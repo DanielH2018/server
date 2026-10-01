@@ -16,10 +16,10 @@
     # resolved once at pod start — so a rotated token reaches the Secret and the running pods
     # keep pushing the old one until something restarts them. `manifests_rollout: ""` above
     # opts out of the shared WAIT, and the shared rollout-RESTART is gated on that same
-    # variable being non-empty, so emptying it silently took the restart with it. Naming both
+    # variable being non-empty, so emptying it silently drops the restart with it. Naming both
     # Deployments here restores the restart: the extra-rollouts task carries no such gate.
-    # Found on 2026-08-30, when rotating the two ddns push tokens left both pods 7d14h old
-    # and both monitors DOWN behind a green deploy.
+    # Without it, rotating the two ddns push tokens leaves both pods on the old token and both
+    # monitors DOWN behind a green deploy.
     manifests_extra_rollouts:
       - name: cloudflare-ddns-direct
       - name: cloudflare-ddns-proxied

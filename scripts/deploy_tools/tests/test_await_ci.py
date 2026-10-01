@@ -103,7 +103,7 @@ def test_a_real_failure_is_not_read_as_no_verdict():
 #
 # The anonymous limit is 60/hour PER SOURCE IP and shared with the deployer's own gate on the
 # same host. At one poll per 20s for up to 900s, one landing costs 45 of those 60, so the second
-# landing in an hour starved the tick into `HTTP Error 403: rate limit exceeded` (2026-09-01).
+# landing in an hour starved the tick into `HTTP Error 403: rate limit exceeded`.
 # Each rule is an accept/reject pair: a resolver that always returned a token and one that
 # never did are indistinguishable from the passing side alone.
 
@@ -159,7 +159,7 @@ def _suite(status, conclusion, runs):
 
 
 def test_a_workflow_cancelled_before_any_run_registered_is_no_verdict():
-    """#766 on 2026-09-02: a workflow cancelled before any run registered is no verdict.
+    """A workflow cancelled before any run registered is no verdict.
 
     The merge commit's CI suite read `completed cancelled` with zero check-runs, so the required
     name never appeared and two waits sat out 2400s.

@@ -1,9 +1,8 @@
 ---
-# valheim-stats' half of game-stats (2026-08-13): its script ConfigMap. The manifests apply is
-# main.yml's.
+# valheim-stats' half of game-stats: its script ConfigMap. The manifests apply is main.yml's.
 #
-# No volume-claim include, unlike terraria.yml: there is no Docker predecessor to import from.
-# The PVC is declared in templates/pvc-valheim.yaml.j2 and started empty.
+# No volume-claim include, unlike terraria.yml: there is nothing to seed.
+# The PVC is declared in templates/pvc-valheim.yaml.j2 and starts empty.
 
 - name: Create the staging directory for valheim-stats
   tags: [config]
@@ -44,7 +43,7 @@
 # before hashing so the trigger is a function of the pair, not of which is written first.
 #
 # Hashed off the SOURCE files, not off the two stage registers: both stages are skipped on a dry
-# run (#2614), and `.checksum` on a skipped result is Undefined, which would raise here rather
+# run, and `.checksum` on a skipped result is Undefined, which would raise here rather
 # than fall back. `rstrip=False` makes these the bytes `copy` hashed, so the value is unchanged.
 - name: Combine the staged module checksums into one pod-roll trigger for valheim-stats
   tags: [config]
@@ -71,10 +70,10 @@
   when: not k8s_dry_run | bool
 
 # Server-side, like monitor-bridge's: client-side apply re-stores the whole object in an
-# annotation capped at 262144 bytes, which the bridge crossed on 2026-09-01. This script is far
+# annotation capped at 262144 bytes, which a bridge ConfigMap can exceed. This script is far
 # smaller, but one apply form across the four script ConfigMaps is one thing to get right.
 # --force-conflicts takes the data keys from the client-side field manager that applied them
-# before the switch. Server-side apply prints the same line whether or not anything changed,
+# earlier. Server-side apply prints the same line whether or not anything changed,
 # so the changed signal is the staged files. ENFORCED by
 # ansible/tests/k8s/test_script_configmaps_apply_server_side.py.
 - name: Apply the script ConfigMap for valheim-stats
@@ -85,7 +84,7 @@
       -f /etc/rancher/k3s/valheim-stats/configmap.yaml
   become: true
   # Skipped on a dry run or --check. k8s/manifests only dry-runs its own apply, so without this
-  # guard a dry run would really write this ConfigMap (#2588).
+  # guard a dry run would really write this ConfigMap.
   when: not k8s_no_mutate
   register: game_stats_valheim_cm_apply
   changed_when: game_stats_valheim_script is changed or game_stats_lib_stage is changed

@@ -27,9 +27,8 @@ def test_consumer_tags_monitor_bridge_tokens():
         "monitor-bridge",
         "uptime-kuma",
     )
-    # `kopia_restore_drill_push_token` had its own arm in the same branch until 2026-08-27. It is
-    # absent from both secrets.yml and secret_rotation.yml, so the arm mapped a name that could
-    # never be passed and the assertion here was the only thing keeping it alive.
+    # `kopia_restore_drill_push_token` is absent from both secrets.yml and secret_rotation.yml,
+    # so no arm maps it and it resolves to no consumer.
     assert consumer_tags("kopia_restore_drill_push_token") == ()
 
 
@@ -71,13 +70,13 @@ def test_consumer_tags_autofix_bridge_token():
 
 def test_consumer_tags_registry_gc_token():
     # Same shape as autofix-bridge above: k8s/registry renders the pusher, the tile is static
-    # in uptime-kuma, and both deploy from daniel-box in one run (#1937).
+    # in uptime-kuma, and both deploy from daniel-box in one run.
     assert consumer_tags("registry_gc_push_token") == ("registry", "uptime-kuma")
 
 
 def test_consumer_tags_artifacts_sync_token():
     # Same shape again: k8s/artifacts renders the sync cron that pushes, the tile is static in
-    # uptime-kuma, and both deploy from daniel-box in one run (#2516).
+    # uptime-kuma, and both deploy from daniel-box in one run.
     assert consumer_tags("artifacts_sync_push_token") == ("artifacts", "uptime-kuma")
 
 
@@ -102,13 +101,12 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
 
 
 def test_no_cross_host_token_is_badly_overdue():
-    # 2026-08-24 review M-3, second run of the same finding. The test above proves each
-    # cross-host token is DECLARED manual; nothing proved anyone was doing the manual part.
+    # The test above proves each cross-host token is DECLARED manual; this one proves someone is
+    # doing the manual part.
     # `consumer_tags` returning () is deliberate and documented beside CROSS_HOST_PUSH_TOKENS:
     # the pusher and the AutoKuma label live on different hosts, so one redeploy cannot update
     # both halves atomically. But the design that skips them assumes an operator picks them up,
-    # and the only thing asking was the daily audit line — which reports the whole registry and
-    # is easy to skim past. Two consecutive reviews found the same tokens unrotated.
+    # and the daily audit line that asks reports the whole registry and is easy to skim past.
     #
     # So the reminder becomes a CI failure. This is deliberately NOT the audit's own due-date:
     # the point is to catch sustained neglect, not to fail the build the day something comes
@@ -116,9 +114,9 @@ def test_no_cross_host_token_is_badly_overdue():
     #
     # NOT the fix the reviewer proposed. That was to give CROSS_HOST_PUSH_TOKENS a two-tag
     # consumer list, and it stays rejected — but the REASON is the hosts, not the arity.
-    # `consumer_tags` became genuinely multi-valued on 2026-08-28, because a push token's tile
-    # lives in k8s/uptime-kuma while its pusher lives elsewhere, and BOTH deploy from daniel-box
-    # in one playbook run. CROSS_HOST tokens are the case that remains unrepresentable: their
+    # `consumer_tags` returns two tags for an ordinary push token, because its tile lives in
+    # k8s/uptime-kuma while its pusher lives elsewhere, and BOTH deploy from daniel-box in one
+    # playbook run. CROSS_HOST tokens are the case that remains unrepresentable: their
     # two halves sit on different HOSTS, so any tag list would assert a repair that no single
     # `rotate --deploy` can perform. They still return `()`, and
     # test_consumer_tags_cross_host_tokens_are_manual is the guard that keeps them there.
@@ -141,12 +139,11 @@ def test_no_cross_host_token_is_badly_overdue():
 # ── consumer_tag correctness ────────────────────────────────────────────────
 # The guard above proves a token RESOLVES a tag. Nothing proved the tag was right, which is
 # this estate's recurring guard-scope shape: a check written alongside a fix inherits the
-# fix's scope. `consumer_tag` routed every `monitor_bridge_*` name to monitor-bridge by
-# prefix, but nine of those tokens are pushed from another role's health script entirely —
+# fix's scope. Routing every `monitor_bridge_*` name to monitor-bridge by prefix is wrong,
+# because nine of those tokens are pushed from another role's health script entirely —
 # the prefix is a Kuma monitor-history artefact, kept so renaming the monitor would not lose
-# its history. For those, `rotate --deploy` wrote a new value, deployed a role that renders
-# the token nowhere, left the real pusher on the old one, and stamped `last_rotated` green
-# (2026-08-25 review M-8b).
+# its history. For those, `rotate --deploy` would write a new value, deploy a role that renders
+# the token nowhere, leave the real pusher on the old one, and stamp `last_rotated` green.
 _SKIP_TAGS = ("ignore", "pinned", "external")
 
 
@@ -213,9 +210,9 @@ def test_uptime_kuma_is_a_consumer_iff_a_tile_exists():
       - a token WITHOUT a tile that claims `uptime-kuma` deploys a role rendering it nowhere,
         which is the mis-routing the 2026-08-25 M-8b finding was about, one role along.
 
-    Measured 2026-08-28: 56 tokens have a tile, 43 resolve a consumer, 42 are in both, and the
-    lone `monitor_bridge_ha_token` sits outside. The 14 tile-bearing tokens that resolve NOTHING
-    are the cross-host ones — deliberately manual, and this test must not drag them back in.
+    Measured: 56 tokens have a tile, 43 resolve a consumer, 42 are in both, and the lone
+    `monitor_bridge_ha_token` sits outside. The 14 tile-bearing tokens that resolve NOTHING are
+    the cross-host ones — deliberately manual, and this test must not drag them back in.
     """
     tile = (
         Path(REPO) / "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"

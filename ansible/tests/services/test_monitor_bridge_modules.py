@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every runtime module in monitor-bridge's files/ must be in its ConfigMap ship list.
 
-check.py was one 3.5k-line file until it was split. The split introduced a failure mode the
+monitor-bridge's runtime is split into modules, which creates a failure mode the
 test suite structurally cannot see: pytest imports the modules from `files/` on disk, so it
 goes green whatever the ship list says, while the pod only ever receives the files named in
 `monitor_bridge_modules`. A module added to files/ and forgotten here therefore passes CI and
@@ -19,8 +19,8 @@ one did, it must not reach the image. This test is what keeps the explicit list 
 
 A module is identified by its dotted path under `files/` (`bridge/config.py` is
 `bridge.config`), and the ship list carries paths relative to `files/`, so the census sees a
-module at any depth. The one-level `FILES.glob("*.py")` this used until 2026-09-02 would have
-returned nothing for a packaged layout and compared an empty census against the ship list.
+module at any depth. A one-level `FILES.glob("*.py")` would return nothing for a packaged
+layout and compare an empty census against the ship list.
 
 Run: uv run pytest ansible/tests/services/test_monitor_bridge_modules.py
 """
@@ -100,10 +100,10 @@ def test_the_census_sees_a_module_inside_a_package(tmp_path):
 
 # --- The second invariant: every patched name is bound in the module the test patches it on ---
 #
-# The suite patches the runtime modules ~210 times: `bridge.net._get_json`, `bridge.config.X`,
+# The suite patches the runtime modules often: `bridge.net._get_json`, `bridge.config.X`,
 # a verdict on the `checks_*` module that from-imports it, `check.CHECKS`. A function reads its
 # globals from the module it is DEFINED in, so a patch lands only if the module named in the
-# test is the module whose code reads the name. Patch `check.PROM_URL` after PROM_URL moved to
+# test is the module whose code reads the name. Patching `check.PROM_URL` when PROM_URL lives in
 # bridge.config and the setattr still SUCCEEDS — it creates a new attribute on `check` that
 # nothing reads — and the test passes against unpatched production code.
 #
@@ -114,8 +114,7 @@ def test_the_census_sees_a_module_inside_a_package(tmp_path):
 #
 # The census must be an AST walk, not a grep. A line-oriented regex over
 # `monkeypatch.setattr(check, "X"` misses the wrapped form ruff format produces and misses plain
-# `check.X = ...` assignment entirely — that hole hid `_cpu_breach_streak`, `_down_streaks` and
-# `_evaluate` when the split was first measured.
+# `check.X = ...` assignment entirely.
 #
 # The test's local name for a module is resolved through its own imports, so `from bridge import
 # config as cfg` followed by `monkeypatch.setattr(cfg, "X", 1)` is a patch on `bridge.config`,
@@ -205,11 +204,10 @@ def _unbound_patches(pairs, sources):
 def test_the_patch_census_spans_more_than_one_module():
     # Without this the assertion below passes vacuously if the AST walk stops matching.
     #
-    # It named `check` until 2026-09-05, when the registry moved to registry.py and the gate
-    # sets and probes became the `Gates` value run_once is handed. Nothing patches the run loop
-    # any more — which is the point of that seam, not a lapsed census — so the pair that keeps
-    # this honest is `bridge.common` and `bridge.net`, the two the suite still stubs. Repoint it
-    # again rather than deleting it when the next module gets its seam.
+    # Nothing patches the run loop: the gate sets and probes are the `Gates` value run_once is
+    # handed, which is the point of that seam. So the pair that keeps this honest is
+    # `bridge.common` and `bridge.net`, the two the suite stubs. Repoint it rather than deleting
+    # it when another module gets its seam.
     pairs = _patched_pairs()
     assert {"bridge.common", "bridge.net"} <= pairs.keys(), sorted(pairs)
     assert len(pairs) >= 2, sorted(pairs)

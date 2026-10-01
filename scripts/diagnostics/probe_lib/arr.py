@@ -25,14 +25,13 @@ from lib.kubectl import DEFAULT_CLUSTER
 # and is fed to curl via stdin (arr_curl_config), never argv — same guard as ha.
 #
 # NB this deliberately does NOT go through k8s_endpoint (Traefik + Authelia), unlike
-# scrutiny/prometheus/loki. Confirmed live 2026-08-17: sonarr has no Authelia
-# access_control bypass rule for its /api/* paths (scrutiny does — config-secret.yaml.j2),
-# so a Traefik-routed GET 302s to the Authelia login page instead of reaching sonarr. The
-# apps' own configarr/janitorr configs (config.yml.j2, application.yml.j2) hit
-# `http://sonarr:8989` directly — the in-cluster Service DNS name — for the same reason.
-# arr_url() therefore keeps the pre-migration ip:port shape; only the IP source changed,
-# from `docker inspect` to the Service's ClusterIP (resolve_arr_ip, k8s's equivalent of a
-# stable container IP — a Service's ClusterIP does not change across pod restarts/redeploys).
+# scrutiny/prometheus/loki. Sonarr has no Authelia access_control bypass rule for its /api/*
+# paths (scrutiny does — config-secret.yaml.j2), so a Traefik-routed GET 302s to the Authelia
+# login page instead of reaching sonarr. The apps' own configarr/janitorr configs
+# (config.yml.j2, application.yml.j2) hit `http://sonarr:8989` directly — the in-cluster
+# Service DNS name — for the same reason. arr_url() therefore keeps an ip:port shape, with
+# the IP resolved from the Service's ClusterIP (resolve_arr_ip: a Service's ClusterIP does
+# not change across pod restarts/redeploys).
 ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696}
 ARR_API_VERSION = {"sonarr": "v3", "radarr": "v3", "prowlarr": "v1"}
 
@@ -66,15 +65,14 @@ def resolve_arr_ip(app, cluster=DEFAULT_CLUSTER):
     stable across pod restarts and redeploys, so this doesn't reintroduce the hand-copied-IP
     staleness `docker inspect` was resolving around in the first place.
 
-    CAVEAT confirmed live 2026-08-17: this only reaches the app when its pod is scheduled on
-    THIS node (daniel-box). Each app's NetworkPolicy allows ingress only from specific pod
-    selectors, no ipBlock for the host — sonarr/radarr (on daniel-box) answered anyway, but
-    prowlarr (on daniel-server that day) refused the connection although ICMP to its pod IP
-    got through, so this is the NetworkPolicy's enforcement, not routing. Host-originated
-    traffic apparently doesn't pass through the destination node's own NetworkPolicy iptables
-    the same way same-node traffic does. This will flip on the next reschedule; a real fix
-    needs a NetworkPolicy ipBlock for the node (ansible/roles/k8s/*/templates/), out of scope
-    here.
+    CAVEAT: this only reaches the app when its pod is scheduled on THIS node (daniel-box).
+    Each app's NetworkPolicy allows ingress only from specific pod selectors, no ipBlock for
+    the host — sonarr/radarr (on daniel-box) answered anyway, but prowlarr (on daniel-server
+    that day) refused the connection although ICMP to its pod IP got through, so this is the
+    NetworkPolicy's enforcement, not routing. Host-originated traffic apparently doesn't pass
+    through the destination node's own NetworkPolicy iptables the same way same-node traffic
+    does. This will flip on the next reschedule; a real fix needs a NetworkPolicy ipBlock for
+    the node (ansible/roles/k8s/*/templates/), out of scope here.
     """
     return resolve_service_ip(app, cluster)
 
@@ -84,9 +82,9 @@ def resolve_arr_ip(app, cluster=DEFAULT_CLUSTER):
 # `arr <app> notification|downloadclient|indexer|importlist` returns objects whose
 # `fields[]` carry live credentials — a Discord webhook URL, the qBittorrent password, an
 # indexer API key. The subcommand is read-only against the app, which says nothing about
-# what it does to the transcript it prints into: one `arr sonarr notification` put the
-# `arr_discord_webhook_url` value into an agent transcript on 2026-09-06 (issue #1388), and
-# the exposed value then had to be rotated.
+# what it does to the transcript it prints into: `arr sonarr notification` would put the
+# `arr_discord_webhook_url` value into an agent transcript, and an exposed value has to be
+# rotated.
 #
 # Two signals decide, because neither is sufficient alone. The *arr API labels a field's
 # `privacy` as `apiKey` / `password` / `userName`, but the Discord `webHookUrl` field is
@@ -120,9 +118,9 @@ def _name_is_sensitive(name):
 def redact_arr_payload(obj):
     """Return `obj` with credential-bearing values replaced by `<redacted>`.
 
-    Walks the whole decoded response rather than a path allow-list. The paths named in
-    #1388 — notification, downloadclient, indexer, importlist — are the ones known to carry
-    credentials, and a name or privacy match on any other path costs nothing.
+    Walks the whole decoded response rather than a path allow-list. The paths notification,
+    downloadclient, indexer and importlist are the ones known to carry credentials, and a
+    name or privacy match on any other path costs nothing.
     """
     if isinstance(obj, list):
         return [redact_arr_payload(item) for item in obj]
@@ -166,15 +164,13 @@ def format_arr_response(body, *, as_json=False, show_secrets=False):
 def run_arr(ns):
     """Read-only *arr API GET, resolved to the app's k8s Service ClusterIP.
 
-    sonarr/radarr/prowlarr have run as k8s Deployments since 2026-08-07 (B4c) and have
-    no Docker container left to `docker inspect` an IP from — this used to shell out to
-    `resolve_ip(ns.app)`, which died with `FileNotFoundError: 'docker'` on both cluster
-    nodes. resolve_arr_ip replaces it with the same idea (resolve the current address at
-    run time) via kubectl instead of docker — see the comment above ARR_PORTS for why
-    this talks to the Service directly instead of going through k8s_endpoint like every
-    other cluster subcommand. Pulls <app>_api_key from SOPS and passes it via stdin.
-    Pretty-prints JSON by default; `--json` prints it on one line. Credential-bearing
-    values are redacted unless `--show-secrets` is passed — see redact_arr_payload.
+    sonarr/radarr/prowlarr run as k8s Deployments and have no Docker container to
+    `docker inspect` an IP from, so resolve_arr_ip resolves the current address at run
+    time via kubectl — see the comment above ARR_PORTS for why this talks to the Service
+    directly instead of going through k8s_endpoint like every other cluster subcommand.
+    Pulls <app>_api_key from SOPS and passes it via stdin. Pretty-prints JSON by
+    default; `--json` prints it on one line. Credential-bearing values are redacted
+    unless `--show-secrets` is passed — see redact_arr_payload.
     """
     if ns.dry_run:
         print(

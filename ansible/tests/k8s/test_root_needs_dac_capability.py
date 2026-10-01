@@ -6,7 +6,7 @@ the DAC_OVERRIDE capability, so dropping ALL takes it away — and root then can
 files owned by another uid, which is the only reason anyone reaches for root in the first place.
 
 Six containers in four templates combine `runAsUser: 0` with `drop: [ALL]`, read from
-`_k8s_render.rendered_docs()` on 2026-10-01. Every one records the lesson in a comment beside
+`_k8s_render.rendered_docs()`. Every one records the lesson in a comment beside
 the fix, which is why this guard has real accept cases rather than synthetic ones:
 
   * `loki-homelab/templates/alloy-daemonset.yaml.j2`, container `alloy`, adds DAC_READ_SEARCH —
@@ -23,10 +23,7 @@ the fix, which is why this guard has real accept cases rather than synthetic one
 Authelia's third seeding container, `crowdsec-config-install`, runs as the pod's uid 1000 and so
 is not a root site.
 
-There was a seventh `runAsUser: 0` site until 2026-09-01: `volume-claim/templates/seed-pod.yaml.j2`,
-which dropped nothing, so root kept its default capability set. It was clean, and it went with
-the rest of the seeding when that role stopped seeding. Its point stands for the six that
-remain — the hazard is the COMBINATION, never root by itself.
+The hazard is the COMBINATION, never root by itself.
 
 WHAT THE REAL-TREE ASSERTION IS WORTH HERE. Zero violations today, so the real-tree half passing
 is not by itself evidence the rule works — a rule matching nothing would pass identically. The
@@ -147,7 +144,7 @@ def test_root_dropping_all_that_adds_only_read_search_is_clean() -> None:
 
 
 def test_root_that_drops_nothing_is_clean() -> None:
-    """seed-pod's live shape. The hazard is the COMBINATION; root alone keeps DAC_OVERRIDE."""
+    """Root that drops nothing keeps DAC_OVERRIDE. The hazard is the COMBINATION."""
     doc = """
         securityContext:
           runAsUser: 0

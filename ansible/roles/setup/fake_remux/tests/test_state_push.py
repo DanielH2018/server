@@ -6,7 +6,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 from state_push import main, read_state, verdict
 
 # The good state file is stamped at this epoch and `main` measures its age from the same one,
-# so the `up` line does not depend on how fast the suite runs (#2158).
+# so the `up` line does not depend on how fast the suite runs.
 NOW = 1_780_000_000
 
 HOUR = 3600.0

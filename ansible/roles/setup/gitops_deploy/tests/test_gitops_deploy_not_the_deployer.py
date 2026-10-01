@@ -1,8 +1,8 @@
-"""A host whose inventory says `has_gitops: false` refuses to tick (#1733).
+"""A host whose inventory says `has_gitops: false` refuses to tick.
 
-The role installs the deployer only `when: has_gitops`, and until 2026-09-09 that was the only
-gate: daniel-server carried `has_gitops: false` and ticked a live timer for three weeks from a
-payload the role had stopped updating. `declares_no_gitops` is the code's own reading of the
+The role installs the deployer only `when: has_gitops`, so a host that carries
+`has_gitops: false` but still has a live timer would tick from a payload the role no longer
+updates. `declares_no_gitops` is the code's own reading of the
 same host_vars; `refuse_unless_deployer` raises `NotTheDeployerHost` at the top of `main()`,
 and `entrypoint()` turns it into a one-line exit 0 with no post and no last_run.
 

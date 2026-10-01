@@ -2,28 +2,28 @@
 
 `bridge_bypass_prefixes` on the karakeep entry renders one forward-auth-free IngressRoute per
 prefix on the public hostname, for the browser extension and the mobile app — Bearer API-key
-callers that cannot pass 2FA. Until #1929 the single prefix was `/api/`, one segment wider than
-anything those callers need: it also matched next-auth's `/api/auth/*` (the app's password
-login, which the app does not throttle) and the cookie-authenticated children beside it, so on
-the internet the app password was the only gate. The fix is an allow-list of the key-gated
-prefixes; this guard keeps `/api/auth/` out of it however the list is next edited.
+callers that cannot pass 2FA. A bare `/api/` prefix is one segment wider than anything those
+callers need: it also matches next-auth's `/api/auth/*` (the app's password login, which the app
+does not throttle) and the cookie-authenticated children beside it, leaving the app password as
+the only gate on the internet. The prefixes are an allow-list of the key-gated paths; this guard
+keeps `/api/auth/` out of it however the list is edited.
 
 Three invariants, each a predicate with a passing and a rejecting input, then applied to the
 rendered routes behind a non-vacuity assertion:
 
 - **No bypass prefix covers `/api/auth/`.** Traefik's `PathPrefix` is a plain string prefix,
   so `/api/` covers it and `/api/v1/` does not.
-- **The bypass still covers what the clients call.** Narrowing to `/api/v1/` alone — the fix
-  the issue prescribed — would gate the extension's tRPC calls and the mobile upload, which
+- **The bypass still covers what the clients call.** Narrowing to `/api/v1/` alone — which looks
+  like the obvious narrowing — would gate the extension's tRPC calls and the mobile upload, which
   fail silently behind Authelia's 302.
 - **No monitoring prefix covers `/api/auth/` either.** The `.local` `karakeep-monitoring`
   route (homepage's widget; ClientIP-gated to the bridge IP and the pod CIDR, no Authelia)
-  carried `/api/` after #1929 closed the public name, so the password form stayed open to
-  every pod (#2018). The first invariant reads the public routes only and never saw it.
+  must not carry `/api/` either, or the password form stays open to every pod. The first
+  invariant reads the public routes only and cannot see it.
 - **The public tRPC procedures are closed and throttled.** `/api/trpc/` also reaches the app's
   public procedures: `users.create` (signup) and `apiKeys.exchange` (password in, API key out).
-  The Deployment set `DISABLE_NEW_USERS_REGISTRATION` until 2026-09-28, a name the app never
-  reads, so signup was open on the internet, and nothing enabled the app's rate limiter.
+  The Deployment must set the names the app reads to close signup and enable its rate limiter;
+  `DISABLE_NEW_USERS_REGISTRATION` is a name the app ignores.
 
 Run: uv run pytest ansible/tests/services/test_karakeep_public_bypass.py
 """
@@ -55,7 +55,7 @@ def prefix_covers(prefix: str, path: str) -> bool:
 
 
 def test_the_old_wide_prefix_is_flagged():
-    """The literal pre-#1929 state."""
+    """The bare `/api/` prefix."""
     assert prefix_covers("/api/", NEXT_AUTH_PATH)
 
 
@@ -64,7 +64,7 @@ def test_a_key_gated_prefix_is_clean():
 
 
 def test_the_issue_prescribed_narrowing_loses_the_clients():
-    """`/api/v1/` alone is what #1929 asked for; the extension and mobile app never call it."""
+    """`/api/v1/` alone loses the clients; the extension and mobile app never call it."""
     assert not any(prefix_covers("/api/v1/", p) for p in CLIENT_PATHS[:3])
 
 
@@ -79,7 +79,7 @@ def missing_controls(env: dict[str, str]) -> set[str]:
 
 
 def test_the_ignored_signup_variable_is_flagged():
-    """The state before 2026-09-28: a name the app ignores, and no rate limiter."""
+    """A name the app ignores, and no rate limiter."""
     assert missing_controls({"DISABLE_NEW_USERS_REGISTRATION": "true"}) == set(
         REQUIRED_ENV
     )

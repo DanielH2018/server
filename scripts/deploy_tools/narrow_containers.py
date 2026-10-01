@@ -2,8 +2,6 @@
 
 Pure over text and dicts, so it imports nothing from `narrow_broad` and the two cannot cycle;
 `narrow_broad._list_reader_tags` does the git reads and the tag mapping around `reader_paths`.
-Split out on 2026-09-18 (#2044) when the reader census took `narrow_broad.py` past the
-600-line cap.
 """
 
 import sys as _sys
@@ -34,17 +32,15 @@ def entry_change_tags(
 
     An entry's own role is visited under the entry's tag. The list's READERS — a role whose
     template renders `containers_list` bare or through `hostvars[...]` — are the other half
-    of the edge and are `narrow_broad._list_reader_tags`; until 2026-09-18 nothing mapped
-    them (#2044): removing glances from daniel-pi's list changed monitor-bridge's
-    `PI_PUBLISHED_PORTS`, no tag named the role, and its pod kept probing a port that no
-    longer existed.
+    of the edge and are `narrow_broad._list_reader_tags`: removing glances from daniel-pi's
+    list changes monitor-bridge's `PI_PUBLISHED_PORTS`, though no tag names that role.
 
     A REMOVED entry contributes nothing of its own and refuses nothing. No `--tags` value
     applies a removal: the play iterates the list, so the removed entry's role is simply not
     visited, and the workload it left behind is reconciled by nothing (the same shape as
     `kubectl apply` leaving an orphaned object) — by the whole play just as much as by a
     narrowed one, so refusing bought no reconciliation and cost a full run plus every service
-    marked stale (#2046). The journal names the orphan instead.
+    marked stale. The journal names the orphan instead.
     """
     old, new = entries(before), entries(after)
     tags: set[str] = set()
@@ -67,7 +63,7 @@ def renders_containers_list(text: str) -> bool:
     """True when a template mentions `containers_list` inside `{{ }}` or `{% %}`.
 
     A mention anywhere else is prose: a `{# #}` header, a `k8s_autodeploy_reason` string, a
-    YAML comment. Counting those reached 59 of 62 services on the real tree (2026-09-18),
+    YAML comment. Counting those reached 59 of 62 services on the real tree,
     through `volume-claim`'s 25 callers and the `ingressroute` macro's importers, where the
     templates that read the list number four. `{# #}` is stripped first, because a header
     quotes code.

@@ -1,10 +1,11 @@
-"""A hand-applied plane beside a tick half that recorded no apply (issue #2579).
+"""A hand-applied plane beside a tick half that recorded no apply.
 
 Both `needs-manual-apply` sites end at their plane arm, which sits above the branch that
-reads the deployer's own state. A PR carrying both therefore never printed `Apply it:` for
-the tick's half, even in the #1537 shape: the tick converged, so no later tick applies that
-range and nothing else says so. One file for both sites, because the bug is the arm ordering
-they share -- the same shape as `test_land_plane_keeps_the_remaining_hosts_line.py`.
+reads the deployer's own state. A PR carrying both would therefore never print `Apply it:`
+for the tick's half, even when the tick converged without applying: no later tick applies
+that range and nothing else says so. One file for both sites, because the bug is the arm
+ordering they share -- the same shape as
+`test_land_plane_keeps_the_remaining_hosts_line.py`.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_plane_keeps_the_tick_half_line.py
 """
@@ -34,7 +35,7 @@ def _landing_at(landing, fakes):
 
 @pytest.mark.parametrize("site", [health_verdict.health, deploy.no_tag_outcome])
 def test_a_plane_does_not_swallow_the_tick_half_command(landing, capsys, site):
-    """The #1537 shape under a plane: the tick converged with no apply recorded."""
+    """The converged-but-unapplied shape under a plane: the tick converged with no apply recorded."""
     ln = _landing_at(
         landing,
         Fakes(plane=_PLANE, self_applied=True, self_applied_command=_COMMAND),
@@ -68,7 +69,7 @@ def test_a_plane_beside_an_applied_tick_half_prints_only_the_plane(
     assert "Apply it:" not in out
 
 
-# Each tick state's own marker, and the substring the plane arm must print for it (#2601).
+# Each tick state's own marker, and the substring the plane arm must print for it.
 _TICK_STATES = [
     pytest.param({"hold_sha": "deadbeef"}, "holding deadbeef", id="held"),
     pytest.param(

@@ -19,9 +19,9 @@ from bridge.config import load_config
 
 
 def test_origin_sel_is_empty_without_a_pin(monkeypatch, cfg):
-    # Against the Docker Prometheus there is no `origin` label at all — external_labels apply on
-    # remote-write and never to local storage — so a pin there would select NOTHING and read as
-    # healthy. Empty must stay empty.
+    # A Prometheus with no `origin` label (external_labels apply on remote-write and never to
+    # local storage) would select NOTHING under a pin and read as healthy. Empty must stay
+    # empty.
     cfg = replace(cfg, PROM_ORIGIN="")
     assert bridge.net.origin_sel(cfg) == ""
     assert bridge.net.origin_sel(cfg, 'name!=""') == '{name!=""}'
@@ -40,10 +40,9 @@ def test_the_pin_is_on_by_default():
     job carries `origin` — so an unpinned disk/memory/targets query silently widens past the
     host it is meant to describe.
 
-    Until #2825 this was derived from PROMETHEUS_URL and CLUSTER_PROMETHEUS_URL naming one
-    instance. The second URL is gone, and a derivation with one reachable branch is a constant.
-    Re-deriving it from the URL's SHAPE instead would answer "does this look in-cluster" when
-    the question is "does this Prometheus carry `origin`".
+    The pin is a constant rather than derived from the Prometheus URL, because a derivation
+    with one reachable branch is a constant. Deriving it from the URL's SHAPE would answer
+    "does this look in-cluster" when the question is "does this Prometheus carry `origin`".
 
     Stated to load_config as an environment rather than reached by reloading the module: a
     reload re-runs one module against the real os.environ, so the test would have to mutate the
@@ -82,16 +81,11 @@ _CADVISOR_METRICS = (
 
 
 def test_cadvisor_checks_never_pin_the_origin(cfg):
-    # REPLACES test_dual_estate_checks_all_pin_the_origin, which asserted the exact opposite and
-    # was wrong from the Phase G retarget until 2026-08-24. Its premise — that these metrics
-    # "genuinely exist in BOTH estates" — died with the Docker cAdvisor on 2026-08-14. `origin` is
-    # set by ONE relabel rule, on the `node` job, so cAdvisor series never carry it; pinning them
-    # selects the empty vector and check_restarts/check_oom/check_cpu report green forever.
-    #
-    # The old test enforced that bug rather than catching it, which is why the fix had to amend a
-    # green test rather than a red one. Keep this assertion pointed at the SOURCE of the pin.
-    # Every runtime module, not just the run loop: the checks are moving out by domain, and a
-    # literal label block in a moved check must stay as visible as one that never moved.
+    # `origin` is set by ONE relabel rule, on the `node` job, so cAdvisor series never carry it;
+    # pinning them selects the empty vector and check_restarts/check_oom/check_cpu report green
+    # forever. Keep this assertion pointed at the SOURCE of the pin.
+    # Every runtime module, not just the run loop: a literal label block in any check module must
+    # stay visible.
     files = Path(check.__file__).resolve().parent
     source = "".join(
         p.read_text()

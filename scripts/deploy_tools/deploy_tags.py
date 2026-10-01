@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Validate the --tags a deploy was given, before Ansible silently accepts them.
 
-THE PROBLEM. Ansible does not error on a tag that matches nothing. Every static task
-in ansible/deploy.yml is `tags: always`, and the per-service tags are attached at
-runtime by include_role from `container_item.name` (deploy.yml:116,
-tasks/k8s_batch.yml:19). So `--tags jellifin` runs the secrets preamble, the namespace
-apply, the rollout drain and the stabilisation gate, prints a green PLAY RECAP, and
-deploys nothing. Confirmed 2026-08-16 with `--tags jellifin --list-tasks`: the play is
-valid and no service matches.
+THE PROBLEM. Ansible does not error on a tag that matches nothing. Every static task in
+ansible/deploy.yml is `tags: always`, and the per-service tags are attached at runtime by
+include_role from `container_item.name` (deploy.yml:116, tasks/k8s_batch.yml:19). So `--tags
+jellifin` runs the secrets preamble, the namespace apply, the rollout drain and the stabilisation
+gate, prints a green PLAY RECAP, and deploys nothing. `--tags jellifin --list-tasks` shows the play
+is valid and no service matches.
 
 That fails in the worst direction — it reports success while shipping nothing, so the
 operator believes the change is live. With ~50 service names, several of them near
@@ -66,7 +65,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 def _git_show(ref: str, path: str) -> str:
     """`git show <ref>:<path>` via lib.git, unstripped (file content, not a summary line).
 
-    Routed through `git()` rather than a private `subprocess.run` (#1230), for the same
+    Routed through `git()` rather than a private `subprocess.run`, for the same
     GIT_*-stripping reason as `_git_diff_names` below — but `git_stdout` would `.strip()` the
     file's own trailing newline, so this calls `git()` directly and reads `.stdout` raw.
     """
@@ -76,7 +75,7 @@ def _git_show(ref: str, path: str) -> str:
 def _git_diff_names(*args: str, cwd: Path) -> list[str]:
     """`git diff --name-only <args>` via lib.git, split into a path list.
 
-    Routed through `git_stdout` rather than a private `subprocess.run` (#1230): it strips
+    Routed through `git_stdout` rather than a private `subprocess.run`: it strips
     every `GIT_*` env var first, so `cwd` alone decides which tree is read even under a hook
     that sets `GIT_DIR`/`GIT_WORK_TREE`.
     """
@@ -90,9 +89,9 @@ def _git_diff_names(*args: str, cwd: Path) -> list[str]:
 # either changes — so this reaches across the role boundary instead, the same way
 # gitops_deploy.py reaches into its own directory.
 DEPLOY_LOGIC_DIR = GITOPS_DEPLOY_FILES
-# Put it on sys.path ONCE, here. The three functions that import from deploy_logic used to
-# each insert it per call and never remove it, so sys.path grew by one entry per call in a
-# long-lived process (#1046). The IMPORTS stay lazy inside those functions — see
+# Put it on sys.path ONCE, here. The three functions that import from deploy_logic would
+# each insert it per call and never remove it, so sys.path would grow by one entry per
+# call in a long-lived process. The IMPORTS stay lazy inside those functions — see
 # _load_deploy_logic — because only the path entry is constant and free; the import is the
 # part `validate`/`list`/`describe` must not pay for.
 _sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
@@ -157,16 +156,15 @@ def tags_by_host(
 
     A deploy reaches only the host it runs against: deploy.yml's `hosts:` defaults to the
     local hostname, and `-e target=<host>` is the only way to another one. A tag alone is
-    therefore not enough to deploy from. The caller has to know WHICH host declares it and
-    add `-e target=` when that host is not the local node. Issue #929 is the failure this
-    answers: land.sh ran `--tags alloy` on daniel-box for a role only daniel-pi declares, the
-    play matched no service and exited 0, and the landing read `settled` while the Pi still
-    ran the old container.
+    therefore not enough to deploy from. The caller has to know WHICH host declares it and add
+    `-e target=` when that host is not the local node. Without it, `--tags alloy` on
+    daniel-box for a role only daniel-pi declares matches no service and exits 0, so a landing
+    would read `settled` while the Pi still ran the old container.
 
     A tag no host declares (a block tag, a typo) lands under none; `validate` is the place
     that refuses those. A tag declared on two hosts lands under both, so each host's copy is
     deployed -- unless it is named in `k8s_only`, which routes it to the `platform: k8s` entry
-    alone. `hosts_for_tags` carries that rule and why it is opt-in (#2718).
+    alone. `hosts_for_tags` carries that rule and why it is opt-in.
     """
     return hosts_for_tags(tags, service_records(host_vars), k8s_only)
 
@@ -176,8 +174,8 @@ def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
 
     Empty for a tag no host declares. The health gate reads this to pick which probe can see
     the workload. A Docker-only tag has nothing on the cluster to check, and probing it there
-    first is how issue #929's gate found loki-homelab's same-named Alloy DaemonSet and
-    reported the Pi's undeployed container healthy.
+    first could find a same-named cluster workload (loki-homelab's Alloy DaemonSet) and
+    report the Pi's undeployed container healthy.
     """
     return {platform for _host, platform, t in service_records(host_vars) if t == tag}
 
@@ -193,10 +191,6 @@ def split_shared_roles(
     longhorn-api, cronjob-gate — because other roles include them by literal
     name. Handing one to `--tags` poisons the WHOLE list: deploy.sh validates every tag and
     exits 2 on the first unknown one, so the valid services beside it are refused too.
-
-    That is not hypothetical. PR #617 (2026-08-29) bumped digest pins in 22 deployable roles
-    alongside `roles/k8s/manifests/` and `roles/k8s/volume-claim/`; land.sh derived all 24
-    names, deploy.sh refused the list, and 22 services sat undeployed behind a green master.
 
     `deploy_logic.k8s_remediation` turns the shared half into an instruction that works.
     """
@@ -317,11 +311,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
 
     The deployer never fast-forwards past one — the bring-up playbooks run by hand by
     construction — so a deploy after that tick is guaranteed to hit deploy.sh's staleness
-    refusal (exit 4). This is checkable in milliseconds and BEFORE any CI wait. Landing PR
-    #570 on 2026-08-29 waited about six minutes for CI, ticked, and only then failed at exit 4,
-    with the blocker already visible in the range the whole time. (That blocker was another
-    session's gitops_deploy.py change; the deployer's own role left the manual set on
-    2026-09-01 and applies itself now, so the same range no longer blocks.)
+    refusal (exit 4). This is checkable in milliseconds and BEFORE any CI wait.
     """
     # Lazy for the reason `_load_deploy_logic` is: `land_changes` imports `deploy_logic` at
     # module scope, so a top-level import here would charge `validate`/`list`/`describe` for
@@ -415,7 +405,7 @@ def changed(ref: str, cwd: Path = REPO) -> int:
         k8s_remediation,
     ) = _load_deploy_logic()
     # Calls the mapper directly, NOT through the `land_changes.changes_for` the other five
-    # sites share (#2419, #2541): that helper drops a quiet set and names the bring-up paths,
+    # sites share: that helper drops a quiet set and names the bring-up paths,
     # and this command has neither question. Its module docstring carries the decision.
     try:
         paths = _git_diff_paths(ref, cwd)
@@ -469,9 +459,9 @@ def changed(ref: str, cwd: Path = REPO) -> int:
 
     tags, shared = split_shared_roles(cs.k8s | cs.services)
     if shared:
-        # Emitting these as tags is what PR #617 did, and deploy.sh then refuses the whole
-        # list (exit 2) — so the shared roles leave the tag list and become an instruction
-        # that can actually apply them.
+        # Emitting these as tags makes deploy.sh refuse the whole list (exit 2), so the
+        # shared roles leave the tag list and become an instruction that can actually
+        # apply them.
         print(
             f"deploy --changed: {', '.join(shared)} "
             f"{'is a shared role' if len(shared) == 1 else 'are shared roles'} with no "
@@ -512,7 +502,7 @@ def _cmd_hosts(args: argparse.Namespace) -> int:
     one deploy.sh per host and add `-e target=` when the host is not the local node.
 
     `--k8s-only` is the tree-read twin of `land_tags.landing_hosts_at`'s own argument, and the
-    landing passes the same subset to both (#2718).
+    landing passes the same subset to both.
     """
     tags = [t for t in args.tags.split(",") if t]
     k8s_only = [t for t in (args.k8s_only or "").split(",") if t]

@@ -10,7 +10,7 @@ _BRINGUP = "ansible/k3s-bringup.yml"
 
 
 def test_a_quiet_path_is_dropped_before_the_mapper_reads_it():
-    """A playbook named for three edited comments has nothing to apply (#848)."""
+    """A playbook named for three edited comments has nothing to apply."""
     loud = changes_for([_SERVICE, _BRINGUP], quiet=[_BRINGUP])
     assert loud.manual == []
     assert loud.changes.k8s == {"sonarr"}

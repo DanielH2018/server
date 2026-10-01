@@ -3,7 +3,7 @@
 `.claude/hooks/block-protected-bash.py` denies a content-printing read of every path this
 module returns. A derivation that quietly narrows therefore unblocks a read that prints a
 credential into the terminal and the transcript, and nothing else in the tree notices — the
-module had no test at all until this file (#1170).
+module had no test at all until this file.
 
 Two shapes of test, because either alone is green while checking nothing:
 
@@ -38,18 +38,17 @@ from secrets_mgmt.secret_bearing_host_paths import (
 # Path -> a secret name the census MUST report for it. Three entries chosen to span the shapes
 # the derivation has to cover, so a narrowing cannot survive by keeping one of them:
 #   * secret-rotation-audit.sh — the incident the module's docstring records (roles/setup/)
-#   * ups-secondary-health.sh  — setup/nut_host, a role initial_setup.yml alone applies (it sat at
-#     roles/nut_host/ until 2026-09-17, which is the "not just k8s" shape this used to pin).
+#   * ups-secondary-health.sh  — setup/nut_host, a role initial_setup.yml alone applies (the
+#     "not just k8s" shape).
 #     Matched on a COMMENT mention: the script renders nothing and reads the endpoint out of
 #     /etc/nut/upsmon.conf at runtime. Kept deliberately — the census errs toward denying, and
 #     narrowing the matcher to Jinja expressions would drop a read-deny and this anchor with it
-#     (#2041). The no_log census (ansible/tests/repo/) matches Jinja-only because a false hit
+#     The no_log census (ansible/tests/repo/) matches Jinja-only because a false hit
 #     there demands a task change, not a prompt.
 #   * qbittorrent-prefs-check.sh — a name that is not `*_push_token`, so the census cannot
 #     silently narrow to push-token-shaped matches and still pass
-#   * secret-rotate.sh — the path #1183 narrowed. It used to be reported for `email` as well
-#     as `secret_rotation_push_token`; tiering `email` `ignore` left the push token as its
-#     only reason to be in the census, so nothing else pins the path any more.
+#   * secret-rotate.sh — its only reason to be in the census is `secret_rotation_push_token`,
+#     so nothing else pins the path.
 # The NAME is pinned alongside the path deliberately: a path survives a `GENERIC_NAMES` entry
 # or a tier flipped to `ignore` while losing the very name that made it dangerous.
 MUST_FIND = {
@@ -115,7 +114,7 @@ def test_the_ignore_tier_is_excluded_from_the_tracked_names():
 def test_the_generic_address_name_is_not_tracked_but_its_password_is():
     """`email` is an address, so it is tiered `ignore` rather than listed in GENERIC_NAMES.
 
-    The pair is the point (#1183). `email` word-matches in any script mentioning an address —
+    The pair is the point. `email` word-matches in any script mentioning an address —
     it reached `/usr/local/bin/secret-rotate.sh` through a `git -c user.email=` line that
     embeds no credential — so a census that tracks it teaches sessions the guard is noise.
     `smtp_notify_app_password` is the value that actually authenticates that SMTP session and

@@ -3,14 +3,14 @@
 The deferral for an unapplyable setup role is quoted by four surfaces: the deployer's journal
 line, its Discord alert, the SessionStart banner and this note. The deployer records the
 narrow tags in its `manual_plane_tags` sidecar, one row per role spanning every range that
-made the role pending (#2307). The note ends in the command that clears the role's line, so
+made the role pending. The note ends in the command that clears the role's line, so
 the row is what has to run.
 
-Nothing ties that row to THIS PR, though (#2324 review, finding 1). Read before the tick has
-recorded this PR's range, it is absent or belongs to an earlier range. A stale `coredns` row
-printed for an RBAC PR sends the operator to apply `coredns` and clear the marker, and the
-RBAC change is never applied. So the note quotes a row only where it contains this PR's own
-derivation, and re-reads it only after the awaited tick.
+Nothing ties that row to THIS PR, though. Read before the tick has recorded this PR's range,
+it is absent or belongs to an earlier range. A stale `coredns` row printed for an RBAC PR
+sends the operator to apply `coredns` and clear the marker, and the RBAC change is never
+applied. So the note quotes a row only where it contains this PR's own derivation, and
+re-reads it only after the awaited tick.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_quotes_the_deployers_narrowing.py
 """
@@ -82,7 +82,7 @@ def test_a_stale_row_from_an_earlier_range_is_flagged(pr):
 
 
 def test_a_narrowed_note_clears_only_the_tags_it_told_you_to_apply(pr):
-    """The clear beside a narrowed apply names `--applied` (#2349).
+    """The clear beside a narrowed apply names `--applied`.
 
     A second PR touching the same role can widen the row between this note being printed and
     the operator running the clear. The bare form would drop that PR's tag too, leaving its
@@ -174,7 +174,7 @@ def test_an_unconfirmed_narrowing_leaves_the_role_tag_in_the_verdict(land_run):
 
 
 def test_a_plane_note_that_raises_after_the_tick_keeps_the_role_tag(land_run):
-    """A raise in the re-render ends in the step 1 note, not in a traceback (#2350).
+    """A raise in the re-render ends in the step 1 note, not in a traceback.
 
     `plane_note` already ran on these inputs in step 1, so this is unlikely — which is exactly
     why it was outside the `try`. `land.py` returning a traceback instead of a VERDICT costs
@@ -203,7 +203,7 @@ def test_a_plane_note_that_raises_after_the_tick_keeps_the_role_tag(land_run):
     assert "ansible/k3s-bringup.yml --tags k3s`" in out
 
 
-# ── a landing that deploys its own merge commit narrows from its own range (#3126) ──────
+# ── a landing that deploys its own merge commit narrows from its own range ──────
 
 
 def test_own_narrowing_is_this_prs_derivation_with_no_row(pr):
@@ -225,7 +225,7 @@ _MIXED_PR = {
 
 
 def _fast_landing(land_run, own):
-    """PR #3091's shape: a service tag AND a k3s template, so the tick is never awaited."""
+    """A service tag AND a k3s template, so the tick is never awaited."""
     f = Fakes(
         gh_views={"files,changedFiles": _MIXED_PR},
         derived=(["obs"], "pr"),

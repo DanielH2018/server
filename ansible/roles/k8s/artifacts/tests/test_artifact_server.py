@@ -191,8 +191,8 @@ class TestDeriveServices:
     def test_a_substring_is_not_a_match(self):
         """`nut` lives inside "minute", which appears in nearly every artifact here.
 
-        Measured 2026-08-19 over the real corpus: substring matching tagged 33 of 48
-        documents `nut`, word matching 16. This is the assertion that pins the difference.
+        Over the real corpus, substring matching tagged 33 of 48 documents `nut`, word
+        matching 16. This is the assertion that pins the difference.
         """
         assert (
             tax.derive_services(
@@ -246,7 +246,7 @@ class TestDeriveCategory:
 
     def test_infra_is_a_fallback_not_a_competitor(self):
         """Every document here says pod/cluster/deploy, so infra must never outrank a
-        specific category — measured, it beat `cost` 4-3 before this rule existed."""
+        specific category — an unranked infra score beat `cost` 4-3."""
         assert (
             tax.derive_category(
                 "Grafana alert rules", "the pod on the node in the cluster deploy"
@@ -425,8 +425,8 @@ class TestSafePath:
         (root / "daniel-box" / "sub").mkdir()
         assert srv.safe_path(root, "daniel-box", "sub") is None
 
-    # The four below pin what the realpath + startswith rewrite (ADR-0016) could get wrong
-    # that the pathlib `parents` check could not: a prefix match that is not a directory
+    # The four below pin what the realpath + startswith check could get wrong
+    # that a pathlib `parents` check could not: a prefix match that is not a directory
     # boundary, the host directory itself, a symlink that stays inside, and a NUL byte.
     def test_a_sibling_sharing_the_host_prefix_is_refused(self, root):
         (root / "daniel-box2").mkdir()

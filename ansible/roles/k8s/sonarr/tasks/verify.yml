@@ -1,7 +1,7 @@
 ---
-# B3's actual deliverable. Everything above only establishes that a pod is running, which for
-# this batch means nothing: the failure being rehearsed is a library that looks intact until an
-# import silently fails, and it is invisible from the outside.
+# The actual proof. Everything above only establishes that a pod is running, which proves
+# little: the failure is a library that looks intact until an import silently fails, and it is
+# invisible from the outside.
 #
 # Read over the Service ClusterIP, not the ingress hostname: the route is behind Authelia, which
 # answers an API call carrying X-Api-Key with a 302 to a login page.
@@ -9,7 +9,7 @@
 # WAIT FOR THE NEW POD BEFORE READING ANYTHING FROM IT.
 #
 # k8s/manifests does NOT wait — it QUEUES the rollout for k8s/manifests/tasks/drain.yml, which drains the
-# whole batch at the end of the play (5eea64e6, 2026-08-15). This file runs straight after the
+# whole batch at the end of the play. This file runs straight after the
 # manifests include, so without this gate the reads below race a pod that is still rolling, and
 # `Recreate` means there is a window with no pod at all where they fail by connection refused.
 #
@@ -41,8 +41,7 @@
 
 - name: Read the cluster copy's root folders
   tags: [deploy]
-  # The seeded config.xml carries the same API key as the Docker copy, which is why one SOPS
-  # value serves both.
+  # The seeded config.xml carries the API key held in SOPS as sonarr_api_key.
   no_log: true
   ansible.builtin.uri:
     url: "http://{{ sonarr_k8s_svc.stdout }}:{{ container_item.port }}/api/v3/rootfolder"
@@ -54,18 +53,15 @@
   # the library resolves inside the pod), which is worth evaluating on a dry run rather than
   # skipping into a failed assert.
   check_mode: false
-  # NO `until:`/`retries:` (#2235). The 12-sample poll this replaced was covering the rollout
-  # the gate at the top of this file now names — and covering it badly, since its 120s budget
-  # was a fifth of sonarr_k8s_rollout_timeout, so a slow first boot failed a rollout that would
-  # have succeeded. A named wait for a named thing, then one read.
+  # NO `until:`/`retries:`: the gate at the top of this file waits for the rollout, and a retry
+  # loop here would only repeat that wait with a smaller budget. A named wait for a named
+  # thing, then one read.
 
 - name: Fail if a root folder does not resolve inside the pod
   tags: [deploy]
   # `accessible` is sonarr's own answer to "can I stat this path right now", so it is the direct
   # test of the D4 mount contract. freeSpace is the corroborating one: it is read from the
-  # filesystem the mount actually leads to, and on daniel-box it must be far larger than
-  # daniel-server's 334 G — a value that matched the old host would mean the pod is somehow
-  # reading the wrong tree.
+  # filesystem the mount actually leads to.
   ansible.builtin.assert:
     that:
       - sonarr_k8s_rootfolders.json | length > 0

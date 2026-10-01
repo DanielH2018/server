@@ -1,10 +1,10 @@
 """The rendered longhorn-backup-health shim: arm states, env-var parity, and real runs.
 
-Split out of `test_validate_shell_templates.py`, which keeps the validator machinery. The
-tests here render `longhorn-backup-health.sh.j2` and — for most of them — RUN the rendered
-script, with every external seam (the Python reader, `kuma_push`, `boot_grace_active`, the
-token files, `curl`) replaced by a fixture. `conftest.py` in this directory puts a stubbed
-`logger` first on PATH, which is what keeps these runs out of the host's syslog.
+The tests here render `longhorn-backup-health.sh.j2` and — for most of them — RUN the
+rendered script, with every external seam (the Python reader, `kuma_push`,
+`boot_grace_active`, the token files, `curl`) replaced by a fixture. `conftest.py` in this
+directory puts a stubbed `logger` first on PATH, which is what keeps these runs out of the
+host's syslog.
 
 Run: uv run pytest scripts/validate/tests/test_backup_health_shim.py
 """
@@ -49,8 +49,8 @@ def test_backup_health_renders_clean_for_every_arm_state(
     is never applied there and its branch would go unexercised — the dead-path shape that let two
     commands stay broken behind passing tests after the k3s cutover. Since the shim only exports
     LONGHORN_BACKUP_ARMED/LONGHORN_R2_ARMED for the Python reader to interpret (BACKUP_TARGETS
-    itself is now derived cluster-side), the disarmed branch that matters is the exported string
-    the reader parses — a wrong render there disarms silently instead of at `set -u`.
+    itself is derived cluster-side), the disarmed branch that matters is the exported string the
+    reader parses — a wrong render there disarms silently instead of at `set -u`.
     """
     shellcheck_bin = shutil.which("shellcheck")
     assert shellcheck_bin, "shellcheck must be on PATH (dev dependency shellcheck-py)"
@@ -106,12 +106,11 @@ def test_backup_health_shim_exports_every_env_var_the_reader_requires():
     """LONGHORN_* names are derived from the reader's OWN source, not hardcoded here.
 
     Every LONGHORN_* var the reader reads is REQUIRED — `_require_env`/`_require_int_env`/
-    `_require_bool_env`, no hardcoded fallback (the 2026-09-04 review's finding #3: a fallback
-    used to let a shim that stopped exporting one var substitute a stale constant silently). The
-    two sides must therefore agree exactly: this derives the required set straight from
-    longhorn_backup_health.py's source so a var added to one side without the other is caught
-    here, rather than by the reader exiting nonzero in production naming the var nobody remembered
-    to export.
+    `_require_bool_env`, no hardcoded fallback (a fallback would let a shim that stopped exporting
+    one var substitute a stale constant silently). The two sides must therefore agree exactly:
+    this derives the required set straight from longhorn_backup_health.py's source so a var added
+    to one side without the other is caught here, rather than by the reader exiting nonzero in
+    production naming the var nobody remembered to export.
     """
     reader_source = BACKUP_HEALTH_READER.read_text()
     required = set(
@@ -151,10 +150,10 @@ def _run_rendered_shim(
     string the `kuma_push` stub received (None when never called) and `curl_calls` is one
     argv line per curl invocation.
 
-    `push_ok_unset` reproduces an older kuma-push-lib.sh that never set KUMA_PUSH_OK at all
-    (2026-09-04 review finding #4) — the injected `kuma_push` stub omits that assignment.
-    `extra_stub_files` places additional executables (name -> script body) on the same PATH
-    directory as the `curl` stub, ahead of the real binaries — e.g. a `mktemp` that fails.
+    `push_ok_unset` reproduces an older kuma-push-lib.sh that never set KUMA_PUSH_OK at all —
+    the injected `kuma_push` stub omits that assignment. `extra_stub_files` places additional
+    executables (name -> script body) on the same PATH directory as the `curl` stub, ahead of
+    the real binaries — e.g. a `mktemp` that fails.
 
     The healthchecks.io seam is not optional on this host: `/etc/healthchecks/ping.env` is
     0640 root:ubuntu, so the test user CAN read the real key, and until this seam existed a
@@ -233,20 +232,19 @@ def _assert_pings_carry_only_the_fixture_key(curl_calls: list[str]) -> None:
 def test_backup_health_kubectl_stderr_does_not_contaminate_the_status(
     tmp_path, logger_calls
 ):
-    """Regression for the 2026-09-04 review's finding #1, run against the ACTUAL shipped shim.
+    """Regression guard, run against the ACTUAL shipped shim.
 
-    Until this fix, `OUT=$(... 2>&1)` meant any stderr byte the reader's own `logger` subprocess
-    wrote — `logger: socket /dev/log: ...`, e.g. — landed ahead of the reader's real stdout line
-    once the two streams were merged, silently turning `up` into garbage that Kuma reads as DOWN
-    and pings healthchecks.io `/fail` on a backup plane that was fine. This patches in a fake
-    reader that writes junk to stderr before printing `up<TAB>ok` and asserts on the status the
-    `kuma_push` stub actually receives — proving the fix at the point that matters (what reaches
-    Kuma) rather than just that the fix's source text exists.
+    With `OUT=$(... 2>&1)`, any stderr byte the reader's own `logger` subprocess writes —
+    `logger: socket /dev/log: ...`, e.g. — lands ahead of the reader's real stdout line once the
+    two streams are merged, silently turning `up` into garbage that Kuma reads as DOWN and pings
+    healthchecks.io `/fail` on a backup plane that was fine. This patches in a fake reader that
+    writes junk to stderr before printing `up<TAB>ok` and asserts on the status the `kuma_push`
+    stub actually receives — proving the fix at the point that matters (what reaches Kuma)
+    rather than just that the fix's source text exists.
 
-    On this path the shim now DOES call `logger` — the 2026-09-04 review's finding #2. Only the
-    failure branch used to call it, so this exact stderr (a green run with something on stderr)
-    used to be silently dropped; see test_backup_health_logs_stderr_on_a_successful_run right
-    below for that half in isolation.
+    On this path the shim DOES call `logger`. A shim that called it only on the failure branch
+    would silently drop this exact stderr (a green run with something on stderr); see
+    test_backup_health_logs_stderr_on_a_successful_run right below for that half in isolation.
     """
     proc, kuma_status, curl_calls = _run_rendered_shim(
         tmp_path,
@@ -265,13 +263,13 @@ def test_backup_health_kubectl_stderr_does_not_contaminate_the_status(
 
 
 def test_backup_health_logs_stderr_on_a_successful_run(tmp_path, logger_calls):
-    """Delta 2 (2026-09-04 review): a clean run's stderr must reach the local trail too.
+    """A clean run's stderr must reach the local trail too.
 
-    Before this fix only the `if [[ $RC -ne 0 ...` branch called `logger` — a kubectl RBAC
-    warning or a uv resolution warning on an otherwise-green tick was captured into ERR and then
-    silently discarded, since the success branch never read it. journalctl showed nothing for
-    the one case where "the run succeeded, but something on stderr is worth knowing" is exactly
-    the signal a warning exists to carry.
+    If only the `if [[ $RC -ne 0 ...` branch called `logger`, a kubectl RBAC warning or a uv
+    resolution warning on an otherwise-green tick would be captured into ERR and then silently
+    discarded, since the success branch never reads it. journalctl would show nothing for the
+    one case where "the run succeeded, but something on stderr is worth knowing" is exactly the
+    signal a warning exists to carry.
     """
     proc, kuma_status, _curl_calls = _run_rendered_shim(
         tmp_path,
@@ -307,7 +305,7 @@ def test_backup_health_reader_failure_is_logged_through_the_stub(
     breaks`, which only asserts the `logger` call's source text sits in the right branch. It is
     also the non-vacuity proof for this directory's `_no_syslog` fixture: the shim's `logger`
     is the one call on any tested path, so an empty `logger_calls` here would mean the stub is
-    no longer first on PATH and the real syslog took it (issue #1052).
+    no longer first on PATH and the real syslog took it.
     """
     proc, kuma_status, curl_calls = _run_rendered_shim(
         tmp_path, "printf 'Traceback: the reader broke\\n' >&2\nexit 1\n"
@@ -322,7 +320,7 @@ def test_backup_health_reader_failure_is_logged_through_the_stub(
     _assert_pings_carry_only_the_fixture_key(curl_calls)
 
 
-# ── delta 1 (2026-09-04 review): STATUS must be Kuma's own "up"/"down" vocabulary ───────────
+# ── STATUS must be Kuma's own "up"/"down" vocabulary ─────────────────────────────────────────
 
 
 def test_backup_health_a_recognized_down_status_reaches_kuma_unchanged(
@@ -340,9 +338,9 @@ def test_backup_health_a_recognized_down_status_reaches_kuma_unchanged(
 def test_backup_health_a_tabless_last_line_is_flagged_not_pushed_as_is(
     tmp_path, logger_calls
 ):
-    """The flagged half. A stray final stdout line with no tab used to make STATUS the whole
-    line — neither "up" nor "down" — and get pushed to Kuma as-is; `[[ "$STATUS" == "up" ]]`
-    then read false and pinged healthchecks.io `/fail` on a status string Kuma never defined.
+    """The flagged half. A stray final stdout line with no tab would make STATUS the whole
+    line — neither "up" nor "down" — pushed to Kuma as-is; `[[ "$STATUS" == "up" ]]` then
+    reads false and pings healthchecks.io `/fail` on a status string Kuma never defined.
     """
     proc, kuma_status, curl_calls = _run_rendered_shim(
         tmp_path, "printf 'a stray line with no tab at all\\n'\n"
@@ -355,7 +353,7 @@ def test_backup_health_a_tabless_last_line_is_flagged_not_pushed_as_is(
     assert any("/fail" in call for call in curl_calls), curl_calls
 
 
-# ── delta 3 (2026-09-04 review): an unchecked mktemp must not go unexplained ────────────────
+# ── an unchecked mktemp must not go unexplained ──────────────────────────────────────────────
 
 
 def test_backup_health_a_failing_mktemp_is_named_in_the_pushed_message(
@@ -376,7 +374,7 @@ def test_backup_health_a_failing_mktemp_is_named_in_the_pushed_message(
     _assert_pings_carry_only_the_fixture_key(curl_calls)
 
 
-# ── delta 4 (2026-09-04 review): KUMA_PUSH_OK must not be a bare reference under `set -u` ───
+# ── KUMA_PUSH_OK must not be a bare reference under `set -u` ─────────────────────────────────
 
 
 def test_backup_health_kuma_alive_ping_has_no_fail_suffix_when_the_push_succeeded(
@@ -395,12 +393,12 @@ def test_backup_health_kuma_alive_ping_has_no_fail_suffix_when_the_push_succeede
 def test_backup_health_an_older_lib_that_never_sets_kuma_push_ok_does_not_abort(
     tmp_path, logger_calls
 ):
-    """The regression this delta exists for: under `set -u`, a bare `(( KUMA_PUSH_OK ))`
-    reference is fatal the instant kuma-push-lib.sh doesn't set it — an older lib on the host,
-    predating this var. That used to kill the script before the hc-ping call even ran, silencing
-    the off-site deadman rather than reddening it. `${KUMA_PUSH_OK:-1}` must let the script keep
-    running (with the default-success reading, matching pi-sd-health.sh.j2's own
-    `${KUMA_PUSH_OK:-1}` convention) and still reach both curl calls.
+    """The regression guarded: under `set -u`, a bare `(( KUMA_PUSH_OK ))` reference is fatal
+    the instant kuma-push-lib.sh doesn't set it — an older lib on the host, predating this var.
+    That would kill the script before the hc-ping call even ran, silencing the off-site deadman
+    rather than reddening it. `${KUMA_PUSH_OK:-1}` must let the script keep running (with the
+    default-success reading, matching pi-sd-health.sh.j2's own `${KUMA_PUSH_OK:-1}` convention)
+    and still reach both curl calls.
     """
     proc, kuma_status, curl_calls = _run_rendered_shim(
         tmp_path, "printf 'up\\tall clean\\n'\n", push_ok_unset=True

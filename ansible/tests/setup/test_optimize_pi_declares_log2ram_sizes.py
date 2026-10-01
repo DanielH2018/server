@@ -3,8 +3,8 @@
 
 Section 7 of `optimize_pi`'s tasks sizes four separate caps against one number -- the log2ram
 tmpfs, 128 MB: journald `SystemMaxUse=32M`, auditd's 12 MB ceiling, `ACCT_LOGGING="3"` and
-sysstat `HISTORY=2`. The number itself came from the package, and nothing in the role asserted
-it (#2714). log2ram shipped `SIZE=40M` before it shipped `SIZE=128M`, so a reinstall or a fresh
+sysstat `HISTORY=2`. The number itself comes from the package unless the role declares it.
+log2ram shipped `SIZE=40M` before it shipped `SIZE=128M`, so a reinstall or a fresh
 provision under a moved default runs those caps into a tmpfs a third of the size they assume,
 with nothing on the run that says so.
 
@@ -108,7 +108,7 @@ def test_the_size_reader_rejects_a_unit_it_does_not_know():
         _mb("128MB")
 
 
-# ── The duplicate JOURNALD_AWARE line (#2726) ─────────────────────────────────────────
+# ── The duplicate JOURNALD_AWARE line ─────────────────────────────────────────
 
 
 def _journald_guard() -> dict:

@@ -1,12 +1,11 @@
 ---
-# The play (initial_setup.yml) runs become:true, so a become:false `echo $HOME` used to be
-# needed to avoid shipping these dotfiles to /root. The deploy user's home is just
-# /home/{{ sys_user }} (also hardcoded in sops_setup's .bashrc path), so hardcode it directly
-# and drop the extra shell task.
+# The play (initial_setup.yml) runs become:true, so `$HOME` would ship these dotfiles to /root.
+# The deploy user's home is hardcoded as /home/{{ sys_user }} (as in sops_setup's .bashrc
+# path).
 # chezmoi owns .bashrc and .gitconfig on the hosts that have its source directory (daniel-box
 # and daniel-server; `chezmoi source-path` resolves both there), and neither file here is
-# chezmoi's version. Copying over them replaced the dotfiles' .bashrc and the templated
-# .gitconfig that carries commit signing (#2322). Only daniel-pi, which has no chezmoi, takes
+# chezmoi's version. Copying over them would replace the dotfiles' .bashrc and the templated
+# .gitconfig that carries commit signing. Only daniel-pi, which has no chezmoi, takes
 # these files. The stat carries both sub-tags so a `--tags bash` or `--tags git` run sets it.
 - name: Check whether chezmoi manages this host's dotfiles
   ansible.builtin.stat:

@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Guards on the seed-backup playbook — the one that writes a first recovery point to B2.
 
-It exists because the block-size migration rebuilt volumes with no backup history, and
-`k3s-bringup.yml --tags longhorn` then puts them back in a weekly shard that runs on one weekday.
-On 2026-08-20 fourteen volumes were in that state at once, none of them overdue and none of them
-holding a recovery point anywhere: the backup-health check's first-run grace excuses a volume until
-its first scheduled run, so the exposure is invisible by design rather than by defect.
+It exists for volumes rebuilt with no backup history: `k3s-bringup.yml --tags longhorn` puts
+them back in a weekly shard that runs on one weekday, so a rebuilt volume can hold no recovery
+point anywhere. The backup-health check's first-run grace excuses a volume until its first
+scheduled run, so the exposure is invisible by design rather than by defect.
 
 Each refusal below prevents a specific way of spending a B2 transaction on a backup that is
 useless, unprunable, or impossible:
 
-NO TIER. Longhorn's retain is per job. A backup of a volume no job selects is never pruned, which
-is how the estate accumulated the orphans the reaper was written for.
+NO TIER. Longhorn's retain is per job. A backup of a volume no job selects is never pruned, so it
+becomes an orphan for the reaper.
 
 DISARMED TARGET. A blank backupTargetURL is how this estate disarms a target. A Backup requested
 against one cannot complete, and leaves a stuck CR behind.
@@ -110,9 +109,9 @@ def test_every_refusal_runs_before_anything_is_created():
 
 def test_both_seed_crs_carry_the_owning_jobs_label():
     """Retain counts only backups labelled with its own job, and the snapshot auto-cleanup only
-    deletes snapshots that are. An unlabelled seed is unowned: its backup sat in B2 until
-    prune_backups.yml's seeds mode and its snapshot pinned 3.5 GB of deleted files into every weekly backup
-    of valheim-config (issue #942)."""
+    deletes snapshots that are. An unlabelled seed is unowned: its backup stays in B2 until
+    prune_backups.yml's seeds mode removes it, and its snapshot pins deleted files into every
+    weekly backup."""
     snapshot = _named("Create the snapshot")[0]["ansible.builtin.command"]["stdin"]
     backup = _named("Request the backup")[0]["ansible.builtin.command"]["stdin"]
     for manifest in (snapshot, backup):

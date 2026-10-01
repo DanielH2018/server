@@ -10,8 +10,8 @@ def widget_role(tmp_path: Path):
     """Build a synthetic k8s role under tmp_path and return its directory.
 
     The autodeploy guards read a role off disk, so pinning their behavior means writing one.
-    Forty of those tests spelled out the same three lines — make the dir, make tasks/, write
-    tasks/main.yml — before getting to the case they were actually about.
+    The fixture makes the dir, makes tasks/ and writes tasks/main.yml, so a test starts at the
+    case it is about.
 
     Pass `tasks` as the tasks/main.yml body, `templates` as {filename: body}, and `defaults` as
     the defaults/main.yml body. Everything is optional: a role with no tasks file at all is

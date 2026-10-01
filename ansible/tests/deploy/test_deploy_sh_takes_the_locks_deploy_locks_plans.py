@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """`deploy_locks.py` names and orders the service locks; `deploy.sh` only takes them.
 
-Until 2026-09-18 both sides carried the naming and the order -- bash at
-`take_service_locks`, Python at `service_locks` -- and a test compared the two, because
-`sort` and Python's `sorted` disagree on `pihole` against `pi-peer-backup` unless the shell
-pins `LC_ALL=C`, and a disagreement is a deadlock between a hand deploy and a tick. Since
-#2054 the wrapper takes what `deploy_locks.plan` returns, in that order, so there is one
-ordering to test rather than two to reconcile; since #2412 the wrapper is Python.
+The wrapper takes what `deploy_locks.plan` returns, in that order, so there is one ordering
+to test rather than two to reconcile. `sort` and Python's `sorted` disagree on `pihole`
+against `pi-peer-backup` unless a shell pins `LC_ALL=C`, and a disagreement is a deadlock
+between a hand deploy and a tick.
 
 Three things are measured, each driven rather than read off the source:
 
@@ -21,9 +19,7 @@ Three things are measured, each driven rather than read off the source:
   on `deploy_under_locks.take_service_locks`, handed a `plan`; `--detach` takes its locks
   through the same call, which a structural check pins.
 - The MODE the wrapper takes `all` in, which decides whether a full run and a scoped run
-  exclude each other. Taken over from the wall-clock pair in
-  `scripts/deploy_tools/tests/test_deploy_service_lock_concurrency.py` (#2415): the property
-  is about a lock mode, and a held lock in this process contends with a second descriptor on
+  exclude each other. The property is about a lock mode, and a held lock in this process contends with a second descriptor on
   the same file exactly as another process would.
 
 Run: uv run pytest ansible/tests/deploy/test_deploy_sh_takes_the_locks_deploy_locks_plans.py
@@ -164,7 +160,7 @@ def test_plan_refuses_a_call_it_cannot_plan_and_prints_no_lock(argv):
 def test_lock_path_is_the_one_naming_site_and_sanitises_what_the_shell_did(
     tmp_path, monkeypatch
 ):
-    """The shell substituted `_` for anything outside `[A-Za-z0-9_.-]`; the module does now."""
+    """The module substitutes `_` for anything outside `[A-Za-z0-9_.-]`."""
     monkeypatch.setenv("HOMELAB_DEPLOY_LOCK_DIR", str(tmp_path))
     assert deploy_locks.lock_path("sonarr") == str(
         tmp_path / "server-deploy-sonarr.lock"
@@ -314,7 +310,7 @@ def test_the_foreground_refuses_with_79_and_takes_nothing_when_plan_fails(plan, 
     assert "deploy_locks.plan" in err
 
 
-# -- what the wrapper no longer carries -------------------------------------------------
+# -- what the wrapper does not carry -------------------------------------------------
 
 
 def _non_docstring_strings(source: str) -> list[str]:

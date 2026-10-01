@@ -6,20 +6,11 @@ dereferences `<reg>.stdout`, or loops `<reg>.results` and reads `item.stdout`, b
 "object of type 'dict' has no attribute 'stdout'" on exactly the runs where the producer's
 `when:` was false — which are the runs nobody tests.
 
-The `when:` half of the rule has bitten twice:
-
-  * 2026-08-21, k8s/volume-snapshot: a retake wait registered over the first wait's genuine
-    result and failed the deploy over a healthy snapshot. `test_volume_snapshot_register.py`
-    is the behavioural anchor from that one, and it covers that role only.
-  * 2026-08-22, k8s/observability: the restart-count snapshot is gated on the manifests
-    changing, but its assert and its stabilise-gate hand-off were not. A dashboards-only
-    deploy — manifests unchanged — failed the play after the dashboards had already applied.
-
-The behavioural test in `test_volume_snapshot_register.py` says a rendered-expression test
-cannot catch this class, and it is right about the general case: the bug is in *when* Ansible
-assigns a register. But the specific structural shape above IS statically visible, and it is
-the shape both incidents took. Catching it costs one parse; catching it behaviourally costs a
-stubbed end-to-end run per role.
+`test_volume_snapshot_register.py` is the behavioural anchor for the `when:` half, and it covers
+k8s/volume-snapshot only. It says a rendered-expression test cannot catch this class, and it is
+right about the general case: the bug is in *when* Ansible assigns a register. But the
+structural shape below IS statically visible. Catching it costs one parse; catching it
+behaviourally costs a stubbed end-to-end run per role.
 
 The rule: if a task carries `when:` and a `register:`, every task that dereferences that
 register must either carry the producer's condition too, or filter the skip results out of
@@ -28,11 +19,10 @@ its loop (`rejectattr('skipped', 'defined')`).
 A PRODUCER NEEDS NO `when:` TO BE CONDITIONAL. Check mode skips `ansible.builtin.command` and
 its siblings whatever their `when:` says, so an UNGUARDED command that registers is a skip
 result on every `--check` run — the same dict with no `stdout`, reached by a different route.
-`setup/k3s/tasks/coredns.yml` was the third incident (2026-09-22, #2305): `Read the live
-Corefile` carries no `when:`, and `Point cluster DNS at Pi-hole first` compares
-`k3s_coredns_live.stdout` in its own `when:`. Under `--check` that conditional errored before
-the play reached anything else in the file. The fix was one `check_mode: false`; the class was
-unguarded until #2315 widened `_producers` with `_check_mode_producers` below.
+`_producers` covers it through `_check_mode_producers`. `setup/k3s/tasks/coredns.yml` is the
+anchor: `Read the live Corefile` carries no `when:`, and `Point cluster DNS at Pi-hole first`
+compares `k3s_coredns_live.stdout` in its own `when:`. Under `--check` that conditional errors
+before the play reaches anything else in the file, unless the read carries `check_mode: false`.
 
 A consumer of a check-mode producer is clean when a `--check` run never reaches it — its own
 `when:`, an enclosing `block:`, or the `when:` on the task that imports its file. All three
@@ -41,29 +31,24 @@ are `_check_mode.excludes_check_mode` over `_check_mode.walk_with_inherited_when
 `deploy/test_retried_commands_survive_check_mode.py`, which asks the same questions of
 the same tasks for the retry-loop version of this bug.
 
-The widening found 33 consumers that predated it. They sat in an allowlist until #2323 fixed
-the last of them, so the rule has no exemptions.
+The rule has no exemptions. Each refinement below has its own pair of anchors at the foot of
+this file. `SKIP_MISSING` names `stdout`/`stderr`/`rc` and their `_lines` forms, because `\b`
+does not break inside `stdout_lines`. `expressions()` drops a `block:` wrapper's children, so a
+child's own `failed_when` is not reported against the block's name. `_check_mode_producers`
+also covers a register the when-based rule covers, because check mode skips the producer
+whatever its `when:` says.
 
-Three holes in that widening were drained on 2026-09-24, each with its own pair of anchors at
-the foot of this file. `SKIP_MISSING` named only `stdout`/`stderr`/`rc`, and `\b` does not
-break inside `stdout_lines`, so a consumer reading the `_lines` form passed (#2351).
-`expressions()` dumped a `block:` wrapper's children as part of the wrapper, reporting a
-child's own `failed_when` against the block's name (#2352). And `_check_mode_producers` skipped
-any register the when-based rule already covered, so a consumer that repeated its producer's
-`when:` was called clean even though check mode skips the producer regardless (#2353).
+Neither rule exempts a whole TASK because it registers a name they track: a task that reads a
+sibling's skip result and registers something of its own is judged by both.
+`test_registering_consumers.py` holds those anchors.
 
-A fourth followed on the same day: both rules exempted the whole TASK once it registered a name
-they tracked, so a task that reads a sibling's skip result and registers something of its own
-was judged by neither. `test_registering_consumers.py` holds those anchors.
-
-A fifth bounded that fourth (#2375). Judging every registering task judged its `failed_when`
-and its `changed_when` too, and a task check mode SKIPS never evaluates either — Ansible
-evaluates both on a result its module returned, and a skipped module returns none. So the
-check-mode rule drops those two keys when the CONSUMER is itself skipped under `--check`, and
-reads its module args and its `when:` as before: both are templated ahead of the skip. `until:`
-is not dropped, though the issue asked for it — the retry loop evaluates against the skip
-result. The when-based rule keeps everything, because its producer is skipped on a real run
-where the consumer runs. Those anchors sit with the fourth's.
+The check-mode rule drops a consumer's `failed_when` and `changed_when` when the CONSUMER is
+itself skipped under `--check`: Ansible evaluates both on a result its module returned, and a
+skipped module returns none. It reads the consumer's module args and its `when:` as before,
+because both are templated ahead of the skip. `until:` is not dropped, because the retry loop
+evaluates against the skip result. The when-based rule keeps everything, because its producer
+is skipped on a real run where the consumer runs. Those anchors sit with
+`test_registering_consumers.py`.
 """
 
 from pathlib import Path
@@ -79,17 +64,16 @@ from _skip_result_rule import _offenders, _task_files
 
 _COREDNS = _ROLES / "setup" / "k3s" / "tasks" / "coredns.yml"
 
-# Files the census must walk. Each held a consumer the #2315 widening flagged, so a glob that
-# stopped reaching them would turn the per-file test green over files it never read.
+# Files the census must walk. Each holds a consumer the check-mode producer rule flags, so a
+# glob that stops reaching them would turn the per-file test green over files it never read.
 _KNOWN_TASK_FILES = frozenset(
     {
         "setup/k3s/tasks/coredns.yml",
         "setup/hypervisor/tasks/reap_staging.yml",
         "k8s/jellyfin/tasks/verify.yml",
         "k8s/media-volume/tasks/sync.yml",
-        # The 2026-09-24 widenings: #2351 added `stdout_lines`/`stderr_lines`/`delta` to
-        # SKIP_MISSING, #2353 stopped skipping a when-gated producer under the check-mode
-        # rule. Each of these held a consumer one of the two flagged.
+        # Each of these holds a consumer flagged through the `stdout_lines`/`stderr_lines`/`delta`
+        # entries in SKIP_MISSING or through a when-gated producer under the check-mode rule.
         "k8s/authelia/tasks/main.yml",
         "k8s/headlamp/tasks/main.yml",
         "k8s/prowlarr/tasks/main.yml",
@@ -114,7 +98,7 @@ def test_the_census_walks_the_files_it_was_written_for() -> None:
     """The non-vacuity half of the per-file test above.
 
     The rule's own behaviour is pinned by the anchors below. This asserts the glob still
-    reaches files that once held an offender, so a moved roles tree fails here by name.
+    reaches files that hold an offender, so a moved roles tree fails here by name.
     """
     walked = {path.relative_to(_ROLES).as_posix() for path in _task_files()}
     missing = sorted(_KNOWN_TASK_FILES - walked)
@@ -122,12 +106,12 @@ def test_the_census_walks_the_files_it_was_written_for() -> None:
 
 
 def test_the_widened_rule_would_have_caught_the_coredns_read(tmp_path: Path) -> None:
-    """#2315's anchor: coredns.yml with its `check_mode: false` taken back off.
+    """Anchor: coredns.yml with its `check_mode: false` taken back off.
 
     `Read the live Corefile` carries no `when:`, so the older rule reads it as an
     unconditional producer. Check mode skips `command` regardless, and `Point cluster DNS at
-    Pi-hole first` compares `k3s_coredns_live.stdout` in its own `when:` — which is how the
-    `coredns` tag failed under `--check` on 2026-09-22 (#2305).
+    Pi-hole first` compares `k3s_coredns_live.stdout` in its own `when:`, which errors under
+    `--check`.
     """
     tasks = yaml_fast.safe_load(_COREDNS.read_text())
     reads = [t for t in tasks if t.get("name") == "Read the live Corefile"]
@@ -165,7 +149,7 @@ def test_the_live_coredns_read_is_clean() -> None:
 
 
 def test_the_check_finds_the_observability_shape(tmp_path: Path) -> None:
-    """Anchor the detector against the 2026-08-22 bug as it was actually written."""
+    """Anchor the detector against the observability restart-count shape as written."""
     tasks = tmp_path / "tasks"
     tasks.mkdir()
     bug = tasks / "main.yml"
@@ -203,7 +187,7 @@ def test_the_check_accepts_a_lazy_conditional_guard(tmp_path: Path) -> None:
         "  ansible.builtin.command: kubectl exec test -f .seeded\n"
         "  register: seed_volume_marker\n"
         # Anchors the WHEN-based rule. The check-mode rule also reaches a when-gated
-        # producer since #2353, and would report the same consumer for a second reason.
+        # producer, and would report the same consumer for a second reason.
         "  check_mode: false\n"
         "- name: Decide whether this run copies\n"
         "  ansible.builtin.set_fact:\n"
@@ -229,7 +213,7 @@ def test_the_lazy_guard_still_catches_an_unrelated_gate(tmp_path: Path) -> None:
         "  ansible.builtin.command: kubectl exec test -f .seeded\n"
         "  register: seed_volume_marker\n"
         # Anchors the WHEN-based rule. The check-mode rule also reaches a when-gated
-        # producer since #2353, and would report the same consumer for a second reason.
+        # producer, and would report the same consumer for a second reason.
         "  check_mode: false\n"
         "- name: Decide whether this run copies\n"
         "  ansible.builtin.set_fact:\n"
@@ -278,7 +262,7 @@ _LINES_PRODUCER = (
     "  register: labelled\n"
 )
 
-# The attributes #2351 added to SKIP_MISSING. Parametrised so each one is load-bearing: the
+# The `_lines`/`delta` attributes of SKIP_MISSING. Parametrised so each one is load-bearing: the
 # tree has no consumer of `stderr_lines` or `delta`, so dropping either from the tuple would
 # leave the census green and every other anchor here passing.
 _ADDED_ATTRS = ("stdout_lines", "stderr_lines", "delta")
@@ -308,7 +292,7 @@ def test_stdout_does_not_match_inside_stdout_lines() -> None:
 def test_the_check_flags_a_consumer_of_each_attribute_a_skip_result_lacks(
     tmp_path: Path, attr: str
 ) -> None:
-    """#2351: an unguarded `command` producer leaves no `<attr>` for the reader below it."""
+    """An unguarded `command` producer leaves no `<attr>` for the reader below it."""
     problems = _offenders(_write(tmp_path, _LINES_PRODUCER + _reader(attr)))
     assert len(problems) == 1
     assert f"labelled.{attr}" in problems[0].message
@@ -326,13 +310,12 @@ def test_the_check_accepts_those_reads_of_an_opted_out_producer(
 
 
 def test_a_block_is_not_flagged_for_its_own_childs_failed_when(tmp_path: Path) -> None:
-    """#2352: `expressions()` drops `block`/`rescue`/`always`.
+    """`expressions()` drops `block`/`rescue`/`always`.
 
     `walk_with_inherited_when` yields the child on its own, so a wrapper that kept its
     children's text saw the child's expressions twice and reported the read against the
     BLOCK's name. Ansible never evaluates a skipped task's own `failed_when`, so the only
-    read here is one that cannot happen — `setup/initial_setup/tasks/system-tuning.yml` was
-    allowlisted for exactly this.
+    read here is one that cannot happen.
     """
     assert (
         _offenders(
@@ -398,13 +381,11 @@ _GUEST_CONSUMER = (
 def test_a_when_gated_producer_is_still_judged_under_the_check_mode_rule(
     tmp_path: Path,
 ) -> None:
-    """#2353: repeating the producer's `when:` is enough on a real run, not under `--check`.
+    """Repeating the producer's `when:` is enough on a real run, not under `--check`.
 
-    `setup/hypervisor/tasks/guest.yml` as it was written, before #2941 retired that guest and
-    its task file. The consumer repeats the producer's
-    condition, so the when-based rule accepts it — and check mode skips the producer whatever
-    its `when:` says, so against a running guest the consumer still read a skip result. The
-    old `reg in when_based` early-out meant the check-mode rule never looked.
+    The consumer repeats the producer's condition, so the when-based rule accepts it. Check mode
+    skips the producer whatever its `when:` says, so the consumer still reads a skip result.
+    The check-mode rule must therefore look at a register the when-based rule covers.
     """
     problems = _offenders(_write(tmp_path, _GUEST_PRODUCER + _GUEST_CONSUMER))
     assert len(problems) == 1
@@ -418,9 +399,9 @@ def test_a_when_gated_producer_is_still_judged_under_the_check_mode_rule(
 def test_a_when_gated_producer_that_opts_out_of_check_mode_is_clean(
     tmp_path: Path,
 ) -> None:
-    """The accepting half, and the fix that file carried: `check_mode: false` on the read.
+    """The accepting half: `check_mode: false` on the read.
 
-    `setup/hypervisor/tasks/reap_staging.yml` carries the same shape today."""
+    `setup/hypervisor/tasks/reap_staging.yml` carries the same shape."""
     opted_out = _GUEST_PRODUCER.replace(
         "  register: hypervisor_staging_vm_live_xml\n",
         "  register: hypervisor_staging_vm_live_xml\n  check_mode: false\n",

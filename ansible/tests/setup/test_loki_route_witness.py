@@ -4,13 +4,13 @@ loki-homelab's read route has one caller, `probe.py` running as a host process, 
 ClientIP set of node-owned addresses. Three properties keep the witness honest, and each fails in a
 way that reads as success:
 
-TWO HOSTS, TWO TOKENS. Which address a host arrives as depends on where the traefik pod sits, which
-is why #1693 left the route dead from daniel-server and healthy from daniel-box. A shared push token
-would let either host's `up` satisfy Kuma's deadline and mask the other — the trap issue #952
-records for the UPS secondary watchdog.
+TWO HOSTS, TWO TOKENS. Which address a host arrives as depends on where the traefik pod sits,
+so the route can be dead from one host and healthy from the other. A shared push token
+would let either host's `up` satisfy Kuma's deadline and mask the other — the same trap the
+UPS secondary watchdog avoids.
 
 THE DEADLINE EXCEEDS THE PRODUCER'S PERIOD. A push monitor whose interval is shorter than its cron's
-period fires DOWN with nothing wrong, which is how the Cloudflare DDNS tiles were read as broken.
+period fires DOWN with nothing wrong.
 
 THERE IS A WAY OUT. A host dropped from `loki_route_witness_hosts` must lose the cron, or it keeps
 pushing a monitor the manifest no longer declares — a 404 that kuma-push-lib retries three times an
@@ -83,7 +83,7 @@ def _flatten(tasks):
 
 
 def test_both_cluster_nodes_witness_and_nothing_else_does():
-    """Non-vacuity, and the reason there are two: one host cannot see #1693."""
+    """Non-vacuity, and the reason there are two: one host cannot see a route that is dead only from the other."""
     assert GROUP_VARS["loki_route_witness_hosts"] == ["daniel-box", "daniel-server"], (
         "both prod cluster nodes witness the route from different source addresses; "
         "daniel-pi is not in its ClientIP set and daniel-stage is a different cluster"
@@ -91,7 +91,7 @@ def test_both_cluster_nodes_witness_and_nothing_else_does():
 
 
 def test_each_host_pushes_its_own_token():
-    """A shared token lets one host's `up` cover the other's dead route (issue #952)."""
+    """A shared token lets one host's `up` cover the other's dead route."""
     assert "loki_route_witness_daniel_server_push_token" in PUSH_ENV
     assert "loki_route_witness_push_token" in PUSH_ENV
     assert "inventory_hostname == 'daniel-server'" in PUSH_ENV, (

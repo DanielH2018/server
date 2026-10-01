@@ -12,9 +12,9 @@ gate:
     <dir>/` applies it but nothing waits on it, so a bump to its image is deployed and never
     verified. A typo'd or drifted `manifests_extra_rollouts` entry falls into this the same way
     an undeclared Deployment does — matching is by name, not by count. prowlarr and freshrss
-    were the original instances and now declare their extras correctly, so they are gated —
-    but both still declare k8s_autodeploy: false regardless, for migrating-state reasons
-    (Recreate + an RWO volume-claim PVC) that gatedness never touched. Don't read "gated" as
+    declare their extras correctly, so they are gated — but both still declare
+    k8s_autodeploy: false, for migrating-state reasons (Recreate + an RWO volume-claim PVC)
+    that gatedness never touches. Don't read "gated" as
     "eligible";
   * a role passing `manifests_rollout: ''`, which skips the rollout wait AND the stability soak
     outright. For a role rendering a Deployment or DaemonSet that is a real defect. For a
@@ -49,12 +49,9 @@ auto-deployed one, so a role's own k8s_autodeploy declaration must cover them. A
 here means a role whose gated set drifts from what it actually renders fails the suite instead
 of silently auto-deploying ungated.
 
-These guards were belt-and-braces while `gitops_deploy_k8s_autodeploy_pilot` named a single
-service; clearing the pilot on 2026-08-16 made them the only thing standing between a role shape
-and an ungated auto-deploy. The probe guard was added in that same commit, after six services
-turned out to match an existing exclusion class while sitting outside the denylist.
+These guards are the only thing standing between a role shape and an ungated auto-deploy.
 
-Split note: the synthetic-role unit tests for the two gate kinds moved to
+The synthetic-role unit tests for the two gate kinds live in
 test_k8s_autodeploy_batch_gates.py and test_k8s_autodeploy_rollout_gates.py, and the derivation
 they share is _autodeploy.py. What stays here is what reads the live tree — the declaration
 partition, the roles/k8s/manifests contract, and the PVC/claim accounting.
@@ -86,12 +83,10 @@ from _autodeploy_claims import (
 def test_every_role_declares_its_autodeploy_stance() -> None:
     """Eligibility is declared where the justifying knowledge lives, not in a central list.
 
-    Omission must not read as consent. This used to be scoped to roles pinning an `_image:`
-    var, which left a mirror gap: a role with no defaults/main.yml at all — longhorn-ui, a
-    live containers_list entry on the CSV denylist at the time — has no
-    `_image:` var either, so it skipped the check entirely. If 1b treats an undeclared role as
-    eligible, the way the CSV era treated denylist-absence as eligible, it flips from
-    protected to auto-deployable with nobody reviewing it. Every role _roles() yields must
+    Omission must not read as consent. Scoping this to roles pinning an `_image:` var would
+    leave a mirror gap: a role with no defaults/main.yml at all has no `_image:` var either, so
+    it would skip the check entirely. Treating an undeclared role as eligible would flip it
+    from protected to auto-deployable with nobody reviewing it. Every role _roles() yields must
     declare, whether or not it pins an image.
     """
     missing = [role.name for role in _roles() if not _declares_autodeploy(role)]
@@ -268,9 +263,9 @@ def test_a_commented_out_seed_volume_include_does_not_credit_a_claim(
 
 
 def test_recreate_is_read_off_the_spec_shell_call(tmp_path: Path) -> None:
-    """The strategy reaches a template through `spec_shell('Recreate')`, not a literal, since
-    2026-09-19 — a scan that matched only the literal read every Deployment as rolling and
-    left `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` with nothing to
+    """The strategy reaches a template through `spec_shell('Recreate')`, not a literal — a
+    scan that matched only the literal would read every Deployment as rolling and leave
+    `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` with nothing to
     check."""
     role = tmp_path / "widget"
     (role / "templates").mkdir(parents=True)
@@ -332,12 +327,11 @@ def test_pvc_template_claim_is_resolved_through_defaults(tmp_path: Path) -> None
 def test_pvc_template_claim_is_found_when_name_is_not_the_first_metadata_key(
     tmp_path: Path,
 ) -> None:
-    """R6: a PVC whose metadata carries `labels:` first must still yield a claim.
+    """A PVC whose metadata carries `labels:` first must still yield a claim.
 
-    `_PVC_NAME` used to require `name:` on the line immediately after `metadata:`, so a PVC whose
-    metadata carried `labels:` first yielded no claim and no complaint — silently, a declared
-    `k8s_autodeploy_snapshot_pvcs` entry would fail `test_snapshot_pvc_declarations_
-    match_rendered_claims` for a role that was correct.
+    A matcher requiring `name:` on the line immediately after `metadata:` would yield no claim
+    and no complaint, and a declared `k8s_autodeploy_snapshot_pvcs` entry would fail
+    `test_snapshot_pvc_declarations_match_rendered_claims` for a role that was correct.
     """
     role = tmp_path / "widget"
     (role / "templates").mkdir(parents=True)
@@ -365,8 +359,7 @@ def test_snapshot_pvc_declarations_match_rendered_claims() -> None:
     isn't protected, and nothing says so; this is the only pre-deploy catch for that, since
     --dry-run never reaches volume-snapshot (see the section comment above).
 
-    Exercised by all thirteen live declarations — see `_rendered_pvc_claims` for why this had to
-    read two sources rather than the brief's single one.
+    See `_rendered_pvc_claims` for why this reads two sources.
     """
     offenders = []
     for role in _roles():
@@ -395,24 +388,17 @@ def test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs() -> None:
     """An auto-deployable role with the Recreate + RWO-PVC shape must declare a non-empty
     `k8s_autodeploy_snapshot_pvcs`, so the pre-apply Longhorn snapshot actually runs for it.
 
-    WAS DELIBERATELY VACUOUS through slice 7a, and 7a's ledger carried that forward rather
-    than leaving a future reader to discover it: `_auto_deployable` was true for 14 roles (none
-    `strategy: Recreate`), `_migrating_state` was true for the thirteen slice 7a task 3 declared
-    `k8s_autodeploy_snapshot_pvcs` for, and the two sets did not intersect. Slice 7b task 7
-    promoted twelve of those thirteen; four of the thirteen now stay denylisted — `code-server`
-    for an unrelated reason (its image is an immutable `registry/…:latest` ref with no version
-    signal to auto-deploy on), and `zigbee2mqtt`/`livesync`/`qbittorrent` because the same-day
-    scope decision found their volume's state coupled to something outside it (coordinator
-    NVRAM, connected Obsidian clients, the referenced data volume) that a revert can
-    desynchronise — a different question from whether the snapshot covers the volume, which it
-    does for all three — and tdarr, re-denied by a later audit for the same shared-media
-    coupling. So this guard runs against a non-empty offender set of eight and asserts
-    it stays empty: every promoted role already declares its snapshot claims, so the assertion
-    passes on real coverage rather than on nothing to check.
-    `test_snapshot_pvc_declarations_match_rendered_claims` above is the guard that actually bit
-    before this; this project has repeatedly shipped guards that matched nothing by accident,
-    and the difference here was that the vacuity used to be deliberate and documented rather
-    than discovered.
+    Auto-deployable roles with the shape exist, so this guard runs against a non-empty set and
+    asserts the offenders among them stay empty: every promoted role declares its snapshot
+    claims, so the assertion passes on real coverage rather than on nothing to check. Denylisted
+    roles with the shape sit outside that set: `code-server` (its image is an immutable
+    `registry/…:latest` ref with no version signal to auto-deploy on),
+    `zigbee2mqtt`/`livesync`/`qbittorrent` (volume state coupled to something outside it —
+    coordinator NVRAM, connected Obsidian clients, the referenced data volume — that a revert
+    can desynchronise, which is a different question from whether the snapshot covers the
+    volume) and tdarr (the same shared-media coupling).
+    `test_snapshot_pvc_declarations_match_rendered_claims` above is the guard that bites on a
+    wrong declaration.
     """
     candidates = [
         role.name

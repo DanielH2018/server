@@ -7,18 +7,14 @@ are written, reviewed and committed; they pass when invoked directly; and `uv ru
 collects them. There is no error to read, because the suite reports the count it always
 reported.
 
-The second guard keeps tests out of the directory holding the code they cover. #764 moved 160
-of them into sibling `tests/` directories, because a role's `files/` is what the role ships
-and a test there was kept off hosts only by per-file copy lists, and because the deployer's
-test-only path rule (`deploy_changes._is_test_only_path`) is a directory check. The layout
-drifted within the hour that PR was open: master added `scripts/lib/test_invocation_sites.py`
-beside its module. `ansible/tests/` satisfies the rule by name. `scripts/conftest.py` is the
+The second guard keeps tests out of the directory holding the code they cover. A role's
+`files/` is what the role ships, and the deployer's test-only path rule
+(`deploy_changes._is_test_only_path`) is a directory check, so tests sit in a sibling `tests/`
+directory. `ansible/tests/` satisfies the rule by name. `scripts/conftest.py` is the
 one deliberate exception, the shared conftest for the whole `scripts` testpath.
 
-This is the residual gap stated in `cef07465`, the commit that deleted
-`test_prek_pytest_files_cover_testpaths.py`: "this covers tests under testpaths only". That
-commit settled the dispatch question for the prek hook itself — `always_run = true`, no `files`
-gate, pinned by `test_prek_pytest_always_runs.py` — and left open what `testpaths` reaches.
+The prek hook for pytest runs unconditionally — `always_run = true`, no `files` gate, pinned by
+`test_prek_pytest_always_runs.py` — so what `testpaths` reaches is the gap this module covers.
 
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED:
 a guard that matches everything and a guard that matches nothing are indistinguishable from the
@@ -127,8 +123,7 @@ _LAYOUT_EXCEPTIONS = {
 def _tracked_suite_files() -> list[str]:
     """The test files plus every `conftest.py`.
 
-    A conftest beside shipped code is the same hazard as a test beside it, and #764 moved two of
-    them.
+    A conftest beside shipped code is the same hazard as a test beside it.
     """
     return sorted(
         set(_tracked_test_files())

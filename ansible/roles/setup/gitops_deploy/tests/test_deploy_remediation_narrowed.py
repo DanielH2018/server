@@ -1,4 +1,4 @@
-"""What the remediation prints once the deployer has narrowed a setup role's tag (#2307).
+"""What the remediation prints once the deployer has narrowed a setup role's tag.
 
 Split out of test_deploy_remediation.py, which is at its module-length cap. The narrowed
 `--tags` replaces the whole-role tag; the whole-role warning goes with it, EXCEPT where the
@@ -82,8 +82,8 @@ def _gated_tasks(paths=None, handlers=None) -> list[tuple[str, frozenset[str]]]:
     Two ways to qualify. A task naming a control-plane gate, `rotate-keys` or the log drop-in
     restart — the markers the warning's own prose names. And a task that NOTIFIES a restart
     handler, whichever file it sits in: that is the half a server.yml-only walk could not see,
-    so a `notify: Restart k3s` added to `node.yml` would have let a narrowed `node-sysctl`
-    take the control plane down with no warning (#2350).
+    so a `notify: Restart k3s` added to `node.yml` would otherwise let a narrowed `node-sysctl`
+    take the control plane down with no warning.
     """
     markers = (
         *deploy_remediation._K3S_CONTROL_PLANE_GATES,
@@ -105,7 +105,7 @@ def _gated_tasks(paths=None, handlers=None) -> list[tuple[str, frozenset[str]]]:
     return out
 
 
-# ── #2307: a derived narrow tag replaces the role tag, and the warning with it ──────────────
+# ── a derived narrow tag replaces the role tag, and the warning with it ──────────────
 
 
 def test_a_narrowed_role_prints_its_own_tags_and_drops_the_warning():
@@ -142,7 +142,7 @@ def test_several_narrow_tags_are_one_comma_joined_tags_value():
     assert "--tags coredns,kubeconfig" in manual_plane_remediation({"k3s"}, narrow)
 
 
-# ── a narrowed tag that still reaches the gated tasks keeps the warning (#2324 review) ──
+# ── a narrowed tag that still reaches the gated tasks keeps the warning ──
 
 
 def test_a_narrowed_tag_reaching_the_gated_tasks_keeps_the_warning():
@@ -168,7 +168,7 @@ def test_the_gated_tags_are_every_tag_the_gated_tasks_carry():
     The deployer's venv cannot import yaml, so `MAXIMAL_ROLE_GATED_TAGS` is a constant there;
     this is where it is checked against the role. The walk covers every task file rather than
     `server.yml` alone: nothing else notifies `Restart k3s` today, and the day one does, a
-    narrowed `--tags` naming its tag would take the control plane down silently (#2350).
+    narrowed `--tags` naming its tag would take the control plane down silently.
     """
     reachable = {p.name for p in _reachable_task_files()}
     assert {"main.yml", "server.yml", "node.yml"} <= reachable, sorted(reachable)
@@ -242,7 +242,7 @@ def test_a_task_notifying_a_restart_outside_server_yml_would_be_found(tmp_path):
     ]
 
 
-# ── #2349: the clear command names the tags the apply beside it ran ─────────────────────
+# ── the clear command names the tags the apply beside it ran ─────────────────────
 
 
 def test_a_narrowed_apply_prints_a_clear_that_names_what_it_applied():
@@ -270,8 +270,8 @@ def test_a_whole_role_apply_prints_the_bare_clear():
 def test_two_roles_print_one_clear_each_and_only_the_narrowed_one_says_applied():
     """`common`'s row is always empty, so `--applied` there would keep its line for good.
 
-    A shared `<role> --applied <tags>` placeholder sent the operator to do exactly that, and
-    its `<` read as a shell redirect when pasted.
+    A shared `<role> --applied <tags>` placeholder would send the operator to do exactly that,
+    and its `<` would read as a shell redirect when pasted.
     """
     cmd = manual_plane_remediation(
         {"k3s", "common"}, {"k3s": frozenset({"kubeconfig"})}

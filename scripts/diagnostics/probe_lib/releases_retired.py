@@ -4,7 +4,7 @@ A retired role's record outlives it: `<service>.json` stays in the release direc
 PR that deleted the role deploys. `compute_stale` judges a record against its role's paths, and
 the deletion commit changes every one of them, so the record reads stale for good. That parks
 `Release Staleness Drift` DOWN with no deploy tag able to clear it, because no tag deploys the
-retired service. #2813's game-stats merge retired terraria-stats and valheim-stats this way.
+retired service.
 
 Every `manifests_service` is a declared deploy tag, so a record whose service no
 `containers_list` entry names belongs to a retired service. Dropping it is the way out;
@@ -27,7 +27,7 @@ def _is_leftover_dir(role_dir):
     Retiring a role removes its tracked files; a gitignored `__pycache__/` left by a pytest
     run keeps the directory itself on disk. Such a shell has no `containers_list` entry, so
     `split_shared_roles` would classify it SHARED and widen every service's staleness paths
-    by a role that no longer exists (#2882).
+    by a role that no longer exists.
 
     `ansible/filter_plugins/k8s_autodeploy.py:is_leftover_dir` is the authoritative copy of
     this predicate -- it is the one that gates the deployer's config write. This is a second

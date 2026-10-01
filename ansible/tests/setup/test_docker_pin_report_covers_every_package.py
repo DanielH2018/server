@@ -2,15 +2,15 @@
 
 `install.yml` installs Docker only on a host that has none, so on daniel-pi a merged Renovate
 bump moves the pin and nothing else. The report is the only thing on an ordinary run that says
-the host is behind it, and until 2026-09-25 it compared
-`docker_install_package_versions['docker-ce']` alone -- while `defaults/main.yml` pins
+the host is behind it, so it must compare every pinned package: `defaults/main.yml` pins
 containerd.io, the compose plugin and the buildx plugin independently and four Renovate
-managers track them (#2407). A bump to one of those four printed nothing; only
-`engine-upgrade.yml`'s apt probe saw it, and only when someone ran that play.
+managers track them. A report comparing `docker_install_package_versions['docker-ce']` alone
+prints nothing for a bump to one of those four; only `engine-upgrade.yml`'s apt probe sees it,
+and only when someone runs that play.
 
-Split out of `test_docker_engine_is_held_before_apt_upgrade.py` when that file crossed the
-module-length cap. The hold census, the apt-spec glob and the deliberate upgrade stay there;
-this file owns the report and the per-package read under it.
+The hold census, the apt-spec glob and the deliberate upgrade live in
+`test_docker_engine_is_held_before_apt_upgrade.py`; this file owns the report and the
+per-package read under it.
 
 Run: uv run pytest ansible/tests/setup/test_docker_pin_report_covers_every_package.py
 """
@@ -38,10 +38,9 @@ def load_tasks(path: Path) -> list[dict]:
 def behind_pin_reports(tasks: list[dict]) -> list[dict]:
     """Every debug task that reports an installed package behind its pin.
 
-    Matched on `when` OR `loop`, because the two shapes name the read in different keys: the
-    pre-#2407 report read the scalar `docker_install_installed_engine` in its `when`, the
-    looped one reads `docker_install_installed_pins` in its `loop` and `item.stdout` in its
-    `when`.
+    Matched on `when` OR `loop`, because the two shapes name the read in different keys: a
+    scalar report reads `docker_install_installed_engine` in its `when`, the looped one reads
+    `docker_install_installed_pins` in its `loop` and `item.stdout` in its `when`.
     """
     out = []
     for task in tasks:
@@ -74,7 +73,7 @@ def report_compared_packages(task: dict, versions: dict) -> set[str]:
 
 
 def test_the_behind_pin_report_compares_every_pinned_package():
-    """A report covering docker-ce alone is silent on the four other pins (#2407).
+    """A report covering docker-ce alone is silent on the four other pins.
 
     `defaults/main.yml` pins containerd.io, the compose plugin and the buildx plugin
     independently, and four Renovate managers track them. A merged bump to one of those alone
@@ -100,7 +99,7 @@ def test_the_behind_pin_report_reads_the_upstream_version_not_the_glob():
     """A `!=` against the globbed suffix is true on every host, pinned correctly or not.
 
     The report would fire on every run, and an operator reading "Nothing moved" would take a
-    correctly-pinned host for one carrying a standing gap (#2357).
+    correctly-pinned host for one carrying a standing gap.
     """
     reports = behind_pin_reports(load_tasks(INSTALL))
     assert reports, "install.yml no longer reports an installed package behind its pin"
@@ -121,7 +120,7 @@ def test_the_per_package_read_covers_every_pin_and_leaves_the_install_gate_scala
 
     Looping the docker-ce read instead of adding one would move its value to `.results`, and
     `Install Docker`'s `when: ... .stdout | length == 0` would then be false on a fresh host --
-    a gate that silently stops gating, which is worse than the gap #2407 closed.
+    a gate that silently stops gating, which is worse than the gap the loop closes.
     """
     tasks = load_tasks(INSTALL)
     reads = [
@@ -165,7 +164,7 @@ def test_the_per_package_read_covers_every_pin_and_leaves_the_install_gate_scala
 
 
 def test_a_docker_ce_only_report_is_detected():
-    """The pre-#2407 shape: a `when` naming one key, against a dict of five."""
+    """The scalar shape: a `when` naming one key, against a dict of five."""
     versions = {
         "docker-ce": "5:1",
         "docker-ce-cli": "5:1",

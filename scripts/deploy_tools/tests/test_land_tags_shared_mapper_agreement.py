@@ -5,13 +5,12 @@ the local `role_for`/`tag_for` regex, while four other sites in the same module 
 `deploy_logic.services_from_changed_paths`. A path the two classify differently produces a
 `--tags` list the deployer would not have chosen, and nothing tied them together.
 
-WHY `derive` IS NOT SIMPLY REROUTED THROUGH THE SHARED MAPPER. They answer two different
-questions, and `land_tags.py:92-125` records the difference: `role_for` names the role
-directory a path sits in, and `tag_for` then keeps only the roles `containers_list` DECLARES
-as a deploy tag. Eight roles under `roles/k8s/` have no entry -- `manifests` is one -- and
-handing one to `--tags` makes deploy.sh refuse the WHOLE list (exit 2). The shared mapper has
-no such filter, so routing `derive` through it would put `manifests` in `--tags` and refuse
-every valid service beside it. That is PR #617's measured failure.
+WHY `derive` IS NOT SIMPLY REROUTED THROUGH THE SHARED MAPPER. They answer two different questions,
+and `land_tags.py:92-125` records the difference: `role_for` names the role directory a path sits
+in, and `tag_for` then keeps only the roles `containers_list` DECLARES as a deploy tag. Eight roles
+under `roles/k8s/` have no entry -- `manifests` is one -- and handing one to `--tags` makes
+deploy.sh refuse the WHOLE list (exit 2). The shared mapper has no such filter, so routing `derive`
+through it would put `manifests` in `--tags` and refuse every valid service beside it.
 
 WHAT IS ASSERTED IS THEREFORE AGREEMENT AT THE ROLE LEVEL, computed from both mappers rather
 than hardcoded: the role `role_for` names must be exactly the role the shared mapper
@@ -45,7 +44,7 @@ CORPUS = (
     # A role's own document. Both mappers must answer "no role": the deployer's has carried
     # `and not p.endswith(".md")` since it learned about k8s roles, and `role_for` did not --
     # so `shared_roles` named `manifests` for a CLAUDE.md edit and land.sh asked for a full
-    # `ansible/deploy.yml` to apply prose (issue #1701). The corpus had no `.md` under a role,
+    # `ansible/deploy.yml` to apply prose. The corpus had no `.md` under a role,
     # which is why the agreement test passed throughout.
     "ansible/roles/k8s/manifests/CLAUDE.md",
     "ansible/roles/containers/wg-easy/CLAUDE.md",
@@ -90,7 +89,7 @@ def test_the_corpus_still_covers_a_role_and_a_non_role():
 
 
 def test_the_corpus_still_carries_a_document_inside_a_role_directory():
-    """Non-vacuity for issue #1701: the disagreement lived on a shape the corpus lacked.
+    """Non-vacuity: a disagreement can live on a shape the corpus lacks.
 
     Named members rather than a count, so a trim that drops the `.md` paths fails here saying
     which one went missing instead of re-opening the gap quietly.

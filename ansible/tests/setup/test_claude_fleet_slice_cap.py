@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """The Claude fleet's memory bound must be ONE number on ONE cgroup, not two that look like one.
 
-Issue #1264: claude-rc.service and user-<uid>.slice both rendered
-`claude_code_rc_memory_high`. Sharing a variable is not sharing a cap — they are cgroup
-siblings under different parents (system.slice and user.slice), so neither saw the other's
-usage and the fleet's real throttle point was the SUM: 16G of anon plus 4G of swap on a
-28 GiB box that also runs k3s and Longhorn.
+claude-rc.service and user-<uid>.slice must not both render `claude_code_rc_memory_high`.
+Sharing a variable is not sharing a cap — they are cgroup siblings under different parents
+(system.slice and user.slice), so neither sees the other's usage and the fleet's real
+throttle point is the SUM: 16G of anon plus 4G of swap on a 28 GiB box that also runs k3s
+and Longhorn.
 
-The fix nests both planes under one parent slice that carries the single derived bound
+Both planes nest under one parent slice that carries the single derived bound
 (`templates/fleet-slice-caps.conf.j2` on user.slice, plus `Slice=` on the RC unit), leaving
 the per-plane caps as sub-bounds. `user-<uid>.slice` itself cannot be reparented —
 systemd.slice(5) derives a slice's parent from its NAME — so the unit we do control is the
@@ -152,7 +152,8 @@ def test_parent_cap_renders_from_the_fleet_variables(fleet_conf: str) -> None:
 def test_parent_cap_does_not_render_a_plane_variable(fleet_conf: str) -> None:
     """The rejecting half of the pair above, aimed at the actual defect this closes.
 
-    Rendering claude_code_rc_memory_high here would reproduce #1264 with an extra cgroup:
+    Rendering claude_code_rc_memory_high here would repeat the shared-variable defect on an
+    extra cgroup:
     a parent whose ceiling equals one plane's, so the pair still throttles at their sum.
     """
     rendered = render(fleet_conf, claude_code_rc_memory_high="99G")
@@ -203,7 +204,7 @@ def test_rc_unit_leaves_the_fleet_slice_when_the_shared_parent_is_disabled(
 def test_every_plane_cap_is_within_the_fleet_bound(defaults: dict[str, object]) -> None:
     """A sub-bound above its parent's can never be reached, so it means the parent's number.
 
-    That is how #1264 read in reverse: two 8G planes under no parent at all. This is the
+    The reverse failure is two 8G planes under no parent at all. This is the
     arithmetic to re-check when either number moves.
     """
     for plane_var, fleet_var in SUB_BOUNDS.items():
@@ -248,7 +249,7 @@ def test_tasks_render_and_remove_the_parent_drop_in() -> None:
 
 def test_parent_drop_in_is_stamped_for_drift_checking() -> None:
     """An unstamped template can sit edited-but-undeployed with every repo-side check green —
-    the gap the role's stamp_render list exists to close (2026-08-24 review M-4)."""
+    the gap the role's stamp_render list exists to close."""
     tasks = TASKS.read_text()
     assert (
         "ansible/roles/setup/claude_code/templates/fleet-slice-caps.conf.j2" in tasks

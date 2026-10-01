@@ -2,17 +2,15 @@
 """Guards on check 4's first-run grace: a volume with NO backup must stay visible while excused.
 
 The grace itself is correct and deliberate — a service deployed this afternoon must not redden the
-backup plane before its first scheduled run. What was wrong until 2026-08-20 is that the excuse was
-SILENT: the branch ended in a bare `continue`, and `CHECKED` is incremented below it, so the green
-message was bit-for-bit identical whether or not the volume existed. The covered count does not
+backup plane before its first scheduled run. What must not happen is a SILENT excuse: a branch ending in a
+bare `continue`, with `CHECKED` incremented below it, makes the green message bit-for-bit
+identical whether or not the volume existed. The covered count does not
 fall when a volume is graced; it fails to rise, and nobody can see a number that did not change.
 
-That is not a hypothetical. On 2026-08-20 fourteen of twenty-five volumes were in this branch at
-once — every one of them with no offsite copy anywhere — while `monitor_status == 0` returned no
-data across the whole fleet. The weekly shard cadence puts a volume's first run up to six days out,
-so the window is days wide, not hours.
+The weekly shard cadence puts a volume's first run up to six days out, so a graced volume can
+have no offsite copy for days, not hours.
 
-The fix mirrors what the DISARMED path already does: count it, and name it in the green message.
+The grace mirrors what the DISARMED path does: count it, and name it in the green message.
 Three properties are load-bearing, and a future edit could plausibly break any of them:
 
 COUNTED. The grace branch must increment `graced` before it excuses the volume, or the state is
@@ -25,8 +23,8 @@ NAMED. The volumes are listed, not just totalled. A graced volume has no offsite
 "3 volume(s) awaiting" tells an operator nothing they can act on — and an unactionable red is what
 check 3's own comment records as the thing that stops being read.
 
-check 4 now lives in longhorn_backup_health_logic.check_tier()/build_verdict(), ported from the
-shell verbatim; these guards run against the ported functions directly.
+check 4 lives in longhorn_backup_health_logic.check_tier()/build_verdict(); these guards run
+against those functions directly.
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_backup_grace_visibility.py
 """
@@ -53,7 +51,7 @@ def _graced_result():
 
 
 def test_the_grace_branch_counts_rather_than_dropping_silently():
-    """A graced volume increments `graced`; a bare drop was the whole 2026-08-20 defect."""
+    """A graced volume increments `graced`; a bare drop hides the volume."""
     result = _graced_result()
     assert result.graced == 1, (
         "check 4's first-run grace must count the volume it excuses — dropping it silently "

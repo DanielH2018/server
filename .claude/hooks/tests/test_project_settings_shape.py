@@ -4,27 +4,24 @@ A `permissions.allow` entry here is a standing grant carried by the repository, 
 reaches every operator who opens the repo rather than only the person who wrote it. Two
 properties are worth holding still, and neither is visible from reading the file:
 
-Every allowed `kubectl` verb must be read-only. Until 2026-08-29 this file allowed
-sixteen write verbs -- apply, create, patch, set, exec, cp, port-forward, scale, the four
-rollout forms, label, annotate, cordon, uncordon. They were inert on the day they were
-written, because the cluster credential is a read-only ServiceAccount and RBAC refuses
-every one of them, and inert again in a normal session, because `autoMode.classifyAllShell`
-suspends `Bash()` allow rules and hands the whole line to the classifier. Neither
-protection is a property of this file. Manual mode runs no classifier, and a widened
-credential is exactly the change that would make the grant live -- so the grant would
-start mattering at the moment it was most dangerous, with nothing here having changed.
-Ansible is the write path to this cluster; see docs/claude-shell-permissions.md.
+Every allowed `kubectl` verb must be read-only. Write verbs here would be inert, because
+the cluster credential is a read-only ServiceAccount and RBAC refuses every one of them,
+and because `autoMode.classifyAllShell` suspends `Bash()` allow rules and hands the whole
+line to the classifier. Neither protection is a property of this file. Manual mode runs no
+classifier, and a widened credential is exactly the change that would make the grant live
+-- so the grant would start mattering at the moment it was most dangerous, with nothing
+here having changed. Ansible is the write path to this cluster; see
+docs/claude-shell-permissions.md.
 
-A `Bash()` rule here cannot narrow a verb by flag. Measured 2026-08-08 against the OTEL
-`tool_decision` stream: `Bash(kubectl apply --prune*)` fired neither as an `ask` nor as a
-`deny`. So a rule that reads like a flag-level guard is a guarantee that is not there.
-(The chezmoi-managed user-level rules are the exception, and only because
-`allow-compound-bash.sh` glob-matches them itself -- that hook is not in play for this
-file's plain verb prefixes.)
+A `Bash()` rule here cannot narrow a verb by flag. `Bash(kubectl apply --prune*)` fired
+neither as an `ask` nor as a `deny` in the OTEL `tool_decision` stream. So a rule that
+reads like a flag-level guard is a guarantee that is not there. (The chezmoi-managed
+user-level rules are the exception, and only because `allow-compound-bash.sh` glob-matches
+them itself -- that hook is not in play for this file's plain verb prefixes.)
 
 Each test below is a pair: one input the rule must reject and one it must accept. A shape
 guard that fires on everything and one that fires on nothing look identical from the
-passing side, and this repo has paid for that twice.
+passing side.
 """
 
 import json
@@ -146,8 +143,8 @@ def test_every_hook_entry_declares_a_timeout():
 
     These hooks run on the interactive path -- a PreToolUse hook sits between the model
     and every Bash call it makes -- so the cost of one hanging is paid on every keystroke
-    after it. Four entries here omitted it until 2026-08-29 and nothing reported them,
-    because the default is silent and generous rather than absent.
+    after it. Nothing reports an entry that omits it, because the default is silent and
+    generous rather than absent.
     """
     missing = sorted(
         f"{event}:{entry.get('command', '?')}"

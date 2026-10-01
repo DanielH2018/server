@@ -25,7 +25,7 @@ This script SEEDS the boards; it does not refresh them. The committed board carr
 post-fetch hand edits it does not reproduce (node-exporter-full's ``operstate="up"`` filter
 and the repo's own tags), and step 2 picks each single-select default from whatever the live Prometheus answers that day.
 A fresh fetch therefore differs from the committed JSON, and writing it would revert that
-local work (#2912). So the script writes a board only when it is missing or when its
+local work. So the script writes a board only when it is missing or when its
 committed form already matches, and otherwise refuses, names the boards that differ, and
 writes nothing:
 
@@ -65,13 +65,9 @@ UID_BY_PLUGIN = {
 # dependency like any other: `revisions/latest` made a re-fetch return whatever upstream had
 # published since, so the 13,746-line node-exporter-full.json could change under an unrelated
 # re-run and the diff had no commit to explain it. Revision 45 of 1860 is the one the
-# committed JSON was adapted from (verified 2026-09-28: revision 45 carries
-# the same dashboard `version: 101` the committed file does), so re-running this script
-# reproduces the committed bytes. Bump a revision deliberately, in its own commit, and read
-# the diff.
-#
-# The cAdvisor board (14282) went on 2026-09-30 (#2806): every panel filtered on the Docker
-# `name` label, which no series carries since the Docker retirement, so it drew nothing.
+# committed JSON was adapted from (it carries the same dashboard `version: 101` the committed
+# file does), so re-running this script reproduces the committed bytes. Bump a revision
+# deliberately, in its own commit, and read the diff.
 DASHBOARDS = {"node-exporter-full": (1860, 45)}
 OUTDIR = Path("ansible/roles/k8s/observability/files/dashboards")
 
@@ -230,7 +226,7 @@ def adapt(name, d):
     d["id"] = None  # let Grafana assign a local id; keep the stable `uid`
 
     # Same serialisation as export_grafana_dashboards.dump, so the two writers agree on
-    # the committed form and a re-fetch of an unchanged revision is a no-op (#2157).
+    # the committed form and a re-fetch of an unchanged revision is a no-op.
     s = json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False)
     for ph, uid in placeholders.items():
         s = s.replace("${%s}" % ph, uid)

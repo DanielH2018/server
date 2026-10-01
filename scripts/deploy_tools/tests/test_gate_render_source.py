@@ -95,7 +95,7 @@ def test_the_platform_routing_reads_the_tree_the_probe_renders(tmp_path):
     inventory, so the two halves of one verdict came from two trees. For a PR that adds a Pi
     role and its `containers_list` entry together, the calling tree answers `set()`, which falls
     to the last branch of `check_one` and probes the CLUSTER first -- where a same-named
-    workload answers 0 for a Pi container nobody deployed. That is issue #929 again.
+    workload answers 0 for a Pi container nobody deployed.
 
     Driven through the real `tag_platforms`: a stub would assert nothing about which inventory
     was read.

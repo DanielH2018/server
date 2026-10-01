@@ -9,9 +9,8 @@
 }}
 ---
 {#
-  Homepage's FreshRSS widget (daniel-server, session-less greader login; pod CIDR added when homepage itself moved in-cluster, E3) — same story as
-  speedtest: the no-auth bridge route it used died in the slice-7 teardown. The path is
-  the greader API endpoint itself, the same one the old bridge probe exercised.
+  Homepage's FreshRSS widget (session-less greader login) reaches this route from the pod
+  CIDR. The path is the greader API endpoint itself.
 #}
 {{ monitoring_route(
     container_item.name,

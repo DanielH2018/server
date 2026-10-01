@@ -19,7 +19,7 @@
   changed_when: false
   failed_when: false
   # A read, and the refusals below judge a one-way door on its output — a dry run that
-  # cannot evaluate them proves nothing about whether the teardown would stop (#2353).
+  # cannot evaluate them proves nothing about whether the teardown would stop.
   check_mode: false
   become: true
 
@@ -47,16 +47,15 @@
   changed_when: false
   failed_when: false
   # A read, and the refusals below judge a one-way door on its output — a dry run that
-  # cannot evaluate them proves nothing about whether the teardown would stop (#2353).
+  # cannot evaluate them proves nothing about whether the teardown would stop.
   check_mode: false
   become: true
 
 - name: Stop the staging network
   tags: [hypervisor]
   # Destroy before undefine so the bridge and its NAT rules go now rather than at the next
-  # reboot. Purging Docker taught this directly: #479 removed the packages and left 13
-  # bridges and their routes on daniel-server until someone reboots it. Removing a thing
-  # should remove what it put on the host.
+  # reboot. A package purge alone leaves the bridges and their routes in place until a
+  # reboot, and removing a thing should remove what it put on the host.
   when:
     - hypervisor_libvirtd_binary.stat.exists
     - hypervisor_teardown_net_info.rc == 0
@@ -109,7 +108,7 @@
 
 - name: Remove what the retired staging gate left on this host
   tags: [hypervisor]
-  # The gate and its guest were retired on 2026-09-29 (#2941), so these are reap targets rather
+  # The gate and its guest are retired, so these are reap targets rather
   # than this role's own state. reap_staging.yml removes the same paths on the has_hypervisor:
   # true path, and refuses first if the checkout holds uncommitted work; here the checkout is
   # already gone by the time a host ever reaches this file, so this is the plain removal.

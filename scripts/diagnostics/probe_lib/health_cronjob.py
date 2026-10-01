@@ -25,7 +25,7 @@ from diagnostics.probe_lib.health_rollout import seconds_since
 # `k8s/cronjob-gate` does at deploy time, or fall back to reading the most recent existing run.
 # probe.py runs as `homelab-readonly` (see `roles/setup/k3s/templates/readonly-rbac.yaml.j2`),
 # bound to the built-in `view` ClusterRole plus one additive ClusterRole, neither granting any
-# write verb. Verified live 2026-09-03, running as that identity:
+# write verb. Verified live, running as that identity:
 #   k3s kubectl auth can-i create jobs -n homelab   -> no
 #   k3s kubectl auth can-i get jobs -n homelab      -> yes
 #   k3s kubectl auth can-i list jobs -n homelab     -> yes
@@ -82,10 +82,9 @@ def _job_outcome(job):
 
 
 # `M H * * *` (daily) and `M H * * D` (weekly) are the only two schedule shapes any CronJob in
-# this cluster uses today — `k3s kubectl get cronjob -A`, checked 2026-09-03: configarr,
-# pi-peer-backup and all seven Longhorn backup jobs. This is deliberately not a general cron
-# parser: a schedule outside these two shapes returns None and the caller fails closed rather
-# than guess what "normal interval" means for it.
+# this cluster uses: configarr, pi-peer-backup and all seven Longhorn backup jobs. This is
+# deliberately not a general cron parser: a schedule outside these two shapes returns None and
+# the caller fails closed rather than guess what "normal interval" means for it.
 _DAILY_SCHEDULE = re.compile(r"^\s*\d+\s+\d+\s+\*\s+\*\s+\*\s*$")
 _WEEKLY_SCHEDULE = re.compile(r"^\s*\d+\s+\d+\s+\*\s+\*\s+[0-6]\s*$")
 

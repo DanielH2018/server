@@ -5,20 +5,20 @@ Invoke it as ``./scripts/deploy_tools/land.sh``, which execs this file; every do
 and hook names the shim. The implementation is the ``land_lib`` package beside it, one
 module per phase; this file is the docstring ``--help`` prints and ``main``.
 
-WHY ONE INVOCATION RATHER THAN A CHAIN. A session cannot write this sequence inline:
-shell control flow and command substitution defeat the worktree containment check, which
-refuses with "too complex to verify that it stays inside the worktree". A single script
-invocation is accepted, loops and all (verified 2026-08-29). Run it backgrounded and the
-session is re-invoked when it exits, instead of hand-polling CI for five to fifteen
-minutes -- 835 polls across 213 wait episodes before this existed.
+WHY ONE INVOCATION RATHER THAN A CHAIN. A session cannot write this sequence inline: shell
+control flow and command substitution defeat the worktree containment check, which refuses with
+"too complex to verify that it stays inside the worktree". A single script invocation is
+accepted, loops and all. Run it backgrounded and the session is re-invoked when it exits, instead
+of hand-polling CI for five to fifteen minutes -- 835 polls across 213 wait episodes before this
+existed.
 
-``--detach --await-verdict`` IS THE ONE-COMMAND FORM, and it is what a session should reach
-for. It names its own logfile, forks the landing into it, then blocks until that landing
-prints its ``VERDICT:`` line and exits with the landing's code. It replaces three steps a
-caller used to write by hand: the ``git rev-parse origin/master`` for ``--since`` (resolved
-here when the flag is absent, before the merge is armed, so it is still the PRE-merge tip),
-the redirect, and ``timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'``. The mechanics
-are ``land_lib/detach.py``.
+``--detach --await-verdict`` IS THE ONE-COMMAND FORM, and it is what a session should reach for.
+It names its own logfile, forks the landing into it, then blocks until that landing prints its
+``VERDICT:`` line and exits with the landing's code. It covers three steps a caller would
+otherwise write by hand: the ``git rev-parse origin/master`` for ``--since`` (resolved here when
+the flag is absent, before the merge is armed, so it is still the PRE-merge tip), the redirect,
+and ``timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'``. The mechanics are
+``land_lib/detach.py``.
 
 WITHOUT ``--detach``, REDIRECT STDOUT AND STDERR TO A FILE YOURSELF. A backgrounded Bash call
 hands this script a non-blocking pipe, and Ansible refuses to start on one ("Ansible requires
@@ -60,11 +60,11 @@ ci-red | ci-timeout | lock-busy | tip-outran-retries.
 `blocked` is not a failure of this PR -- something else in the incoming range needs an
 operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something
 neither a deploy tag nor the tick covers, or a self-applied setup role that reaches a host
-beyond the one the tick just ran on (issue #1009), so it is landed but not live everywhere.
+beyond the one the tick just ran on, so it is landed but not live everywhere.
 `deferred` means the tick applies this PR itself and has not crossed origin yet; the next
 tick does it -- UNLESS the verdict says this run stopped watching a tick that was still
 applying, in which case the deployer's markers were read mid-apply and a hold cannot be
-ruled out (issue #1607). Re-run land.sh then; no later tick crosses a hold.
+ruled out. Re-run land.sh then; no later tick crosses a hold.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed
 auto-merge never recovers from. `pr-ci-red` is the PR's CI before the merge; `ci-red` is
 master's after it.
@@ -91,10 +91,10 @@ def _prepare_stdio() -> None:
 
     Two separate hazards on the same fds. A backgrounded Bash call hands us non-blocking
     pipes, which Ansible refuses to start on. And a landing is always run with stdout
-    redirected to a file, where Python block-buffers it -- so the log stayed EMPTY for the
-    whole ten-to-fifteen-minute run and appeared all at once at exit, leaving a session
+    redirected to a file, where Python block-buffers it -- so the log would stay EMPTY for
+    the whole ten-to-fifteen-minute run and appear all at once at exit, leaving a session
     tailing it unable to tell which phase was in flight. stderr is line-buffered either way,
-    which is why a `die` line used to surface above the `== arm` lines printed before it.
+    so without this a `die` line would surface above the `== arm` lines printed before it.
 
     The suppress is load-bearing rather than defensive: under pytest's capsys, `sys.stdout`
     is not a TextIOWrapper and has no `reconfigure`.
@@ -124,7 +124,7 @@ def main(
     # WHY IT IS WRAPPED AGAIN. argparse's 2 collided with three other meanings a caller sees
     # through this same pipeline -- `CI_DISARMED`, `DEPLOY_TAG_MISS` and `PUBLISH_PUSHED_NO_PR`
     # -- so `land.sh` alone answered a bad command line with a different number from every
-    # other entry point here (issue #2854). `LAND_BAD_ARGS` is now the shared 64.
+    # other entry point here. `LAND_BAD_ARGS` is the shared 64.
     try:
         opts = parse_args(argv, __doc__ or "")
     except SystemExit as exc:
@@ -140,15 +140,14 @@ def _resolve_since(opts: Options) -> Options:
     BEFORE THE MERGE IS ARMED, which is the whole reason it is here and not in the pipeline.
     `--since` is the PRE-merge tip: it bounds the range the truncated-list fallback derives
     tags from, and reading it after `--arm-merge` has merged would capture the tip that
-    INCLUDES this PR and derive nothing. The `land-after-merge` skill asked the caller to run
-    `git rev-parse origin/master` first for exactly that ordering; the ordering is now the
-    script's (issue #2853).
+    INCLUDES this PR and derive nothing. The ordering is the script's: the caller does not run
+    `git rev-parse origin/master` first.
 
-    ONLY ON THE `--detach` PATH, deliberately. Every invocation written before that flag
-    existed reaches `_land` having had nothing resolved for it, so nothing about the proven
-    path changed when this was added. An unreadable `origin/master` -- a primary checkout that
-    is not there -- leaves `--since` empty and the pipeline names the missing checkout, which
-    is the error the caller needs rather than a `rev-parse` traceback.
+    ONLY ON THE `--detach` PATH, deliberately. An invocation without the flag reaches `_land`
+    having had nothing resolved for it, so the proven path is unchanged. An unreadable
+    `origin/master` -- a primary checkout that is not there -- leaves `--since` empty and the
+    pipeline names the missing checkout, which is the error the caller needs rather than a
+    `rev-parse` traceback.
     """
     if opts.since:
         return opts

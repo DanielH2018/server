@@ -129,7 +129,7 @@ def test_auto_deployable_roles_declare_a_readiness_probe() -> None:
 def test_readiness_probe_check_covers_every_gated_deployment(widget_role) -> None:
     """A probe on the primary Deployment doesn't excuse a probe-less gated extra.
 
-    The old `any()` check would read this role as compliant — the primary has a probe, and
+    An `any()` check would read this role as compliant — the primary has a probe, and
     `any()` stops looking once one template has one. Checking each template individually is
     what catches the extra.
     """
@@ -164,9 +164,9 @@ def test_readiness_probe_check_covers_every_gated_deployment(widget_role) -> Non
 def test_the_workload_matcher_sees_daemonsets(widget_role) -> None:
     """A DaemonSet-rendering role must be visible to the shape guards.
 
-    Before this, `_deployment_templates` matched only `kind: Deployment`, so a DaemonSet role
-    rendered zero workloads and passed every shape guard while being ungated — the failure
-    mode the guards exist to catch, hidden by the matcher rather than absent.
+    Matching only `kind: Deployment` would make a DaemonSet role render zero workloads and pass
+    every shape guard while being ungated — the failure mode the guards exist to catch, hidden
+    by the matcher rather than absent.
     """
     role = widget_role(
         templates={
@@ -203,7 +203,7 @@ def test_extra_rollout_naming_the_wrong_deployment_reads_as_ungated(
 ) -> None:
     """A typo'd or drifted `manifests_extra_rollouts` name doesn't gate anything real.
 
-    Matching by count alone (rendered - 1 - len(extras) == 0) read this as fully gated even
+    Matching by count alone (rendered - 1 - len(extras) == 0) would read this as fully gated even
     though the declared extra's name matches neither rendered Deployment. Matching by identity
     catches it: the second Deployment's real name isn't in {primary, declared extra}.
     """
@@ -296,8 +296,8 @@ def test_rollout_gate_tolerates_a_trailing_comment_on_the_empty_rollout(
 ) -> None:
     """`manifests_rollout: ''  # nothing to roll` must still be seen as empty.
 
-    task-3-rulings.md R3: this repo comments nearly every var, and the triggering edit for
-    this gap is exactly that house style applied to `manifests_rollout`. A role in this shape
+    This repo comments nearly every var, and that house style applied to `manifests_rollout`
+    is the triggering edit. A role in this shape
     with no batch gate at all must still read as an offender — the comment must not make it
     invisible to the check.
     """
@@ -318,12 +318,11 @@ def test_primary_rollout_name_agrees_with_sets_empty_rollout_on_a_comment(
 ) -> None:
     """`_primary_rollout_name` must also read the trailing comment as empty, not the service.
 
-    task-3-rulings-2.md S4: R3 widened `_sets_empty_rollout` for
-    `manifests_rollout: ''  # nothing to roll` and left this matcher anchored at end-of-line
-    right after the closing quote, so the two disagreed about the same variable — one read
-    "empty", the other fell through to `manifests_service` and returned the real service name.
-    Latent while `_rollout_gate_offender`'s Deployment check happened to catch every affected
-    role anyway, but two matchers disagreeing about one variable is a defect on its own.
+    `_sets_empty_rollout` tolerates `manifests_rollout: ''  # nothing to roll`. A matcher
+    anchored at end-of-line right after the closing quote would disagree about the same
+    variable — one reads "empty", the other falls through to `manifests_service` and returns
+    the real service name. That is a defect on its own, even while `_rollout_gate_offender`'s
+    Deployment check happens to catch every affected role.
     """
     role = widget_role(
         "- ansible.builtin.include_role:\n"
@@ -340,7 +339,7 @@ def _widget_with_a_deployment(
 ) -> Path:
     """A role gating one batch workload (widget-job) while also rendering a Deployment.
 
-    Shared by the three task-3-rulings.md R2 control cases below — they differ only in how
+    Shared by the three control cases below — they differ only in how
     the Deployment's `kind:` line is spelled, or whether it shares a file with another
     document.
     """
@@ -368,11 +367,10 @@ def test_rollout_gate_still_flags_a_role_with_a_quoted_kind_deployment(
 ) -> None:
     """A fully-gated batch workload does not exempt a role that also renders a Deployment.
 
-    task-3-rulings.md R2: `_rollout_gate_offender` used to check only the batch workloads it
-    could see, never whether the role also rendered a Deployment or DaemonSet. Paired with
-    `_deployment_templates` being blind to `kind: "Deployment"` — valid YAML, applied by
-    kubectl exactly like the bare form — a role in this shape read as a fully-gated batch-only
-    role while its Deployment had no rollout wait at all.
+    `_rollout_gate_offender` must check whether the role also renders a Deployment or
+    DaemonSet, not only the batch workloads it can see. A matcher blind to `kind: "Deployment"`
+    — valid YAML, applied by kubectl exactly like the bare form — would read a role in this
+    shape as a fully-gated batch-only role while its Deployment has no rollout wait at all.
     """
     role = _widget_with_a_deployment(
         widget_role,
@@ -411,11 +409,10 @@ def test_rollout_gate_flags_one_gated_and_one_ungated_batch_workload(
 ) -> None:
     """A role gating one of two rendered Jobs is still an offender, not exempt.
 
-    task-3-rulings.md R4: `_rollout_gate_offender`'s final line uses `any(...)`, which is
-    correct — a role must gate EVERY batch workload it renders, not just one. Every test in
-    this file up to this one renders at most one batch workload, so a bug that quietly swapped
-    `any` for `all` would leave all of them green. This fixture is the one that would go red
-    under that substitution.
+    `_rollout_gate_offender`'s final line uses `any(...)`, which is correct — a role must gate
+    EVERY batch workload it renders, not just one. Most tests in this file render at most one
+    batch workload, so a bug that quietly swapped `any` for `all` would leave them green. This
+    fixture goes red under that substitution.
     """
     role = widget_role(
         "- ansible.builtin.include_role:\n"
@@ -443,13 +440,11 @@ def test_rollout_gate_does_not_falsely_accuse_a_role_gated_via_extras(
 ) -> None:
     """A role skipping the primary rollout but gating its Deployment via extras is not an offender.
 
-    task-3-rulings-2.md S5: R2's unconditional "renders a Deployment ⇒ offender" flagged this shape
-    even though the Deployment IS gated — `manifests_extra_rollouts` rolls and soaks independently
-    of the primary, so `manifests_rollout: ''` on the primary alone proves nothing here. The
-    reviewer measured `_rollout_gate_offender: True` while `_ungated_deployments: []` for exactly
-    this construction. The generalised rule checks `_ungated_deployments` (which already resolves
-    gating by name, primary-or-extra) instead of "renders any Deployment at all", so this is no
-    longer a false offender.
+    `manifests_extra_rollouts` rolls and soaks independently of the primary, so
+    `manifests_rollout: ''` on the primary alone proves nothing here. An unconditional "renders
+    a Deployment ⇒ offender" rule would flag this shape even though the Deployment IS gated.
+    The rule checks `_ungated_deployments` (which already resolves gating by name,
+    primary-or-extra) instead of "renders any Deployment at all".
     """
     role = widget_role(
         "- ansible.builtin.include_role:\n"

@@ -13,17 +13,14 @@ the check is actually false. The fix is to single-quote the whole jsonpath argum
 the shlex-split leaves intact (verified: single-quoted survives, bare-quoted does not — see
 ansible/roles/setup/k3s/tasks/server.yml's comment for the same reasoning).
 
-This trap has bitten this repo three times: ansible/roles/setup/k3s/tasks/server.yml and
-ansible/roles/setup/k3s/tasks/agent_verify.yml, then ansible/roles/k8s/pihole/tasks/roll_one.yml.
-Three recurrences is this repo's own threshold (CLAUDE.md, "Review & Memory Hygiene") for
-turning a comment into an executable check.
+This trap recurs: ansible/roles/setup/k3s/tasks/server.yml,
+ansible/roles/setup/k3s/tasks/agent_verify.yml and ansible/roles/k8s/pihole/tasks/roll_one.yml
+all carry the quoted form, which is why it is an executable check rather than a comment.
 
-A fourth then slipped past THIS FILE, because the check was one character class too narrow.
 shlex strips backslashes as readily as it strips double quotes, and `\.` is how a jsonpath
-escapes a dot that belongs to an annotation KEY. k8s/volume-claim's short-circuit shipped with
-a bare one, read empty on every claim across two full deploys, and cost nothing but the saving
-it was written to deliver. The double-quote form at least fails loudly; the backslash form
-returns empty with rc 0 and looks exactly like "the annotation is not set".
+escapes a dot that belongs to an annotation KEY. A bare one reads empty and costs nothing but
+the saving it was written to deliver. The double-quote form at least fails loudly; the
+backslash form returns empty with rc 0 and looks exactly like "the annotation is not set".
 
 So there are two checks below, one per character class. If a third form of shlex damage turns
 up, add a third rather than widening one regex until nobody can read it.
@@ -124,10 +121,9 @@ def test_no_unquoted_double_quoted_jsonpath():
 def test_no_unquoted_backslash_escaped_jsonpath():
     """The silent half of the same trap — no error, just an empty result forever.
 
-    Caught in production rather than by this file: k8s/volume-claim's short-circuit read a
-    `homelab.daniel-hunter.com/seeded` annotation through a bare `\\.`-escaped jsonpath, and
-    read empty on all 25 claims across two full deploys while the annotation was present on
-    every PVC. The whole optimisation was inert and every check stayed green.
+    A short-circuit that reads a `homelab.daniel-hunter.com/seeded` annotation through a bare
+    `\\.`-escaped jsonpath reads empty while the annotation is present, so the whole
+    optimisation is inert and every check stays green.
     """
     offenders = [
         f"{path.relative_to(ANSIBLE.parent)}: task {name!r}"

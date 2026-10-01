@@ -1,9 +1,8 @@
 """A script another one imports and runs in process inherits that caller's kind.
 
-`deploy_run.py` calls `deploy_staleness.main` on every deploy where the bash wrapper used to
-spawn it (#2412). Without this rule the helper reads as a `library`, which says a break costs
-nothing unattended when it stops every deploy. A plain module with no `__main__` guard stays
-a library: it has no run of its own to inherit.
+`deploy_run.py` calls `deploy_staleness.main` on every deploy. Without this rule the helper
+reads as a `library`, which says a break costs nothing unattended when it stops every deploy. A
+plain module with no `__main__` guard stays a library: it has no run of its own to inherit.
 
 Run: uv run pytest scripts/lib/tests/test_script_classify_in_process.py
 """

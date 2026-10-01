@@ -1,8 +1,8 @@
-"""config_files leaves a chezmoi-managed host's dotfiles alone (#2322).
+"""config_files leaves a chezmoi-managed host's dotfiles alone.
 
 chezmoi owns `.bashrc` and the templated `.gitconfig`, which carries commit signing, on
-daniel-box and daniel-server. `config_files` used to copy its own versions over them on every
-host. Each copy is now gated on a `stat` of the chezmoi source directory, and the stat carries
+daniel-box and daniel-server. `config_files` gates each copy on a `stat` of the chezmoi source
+directory, and the stat carries
 both sub-tags so a `--tags bash` or `--tags git` run still sets the register the gate reads.
 
 Run: uv run pytest ansible/tests/setup/test_config_files_skips_chezmoi_hosts.py

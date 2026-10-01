@@ -3,11 +3,9 @@
   Public as well as LAN, which is the macro's default — so this call passes no `public`
   argument at all.
 
-  It was `public=false` until 2026-08-24, on the reasoning that the reference pages map every
-  service, hostname, auth tier and backup posture, and that a complete map of the homelab
-  should not face the internet. That reasoning was retired deliberately, not overlooked: the
-  operator asked for a name reachable off the LAN, and the map is only as exposed as the gate
-  in front of it.
+  The operator wants a name reachable off the LAN. The reference pages map every service,
+  hostname, auth tier and backup posture, so the map is only as exposed as the gate in front
+  of it.
 
   What makes that safe is that the gate covers EVERY path. There is one route, matched on the
   Host rule alone, and `bypass_prefixes` is empty — so `/healthz` and `/build-info.json` sit

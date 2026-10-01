@@ -1,5 +1,5 @@
 ---
-# Record the digest a render of THIS tree produces for one service, without applying it (#2574).
+# Record the digest a render of THIS tree produces for one service, without applying it.
 #
 # THE PROBLEM. `probe.py releases --stale-only` decides whether a service's applied manifests
 # lag origin/master from the paths a merge touched. A path is a proxy: five narrowings exist
@@ -7,7 +7,7 @@
 # `manifests_digest` for the bytes an apply wrote. Comparing it against the digest of a fresh
 # render answers the real question, and only a play can produce that render faithfully: the
 # offline harness stubs SOPS values and renders a placeholder domain, so it reproduced the
-# applied bytes for 9 of 57 services when measured on 2026-09-25.
+# applied bytes for only 9 of 57 services.
 #
 # This runs inside the dry-run render, so it reads the same vars, the same decrypted secrets
 # and the same host_vars a deploy reads. It adds no read path over `no_log` output: the digest
@@ -57,8 +57,8 @@
       manifests: "{{ manifests_release_files }}"
       manifests_digest: "{{ manifests_release_digest }}"
       # A matching `manifests_digest` says nothing about these files: a line added to
-      # uptime-kuma's `static-monitors.yaml.j2`, which is one, left it identical on
-      # 2026-09-25. `secret_digest` is what moves for them, so a reader may treat a match as
+      # uptime-kuma's `static-monitors.yaml.j2`, which is one, leaves it identical.
+      # `secret_digest` is what moves for them, so a reader may treat a match as
       # "not stale" only where this list is empty on both sides or both `secret_digest`s match.
       secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"
       secret_digest: "{{ manifests_release_secret_digest }}"

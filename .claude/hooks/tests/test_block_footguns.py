@@ -3,8 +3,7 @@
 
 Each rule is an accept/reject pair: the command it must refuse, and the near-miss it must let
 through. A guard that fires on everything and one that fires on nothing are indistinguishable
-from the passing side alone. The four rules dotfiles #628 moved into claude_guard took their
-pairs with them (claude-guard's tests/test_footguns.py).
+from the passing side alone.
 
 Run: uv run pytest .claude/hooks
 """
@@ -103,8 +102,7 @@ def test_malformed_payload_is_ignored(monkeypatch, capsys):
 
 
 def test_an_unreadable_command_naming_a_rule_binary_asks():
-    """The package's contract: a non-ok parse is a refusal, never "nothing here". Until #2134
-    `split_stages` returned `[]` for this and the hook stayed silent."""
+    """The package's contract: a non-ok parse is a refusal, never "nothing here"."""
     decision, reason = _mod.decide("kubectl rollout restart 'oops")
     assert decision == "ask"
     assert "unbalanced-quote" in reason
@@ -172,11 +170,10 @@ def test_a_later_pipeline_stage_is_still_judged():
 
 
 def test_a_semicolon_joined_later_stage_is_still_judged():
-    """Issue #1020: `;` joined the same way as `&&` above must still be caught.
+    """`;` joined the same way as `&&` above must still be caught.
 
-    The live incident was `git stash && prek run ... | tail -5; git stash pop`, ALLOWED
-    before the fix because `shlex.split` glued the `;` onto `-5`. That rule now lives in
-    claude_guard (dotfiles #628); a rule that stays here proves the same splitting.
+    A command such as `git stash && prek run ... | tail -5; git stash pop` must be
+    refused, though `shlex.split` glues the `;` onto `-5`.
     """
     assert (
         _mod.problem("kubectl get pods; kubectl rollout restart deploy/x") is not None
@@ -300,7 +297,7 @@ def test_a_gh_issue_create_later_in_a_pipeline_is_denied():
 
 
 def test_a_gh_issue_create_aimed_at_another_repo_names_findings_open_repo():
-    """#2685: the wrapper files into another repo too, so the reason names that door."""
+    """The wrapper files into another repo too, so the reason names that door."""
     for command in (
         "gh issue create -R DanielH2018/dotfiles --title x",
         "gh issue create --repo DanielH2018/dotfiles --title x",
@@ -340,12 +337,7 @@ def test_the_words_as_a_search_argument_are_clean():
 
 # --- 10. a leading shell keyword must not slip any rule ---------------------------------------
 #
-# Rules 5 and 6 called `strip_shell_keywords` from the day they were written; rules 1-4 predate
-# it and decided on `stage[0]` directly. Measured 2026-08-30, before the strip moved into
-# `problem()`: each of the four commands below was ALLOWED while its bare form was denied.
-#
-# The stash and ugrep cases of this measurement moved to claude_guard with their rules
-# (dotfiles #628), which strips the same keywords.
+# Each of the four commands below must be denied exactly as its bare form is.
 
 
 def test_a_negated_rollout_restart_is_denied():
@@ -417,6 +409,6 @@ def test_a_branch_dispatch_and_the_near_misses_stay_clean(command):
 
 
 def test_the_gate_opens_for_a_ci_dispatch():
-    """`gh` was already in `_RULE_BINARIES` for the issue-create rule; this pins that the new
+    """`gh` is in `_RULE_BINARIES` for the issue-create rule; this pins that the
     rule is reachable, so a later narrowing of the gate cannot disarm it silently."""
     assert _mod.could_fire("gh workflow run ci.yml")

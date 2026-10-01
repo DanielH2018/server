@@ -2,11 +2,8 @@
 
 Four test modules drive one full check cycle with the transport stubbed and one gate forced
 into a state — `test_check_gates.py`, `test_check_gates_exporters.py`, `test_check_b2_gate.py`
-and `test_check_streaks.py`. Each used to carry its own near-identical `_wire_run_once`, and
-each patched `check.CHECKS` and the four gate bodies onto the `check` module to do it.
-
-Since the `Gates` seam they state the gate configuration instead, which is short enough to
-share: one `Gates(...)` and one `checks` list per driver. A module with a leading underscore
+and `test_check_streaks.py`. Each driver states the gate configuration, which is short enough
+to share: one `Gates(...)` and one `checks` list per driver. A module with a leading underscore
 rather than a `conftest.py` fixture, because these take arguments and return values — a fixture
 would have to be a factory returning a function, which reads worse than the import. The name is
 unique repo-wide, which is what `from conftest import ...` cannot promise.

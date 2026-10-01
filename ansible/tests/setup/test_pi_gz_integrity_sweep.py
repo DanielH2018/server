@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """The daily sweep that catches a rotated log on daniel-pi that stops decompressing.
 
-`gzip -t` is the only reader that disagrees with a clobbered gzip trailer: the #2694 corruption
-left every CRC32 matching, so `zcat` recovered every byte and nothing else on the host noticed
-(#2715). The sweep runs that test daily and writes a verdict; `pi-sd-health.sh` reads the verdict
+`gzip -t` is the only reader that disagrees with a clobbered gzip trailer: that corruption
+leaves every CRC32 matching, so `zcat` recovers every byte and nothing else on the host notices.
+The sweep runs that test daily and writes a verdict; `pi-sd-health.sh` reads the verdict
 every 5 minutes and folds it into the Kuma push.
 
 Two failure modes get their own tests here, because both read GREEN from the passing side:
@@ -70,7 +70,7 @@ def good_gz(directory, count, start=0):
 
 
 def clobber(path):
-    """Overwrite the gzip ISIZE trailer, exactly as #2694's rsync did.
+    """Overwrite the gzip ISIZE trailer, exactly as a sparse rsync does.
 
     The content and its CRC32 stay intact -- only the last four bytes change -- so this is the
     corruption that `zcat` survives and `gzip -t` reports.
@@ -96,7 +96,7 @@ def test_a_healthy_tree_reads_up_and_counts_what_it_checked(tmp_path):
 
 
 def test_a_clobbered_trailer_reads_down_and_names_the_file(tmp_path):
-    """REJECT: the #2694 corruption, on the tree it actually landed on."""
+    """REJECT: the clobbered-trailer corruption, on the tree it actually lands on."""
     roots = [tmp_path / "log", tmp_path / "hdd.log"]
     good_gz(roots[0], FLOOR)
     good_gz(roots[1], FLOOR)

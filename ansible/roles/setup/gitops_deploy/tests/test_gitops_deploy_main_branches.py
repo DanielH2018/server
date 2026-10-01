@@ -1,13 +1,13 @@
 """main()'s branches, run against a scripted checkout.
 
-Every invariant here used to be an AST guard on main()'s source: the ff-merge lands the SHA
+Each invariant is an assertion on what main() did: the ff-merge lands the SHA
 the tick pinned, write_hold precedes every rollback reset, a rollback's exit code follows
 whether its post was delivered, the diverged marker is written ahead of the action
 branching, drain_pending() runs ahead of the short-circuits, the rollback redeploy passes the
 FAILED commit's short SHA under its own budget, and a secrets change bundled with an image
 bump is still flagged. The `tick` fixture in conftest.py answers git, ansible-playbook, the
 CI verdict, the health gate and Discord from a script and records every
-call in order, so each guard is now an assertion on what main() did.
+call in order.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py
@@ -39,7 +39,7 @@ def _marker(state_dir, name: str) -> str | None:
 
 
 def _alerted(state_dir, slot: str) -> str | None:
-    """The SHA one alert slot has paged on, out of the one keyed marker file (#3047)."""
+    """The SHA one alert slot has paged on, out of the one keyed marker file."""
     return parse_alerted(_marker(state_dir, "alerted_shas")).get(slot)
 
 
@@ -172,7 +172,7 @@ def test_a_docker_template_push_merges_deploys_nothing_and_says_so(
 def test_a_containers_common_push_merges_without_the_full_play(
     gitops_deploy, tick, capsys
 ):
-    """The Pi's shared deploy path used to read as broad and buy a full deploy.yml here (#2805)."""
+    """The Pi's shared deploy path is not broad, so it does not buy a full deploy.yml."""
     tick.paths = ["ansible/roles/containers/common/tasks/docker_deploy.yml"]
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
@@ -238,10 +238,10 @@ def _hold_the_deploy_plane(state_dir) -> None:
 def test_a_setup_plane_success_keeps_a_deploy_plane_hold(
     gitops_deploy, tick, state_dir
 ):
-    """The 2026-09-02 erasure: a held deploy.yml, then a successful setup-plane tick.
+    """A held deploy.yml survives a successful setup-plane tick.
 
-    Both markers went within 30 seconds while the deploy plane stayed unapplied, and every
-    consumer gates on hold_sha — so GitOps Deploy — Status read green over it.
+    Clearing both markers would leave the deploy plane unapplied, and every consumer gates on
+    hold_sha — so GitOps Deploy — Status would read green over it.
     """
     _hold_the_deploy_plane(state_dir)
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
@@ -289,11 +289,11 @@ DEPLOY_SONARR = [
 def test_an_image_bump_beside_a_pi_change_deploys_and_names_the_pi_half(
     gitops_deploy, monkeypatch, tick, capsys
 ):
-    """#2836: the bump deploys, and the Pi work it rode in with is still named.
+    """The bump deploys, and the Pi work it rode in with is still named.
 
-    The promotion used to be refused outright when `cs.services` was non-empty. Dropping that
-    moves the tick off `handle_no_services`, which was the only path that said anything about
-    the Pi half — so `handle_k8s` says it now.
+    The promotion is not refused when `cs.services` is non-empty. That moves the tick off
+    `handle_no_services`, the only path that said anything about the Pi half — so `handle_k8s`
+    says it.
     """
     _image_bump(gitops_deploy, monkeypatch, tick, extra_paths=[DOCKER_TEMPLATE])
     assert gitops_deploy.main(tick.tools) == 0

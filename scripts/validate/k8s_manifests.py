@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Render every k8s manifest template with stubbed vars and assert each parses as valid YAML.
 
-The Docker side has had this guard since the compose templates existed
-(``validate/compose_templates.py``); the k8s manifests introduced in slice 1 of the k3s
-migration need the same one for the same reason. A Jinja indentation bug is exactly the class
+The compose templates have the same guard (``validate/compose_templates.py``), and the k8s
+manifests need it for the same reason. A Jinja indentation bug is exactly the class
 ``check-yaml`` and ``ansible-lint`` miss — neither renders ``.j2`` — so it passes CI and first
 appears as ``error validating data`` partway through a ``kubectl apply``, with some objects
 already applied and some not.
@@ -23,18 +22,17 @@ or invalid YAML.
 Also cross-checks every ``persistentVolumeClaim.claimName`` against the PVC names actually
 rendered across the whole tree (a Deployment mounting a PVC nothing declares passes admission —
 PVC binding is a scheduling concern, not a validating webhook — so this is otherwise only caught
-live). Reported as ``[WARN]``, not folded into the exit code: added 2026-08-17, unproven against
-the real tree yet. Promote to a hard failure (fold `unresolved` into `failures` in main()) once
-it has run clean — no false positive — for a while.
+live). Reported as ``[WARN]``, not folded into the exit code. Promote to a hard failure (fold
+`unresolved` into `failures` in main()) once it has run clean — no false positive — for a while.
 
-The rendering and parsing pieces live under ``scripts/lib/`` since 2026-09-04 —
-``k8s_roles`` (which roles are rendered and which are exempt), ``k8s_context`` (Ansible's
-variable semantics), ``k8s_yaml`` (the strict loaders and the ``lookup()`` stub), ``k8s_pvc``
-(claim names). The two rule modules only this validator imports sit in ``validate_lib/``:
-``k8s_schema`` (the OpenAPI and vendored-CRD checks) and ``k8s_net_rules`` (the two semantic
-rules no schema can make). The filter registration every render guard shares is
-``lib.ansible_jinja_env``. This module keeps the per-template render and ``main()``, and
-re-exports every moved name so an existing importer keeps working.
+The rendering and parsing pieces live under ``scripts/lib/`` — ``k8s_roles`` (which roles are
+rendered and which are exempt), ``k8s_context`` (Ansible's variable semantics), ``k8s_yaml``
+(the strict loaders and the ``lookup()`` stub), ``k8s_pvc`` (claim names). The two rule modules
+only this validator imports sit in ``validate_lib/``: ``k8s_schema`` (the OpenAPI and
+vendored-CRD checks) and ``k8s_net_rules`` (the two semantic rules no schema can make). The
+filter registration every render guard shares is ``lib.ansible_jinja_env``. This module keeps
+the per-template render and ``main()``, and re-exports every moved name so an existing importer
+keeps working.
 """
 
 import sys
@@ -183,7 +181,7 @@ def role_names(k8s_roles: Path) -> list[str]:
 
     A retired role's gitignored `__pycache__/` keeps its directory on disk after the
     deployer's fast-forward removes the tracked files. `is_leftover_dir` drops that shell,
-    which would otherwise render as a role with no templates and prove nothing (#2888).
+    which would otherwise render as a role with no templates and prove nothing.
     """
     return sorted(
         d.name
@@ -254,9 +252,9 @@ def main() -> int:
             if is_manifest_template(p)
         )
         if not templates:
-            # A role that only delegates — as the retired n8n-images did, calling image-builder
-            # twice and owning no manifests of its own. Not a failure, but it must still have an inventory entry,
-            # so the check below is deliberately not skipped with it.
+            # A role that only delegates — it calls image-builder and owns no manifests of its
+            # own. Not a failure, but it must still have an inventory entry, so the check below
+            # is deliberately not skipped with it.
             if role in entries:
                 continue
             print(f"  [FAIL] {role}: no manifest templates found", file=sys.stderr)
@@ -294,7 +292,7 @@ def main() -> int:
         ctx = {**base, **role_vars, "container_item": entries[role]}
         pvc_names.update(volume_claim_pvc_names(role, ctx, claim_env))
         # A manifest `k8s/manifests` renders from ansible/templates/ because this role ships
-        # none of its own (#2872). Rendered here under the role's own context, exactly as the
+        # none of its own. Rendered here under the role's own context, exactly as the
         # deploy renders it -- 25 roles' Service manifests left the tree with their template
         # and would otherwise leave this validator's corpus with it, taking the schema check
         # and the Service-to-container port cross-reference with them.

@@ -3,11 +3,11 @@
 
 `docker_install_package_specs` renders each pin into an apt spec
 (`containerd.io=2.3.5-*~ubuntu.24.04~noble`), so the version space that matters is Docker's
-own apt index, not the upstream GitHub tags. Until #2341 the managers read github-releases,
-and Docker packages a release days-to-weeks after upstream tags it: PR #2327 offered
-containerd 2.4.0 while the noble/arm64 index topped out at 2.3.5, so the
-`docker-engine-upgrade` play would have failed at apt AFTER stopping every Compose project
-on the Pi. Nothing in CI said so, because no job resolved the rendered spec.
+own apt index, not the upstream GitHub tags. The managers read the apt index, not
+github-releases, because Docker packages a release days-to-weeks after upstream tags it: a
+bare upstream tag can name a version the noble/arm64 index does not carry, and the
+`docker-engine-upgrade` play would then fail at apt AFTER stopping every Compose project on
+the Pi. No CI job resolves the rendered spec.
 
 The guards here are offline by construction — the operator rejected a CI job that fetches
 Docker's index on every run. They assert the config's own internal agreement instead: the
@@ -44,11 +44,11 @@ DOCKER_INSTALL_DEFAULTS = "ansible/roles/setup/docker_install/defaults/main.yml"
 _PI_DOCKER_GROUP_PREFIX = "docker engine on the Pi"
 
 # The apt version strings the index actually serves, read from
-# https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages on
-# 2026-09-24. Both shapes are present: containerd.io carries bare `<version>-<rev>` rows
-# alongside the suffixed ones, and docker-ce carries a `5:` epoch. A version extractVersion
-# cannot match is dropped from the version space, so a regex anchored on `~ubuntu` would
-# silently narrow it.
+# https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages. Both
+# shapes are present: containerd.io carries bare `<version>-<rev>` rows alongside the
+# suffixed ones, and docker-ce carries a `5:` epoch. A version extractVersion cannot match
+# is dropped from the version space, so a regex anchored on `~ubuntu` would silently narrow
+# it.
 _APT_VERSION_FIXTURES = [
     ("5:29.8.1-1~ubuntu.24.04~noble", "29.8.1"),
     ("2.3.5-1~ubuntu.24.04~noble", "2.3.5"),
@@ -58,7 +58,7 @@ _APT_VERSION_FIXTURES = [
 ]
 
 # Shapes extractVersion must NOT turn into a version. A bare upstream tag is the one that
-# matters: it is what the github-releases datasource used to hand over, and it is exactly the
+# matters: it is what a github-releases datasource would hand over, and it is exactly the
 # version apt has no package for.
 _NON_APT_VERSION_FIXTURES = ["2.4.0", "v2.4.0", "29.8.1"]
 
@@ -77,10 +77,10 @@ def _pi_docker_managers() -> list[dict]:
 def test_managers_name_the_apt_packages_they_pin() -> None:
     """Each manager's depName must be the apt package whose spec its var renders.
 
-    The bug #2341 records is a manager tracking a version space its own consumer cannot
-    install. `docker_install_package_versions` is that consumer: its keys are the apt package
-    names and its values interpolate the pinned vars, so binding depName to the key is what
-    makes the datasource and the spec name the same thing.
+    The bug guarded is a manager tracking a version space its own consumer cannot install.
+    `docker_install_package_versions` is that consumer: its keys are the apt package names
+    and its values interpolate the pinned vars, so binding depName to the key is what makes
+    the datasource and the spec name the same thing.
     """
     # fact: ansible/roles/setup/docker_install/CLAUDE.md#The engine is held; `--tags docker-engine-upgrade` is how it moves
     defaults = yaml_fast.safe_load((_REPO / DOCKER_INSTALL_DEFAULTS).read_text())
@@ -134,7 +134,7 @@ def test_extract_version_reads_every_apt_shape(apt_version: str, expected: str) 
 
 @pytest.mark.parametrize("not_an_apt_version", _NON_APT_VERSION_FIXTURES)
 def test_extract_version_rejects_a_bare_upstream_tag(not_an_apt_version: str) -> None:
-    """The rejecting half: a bare upstream tag is what github-releases used to serve, and it
+    """The rejecting half: a bare upstream tag is what github-releases would serve, and it
     is exactly the version the Pi's apt has no package for."""
     for mgr in _pi_docker_managers():
         pattern = re.compile(_to_python_regex(mgr["extractVersionTemplate"]))
@@ -149,10 +149,10 @@ def test_pins_resolve_to_the_manual_group(dep_name: str) -> None:
     """A minor bump must land in the Pi's own manual group, never the automerging catch-all.
 
     `container images (non-major)` has no matchFileNames and automerges minor and patch. The
-    override that keeps these four out of it selects on datasource AND package name, so the
-    #2341 datasource move had to carry it — a rule left on github-releases/moby-moby would
-    have matched nothing and started automerging engine bumps onto a Pi that cannot apply
-    them without the docker-engine-upgrade play.
+    override that keeps these four out of it selects on datasource AND package name, so it
+    must follow the datasource — a rule left on github-releases/moby-moby would match
+    nothing and start automerging engine bumps onto a Pi that cannot apply them without the
+    docker-engine-upgrade play.
     """
     group = _resolve_group_name(dep_name, DOCKER_INSTALL_DEFAULTS, "minor", "deb")
     assert group is not None and group.startswith(_PI_DOCKER_GROUP_PREFIX), (

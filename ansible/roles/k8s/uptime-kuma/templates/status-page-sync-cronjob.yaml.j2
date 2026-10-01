@@ -141,7 +141,7 @@ spec:
                   memory: {{ kuma_status_page_sync_mem_request }}
 {# No desired.json means the render stage found the page already grouped as declared, which is
    the steady state. Writing it anyway would be a saveStatusPage into Kuma's SQLite on every
-   run — the shape of the notification-rewrite loop this role paid for in 2026-08. #}
+   run. #}
             - name: apply
               image: {{ kuma_cli_k8s_image }}
               command: ["/busybox/sh", "-c"]

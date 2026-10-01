@@ -1,11 +1,10 @@
 """The root CLAUDE.md points at the check that holds a fact; it does not restate the fact and
 then disclaim the restatement.
 
-Until #2060 the file carried lines of the shape "read it rather than trusting this one" and
-"derive the set with grep rather than trusting a count written here" — prose admitting it could
-not hold the fact it had just written out. Each such fact already had an owner (a hook, a
-generator, a test), so the fix was to cut the restatement to a pointer. This keeps the shape
-from coming back: a sentence that needs the disclaimer is a sentence that should have been a
+Lines of the shape "read it rather than trusting this one" or "derive the set with grep
+rather than trusting a count written here" are prose admitting it cannot hold the fact it just
+wrote out. Each such fact has an owner (a hook, a generator, a test), so the restatement
+belongs as a pointer. This keeps the shape out: a sentence that needs the disclaimer is a sentence that should have been a
 pointer, and every session loads this file.
 
 Run: uv run pytest ansible/tests/repo/test_claude_md_has_no_self_disclaiming_prose.py
@@ -17,7 +16,7 @@ from _helpers import REPO
 
 CLAUDE_MD = REPO / "CLAUDE.md"
 
-# The three phrasings the file used; a new one belongs here, not in the doc.
+# The three phrasings of the shape; a new one belongs here, not in the doc.
 SELF_DISCLAIMER = re.compile(
     r"rather than trusting|written here went stale|read it rather", re.IGNORECASE
 )

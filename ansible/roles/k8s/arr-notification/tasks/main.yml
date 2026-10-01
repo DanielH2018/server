@@ -35,8 +35,7 @@
 # `sonarr.homelab.svc` does not resolve here. Not Traefik either — neither app has an Authelia
 # bypass for /api/*, so a routed request 302s at the middleware and never reaches the app
 # (scripts/diagnostics/probe_lib/arr.py carries the same finding and reaches it the same way).
-# A ClusterIP is stable across pod restarts and redeploys, so this is the k8s equivalent of the
-# pre-migration container IP.
+# A ClusterIP is stable across pod restarts and redeploys.
 - name: Resolve the Service ClusterIP of {{ arr_notification_app }}
   tags: [deploy]
   ansible.builtin.command:

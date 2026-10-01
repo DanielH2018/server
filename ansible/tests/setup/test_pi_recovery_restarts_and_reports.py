@@ -1,31 +1,29 @@
 #!/usr/bin/env python3
 """pi-recovery-health.sh restarts a dead container AND still reports the cycle as DOWN.
 
-The script used to only detect. On 2026-08-29 autoheal died with an OCI create failure
-("Timeout waiting for systemd to create scope") under memory pressure on daniel-pi, and
-`restart: unless-stopped` never retried it -- that policy covers a container whose process
-exits, not one whose create fails -- so it stayed down ~50 minutes until a human ran
-`docker start`. Detection worked; remediation did not exist.
+A container whose create fails (autoheal died with an OCI create failure, "Timeout waiting
+for systemd to create scope", under memory pressure) is never retried by
+`restart: unless-stopped` -- that policy covers a container whose process exits, not one
+whose create fails -- so it stays down until a human runs `docker start`. The script
+therefore remediates as well as detects.
 
 Adding a restart introduces the opposite hazard, which is why the reporting half is tested
 just as hard as the restart half: a self-healing cron that pushes `up` after a successful
 restart makes a container crashing every 5 minutes read green forever. So a cycle that had
 to intervene pushes DOWN, and only a clean cycle pushes `up`.
 
-Two later additions, both tested here. The watch set is every container the host deploys,
-not the two the script was born with (#1910): the same failed start reaches glances, wg-easy
-and docker-proxy-lifecycle, and only the last is invisible to Kuma from outside. And the
-DOWN line records `docker inspect`'s exit code and error BEFORE the restart erases them
-(#1912): the Pi's journal rotates in a day, so that line is the only evidence that survives.
-A third covers the daemon rather than a container (#1922): when dockerd itself is gone every
-container reads `inspect failed` and the reason lives only in `journalctl -u docker`, so the
-line carries the newest non-info lines of that unit — through a stub, since the real
-journalctl on PATH would read this host's journal.
+Three further properties are tested here. The watch set is every container the host
+deploys: the same failed start reaches glances, wg-easy and docker-proxy-lifecycle, and only
+the last is invisible to Kuma from outside. The DOWN line records `docker inspect`'s exit
+code and error BEFORE the restart erases them: the Pi's journal rotates in a day, so that
+line is the only evidence that survives. And one case covers the daemon rather than a
+container: when dockerd itself is gone every container reads `inspect failed` and the reason
+lives only in `journalctl -u docker`, so the line carries the newest non-info lines of that
+unit — through a stub, since the real journalctl on PATH would read this host's journal.
 
 One property here is not about the script at all: the cron that runs it must be disarmable
-from the inventory. The contract section documented disarming as an edit to the task
-(`state: absent`), which another session's `--tags recovery-health` run silently undoes
-because nothing records the intent (#2736).
+from the inventory. Disarming as an edit to the task (`state: absent`) is silently undone
+by a `--tags recovery-health` run, because nothing records the intent.
 
 Run: uv run pytest ansible/tests/setup/test_pi_recovery_restarts_and_reports.py
 """
@@ -44,8 +42,7 @@ CRON_NAME = "Pi container-recovery heartbeat"
 # rather than counted so the failure says which container the cron stopped watching.
 PI_CONTAINERS = [c["name"] for c in PI_HOST_VARS["containers_list"]]
 EXPECTED_WATCH_SET = {*PI_CONTAINERS, "docker-proxy-lifecycle"}
-# The container #1910 was filed on: a compose sub-service, not a containers_list entry, so
-# iterating the list alone would miss it.
+# A compose sub-service, not a containers_list entry, so iterating the list alone would miss it.
 MUST_WATCH = frozenset(
     {"autoheal", "docker-proxy", "docker-proxy-lifecycle", "wg-easy"}
 )
@@ -106,7 +103,7 @@ def test_a_dead_container_is_restarted(tmp_path, dead):
 
 
 def test_a_restart_that_fails_is_reported_as_failed(tmp_path):
-    """The input it must REJECT: down AND unrecoverable -- the 2026-08-29 state itself."""
+    """The input it must REJECT: down AND unrecoverable -- the autoheal create-failure state."""
     status, msg, still_running, _ = run(
         SCRIPT,
         tmp_path,
@@ -142,7 +139,7 @@ OCI_ERROR = "unable to start unit: Timeout waiting for systemd to create scope"
 
 
 def test_the_down_line_names_the_exit_reason_before_the_restart(tmp_path):
-    """ACCEPT (#1912): the message carries inspect's state from BEFORE `docker start`.
+    """ACCEPT: the message carries inspect's state from BEFORE `docker start`.
 
     The stub answers status=running once a container is started, so an `exit=137` in the
     message proves the inspect ran first -- after the restart, the reason is gone for good.
@@ -188,7 +185,7 @@ DAEMON_JOURNAL = (
 
 
 def test_a_dead_daemon_is_named_from_its_own_journal(tmp_path):
-    """ACCEPT (#1922): every container reads `inspect failed`, so the line carries dockerd's
+    """ACCEPT: every container reads `inspect failed`, so the line carries dockerd's
     journal — the only copy that outlives the Pi's 32M journal rotation is this record.
     """
     status, msg, _, lines = run(
@@ -295,7 +292,7 @@ def _cron_task() -> dict:
 
 
 def test_the_cron_can_be_disarmed_from_the_inventory():
-    """A one-way arming switch is a bug: adding a way in means adding the way out (#2736)."""
+    """A one-way arming switch is a bug: adding a way in means adding the way out."""
     state = str(_cron_task()["ansible.builtin.cron"].get("state", "present"))
     assert "optimize_pi_recovery_restart_enabled" in state, (
         "state: must follow optimize_pi_recovery_restart_enabled, or disarming the cron means "

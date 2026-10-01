@@ -2,9 +2,8 @@
 
 `K8S_AUTODEPLOY_DENYLIST` is derived from every role under roles/k8s/ at RENDER time, and only
 `initial_setup.yml --tags gitops_deploy` renders it. A change under roles/k8s/ matches no prefix
-that runs that playbook, so adding a role declaring `k8s_autodeploy: false` left the baked list
-stale and disarmed image-pin auto-deploy FLEET-WIDE — measured on game-stats-lib, 12:30 to 18:29
-UTC on 2026-09-05 (issues #1265, #1294). This phase closes that gap by stating the invariant
+that runs that playbook, so adding a role declaring `k8s_autodeploy: false` leaves the baked list
+stale and disarms image-pin auto-deploy FLEET-WIDE. This phase closes that gap by stating the invariant
 locally: config.env must agree with the declarations at the checkout's own HEAD.
 
 Both halves of every rule are here, because a check is only ever observed passing: a case it
@@ -85,7 +84,7 @@ def _marker(state_dir, name: str) -> str | None:
 def test_a_config_that_disagrees_with_the_checkout_is_re_rendered(
     gitops_deploy, tick, state_dir, settings
 ):
-    """The flagged half: HEAD denies a role the baked config does not — the #1294 shape."""
+    """The flagged half: HEAD denies a role the baked config does not."""
     _declares(tick, "false")
     assert deploy_phases.reconcile_denylist(
         gitops_deploy.STATE, _armed(settings), LOCAL
@@ -151,10 +150,10 @@ def test_an_unreadable_ref_retries_next_tick_instead_of_claiming_the_sha(
 def test_an_empty_declaration_read_is_not_agreement_with_an_empty_denylist(
     gitops_deploy, tick, state_dir, settings
 ):
-    """The vacuity half of the comparison (issue #1331).
+    """The vacuity half of the comparison.
 
     An empty tree listing derives `frozenset()`, which against a config that LOST its denylist
-    line — also `frozenset()` — used to compare equal and claim the SHA, marking the damaged
+    line — also `frozenset()` — would compare equal and claim the SHA, marking the damaged
     config reconciled for that checkout so the repair never ran. Empty is a broken read, so it
     behaves like an unreadable ref: no render, and no marker, so the next tick tries again."""
     tick.tree_listing = ""
@@ -207,11 +206,11 @@ def test_a_host_with_auto_deploy_off_renders_nothing_on_any_tick(
 def test_a_config_that_lost_its_denylist_line_is_re_rendered(
     gitops_deploy, tick, state_dir, settings
 ):
-    """The state the fail-closed disarm creates, and used to make unhealable (issue #1317).
+    """The state the fail-closed disarm creates, which must stay healable.
 
     A truncated deployer config keeps `K8S_AUTODEPLOY_ENABLED=true` and drops the denylist, so
-    `gitops_deploy.py` disarms auto-deploy. Gating the reconcile on that disarmed value meant
-    the file whose damage caused the disarm was never re-rendered. An empty denylist is the
+    `gitops_deploy.py` disarms auto-deploy. Gating the reconcile on that disarmed value would
+    mean the file whose damage caused the disarm is never re-rendered. An empty denylist is the
     repair's trigger, not its blocker."""
     _declares(tick, "false")
     assert deploy_phases.reconcile_denylist(
@@ -226,8 +225,8 @@ def test_an_idle_tick_re_renders_a_stale_denylist(
     gitops_deploy, tick, state_dir, settings
 ):
     """The heal lands on the tick AFTER the fast-forward, which is a converged, otherwise-idle
-    one — exactly the tick that used to return 0 having done nothing while auto-deploy stayed
-    disarmed fleet-wide."""
+    one — exactly the tick that would otherwise return 0 having done nothing while auto-deploy
+    stays disarmed fleet-wide."""
     _declares(tick, "false")
     tick.origin = tick.local
     assert gitops_deploy.main(tick.tools, _armed(settings, ["other"])) == 0

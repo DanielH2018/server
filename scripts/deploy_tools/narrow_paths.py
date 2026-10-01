@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The rules `narrow_broad` keeps outside itself: a path shape, and a role-directory read.
 
-Split out for the reason `narrow_containers.py` was (#2044): `narrow_broad.py` sits at its
+Split out for the reason `narrow_containers.py` was: `narrow_broad.py` sits at its
 600-line cap, so a rule added there has to live beside it. It imports nothing from
 `narrow_broad`, so the two cannot cycle — the role trees a caller reads are passed in rather
 than imported back.
@@ -49,13 +49,13 @@ def role_is_gone(role: str, ref: str, cwd: Path, trees: Iterable[str]) -> bool:
     A range that DELETES a role still lists every path the role owned as changed, so
     `narrow_broad._changed_half` handed `_role_tags` a role with no `containers_list` entry
     and no caller, which refuses — every role retirement, however small, cost the tick a
-    full `ansible/deploy.yml` (#2879).
+    full `ansible/deploy.yml`.
 
     A role directory that no longer exists at the new ref applies nothing: no play visits
     it, and the objects it owned are either orphaned, which the prune check reports, or
     re-owned by a role whose own paths changed in the same range and maps to its own tag.
     That is the reading `narrow_containers.entry_change_tags` already gives a REMOVED
-    `containers_list` entry (#2046) — no `--tags` value undoes a removal, and neither does
+    `containers_list` entry — no `--tags` value undoes a removal, and neither does
     the whole play, so refusing bought no reconciliation and cost twenty minutes.
 
     The caller drops a gone role BEFORE `narrow_broad._role_tags` looks its callers up:

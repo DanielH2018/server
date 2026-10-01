@@ -1,7 +1,7 @@
 """`role_dirs` returns real roles and skips a retired role's `__pycache__` shell.
 
 The census is what every guard reads a role tree through — `roles/k8s/`, `roles/setup/` and
-the Pi's `roles/containers/` alike (#2964) — so its two edges, debris is skipped and an empty
+the Pi's `roles/containers/` alike — so its two edges, debris is skipped and an empty
 directory is not, need their own coverage rather than each caller's.
 """
 
@@ -10,9 +10,9 @@ from _role_census import role_dirs
 
 
 def test_a_retired_roles_debris_shell_is_not_a_role(tmp_path):
-    """The bug (#2952): the deployer's fast-forward removes a retired role's tracked files and
-    the gitignored `__pycache__/` keeps its directory, so a bare walk read a role that no
-    longer exists in git."""
+    """The deployer's fast-forward removes a retired role's tracked files and the gitignored
+    `__pycache__/` keeps its directory, so a bare walk reads a role that no longer exists
+    in git."""
     (tmp_path / "widget" / "tasks").mkdir(parents=True)
     (tmp_path / "widget" / "tasks" / "main.yml").write_text("[]\n")
     (tmp_path / "retired" / "__pycache__").mkdir(parents=True)
@@ -43,6 +43,6 @@ def test_the_default_census_finds_the_real_k8s_roles():
 
 
 def test_the_census_finds_the_real_setup_and_pi_roles():
-    """Non-vacuity for the two trees #2964 added, each named by a role that predates it."""
+    """Non-vacuity for the setup and Pi trees, each named by a role."""
     assert {"common", "gitops_deploy"} <= {p.name for p in role_dirs(SETUP_ROLES)}
     assert {"wg-easy", "docker-proxy"} <= {p.name for p in role_dirs(CONTAINER_ROLES)}

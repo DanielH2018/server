@@ -4,10 +4,10 @@
 bouncing to the Authelia portal is recovered by re-minting the session and calling
 `browser_close`, because the MCP server builds a browser context — and reads `storageState` —
 once per context rather than once per navigation. That was measured against `@playwright/mcp`
-0.0.79 on 2026-09-06 and nothing guarded it. The package is Renovate-managed, and a bump that
-changed what `browser_close` disposes would leave the documented procedure silently wrong: no
-test anywhere goes red, and the symptom is an agent following a doc that no longer works, which
-looks exactly like the stale session the doc exists to explain (GitHub issue #1413).
+0.0.79 and nothing else guards it. The package is Renovate-managed, and a bump that changed what
+`browser_close` disposes would leave the documented procedure silently wrong: no test anywhere
+goes red, and the symptom is an agent following a doc that no longer works, which looks exactly
+like the stale session the doc exists to explain.
 
 **A private state file, never the shared jar.** The test swaps the file underneath a running
 server, and the shared jar is what every other `-m ui` run and every live Claude session reads.
@@ -114,8 +114,8 @@ def test_browser_close_makes_the_next_navigation_re_read_the_state_file(
     # The pid goes in the FILENAME, not in the directory: `ui_mcp.sh` derives its private
     # launch config as `$RUNTIME_DIR/playwright-mcp-private-$(basename "$STATE_PATH").json`,
     # which `tmp_path`'s uniqueness never reaches. Two concurrent `-m ui -k state_reload`
-    # runs shared that config path and one server came up pointed at the other run's state
-    # file (GitHub issue #1591).
+    # runs would share that config path and one server would come up pointed at the other
+    # run's state file.
     state = tmp_path / f"session-state-{os.getpid()}.json"
     # Valid JSON, not an empty file: a malformed state fails the context build, which arrives
     # as a server error rather than as the portal, and the first assertion never runs.

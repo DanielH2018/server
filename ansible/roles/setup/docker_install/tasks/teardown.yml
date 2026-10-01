@@ -3,17 +3,12 @@
 # has_docker: false; everything here is state=absent, so it is a no-op on a host that
 # never had Docker.
 #
-# /var/lib/docker is still deliberately NOT touched: it holds image and volume data, and
+# /var/lib/docker is deliberately NOT touched: it holds image and volume data, and
 # deleting it is irreversible in a way removing a package is not. It is inert once the
 # daemon is gone.
 #
-# The PACKAGES used to be left alone too, on the reasoning that purging them was the
-# operator's call and "on daniel-server it is already done". Both halves of that failed.
-# docker-ce was purged on 2026-08-14 and reinstalled on 2026-08-19 at 22:37 by an Ansible
-# run that saw has_docker: true — so `has_docker: false` described an end state nothing
-# enforced, and the host ran a second container runtime for eight days while every repo
-# check read green. A declared state that the role will not converge to is not a declared
-# state. Purging here is what makes has_docker: false mean something.
+# The packages ARE purged: a declared state that the role will not converge to is not a
+# declared state, so purging here is what makes has_docker: false mean something.
 
 - name: Find leftover docker-compose systemd units
   tags: [docker-teardown]
@@ -55,11 +50,11 @@
 
 - name: Remove crons belonging to retired Compose services
   tags: [docker-teardown]
-  # Ansible-managed crons are only reaped by the role that wrote them, and these roles are
-  # archived — so they outlive their services. Both were still scheduled on daniel-server
-  # two days after the uninstall: the ical-proxy redeploy invokes a Docker deploy for a
-  # service that is now a k8s workload, and the tdarr sweep points at a transcode_cache
-  # directory the migration emptied, making it a silent no-op rather than merely stale.
+  # Ansible-managed crons are only reaped by the role that wrote them, and these roles no
+  # longer exist — so the crons outlive their services. The ical-proxy redeploy invokes a
+  # Docker deploy for a service that is now a k8s workload, and the tdarr sweep points at a
+  # transcode_cache directory the migration emptied, making it a silent no-op rather than
+  # merely stale.
   # Listed by name because ansible.builtin.cron matches on its exact comment marker.
   ansible.builtin.cron:
     name: "{{ item }}"
@@ -94,7 +89,7 @@
 - name: Release the hold on the Docker engine packages before purging them
   tags: [docker-teardown]
   # The install half holds docker_engine_packages so no upgrade moves them under running
-  # containers (#1961). apt with `-y` refuses to change a held package unless told
+  # containers. apt with `-y` refuses to change a held package unless told
   # `--allow-change-held-packages`, so the purge below fails on a host that came through the
   # install half unless the hold is released first. Guarded on the binary like the stop above:
   # dpkg_selections fails on a name dpkg has never seen.
@@ -110,7 +105,7 @@
   # containerd.io is safe to purge alongside the engine: it provides /usr/bin/containerd,
   # which only dockerd uses. k3s runs its OWN embedded containerd out of
   # /var/lib/rancher/k3s/data/current/bin/ and never reads the packaged one — verified on
-  # daniel-server 2026-08-27, where the running shim resolved under /var/lib/rancher.
+  # daniel-server, where the running shim resolves under /var/lib/rancher.
   # Purge rather than remove so /etc/docker (daemon.json, live-restore) goes too;
   # autoremove drops the pulled-in extras (pigz, rootless-extras, slirp4netns).
   # docker_engine_packages plus rootless-extras, which arrives as a Recommends and is not held.

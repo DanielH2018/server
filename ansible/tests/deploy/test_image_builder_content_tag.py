@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Guards k8s/image-builder's content tag — the immutable second name every build pushes.
 
-WHY IT EXISTS. Every built image was pushed to a mutable `:latest` alone, so "is the running pod
-the image this commit describes" could only be answered by reading a registry digest
-(post_tasks/k8s_image_drift_gate.yml). `<name>:sha-<12 hex>`, derived from the build inputs,
-makes that a comparison of NAMES.
+WHY IT EXISTS. A mutable `:latest` alone can answer "is the running pod the image this commit
+describes" only by reading a registry digest (post_tasks/k8s_image_drift_gate.yml).
+`<name>:sha-<12 hex>`, derived from the build inputs, makes that a comparison of NAMES.
 
 The failure this file is written against is not a build that breaks — it is a tag that stays
 still while the image changes. That ships a stale image behind a fresh-looking name, which is
-strictly worse than the mutable tag it was added to, and it reads green throughout. So every
+strictly worse than the mutable tag, and it reads green throughout. So every
 test below is a pair: one input that must move the tag, and the identical input that must not.
 
 The expression is read out of the role and evaluated through Ansible's own templar against real
@@ -174,8 +173,8 @@ def test_rewording_a_comment_in_that_template_does_not_move_the_tag(
 ):
     """Why the hash takes `['data']` and not the whole render.
 
-    That template is two-thirds prose. Hashing it whole would rebuild and re-roll all nine built
-    images on a comment edit, which is most of the ~106s the build gate exists to save.
+    That template is two-thirds prose. Hashing it whole would rebuild and re-roll every built
+    image on a comment edit, which is most of the ~106s the build gate exists to save.
     """
     copy = tmp_path / "role"
     shutil.copytree(ROLE, copy)
@@ -291,7 +290,7 @@ def test_the_confirm_step_fails_when_only_the_mutable_tag_was_pushed():
 
 
 def test_the_confirm_step_still_fails_when_the_mutable_tag_is_missing():
-    """Unchanged from before the content tag: every unconverted consumer pulls `:latest`."""
+    """The `:latest` push is unchanged: every unconverted consumer pulls it."""
     assert not _confirms_ok(["sha-abcdef012345"])
 
 

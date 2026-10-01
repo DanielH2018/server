@@ -1,7 +1,6 @@
 """The WAN-reachability gate: the verdict, the membership, and what it suppresses.
 
-An internet outage had no gate before 2026-09-27, so 11 tiles paged for the one outage of
-2026-09-18 (#2784). The behaviour that has to hold is narrow: down only when EVERY endpoint
+Without a gate, one internet outage pages every dependent tile. The behaviour that has to hold is narrow: down only when EVERY endpoint
 fails, one page rather than none, and the dependents held green with a `skipped` message.
 """
 
@@ -71,7 +70,7 @@ def test_the_default_endpoints_are_two_independent_providers():
 def test_the_default_endpoints_are_hostnames_not_addresses():
     """DNS failure is part of the outage this gate reports.
 
-    The 2026-09-18 outage included "failed to resolve public IPv4 from ipify". A probe against
+    An outage can include "failed to resolve public IPv4 from ipify". A probe against
     an anycast literal stays green through a DNS-only outage while every dependent fails.
     """
     for url in WAN_PROBE_DEFAULT.split(","):

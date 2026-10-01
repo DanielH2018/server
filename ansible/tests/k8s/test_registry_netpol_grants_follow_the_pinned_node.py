@@ -1,10 +1,9 @@
 """The registry policy's two node grants must follow the node its pod is pinned to.
 
 A host process reaching a pod on the OTHER node crosses the VXLAN overlay and arrives as the
-sending node's flannel.1 address, not as a cni0 gateway. Measured 2026-09-10 (#1725), with the
-pod's node as the only variable: from daniel-box, sonarr's ClusterIP (pod on daniel-box)
-answered 200 while prowlarr's (pod on daniel-server) timed out, and from daniel-server the two
-verdicts swapped.
+sending node's flannel.1 address, not as a cni0 gateway. With the pod's node as the only
+variable, from daniel-box sonarr's ClusterIP (pod on daniel-box) answers 200 while prowlarr's
+(pod on daniel-server) times out, and from daniel-server the two verdicts swap.
 
 The registry survives that because its policy admits BOTH families by hand: daniel-box's cni0
 gateway for a same-node pull, and daniel-server's flannel.1 address for the agent's containerd

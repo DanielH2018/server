@@ -63,13 +63,12 @@ def test_custom_manager_matches_live_targets(mgr: dict, tracked: list[str]) -> N
 def test_no_custom_manager_tracks_the_retired_compose_plane() -> None:
     """No customManager may target ansible/roles/containers/**.
 
-    Replaces the old per-compose coverage test, whose premise expired with the k3s migration.
     Both cluster hosts are drained (daniel-server's containers_list is empty and Docker is
     uninstalled; daniel-box is all platform: k8s), so the only composes left are daniel-pi's
     five — and the Pi has has_gitops: false, no CI deploy path, and is deliberately untracked
     per operator decision. Every remaining compose is therefore either dead or hand-deployed,
-    and tracking them only manufactured drift: PR #67 bumped the pihole and traefik compose
-    templates for services that now run in the cluster, against pins nothing reads.
+    and tracking them only manufactures drift: a bump of a compose template for a service
+    that runs in the cluster targets a pin nothing reads.
 
     Asserted rather than merely deleted, because re-adding a compose manager looks entirely
     reasonable in isolation — this is the context that makes it wrong.
@@ -117,10 +116,10 @@ def test_ignore_paths_keeps_the_inherited_preset_globs() -> None:
 def test_group_vars_images_are_tracked() -> None:
     """Some customManager must scan inventory/group_vars/all.yml.
 
-    crowdsec_k8s_image was hoisted out of its role defaults into group_vars, which put it
-    outside the k8s-defaults manager's file patterns AND outside the glob the per-image
-    coverage test below uses — so the WAF core, the one image whose staleness is a security
-    problem, was the single pin that neither could see.
+    crowdsec_k8s_image lives in group_vars, which is outside the k8s-defaults manager's
+    file patterns AND outside the glob the per-image coverage test below uses — so without
+    this check the WAF core, the one image whose staleness is a security problem, would be
+    the single pin that neither could see.
     """
     scanned = [p for m in _MANAGERS for p in m["managerFilePatterns"]]
     assert any("group_vars" in p for p in scanned), (
@@ -135,11 +134,10 @@ _CONTROL_PLANE_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
 def test_control_plane_version_pins_are_tracked() -> None:
     """Every `*_version:` pin in roles/setup/k3s/defaults must be matched by a customManager.
 
-    k3s, MetalLB and Longhorn were pinned here with no manager reaching the file at all: the
-    k8s-images manager one directory over scans roles/k8s/*/defaults and matches `_image:` keys,
-    so neither its file patterns nor the per-image coverage test above could ever see these
-    (2026-08-15 review H5). Widening that test's glob would NOT have caught it — these are
-    version vars, not image vars — which is why this is a separate guard.
+    k3s, MetalLB and Longhorn are pinned here, and the k8s-images manager one directory over
+    scans roles/k8s/*/defaults and matches `_image:` keys, so neither its file patterns nor the
+    per-image coverage test above can see these. Widening that test's glob would NOT have caught
+    it — these are version vars, not image vars — which is why this is a separate guard.
 
     Written to read the pins out of the file rather than assert three known names, so a fourth
     component pinned here later (cilium, cert-manager, a k3s addon) fails this test until it is
@@ -178,12 +176,11 @@ def test_control_plane_version_pins_are_tracked() -> None:
 def test_coredns_extract_skips_the_upstream_stray_tags() -> None:
     """The coredns manager's extractVersionTemplate must read `v1.14.7` and skip `v011`.
 
-    coredns/coredns carries stray tags `v002` ... `v011` beside its real `v1.x.y` releases. The
-    first version of this manager extracted `^v(?<version>.*)$`, which admitted `v011`; Renovate
-    ranked `011` above `1.14.7` as a major and raised PR #3061, whose download URL 404s and whose
-    paired sha256 still belonged to 1.14.7 (#3087). The pin sits in the `k3s-bringup.yml` plane
-    the GitOps deployer never applies, so nothing would have surfaced the break until someone ran
-    that playbook by hand.
+    coredns/coredns carries stray tags `v002` ... `v011` beside its real `v1.x.y` releases. An
+    extraction of `^v(?<version>.*)$` admits `v011`; Renovate then ranks `011` above `1.14.7` as
+    a major and raises a PR whose download URL 404s and whose paired sha256 still belongs to
+    1.14.7. The pin sits in the `k3s-bringup.yml` plane the GitOps deployer never applies, so
+    nothing would have surfaced the break until someone ran that playbook by hand.
 
     Asserted on the pattern rather than on a version bound, because a bound of `^1\\.` would also
     hide a real 2.0.0 — the silent-staleness failure mode this manager exists to close.
@@ -221,7 +218,7 @@ REGISTRY_BUILT_IMAGES = {
     "code_server_k8s_image",  # ansible/roles/k8s/code-server/templates/Dockerfile.j2
     "homelab_mcp_k8s_image",  # ansible/roles/k8s/homelab-mcp/templates/Dockerfile.j2
     # ansible/roles/k8s/karakeep/templates/Dockerfile.j2 — a chown layer over the pinned uv
-    # base so the time-tagger runs as uid 1000 (#2672). Its FROM is watched like the rest; the
+    # base so the time-tagger runs as uid 1000. Its FROM is watched like the rest; the
     # pip pins the container installs at boot sit in deployment-time-tagger.yaml.j2 and have
     # their own regex manager.
     "karakeep_k8s_tagger_image",
@@ -239,36 +236,33 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     """The sibling of the test above, for the cluster.
 
     A k8s role has no compose template to read: the `*_image:` vars in its defaults ARE the
-    source of truth for what every pod runs. Nothing watched them until 2026-08-06 — 21 pins
-    across 13 roles, the entire cluster fleet, ageing with no update signal — which surfaced
-    only when pinning littlelink's `:latest` would otherwise have frozen it outright.
+    source of truth for what every pod runs. Without it the entire cluster fleet's pins (21
+    across 13 roles) could age with no update signal.
 
     Per-var rather than aggregate, for the same reason as the compose guard: the manager
     matching SOMETHING passes even when one role's image slips the regex. An untagged or
     digest-only pin does exactly that, because the matchString requires an explicit :tag.
 
-    Regex-match alone is NOT sufficient, either (2026-08-13 review): the watchtower-era
-    `/^latest$/` packageRule disabled the WHOLE dependency for any k8s image whose extracted
-    currentValue was `latest` — including the deliberate `latest@sha256:...` digest pins
-    (littlelink, tdarr, dri-device-plugin) — even though every one of those lines matched this
-    manager's matchStrings just fine. Renovate never raised a single digest PR for 13 roles and
-    this test stayed green throughout. So beyond matching, assert nothing DISABLES the match:
-    walk packageRules the same way Renovate would and fail if an `enabled: false` rule applies
-    to this file's currentValue.
+    Regex-match alone is NOT sufficient, either: a `/^latest$/` packageRule disables the WHOLE
+    dependency for any k8s image whose extracted currentValue is `latest` — including the
+    deliberate `latest@sha256:...` digest pins (littlelink, tdarr, dri-device-plugin) — even
+    though every one of those lines matches this manager's matchStrings. So beyond matching,
+    assert nothing DISABLES the match: walk packageRules the same way Renovate would and fail
+    if an `enabled: false` rule applies to this file's currentValue.
     """
     match_res = [
         re.compile(_to_python_regex(ms)) for ms in _k8s_image_manager()["matchStrings"]
     ]
     disabling_rules = _disabling_currentvalue_rules(_PACKAGE_RULES)
-    # group_vars/all.yml is included deliberately: crowdsec_k8s_image was hoisted out of its
-    # role defaults into group_vars, and this glob's role-defaults-only form could not see it —
-    # so the test written to catch an untracked cluster image was structurally blind to the one
-    # image (the WAF core) whose staleness is a security problem.
+    # group_vars/all.yml is included deliberately: crowdsec_k8s_image lives in group_vars, and
+    # a role-defaults-only glob cannot see it — so the test written to catch an untracked
+    # cluster image would be structurally blind to the one image (the WAF core) whose staleness
+    # is a security problem.
     #
     # roles/setup/*/defaults/main.yml is included for the same reason: k3s_longhorn_restore_drill_image
     # (busybox:stable, roles/setup/k3s/defaults/main.yml) is one directory over from the k8s
-    # role defaults this glob covered, matched by no manager and by no test, until 2026-08-27
-    # (this is the *_image: sibling of the *_version: pins in the same file that
+    # role defaults, so a role-defaults-only glob would leave it matched by no manager and by no
+    # test (this is the *_image: sibling of the *_version: pins in the same file that
     # test_control_plane_version_pins_are_tracked already covers — separate guard, same file,
     # different key, so neither doubles up on the other).
     defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
@@ -304,7 +298,7 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
 
 
 def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
-    """Regression test for the exact bug the guard above now catches.
+    """Regression test for the exact bug the guard above catches.
 
     Proves _is_disabled_by_packagerule actually fires — without this, the strengthened
     assertion above is vacuous the moment renovate.json is correct (it would pass whether or
@@ -350,10 +344,8 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
 # Every `image:` line in a k8s deployment template must come from a Jinja variable, not a
 # literal — a literal bypasses the k8s-defaults customManager above entirely (it only scans
 # defaults/main.yml, never templates/*.j2), so it would age with NO update signal at all, worse
-# than even the `latest` disable bug. Empty by design: as of 2026-08-13 every k8s template's
-# image is a var (the last 4 literals — homepage/peanut/home-assistant/zigbee2mqtt init
-# containers — were hoisted to defaults/main.yml the same review cycle this test was added).
-# Add an entry here only as a deliberate, reviewed exception; it defeats the point otherwise.
+# than even the `latest` disable bug. Empty by design: every k8s template's image is a var. Add
+# an entry here only as a deliberate, reviewed exception; it defeats the point otherwise.
 IMAGE_LITERAL_ALLOWLIST: frozenset[str] = frozenset()
 
 
@@ -395,18 +387,16 @@ def test_ci_toolchain_pins_have_their_own_group(
 
     The 'container images (non-major)' packageRule has no `matchFileNames`, so it matches
     every custom.regex dep by default — including the prek and Vale pins in ci.yml/.vale.ini,
-    none of which is a container image. #939 shipped titled for prek's v0.5.0 bump while its
-    diff carried only Vale's, because both shared that one catch-all group's branch (issue
-    #980): Renovate reuses a group's branch across whichever deps land in it, so a title
-    generated for one dep can survive a force-push that swaps in another dep's diff. Each of
-    these pins now gets its own `{{depName}}` group instead, so its branch and title always
-    name itself.
+    none of which is a container image. Renovate reuses a group's branch across whichever deps
+    land in it, so a title generated for one dep can survive a force-push that swaps in
+    another dep's diff. Each of these pins gets its own `{{depName}}` group instead, so its
+    branch and title always name itself.
     """
     assert _resolve_group_name(dep_name, rel_path, "minor", datasource) == "{{depName}}"
 
 
 def test_ci_toolchain_group_resolution_catches_the_catch_all() -> None:
-    """Regression test for the exact bug the guard above now catches.
+    """Regression test for the exact bug the guard above catches.
 
     Without a file-scoped override, the broad non-major rule wins by default — proving
     `_resolve_group_name` isn't vacuously returning the right answer for every input, the same

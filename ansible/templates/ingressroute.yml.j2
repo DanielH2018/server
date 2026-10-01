@@ -1,34 +1,25 @@
 {#
-  IngressRoute for a k8s-hosted service — the replacement for traefik.yml.j2's labels()
-  macro, which cannot survive the migration: there are no Docker labels in k8s and the
-  docker provider is gone. Everything labels() encoded (host rule, entrypoint, TLS resolver
-  and SAN set, service port, rate-limit, optional Authelia) is encoded here instead.
+  IngressRoute for a k8s-hosted service. It encodes the host rule, entrypoint, TLS resolver
+  and SAN set, service port, rate-limit and optional Authelia, written once so each service
+  is a one-line call rather than a hand-authored route that drifts from the others.
 
-  Written once so slice 2's ~33 remaining services are a one-line call each, not 33
-  hand-authored routes that drift from one another.
-
-  Arguments mirror labels() where they can:
+  Arguments:
     name               Service (and IngressRoute) name; matches the k8s Service
-    hostname           Host label, WITHOUT the domain. ONE name per service since the
-                       transitional `-k8s` suffix retired (2026-08-15): during the migration
-                       a service answered on both a `-k8s` name and the unsuffixed one its
-                       Docker twin had owned, and this macro emitted a second route for the
-                       latter. Docker is gone, so the unsuffixed name is the only name.
+    hostname           Host label, WITHOUT the domain. ONE name per service, the
+                       unsuffixed one.
     port               Service port to route to
     authelia           attach the forward-auth Middleware (containers_list use_authelia)
     extra_middlewares  additional Middleware names, applied after the standard two
 
   The TLS block is explicit rather than relying on the TLSStore default. Omitting it makes
   Traefik request a certificate for the literal Host rule — a separate cert per hostname,
-  a separate Let's Encrypt issuance, and rate-limit arithmetic that no longer matches the
-  Docker instance's. The Docker side repeats the same block on each hand-rolled file-provider
-  router for the same reason.
+  a separate Let's Encrypt issuance, and the rate-limit exposure that comes with it.
 #}
 {# DECIDED: no retry middleware in the default chain; the macro has no per-route opt-out, and a
    retry replays a POST body a terminating backend already consumed. #}
 {% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, public=true, bypass_prefixes=[]) -%}
 {#
-  namespace defaults to k8s_namespace — every slice-2 service wants that. It is overridable
+  namespace defaults to k8s_namespace, which most services want. It is overridable
   because the telemetry stack runs in its own namespace, and an IngressRoute must live
   alongside the Service it targets: Traefik will not route across namespaces with
   allowCrossNamespace off, which it deliberately is. The referenced middlewares must
@@ -41,9 +32,9 @@
       (`rate-limit-proxied`); the `.local.` name is DNS-only and reached direct, where the
       remote address is the client and a forwarded-header key would pool every LAN client
       into one bucket. A Rule carries one middleware list. The full reasoning is with the
-      middlewares in roles/k8s/traefik/templates/dynamic.yaml.j2 (#1955).
+      middlewares in roles/k8s/traefik/templates/dynamic.yaml.j2.
     - TLS options. The public name requires Cloudflare's origin-pull client certificate
-      (`cloudflare-origin-pull`, ansible/templates/origin-pull.yml.j2, #1990); the `.local.`
+      (`cloudflare-origin-pull`, ansible/templates/origin-pull.yml.j2); the `.local.`
       name must not, since a LAN or WireGuard client holds none. `spec.tls.options` is per
       IngressRoute and Traefik picks it by SNI, so one object holding both hosts would demand
       the certificate of LAN clients too. Hence two objects, not two Rules.
@@ -53,8 +44,7 @@
   object renders unconditionally, so a checkout with k8s_public_route off keeps today's
   object names and nothing orphans under manifests_prune.
 
-  The public object exists only once k8s_public_route flipped (slice-6 B4, with the CrowdSec
-  bouncer on this edge) AND the caller didn't opt out. The absent object is the guard — not
+  The public object exists only when k8s_public_route is true AND the caller didn't opt out. The absent object is the guard — not
   the absent DNS record: the Cloudflare wildcard resolves ANY name. `public=false` is for
   infrastructure APIs that must never face the internet whatever the flag says — the CrowdSec
   LAPI is the standing example.
@@ -89,7 +79,7 @@ spec:
   `k8s_tls_cert_resolver` is empty on a cluster with no ACME resolver, and then Traefik serves
   its own default self-signed certificate. The `tls:` key itself is NEVER conditional: without
   it this becomes a non-TLS router that an HTTPS request is never matched against — see the
-  header of monitoring_route below, which is where that cost a week. `domains:` is the SAN set
+  header of monitoring_route below. `domains:` is the SAN set
   ACME is told to request, so it goes with the resolver rather than with TLS.
 #}
   tls:
@@ -160,52 +150,43 @@ spec:
 
 {% macro monitoring_route(name, hostname, port, path_prefix, namespace=none, extra_client_cidrs=[], service_name=none, include_bridge_ip=true) -%}
 {#
-  A query-only door for monitor-bridge, which runs in Docker on daniel-server and lost its
-  route to these services when they left that host (slice 4, B4c). Modelled on
-  prometheus-monitoring / n8n-monitoring, which exist for exactly this problem.
+  A query-only door for monitor-bridge to reach services that carry no unauthenticated route
+  of their own. Modelled on prometheus-monitoring / n8n-monitoring.
 
-  It served the `-k8s` hostname until that suffix retired (2026-08-15), and the reason it HAD
-  to is now history: the caller was a container on daniel-server, which cannot reach a port
-  its neighbour publishes on the same Docker bridge (same-bridge hairpin NAT — it broke
-  homepage's widgets and check_n8n), so only a name resolving to the cluster VIP worked.
-  Docker left both cluster nodes on 2026-08-14 and the callers are pods, so this now shares
-  the service's one plain `.local` hostname. What keeps it distinct from the app's own route
+  It shares the service's one plain `.local` hostname. What keeps it distinct from the app's own route
   is the ClientIP + PathPrefix pair below plus `priority: 100`, NOT a separate hostname —
   do not "fix" a widget by inventing a second name for it.
 
-  THE `tls:` BLOCK AT THE BOTTOM IS LOAD-BEARING, and its absence is what broke this macro for
-  most of 2026-08-07. An IngressRoute on the `https` entrypoint with no `spec.tls` becomes a
-  NON-TLS router: this entrypoint sets no entrypoint-level TLS, so TLS is decided per router,
-  and an HTTPS request is only ever matched against TLS routers. The route was therefore not
-  losing to the service's plain Host router — it was never a candidate at all, so every request
-  fell through to that router and monitor-bridge got Authelia's 401.
+  THE `tls:` BLOCK AT THE BOTTOM IS LOAD-BEARING. An IngressRoute on the `https` entrypoint
+  with no `spec.tls` becomes a NON-TLS router: this entrypoint sets no entrypoint-level TLS,
+  so TLS is decided per router, and an HTTPS request is only ever matched against TLS routers.
+  Without the block the route is not losing to the service's plain Host router — it is never a
+  candidate at all, so every request falls through to that router and monitor-bridge gets
+  Authelia's 401.
 
   That failure mode is invisible from the object: the route applies cleanly, `kubectl get`
-  shows it, and Traefik logs nothing. It also makes the rule look irrelevant, which sent the
-  first investigation down three dead ends — priority (raised to 1000), the ClientIP matcher
-  (removed entirely, then widened to the whole LAN), and reconciliation lag. None of them could
-  have changed anything. What finally isolated it was a field-by-field diff against
-  n8n-monitoring, which works from the same caller and carries `tls:`.
+  shows it, and Traefik logs nothing. It also makes the rule look irrelevant, so changing
+  priority, the ClientIP matcher or reconciliation timing changes nothing. A field-by-field
+  diff against n8n-monitoring, which works from the same caller and carries `tls:`, isolates it.
 
   Guard: ansible/tests/k8s/test_k8s_manifests.py fails any rendered IngressRoute that serves the
-  https entrypoint without a tls block, so this cannot regress silently again.
+  https entrypoint without a tls block, so this cannot regress silently.
 
   The guards it is MEANT to provide, kept in the rule so they are real once it routes:
     1. ClientIP — `k8s_bridge_client_ip` (daniel-server's LAN address) plus whatever
-       `extra_client_cidrs` adds. `extra_client_cidrs` is a per-caller widening: added for the
-       Kuma prober's move into the cluster (Phase D), whose probes arrive from the pod CIDR.
+       `extra_client_cidrs` adds. `extra_client_cidrs` is a per-caller widening, such as the
+       Kuma prober's, whose probes arrive from the pod CIDR.
 
        `include_bridge_ip=false` drops the prepend for a route whose callers are all in
-       `extra_client_cidrs`. The prepend is a leftover from when monitor-bridge was a Docker
-       container ON daniel-server: a pod arrives with its own 10.42.x.y address, and a
-       daniel-server HOST process arrives SNATed to a cluster-internal address rather than to
-       10.0.0.161 — measured 2026-09-10, see the three *arr `-monitoring` templates, the only
-       callers that pass false today. Every other call site keeps the prepend, because none of
+       `extra_client_cidrs`. The prepend names daniel-server's own address, but a pod arrives
+       with its own 10.42.x.y address, and a daniel-server HOST process arrives SNATed to a
+       cluster-internal address rather than to 10.0.0.161 — measured, see the three *arr
+       `-monitoring` templates, the only callers that pass false. Every other call site keeps the prepend, because none of
        them has had its callers censused.
     2. PathPrefix — only the endpoint the check reads. The *arr APIs are wide, and a bare Host
        rule would expose every write endpoint they have.
-    3. LAN-only. Unlike ingressroute() above this does NOT honour k8s_public_route, so slice 6
-       cannot drag it onto the public internet with the app routes.
+    3. LAN-only. Unlike ingressroute() above this does NOT honour k8s_public_route, so the
+       public-route flag cannot drag it onto the public internet with the app routes.
 
   The app's own X-Api-Key remains the authentication behind all of that.
 #}
@@ -220,8 +201,7 @@ spec:
   routes:
     - kind: Rule
 {# One ClientIP() per CIDR, OR'd: Traefik v3's ClientIP takes a single argument, and a
-    two-argument call silently kills the whole router — every source 404s, measured
-    2026-08-10 when the first extra_client_cidrs caller landed. #}
+    two-argument call silently kills the whole router — every source 404s. #}
 {% set client_cidrs = ([k8s_bridge_client_ip ~ '/32'] if include_bridge_ip else []) + extra_client_cidrs %}
 {# An empty set would render `&& ()`, which Traefik rejects and which would read as "no client
     restriction" to anyone skimming the template. Fail at render instead. #}
@@ -261,8 +241,8 @@ spec:
           - "*.{{ domain }}"
           - "*.local.{{ domain }}"
 {#- The dash matters. `{% endif %}` on its own line leaves the newline that ended the SAN
-    above, where `{%- endmacro %}` used to strip it — a trailing blank line in every rendered
-    monitoring route. Harmless YAML, but a changed manifest rolls the workload, so ten pods
-    would restart for a whitespace edit. Caught by diffing the prod render, not by review. -#}
+    above, which `{%- endmacro %}` would otherwise strip — a trailing blank line in every
+    rendered monitoring route. Harmless YAML, but a changed manifest rolls the workload, so ten
+    pods would restart for a whitespace edit. -#}
 {%- endif %}
 {%- endmacro %}

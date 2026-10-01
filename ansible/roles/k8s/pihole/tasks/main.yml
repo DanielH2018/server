@@ -1,8 +1,4 @@
 ---
-# Slice 6, B3 (build half). Standing this up unattended is safe by design (D4): the DNS VIP
-# serves nobody until the router's DHCP DNS option flips at cutover. (The web UI carried a
-# `-k8s` suffix while a Docker copy held pihole.<domain>; both retired 2026-08-14/15.)
-
 - name: Deploy pihole to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -13,14 +9,14 @@
     # Pi-holes down at once — exactly the outage the second instance exists to prevent.
     manifests_rollout: ''
     # Both instances, declared to the release record so `probe.py health` expects each to roll
-    # after a changed render (issue #1902) — but they reach it by different routes, because
-    # #2884 moved instance 2 to its own staging directory and its own later apply
-    # (tasks/apply_instance_2.yml). `image: pihole` on both:
+    # after a changed render — but they reach it by different routes, because instance 2 has
+    # its own staging directory and its own later apply (tasks/apply_instance_2.yml).
+    # `image: pihole` on both:
     # roll_one.yml also fires on manifests_image_changed, which keys on the SERVICE name. The
     # shared role also fingerprints this entry's pod template across the apply, so roll_one.yml
-    # can skip restarting the instance the apply already rolled (#1994).
+    # can skip restarting the instance the apply already rolled.
     #
-    # pihole-2 carries `rolled_by_role: true` (#2902): this include writes the release record
+    # pihole-2 carries `rolled_by_role: true`: this include writes the release record
     # BEFORE apply_instance_2.yml runs, so it cannot decide instance 2's `restart`. Its verdict
     # would read true (the render changed; this apply did not roll it), and the sequenced apply
     # then rolls pihole-2 by changing its pod template, which stamps no `restartedAt` —
@@ -42,10 +38,10 @@
     manifests_secret_files:
       - secret.yaml
     # Instance 2's Deployment: rendered, pruned and DIGESTED by the shared role, applied by this
-    # one (#2899). Staged in its own directory, so neither the shared prune nor the shared
+    # one. Staged in its own directory, so neither the shared prune nor the shared
     # `kubectl apply -f <dir>/` touches it, and the shared role publishes the path as
     # `manifests_deferred_dir` and the render as `manifests_deferred_render`. Rendering it here
-    # instead left its bytes outside `manifests_digest`, so a change to `deployment-2.yaml.j2`
+    # instead would leave its bytes outside `manifests_digest`, so a change to `deployment-2.yaml.j2`
     # moved no digest and `probe.py releases --stale-only` could neither clear pihole's path hit
     # by a match nor catch it by a mismatch — for half the workload.
     manifests_deferred_files:
@@ -55,14 +51,12 @@
 # Instance 2's Deployment is applied SEPARATELY, from its own directory, and the apply above
 # therefore carries instance 1 alone.
 #
-# Until #2884 both Deployments rendered into one deployment.yaml, and `kubectl apply -f <dir>/`
-# applies every file in a directory in one request: an image-pin bump changed both pod templates
-# at once and the controller Recreate-cycled both instances in the same second, before the loop
-# below ever ran. Measured on 2026-09-28 (pihole/pihole 2026.07.2 -> 2026.09.0): both new
-# ReplicaSets carried creation time 17:36:30Z, LAN DNS was down 52s, and both new pods failed
-# their image pull with `lookup registry-1.docker.io: Try again` — they were pulling through the
-# resolver they had just replaced. The play reported failed=0 throughout. Sequencing the restarts
-# could not help, because the restarts were not what rolled them.
+# `kubectl apply -f <dir>/` applies every file in a directory in one request, so two Deployments
+# in one file change both pod templates on an image-pin bump, and the controller Recreate-cycles
+# both instances in the same second, before the loop below ever runs. Both new pods then pull
+# their image through the resolver they just replaced and fail with `lookup registry-1.docker.io:
+# Try again`, while the play reports failed=0. Sequencing the restarts cannot help, because the
+# restarts are not what rolls them.
 #
 # A separate directory rather than a second file in the shared one: the shared role's prune owns
 # every file in /etc/rancher/k3s/manifests/pihole/ and its apply sweeps the whole directory, so a
@@ -71,12 +65,11 @@
 # and `<service>-claims` use, derived rather than listed by
 # ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py.
 #
-# The RENDER of that directory is the shared role's, through `manifests_deferred_files` (#2899).
-# It was this role's until then, which put instance 2's bytes outside `manifests_digest` and
-# outside a dry run's render entirely. The apply stays here, because the ordering of the apply is
+# The RENDER of that directory is the shared role's, through `manifests_deferred_files`, so
+# instance 2's bytes are inside `manifests_digest` and a dry run's render. The apply stays here, because the ordering of the apply is
 # the whole point. What a dry run still does not cover is that apply: `kubectl apply -f <dir>/`
 # is not recursive, so the dry-run render's subdirectory is never shown to the API server, and a
-# dry run must not write the node outside roles/k8s/manifests (#2611/#2614, enforced by
+# dry run must not write the node outside roles/k8s/manifests (enforced by
 # ansible/tests/deploy/test_k8s_dry_run_host_writes.py). What makes that residual gap small is
 # the macro: both Deployments render from one body in templates/pihole-deployment.yaml.j2 and
 # differ only in the workload name and the claim name, so instance 1's dry run exercises the
@@ -103,23 +96,23 @@
   # on, `manifests_rolled_by_apply`, is read inside roll_one.yml on the restart task alone: the
   # include still runs so the sibling check and the rollout wait follow a roll the apply started.
   #
-  # The `config` trigger is the render AND the shared apply's own verdict (#3127, mirroring
-  # #3115): `manifests_render is changed` compares rendered bytes, so a YAML comment edit moved
-  # it while `kubectl apply` printed every object `unchanged`, and the LAN resolvers rolled for
+  # The `config` trigger is the render AND the shared apply's own verdict:
+  # `manifests_render is changed` compares rendered bytes, so a YAML comment edit moves it
+  # while `kubectl apply` prints every object `unchanged`, and the LAN resolvers would roll for
   # nothing. The secret trigger stays on the secret render, as in the shared role.
   #
   # Never on a dry run or --check: a dry-run render is always `changed` and the apply rolled
-  # nothing, so this would restart both live Pi-holes on every dry run (#2588).
+  # nothing, so this would restart both live Pi-holes on every dry run.
   #
   # `manifests_deferred_render` is the other trigger: instance 2's Deployment is rendered into
   # its own directory and is not part of `manifests_render`, so a change to deployment-2.yaml.j2
   # alone moves none of the facts above and without this the apply that carries it would
   # never run. It fires the `pihole-2` iteration only: `when` on a looped include is evaluated
-  # per item, and instance 1's manifests did not move, so rolling it bought one needless
-  # Recreate cycle of a live resolver plus a Longhorn detach/attach (#2957). Skipping the
+  # per item, and instance 1's manifests did not move, so rolling it would cost one needless
+  # Recreate cycle of a live resolver plus a Longhorn detach/attach. Skipping the
   # `pihole` iteration skips nothing else — apply_instance_2.yml is included from `pihole-2`'s.
   # This clause is bytes only, because the apply it must let run has not happened yet; the
-  # restart that follows it is gated on that apply's own verdict inside roll_one.yml (#3127).
+  # restart that follows it is gated on that apply's own verdict inside roll_one.yml.
   when:
     - not k8s_no_mutate
     - (manifests_render is changed and manifests_apply is changed)
@@ -214,8 +207,7 @@
   register: pihole_k8s_gravity_sql
   become: true
   # changed_when is evaluated per loop iteration against that iteration's own result, so
-  # this expression (unchanged from the single-instance version) judges each instance on
-  # its own stdout, not the accumulated .results list. Verified against a local no-op
+  # this expression judges each instance on its own stdout, not the accumulated .results list. Verified against a local no-op
   # playbook: a registered loop task's changed_when sees the current iteration's fields
   # under the registered var's own name, exactly as it would outside a loop.
   changed_when: (pihole_k8s_gravity_sql.stdout_lines | last | default('0') | int) > 0

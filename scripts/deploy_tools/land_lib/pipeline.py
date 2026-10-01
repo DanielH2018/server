@@ -62,9 +62,7 @@ def _step_tick(ln: Landing) -> None:
     in step 5 (`deploy.sh --at`), so it needs the tick only to converge the primary checkout
     eventually. Step 5 kicks it once the deploy has returned, because the tick holds the tree
     lock for its whole unit run and deploy.sh would otherwise queue behind it. Nothing is
-    awaited here and `tick=0` on the board says so. Eleven landings in the 14 days to
-    2026-09-11 spent the full 540s in this step watching a deployer busy with somebody else's
-    apply.
+    awaited here and `tick=0` on the board says so.
 
     Every other shape keeps waiting, because there the tick is the apply: a PR with no service
     tag, whose verdict `no_tag_outcome` reads off the deployer's markers, and a PR that

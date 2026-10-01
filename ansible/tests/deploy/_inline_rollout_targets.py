@@ -3,8 +3,8 @@
 Both resolve to a workload NAME read off the role's rendered manifests, never the directory
 name: `observability` renders `grafana`, `pihole` renders two. A `kubectl get pod -l ...`, an
 `exec`/`logs <target>` and a `rollout status <kind>/<name>` each map to a set of names, or
-to `_UNRESOLVED` when the target is a Jinja expression these sources cannot resolve. Split
-from `test_inline_rollout_gates.py` on 2026-09-02; that module's docstring is the contract.
+to `_UNRESOLVED` when the target is a Jinja expression these sources cannot resolve. The
+docstring of `test_inline_rollout_gates.py` is the contract.
 """
 
 import re

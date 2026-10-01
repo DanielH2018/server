@@ -3,19 +3,16 @@
 `[tool.ty.src] include` decides which files are checked, and `[tool.ty.environment] extra-paths`
 decides which imports resolve. Both are enumerated by hand, and both drift.
 
-WHY `include` IS HAND-KEPT AT ALL. Omitting it does not fall back to the whole project. Measured
-2026-09-02 with ty 0.0.77: with `include` absent, a deliberately broken file at the repo root was
-not checked, while the same file under `scripts/` still was.
+WHY `include` IS HAND-KEPT AT ALL. Omitting it does not fall back to the whole project. With
+ty 0.0.77 and `include` absent, a deliberately broken file at the repo root was not checked,
+while the same file under `scripts/` still was.
 
 This repo has no `__init__.py` files and installs nothing: a script reaches a sibling directory
 through the `sys.path` bootstrap the root CLAUDE.md describes, and a role's test reaches its
 `files/` the same way. Two tools have to be told about that, and they are told separately —
 pytest by `[tool.pytest.ini_options] pythonpath`, ty by `[tool.ty.environment] extra-paths`.
 
-Two hand-kept lists over one convention, so both drift. They are guarded for different reasons,
-and it is worth being clear which is which — an earlier version of this paragraph claimed the
-checks run only on the quiet failure and then described a loud one, which reads as an argument
-for deleting the include guard.
+Two hand-kept lists over one convention, so both drift. They are guarded for different reasons.
 
 The `include` gap is the quiet one, and `test_every_tracked_python_file_is_inside_a_ty_source_root`
 is the check for it. A file outside every source root is neither checked nor skipped; the gate

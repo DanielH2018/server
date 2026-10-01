@@ -88,8 +88,8 @@ def test_a_write_asks_rather_than_denies():
 
 # ── arm 2: reads that print a secret-bearing host script ─────────────────────────────
 
-# secret-rotation-audit.sh is the file from the 2026-08-28 incident (PR #550): a
-# `grep -nE "rotate|--commit|sops set|push"` on it printed a live push token.
+# secret-rotation-audit.sh embeds a live push token: a
+# `grep -nE "rotate|--commit|sops set|push"` on it prints the token.
 INCIDENT = "/usr/local/bin/secret-rotation-audit.sh"
 
 FLAGGED_READS = [

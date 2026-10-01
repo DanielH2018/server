@@ -1,23 +1,16 @@
 """A repair command that runs the suite before it writes must not be gated on what it writes.
 
-The shape (#1799, #1877): a self-healing command refuses to write unless "everything passes",
-and one of the things that must pass is the assertion the command exists to satisfy. The
-guard is red exactly when the repair is needed, so the repair can never run. Measured
-2026-09-11: 126 of 629 test files unweighted against a 20% cap, the coverage ratchet red, and
-two consecutive `pytest_shard.py --record` runs wrote nothing. PR #1797 broke that instance by
-deselecting the ratchet during the record run, and #2830 removed the ratchet itself, so the
-deadlock now has no instance in the tree at all. This module is the sweep #1877 asked for: the
-census of every regenerate-then-commit path, each with a ruling.
+The shape: a self-healing command refuses to write unless "everything passes", and one of the
+things that must pass is the assertion the command exists to satisfy. The guard is red exactly
+when the repair is needed, so the repair can never run. No instance exists in the tree. This
+module is the census of every regenerate-then-commit path, each with a ruling.
 
-The census, measured 2026-09-17 and re-ruled 2026-09-28. A path deadlocks only when its
-precondition is evaluated BEFORE the repair writes and the guard reads the pre-repair state.
-Every other order is safe.
+A path deadlocks only when its precondition is evaluated BEFORE the repair writes and the
+guard reads the pre-repair state. Every other order is safe.
 
 - `scripts/dev/pytest_shard.py --record`. Runs the full serial suite and writes the weights
-  only if it passed. It deadlocked while `test_the_recorded_weights_still_cover_most_of_the_suite`
-  read the weights the run had not written yet, and was guarded here by a mandatory
-  `--deselect`. Since #2830 no test in the suite reads the weights table for staleness, so the
-  precondition cannot refuse to clear itself and the deselect is gone. Not deadlocked.
+  only if it passed. No test in the suite reads the weights table for staleness, so the
+  precondition cannot refuse to clear itself. Not deadlocked.
 - `scripts/docs/gen_doc_fragments.py`. Writes unconditionally. Its guard,
   `test_every_committed_fragment_matches_what_the_generator_writes_now`, runs at commit time
   over the regenerated output. Not deadlocked.
@@ -26,7 +19,7 @@ Every other order is safe.
   monkeypatch ratchets in `test_module_length_ratchet.py`, runs at commit time over the
   rewritten lists — the `tighten-ratchet-allowlists` prek hook sits above `pytest` so the
   order holds. Not deadlocked, and deliberately so: the ratchet it repairs is red exactly
-  when the repair is needed, so a green-suite precondition here would be the #1799 shape.
+  when the repair is needed, so a green-suite precondition here would deadlock.
 - `scripts/secrets_mgmt/secret_rotation.py sync`. Writes the registry unconditionally. Its
   guard, the `secret-rotation-registry-sync` prek hook (`audit --check`), runs at commit time
   over the synced registry. Not deadlocked.

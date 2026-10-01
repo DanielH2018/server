@@ -2,9 +2,9 @@
 
 `n8n-broker` (roles/k8s/n8n/templates/networkpolicy.yaml.j2) is the ONLY thing fencing the n8n
 pod: `netpol-baseline-exempt: "true"` takes it out of the namespace baseline, so a rule there
-with no `from:` admits every pod in the cluster. That is how it read until 2026-09-17 (#1926):
-karakeep's headless Chrome, qbittorrent or the n8n runners could dial `n8n:5678` directly,
-skipping Traefik and with it Authelia's two_factor, the CrowdSec bouncer and the rate-limit.
+with no `from:` admits every pod in the cluster, so karakeep's headless Chrome, qbittorrent or
+the n8n runners could dial `n8n:5678` directly, skipping Traefik and with it Authelia's
+two_factor, the CrowdSec bouncer and the rate-limit.
 
 Two invariants, each a predicate with a passing and a rejecting input, then applied to the real
 rendered manifests:
@@ -12,8 +12,7 @@ rendered manifests:
 - **The 5678 rule names exactly the two callers.** traefik (where the auth middleware runs) and
   monitor-bridge (check_n8n dials the API with X-N8N-API-KEY). A rule with no `from:` is the
   hole; a rule with an extra peer is a widening nobody asked for.
-- **The probe Job asserts 5678 REFUSED, and its control is not n8n.** Until #1926 the probe's
-  control dialled `n8n:5678`, so every deploy asserted the hole was open. A control on n8n's own
+- **The probe Job asserts 5678 REFUSED, and its control is not n8n.** A control on n8n's own
   port and a fence on that port cannot both hold.
 
 Run: uv run pytest ansible/tests/services/test_n8n_web_port_is_fenced.py
@@ -112,7 +111,7 @@ def test_the_inverted_probe_is_clean():
 
 
 def test_the_pre_1926_probe_is_flagged():
-    """The old shape: n8n:5678 as the CONTROL, which asserted the hole on every deploy."""
+    """n8n:5678 as the CONTROL asserts the hole on every deploy."""
     script = (
         f"if ! nc -w 5 -z n8n {WEB_PORT}; then exit 1; fi\n"
         f"if nc -w 5 -z n8n {BROKER_PORT}; then exit 1; fi\n"
@@ -145,7 +144,7 @@ def test_n8n_broker_fences_the_web_port_to_traefik_and_monitor_bridge():
 
 
 def test_n8n_broker_still_fences_the_broker_to_the_runners():
-    """The point of the file, kept while the web port was fenced beside it."""
+    """The broker stays fenced to the runners beside the web-port rule."""
     policy = _n8n_doc("NetworkPolicy", "n8n-broker")
     assert peers_admitted_on(policy, BROKER_PORT) == {"n8n-runners"}
 

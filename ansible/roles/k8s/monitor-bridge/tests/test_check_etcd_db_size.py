@@ -1,11 +1,11 @@
-"""check_etcd_db_size — #2403's proxy for the etcd series k3s does not expose.
+"""check_etcd_db_size — a proxy for the etcd series k3s does not expose.
 
-`k3s_etcd_expose_metrics` is off, so `etcd_mvcc_db_total_size_in_bytes` returns nothing and the
-DB filling its backend quota was unwatched. `apiserver_storage_size_bytes` is scraped
+`k3s_etcd_expose_metrics` is off, so `etcd_mvcc_db_total_size_in_bytes` returns nothing.
+`apiserver_storage_size_bytes` is scraped
 unconditionally and carries the same number. At the quota etcd rejects every write and the
 control plane stops, so the verdict pages rather than warns.
 
-Two facts the query depends on, both measured against the live cluster Prometheus 2026-09-25:
+Two facts the query depends on, both measured against the live cluster Prometheus:
 k3s scrapes that series under BOTH `job="kubernetes-apiserver"` and `job="kubernetes-kubelet"`
 (one process serves both endpoints), and it read 56,389,632 — 2.6% of the 2 GiB default quota.
 
@@ -41,7 +41,7 @@ def test_the_check_is_prom_dependent():
 
 
 def test_a_db_well_under_the_quota_is_up(cfg):
-    """The live reading: 2.6% of 2 GiB, flat for five weeks before the check existed."""
+    """The live reading: 2.6% of 2 GiB."""
     ok, msg = _at(cfg, 56389632.0)
     assert ok
     assert "2.6%" in msg

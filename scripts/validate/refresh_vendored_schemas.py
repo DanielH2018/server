@@ -52,7 +52,7 @@ VENDORED = [
 # Authelia publishes a JSON Schema per MINOR release of its own configuration file, and it sets
 # `additionalProperties: false` throughout — which is the property the check needs, because
 # Authelia refuses to start on a key it does not recognise and nothing else between the editor
-# and the SSO gate can see one (#1608).
+# and the SSO gate can see one.
 #
 # Pinned to the minor rather than tracking `latest`: `authelia_k8s_image` pins a patch release,
 # and a schema from a later minor would accept keys the running binary rejects — the exact

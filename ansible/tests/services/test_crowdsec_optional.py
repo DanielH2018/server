@@ -153,7 +153,7 @@ def test_the_agent_sidecar_ships_with_crowdsec_on_and_not_with_it_off(
 
 
 def test_authelia_drops_the_init_container_key_rather_than_emptying_it() -> None:
-    """Two sources feed it: CrowdSec's seeding steps, and `wait-for-redis` (#1626). Gating on
+    """Two sources feed it: CrowdSec's seeding steps, and `wait-for-redis`. Gating on
     CrowdSec alone emitted a bare `initContainers:` whenever CrowdSec was off and redis on; both
     off is the only branch with no contributor, and there the key goes entirely."""
     inits = _pod_spec("authelia", True)["initContainers"]
@@ -166,7 +166,7 @@ def test_authelia_drops_the_init_container_key_rather_than_emptying_it() -> None
 
 
 def test_traefik_prestages_the_agent_config_so_the_entrypoint_never_rsyncs() -> None:
-    """The sidecar's first start died on every cold boot (#976): the image entrypoint
+    """The sidecar's first start dies on every cold boot without the seed: the image entrypoint
     populates /etc/crowdsec with ``rsync`` under ``set -e``, and about twenty staged
     files are root-only, so the non-root sidecar's rsync exited 23. The init container
     runs that rsync itself, tolerating exit 23 alone, so config.yaml exists before the
@@ -187,7 +187,7 @@ def _copies_the_staged_datafiles(script: str) -> bool:
     rendered tree is only ever observed passing, which is indistinguishable from one that fires
     on nothing.
 
-    Three properties, each with its own incident behind it. It must read the staged data
+    Three properties. It must read the staged data
     directory, or it seeds nothing. It must `install -m 644` per file rather than `cp -r`, or
     the copies keep the 0600 the non-root agent cannot read and `trace/` (0700) fails the run.
     And it must end in `exit 0`, because both pods roll under Recreate: the old pod is already
@@ -209,8 +209,7 @@ def test_the_staged_datafiles_are_copied_in_so_geoip_can_initialise(role: str) -
     data volume, so the non-root agent cannot read through the link and GeoIP never initialises
     — `unable to open GeoLite2-City.mmdb: permission denied` behind a pod that reads healthy.
     A root init container copies them in world-readable, which also defeats the symlink: the
-    entrypoint skips a name that already exists. Traefik was fixed for this in #990; authelia
-    carried the emptyDir but not the init container until #1177.
+    entrypoint skips a name that already exists.
 
     Parameterized over `_FLAGS`, which names both pods carrying the sidecar literally — a third
     pod that gains the sidecar without the init container, or a rename of either, fails here
@@ -301,19 +300,15 @@ def test_the_shared_log_volume_survives_without_crowdsec(
 
 # --- k8s_public_route and the bouncer must move together, per host ---
 #
-# This replaces test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec in
-# test_k8s_manifests.py, which two changes had made inert:
+# Detection is on RENDERED output, under each host's own variables. Two shortcuts would make
+# the guard inert:
 #
-# 1. It detected the bouncer by SUBSTRING over raw template text. Since the CrowdSec gating
-#    landed, every occurrence sits inside `{% if traefik_k8s_manage_crowdsec %}`, so the text
-#    is present whatever the flag says and the comparison read True unconditionally.
-# 2. It read `k8s_public_route` from group_vars/all.yml only, so a host that overrides it was
-#    never evaluated. daniel-stage set `k8s_public_route: false` AND
-#    `traefik_k8s_manage_crowdsec: false` — a consistent pair the old guard never looked at.
-#    That host is retired (#2941); the reading is still per-host, and the rejecting test below
-#    drives the False side through an override.
-#
-# Detection here is on RENDERED output, under each host's own variables.
+# 1. Detecting the bouncer by SUBSTRING over raw template text. Every occurrence sits inside
+#    `{% if traefik_k8s_manage_crowdsec %}`, so the text is present whatever the flag says and
+#    the comparison reads True unconditionally.
+# 2. Reading `k8s_public_route` from group_vars/all.yml only, so a host that overrides it is
+#    never evaluated. The reading is per-host, and the rejecting test below drives the False
+#    side through an override.
 
 
 def _host_render(host: str, template: str, overrides: dict | None = None) -> str:
@@ -388,8 +383,7 @@ def test_the_bouncer_reading_follows_the_flag() -> None:
     cannot show that `has_bouncer` reads anything at all — a detector stuck on False would agree
     with every LAN-only host.
 
-    daniel-box runs the bouncer; daniel-stage was the host that did not, until #2941 retired it.
-    Turning the flag off by override gives one real True and one real False, which is what proves
+    daniel-box runs the bouncer. Turning the flag off by override gives one real True and one real False, which is what proves
     the reading tracks the flag rather than the template text.
     """
     assert has_bouncer("daniel-box") is True

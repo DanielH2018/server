@@ -38,12 +38,10 @@ Those fall through to `None` and are reported as `unresolvable`, not silently pa
 `test_no_import_bootstrap_is_unresolvable` below, which currently expects zero.
 
 Scope: every `scripts/**/*.py` that something other than pytest can run. A module pytest alone
-invokes -- `test_*.py`, `conftest.py`, and any module under a `tests/` directory, fixture
-modules included -- is Guard 3's (`test_test_module_bootstraps_present.py`), which REFUSES an
-insert `pythonpath` already supplies where this guard would mandate it. `is_pytest_only` is the
-one predicate both read, so the two stay complementary by construction: until #2099 this guard
-skipped only `test_*.py`/`conftest.py` and Guard 3 collected only those, so seven
-`tests/_*.py` fixture modules sat in this census and kept an insert #2061 deleted everywhere else.
+invokes -- `test_*.py`, `conftest.py`, and any module under a `tests/` directory, fixture modules
+included -- is Guard 3's (`test_test_module_bootstraps_present.py`), which REFUSES an insert
+`pythonpath` already supplies where this guard would mandate it. `is_pytest_only` is the one
+predicate both read, so the two stay complementary by construction.
 """
 
 import ast
@@ -386,7 +384,7 @@ def test_the_import_index_is_not_empty():
 
 def test_a_fixture_module_under_tests_is_pytest_only_and_a_library_beside_it_is_not():
     """The census boundary this guard shares with Guard 3, pinned on both sides: a
-    `tests/_*.py` fixture module is skipped here (#2099), a `.py` beside the `tests/`
+    `tests/_*.py` fixture module is skipped here, a `.py` beside the `tests/`
     directory is not, whatever its name."""
     assert is_pytest_only(Path("scripts/deploy_tools/tests/_land_fakes.py"))
     assert is_pytest_only(Path("scripts/conftest.py"))

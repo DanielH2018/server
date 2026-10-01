@@ -16,7 +16,7 @@ import bridge.net
 import checks.r2
 
 
-# A fixed epoch, not the live clock: the verdict must not move with wall time (#2158).
+# A fixed epoch, not the live clock: the verdict must not move with wall time.
 R2_NOW = 1_780_000_000.0
 
 

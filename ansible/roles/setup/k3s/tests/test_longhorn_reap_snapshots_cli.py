@@ -65,7 +65,7 @@ def test_snapshots_aborts_when_recurringjobs_is_empty_but_a_volume_carries_the_l
 
 
 def test_snapshots_refuse_when_a_labelled_volume_resolves_to_no_job(tmp_path):
-    # The rejecting half for #1063: RecurringJobs list fine, but the group this volume is
+    # The rejecting half: RecurringJobs list fine, but the group this volume is
     # labelled with names no job, so its owner resolves to "" and the current-tier test is False
     # against every snapshot it has. classify_snapshots raises ReapAbort; main() must print the
     # ABORT line and exit 1 rather than let the traceback out.

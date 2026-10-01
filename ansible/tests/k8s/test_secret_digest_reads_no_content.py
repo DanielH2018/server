@@ -1,7 +1,7 @@
-"""The secret-manifest digest path must not read a secret manifest's content into Ansible (#2574).
+"""The secret-manifest digest path must not read a secret manifest's content into Ansible.
 
-Secret manifests are rendered under `no_log` from decrypted SOPS values. The operator approved
-digesting them on 2026-09-26 on one condition: hashing must not open a new read path over that
+Secret manifests are rendered under `no_log` from decrypted SOPS values. Digesting them is
+allowed on one condition: hashing must not open a new read path over that
 output. A `slurp`, a `lookup('file')` or a `set_fact` of the content would put the plaintext in
 a task result or a host fact, where anything that later prints it prints the secret. So the
 digest runs as `files/secret_hmac.py`, which receives paths and prints one hex digest, one

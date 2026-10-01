@@ -1,15 +1,14 @@
 """A narrowed `broad_applied` marker settles a deploy-plane landing, whatever its tag slot.
 
-The deployer stopped running `ansible/deploy.yml` unscoped for every deploy-plane range: it
-now records `<sha> ansible/deploy.yml <narrowed tags>`, or `<sha> ansible/deploy.yml
-narrowed-to-nothing` when the range moves no rendered output at all.
+The deployer records `<sha> ansible/deploy.yml <narrowed tags>`, or `<sha> ansible/deploy.yml
+narrowed-to-nothing` when the range moves no rendered output at all, rather than running
+`ansible/deploy.yml` unscoped for every deploy-plane range.
 
-`broad_applied_covers` reads only the SHA and asks whether this PR is an ancestor of it, so
-both spellings already work — and the tag slot must STAY unread. Reading it would ask the
-wrong question: `handle_broad` scopes the tags to the range it crossed, not to this PR's own
-roles, so a tag-slot comparison would report `needs-manual-apply` for a PR the tick applied
-alongside somebody else's merge. That is the failure issue #1537 is about, arriving from the
-other side.
+`broad_applied_covers` reads only the SHA and asks whether this PR is an ancestor of it, so both
+spellings already work — and the tag slot must STAY unread. Reading it would ask the wrong
+question: `handle_broad` scopes the tags to the range it crossed, not to this PR's own roles, so
+a tag-slot comparison would report `needs-manual-apply` for a PR the tick applied alongside
+somebody else's merge. That is the converged-but-unapplied failure arriving from the other side.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reads_a_narrowed_broad_applied_marker.py
 """

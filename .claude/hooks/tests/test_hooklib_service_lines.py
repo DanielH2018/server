@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""The banner's scrape-target and stale-release sections, split out of session-health.py — #1678.
+"""The banner's scrape-target and stale-release sections.
 
 These drive `hooklib.service_lines` through its `run` and `scaled_to_zero` seams rather than
-patching a module attribute, so they need no live cluster or Prometheus. Their subjects lived
-in session-health.py until that file hit its 600-line cap.
+patching a module attribute, so they need no live cluster or Prometheus.
 
 Run: uv run pytest .claude/hooks
 """
@@ -147,13 +146,12 @@ def test_k8s_namespace_is_none_when_the_file_is_missing(tmp_path):
     assert service_lines.k8s_namespace(str(tmp_path)) is None
 
 
-# ── the release-staleness cron's last verdict (#1993, #2390) ─────────────────────────────
+# ── the release-staleness cron's last verdict ─────────────────────────────
 #
-# The cron has run `probe.py releases --stale-only --kuma` since b8467ea73, so every verdict
-# reaching the journal is one of `bridge.msgfmt`'s three DOWN shapes. The fixtures below are
-# those three; `test_..._parses_what_msgfmt_actually_renders` holds them against the producer
-# so a shape change goes red here rather than putting every DOWN on the banner as a broken
-# check, which is the #2390 regression the old per-line fixtures could not see.
+# The cron runs `probe.py releases --stale-only --kuma`, so every verdict reaching the
+# journal is one of `bridge.msgfmt`'s three DOWN shapes. The fixtures below are those three;
+# `test_..._parses_what_msgfmt_actually_renders` holds them against the producer so a shape
+# change goes red here rather than putting every DOWN on the banner as a broken check.
 
 _ONE_SERVICE = (
     "status=down 1 service stale: freshrss — freshrss/defaults/main.yml. "
@@ -270,8 +268,8 @@ def test_stale_release_problems_parses_what_msgfmt_actually_renders():
     """The producer is the oracle: msgfmt renders, this parser reads, the count agrees.
 
     Without this the fixtures above are only assertions that the parser matches text
-    written beside it. #2390 is exactly that failure — #2013 changed msgfmt's shape and the
-    hand-written fixtures kept passing while every live DOWN reached the banner as broken.
+    written beside it: a changed msgfmt shape would leave hand-written fixtures passing
+    while every live DOWN reached the banner as broken.
     """
     # `pythonpath` in pyproject.toml already carries the bridge's `files/`.
     from bridge import msgfmt

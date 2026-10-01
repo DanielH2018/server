@@ -1,10 +1,10 @@
-"""Guards for the home-allowlist cron's own Kuma-push retry window, issue #999.
+"""Guards for the home-allowlist cron's own Kuma-push retry window.
 
 The monitor is push-type with `max_retries: 0`, so one dropped push is an immediate DOWN. The
-pushes drop during an uptime-kuma rollout, and measured from Traefik's access log on 2026-09-03
-they drop as Traefik's own 404 with an empty RouterName — the KubernetesCRD provider removes a
-router whose service has no endpoints, so the route is gone rather than serving 503 through it.
-The longest endpoint-less window observed was 31s (12:29:43-12:30:14, 2026-09-03).
+pushes drop during an uptime-kuma rollout, as Traefik's own 404 with an empty RouterName — the
+KubernetesCRD provider removes a router whose service has no endpoints, so the route is gone
+rather than serving 503 through it. The longest endpoint-less window measured from Traefik's
+access log was 31s.
 
 Two things therefore have to stay true of the push, and each is guarded by an accept/reject
 pair so a rule that stopped matching fails its own test:
@@ -27,7 +27,7 @@ from _helpers import ROLES
 SCRIPT = ROLES / "k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
 TASKS = ROLES / "k8s/crowdsec/tasks/main.yml"
 
-# The endpoint-less window measured on 2026-09-03 — see the DECIDED block in the script.
+# The measured endpoint-less window — see the DECIDED block in the script.
 OBSERVED_OUTAGE_S = 31
 
 
@@ -142,7 +142,7 @@ def test_a_run_that_overruns_the_cron_period_is_flagged():
 @pytest.mark.parametrize(
     "cmd,expected",
     [
-        # curl 8.5.0, measured 2026-09-03 against a 404: 1+2+4s of backoff, 7.04s end to end.
+        # curl 8.5.0, measured against a 404: 1+2+4s of backoff, 7.04s end to end.
         ("curl --max-time 10 --retry 3", 7),
         # The shipped flags against the same 404: 63.09s end to end. The attempts themselves
         # return in microseconds, so the measurement is the backoff sum.

@@ -1,10 +1,10 @@
 """Traefik's startupProbe must land on a router that the CrowdSec plugin failure kills.
 
-#1322: Traefik's boot-time download of the CrowdSec bouncer plugin timed out, the `crowdsec`
-Middleware resolved to "invalid middleware type", every router on the https entrypoint was
-rejected, and the pod sat 3/3 Ready serving 404 to the whole fleet for 3.5 hours. The fix is a
-startupProbe (deployment.yaml.j2) aimed at a router of Traefik's own
-(edge-selfcheck-ingressroute.yaml.j2) that is rejected by that same failure.
+If Traefik's boot-time download of the CrowdSec bouncer plugin times out, the `crowdsec`
+Middleware resolves to "invalid middleware type", every router on the https entrypoint is
+rejected, and the pod sits 3/3 Ready serving 404 to the whole fleet. A startupProbe
+(deployment.yaml.j2) aims at a router of Traefik's own (edge-selfcheck-ingressroute.yaml.j2)
+that is rejected by that same failure.
 
 The probe only detects anything because of a coupling that nothing in either file states: the
 self-check router sits on an entrypoint whose static-config middleware chain names the crowdsec
@@ -34,8 +34,7 @@ from _k8s_render import host_context, render_role_template
 
 _ROLE = "traefik"
 # daniel-box runs the bouncer plugin. A cluster without it has neither the failure mode nor
-# the probe; daniel-stage was that cluster until #2941 retired it, so the case is now driven by
-# an override rather than by a host.
+# the probe, so that case is driven by an override rather than by a host.
 _HOST = "daniel-box"
 _WITHOUT_CROWDSEC = {"traefik_k8s_manage_crowdsec": False}
 
@@ -103,7 +102,7 @@ def selfcheck_gaps(
 ) -> list[str]:
     """The comparison itself, taking plain arguments so the rejecting tests can drive it.
 
-    Returns one message per way the probe has stopped detecting the #1322 failure; empty means
+    Returns one message per way the probe has stopped detecting the plugin failure; empty means
     the coupling holds.
     """
     out = []
@@ -139,7 +138,7 @@ def test_the_probe_detects_a_missing_bouncer_plugin() -> None:
         # `or []`, not a default: dropping the last entry leaves a bare `middlewares:` key,
         # which parses to None. `.get(..., [])` returns that None and `selfcheck_gaps` raises
         # a TypeError instead of naming the gap. Matches the sibling guard in
-        # test_traefik_http_entrypoint_crowdsec.py (#1355).
+        # test_traefik_http_entrypoint_crowdsec.py.
         name: (spec.get("http") or {}).get("middlewares") or []
         for name, spec in config["entryPoints"].items()
     }
@@ -195,8 +194,7 @@ def test_a_broken_coupling_is_flagged(
 
 def test_the_route_has_no_host_matcher() -> None:
     """A kubelet httpGet probe connects to the pod IP and sends no SNI, and Traefik answers a
-    matched Host() router whose SNI disagrees with the Host header with 421 — measured
-    2026-09-06 against this route before it went path-only. A probe that can only return 421
+    matched Host() router whose SNI disagrees with the Host header with 421. A probe that can only return 421
     or 404 never passes, so the edge would crashloop on the change meant to protect it."""
     for rule in (r["match"] for r in _selfcheck_route(_HOST)["spec"]["routes"]):
         assert "Host(" not in rule, (
@@ -215,7 +213,7 @@ def test_the_route_is_a_traefik_service_not_a_kubernetes_one() -> None:
 
 def test_the_probe_is_absent_without_crowdsec() -> None:
     """The probe is gated on traefik_k8s_manage_crowdsec. A cluster without the bouncer plugin
-    has no crowdsec Middleware and no #1322 failure mode, so the probe would only be a way for
+    has no crowdsec Middleware and no plugin failure mode, so the probe would only be a way for
     the edge to crashloop — and defaults/main.yml is explicit that a false failure there is a
     real hazard."""
     assert _traefik_container(_HOST, _WITHOUT_CROWDSEC).get("startupProbe") is None

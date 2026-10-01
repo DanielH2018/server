@@ -7,9 +7,9 @@ from the deploy that created it.
 
 Reading it on the target only ever coincided with that. `ansible/inventory/hosts.ini` pins both
 daniel-box and daniel-server to `ansible_connection=local`, so "the target" and "the controller"
-were the same machine and the same checkout, and the missing `delegate_to` was invisible.
-daniel-stage is the first genuinely remote target in this repo. It has no checkout, and the task
-fails there with "Unable to change directory before execution" — in a role with thirteen callers.
+are the same machine and the same checkout there, and a missing `delegate_to` is invisible.
+daniel-stage is a genuinely remote target. It has no checkout, and the task fails there with
+"Unable to change directory before execution" — in a role with many callers.
 
 Nothing else catches this. The role's other tests stub `k3s kubectl` and run against the local
 checkout, where the two hosts are the same thing; `--check` skips the command entirely; and a

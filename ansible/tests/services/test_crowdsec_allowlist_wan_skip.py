@@ -1,4 +1,4 @@
-"""The home-allowlist cron's own WAN probe, issue #2793.
+"""The home-allowlist cron's own WAN probe.
 
 This cron is self-contained by design — its `push` carries curl flags tuned to its `*/5` period
 rather than the shared library's, and the block at the top of the script records why. So it carries

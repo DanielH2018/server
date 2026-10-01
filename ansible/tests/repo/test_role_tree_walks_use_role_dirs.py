@@ -1,19 +1,17 @@
 """No guard censuses a role tree with a bare `iterdir()`; they all go through `role_dirs`.
 
 A retired role's gitignored `__pycache__/` keeps `roles/<plane>/<role>/` on disk after the
-deployer's fast-forward removes its tracked files (#2882). Sixteen k8s guards then read that
-shell as a role. Two of them failed outright on a planted shell — the ones that go on to read
-`defaults/main.yml` or a role's `CLAUDE.md` raise — and the rest censused or skipped a role
-that no longer exists in git (#2952). CI reads a fresh checkout, so neither half showed up
-there — the failure lands only in the long-lived primary checkout, which is where
-the prek pre-push `pytest` hook runs.
+deployer's fast-forward removes its tracked files. A guard that censuses with a bare
+`iterdir()` then reads that shell as a role. A guard that goes on to read `defaults/main.yml`
+or a role's `CLAUDE.md` raises, and the rest census or skip a role that no longer exists in
+git. CI reads a fresh checkout, so neither failure shows up there — it lands only in the
+long-lived primary checkout, which is where the prek pre-push `pytest` hook runs.
 
-All three trees ghost the same way, and #2952 fixed only `roles/k8s/` because that issue was
-scoped to it. The Pi's `roles/containers/` and `roles/setup/` fail LOUDER than k8s does: both
-`test_containers_list_roles_exist.py` and `test_setup_role_playbooks_agree.py` assert against a
-declaration (`containers_list`, the playbooks), so a shell reads as an undeclared role and the
-guard fails rather than miscensusing. #2964 routed those, the two `CLAUDE.md` censuses and the
-two setup walkers through the same reader, and widened this scan to cover all three trees.
+All three trees ghost the same way. The Pi's `roles/containers/` and `roles/setup/` fail
+LOUDER than k8s does: both `test_containers_list_roles_exist.py` and
+`test_setup_role_playbooks_agree.py` assert against a declaration (`containers_list`, the
+playbooks), so a shell reads as an undeclared role and the guard fails rather than
+miscensusing. This scan covers all three trees.
 
 `_role_census.role_dirs` is the one reader, filtering with the deployer's own
 `k8s_autodeploy.is_leftover_dir` predicate. This guard is what keeps the next walk from being
@@ -21,24 +19,22 @@ written bare, because the bare form passes every test on a fresh checkout.
 
 The scan is receiver-name-based: it sees `K8S_ROLES.iterdir()` and
 `(REPO / "ansible/roles/k8s").iterdir()`, and it cannot see a walk that reaches a tree through
-a name that mentions neither (`_ROLE.parent.iterdir()`, the shape
-`test_cronjob_gate_decision.py` used). `EXPECTED_ROLE_DIRS_CALLERS` below covers that half:
+a name that mentions neither (`_ROLE.parent.iterdir()`). `EXPECTED_ROLE_DIRS_CALLERS` below covers that half:
 those files must keep calling `role_dirs`, whatever spelling a rewrite reaches for.
 
-#2968 found two more such spellings, both walking `roles/k8s/` unfiltered: a from-import
-alias (`from _helpers import K8S_ROLES as K8S`, then `sorted(K8S.iterdir())`) and a path
-rebuilt segment by segment (`K8S = REPO / "ansible" / "roles" / "k8s"`). Both are now routed
-through `role_dirs` and listed below. The segmented literal joined the pattern, since
+Two more such spellings walk `roles/k8s/` unfiltered: a from-import alias
+(`from _helpers import K8S_ROLES as K8S`, then `sorted(K8S.iterdir())`) and a path rebuilt
+segment by segment (`K8S = REPO / "ansible" / "roles" / "k8s"`). Both are routed through
+`role_dirs` and listed below. The segmented literal is in the pattern, since
 `"roles" / "k8s"` is as readable as `"roles/k8s"` — but only where the walk is on that same
 line. The pattern is one line wide by construction, so a tree bound to a constant on one line
 and walked on another is invisible to it whatever the spelling, and the list is what covers
-that. Neither was a live failure: both tolerated a planted `__pycache__`-only shell.
+that.
 
 The scan covers tracked `.py` files under `ansible/tests` only. The role-tree walkers
 outside the suite — `scripts/validate/k8s_manifests.py`, `scripts/docs/catalog_backup.py`,
 `scripts/docs/glance_facts.py`, `scripts/dev/k8s_autodeploy_counts.py`,
-`scripts/diagnostics/probe_lib/releases_retired.py` — were fixed by #2882, #2888 and #2964 and
-call `is_leftover_dir` directly. They are deliberately out of scope here: they read the tree
+`scripts/diagnostics/probe_lib/releases_retired.py` — call `is_leftover_dir` directly. They are deliberately out of scope here: they read the tree
 through their own module, not through the suite's `_role_census`, so a guard over them would
 have a different one-true-reader to name.
 

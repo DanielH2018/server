@@ -1,11 +1,11 @@
 """Every public Host router requires Cloudflare's origin-pull client certificate; no `.local.` one does.
 
 A client that reaches the origin IP directly can send a public `Host: x.<domain>` and skip
-Cloudflare's WAF. The #1974 netpol admits only `cloudflare_ips` on :8443, but that list admits
+Cloudflare's WAF. The netpol admits only `cloudflare_ips` on :8443, but that list admits
 any source inside Cloudflare's ranges whether or not the connection is Cloudflare's.
 Authenticated Origin Pulls closes the rest: Cloudflare presents a client certificate on every
 origin connection, and the `cloudflare-origin-pull` TLSOption (ansible/templates/
-origin-pull.yml.j2) requires and verifies one (#1990). Traefik picks TLS options by SNI, so the
+origin-pull.yml.j2) requires and verifies one. Traefik picks TLS options by SNI, so the
 public and `.local.` hosts sit on separate IngressRoute objects and only the public one names
 the option — a LAN or WireGuard client holds no certificate.
 
@@ -258,11 +258,11 @@ def test_option_guard_accepts_a_matched_pair(match, options, namespace):
 @pytest.mark.parametrize(
     ("match", "options", "namespace"),
     [
-        # The pre-#1990 shape: a public host on the plain option.
+        # A public host on the plain option.
         ("Host(`x.example.com`)", {"name": "modern"}, "homelab"),
         # The overreach: a LAN host demanding the certificate.
         ("Host(`x.local.example.com`)", {"name": ORIGIN_PULL}, "homelab"),
-        # One object carrying both hosts, which is what the macro used to render.
+        # One object carrying both hosts.
         (
             "Host(`x.example.com`) || Host(`x.local.example.com`)",
             {"name": ORIGIN_PULL},

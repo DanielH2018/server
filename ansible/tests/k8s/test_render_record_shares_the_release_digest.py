@@ -1,4 +1,4 @@
-"""The render record and the release record compute one digest, through one file (#2574).
+"""The render record and the release record compute one digest, through one file.
 
 `probe.py releases --stale-only` is meant to compare a release record's `manifests_digest`
 against a render record's. That comparison is only sound while both digests come from the same
@@ -7,8 +7,8 @@ nobody can clear. So `release_stamp.yml` and `render_record.yml` both include
 `release_digest.yml`, and neither hashes anything itself.
 
 The render record's own dict must not share a name with the mode flag. The render cron passes
-`manifests_render_record=true` with -e, extra vars outrank task vars, and the first fleet run
-wrote the string "true" as all 45 records.
+`manifests_render_record=true` with -e, and extra vars outrank task vars, so a shared name
+would make every record the string "true".
 
 Run: uv run pytest ansible/tests/k8s/test_render_record_shares_the_release_digest.py
 """

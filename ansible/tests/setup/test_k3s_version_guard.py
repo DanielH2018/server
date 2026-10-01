@@ -2,14 +2,13 @@
 """Guards the k3s install tasks against reverting to an args-only condition.
 
 Both install tasks pass `INSTALL_K3S_VERSION` to the installer, so it is easy to read them
-as version-aware. They are not, unless their `when:` says so. Until 2026-08-22 the condition
-diffed `k3s_server_args` / `k3s_agent_args` against the installed systemd unit and nothing
-else, which means a version-only bump left every argument identical, the guard read false,
-and the installer never ran. The pin moved, the node did not, and the play reported `ok` —
-`k3s_version` occurred four times in the whole tree and none of them was a comparison.
+as version-aware. They are not, unless their `when:` says so. A condition that diffs
+`k3s_server_args` / `k3s_agent_args` against the installed systemd unit and nothing else
+leaves every argument identical on a version-only bump, so the guard reads false and the
+installer never runs. The pin moves, the node does not, and the play reports `ok`.
 
-Renovate opens that exact change (PR #199, v1.36.2+k3s1 -> v1.36.3+k3s1), so the silent
-no-op is on the routine upgrade path, not a corner case.
+Renovate opens exactly that change (`v1.36.2+k3s1` -> `v1.36.3+k3s1`), so the silent no-op
+is on the routine upgrade path, not a corner case.
 
 Each test here encodes a way the fix regresses while everything still reads green:
 
@@ -81,7 +80,7 @@ def test_install_condition_still_consults_the_args() -> None:
     """The control: adding the version check must not drop the original args check.
 
     A condition that watched only the version would stop reacting to a changed flag, which
-    is the regression the args guard was itself introduced to fix.
+    is the regression the args guard exists to prevent.
     """
     for filename, name, _ in INSTALLS:
         when = str(_named(filename, name).get("when", ""))

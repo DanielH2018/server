@@ -1,5 +1,5 @@
 ---
-# B4b's two proofs. Neither is "the pod is Running", which for this service means very little:
+# Two proofs. Neither is "the pod is Running", which for this service means very little:
 # a healthy-looking tunnel with a kill-switch that has eaten the cluster's return path, or a
 # dead tunnel leaking in the clear, both present as a green rollout.
 #
@@ -12,14 +12,13 @@
 # WAIT FOR THE NEW POD BEFORE ASSERTING ANYTHING ABOUT "THE" POD.
 #
 # roles/k8s/manifests does NOT wait for the rollout — it QUEUES it, and roles/k8s/manifests/tasks/drain.yml
-# runs `rollout status` for the whole batch afterwards (a deliberate 2026-08-09 change, so N
-# waits overlap instead of serialising). A role's own verify.yml therefore runs BEFORE its
+# runs `rollout status` for the whole batch afterwards (so N waits overlap instead of
+# serialising). A role's own verify.yml therefore runs BEFORE its
 # rollout completes, and `get pod -l app=qbittorrent` returns the OUTGOING pod.
 #
-# That went unnoticed while every proof here happened to hold for the old pod too — a tunnel and
-# a return path look the same either side of a roll. Proof 3 is the first assertion whose answer
-# genuinely differs between the two, and it failed the 2026-08-27 deploy against a pod that was
-# already Terminating while the new pod, correctly mounted, came up seconds later.
+# Proofs 1 and 2 hold for the old pod too — a tunnel and a return path look the same either
+# side of a roll. Proof 3 is the first assertion whose answer differs between the two, so it
+# fails against a pod that is already Terminating while the new pod comes up seconds later.
 #
 # `rollout status` and not `wait --for=condition=Available`: Available flips on the OLD
 # ReplicaSet and returns instantly, so it would reintroduce exactly this bug. See
@@ -61,8 +60,7 @@
 # ── proof 1: egress really leaves through Mullvad ───────────────────────────────────────────
 # Comparing the two public addresses is a stronger statement than `wg show wg0`, which only says
 # an interface exists. It is also the same question am.i.mullvad.net answers, without depending
-# on Mullvad's API being up — the transient failures of which used to restart this tunnel
-# needlessly under Docker.
+# on Mullvad's API being up.
 - name: Read this host's public address
   tags: [deploy]
   ansible.builtin.uri:
@@ -103,7 +101,7 @@
 # From INSIDE the cluster, not from this host. The host's address sits in lan_subnet, so a
 # request from here would pass even with the pod-CIDR entry missing — and pod CIDR is exactly
 # what Traefik and the kubelet's probes arrive from.
-# This is the D11 trap, tested at the only source address that can detect it.
+# This tests the kill-switch trap at the only source address that can detect it.
 #
 # IT RETRIES FOR ~40s, AND THE RETRY IS THE WHOLE POINT OF THE LOOP — not defensive padding.
 # kube-router's source-pod lookup lags pod creation, so a pod that dials immediately is not yet
@@ -112,18 +110,16 @@
 #   wget: can't connect to remote host (10.43.115.232): Connection refused
 #
 # which reads exactly like the kill-switch having eaten the return path — the failure this task
-# exists to detect — while the service is entirely healthy. Measured 2026-08-27: the probe failed
-# on four consecutive runs while sonarr and radarr both returned valid=true on a LIVE
-# downloadclient test, and all three addresses answered 200 from the host.
+# exists to detect — while the service is entirely healthy.
 #
-# A single dial therefore made this gate fail closed on a race, which blocks every deploy of this
-# role. Distinguishing the two causes is what the loop buys: a genuine kill-switch fault stays
+# A single dial would therefore fail closed on a race and block every deploy of this role.
+# Distinguishing the two causes is what the loop buys: a genuine kill-switch fault stays
 # refused for the full 40s, where the race clears in seconds.
 #
 # `Connection refused` rather than a timeout is also the tell that this is a REJECT and not a
 # DROP, so do not read it as a NetworkPolicy that merely omits the caller.
 #
-# Not convertible to `kubectl wait` (#2205). The `sleep 2` below runs INSIDE the probe pod, and
+# Not convertible to `kubectl wait`. The `sleep 2` below runs INSIDE the probe pod, and
 # what it waits on is kube-router having programmed this pod into the policy's `from:` selector
 # — iptables/ipset state on the node, not a field on any API object, so there is no condition
 # to name. The only cluster-side wait available is on the probe pod itself, and `--rm -i` is
@@ -163,10 +159,9 @@
 
 # ── proof 3: the modcache is populated, so an lscr.io outage is survivable ──────────────────
 # The gate for the one-mount fix in deployment.yaml.j2. LSIO's docker-mods script applies a
-# cached mod when the registry lookup fails, and that path RAN during the 9h/107-restart
-# incident and found an empty cache — because /modcache was container-local and died with the
-# pod. Asserting the tarball is on the volume is what turns "the mount is declared" into "the
-# fallback has something to fall back to".
+# cached mod when the registry lookup fails, but only if the cache outlives the pod. Asserting
+# the tarball is on the volume is what turns "the mount is declared" into "the fallback has
+# something to fall back to".
 #
 # READ-ONLY, so it runs under --check alongside proof 1. If the mod could not be fetched at all
 # the pod never passes its startupProbe and the rollout fails long before this task.
@@ -187,10 +182,9 @@
     that:
       # BOTH halves, and the first one is the one with teeth. mod-init creates /modcache inside
       # the container and caches there whether or not a volume is mounted, so a tarball on its
-      # own proves NOTHING about surviving a restart — it is thrown away with the pod. Asserting
-      # only the file passed happily against a pod with no mount at all (measured 2026-08-27,
-      # which is how this was caught). /proc/mounts is what distinguishes the volume from the
-      # container's own filesystem.
+      # own proves NOTHING about surviving a restart — it is thrown away with the pod, so a
+      # file-only assertion passes against a pod with no mount at all. /proc/mounts is what
+      # distinguishes the volume from the container's own filesystem.
       - "'MOUNTED' in qbittorrent_k8s_modcache.stdout_lines"
       - qbittorrent_k8s_modcache.stdout_lines | select('search', '[.]tar[.]xz$') | list | length > 0
     fail_msg: >-
@@ -203,8 +197,7 @@
       ({{ qbittorrent_k8s_modcache.stdout_lines | select('search', '[.]tar[.]xz$') | join(', ') }}),
       so a start that cannot reach lscr.io applies the cached copy instead of stranding.
 
-# A LEFTOVER LOCK IS THE NEW FAILURE MODE THIS MOUNT INTRODUCES, so name it here rather than
-# leaving the next person to rediscover it during an outage. docker-mods holds
+# A LEFTOVER LOCK IS THIS MOUNT'S FAILURE MODE. docker-mods holds
 # /modcache/<name>.lock for the duration of a download; a pod killed mid-download leaves it
 # behind, and later starts WAIT on it and then skip the mod — which presents as no tunnel and a
 # restarting pod, the same symptom as the outage this cache exists to prevent. Warns rather than

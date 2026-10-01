@@ -36,7 +36,7 @@ from dev.findings_lib.boundaries import FindingsTools
 def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
     """Passes ``issues`` through, warning on stderr about any at gh's comment page cap.
 
-    THE FOLD GOES BLIND PAST THE CAP (#1284). gh asks for `comments(first: 100)` and nothing
+    THE FOLD GOES BLIND PAST THE CAP. gh asks for `comments(first: 100)` and nothing
     paginates, so a release comment past the cap would leave an issue claimed forever and a
     claim past it would make the read-back find nothing. The read itself is unchanged —
     paginating means leaving `gh issue list --json` for the REST API on every command, for a
@@ -51,40 +51,36 @@ def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
 
 
 # The `--limit` every list here passes, and the number the warning below compares against.
-# It is set to GH'S OWN CEILING ON A LABEL-FILTERED LIST on purpose (#2892). A `--label`
-# sends `gh issue list` through GitHub's SEARCH API, which caps at 1000 whatever `--limit`
-# says — measured 2026-09-29: the repo held 1026 `claude` issues by the search API's own
-# `total_count`, and `--label claude --state all` returned exactly 1000 at `--limit 5000`
-# and again at `--limit 1200`. An UNFILTERED list pages past it (1029 at `--limit 1200` the
-# same day, and 1001 at `--limit 1005` on 2026-09-28), which is where the 5000 cap came
-# from; every list here carries `--label claude`, so 1000 is the number that binds.
+# It is set to GH'S OWN CEILING ON A LABEL-FILTERED LIST on purpose. A `--label` sends `gh
+# issue list` through GitHub's SEARCH API, which caps at 1000 whatever `--limit` says:
+# `--label claude --state all` returns exactly 1000 even at `--limit 5000`. An UNFILTERED
+# list pages past it; every list here carries `--label claude`, so 1000 is the number that
+# binds.
 #
 # A cap above that ceiling can never make `len(issues) >= ISSUE_LIST_CAP` true, so the
-# truncation the warning below exists to announce was silent, and it had already cost the
-# settled register two refuted rows (#804 and #826 were missing from the rendered page). At
-# 1000 the warning fires exactly when gh truncates, which is what it says it does.
+# truncation the warning below exists to announce would be silent. At 1000 the warning
+# fires exactly when gh truncates, which is what it says it does.
 #
 # Nothing fetches the whole register any more, so no live caller is near this: every
 # `findings.py` subcommand reads `--state open`, `open` asks gh's search index for one
-# fingerprint (#2846), and the backlog cron reads the three narrow slices
-# `load_backlog_issues` names. The largest of those was 49 issues on 2026-09-29.
+# fingerprint, and the backlog cron reads the three narrow slices `load_backlog_issues`
+# names. The largest of those is 49 issues.
 ISSUE_LIST_CAP = 1000
 
-# `lib.gh.gh`'s default timeout is 60s, which the whole-register `--state all` fetch
-# outgrew: it asked for `body` and `comments` on every `claude` issue in every state, and on
-# 2026-09-28 that was 4.19 MB across ~900 issues and took 67.5s wall — so EVERY findings.py
-# subcommand failed, `open` included, with a bare "gh failed: ... timed out after 60.0
-# seconds" (#2800's session could not file its own follow-ups). Raising the timeout only
-# moved the wall: at ~58s per 1000 issues, 300s breaks at about 5,100 issues, and a fetch
-# that times out never reaches the cap warning that would have explained it (#2892).
+# `lib.gh.gh`'s default timeout is 60s, which a whole-register `--state all` fetch outgrows:
+# asking for `body` and `comments` on every `claude` issue in every state is 4.19 MB across
+# ~900 issues and takes 67.5s wall, so EVERY findings.py subcommand would fail, `open`
+# included, with a bare "gh failed: ... timed out after 60.0 seconds". Raising the timeout
+# only moved the wall: at ~58s per 1000 issues, 300s breaks at about 5,100 issues, and a
+# fetch that times out never reaches the cap warning that would have explained it.
 #
-# NARROWING THE FIELD SET IS THE WRONG LEVER, measured 2026-09-28 — the field set is not
-# what makes a fetch slow, the STATE is (`--state all` 995 issues / 58.4s, `--state open` 57
-# issues / 0.9s), and `issue_model.issue_rows` structurally needs `body` for `verify_by` and
-# `paths` and `comments` for `claimed` and `reobservations`. Narrowing the QUERY is the
-# lever: `fingerprint_match` for `open`, `load_backlog_issues` for the cron. This timeout is
-# now a ceiling over fetches measured in seconds, kept because the register keeps growing
-# and a slow LAN is not a reason to lose the page.
+# NARROWING THE FIELD SET IS THE WRONG LEVER — the field set is not what makes a fetch slow,
+# the STATE is (`--state all` 995 issues / 58.4s, `--state open` 57 issues / 0.9s), and
+# `issue_model.issue_rows` structurally needs `body` for `verify_by` and `paths` and
+# `comments` for `claimed` and `reobservations`. Narrowing the QUERY is the lever:
+# `fingerprint_match` for `open`, `load_backlog_issues` for the cron. This timeout is a
+# ceiling over fetches measured in seconds, kept because the register keeps growing and a
+# slow LAN is not a reason to lose the page.
 REGISTER_FETCH_TIMEOUT = 300.0
 
 
@@ -130,14 +126,14 @@ SETTLED_LABELS = ("refuted", "accepted")
 def load_backlog_issues(tools: FindingsTools | None = None) -> list[dict]:
     """The rows `scripts/docs/reference/backlog.py` renders, in three narrow fetches.
 
-    NOT `--state all` (#2892). `backlog.render_markdown` renders exactly three sets — the
-    open findings, the closed `refuted` ones and the closed `accepted` ones — and drops
-    every other closed issue on the floor. Fetching the whole register to throw most of it
-    away cost 995 issues and 58.4s on 2026-09-28 and grew about 350 issues a week, which
-    `REGISTER_FETCH_TIMEOUT` above put on a course to break at about 5,100 issues with the
-    backlog page silently stale behind it. The same three sets were 49 + 26 + 21 = 96 issues
-    on 2026-09-29, and they grow with what is FILED and SETTLED rather than with what is
-    closed, so this cost does not track the register's size.
+    NOT `--state all`. `backlog.render_markdown` renders exactly three sets — the open
+    findings, the closed `refuted` ones and the closed `accepted` ones — and drops every
+    other closed issue on the floor. Fetching the whole register to throw most of it away
+    costs 58.4s for 995 issues and grows about 350 issues a week, which would break
+    `REGISTER_FETCH_TIMEOUT` above at about 5,100 issues with the backlog page silently
+    stale behind it. The same three sets are 49 + 26 + 21 = 96 issues, and they grow with
+    what is FILED and SETTLED rather than with what is closed, so this cost does not track
+    the register's size.
 
     Returns them deduplicated by issue number: an issue carrying both settled labels comes
     back from two of the fetches and must render once.

@@ -1,13 +1,11 @@
 """Host Python runs through uv, on a pinned interpreter, and only that way.
 
-This replaces test_host_scripts_py312.py. That guard existed because the hosts ran Ubuntu 24.04's
-Python 3.12 while the repo was on 3.14, so 3.13+ syntax parsed in CI and SyntaxErrored on the
-host — silently, in the case of session-health.py, whose wrapper routes stderr to /dev/null and
-exits 0 by design. Those scripts now run a pinned 3.14 through uv and the floor is gone.
-
-What remains dangerous is the way back. A new unit, cron entry or hook wrapper reaching for
-`/usr/bin/python3` puts one script under 3.12 again with nothing left to notice. So this file
-guards the properties the migration established rather than the syntax level it removed.
+Hosts run Ubuntu 24.04's Python 3.12 as the system interpreter while the repo is on 3.14, so a
+script run by `/usr/bin/python3` parses 3.13+ syntax in CI and SyntaxErrors on the host --
+silently, in the case of session-health.py, whose wrapper routes stderr to /dev/null and
+exits 0 by design. Host scripts therefore run a pinned 3.14 through uv. A new unit, cron
+entry or hook wrapper reaching for `/usr/bin/python3` puts one script under 3.12 with nothing
+left to notice, so this file guards that route rather than the syntax level.
 
 Container contexts are deliberately out of scope: a Dockerfile or compose healthcheck names the
 interpreter inside its own digest-pinned image, which has nothing to do with the host.
@@ -19,8 +17,7 @@ from _helpers import REPO as _REPO, load_tasks, walk_tasks
 
 # The same export the root crons' templates carry (cron_checks.py enforces it there). A task
 # with `become: true` runs with HOME=/root, and uv finds no managed Python under /root: the pin
-# is installed `become: false` under the connecting user. #2490: the release prune found 3.14.6
-# only through a `.venv` above the cwd, and lost it when a patch install moved that venv's link.
+# is installed `become: false` under the connecting user.
 _ROOT_UV_ENV = "UV_PYTHON_INSTALL_DIR"
 _COMMAND_MODULES = ("ansible.builtin.command", "ansible.builtin.shell")
 
@@ -63,7 +60,7 @@ def _root_uv_tasks():
 def test_root_uv_tasks_point_uv_at_the_user_interpreters():
     found = list(_root_uv_tasks())
     names = {task.get("name", "") for _, task in found}
-    # Non-vacuous: the task #2490 was about must be in the census.
+    # Non-vacuous: the release-prune task must be in the census.
     assert "Prune superseded releases for {{ release_bin_group }}" in names
     offenders = [
         f"{path}: {task.get('name')}"
@@ -138,15 +135,14 @@ def _offending_lines(needle: str):
 
 
 def _pinned_uv_lines():
-    """Only the host-script invocations this migration created.
+    """Only the host-script invocations.
 
     The discriminator is `--python`. A `uv run` that names an interpreter is a standalone host
     script and must not touch a project; a `uv run` without one is deliberately using the repo
     project's environment because it needs repo dependencies. The repo has several of the latter
     and they are all correct — bash-pretool.sh, block-protected-edits.sh
     (`--no-sync --quiet python`) and secret-rotation-audit.sh.j2
-    (`--frozen`). An earlier draft of this guard scanned every
-    `uv run` line and would have failed on all of them.
+    (`--frozen`).
     """
     for path in _candidate_files():
         for n, line in enumerate(path.read_text().splitlines(), 1):
@@ -183,7 +179,7 @@ def test_pinned_uv_invocations_disable_project_discovery():
     have arbitrary ones. gitops-deploy's WorkingDirectory is itself a uv project. --no-project
     stops uv resolving and syncing that project from a unit that holds the git-tree lock.
 
-    Measured 2026-08-16, so do not overstate what this defends: with an explicit --python the
+    Measured, so do not overstate what this defends: with an explicit --python the
     version is honoured either way, and --no-project does not even suppress `.venv` activation
     from the cwd. It governs project SYNCING. The version guarantee comes from --python.
     """
@@ -234,8 +230,7 @@ def test_the_hooks_use_the_uv_that_exists_without_the_tooling_tag():
 
     `/usr/local/bin/uv` is a symlink the `tooling` tag of `initial_setup` creates, gated on
     `dev_tooling_hosts` (daniel-box and daniel-server, `group_vars/all.yml`). It exists on both
-    prod nodes: measured on daniel-server 2026-09-11, `ls -l /usr/local/bin/uv` ->
-    `/home/ubuntu/.local/bin/uv`, created 2026-08-17. The Claude hooks avoid it anyway. They
+    prod nodes, as a link to `/home/ubuntu/.local/bin/uv`. The Claude hooks avoid it anyway. They
     must also work on a host that never ran the `tooling` tag, and `/home/<user>/.local/bin/uv`
     exists wherever uv is installed without depending on a `become: true` symlink task having
     run. It is what their sibling hooks already use. The hooks route stderr to /dev/null and

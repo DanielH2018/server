@@ -6,7 +6,7 @@ Jellyfin's loader refuses a plugin whose `targetAbi` is newer than the running s
 nothing about it — the directory sits on disk, `GET /Plugins` omits it, the rollout is green.
 
 The trap is sharper here than for the siblings. Webhook's own release line moved to Jellyfin
-12: version 22.0.0.0 (2026-09-08) declares `targetAbi` 12.0.0.0, so "the newest Webhook" is the
+12: version 22.0.0.0 declares `targetAbi` 12.0.0.0, so "the newest Webhook" is the
 wrong one while `jellyfin_k8s_image` is a 10.11 build. 21.0.0.0 declares 10.11.8.0 and is the
 newest that loads.
 
@@ -163,8 +163,7 @@ def test_every_plugin_installer_is_still_present():
     guarded by its own file — so a new installer added without a guard, or one renamed out
     from under its guard, is exactly what this asserts against.
 
-    NOT NAMED FOR A COUNT. It was `test_all_five_...` until Trakt and SSO-Auth landed (#1617,
-    #1648), and a test whose name carries a number lies from the next addition on.
+    NOT NAMED FOR A COUNT: a test whose name carries a number lies from the next addition on.
     """
     template = DEPLOYMENT.read_text()
     installers = set(re.findall(r"- name: (install-[a-z-]+)", template))
@@ -182,10 +181,10 @@ def test_every_plugin_installer_is_still_present():
     )
 
 
-# ── Renovate coverage (#1557) ───────────────────────────────────────────────────────────────
-# The pin had no update signal at all until this manager existed: renovate.json's k8s-images
-# manager keys on `_image:`, so a plugin version, its URL and its MD5 were invisible to every
-# manager and aged silently — which reads exactly like a plugin with no updates available.
+# ── Renovate coverage ───────────────────────────────────────────────────────────────────────
+# The pin has no update signal without a dedicated manager: renovate.json's k8s-images
+# manager keys on `_image:`, so a plugin version, its URL and its MD5 are invisible to every
+# other manager and age silently — which reads exactly like a plugin with no updates available.
 
 DEP = "jellyfin/jellyfin-plugin-webhook"
 

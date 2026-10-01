@@ -1,5 +1,5 @@
 ---
-# Navidrome — Subsonic-compatible music server, added for issue #803.
+# Navidrome — Subsonic-compatible music server.
 #
 # Pinned tag@sha256 rather than a bare digest: the k8s-images Renovate manager keys on
 # `_image:` in this file and needs the tag to read a version stream, and a bare repo@sha256
@@ -14,8 +14,7 @@ k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "parked at replicas 0 — an auto-applied image bump would never reach a pod"  # noqa var-naming[no-role-prefix]
 
 # ── parked ──────────────────────────────────────────────────────────────────────────────────
-# Stood up and verified on 2026-09-02 (issue #803), then scaled to zero on operator request.
-# There is also nothing for it to serve yet: /srv/media/media holds books, movies and tv and no
+# Parked at zero replicas on operator request. There is also nothing for it to serve yet: /srv/media/media holds books, movies and tv and no
 # music directory, so `navidrome_k8s_music_dir` below is still backed by an emptyDir.
 #
 # Declarative rather than a live `kubectl scale`, for the two reasons terraria's defaults

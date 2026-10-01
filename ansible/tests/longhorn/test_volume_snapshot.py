@@ -50,16 +50,16 @@ from _volume_ops import assert_the_role_declares_an_autodeploy_stance
 
 #
 # A detached volume takes the ordinary path: Longhorn v1.12.1 snapshots one with healthy
-# replicas, measured by two drills, and #2740 retired the maintenance-mode attach that stood
-# between the wait and the failure. The two tests below hold that retirement in place.
+# replicas, measured by two drills, so the role has no maintenance-mode attach. The two tests
+# below hold that in place.
 
 
 def test_the_role_makes_no_longhorn_api_call_and_attaches_nothing() -> None:
-    """#2740 retired the maintenance-mode attach; adding one back must be a deliberate edit.
+    """The role has no maintenance-mode attach; adding one must be a deliberate edit.
 
     Two drills measured Longhorn v1.12.1 snapshotting a detached volume on the ordinary path, so
     an attach here buys nothing and costs the deploy an unreachable branch with its own failure
-    modes. The assertion names what came back rather than only that something did.
+    modes. The assertion names what was added rather than only that something did.
     """
     for task in _tasks(_CLAIM):
         assert "ansible.builtin.uri" not in task, (
@@ -90,7 +90,7 @@ def test_an_unready_snapshot_fails_the_deploy_whatever_the_volume_state() -> Non
 
 
 def test_the_refused_delete_report_points_at_no_removal_route() -> None:
-    """#2733: the report used to send the operator at the Longhorn manager API.
+    """The report must not send the operator at the Longhorn manager API.
 
     `snapshotDelete` acts on the engine chain and never touches the CR, `snapshotCRDelete` is a
     Kubernetes DELETE the same webhook denies, and the UI's per-volume delete makes the first
@@ -154,7 +154,7 @@ def test_the_prune_is_guarded_as_a_whole_not_only_at_the_delete() -> None:
 
 def test_the_delete_never_waits_on_the_finalizer() -> None:
     """A Snapshot CR's `longhorn.io` finalizer makes a default `kubectl delete` block until the
-    volume coalesces the data — measured hanging a drill run for twelve minutes on 2026-08-21."""
+    volume coalesces the data — measured hanging a drill run for twelve minutes."""
     argv = _named(_CLAIM, "Prune snapshots beyond the retention window")[
         "ansible.builtin.command"
     ]["argv"]
@@ -178,7 +178,7 @@ def test_every_kubectl_call_uses_argv() -> None:
 
 
 def test_the_deploy_tag_uses_chdir_not_git_dash_c() -> None:
-    """`git -C` does not override GIT_DIR, and a stray GIT_DIR has already made a check in this
+    """`git -C` does not override GIT_DIR, and a stray GIT_DIR can make a check in this
     repo operate on the real repository instead of its fixture."""
     command = _named(_MAIN, "Resolve the deploy tag")["ansible.builtin.command"]
     assert "chdir" in command
@@ -190,8 +190,7 @@ def test_the_deploy_tag_uses_chdir_not_git_dash_c() -> None:
 
 def test_the_reads_every_later_task_depends_on_survive_check_mode() -> None:
     """A `command` task is skipped under --check by default, and a skipped read does not fail —
-    it fails its consumer several tasks later with an undefined attribute. That class cost nine
-    roles a fix already."""
+    it fails its consumer several tasks later with an undefined attribute."""
     for path, fragment in (
         (_MAIN, "Resolve the deploy tag"),
         (_CLAIM, "Resolve the Longhorn volume backing"),
@@ -208,8 +207,8 @@ def test_the_role_declares_an_autodeploy_stance() -> None:
 # This role's whole value is a snapshot taken BEFORE the apply that can destroy what it protects.
 # A snapshot moved after the apply would still create a CR, still pass readiness, still prune,
 # and every test above would keep passing — "wrong without anyone noticing" is exactly the shape
-# Task 1's `test_the_snapshot_name_starts_with_the_prefix_the_prune_selects_on` was written to
-# catch for the name/prefix coupling, and this is the same trap for the include's position.
+# `test_the_snapshot_name_starts_with_the_prefix_the_prune_selects_on` catches that shape for
+# the name/prefix coupling, and this is the same trap for the include's position.
 
 
 def _manifests_tasks() -> list[dict]:
@@ -264,7 +263,7 @@ def test_the_listing_jsonpath_parses() -> None:
     jsonpath kubectl rejects returns rc=1 and an empty read, every retention test above still
     passes, and the prune silently never deletes anything.
 
-    kubectl's jsonpath has no `&&` — verified 2026-08-21, `unrecognized character in action:
+    kubectl's jsonpath has no `&&` — `unrecognized character in action:
     U+0026` — which is why the volume filter is one comparison and markRemoved is filtered in
     Jinja. This test is what catches someone folding them back together.
     """
@@ -337,11 +336,10 @@ def test_the_listing_fields_exist_on_a_real_snapshot() -> None:
 def test_both_prefix_matchers_regex_escape_their_prefix():
     """`match` is a regex test, so a literal prefix must be escaped before it is used as one.
 
-    2026-08-22 review. k8s/volume-revert escaped its prefix and said why in-line; the prune here
-    did not, and the prune's result feeds a `kubectl delete`. Unreachable today — both the service
-    and the claim are DNS-1123 labels, which carry no regex metacharacters — but the two files
-    make the SAME decision and only one of them encoded it, which is the shape that becomes true
-    after one rename.
+    k8s/volume-revert escapes its prefix and says why in-line; the prune here escapes it too, and
+    its result feeds a `kubectl delete`. A bad prefix is unreachable while both the service and
+    the claim are DNS-1123 labels, which carry no regex metacharacters — but the two files must
+    make the SAME decision, or one rename makes the gap real.
 
     Reverting either escape fails this test: the assertion is on the filter chain in the role
     source, so an unescaped `selectattr(..., 'match', <prefix>)` no longer matches.

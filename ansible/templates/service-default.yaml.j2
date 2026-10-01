@@ -1,8 +1,8 @@
 {# Not a macro — a whole manifest. `k8s/manifests` renders this file as `service.yaml` for
    every role that names `service.yaml` in its `manifests_files` and ships no
    `templates/service.yaml.j2` of its own (`manifests_shared_defaults` in that role's
-   defaults). 22 roles' Service templates were byte-identical three-line wrappers around the
-   `service()` macro below; this file is that wrapper, rendered once (#2872).
+   defaults). This file is the three-line wrapper around the `service()` macro below that
+   22 roles' Service templates would otherwise repeat byte for byte.
 
    THE ENTRY IS THE INPUT. Name and port come from the role's `containers_list` entry, and the
    two variants those 22 roles differed on are entry keys rather than template edits:

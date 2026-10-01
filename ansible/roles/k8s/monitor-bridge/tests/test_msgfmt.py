@@ -1,4 +1,4 @@
-"""bridge.msgfmt groups a multi-item DOWN by reason and elides names before reasons (#2013)."""
+"""bridge.msgfmt groups a multi-item DOWN by reason and elides names before reasons."""
 
 import pytest
 

@@ -4,7 +4,7 @@ The ical-proxy test suite (`ansible/roles/k8s/ical-proxy/tests/test_app.py`) imp
 `ical_proxy.py`, which imports flask — so it validates the app against whatever flask/requests uv.lock
 pins for the `dev` group. The runtime image installs them via `pip install flask==X requests==Y`
 in `templates/Dockerfile.j2`. If those versions drift, the test certifies a flask the container
-never runs (2026-07-18 review L1). This fails the instant they diverge, forcing the Dockerfile pin
+never runs. This fails the instant they diverge, forcing the Dockerfile pin
 to be bumped in lockstep whenever lockFileMaintenance moves uv.lock.
 """
 

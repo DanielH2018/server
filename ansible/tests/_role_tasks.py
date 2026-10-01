@@ -4,12 +4,12 @@ The inline-rollout guard reads what a role DOES after the manifests include, so 
 expanded task list rather than the file: an `include_tasks` is followed into its target,
 blocks are flattened, a `loop:` whose values can be read statically is unrolled, and the loop
 variable in each unrolled command is substituted with its value so a target can be resolved.
-The result is memoised per role. Split from `test_inline_rollout_gates.py` on 2026-09-02; that
-module's docstring is the contract for the inline-gate half.
+The result is memoised per role. `test_inline_rollout_gates.py`'s docstring is the contract
+for the inline-gate half.
 
 It sits at the `ansible/tests/` root rather than under `deploy/` because a second suite reads
 it: `in_role_wait_s` below feeds gitops_deploy's rollback budget, whose tests live in the
-role (#2399). Both callers need the same expansion — prowlarr's isolation probe and sonarr's
+role. Both callers need the same expansion — prowlarr's isolation probe and sonarr's
 gate are each several include levels down from `main.yml`.
 """
 
@@ -209,11 +209,10 @@ _WAIT_TIMEOUT = re.compile(r"--timeout=(\S+)")
 def in_role_wait_s(role: str) -> int:
     """Seconds this role waits in its OWN tasks, ON TOP OF the batch drain's rollout wait.
 
-    `k8s/manifests/tasks/drain.yml` runs once at the end of a batch, so everything a role waits for in its
-    own `tasks/` is spent before the drain starts and adds to it. Two budget derivations size
-    themselves against a role's cost and both used to count the drain alone, which scored
-    prowlarr 300s short: its flaresolverr isolation probe waits `--timeout=300s` for a Job that
-    has nothing to do with any rollout (#2399).
+    `k8s/manifests/tasks/drain.yml` runs once at the end of a batch, so everything a role waits
+    for in its own `tasks/` is spent before the drain starts and adds to it. Counting the drain
+    alone would score prowlarr 300s short: its flaresolverr isolation probe waits
+    `--timeout=300s` for a Job that has nothing to do with any rollout.
 
     An inline `rollout status` gate is EXCLUDED, and that is the only exclusion. Such a gate
     waits for a rollout the drain also waits for, so the two are alternatives on one timeline —
@@ -223,7 +222,7 @@ def in_role_wait_s(role: str) -> int:
 
     The exclusion is by substring, which is safe only while no single command carries both a
     `rollout status` wait and an unrelated one. No k8s role's tasks carry two `--timeout=` values
-    on one command (checked 2026-09-24); a command that did would need this split by token.
+    on one command; a command that did would need this split by token.
 
     Args:
         role: the directory name under `ansible/roles/k8s/`.

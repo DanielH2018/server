@@ -40,7 +40,7 @@ def test_env_file_default_when_neither_set():
 def test_env_file_missing_file_falls_back_to_env(tmp_path):
     # A *_FILE path that doesn't exist must degrade to the plain env var, not raise — an
     # unguarded open() would fail the whole config build and silence every monitor over one
-    # missing file (2026-07-15 review L1).
+    # missing file.
     env = {
         "HA_TOKEN_FILE": str(tmp_path / "does-not-exist"),
         "HA_TOKEN": "inline-fallback",

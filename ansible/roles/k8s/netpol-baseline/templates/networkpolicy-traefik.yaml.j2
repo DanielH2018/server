@@ -20,8 +20,8 @@ spec:
    stay live and keep fencing, minus the traefik/prometheus grants the flag also switches off --
    strictly worse than not rolling back at all. Real deletion is not available either;
    `kubectl delete networkpolicy` is deny-listed for agents and refused by the readonly SA.
-   Slice 3 established this render-allow-all pattern for the observability policies
-   (networkpolicy-observability.yaml.j2); slice 4 follows it.
+   The observability policies (networkpolicy-observability.yaml.j2) use the same
+   render-allow-all pattern.
 
    `| bool` matches the `when:` in tasks/main.yml. Without it the two disagree for a STRING:
    `-e netpol_baseline_enforced=false` is truthy to Jinja (this branch renders, fencing

@@ -4,7 +4,7 @@
 # etcd restore drill's guest attaches to". Kept in the same role because both are libvirt state
 # on one host, and a second role for one network would be ceremony.
 #
-# It keeps the `staging` name after daniel-stage was retired (#2941): the network on
+# It keeps the `staging` name: the network on
 # daniel-server carries that name and a UUID libvirt refuses to redefine under another one, so
 # renaming it would mean destroying and rebuilding the bridge for cosmetics.
 
@@ -43,7 +43,7 @@
   changed_when: false
   failed_when: false
   # A read of libvirt's own state, so it runs under --check too: skipped, it leaves no rc and
-  # the define below errors on the attribute instead of skipping (#2323).
+  # the define below errors on the attribute instead of skipping.
   check_mode: false
   become: true
 
@@ -67,7 +67,7 @@
   register: hypervisor_staging_net_live_uuid
   changed_when: false
   failed_when: false
-  # A read, so it runs under --check too; the pin below reads its rc and stdout (#2323).
+  # A read, so it runs under --check too; the pin below reads its rc and stdout.
   check_mode: false
   become: true
 
@@ -106,7 +106,7 @@
   register: hypervisor_staging_net_info
   changed_when: false
   failed_when: false
-  # A read, so it runs under --check too; the define below reads its rc (#2323).
+  # A read, so it runs under --check too; the define below reads its rc.
   check_mode: false
   become: true
 
@@ -162,7 +162,7 @@
     cmd: virsh --connect qemu:///system net-info {{ hypervisor_staging_net_name }}
   register: hypervisor_staging_net_state
   changed_when: false
-  # A read, so it runs under --check too (#2323). On a host the network was never defined on,
+  # A read, so it runs under --check too. On a host the network was never defined on,
   # --check only simulated the define above, so the read has nothing to find; that is not a
   # failure of the check run, and the start and autostart below then see an empty stdout.
   check_mode: false

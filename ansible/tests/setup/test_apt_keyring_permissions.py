@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """Guards against APT keyrings being created without an explicit mode.
 
-The failure this encodes actually happened (daniel-box, 2026-08-01). The
-initial_setup role sets UMASK 027 in /etc/login.defs, and docker_install — which
-runs later in the SAME play — created its keyring with `gpg --dearmor` via
-ansible.builtin.command. `command` has no `mode:`, so the file inherited root's
-now-restrictive umask and landed 0640. apt fetches as the unprivileged `_apt`
-user, could not read the keyring, and reported the repo as unsigned:
+The initial_setup role sets UMASK 027 in /etc/login.defs, and docker_install runs later in
+the SAME play. A keyring created with `gpg --dearmor` via ansible.builtin.command inherits
+root's restrictive umask, because `command` has no `mode:`, and lands 0640. apt fetches as
+the unprivileged `_apt` user, cannot read the keyring, and reports the repo as unsigned:
 
     GPG error: https://download.docker.com/linux/ubuntu noble InRelease:
     NO_PUBKEY 7EA0A9C3F273FCD8 ... repository is not signed
 
-That failed initial_setup.yml at the cache refresh, one task before Docker would
-have been installed. Hosts provisioned before the umask change never showed it:
-their keyring was already 0644 and a `creates:` guard stopped it being rewritten.
+That fails initial_setup.yml at the cache refresh, one task before Docker would be
+installed. Hosts provisioned before the umask change never show it: their keyring is
+already 0644 and a `creates:` guard stops it being rewritten.
 
 Both rules below are about the same thing — a keyring's mode must be stated, not
 inherited from whatever the ambient umask happens to be.

@@ -1,12 +1,12 @@
 ---
-# The Claude Code telemetry stack: collector + Loki + Prometheus (slice 1), Grafana behind
-# Authelia (slice 2), Tempo + the traces pipeline (slice 3).
+# The Claude Code telemetry stack: collector + Loki + Prometheus, Grafana behind Authelia,
+# Tempo + the traces pipeline.
 
 - name: Build the ported Grafana dashboard ConfigMaps
   # Guarded at the include rather than task by task: every task in dashboards.yml either writes
   # the node (three staging trees, the annotated copies, the ConfigMap manifests) or reads one
   # of those trees back, and the guard propagates to all of them. Nothing in this role's
-  # rendered manifests reads a fact the file sets, so skipping it moves no digest (#2614).
+  # rendered manifests reads a fact the file sets, so skipping it moves no digest.
   when: not k8s_dry_run | bool
   ansible.builtin.include_tasks: dashboards.yml
 
@@ -20,7 +20,7 @@
       - collector.yaml
       - loki.yaml
       - prometheus.yaml
-      # After prometheus.yaml: that file now carries the ServiceAccount/ClusterRole the
+      # After prometheus.yaml: that file carries the ServiceAccount/ClusterRole the
       # cadvisor discovery needs, and kube-state-metrics is a scrape target of it.
       - kube-state-metrics.yaml
       - tempo.yaml
@@ -29,9 +29,6 @@
       - ingressroute.yaml
       # Must follow middlewares.yaml — it references the `rate-limit` Middleware, which
       # Traefik will not resolve across namespaces.
-      # (ingest-ingressroute retired 2026-08-13 with the D7 forwarder — the collector
-      # DaemonSet gives every node its own loopback hostPort, so nothing ingests over
-      # the LAN anymore.)
       - prometheus-ingressroute.yaml
     manifests_secret_files:
       - grafana-secret.yaml
@@ -43,14 +40,14 @@
     # in a different namespace. Skip its wait and roll our own below.
     manifests_rollout: ''
     # ...but tell the release record which workloads that private restart targets, so
-    # `probe.py health` expects them to roll after a changed render (issue #1902). The same
+    # `probe.py health` expects them to roll after a changed render. The same
     # list the restart loop below and the stabilisation snapshot iterate; the record decides
     # `restart` from the same facts that loop gates on. The shared role neither restarts nor
     # drains these; it does fingerprint each one's pod template across the apply, so the loop
-    # below can skip a workload the apply already rolled (#1994). `namespace` is load-bearing
+    # below can skip a workload the apply already rolled. `namespace` is load-bearing
     # for that: the fingerprints default to k8s_namespace, and these six live in
     # k8s_observability_namespace -- without it both reads fail, every entry reads "not
-    # rolled", and an image bump rolls each workload twice, exactly as before the fix.
+    # rolled", and an image bump rolls each workload twice.
     manifests_self_rollouts: >-
       {{ observability_stabilise_workloads
          | map('combine', {'namespace': k8s_observability_namespace}) | list }}
@@ -59,25 +56,21 @@
   tags: [deploy]
   # `manifests_rollout: ''` above skips the shared role's WAIT, and skipping it also skips its
   # rollout-restart — so without a restart here a config edit applies to the object, reports
-  # changed, and never reaches the running pod. Caught on the first config edit: the collector
-  # kept serving the previous config with the deploy fully green.
+  # changed, and never reaches the running pod.
   #
-  # This used to restart ALL SIX on `manifests_render is changed`, which is a per-ROLE signal —
-  # it fires when any of this role's eight manifests changed. prometheus.yaml.j2 alone changed
-  # in 49 commits in 90 days, and each of those restarted Loki, Tempo, kube-state-metrics, the
-  # collector and Grafana for an edit none of them read. Each ConfigMap is now hashed into its
-  # OWN pod template (`checksum/config`), so a ConfigMap edit moves that one pod template and
-  # the apply rolls that one pod. What the annotation cannot cover is a Secret — hashing one
-  # into a world-readable annotation would open a read path over it — so this task survives for
-  # exactly the two workloads that read one, selected by `restart_on` rather than by a second
-  # hand-written list. Issue #2858.
+  # Each ConfigMap is hashed into its OWN pod template (`checksum/config`), so a ConfigMap edit
+  # moves that one pod template and the apply rolls that one pod. Restarting on
+  # `manifests_render is changed` instead would restart all six on a per-ROLE signal, for an
+  # edit none of them read. What the annotation cannot cover is a Secret — hashing one into a
+  # world-readable annotation would open a read path over it — so this task runs for exactly
+  # the two workloads that read one, selected by `restart_on` rather than by a second
+  # hand-written list.
   #
   # Skipped for a Deployment this run created — its pods are already on the new config, and
   # `rollout restart` races the initial rollout. Skipped too for a workload the apply itself
   # rolled — its pod template changed, which an image-pin bump does — read from the shared
-  # role's fingerprint verdict, `manifests_rolled_by_apply` (#1994, the self-rollout half of
-  # #1988): the second roll cost a spare pod per Deployment and a full re-pull on the
-  # Recreate ones.
+  # role's fingerprint verdict, `manifests_rolled_by_apply`: a second roll costs a spare pod
+  # per Deployment and a full re-pull on the Recreate ones.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_observability_namespace }}
@@ -89,7 +82,7 @@
   changed_when: true
   when:
     # A dry-run render is always `changed` and its apply rolled nothing, so without this every
-    # dry run would restart the live workloads (#2588).
+    # dry run would restart the live workloads.
     - not k8s_no_mutate
     - "'secret' in item.restart_on"
     - manifests_secret_render is changed
@@ -97,8 +90,7 @@
     # restart. Read the two failure directions before changing it — they are not symmetric. A
     # spurious restart races only a first-ever creation, which happens once per workload and
     # recovers; a missed restart leaves the pod serving the previous config with the deploy
-    # fully green, which is the bug this task exists to prevent and which was actually
-    # observed. Without the default, an unreadable register is not a wrong answer but a hard
+    # fully green, which is the bug this task exists to prevent. Without the default, an unreadable register is not a wrong answer but a hard
     # failure: `object of type 'dict' has no attribute 'stdout'`, mid-loop.
     - not (manifests_apply.stdout | default('')) is search('\.apps/' ~ item.name ~ ' created')
     - not manifests_rolled_by_apply.get(item.name, false)
@@ -125,16 +117,12 @@
   changed_when: false
 
 # This role skips the shared role's wait (manifests_rollout: '') and rolls its own above, so it
-# must also opt into the stabilisation gate explicitly — the wait it replaced is exactly the one
-# that cannot see a post-readiness liveness failure. kube-state-metrics crashlooped through a
-# green deploy here on 2026-08-07.
+# must also opt into the stabilisation gate explicitly — the wait it replaces cannot see a
+# post-readiness liveness failure.
 #
-# It used to opt in by importing assert_stable.yml, which carried its own 60s `pause`. That pause
-# was the single most expensive task in the role and it duplicated the play-level window in
-# post_tasks/k8s_stabilise_gate.yml: measured 2026-08-22 on a full deploy (pid 2004861), 60.02s
-# of the role's 69.0s. Handing the workloads to the play gate instead removes the second pause
-# and is STRICTER, not weaker — these six are deployed in batch 4 of 11, so the gate observes
-# them for the remainder of the run rather than for exactly 60s.
+# The play-level window in post_tasks/k8s_stabilise_gate.yml does the observing, so this role
+# carries no `pause` of its own. That is STRICTER than a fixed 60s pause: the gate observes
+# these six for the remainder of the run.
 #
 # Roles on the normal path get this snapshot from roles/k8s/manifests/tasks/drain.yml, which never sees these
 # six because nothing queued them into k8s_pending_rollouts. Queueing them there instead is not
@@ -176,8 +164,7 @@
 
 - name: Fail if a telemetry pod selector matched no pods
   tags: [deploy]
-  # Carried over from assert_stable.yml, and it is the one way this gate could go quietly
-  # false-green: a selector matching nothing reports zero restarts and passes every comparison.
+  # This is the one way the gate could go quietly false-green: a selector matching nothing reports zero restarts and passes every comparison.
   # All six carry the repo-wide `app: <workload-name>` label; assert it rather than assume it.
   ansible.builtin.assert:
     that: item.stdout | trim | length > 0
@@ -226,25 +213,23 @@
 
 # GF_SECURITY_ADMIN_PASSWORD (the grafana-admin Secret) is only consulted when Grafana
 # initialises its database, so on an existing install a rotated grafana_admin_password
-# never reaches the live admin user — SOPS and the actual login diverge silently. Same
-# fix the retired Docker grafana role carried: `grafana cli admin reset-admin-password`
-# writes straight to the DB and needs no knowledge of the CURRENT password. Gated on the
+# never reaches the live admin user — SOPS and the actual login diverge silently.
+# `grafana cli admin reset-admin-password` writes straight to the DB and needs no knowledge of the CURRENT password. Gated on the
 # secret render changing (also fires on a scrape-credentials rotation — harmless, it
 # re-sets the same password).
 #
-# STILL A POLL, and not convertible to `kubectl wait` (#2205). The condition is the exit status
-# of a process exec'd inside the container, which no API object carries — that holds whatever
-# the underlying cause. Until 2026-09-21 this comment blamed "a freshly-rolled Grafana still
-# running its schema migrations", and at 13.2.1 that cannot be the cause: `sqlstore.ProvideService`
-# runs `Migrate` before it returns, and `HTTPServer` takes the store as a dependency
+# A POLL, not convertible to `kubectl wait`. The condition is the exit status of a process
+# exec'd inside the container, which no API object carries.
+#
+# The retry does not wait for the server's schema migrations. `sqlstore.ProvideService` runs
+# `Migrate` before it returns, and `HTTPServer` takes the store as a dependency
 # (pkg/services/sqlstore/sqlstore.go, pkg/api/http_server.go), so `/api/health` — the readiness
 # probe the `rollout status` loop above already waited on — answers only after the server's
 # migrations are done. What the retry covers is the CLI: `reset-admin-password` runs under
 # `runRunnerCommand` → `initializeRunner` → `server.InitializeForCLI`
 # (pkg/cmd/grafana-cli/commands/commands.go), which constructs a SECOND store and runs its own
 # `Migrate` pass on the same SQLite file the live server holds open, so the two contend for
-# the file and the CLI can lose to a write the server has in flight. That is the mechanism,
-# not a recorded incident — no log names which failure the original 5 x 10s was chasing.
+# the file and the CLI can lose to a write the server has in flight.
 - name: Sync the live Grafana admin password with SOPS # noqa no-handler
   tags: [deploy]
   ansible.builtin.command:
@@ -295,9 +280,8 @@
 - name: Deploy the telemetry-stack heartbeat
   tags: [cron]
   # Runs as {{ sys_user }}, not root: all it does is open a TCP connection to the node's own
-  # loopback and push the outcome, so it needs no privilege at all. It read the cluster through
-  # that user's read-only kubeconfig until the 2026-10-01 fold into monitor-bridge (#3094) left
-  # it with the one probe no in-cluster pod can run — the template's own DECIDED marker has why.
+  # loopback and push the outcome, so it needs no privilege at all. That is the one probe no
+  # in-cluster pod can run — the template's own DECIDED marker has why.
   #
   # DECIDED: the heartbeat keeps the name `claude-otel-health` though the role was renamed to
   # `observability` on 2026-10-01 (#2911). That string is a join key in four places outside

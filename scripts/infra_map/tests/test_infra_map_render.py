@@ -309,7 +309,7 @@ def _module_that_draws_the_diagram() -> str:
 
 
 def test_the_footer_names_the_module_that_actually_draws_the_diagram():
-    """`gen_infra_map.py` is the CLI and has never held a coordinate (#1111).
+    """`gen_infra_map.py` is the CLI and has never held a coordinate.
 
     The shape sentence sends a reader who wants to move a box, so it has to name the
     module defining `diagram_svg_fragment` — wherever that module is split to next.
@@ -318,7 +318,7 @@ def test_the_footer_names_the_module_that_actually_draws_the_diagram():
 
 
 def test_a_footer_naming_the_cli_for_the_shape_is_caught():
-    """The RED half: the pre-#1111 footer text, which named the CLI."""
+    """The RED half: a footer text that names the CLI."""
     stale = (
         "The diagram's <em>shape</em> is fixed in "
         "<code>scripts/infra_map/gen_infra_map.py</code> — those edges"

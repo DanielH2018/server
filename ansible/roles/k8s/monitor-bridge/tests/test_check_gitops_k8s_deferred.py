@@ -1,8 +1,8 @@
 """GitOps Deploy — Status's sixth arm: a bump a broad tick deferred for lack of budget.
 
-Split out of `test_check_gitops.py` at its 500-line cap; the `cfg` fixture is the suite's.
-The arm exists because the deferring tick MERGED the bump — `behind_since` is empty, no later
-tick's range carries it, and the defer-and-alert post named it exactly once (#2449).
+The `cfg` fixture is the suite's. The arm exists because the deferring tick MERGED the bump —
+`behind_since` is empty, no later tick's range carries it, and the defer-and-alert post names
+it exactly once.
 
 Run: uv run pytest ansible/roles/k8s/monitor-bridge/tests/test_check_gitops_k8s_deferred.py
 """
@@ -77,12 +77,11 @@ def test_a_held_deploy_is_reported_ahead_of_a_deferred_bump(cfg):
 
 
 def test_nothing_in_this_check_reads_the_k8s_unapplied_marker():
-    """The property the whole `k8s_unapplied` design rests on (#2570).
+    """The property the whole `k8s_unapplied` design rests on.
 
-    Forty of the fifty-four k8s roles are denylisted, so a page on their ordinary merged-
-    and-unapplied changes would hold this monitor red as normal operation — the failure
-    #2471 ruled the marker out to avoid. The marker is affordable only because NOTHING here
-    opens it, and a reader added later would be exactly the regression. Asserted on the
+    Many k8s roles are denylisted, so a page on their ordinary merged-and-unapplied changes
+    would hold this monitor red as normal operation. The marker is affordable only because
+    NOTHING here opens it, and a reader added later would be exactly the regression. Asserted on the
     package's source text rather than on a verdict: a check that never reads the file cannot
     be shown not to read it by driving it.
     """

@@ -6,8 +6,8 @@ on everything and one that fired on nothing are indistinguishable from the passi
 alone, which is how `volume-claim` shipped behind 16 green tests and then matched 0 of 25
 claims. These run in CI: they carry no `ui` marker and start no browser.
 
-The payloads are the real ones, sampled on 2026-08-30 through `ui_mcp.sh` against the live
-cluster, not invented.
+The payloads are the real ones, sampled through `ui_mcp.sh` against the live cluster, not
+invented.
 """
 
 import os
@@ -60,7 +60,7 @@ def test_a_rendered_dashboard_is_clean():
 
 
 def test_a_dashboard_below_its_header_floor_is_flagged():
-    """The 2026-08-22 shape: mounted, provisioned, drawing nothing."""
+    """Mounted, provisioned, drawing nothing."""
     v = classify(RENDERED | {"headers": 2}, min_headers=10)
     assert v.status == FLAGGED
     assert "expected at least 10" in v.detail

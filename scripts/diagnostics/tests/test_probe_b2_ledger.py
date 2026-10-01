@@ -103,7 +103,7 @@ TARGETS = {_B2_VOL: "default", _R2_VOL: "r2"}
 
 def test_format_backup_spend_excludes_r2_volumes_from_the_class_b_total():
     """R2's caps are monthly and vast, so an R2 block charged to B2's daily figure is the meter
-    lying by 5.6x during the incident class it exists for (#2669)."""
+    lying by 5.6x during the incident class it exists for."""
     text = b2_spend.format_backup_spend(
         b2_spend.parse_backup_spend(SPEND_LOG), "6h", targets=TARGETS
     )
@@ -290,7 +290,7 @@ def test_every_completed_run_ends_with_one_summary_line():
     """Check 10 judges this cron's liveness on that line, so it cannot be conditional.
 
     The counts are the ones the report above them shows; the shape is what
-    `deletions_have_spoken` matches (#2545).
+    `deletions_have_spoken` matches.
     """
     charged, _ = ledger.format_backup_deletions(
         [{"backup": "backup-a", "volume": VOL_A, "class_c": 337}],
@@ -308,7 +308,7 @@ def test_a_disarmed_backup_target_still_reports_that_the_run_finished():
     """REJECT the false page: a legitimate no-op must not read as a stopped cron.
 
     `run_b2_deletions` returns this before `format_backup_deletions` when it cannot tell B2
-    from R2, so that path needs a recognised line of its own (#2545).
+    from R2, so that path needs a recognised line of its own.
     """
     text = ledger.format_declined_deletions()
     assert "the B2 BackupTarget has no URL" in text

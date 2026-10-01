@@ -49,7 +49,7 @@ def all_role_names() -> list[str]:
     """Every role directory under `ansible/roles/k8s/`, sorted.
 
     A retired role's `__pycache__`-only leftover is not a role — it would otherwise be
-    counted as one that declares no stance (#2882).
+    counted as one that declares no stance.
     """
     return sorted(
         entry.name

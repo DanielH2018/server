@@ -7,10 +7,9 @@ playbooks and fails when the two disagree.
 
 WHAT ROTS, AND WHY IT IS SILENT. `--tags` matching nothing makes `ansible-playbook` exit 0. A
 wrong playbook or a wrong tag therefore produces a green run that changes nothing, and the
-deployer records the change as applied. That is not hypothetical: on 2026-09-01 a
-`roles/setup/k3s/` change (PR #702, a host DNS forwarder) was auto-applied as
-`initial_setup.yml --tags k3s`, which matches no task there because the role appears only in
-`k3s-bringup.yml`. The forwarder had to be installed by hand, and nothing reported the gap.
+deployer records the change as applied. For example, a
+`roles/setup/k3s/` change auto-applied as `initial_setup.yml --tags k3s` matches no task
+there, because the role appears only in `k3s-bringup.yml`, and nothing reports the gap.
 
 Adding a setup role, moving one between playbooks, or renaming a role's tag all fail here.
 """

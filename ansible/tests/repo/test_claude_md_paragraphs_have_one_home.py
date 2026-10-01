@@ -1,8 +1,8 @@
 """No paragraph of the root CLAUDE.md is also, verbatim, in a skill, a rule or a docs page.
 
-The root file loads in every session, so a paragraph there is paid for on every turn. Six of
-its sections had grown into copies of a longer skill or docs page (#2128): the same
-paragraph, sentence for sentence, in two places, one of which drifts. The shape that holds is
+The root file loads in every session, so a paragraph there is paid for on every turn. A
+section that copies a longer skill or docs page puts the same paragraph, sentence for
+sentence, in two places, one of which drifts. The shape that holds is
 the `## Shell Commands` one — a short summary in root, the detail in one owner — and this
 keeps it: a paragraph long enough to be a fact rather than a pointer lives in one file.
 
@@ -66,8 +66,8 @@ def test_a_short_pointer_is_not_graded():
     assert copied_paragraphs(pointer, {"docs/x.md": pointer}) == []
 
 
-# The root file graded 32 paragraphs when this guard landed. A census that finds its subject
-# by pattern must know it found something, or a changed split leaves it green over nothing.
+# A census that finds its subject by pattern must know it found something, or a changed split
+# leaves it green over nothing.
 MIN_GRADED_PARAGRAPHS = 20
 
 

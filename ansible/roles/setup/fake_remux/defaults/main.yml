@@ -1,17 +1,13 @@
 ---
-# Slice 4, B7c. The fake-remux pair — detector + reconciler — moved off daniel-server when the
-# media stack did. Not a rehost of a container: daniel-box runs no Docker, so `docker inspect
-# sonarr` and `docker exec jellyfin ffprobe` had nothing to talk to. Both scripts gained a
-# Docker-free mode (SONARR_URL, host ffprobe + HOST_DATA_ROOT) and this role is where that mode is
-# configured.
+# The fake-remux pair — detector + reconciler — runs on the media stack's host. daniel-box
+# runs no Docker, so the scripts use their Docker-free mode (SONARR_URL, host ffprobe +
+# HOST_DATA_ROOT), which this role configures.
 #
 # The two crons move TOGETHER and cannot be split: they share one ledger
 # (replacements.json), the scan seeding entries the reconciler acts on. The role's own docs warned
 # about repointing one half without the other.
 #
-# Scripts and the config template live in THIS role's files/templates since the Docker
-# uninstall (2026-08-14) — containers/autofix-bridge archived, leaving this their only
-# consumer; still one copy, no drift.
+# Scripts and the config template live in THIS role's files/templates: one copy, no drift.
 # fake_remux_host lives in group_vars/all.yml — initial_setup.yml's role `when:` needs it before
 # this file is in scope.
 
@@ -27,8 +23,7 @@ fake_remux_jellyfin_container: ""
 # Resolved at deploy time from the cluster Service rather than hardcoded. A ClusterIP is stable for
 # a Service's life but NOT across a delete, which is the same reasoning telemetry-health.sh gives
 # for resolving rather than pinning. The *arr is not reachable by name from the host (no cluster
-# DNS) and the `-k8s` ingress name mis-resolves on this node specifically, so the ClusterIP is the
-# honest path — see the -k8s aside in docs/archive/k3s-migration/slice-4-media-cluster.md.
+# DNS), so the ClusterIP is the honest path.
 fake_remux_sonarr_namespace: homelab
 fake_remux_sonarr_service: sonarr
 fake_remux_sonarr_port: 8989
@@ -47,13 +42,11 @@ fake_remux_health_cron_minute: "*/10"
 
 # mkv attachment-name repair. Every 15 minutes, which is what bounds how long a newly imported
 # file can sit unplayable with burned-in subtitles: the repair is only reachable by a sweep, so
-# the sweep interval IS the exposure window. It was daily until 2026-08-29 and the cost of the
-# change is nil — the sweep reads mkv headers and never the streams, and took 5s over 61 files
+# the sweep interval IS the exposure window. The cost of a 15-minute cadence is nil — the sweep reads mkv headers and never the streams, and took 5s over 61 files
 # measured on daniel-box. It shares fake_remux_lock with the daily scan and the */20 reconcile;
 # flock waits rather than skipping, so the extra contention costs a wait, not a missed run.
 #
-# The max-age is derived from the schedule rather than picked, and it MOVED with the schedule:
-# 26h against a 15-minute gap would leave the monitor green through 103 consecutive missed runs.
+# The max-age is derived from the schedule rather than picked: 26h against a 15-minute gap would leave the monitor green through 103 consecutive missed runs.
 # 1.2h is the reconciler's value, against the same */20-ish cadence — a grace shorter than the
 # gap flaps, one much longer clears the DOWN it exists to make sticky.
 fake_remux_mkv_attachment_cron_minute: "*/15"

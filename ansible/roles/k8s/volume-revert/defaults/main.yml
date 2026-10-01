@@ -1,5 +1,5 @@
 ---
-# Detach and attach are engine operations. Task 6's drill measured the whole cycle at 42.6s
+# Detach and attach are engine operations. A drill measured the whole cycle at 42.6s
 # direct and ~47s through a real deploy (speedtest-config, 1Gi/~382MB), and the worst single
 # state wait it saw was 40.80s — dominated by the fixed terminationGracePeriodSeconds: 30 that
 # speedtest, home-assistant and tdarr all set, not by data. 90 is ~2.2x that worst wait and 3x
@@ -10,7 +10,7 @@ volume_revert_state_timeout: 90
 volume_revert_poll_interval: 2
 
 # Seconds to wait for one Longhorn API action to answer. The three calls this role makes update
-# CRs and return; they do not wait for the state change, which the polls above cover. Task 6's
+# CRs and return; they do not wait for the state change, which the polls above cover. A
 # drill saw a worst single call of 0.41s; 30 is ~70x that, keeping the ceiling generous while a
 # client timeout still isn't proof the server did nothing. CLAUDE.md says what to do when it
 # happens.

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""`scripts/deploy.sh` asks whether the tree is stale BEFORE it validates --tags (issue #1566).
+"""`scripts/deploy.sh` asks whether the tree is stale BEFORE it validates --tags.
 
 Both refusals mean nothing was deployed, but they name different causes and consumers act on
 them differently: `land.sh` retries exit 4 (stale tree) after the tick fast-forwards, and
 reports exit 2 (tag miss) as `deploy-failed cause=tag-miss` -- "your change broke something".
 
 `deploy_tags.py validate` reads the CHECKOUT's own containers_list, so on a tree that is behind
-origin/master it answers about the wrong tree. The first landing of a new k8s role therefore
-read as a tag miss whenever the tick had not yet fast-forwarded the merge commit, because
-PR #1555 derives `land.sh`'s tags from the merge commit while deploy.sh validated them against
+origin/master it answers about the wrong tree. The first landing of a new k8s role would
+therefore read as a tag miss whenever the tick had not yet fast-forwarded the merge commit,
+because `land.sh` derives its tags from the merge commit while deploy.sh validates them against
 the primary checkout. Ordering staleness first makes the stale tree the reported cause.
 
 Both halves, per CLAUDE.md: a stale tree carrying an unknown tag must refuse as STALE (the
 half the bug got wrong), and an unknown tag on a current tree must still refuse as a TAG MISS
 (the half a naive reorder could delete by never reaching the tag check at all).
 
-The gates run in process in `deploy_run.py` (#2412), so `run_front_half` injects their
+The gates run in process in `deploy_run.py`, so `run_front_half` injects their
 verdicts; the order they are asked in is the real code.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_tag_validation.py
@@ -39,7 +39,7 @@ def _run(
 
 
 def test_a_stale_tree_with_an_unknown_tag_refuses_as_stale(tmp_path, monkeypatch):
-    """RED half: the shape issue #1566 reported -- a new role's tag on a not-yet-pulled tree."""
+    """RED half: a new role's tag on a not-yet-pulled tree."""
     code, names, _ = _run(tmp_path, monkeypatch, stale=1, validate=1)
     assert code == _STALE_EXIT
     # The tag was never judged against the wrong tree, and nothing was deployed.

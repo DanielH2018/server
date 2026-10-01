@@ -135,8 +135,8 @@ def service_resolution_errors(config: dict, known_services: set[str]) -> list[st
     """A called service absent from `known_services` (= a typo or a stale snapshot — run `refresh`).
 
     Unlike resolution_errors (entities), this checks EVERY domain unconditionally — there is no
-    _MANAGED_DOMAINS gate. The live /api/services snapshot is complete, so an un-enumerable domain
-    like `notify` no longer has to be exempted; that is exactly how `notify.<typo>` is caught.
+    _MANAGED_DOMAINS gate. The live /api/services snapshot is complete, so no domain such as
+    `notify` needs an exemption; that is how `notify.<typo>` is caught.
     """
     errs = []
     for svc in sorted(referenced_services(config)):
@@ -378,9 +378,9 @@ def load_sanctioned_writers() -> dict:
 def single_writer_errors(writes: dict, sanctioned: dict) -> list[str]:
     """HARD and symmetric: each sanctioned actuator's writer set equals module ∪ exemptions.
 
-    Derived from the config, and checked both ways. An
-    unsanctioned writer fails; a sanctioned entry that no longer writes the actuator fails too (a
-    stale entry silently widens the allowed set — remove it). Mirrors override_writer_errors.
+    Derived from the config, and checked both ways. An unsanctioned writer fails. A
+    sanctioned entry that writes nothing fails too, because a stale entry silently widens the
+    allowed set. Mirrors override_writer_errors.
     """
     errs = []
     for actuator, spec in sorted(sanctioned.items()):

@@ -156,7 +156,7 @@ def test_rewrite_applies_to_a_pipeline_consumer():
 
 
 # A `VAR=x.py` word is a shell assignment, not a script invocation. The hook once rewrote it
-# to `uv run P=…`, which failed with `Failed to spawn: P=…` (#2388). The pair proves the fix
+# to `uv run P=…`, which failed with `Failed to spawn: P=…`. The pair proves the fix
 # skips only the assignment rather than abandoning the whole command.
 
 
@@ -386,14 +386,14 @@ def test_the_fixup_is_needed_because_a_non_blocking_child_reads_non_blocking(tmp
 # --- heredocs: a document body is data, not a command sequence -----------------------------
 #
 # The walk reads a newline as a command separator, and a heredoc body is part of the Bash
-# tool's command text. So a line of prose starting with a `.py` filename used to be spliced
-# as if it were a program — a commit message went to master reading `uv run health.py had
-# grown to 938 lines`. Auto mode writes files through heredocs too, so `cat > foo.py <<'EOF'`
-# is the same bug on a more common surface.
+# tool's command text. A line of prose starting with a `.py` filename must not be spliced as
+# if it were a program — e.g. a commit message reading `uv run health.py had grown to 938
+# lines`. Auto mode writes files through heredocs too, so `cat > foo.py <<'EOF'` is the same
+# bug on a more common surface.
 #
-# Body apostrophes are why these vectors need reading carefully: on the unfixed hook a body
-# containing "doesn't" flipped the quote state and the unterminated-quote bail returned None
-# for the wrong reason. The vectors below are apostrophe-free so they were RED before the fix.
+# Body apostrophes are why these vectors need reading carefully: a body containing "doesn't"
+# flips the quote state, and the unterminated-quote bail would return None for the wrong
+# reason. The vectors below are apostrophe-free so they isolate the heredoc handling.
 
 
 @_runnable

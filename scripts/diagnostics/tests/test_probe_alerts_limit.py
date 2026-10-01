@@ -1,4 +1,4 @@
-"""`alerts --limit` against Loki's `max_entries_limit_per_query` (#1790)."""
+"""`alerts --limit` against Loki's `max_entries_limit_per_query`."""
 
 import json
 
@@ -17,9 +17,9 @@ from diagnostics.probe_lib import alerts, cli_parser
 def test_a_limit_over_lokis_cap_is_clamped_and_named_rather_than_a_traceback(
     monkeypatch, capsys
 ):
-    # The issue's verify-by (#1790). Loki answers a limit above max_entries_limit_per_query
-    # with a plaintext 400, which json.loads used to turn into a JSONDecodeError naming the
-    # probe. The cap comes from that body, not from a constant here.
+    # The issue's verify-by. Loki answers a limit above max_entries_limit_per_query with a
+    # plaintext 400, which json.loads would turn into a JSONDecodeError naming the probe.
+    # The cap comes from that body, not from a constant here.
     seen = _route_alert_fetch(
         monkeypatch, {alerts.ALERT_LOGQL: _two_day_log()}, respect_limit=True, cap=10
     )
@@ -81,8 +81,8 @@ def test_a_clamp_notice_stays_off_stdout_under_json(monkeypatch, capsys):
 
 
 def test_a_non_json_body_that_is_not_the_cap_exits_with_the_servers_words(monkeypatch):
-    # The other half of #1790: any other error body surfaces as the HTTP error it is — the
-    # server's text, a clean exit — never a JSONDecodeError. A truncated JSON body counts too.
+    # The other half: any other error body surfaces as the HTTP error it is — the server's
+    # text, a clean exit — never a JSONDecodeError. A truncated JSON body counts too.
     _route_alert_fetch(monkeypatch, {}, body="too many outstanding requests")
     ns = cli_parser._build_parser().parse_args(["alerts", "--days", "1"])
     with pytest.raises(SystemExit) as exc:

@@ -1,21 +1,19 @@
 """Every guest on the staging network must be fenced off the production LAN, by a filter of
 the right shape.
 
-Since daniel-stage was retired (#2941) the only guest wearing the fence is the etcd restore
-drill's throwaway one, which holds the cluster token and the R2 write credentials for the
-whole backup bucket — so the fence matters at least as much as it did.
+The only guest wearing the fence is the etcd restore drill's throwaway one, which holds the
+cluster token and the R2 write credentials for the whole backup bucket.
 
 The libvirt staging network is `<forward mode='nat'/>` with no destination constraint, so
 without an explicit rule the guest reaches the whole production LAN — and reaches it
 masqueraded as daniel-server, a trusted node. That defeats every source-IP control production
 has: authelia's `policy: bypass` rules are scoped to `lan_subnet`, and daniel-pi's wg-easy
-admin UI is unauthenticated on a LAN-only premise. Measured live on 2026-08-27 before any
-fence existed: MetalLB VIP 301, k3s API 401, wg-easy 200.
+admin UI is unauthenticated on a LAN-only premise. Measured without a
+fence: MetalLB VIP 301, k3s API 401, wg-easy 200.
 
 The fence is a libvirt nwfilter attached to the guest's interface. It is deliberately NOT a
-ufw `route deny`: that was the first attempt, it deployed cleanly, `ufw status` listed it, and
-it was inert, because libvirt's own FORWARD accept is reached first. The whole history is at
-roles/setup/initial_setup/tasks/network.yml, where the rule used to live.
+ufw `route deny`: that deploys cleanly and `ufw status` lists it, but it is inert, because
+libvirt's own FORWARD accept is reached first.
 
 Two halves live here. The first checks the filter's SHAPE and its ATTACHMENT, which is all a
 check that never leaves the repo can see: a correct filter that is unattached reads green in
@@ -24,9 +22,7 @@ every listing the host offers, and the inert ufw rule passed a whole file of sha
 The second half is the reachability gate, and two tests of it live here: that the leg dials
 every range this filter drops, and that it runs before the guest is handed any credential.
 Neither can be seen from inside the guest. Its verdicts are
-test_staging_egress_fence_fires.py, driven through the _fence_probe harness. The leg replaces
-scripts/diagnostics/staging_egress_probe.py, which ran on demand inside the persistent
-daniel-stage guest and was deleted with it (#2941, restored as a drill leg in #2943).
+test_staging_egress_fence_fires.py, driven through the _fence_probe harness.
 
 The pair that matters most is the two CIDR tests at the end. A fence keyed to a network that
 does not contain the guest is not a weaker fence, it is no fence at all, and it reads green
@@ -108,7 +104,6 @@ def test_the_filter_pins_its_uuid():
 
     `virsh nwfilter-define` is not `net-define`. Handed XML with no <uuid> it mints a fresh
     one and then refuses the name collision — "filter 'x' already exists with uuid ...".
-    Measured on daniel-server 2026-08-28; it is what broke the first deploy of this role.
     """
     uuid = _rendered_filter().findtext("uuid")
     assert uuid and uuid.strip(), (
@@ -175,8 +170,8 @@ def fence_disagreement(targeted, expected):
 def test_the_fence_targets_every_production_range():
     """Set EQUALITY, deliberately, and widened from the variables rather than relaxed.
 
-    Too narrow was the live defect: until 2026-08-28 this fenced only lan_subnet, and the
-    guest read prod's unauthenticated Longhorn API on a ClusterIP the LAN rule cannot cover.
+    Too narrow is a live defect: a fence on lan_subnet alone lets the guest read prod's
+    unauthenticated Longhorn API on a ClusterIP the LAN rule cannot cover.
     Too broad is the other failure and is why this stays an equality — a rule that grew to
     cover 0.0.0.0/0 or 10.0.0.0/8 would swallow the guest's default route, and the probe
     would report that as a broken fence only because its internet control leg goes red.
@@ -192,11 +187,10 @@ def test_the_fence_targets_every_production_range():
 
 
 def test_the_range_check_rejects_the_shape_that_was_live():
-    """The rejecting half, driving the real verdict function on the real pre-fix filter.
+    """The rejecting half, driving the real verdict function on a filter that fences lan_subnet only.
 
-    This is the exact XML the role shipped until 2026-08-28 — one rule, lan_subnet only.
-    A check that could not tell it apart from the current filter is the check that let the
-    guest read prod's Longhorn API for a day.
+    A check that could not tell it apart from the correct filter would let the guest read
+    prod's Longhorn API.
     """
     lan = _all_vars()[LAN_VAR]
     was_live = ET.fromstring(

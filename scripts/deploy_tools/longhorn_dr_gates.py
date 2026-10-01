@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """Run the stop conditions of `docs/longhorn-disaster-recovery.md` in order, exit code naming the first failure.
 
-The recovery procedure's one ordering rule with teeth is step 4: restore the volumes BEFORE
-any `deploy.yml`, because a deploy first provisions fresh, empty PVCs under the very names the
-backups would have restored into. Steps 2 and 3 are what make step 4 possible at all. The
-runbook carried these as prose and a hand-run `kubectl get backuptarget`; here each is a
-verdict over what the rebuilt cluster answered, the runner stops at the first failure, and the
-exit code is the gate number (#2216, the shape `k3s_upgrade_gates.py` set in #2162). Run it
-on the rebuilt cluster after bring-up and before the first restore.
+The recovery procedure's one ordering rule with teeth is step 4: restore the volumes BEFORE any `deploy.yml`,
+because a deploy first provisions fresh, empty PVCs under the very names the backups would have restored into.
+Steps 2 and 3 are what make step 4 possible at all. Each is a verdict over what the rebuilt cluster answered,
+the runner stops at the first failure, and the exit code is the gate number (the shape `k3s_upgrade_gates.py`
+sets). Run it on the rebuilt cluster after bring-up and before the first restore.
 
 The gates, in the order the runbook gives them:
 
@@ -22,7 +20,7 @@ The gates, in the order the runbook gives them:
      that was not created from a backup. A live cluster fails this gate on every volume —
      which is correct, because this runbook is for a cluster that has lost them.
 
-Every cluster read goes through `lib.kubectl` with the cluster named `prod` (#1663). The B2
+Every cluster read goes through `lib.kubectl` with the cluster named `prod`. The B2
 transaction cap is not scriptable from here: a cap denial surfaces as `cannot find volume.cfg
 in backupstore`, and the runbook's step 3 says what to do when you see it.
 

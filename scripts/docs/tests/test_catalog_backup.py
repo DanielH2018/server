@@ -3,7 +3,7 @@
 
 Fixture-driven like test_service_catalog.py (the synthetic repo is `_catalog_fixtures`),
 with one deliberate exception at the end that reads the real roles. Split out of
-test_service_catalog.py when the StorageClass axis (#2095) took it past the module-length cap.
+test_service_catalog.py when the StorageClass axis took it past the module-length cap.
 Run: uv run pytest scripts/docs/tests/test_catalog_backup.py
 """
 
@@ -161,7 +161,7 @@ def test_multiple_pvcs_report_each_tier_deduplicated(tmp_path):
     assert row.backup_tier == "weekly -> B2 (default target); daily -> R2"
 
 
-# --- Backup tier: the StorageClass axis (#2095) ---------------------------------------------
+# --- Backup tier: the StorageClass axis ---------------------------------------------
 #
 # Longhorn backs a volume up only when its StorageClass asks (`longhorn`, not
 # `longhorn-nobackup`) AND the k3s role's no-backup list leaves it alone. One accept/reject
@@ -238,8 +238,8 @@ def test_backup_tier_nobackup_list_beats_the_weekly_list(tmp_path):
 
 
 def test_backup_tier_unresolvable_class_off_every_list_is_unknown_not_default(tmp_path):
-    # The bug's shape: before #2095 a claim with no readable class fell through to
-    # "daily -> B2 (default group)", which is a guess, not a derivation.
+    # A claim with no readable class must not fall through to "daily -> B2
+    # (default group)", which is a guess, not a derivation.
     paths = make_repo(tmp_path)
     tier = _jellyfin_tier(paths, _pvc_block("some-other-claim"))
     assert tier.startswith("unknown")
@@ -362,7 +362,7 @@ def test_backup_tier_claimname_reference_finds_the_class_in_the_declaring_role(
 
 
 def test_claim_tiers_pairs_every_claim_with_its_tier_in_mount_order(tmp_path):
-    """The per-claim form `gen_role_glance.py` prints (#2105): one pair per claim, references
+    """The per-claim form `gen_role_glance.py` prints: one pair per claim, references
     first, an unresolvable name kept as written, and no de-duplication of equal tiers."""
     paths = make_repo(tmp_path)
     jellyfin = paths["k8s_roles"] / "jellyfin"
@@ -419,7 +419,7 @@ def test_role_dirs_keeps_a_role_with_defaults_is_clean(tmp_path):
 
 
 def test_role_dirs_drops_a_pycache_only_shell_is_flagged(tmp_path):
-    """A retired role's `__pycache__`-only directory is not walked as a role (#2888)."""
+    """A retired role's `__pycache__`-only directory is not walked as a role."""
     pycache = tmp_path / "retired" / "files" / "__pycache__"
     pycache.mkdir(parents=True)
     (pycache / "check.cpython-312.pyc").write_bytes(b"\x00")
@@ -483,7 +483,7 @@ def test_a_template_that_calls_no_shared_macro_contributes_no_claim(tmp_path):
 
 def test_the_arr_roles_still_report_the_media_claim_they_mount_through_the_macro():
     """Named members, against the real tree: radarr and sonarr mount `media-data` only
-    through `ansible/templates/arr-deployment.yml.j2` (#2871), so a scanner that stopped
+    through `ansible/templates/arr-deployment.yml.j2`, so a scanner that stopped
     following the macro would drop it from both At-a-glance blocks and from the catalogue."""
     for role in ("radarr", "sonarr"):
         names = claim_names(K8S_ROLES / role)

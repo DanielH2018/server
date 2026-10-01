@@ -4,7 +4,7 @@ Two callers that cannot share anything else share this. probe.py and postflight.
 host and reach both stores through the VIP-pinned edge with curl (`core.fetch`,
 `core.get_status`). homelab-mcp runs in a pod built from `python:3.14-slim`, which ships no
 curl, and reaches both stores by their in-cluster Service names. Before this module each
-built its own query strings and its own Loki window (#2860).
+built its own query strings and its own Loki window.
 
 STDLIB ONLY, AND NO FIRST-PARTY IMPORT. homelab-mcp's image carries this file flat at
 `/app/obs_api.py` (`ansible/roles/k8s/homelab-mcp/tasks/main.yml`), where neither `scripts/`

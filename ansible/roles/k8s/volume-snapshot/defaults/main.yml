@@ -1,5 +1,5 @@
 ---
-# How many autodeploy- snapshots to keep per volume. Three, not one: slice 7b reverts to the
+# How many autodeploy- snapshots to keep per volume. Three, not one: k8s/volume-revert reverts to the
 # most recent, and keeping a spare means a rollback is still possible if the newest snapshot is
 # the one that is corrupt or still coalescing.
 #
@@ -38,6 +38,6 @@ k8s_autodeploy_reason: "deploys no workload of its own — a pre-apply snapshot 
 # space is nearly full. A cap is only dangerous as it is approached: when it is REACHED,
 # Longhorn refuses new snapshots instead of pruning, and this role snapshots before it prunes,
 # so the deploy that first hits the cap fails and every later one fails identically until
-# snapshots are deleted by hand (#1560). Only volumes with a non-zero cap are ever measured —
+# snapshots are deleted by hand. Only volumes with a non-zero cap are ever measured —
 # `"0"` is Longhorn's uncapped value and the fleet default.
 volume_snapshot_cap_warn_ratio: 0.9

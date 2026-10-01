@@ -39,14 +39,12 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Three sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
-# `hooklib`-not-`lib`): the worktree, scrape-target and stale-release lines. This file
-# sat at its 600-line cap with no headroom for any split. Wrapped like `lib.deployer_park`
-# below (issue #1566), in its own try so a failure names the package that broke rather than
-# deployer_park's unrelated line. `SyntaxError` is caught alongside `ImportError` because
+# `hooklib`-not-`lib`): the worktree, scrape-target and stale-release lines. Wrapped like
+# `lib.deployer_park` below, in its own try so a failure names the package that broke rather
+# than deployer_park's unrelated line. `SyntaxError` is caught alongside `ImportError` because
 # these modules use PEP 758 syntax and `session-health.sh` sends stderr to /dev/null, exits 0.
-# An uncaught SyntaxError at import would take the WHOLE banner out silently, which is the
-# #1566 failure class — nothing at module scope may be able to stop the banner. A SyntaxError
-# is not an ImportError, so the narrower catch left that hole open.
+# An uncaught SyntaxError at import would take the WHOLE banner out silently: nothing at
+# module scope may be able to stop the banner.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from hooklib import service_lines
@@ -66,17 +64,18 @@ except (ImportError, SyntaxError) as exc:
 
     # A stub, not a raising placeholder: `remote_fanout_lines` above already carries the one
     # `hooklib is broken` line the banner needs, and a second copy of it would say nothing new.
-    # Silence here is what the #1566 rule forbids only when nothing else reports the failure.
+    # Silence here is what the no-silent-failure rule forbids only when nothing else reports
+    # the failure.
     def missing_hook_script_lines(*_args, **_kwargs):
         return []
 
 
 # The park decision lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4 asks
-# the same question of the same marker and a second derivation would drift (issue #1429); the
+# the same question of the same marker and a second derivation would drift; the
 # marker parsers and clear commands come from `lib.gitops_markers`, the deployer's own module
 # copied there. `GITOPS_STATE_DIR` is mode 0750 owned by `ubuntu`: any other host reads silence.
 #
-# Wrapped, because NOTHING at module scope may be able to stop the banner (issue #1566). This
+# Wrapped, because NOTHING at module scope may be able to stop the banner. This
 # file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0, so an
 # ImportError here would take out the scrape-target, live-session and stale-worktree
 # sections as well — silently, and for a reason no session could see. The failure is reported
@@ -106,8 +105,8 @@ except ImportError as exc:
 
     # Inert placeholders, never read: `parked_deployer_problems` returns its `⚠` line before it
     # asks the park question. They keep the names defined and singly-typed for the type checker.
-    # NOT a fallback copy of the real values — a second BEHIND_PARK_SECONDS here would be the
-    # second derivation issue #1429 removed — and the raising stubs say so if one is ever called.
+    # NOT a fallback copy of the real values — a second BEHIND_PARK_SECONDS here would be a
+    # second derivation — and the raising stubs say so if one is ever called.
     BEHIND_PARK_SECONDS = 0
     CONTENTION_PARK_SECONDS = 0
     GITOPS_STATE_DIR = ""
@@ -167,7 +166,7 @@ def dirty_primary_lines(porcelain, path):
     it sees `deploy.sh` exit 4 — "this tree is N commit(s) behind origin/master" — which names
     its own worktree and points at `git rebase`, the wrong repair. Worse, no session can look:
     the isolation guard refuses a git command targeting the shared checkout, correctly. This
-    banner is the way the cause reaches a worktree session at all (issues #1416, #1418).
+    banner is the way the cause reaches a worktree session at all.
 
     Names the paths with their porcelain status codes, the way the deployer's own journal line
     does. `??` is the code worth seeing: `git status --porcelain` counts untracked files, so the
@@ -202,14 +201,14 @@ def behind_park_lines(marker, now):
     `behind_since` holds `"<origin_sha> <unix_ts_first_seen>"` while the host is behind
     `origin/master`. Any tick that fast-forwarded renews the stamp, so its age is how long the
     deployer has moved the tree nowhere rather than how long it has been behind the tip — which
-    is the number that means something now the tick lands at the newest green ancestor. A
+    is the number that means something because the tick lands at the newest green ancestor. A
     routine push clears in one tick; a stamp older than `BEHIND_PARK_SECONDS` means several
     ticks in a row moved nothing, which is a park. This catches the parks a dirty tree does not
     explain (a held SHA, an unapplied broad plane) as well as the one it does.
 
     Malformed or unparsable content reads as "no park": the marker is written atomically, and a
     banner that guessed an age from a torn value would be worse than one that said nothing. The
-    decision is `lib.deployer_park.park_age`, shared with `deploy.sh` exit 4 (issue #1429); this
+    decision is `lib.deployer_park.park_age`, shared with `deploy.sh` exit 4; this
     function owns only the banner line it becomes.
     """
     age = park_age(marker, now)
@@ -329,11 +328,10 @@ def parked_deployer_problems(
         # Last, after every other deferral: a deferred image bump is the cheapest of them to
         # clear and the least urgent. One deploy of the named service does it, and this banner
         # reaches the session that can run it — `land.sh` printed the command to whoever merged
-        # the bump, and nothing printed it again (#2470).
+        # the bump, and nothing printed it again.
         lines += k8s_deferred_lines(read_k8s_deferred(), clock)
         # Last of all, because it is the only one nothing pages on: a k8s role this deployer
-        # never applies is owed to a hand indefinitely, and the banner is where that is said
-        # (#2570).
+        # never applies is owed to a hand indefinitely, and the banner is where that is said.
         lines += k8s_unapplied_lines(read_k8s_unapplied(), clock)
     except Exception:
         return lines
@@ -369,12 +367,10 @@ def master_moved_problems():
     including a checkout with no origin/master ref at all -- diagnosing that is not this
     hook's job.
 
-    A failure to IMPORT `lib.git` is the exception, and returns a `⚠` line naming it
-    (issue #1306). Both halves of this banner import from the same `scripts/` path insert,
-    and `other_live_sessions` already fails loudly for the reason recorded there: an empty
-    list is indistinguishable from "nothing to report", which is what let a stale insert
-    hide that whole section from 2026-08 until 2026-09-01. The two halves now fail the
-    same way.
+    A failure to IMPORT `lib.git` is the exception, and returns a `⚠` line naming it. Both halves of
+    this banner import from the same `scripts/` path insert, and `other_live_sessions` already fails
+    loudly for the reason recorded there: an empty list is indistinguishable from "nothing to report".
+    The two halves fail the same way.
 
     The read goes through `lib.git.git` rather than `_run`, which strips every `GIT_*`
     variable and so leaves `cwd` alone deciding which tree is counted. Neither `git -C` nor a
@@ -419,11 +415,9 @@ def other_live_sessions(cwd):
     go stale when a session forgets to announce itself or dies without cleaning up. Knowing
     another session is already in a role is what stops two of them editing it at once.
     """
-    # scripts/dev/, not scripts/ — the module moved when scripts/ was regrouped into
-    # subdirectories by what each script acts on (#443), and this insert did not follow it.
-    # Nothing failed loudly, because the except below returned an empty list and an empty list
-    # is indistinguishable from "no other sessions are running" — so the banner's whole
-    # other-sessions section was silently absent from 2026-08 until 2026-09-01.
+    # scripts/dev/, not scripts/ — the module lives in a subdirectory grouped by what each
+    # script acts on. A stale insert would fail silently: the except below returns an empty
+    # list, and an empty list is indistinguishable from "no other sessions are running".
     sys.path.insert(0, os.path.join(REPO, "scripts", "dev"))
     sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
@@ -465,7 +459,7 @@ def other_live_sessions(cwd):
 
 
 # Well inside the 15s budget settings.json kills this hook at (session-health.sh's gen-hooks
-# header). prune_worktrees.py --brief took 1.3s warm on 2026-09-24.
+# header). prune_worktrees.py --brief takes 1.3s warm.
 WORKTREE_TIMEOUT_S = 5
 
 
@@ -524,7 +518,7 @@ def main(
     master_moved = master_moved_problems()
     # First of everything, ahead of the unhealthy workloads: "the guards this session registers
     # are not running" changes how the whole session should be read, where a down scrape target
-    # only changes what to look at next (issue #2697). The payload's `cwd` is passed because this
+    # only changes what to look at next. The payload's `cwd` is passed because this
     # process's own cwd is whatever Claude Code launched the hook with, and the SESSION's
     # directory is what decides which checkout's `settings.json` to read. Wrapped, because this
     # reads a file outside the repo and the banner must survive anything it finds there.
@@ -554,7 +548,7 @@ def main(
             print(line)
 
     # A kill at the hook's timeout discards what Python still buffers, so everything above
-    # reaches the pipe before the slow, GitHub-bound worktree read starts (#2388).
+    # reaches the pipe before the slow, GitHub-bound worktree read starts.
     sys.stdout.flush()
     for line in stale_worktree_lines():
         print(line)

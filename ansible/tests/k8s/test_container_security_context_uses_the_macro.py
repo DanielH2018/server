@@ -1,7 +1,7 @@
 """A container-level securityContext at pod-template depth comes from the shared macro.
 
 `ansible/templates/security-context.yml.j2` carries the `allowPrivilegeEscalation: false` +
-`capabilities.drop: [ALL]` body that ~100 container specs share; 78 templates import it. A
+`capabilities.drop: [ALL]` body that ~100 container specs share. A
 hand-written copy is where the body drifts: a `drop: [ALL]` that becomes `drop: [NET_RAW]`, a
 `readOnlyRootFilesystem` that goes missing on a paste. `test_container_security_context.py`
 checks the RENDERED result drops capabilities, so it cannot tell a macro call from a copy that
@@ -16,8 +16,7 @@ Two exemptions, both the macro's own docstring's, both structural rather than na
 
 So the rule is textual: a literal `allowPrivilegeEscalation:` line at exactly 12 spaces (the
 key depth under a 10-space `securityContext:`) must sit in a block that also sets
-`runAsUser: 0`. Seven such blocks exist and every one is root; the audit that filed this
-counted four exemptions and was wrong about the count, not the rule.
+`runAsUser: 0`. Seven such blocks exist and every one is root.
 
 Run: uv run pytest ansible/tests/k8s/test_container_security_context_uses_the_macro.py
 """

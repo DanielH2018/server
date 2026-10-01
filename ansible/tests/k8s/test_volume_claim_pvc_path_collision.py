@@ -2,23 +2,22 @@
 """Two invariants on where `k8s/volume-claim`'s claim is staged, and who else creates it.
 
 `k8s/volume-claim` renders the claim it owns under `/etc/rancher/k3s/manifests/`. Two things
-about that path have each cost a deploy:
+about that path matter:
 
 1. **The claim must not be staged in the consuming role's own manifest directory.** That
    directory belongs to `k8s/manifests`, whose prune task deletes every file in it that the
    caller does not name in `manifests_files`/`manifests_secret_files`. No caller names this
-   claim, so the prune deleted it on every deploy — a permanently `changed` task on an
+   claim, so the prune would delete it on every deploy — a permanently `changed` task on an
    otherwise idempotent run, and a staged claim never re-applied from the role's own
-   directory (#1654). The claim now lands in a sibling `<service>-claims/` directory that no
+   directory. The claim lands in a sibling `<service>-claims/` directory that no
    role's `manifests_service` claims, so no `kubectl apply -f <dir>/` sweeps it.
 
 2. **Exactly one path may create a given claim.** A role that includes `k8s/volume-claim`
    unconditionally AND lists `pvc.yaml` in `manifests_files` has two independently-edited
-   manifests declaring one claim name. Valheim shipped that way until 2026-09-10 (#1550):
-   both writers targeted the same staged file, its content flipped every run, and the
-   rollout-restart gate restarted the server with a byte-identical pod template — two
-   restarts in one evening with players connected. The staged-path half of that mechanism is
-   gone with invariant 1; the two-creators half is not, so it stays guarded here.
+   manifests declaring one claim name. Both writers target the same staged file, its content
+   flips on every run, and the rollout-restart gate restarts the workload with a
+   byte-identical pod template. The staged-path half of that mechanism is closed by
+   invariant 1; the two-creators half stays guarded here.
 
 Each invariant is checked with the input it must accept and the one it must reject, plus a
 named census so a rename of `tasks/main.yml` or of the role path cannot empty the check.
@@ -115,8 +114,7 @@ def volume_claim_callers(roles_dir: Path) -> set[str]:
     }
 
 
-# Verified against the tree on 2026-09-10. A census that finds none of these is reading the
-# wrong path, not a tree with no callers.
+# A census that finds none of these is reading the wrong path, not a tree with no callers.
 KNOWN_CALLERS = frozenset({"valheim", "navidrome", "freshrss", "jellyfin", "sonarr"})
 
 REAL_CLAIM_TASKS = K8S_ROLES / "volume-claim" / "tasks" / "claim.yml"

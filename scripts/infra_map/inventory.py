@@ -82,9 +82,7 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
     # only workload is a CronJob, and one whose templates are all non-workload
     # objects: an IngressRoute onto a chart-owned
     # Deployment (longhorn-ui), a PVC (media-volume), NetworkPolicies
-    # (netpol-baseline). Derived from the manifests rather than from the Docker
-    # compose that used to declare no container name — that plumbing was deleted
-    # with the migration.
+    # (netpol-baseline). Derived from the manifests.
     k8s_roles = repo_root / "ansible" / "roles" / "k8s"
     for role in sorted(p for p in k8s_roles.glob("*") if p.is_dir()):
         templates = role / "templates"

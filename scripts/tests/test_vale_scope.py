@@ -3,9 +3,8 @@
 Vale exits 0 on a file it has no section for, so the two registries fail in opposite
 directions and only one of them is visible. A path in `.vale.ini` but not in the hook's
 `files:` is never handed to Vale at all: the hook reports "no files to check", the commit
-goes green, and the page is ungated forever. That is not hypothetical — `docs/deploying.md`
-and `docs/gitops-pipeline.md` were added to `.vale.ini` in PR #418 and were never added to
-the regex, so they went unlinted from the day they were written.
+goes green, and the page is ungated forever. A page added to `.vale.ini` and never to the
+regex goes unlinted from the day it is written.
 
 The duplication itself is deliberate (see the comment above the hook in prek.toml); this
 test is what makes it safe.
@@ -124,10 +123,10 @@ KNOWN_FRAGMENTS = frozenset(
 
 
 def test_the_hook_covers_every_generated_fragment_on_disk():
-    """The operator put the transcluded fragments in CI's Vale scope on 2026-09-30 (#3008).
+    """The transcluded fragments are in CI's Vale scope.
 
-    Before that, `.vale.ini` matched them and the hook regex did not, so a fragment was
-    linted by a hand `vale docs` run and never by CI.
+    If `.vale.ini` matched them and the hook regex did not, a fragment would be linted by a
+    hand `vale docs` run and never by CI.
     """
     pattern = re.compile(vale_hook_regex())
     names = {p.name for p in FRAGMENTS.glob("*.md")}

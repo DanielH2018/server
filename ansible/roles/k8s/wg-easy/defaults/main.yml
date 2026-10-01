@@ -1,20 +1,12 @@
 ---
-# Slice-6 B5, pulled forward from slice 7: the operator moved ALL router forwards —
-# including 51820/udp — to the device daniel-box, so wg-easy's move stopped being a
-# slice-7 nicety and became the restoration of remote access.
-
 # v15 tag + digest: the `:15` keeps Renovate tracking the major so a v16 arrives as a
 # deliberate PR, and the digest keeps it immutable within v15.x.
 #
-# The v14 pin this replaces carried a warning that v15 "drops PASSWORD_HASH for an
-# interactive setup wizard and would silently reopen the admin API". That was correct, and
-# the migration answered it rather than avoiding it: v15 owns its own credentials in a
-# SQLite DB under /etc/wireguard, created once through the setup wizard. Rotation is
-# `cli db:admin:reset` inside the pod, NOT a SOPS value — which is why
-# ansible/secret_rotation.yml no longer carries wg_easy_password_hash.
+# v15 owns its own credentials in a SQLite DB under /etc/wireguard, created once through the
+# setup wizard. Rotation is `cli db:admin:reset` inside the pod, NOT a SOPS value.
 #
-# The wizard is the ONLY v14 -> v15 import path (it takes the wg0.json the v14 UI's Backup
-# button produced); the CLI has no import command, and the INIT_* unattended variables skip
+# The wizard is the ONLY import path (it takes the wg0.json the v14 UI's Backup button
+# produced); the CLI has no import command, and the INIT_* unattended variables skip
 # the wizard AND the import together, minting a fresh server keypair that invalidates every
 # client config. So a future rebuild from an empty volume is a manual step, not a redeploy.
 wg_easy_k8s_image: ghcr.io/wg-easy/wg-easy:15@sha256:0e7bc9d34e86ddcaa92bc700d4d7dc9b33291dbc07ac8d13382f7c2095f949ec
@@ -25,7 +17,7 @@ wg_easy_k8s_image: ghcr.io/wg-easy/wg-easy:15@sha256:0e7bc9d34e86ddcaa92bc700d4d
 # It ALSO matches the migrating-state shape independently: Recreate + a real ReadWriteOnce
 # Longhorn PVC holding the server keypair and every client config — a bad image swap can
 # migrate that volume before the gate observes a fault, same class as sonarr/prowlarr. Either
-# reason alone would justify the denylist entry. Under v15 that volume is a SQLite DB the app
+# reason alone would justify the denylist entry. That volume is a SQLite DB the app
 # owns, so a migration is one-way and the Longhorn backup is the only revert.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "platform — sole remote-access path; a failed deploy can cut off remote recovery. ALSO Recreate + RWO Longhorn PVC (migrating-state shape, same class as sonarr/prowlarr) — two independent reasons. COUPLING NOTE for a future promotion: the PVC holds the server keypair and peer list, but each peer's own key lives on a client device outside it — a revert can un-revoke a removed peer or orphan an added one"  # noqa var-naming[no-role-prefix]
@@ -36,7 +28,7 @@ wg_easy_k8s_claim: wg-easy-config
 wg_easy_k8s_storage_class: longhorn
 wg_easy_k8s_size: 1Gi
 
-# Resource caps mirrored from the compose template (M1 values, k8s-native units).
+# Resource caps.
 wg_easy_k8s_cpu_limit: 500m
 wg_easy_k8s_mem_limit: 256Mi
 wg_easy_k8s_cpu_request: 50m

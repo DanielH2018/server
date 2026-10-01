@@ -21,10 +21,9 @@ DEFAULT_OUTPUT = Path.home() / ".claude" / "artifacts" / "homelab-infra-map.html
 HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
 
 # What each host actually is. Stated rather than inferred from the platform keys
-# in its ``containers_list``: daniel-server's Docker was uninstalled on
-# 2026-08-14 and its list emptied, so inference fell through to "docker" and
-# every run ssh-ed it for a binary that is gone — the host rendered as an
-# unreachable Docker box when it is in fact a healthy k3s agent.
+# in its ``containers_list``: daniel-server has no Docker and an empty list, so
+# inference would fall through to "docker", ssh it for a binary that is not there, and
+# render a healthy k3s agent as an unreachable Docker box.
 HOST_PLANE = {
     "daniel-box": "k8s",
     "daniel-server": "k8s",

@@ -68,15 +68,15 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # on that host) + a k8s/uptime-kuma tile deployed from daniel-box: two hosts, no single
         # redeploy moves both halves. The tile is the only alarm on the full etcd restore drill.
         "etcd_drill_full_push_token",
-        # The same run's egress-fence verdict, on a tile of its own (#3021). Same two-host shape
+        # The same run's egress-fence verdict, on a tile of its own. Same two-host shape
         # as the token above, and rendered into the same env file on daniel-server — so a
         # rotation that moves only the tile silences the alarm that says a fenced range went
         # unmeasured, which is the one thing this tile exists to say.
         "etcd_drill_fence_push_token",
         "secret_rotation_push_token",  # self-referential
         # Pushed by a setup role with no deploy tag, so there is nothing for --deploy to run.
-        # Named `monitor_bridge_*` only for Kuma monitor-history continuity after the check
-        # moved out of monitor-bridge (2026-08-25 review M-8b).
+        # Named `monitor_bridge_*` only for Kuma monitor-history continuity; the check lives
+        # outside monitor-bridge.
         "monitor_bridge_fake_remux_push_token",  # setup/fake_remux cron
         "monitor_bridge_fake_remux_replace_push_token",  # setup/fake_remux cron
         "monitor_bridge_renovate_alive_push_token",  # setup/renovate_notify
@@ -89,8 +89,8 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # deploy tag, so `--deploy --tags uptime-kuma` would move the tile and leave the root cron
         # pushing the old value — silencing the monitor that watches the shutdown chain.
         "ups_secondary_push_token",
-        # daniel-server's (ups_host) own leg of the same watchdog, added in issue #952 so the
-        # two hosts stop sharing ups_secondary_push_token above — same shape and same reason.
+        # daniel-server's (ups_host) own leg of the same watchdog, so the two hosts do not
+        # share ups_secondary_push_token above — same shape and same reason.
         "ups_secondary_daniel_server_push_token",
         # daniel-box timer (setup/render_records, renders /etc/render-records/config.env) +
         # k8s/uptime-kuma static tile. Same shape as mkv_attachment_repair_push_token: the
@@ -101,14 +101,14 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
 
 
 # Push tokens whose name carries the `monitor_bridge_` prefix but whose PUSHER lives in another
-# role entirely. The prefix is a Kuma-history artefact: the monitor was created by monitor-bridge
-# and renaming it would break its history, so the token kept the name after the check moved out
-# into the owning service's own health script. Routing these by prefix names a role that renders
-# them NOWHERE — `rotate --deploy` would write a new value, deploy monitor-bridge, leave the real
-# pusher on the old token and stamp `last_rotated` green (2026-08-25 review M-8b).
+# role entirely. The prefix is a Kuma-history artefact: renaming the monitor would break its
+# history, so the token keeps its name although the owning service's own health script pushes
+# it. Routing these by prefix names a role that renders them NOWHERE — `rotate --deploy` would
+# write a new value, deploy monitor-bridge, leave the real pusher on the old token and stamp
+# `last_rotated` green.
 #
 # Derived by measurement, not by reading the names: `grep -rl <token> ansible/roles/`. Nine of
-# the 41 `monitor_bridge_*` tokens mis-routed; the review reported two.
+# the 41 `monitor_bridge_*` tokens are mis-routed by their prefix.
 PREFIX_EXCEPTION_CONSUMERS = {
     "monitor_bridge_appsec_push_token": "crowdsec",
     "monitor_bridge_home_allowlist_push_token": "crowdsec",
@@ -124,20 +124,20 @@ PREFIX_EXCEPTION_CONSUMERS = {
 # green having deployed nothing. They decline instead, above.
 
 
-# Every push token has TWO consumers in the cluster, and until 2026-08-28 this function named
-# only one of them. The pusher reads it from its own role's env Secret; the Kuma monitor that
-# receives the push is a static AutoKuma entity rendered by k8s/uptime-kuma
-# (`static-monitors.yaml.j2`, a manifests_secret_file). AutoKuma reconciles the live monitor's
-# `push_token` FROM that Secret, so a rotation that redeploys only the pusher leaves Kuma
-# expecting the old token: the bridge then pushes a token nothing matches, the monitor stops
-# beating, and it goes DOWN. That is loud rather than silent, but it is a self-inflicted outage
-# on every rotated push monitor, and `rotate --deploy` stamped `last_rotated` green through it.
+# Every push token has TWO consumers in the cluster, and this function names both. The pusher
+# reads it from its own role's env Secret; the Kuma monitor that receives the push is a static
+# AutoKuma entity rendered by k8s/uptime-kuma (`static-monitors.yaml.j2`, a
+# manifests_secret_file). AutoKuma reconciles the live monitor's `push_token` FROM that Secret,
+# so a rotation that redeploys only the pusher leaves Kuma expecting the old token: the bridge
+# then pushes a token nothing matches, the monitor stops beating, and it goes DOWN. That is
+# loud rather than silent, but it is a self-inflicted outage on every rotated push monitor, and
+# `rotate --deploy` stamped `last_rotated` green through it.
 #
-# Measured 2026-08-28 against the live registry and template: 43 tokens resolve a consumer,
-# 42 of them have a tile, and the single exception is `monitor_bridge_ha_token` — an HA API
-# token that carries the prefix for Kuma history reasons but is not a push token at all. So
-# `_push_token` is the exact discriminator, and `test_uptime_kuma_is_a_consumer_iff_a_tile_
-# exists` derives the split from the template rather than trusting this comment.
+# Measured against the live registry and template: 43 tokens resolve a consumer, 42 of them
+# have a tile, and the single exception is `monitor_bridge_ha_token` — an HA API token that
+# carries the prefix for Kuma history reasons but is not a push token at all. So `_push_token`
+# is the exact discriminator, and `test_uptime_kuma_is_a_consumer_iff_a_tile_ exists` derives
+# the split from the template rather than trusting this comment.
 UPTIME_KUMA_TAG = "uptime-kuma"
 
 
@@ -145,14 +145,11 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     """Deploy tags whose redeploy makes a rotated push token take effect.
 
     EMPTY when the consumer spans hosts or is self-referential — those stay MANUAL: the
-    unattended cron skips them, the audit still reminds. Plural, and a tuple, since
-    2026-08-28. The pre-migration docstring here said a push token
-    "lives in two places on one compose file", which was true under Docker+AutoKuma labels and
-    false after the k3s migration split the pusher and the tile into two roles. Both roles
-    deploy from daniel-box in ONE playbook run, so both tags are reachable by a single
-    `rotate --deploy` — which is exactly what distinguishes this from CROSS_HOST_PUSH_TOKENS,
-    where the two halves sit on different HOSTS and no redeploy can cover them. Those still
-    return empty; a multi-tag return there would assert a repair that cannot happen.
+    unattended cron skips them, the audit still reminds. Both roles deploy from daniel-box in
+    ONE playbook run, so both tags are reachable by a single `rotate --deploy` — which is
+    exactly what distinguishes this from CROSS_HOST_PUSH_TOKENS, where the two halves sit on
+    different HOSTS and no redeploy can cover them. Those still return empty; a multi-tag
+    return there would assert a repair that cannot happen.
     """
     # Both of these precede the prefix rule below: every token they name also carries the
     # `monitor_bridge_` prefix, so the prefix rule would otherwise claim them first.
@@ -175,22 +172,22 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         pusher = "monitor-bridge"
     elif name == "arr_autoblock_push_token":
         # autofix-bridge (daniel-server only) renders the pusher's env. (Token name kept as
-        # arr_autoblock_* through the arr-autoblock -> autofix-bridge rename for Kuma history
-        # continuity; the consumer is the autofix-bridge deploy tag.)
+        # arr_autoblock_* for Kuma history continuity; the consumer is the autofix-bridge
+        # deploy tag.)
         pusher = "autofix-bridge"
     elif name == "registry_gc_push_token":
         # The k8s/registry role renders the weekly GC cron's script on daniel-box and the tile
         # is a static entity in k8s/uptime-kuma: two deploy-plane tags, one host, one playbook
-        # run (#1937). Unrouted, the fall-through below drops an auto-tier token out of
+        # run. Unrouted, the fall-through below drops an auto-tier token out of
         # unattended rotation while the audit still reports it registered.
         pusher = "registry"
     elif name == "crowdsec_remote_allowlist_push_token":
         # Same shape as registry_gc: the crowdsec role renders the daniel-box cron that pushes,
-        # the tile is a static entity in k8s/uptime-kuma (#2123).
+        # the tile is a static entity in k8s/uptime-kuma.
         pusher = "crowdsec"
     elif name == "artifacts_sync_push_token":
         # Same shape as registry_gc: the artifacts role renders the daniel-box peer sync cron
-        # that pushes, the tile is a static entity in k8s/uptime-kuma (#2516).
+        # that pushes, the tile is a static entity in k8s/uptime-kuma.
         pusher = "artifacts"
     else:
         # anything else unrecognised -> manual
@@ -219,7 +216,7 @@ _CENSUS_SKIP_FILES = {"secrets.yml", "secret_rotation.yml"}
 # Markdown is EXCLUDED, and this is a correctness fix rather than tidiness. A role's CLAUDE.md
 # names secrets it explains without rendering any of them, so counting docs makes the census
 # claim consumers that hold no copy — and sends the operator to redeploy a role that cannot
-# help. Measured 2026-08-29 across all 149 secrets: 5 secrets gained 11 doc-only roles, and
+# help. Measured across all 149 secrets: 5 secrets gained 11 doc-only roles, and
 # `r2_access_key_id` is the clearest — monitor-bridge's CLAUDE.md discusses it while the only
 # renderers are setup/k3s's longhorn-r2-secret.yaml.j2 and health-crons.yml.
 #
@@ -232,11 +229,9 @@ _CENSUS_SKIP_SUFFIXES = (".md",)
 def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
     """Every censusable file under `ansible/`, read once — (text, role, plane) per file.
 
-    `tree_consumers()` used to walk and read the whole tree per secret name. The two
-    parametrized tests in `ansible/tests/k8s/test_secret_consumer_census.py` run over all
-    ~180 names in `sops_names()`, so the suite paid for ~180 full reads of the same 1600
-    files to answer one question per read. Reading once and matching every name against the
-    one corpus gives the identical answer for a fraction of the I/O (issue #2401).
+    The two parametrized tests in `ansible/tests/k8s/test_secret_consumer_census.py` run over
+    all ~180 names in `sops_names()`. Reading the tree once and matching every name against the
+    one corpus costs a fraction of the I/O of walking ~1600 files per name.
 
     Only files that belong to a role on a known plane are kept: a hit anywhere else cannot
     name a consumer, so carrying its text would cost memory for a match that is discarded.
@@ -287,8 +282,8 @@ def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
 
     It answers the question a rotation actually poses — "who now holds a stale copy?" — which
     `consumer_tags()` cannot for anything outside its table. `sonarr_api_key` falls to that
-    function's default and returns `()`, meaning MANUAL: correct, but it names nobody, and on
-    2026-08-29 that left seven consumers holding a dead key for ~40 minutes.
+    function's default and returns `()`, meaning MANUAL: correct, but it names nobody, so its
+    consumers can hold a dead key until someone finds them.
 
     Returns a plane per role because the repair command differs by plane and one of them is
     unreachable from `deploy.sh` — see `_ROLE_PLANES`.

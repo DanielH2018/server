@@ -11,8 +11,8 @@ It only ever tightens. An entry over its file's count falls to the count, an ent
 is gone or back under its cap is deleted, and an entry a file has GROWN past is left exactly
 as written so `test_no_module_is_longer_than_its_cap_or_its_allowlist_entry` still fails.
 
-It writes unconditionally, without running the suite first, which is what keeps it out of the
-#1799 repair deadlock — the ratchet it repairs is red exactly when the repair is needed.
+It writes unconditionally, without running the suite first, which is what keeps it out of a
+repair deadlock — the ratchet it repairs is red exactly when the repair is needed.
 `--tighten` writes and exits 1 when it rewrote a list, the way a formatter does, so the prek
 hook stages what it wrote. Without the flag it only reports, and exits 1 when a list needs the
 edit.

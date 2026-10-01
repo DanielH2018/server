@@ -4,13 +4,13 @@ Repo CLAUDE.md: a directly-invoked script gets its OWN directory on `sys.path` a
 else, and `pythonpath` in pyproject.toml is a pytest setting — so `from lib import yaml_fast`
 in `scripts/docs/build_docs.py` resolves under pytest and raises `ModuleNotFoundError` under
 the cron or prek hook that actually runs it. Every module reaching outside its directory
-therefore carries its own `_sys.path.insert(0, ...)` ABOVE the import. 37 modules held that
-on 2026-09-17 and nothing checked it; the suite is exactly the thing that cannot see it.
+therefore carries its own `_sys.path.insert(0, ...)` ABOVE the import. The suite
+cannot see a missing insert, so this guard reads the source.
 
 Scope: tracked `scripts/**/*.py` outside any `tests/` directory. A test module reaches its
 subject through `pythonpath`, which is what pytest is for — and so must NOT carry the insert:
 `scripts/tests/test_test_module_bootstraps_present.py` refuses one whose target `pythonpath`
-already lists (#2061).
+already lists.
 
 Run: uv run pytest ansible/tests/repo/test_cross_directory_importer_bootstraps_sys_path.py
 """
@@ -25,7 +25,7 @@ SCRIPTS = REPO / "scripts"
 IMPORT = re.compile(r"^(?:from|import) (\w+)(?:[ .]|$)", re.MULTILINE)
 BOOTSTRAP = re.compile(r"sys\.path\.insert\(")
 
-# Two modules that have carried the bootstrap since the `scripts/` split, so an emptied census
+# Two modules that carry the bootstrap, so an emptied census
 # fails by name rather than passing on `all([])`.
 KNOWN_CROSS_IMPORTERS = frozenset({"docs/build_docs.py", "validate/k8s_manifests.py"})
 

@@ -4,15 +4,13 @@
   ONE reader through this route: postflight.py's §9.3 API-key check, which asks for
   /api/v3/queue because it is the path this route admits. monitor-bridge's check_arr_queue
   (`monitor-bridge/files/checks/service.py`) reads SONARR_URL, a ClusterIP
-  (`sonarr.<ns>.svc.cluster.local:8989`), and never touches Traefik — the template comment said
-  otherwise until 2026-09-10 (#1683), carried forward through two rewrites without being
-  checked. Nothing else on the sonarr API is reachable through this route.
+  (`sonarr.<ns>.svc.cluster.local:8989`), and never touches Traefik. Nothing else on the sonarr API is reachable through this route.
 
   extra_client_cidrs admits the cluster nodes' own host processes, which is what postflight is,
   and `include_bridge_ip=false` drops the macro's default grant. That default is
-  `k8s_bridge_client_ip` (10.0.0.161, daniel-server's LAN address), left over from when
-  monitor-bridge was a Docker container ON daniel-server; it is dead on this route and was
-  measured dead on 2026-09-10. A request from a daniel-server shell to
+  `k8s_bridge_client_ip` (10.0.0.161, daniel-server's LAN address), which only
+  matched a monitor-bridge running as a Docker container ON daniel-server; it is dead on this
+  route, as measured: a request from a daniel-server shell to
   `sonarr.local.<domain>/api/v3/queue` arrived at Traefik as `ClientHost: 10.42.1.0` and got a 302,
   so the route did not match — 10.0.0.161 never reaches it.
 
@@ -22,7 +20,7 @@
   bridge and arrives as that node's cni0 gateway; traffic from the OTHER node crosses the VXLAN
   overlay and arrives as the SENDING node's flannel.1 address. Traefik is pinned to daniel-box
   (`kubernetes.io/hostname` nodeSelector), so daniel-box arrives as its cni0 gateway
-  `10.42.0.1` — measured the same day, a 401 from sonarr rather than a 302, which is the route
+  `10.42.0.1` — measured, a 401 from sonarr rather than a 302, which is the route
   matching and sonarr rejecting the absent X-Api-Key — while daniel-server arrives as its
   flannel.1 address `10.42.1.0`, NOT as its cni0 gateway `10.42.1.1`.
 

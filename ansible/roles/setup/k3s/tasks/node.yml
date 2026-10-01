@@ -1,9 +1,8 @@
 ---
 # Node-level host config: the agent-join firewall allows, pinned DNS upstreams,
 # and the inotify limit pod log tailing needs.
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
-# Phase F: node-to-node cluster traffic terminates in host processes (apiserver, kubelet,
+# Node-to-node cluster traffic terminates in host processes (apiserver, kubelet,
 # flannel), not the Docker/kube NAT paths every service port rides — so it is the one
 # class of traffic that actually meets UFW's default-deny INPUT and needs explicit
 # allows. No-op while k3s_agent_node_ips is empty.
@@ -40,9 +39,9 @@
 # masquerades a pod's traffic to any address outside the pod CIDR, and this node's LAN address
 # is outside it, so a scrape from the other node arrives from that node's LAN IP instead.
 # Prometheus is a single-replica Deployment with no nodeSelector, so it lands wherever the
-# scheduler puts it: on 2026-09-06 it moved to daniel-server and the coredns-host target sat
-# behind `[UFW BLOCK] SRC=10.0.0.161 DPT=9253` from 14:08 UTC. The 9100 entry in
-# k3s_join_server_ports is the same fix for the same reason (2026-08-23). Guarded by
+# scheduler puts it: after a move to daniel-server the coredns-host target sits behind
+# `[UFW BLOCK] SRC=10.0.0.161 DPT=9253`. The 9100 entry in
+# k3s_join_server_ports is the same fix for the same reason. Guarded by
 # ansible/tests/setup/test_coredns_metrics_port_allows_agent_nodes.py.
 - name: Allow Prometheus on an agent node to scrape the host forwarder
   tags: [node-dns]
@@ -76,8 +75,8 @@
   # transport integrity twice and authenticity never. The pin lives in defaults/main.yml and
   # a changed artifact fails here. Same shape as roles/setup/sops_setup.
   #
-  # A separate get_url because `unarchive` with a URL src takes no checksum at all: until
-  # #2391 the tarball was fetched and extracted with nothing reading the pin. The tarball
+  # A separate get_url because `unarchive` with a URL src takes no checksum at all: it
+  # would fetch and extract the tarball with nothing reading the pin. The tarball
   # stays in the versioned directory, so a rerun finds a matching file and downloads nothing.
   # test_host_coredns_install_is_checksummed.py pins this shape.
   ansible.builtin.get_url:
@@ -193,7 +192,7 @@
     # Skipped under `--check`, not opted out of it. The unit and Corefile above are written
     # and started by tasks a dry run only simulates, so on a host that has never run this
     # role the probe would poll 127.0.0.1 for a forwarder nothing started. Nothing downstream
-    # reads this register — `until` is the whole verdict. #2305.
+    # reads this register — `until` is the whole verdict.
     - not ansible_check_mode
     - k3s_host_coredns_enabled
 
@@ -240,14 +239,13 @@
 # homelab/node-exporter, both hostNetwork — still carry whatever was there when they started,
 # and after this change that is a `nameserver 127.0.0.53` pointing at a stub nothing serves.
 # DELIBERATELY NOT RESTARTED. Neither resolves names in normal operation (both reach the
-# apiserver by IP), all 70 Prometheus targets stayed up across the 2026-09-01 cutover, and
-# restarting the speaker is what blacks out the ETP-Local VIPs it announces. They pick the new
+# apiserver by IP), and restarting the speaker is what blacks out the ETP-Local VIPs it announces. They pick the new
 # file up on their next restart for any other reason. The Pi has the same problem with Docker
 # and DOES need the fix, because its containers genuinely resolve — see optimize_pi.
 #
 # systemd-resolved owns /etc/resolv.conf whenever it runs, so it has to go for the file above
 # to survive. It is DISABLED rather than masked, matching daniel-server, which has run without
-# it since 2026-08-10. With it gone, k3s reads /etc/resolv.conf directly for the pod template,
+# it. With it gone, k3s reads /etc/resolv.conf directly for the pod template,
 # which is why no --resolv-conf kubelet arg is needed (daniel-server carries none either).
 - name: Stop and disable systemd-resolved
   tags: [node-dns]
@@ -259,7 +257,7 @@
 
 # The A1 drop-in is inert once resolved is disabled, and an inert config file that still reads
 # like the active mechanism is how the next reader gets it wrong. Remove it rather than leave
-# it: `k3s_node_dns_upstreams` now renders into resolv.conf, not into this.
+# it: `k3s_node_dns_upstreams` renders into resolv.conf, not into this.
 - name: Remove the retired systemd-resolved upstream drop-in
   tags: [node-dns]
   ansible.builtin.file:
@@ -271,7 +269,7 @@
 # override was what kept /run/systemd/resolve/resolv.conf from running six nameservers deep —
 # kubelet copies that file into every pod whose effective dnsPolicy is Default and Kubernetes
 # keeps only the first 3, so the lease's resolvers cost a DNSConfigForming warning per pod
-# sync. resolved is disabled above, so kubelet now reads the two-line /etc/resolv.conf this
+# sync. resolved is disabled above, so kubelet reads the two-line /etc/resolv.conf this
 # role writes and that warning cannot recur. The override stays because it is what stops the
 # lease contributing resolvers again the moment anything re-enables resolved — an apt upgrade,
 # a re-image, or a future decision to reverse the task above. Removing it would make that
@@ -310,9 +308,9 @@
   tags: [node-sysctl]
   # Kernel default is 128 instances PER UID — and every root-uid process on the node
   # (kubelet's log watchers plus each root container) draws from the same budget. The
-  # crowdsec agent sidecar was the straw that broke it at slice-6 B1: its file
-  # acquisition died with "couldn't initialize inotify: too many open files" while the
-  # node sat well under every other limit. 1024 matches what log-shipping DaemonSet
+  # crowdsec agent sidecar is the kind of process that exhausts it: its file
+  # acquisition dies with "couldn't initialize inotify: too many open files" while the
+  # node sits well under every other limit. 1024 matches what log-shipping DaemonSet
   # docs (promtail/vector) recommend for container nodes.
   ansible.posix.sysctl:
     name: fs.inotify.max_user_instances

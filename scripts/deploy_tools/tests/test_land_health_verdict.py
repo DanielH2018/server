@@ -13,7 +13,7 @@ from deploy_tools.land_lib.outcome import Outcome
 
 
 # The deployer's record of a broad apply that CONTAINS this PR. A self-applied landing needs
-# it before it may settle: `behind_since` empty proves only that local == origin (issue #1537).
+# it before it may settle: `behind_since` empty proves only that local == origin.
 APPLIED = {"broad_applied": f"{MERGE_SHA} ansible/initial_setup.yml renovate_agent"}
 
 
@@ -38,7 +38,7 @@ def test_settled_after_a_healthy_deploy(landing, capsys):
 
 
 def test_a_joined_kick_is_asked_again_after_the_gate_before_any_verdict(landing):
-    """Issue #1843: the gate is the wait that lets the joined run end, so the second request
+    """The gate is the wait that lets the joined run end, so the second request
     goes out after it and before the verdict -- on the unhealthy exit as well."""
     ln, calls = _deployed(landing, Fakes(gate=(False, ["sonarr: unhealthy"]), tick=[0]))
     ln.ledger.kick = "joined"
@@ -91,7 +91,7 @@ def test_an_ordinary_service_pr_ignores_the_deployers_state(landing):
 
 
 def test_a_self_applied_role_that_reaches_other_hosts_is_not_settled(landing, capsys):
-    """Issue #1009: the services are live, the tick converged, and two hosts are still owed."""
+    """The services are live, the tick converged, and two hosts are still owed."""
     ln, _ = _deployed(
         landing,
         Fakes(
@@ -111,7 +111,7 @@ def test_a_self_applied_role_that_reaches_other_hosts_is_not_settled(landing, ca
 
 
 def test_no_remaining_hosts_still_settles(landing):
-    """The reject half: the #723 shape, where the tick's host is the only one reached."""
+    """The reject half: the tick's host is the only one reached."""
     ln, _ = _deployed(
         landing, Fakes(self_applied=True, remaining_setup="", state=APPLIED)
     )
@@ -120,12 +120,12 @@ def test_no_remaining_hosts_still_settles(landing):
     assert (exc.value.rc, exc.value.verdict) == (0, "settled")
 
 
-# ── converged is not applied (issue #1537) ────────────────────────────────────────────────
+# ── converged is not applied ────────────────────────────────────────────────
 
 
 def test_a_converged_tick_that_recorded_no_apply_is_not_settled(landing, capsys):
-    """PR #1529's shape: something else fast-forwarded the checkout, so the tick applied
-    nothing and will never see the range again — and every marker land.sh used to read is in
+    """Something else fast-forwarded the checkout, so the tick applied
+    nothing and will never see the range again — and every marker land.sh reads is in
     the settled state."""
     ln, _ = _deployed(landing, Fakes(self_applied=True, state={}))
     with pytest.raises(Outcome) as exc:
@@ -178,7 +178,7 @@ def test_an_unrecorded_apply_read_mid_tick_is_deferred_not_owed_to_a_hand(
 ):
     """A tick that already ff-merged this PR answers CONVERGED, never BEHIND, so the
     abandoned-watch arm above cannot catch it — and `broad_applied` is written only once the
-    apply returns. PR #2437 was told to deploy by hand mid-apply (#2448)."""
+    apply returns."""
     ln, _ = _deployed(landing, Fakes(self_applied=True, state={}, merge_applied_rc=0))
     ln.tick_watch_abandoned = True
     with pytest.raises(Outcome) as exc:

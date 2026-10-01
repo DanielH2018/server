@@ -2,12 +2,10 @@
 
 scrutiny-web calls InfluxDB's `/api/v2/setup` during AppEngine.Setup and `panic(err)`s on a
 connection error instead of retrying — upstream `webapp/backend/pkg/web/middleware/repository.go`,
-read against upstream master on 2026-09-06 and recorded in `web.yaml.j2`'s `wait-for-influxdb`
-comment. The init gate that absorbs it is bounded at 60 x 2s, so an unreachable InfluxDB fails the
-pod rather than parking it. The NetworkPolicy granting the only path to InfluxDB lived in
-`roles/k8s/netpol-baseline/` until 2026-09-10, one role away from the Deployment whose startup
-depends on it: `--tags scrutiny` staged a web pod that could only time out. That is the split
-#1609 closed for authelia's session store, carried forward by #1620.
+recorded in `web.yaml.j2`'s `wait-for-influxdb` comment. The init gate that absorbs it is bounded at 60 x 2s, so an unreachable InfluxDB fails the
+pod rather than parking it. The NetworkPolicy granting the only path to InfluxDB lives in the same role as the
+Deployment whose startup depends on it. A policy one role away would let `--tags scrutiny`
+stage a web pod that can only time out.
 
 `build_k8s_dep_map` cannot cover this: it derives a role's edges from templates inside that role's
 own directory (`ansible/filter_plugins/toposort.py`), so a dependency expressed in a sibling role
@@ -83,7 +81,7 @@ def test_a_co_located_policy_is_clean():
 
 
 def test_a_policy_in_a_sibling_role_is_flagged():
-    """The literal pre-2026-09-10 state: Deployment in scrutiny, policy in netpol-baseline."""
+    """The split state: Deployment in scrutiny, policy in netpol-baseline."""
     assert not the_policy_ships_with_the_workload("scrutiny", "netpol-baseline")
 
 

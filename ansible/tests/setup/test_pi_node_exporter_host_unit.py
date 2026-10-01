@@ -1,6 +1,6 @@
 """Guard: the Pi's node_exporter host unit keeps the container's collector set and version.
 
-node-exporter left Docker on daniel-pi for a systemd unit (#2005). Two things must not
+node-exporter runs on daniel-pi as a systemd unit. Two things must not
 drift silently: the collector flags, which monitor-bridge's Pi verdicts read series from
 (`node_hwmon_*`, `node_filesystem_*`, `node_memory_*`), and the version, which the cluster's
 DaemonSet pins and the two should share. The version's oracle is in the tree:

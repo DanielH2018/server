@@ -1,8 +1,6 @@
 """The shared marker parsers: one good line and the garbage each must read as nothing.
 
-These took over from `ansible/tests/deploy/test_{contention,manual_plane}_parsers_agree.py`,
-which fed three independent parsers the same lines (issue #2063). There is one parser per
-format now, so what remains to pin is each parser's own must-fire / must-not-fire pair: a
+There is one parser per format, so what to pin is each parser's own must-fire / must-not-fire pair: a
 reader that guessed at a torn line would page on a lock or a role nobody can find.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_markers.py

@@ -1,12 +1,12 @@
 """A dispatched CI run is a FULL sweep, and it cannot evict a master push.
 
 WHY THIS IS A TEST. `workflow_dispatch` is on ci.yml for one job: sweeping every hook against a
-branch whose own diff scopes them all out. A runner-image bump is the case — #2259 moves every
-`runs-on` to `ubuntu-26.04`, a workflow-only diff matches no hook's `files` regex, and the PR run
-is green without having run `validate-unit-templates` or gitleaks on that image at all (#2366).
+branch whose own diff scopes them all out. A runner-image bump is the case: a
+workflow-only diff matches no hook's `files` regex, so the PR run is green without having run
+`validate-unit-templates` or gitleaks on that image at all.
 
 The trigger buys that only while every job reads a dispatch as a push. Both scoping conditions
-key on `pull_request` today, so a dispatch falls through to the full-sweep arm. Rewriting one as
+key on `pull_request`, so a dispatch falls through to the full-sweep arm. Rewriting one as
 `github.event_name == 'push'` would leave a dispatch fast, green and checking nothing, and
 nothing in the file would look wrong — which is why the property is asserted here rather than
 only described in the trigger's comment.
@@ -171,7 +171,7 @@ def test_a_dispatch_cannot_join_a_push_concurrency_group():
 
 
 def test_a_group_without_a_dispatch_arm_is_flagged():
-    """The reject half — the value this arm replaced on 2026-09-24."""
+    """The reject half: a group with no dispatch arm."""
     assert not dispatch_keyed_uniquely(
         "${{ github.workflow }}-${{ github.event_name == 'pull_request' "
         "&& github.ref || github.sha }}"

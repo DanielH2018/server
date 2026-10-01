@@ -6,7 +6,7 @@
 # The home directory is /home/{{ sys_user }}, NOT ansible_env.HOME. ansible_env reports
 # the environment of the user facts were GATHERED as, and initial_setup.yml gathers them
 # escalated (its setup: pre_task runs under the play's become: true) — so ansible_env.HOME
-# is /root even inside a become: false task. Using it here failed on daniel-box with
+# is /root even inside a become: false task, and using it here fails with
 # "Permission denied: /root/.local". Same reason config_files hardcodes the path.
 
 - name: Ensure the per-user directories exist

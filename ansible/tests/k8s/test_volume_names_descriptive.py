@@ -4,7 +4,7 @@
 WHY THIS EXISTS. Two separate problems, one scan, because the same scan finds both.
 
 1. **Descriptive names.** A `volumes[].name` of `config` or `data` is pod-scoped and therefore
-   legal, but it reads identically in 71 manifests. Whoever is looking at a `volumeMounts`
+   legal, but it reads identically in every manifest. Whoever is looking at a `volumeMounts`
    entry in a log line, a `kubectl describe`, or a diff cannot tell which workload's config it
    is. Every cluster-scoped name in this repo is already `<service>-<purpose>` (PVCs, Services,
    ConfigMaps, Secrets, Deployments); the pod-level names were the one layer that was not, and

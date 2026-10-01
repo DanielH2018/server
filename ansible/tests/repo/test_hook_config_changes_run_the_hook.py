@@ -3,23 +3,19 @@
 On a PR, ci.yml runs the prek hooks scoped to the files the PR changed, and each hook's `files`
 regex in prek.toml matches the code the hook checks. A hook's CONFIG file is not the code it
 checks, so a PR that only edited the config ran that hook against nothing, and master's
-`--all-files` sweep failed after the merge. Over the 1000 master runs before 2026-09-11 that was
-every master-only lint failure there was: Vale's terms on 2026-08-27 (`.vale.ini`, runs
-33126290755 and 33126512503) and ruff's rules on 2026-09-02 (pyproject.toml, runs 33632377189
-and 33632621818), each shown twice because a second commit landed before the fix.
+`--all-files` sweep failed after the merge.
 
 Two mechanisms close it, and which one a hook uses follows from whether it takes filenames:
 
 - A hook with `pass_filenames = false` names its config in `files`. Any match runs it over the
-  whole tree, so the config file is just one more trigger. `ty` did this first.
+  whole tree, so the config file is just one more trigger.
 - A hook that takes filenames cannot: prek would hand it the config file to lint. For those the
   scoping step in ci.yml carries a `FULL_SWEEP_PATHS` list, and a PR touching one of them runs
   the full sweep. `prek.toml` is in every job's list because a rev bump changes what any hook
   does and matches no hook's `files` but check-toml's.
 
-A hook's config is more than one file, and the first version of this test treated it as one --
-so `uv.lock`, which decides the ruff VERSION both ruff hooks run, and Vale's vocabulary and
-binary pin were uncovered while every hook read as clean (#2543, #2552). `CONFIG_OWNERS` below
+A hook's config is more than one file: `uv.lock` decides the ruff VERSION both ruff hooks
+run, and Vale reads a vocabulary and a binary pin. `CONFIG_OWNERS` below
 maps a hook to every file that changes its verdict, and each is checked on its own.
 
 The static half here checks each hook against that rule, reading prek.toml and both lists. The
@@ -53,15 +49,14 @@ PREK_CONFIG = REPO / "prek.toml"
 # entry must exist in prek.toml and every config file in the tree, so a hook rename or a config
 # move fails here by name rather than silently shrinking what the rule below covers.
 #
-# A hook's config is not always one file, which is how two of these stayed uncovered after the
-# single-file version of this test landed:
+# A hook's config is not always one file:
 #
 # - uv.lock decides the VERSION of a tool a hook runs under `uv run --frozen`, so it changes the
-#   verdict the way the ruleset does. Renovate's lock-file maintenance moved ruff 0.16.8 ->
-#   0.16.9 with both ruff hooks reading "(no files to check)Skipped" (#2552).
+#   verdict the way the ruleset does. A lock-file bump can move ruff with both ruff hooks
+#   reading "(no files to check)Skipped".
 # - Vale reads three: its ini, its vocabulary (which decides what Vale.Spelling accepts across
-#   the whole corpus), and the workflow that pins the binary. The 3.21.0 -> 3.22.0 bump turned
-#   master red on 15 untouched lines in 10 docs with Vale skipped on its own PR (#2536, #2543).
+#   the whole corpus), and the workflow that pins the binary. A Vale version bump can turn
+#   master red on untouched lines while Vale is skipped on its own PR.
 #
 # The host's Vale pin (ansible/roles/setup/initial_setup/tasks/host-basics.yml) is NOT a config
 # file here: CI installs its own binary, and test_vale_matches_the_ci_pin.py already forces a
@@ -177,7 +172,7 @@ def test_a_no_filenames_hook_whose_files_names_its_config_is_clean() -> None:
 
 def test_one_covered_config_does_not_vouch_for_the_hooks_other_config() -> None:
     # The multi-config half: ruff's ruleset is named in `files`, its pin is not, which is
-    # exactly the state #2552 reported. A per-hook verdict would have read this as clean.
+    # exactly the state a lock-only edit leaves. A per-hook verdict would read this as clean.
     hooks = {
         "ruff": {
             "id": "ruff",

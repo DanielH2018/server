@@ -4,7 +4,7 @@ title: Code scanning stays on default setup, and false positives are removed in 
 status: Accepted
 date: 2026-09-02
 governs:
-  - scripts/diagnostics/probe_lib/ha.py:283
+  - scripts/diagnostics/probe_lib/ha.py:280
   - ansible/roles/k8s/homelab-mcp/files/safe_reads.py:248
 ---
 
@@ -147,7 +147,7 @@ those two queries matter most.
 
 ## Governs
 
-- `scripts/diagnostics/probe_lib/ha.py:283` — the `tls_context()` marker in the probe library.
+- `scripts/diagnostics/probe_lib/ha.py:280` — the `tls_context()` marker in the probe library.
 - `ansible/roles/k8s/homelab-mcp/files/safe_reads.py:248` — the same marker in the MCP
   server's ship list.
 

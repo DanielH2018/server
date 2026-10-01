@@ -3,14 +3,13 @@
 
 `shlex.split` never returns a bare `;` token: it leaves the separator glued to the word
 before it (`"hi;"`), so a rule keyed on a stage's first word never sees anything after a
-`;`. Issue #1020: every `block-footguns.py` and `nudge-land-sh.py` rule was reachable by
-writing `;` instead of `&&`, confirmed live — `git stash && ... ; git stash pop` was
-ALLOWED and applied another session's 25-file work-in-progress into this tree.
+`;`. Without a `;` split, every `block-footguns.py` and `nudge-land-sh.py` rule is
+reachable by writing `;` instead of `&&`.
 
-Since #2134 the splitter is the dotfiles package's segmenter, so the `;` cases below pin
-what that package must keep doing for this repo, and the newline and heredoc cases pin what
-the hand-rolled splitter never did. The deployed package is the thing under test; CI links
-a pinned dotfiles checkout into the deployed path (#2812), so these run there too.
+The splitter is the dotfiles package's segmenter, so the `;` cases below pin what that
+package must keep doing for this repo, and the newline and heredoc cases pin what a
+hand-rolled splitter cannot do. The deployed package is the thing under test; CI links a
+pinned dotfiles checkout into the deployed path, so these run there too.
 
 Every case below is an accept/reject pair: a `;`-joined command that must still split into
 stages a rule can see, and a quoted `;` that must NOT split. Run:
@@ -31,8 +30,7 @@ def test_the_deployed_segmenter_is_present():
     """Every case below splits through the deployed package, so a missing one fails here by name.
 
     Without this, a runner that lost the dotfiles checkout would fail the rule tests one by one,
-    each reading as a rule bug. `segmenter_or_skip` used to skip them instead, which is how CI
-    ran none of them until #2812.
+    each reading as a rule bug.
     """
     import _hook_common
 
@@ -142,7 +140,7 @@ def test_a_heredoc_body_is_not_a_stage():
 
 
 def test_unbalanced_quotes_are_refused():
-    """Until #2134 this returned `[]`, which every consumer read as "nothing to judge"."""
+    """A non-ok parse is not `[]`: every consumer would read that as "nothing to judge"."""
     with pytest.raises(Unsplittable) as caught:
         split_stages("echo 'unterminated")
     assert caught.value.status == "unreadable:unbalanced-quote"

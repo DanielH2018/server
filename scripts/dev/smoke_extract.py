@@ -6,11 +6,8 @@ Used by the image-smoke workflow: a Renovate bump changes the literal
 line in a k8s role's defaults/main.yml — the workflow checks just the new ref, from
 whichever shape.
 
-EVERY matched ref is emitted. Until 2026-08-21 a `_SKIP_BARE_BOOT` set filtered out 11
-repositories that could not survive a bare `docker run`, which also excluded them from the
-`docker pull` the workflow ran first — so those refs were verified by nothing at all, not even
-that the tag resolved. The workflow's fatal checks no longer execute the image, so nothing
-here needs an exception list. See the workflow for what replaced it.
+EVERY matched ref is emitted. The workflow's fatal checks do not execute the image, so nothing
+here needs an exception list.
 """
 
 import re
@@ -51,8 +48,8 @@ def extract_changed_images(diff_text: str) -> list[str]:
 
 
 if __name__ == "__main__":
-    # Before the read: the diff arrives on stdin, so `--help` used to hang on a terminal
-    # rather than answer (#2854).
+    # Before the read: the diff arrives on stdin, so `--help` would hang on a terminal
+    # rather than answer.
     answer_help(__doc__)
     images = extract_changed_images(sys.stdin.read())
     for img in images:

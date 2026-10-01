@@ -1,6 +1,6 @@
 """Paths, task readers and the no-cluster detector the `k8s/volume-revert` guards share.
 
-The guards split five ways on 2026-09-01 -- the drill-proven sequence, the mutation guards,
+The guards split five ways -- the drill-proven sequence, the mutation guards,
 the snapshot selection, the manifests include, and the seam and input checks that stay in
 `test_volume_revert.py` -- and each reads the same task files through these.
 """
@@ -20,9 +20,9 @@ _MAIN = _ROLE / "tasks/main.yml"
 
 _DEFAULTS = _ROLE / "defaults/main.yml"
 
-# The two exemption sets the validator skips roles by. They moved out of
-# scripts/validate/k8s_manifests.py on 2026-09-04; that module re-exports them, but this test
-# parses the source rather than importing it, so it must name the file that defines them.
+# The two exemption sets the validator skips roles by. scripts/validate/k8s_manifests.py
+# re-exports them, but this test parses the source rather than importing it, so it names the
+# file that defines them.
 _VALIDATOR = _REPO / "scripts/lib/k8s_roles.py"
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -57,7 +57,7 @@ def _index(names: list[str], fragment: str) -> int:
     return hits[0]
 
 
-# kubectl's ways of saying "there is no cluster here to ask". Measured 2026-08-21: kubectl does
+# kubectl's ways of saying "there is no cluster here to ask". kubectl does
 # NOT print the bare string "connection refused" — it prints "The connection to the server
 # localhost:8080 was refused", and a cluster without Longhorn's CRDs answers "the server doesn't
 # have a resource type". A guard that misses either turns "no cluster" into a red test on any

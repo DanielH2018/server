@@ -33,21 +33,19 @@ a gate the repo requires, so nothing downstream notices either way.
      `origin/master` (exit 4, nothing deployed) because a stale tree renders stale templates
      and reverts live config while every repo-side check reads green — and the flag makes that
      deploy succeed with a green recap. The deploy skill and `docs/deploying.md` said "never";
-     `auto-mode-bridge.py` nudged in prose; nothing denied it (#2170). There is no correct use
+     `auto-mode-bridge.py` nudged in prose; nothing denied it. There is no correct use
      left: the one exemption was inside the staging gate's runner, whose tree was pinned behind
-     master by construction, and that runner went with the daniel-stage guest (#2941).
+     master by construction, and that runner went with the daniel-stage guest.
 
   6. `gh workflow run ci.yml` with no `--ref`. gh resolves an empty ref to the default branch,
      so the dispatch sweeps master's HEAD — and `deploy_git.ci_verdict` applies worst-wins over
      every required check-run on a SHA with no event filter, while GitHub's `filter=latest`
      does not merge same-named runs across check suites. So one red dispatch run sits beside
      the green push run and pins that master SHA's verdict to fail, which stops the GitOps
-     deployer's walk at it. The dispatch itself reports nothing wrong (#2402).
+     deployer's walk at it. The dispatch itself reports nothing wrong.
 
-Four more rules lived here until dotfiles #628 moved them into `claude_guard.footguns`, which
-every repo's PreToolUse hook runs: ugrep's `-Z`/`-z`, a bare `git stash pop`, a self-matching
-`pgrep -f` and a partial `security_and_analysis` PATCH. They key on a host tool or on
-GitHub, not on this repo.
+Rules that key on a host tool or on GitHub rather than on this repo live in
+`claude_guard.footguns`, which every repo's PreToolUse hook runs.
 
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fix; otherwise no
 output -> normal permission flow. The hook can only ever DENY.
@@ -179,7 +177,7 @@ def issue_create_by_hand_problem(stage: list[str]) -> str | None:
     A create aimed at another repo is denied too, and the reason names `findings.py open
     --repo` with that repo. The wrapper files there with the same labels and fingerprint
     dedup, so passing the hand-filed form would give that repo's register the duplicates
-    this rule prevents here (#2685).
+    this rule prevents here.
     """
     words = strip_shell_keywords(stage)
     if not invokes(words, ("gh", "issue", "create")):
@@ -207,7 +205,7 @@ def skip_staleness_problem(stage: list[str]) -> str | None:
     """
     words = strip_shell_keywords(stage)
     names = [word.rsplit("/", 1)[-1] for word in words]
-    # The shim execs `deploy_run.py` (#2412), so an interpreter handed that module is the same
+    # The shim execs `deploy_run.py`, so an interpreter handed that module is the same
     # deploy by another door. Keyed on the interpreter as the command word, so a `grep` that
     # names the module and the flag as arguments stays clean.
     runs_the_module = (
@@ -267,7 +265,7 @@ def ci_dispatch_on_master_problem(stage: list[str]) -> str | None:
     Out of scope, deliberately: the workflow's numeric id (a literal here would drift), the
     Actions UI button, and a raw `gh api .../dispatches` call. The issue that filed this
     conceded all three; the alternative that covers them needs an `actions/runs?head_sha=`
-    join on every verdict read and doubles the anonymous-quota requests (#2402).
+    join on every verdict read and doubles the anonymous-quota requests.
     """
     words = strip_shell_keywords(stage)
     if not invokes(words, ("gh", "workflow", "run")):
@@ -321,11 +319,10 @@ def problem(command: str) -> str | None:
 
     Leading shell keywords are stripped ONCE here rather than per rule. Every rule decides on
     the first word — `stage[0]` directly, or `invokes()`, which does the same — so a keyword
-    in front of the binary made all four of the original rules miss: measured 2026-08-30,
-    `! git stash pop`, `time git stash pop`, `! kubectl rollout restart …` and `command grep
-    -Z …` were each allowed while the bare form was denied. `! git stash pop` is the one that
-    matters: a bare pop can apply another session's work-in-progress into this tree, and a
-    negation is exactly what someone writes when they expect the pop to fail.
+    in front of the binary (`! git stash pop`, `time git stash pop`, `command grep -Z …`)
+    would make a rule miss. `! git stash pop` is the one that matters: a bare pop can apply
+    another session's work-in-progress into this tree, and a negation is exactly what someone
+    writes when they expect the pop to fail.
 
     Stripping at the dispatch site rather than in each rule means a rule added later inherits
     it instead of having to remember. The two rules that already call `strip_shell_keywords`

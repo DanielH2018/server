@@ -7,7 +7,7 @@ runbooks, design documents and generated reference pages are readable in a brows
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "docs"`
 - **Image:** `nginxinc/nginx-unprivileged` (`docs_k8s_image`)
-- **Route:** `docs.local.<domain>` (LAN only), Authelia one_factor
+- **Route:** `docs.<domain>` · `docs.local.<domain>`, Authelia one_factor
 - **Claims:** none (no PVC)
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->

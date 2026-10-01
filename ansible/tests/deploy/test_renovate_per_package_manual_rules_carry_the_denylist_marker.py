@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """A per-package manual Renovate rule whose pin a denied role owns carries `k8s_autodeploy: false`.
 
-Issue #1963. The unattended `renovate_agent` keys its exclusion on one phrase in the PR title,
-`k8s_autodeploy: false`, which the denylist rule's groupName carries (#1939). The per-package
+The unattended `renovate_agent` keys its exclusion on one phrase in the PR title,
+`k8s_autodeploy: false`, which the denylist rule's groupName carries. The per-package
 manual rules below that rule override its groupName for the pins they own, and a
-github-releases or pypi pin never reached it at all. Either way the title loses the phrase, so
+github-releases or pypi pin never reaches it at all. Either way the title loses the phrase, so
 the crowdsec bouncer plugin bump — a traefik redeploy whose failure the health gate cannot
-see — shipped through `land.sh --arm-merge` like a jellyfin plugin work order.
+see — would ship through `land.sh --arm-merge` like a jellyfin plugin work order.
 
 The rule is the class, not the instance: every per-package manual rule whose pin a denied
 role owns ends its parenthetical with the marker, and one whose pin no denied role owns does
@@ -16,7 +16,7 @@ file it matches owns the pin; one without derives the name from the file, so the
 carry the package literally (the `_image:` pins). Renovate's built-in `dockerfile` manager
 reads the n8n Dockerfiles with no entry in `customManagers`, so it is spelled here. A build role that renders no workload of
 its own would hand the bump to the role that runs what it builds
-in `deploy_changes.py` (empty since #2813) — so ownership follows that same coupling, and a pin
+in `deploy_changes.py` — so ownership follows that same coupling, and a pin
 no role owns fails rather than passing as "not denied".
 `test_renovate_agent_unit.py` reads the marker out of every such groupName and pins that the
 prompt names the same phrase.
@@ -51,7 +51,7 @@ _ROLES = REPO / "ansible" / "roles"
 # Manual rules whose pin sits outside every role, so no deploy can ship it and no marker is
 # owed. Named one by one, like GROUP_VARS in the automerge guard: a second entry has to be
 # argued for. kubernetes-validate is the manifest guard's schema (pyproject.toml, read by the
-# built-in pep621 manager); its PR is the work order for the next k3s minor (#2367).
+# built-in pep621 manager); its PR is the work order for the next k3s minor.
 REPO_ONLY_PINS = {"kubernetes-validate": "pyproject.toml"}
 
 # Renovate's built-in dockerfile manager, which `customManagers` does not list: its second
@@ -96,7 +96,7 @@ def pin_owner_roles(
     `datasources` is the rule's `matchDatasources`: a manager whose datasource the rule never
     matches cannot own its pin, whatever its files say. Without it, a github-releases rule for
     `astral-sh/uv` read as karakeep's, because the docker `_image:` manager's file names
-    `ghcr.io/astral-sh/uv` -- a different package in a different datasource (#2148). None
+    `ghcr.io/astral-sh/uv` -- a different package in a different datasource. None
     means the rule matches every datasource.
     """
     owners: set[str] = set()
@@ -225,7 +225,7 @@ def test_a_named_package_manager_maps_the_pin_to_every_file_it_matches() -> None
 
 
 def test_a_dockerfile_pin_is_owned_by_the_role_that_builds_and_runs_it() -> None:
-    """n8n builds the image it runs, so the Dockerfile pin is n8n's alone (#2813)."""
+    """n8n builds the image it runs, so the Dockerfile pin is n8n's alone."""
     files = ["ansible/roles/k8s/n8n/templates/Dockerfile.j2"]
     assert pin_owner_roles(
         "n8nio/n8n", [], files, read=lambda _: "FROM n8nio/n8n:1.0\n"

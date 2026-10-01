@@ -61,10 +61,10 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch
 
 @pytest.mark.parametrize("argv", [["--bogus"], []])
 def test_a_usage_error_does_not_annotate(argv):
-    """Issue #1304's rejecting half: a bad flag and a missing `--pr` are usage errors, not
-    landings, and must write nothing to the stream the Landings board counts. Both reach
-    argparse's SystemExit before a Landing or a Ledger exists, so the only line they could
-    write is `pr=unknown verdict=aborted` -- 592 of which reached Loki's 744h window. `main`
+    """The rejecting half: a bad flag and a missing `--pr` are usage errors, not landings,
+    and must write nothing to the stream the Landings board counts. Both reach argparse's
+    SystemExit before a Landing or a Ledger exists, so the only line they could write is
+    `pr=unknown verdict=aborted` -- 592 of which reached Loki's 744h window. `main`
     renumbers the code to `LAND_BAD_ARGS` on the way out and still annotates nothing.
 
     Real `parse_args`, not the `land_run` fixture's wrapper: the wrapper always calls the
@@ -156,9 +156,9 @@ def test_a_tags_override_takes_the_same_two_paths_as_a_derived_landing(
 ):
     """`--tags` skips the derivation, not the decision about which path this landing takes.
 
-    Both halves matter. The FLAGGED one is `self_applied=True`: `classify` used to return at
-    its first statement when `opts.tags` had populated `resolved_tags`, so the predicate read
-    False and a mixed PR landed with `--tags` deployed `--at` and printed a verdict that never
+    Both halves matter. The FLAGGED one is `self_applied=True`: `classify` must not return at
+    its first statement when `opts.tags` has populated `resolved_tags`, or the predicate reads
+    False and a mixed PR lands with `--tags` deployed `--at` and prints a verdict that never
     read the deployer's markers. The CLEAN one is the tags-only override, which must keep the
     fast path -- classifying on this path must not turn into awaiting a tick for everyone.
     """
@@ -227,7 +227,7 @@ def test_land_never_bypasses_the_staleness_guard():
 
 
 def test_every_verdict_is_produced_by_a_running_test():
-    """The #1012 census: thirteen verdicts, each asserted by name in a land test."""
+    """The census: thirteen verdicts, each asserted by name in a land test."""
     import re
     from pathlib import Path
 
@@ -281,7 +281,7 @@ def test_the_real_classifier_derives_a_tag_from_a_real_path(land_run):
 
     `pull_ref_rc=1` makes `pr_range` fail to read the PR's own range, which is what keeps
     `quiet_paths` from shelling out to git: with no range it returns immediately, and every
-    broad path stays loud -- the direction a wrong answer there must fall (issue #848).
+    broad path stays loud -- the direction a wrong answer there must fall.
     """
     fakes = Fakes(
         pull_ref_rc=1,

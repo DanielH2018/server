@@ -100,8 +100,8 @@ def test_reader_syslog_line_is_intercepted(tmp_path, logger_calls):
 
     This is the non-vacuity half of the autouse `_no_syslog` fixture: an empty `logger_calls`
     would mean either that the reader stopped logging its verdict, or that the real `logger`
-    took the call — which is issue #1052, fixture verdicts (`STUB_KUBECTL_MARKER`, pytest tmp
-    paths) shipped through Promtail into the Alert History board beside real ones.
+    took the call — which ships fixture verdicts (`STUB_KUBECTL_MARKER`, pytest tmp paths)
+    through Promtail into the Alert History board beside real ones.
     """
     env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL="/bin/false")
 
@@ -122,7 +122,7 @@ def test_reader_syslog_line_is_intercepted(tmp_path, logger_calls):
 def test_reader_exits_nonzero_naming_a_missing_env_var(tmp_path):
     """A shim that stops exporting a var must be LOUD, not silently fall back to a stale constant.
 
-    Every LONGHORN_* var is required (2026-09-04 review finding #3). This drops one from the
+    Every LONGHORN_* var is required. This drops one from the
     otherwise-complete env and asserts the reader exits nonzero and names it — which is exactly
     what the shim's `if ! OUT=$(...)` / `[[ $RC -ne 0 ]]` branch turns into a `reader failed`
     push, rather than a wrong-but-plausible verdict computed from a hardcoded fallback.
@@ -159,13 +159,12 @@ def test_reader_treats_a_clean_bool_env_normally(tmp_path):
 
 
 def test_reader_exits_nonzero_on_an_unrecognized_bool_env(tmp_path):
-    """An armed flag must REFUSE an unrecognized value, not fold it into False (2026-09-04
-    review finding #9).
+    """An armed flag must REFUSE an unrecognized value, not fold it into False.
 
     `_require_bool_env` backs LONGHORN_BACKUP_ARMED and LONGHORN_R2_ARMED, and False there means
     DISARMED — a target's volumes get suppressed from every check rather than watched. A typo'd
-    or truncated export used to fold silently into "disarmed" instead of failing loudly the way
-    a missing var already does.
+    or truncated export must fail loudly the way a missing var does, not fold silently into
+    "disarmed".
     """
     env = _reader_env(
         tmp_path,
@@ -220,7 +219,7 @@ def test_reader_green_path_pins_the_transport(tmp_path):
 
 
 def test_reader_pages_when_the_trim_cron_file_is_gone(tmp_path):
-    """Check 10 through the real wiring: the shim's cron paths reach the verdict (#2443).
+    """Check 10 through the real wiring: the shim's cron paths reach the verdict.
 
     The green path above proves the logic stays quiet; this proves the reader actually stats
     what the shim exports, rather than the arm being unreachable in production.
@@ -281,7 +280,7 @@ def test_reader_argv_hands_now_to_main(tmp_path):
     assert "960h old (limit 30h)" in proc.stdout, proc.stdout
 
 
-# ── fetch failures: the deadman must go DOWN with a reason, never quietly UP (issue #1061) ────
+# ── fetch failures: the deadman must go DOWN with a reason, never quietly UP ────
 #
 # test_reader_green_path_pins_the_transport above is the CLEAN half of every pair below: the same
 # fixture, no knob set, verdict UP. Each test here turns exactly one fetch red and asserts the
@@ -305,12 +304,12 @@ def test_reader_argv_hands_now_to_main(tmp_path):
     ],
 )
 def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, named):
-    """rc 124 is host_lib's timeout code — the exact case that used to read as an empty result.
+    """rc 124 is host_lib's timeout code — the case that must not read as an empty result.
 
-    Every one of these seven fetches turned a nonzero rc into `[]`/`set()` and fed it to a check
-    that reads empty as clean: "nothing errored", "no failed jobs", or a tier silently dropped
-    from the coverage count. A 30s API-server timeout on one call therefore left the whole
-    verdict UP with a quietly smaller number in it.
+    None of these seven fetches may turn a nonzero rc into `[]`/`set()`: a check that reads
+    empty as clean ("nothing errored", "no failed jobs", or a tier silently dropped from the
+    coverage count) would leave the whole verdict UP with a quietly smaller number in it after
+    a 30s API-server timeout on one call.
     """
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
     proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH=branch)
@@ -379,7 +378,7 @@ def test_reader_is_up_with_an_empty_excluded_oversize_file(tmp_path):
 
 
 def test_reader_pages_naming_a_volume_the_drill_excluded_as_oversize(tmp_path):
-    """The reader reads the drill's `excluded_oversize` file, which no logic test can see (#2667)."""
+    """The reader reads the drill's `excluded_oversize` file, which no logic test can see."""
     (tmp_path / "drill").mkdir()
     (tmp_path / "drill" / "excluded_oversize").write_text(
         f"jellyfin-config\t{5 * 2**30}\n"
@@ -406,7 +405,7 @@ def test_reader_is_up_with_an_empty_excluded_nopvc_file(tmp_path):
 
 
 def test_reader_pages_naming_a_volume_the_drill_excluded_for_no_pvc(tmp_path):
-    """The reader reads the drill's `excluded_nopvc` file, which no logic test can see (#2706)."""
+    """The reader reads the drill's `excluded_nopvc` file, which no logic test can see."""
     (tmp_path / "drill").mkdir()
     (tmp_path / "drill" / "excluded_nopvc").write_text("pvc-released\n")
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))

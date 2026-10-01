@@ -6,9 +6,6 @@ templating; getting that wrong leaves literal braces in a manifest, which reads 
 YAML" pointing at a perfectly good template. `colliding_default_keys` asserts the render
 context's inverted precedence stays harmless.
 
-Split out of scripts/validate/tests/test_validate_k8s_manifests.py on 2026-09-04, with the
-code it covers.
-
 Run: uv run pytest scripts/lib/tests/test_k8s_context.py
 """
 
@@ -112,9 +109,8 @@ def test_a_role_default_with_its_own_key_space_is_clean():
 # --- resolve_vars: the `bool` filter a variable value reaches for ---
 #
 # `k8s_no_mutate` in group_vars is `"{{ ... | bool }}"`; a bare Jinja env has no `bool`, so
-# expansion registers a shim. The shim is the one every render guard in scripts/lib shares —
-# a second copy that took `-e var=false` (the STRING "false") as truthy lived here until
-# issue #2050. This pair checks the string/boolean divergence the filter exists for.
+# expansion registers a shim. The shim is the one every render guard in scripts/lib shares.
+# This pair checks the string/boolean divergence the filter exists for.
 
 
 def test_resolve_vars_bool_filter_reads_the_string_false_as_false():

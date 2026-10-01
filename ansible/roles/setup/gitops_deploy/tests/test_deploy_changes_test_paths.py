@@ -1,8 +1,8 @@
 """A test-suite path reaches no host, so it must drive no deploy decision.
 
-Every prefix in deploy_changes matches on path alone, which made a test file read as whatever
-plane it happened to sit under -- one under roles/setup/gitops_deploy/ parked the tick for
-every session, one under roles/k8s/<svc>/files/ defer-alerted (PR #707, 2026-09-01). The
+Every prefix in deploy_changes matches on path alone, so a test file would read as whatever
+plane it happens to sit under -- one under roles/setup/gitops_deploy/ would park the tick for
+every session, one under roles/k8s/<svc>/files/ would defer-alert. The
 exemption has to be exact: a test beside a real change must not disarm the change, and a
 path that merely contains `test` is not a test.
 """
@@ -14,11 +14,10 @@ from deploy_changes import services_from_changed_paths
 
 # ── test-suite paths reach no host, so they drive no deploy decision ────────────────────
 #
-# Every prefix in this module matches on path alone, which made a test file read as whatever
-# plane it happened to sit under. PR #707 changed three of them and hit two arms at once: a
-# test under roles/setup/gitops_deploy/ set broad_manual and parked the tick for every session,
-# and one under roles/k8s/<svc>/files/ set cs.k8s and defer-alerted. Clearing it took an
-# operator running the playbook by hand and then an ff-merge (2026-09-01).
+# Every prefix in this module matches on path alone, so a test file would read as whatever
+# plane it happens to sit under. A test under roles/setup/gitops_deploy/ would set broad_manual
+# and park the tick for every session, and one under roles/k8s/<svc>/files/ would set cs.k8s
+# and defer-alert.
 #
 # The pairs below are clean/flagged per rule: a guard that classifies everything as a test and
 # one that classifies nothing are indistinguishable from the passing side alone.
@@ -28,7 +27,7 @@ TEST_ONLY_PATHS = [
     "ansible/tests/k8s/test_k8s_manifests.py",
     "ansible/tests/_helpers.py",
     "ansible/tests/conftest.py",
-    # A test beside the module it covers. No suite sits this way any more (#764), but the
+    # A test beside the module it covers. No suite sits this way, but the
     # name-shaped half of the predicate still has to hold for one a session adds there.
     "ansible/roles/k8s/qbittorrent/files/test_apply_prefs.py",
     "ansible/roles/k8s/monitor-bridge/files/conftest.py",

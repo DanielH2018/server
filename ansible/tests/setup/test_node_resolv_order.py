@@ -10,7 +10,7 @@ return to Pi-hole with no daemon watching anything.
 WHY IT NEEDS A GUARD RATHER THAN THE COMMENTS IT ALREADY HAS. Each of the three ways to break
 it is silent. Swap the order and every lookup goes to Cloudflare while the config still names
 Pi-hole and the deploy still reads green. Drop the fallback and the host has no DNS at all
-until the cluster is up — the exact cold-start deadlock slice-6 A1 was written to avoid. Add
+until the cluster is up — a cold-start deadlock. Add
 `rotate` and roughly half the queries bypass Pi-hole, which is the same coin flip the
 cluster's CoreDNS already had to be fixed for (`policy sequential` in coredns-corefile.j2).
 None of the three produces an error, a failed task, or a red monitor.
@@ -35,8 +35,8 @@ _TEMPLATE = _ROLES / "setup/common/templates/resolv.conf.j2"
 # passes. All are checked: the template is shared, so a correct file plus one bad caller is
 # still a host resolving through Cloudflare.
 #
-# daniel-box IS NOT HERE, and that is deliberate. Since 2026-09-01 its resolv.conf names one
-# entry, 127.0.0.1, and the ordered preference moved into its host forwarder's Corefile — it
+# daniel-box IS NOT HERE, and that is deliberate. Its resolv.conf names one
+# entry, 127.0.0.1, and the ordered preference lives in its host forwarder's Corefile — it
 # is checked at the bottom of this file instead. Adding it back here would fail on the
 # sole-entry rule; LOOSENING THAT RULE TO ACCOMMODATE IT would delete the check that catches a
 # missing fallback on the host that still needs one.
@@ -126,7 +126,7 @@ def test_the_fallback_listed_first_is_flagged() -> None:
 
 
 def test_a_sole_pihole_entry_is_flagged() -> None:
-    """No fallback re-creates the cold-start deadlock slice-6 A1 was written to avoid."""
+    """No fallback re-creates the cold-start deadlock."""
     assert order_problems([_VIP_REF], "options timeout:2 attempts:1") == [
         "no fallback nameserver behind Pi-hole"
     ]
@@ -143,7 +143,7 @@ def test_rotate_is_flagged() -> None:
 # ── daniel-box: the first hop is the Corefile ───────────────────────────────────────────
 # Same invariant, different file. CoreDNS's forward plugin defaults to `random`, so the list
 # alone proves nothing — without `policy sequential` an ordered-looking list is a coin flip,
-# which is the exact defect this arrangement replaced. Each way to break it is silent: invert
+# which is the exact defect this arrangement avoids. Each way to break it is silent: invert
 # the list and Cloudflare answers everything while the config still names Pi-hole; drop the
 # public entries and a Pi-hole outage takes the node's DNS with it; set `max_fails 0` and
 # CoreDNS stops health checking entirely while still reading as configured.

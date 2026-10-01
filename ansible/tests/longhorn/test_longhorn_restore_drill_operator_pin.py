@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """The restore drill's operator pin path: one volume on demand, without steering the rotation.
 
-Until 2026-09-21 `PIN` was rendered from `k3s_longhorn_restore_drill_pvc` and nothing else read
-it, so `PIN=<pvc> longhorn-restore-drill.sh` was overwritten on line 26 and the rotation's own
-pick was drilled instead. PR #2182 printed exactly that non-working command as a remediation.
-The only way to drill one volume was to backdate its attempt stamp so the next nightly run
-picked it (#2183).
+`PIN=<pvc> longhorn-restore-drill.sh` drills that one volume. The operator does not have to
+backdate its attempt stamp to make the next nightly run pick it.
 
 These tests RUN the rendered script rather than grep it, through the shared harness in
 `_restore_drill.py`.

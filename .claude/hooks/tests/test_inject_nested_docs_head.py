@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for inject-nested-docs' head form: a doc over the payload budget (#2650, #2775).
+"""Tests for inject-nested-docs' head form: a doc over the payload budget.
 
 Split from test_inject_nested_docs.py, which reached the 500-line module cap, rather than
 grown in place. It reuses that module's fixture repo, so a doc here is written over the
@@ -26,7 +26,7 @@ def _big_doc():
 
 
 def test_a_doc_under_the_cap_but_over_what_the_preamble_leaves_is_a_head(repo):
-    """The gap between the payload left and INLINE_MAX_CHARS used to defer a doc forever."""
+    """A doc in the gap between the payload left and INLINE_MAX_CHARS must not be deferred forever."""
     line = ("gap filler words here " * 5).rstrip() + "\n"
     text = "# Gap doc\n\nthe opening rule\n\n## More\n\n" + line * 67
     # Few lines and many chars, so only the char budget decides between whole and head.
@@ -43,7 +43,7 @@ def test_a_doc_under_the_cap_but_over_what_the_preamble_leaves_is_a_head(repo):
 
 
 def test_a_doc_over_the_budget_is_injected_as_its_head(repo):
-    """#2650: the headings alone were read after only 23% of injections, so ship text."""
+    """Headings alone are rarely enough, so an over-budget doc ships its head text."""
     (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
     context, chosen = _build(
         repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
@@ -81,8 +81,8 @@ def test_an_over_budget_doc_waits_when_little_budget_is_left(repo):
 
 
 def test_a_rule_beside_an_over_budget_role_doc_is_flagged(repo):
-    """#2775: the head used to spend the payload first, deferring a short rule to a later
-    command that 9 of 23 measured contexts never ran."""
+    """A head that spends the payload first would defer a short rule to a later command that
+    may never run."""
     (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
     context, chosen = _build(
         repo, "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"

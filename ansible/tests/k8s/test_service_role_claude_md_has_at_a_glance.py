@@ -1,18 +1,16 @@
 """Every deployed k8s service role's CLAUDE.md opens `## At a glance` with the generated block.
 
-The section is the fixed-shape summary a session reads before touching a service. Until
-2026-09-19 every line of it was hand-typed and this guard checked only that the heading
-existed, so a doc could pin an image its defaults no longer pinned (#2058). The mechanical
-half — deploy tag, images, route, claims, auto-deploy stance — is now written by
+The section is the fixed-shape summary a session reads before touching a service. The
+mechanical half — deploy tag, images, route, claims, auto-deploy stance — is written by
 `scripts/docs/gen_role_glance.py` between two `generated_from` markers directly under the
 heading, and this guard asserts that structure for every deployed role. Whether the block's
 CONTENT matches the tree is `scripts/docs/tests/test_gen_role_glance.py`'s gate; keeping the
 two apart means a missing heading and a stale value fail with different messages.
 
 Scope is the deployed services: the k8s `containers_list` entries. A helper role with no entry
-(manifests, cronjob-gate, volume-claim, ...) is documented from its callers' side. The four
-exporter/route-only roles this guard used to exempt carry the generated block like every
-other — there is nothing to hand-restate any more, so nothing to exempt.
+(manifests, cronjob-gate, volume-claim, ...) is documented from its callers' side. The
+exporter/route-only roles carry the generated block like every other — there is nothing to
+hand-restate, so nothing to exempt.
 
 Run: uv run pytest ansible/tests/k8s/test_service_role_claude_md_has_at_a_glance.py
 """

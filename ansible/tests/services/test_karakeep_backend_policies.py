@@ -4,9 +4,8 @@
 `karakeep-meilisearch:7700` in an UNBOUNDED loop. karakeep the app degrades when meilisearch is
 unreachable — it logs search errors and serves — but the pod never reaches the app: with either
 policy absent it sits in Init forever, with no restart count to read and no CrashLoopBackOff to
-notice. Both policies lived in `roles/k8s/netpol-baseline/` until 2026-09-10, one role away from
-the Deployment they let start, which is the split that took SSO down for 25 minutes when it was
-authelia's session store (#1609) and is carried forward for these two by #1620.
+notice. Both policies live in the same role as the Deployment they let start. A policy one role
+away from its Deployment is the split that stalls the workload.
 
 `build_k8s_dep_map` cannot cover this: it derives a role's edges from templates inside that
 role's own directory (`ansible/filter_plugins/toposort.py`), so a dependency expressed in a
@@ -84,7 +83,7 @@ def test_a_co_located_policy_is_clean():
 
 
 def test_a_policy_in_a_sibling_role_is_flagged():
-    """The literal pre-2026-09-10 state: Deployment in karakeep, policy in netpol-baseline."""
+    """The split state: Deployment in karakeep, policy in netpol-baseline."""
     assert not the_policy_ships_with_the_workload("karakeep", "netpol-baseline")
 
 

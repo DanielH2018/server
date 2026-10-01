@@ -1,6 +1,5 @@
 ---
-# Slice 0 of the k3s migration: stand up a single-node cluster on daniel-box.
-# Plan: docs/archive/k3s-migration/slice-0-cluster-foundation.md
+# Stand up the k3s cluster on daniel-box.
 #
 # Run ON daniel-box (the play's hosts: defaults to the local hostname, same as deploy.yml):
 #   uv run ansible-playbook ansible/k3s-bringup.yml
@@ -10,8 +9,8 @@
 # fail-closed guards below (daniel-box only, no Docker) are the real safety net.
 #
 # Deliberately a separate playbook rather than a role in initial_setup.yml: that playbook
-# runs on every host, and the server role must land on daniel-box alone. daniel-server joined
-# as an AGENT in slice 7 (2026-08-14) — that is the opt-in join play further down, not this one.
+# runs on every host, and the server role must land on daniel-box alone. daniel-server joins
+# as an AGENT — that is the opt-in join play further down, not this one.
 - name: Bring up the k3s cluster
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   # An escalated task imports from this tree's .venv as root, and the root-owned
@@ -53,7 +52,7 @@
   roles:
     - { role: k3s, tags: ["k3s"] }
 
-# Phase F (slice-7 §F): join an agent node. Deliberately opt-in — the join plays match no
+# Join an agent node. Deliberately opt-in — the join plays match no
 # hosts unless invoked with `-e join_agent=daniel-server`. Three plays, not one: the join
 # play overrides hosts.ini's `ansible_connection=local` (correct for each host running
 # its OWN plays, wrong for driving the join from daniel-box), and play-level connection

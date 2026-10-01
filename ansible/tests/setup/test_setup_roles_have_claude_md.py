@@ -1,12 +1,9 @@
 """Every ansible/roles/setup/ role has a CLAUDE.md, and every one whose cron or timer changes
 state carries an `## Autonomous-role contract` section.
 
-Written for issue #1854. Root CLAUDE.md's "Where to Look" table routes "adding / changing a
-cron that changes state" to "that role's CLAUDE.md *Autonomous-role contract*", and on
-2026-09-17 only `initial_setup` (and `k8s/autofix-bridge`) had the heading — `gitops_deploy`
-and `renovate_agent`, the two most state-changing crons in the tree, did not, and `k3s`
-(seven `files/*.py`, a dozen crons) had no CLAUDE.md at all. `test_k8s_roles_have_claude_md.py`
-covers `roles/k8s/` only.
+Root CLAUDE.md's "Where to Look" table routes "adding / changing a cron that changes state"
+to "that role's CLAUDE.md *Autonomous-role contract*", so every role whose cron changes
+state needs that heading. `test_k8s_roles_have_claude_md.py` covers `roles/k8s/` only.
 
 Two guards, one subject:
 
@@ -26,20 +23,17 @@ Two guards, one subject:
 Red-proof pairs use fixture roles under `tmp_path`; non-vacuity pins named members the live
 census must contain, so a renamed `tasks/` layout fails loudly rather than checking nothing.
 
-3. A size ceiling (issues #2126, #2826). `gitops_deploy/CLAUDE.md` had grown to 1315 lines
-   (~27k tokens) of postmortem before its record moved to `docs/gitops-pipeline.md`, and a role
-   doc is loaded whole on every touch of the role. A doc over `MAX_CHARS` fails unless
+3. A size ceiling. A role doc is loaded whole on every touch of the role, so a long one costs
+   tokens on every edit. A doc over `MAX_CHARS` fails unless
    `OVER_CEILING` names the role with the reason, and an entry there for a doc that has since
    shrunk fails too. Same shape as the k8s test's ceiling.
 
    The unit is characters: `MAX_CHARS` is the payload budget of the hook that injects a role
    doc into a Bash session (`_doc_size.MAX_CHARS`), so a doc over it is one a session reads
-   truncated to its head. The ceiling counted lines until #2826, which measured 30 of 93 role
-   docs past the hook's budget while the line ceiling passed them all.
+   truncated to its head, which a line count cannot measure.
 
    Each reason opens with the character count it was written against, and a doc that grows past
-   that count fails (#2679). Before that check, `gitops_deploy`'s entry said "404 lines" while
-   the doc grew to 488, because a listed role passed at any length.
+   that count fails, because a listed role would otherwise pass at any length.
 """
 
 from pathlib import Path
@@ -53,30 +47,9 @@ MIN_NON_BLANK_LINES = 8
 
 # Roles whose CLAUDE.md is allowed over MAX_CHARS, each with the reason. An entry is a
 # justification, not a waiver: it names the operating rule that cannot move to a docs/ page,
-# and the section to move out next. A doc that grows past its recorded count fails (#2679),
-# so the list shrinks rather than settling. Recorded 2026-09-28 when the unit became
-# characters (#2826); #2921 and #2982 started the trim on gitops_deploy and initial_setup,
-# and each reason names the section that goes next. #2989 took renovate_notify out: its
-# sandbox surprises, dashboard-parser measurements and module layout moved to
-# docs/renovate-notify-internals.md. #2991 took two more: claude_code's memory incidents and
-# slice-placement argument moved to docs/claude-code-rc-caps.md, and hypervisor's staging
-# reap, subnet census and libvirt collisions to docs/hypervisor-libvirt-internals.md. #2993
-# took docker_install out: the 2026-09-18 engine-upgrade incident, the pin derivations, the Go
-# runtime measurements and the uninstall behind the teardown arm moved to
-# docs/docker-engine-pins-and-runtime.md, and `## What it does` became a pointer at
-# `tasks/install.yml`. #2995 took renovate_agent out: the four bounds and the worktree rules,
-# the digest's before/after census, the alive tile's exit codes and token plumbing, the wrapper's
-# throwaway-config harness and the denylist marker's history moved to
-# docs/renovate-agent-bounds-and-digest.md, leaving the arming procedure and the contract. #2997
-# took k3s out: the restore drill's three bounds, the cron-evidence checks, the read-only crons, the
-# control-plane gates and the four measured incidents moved to
-# docs/k3s-node-plane-crons-and-incidents.md, and the contract kept every `ENFORCED:` test node.
-# #2999 took the last entry, gitops_deploy, out: the deployer's module layout, the two timeout
-# budgets and the waiters they move, the `manual_plane` and k8s-marker rules, the contention
-# reset, the dirty-tree skip and the two GitHub settings moved to docs/gitops-pipeline.md,
-# leaving the contract, `## Safety`'s one-line-per-arm rules and the hold-clearing rule. Both
-# role-doc ceilings now hold every doc in the tree, so an entry here is a new justification
-# rather than a survivor.
+# and the section to move out next. A doc that grows past its recorded count fails, so the
+# list shrinks rather than settling. Both role-doc ceilings hold every doc in the tree, so an
+# entry here is a new justification rather than a survivor.
 OVER_CEILING: dict[str, str] = {}
 
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
@@ -103,8 +76,8 @@ def _role_dirs(roles_dir: Path = SETUP_ROLES) -> list[Path]:
     """Every role under `roles_dir`, a dotted directory and a retired role's shell skipped.
 
     A shell is a directory holding only a gitignored `__pycache__/` after the deployer's
-    fast-forward removed the role's tracked files; reading it as a role made this guard raise
-    `FileNotFoundError` on its missing `CLAUDE.md` (#2964).
+    fast-forward removed the role's tracked files; reading it as a role would raise
+    `FileNotFoundError` on its missing `CLAUDE.md`.
     """
     return [d for d in role_dirs(roles_dir) if not d.name.startswith(".")]
 
@@ -214,9 +187,9 @@ def test_census_sees_at_least_twelve_setup_roles():
 
 def test_optimize_pi_is_not_exempt():
     """Its container-recovery cron runs `docker start` on any watched container it finds down,
-    so it is an autonomous actor and owes the contract (#2727). The exemption it used to carry
-    claimed only that the crons delete nothing and change no service configuration, which is a
-    narrower claim than "changes no state" — and an argument this guard exists to refuse.
+    so it is an autonomous actor and owes the contract. An exemption claiming only that the crons
+    delete nothing and change no service configuration is narrower than "changes no state" — an
+    argument this guard exists to refuse.
     """
     assert "optimize_pi" not in EXEMPT
     assert _contract_problems(SETUP_ROLES / "optimize_pi") == []

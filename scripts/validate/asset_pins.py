@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Fetch every pinned download in the roles' `defaults/` and check its checksum.
 
-A Renovate PR that bumps a version used to build a download URL is green whether or not the
-URL it wrote exists: nothing in CI fetches it. The 2026-09-02 case (`renovate-prs` skill, §3)
-was a `jellyfin-ani-sync` bump that left a 404 URL beside a checksum from the old release,
-with green CI. The skill answered with two `curl` lines the operator ran by hand per PR; this
-script is those lines over every pin at once (#2163).
+A Renovate PR that bumps a version used to build a download URL is green whether or not the URL
+it wrote exists: nothing in CI fetches it. A `jellyfin-ani-sync` bump can leave a 404 URL
+beside a checksum from the old release, with green CI. This script is the fetch-and-check over
+every pin at once.
 
 A pin is a URL and the digest the role checks the download against. Two shapes carry one:
 
@@ -19,7 +18,7 @@ file alone, and one that does not resolve is reported as a failure, never skippe
 with no URL beside it (a `get_url` whose URL is inline in `tasks/`) is listed as unpaired so
 the gap is visible; it does not fail the run. The fix is to move the URL into defaults beside
 the digest, templated from the version key — `optimize_pi_node_exporter_url` is the worked
-example (#2224).
+example.
 
 `KNOWN_PINS` names pins the census must find. A scanner that finds its subjects by pattern
 returns an empty set the moment the keys are renamed, and a loop over nothing passes — the

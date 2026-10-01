@@ -6,7 +6,7 @@ SERIALISED AS A STRING -- `{"v1":"enabled","v2":"enabled"}` -- and not the bare 
 other Longhorn setting patched in `longhorn.yml` takes. The failure mode is quiet: a patch
 copying a sibling's `{"value":"enabled"}` shape is accepted by kubectl, stored, and ignored by
 Longhorn, so the cluster keeps running `fast-check` while the repo and a green deploy both say
-`enabled`. That is #1364's whole subject, so the shape is worth a guard rather than a comment.
+`enabled`. The shape is worth a guard rather than a comment.
 
 The two halves below are the accept/reject pair this repo requires of a new check: a bare-string
 value must be REJECTED, and the rendered map must be ACCEPTED. Without the rejecting half there

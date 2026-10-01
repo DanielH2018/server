@@ -1,10 +1,10 @@
-"""The Alloy config must emit exactly the Loki labels Promtail emitted.
+"""The Alloy config must emit exactly the Loki labels its consumers select on.
 
 Every consumer — monitor-bridge's selectors, terraria-stats' and valheim-stats'
 `{container="…"}` queries, the `{job="syslog"}` deploy annotation on every dashboard — selects
 on `job`, `container`, `pod`, `namespace`, `machine` and `stream`, and on the ABSENCE of `app`.
-A missing `machine` or a stray `app` is a shipped-blind bug: the HA ban check went blind that
-way on 2026-08-23. The config is River, not YAML, so this reads the rendered ConfigMap text
+A missing `machine` or a stray `app` is a shipped-blind bug: the HA ban check goes blind that
+way. The config is River, not YAML, so this reads the rendered ConfigMap text
 rather than a parsed document.
 """
 
@@ -21,7 +21,7 @@ REQUIRED_FRAGMENTS = (
     'selector = "{container=\\"access-log-rotate\\"}"',
     'drop_counter_reason = "traefik_routine_access_log"',
     '"DownstreamStatus\\":(200|204|304),.*\\"Duration\\":[0-9]{1,9},',
-    # The HA cast refresh_token redaction, scoped the same way (issue #3015). Its behaviour —
+    # The HA cast refresh_token redaction, scoped the same way. Its behaviour —
     # token gone, `_handle_signal_show_view` marker intact — is test_alloy_redacts_ha_refresh_token.
     'selector = "{container=\\"home-assistant\\"}"',
     "stage.replace {",

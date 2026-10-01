@@ -93,7 +93,7 @@ def test_a_pr_the_tick_already_applied_is_not_behind(landing):
     `behind_since` is set on a tick that applied this very PR — that is what keeps the 6h
     watchdog armed for a tail that never goes green. Answering BEHIND off the marker alone
     reported `deferred` (exit 75) for work already live, on most landings rather than a rare
-    one (issue #1786).
+    one.
     """
     ln, _ = landing(Fakes(state={"behind_since": "x"}, merge_applied_rc=0))
     ln.merge_sha = "abc123"
@@ -124,9 +124,9 @@ def test_an_unreadable_hold_marker_is_unknown_even_when_behind_is_readable(landi
 def test_an_unreadable_state_directory_is_unknown_not_converged(landing):
     """The reject half of `tick_state`, and the reason `read_state` distinguishes the two.
 
-    `read_state` used to suppress every OSError and answer "", so a state directory this
-    process could not read reported `converged` -- "the tick applied it" -- and a landing
-    settled on the strength of a read that never happened.
+    `read_state` must not suppress every OSError and answer "": a state directory this
+    process could not read would report `converged` -- "the tick applied it" -- and a
+    landing would settle on the strength of a read that never happened.
     """
     ln, _ = landing()
     ln.tools.read_state = lambda root, name: None

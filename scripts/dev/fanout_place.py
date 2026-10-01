@@ -249,7 +249,7 @@ def cmd_launch(args, tools: Tools) -> int:
             # running. Name them and the run-id: the manifest is what `status` and `clean`
             # read, and the `clean <run-id>` an `exists` refusal asks for needs the id. A
             # run that launched nothing gets no manifest — an empty one records no work,
-            # and `launch` now reads every manifest under the root before it places.
+            # and `launch` reads every manifest under the root before it places.
             if not run.batches:
                 print("launched before this failure: none", file=sys.stderr)
                 return 1
@@ -364,11 +364,11 @@ def cmd_clean_one(
     six of `clean_one`'s own seams are forwarded so a REMOVABLE-with-lock case run through this
     entry point stays hermetic too.
 
-    An absent worktree reads `removed`, not `kept` — it is the goal state, not a failure.
-    This is no longer how `clean` handles a gone tree: the copy of this script that a
-    remote leg runs lives inside the worktree, so `remote_clean_command`'s shell chain
-    answers the absent-tree case before this interpreter could start (Ruling 30). The path
-    below stays for a `clean-one` run by hand against a tree that is already gone.
+    An absent worktree reads `removed`, not `kept` — it is the goal state, not a failure. This
+    is not how `clean` handles a gone tree: the copy of this script that a remote leg runs
+    lives inside the worktree, so `remote_clean_command`'s shell chain answers the absent-tree
+    case before this interpreter could start (Ruling 30). The path below stays for a
+    `clean-one` run by hand against a tree that is already gone.
     """
     from fanout_lib.clean import clean_one
     from fanout_lib.clean import delete_branch as default_brancher

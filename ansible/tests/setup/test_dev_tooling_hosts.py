@@ -1,9 +1,9 @@
 """Guards on `dev_tooling_hosts` — which hosts `initial_setup --tags tooling` provisions.
 
 The tag installs uv, the uv-managed CLI tools, the pinned host Python, the /usr/local/bin/uv
-symlink and the pinned Vale binary. Those tasks used to be gated on `has_repo_checkout`, or on
-nothing at all, and daniel-pi sets `has_repo_checkout: true` — so the tag implied work on a
-512 MB Zero 2 W that nobody intended to apply, and issue #1726 settled that the Pi is excluded.
+symlink and the pinned Vale binary. Those tasks gate on the list, not on `has_repo_checkout`:
+daniel-pi sets `has_repo_checkout: true`, and the tag must not imply work on a 512 MB Zero 2 W
+that nobody intends to apply. The Pi is excluded.
 
 THE MEMBERSHIP IS THE WHOLE GUARD. An allowlist that quietly grew a host provisions it on the
 next run of the tag, which is exactly the outcome the operator rejected. So the accepting half
@@ -76,9 +76,9 @@ def test_the_allowlist_names_the_two_hosts_somebody_commits_from():
 
 
 def test_daniel_pi_is_excluded():
-    """The rejecting half. The operator settled this on 2026-09-10 (issue #1726): the Pi holds a
-    checkout but is driven remotely over ssh and nobody commits from it, so provisioning a
-    pinned Python 3.14 on a 512 MB Zero 2 W was rejected in favour of narrowing the gate."""
+    """The rejecting half. The operator excluded the Pi: it holds a checkout but is driven
+    remotely over ssh and nobody commits from it, so provisioning a pinned Python 3.14 on a
+    512 MB Zero 2 W was rejected in favour of narrowing the gate."""
     assert "daniel-pi" not in GROUP_VARS[VAR], (
         "daniel-pi is back in the allowlist. Re-adding it provisions the Pi, which is the "
         "outcome issue #1726 rejected — the Pi's `has_repo_checkout: true` is a proxy for "
@@ -156,7 +156,7 @@ def test_the_shared_fact_task_is_still_the_only_exemption():
 
 def test_the_git_hooks_task_gates_on_the_allowlist():
     """`prek install` needs prek, which arrives with this tooling. Gating the two differently
-    is what left daniel-pi with a task that can only fail."""
+    leaves daniel-pi with a task that can only fail."""
     tasks = yaml_fast.safe_load((TASKS_DIR / "system-tuning.yml").read_text())
     task = next(t for t in tasks if t.get("name") == "Install Git hooks")
     assert _gated_on_the_allowlist(task.get("when")), (

@@ -2,12 +2,6 @@
 # Deploy-time gate for a role whose only workload is a CronJob. See CLAUDE.md for what a
 # caller's CronJob must guarantee before including this — `concurrencyPolicy: Forbid` and
 # idempotence under one extra out-of-band run.
-#
-# Extracted in shape from configarr, which had carried this inline since it ported to k3s. The
-# poll was not invented for the shared role; what changed is the guard (widened from
-# ansible_check_mode to k8s_no_mutate) and the failure handling (a run whose container never
-# STARTED now fails the deploy — see the block below the poll for what that does and does not
-# cover).
 
 # Fixed name, deleted first, so repeated deploys do not accumulate Jobs. `--wait=true` matters:
 # `create job` against a name whose Job is still terminating fails with AlreadyExists.
@@ -40,7 +34,7 @@
   # costs an extra 10 s on every failure and reads as two gates rather than one.
   # A `cmd:` string is safe HERE and only here: this jsonpath contains no spaces, so command's
   # shlex split leaves it whole. Add a `{range ...}` to it and it must move to argv like the
-  # container-state read below, which shipped broken for exactly that reason.
+  # container-state read below.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} get job {{ cronjob_gate_name }}-deploy-gate
@@ -60,7 +54,7 @@
     'Complete' in cronjob_gate_result.stdout or 'Failed' in cronjob_gate_result.stdout
   retries: "{{ (cronjob_gate_timeout | int / 10) | round | int }}"
   delay: 10
-  # Defensive, carried across from configarr, and narrower than it looks. On the `Failed` path
+  # Defensive, and narrower than it looks. On the `Failed` path
   # `kubectl get` returns rc 0 — it found the Job and printed its conditions — so nothing would
   # abort here even without this. What it covers is a non-zero rc on the attempt that satisfied
   # `until`, which would otherwise fail the task before the log dump below could run. It does
@@ -80,19 +74,17 @@
 #   * The container ran and exited non-zero — the binary works and the application failed. On an
 #     image-only diff that is almost never the image; it is a transient dependency, which the
 #     caller's own monitor already pages for on a bounded delay. Reported, not enforced.
-#     configarr/tasks/main.yml carries the incident behind that: a wrapper was retired for
-#     failing deploys over exactly this.
 #
 # So the contract is narrow and worth stating out loud: this role proves the new image RUNS. It
 # does not prove the workload succeeded. Do not "simplify" it back to a blanket fail — that
-# reverses a decision taken after a real outage, and CLAUDE.md records why.
+# reverses a deliberate decision, and CLAUDE.md records why.
 
 # argv, NOT a folded `cmd:` string. ansible.builtin.command shlex-splits a cmd, and the space
 # inside `{range .items[*]}` tears the jsonpath into two arguments while the quotes around the
 # newlines are stripped — kubectl then answers "name cannot be provided when a selector is
 # specified", rc=1, which `failed_when: false` below swallows into an empty stdout. That reads
 # as "no state readable", which is fatal, so the ENTIRE non-fatal branch below becomes dead
-# code and every application failure fails the deploy. It shipped that way once. argv invokes
+# code and every application failure fails the deploy. argv invokes
 # no shell and has no quoting layer to get wrong; roles/setup/k3s/tasks/longhorn.yml:272 is the
 # other instance of the same fix, and its comment says the same thing.
 #

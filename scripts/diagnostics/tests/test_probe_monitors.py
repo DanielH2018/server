@@ -47,7 +47,7 @@ def _series(name, status="1"):
 
 
 def test_monitors_names_the_declared_monitors_the_exporter_has_not_exported():
-    # #1779: minutes after a Kuma pod replacement the exporter had 89 of 105 declared
+    # Minutes after a Kuma pod replacement the exporter had 89 of 105 declared
     # monitors, and `monitors` read "89/89 up" — the 16 unreported tiles included the etcd
     # snapshot and secret-rotation dead-men. The ratio stays (it is still what is down), and
     # the shortfall is named beside it. Exit code stays 0: absence is kuma-drift's verdict.
@@ -82,8 +82,8 @@ def test_declared_monitor_count_leaves_gated_declarations_out(tmp_path):
 
 
 def test_kuma_drift_reports_a_declared_monitor_that_is_not_live():
-    # The 2026-08-20 case: the tile is absent from the exporter, not down, so `monitors`
-    # reported 81/81 up for a day. Long-uptime Kuma, so PENDING cannot be the explanation.
+    # The tile is absent from the exporter, not down, so `monitors` would report 81/81 up.
+    # Long-uptime Kuma, so PENDING cannot be the explanation.
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "k3s Grafana"}
     text, code = monitors.format_kuma_drift(declared, live, 86400 * 3)
@@ -119,7 +119,7 @@ TEMPLATED_INTERVAL_VARS = {"etcd_drill_full_kuma_interval_s": 3024000}
 
 def test_parse_declared_monitors_evaluates_a_templated_interval_against_the_variables():
     # A digits-only match read `{{ etcd_drill_full_kuma_interval_s }}` as None, so the monthly
-    # drill tile could never be pending and read as drift after every Kuma restart (#2019).
+    # drill tile could never be pending and read as drift after every Kuma restart.
     declared = monitors.parse_declared_monitors(
         TEMPLATED_INTERVAL_SAMPLE, variables=TEMPLATED_INTERVAL_VARS
     )
@@ -197,12 +197,11 @@ def test_kuma_drift_skips_a_monitor_whose_gate_is_genuinely_unset():
 
 
 def test_kuma_drift_reports_drift_when_the_gate_is_set_but_the_monitor_is_absent():
-    """The 2026-08-22 case, and the reason `gate` exists.
+    """The reason `gate` exists.
 
-    etcd_snapshot_push_token was set (32 chars, in the rotation registry since 2026-07-04) and
-    Off-box etcd Snapshot was not live — and the old check called that correctly skipped. A
-    gated monitor that vanishes was invisible twice: absent from the exporter, and excused by
-    the drift check written to catch exactly that.
+    etcd_snapshot_push_token is set and Off-box etcd Snapshot is not live — which must not be
+    called correctly skipped. A gated monitor that vanishes was invisible twice: absent from
+    the exporter, and excused by the drift check written to catch exactly that.
     """
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
@@ -323,14 +322,14 @@ def test_resolve_gate_states_covers_only_the_gates_whose_monitor_is_absent():
     """The narrowing is a deliberate sops-cost bound: one decrypt per gate, so it is not paid
     for a monitor that is live and needs no explanation for why it might not be.
 
-    Extracted from `run_kuma_drift` for #1632 so `postflight.check_kuma_drift` shares one
-    constructor rather than carrying its own copy — a second caller is exactly how the
-    gate_states argument came to be omitted in the first place.
+    Shared with `postflight.check_kuma_drift` through one constructor rather than a second
+    copy — a second caller is exactly how the gate_states argument comes to be omitted.
 
     Asserted on the returned KEYS rather than on a recorded call list, so this needs no age
     key and no patch: the narrowing IS which gates appear. `no_secrets` then pins the other
     half — a deliberate non-read maps to None ("could not be read", rendered as unverified),
-    never to False, which would excuse the monitor. That conflation is the 2026-08-22 miss.
+    never to False, which would excuse the monitor. That conflation is the miss this guards
+    against.
     """
     declared = {
         "Live Gated": {"type": "push", "interval": 60, "gated": True, "gate": "tok_a"},
@@ -348,7 +347,7 @@ def test_resolve_gate_states_covers_only_the_gates_whose_monitor_is_absent():
 
 
 def test_an_undeclared_gate_key_reads_as_genuinely_unset_is_clean():
-    """The #1644 case: a key that is not in the store at all is an unset gate.
+    """A key that is not in the store at all is an unset gate.
 
     `homelab_eval_push_token` is deliberately absent — static-monitors.yaml.j2 says so — and
     its monitor correctly renders away, which is exactly the False arm. It reported None

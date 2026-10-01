@@ -98,7 +98,7 @@ def test_an_absent_marker_is_not_an_error(tmp_path, run, capsys):
     assert "not pending" in capsys.readouterr().out
 
 
-# ── #2349: a narrowed apply clears only the tags it ran ────────────────────────────────
+# ── a narrowed apply clears only the tags it ran ────────────────────────────────
 
 
 def test_a_narrowed_clear_keeps_a_tag_a_later_range_added(
@@ -274,13 +274,13 @@ def test_the_role_is_resolved_through_the_deployers_own_tag_map(marker):
     assert gitops_state.marker_key("k3s") == "k3s"
 
 
-# ── the journal line a clear leaves (issue #2022) ─────────────────────────────────────────
+# ── the journal line a clear leaves ─────────────────────────────────────────
 def test_a_clear_journals_the_role_and_the_line_it_dropped_and_a_no_op_says_so(
     marker, run, journal
 ):
-    """`k3s` was cleared by hand on 2026-09-18 with its apply still owed, and nothing said
-    who, when, or which merged SHA that silenced: the marker's own truncation is the only
-    write the command made. The journal call is the evidence that write does not leave.
+    """A clear by hand with its apply still owed leaves no trace of who, when, or which
+    merged SHA it silenced: the marker's own truncation is the only write the command
+    makes. The journal call is the evidence that write does not leave.
     """
     assert run(marker.parent, "clear-manual-plane", "k3s") == 0
     ((role, dropped, _remaining),) = journal
@@ -350,7 +350,7 @@ def test_a_failing_logger_does_not_change_the_clears_exit_code(marker, tree_lock
     assert marker.read_text().splitlines() == [COMMON]
 
 
-# ── clear-contention (issue #1847) ────────────────────────────────────────────────────────
+# ── clear-contention ────────────────────────────────────────────────────────
 def test_clear_contention_removes_the_marker(tmp_path, run, capsys):
     (tmp_path / "contention_since").write_text(f"{'a' * 40} sonarr 1.0 2.0 3\n")
     assert run(tmp_path, "clear-contention") == 0
@@ -380,8 +380,8 @@ def test_clear_contention_refuses_while_the_tree_lock_is_held(
 def test_an_empty_applied_is_refused(tmp_path, run):
     """`--applied "$TAGS"` with TAGS unset parsed to the empty set, which clears the line.
 
-    The empty set means a WHOLE-role apply here, so the row was dropped however it had grown
-    (#2371). Refusing costs a retype; clearing silences the only signal that the role is
+    The empty set means a WHOLE-role apply here, so the row would be dropped however it had
+    grown. Refusing costs a retype; clearing silences the only signal that the role is
     unapplied.
     """
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
@@ -403,7 +403,7 @@ def test_a_non_empty_applied_still_clears_its_tags(tmp_path, run):
 def test_the_kept_message_warns_about_the_whole_role_apply_it_prescribes(
     tmp_path, run, capsys
 ):
-    """It sends the operator to `--tags k3s`, which arms the gated tasks (#2345).
+    """It sends the operator to `--tags k3s`, which arms the gated tasks.
 
     Every other surface printing that command carries `maximal_apply_warning`; this one
     printed it bare.
@@ -424,7 +424,7 @@ def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(
     assert "kept common" in out and "WARNING" not in out
 
 
-# ── clear-k8s-deferred: the same shape one plane over (#2449) ─────────────────────────────
+# ── clear-k8s-deferred: the same shape one plane over ─────────────────────────────
 
 SONARR = "abc123def4567890 sonarr 1000.0"
 RADARR = "def456abc7890123 radarr 2000.0"
@@ -460,7 +460,7 @@ def test_clearing_the_last_deferred_bump_removes_the_marker(tmp_path, run):
     assert not (tmp_path / "k8s_deferred").exists()
 
 
-# ── clear-k8s-unapplied: the marker nothing pages on (#2570) ───────────────────────────────
+# ── clear-k8s-unapplied: the marker nothing pages on ───────────────────────────────
 
 AUTHELIA = SONARR.replace("sonarr", "authelia")
 

@@ -101,19 +101,18 @@ def k8s_job_pods_args(job_name, namespace):
 def pod_selector(workload):
     """The `-l` expression matching a workload's OWN pods, read from its pod template labels.
 
-    Not `app=<name>`. pihole-2's Deployment selects `app: pihole`, so `app=pihole-2` matched
-    no pods at all while `app=pihole` matched both piholes' — and a pod query that matches
-    nothing yields `restarts=0` with an empty recent-restart list, which is byte-identical to a
-    genuinely quiet workload. That would leave the restart half of this gate silently inert,
-    the half that caught a crashlooping kube-state-metrics on 2026-08-07.
+    Not `app=<name>`. pihole-2's Deployment selects `app: pihole`, so `app=pihole-2` matched no
+    pods at all while `app=pihole` matched both piholes' — and a pod query that matches nothing
+    yields `restarts=0` with an empty recent-restart list, which is byte-identical to a
+    genuinely quiet workload. That would leave the restart half of this gate silently inert.
 
-    Nor `spec.selector.matchLabels`, which is what this read until 2026-09-02. `spec.selector`
-    is `apps/v1` immutable, so a role running two instances off one pod template cannot
-    discriminate them there: both pihole Deployments select `app: pihole`, and each therefore
-    read the union of the two instances' pods. The pod template is where the discriminating
-    label can live — pihole's carries `instance: pihole` / `instance: pihole-2` for exactly
-    that reason (`roles/k8s/pihole/templates/deployment.yaml.j2`), and the pihole web Service
-    already selects on it. k8s requires `spec.template.metadata.labels` to be a superset of
+    Nor `spec.selector.matchLabels`. `spec.selector` is `apps/v1` immutable, so a role running
+    two instances off one pod template cannot discriminate them there: both pihole Deployments
+    select `app: pihole`, and each therefore read the union of the two instances' pods. The pod
+    template is where the discriminating label can live — pihole's carries `instance: pihole` /
+    `instance: pihole-2` for exactly that reason
+    (`roles/k8s/pihole/templates/deployment.yaml.j2`), and the pihole web Service already
+    selects on it. k8s requires `spec.template.metadata.labels` to be a superset of
     `spec.selector.matchLabels`, so this is never wider than the selector.
 
     It can be narrower than the running set during a deploy that changes a pod template label:

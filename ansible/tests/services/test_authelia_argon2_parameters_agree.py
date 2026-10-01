@@ -7,8 +7,7 @@ spelled as CLI flags. Drift between them is invisible by construction: Authelia 
 algorithm and parameters back off each stored digest's own `$argon2id$` PHC prefix
 (`crypt.Decode`, `file_user_provider_database.go` at v4.39.21), so a login succeeds whatever
 the config block says and a deploy is green either way. Under the legacy flat spelling the two
-copies stood 1024x apart on `memory` for as long as the block existed (#1621); #1643 made them
-agree, and this guard is what keeps them agreeing.
+copies stand 1024x apart on `memory`; this guard keeps them agreeing.
 
 The flag-to-key mapping is NOT identity — `--salt-size` is `salt_length` and `--key-size` is
 `key_length` — which is itself the reason it is pinned here rather than left to a reader.
@@ -16,7 +15,7 @@ The flag-to-key mapping is NOT identity — `--salt-size` is `salt_length` and `
 Each rule is a predicate with a passing and a rejecting input, then applied to the real
 rendered manifest and the real task file behind non-vacuity assertions.
 
-Those non-vacuity assertions carry the #1621 case itself, so do not simplify them away. A revert
+Those non-vacuity assertions carry the legacy-spelling case itself, so do not simplify them away. A revert
 to the legacy flat spelling empties `password.argon2`, and the comparison would then hold two
 empty mappings and pass; what fails instead is the fixture's own assertion, naming the parameters
 the mapping lost.
@@ -122,7 +121,7 @@ def test_agreeing_parameters_are_clean():
 
 
 def test_a_changed_flag_is_flagged():
-    """The #1621 shape: one side moved, the other did not, and every gate stays green."""
+    """One side moved, the other did not, and every gate stays green."""
     mutated = GOOD_CMD.replace("--memory 65536", "--memory 64")
     assert mismatches(GOOD_CONFIG, argon2_flags(mutated))
 

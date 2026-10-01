@@ -1,10 +1,10 @@
 """The staging cluster stays retired, and the hypervisor substrate the etcd drill needs stays.
 
-Two retirements, one ratchet. #2859 removed the deployer's staging consultation: no `STAGING_*`
-key in the rendered config, no staging module under the role's `files/`, and no marker for the
-tick ledger or the one-tick override. #2941 then removed the cluster itself — the operator
-decided no manual staging sessions continue, so the `daniel-stage` guest, the gate that deployed
-to it, its inventory entry and its own secrets file are gone.
+Two retirements, one ratchet. The deployer does not consult staging: no `STAGING_*` key in the
+rendered config, no staging module under the role's `files/`, and no marker for the tick ledger
+or the one-tick override. The cluster itself is gone too — no manual staging sessions continue,
+so the `daniel-stage` guest, the gate that deployed to it, its inventory entry and its own
+secrets file are removed.
 
 What survives is the libvirt substrate the monthly etcd restore drill runs in:
 `roles/setup/hypervisor`, the staging network and the egress fence. That half is asserted here
@@ -35,7 +35,7 @@ RETIRED_KEYS = (
     "STAGING_EXPECT_TIMEOUT_S",
 )
 RETIRED_MARKERS = ("staging_alerted", "staging_ticks", "staging_override")
-# The state file the retired `staging_alerted` marker left on daniel-box (#3079), and the two
+# The state file the retired `staging_alerted` marker left on daniel-box, and the two
 # ledgers in the same directory that must survive the sweep. Named by basename rather than
 # matched by a `staging` prefix: a prefix check would read the kept ledgers as reapable too.
 REAPED_STATE = "/var/lib/gitops-deploy/staging_alerted_sha"
@@ -52,7 +52,7 @@ KEPT = (
     "ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2",
     "ansible/roles/setup/hypervisor/templates/etcd-drill-vm.xml.j2",
 )
-# The daniel-stage surface #2941 removed, one entry per thing a revival would have to re-add.
+# The daniel-stage surface that stays removed, one entry per thing a revival would have to re-add.
 GONE = (
     "ansible/inventory/host_vars/daniel-stage.yml",
     "ansible/vars/secrets-staging.yml",
@@ -74,8 +74,8 @@ def test_the_rendered_config_carries_no_staging_key():
 
 
 def test_the_role_defaults_declare_no_staging_budget():
-    """Nothing survives: the gate's ssh identity went with the gate (#2941), and the role now
-    only reaps the path it used to write."""
+    """Nothing survives: the gate's ssh identity went with the gate, and the role only
+    reaps the path the gate wrote."""
     text = DEFAULTS.read_text()
     budgets = re.findall(r"^gitops_deploy_staging_\w+:", text, re.MULTILINE)
     assert budgets == [], budgets
@@ -126,10 +126,10 @@ def test_the_drill_substrate_is_still_shipped():
 
 
 def test_the_daniel_stage_surface_is_gone():
-    """The cluster itself, retired by operator decision on 2026-09-28 (#2941).
+    """The cluster itself stays retired, by operator decision.
 
-    Nothing consults the guest, so 8 GiB of daniel-server's RAM and a 100 GB qcow2 sat
-    allocated for a host nothing drove. A file reappearing here is a revival, which is a
+    Nothing consults the guest, so 8 GiB of daniel-server's RAM and a 100 GB qcow2 would sit
+    allocated for a host nothing drives. A file reappearing here is a revival, which is a
     decision rather than a side effect of a refactor.
     """
     present = [path for path in GONE if (REPO / path).exists()]

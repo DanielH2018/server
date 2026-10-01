@@ -2,11 +2,10 @@
 
 WHY A SHARED MODULE. A test that runs `git -C <tmp_path> commit` under `prek`'s pytest hook
 writes the REAL checkout: `git commit` exports `GIT_DIR` and `GIT_INDEX_FILE` to its hooks,
-and git resolves both before `-C` or `cwd`. Twenty-five test modules each re-derived the same
-scrub, and they disagreed on what else went in it — some pinned `GIT_CONFIG_GLOBAL`, some did
-not, some set a commit identity and some relied on the host's. A module that forgot one line
-still passed on a developer box and wrote the primary repository's config under a hook
-(#2857).
+and git resolves both before `-C` or `cwd`. Test modules that each re-derive the scrub
+disagree on what else goes in it — some pin `GIT_CONFIG_GLOBAL`, some do not, some set a commit
+identity and some rely on the host's. A module that forgets one line passes on a developer box
+and writes the primary repository's config under a hook.
 
 `leakguard.py` strips `GIT_DIR`, `GIT_INDEX_FILE` and `GIT_WORK_TREE` from `os.environ` once
 at plugin load, so it is the backstop for the whole suite. This module is the positive form:

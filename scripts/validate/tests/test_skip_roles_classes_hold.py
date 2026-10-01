@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """The two exemption classes in scripts/lib/k8s_roles.py must keep meaning what they say.
 
-A role in SKIP_ROLES is never rendered and never parsed as YAML by the manifest validator, so
-an entry whose stated reason has stopped being true is an unvalidated role that reads as a
-deliberate decision. The set was a single literal list until 2026-08-29, and by then two of its
-eight entries — volume-claim and image-builder — carried manifest templates while sitting beside
-six that carried none, with nothing distinguishing the two cases mechanically.
+A role in SKIP_ROLES is never rendered and never parsed as YAML by the manifest validator, so an
+entry whose stated reason has stopped being true is an unvalidated role that reads as a
+deliberate decision. Two of its eight entries — volume-claim and image-builder — carry manifest
+templates while sitting beside six that carry none, so a single literal list could not
+distinguish the two cases mechanically.
 
 The classes rot in OPPOSITE directions, which is why each gets its own assertion:
 
@@ -25,8 +25,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Imported from the module that DEFINES them, not from validate.k8s_manifests, which only
-# re-exports them since the 2026-09-04 split. A guard that reads a re-export passes just as
-# happily when the definition it means to police has moved somewhere else.
+# re-exports them. A guard that reads a re-export passes just as happily when the
+# definition it means to police has moved somewhere else.
 from lib.k8s_roles import (
     CALLER_RENDERED_ROLES,
     K8S_ROLES,
@@ -92,9 +92,9 @@ def test_the_predicate_can_tell_a_manifest_from_a_helper(tmp_path: Path):
     assert not is_manifest_template(tmp_path / "Dockerfile.j2")
 
 
-# The two placement rules from #1856, one on the source and one on the render. Both are what
-# lets app config sit at templates/ top level unnoticed: the validator parses it as a manifest,
-# finds no `kind`, and skips it silently.
+# The two placement rules, one on the source and one on the render. Both are what lets app
+# config sit at templates/ top level unnoticed: the validator parses it as a manifest, finds no
+# `kind`, and skips it silently.
 _EMBED = (
     "{{ lookup('template', playbook_dir + '/roles/k8s/x/templates/%s') | indent(4) }}"
 )

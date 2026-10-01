@@ -2,7 +2,7 @@
 
 Home Assistant writes the Google Cast system user's `refresh_token` in plaintext whenever a cast
 fails in `_handle_signal_show_view`, and `homeassistant.util.logging` is not silenced, so the
-record reaches Loki (issue #3015). The stage that strips it has two ways to be wrong, and the
+record reaches Loki. The stage that strips it has two ways to be wrong, and the
 pair below is one test each:
 
 - it stops matching, and a live HA API credential sits in a 744h log store;
@@ -20,7 +20,7 @@ import pytest
 
 from _k8s_render import rendered_docs
 
-# The 2026-09-29 record's shape. HA formats the `cast_show_view` signal args into the message.
+# The record's shape. HA formats the `cast_show_view` signal args into the message.
 # The stand-in keeps the real token's length (64 hex chars) and carries no entropy, so gitleaks
 # does not read the fixture as a credential.
 TOKEN = "f" * 64

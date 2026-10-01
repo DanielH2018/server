@@ -9,7 +9,7 @@
 # .claude/logs/instructions.log, so path-scoped rule loading can be verified.
 #
 # Routed through uv like every other host-run Python here: one way to run Python
-# on these hosts, and the system 3.12 is no longer a viable interpreter for these
+# on these hosts, and the system 3.12 cannot run these
 # scripts. `--no-project` because uv resolves a project from the cwd and a hook's
 # cwd is arbitrary. `2>/dev/null` + `exit 0` guarantee the hook never surfaces an
 # error (even if uv were missing); it cannot block.

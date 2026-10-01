@@ -3,8 +3,8 @@
 
 WHY THIS EXISTS. `sudo` resolves the local hostname on every invocation. With no line for it in
 /etc/hosts the lookup falls through to /etc/resolv.conf, whose first nameserver is the cluster's
-Pi-hole VIP -- so every `sudo` on the Pi printed `unable to resolve host daniel-pi: Name or
-service not known` (2026-09-27, #2724), and a `sudo` during a cluster or Pi-hole outage waits on
+Pi-hole VIP -- so every `sudo` on the Pi prints `unable to resolve host daniel-pi: Name or
+service not known`, and a `sudo` during a cluster or Pi-hole outage waits on
 the resolver timeout before running anything. That is exactly when an operator needs the Pi.
 
 WHY IT NEEDS A GUARD. Both ways to break it are silent on the run that breaks them:

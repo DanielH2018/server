@@ -50,7 +50,7 @@
   become: false
   changed_when: false
   # A read, so it runs under --check too: skipped, it leaves no stdout and the login report
-  # below errors on the attribute (#2323). On a host without claude yet, --check only
+  # below errors on the attribute. On a host without claude yet, --check only
   # simulated the install above, so there is nothing to run; that is not a failure of the
   # check run.
   check_mode: false
@@ -59,7 +59,7 @@
 - name: Keep the user manager alive after logout (loginctl enable-linger)
   # user-1000.slice is StopWhenUnneeded=yes, so a fan-out agent launched from an ssh login
   # dies at logout unless the user lingers. This is what lets `systemd-run --user` hold a
-  # transient service after the launching ssh call returns (spec 2026-09-06 §3).
+  # transient service after the launching ssh call returns.
   tags: [claude_code]
   ansible.builtin.command: "loginctl enable-linger {{ sys_user }}"
   args:
@@ -93,7 +93,7 @@
 # disconnects", so there is no built-in always-on host to enable and systemd supervises it
 # instead. See this role's CLAUDE.md.
 
-# ── The fleet bound (issue #1264) ──────────────────────────────────────────────────────
+# ── The fleet bound ────────────────────────────────────────────────────────────────────
 # One cap for both Claude cgroup planes, on the slice that parents them: claude-rc.service
 # (moved into it by the unit's Slice= line) and user-{{ claude_code_login_uid }}.slice.
 # Applied BEFORE the unit is installed so the parent cap is already on disk when the first
@@ -163,9 +163,9 @@
 
 - name: Write the alert webhook where only systemd reads it
   tags: [claude_code]
-  # 0600 and root-owned because this file is the only place the value lives now. Keeping it
+  # 0600 and root-owned because this file is the only place the value lives. Keeping it
   # out of the unit is what stops `systemctl show` printing it over the system bus — the unit's
-  # own mode never did (2026-08-24 review M-1).
+  # own mode never did.
   ansible.builtin.template:
     src: alert-webhook.env.j2
     dest: /etc/claude-rc/alert-webhook.env
@@ -222,14 +222,12 @@
       claude_code_rc_enabled=true.
   when: not claude_code_rc_enabled
 
-# ── Cgroup resource metrics (issue #1238) ──────────────────────────────────────────────
-# claude-rc.service is bounded (MemoryHigh/MemorySwapMax) and user-1000.slice (SSH-started
-# sessions, #1213) is not, but neither cgroup's counters reached Prometheus — the box stalled
-# unreachable for ~30 min on 2026-09-05 with nothing narrating it (#1154/#1213). The counters
-# are already free (this host sets DefaultMemoryAccounting/CPUAccounting=yes) and
-# node-exporter's textfile collector is already deployed and scraped, so this drops a gauge
-# set into it every 30s with no exporter change. Read-only observation only — it does not
-# touch the cap mechanism #1213 is fixing separately.
+# ── Cgroup resource metrics ────────────────────────────────────────────────────────────
+# The cgroup counters for claude-rc.service and user-1000.slice (SSH-started sessions) are
+# already free (this host sets DefaultMemoryAccounting/CPUAccounting=yes) and node-exporter's
+# textfile collector is already deployed and scraped, so this drops a gauge set into it every
+# 30s with no exporter change. Read-only observation only — it does not touch the cap
+# mechanism.
 
 - name: Deploy the cgroup metrics script
   tags: [claude_code]
@@ -264,11 +262,11 @@
     daemon_reload: true
   become: true
 
-# ── Login-session caps (issue #1213) ────────────────────────────────────────────────────
+# ── Login-session caps ──────────────────────────────────────────────────────────────────
 # The RC unit's MemoryHigh/MemorySwapMax/PYTEST_XDIST_AUTO_NUM_WORKERS bound only its own
 # cgroup. A session started with `claude agents` (or a bare `claude`) from an interactive
 # SSH shell lands in user.slice/user-{{ claude_code_login_uid }}.slice instead, which none of
-# those touch — see defaults/main.yml for the incident this closes. Unconditional whenever
+# those touch — see defaults/main.yml for the gap this closes. Unconditional whenever
 # this role runs: unlike the RC host, a login shell is not something claude_code_rc_enabled
 # gates, so these two artifacts have their own on/off var instead.
 
@@ -401,12 +399,10 @@
   when: not claude_code_memory_sync_enabled
   notify: Reload systemd
 
-# Render provenance for manifest-prune-check.sh's stale-script arm. This role landed on
-# 2026-08-23 rendering five files and stamping none, so an edit to any of them could sit
-# undeployed on this host with every repo-side check green — the H1 gap the 2026-08-23b sweep
-# closed for the sibling roles, reopened by a role written the same morning (2026-08-24 review
-# M-4). Last in the role so a failed run leaves the previous checksums rather than claiming
-# these. `import_tasks`, not `include_tasks`: an include renders no fragment (commit 13c6285f).
+# Render provenance for manifest-prune-check.sh's stale-script arm: without a stamp, an edit to
+# a rendered file can sit undeployed on this host with every repo-side check green. Last in the
+# role so a failed run leaves the previous checksums rather than claiming these. `import_tasks`,
+# not `include_tasks`: an include renders no fragment.
 - name: Stamp the rendered Remote Control units
   tags: [claude_code]
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
@@ -428,7 +424,7 @@
       - ansible/roles/setup/claude_code/templates/claude-memory-sync-alert.service.j2
 
 # Sibling of the stamp above, for the ONE copy:-deployed (not template:-rendered) artifact
-# this role now carries — manifest-prune-check.sh's second arm (is the deployed code the repo's
+# this role carries — manifest-prune-check.sh's second arm (is the deployed code the repo's
 # code?) only sees a copy:-deployed script if it is registered here.
 - name: Record the deployed cgroup metrics script for drift checking
   tags: [claude_code]

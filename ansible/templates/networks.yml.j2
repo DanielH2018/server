@@ -1,10 +1,9 @@
 {# Shared network blocks for container compose templates.
 
-   Every service template inlined the same two `networks:` blocks — the per-service
-   attachment list and the top-level external declaration — looping over
-   container_item.networks (falling back to the default docker_network). These two
-   macros replace that boilerplate; they emit byte-identical output to the old inline
-   loops, so a service can still append extra hardcoded networks on the lines that
+   These two macros emit the `networks:` blocks every service template needs — the
+   per-service attachment list and the top-level external declaration — looping over
+   container_item.networks (falling back to the default docker_network). A service
+   can still append extra hardcoded networks on the lines that
    follow the macro call (e.g. karakeep's `- internal`, crowdsec's `crowdsec-db:`).
 
    `service_networks()` — the per-service `networks:` list. Invoke at the service's

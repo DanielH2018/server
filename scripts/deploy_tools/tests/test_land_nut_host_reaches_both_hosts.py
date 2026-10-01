@@ -1,13 +1,12 @@
-"""PR #1915's shape lands reported: `nut_host` is a setup role both mappers can see.
+"""`nut_host` is a setup role both mappers can see.
 
-PR #1915 changed `ansible/roles/nut_host/tasks/main.yml`. The role sat outside the
-`ansible/roles/setup/<role>/` shape that `deploy_changes.py` (`_SETUP_ROLE`) and `land_reach`
-(`_SETUP_ROLES_DIR`) both derive the setup plane from, so it derived no tag, no setup role and
-no note: the landing named `initial_setup` alone, the deployer's `broad_applied` recorded the
-same, and the change sat unapplied on daniel-box and daniel-server until a hand run (issue
-#1916). The role moved under `roles/setup/` on 2026-09-17;
-`ansible/tests/setup/test_initial_setup_roles_are_visible_to_the_deployer.py` refuses a
-sibling in the old position. This file pins what the landing now says for that PR's path.
+A role outside the `ansible/roles/setup/<role>/` shape that `deploy_changes.py`
+(`_SETUP_ROLE`) and `land_reach` (`_SETUP_ROLES_DIR`) both derive the setup plane from derives
+no tag, no setup role and no note: the landing would name `initial_setup` alone, the
+deployer's `broad_applied` would record the same, and the change would sit unapplied until a
+hand run. `ansible/tests/setup/test_initial_setup_roles_are_visible_to_the_deployer.py`
+refuses a role outside `roles/setup/`. This file pins what the landing says for `nut_host`'s
+paths.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py
 """

@@ -11,7 +11,7 @@ from unittest import mock
 import stats_lib
 
 # The handler reads this instant on every request and `last_poll_ok` is set against it, so
-# the /healthz verdict is a fixed distance from `health_max_age` (#2158).
+# the /healthz verdict is a fixed distance from `health_max_age`.
 NOW = 1_780_000_000.0
 
 

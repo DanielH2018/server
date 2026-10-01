@@ -4,13 +4,12 @@
 `roles/k8s/game-stats/files/stats_lib.py` is the skeleton the terraria and valheim exporters
 share. Each game ships it into its own ConfigMap that a python:3.14-alpine pod mounts beside the
 entry script, so each game needs two things: the file staged on the node, and a `--from-file`
-entry naming it in that game's own `kubectl create configmap` command. Until #2055 those were two
-hand-kept halves, and a game could do one without the other and ship a pod that dies at
-`import stats_lib` on its next roll.
+entry naming it in that game's own `kubectl create configmap` command. A game could do one
+without the other and ship a pod that dies at `import stats_lib` on its next roll.
 
-Now the include owns both halves: `tasks/stage.yml` copies the file AND sets
+The include owns both halves: `tasks/stage.yml` copies the file AND sets
 `game_stats_lib_from_file` to the `--from-file` argument for that copy, and each game's task
-file interpolates the fact into its ship list. Since #2813 the lib and both games are one role,
+file interpolates the fact into its ship list. The lib and both games are one role,
 so the consumers are task files, not roles. What is left to check is the include's contract:
 
   - the fact names exactly the file the copy task stages (key == basename, path == dest);

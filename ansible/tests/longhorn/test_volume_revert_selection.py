@@ -65,7 +65,7 @@ def test_the_selection_takes_the_newest_by_creation_timestamp() -> None:
 
 
 def test_the_selection_rejects_a_markremoved_snapshot() -> None:
-    """Measured 2026-08-21: a snapshot already `markRemoved` cannot be reverted to.
+    """A snapshot already `markRemoved` cannot be reverted to.
 
     Taking one would fail the revert after the scale-down — and a retention pass racing a rollback
     is exactly how the newest becomes markRemoved.
@@ -104,7 +104,7 @@ def test_the_prefix_ends_at_a_claim_boundary() -> None:
     The residual case the separator does NOT close — a claim named `<other-claim>-something` —
     cannot matter, because the listing this filters is already scoped to THIS claim's own
     Longhorn volume in the jsonpath. No claim's snapshot ever appears in another claim's
-    listing. Measured 2026-08-21: no pair of the thirteen declared claims has either shape.
+    listing. No pair of declared claims has either shape.
     """
     prefix = _named(_CLAIM, "Name the snapshot prefix")["ansible.builtin.set_fact"][
         "volume_revert_prefix"

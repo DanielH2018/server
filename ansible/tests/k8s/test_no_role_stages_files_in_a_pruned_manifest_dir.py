@@ -8,16 +8,13 @@ deleted at the start of the next deploy and re-rendered a few tasks later — a 
 `changed` prune item on an otherwise idempotent run, and for a file something else reads later
 (`registry-gc.sh` reads `gc-job.yaml` at CRON time) a window in which the file is simply gone.
 
-That is one class with three instances so far, guarded here rather than re-derived a fourth
-time: `k8s/volume-claim`'s claim (#1654), n8n's broker-isolation probe (#1668), and registry's
-four job manifests (#1669). The fix each time was the same — move the file to a sibling
-directory under the manifest root that no role's `manifests_service` claims, the way
-`headlamp-netpol`, `media-volume-probe`, `build-*`, `registry-jobs` and `<service>-claims` do.
+The fix is to move the file to a sibling directory under the manifest root that no role's
+`manifests_service` claims, the way `headlamp-netpol`, `media-volume-probe`, `build-*`,
+`registry-jobs` and `<service>-claims` do.
 
-Those sibling names are a reservation, and #1670 is that nothing enforced it: a future role
-with `manifests_service: n8n-netpol` would render into that directory, prune every file it did
-not list, and `kubectl apply -f <dir>/` the rest — #1654 reproduced exactly. Hence two
-invariants, each with the input it must accept, the input it must reject, and a named census
+Those sibling names are a reservation: a role with `manifests_service: n8n-netpol` would
+render into that directory, prune every file it did not list, and `kubectl apply -f <dir>/`
+the rest. Hence two invariants, each with the input it must accept, the input it must reject, and a named census
 so a rename cannot empty it and leave an assertion passing on nothing:
 
 1. **No task stages a file into a directory some role's `manifests_service` names**, unless
@@ -98,7 +95,7 @@ def staged_files(tasks_file: Path) -> set[tuple[str, str]]:
     Read from the raw text, so a `template: dest:`, a `file: path:` and the path inside a
     `kubectl apply` command are all covered by one pattern — the render and the apply have to
     move together, and a check reading only `dest:` would pass while the apply still pointed at
-    the pruned directory (that is the shape #1669's `gc-job.yaml` had).
+    the pruned directory.
 
     A path with no filename component is a directory task and is skipped. A directory named by
     a Jinja expression is skipped too: only the utility roles write those, and resolving one
@@ -265,7 +262,7 @@ def test_a_removal_task_in_the_pruned_directory_is_clean(tmp_path):
 
 
 def test_the_pre_fix_n8n_probe_is_flagged(tmp_path):
-    """#1668 as it was written, so the guard is proven against the real defect it exists for."""
+    """n8n's broker-isolation probe staging into its pruned directory, a real defect shape."""
     text = """---
 - name: Deploy n8n to the cluster
   ansible.builtin.include_role:
@@ -291,7 +288,7 @@ def test_the_pre_fix_n8n_probe_is_flagged(tmp_path):
 
 
 def test_the_pre_fix_registry_jobs_are_flagged(tmp_path):
-    """#1669 as it was written: all four job manifests, including the cron-read gc-job."""
+    """Registry's shape: all four job manifests, including the cron-read gc-job."""
     text = """---
 - name: Deploy the image registry to the cluster
   ansible.builtin.include_role:
@@ -338,8 +335,7 @@ def test_the_pre_fix_registry_jobs_are_flagged(tmp_path):
 
 
 # Named rather than counted: an empty census would make the invariants below pass on nothing,
-# and which member went missing says more than a count moving. Verified against the tree on
-# 2026-09-10.
+# and which member went missing says more than a count moving.
 KNOWN_PRUNED_DIRS = frozenset({"n8n", "registry", "traefik", "authelia", "jellyfin"})
 KNOWN_STAGED_FILES = frozenset(
     {
@@ -439,8 +435,8 @@ def test_no_manifests_service_claims_a_reserved_sibling_name():
 #
 # `staged_files` reads tasks files. `registry-gc.sh` is a script template, so a move that
 # retargets the gc render's `dest:` and leaves `JOB_MANIFEST` pointing at the old directory
-# passes every assertion above and breaks GC at CRON time — which is the whole reason #1669's
-# `gc-job.yaml` was more than cosmetic. One targeted pair rather than a wider glob: manifest
+# passes every assertion above and breaks GC at CRON time — which is why a `gc-job.yaml` move
+# is more than cosmetic. One targeted pair rather than a wider glob: manifest
 # templates mention paths too, and reading them all would only add noise.
 
 GC_SCRIPT = K8S_ROLES / "registry" / "templates" / "registry-gc.sh.j2"

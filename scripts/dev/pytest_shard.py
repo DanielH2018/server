@@ -3,14 +3,14 @@
 
 WHY. The `pytest` job is the pole of every CI run and a landing waits on it twice — once on
 the PR, once on the master merge commit that `land.sh` and the deployer's CI gate both read.
-Sharding across matrix jobs is the remaining lever (#1270).
+Sharding across matrix jobs is the remaining lever.
 
 WHOLE MODULES, NEVER PART OF ONE. `--dist loadscope` in `addopts` keeps a module's tests on
 one xdist worker so a module-scoped fixture is built once. Splitting a module across shards
 would rebuild those fixtures per shard and give the saving straight back.
 
 WHY WEIGHTS, AND NOT A HASH. A stable hash of the module path is the obvious split and it
-balances badly here: the suite's cost is concentrated, not flat. Measured 2026-09-06 against a
+balances badly here: the suite's cost is concentrated, not flat. Measured against a
 serial `--durations=0` run of the whole suite (103.6s over 505 files), projected pole shard at
 N=4 was 42.7s for a sha256 split and 39.8s for a greedy split weighted by the number of `def
 test_` in each file, against 24.9s for a greedy split weighted by measured per-file seconds —
@@ -25,27 +25,22 @@ in exactly one shard, so a stale table makes CI slower, never wrong.
 THE MEDIAN IS A BAD GUESS FOR A HEAVY FILE, AND THE TABLE CANNOT KNOW WHICH FILES ARE HEAVY.
 The suite's median is 0.0s, so an unweighted file is packed as the lightest thing in the
 suite and placed last, into whichever shard happened to be least loaded. One unrecorded 30s
-module landed that way on 2026-09-17 and skewed the four CI shards to 65/99/99/68s against
-a 43s projection for every one (#2225).
+module landing that way skews the four CI shards to 65/99/99/68s against
+a 43s projection for every one.
 
 ONE GATE GUARDS THE TABLE, AND IT IS A CI STEP: `--check-durations`. It reads the durations
 report CI's own test step already wrote, so it measures each module by running it. That is what
 lets it see the two shapes nothing static can. A heavy module landing where every recorded
 sibling is light is invisible to a neighbour heuristic, and `def test_` count, byte size and
-directory mean all failed to separate the 2026-09-17 module from an ordinary file (#2238); the
+directory mean all fail to separate a heavy module from an ordinary file; the
 gate rejects it on `RUNNER_HEAVY_SECONDS`. And a recorded number can go wrong in the other
 direction, which no arm asking "is this file MISSING" ever sees:
-`ansible/tests/k8s/test_secret_consumer_census.py` stood at 17.31s against 0.09s measured, and
-the greedy split placed it first, so one shard carried 17s of phantom weight (#2514). The gate
+a recorded 17.31s against 0.09s measured makes the greedy split place the file first, so one
+shard carries 17s of phantom weight. The gate
 answers that as a RATIO — see STALE_WEIGHT_RATIO — and `--record-files` is its repair, since
 `--record-missing` only fills gaps.
 
-TWO STATIC ARMS USED TO SIT IN THE SUITE AND NO LONGER DO (#2830). An unweighted-fraction count
-and an unweighted-file-beside-a-recorded-pole neighbour test both asked whether a file was
-MISSING from the table. Since #2274 the docs-refresh cron runs `--record-missing` itself, so
-those gaps fill without a human, and the two arms bought 39 hand-run record commits in the 30
-days to 2026-09-28. Removing them also removed the only pytest test over this table, which is
-why nothing here deselects a node id any more.
+The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
@@ -80,7 +75,7 @@ WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
 _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 
 # What a file costs before any of its tests run: pytest imports the module at collection, and
-# the durations report attributes that to no test. Measured 2026-09-06 by timing two N=4 shards
+# the durations report attributes that to no test. Timing two N=4 shards
 # serially against their recorded totals — a 49-file shard ran 26.0s against 24.5s recorded and
 # a 357-file shard 34.2s against the same 24.5s, so the residual is 0.031s and 0.027s per file.
 # Without this term the split balances recorded seconds and leaves the file COUNT wildly uneven,
@@ -93,21 +88,20 @@ _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
 
 # What an unweighted module may measure on the CI runner before the shard gate rejects it.
 #
-# WHY A CI MEASUREMENT AND NOT A STATIC ARM. The neighbour heuristic this replaced saw an
-# unweighted file only where a recorded pole already sat in its directory. A heavy module
-# landing in a quiet directory was invisible to it, and no static proxy separates the two:
-# `def test_` count, byte size and directory mean were all checked against the 2026-09-17
-# module (6 tests, 248 lines, a directory averaging 0.19s) and none discriminates (#2238).
+# WHY A CI MEASUREMENT AND NOT A STATIC ARM. A neighbour heuristic sees an
+# unweighted file only where a recorded pole already sits in its directory. A heavy module
+# landing in a quiet directory is invisible to it, and no static proxy separates the two:
+# `def test_` count, byte size and directory mean were all checked against a heavy module
+# (6 tests, 248 lines, a directory averaging 0.19s) and none discriminates.
 # Only running the file says what it costs, and CI already runs it.
 #
 # WHY TEN. The gate reads the runner's own per-test seconds, summed per file, where the table
 # holds workstation seconds — the two are not the same scale, so the number is set against the
 # shard it would skew rather than against the table. A shard projects around 40s at six ways,
-# so an unweighted module worth 10s is a quarter of a shard placed by a 0.0s guess, which is
-# the #2225 shape. The 2026-09-17 module that prompted all of this measured about 30s. The
+# so an unweighted module worth 10s is a quarter of a shard placed by a 0.0s guess. The
+# module that motivated the gate measured about 30s. The
 # runner is slower per test than the workstation, so 10 runner seconds is FEWER than 10
-# recorded seconds: the gate sits at or below the pole cutoff that heuristic used, which was
-# 5.22s on 2026-09-22.
+# recorded seconds: the gate sits at or below the pole cutoff a neighbour heuristic would use.
 RUNNER_HEAVY_SECONDS = 10.0
 
 # How many times its measured runner seconds a RECORDED weight may claim before the shard gate
@@ -116,13 +110,13 @@ RUNNER_HEAVY_SECONDS = 10.0
 # WHY A SECOND ARM AT ALL. Every other arm of the gate asks "is this file missing from the
 # table". None asks "is a recorded number still roughly what the file costs", so an entry that
 # has become far too high stands until someone runs a full `--record`: `--record-missing` only
-# fills gaps. Measured 2026-09-24 while fixing #2498,
-# `ansible/tests/k8s/test_secret_consumer_census.py` was recorded at 17.31s and measured 0.09s.
-# The greedy split placed it first, so one shard carried 17s of phantom weight for as long as
-# the entry stood — the #2225 skew with the sign flipped (#2514).
+# fills gaps. A recorded 17.31s for `ansible/tests/k8s/test_secret_consumer_census.py` that
+# measured 0.09s made the greedy split place it first, so one shard carried 17s of phantom
+# weight for as long as the entry stood — the skew of an unweighted heavy file with the sign
+# flipped.
 #
 # WHY A RATIO AND NOT A DELTA. The table holds workstation seconds and the report holds runner
-# seconds, and the two are not the same scale. Controls measured on daniel-server 2026-09-24
+# seconds, and the two are not the same scale. Controls measured on daniel-server
 # ran 1.10x to 1.46x their recorded values, so anything under about 3x is that scale
 # difference rather than a stale entry. FIVE leaves room above that noise while still catching
 # the 190x case, and a gate set nearer the noise would turn into a weekly chore.
@@ -141,8 +135,8 @@ RUNNER_HEAVY_SECONDS = 10.0
 #
 # THE BLIND SPOT. A file whose every test measures under pytest's `--durations-min` contributes
 # no line and cannot be compared at all, so an entry that collapsed to literally nothing is
-# invisible here. The #2498 entry measured 0.09s and did produce lines, which is the shape that
-# has actually occurred.
+# invisible here. An entry that is merely far too high still produces lines, which is the
+# shape that occurs in practice.
 STALE_WEIGHT_RATIO = 5.0
 STALE_WEIGHT_FLOOR_SECONDS = 3.0
 
@@ -248,11 +242,10 @@ def measure_weights(files: list[str] | None = None) -> dict[str, float]:
     every duration rather than hiding the ones under 5ms — a file whose tests are all fast
     still costs its import, and leaving it unrecorded would hand it the median instead.
 
-    Nothing is deselected. The refusal below treats any failure as "not a baseline", which was
-    the #1799 deadlock for as long as a coverage ratchet read the weights this run had not
-    written yet — measured 2026-09-11, 126 of 629 files unweighted and two consecutive
-    `--record` runs wrote nothing. No test reads the table for staleness since #2830, so the
-    precondition can no longer refuse to clear itself.
+    Nothing is deselected. The refusal below treats any failure as "not a baseline", so a
+    test that reads the weights this run has not written yet could block the recording that
+    would fix it. No test reads the table for staleness, so the
+    precondition cannot refuse to clear itself.
 
     A file whose every test addopts deselects (`-m 'not ui'`, which CI runs under too) has no
     durations line and is absent from the result; the callers record it at 0.0, since in the
@@ -418,7 +411,7 @@ def record_missing_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
     """Measure only the census files the table lacks, and write the merged table.
 
     Seconds rather than the full run's minutes, which is what lets the docs-refresh cron run
-    this on every tick (#2274). A recorded path no longer in the census is dropped on the way
+    this on every tick. A recorded path no longer in the census is dropped on the way
     through, so the table does not keep a weight for a module that was deleted.
     """
     files = census()
@@ -436,7 +429,7 @@ def record_named_weights(
 ) -> dict[str, float]:
     """Re-measure exactly `paths` and write the merged table, refreshing entries that exist.
 
-    The repair for a recorded weight that has drifted (#2514). `record_missing_weights` above
+    The repair for a recorded weight that has drifted. `record_missing_weights` above
     deliberately leaves a present entry alone, so without this the only refresh is a full
     `--record` — the whole suite, in minutes, rewriting every other entry from the same run.
 

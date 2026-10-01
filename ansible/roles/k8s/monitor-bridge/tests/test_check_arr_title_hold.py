@@ -1,8 +1,7 @@
 """Sonarr's self-clearing title hold: the ONE queue reason check_arr_queue waits on.
 
-Three of `arr_queue`'s seven DOWN episodes in the 14 days to 2026-09-27 were "Episode has a
-TBA title and recently aired" (2.9h, 7.4h, 2.9h). Sonarr applies that hold itself and releases
-it once the title arrives, so the page named no action a human could take. The grace is 48h
+Sonarr applies the "Episode has a TBA title and recently aired" hold itself and releases it
+once the title arrives, so a page about it names no action a human could take. The grace is 48h
 because that is upstream's OWN window — `EpisodeTitleSpecification` stops applying the rule once
 the episode aired more than 48 hours ago — so an item still carrying the message past it is
 stuck rather than waiting.
@@ -39,8 +38,7 @@ def _tba_item(added, **over):
 
 
 def test_queue_warnings_tba_title_hold_inside_grace_is_clean():
-    # Sonarr applies this hold itself and releases it itself; the three episodes in the 14 days
-    # to 2026-09-27 lasted 2.9h, 7.4h and 2.9h and named no operator action.
+    # Sonarr applies this hold itself and releases it itself, so it names no operator action.
     q = _queue(_tba_item("2026-09-27T05:00:00Z"))
     assert checks.service.queue_warnings(q, "Sonarr", TBA_NOW, 48.0) == []
 
@@ -71,7 +69,7 @@ def test_queue_warnings_missing_title_hold_is_held_too():
 
 
 def test_queue_warnings_custom_format_rejection_still_flagged():
-    # The four other episodes in that window — these need someone to act.
+    # Every other queue reason needs someone to act.
     q = _queue(
         _tba_item(
             "2026-09-27T05:00:00Z",

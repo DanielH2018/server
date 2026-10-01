@@ -1,11 +1,11 @@
-"""Authelia's users database now holds two users, and one bug makes them the same account.
+"""Authelia's users database holds two users, and one bug would make them the same account.
 
 `claude-ui` is the identity the headless UI tier logs in as, so it can reach the
 `two_factor` services (code-server, n8n, longhorn) without a code typed off a phone. The
 role reads each user's existing argon2 digest back out of the live Secret before deciding
-whether to mint a new one, and the read-back it inherited anchored on the hash itself:
-`regex_search('\\$argon2[^\\s\\']+')` over the whole decoded file. With one user that was
-exact. With two it returns the FIRST digest whichever user is being resolved, which hands
+whether to mint a new one. A read-back that anchors on the hash itself —
+`regex_search('\\$argon2[^\\s\\']+')` over the whole decoded file — is exact with one user.
+With two it returns the FIRST digest whichever user is being resolved, which hands
 both users one password — and nothing about that presents as a failure. Both accounts log
 in, both render their UIs, and the operator's password silently opens the tier that exists
 to be revocable on its own.

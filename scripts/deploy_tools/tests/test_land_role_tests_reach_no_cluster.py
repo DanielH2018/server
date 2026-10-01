@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""A role's own `tests/` reaches no cluster, from mapper to verdict -- issue #1729, in part.
+"""A role's own `tests/` reaches no cluster, from mapper to verdict .
 
-WHAT THIS DROPS. `shared_roles` named a role for ANY path under it, so a PR whose only change
-under a tag-less role was that role's pytest guards ended `needs-manual-apply` and printed a
-full `ansible/deploy.yml` as the remedy. A role's `tests/` covers its `files/*.py` and is staged
-by nothing (`ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide), so no
-deploy can apply it. Same class as the `.md` rule (#1701).
+WHAT THIS DROPS. A role's pytest guards under a tag-less role must not make `shared_roles` name
+the role, which would end the landing `needs-manual-apply` with a full `ansible/deploy.yml` as
+the remedy. A role's `tests/` covers its `files/*.py` and is staged by nothing
+(`ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide), so no deploy can
+apply it. Same class as the `.md` rule.
 
-WHAT THIS KEEPS, and why the reject halves below are `tasks/` cases. Issue #1729 proposed
-dropping a shared role's `tasks/` as well, and three facts refute that: a tasks-only PR adding
-an unregistered role must still be reported (`test_land_classify.py:110`, #1544); a helper's
-tasks apply live state per caller, so one caller deployed is not the change applied
-(`test_land_tags_caller_coverage.py:76`, #1397); and `_supplies_manifest_bytes`, the predicate
-#1729 cites as precedent, names `volume-claim/templates/pvc.yaml.j2` as a byte supplier, which
+WHAT THIS KEEPS, and why the reject halves below are `tasks/` cases. Dropping a shared role's
+`tasks/` as well is wrong for three reasons: a tasks-only PR adding an unregistered role must
+still be reported (`test_land_classify.py:110`); a helper's tasks apply live state per caller,
+so one caller deployed is not the change applied (`test_land_tags_caller_coverage.py:76`); and
+`_supplies_manifest_bytes` names `volume-claim/templates/pvc.yaml.j2` as a byte supplier, which
 puts that role's own example in the REPORTED set.
 
 THE VERDICT IS ASSERTED for the tests-only half, not just `plane_note`, for the reason
@@ -61,8 +60,8 @@ def test_a_role_test_file_is_clean():
 
 
 def test_a_role_task_file_is_flagged():
-    """The reject half, and the half of #1729 that is refuted: tasks/ still owes a deploy,
-    which since #2704 is a deploy of both callers rather than a hand."""
+    """The reject half: tasks/ still owes a deploy, which is a deploy of both callers rather
+    than a hand."""
     assert land_tags.is_role_test_path(_ROLE_TASKS) is False
     assert land_tags.shared_roles([_ROLE_TASKS]) == ["arr-notification"]
     assert land_tags.shared_caller_tags([_ROLE_TASKS]) == {
@@ -71,7 +70,7 @@ def test_a_role_task_file_is_flagged():
 
 
 def test_a_shared_storage_role_task_file_is_flagged():
-    """#1729's own example. volume-claim ships templates/, so it supplies applied bytes."""
+    """volume-claim ships templates/, so it supplies applied bytes."""
     assert land_tags.shared_roles([_CLAIM_TASKS]) == ["volume-claim"]
     assert "sonarr" in land_tags.shared_caller_tags([_CLAIM_TASKS])["volume-claim"]
 
@@ -107,13 +106,12 @@ def test_a_role_test_change_ends_nothing_to_deploy(landing):
 
 
 def test_a_role_task_change_owes_no_hand_because_its_callers_deploy():
-    """The tag path decides it now: the landing deploys sonarr and radarr (#2704)."""
+    """The tag path decides it: the landing deploys sonarr and radarr."""
     assert land_tags.plane_note([_ROLE_TASKS]) == ""
 
 
-# The declared-role half (issue #1735). #1734 dropped a role's tests/ from `shared_roles`
-# only; a DECLARED role's tests/ still derived that role's deploy tag, so a pytest-only PR
-# to monitor-bridge deployed monitor-bridge.
+# The declared-role half. A DECLARED role's tests/ must not derive that role's deploy tag,
+# or a pytest-only PR to monitor-bridge deploys monitor-bridge.
 _DECLARED_TESTS = "ansible/roles/k8s/monitor-bridge/tests/test_b2_storage.py"
 _DECLARED_FILES = "ansible/roles/k8s/monitor-bridge/files/checks/service.py"
 
@@ -131,7 +129,7 @@ def test_the_declared_paths_under_test_still_exist():
 
 
 def test_a_declared_role_test_file_derives_no_tag():
-    """The accept half of #1735: no tag, so no rollout, restart window or health gate."""
+    """The accept half: no tag, so no rollout, restart window or health gate."""
     assert land_tags.tag_for(_DECLARED_TESTS) is None
     assert land_tags.derive([_DECLARED_TESTS], 1) == land_tags.Derivation(
         [], land_tags.DeriveSource.PR

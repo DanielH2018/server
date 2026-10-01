@@ -2,10 +2,9 @@
 """The Media Cleaner plugin install step must exist, be checksum-pinned, and be loadable.
 
 Fifth of jellyfin's plugin installers, and the one whose blast radius justifies the pin: Media
-Cleaner DELETES MEDIA FILES on a schedule, by rule. It ran unmanaged on the `jellyfin-config`
-PVC from a dashboard install until #1619 — no pinned version, no checksum, no recorded
-`targetAbi`, no test — so an image bump could drop it silently, Jellyfin's loader refusing a
-plugin built for a newer server without logging anything.
+Cleaner DELETES MEDIA FILES on a schedule, by rule. An unmanaged install (no pinned version, no
+checksum, no recorded `targetAbi`) could be dropped silently by an image bump, Jellyfin's loader
+refusing a plugin built for a newer server without logging anything.
 
 This install has a hazard none of the four siblings has. Upstream ships ONE release tag
 (`v3.2.0`) carrying THREE per-ABI assets, and the published manifest publishes each as its own
@@ -286,7 +285,7 @@ def test_the_pin_guards_reject_a_mismatched_defaults_file(what, before, after):
         _assert_pin_agrees(mutated)
 
 
-# ── Renovate coverage (the finding #1557 exists for) ─────────────────────────────────────────
+# ── Renovate coverage ────────────────────────────────────────────────────────────────────────
 # renovate.json's k8s-images manager keys on `_image:`, so a plugin version, its URL and its
 # checksum are invisible to every manager without a dedicated one — and a pin with no update
 # signal reads exactly like a plugin with no updates available.

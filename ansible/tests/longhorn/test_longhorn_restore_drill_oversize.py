@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""The restore drill publishes the backed-up volumes its actualSize cap keeps out (#2667).
+"""The restore drill publishes the backed-up volumes its actualSize cap keeps out.
 
 Check 8 iterates only the drill's candidates file, and the drill writes that file after the cap.
-A volume that grows past `k3s_longhorn_restore_drill_max_actual_bytes` therefore left the
-rotation and the coverage check together, and nothing reported it. valheim-config did exactly
-that at the old 2 GiB cap. The drill now writes `excluded_oversize` beside the candidates, and
+A volume that grows past `k3s_longhorn_restore_drill_max_actual_bytes` therefore leaves the
+rotation and the coverage check together, unreported. The drill writes `excluded_oversize` beside the candidates, and
 the backup-health reader names every volume in it.
 
 These tests RUN the rendered script through the shared harness in `_restore_drill.py`.

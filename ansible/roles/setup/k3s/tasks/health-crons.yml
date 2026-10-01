@@ -1,7 +1,6 @@
 ---
 # Host crons that push heartbeats for the backup plane, root-disk headroom and
 # manifest drift, plus the shared Healthchecks.io ping key they use.
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
 - name: Create the setup-plane state directory
   tags: [backup-health, disk-health, manifest-prune]
@@ -21,17 +20,16 @@
 # from the repo. Equal means this host has run initial_setup.yml since the templates last
 # changed; unequal means it has not, and is still executing the old rendered copy.
 #
-# THE FAILURE THIS CLOSES (2026-08-23): /usr/local/bin/longhorn-backup-health.sh was two
-# commits behind for two days while manifest-prune-check pushed "deployed scripts match the
-# repo" — true of the three files it compared, false of the twenty it did not, including
-# itself. roles/setup/ changes are deferred-and-alerted by the gitops tick, but that alert
-# clears the moment the tree ff-merges, leaving the stale render with nothing watching it
-# (the mechanism deploy_logic.py:86-100 already predicted in a comment).
+# THE FAILURE THIS CLOSES: a rendered script falls behind the repo while manifest-prune-check
+# pushes "deployed scripts match the repo" — true of the files it compares, false of the ones
+# it does not, including itself. roles/setup/ changes are deferred-and-alerted by the gitops
+# tick, but that alert clears the moment the tree ff-merges, leaving the stale render with
+# nothing watching it.
 #
 # ONE STAMP PER TAG FAMILY, each carrying that family's tags — see k3s_render_stamp_groups in
 # defaults/main.yml for why a single untagged stamp over all eight was worse than none. The
 # stamps live at the END of this file, AFTER every template: task, for the second half of the
-# same problem: the old stamp ran first, so a run that died partway through had still declared
+# same problem: a stamp that ran first would let a run that died partway through declare
 # every script current.
 
 - name: Deploy the Kuma push credentials for the heartbeat scripts
@@ -72,7 +70,7 @@
   ansible.builtin.copy:
     # Single-quoted for the same reason as kuma-push.env and live-drift-check.env: this file is
     # `.`-sourced by root and {{ sys_user }} scripts, so an unquoted value is shell input rather
-    # than data (2026-08-23b review L5, applied to the whole class rather than the one instance).
+    # than data.
     content: "HC_PING_KEY='{{ healthchecks_ping_key | default('') }}'\n"
     dest: /etc/healthchecks/ping.env
     mode: "0640"
@@ -94,7 +92,7 @@
 # exactly the partial-group false-green the comment above that stamp task warns about, and
 # sharing one list makes the two incapable of disagreeing.
 #
-# The per-script notes that used to sit in this loop now live beside that list in
+# The per-script notes live beside that list in
 # roles/setup/k3s/defaults/main.yml, next to the paths they describe.
 # DECIDED: `copy`, not release_bin.yml: these are operator-invoked (deliberately unscheduled —
 # see the templates above), not cron targets, so there is no rollback-unit reason to version
@@ -165,7 +163,7 @@
   # /opt/longhorn-backup-health/longhorn_backup_health.py by absolute path the moment it lands,
   # so if the shim's release install ran first, a `*/10` cron firing in the window between the
   # two tasks would call a reader that doesn't exist yet (first install) — a spurious page,
-  # not a real one (2026-09-04 review finding #5).
+  # not a real one.
   ansible.builtin.file:
     path: /opt/longhorn-backup-health
     state: directory
@@ -219,7 +217,7 @@
   tags: [backup-health]
   # `copy:`-deployed, like live-drift-check.py and manifest-declares.py, so a stale copy of the
   # reader is visible to manifest-prune-check's deployed-code arm rather than invisible to it
-  # (2026-08-24 review M-5) — the render-stamp arm above only ever saw the shell shim.
+  # — the render-stamp arm above only ever sees the shell shim.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:
     stamp_deployed_name: k3s-longhorn-backup-health-reader
@@ -252,7 +250,7 @@
   # hour: trimming before the day's snapshot would hand back blocks the snapshot then re-pins.
   #
   # `2>&1 | logger -t longhorn-trim-cron` for the journal reason on the secret-rotation cron in
-  # `initial_setup/tasks/crons.yml` (#2466): this mailed one `trim <volume>` or `skip <volume>`
+  # `initial_setup/tasks/crons.yml`: without it cron mails one `trim <volume>` or `skip <volume>`
   # line per volume per day into a spool nothing opens.
   #
   # A DIFFERENT TAG FROM THE SCRIPT'S OWN `logger -t longhorn-trim`, deliberately. Check 9 of
@@ -273,11 +271,10 @@
   tags: [backup-health]
   when: has_repo_checkout
   # Charges each completed backup deletion to the B2 ledger, from longhorn-manager's own logs.
-  # Until 2026-09-03 the ledger recorded only the two read-only listing probes, so the one
-  # operation it exists to capture wrote no line at all: a deletion walks the volume's whole
-  # block tree at ~1.28 Class C per stored block, which is what sets the daily cap. The pair of
-  # valheim-config deletions on 2026-09-03 12:39 UTC left the ledger reading 26 Class C for the
-  # day, and by the time anyone looked the tree that would have priced them was gone.
+  # Without this pass the ledger records only the two read-only listing probes, so the one
+  # operation it exists to capture writes no line at all: a deletion walks the volume's whole
+  # block tree at ~1.28 Class C per stored block, which is what sets the daily cap, and once
+  # the tree is gone nothing can price it.
   #
   # After the trim sweep at 06:10 and well clear of both prune windows (03:30 daily, 04:30
   # weekly), so the day's deletions have all completed. Same UTC day as those windows under
@@ -313,8 +310,7 @@
   # tomorrow. Running it first would silently understate every charge.
   #
   # This one does spend B2: one paged listing, measured at 2-3 Class C per run against the
-  # 2,500/day cap. It was manual-only until now, which is why nothing had a price to charge
-  # against. It also refreshes the per-shard budget projection as a side effect.
+  # 2,500/day cap. It also refreshes the per-shard budget projection as a side effect.
   ansible.builtin.cron:
     name: "B2 backup budget listing"
     hour: "{{ k3s_b2_budget_cron_hour }}"
@@ -385,7 +381,7 @@
 
 - name: Schedule the manifest-prune drift check
   tags: [manifest-prune]
-  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
   # verdict reruns every 30 min until it clears rather than sitting on the tile for a day.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
   vars:
@@ -418,7 +414,7 @@
 - name: Create the release-staleness check's state directory
   tags: [release-staleness]
   # Holds the stale set the last DOWN pushed, so the check can re-alert when that set changes
-  # while the tile stays DOWN (#2378). Owned by the cron's own user, and outside the primary
+  # while the tile stays DOWN. Owned by the cron's own user, and outside the primary
   # checkout: an untracked file there would park the GitOps deployer.
   ansible.builtin.file:
     path: /var/lib/homelab/release-staleness
@@ -479,7 +475,7 @@
   # check reports as exit 2 rather than as a clean run. The env file carries the push token;
   # EnvironmentFile= exports it the way the cron's `set -a` did.
   #
-  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
   # verdict reruns every 30 min until it clears rather than sitting on the tile for a day.
   # BOOT_GRACE_S makes a Persistent catch-up run at boot exit 1 without a push, so the restart
   # carries the real verdict once the cluster is up.
@@ -563,7 +559,7 @@
   # full restore must not be scheduled; the short version is that it cannot pass on this host and
   # every failure would hold a restored etcd database in /var/tmp for 30 days.
   #
-  # Output goes to the journal (#2487): the drill's `log()` prints progress lines on every
+  # Output goes to the journal: the drill's `log()` prints progress lines on every
   # pass. A failure is still seen, because monitor-bridge reads the drill's success stamp.
   ansible.builtin.cron:
     name: "etcd restore drill"
@@ -607,7 +603,7 @@
 
 # live-drift-check.py is `copy:`-deployed, not rendered, so the stale-script arm structurally
 # cannot see it — it belongs to the deployed-code arm, which hardcoded three gitops-deploy paths
-# and knew nothing of this one (2026-08-24 review M-5). Tagged with the family that deploys it,
+# and knew nothing of this one. Tagged with the family that deploys it,
 # so a `--tags live-drift` run records exactly what it just installed.
 - name: Record the deployed live-drift check
   tags: [live-drift]

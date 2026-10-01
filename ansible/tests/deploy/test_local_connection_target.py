@@ -5,9 +5,9 @@ Both cluster nodes are pinned `ansible_connection=local` in inventory/hosts.ini,
 command was typed on. Selection and execution are separate, and `target` controls only the
 first. Ansible then prints a green recap for a play that touched the wrong host.
 
-Measured 2026-08-29: `initial_setup.yml --tags setup_drift -e target=daniel-server`, run from
-daniel-box, installed the setup-drift reader onto daniel-box and exited 0 while daniel-server
-had none of it. The same invocation would put nut_host's UPS shutdown chain — gated to
+For example, `initial_setup.yml --tags setup_drift -e target=daniel-server`, run from
+daniel-box, installs the setup-drift reader onto daniel-box and exits 0 while daniel-server
+has none of it. The same invocation would put nut_host's UPS shutdown chain — gated to
 `ups_host: daniel-server` — on the host with no UPS attached.
 
 These tests EVALUATE the assert's own `that:` expression, pulled out of the YAML, against
@@ -72,7 +72,7 @@ def _evaluate(expression, *, inventory_hostname, connection, running_on):
 
 
 def test_a_local_host_targeted_from_another_machine_is_refused():
-    """The measured failure: daniel-box running the play for daniel-server."""
+    """The failure: daniel-box running the play for daniel-server."""
     assert not _evaluate(
         _guard_expression(),
         inventory_hostname=LOCAL_PEER,

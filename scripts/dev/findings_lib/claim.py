@@ -5,12 +5,12 @@ A claim names a worktree. The question "is this claim still live" is therefore t
 "is this worktree still doing the work", which `prune_worktrees.py` already answers for a
 different caller — so this module reuses its judgment rather than adding a second one.
 
-WHY NOT A HEARTBEAT, AND WHY NOT A TTL. Both key on the CLAIMING PROCESS. On 2026-09-05 the
-container restarted and killed 14 agents mid-work; every one of their worktrees kept its
-uncommitted edits, so each session was resumed in place rather than restarted. A heartbeat
-or a TTL would have expired those claims while the work was still live, handing half-finished
-issues to a second agent. Keying on the worktree gets that case right with no timer at all:
-a worktree with uncommitted changes is holding work, whatever happened to the process.
+WHY NOT A HEARTBEAT, AND WHY NOT A TTL. Both key on the CLAIMING PROCESS. A container restart
+kills the agents mid-work while every worktree keeps its uncommitted edits, so each session
+is resumed in place rather than restarted. A heartbeat or a TTL would have expired those
+claims while the work was still live, handing half-finished issues to a second agent. Keying
+on the worktree gets that case right with no timer at all: a worktree with uncommitted
+changes is holding work, whatever happened to the process.
 """
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -83,18 +83,18 @@ def claim_is_live(
         (live, reason). The reason is `classify`'s own, so a `claims` row and a
         `prune_worktrees` row say the same thing about the same worktree.
 
-    DELEGATES TO `classify`. Re-implementing the verdict here would drop a condition, and
-    it did in an earlier draft of this plan: the live-session-lock check. An orchestrator
-    worktree that only orchestrates has no commits and no edits, so its HEAD is an ancestor
-    of origin/master and `is_merged` says True — every claim it makes would read as stale
-    the moment it was written, and `reap` would release it while the fan-out was running.
-    `classify` checks the live lock FIRST, which is exactly what that case needs.
+    DELEGATES TO `classify`. Re-implementing the verdict here would drop a condition: the
+    live-session-lock check. An orchestrator worktree that only orchestrates has no commits
+    and no edits, so its HEAD is an ancestor of origin/master and `is_merged` says True —
+    every claim it makes would read as stale the moment it was written, and `reap` would
+    release it while the fan-out was running. `classify` checks the live lock FIRST, which
+    is exactly what that case needs.
 
     AN UNREADABLE WORKTREE IS HELD, NOT RELEASED. A PRUNABLE worktree — one whose directory
     was removed without `git worktree remove` — keeps appearing in `git worktree list
     --porcelain`, so it reaches here in the ordinary course of events. `dirty` then runs git
     with `check=True` in a directory that does not exist and RAISES, which took `claims`,
-    `reap` and `next` down together under an error blaming gh (#1276). Holding the claim is
+    `reap` and `next` down together under an error blaming gh. Holding the claim is
     the same fail-safe direction a dirty worktree with a dead owner already takes: releasing
     a claim whose state cannot be read hands live work to a second session. The reason names
     `git worktree prune`, because nothing else in the output points at a stale registration.
@@ -122,7 +122,7 @@ def another_claim_blocks(issue: dict, worktree: str) -> bool:
     An issue `plan_claim` would refuse anyway answers False even when a claim sits on it:
     `plan_claim` is the single authority on those refusals, and reaping a claim off such an
     issue would post a release to no purpose. There are three — closed, `manual`, and outside
-    the `claude` register (#1277) — and this list has to stay level with `plan_claim`'s.
+    the `claude` register — and this list has to stay level with `plan_claim`'s.
     """
     names = label_names(issue)
     if (
@@ -143,7 +143,7 @@ def stale_holder(
 ) -> tuple[str, str] | None:
     """(holder, why) when this issue's claim is STALE, else None.
 
-    What `cmd_claim` reaps before taking an issue (#1274). Takes the same three facts
+    What `cmd_claim` reaps before taking an issue. Takes the same three facts
     `claim_states` does rather than `_worktree_facts`'s 4-tuple, so the caller keeps the
     decision about what a FAILED git read means — `cmd_claim` leaves the claim standing,
     `cmd_reap` refuses outright, and neither reads a git error as "every worktree is gone".
@@ -188,9 +188,9 @@ def _claim_age_days(issue: dict, held: str, now: datetime | None = None) -> int 
     from None -> held that is still open (not released). Returns None when that comment
     carries no parseable `createdAt`, or when the datetime is naive (missing timezone info).
 
-    Skips comments `is_operator_comment` rejects, for the same reason `current_claim` does
-    (#1280) — and it has to skip exactly the same ones, or the two disagree about which claim
-    is current and a `claims` row ages a claim the register does not think exists.
+    Skips comments `is_operator_comment` rejects, for the same reason `current_claim` does — and it has
+    to skip exactly the same ones, or the two disagree about which claim is current and a `claims` row
+    ages a claim the register does not think exists.
     """
     claimed_at_comment: dict | None = None
     currently_held: str | None = None

@@ -6,9 +6,6 @@ concern, not a validating webhook — so the validator cross-references the two 
 whole tree. These cover the two halves of that index, plus the volume-claim include the
 declaring half would otherwise miss.
 
-Split out of scripts/validate/tests/test_validate_k8s_manifests.py on 2026-09-04, with the
-code it covers.
-
 Run: uv run pytest scripts/lib/tests/test_k8s_pvc.py
 """
 

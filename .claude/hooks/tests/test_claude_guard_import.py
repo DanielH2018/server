@@ -1,9 +1,7 @@
 """Tests for `_claude_guard.py`, the bootstrap onto the deployed `claude_guard` package.
 
 `_hook_common.py` imports `claude_guard.segment` through it, and every Bash guard here cuts
-its stages with that segmenter. The read-only classifier that also read `claude_guard.tables`
-through it moved into the package itself (dotfiles #628), along with the stand-in, boundary
-and shared-verdict tests that compared the two copies.
+its stages with that segmenter.
 
 Run: uv run pytest .claude/hooks
 """
@@ -27,8 +25,7 @@ sys.path.insert(0, str(HOOKS))  # _claude_guard is imported by bare name
 
 # The `uv` that is running this suite: `uv run` exports its own path as `UV`, and PATH is
 # the fallback for a bare `pytest`. Resolved at import, before leakguard swaps PATH for a
-# stub directory at each test's setup. It was `/home/ubuntu/.local/bin/uv` until #2159,
-# which was a fact about one host rather than about the tree.
+# stub directory at each test's setup.
 UV_BIN = os.environ.get("UV") or shutil.which("uv") or ""
 _CLAUDE_GUARD_DIR = Path("~/.local/share/claude-guard").expanduser()
 

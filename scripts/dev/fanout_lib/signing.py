@@ -3,7 +3,7 @@
 This repo's branch protection requires verified signatures. An agent launched on a host whose
 SSH signing key is not registered on the GitHub account signs commits GitHub reads as
 `verified=false reason=unknown_key`, so its PR cannot merge until someone re-signs the branch
-by hand (issue #1615, observed on PR #1572).
+by hand.
 
 The comparison is against what GitHub actually accepts — the account's registered signing
 keys, read live from the API — never a fingerprint written down here, which would go stale the

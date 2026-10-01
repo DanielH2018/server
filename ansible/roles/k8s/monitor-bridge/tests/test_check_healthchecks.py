@@ -1,6 +1,6 @@
-"""The Healthchecks.io console against the deadman doc's schedules and graces (#2566).
+"""The Healthchecks.io console against the deadman doc's schedules and graces.
 
-`healthchecks_verdict` is pure. The flagged cases are the two real drifts #2563 found:
+`healthchecks_verdict` is pure. The flagged cases are two real drifts:
 `pi-peer-backup` carrying `30 23 * * *` after its CronJob moved to `0 23`, and
 `longhorn-backup-health` set up as a daily Cron check instead of Simple 10m/20m. The fetch and
 the cache are parameters of `healthchecks_drift`, so nothing here patches the module.

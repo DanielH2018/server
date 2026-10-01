@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """How every first-party script under ``scripts/`` is run, derived from the tree.
 
-Split out of ``scripts/docs/reference/scripts.py`` on 2026-09-04. The generator renders the
-page; this module answers the question the page is about, and it does so without importing a
-single script it classifies.
+The generator renders the page; this module answers the question the page is about, and it
+does so without importing a single script it classifies.
 
 WHY IT IS DERIVED RATHER THAN DECLARED. A hand-kept list of "these ones are automated" is
 stale the first time someone adds a cron. The tree already says how every script is reached:
@@ -192,12 +191,11 @@ def _literal_segments(node: ast.AST) -> list[str]:
 def _constructed_path_references(text: str) -> set[str]:
     """Script filenames an expression assembles out of separate path segments.
 
-    `deploy_io.staging_expect_script` built `os.path.join(repo, "scripts", "deploy_tools",
-    "staging_expectations.py")`, so no string literal in the file spelled the filename next to
-    its directory and `_argv_references` could not see it. The GitOps deployer ran both staging
-    scripts that way, and the generated page called one of them "no automated caller in the
-    tree" (#2424). Those callers and those scripts are retired (#2859, #2941); the shape is not
-    specific to them, and this reader is what stops the next assembled path repeating it.
+    A caller can build `os.path.join(repo, "scripts", "deploy_tools",
+    "staging_expectations.py")`, so no string literal in the file spells the filename next to
+    its directory and `_argv_references` cannot see it. The generated page then calls the
+    script "no automated caller in the tree". This reader is what stops an assembled path
+    from reading that way.
     """
     try:
         tree = ast.parse(text)
@@ -347,7 +345,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     for path, kind, evidence in _invocation_sites(repo):
         for script in _invoked_by(path, scripts):
             # A role's tasks naming a Python module with no `__main__` guard carry it into an
-            # image rather than run it: homelab-mcp's ship `obs_api.py` as a library (#2860).
+            # image rather than run it: homelab-mcp's ship `obs_api.py` as a library.
             # A hook, or a role's own `files/` runner, naming one still runs it.
             if (
                 path.is_relative_to(roles)
@@ -402,7 +400,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     # A Python module with no `__main__` guard that only a test imports is not a library by
     # the rule above, and it is not something a person runs either -- there is nothing to run.
     # `grafana_panel_report.py` is the live case: its classifier is unit-tested without a
-    # browser, and the page called it "no automated caller in the tree" (#3020).
+    # browser, and the page called it "no automated caller in the tree".
     tested = _test_importers(scripts)
     for path in candidates(scripts):
         if path.suffix != ".py" or path.name in verdicts:
@@ -437,12 +435,11 @@ def _walk(scripts: Path) -> list[Path]:
 def candidates(scripts: Path) -> list[Path]:
     """Every first-party script under scripts/, at any depth.
 
-    Depth is not capped. It was capped at one directory until 2026-09-02, which meant a
-    module in a nested subdirectory was absent from the page entirely rather than listed
-    as uncovered — the failure mode a reference page must not have.
+    Depth is not capped, so a module in a nested subdirectory is listed as uncovered rather
+    than absent from the page entirely — the failure mode a reference page must not have.
 
     Filenames stay unique across the subdirectories, which is what lets the rest of this
-    module key verdicts and evidence on the bare name rather than a path. That is now an
+    module key verdicts and evidence on the bare name rather than a path. That is an
     enforced invariant, not an assumption: see
     `test_no_two_scripts_share_a_basename` in
     `scripts/docs/tests/test_gen_reference_scripts.py` for why keying by path

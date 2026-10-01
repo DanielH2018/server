@@ -1,36 +1,35 @@
 #!/usr/bin/env python3
 """Renovate automerges a k8s image bump only for a role the deployer may auto-deploy.
 
-Issue #1886. renovate.json automerges minor/patch and digest image bumps under
+renovate.json automerges minor/patch and digest image bumps under
 `ansible/roles/k8s/**`; the GitOps deployer applies such a bump unattended only for a role
 outside the denylist that `ansible/filter_plugins/k8s_autodeploy.py` derives from each role's
-`k8s_autodeploy` flag. The two boundaries disagreed in one direction: Renovate merged authelia
-4.39.23 (#1831) and 4.39.24 (#1862) unattended, the tick fast-forwarded each and applied nothing,
-and `Release Staleness Drift` paged a person for the hand deploy both times.
+`k8s_autodeploy` flag. If the two boundaries disagree, Renovate merges a denied role's bump
+unattended, the tick fast-forwards it and applies nothing, and `Release Staleness Drift` pages a
+person for the hand deploy.
 
-The fix is one `automerge: false` rule whose `matchFileNames` is the denylist spelled as paths.
+One `automerge: false` rule whose `matchFileNames` is the denylist spelled as paths.
 That list is typed into renovate.json, so this guard is what stops it drifting from the flags:
 it derives the expected set the same way the deployer does and asserts equality, and its
 failure message prints the exact line to add or drop. It also pins the rule's position, which
 is load-bearing — later rules win in Renovate, so the rule must follow the two automerge rules
 it overrides and precede the per-package manual rules that override its groupName.
 
-One path in the rule is not a role's defaults: `ansible/inventory/group_vars/all.yml` (issue
-#1936). `crowdsec_k8s_image` lives there because traefik's and authelia's sidecars read it too,
-and the per-role rule left it automerging while the deployer routed the merged bump through its
+One path in the rule is not a role's defaults: `ansible/inventory/group_vars/all.yml`.
+`crowdsec_k8s_image` lives there because traefik's and authelia's sidecars read it too, and a
+per-role rule would leave it automerging while the deployer routes the merged bump through its
 broad plane — which applies every role reading the key with no denylist check. That path is
 safe in this rule only while every `_image:` pin in group_vars belongs to denied roles, so the
 census below reads each pin's Jinja readers out of the role trees and asserts they are all
 denied. A pin no role reads fails too: an unmappable pin must not pass as "not eligible".
 
-A second rule carries the same marker for a denied role's BASE image (issue #2117). The
+A second rule carries the same marker for a denied role's BASE image. The
 denylist rule is scoped to the custom.regex manager over `defaults/main.yml`, so it never sees
 a `FROM` pin in `templates/Dockerfile*.j2` — Renovate's built-in dockerfile manager finds
-those, and nut's debian digest bump (#2115) arrived with a bare title. Its `matchFileNames` is
+those. Its `matchFileNames` is
 the denylist restricted to the roles that carry a Dockerfile, derived here the same way, with a
 named-member floor so a glob that finds nothing fails rather than agreeing with an empty rule.
-n8n is on it since #2813 folded its Dockerfiles in from the eligible `n8n-images` role; its
-per-package rules override the groupName and carry the marker themselves.
+n8n is on it; its per-package rules override the groupName and carry the marker themselves.
 
 Run: uv run pytest ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py
 """

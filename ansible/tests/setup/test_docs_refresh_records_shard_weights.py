@@ -1,4 +1,4 @@
-"""docs-refresh records a weight for every new test module, unattended — #2274.
+"""docs-refresh records a weight for every new test module, unattended.
 
 CI's measured gate (`pytest_shard.py --check-durations`) rejects the PR that introduces an
 unweighted module costing `RUNNER_HEAVY_SECONDS` or more and hands the repair to a human. It

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Jellyfin's plugin allowlist sweep keeps exactly what the role installs, and nothing else.
 
-`sweep-unlisted-plugins` replaced one named sweep per retired plugin (#2873). It walks the
-top-level entries of /config/data/plugins and removes a `<Name>_<Version>` directory unless
-`<Name>` is in its KEEP tuple. Three things decide whether that is safe:
+`sweep-unlisted-plugins` walks the top-level entries of /config/data/plugins and removes a
+`<Name>_<Version>` directory unless `<Name>` is in its KEEP tuple. Three things decide whether
+that is safe:
 
 - **KEEP equals the set the installers write.** A name missing from KEEP makes the sweep remove
   a plugin the role installs; a name KEEP carries that no installer writes lets an unmanaged
@@ -122,7 +122,7 @@ def plugins(tmp_path):
         # Jellyfin's own Update Plugins task writes a newer version between restarts. This
         # sweep keeps both on purpose — it matches the NAME — and the installer's own
         # superseded sweep removes the version the pin does not name
-        # (test_jellyfin_plugin_pins_hold_across_a_restart.py, #2905).
+        # (test_jellyfin_plugin_pins_hold_across_a_restart.py).
         "Media Cleaner_99.0.0.0",
         "Trakt_30.0.0.0",
         "SSO Authentication_4.0.0.4",

@@ -3,10 +3,10 @@
 # longhorn-manager pod. The longhorn-manager NetworkPolicy's `from:` is entirely podSelectors,
 # so host-originated traffic matches no rule and the cross-node pod refuses the connection.
 # The `longhorn-backend` ClusterIP has one endpoint per node, which makes it a coin flip:
-# measured 2026-08-21, 2 of 8 GETs succeeded. `ansible/seed_volume_backup.yml:14-17` records
+# 2 of 8 measured GETs succeeded. `ansible/seed_volume_backup.yml:14-17` records
 # the same finding from the other direction and chose CRs instead.
 #
-# `[*]`, NOT `[0]`. Measured 2026-08-21: `{.items[0].status.podIP}` against a zero-match query
+# `[*]`, NOT `[0]`. Measured: `{.items[0].status.podIP}` against a zero-match query
 # returns rc=1 with "array index out of bounds: index 0, length 0" — a kubectl internals error,
 # not the empty stdout the guard task below expects, so Ansible aborts here and the guard never
 # runs. `{.items[*].status.podIP}` returns rc=0 with genuinely empty stdout on the same
@@ -14,9 +14,8 @@
 #
 # `check_mode: false` because this is a read whose value the two tasks below depend on. A
 # command task is SKIPPED under --check by default, and a skipped read does not fail — it fails
-# a downstream consumer with an undefined attribute instead. That class has cost this repo nine
-# roles' worth of fixes already (see `volume-snapshot`'s "Resolve the deploy tag" task for the
-# same reasoning). The command is a plain read, so running it for real under `--check` is
+# a downstream consumer with an undefined attribute instead (see `volume-snapshot`'s "Resolve
+# the deploy tag" task for the same reasoning). The command is a plain read, so running it for real under `--check` is
 # harmless — this makes the role safe for any future caller rather than resting on every caller
 # remembering to gate its own include.
 - name: Resolve this node's own longhorn-manager pod IP
@@ -42,14 +41,12 @@
 
 # `longhorn_api_required` (default true, see defaults/main.yml) decides whether an empty result
 # is fatal. A caller that needs the API — k8s/volume-revert, which has no fallback for a failed
-# rollback — leaves it at the default and gets this hard failure, unchanged from before this
-# variable existed.
+# rollback — leaves it at the default and gets this hard failure.
 #
 # THIS IS THE ONLY WAY TO MAKE THIS NON-FATAL FOR A CALLER. `ignore_errors: true` on the
 # `include_role` that pulls this file in does NOT work: it suppresses a failure of the include
 # STATEMENT, not a fatal `fail()` raised by a task the include pulls in — this is documented
-# Ansible behaviour, not a version quirk, and slice 7b shipped that exact mistake once already
-# (see k8s/volume-snapshot's CLAUDE.md and `test_longhorn_api_soft_mode_survives_no_manager` in
+# Ansible behaviour, not a version quirk (see k8s/volume-snapshot's CLAUDE.md and `test_longhorn_api_soft_mode_survives_no_manager` in
 # test_longhorn_api.py, which runs this file for real through a scratch play to prove it).
 - name: Fail when this node runs no longhorn-manager
   tags: [deploy]
@@ -75,7 +72,7 @@
 
 # `.split(' ')[0]`, not the raw trimmed stdout: the wildcard above returns space-separated IPs
 # for every matching pod, and this DaemonSet's own rollout is NOT what would put two pods on one
-# node at once — measured 2026-08-21, its updateStrategy is `{"rollingUpdate":{"maxSurge":0,
+# node at once — its updateStrategy is `{"rollingUpdate":{"maxSurge":0,
 # "maxUnavailable":"100%"},"type":"RollingUpdate"}`, and `maxSurge: 0` is delete-then-create
 # specifically to rule out a surge replacement coexisting with the pod it replaces. What this
 # still guards against is narrower: a terminating pod's object can outlive its container for the

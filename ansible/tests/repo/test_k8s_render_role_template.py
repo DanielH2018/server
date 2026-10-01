@@ -5,9 +5,8 @@ Pins the two decisions in its docstring that seven guards now depend on. The sub
 the bouncer only when the flag holds, so the resolved value is visible in the output and not
 just in the context.
 
-daniel-stage was the host that set it false, until #2941 retired it. No host_vars file
-overrides a role default today, so the precedence half is driven by laying a role default
-against an override rather than against a host.
+No host_vars file overrides a role default, so the precedence half is driven by laying a
+role default against an override rather than against a host.
 """
 
 from lib import yaml_fast

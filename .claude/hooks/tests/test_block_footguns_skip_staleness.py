@@ -43,7 +43,7 @@ def test_the_rule_ignores_the_flag_behind_another_binary():
 
 
 def test_the_rule_denies_the_python_module_the_shim_execs():
-    """`deploy.sh` execs `deploy_run.py` (#2412); running it directly is the same deploy."""
+    """`deploy.sh` execs `deploy_run.py`; running it directly is the same deploy."""
     assert _mod.skip_staleness_problem(
         [
             "uv",
@@ -95,9 +95,8 @@ def test_deploy_sh_without_the_flag_is_clean():
 
 def test_a_wrapper_script_that_passes_the_flag_itself_is_clean():
     """The rule is keyed on the command word, so a script that passes the flag from inside its
-    own text never reaches it. The staging gate's runner was the one sanctioned case and went
-    with the daniel-stage guest (#2941); the boundary the issue named (#2170) is the same, so
-    this case stays with a stand-in — a widened rule keyed on the flag alone would cross it."""
+    own text never reaches it. A stand-in script proves the boundary: a widened rule keyed on
+    the flag alone would cross it."""
     assert _mod.problem("./scripts/some_wrapper.sh abc1234 sonarr,radarr") is None
 
 

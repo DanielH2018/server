@@ -3,26 +3,24 @@
 
 Every other check in the heartbeat reads Longhorn's own objects. A recurring job that dies before
 Longhorn records anything leaves none of them — no Error backup for check 3, and the surviving
-volumes keep the fleet-wide freshness of check 2 green. `daily-backup-29775090` failed at 03:30 on
-2026-08-12, exhausted its three retries by 11:28, and the only signal anywhere was a failed Job
-object nothing read. The B2 transaction cap it died against was found by hand, days later.
+volumes keep the fleet-wide freshness of check 2 green. The only signal is a failed Job
+object.
 
 Two properties are load-bearing and neither is obvious from reading the check:
 
 FRESHNESS. Kubernetes never garbage-collects a failed Job — there is no TTL, and the history
 limits retain it by design. An unbounded check therefore goes red once and stays red forever,
-which is exactly the desensitising that check 3's own comment was written about after 11 immortal
-Error objects re-reported on every 10-minute tick. The age bound is what makes a failure page and
+which is the desensitising that check 3's own comment describes for immortal Error objects
+re-reported on every 10-minute tick. The age bound is what makes a failure page and
 then clear on its own, whether or not anyone deletes the object.
 
-DATING. A Job retries to its backoff limit before it fails, and on 2026-08-12 that was eight
-hours after creation. Dating the failure by `creationTimestamp` puts a created-yesterday /
+DATING. A Job retries to its backoff limit before it fails, which can take hours
+after creation. Dating the failure by `creationTimestamp` puts a created-yesterday /
 failed-this-morning run outside the window at the moment it should page, so the condition's
 `lastTransitionTime` has to win.
 
-check 6 now lives in longhorn_backup_health_logic.check_failed_jobs(), ported from the shell's jq
-program verbatim; these guards run against the ported function directly rather than grepping the
-shell source, so a future edit that breaks one of the two properties above fails a real assertion
+check 6 lives in longhorn_backup_health_logic.check_failed_jobs(); these guards run against that
+function directly rather than grepping the shell source, so a future edit that breaks one of the two properties above fails a real assertion
 instead of a text match.
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_backup_job_failure_check.py
@@ -80,7 +78,7 @@ def test_failed_jobs_raise_a_problem_at_backup_failure_severity() -> None:
 
 
 def test_failed_job_check_is_age_bounded() -> None:
-    """Without this the 2026-08-12 corpse holds the tile red forever. See the module docstring."""
+    """Without this an old failed Job holds the tile red forever. See the module docstring."""
     old_failure = "2026-08-12T11:28:00Z"
     assert (
         logic.check_failed_jobs(

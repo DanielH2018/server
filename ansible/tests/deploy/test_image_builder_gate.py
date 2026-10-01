@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Guards k8s/image-builder's build gate — the fact that decides whether an image is rebuilt.
 
-Seven images are built in-cluster and every one of them rebuilt on every full deploy, costing
-~106s for a result that was byte-identical five times out of seven (measured 2026-08-22 across
-two full deploys five days apart). `image_builder_building` skips the build when the rendered
-context has not changed and the registry already serves the tag.
+`image_builder_building` skips an in-cluster image build when the rendered context has not
+changed and the registry already serves the tag. Rebuilding every image on every full deploy
+costs ~106s for a result that is usually byte-identical.
 
 The gate's two failure directions are not symmetric, and that asymmetry is what these tests
 encode. A needless build costs ~15s and is visible in the log. A wrongly skipped one ships a
@@ -143,9 +142,8 @@ def test_a_missing_content_tag_builds():
     """The clause that makes the content tag load-bearing rather than decorative.
 
     `:latest` being served says nothing about whether the `sha-<hash>` tag a consumer references
-    exists, and the first deploy after the builder started computing one is exactly that state:
-    unchanged context, `:latest` present, no content tag ever pushed. Skipping there leaves a
-    consumer naming a tag the registry has never seen.
+    exists. Unchanged context, `:latest` present and no content tag ever pushed is a reachable
+    state, and skipping there leaves a consumer naming a tag the registry has never seen.
     """
     assert (
         _render(**{**STEADY, "image_builder_content_tag_head": {"status": 404}})
@@ -266,7 +264,7 @@ def test_dereferencing_consumers_are_guarded_before_the_deref(prefix):
 
 
 def test_a_failed_previous_build_builds():
-    """The stale-image case (#1534): a failed build leaves every other clause reading 'ok'.
+    """The stale-image case: a failed build leaves every other clause reading 'ok'.
 
     Its rendered context stays on disk, so the template task reports `ok` rather than
     `changed`, and the registry still serves the PREVIOUS tag, so the digest clause reads 200.

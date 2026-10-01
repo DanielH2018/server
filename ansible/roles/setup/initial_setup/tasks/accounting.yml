@@ -1,6 +1,5 @@
 ---
 # sysstat/psacct accounting, the login banners, and the two weekly apt-hygiene crons.
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
 - name: Install sysstat for system accounting
   tags: [accounting]

@@ -1,10 +1,8 @@
 """How gitops_deploy decides a k8s role may auto-deploy, derived from the role sources.
 
-Split out of test_k8s_autodeploy_guard.py, which had grown to 2,712 lines holding both this
-derivation and the three test groups built on it. The logic is what the guards agree on; a
-change here moves every one of them at once, which is the point — the tree-wide guards and the
-synthetic-role unit tests must read a role the same way or the unit tests stop standing for
-anything.
+The logic is what the guards agree on. A change here moves every one of them at once. The
+tree-wide guards and the synthetic-role unit tests must read a role the same way, or the unit
+tests stop standing for anything.
 
 The derivation is layered, base first, and each consumer imports from the layer it needs:
 
@@ -62,9 +60,8 @@ def _denylist() -> set[str]:
 def _roles() -> list[Path]:
     """Every deployable role directory under roles/k8s/, shared roles excluded.
 
-    `is_leftover_dir` skips a retired role's `__pycache__`-only debris, which the filter
-    itself skips (#2882). Without it these guards fail naming a "role" that no longer exists
-    in git, which is a harder failure to read than the raise the filter used to produce.
+    `is_leftover_dir` skips `__pycache__`-only debris from a removed role. Without it these
+    guards fail naming a "role" that no longer exists in git.
     """
     return sorted(
         p
@@ -127,15 +124,14 @@ def _deployment_templates(role: Path) -> list[str]:
 
     Both are gated the same way: `roles/k8s/manifests` waits on `<kind>/<name>` and the guards
     below check that every rendered workload is named in that wait. Matching only Deployment
-    made a DaemonSet role render zero workloads and pass every shape guard ungated.
+    would make a DaemonSet role render zero workloads and pass every shape guard ungated.
 
     The `kind` match tolerates optional quoting (`kind: "Deployment"`) and an optional trailing
     comment (`kind: Deployment  # web`), the same tolerance `_batch_templates` already carries
-    for `Job`/`CronJob`. No live template uses either spelling today, but this became
-    load-bearing rather than prophylactic once `_rollout_gate_offender` started trusting an
-    empty result here as proof a role renders no Deployment/DaemonSet at all — a quoted or
-    commented `kind:` line this couldn't see would grant a batch-gate exemption to a role that
-    still has an ungated rollout.
+    for `Job`/`CronJob`. No live template uses either spelling. The tolerance is load-bearing
+    because `_rollout_gate_offender` trusts an empty result here as proof a role renders no
+    Deployment/DaemonSet at all. A quoted or commented `kind:` line this could not see would
+    grant a batch-gate exemption to a role that still has an ungated rollout.
     """
     out = []
     for t in (
@@ -157,8 +153,8 @@ def _batch_templates(role: Path) -> list[tuple[str, str]]:
 
     Batch workloads are gated role-locally (`wait --for=condition=complete`), not through
     `manifests_rollout`, so they need their own offender set. Matching only
-    Deployment/DaemonSet made a Job-only role render zero workloads and pass every shape
-    guard ungated — the same defect slice 2 found for DaemonSets.
+    Deployment/DaemonSet would make a Job-only role render zero workloads and pass every shape
+    guard ungated.
 
     A template can hold several `---`-separated YAML documents, and a batch-workload
     template holding two is not hypothetical:
@@ -170,8 +166,7 @@ def _batch_templates(role: Path) -> list[tuple[str, str]]:
 
     The `kind` match tolerates an optional quoting (`kind: "Job"`) and an optional trailing
     comment (`kind: Job  # one-shot`) — both valid YAML that kubectl applies identically to
-    the bare form. No template does either today, so this is prophylactic rather than fixing
-    a live miss.
+    the bare form. No template uses either spelling.
     """
     out: list[tuple[str, str]] = []
     tdir = role / "templates"
@@ -190,12 +185,11 @@ def _batch_templates(role: Path) -> list[tuple[str, str]]:
 def _strip_comments(text: str) -> str:
     """`text` with YAML/shell comments removed — whole-line AND trailing, on every line.
 
-    A comment is the argument against a thing, and this file's whole history is text matchers
-    crediting that argument as the thing itself: a commented-out wait counted as a gate, and a
-    comment explaining why a role does NOT use `kubectl wait` satisfied a check for
-    `kubectl wait`. Stripping only whole-line comments closed the first shape and left the
-    second one open in its trailing form — measured, `_has_completion_gate` credited
-    `- name: x  # we deliberately do not use wait --for=condition=complete`.
+    A comment is the argument against a thing, and a text matcher that credits it counts the
+    argument as the thing itself. A commented-out wait counts as a gate, and a comment
+    explaining why a role does NOT use `kubectl wait` satisfies a check for `kubectl wait`.
+    Stripping whole-line comments alone leaves the trailing form open: `_has_completion_gate`
+    credits `- name: x  # we deliberately do not use wait --for=condition=complete`.
 
     Applied to command text as well as to file text, so it also covers a `#` comment inside a
     `shell: |` block scalar, where YAML itself does no stripping and the `#` is a real shell
@@ -229,7 +223,7 @@ def _when_is_falsy_literal(when) -> bool:
 
     Ansible templates a `when:` string through Jinja and evaluates the result the same way it
     evaluates the bare boolean, so `when: "false"`, `'no'`, `'False'` and `when: 0` all skip the
-    task exactly as `when: false` does — measured directly against real Ansible, not assumed.
+    task exactly as `when: false` does.
     These are plain YAML scalars, decidable without rendering; a `when:` that references a
     variable or filter is genuine Jinja and is left alone rather than guessed at, the same
     fail-closed choice the rest of this file makes for anything it cannot resolve statically.
@@ -257,8 +251,7 @@ def _iter_task_dicts(
 ) -> "list[tuple[dict, tuple, bool]]":
     """Every task in a parsed tasks/main.yml, as `(task, effective_tags, effective_when_falsy)`.
 
-    Descends into `block`/`rescue`/`always`, and — this is the part a first pass got only half
-    right — PROPAGATES the enclosing block's own `when:`/`tags:` down to every task it contains,
+    Descends into `block`/`rescue`/`always` and PROPAGATES the enclosing block's own `when:`/`tags:` down to every task it contains,
     the way Ansible itself does: a block's `tags:` UNION into each child's effective tags, and a
     block's `when:` ANDs with each child's own `when:`, so a falsey block `when:` (or a
     `tags: [never]`/`tags: [config]` on the block) excludes every task inside it regardless of
@@ -324,10 +317,9 @@ def _live_tasks(role: Path) -> list[dict]:
     """Every task in the role's tasks/main.yml that a normal, untagged deploy actually runs.
 
     The single entry point for "what does this role do", shared by `_batch_gated_names`,
-    `_has_completion_gate` and `_has_failure_escalation` so the three cannot drift apart. They
-    did drift: `_batch_gated_names` parsed YAML and applied the tags/`when:` rules, while the
-    other two were raw substring tests over the same file — so a `debug` describing a wait, or
-    a `fail` under `when: false`, credited in one and not in the other. Anything a matcher here
+    `_has_completion_gate` and `_has_failure_escalation` so the three cannot drift apart. Two
+    matchers reading the same file differently credit a `debug` describing a wait, or a `fail`
+    under `when: false`, in one and not in the other. Anything a matcher here
     wants to read about a role goes through this walker first, and the module discipline is
     then whichever module key the matcher reads off the returned dict.
     """
@@ -356,8 +348,7 @@ def _task_command_text(task: dict) -> str | None:
     folded/literal-blocked in YAML — `yaml.safe_load` already normalized that) and `argv:` (a
     list of raw arguments, joined with spaces here so the same regexes downstream can read
     either form). `argv:` is not hypothetical in this codebase — `k8s/cronjob-gate` itself uses
-    it for its own container-state read, specifically BECAUSE the `cmd:` form once shipped
-    broken (see its tasks/main.yml). A guard that could not read the spelling this repo already
+    it for its own container-state read. A guard that could not read the spelling this repo already
     established as the correct one would false-offend the next role that follows the precedent.
     """
     for module in (
@@ -390,7 +381,7 @@ def _auto_deployable(role: Path) -> bool:
     role that doesn't.
 
     Reads defaults/main.yml as a plain FILE via yaml.safe_load, not as a live Ansible variable.
-    Whoever re-points gitops_deploy at these declarations (slice 1b) must do the same: k8s_autodeploy
+    Whoever re-points gitops_deploy at these declarations must do the same: k8s_autodeploy
     and k8s_autodeploy_reason are unprefixed keys, shared by name across every role in one play, so
     Ansible variable lookup would resolve whichever role's defaults last set them in load order —
     not the role being asked about.
@@ -419,32 +410,23 @@ def _declares_autodeploy(role: Path) -> bool:
     )
 
 
-# ── slice 7a task 3: k8s_autodeploy_snapshot_pvcs ────────────────────────────────────────────
+# ── k8s_autodeploy_snapshot_pvcs ─────────────────────────────────────────────────────────────
 #
 # k8s/manifests takes a pre-apply Longhorn snapshot of a role's `k8s_autodeploy_snapshot_pvcs`
 # claims (roles/k8s/manifests/tasks/main.yml, guarded on `not k8s_no_mutate`). That guard means
 # --dry-run never exercises volume-snapshot at all — a typo'd claim name is invisible to a dry
 # run and surfaces only on a real deploy, as the "PVC has no spec.volumeName" assert failing
-# before the apply (task-2-report.md). Test 1 below is therefore the only pre-deploy catch.
+# before the apply. The claim-name test below is therefore the only pre-deploy catch.
 #
-# THE BRIEF'S RECIPE FOR TEST 1 DOESN'T MATCH THIS CODEBASE'S SHAPE, AND HAD TO BE ADAPTED.
-# The brief says: parse the role's own `templates/*.j2` for `kind: PersistentVolumeClaim` and
-# assert every declared claim's name appears. Checked against the live tree
-# (`grep -rl PersistentVolumeClaim ansible/roles/k8s/{home-assistant,sonarr,radarr,jellyfin,
-# qbittorrent,bazarr,prowlarr,freshrss,livesync,speedtest,tdarr,code-server}`): only
-# code-server/templates/pvc-workspace.yaml.j2 matches. Eleven of the thirteen roles delegate PVC
-# creation entirely to the shared `k8s/volume-claim` role (`include_role: k8s/volume-claim`,
-# `vars: volume_claim_name: "{{ <role>_k8s_claim }}"`) and render no PersistentVolumeClaim
-# document of their own at all. The literal recipe would find an empty rendered set for those
-# eleven and fail every one of their correct declarations — not vacuous, wrong. And the two
-# roles that DO render their own PVC (zigbee2mqtt, code-server's workspace claim) still write
-# `metadata.name: {{ <role>_k8s_claim }}`, a Jinja reference, not a literal — so even those two
-# need the same resolution step. `_rendered_pvc_claims` below is the adapted version: it reads
-# both sources (a role's own PVC template AND a `volume_claim_name` var on a live
-# `k8s/volume-claim` include) and resolves the single-var-reference shape both use through the
-# role's own defaults/main.yml. This is a finding about the brief, not about any role's claim
-# name — every claim in the table was independently verified against `kubectl -n homelab get
-# pvc` on 2026-08-21 and all fourteen are live.
+# Most roles delegate PVC creation entirely to the shared `k8s/volume-claim` role
+# (`include_role: k8s/volume-claim`, `vars: volume_claim_name: "{{ <role>_k8s_claim }}"`) and
+# render no PersistentVolumeClaim document of their own. The roles that DO render their own PVC
+# (zigbee2mqtt, code-server's workspace claim) write `metadata.name: {{ <role>_k8s_claim }}`, a
+# Jinja reference, not a literal. A test that parsed only a role's own `templates/*.j2` for
+# literal claim names would find an empty set for the delegating roles and fail their correct
+# declarations. `_rendered_pvc_claims` reads both sources (a role's own PVC template AND a
+# `volume_claim_name` var on a live `k8s/volume-claim` include) and resolves the single-var
+# reference both use through the role's own defaults/main.yml.
 
 
 def _role_defaults(role: Path) -> dict:

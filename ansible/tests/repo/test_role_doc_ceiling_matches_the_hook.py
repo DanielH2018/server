@@ -3,9 +3,7 @@
 `_doc_size.MAX_CHARS` is what the two role-doc guards fail over, and it means something only
 because `.claude/hooks/inject-nested-docs.py:INLINE_MAX_CHARS` is the point where that hook
 stops inlining a doc and injects its head instead. Two numbers in two trees drift, and the
-drift is silent: the guard keeps passing docs the hook has started truncating. #2826 is what
-that looks like at scale, in the other unit — a 400-line ceiling passed 30 of 93 role docs the
-hook was already cutting.
+drift is silent: the guard keeps passing docs the hook has started truncating.
 
 Run: uv run pytest ansible/tests/repo/test_role_doc_ceiling_matches_the_hook.py
 """

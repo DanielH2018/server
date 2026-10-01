@@ -1,10 +1,10 @@
 ---
-# Slice 4, B7b — the last of the nine. No Service, no route, no PVC: janitorr has no web UI and
-# keeps no state of its own. What it has is write access to the whole media tree, which is why it
-# ships with dry-run on and why verify.yml is a gate rather than a formality.
+# No Service, no route, no PVC: janitorr has no web UI and keeps no state of its own. What it
+# has is write access to the whole media tree, which is why verify.yml is a gate rather than a
+# formality.
 
-# Read by the Docker role's application.yml.j2 through lookup('template'), which defaults it to
-# false so only this side runs dry. A set_fact rather than an include_role var because the render
+# Read by templates/config/application.yml.j2 through lookup('template'), which defaults it to
+# false. A set_fact rather than an include_role var because the render
 # happens inside the manifests role, and an include var there would have to carry that role's
 # `manifests_` prefix to satisfy ansible-lint — which would put janitorr's deletion switch under
 # a name that says nothing about janitorr.
@@ -27,7 +27,7 @@
   ansible.builtin.import_tasks: verify.yml
   # Every proof in verify.yml is about the pod this deploy rolled out. --check rolls nothing
   # out and skips the rollout wait, so the proofs would test the running pod and their reports
-  # would error on check-mode skip results (#2323).
+  # would error on check-mode skip results.
   when: not ansible_check_mode
 
 - name: Install the janitorr health reader directory
@@ -66,9 +66,9 @@
   become: true
   when: not k8s_dry_run | bool
 
-# The reader scripts and their host_lib sibling were `copy:`-deployed and watched by nothing
-# (#2590): setup-drift-lib.sh's deployed-code arm only compares pairs a role declared, so a
-# stale copy here ran behind a drift check reporting "deployed code matches the repo". Tagged
+# The reader scripts and their host_lib sibling are stamped so the drift check watches them:
+# setup-drift-lib.sh's deployed-code arm only compares pairs a role declared, so an unstamped
+# stale copy would run behind a check reporting "deployed code matches the repo". Tagged
 # `config` like the copies above, so a `--tags config` run stamps exactly what it just wrote.
 - name: Record the deployed janitorr health reader code
   tags: [config]

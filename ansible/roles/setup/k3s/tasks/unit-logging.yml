@@ -10,8 +10,8 @@
 # (`MaxLevelStore=notice`, initial_setup/tasks/system-tuning.yml), and every line k3s writes
 # is priority info: logrus and klog both emit plain text to stderr, with no `<N>` prefix
 # for journald to read a level from, so the unit's `SyslogLevel=info` default applies to
-# INFO, WARN and FATA alike. On 2026-09-09 k3s crash-looped ~3000 times over 5h08m and the
-# journal kept only systemd's `status=1/FAILURE` lines; the reason k3s exited is gone (#1918).
+# INFO, WARN and FATA alike. A k3s crash loop therefore leaves only systemd's
+# `status=1/FAILURE` lines in the journal, and the reason k3s exited is lost.
 # `SyslogLevel=notice` on the unit would keep the lines, but at notice they also pass the
 # rsyslog info filter, land in /var/log/syslog and ship to Loki — the volume the cap was
 # set to stop, from the noisiest unit on the box. A file keeps the journal and Loki as
@@ -37,7 +37,7 @@
 
 - name: Create the drop-in directory for {{ k3s_log_unit }}
   # copy: does not create parents, and neither the installer nor systemd makes a `.d/` for
-  # a unit that has no drop-ins — both hosts lacked it when this was written.
+  # a unit that has no drop-ins.
   ansible.builtin.file:
     path: "/etc/systemd/system/{{ k3s_log_unit }}.service.d"
     state: directory
@@ -65,7 +65,7 @@
 - name: Rotate the log for {{ k3s_log_unit }}
   # `copytruncate`, NOT `create`: systemd holds the fd from `append:` and reopens it only on
   # the unit's next exec, so a renamed file keeps receiving every line until then. The
-  # dual-arm is the crash-loop shape: 2026-09-09 restarted k3s ~3000 times in 5h, and each
+  # dual-arm is the crash-loop shape: a loop restarts k3s thousands of times in hours, and each
   # start logs its whole startup, so `maxsize` bounds the file per logrotate run while
   # `rotate 4` bounds the history.
   ansible.builtin.copy:

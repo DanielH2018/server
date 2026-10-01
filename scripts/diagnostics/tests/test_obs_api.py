@@ -1,4 +1,4 @@
-"""obs_api: the Prometheus/Loki client probe.py, postflight and homelab-mcp share (#2860).
+"""obs_api: the Prometheus/Loki client probe.py, postflight and homelab-mcp share.
 
 The URL builders keep their tests in test_probe.py under their `core.` spelling. What lives here
 is what only homelab-mcp's copy exercises: the trailing window, the urllib transport, and the

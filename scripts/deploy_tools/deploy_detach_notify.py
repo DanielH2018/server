@@ -52,14 +52,13 @@ PROBE_TIMEOUT_S = 30
 # like config/deploy/cron, a typo --skip-tag-check let through, or a role (netpol-baseline,
 # media-volume) whose manifests declare no workload at all.
 #
-# THESE MUST STAY UNAMBIGUOUS. "not found (not created" used to be on this list, and probe.py
-# emitted it for BOTH "this tag names no container" and "the container that should exist is
-# absent" -- so a failed deploy reported `skipped` and the verdict stayed `settled`. That is
-# how PR #685's observability health gate never ran while land.sh printed VERDICT: settled.
-# probe.py now says which of the two happened, and its docstring records the rule: a name
-# GUESSED from the tag may skip when absent, a name RESOLVED from the role's own manifests may
-# not. `test_deploy_detach_notify.py` asserts every message probe.py emits for an absent
-# workload matches none of these, so a rewording cannot quietly reopen the hole.
+# THESE MUST STAY UNAMBIGUOUS. A message that fits both "this tag names no container" and "the
+# container that should exist is absent" must not be on this list, or a failed deploy would
+# report `skipped` and the verdict would stay `settled`. probe.py says which of the two
+# happened, and its docstring records the rule: a name GUESSED from the tag may skip when
+# absent, a name RESOLVED from the role's own manifests may not. `test_deploy_detach_notify.py`
+# asserts every message probe.py emits for an absent workload matches none of these, so a
+# rewording cannot quietly reopen the hole.
 NOT_APPLICABLE_MARKERS = (
     "no Deployment or DaemonSet",
     "declares no rollout-checkable workload",
@@ -164,8 +163,6 @@ def check_one(
         # Pi role and its containers_list entry together declares the tag only at the commit
         # that was deployed, and the primary reads `set()` for it -- which falls through to the
         # last branch below and probes k8s FIRST, where a same-named cluster workload answers.
-        # That is issue #929's shape, arriving through the half of the verdict that used to be
-        # read from the calling checkout while the manifests came from the snapshot.
         platforms = tools.tag_platforms(tag, host_vars=(cwd or REPO) / HOST_VARS_REL)
 
     if platforms == {"docker"}:
@@ -307,7 +304,7 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
         tags, ns.status == 0, tools=tools, cwd=Path(ns.cwd) if ns.cwd else None
     )
     # deploy.sh's own code, not ansible's: the playbook exited 0 having matched no host, and
-    # the wrapper read that off the PLAY RECAP (issue #1814). Said in those words, because
+    # the wrapper read that off the PLAY RECAP. Said in those words, because
     # "exited non-zero -- see the log" sends the reader to a log whose ansible run looks clean.
     who = "ansible"
     if ns.status == DEPLOY_NO_HOSTS:

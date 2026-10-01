@@ -3,22 +3,21 @@
 `releases.manifest_affecting_shared_roles()` answers "which entry-less roles under
 `ansible/roles/k8s/` supply bytes to somebody's applied manifests". It does not answer whose,
 and `role_paths_for` used the first answer for the second: every census role sat on every
-service's path list. So PR #2503's edit to `game-stats-lib/files/stats_lib.py` marked sonarr,
-traefik, uptime-kuma and wg-easy stale for a file none of them embeds, and `Release Staleness
-Drift` stayed DOWN with no deploy tag able to clear it (#2504) -- the shape #1672 records for
-`volume-claim`'s staging-directory move.
+service's path list. Without that, an edit to `game-stats-lib/files/stats_lib.py` would mark
+sonarr, traefik, uptime-kuma and wg-easy stale for a file none of them embeds, and `Release
+Staleness Drift` would stay DOWN with no deploy tag able to clear it.
 
 THE EDGE IS ALREADY DERIVED ONCE. `lib.k8s_roles.role_callers` reads it: one k8s role reaches
 another's tasks either by `include_role: k8s/<role>` or by `import_tasks` of a sibling role's
 tasks file, and whoever deploys the caller runs the callee. `land_tags.py` asks it the same
-question for the same reason (#1397). Re-deriving it here by grepping each role's tree for the
+question for the same reason. Re-deriving it here by grepping each role's tree for the
 shared role's name would read prose as an edge: `valheim-stats/tasks/main.yml` says "No
 volume-claim include, unlike terraria-stats" and `game-stats-lib/tasks/stage.yml` says
 "k8s/volume-claim and k8s/manifests", and both would become volume-claim consumers on the
 strength of a comment.
 
 FAILING TOWARD VISIBLE. This narrows, so a consumer it misses reads CLEAN -- the false-GREEN
-class issue #947 built this reader to catch. Two guards keep the failure loud instead:
+class this reader exists to catch. Two guards keep the failure loud instead:
 
   * `manifests` is fleet-wide by name and never narrowed. Its tasks render every service's
     bytes, and three docstrings in `releases.py` name it as the one path that must never read
@@ -116,11 +115,11 @@ def consumers_for(shared_roles, repo=None, callers=None, renderer="manifests"):
 def consumes_manifests(role_dir):
     """Whether `role_dir`'s tasks include `k8s/manifests`, the contract that ends in a stamp.
 
-    Not every `containers_list` k8s entry has to: the retired `n8n-images` only called
-    `k8s/image-builder` and applied no manifests of its own, so it could never
-    be stamped and would otherwise read as permanently missing -- the exact "monitor nobody
-    trusts" failure `manifest-prune-check.sh.j2`'s header warns against. Same one-level grep the
-    repo CLAUDE.md names for this question (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/`).
+    Not every `containers_list` k8s entry has to: an entry whose role only calls
+    `k8s/image-builder` and applies no manifests of its own can never be stamped and would
+    otherwise read as permanently missing -- the exact "monitor nobody trusts" failure
+    `manifest-prune-check.sh.j2`'s header warns against. Same one-level grep the repo CLAUDE.md
+    names for this question (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/`).
     """
     tasks_dir = role_dir / "tasks"
     if not tasks_dir.is_dir():

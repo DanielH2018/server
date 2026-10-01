@@ -1,6 +1,5 @@
 ---
-# Read-only MCP server, rehomed from daniel-server (Phase E, 2026-08-13 — this was the
-# last routed tenant of the Docker edge). The route is NOT an IngressRoute: the bearer
+# Read-only MCP server. The route is NOT an IngressRoute: the bearer
 # token lives in the k8s edge's file-provider gate Secret alongside livesync's
 # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2) so it stays out of CRD
 # objects the readonly kubeconfig can list.
@@ -11,7 +10,7 @@
   vars:
     image_builder_name: homelab-mcp
     # playbook_dir, not role_path: these render INSIDE image-builder, where role_path
-    # names the wrong role (bit the first deploy, 2026-08-13).
+    # names the wrong role.
     image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/homelab-mcp/templates/Dockerfile.j2"
     # Raw files, not templates: app.py embeds PromQL whose {{...}} braces Jinja would
     # eat (the reason image_builder_context_files exists).
@@ -19,7 +18,7 @@
       "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/app.py": app.py
       "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/safe_reads.py": safe_reads.py
       "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/k8s_reads.py": k8s_reads.py
-      # The Prometheus/Loki client probe.py shares (#2860). It lives outside this role, so an
+      # The Prometheus/Loki client probe.py shares. It lives outside this role, so an
       # edit to it alone maps to no deploy tag: redeploy homelab-mcp after changing it.
       "{{ playbook_dir }}/../scripts/diagnostics/probe_lib/obs_api.py": obs_api.py
 

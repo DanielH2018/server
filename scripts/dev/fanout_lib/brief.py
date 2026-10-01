@@ -1,4 +1,4 @@
-"""The brief a headless fan-out agent reads on stdin — spec 2026-09-06 §3.
+"""The brief a headless fan-out agent reads on stdin.
 
 A headless agent reads no SessionStart banner, so the brief carries what the banner carries.
 The issue-fanout skill's required-contents list (its step 3) is the source; keep the two in step.
@@ -110,7 +110,7 @@ def _finishing(host: str) -> str:
     # Only the landing host can owe a host apply, so only its brief names the heading.
     if host == LANDS:
         # The landing host owes a verdict as well as a PR: `gh pr create` returning says
-        # nothing about whether the PR merged and deployed (issue #2890). The hook and
+        # nothing about whether the PR merged and deployed. The hook and
         # `status` both check for the VERDICT line, so the brief has to ask for it.
         after = (
             "after the landing steps above, with any `MANUAL APPLY PENDING` heading above "

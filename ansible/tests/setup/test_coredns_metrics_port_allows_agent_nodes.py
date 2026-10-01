@@ -8,9 +8,8 @@ Deployment with no nodeSelector, so which node it runs on is the scheduler's cho
 every reboot.
 
 WHY IT NEEDS A GUARD. The failure is a red Scrape Targets monitor and nothing else: the pod is
-Ready, the host process answers locally, and the deploy reads green. The 9100 node-exporter
-scrape lost 5.4h to the same class on 2026-08-23; the coredns-host scrape lost the afternoon
-of 2026-09-06. Both allows must exist, one per source shape.
+Ready, the host process answers locally, and the deploy reads green. Both allows must exist,
+one per source shape.
 """
 
 from _helpers import ROLES as _ROLES

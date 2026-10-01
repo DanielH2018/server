@@ -1,4 +1,4 @@
-"""The non-paging durable record of a k8s change this deployer will never apply (#2570).
+"""The non-paging durable record of a k8s change this deployer will never apply.
 
 `k8s_deferred` records the ONE class of k8s deferral the tick chose for itself — a promoted
 bump the broad arm ran out of budget for, plus a staging demotion — and monitor-bridge pages
@@ -59,7 +59,7 @@ def test_a_deferred_k8s_role_is_recorded_with_the_sha_and_the_stamp(
 def test_each_line_names_the_commit_that_changed_its_service(
     gitops_deploy, state_dir, settings
 ):
-    """#3111: sonarr changed at APPLIED, below a later tip. Its landing's record names APPLIED,
+    """sonarr changed at APPLIED, below a later tip. Its landing's record names APPLIED,
     so a line at the tip would never discharge. authelia has no attribution and keeps the tip."""
     deploy_defer.alert_and_record_deferred(
         _tools(),
@@ -92,7 +92,7 @@ def test_a_range_with_no_k8s_role_records_nothing(gitops_deploy, state_dir, sett
 def test_a_second_deferral_of_the_same_role_moves_the_origin_and_keeps_the_stamp(
     gitops_deploy, state_dir, settings
 ):
-    """The line has to name the NEWEST unapplied change, or it discharges past it (#2644).
+    """The line has to name the NEWEST unapplied change, or it discharges past it.
 
     The stamp is the age the banner prints, and it dates the oldest unapplied change, so a
     later range touching the role must not reset it.
@@ -153,7 +153,7 @@ def test_a_torn_line_survives_an_origin_advance(gitops_deploy, state_dir, settin
 def test_a_torn_line_naming_a_service_is_repaired_rather_than_duplicated(
     torn, gitops_deploy, state_dir, settings
 ):
-    """The issue #2657 half: a torn line the record CAN attribute is rewritten in place.
+    """A torn line the record CAN attribute is rewritten in place.
 
     The service is absent from `parse_k8s_deferred`'s entries, so a writer reading only those
     appends a second line beside the torn one — and `_clear_k8s_lines` and the discharge, both
@@ -229,8 +229,7 @@ def test_a_release_record_predating_the_change_keeps_the_line(pending, settings)
 
 
 def test_a_deploy_between_two_changes_does_not_discharge_the_second(pending, settings):
-    """The defect #2644 names: a line stuck at the OLDEST origin discharges past a change
-    merged after it.
+    """A line stuck at the OLDEST origin discharges past a change merged after it.
 
     Change A merged at ORIGIN, change B at LATER, and a deploy in between stamped APPLIED,
     which descends from ORIGIN and not from LATER. With the line advanced to LATER that
@@ -258,7 +257,7 @@ def test_a_missing_release_record_keeps_the_line(pending, settings):
     assert [e.service for e in pending.k8s_unapplied_pending()] == ["authelia"]
 
 
-# ── a shared role has no record of its own, so its callers' records stand in (#2643) ───────
+# ── a shared role has no record of its own, so its callers' records stand in ───────────
 @pytest.fixture
 def shared_pending(gitops_deploy, state_dir, settings):
     """A pending `k8s_unapplied` line for the shared role `game-stats-lib` at ORIGIN."""
@@ -287,7 +286,7 @@ SHARED = {"game-stats-lib", "manifests"}
 def test_a_shared_role_whose_callers_all_carry_the_change_is_discharged(
     shared_pending, settings
 ):
-    """FLAGGED half: the full deploy of 2026-09-26, which left this line standing."""
+    """FLAGGED half: a full deploy that carries the change at every caller discharges the line."""
     assert _discharge_shared(shared_pending, settings) == ["game-stats-lib"]
     assert shared_pending.k8s_unapplied_pending() == []
 
@@ -320,7 +319,7 @@ def test_a_shared_role_with_no_derivable_caller_is_kept(
     ]
 
 
-# ── a render whose digests match stands in for a caller's deploy, for `manifests` (#3057) ──
+# ── a render whose digests match stands in for a caller's deploy, for `manifests` ───────
 def _render_proved(svc):
     """valheim-stats' render, at a commit descending from the change, matches its digests."""
     return LATER + "render" if svc == "valheim-stats" else None
@@ -350,7 +349,7 @@ def test_a_role_acting_outside_the_digest_ignores_a_matching_render(
     assert "game-stats-lib" not in deploy_defer.DIGEST_PROVABLE_ROLES
 
 
-# ── a service's own line takes the render proof when its role is digest-provable (#3110) ──
+# ── a service's own line takes the render proof when its role is digest-provable ─────────
 def _discharge_own(state, settings, digest_provable):
     """authelia's record predates the line; its render at LATER matches the applied bytes."""
     return deploy_defer.discharge_k8s_unapplied(

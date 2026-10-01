@@ -9,13 +9,12 @@
 # internal to that host, so daniel-box cannot route to it (docs/archive/staging-cluster.md,
 # Decision 2).
 #
-# ITS OWN PLAYBOOK, not a fourth play in k3s-bringup.yml, which is where it first lived.
+# ITS OWN PLAYBOOK, not a fourth play in k3s-bringup.yml.
 # That playbook's first play takes `hosts: {{ target | default(lookup('pipe','hostname')) }}`
 # and asserts the resulting host is in k3s_server_hosts, under `tags: always`. So ANY play
 # appended there inherits the precondition "the host you are invoking from is itself a k3s
 # server" — and the one host that can reach daniel-stage is daniel-server, which is
-# deliberately not one. Measured 2026-08-27: the run died at that assert with ok=3 failed=1,
-# never reaching the smoke play. Neither `--tags` nor a narrower `hosts:` avoids it, because
+# deliberately not one, so the run dies at that assert and never reaches the smoke play. Neither `--tags` nor a narrower `hosts:` avoids it, because
 # the assert is always-tagged by design. Do not fold this back in.
 - name: Verify Longhorn can bind a volume
   hosts: "{{ storage_smoke | default([]) }}"

@@ -5,9 +5,9 @@ on the node that announces it. When it does not, kube-proxy installs a filter-ta
 KUBE-EXTERNAL-SERVICES DROP for that VIP on the announcer and every forwarded LAN packet dies
 there — while the Service reads Ready and the pod reads 1/1.
 
-The reject cases are not synthetic. `test_the_cold_boot_reschedule_is_the_red` replays the
-2026-08-14 outage exactly: the L2Advertisement stayed pinned to daniel-box while a cold boot
-rescheduled pihole onto daniel-server, and LAN DNS went down for everyone.
+The reject cases are not synthetic. `test_the_cold_boot_reschedule_is_the_red` replays an
+outage exactly: the L2Advertisement stays pinned to daniel-box while a cold boot reschedules
+pihole onto daniel-server, and LAN DNS goes down for everyone.
 
 `test_an_empty_read_is_inconclusive_not_a_pass` is the control. Every other check here reads
 lists, and a probe over an empty list reports "all zero are fine" — the
@@ -68,7 +68,7 @@ def test_a_vip_backed_on_the_announcing_node_passes():
 
 
 def test_the_cold_boot_reschedule_is_the_red():
-    """The 2026-08-14 outage, replayed.
+    """The cold-boot outage, replayed.
 
     The announcer stayed pinned to daniel-box; the pod moved to daniel-server. Nothing about
     the Service or the pod is unhealthy, which is exactly why this needs its own check.
@@ -149,8 +149,8 @@ def test_a_selector_matching_nothing_resolves_to_nothing():
 def test_a_zero_replica_workload_is_not_stranded():
     """terraria is parked at zero replicas by design, so its empty endpoint set is expected.
 
-    Issue #870: this FAILed the whole command, and a check that is red whenever a service is
-    intentionally off trains its reader to ignore the red.
+    A check that is red whenever a service is intentionally off trains its reader to ignore
+    the red.
     """
     text, code = ph.format_vip_placement(
         [_svc("terraria", ip="10.0.0.245")], [], _BOX, [_workload("terraria", 0)]

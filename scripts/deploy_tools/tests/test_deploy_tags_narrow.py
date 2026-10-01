@@ -57,7 +57,7 @@ def test_an_added_containers_list_entry_narrows_to_its_tag(tree: Tree):
 
 def test_a_removed_containers_list_entry_narrows_to_nothing_of_its_own(tree: Tree):
     """No tag undoes a removal, and no whole-play run does either — the play never visits
-    the removed entry's role — so a removal reaches only the list's readers (#2046)."""
+    the removed entry's role — so a removal reaches only the list's readers."""
     tree.write(
         "ansible/inventory/host_vars/daniel-box.yml",
         HOST_VARS.replace("  - name: bazarr\n    platform: k8s\n", ""),
@@ -74,7 +74,7 @@ def _reader(tree: Tree, role: str, line: str) -> None:
 
 
 def test_a_role_reading_another_hosts_list_through_hostvars_is_reached(tree: Tree):
-    """The #2044 shape: monitor-bridge derives PI_PUBLISHED_PORTS from daniel-pi's list."""
+    """monitor-bridge derives PI_PUBLISHED_PORTS from daniel-pi's list."""
     _reader(tree, "prowlarr", "ports: {{ hostvars['daniel-pi'].containers_list }}")
     tree.write(
         "ansible/inventory/host_vars/daniel-pi.yml",
@@ -184,7 +184,7 @@ def test_a_macro_nothing_imports_narrows_to_nothing(tree: Tree):
 
 def test_a_macro_named_by_a_filter_plugin_is_clean(tree: Tree):
     """A `.py` under `filter_plugins/` cannot render a macro; `toposort.py` names
-    `ingressroute.yml.j2` as the marker it greps role templates for (#2001)."""
+    `ingressroute.yml.j2` as the marker it greps role templates for."""
     tree.write(
         "ansible/filter_plugins/toposort.py",
         'MARKERS = ("traefik.io", "container-resources.yml.j2")\n',
@@ -294,7 +294,7 @@ def test_hosts_ini_is_flagged(tree: Tree):
 
 
 def test_a_deleted_unimported_macro_narrows_to_nothing(tree: Tree):
-    """CLEAN half: no template imports it at the new ref, so it reaches no render (#2440).
+    """CLEAN half: no template imports it at the new ref, so it reaches no render.
 
     Deleting `ansible/templates/traefik.yml.j2` in `8d825a872` refused and bought the whole
     ~20-minute `deploy.yml` play, and `probe.py releases --stale-only` then called all 58
@@ -321,7 +321,7 @@ def test_a_deleted_inventory_file_is_flagged(tree: Tree):
 
 
 def test_a_non_utf8_broad_path_is_flagged_rather_than_raised(tree: Tree):
-    """The scans read text; a traceback is a worse "cannot narrow" than the refusal (#2388)."""
+    """The scans read text; a traceback is a worse "cannot narrow" than the refusal."""
     (tree.root / "ansible/templates/blob.yml.j2").write_bytes(b"\xff\xfe\x00")
     with pytest.raises(narrow_broad.CannotNarrow, match="is not text"):
         tree.narrow(*_refs(tree))
@@ -332,7 +332,7 @@ def test_a_non_utf8_broad_path_is_flagged_rather_than_raised(tree: Tree):
 
 def test_a_doc_under_a_play_prefix_narrows_to_nothing(tree: Tree):
     """CLEAN half: `roles/containers/common/CLAUDE.md` widened the tick to a full
-    `ansible/deploy.yml` — 14 minutes for prose (#2448)."""
+    `ansible/deploy.yml` — 14 minutes for prose."""
     tree.write(
         "ansible/roles/containers/common/CLAUDE.md", "# how the deploy path works\n"
     )
@@ -340,9 +340,9 @@ def test_a_doc_under_a_play_prefix_narrows_to_nothing(tree: Tree):
 
 
 def test_a_doc_under_a_play_prefix_templates_dir_is_prose_too(tree: Tree):
-    """A `.md` under `templates/` reads as prose as well, since #2810 decided it once.
+    """A `.md` under `templates/` reads as prose as well.
 
-    It used to refuse here, because a task CAN render a `.md` onto a host. None does — the
+    A task CAN render a `.md` onto a host, but none does — the
     invariant is `ansible/tests/deploy/test_no_role_ships_a_markdown_file.py`, which goes red
     the day a task starts shipping one, and whoever trips it restores a carve-out rather than
     discovering the skip from a service that stayed stale.
@@ -365,7 +365,7 @@ def test_a_non_broad_path_maps_the_way_changed_maps_it(tree: Tree):
 
 
 def test_a_setup_plane_path_in_the_range_narrows_the_deploy_half(tree: Tree):
-    """Mixed planes: the setup half gets its own plan (#2046), so it contributes no tag here
+    """Mixed planes: the setup half gets its own plan, so it contributes no tag here
     and does not refuse — a refusal only turned the dropped half into a full run nobody ran."""
     tree.write("ansible/roles/setup/k3s/defaults/main.yml", "k3s_x: 1\n")
     tree.write("ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2", "a: c\n")

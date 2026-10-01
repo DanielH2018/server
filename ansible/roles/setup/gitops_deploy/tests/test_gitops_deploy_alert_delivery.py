@@ -110,7 +110,7 @@ def test_deliver_has_queued_the_alert_by_the_time_it_posts(
 def test_a_death_inside_the_post_leaves_the_alert_queued(
     gitops_deploy, monkeypatch, state_dir, settings
 ):
-    # The 2026-08-31 review M-1: a reboot, a `systemctl stop` or the UPS shutdown chain landing
+    # A reboot, a `systemctl stop` or the UPS shutdown chain landing
     # inside urlopen. drain_pending() at the top of the next tick reposts what is queued here.
     tools, _at_send = _sender(state_dir, RuntimeError("SIGTERM mid-POST"))
     with pytest.raises(RuntimeError, match="mid-POST"):

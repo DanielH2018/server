@@ -7,8 +7,7 @@ The third case is ignored, never rejected: prose quotes commands constantly, and
 that flagged every backtick would be switched off within a day.
 
 The grammar is closed on purpose. An unrecognised span is not support, so a new form is a
-change here plus a paired test, never an ad-hoc regex in a caller. The design is
-in PR #2138.
+change here plus a paired test, never an ad-hoc regex in a caller.
 """
 
 import os

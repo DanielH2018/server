@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the fan-out Stop hook (issue #2816).
+"""Tests for the fan-out Stop hook.
 
 The hook blocks a headless fan-out session from stopping on a progress report, at most three
 times per batch, and stays silent outside a fan-out worktree. Each rule is a block/allow pair:
@@ -116,7 +116,7 @@ def test_the_hook_and_status_read_the_same_patterns():
 
 
 def test_a_landing_batch_that_names_a_pr_but_no_verdict_is_blocked(tmp_path):
-    """#2890: on daniel-box `gh pr create` returning is not the finish the brief asks for."""
+    """On daniel-box `gh pr create` returning is not the finish the brief asks for."""
     root = _fanout_tree(tmp_path, LANDING_BRIEF)
     reason = _stop(root, FINISHED)
     assert reason and "no `VERDICT:` line" in reason

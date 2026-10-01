@@ -1,14 +1,14 @@
 ---
 # The GATE, not the exit criterion — same split as the jellyfin role. These prove the render node
-# is reachable from tdarr's pod and that its OWN ffmpeg can encode through VAAPI. B6's actual
+# is reachable from tdarr's pod and that its OWN ffmpeg can encode through VAAPI. The actual
 # proof is a real library file transcoding to completion and the output playing, which needs a
 # job run and a human.
 
 # WITHOUT THIS, EVERY PROOF BELOW RUNS AGAINST THE OUTGOING POD. k8s/manifests does not wait
 # for a rollout — it QUEUES it for k8s/manifests/tasks/drain.yml, which drains the whole batch at the end.
 # So a role's own verify tasks run before its rollout completes, and the pod lookup returns the
-# pod that is being replaced. Found on qbittorrent 2026-08-27, where a proof that genuinely
-# differs between old and new pod failed a deploy that had in fact succeeded.
+# pod that is being replaced, so a proof that differs between old and new pod fails a deploy
+# that succeeded.
 #
 # `rollout status` and NOT a readiness wait — the old pod satisfies every readiness-shaped
 # check, including the `--field-selector status.phase=Running` below, because phase stays
@@ -33,7 +33,7 @@
   register: tdarr_k8s_pod
 
 # `: < dev` opens and closes WITHOUT reading. Reading blocks forever on a DRM render node once
-# open() succeeds — it cost a 15-minute wedged play in B5 before that was understood.
+# open() succeeds.
 - name: Prove the render node can actually be opened
   tags: [deploy]
   ansible.builtin.command:
@@ -51,7 +51,7 @@
     msg: "{{ tdarr_k8s_device.stdout_lines }}"
 
 # tdarr's OWN bundled ffmpeg, not jellyfin's — a different binary built against different
-# libraries, which is exactly why B5's result does not carry over. Locating it rather than
+# libraries, which is why jellyfin's encode proof does not carry over. Locating it rather than
 # hardcoding a path: the image has moved it between releases, and a wrong path would fail here
 # in a way that reads identically to the GPU being unreachable.
 - name: Encode through VAAPI with tdarr's own ffmpeg

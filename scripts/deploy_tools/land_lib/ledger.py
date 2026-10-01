@@ -8,24 +8,23 @@ waiting on the tree lock -- part of `tick` and `deploy`, not a fifth phase.
 `landing.retry_while_locked`, backoff included. A wait a wrapper rode out INSIDE its own
 flock and then reported on its stderr is booked by `landing.note_in_flock_wait`: deploy.sh
 queuing in `flock -w`, gitops_tick.sh watching a tick another actor started. Both of those
-exit 0, so until they reported it the seconds landed in `deploy` and `tick` instead and every
-row read `lock=0`. The two sources cannot double-count: a wrapper reports only a wait that
+exit 0, so without the report the seconds would land in `deploy` and `tick` and every row
+would read `lock=0`. The two sources cannot double-count: a wrapper reports only a wait that
 ended in an acquire or a join, never one that ended in contention.
 
 `kick` is what became of the tick a fast-path landing kicks after `deploy.sh --at`: `started`
 (a tick of its own, which converges the primary while the gate runs), `rearmed` (the first
-request joined a run already in flight and the second, after the gate, started one),
-`joined` (both requests joined; nothing this landing did converges the primary, the timer
-does), `failed` (systemd refused the request), and empty for a landing that kicked none. The
-joined tick fetched before the merge, so it does not carry the landing's commit, and until
-2026-09-17 that case exited 0 and read as `started` (issue #1843).
+request joined a run already in flight and the second, after the gate, started one), `joined`
+(both requests joined; nothing this landing did converges the primary, the timer does),
+`failed` (systemd refused the request), and empty for a landing that kicked none. The joined
+tick fetched before the merge, so it does not carry the landing's commit.
 
 `cause` is a one-token reason beside a `deploy-failed` verdict, and empty beside every other
 one. The verdict alone cannot tell "nothing was deployed" (a tag miss, a failed tick, a
-host-lookup crash) from "changes are live and a task failed after them", and the board had
-no way to split them (issue #1031). Its vocabulary is `outcome.Cause` and it is checked HERE,
-on assignment, because the board groups by the field: a value invented at one of the seven
-writing sites becomes a bar on the dashboard, and nothing downstream would reject it.
+host-lookup crash) from "changes are live and a task failed after them", so `cause` lets the
+board split them. Its vocabulary is `outcome.Cause` and it is checked HERE, on assignment,
+because the board groups by the field: a value invented at one of the seven writing sites
+becomes a bar on the dashboard, and nothing downstream would reject it.
 """
 
 from dataclasses import dataclass

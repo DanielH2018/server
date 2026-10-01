@@ -59,11 +59,11 @@ def test_health_unhealthy_exits_one_and_shows_streak_and_last_log():
 
 
 def test_health_starting_with_no_failing_probe_exits_zero():
-    """The accept half of #1601.
+    """The accept half.
 
     A deploy recreates the container, so the post-deploy gate reads it before its healthcheck
-    has completed a probe. `starting` with FailingStreak 0 is no evidence of failure and used
-    to produce `VERDICT: unhealthy` on a correct deploy.
+    has completed a probe. `starting` with FailingStreak 0 is no evidence of failure and must
+    not produce `VERDICT: unhealthy` on a correct deploy.
     """
     data = _inspect(
         {
@@ -116,8 +116,8 @@ def test_health_absent_but_declared_is_flagged():
     """The reject half.
 
     A service daniel-pi's inventory declares, with no container on the host, is a deploy that did
-    not create it — and until 2026-09-01 it shared the undeclared case's "not found (not created"
-    message, which the notifier skipped.
+    not create it, and must not share the undeclared case's "not found (not created" message,
+    which the notifier skips.
     """
     text, code = health_docker.format_health([], "wg-easy", declared=True)
     assert code == 1
@@ -141,11 +141,10 @@ def test_declared_on_pi_fails_closed_on_an_unreadable_inventory(tmp_path):
     assert health_docker.declared_on_pi("wg-easy", tmp_path / "gone.yml") is True
 
 
-#
-# `health` ran `docker inspect` unconditionally until 2026-08-16 and had been dead on both
-# cluster nodes since the 2026-08-14 Docker retirement — neither has the binary, so it raised
-# FileNotFoundError. Every case below is a way the k8s replacement could report healthy when it
-# is not, which is the only direction that matters for a post-deploy gate.
+# `health` must not run `docker inspect` unconditionally: neither cluster node has the binary,
+# so it would raise FileNotFoundError. Every case below is a way the k8s replacement could
+# report healthy when it is not, which is the only direction that matters for a post-deploy
+# gate.
 
 
 def _deploy(generation=1, observed=1, replicas=1, updated=1, ready=1, available=1):
@@ -196,7 +195,7 @@ def test_k8s_health_incomplete_rollout_exits_one():
 
 
 def test_k8s_health_recent_restart_exits_one_despite_being_ready():
-    """The kube-state-metrics failure of 2026-08-07: a recent restart exits 1 despite being Ready.
+    """A recent restart exits 1 despite being Ready (a crashlooping kube-state-metrics).
 
     A bad liveness probe passes READINESS, flips the Deployment to Available, and only then starts
     getting killed. Every readiness-derived field reads healthy while the pod crashloops.
@@ -345,13 +344,10 @@ def test_the_import_census_sees_a_module_that_reaches_for_a_sibling():
     assert _module_imports("import subprocess\n") == {"subprocess"}
 
 
-#
-# A deploy tag names a ROLE, not a workload. Everything below covers the resolution step added
-# 2026-09-01: for eleven roles the tag is not the name of the thing to health-check, and for
-# four of them it names no workload at all — so `probe.py health <tag>` reported "no Deployment
-# or DaemonSet" and `deploy_detach_notify.py` skipped it. PR #685 landed VERDICT: settled with
-# observability's gate never having run.
-#
+# A deploy tag names a ROLE, not a workload. Everything below covers the resolution step: for
+# eleven roles the tag is not the name of the thing to health-check, and for four of them it
+# names no workload at all — so `probe.py health <tag>` would report "no Deployment or
+# DaemonSet" and `deploy_detach_notify.py` would skip it.
 
 
 def _target(namespace, kind, name, workload, pods_doc=None):

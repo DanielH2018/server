@@ -54,7 +54,7 @@ def _only(tree: Tree, *files: str) -> bool:
 
 
 def test_a_default_only_a_task_reads_is_deploy_time_only(tree: Tree):
-    """CLEAN half: PR #2460's change, which no live object carries (#2462)."""
+    """CLEAN half: a change no live object carries."""
     tree.write(
         "ansible/roles/k8s/manifests/defaults/main.yml",
         DEFAULTS.replace("600s", "900s"),
@@ -114,7 +114,7 @@ def test_a_comment_only_task_change_is_deploy_time_only(tree: Tree):
 
 
 def test_the_note_drops_a_comment_only_shared_role(tree: Tree):
-    """The wiring #2581 asks for: no shared-role note, and no fan-out to its callers (#2704)."""
+    """The wiring: no shared-role note, and no fan-out to its callers."""
     files = [
         "ansible/roles/k8s/manifests/tasks/main.yml",
         "ansible/roles/k8s/manifests/CLAUDE.md",

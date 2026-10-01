@@ -7,9 +7,7 @@ metadata:
 data:
   local.ini: |
 {#
-  Rendered from the Docker role's template rather than copied here, so the two deployments read
-  byte-identical CouchDB config through coexistence. The smoosh ratios in particular are tuned
-  to bound .couch bloat, and a copy that drifted would change how fast the volume grows on one
-  side only — which then reads as a k8s problem.
+  Rendered from config/local.ini.j2 below. The smoosh ratios in particular are tuned to bound
+  .couch bloat.
 #}
 {{ lookup('template', playbook_dir + '/roles/k8s/livesync/templates/config/local.ini.j2') | indent(4, true) }}

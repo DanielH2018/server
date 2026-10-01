@@ -4,9 +4,9 @@ main() raises RetryableFetchError when `git status` or `git fetch` fails, and en
 turns that into exit 0 with no Discord post and NO last_run write: a one-off GitHub blip is
 retried invisibly next tick, while a persistent fetch break ages last_run and trips
 GitOps-Alive. Any other exception still pages and re-raises, and a completed tick, rollback
-included, writes last_run. Before the RetryableFetchError split, a fetch error double-paged
-(the crash Discord plus the OnFailure unit) every 30 minutes for the length of a GitHub
-incident. Each contract here is exercised by calling the function, against the canned config
+included, writes last_run. Without the RetryableFetchError split, a fetch error would
+double-page (the crash Discord plus the OnFailure unit) on every tick for the length of a
+GitHub incident. Each contract here is exercised by calling the function, against the canned config
 and a tmp state dir from conftest.py.
 """
 
@@ -47,8 +47,8 @@ def _tools(**overrides) -> DeployTools:
 
 
 def test_a_failing_git_status_raises_retryable(gitops_deploy, state_dir):
-    # 2026-08-17 14:33: `git status --porcelain` exited 128 on a momentarily unreadable work tree
-    # (a parallel `git worktree` operation), the very next tick was fine, and the tick double-paged.
+    # `git status --porcelain` exits 128 on a momentarily unreadable work tree (a parallel
+    # `git worktree` operation) while the very next tick is fine, so it must raise retryable.
     tools = _tools(
         git_status=lambda _repo: _completed(
             128, "fatal: this operation must be run in a work tree"
@@ -141,7 +141,7 @@ def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
 ):
     """The acceptance criterion for moving the config parse out of import time.
 
-    `K8S_DEPLOY_TIMEOUT_S=5m` used to raise `ValueError: invalid literal for int()` while the module
+    `K8S_DEPLOY_TIMEOUT_S=5m` raised `ValueError: invalid literal for int()` while the module
     was still importing — no key name, no webhook, no log line. The handler must sit ABOVE the
     generic `except Exception` (ConfigError subclasses it, so a reordering silently restores the
     traceback), and must leave last_run alone: a deployer that cannot parse its config is not

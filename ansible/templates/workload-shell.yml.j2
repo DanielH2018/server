@@ -1,8 +1,8 @@
 {#
   The pod-spec "shell" every long-running workload here shares, at its two depths.
 
-  Until 2026-09-19 each of the 69 Deployment and DaemonSet templates hand-copied these fields
-  and three field-level guards policed the copies (#2056). A copy is where a field drifts: the
+  Without a macro, each Deployment and DaemonSet template would hand-copy these fields. A copy
+  is where a field drifts: the
   next service inherits whatever its author copied, and nothing notices until a pod is evicted
   ahead of the things it outranks on paper, or an app reads a Service's env vars as its own
   configuration. Two macros, because the fields sit at two indent depths and a macro that can
@@ -22,7 +22,7 @@
 
     revisionHistoryLimit: 3   invariant. Unpinned, a Deployment keeps ten scaled-to-zero
                               ReplicaSets and `kubectl get rs -A` stops being readable — 605
-                              ReplicaSets against 68 Deployments on 2026-08-28. Rollbacks here
+                              ReplicaSets against 68 Deployments. Rollbacks here
                               are `git revert` + redeploy, so deeper history buys nothing.
     strategy                  REQUIRED, `Recreate` or `RollingUpdate`, no default. Recreate is
                               a downtime gap on every deploy; RollingUpdate is two pods at once
@@ -44,7 +44,7 @@
                               Docker-link env vars for every Service in the namespace —
                               AUTHELIA_SERVICE_HOST, AUTHELIA_PORT_9091_TCP and friends — and an
                               app that reads <NAME>_* as configuration picks them up. Authelia
-                              did, and exited before serving anything (daniel-box, 2026-08-02):
+                              did, and exited before serving anything:
                                 the new key already exists with value 'tcp4://:9091' but the
                                 deprecated keys and the new key can't both be configured
                               The collision needs only that a Service name match the app's
@@ -54,12 +54,12 @@
                               system class the hygiene test's `_SYSTEM_TIER` allowlists). No
                               default on purpose: five values are in use and none dominates,
                               and an omitted class is priority 0 — BELOW homelab-best-effort,
-                              so the pod loses every eviction race silently (#1851).
+                              so the pod loses every eviction race silently.
     service_account           emit `serviceAccountName: <value>`; omitted when none.
     automount                 `automountServiceAccountToken`. Left at none it follows the
                               hygiene rule: a pod that names no service_account runs as the
                               namespace `default` SA and never uses its token, so `false` is
-                              emitted (#1852); a pod that names one gets NO line, because the
+                              emitted; a pod that names one gets NO line, because the
                               ServiceAccount object may set the field and the pod's own value
                               then means nothing. Pass true or false to write the line
                               regardless — headlamp needs true beside its SA, since
@@ -79,8 +79,7 @@
   and its own guard, test_vip_pins.py, which reads the literal), `affinity`
   (pod-affinity.yml.j2), `hostNetwork`/`hostPID`, `tolerations`, `hostAliases`,
   `terminationGracePeriodSeconds`, `progressDeadlineSeconds` — one caller each, so there is
-  nothing to share. The WHY comment for a non-default argument stays above the call, where
-  the copied blocks used to sit.
+  nothing to share. The WHY comment for a non-default argument stays above the call.
 #}
 {% macro spec_shell(strategy, max_surge=none, max_unavailable=none) %}
   revisionHistoryLimit: 3

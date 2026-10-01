@@ -3,7 +3,7 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_arm_merge_through_the_shim.py
 
 Every other land_lib test calls a phase against a fake `Tools`, so a break in the wiring
-between the command line, `pipeline._phases` and `tools.gh` fails none of them (issue #1067).
+between the command line, `pipeline._phases` and `tools.gh` fails none of them.
 This module is the one that runs the shim as a process against stubs on PATH, the way the
 deleted test_land_arm_merge.py did, and reads the recorded argv back.
 
@@ -113,7 +113,7 @@ def test_git_runs_in_land_primary_rather_than_the_live_checkout(tmp_path):
 
     Until `parse_args` read it, `Options.primary` was `/home/ubuntu/server` — a real
     directory on the deploy host, so `_phases` passed its `is_dir` check and `fetch_branch`
-    ran there (issue #1067). This is the assertion that would have caught it.
+    ran there. This is the assertion that would have caught it.
     """
     _run(tmp_path, "OPEN")
 

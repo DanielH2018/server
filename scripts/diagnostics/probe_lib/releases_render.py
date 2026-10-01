@@ -1,6 +1,6 @@
-"""The render digest, which is `probe.py releases`' primary answer on staleness (#3046).
+"""The render digest, which is `probe.py releases`' primary answer on staleness.
 
-WHY THIS EXISTS (#2586). `releases.compute_stale` decides staleness from the paths a merge
+WHY THIS EXISTS. `releases.compute_stale` decides staleness from the paths a merge
 touched, and a path is a proxy: five narrowings exist because a path moved while the rendered
 bytes did not. A render-mode dry run (`-e k8s_dry_run=true -e manifests_render_record=true`)
 writes `k8s-renders.d/<service>.json`, whose `manifests_digest` comes from the same
@@ -25,16 +25,16 @@ WHAT MAKES A RECORD PROVE NOTHING. A digest is evidence only when the render rec
 IS the ref, its tree was clean, and its `host` is the release record's, because a digest from
 another commit, a dirty tree or another host's vars names different bytes. `manifests_digest`
 also excludes secret manifests by design, and uptime-kuma's `static-monitors.yaml` is one: a
-monitor added there left the digest identical while the path check correctly read it stale
-(2026-09-25). The `secret_digest` HMAC covers that (#2574), so a service with secret manifests
-needs that field on BOTH records; one written before it, or one whose host key was unreadable
-('' by design), falls back to the path verdict and the fleet converges one redeploy at a time.
+monitor added there leaves the digest identical while the path check correctly reads it stale.
+The `secret_digest` HMAC covers that, so a service with secret manifests needs that field on
+BOTH records; one written before it, or one whose host key was unreadable ('' by design), falls
+back to the path verdict and the fleet converges one redeploy at a time.
 
 TWO THINGS A DRIFTED VERDICT DOES NOT OVERRIDE. A service inside `compute_stale`'s grace window
-keeps waiting: the window exists because a landing's own deploy is still in flight (code-server,
-2026-09-21), and a digest cannot tell that apart from drift. And "commit unknown to this
-checkout" is a doubt about PROVENANCE -- nobody can say where the applied bytes came from --
-which no digest speaks to, so it stays reported as it was.
+keeps waiting: the window exists because a landing's own deploy is still in flight, and a digest
+cannot tell that apart from drift. And "commit unknown to this checkout" is a doubt about
+PROVENANCE -- nobody can say where the applied bytes came from -- which no digest speaks to, so
+it stays reported as it was.
 
 THE EVALUATION ORDER IS NOT THE PRECEDENCE ORDER. `run_releases` runs `compute_stale` first and
 then applies the verdicts over its result. The digest still decides -- it replaces or creates
@@ -134,7 +134,7 @@ def _comparable(release, render, ref_sha):
         return False
     if render.get("commit") != ref_sha or render.get("tree_dirty") is not False:
         return False
-    # A release record written before #2532 carries no host. That is "unknown", never a match.
+    # An older release record carries no host. That is "unknown", never a match.
     if not release.get("host") or release.get("host") != render.get("host"):
         return False
     if not release.get("manifests_digest") or not render.get("manifests_digest"):

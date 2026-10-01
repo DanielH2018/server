@@ -6,12 +6,12 @@
 # var-naming[no-role-prefix]), so the Remote Control ones read `claude_code_rc_*`.
 
 # The service hands anything holding the claude.ai account a session on the k3s
-# control-plane node, so it shipped disabled until the prerequisite Ansible cannot check was
-# confirmed by hand: whether a phone-spawned worktree clears the workspace-trust dialog,
-# which nobody can answer remotely. Confirmed on daniel-box 2026-08-23 — a session created
-# from the phone produced `.claude/worktrees/test-scratch` on branch `worktree-test-scratch`
-# and reached a prompt, with no dialog. Setting this back to false stops AND disables the
-# host and its restart timer; that is the rollback.
+# control-plane node, and it depends on a prerequisite Ansible cannot check: whether a
+# phone-spawned worktree clears the workspace-trust dialog, which nobody can answer remotely.
+# Confirmed on daniel-box — a session created from the phone produced
+# `.claude/worktrees/test-scratch` on branch `worktree-test-scratch` and reached a prompt,
+# with no dialog. Setting this to false stops AND disables the host and its restart timer;
+# that is the rollback.
 claude_code_rc_enabled: true
 
 # The directory the host runs in. Sessions spawned on demand get their own worktree
@@ -47,27 +47,26 @@ claude_code_rc_capacity: 10
 #
 # Derivation, and the thing to re-derive if you change it: the worst case is workers ×
 # capacity, not workers. At 4 × 10 that is 40 workers, and xdist workers measured 20-150 MB
-# RSS during the 2026-09-05 stall, so call it ~4 GB of workers against the 8 GB MemoryHigh,
+# RSS during a stall, so call it ~4 GB of workers against the 8 GB MemoryHigh,
 # with the 10 `claude` processes taking most of the rest. That sits the extreme case at the
 # throttle point, which is where a throttle belongs.
 #
-# Checked against the incident rather than only the arithmetic: nine concurrent runs would
-# have been 36 workers instead of 144, roughly 3.6 GB instead of the ~15 GB that exhausted
-# the box's swap. Raise it on measurement, and re-check the product, not the factor.
+# Nine concurrent runs at this cap are 36 workers, roughly 3.6 GB, where uncapped `auto` was
+# 144 workers and ~15 GB. Raise it on measurement, and re-check the product, not the factor.
 #
 # A sibling entry in ~/.claude/settings.json's `env` block carries the same value for Claude
 # sessions this unit does not spawn (chezmoi repo, home/.chezmoitemplates/settings.base.json).
 # Raise both together, or the cap depends on how the session started.
 claude_code_rc_pytest_workers: 4
 
-# ── The fleet bound (issue #1264) ───────────────────────────────────────────────────────
+# ── The fleet bound ─────────────────────────────────────────────────────────────────────
 # The Claude fleet occupies TWO cgroups on this box: claude-rc.service's own, and
-# user-<claude_code_login_uid>.slice for a session started from an interactive shell. Both
-# used to carry claude_code_rc_memory_high directly, which reads as one bound and is two —
-# they are siblings under different parents, so neither saw the other's usage and the real
-# throttle point was the SUM. 16G of anon plus 4G of swap on a 28 GiB box that also runs
-# k3s, Longhorn and the rest of the homelab plane. The vars below make the sum the number,
-# applied to the one slice that is a parent of both planes.
+# user-<claude_code_login_uid>.slice for a session started from an interactive shell. They are
+# siblings under different parents, so a cap on each reads as one bound and is two: neither
+# sees the other's usage and the real throttle point is the SUM, such as 16G of anon plus 4G
+# of swap on a 28 GiB box that also runs k3s, Longhorn and the rest of the homelab plane. The
+# vars below make the sum the number, applied to the one slice that is a parent of both
+# planes.
 
 # Whether the fleet bound is applied: the drop-in on claude_code_fleet_slice, and the
 # Slice= line that moves claude-rc.service under it. false removes both — the drop-in is
@@ -121,9 +120,7 @@ claude_code_fleet_slice: user.slice
 claude_code_fleet_memory_high: 14G
 
 # The fleet's swap ceiling. 2G is a quarter of this host's 8 GiB /swap.img, so the homelab
-# plane keeps three quarters — which is what the per-plane 2G was already documented as
-# meaning while actually delivering 4G across the two planes. Same not-zero reasoning as
-# the per-plane cap below.
+# plane keeps three quarters. Same not-zero reasoning as the per-plane cap below.
 claude_code_fleet_swap_max: 2G
 
 # ── The per-plane sub-bounds ────────────────────────────────────────────────────────────
@@ -132,8 +129,7 @@ claude_code_fleet_swap_max: 2G
 # parent's is a number that can never be reached. ENFORCED by
 # ansible/tests/setup/test_claude_fleet_slice_cap.py.
 #
-# 10G since 2026-09-26. It was raised 6G -> 8G on 2026-09-05 and 8G -> 10G on 2026-09-26,
-# each time at user request alongside the fleet cap above. Every fan-out agent on this host
+# Every fan-out agent on this host
 # runs in the login plane, so this is the cap the fan-out dispatcher runs out of first, and
 # raising the fleet cap alone adds no fan-out width. Deliberately more than half of 14G: a
 # plane doing real work while the other is idle should be able to use most of the fleet's
@@ -142,11 +138,9 @@ claude_code_fleet_swap_max: 2G
 claude_code_rc_memory_high: 10G
 
 # One plane's swap ceiling, written to memory.swap.max. Without it a plane swaps without
-# limit: on 2026-09-05 claude-rc.service's cgroup held all 8 GiB of this box's swap plus
-# 6.96 GB anon, stalled in reclaim 98.5% of the time, and starved every other cgroup — k3s
-# at 2.9 GB and kubepods.slice at 10.8 GB. MemoryHigh cannot prevent that. It throttles
-# rather than caps, and swap is exactly where a throttled cgroup's anon pages go. Issue
-# #1154.
+# limit: one cgroup can hold all 8 GiB of this box's swap, stall in reclaim, and starve every
+# other cgroup, k3s included. MemoryHigh cannot prevent that. It throttles rather than caps,
+# and swap is exactly where a throttled cgroup's anon pages go.
 #
 # 2G here equals claude_code_fleet_swap_max, so one plane may take the fleet's whole swap
 # share while the two together still cannot exceed it. Raise them together.
@@ -170,13 +164,12 @@ claude_code_rc_disable_bg_shell_pressure_reap: true
 # started with. systemd OnCalendar syntax.
 claude_code_rc_restart_schedule: weekly
 
-# ── Login-session caps (issue #1213) ────────────────────────────────────────────────────
+# ── Login-session caps ──────────────────────────────────────────────────────────────────
 # claude-rc.service's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS bound only
 # that unit's own cgroup. A session started with `claude agents` (or a bare `claude`) from
 # an interactive SSH shell lands in user.slice/user-{{ claude_code_login_uid }}.slice/
-# session-<n>.scope instead, which none of the three touch. On 2026-09-05 that gap put 965
-# processes and 20.4G anon in one such scope while claude-rc.service held 50.9 MB — every
-# bound the role had added up to then was scoped to the RC unit's cgroup alone.
+# session-<n>.scope instead, which none of the three touch, so such a scope can grow without
+# bound while claude-rc.service stays small.
 
 # Whether the two tasks below are applied. Unlike claude_code_rc_enabled this has no
 # "installed but stopped" middle state to fall back to — false removes the drop-in and the
@@ -186,9 +179,8 @@ claude_code_rc_restart_schedule: weekly
 claude_code_login_caps_enabled: true
 
 # The numeric uid whose login-session slice (user-<uid>.slice) gets the same caps as
-# claude-rc.service's own cgroup. Confirmed to be 1000 for {{ sys_user }} on daniel-box by
-# the 2026-09-05 incident evidence itself: the runaway scope was
-# `user.slice/user-1000.slice/session-14505.scope`. Override per-host if a different uid
+# claude-rc.service's own cgroup. Confirmed to be 1000 for {{ sys_user }} on daniel-box.
+# Override per-host if a different uid
 # ever owns the account this role manages — a getent lookup was considered and rejected
 # here: it would need `become: true` just to read NSS and would make the render tests below
 # depend on a fact rather than a plain default.

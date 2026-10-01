@@ -36,12 +36,12 @@
 !/.python-version
 !/PLANS.md
 # The two community files GitHub looks for at the root. The deny-all above hid them once:
-# they committed clean and simply were not in the tree afterwards (PR #561).
+# they committed clean and simply were not in the tree afterwards.
 !/LICENSE
 !/SECURITY.md
 # Track the SOPS-aware diff-driver attribute for secrets.yml. NB: rendering the
 # decrypted diff also requires a per-machine `git config diff.sops.textconv`,
-# which isn't set here yet — so this attribute is currently a no-op.
+# which isn't set here — so this attribute is a no-op.
 !/.gitattributes
 # Make sure these are ignored
 ansible/.env
@@ -86,7 +86,7 @@ id_ed25519
 # It is ignored rather than merely untracked because the GitOps deployer reads
 # `git status --porcelain` (gitops_deploy.py:998), which COUNTS untracked files, and treats a
 # dirty tree as a healthy skip: the tick completes and writes last_run, so GitOps-Alive stays
-# green while nothing fast-forwards. On 2026-08-30 that parked the primary checkout 7 commits
-# behind for ~40 minutes with every signal green — the deployer was working exactly as designed
-# and the only cause was this file existing.
+# green while nothing fast-forwards. The file would park the primary checkout behind origin
+# with every signal green: the deployer works exactly as designed and the only cause is the
+# file existing.
 .claude/staging-backfill.jsonl

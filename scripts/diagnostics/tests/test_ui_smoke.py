@@ -57,23 +57,23 @@ SERVICES = [
     # relaxing this line and deleting that setting; both would have made the check permanently
     # green on the broken state.
     #
-    # The MECHANISM behind a `Homepage` failure here was settled by #1414 and is not an
+    # The MECHANISM behind a `Homepage` failure here is not an
     # unreadable config Secret: the image bakes a config-less render of `/` (`en.json` reads
     # `"initialSettings":{}`), and upstream re-renders only for a browser whose stored
     # `/api/hash` value mismatches the pod's. This suite drives a FRESH Chromium with no
     # localStorage, so it never triggered that re-render and saw the baked page. The
-    # `lifecycle.postStart` hook in the homepage role now revalidates at startup; that is what
+    # `lifecycle.postStart` hook in the homepage role revalidates at startup; that is what
     # makes this entry deterministic rather than dependent on someone's browser having visited.
     ("homepage", "My Awesome Homepage", "/"),
     ("sonarr", "Sonarr", "/"),
     ("freshrss", "Login · FreshRSS", "/i/"),
     # Its own Django login behind Authelia's `*.local` one_factor rule, so `/` redirects to
-    # `/accounts/login/`. Title and path both observed against the live route on 2026-09-10,
-    # not guessed: `Home Server healthchecks` is the role's own `SITE_NAME`
+    # `/accounts/login/`. Title and path both observed against the live route, not guessed:
+    # `Home Server healthchecks` is the role's own `SITE_NAME`
     # (`roles/k8s/healthchecks/templates/deployment.yaml.j2:45`), so a page rendered without
     # that setting carries the image's default and fails here — do not relax to a substring.
     # It earns an entry because it is the dead-man's switch the fleet's crons ping, so its
-    # silent breakage is least likely to be caught by anything else (#1575).
+    # silent breakage is least likely to be caught by anything else.
     ("healthchecks", "Log In - Home Server healthchecks", "/accounts/login/"),
     # Routed by the `observability` role, whose containers_list entry names Grafana alone.
     # `Grafana` at `/login` is Grafana's OWN login page: it sits behind the one_factor
@@ -85,10 +85,9 @@ SERVICES = [
 
 # `two_factor` in Authelia's access control, so a one_factor cookie is turned away at the
 # portal (config-secret.yaml.j2). The fixture below mints its own session as `claude-ui`,
-# whose TOTP shared secret is a SOPS value — until 2026-09-06 that took a code typed off a
-# phone, and these three skipped for eight days at a stretch instead of running. Titles
-# observed through a real two_factor session; code-server carries its own login on top of
-# Authelia, as FreshRSS does.
+# whose TOTP shared secret is a SOPS value, so these three run unattended. Titles observed
+# through a real two_factor session; code-server carries its own login on top of Authelia,
+# as FreshRSS does.
 TWO_FACTOR_SERVICES = [
     ("longhorn", "Longhorn", "/#/dashboard"),
     ("code-server", "code-server login", "/login"),
@@ -98,7 +97,7 @@ TWO_FACTOR_SERVICES = [
 
 # Exactly five: `state()` in `deploy_ui.html` renders one `<tr>` per marker in
 # `deploy_ui_reads.MARKERS`, and a failed read renders a `<span class="unavail">` with no
-# table at all — which is what makes an exact count a rejecting assertion (#1598).
+# table at all — which is what makes an exact count a rejecting assertion.
 DEPLOYER_STATE_ROWS = 5
 
 # The panels fill from async `/api/*` fetches after load, so the first read lands on an empty
@@ -109,8 +108,8 @@ _PANEL_INTERVAL = 0.75
 MINT_HINT = "mint one with `uv run python scripts/diagnostics/ui_login.py --two-factor`"
 
 
-# Both budgets absorb a transient, not a slow load. Measured 2026-08-30: a settled title
-# arrives on the second read, and a resultless evaluate succeeded on its retry every time.
+# Both budgets absorb a transient, not a slow load. A settled title arrives on the second
+# read, and a resultless evaluate succeeds on its retry.
 _EVALUATE_ATTEMPTS = 3
 _EVALUATE_RETRY_INTERVAL = 0.5
 _TITLE_SETTLE_ATTEMPTS = 4
@@ -177,10 +176,10 @@ class McpClient:
         """Run JS in the page and return its parsed result.
 
         **A reply with no result block is retried, not reported.** The server answers an
-        evaluate with the code it ran plus a `### Result` section, and occasionally — seen
-        on 2026-08-30, shortly after a navigation — it returns the echo alone. That is the
-        transport having a moment, not the page saying anything, so treating it as a verdict
-        fails a service that is fine.
+        evaluate with the code it ran plus a `### Result` section, and occasionally —
+        shortly after a navigation — it returns the echo alone. That is the transport having
+        a moment, not the page saying anything, so treating it as a verdict fails a service
+        that is fine.
         """
         last = ""
         for attempt in range(_EVALUATE_ATTEMPTS):
@@ -364,17 +363,16 @@ def two_factor_browser(domain):
     """A browser carrying a two_factor session, minting one when none is live.
 
     A two_factor session lasts about an hour, so its absence is the normal state of this
-    machine rather than a regression. It is no longer a reason to skip: the tier logs in as
+    machine rather than a regression. It is not a reason to skip: the tier logs in as
     `claude-ui`, whose password and TOTP secret are both SOPS values, so this fixture mints
-    on demand. A skip now means the mint itself failed — the portal was unreachable, or the
+    on demand. A skip means the mint itself failed — the portal was unreachable, or the
     seeded secret and Authelia's own row disagree.
 
-    **The gate is a real browse, not `/api/state`.** It used to ask `ui_login.py --check
-    --two-factor`, and the two questions came apart: measured 2026-08-29, the check reported
-    the session live, the wrapper's own check agreed, and all three navigations then landed
-    on the portal — three failures where three skips were the truth. Asking the browser to
-    fetch a `two_factor` route is the same question the tests ask, so the guard and the
-    assertions cannot disagree by construction.
+    **The gate is a real browse, not `/api/state`.** `ui_login.py --check --two-factor` and
+    a real browse can disagree: the check can report the session live while all three
+    navigations land on the portal — three failures where three skips are the truth. Asking
+    the browser to fetch a `two_factor` route is the same question the tests ask, so the
+    guard and the assertions cannot disagree by construction.
 
     The `--check` call survives as a cheap pre-filter only — it decides whether to mint,
     not whether to run.

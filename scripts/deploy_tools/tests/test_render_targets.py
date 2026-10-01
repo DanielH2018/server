@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the render-record tag list (#2587).
+"""Tests for the render-record tag list.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_render_targets.py
 """
@@ -47,9 +47,9 @@ def test_only_local_k8s_manifests_includers(tmp_path):
 
 
 def test_real_inventory_renders_stamped_services_and_skips_a_shared_role():
-    # Named members, so a derivation that silently empties is caught: jellyfin is one of the
-    # services #2588 made dry-runnable, n8n builds its own images since #2813 and renders too,
-    # and volume-claim is a shared role no containers_list names.
+    # Named members, so a derivation that silently empties is caught: jellyfin is a service
+    # whose dry-run must render, n8n builds its own images and renders too, and volume-claim
+    # is a shared role no containers_list names.
     tags = render_targets.render_targets("daniel-box")
     assert "jellyfin" in tags
     assert "n8n" in tags

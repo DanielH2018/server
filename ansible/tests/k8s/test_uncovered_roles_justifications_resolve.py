@@ -2,10 +2,8 @@
 
 `test_container_security_context.py` exempts a handful of roles from its corpus, each with a
 comment saying why, and the stale check there asserts only that each exempt ROLE still exists.
-It cannot see a justification pointing at a file the role no longer has: the `volume-claim`
-entry cited `seed-pod.yaml.j2` and `test_seed_pod_security_context.py` for sixteen days after
-05f990a1d deleted both (#1887). The exemption stayed correct, so nothing failed; the reason a
-reader was handed was a pointer to two dead files.
+It cannot see a justification pointing at a file the role no longer has. The exemption stays
+correct, so nothing fails, but the reason a reader is handed points at a dead file.
 
 This reads the exemption block as text — a comment is not a value the test module could export
 — and checks every `*.j2` and `test_*.py` token in it against the tree. A `.j2` must sit under

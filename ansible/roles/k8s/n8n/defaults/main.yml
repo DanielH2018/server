@@ -7,20 +7,18 @@
 # a rebuild pushes over it. That is unrelated to the UPSTREAM base, which is pinned — see the
 # Dockerfile headers in templates/ for why a floating FROM has no updater.
 #
-# BUILD AND ROLL IN ONE PLAY — which `./scripts/deploy.sh --tags n8n` is, since #2813 folded the
-# builds into this role:
+# BUILD AND ROLL IN ONE PLAY — which `./scripts/deploy.sh --tags n8n` is, because this role
+# includes both builds:
 #
 # A rebuild under an unchanged tag changes no manifest, and `imagePullPolicy: Always` is consulted
 # only when a pod is CREATED — so nothing about the rebuild alone would roll the Deployment. The
 # image-builder role closes that: it reads the tag's digest before and after the build and appends
 # the image to `k8s_rebuilt_images`, which roles/k8s/manifests turns into `manifests_image_changed`
-# and rolls on. (Before that wiring, a build run and a separate n8n run both reported green while
-# the old pods kept running the old image — which is how the 2026-08-08 `@n8n/di` fix looked
-# deployed and was not.)
+# and rolls on.
 #
-# The constraint that remains is SCOPE: `k8s_rebuilt_images` is a play-scoped fact, so the rebuild
+# The constraint is SCOPE: `k8s_rebuilt_images` is a play-scoped fact, so the rebuild
 # and the rollout must happen in the SAME ansible-playbook run. Two separate runs lose the fact and
-# leave the old pods up — the original failure, by a different route. Hence one role. Rolling by hand is the fallback if they ever do get separated:
+# leave the old pods up. Hence one role. Rolling by hand is the fallback if they do get separated:
 #     k3s kubectl -n homelab rollout restart deploy/n8n deploy/n8n-runners
 #
 # Renovate cannot track the two vars below (they are local registry refs, not upstream ones) — the
@@ -46,7 +44,7 @@ n8n_k8s_mem_limit: 2048Mi
 n8n_k8s_cpu_request: "100m"
 n8n_k8s_mem_request: 128Mi
 
-# 225M at migration time: workflows, execution history, the encrypted credentials in
+# Holds workflows, execution history, the encrypted credentials in
 # database.sqlite AND the key that decrypts them in `config`. On `longhorn` (backed up to B2),
 # matching the Docker side, where the bind mount under containers/ is deliberately in Kopia's
 # scope for exactly this reason.
@@ -57,7 +55,7 @@ n8n_k8s_claim: n8n-data
 n8n_k8s_storage_class: longhorn
 n8n_k8s_size: 4Gi
 
-# The `/files` mount. EMPTY at migration time (last written Oct 2025), but a claim rather than an
+# The `/files` mount. Empty, but a claim rather than an
 # emptyDir because a workflow references /files/PAL_E4389.pdf — so the path is live, and an
 # emptyDir would silently turn "the file persists" into "the file vanishes on restart", which
 # fails at workflow-run time rather than at deploy time. Nothing to seed; created empty.

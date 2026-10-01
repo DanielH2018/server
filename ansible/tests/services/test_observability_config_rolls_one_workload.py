@@ -1,13 +1,11 @@
 """One observability config edit must roll one observability workload.
 
 The role sets `manifests_rollout: ''`, so `k8s/manifests` neither waits nor restarts for it,
-and the role does both itself. Until 2026-09-28 its restart task looped over all six workloads
-gated on `manifests_render is changed` — a per-ROLE signal that fires when ANY of the role's
-eight manifests changed. `prometheus.yaml.j2` alone changed in 49 commits in 90 days, and each
-of those restarted Loki, Tempo, kube-state-metrics, the collector and Grafana for an edit none
-of them reads (issue #2858).
+and the role does both itself. A restart gated on `manifests_render is changed` would be a
+per-ROLE signal that fires when ANY of the role's eight manifests changed, restarting Loki,
+Tempo, kube-state-metrics, the collector and Grafana for an edit none of them reads.
 
-The replacement has two halves, and this module guards both against the ways they go quiet:
+The role rolls per workload instead, and this module guards the ways that goes quiet:
 
   * **A ConfigMap edit rolls its own pod, through a `checksum/config` annotation.** Lose the
     annotation and the edit reaches the ConfigMap and never the pod, with the deploy fully
@@ -19,8 +17,8 @@ The replacement has two halves, and this module guards both against the ways the
   * **The annotation hashes less than the ConfigMap.** Each template captures ONE `data:` key's
     body into the variable it hashes, except grafana's, which captures the whole `data:` block.
     A second key added to one of the other four lands outside the capture: the ConfigMap
-    changes, the pod template does not, and the annotation is present throughout. That is the
-    original bug with the gate blinded, so the key count is pinned below.
+    changes, the pod template does not, and the annotation is present throughout. That blinds
+    the gate, so the key count is pinned below.
 
 `restart_on` also decides what the release record expects (`rollouts[].restart`,
 `k8s/manifests/tasks/release_stamp.yml`), so a wrong value fails `probe.py health observability`

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A `behind` read taken after this landing stopped watching a tick names the race (#1607).
+"""A `behind` read taken after this landing stopped watching a tick names the race.
 
 `land.sh` printed `VERDICT: deferred` and "the next tick crosses it" during the very apply
 that failed and set `hold_sha`, parking the deployer for every session. The read was racing

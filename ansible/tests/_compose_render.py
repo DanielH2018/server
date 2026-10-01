@@ -2,7 +2,7 @@
 
 A compose guard that scans the template's source text cannot tell a key from a commented-out
 copy of it: a `# - WEBHOOK_JSON_KEY=content` line or a `{# … #}`-wrapped `healthcheck:` block
-still matches the pattern while the container ships without it (#2809). Parsing the rendered
+still matches the pattern while the container ships without it. Parsing the rendered
 service sees what Compose would.
 
 Secret values render as `STUB` (the `DECIDED:` rule in `lib/render_guard.py`), so a guard built

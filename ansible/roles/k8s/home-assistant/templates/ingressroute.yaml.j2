@@ -1,9 +1,7 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
-{# use_authelia false, same as the Docker route and for the same reason: forward-auth breaks
-   the companion app, webhooks, and long-lived tokens. HA's own login + TOTP is the gate;
-   TLS/CrowdSec/rate-limit still apply. unsuffixed_hostname joins at the cutover commit — adding
-   it earlier trips the strangler guard while the Docker copy still runs. #}
+{# use_authelia false: forward-auth breaks the companion app, webhooks, and long-lived tokens.
+   HA's own login + TOTP is the gate; TLS/CrowdSec/rate-limit still apply. #}
 {{ ingressroute(
     container_item.name,
     container_item.hostname | default(container_item.name),

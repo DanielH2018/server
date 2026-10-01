@@ -4,8 +4,8 @@
 WHY. release_bin.yml keeps the last five releases of a group on disk so a rollback is one
 symlink. That retention is the whole point, and it is also why a secret-rendering script cannot
 go in one: five releases of a script with an inline token means five copies of a rotated token
-still readable on disk, which turns a rollback convenience into a credential archive. The repo
-has paid for the general class three times, every occurrence ending in a rotation
+still readable on disk, which turns a rollback convenience into a credential archive. Every
+occurrence of the general class ends in a rotation
 (`grep-on-a-script-prints-the-secret-it-embeds`).
 
 Seven host scripts render a credential inline today and carry `no_log: true` where they are
@@ -34,8 +34,8 @@ from lib import release_bin_groups
 
 REPO = ANSIBLE.parent
 
-# The name list lives in _helpers (`registry_secret_names`, `GENERIC_SECRET_NAMES`) since the
-# no_log census in ansible/tests/k8s started reading the same registry (#1932), so the two
+# The name list lives in _helpers (`registry_secret_names`, `GENERIC_SECRET_NAMES`) because the
+# no_log census in ansible/tests/k8s reads the same registry, so the two
 # guards cannot disagree about what counts as a secret.
 #
 # DECIDED: `domain` is exempt. It is in the registry at `tier: ignore`
@@ -61,9 +61,9 @@ def release_bin_sources():
     """Every `src` handed to release_bin.yml anywhere in the tree, as (task_file, src).
 
     Delegates to the shared resolver so this guard and `validate/validate_lib/cron_targets.py` cannot
-    disagree about a group's contents. This function used to keep its own copy, which iterated
-    `release_bin_templates` looking for dicts — and that key is a folded Jinja string naming a
-    group, so it matched nothing and the guard passed having scanned zero files.
+    disagree about a group's contents. A private resolver that looked for dicts in
+    `release_bin_templates` would match nothing, because that key is a folded Jinja string naming
+    a group, and the guard would pass having scanned zero files.
     `test_discovery_finds_the_converted_group` is the proof that it scans something.
     """
     return [
@@ -96,14 +96,12 @@ def test_the_registry_yields_names():
 
 
 def test_discovery_finds_the_converted_group():
-    """The half that was missing, and the reason this guard shipped scanning nothing.
+    """The scan must find sources, not only names.
 
-    `test_the_registry_yields_names` proves the NAME list is non-empty; nothing proved the
-    SOURCE list was. From 2026-08-29 until this test existed, `release_bin_sources()` returned
-    `[]` — `release_bin_templates` is a folded Jinja string naming a group, and the old resolver
-    kept only dict entries — so the guard passed for every input, including one that renders a
-    credential. A guard is only ever observed passing, so the empty-scan case has to be an
-    assertion rather than something a reader would have to notice.
+    `test_the_registry_yields_names` proves the NAME list is non-empty; nothing else proves the
+    SOURCE list is. If `release_bin_sources()` returned `[]`, the guard would pass for every input,
+    including one that renders a credential. A guard is only ever observed passing, so the
+    empty-scan case has to be an assertion rather than something a reader would have to notice.
 
     Named rather than counted: asserting a count locks the test to how many scripts happen to be
     converted, and it would be "fixed" by lowering the number.

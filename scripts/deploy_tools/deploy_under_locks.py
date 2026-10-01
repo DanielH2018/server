@@ -56,10 +56,10 @@ import deploy_locks
 
 # Covers gitops-deploy's worst-case hold of 3780s (STAGING_GATE_TIMEOUT_S 600 +
 # STAGING_EXPECT_TIMEOUT_S 120 + K8S_DEPLOY_TIMEOUT_S 1440 + K8S_ROLLBACK_TIMEOUT_S 1620), not its
-# TimeoutStartSec. It was 1500 until 2026-08-23 and was left behind when the unit's timeout
-# grew, so a deploy queued behind a pathological gitops run gave up having deployed nothing
-# while that run was still legitimately working. Pinned to the same role defaults the deployer
-# reads by test_deploy_lock_wait_budget.py. It is also the budget each per-service lock waits.
+# TimeoutStartSec. It tracks the unit's timeout: a budget below the worst-case hold makes a deploy
+# queued behind a pathological gitops run give up having deployed nothing while that run is still
+# legitimately working. Pinned to the same role defaults the deployer reads by
+# test_deploy_lock_wait_budget.py. It is also the budget each per-service lock waits.
 LOCK_WAIT = 3840
 # The snapshot this run is using, told apart from a dead one by an advisory lock inside it.
 OWNER_LOCK = ".deploy-owner.lock"
@@ -68,7 +68,7 @@ SNAPSHOT_ROOT_DEFAULT = "/tmp/homelab-deploy-snapshots"
 # deploy_detach's log file adds `deploy-`, `.log` and the same stamp and pid.
 LABEL_MAX_BYTES = 200
 # How long `deploy_tags.py list` may take under the tree lock. ADR-0017's "the hold is
-# seconds" rests on it staying fast; measured 2026-09-17 on a warm venv: 0.9s.
+# seconds" rests on it staying fast (0.9s on a warm venv).
 TAG_LIST_TIMEOUT_DEFAULT = 120
 # How many dead snapshots one locked run removes. The reaper runs under the tree lock and
 # `git worktree remove` is ~0.3s each, so a root with hundreds of dead directories would
@@ -192,10 +192,10 @@ class Run:
 
         Joined with `+`, never `,`: the snapshot is the playbook's cwd, and ansible-core reads
         a comma anywhere in the resolved inventory path as an inline host list, so every
-        multi-tag deploy matched no host while exiting 0 (issue #1813).
+        multi-tag deploy matched no host while exiting 0.
 
         Capped at LABEL_MAX_BYTES, naming how many tags were cut. A shared role's caller
-        expansion (#2704) passes 58 tags, and their full join is past the 255-byte filename
+        expansion passes 58 tags, and their full join is past the 255-byte filename
         limit, so `git worktree add` refused the snapshot. The directory's stamp and pid keep
         it unique, so the label only has to be readable.
         """
@@ -344,9 +344,9 @@ def enumerate_full_run_tags(run: Run) -> list[str]:
     """Every deploy tag a full run must lock, read FROM THE SNAPSHOT under the tree lock.
 
     A subprocess in the snapshot, not an import: the list must be the snapshot's
-    `containers_list` read by the snapshot's own parser (the #851 skew otherwise). Collected in
-    the order printed and not sorted: `deploy_locks.plan` sorts, and it is the only thing that
-    may. An empty list is a failure -- a full run would deploy everything holding nothing.
+    `containers_list` read by the snapshot's own parser, or the two skew. Collected in the
+    order printed and not sorted: `deploy_locks.plan` sorts, and it is the only thing that may.
+    An empty list is a failure -- a full run would deploy everything holding nothing.
     """
     timeout = _env_int("HOMELAB_DEPLOY_TAG_LIST_TIMEOUT", TAG_LIST_TIMEOUT_DEFAULT)
     try:
@@ -389,7 +389,7 @@ def tree_lock() -> Iterator[None]:
 
     The holder is sampled BEFORE this process opens the lock file: fuser reports every process
     with a descriptor on it, so once this process holds one it names ITSELF. A lock taken at
-    once reports nothing -- 0s by construction, whatever the clock says (#1881).
+    once reports nothing -- 0s by construction, whatever the clock says.
     """
     path = tree_lock_path()
     holder = lock_holder(path)
@@ -522,7 +522,7 @@ def run(repo_root: Path, tags: list[str], at_sha: str, args: list[str]) -> int:
         )
         return DEPLOY_NO_HOSTS
     # ansible's own 2/3/4 collide with the wrapper's tag-miss, broad and stale codes, so its
-    # number is reported and 20 returned (issue #840).
+    # number is reported and 20 returned.
     say(
         f"deploy: the playbook ran and failed (ansible-playbook exit {status}) -- changes that",
         "  applied before the failing task ARE live. Read the PLAY RECAP and the failing",

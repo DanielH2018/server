@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the SessionStart banner's busy-service-lock line (issue #1847).
+"""Tests for the SessionStart banner's busy-service-lock line.
 
 A tick that finds a service lock busy for its whole budget resets its tree and returns 0, so
 `last_run` advances, `hold_sha` stays empty and only `behind_since` ages — toward a six-hour

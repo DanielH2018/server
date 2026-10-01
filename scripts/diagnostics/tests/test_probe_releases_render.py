@@ -1,4 +1,4 @@
-"""The render digest outranks the `--stale-only` path verdict, both ways (#2586, #3046).
+"""The render digest outranks the `--stale-only` path verdict, both ways.
 
 Every refusal is paired with the clearing case it differs from by one field, so a rule that
 stopped refusing fails here rather than reading green. The three-branch ladder -- a match
@@ -119,9 +119,9 @@ def test_a_matching_digest_with_no_secret_manifests_is_clean(repo, tmp_path):
 def test_a_secret_manifest_without_a_secret_digest_falls_back_to_the_path_rule(
     repo, tmp_path
 ):
-    """uptime-kuma's static-monitors change left the digest identical on 2026-09-25.
+    """uptime-kuma's static-monitors change leaves the digest identical.
 
-    Records written before #2574 carry no `secret_digest`, so they keep the path verdict.
+    Records without a `secret_digest` keep the path verdict.
     """
     repo, base, tip = repo
     secrets = ["static-monitors.yaml"]
@@ -151,7 +151,7 @@ def test_a_matching_secret_digest_clears_a_secret_manifest(repo, tmp_path):
 def test_a_moved_secret_digest_is_flagged(repo, tmp_path):
     """A monitor added to static-monitors.yaml moves `secret_digest`, not `manifests_digest`.
 
-    The reason is the digest verdict rather than the path hit beside it (#3046).
+    The reason is the digest verdict rather than the path hit beside it.
     """
     repo, base, tip = repo
     secrets = ["static-monitors.yaml"]
@@ -166,7 +166,7 @@ def test_a_moved_secret_digest_is_flagged(repo, tmp_path):
 
 
 def test_a_different_digest_is_reported_as_the_digest_verdict(repo, tmp_path):
-    """The mismatch is the reason, not the path hit it happens to sit beside (#3046)."""
+    """The mismatch is the reason, not the path hit it happens to sit beside."""
     repo, base, tip = repo
     stale, _ = _stale_after_renders(
         repo,
@@ -179,7 +179,7 @@ def test_a_different_digest_is_reported_as_the_digest_verdict(repo, tmp_path):
 
 
 def test_a_different_digest_flags_a_service_no_path_hit_reaches(repo, tmp_path):
-    """The inversion #3046 asks for: the digest can make a service stale on its own.
+    """The digest can make a service stale on its own.
 
     `uptime-kuma`'s own template moved at `tip`, `littlelink`'s did not -- so littlelink reads
     clean by every path rule, and only the digest can see that its applied bytes are not what
@@ -203,11 +203,11 @@ def test_a_different_digest_flags_a_service_no_path_hit_reaches(repo, tmp_path):
 
 
 def test_a_moved_secret_digest_flags_a_service_no_path_hit_reaches(repo, tmp_path):
-    """The 2026-09-25 uptime-kuma case, from the other side.
+    """The uptime-kuma case, from the other side.
 
     A monitor added to a secret manifest leaves `manifests_digest` identical, so only
-    `secret_digest` names the drift -- and before #3046 a differing one merely declined to
-    clear a path hit.
+    `secret_digest` names the drift -- a differing one makes the service stale rather than
+    merely declining to clear a path hit.
     """
     repo, _, tip = repo
     secrets = ["static-monitors.yaml"]
@@ -333,7 +333,7 @@ def test_a_matching_digest_clears_a_renderer_hit_is_clean(tmp_path, changed):
 
 @pytest.mark.parametrize("changed", [[_PVC], [_OWN, _PVC]])
 def test_a_matching_digest_keeps_a_volume_claim_hit_is_flagged(tmp_path, changed):
-    """#3090: the PVC is staged outside the digest, so CURRENT proves nothing about it."""
+    """The PVC is staged outside the digest, so CURRENT proves nothing about it."""
     assert _shared_role_stale(tmp_path, changed) == {
         "littlelink": rr.path_reason([_PVC])
     }

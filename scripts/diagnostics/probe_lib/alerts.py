@@ -1,7 +1,5 @@
 """`probe.py alerts` -- DOWN history reconstructed from Loki, since Kuma keeps only current state.
 
-Split out of probe.py, which had grown to 1349 lines across thirteen subcommands.
-
 TWO streams are read. monitor-bridge's container log covers the checks it runs; the host crons
 push Kuma directly and so leave no trace there, which is why `{job="syslog"} status=down` is read
 alongside it. Reading only the first left the whole backup/drift plane with no episode anywhere.
@@ -42,13 +40,11 @@ from diagnostics.probe_lib.core import (
 # It is NOT the only alert path, which is why this command reads two streams. Several host
 # crons push their own Kuma monitors directly and never pass through monitor-bridge, so
 # monitor-bridge's container log contains nothing about them — it polls no Kuma state. Reading
-# only that stream made the backup plane's sole DOWN signal invisible: measured 2026-08-22,
-# 465 `longhorn-backup-health: status=down` lines over 7 days appeared in no episode list,
-# while `monitor_status{monitor_name="Manifest Prune Drift"}` read 0 and `alerts --check
-# manifest` printed "no DOWN alerts". See SYSLOG_ALERT_LOGQL below for the second stream.
+# only that stream would hide the backup plane's sole DOWN signal. See SYSLOG_ALERT_LOGQL
+# below for the second stream.
 ALERT_LOGQL = '{container="monitor-bridge"} |= "DOWN"'
-# "DOWN n8n - 1 active workflow(s) failed ... (2 cycles)", optionally behind the bracketed
-# stamp the bridge printed until 2026-09-04.
+# "DOWN n8n - 1 active workflow(s) failed ... (2 cycles)", optionally behind a bracketed
+# stamp.
 #
 # THE STAMP IS OPTIONAL BECAUSE THE EMITTER DROPPED IT, and requiring it cost every episode.
 # `bridge.common.log` printed `[%Y-%m-%dT%H:%M:%S]` until bec8990a removed it — that stamp was
@@ -82,33 +78,26 @@ def parse_down_line(line):
 # and, when the push itself fails (the case where syslog is the ONLY record, since Kuma never
 # learned),
 #   "<iso-ts> <host> <tag>: push failed (status=down: <msg>)"
-# Measured over 7 days on 2026-08-22, `|= "status=down"` matched exactly three tags —
-# longhorn-backup-health (465 lines), manifest-prune-check (2) and claude-otel-health (1) — so
+# `|= "status=down"` matches only a handful of tags — longhorn-backup-health,
+# manifest-prune-check and claude-otel-health — so
 # the filter is precise, not a net that drags in unrelated syslog traffic.
 #
-# Every pusher this reads emits the `status=` token, and the two that once did not are pinned:
-# secret-rotation-audit logged a bare reason string and live_drift_check's cron piped nothing
-# to `logger` until 2026-08-22 (467983961), which is why a 7-day Loki query for either name
-# returned "no logs" then. Their lines are the fixtures in
-# scripts/diagnostics/tests/test_probe_alerts_parsing.py, and #1787 was filed off this comment's
-# earlier wording — three secret-rotation-audit episodes were already in `alerts --days 7` on
-# the day it was closed. What stays out of reach is heartbeat EXPIRY: a push monitor also goes
+# Every pusher this reads emits the `status=` token. Their lines are the fixtures in
+# scripts/diagnostics/tests/test_probe_alerts_parsing.py.
+# What stays out of reach is heartbeat EXPIRY: a push monitor also goes
 # DOWN when nothing pushes, which writes no line anywhere, so this view is a lower bound against
 # Prometheus `monitor_status` by construction.
 #
-# daniel-pi WAS invisible here for two independent reasons, and fixing either alone changed
-# nothing. A real "Daniel Pi Recovery" DOWN on 2026-08-29 — autoheal exited and stayed down
-# ~50 min — read as "no DOWN alerts in the last 7d" while the monitor was live-DOWN.
-#   1. NOTHING WAS EMITTED. The Pi's two crons end at `kuma_push`, and kuma-push-lib.sh calls
-#      `logger` only when the PUSH fails. The server crons that ARE visible log their verdict
-#      themselves (longhorn-backup-health, manifest-prune-check: `logger -t <tag>
+# daniel-pi is visible here only because each Pi cron appends an rsyslog-shaped line to
+# /var/log/pi-health/ and the Pi's promtail tails it as the `pi-health` job under
+# `job="syslog"`. Two facts make that necessary:
+#   1. The Pi's two crons end at `kuma_push`, and kuma-push-lib.sh calls `logger` only when
+#      the PUSH fails. The server crons that ARE visible log their verdict themselves
+#      (longhorn-backup-health, manifest-prune-check: `logger -t <tag>
 #      "status=${STATUS} ${MSG}"`).
-#   2. NOTHING WOULD HAVE SHIPPED IT. The Pi has no journal path to Loki: rsyslog is not
-#      installed and optimize_pi masks it deliberately, and that image's promtail is a stub
-#      for journal support (verified on the running arm64 3.6.8 binary — carries "not
-#      compiled into this build", no `sd_journal_open`, no libsystemd).
-# Both are now closed: each cron appends an rsyslog-shaped line to /var/log/pi-health/, and
-# the Pi's promtail tails it as the `pi-health` job under `job="syslog"`.
+#   2. The Pi has no journal path to Loki: rsyslog is not installed and optimize_pi masks it
+#      deliberately, and that image's promtail is a stub for journal support (the arm64
+#      binary carries "not compiled into this build", no `sd_journal_open`, no libsystemd).
 #
 # THE TIMESTAMP FORMAT IS LOAD-BEARING. `_SYSLOG_LINE_RE` below wants exactly two
 # whitespace-free tokens before the tag, which is what rsyslog's own prefix gives. The Pi
@@ -119,18 +108,16 @@ SYSLOG_ALERT_LOGQL = '{job="syslog"} |= "status=down"'
 _SYSLOG_LINE_RE = re.compile(
     r"^\S+\s+\S+\s+(?P<name>[A-Za-z0-9_.-]+?)(?:\[\d+\])?:\s+(?P<rest>.*status=down.*)$"
 )
-# The closing paren is OPTIONAL because rsyslog truncates a long line — observed on
-# longhorn-backup-health, whose status message runs past the limit and arrives with no closing
-# paren at all. Anchoring on `\)$` dropped those lines to the raw fallback below, printing the
-# "push failed (status=down: " scaffolding as if it were the message. The `(http=… rc=…)` pair
-# is optional for the same reason in the other direction: kuma-push-lib.sh has logged it since
-# the retry landed (#1010), the Pi's health.log and the pre-retry lines carry none, and this
-# reader followed neither until 2026-09-17 — every retry-era lost push printed the whole
-# scaffolding as its message. The library's `push failed transiently` line is NOT a verdict
+# The closing paren is OPTIONAL because rsyslog truncates a long line: longhorn-backup-health's
+# status message runs past the limit and arrives with no closing paren at all. Anchoring on
+# `\)$` would drop those lines to the raw fallback below, printing the "push failed
+# (status=down: " scaffolding as if it were the message. The `(http=… rc=…)` pair is optional
+# for the same reason in the other direction: kuma-push-lib.sh logs it, while the Pi's
+# health.log carries none. The library's `push failed transiently` line is NOT a verdict
 # record (the final line follows it, or the push lands and the cron's own `status=` line is
 # the record), so it is dropped rather than listed as an episode of its own; monitor-bridge's
 # check_swallowed_verdicts excludes it in LogQL for the same reason. The pair may be followed
-# by further `k=v` words — ` by=kuma` since #1803, when Kuma itself answered the push.
+# by further `k=v` words — ` by=kuma` when Kuma itself answered the push.
 _SYSLOG_PUSH_FAILED_RE = re.compile(
     r"^push failed \((?:http=\S+ rc=\S+(?: [a-z]+=\S+)*\) \()?status=down:\s*(?P<msg>.*?)\)?$"
 )
@@ -199,10 +186,8 @@ def is_pi_alert(logql, line, name):
 def keep_alert_row(check, pi, logql, line, name):
     """Whether `--check`/`--pi` admit one fetched line. Pure.
 
-    ONE predicate for both views. `--raw` used to print every fetched line while the episode
-    view filtered, so `--check traefik_latency --raw` also printed arr_queue, k8s_workloads and
-    etcd-restore-drill-vm lines (#1782) — the two paths filtered differently because they
-    filtered in two places.
+    ONE predicate for both views, so `--raw` and the episode view cannot filter differently:
+    `--check traefik_latency --raw` prints only traefik_latency lines.
 
     `name` is None for a line neither parser read. Unfiltered that line still prints, which is
     what makes `--raw` the way to see a shape the parsers have stopped matching. Under a filter
@@ -219,13 +204,10 @@ def keep_alert_row(check, pi, logql, line, name):
     return True
 
 
-# Splitting one incident into several is a CADENCE question, not a fixed-minutes one, and
-# getting it wrong is how `alerts` misdated an incident. The default gap used to be 30 minutes
-# against a `*/30` cron: consecutive DOWN ticks land EXACTLY on the splitting boundary, so a
-# second of cron jitter starts a new episode. Measured 2026-09-04, one continuous
-# release-staleness-check outage (33 down ticks, 00:30 to 14:00 UTC) rendered as 16 episodes.
-# The list is newest-first, so the top row read 07:30 — no row anywhere carried the onset, and
-# the root-cause pass on #1094 was dispatched against a start time 12 hours late.
+# Splitting one incident into several is a CADENCE question, not a fixed-minutes one. A fixed
+# 30-minute gap against a `*/30` cron lands consecutive DOWN ticks EXACTLY on the splitting
+# boundary, so a second of cron jitter starts a new episode: one continuous outage renders as
+# many episodes, and since the list is newest-first no row carries the onset.
 #
 # So each check gets its own threshold, derived from its own samples. The median delta is the
 # check's observed cadence: robust to a duplicate log line (which a min would take as the
@@ -295,8 +277,7 @@ def alert_episodes(rows, gap_s=None):
 
 # UTC, and SAID to be UTC on every row. daniel-box runs UTC (docs/healthchecks-io-deadman.md),
 # so the journal, the raw Loki lines and every incident timestamp an operator compares against
-# are UTC — these rows were America/Chicago with no marker, five hours off the surface next to
-# them. The monitor-bridge log line's own bracketed stamp stays Chicago (the container's TZ
+# are UTC. The monitor-bridge log line's own bracketed stamp stays Chicago (the container's TZ
 # env); `--raw` prints that line verbatim, and only the episode view is restamped.
 def _fmt_utc(ns):
     return datetime.fromtimestamp(ns / 1e9, UTC).strftime("%Y-%m-%d %H:%M")
@@ -378,7 +359,7 @@ def alert_source_urls(base, days, limit, now=None):
 # `max entries limit per query exceeded, limit > max_entries_limit_per_query (20000 > 5000)`.
 # The cap is read from that body rather than pinned here: nothing in this repo sets it (5000 is
 # Loki's built-in default), so a constant would be a guess that drifts the day loki-homelab's
-# configmap overrides it. Measured live 2026-09-17 against loki-homelab (#1790).
+# configmap overrides it.
 _LOKI_CAP_RE = re.compile(r"max_entries_limit_per_query \((\d+) > (\d+)\)")
 
 
@@ -391,9 +372,9 @@ def loki_entries_cap(body):
 def fetch_alert_streams(base, pin, days, limit, notice_file=None, now=None):
     """Fetch every alert stream at `limit`, clamping to Loki's cap when it rejects the limit.
 
-    Returns `(limit_used, [(logql, parser, rows), ...])`. A limit above the server cap used to
-    die in `json.loads` on the 400 body — a traceback naming the probe, reached by following
-    the truncation notice's own advice to raise `--limit` (#1790). The clamp restarts the whole
+    Returns `(limit_used, [(logql, parser, rows), ...])`. A limit above the server cap draws a
+    400 body that is not JSON, which would die in `json.loads` with a traceback naming the
+    probe. The clamp restarts the whole
     fetch at the cap so every later read of the limit (the truncation test, its notice) sees
     the value the server actually applied; clamping the URL alone would fetch 5000 rows,
     compare them against 20000, and print an all-clear. Any other non-JSON body propagates as
@@ -470,7 +451,7 @@ def run_alerts(ns, now=None):
     # "Raise --limit" only when raising it can work. After the clamp it cannot, and the notice
     # says so. Without one, whether it can depends on a cap this run never learned — the
     # default 5000 is the server's default too, so a plain run that truncates is AT the cap and
-    # a bare "raise --limit" would send the operator round the clamp and back here (#1790).
+    # a bare "raise --limit" would send the operator round the clamp and back here.
     remedy = (
         "Narrow --days"
         if limit < ns.limit

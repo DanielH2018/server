@@ -1,11 +1,10 @@
 ---
 # The Longhorn backup plane: B2 and R2 targets, their credentials, per-volume
 # target routing, and the recurring backup job.
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
 - name: Derive the B2 region from the Kopia endpoint
   tags: [longhorn_backup]
-  # Longhorn's S3 target is s3://<bucket>@<region>/<prefix>; Kopia stores a hostname.
+  # Longhorn's S3 target is s3://<bucket>@<region>/<prefix>; the SOPS endpoint is a hostname.
   # Derived rather than duplicated so the two can't drift apart in SOPS.
   # Deliberately not the capture-group form of regex_search: on no match it returns None,
   # and `None | first` raises a Jinja error before any default can catch it — so a bad
@@ -27,9 +26,9 @@
       s3://<bucket>@<region>/<prefix>. Set k3s_longhorn_b2_region explicitly in host_vars
       rather than loosening the regex.
 
-# Reconciled on every run, not created-if-absent. It WAS created-if-absent, which made rotating
-# longhorn_b2_application_key in SOPS a guaranteed no-op against the cluster: nothing compared the
-# live value, so the registry recorded a rotation as complete while Longhorn kept authenticating
+# Reconciled on every run, not created-if-absent. A created-if-absent Secret makes rotating
+# longhorn_b2_application_key in SOPS a guaranteed no-op against the cluster: nothing compares the
+# live value, so the registry records a rotation as complete while Longhorn keeps authenticating
 # with the old key — the dangerous direction if the rotation was prompted by a suspected leak.
 #
 # Fed on stdin rather than `create --from-literal`, which put the plaintext key in the process
@@ -46,9 +45,8 @@
   changed_when: "'unchanged' not in k3s_longhorn_b2_secret_apply.stdout"
 
 # Declarative in BOTH directions: k3s_longhorn_backup_armed=false enforces a BLANK target.
-# It used to arm unconditionally, which silently resurrected a deliberately blanked target
-# on every role run — that re-arm restarted the B2 transaction-cap death spiral twice
-# (2026-08-10 and 2026-08-12; docs/archive/b2-transaction-cap-monitoring-gaps.md). Blanking is the
+# Arming unconditionally would silently resurrect a deliberately blanked target on every
+# role run and restart the B2 transaction-cap death spiral. Blanking is the
 # incident lever that stops all backupstore S3 traffic, so a blank must survive deploys
 # until an operator flips the var back.
 #
@@ -100,7 +98,7 @@
     # Skipped under `--check`, not opted out of it. The two tasks above that point Longhorn
     # at the target and its credential are themselves skipped, so a dry run on a cluster that
     # has not been armed yet would spend all 12 retries waiting for a target nothing set.
-    # Nothing downstream reads this register — `until` is the whole verdict. #2305.
+    # Nothing downstream reads this register — `until` is the whole verdict.
     - not ansible_check_mode
     - k3s_longhorn_backup_armed | bool
 
@@ -149,7 +147,7 @@
   register: k3s_longhorn_volume_targets
   # A read of state that exists independently of this play, and the routing tasks below
   # loop its `stdout_lines`. Without this `--check` skips it and they error on the
-  # attribute instead of skipping (#2351).
+  # attribute instead of skipping.
   check_mode: false
 
 # Declarative in both directions, like the recurring-job group pairs above: this claims the
@@ -203,8 +201,8 @@
   become: true
   changed_when: "'created' in k3s_longhorn_recurringjob.stdout or 'configured' in k3s_longhorn_recurringjob.stdout"
 
-# The flat Sunday `weekly-backup` job was replaced by the seven weekday shards on 2026-08-16,
-# and `kubectl apply` never deletes what the manifest stopped mentioning — the live job would
+# Reaps the retired flat Sunday `weekly-backup` job (the seven weekday shards replace it):
+# `kubectl apply` never deletes what the manifest stopped mentioning, so the live job would
 # keep firing every Sunday against a group nothing belongs to. Explicit delete, idempotent via
 # --ignore-not-found.
 - name: Remove the retired flat weekly-backup recurring job
@@ -219,7 +217,7 @@
   tags: [longhorn_backup]
   # available:true proves credentials and reachability. It does NOT prove an object was
   # ever written, and "a backup system that reports success while storing nothing" is the
-  # exact failure this slice exists to prevent. Only listing the bucket settles it.
+  # exact failure this check exists to prevent. Only listing the bucket settles it.
   ansible.builtin.debug:
     msg: >-
       Longhorn reports the backup target reachable. This does NOT prove an object was

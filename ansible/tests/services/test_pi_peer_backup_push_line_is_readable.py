@@ -1,10 +1,10 @@
-"""pull-pi-peers.sh's push outcome is a line monitor-bridge can read (issue #1943).
+"""pull-pi-peers.sh's push outcome is a line monitor-bridge can read.
 
 The CronJob runs in a pod with no `logger`, so its verdict and a failed push go to stdout in
 the host crons' syslog shape — `<ts> <host> pi-peer-backup: ...` — and Alloy lands them under
-the pod's labels, which `checks/logs.py` reads through a second selector. Until 2026-09-18 it
-wrote `kuma push failed (<status>: <msg>)` to stderr, which no reader matched, so a push Kuma
-rejected — a token no live tile holds (#1803) — was invisible from this pusher.
+the pod's labels, which `checks/logs.py` reads through a second selector. A message on stderr
+matches no reader, so a push Kuma rejects (a token no live tile holds) would be invisible from
+this pusher.
 
 `report()` and `push()` are sourced by name and run against a stubbed `curl`; the script
 itself cannot be sourced whole, since it rsyncs from the Pi at the top level. Each emitted
@@ -73,7 +73,7 @@ def test_the_verdict_line_is_read_as_a_run(tmp_path):
 
 
 def test_a_kuma_json_404_is_read_as_rejected(tmp_path):
-    # ACCEPT: Kuma refusing the token answers 404 as application/json (measured 2026-09-18);
+    # ACCEPT: Kuma refusing the token answers 404 as application/json;
     # the in-cluster Service URL has no Traefik in front, so this is the shape a bad token
     # takes from this pod.
     out, err = _run_push(tmp_path, "404 application/json; charset=utf-8", 0, "up")

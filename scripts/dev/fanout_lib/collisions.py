@@ -1,11 +1,10 @@
 """The file-level collision check `fanout_place.py launch` runs before it touches a host.
 
-The triage step groups issues so no two batches share an Ansible role. That rule never covered
-the shared code under `scripts/`: on the 2026-09-11 wave two batches with different role
-groupings both cited `scripts/diagnostics/probe_lib/alerts.py`, two agents fixed the same
-defect with a character-identical regex, and the second PR had to be superseded by hand
-(#1798). The check reads the same body citations the orchestrator groups by, so a grouping
-that missed one is refused here rather than discovered at merge.
+The triage step groups issues so no two batches share an Ansible role. That rule never covers
+the shared code under `scripts/`: two batches with different role groupings can both cite
+`scripts/diagnostics/probe_lib/alerts.py`, and two agents then fix the same defect. The check
+reads the same body citations the orchestrator groups by, so a grouping that missed one is
+refused here rather than discovered at merge.
 """
 
 import sys

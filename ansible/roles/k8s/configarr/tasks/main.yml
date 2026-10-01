@@ -1,9 +1,9 @@
 ---
-# Slice 4, B7a — the nightly TRaSH-guide reconcile.
+# The nightly TRaSH-guide reconcile.
 #
-# No Deployment, no Service, no route: configarr runs, reconciles the two *arrs, and exits. What
-# ports here is the CronJob plus the health cron that reads it; the config itself is rendered from
-# the Docker role's template, so the grab policy has exactly one source.
+# No Deployment, no Service, no route: configarr runs, reconciles the two *arrs, and exits. This
+# role deploys the CronJob plus the health cron that reads it; the config itself is rendered from
+# templates/config/config.yml.j2, so the grab policy has exactly one source.
 
 - name: Deploy configarr to the cluster
   ansible.builtin.include_role:
@@ -19,9 +19,9 @@
     manifests_rollout: ""
 
 # THE ONE CONSUMER-SIDE BARRIER IN THE k8s PLAY. The reconcile below runs against sonarr and radarr
-# over HTTP, and both are listed BEFORE configarr in containers_list. While roles/k8s/manifests
-# waited on its own rollout inline, that ordering alone guaranteed they were live by now; it no
-# longer does, because the wait is deferred to the end of the batch. Without this drain the Job
+# over HTTP, and both are listed BEFORE configarr in containers_list. That ordering does not
+# guarantee they are live, because roles/k8s/manifests defers its rollout wait to the end of the
+# batch. Without this drain the Job
 # fires into sonarr's ~5-minute startup (its unpinned striptracks DOCKER_MODS reinstalls on every
 # boot, which is why it carries manifests_rollout_timeout: 660s) and reconciles against a dead API.
 #
@@ -35,16 +35,15 @@
 
 # A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved: the
 # apply reports success and the first thing to actually run the new image is the 04:30 firing,
-# hours later. Carried over from the Docker role for a second reason too — a config.yml edit
-# that only took effect at the next 04:30 would leave a deploy reporting success while the
-# *arrs still run yesterday's policy.
+# hours later. A config.yml edit that only took effect at the next 04:30 would also leave a
+# deploy reporting success while the *arrs still run yesterday's policy.
 #
 # What makes the extra out-of-band run safe is that configarr is a convergent reconciler —
 # running the same sync twice changes nothing. Not concurrencyPolicy: Forbid, which is set but
-# only covers one direction: the gate run suppresses the next SCHEDULED firing (verified
-# 2026-08-21 — a `--from=cronjob` Job does carry a controller ownerReference), while a gate run
-# created into an already-running scheduled one still overlaps. That window is 26s live
-# (09:30:00 → 09:30:26). See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
+# only covers one direction: the gate run suppresses the next SCHEDULED firing (a
+# `--from=cronjob` Job does carry a controller ownerReference), while a gate run
+# created into an already-running scheduled one still overlaps. That window is about 26s.
+# See ansible/roles/k8s/cronjob-gate/CLAUDE.md.
 - name: Gate the configarr deploy on a one-off run
   tags: [deploy]
   ansible.builtin.include_role:
@@ -84,7 +83,7 @@
   loop:
     - configarr_health.py
     - configarr_health_logic.py
-    # The verdict logic, unchanged and still owned by the Docker role, whose tests live beside it.
+    # The verdict logic, whose tests live beside it.
     # Copied rather than duplicated for the same reason host_lib.py is: the sibling copy is what
     # `import configarr_status` resolves at runtime, and a second edited copy is how two callers
     # quietly stop agreeing about what a failed sync looks like.
@@ -92,9 +91,9 @@
   become: true
   when: not k8s_dry_run | bool
 
-# The reader scripts and their host_lib sibling were `copy:`-deployed and watched by nothing
-# (#2590): setup-drift-lib.sh's deployed-code arm only compares pairs a role declared, so a
-# stale copy here ran behind a drift check reporting "deployed code matches the repo". Tagged
+# The reader scripts and their host_lib sibling are stamped, because setup-drift-lib.sh's
+# deployed-code arm only compares pairs a role declared. An unstamped copy would go stale behind
+# a drift check reporting "deployed code matches the repo". Tagged
 # `config` like the copies above, so a `--tags config` run stamps exactly what it just wrote.
 - name: Record the deployed configarr health reader code
   tags: [config]
@@ -140,8 +139,8 @@
   become: true
   when: not k8s_dry_run | bool
 
-# Reported, not enforced. A failed guide sync is the monitor's job to page — failing the deploy
-# over a transient *arr outage is exactly what the retired wrapper avoided by always exiting 0.
+# Reported, not enforced. A failed guide sync is the monitor's job to page, and failing the
+# deploy over a transient *arr outage is the wrong trade.
 # Running the reader here also proves it works, on the deploy that installs it.
 - name: Report what the health reader makes of the reconcile
   tags: [deploy]

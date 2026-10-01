@@ -1,17 +1,17 @@
 """A kubelet probe must not GET a large metrics body on a short period.
 
-THE FAILURE THIS CLOSES (2026-08-29). node-exporter's liveness and readiness probes both used
-`httpGet: /metrics`. kubelet's HTTP prober reads a bounded prefix of the response and closes
-the connection; node_exporter's /metrics is 250,165 bytes over 312 families, so every probe was
-cut off mid-body and the exporter logged `error encoding and sending metric family: ...
-connection reset by peer` once per family it could no longer write — about 180 lines per probe.
-At 8 probes a minute that was 21-24 lines/sec/pod and 97% of all k8s-namespace Loki ingest.
+THE FAILURE THIS CLOSES. A liveness or readiness probe with `httpGet: /metrics` on
+node-exporter. kubelet's HTTP prober reads a bounded prefix of the response and closes
+the connection; node_exporter's /metrics is 250,165 bytes over 312 families, so every probe is
+cut off mid-body and the exporter logs `error encoding and sending metric family: ...
+connection reset by peer` once per family it can no longer write — about 180 lines per probe.
+At 8 probes a minute that is 21-24 lines/sec/pod and 97% of all k8s-namespace Loki ingest.
 
-It is worth a guard rather than a comment because every signal around it read healthy. The pods
-were Ready, the probes passed, Prometheus scraped fine, and the flood looked like a throttling
-symptom (node-exporter was CFS-throttled on 42% of periods). Raising the CPU limit took
-throttling to zero and changed the line rate not at all — the prober closes after its fixed
-read however fast the body is produced. Nothing in the manifest looked wrong, which is why a
+It is worth a guard rather than a comment because every signal around it reads healthy. The
+pods are Ready, the probes pass, Prometheus scrapes fine, and the flood looks like a throttling
+symptom (node-exporter is CFS-throttled on 42% of periods). Raising the CPU limit takes
+throttling to zero and changes the line rate not at all — the prober closes after its fixed
+read however fast the body is produced. Nothing in the manifest looks wrong, which is why a
 future role can reintroduce this without anyone noticing until Loki fills.
 
 The rule: a probe that asks for a whole exporter's metrics may exist — it is the only thing
@@ -101,7 +101,7 @@ def test_the_rule_rejects_the_shape_it_was_written_for():
 
     Without this the check above passes trivially the day `_is_metrics_route` stops matching, or
     `_probes()` stops finding probes at all — the two ways a guard like this goes quietly
-    vacuous. The fixture is node-exporter's readiness probe as it actually shipped.
+    vacuous. The fixture is node-exporter's readiness probe.
     """
     role, tpl, workload, cname, kind, path, period = (
         "node-exporter",

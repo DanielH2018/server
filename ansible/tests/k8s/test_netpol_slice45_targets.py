@@ -7,10 +7,8 @@ agreement, and pins the query shape that made a scaled-to-zero target unreadable
 WHY THE QUERY SHAPE IS A TEST AND NOT A COMMENT. A Service with no ready pods keeps its
 EndpointSlice and sets `endpoints: null`, not `[]`. kubectl's jsonpath filter cannot filter nil
 — it exits 1 with `<nil> is not array or slice` — so the READ failed before the assert could
-name the target. Measured 2026-09-02 against the live cluster: the filter form exits 1 on
-terraria (0 replicas) and 0 on freshrss; the `[*]` form exits 0 on both. That cost three failed
-`deploy.yml` runs in one evening, each reporting a Go template dump instead of "terraria is
-down".
+name the target. The filter form exits 1 on terraria (0 replicas) and 0 on freshrss; the `[*]`
+form exits 0 on both. A failed read reports a Go template dump instead of "terraria is down".
 """
 
 from lib import yaml_fast
@@ -72,12 +70,12 @@ def test_the_gate_loops_the_shared_target_list() -> None:
 
 
 def test_terraria_is_absent_while_it_is_scaled_to_zero() -> None:
-    """#836 set terraria to replicas 0; asserting it has a ready endpoint can only fail.
+    """terraria runs at replicas 0, so asserting it has a ready endpoint can only fail.
 
     Paired with the probe check below: the list and the rendered leg have to agree, or the gate
     passes and the probe fails on the same fact.
     """
-    # In inventory, not terraria's defaults, since #2877 — k8s/game-stats renders the exporter
+    # In inventory, not terraria's defaults — k8s/game-stats renders the exporter
     # at the same count and a role default does not cross a role boundary.
     all_vars = yaml_fast.safe_load(ALL_VARS.read_text())
     if int(all_vars["terraria_k8s_replicas"]) == 0:

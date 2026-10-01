@@ -5,8 +5,7 @@ The role enumerates its modules by name twice — once in the "Install agent Pyt
 loop, once in `stamp_deployed_pairs` for manifest-prune-check.sh's stale-script arm. Neither
 list is derived from the directory, so a module added to `files/` and to neither list is one
 the host never receives, and the suite stays green because every test reaches `files/` through
-its own `sys.path` insert. #3036 split `renovate_agent.py` into three modules and would have
-shipped one of them nowhere.
+its own `sys.path` insert.
 
 Run: uv run pytest ansible/tests/setup/test_renovate_agent_modules_are_shipped.py
 """
@@ -45,7 +44,7 @@ def listing_problems(shipped: set[str], tasks: list[dict]) -> list[str]:
 def test_every_shipped_module_is_installed_and_stamped() -> None:
     shipped = {p.name for p in (ROLE / "files").glob("*.py")}
     # The census finds its subject by glob, so it names members it must find: the entry
-    # module and the two #3036 split out of it.
+    # module and the two modules it splits into.
     for member in ("renovate_agent.py", "agent_toolbox.py", "run_worktree.py"):
         assert member in shipped, f"{member} is gone from the role's files/"
     assert listing_problems(shipped, yaml_fast.safe_load(TASKS.read_text())) == []

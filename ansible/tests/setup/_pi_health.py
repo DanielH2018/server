@@ -35,7 +35,7 @@ kuma_push() {
 
 # Enough of the docker CLI for pi-recovery-health: the `ps -q` liveness probe, `inspect`,
 # and `start`. Running containers live in $STATE_FILE, one name per line; $UNSTARTABLE names
-# those whose start fails, which is the 2026-08-29 autoheal case. `inspect` answers with the
+# those whose start fails. `inspect` answers with the
 # real CLI's shape for whatever --format asks: a running container reads status=running, a
 # stopped one carries $STUB_EXIT / $STUB_ERROR -- so a message that names an exit code proves
 # the script inspected BEFORE it started the container, not after. $STUB_DAEMON_DOWN=1 is

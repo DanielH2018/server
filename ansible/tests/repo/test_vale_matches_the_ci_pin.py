@@ -2,11 +2,10 @@
 
 The prek `vale` hook is `language = "system"`: it runs whatever binary sits on PATH. CI installs
 one itself (`.github/workflows/ci.yml`), so a host without it fails the hook at commit time with
-exit 127 while CI stays green — issue #1703, worked around during PR #1702 by fetching the
-tarball by hand into `~/.local/bin`. `roles/setup/initial_setup/tasks/host-basics.yml` now
-installs it, which makes the version a fact stored in two places.
+exit 127 while CI stays green. `roles/setup/initial_setup/tasks/host-basics.yml` installs it,
+which makes the version a fact stored in two places.
 
-Two places is the `#1527`/`#1629` failure class: a Renovate bump that rewrites one copy leaves
+Two places is the failure class `test_ci_tool_pins_do_not_move_backwards.py` records: a Renovate bump that rewrites one copy leaves
 the other behind, and both a green CI and a green local hook are consistent with the two running
 DIFFERENT rule sets, because a style package's rules change between releases. renovate.json's
 Vale manager names both files so one PR carries both; this guard is what fails when they

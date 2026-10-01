@@ -161,8 +161,7 @@ def test_startup_grace_disjoint_from_run_once_skip_sets():
 
 
 def test_startup_grace_covers_every_ungated_reach_out_check():
-    # Completeness guard (the 2026-07-14 gap: prowlarr_indexers + scrutiny were reach-out checks
-    # structurally identical to the four graced ones, yet omitted). Every check that polls a live
+    # Completeness guard. Every check that polls a live
     # app dependency via _get_json — and is NEITHER reachability-gated NOR carrying its own
     # consecutive-streak hysteresis — must be in STARTUP_GRACE, else it false-pages on the
     # weekly-reboot first cycle. A new reach-out check that skips the set trips this test, forcing
@@ -247,9 +246,9 @@ def test_run_once_graced_check_recovers_without_paging(monkeypatch, cfg):
 
 
 # ── log-shipper dropped-entries watchdog (Prometheus counter; partial log loss) ──
-# #993: the client-side shipper counter and the server-side Loki-discard counter are read
+# The client-side shipper counter and the server-side Loki-discard counter are read
 # together, and the LARGER of the two decides the verdict — see shipper_dropped()'s docstring
-# for the measured 161,573-vs-1,027 burst that motivated this.
+# for the measured 161,573-vs-1,027 burst.
 
 
 @pytest.mark.parametrize(
@@ -267,7 +266,7 @@ def test_run_once_graced_check_recovers_without_paging(monkeypatch, cfg):
         pytest.param(None, [], True, (), id="no_series_either_side_is_clean"),
         # Exactly at the threshold must NOT alert (strictly greater).
         pytest.param(1000, [], True, (), id="at_threshold_is_clean"),
-        # Server-side alone crosses the threshold while the client stays clean — the #993 case:
+        # Server-side alone crosses the threshold while the client stays clean:
         # the client counted 1,027 (well under threshold) while Loki discarded 161,573
         # server-side. The client count here must be below `threshold` on its own, or this
         # case only proves message attribution, not that the server arm can fire by itself.
@@ -301,11 +300,9 @@ def test_shipper_dropped(client_count, server_reasons, ok, must_contain):
 def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch, cfg):
     """One scalar query over a __name__ regex, no reason filter, for the CLIENT side.
 
-    Both estates ship through Alloy and share `loki_write_dropped_entries_total`, but the
-    query stays a name regex: while daniel-pi ran Promtail its counter had a different name,
-    and a selector naming only one estate's counter read the other as "0 dropped" forever —
-    the same fail-open shape as a selector on a label nothing emits. No reason filter: every
-    reason is a real drop (M2).
+    The query stays a name regex: a selector naming only one counter would read a source
+    shipping under another name as "0 dropped" forever — the same fail-open shape as a
+    selector on a label nothing emits. No reason filter: every reason is a real drop.
     """
     queries = []
 
@@ -330,7 +327,7 @@ def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch, cfg):
     )
 
 
-# ── arm 3: the OTel collector's export failures, folded in from the host cron (#3094) ──
+# ── arm 3: the OTel collector's export failures ──
 
 
 @pytest.mark.parametrize(
@@ -418,7 +415,7 @@ def test_check_shipper_dropped_disables_the_collector_arm_on_an_empty_selector(c
 
 
 def test_check_shipper_dropped_reads_server_side_by_reason(monkeypatch, cfg):
-    """The SERVER-side arm queries Loki's own discard counter, grouped `by (reason)` (#993).
+    """The SERVER-side arm queries Loki's own discard counter, grouped `by (reason)`.
 
     Grouping by reason is what lets a fired alert name the cause (too_far_behind vs a
     throughput/limit reason) instead of just a bare count.

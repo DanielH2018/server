@@ -6,7 +6,7 @@
 One line per file as it loads, carrying the file and its `load_reason`: session_start,
 path_glob_match, nested_traversal, include, compact. `inject-nested-docs.py` appends a sixth,
 `bash_path_match`, through `append_row` below, for a doc it supplied because a Bash command
-named a path under it (issue #2125) — so one log grades both the harness's loads and the
+named a path under it — so one log grades both the harness's loads and the
 hook's.
 
 The point: verify that path-scoped rules actually fire. Claude Code has known bugs where a

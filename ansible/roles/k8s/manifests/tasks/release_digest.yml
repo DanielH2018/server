@@ -3,7 +3,7 @@
 # dirty, the sha256 digest of the ordinary rendered bytes, and a keyed digest of the secret ones.
 #
 # Shared by release_stamp.yml, which records what an apply wrote, and render_record.yml, which
-# records what a render-only pass over origin/master would write (#2574). They share this file
+# records what a render-only pass over origin/master would write. They share this file
 # rather than a copied expression because the comparison `probe.py releases --stale-only` makes
 # between the two digests is only meaningful while both are computed by the same code. A copy
 # drifts one edit at a time, and every drift reads as a stale service.
@@ -75,10 +75,10 @@
 - name: Checksum the rendered deferred manifests for {{ manifests_service }}
   tags: [deploy]
   # The bytes the OWNING role applies, from the sibling directory this role rendered them into
-  # (#2899). Without this the digest covered half of pihole's workload: a change to
-  # `deployment-2.yaml.j2` moved no digest, so `probe.py releases --stale-only` could neither
-  # clear the path hit by a match nor catch it by a mismatch. A separate loop rather than one
-  # over both lists, because the two live in different directories.
+  # . Without this the digest would cover half of pihole's workload: a change to
+  # `deployment-2.yaml.j2` would move no digest, so `probe.py releases --stale-only` could
+  # neither clear the path hit by a match nor catch it by a mismatch. A separate loop rather
+  # than one over both lists, because the two live in different directories.
   ansible.builtin.stat:
     path: "{{ manifests_deferred_dir }}/{{ item }}"
     checksum_algorithm: sha256
@@ -122,15 +122,13 @@
   #
   # Secret manifests never reach it: the stats above loop `manifests_files` and
   # `manifests_deferred_files` only. They get their own keyed digest below, in a separate field,
-  # so this one is unchanged by that (#2574). Adding a deferred file to a role DOES move this
-  # digest, so that service reads stale once until its next deploy writes a fresh record —
-  # the same one-redeploy convergence `secret_digest` had.
+  # so this one is unchanged by that. Adding a deferred file to a role DOES move this
+  # digest, so that service reads stale until its next deploy writes a fresh record.
   ansible.builtin.set_fact:
     manifests_release_digest: "{{ (manifests_release_files | dictsort | to_json) | hash('sha256') }}"
 
-# The keyed digest of the secret manifests (#2574, operator decision 2026-09-26). A separate
-# field from `manifests_digest`, which stays exactly as it was, so records written before this
-# still compare on the ordinary bytes. Publishes `manifests_release_secret_digest`: the digest,
+# The keyed digest of the secret manifests. A separate field from `manifests_digest`, so
+# records without it still compare on the ordinary bytes. Publishes `manifests_release_secret_digest`: the digest,
 # or '' when the host key is unavailable, which the reader treats as "no secret digest".
 #
 # Nothing below reads a secret manifest into Ansible. secret_hmac.py receives two paths and
@@ -160,7 +158,7 @@
   failed_when: false
   check_mode: false
   # become resets HOME to /root, where uv keeps no managed Python; same export and reason as
-  # setup/common/tasks/release_bin.yml's prune (#2490).
+  # setup/common/tasks/release_bin.yml's prune.
   environment:
     UV_PYTHON_INSTALL_DIR: "/home/{{ sys_user }}/.local/share/uv/python"
   become: true
@@ -192,7 +190,7 @@
   failed_when: false
   check_mode: false
   # become resets HOME to /root, where uv keeps no managed Python; same export and reason as
-  # setup/common/tasks/release_bin.yml's prune (#2490).
+  # setup/common/tasks/release_bin.yml's prune.
   environment:
     UV_PYTHON_INSTALL_DIR: "/home/{{ sys_user }}/.local/share/uv/python"
   become: true

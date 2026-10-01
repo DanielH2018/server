@@ -164,7 +164,7 @@ def test_list_renders_the_manual_and_claimed_markers(capsys, issue, make_tools):
     """The two markers the spec's `list` section requires, in the TEXT render.
 
     Every other `list` test passes `--json` or an empty issue set, so the render loop never
-    ran and neither marker had a test that could go red (#1275). They are the only way an
+    ran and neither marker had a test that could go red. They are the only way an
     operator reading ordinary `list` output sees that an issue is reserved or being worked.
     """
     reserved = issue(5, labels=("manual",), title="operator only")
@@ -401,18 +401,19 @@ def test_prefixed_picks_the_alphabetically_first_of_two():
 
 
 def test_main_requires_the_tools_seam():
-    """`main` used to read `tools or FindingsTools()`, so this call reached the real `gh`.
+    """`main` must not read `tools or FindingsTools()`, which would reach the real `gh` on
+    this call.
 
     The red-proof half: under the old default `main(["list"])` shelled out to `gh issue list`
-    from a unit test instead of failing. The `__main__` block is now the only site that builds
-    the real boundaries.
+    from a unit test instead of failing. The `__main__` block is the only site that builds the
+    real boundaries.
     """
     with pytest.raises(TypeError):
         findings.main(["list"])  # ty: ignore[missing-argument]
 
 
 def test_help_carries_the_docstring_summary(capsys, make_tools):
-    """#1272: the description came from `__doc__.splitlines()[1]`, which is the BLANK line
+    """The description came from `__doc__.splitlines()[1]`, which is the BLANK line
     after the summary, so `--help` printed usage and then straight to `positional arguments`
     with nothing saying what this eleven-subcommand entry point is for. Asserts the summary
     text rather than merely "non-empty", so a description that goes blank again fails here.
@@ -426,7 +427,7 @@ def test_help_carries_the_docstring_summary(capsys, make_tools):
     assert "close Claude's unfixed findings as GitHub Issues" in plain
 
 
-# The fan-out's file-level collision check (#1798) groups by these.
+# The fan-out's file-level collision check groups by these.
 def test_cited_paths_finds_files_and_drops_line_numbers_directories_and_hosts():
     body = (
         f"see `{'scripts/diagnostics/probe_lib/alerts.py'}:42`, `ansible/roles/k8s/monitor-bridge/`, "
@@ -489,11 +490,9 @@ def test_the_list_cap_does_not_sit_above_the_ceiling_gh_enforces_itself():
     """A cap above the 1000 a label-filtered list stops at makes the warning unreachable.
 
     A `--label` sends `gh issue list` through GitHub's search API, which caps at 1000
-    whatever `--limit` says. Measured 2026-09-29: the repo held 1026 `claude` issues by the
-    search API's own `total_count`, and `--label claude --state all` returned exactly 1000
-    at `--limit 5000` and again at `--limit 1200`. An unfiltered list pages past it (1029),
-    which is where the old 5000 came from, but every list `load_issues` builds carries
-    `--label claude`. With the cap at 5000 the `>=` never held, so the truncation was silent
-    and two refuted findings were missing from the rendered settled register (#2892).
+    whatever `--limit` says. An unfiltered list pages past it (1029), which is where the old
+    5000 came from, but every list `load_issues` builds carries `--label claude`. With the
+    cap at 5000 the `>=` never held, so the truncation was silent and two refuted findings
+    were missing from the rendered settled register.
     """
     assert ISSUE_LIST_CAP <= 1000

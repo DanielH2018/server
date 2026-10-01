@@ -55,11 +55,9 @@ MERGED_DENY_GUARDS = ("block-protected-bash", "nudge-land-sh", "block-footguns")
 def _cd_guarded_shims() -> list[str]:
     """Every hook shim that changes into the repo before doing its work.
 
-    DERIVED, not listed. The four names above were hardcoded with `len(...) == 4` as the
-    non-vacuity anchor, and a count cannot notice a shim that was added and never listed:
-    auto-mode-bridge, auto-approve-readonly and auto-approve-remote-ssh all grew the same
-    `cd ... || exit 0` and none of them got issue #1014's stderr line, so several guards kept
-    disarming silently while this file reported full coverage of "the four shims".
+    DERIVED, not listed. A hardcoded list with a `len(...) == 4` non-vacuity anchor cannot
+    notice a shim that is added and never listed, so several guards could keep disarming
+    silently while this file reported full coverage.
     """
     return sorted(
         p.name for p in HOOKS.glob("*.sh") if _CD_GUARD in p.read_text(encoding="utf-8")
@@ -83,8 +81,7 @@ EXEC_SHIM_NAMES = _exec_shims()
 def test_the_shim_census_is_non_vacuous():
     # Assert the NAMES, not a count. A glob returns an empty set the moment the files move or
     # are renamed, and every parametrized test below would then pass by iterating zero times —
-    # the failure mode the repo-root CLAUDE.md describes, and the one the old `len() == 4`
-    # anchor could not see because it pinned the size of a hand-written list instead.
+    # the failure mode the repo-root CLAUDE.md describes.
     assert set(SHIM_NAMES) == {
         "auto-mode-bridge.sh",
         "bash-pretool.sh",
@@ -126,9 +123,8 @@ def test_decided_marker_documents_the_trade_off(hook_name):
 
 
 def test_the_merged_shim_names_every_guard_that_did_not_run(tmp_path):
-    """#2394: one shim replaced three deny guards and two silent ones. The silent pair cost a
-    prompt and a re-read, so the merged posture is the `ask` — and the operator can only act
-    on it if the reason says which guards it covers."""
+    """One shim stands in for several guards, so the posture is the `ask` — and the operator
+    can only act on it if the reason says which guards it covers."""
     proc = _run(tmp_path, "bash-pretool.sh", str(tmp_path / "does-not-exist"))
     reason = json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
     for guard in MERGED_DENY_GUARDS:
@@ -137,7 +133,7 @@ def test_the_merged_shim_names_every_guard_that_did_not_run(tmp_path):
 
 @pytest.mark.parametrize("hook_name", SHIM_NAMES)
 def test_reject_a_missing_cd_target_now_reports_on_stderr(tmp_path, hook_name):
-    """The failure this issue is about: `cd` fails, and until now nothing said so."""
+    """When `cd` fails, something must say so."""
     missing = tmp_path / "does-not-exist"
     proc = _run(tmp_path, hook_name, str(missing))
     assert proc.returncode == 0, proc.stderr
@@ -149,7 +145,7 @@ def test_reject_a_missing_cd_target_now_reports_on_stderr(tmp_path, hook_name):
 
 @pytest.mark.parametrize("hook_name", sorted(DENY_GUARD_SHIMS))
 def test_reject_a_deny_guard_that_cannot_run_asks(tmp_path, hook_name):
-    """#2171: a bare exit 0 from a DENY guard is an allow. The `ask` names the shim, because
+    """A bare exit 0 from a DENY guard is an allow. The `ask` names the shim, because
     four of these can fire on one call and the operator needs to know which one did not run."""
     proc = _run(tmp_path, hook_name, str(tmp_path / "does-not-exist"))
     assert proc.returncode == 0, proc.stderr

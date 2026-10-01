@@ -1,7 +1,6 @@
 ---
 # auditd, sensitive-file permissions, the rare-protocol module blacklist, the
 # WireGuard module, and Intel GuC firmware for QuickSync.
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
 - name: Install auditd
   tags: [audit]
@@ -89,9 +88,9 @@
     mode: "0644"
   become: true
 
-# QuickSync transcode for jellyfin/tdarr needs the i915 GuC firmware loaded. This was a
-# hand-run `echo … | tee -a` in the bring-up runbook, which appends a DUPLICATE option line
-# every time it's run — daniel-server's i915.conf carries the line twice from exactly that.
+# QuickSync transcode for jellyfin/tdarr needs the i915 GuC firmware loaded. A hand-run
+# `echo … | tee -a` appends a DUPLICATE option line every time it runs, so this task manages
+# the line idempotently.
 #
 # has_igpu alone is the WRONG gate: it means "pass /dev/dri through to jellyfin/tdarr", which
 # is vendor-neutral (AMD does VAAPI through the same device node), whereas enable_guc is an

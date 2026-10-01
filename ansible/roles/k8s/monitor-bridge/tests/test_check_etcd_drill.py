@@ -1,10 +1,9 @@
 """The etcd restore drill's stamp reader.
 
-The reader was deliberately held back until the drill had a cron, because a fail-closed
-staleness check against a stamp nothing keeps fresh sits red forever and trains the operator to
-ignore it. The cron landed 2026-08-28 (`k3s_etcd_restore_drill_cron`), so these are the guards
-that came with the reader. Every one of them is a way the check could report GREEN while the
-restore path is unproven, which is the only failure mode that matters here.
+A fail-closed staleness check against a stamp nothing keeps fresh sits red forever and trains
+the operator to ignore it, so the reader pairs with the drill's cron
+(`k3s_etcd_restore_drill_cron`). Every guard here is a way the check could report GREEN while
+the restore path is unproven, which is the only failure mode that matters here.
 """
 
 import os
@@ -20,17 +19,16 @@ import registry
 
 
 # Stamps are dated against this epoch and the check reads the same one, so "1.0 days ago"
-# is exact rather than a rounding of wall time (#2158).
+# is exact rather than a rounding of wall time.
 DRILL_NOW = 1_780_000_000.0
 
 
 # --- the etcd restore drill's stamp reader ------------------------------------------------------
 #
-# The reader was deliberately held back until the drill had a cron, because a fail-closed staleness
-# check against a stamp nothing keeps fresh sits red forever and trains the operator to ignore it.
-# The cron landed 2026-08-28 (k3s_etcd_restore_drill_cron), so these are the guards that came with
-# the reader. Every one of them is a way the check could report GREEN while the restore path is
-# unproven, which is the only failure mode that matters here.
+# A fail-closed staleness check against a stamp nothing keeps fresh sits red forever and trains
+# the operator to ignore it, so the reader pairs with the drill's cron
+# (k3s_etcd_restore_drill_cron). Every guard here is a way the check could report GREEN while
+# the restore path is unproven, which is the only failure mode that matters here.
 
 
 def _stamp(cfg, tmp_path, body, mode=0o644, name="last-success-list-only"):
@@ -114,7 +112,7 @@ def test_etcd_drill_grace_is_derived_from_the_cron(cfg):
 
     The drill runs weekly (Monday 10:20). A window at or under the cadence flaps on every normal
     week; a window at twice it silently tolerates a whole missed run, which is the miss this
-    check exists to catch — the 24h-grace-against-a-23h-gap failure of 2026-08-25, one cadence up.
+    check exists to catch.
     """
     defaults = yaml.safe_load(
         (
@@ -141,7 +139,7 @@ def test_etcd_drill_grace_is_derived_from_the_cron(cfg):
 
 
 def test_etcd_drill_is_registered_and_can_actually_push():
-    """Registration and the token must land together, and both now have.
+    """Registration and the token must land together.
 
     Asserting membership alone would pass for a check registered against a token nothing can
     set — which pushes to nowhere forever, present in the code and absent from the world. So

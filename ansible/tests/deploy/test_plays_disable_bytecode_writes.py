@@ -5,13 +5,13 @@ A play run from a Claude worktree executes its modules with that tree's `.venv/b
 it). A task with `become: true` therefore imports from the worktree's site-packages AS ROOT,
 and CPython writes the `__pycache__` for anything not already compiled with root's ownership.
 
-The session that created the tree cannot then remove it. Measured 2026-09-24 (#2456), after
-`k3s-bringup.yml --tags node-dns` was applied by hand from a worktree:
+The session that created the tree cannot then remove it. For example, after
+`k3s-bringup.yml --tags node-dns` is applied by hand from a worktree:
 
     .venv/lib/python3.14/site-packages/cryptography/x509/__pycache__   root:root 750
 
-`git worktree remove` unregistered the tree and failed with `Directory not empty`; the
-recursive delete that followed failed with `Permission denied`. Only a delete run under sudo
+`git worktree remove` unregisters the tree and fails with `Directory not empty`; the
+recursive delete that follows fails with `Permission denied`. Only a delete run under sudo
 clears it, and sessions here have no sudo. `prune_worktrees.py` and `ExitWorktree` hit the
 same wall.
 
@@ -22,7 +22,7 @@ variable sits inside the shell command sudo runs rather than in sudo's own envir
 which `env_reset` would have discarded. A task-level `environment:` merges with the play's
 rather than replacing it, so `prune_backups.yml`'s B2 keys still reach their task.
 
-The alternative the issue offered — pointing `ansible_python_interpreter` outside the tree —
+The alternative — pointing `ansible_python_interpreter` outside the tree —
 is not available here. The repo's venv is load-bearing for module execution: `community.docker`
 needs `requests` and `docker`, and the k8s modules need the Kubernetes client, none of which
 the host's python3.12 carries.
@@ -37,7 +37,7 @@ from _helpers import REPO as _REPO
 _ENV_KEY = "PYTHONDONTWRITEBYTECODE"
 _PLAYBOOK_DIR = _REPO / "ansible"
 
-# The playbooks known when this guard was written. Asserted below so that a rename or a move
+# The known playbooks. Asserted below so that a rename or a move
 # fails loudly here rather than leaving the guard matching nothing and passing vacuously.
 _KNOWN = frozenset(
     {

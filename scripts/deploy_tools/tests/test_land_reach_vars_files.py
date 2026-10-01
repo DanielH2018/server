@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-"""A `defaults/`/`vars/` change reaches the hosts that run the tasks consuming its vars (#2610).
+"""A `defaults/`/`vars/` change reaches the hosts that run the tasks consuming its vars.
 
-WHAT WENT WRONG. Landing PR #2553 ended `needs-manual-apply`, prescribing
-`initial_setup.yml --tags gitops_deploy` on daniel-server and daniel-pi. Both hosts set
-`has_gitops: false`, where the role runs `teardown.yml` alone, so each command re-runs an
-idempotent teardown and applies none of the PR. The path that widened the note is
-`gitops_deploy/defaults/main.yml`: no task names a defaults file, so `setup_file_hosts` fell
-through to the role-level reach, which for this dispatcher is the union of both halves --
-every host.
-
-Issue #2610 read the cause as `_gates_in` not following an `include_tasks` gate. It was not:
-`_IMPORT_KEYS` has carried `include_tasks` since 693a0bcc2 (2026-09-09), and every
-`gitops_deploy/files/*.py` path reads as daniel-box alone on the module that landed #2553.
+`gitops_deploy` runs `teardown.yml` alone on daniel-server and daniel-pi, where `has_gitops` is
+false, so an `initial_setup.yml --tags gitops_deploy` run there re-runs an idempotent teardown
+and applies none of a change to the role's `defaults/main.yml`. No task names a defaults file,
+so `setup_file_hosts` would fall through to the role-level reach, which for this dispatcher is
+the union of both halves -- every host. Every `gitops_deploy/files/*.py` path reads as
+daniel-box alone.
 
 `_var_consumer_chains` reads a vars file's reach from the tasks that consume the vars it
 defines, and narrows only when EVERY var has a consumer -- the reject half below, because a
@@ -27,8 +22,8 @@ import land_reach
 
 from lib.repo_paths import REPO as REPO_ROOT
 
-# PR #2553's `gitops_deploy` paths, verbatim (`gh pr view 2553 --json files`). The
-# `defaults/main.yml` entry is the one that widened the note.
+# The `gitops_deploy` paths of a real PR, verbatim (`gh pr view <n> --json
+# files`). The `defaults/main.yml` entry is the one that widened the note.
 _PR_2553_PATHS = [
     "ansible/roles/setup/gitops_deploy/CLAUDE.md",
     "ansible/roles/setup/gitops_deploy/defaults/main.yml",
@@ -56,7 +51,7 @@ def test_the_deployer_defaults_reach_the_gitops_host_only():
 
 
 def test_pr_2553_owes_no_host_beyond_the_tick():
-    """The verdict PR #2553 should have read: `settled`, not `needs-manual-apply`."""
+    """The verdict is `settled`, not `needs-manual-apply`."""
     assert land_reach.remaining_setup_hosts_note(_PR_2553_PATHS, "daniel-box") == ""
 
 
@@ -165,8 +160,8 @@ def _hosts(fixture, path):
 
 def test_a_defaults_file_narrows_to_the_hosts_its_consumers_run_on(_knobs_role):
     """The accept half. One var is read by a shipped template, the other only by the `vars:`
-    of a cross-role import -- the shape `_gates_in` used to skip outright, which left that
-    var with no consumer and kept the whole file wide."""
+    of a cross-role import -- the shape `_gates_in` must not skip, or that
+    var has no consumer and the whole file stays wide."""
     assert _hosts(
         _knobs_role, "ansible/roles/setup/knobs/defaults/main.yml"
     ) == frozenset({"daniel-box"})

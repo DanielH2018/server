@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""daniel-server is a Claude session host with its own cap numbers (spec 2026-09-06 §1).
+"""daniel-server is a Claude session host with its own cap numbers.
 
-The caps are the first per-host overrides of the claude_code role; before this every number
-came from defaults/main.yml. The render is the same jinja2.Template call the sibling
+The caps are per-host overrides of the claude_code role's defaults/main.yml. The render is the
+same jinja2.Template call the sibling
 test_claude_login_slice_caps.py makes, with the host's vars laid over the defaults.
 Run: uv run pytest ansible/tests/setup/test_claude_code_on_daniel_server.py
 """

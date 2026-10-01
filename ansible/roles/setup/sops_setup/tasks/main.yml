@@ -15,7 +15,7 @@
     mode: "0755"
     # The version, both URLs and both digests are `defaults/main.yml`'s, beside each other,
     # so `scripts/validate/asset_pins.py` can render them and fetch the hash a Renovate bump
-    # leaves for a human to finish (#2313). That file carries the full argument.
+    # leaves for a human to finish. That file carries the full argument.
     checksum: "sha256:{{ sops_setup_binary_sha256 }}"
   vars:
     # ONE selection of the architecture, read twice. The pins themselves are role defaults —
@@ -64,9 +64,9 @@
     mode: "0700"
 
 # DR NOTE: host keys at ~/.config/sops/age/keys.txt are in NO automated backup — nothing outside
-# a Longhorn volume is, since Kopia retired 2026-08-13 (and it only covered `containers/` before). Since 2026-06-11 .sops.yaml has a third, OFF-BOX recovery
-# recipient (private half only in the operator's password manager), so losing both hosts'
-# keys no longer strands the secrets. Host keys also backed up out-of-band (2026-06-06).
+# a Longhorn volume is. .sops.yaml has a third, OFF-BOX recovery recipient (private half only
+# in the operator's password manager), so losing both hosts' keys does not strand the secrets.
+# Host keys are also backed up out-of-band.
 - name: Generate Age key (only if it doesn't exist)
   tags: [age-key]
   become: false
@@ -84,7 +84,7 @@
   register: sops_setup_public_key
   changed_when: false
   # A read, so it runs under --check too: skipped, it leaves no stdout and the two tasks below
-  # error on the attribute (#2323). On a host with no key yet, --check only simulated the
+  # error on the attribute. On a host with no key yet, --check only simulated the
   # keygen above, so there is nothing to read; that is not a failure of the check run.
   check_mode: false
   failed_when: sops_setup_public_key.rc != 0 and not ansible_check_mode

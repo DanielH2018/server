@@ -9,13 +9,10 @@ value is read from its source rather than pinned, so a bump to any one of them f
 instead of silently reopening the gap.
 
 The forward cap is derived the same way as the rollback budget: from the worst promoted role's
-own waits, plus a lock-wait allowance and playbook overhead (#2397).
+own waits, plus a lock-wait allowance and playbook overhead.
 
-The lock waiters are checked as a CENSUS (`_LOCK_WAITERS`) rather than one test each. Two of
-the four were pinned individually and the other two were not, so docs-refresh and eval-run sat
-at 2700 against a 2940s hold with every check green — and docs-refresh's comment claimed it
-matched secret-rotate, which was 3000. A per-consumer test only ever covers the consumers
-somebody remembered to write one for.
+The lock waiters are checked as a CENSUS (`_LOCK_WAITERS`) rather than one test each. A
+per-consumer test only ever covers the consumers somebody remembered to write one for.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py
@@ -34,8 +31,7 @@ from _role_tasks import in_role_wait_s
 # Each phase budget is measured from the moment its phase starts, which is AFTER flock acquires,
 # while TimeoutStartSec counts from unit activation and so INCLUDES the flock wait. The worst case
 # is therefore flock_wait + the summed phase budgets, and it must fit inside TimeoutStartSec, else
-# systemd SIGTERMs the deployer mid-rollback and the bad commit is stranded live (the failure
-# 1ba4fbb2 sized these values to avoid). Nothing else pins the cross-file sum, so a later bump to
+# systemd SIGTERMs the deployer mid-rollback and the bad commit is stranded live. Nothing else pins the cross-file sum, so a later bump to
 # any one value would silently reopen it while every other test stays green — the same class the
 # write_hold / divergence-marker guards pin.
 
@@ -114,8 +110,7 @@ def test_k8s_deploy_timeout_budget_survives_max_flock_contention():
 def test_a_budget_that_outgrows_the_ceiling_is_caught():
     # Red proof for the three budget tests that share _worst_lock_hold. They can only ever be
     # observed passing, so this drives the same verdict function with a shape that must fail:
-    # the 2026-08-29 review's H-1, where two phase budgets sat inside a 2700s ceiling that
-    # nothing summed them into.
+    # two phase budgets inside a 2700s ceiling that nothing sums them into.
     sized = {
         "gitops_deploy_k8s_timeout_s": 900,
         "gitops_deploy_k8s_rollback_timeout_s": 1320,
@@ -141,13 +136,9 @@ _SECRET_ROTATE = _INITIAL_SETUP_TEMPLATES / "secret-rotate.sh.j2"
 
 # Every job that waits for /var/lock/server-git-tree.lock, with the regex that reads its wait.
 #
-# WHY A CENSUS AND NOT ONE TEST EACH. Two of these four were pinned individually (secret-rotate
-# from the 2026-08-22 review M4, deploy.sh from 2026-08-23b M13) and the other two were not, so
-# docs-refresh and eval-run sat at 2700 against a 2940s hold while every check read green.
-# docs-refresh's own comment claimed it "matches secret-rotate" while secret-rotate was 3000.
-# A per-consumer test only covers the consumers somebody remembered to write one for; this
-# table is the thing a new waiter has to be added to, and the non-vacuity test below is what
-# makes forgetting fail rather than pass silently.
+# WHY A CENSUS AND NOT ONE TEST EACH. A per-consumer test only covers the consumers somebody
+# remembered to write one for. This table is the thing a new waiter has to be added to, and the
+# non-vacuity test below is what makes forgetting fail rather than pass silently.
 _LOCK_WAITERS = {
     "secret-rotate.sh.j2": (_SECRET_ROTATE, r"^flock\s+-w\s+(\d+)\s+9"),
     "docs-refresh.sh.j2": (
@@ -209,7 +200,7 @@ def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
 
 def test_a_short_lock_waiter_is_flagged():
     # Red proof for the parametrized test above, which can only ever be observed passing. This
-    # is the real pre-fix shape: docs-refresh's 2700 against the current 2940s hold.
+    # is a waiter at 2700 against the 2940s hold.
     defaults = yaml.safe_load(_DEFAULTS.read_text())
     assert 2700 < _worst_lock_hold(defaults), (
         "the worst-case hold must exceed 2700 for this red proof to mean anything; if the "
@@ -240,15 +231,14 @@ _ALL_VARS = pathlib.Path(__file__).parents[4] / "inventory" / "group_vars" / "al
 
 def _rollout_timeout_s(role: str) -> int:
     # Shared with ansible/tests/longhorn/test_rollback_timeout_budget.py and the inline-gate
-    # census. The literal read this replaced returned the shared default for a role that names
-    # its budget in a variable (sonarr), sizing a 660s service as a 300s one with every test
-    # green.
+    # census. A literal read returns the shared default for a role that names its budget in a
+    # variable (sonarr), sizing a 660s service as a 300s one.
     return manifests_rollout_timeout_s(_K8S_ROLES_DIR / role)
 
 
 # The role whose in-role wait this derivation must find. prowlarr's flaresolverr isolation probe
-# waits `--timeout=300s` for a Job, before the batch drain runs and on top of it, and the
-# derivation below counted only the drain until #2399. Named rather than counted: the reader
+# waits `--timeout=300s` for a Job, before the batch drain runs and on top of it. Named rather
+# than counted: the reader
 # finds its subject by pattern, so a rename or a moved task would otherwise leave the sum
 # quietly smaller and every assertion here still green.
 _IN_ROLE_WAIT_CENSUS = {"prowlarr": 300, "netpol-baseline": 650}
@@ -334,7 +324,7 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
 # see the difference: it reads the budget, not whether anything spends it.
 #
 # The forward sum also carries two terms no role declares. Both are allowances rather than
-# bounds, sized from the 2026-09-23 sonarr tick (27.8s in total, snapshot 4.74s, probe 0.27s):
+# bounds, sized from a sonarr tick (27.8s in total, snapshot 4.74s, probe 0.27s):
 #
 #   - the service-lock wait, which `locked_budget` spends out of this same deadline. That tick
 #     showed a 70s gap consistent with one. A wait longer than the allowance does not strand
@@ -343,7 +333,7 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
 #   - playbook overhead: start-up, fact gathering and renders, about 30s measured.
 #
 # The cap has to clear the worst role's ceiling plus both, or a slow prowlarr deploy is killed
-# by the cap mid-drain before its own 780s rollout timeout can fire (#2397).
+# by the cap mid-drain before its own 780s rollout timeout can fire.
 _FORWARD_LOCK_ALLOWANCE_S = 90
 _FORWARD_OVERHEAD_S = 60
 
@@ -456,7 +446,7 @@ def test_the_forward_cap_covers_the_worst_promoted_role():
 def test_a_forward_ceiling_past_the_cap_is_caught():
     # Red proof for the fit check above, which can only ever be observed passing. Driven on the
     # verdict function the way `test_a_budget_that_outgrows_the_ceiling_is_caught` drives
-    # `_budget_fits`. The pre-#2397 shape is the real one: prowlarr's 1260s against a 900s cap.
+    # `_budget_fits`. The shape is prowlarr's 1260s against a 900s cap.
     assert _forward_fits(1260, 1440)
     assert not _forward_fits(1260, 900), (
         "the fit check must REJECT prowlarr's 1260s against the pre-#2397 900s cap; a check "

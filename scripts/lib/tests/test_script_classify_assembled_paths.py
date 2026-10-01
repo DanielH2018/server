@@ -1,15 +1,12 @@
 """A script whose path the caller assembles from segments is still a script it runs.
 
-`deploy_io.staging_expect_script` built `os.path.join(repo, "scripts", "deploy_tools",
-"staging_expectations.py")`, so no string literal in that file spelled the filename next to its
-directory. The caller census matched a whole-path literal only, and `docs/reference/scripts.md`
-called both staging scripts "no automated caller in the tree" while the GitOps deployer ran
-them after every staging deploy that exits 0 (#2424).
+A caller can build `os.path.join(repo, "scripts", "deploy_tools", "staging_expectations.py")`,
+so no string literal in that file spells the filename next to its directory. A caller census
+that matched a whole-path literal only would let `docs/reference/scripts.md` call the script
+"no automated caller in the tree".
 
-That caller is gone — #2859 retired the deployer's staging consultation, so the two staging
-scripts are operator-driven again and the tree holds no assembled-path caller to name. The
-cases below are synthetic for that reason; a real one reaching the tree again belongs here as
-a fourth, named case.
+The tree holds no assembled-path caller to name, so the cases below are synthetic. A real one
+reaching the tree belongs here as a fourth, named case.
 
 Run: uv run pytest scripts/lib/tests/test_script_classify_assembled_paths.py
 """

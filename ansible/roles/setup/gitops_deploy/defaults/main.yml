@@ -1,11 +1,9 @@
 ---
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
-# Refuse to deploy a master tip whose CI is red or still running. Until this existed the deployer
-# applied whatever landed on master: nothing in the pull path consulted a workflow result, so a
-# broken commit reached the homelab on the next 30-min tick. Branch protection can't cover it
-# either — a required status check gates the MERGE, and this gates the DEPLOY, which is the half
+# Refuse to deploy a master tip whose CI is red or still running. Branch protection can't cover
+# this: a required status check gates the MERGE, and this gates the DEPLOY, which is the half
 # that matters once a whole-tree failure only shows up on master (PR CI is scoped to changed
-# files). Set false to go back to deploying whatever is on master.
+# files). Set false to deploy whatever is on master.
 gitops_deploy_require_ci: true
 
 # Check-run names that must be green. These are GitHub's check-run NAMES, which are also the
@@ -25,8 +23,8 @@ gitops_deploy_ci_contexts:
 # The tip's own request counts, so 10 is at most ten requests on a tick that would otherwise
 # defer, and zero on every other tick. It bounds `deploy_phases.assess`'s walk to the newest
 # green ancestor: master takes about 124 merges a day (median gap 315s) against a ~103s CI
-# sweep, so the tip is pending on most ticks that would deploy, and gating on it parked a green
-# commit behind every later merge's sweep.
+# sweep, so the tip is pending on most ticks that would deploy, and gating on the tip alone parks
+# a green commit behind every later merge's sweep.
 #
 # 10 rather than a larger number: it covers the measured p25 merge gap of 88s against a sweep
 # of ~103s several times over, and the walk is spent inside one tick's wall clock while the
@@ -47,12 +45,10 @@ gitops_deploy_ci_ancestor_walk_max: 10
 # every landing's await_ci.py poll.
 gitops_deploy_github_repo: DanielH2018/server
 
-# How often the timer starts a tick (systemd time span). 30min from the role's first day until
-# 2026-09-01, sized so the CI gate's anonymous GitHub reads stayed far inside the 60/hour
-# per-IP budget. The gate authenticates now (5000/hour), so the budget no longer sets the
-# cadence, and what a shorter one buys is latency for everything not landed by hand through
-# land.sh — chiefly Renovate's auto-merged image bumps, which waited up to 30 minutes for the
-# timer. A noop tick costs one `git fetch`; the GitHub read is spent only on a tick that would
+# How often the timer starts a tick (systemd time span). The gate authenticates (5000/hour), so
+# the anonymous 60/hour per-IP budget does not set the cadence. A shorter interval buys latency
+# for everything not landed by hand through land.sh, chiefly Renovate's auto-merged image bumps.
+# A noop tick costs one `git fetch`; the GitHub read is spent only on a tick that would
 # otherwise deploy. A tick that overruns the interval is safe: the elapse is coalesced into the
 # run in flight (timer template), and the tree lock serializes everything else.
 gitops_deploy_tick_interval: 10min
@@ -66,8 +62,8 @@ gitops_deploy_tick_interval: 10min
 # master and could never be waited on by a tick.
 #
 # Declared here so github-ruleset-drift.sh can compare it against the live ruleset daily. That
-# comparison is the whole point: this list is a hand-copy of remote state, and by 2026-08-31 two
-# other hand-copies of the same state had silently gone stale. Reconcile this list when the drift
+# comparison is the whole point: this list is a hand-copy of remote state that can silently go
+# stale. Reconcile this list when the drift
 # monitor fires — do not edit the ruleset to match the list.
 gitops_deploy_ruleset_id: 20912512
 gitops_deploy_expected_ruleset_contexts:
@@ -78,7 +74,7 @@ gitops_deploy_expected_ruleset_contexts:
 # The branch-protection ruleset ("Default": `deletion` + `non_fast_forward` on every ref, admin
 # bypass only) must exclude Renovate's branches, or GitHub refuses the app's post-merge delete
 # and its rebase force-push. A merged branch then survives at its green SHA and the next
-# version's PR automerges empty off that stale verdict (#1741/#1743, issue #1759). The drift
+# version's PR automerges empty off that stale verdict. The drift
 # check alerts when the exclusion is missing; it never writes the ruleset.
 gitops_deploy_branch_ruleset_id: 17358590
 gitops_deploy_branch_ruleset_renovate_exclude: refs/heads/renovate/**
@@ -116,10 +112,10 @@ gitops_deploy_k8s_autodeploy_pilot: []
 # soak per service, 1440s is spent around nine; the cap is sized for the worst SINGLE role.
 #
 # renovate.json states the intent ("keeps each auto-deploy tick to a single service, which is
-# what the deploy timeout is sized for") but nothing enforced it: a tick diffs local..origin,
+# what the deploy timeout is sized for"), and this cap enforces it: a tick diffs local..origin,
 # spanning every commit since the last one, and the per-service k8s PRs share one daily window
-# with platformAutomerge. The pilot list happens to bound this today at one service; this
-# survives the pilot being cleared, which is when it would otherwise start to matter.
+# with platformAutomerge. The pilot list bounds the tick at one service while it is non-empty;
+# the cap still holds once the pilot is cleared.
 #
 # 3 rather than 1: a cap of 1 would defer routine multi-bump mornings a tick at a time for no
 # safety gain, since three services fit the timeout with room to spare.
@@ -133,8 +129,8 @@ gitops_deploy_k8s_autodeploy_max_per_tick: 3
 #
 # Two co-batched claim-declaring services need ~1680s against that 1320s budget and three ~2160s;
 # past it killpg fires mid-revert, leaving a workload at zero replicas with its volume attached in
-# Longhorn maintenance mode. Slice 7b co-promoted five lscr.io/linuxserver/* siblings sharing one
-# Renovate automerge window with no stagger, so a 2-3 sibling tick is ordinary rather than rare.
+# Longhorn maintenance mode. The lscr.io/linuxserver/* siblings share one Renovate automerge
+# window with no stagger, so a 2-3 sibling tick is ordinary rather than rare.
 #
 # 1, not a larger number: this is what makes the single-service rollback ceiling the binding one.
 # Claim-FREE services still batch up to max_per_tick — they cost nothing on the revert path — so
@@ -144,22 +140,21 @@ gitops_deploy_k8s_autodeploy_max_claim_services_per_tick: 1
 
 # Roles that must never be auto-deployed, derived from each role's own declaration:
 # roles/k8s/<name>/defaults/main.yml sets `k8s_autodeploy` plus a `k8s_autodeploy_reason`
-# giving the mechanism. The reasons that used to be comments here now live beside the role
-# they describe, where every property that justifies them is visible at once.
+# giving the mechanism.
 #
 # The filter fails closed: a role that declares nothing, declares a non-boolean, or cannot
 # be parsed raises rather than dropping out of this list. Absence from the denylist means
-# auto-deployable, which is how volume-claim and image-builder went months as eligible.
+# auto-deployable.
 #
 # An empty denylist still disarms the feature in gitops_deploy.py rather than allowing
-# everything — but the filter refuses to render an empty one, so that guard is now a
-# backstop rather than a live path.
+# everything — but the filter refuses to render an empty one, so that guard is a backstop
+# rather than a live path.
 gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylist }}"
 
 # Wall-clock cap for one `ansible-playbook` invocation on the k8s path, in seconds — the FORWARD
 # deploy only; the rollback redeploy has its own budget below.
 #
-# DERIVED from the worst promoted role (#2397). The same terms the rollback budget below sums,
+# DERIVED from the worst promoted role. The same terms the rollback budget below sums,
 # minus the revert ones, run inside this one budget in sequence: claims x volume_snapshot_timeout
 # (the pre-apply snapshot) + the role's OWN in-role waits + manifests_rollout_timeout +
 # k8s_rollout_stabilise_seconds. prowlarr is the worst at 120 + 300 + 780 + 60 = 1260s. The
@@ -169,9 +164,9 @@ gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylis
 #
 # On top of the role terms the tick pays two things no role declares:
 #   - the service-lock wait, spent out of this same budget (`deploy_locks.locked_budget`). 90s
-#     allowance: the 2026-09-23 sonarr tick showed a 70s gap consistent with one.
-#   - playbook overhead (start-up, facts, renders). 60s allowance: the 2026-09-23 sonarr tick
-#     was 27.8s in total, of which the snapshot was 4.74s and the probe 0.27s.
+#     allowance: a sonarr tick showed a 70s gap consistent with one.
+#   - playbook overhead (start-up, facts, renders). 60s allowance: a sonarr tick was 27.8s in
+#     total, of which the snapshot was 4.74s and the probe 0.27s.
 # 1260 + 90 + 60 = 1410, rounded up to 1440. Under 1410 a cap kill lands as a killpg MID-DRAIN
 # that routes to _rollback_k8s, and it binds before prowlarr's own 780s rollout timeout does.
 #
@@ -196,22 +191,21 @@ gitops_deploy_k8s_timeout_s: 1440
 # ignore_errors/failed_when anywhere in this chain — so it can never compound with an
 # independent failure elsewhere; see CLAUDE.md's rollback-timeout section).
 #
-# Sized against every currently-promoted (`k8s_autodeploy: true`) role that also declares
+# Sized against every promoted (`k8s_autodeploy: true`) role that also declares
 # `k8s_autodeploy_snapshot_pvcs`, at task 6b's drill-sized volume_revert_state_timeout/api_timeout
 # (90/30) and volume_snapshot_timeout (120):
 #   ceiling = claims x (volume_snapshot_timeout + 3xvolume_revert_state_timeout
 #             + 3xvolume_revert_api_timeout) + the role's OWN in-role waits
 #             + manifests_rollout_timeout + k8s_rollout_stabilise_seconds (60)
 #
-# The in-role term arrived with #2399, and it moved the worst case. A role's own `tasks/` run
-# before k8s/manifests/tasks/drain.yml, so what they wait for adds to the drain rather than overlapping it:
-# prowlarr waits `--timeout=300s` for its flaresolverr isolation probe Job, on top of its 780s
-# rollout. That makes prowlarr the worst promoted service at 480 + 300 + 780 + 60 = 1620s, where
-# the derivation that counted the drain alone read it as 1320. An inline `rollout status` gate is
+# The in-role term matters. A role's own `tasks/` run before k8s/manifests/tasks/drain.yml, so
+# what they wait for adds to the drain rather than overlapping it: prowlarr waits
+# `--timeout=300s` for its flaresolverr isolation probe Job, on top of its 780s rollout. That
+# makes prowlarr the worst promoted service at 480 + 300 + 780 + 60 = 1620s. An inline `rollout status` gate is
 # NOT counted — sonarr's 660s gate waits for the rollout the drain also waits for, so the two are
 # alternatives on one timeline, not additions.
 #
-# 1620 is today's worst case exactly, with no slack, and that is deliberate: it is the largest
+# 1620 is the worst case exactly, with no slack, and that is deliberate: it is the largest
 # value the four tree-lock waiters (3840s) still clear with a 60s margin. The test below computes the real ceiling
 # from role sources rather than trusting this number, so a new in-role wait or a rollout bump
 # fails there instead of being absorbed silently.
@@ -226,17 +220,15 @@ gitops_deploy_k8s_timeout_s: 1440
 #
 # What closes it is gitops_deploy_k8s_autodeploy_max_claim_services_per_tick (below), which caps
 # claim-declaring services per tick so this single-service ceiling is always the binding one.
-# Per-service invocation on the rollback path — the fix this comment used to name — does NOT fit:
-# 3 x 1200 + 1440 forward + 180 flock = 5220s exceeds the unit's TimeoutStartSec (4200s as of
-# 2026-09-25; gitops-deploy.service.j2 is the live value).
+# Per-service invocation on the rollback path does NOT fit: 3 x 1200 + 1440 forward + 180 flock
+# = 5220s exceeds the unit's TimeoutStartSec (gitops-deploy.service.j2 is the live value).
 #
 # This value has its OWN budget rather than sharing gitops_deploy_k8s_timeout_s (1440) at runtime
 # because the two runs are sequential within one systemd unit activation — see
-# gitops-deploy.service.j2's TimeoutStartSec (raised past 25min for exactly this) and that
-# template's own arithmetic comment. Consequence: the lock this unit holds
-# (/var/lock/server-git-tree.lock, the same one ./scripts/deploy.sh and the weekly secret-rotate
-# cron take) can now be held past the 30-minute timer interval in the pathological case both
-# k8s timeouts are spent in full — see CLAUDE.md for what that does to a concurrent
+# gitops-deploy.service.j2's TimeoutStartSec and that template's own arithmetic comment.
+# Consequence: the lock this unit holds (/var/lock/server-git-tree.lock, the same one
+# ./scripts/deploy.sh and the weekly secret-rotate cron take) can be held past the timer
+# interval in the pathological case both k8s timeouts are spent in full — see CLAUDE.md for what that does to a concurrent
 # ./scripts/deploy.sh (exit 75, nothing deployed) or the secret-rotate cron (waits on the lock).
 gitops_deploy_k8s_rollback_timeout_s: 1620
 
@@ -246,21 +238,16 @@ gitops_deploy_k8s_rollback_timeout_s: 1620
 # lands with no hold written and no alert sent, leaving the tree fast-forwarded onto a commit
 # nothing recorded as bad.
 #
-# 1800 covers the 1212s measured full deploy (2026-08-22, 1753 tasks) with headroom, and fits
-# inside the unit's TimeoutStartSec alongside the 180s max flock wait. It deliberately does NOT
-# fund a rollback re-run on top: at the 45min ceiling this was sized against,
-# deploy_remediation.broad_budget_ok showed 180 + 1212 + 1212 = 2604 leaving a 96s margin, so a
-# run four percent slower than measured would have been killed mid-rollback. The ceiling went to
-# 60min on 2026-08-29 and the arm stays forward-only anyway — the DECIDED marker in
-# deploy_remediation.py carries why.
+# 1800 covers the 1212s measured full deploy with headroom, and fits inside the unit's
+# TimeoutStartSec alongside the 180s max flock wait. It deliberately does NOT fund a rollback
+# re-run on top, and the arm stays forward-only — the DECIDED marker in deploy_remediation.py
+# carries why.
 gitops_deploy_broad_timeout_s: 1800
 
 # The retired staging gate's dedicated ssh identity, a reap target rather than a deployed file.
 #
-# The deployer stopped consulting staging in #2859, and the guest and the gate were removed on
-# 2026-09-29 (#2941). The SOPS key `staging_gate_ssh_key` went with them, so install.yml now
-# deletes this path instead of writing it; the name stays only so both halves of the role name
-# the same file. Drop it once every has_gitops host has applied the role at least once.
+# install.yml deletes this path; the name stays only so both halves of the role name the same
+# file. Drop it once every has_gitops host has applied the role at least once.
 gitops_deploy_retired_staging_gate_key_path: /etc/gitops-deploy/staging_gate_ed25519
 
 # ── self-render kick ──────────────────────────────────────────────────────────────────────────

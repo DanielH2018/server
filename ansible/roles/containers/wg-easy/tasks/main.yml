@@ -15,6 +15,5 @@
     tasks_from: docker_deploy.yml
 
 
-# The backup_controller_host peer-pull plane (known_hosts pin, pull script, 23:30 cron,
-# state dir) lived here 2026-06→2026-08-14. Host flip 1 moved it in-cluster: see
-# roles/k8s/pi-peer-backup (CronJob → Longhorn PVC → the B2 nightly, direct Kuma push).
+# The Pi's peer-key backup runs in-cluster: see roles/k8s/pi-peer-backup
+# (CronJob → Longhorn PVC → the B2 nightly, direct Kuma push).

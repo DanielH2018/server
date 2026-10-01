@@ -66,7 +66,7 @@ def test_check_raising_does_not_abort_the_run(monkeypatch):
     assert postflight.main([]) == 1
 
 
-# ── `--help` must not run the sweep (#1685) ──────────────────────────────────────────
+# ── `--help` must not run the sweep ──────────────────────────────────────────
 # The rejecting half of the pair: before the parser existed, `--help` ran every check —
 # several SOPS decrypts and ~15 authenticated requests to production — and exited 0, which
 # reads as a passing `--help`. The accepting half is below it: the no-argument invocation is
@@ -78,7 +78,7 @@ def test_help_exits_zero_without_running_a_single_check(capsys, monkeypatch):
     # when FORCE_COLOR is set, TTY or not, and it wraps `usage: ` and the program name in
     # SEPARATE escape runs — so the phrase below survives in CI (which sets neither variable)
     # and is split on any host whose shell exports FORCE_COLOR. Stating the dependency here is
-    # what stops this passing remotely and failing locally (#1727).
+    # what stops this passing remotely and failing locally.
     monkeypatch.delenv("FORCE_COLOR", raising=False)
     monkeypatch.setenv("NO_COLOR", "1")
     with pytest.raises(SystemExit) as exc:
@@ -97,7 +97,7 @@ def test_no_arguments_is_still_the_whole_interface():
 
 
 def test_a_host_in_no_known_cluster_skips_its_kubectl_checks(monkeypatch, capsys):
-    """#2069: the Pi is a node of neither cluster, so a kubectl-reaching check SKIPs, not FAILs.
+    """The Pi is a node of neither cluster, so a kubectl-reaching check SKIPs, not FAILs.
 
     A raise here would count as the check's own verdict — `MissingKubectl` on the Pi, or
     `WrongCluster` on a node the table does not list — and fail the run.

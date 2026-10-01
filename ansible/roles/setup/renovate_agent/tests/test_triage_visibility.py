@@ -1,4 +1,4 @@
-"""How a comment-only triage reaches `runs.jsonl` and the digest (#3032).
+"""How a comment-only triage reaches `runs.jsonl` and the digest.
 
 A session that comments on or labels a Renovate PR and leaves it open moves nothing out of
 the open set, so the before/after census sees no delta at all. The one field that does move is

@@ -9,9 +9,9 @@ an optional one. The k3s role edits `/etc/zsh/zshenv` to make its kubeconfig hoo
 with `create: false` chosen deliberately: writing a zsh startup file onto a host with no zsh
 leaves a trap for whoever installs zsh later.
 
-Both prod nodes run zsh, so nothing exercised the missing-file path until the first
-`k3s-bringup.yml` run against `daniel-stage` on 2026-08-27 — a stock Ubuntu cloud image with
-no `/etc/zsh` at all. It failed the play after 75 tasks, with the cluster otherwise up.
+Both prod nodes run zsh, so only a host with no `/etc/zsh` at all, such as a stock Ubuntu
+cloud image, exercises the missing-file path: `k3s-bringup.yml` fails the play there after 75
+tasks, with the cluster otherwise up.
 
 Derived over the role's task files rather than naming that one task, so a sibling written the
 same way is covered. The fix is always a guard, never flipping `create: true` — that would

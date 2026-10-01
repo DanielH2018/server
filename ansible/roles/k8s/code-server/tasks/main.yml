@@ -1,9 +1,6 @@
 ---
-# Slice-7 Phase C (2026-08-10): ported WITHOUT its docker plumbing (operator decision) — no
-# DOCKER_HOST, so the in-IDE docker CLI and devcontainers are gone, and docker-proxy-codeserver
-# plus the `codeserver` net retire with the Docker copy. Image built into the cluster registry
-# from the containers role's Dockerfile — that role remains the build source, same split as
-# n8n/ical-proxy.
+# No docker plumbing: no DOCKER_HOST, so the image has no in-IDE docker CLI or devcontainers.
+# Image built into the cluster registry from this role's templates/Dockerfile.j2.
 
 - name: Build the code-server image
   ansible.builtin.include_role:
@@ -14,16 +11,15 @@
     # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
     image_builder_context:
       "{{ playbook_dir }}/roles/k8s/code-server/files/extensions.sh": extensions.sh
-    # MEASURED, and the measurement says leave it (#2213). This value is the Job's
+    # MEASURED, and the measurement says leave it. This value is the Job's
     # `activeDeadlineSeconds` (image-builder/templates/build-job.yaml.j2), so exceeding it
-    # kills the build rather than just failing the wait. A cold build on 2026-09-21 — base
-    # bumped to 4.138.0-ls365 the same day, so no layer cache — took 1291 s end to end
-    # (build-code-server, 20:10:06Z -> 20:31:37Z), 72% of this deadline. Where it went, from
+    # kills the build rather than just failing the wait. A cold build with no layer cache
+    # takes 1291 s end to end, 72% of this deadline. Where it goes, from
     # the BuildKit log: 690 s pulling the linuxserver base from lscr.io, 247 s building the
     # pip venv, 197 s fetching the Anthropic.claude-code VSIX from the MS marketplace, 45 s
     # for Pylance, ~30 s for the rest. The default 900 s would have killed it during the venv.
     #
-    # Pinning every input (#2149) fixed WHAT a build fetches, not how fast the mirrors serve
+    # Pinning every input fixes WHAT a build fetches, not how fast the mirrors serve
     # it: the base pull alone is a third of this budget and is the term that varies. Lower
     # this only after a cold build measured under ~900 s. A build that hits the registry
     # layer cache re-runs only the steps below the first changed one and never approaches it.

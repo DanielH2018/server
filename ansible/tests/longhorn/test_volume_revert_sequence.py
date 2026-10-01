@@ -1,6 +1,6 @@
 """The order `k8s/volume-revert` runs its steps in, and the shape of each Longhorn call.
 
-The sequence is drill-proven, not chosen (measured 2026-08-21 on `speedtest-config`, Longhorn
+The sequence is drill-proven, not chosen (measured on `speedtest-config`, Longhorn
 v1.12.1): a revert with the frontend enabled returns HTTP 500, and so does a revert on a
 plainly detached volume, because no engine is running to perform it. So the volume is
 attached in maintenance mode, every step that can fail fails BEFORE the workload is scaled to
@@ -14,7 +14,7 @@ from _volume_revert import _CLAIM, _GUARD, _MAIN, _guard_of, _index, _named, _ta
 
 
 def test_the_revert_asserts_the_frontend_is_disabled_before_reverting() -> None:
-    """Measured 2026-08-21: a revert with the frontend enabled returns HTTP 500.
+    """A revert with the frontend enabled returns HTTP 500.
 
     The server answers `failed to revert snapshot for volume ... with frontend enabled`. The assert
     is the precondition, not a formality — without it the revert fails late, after the workload is
@@ -66,9 +66,9 @@ def test_the_whole_sequence_is_in_the_drill_proven_order() -> None:
     """Every step of claim.yml, pinned as one sequence.
 
     Pairwise asserts leave the pairs nobody thought of unpinned, and two of those transpositions
-    are outages. Measured 2026-08-21: moving the scale-down AFTER the maintenance-mode attach
-    left every other test green, and at runtime the pod still holds the volume, so the attach
-    cannot give the engine a disabled frontend — service down, unreverted. Moving the detach
+    are outages. Moving the scale-down AFTER the maintenance-mode attach leaves every
+    other test green, and at runtime the pod still holds the volume, so the attach cannot give
+    the engine a disabled frontend — service down, unreverted. Moving the detach
     BEFORE the revert is the same shape: the revert then hits a plainly detached volume and gets
     the drill-measured HTTP 500, again with the workload already at zero.
 

@@ -1,13 +1,13 @@
-"""node-exporter's filesystem exclusion must expose CSI global mounts and nothing more (#1243).
+"""node-exporter's filesystem exclusion must expose CSI global mounts and nothing more.
 
-The 50-minute silent outage this closes was a two-part blind spot: `node_filesystem_readonly`
-was already scraped, but excluded under `var/lib/kubelet` wholesale, and
+The blind spot this closes has two parts: `node_filesystem_readonly` is scraped, but a
+wholesale exclusion of `var/lib/kubelet` would hide CSI global mounts, and
 `checks.storage.check_kubelet_plugin_readonly` reads green on an EMPTY vector by design (an
 absent series there genuinely means no CSI global mount is read-only — see that check's
 docstring). Which means a regex that silently widens back to excluding
 `var/lib/kubelet/plugins` is invisible to the check itself: node-exporter stays up, the family
 just goes empty, and the monitor reads healthy forever. This is the only thing standing between
-that regression and #1243 recurring unnoticed, so it is asserted directly against the compiled
+that regression and the blind spot recurring unnoticed, so it is asserted directly against the compiled
 pattern rather than left to the check's own (correct, but blind-to-this) empty-is-fine logic.
 
 Run: uv run pytest ansible/tests/k8s/test_node_exporter_filesystem_exclusion.py
@@ -29,7 +29,7 @@ _MUST_STAY_EXCLUDED = (
     "/var/lib/kubelet/pods/abc-123/volumes/kubernetes.io~empty-dir/cache",
 )
 
-# The whole point of #1243's fix: these must be SCRAPED, not excluded.
+# The whole point of the narrowed exclusion: these must be SCRAPED, not excluded.
 _MUST_STAY_INCLUDED = (
     "/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount",
     "/var/lib/kubelet/plugins_registry",

@@ -1,12 +1,12 @@
 {#
-  Cloudflare Authenticated Origin Pulls at the k8s edge (#1990).
+  Cloudflare Authenticated Origin Pulls at the k8s edge.
 
   Cloudflare presents a per-zone client certificate on every connection it opens to the origin,
   and the `cloudflare-origin-pull` TLSOption below requires and verifies one against Cloudflare's
   published CA. Every router matching a public `x.<domain>` Host references it (the
   ingressroute() macro's public object, its bypass documents, healthchecks' ping route, the
   livesync file-provider routers), so a client that reaches the origin IP directly with a public
-  SNI fails the handshake — even from a source inside `cloudflare_ips`, which is what the #1974
+  SNI fails the handshake — even from a source inside `cloudflare_ips`, which is what the
   netpol allowlist on :8443 admits. The `.local.` routers keep `modern`: a LAN or WireGuard
   client holds no such certificate.
 

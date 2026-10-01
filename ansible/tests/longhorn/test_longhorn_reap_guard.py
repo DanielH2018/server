@@ -1,27 +1,24 @@
 #!/usr/bin/env python3
-"""Guards on the orphaned-backup reaper, whose only safety floor silently stopped working.
+"""Guards on the orphaned-backup reaper's safety floor.
 
 The reaper deletes Longhorn Backup objects stranded by a tier move, and its whole reason to
-exist is FLOOR 1: never delete a volume's last recovery point. On 2026-08-16 that floor was
-inoperative from the day it shipped, and nothing said so — the dry run reported `0 reapable`,
-which reads as "nothing to do" and was in fact the bug's own output.
+exist is FLOOR 1: never delete a volume's last recovery point. A floor that silently stops
+working reports `0 reapable` in a dry run, which reads as "nothing to do".
 
-The mechanism is worth encoding rather than remembering. Ownership was read with
-`-o jsonpath='{range .metadata.labels}{@}{" "}{end}'`, but ranging a MAP in kubectl jsonpath does
-not iterate key/value pairs — it emits the whole label object as one space-free JSON blob. The
-prefix match therefore never fired and the ownership map was empty for every volume. That does
+The mechanism is worth encoding rather than remembering. Reading ownership with
+`-o jsonpath='{range .metadata.labels}{@}{" "}{end}'` fails: ranging a MAP in kubectl jsonpath
+does not iterate key/value pairs — it emits the whole label object as one space-free JSON blob.
+The prefix match therefore never fires and the ownership map is empty for every volume. That does
 not fail closed: the `$JOB == ${OWNER[$VOL]:-}` test then matches any backup with no
 RecurringJob label, so a single hand-triggered probe backup counts as proof the volume's current
 tier is producing backups, and FLOOR 1 (which fires only at a count of zero) stands down. On
 wg-easy-config that would have deleted 3 of its 5 backups while its tier had produced none.
 
-The classification logic that used to be inline bash string processing in
-longhorn-reap-orphan-backups.sh.j2 now lives in longhorn_reap_logic.py
-(ansible/roles/setup/k3s/files/), read with `kubectl -o json` rather than jsonpath — the port
-that closes the defect class this file guards. The tests below exercise that module directly
-rather than regex-matching shell source, which is what let the original floor ship broken:
-a passing regex proved the RIGHT WORDS were present, never that the behaviour they described
-actually held.
+The classification logic lives in longhorn_reap_logic.py (ansible/roles/setup/k3s/files/),
+read with `kubectl -o json` rather than jsonpath, which closes the defect class this file
+guards. The tests below exercise that module directly rather than regex-matching shell source:
+a passing regex proves the RIGHT WORDS are present, never that the behaviour they describe
+holds.
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_guard.py
 """
@@ -79,7 +76,7 @@ def test_no_shell_template_ranges_a_label_map_in_jsonpath():
     read the same labels for the same purpose, and the next script to need a volume's group
     will reach for the same idiom. The working form is a label selector (`-l group=enabled`)
     or `-o json` piped through jq/json.loads reading `.metadata.labels | keys[]` — which is what
-    longhorn_reap_logic.backup_owner_map / snapshot_owner_map now do.
+    longhorn_reap_logic.backup_owner_map / snapshot_owner_map do.
     """
     offenders = [p.name for p in _shell_templates() if MAP_RANGE.search(_code(p))]
     assert not offenders, (
@@ -107,8 +104,7 @@ def test_reaper_shim_no_longer_touches_kubectl_at_all():
 def test_reaper_aborts_when_ownership_resolves_empty():
     """An empty ownership map must stop the run, not quietly disarm the floors.
 
-    This is the assertion that would have caught the original defect: the lookup can break in
-    ways this test cannot anticipate, so the module has to notice the *result* is unusable
+    The lookup can break in ways this test cannot anticipate, so the module has to notice the *result* is unusable
     rather than trust that an empty map means "nothing is stranded".
     """
     assert logic.abort_reason(volume_count=22, owner_count=0) is not None
@@ -120,7 +116,7 @@ def test_reaper_aborts_when_ownership_resolves_empty():
 def test_reaper_never_treats_an_unlabelled_backup_as_tier_evidence():
     """A hand-triggered backup carries no RecurringJob label and is neither current nor stranded.
 
-    Reproduces the wg-easy-config incident from this module's docstring: without excluding the
+    Reproduces the wg-easy-config case from this module's docstring: without excluding the
     unlabelled probe backup from the counting pass, it stands in as proof the volume's tier is
     healthy, which is precisely how FLOOR 1 was disarmed and would have deleted 3 of 5 backups.
     """
@@ -137,13 +133,13 @@ def test_reaper_never_treats_an_unlabelled_backup_as_tier_evidence():
 
 
 def test_reaper_does_not_delete_under_the_readonly_kubeconfig():
-    """--apply used to run as homelab-readonly, so every delete was Forbidden.
+    """--apply must not run as homelab-readonly, where every delete is Forbidden.
 
-    With no return-code check the loop ran to completion and the script exited 0 after printing
-    "deleting N object(s)" — the refusal and the success line arrived together. That is the
-    recorded readonly-SA-reads-as-success shape, and it is dangerous here for the opposite of
-    the obvious reason: the refusal was the only thing preventing data loss while the floor was
-    broken, so "make the deletes work" is a change that must never land alone.
+    Without a return-code check the loop runs to completion and the script exits 0 after printing
+    "deleting N object(s)" — the refusal and the success line arrive together. That is the
+    readonly-SA-reads-as-success shape, and it is dangerous here for the opposite of the obvious
+    reason: with a broken floor the refusal is the only thing preventing data loss, so "make the
+    deletes work" is a change that must never land alone.
     longhorn_reap_orphan_backups.py refuses before making any kubectl call at all when the admin
     kubeconfig is unreadable — proven directly, not by grepping for a path string.
     """
@@ -181,8 +177,9 @@ def test_deleted_volume_strays_need_their_own_flag():
         [_backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")],
         owner={},
         # A live volume alongside the deleted one. An EMPTY set is the separate case
-        # classify_backups now refuses outright: it means the volume read returned nothing,
-        # not that every volume was deleted, and orphaning the whole backup set on it is #1062.
+        # classify_backups refuses outright: it means the volume read returned nothing,
+        # not that every volume was deleted, and orphaning the whole backup set on it is the
+        # failure that refusal prevents.
         existing_volumes={"live-vol"},
     )
     assert result.candidates == []

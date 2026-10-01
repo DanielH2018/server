@@ -1,10 +1,8 @@
 """First-party Python parses YAML through `lib.yaml_fast`, not `yaml.safe_load`.
 
 PyYAML's `safe_load` uses a parser written in Python. libyaml implements the same YAML 1.1
-safe schema an order of magnitude faster — measured 2026-09-03 over the 184
-`ansible/**/tasks/*.yml` files, 0.42s against 0.04s — and this repo parses a lot of YAML.
-Converting every call site took the full test suite from 44.9s to 30.6s at `-n 4`, and the
-CI `pytest` job from 285s to 104s (PRs #1028, #1026).
+safe schema an order of magnitude faster — 0.42s against 0.04s over the 184
+`ansible/**/tasks/*.yml` files — and this repo parses a lot of YAML.
 
 WHY THIS IS A TEST AND NOT A NOTE IN CLAUDE.md. Nothing about `yaml.safe_load` looks wrong.
 A new file that reaches for it parses correctly, passes review, and silently hands back a
@@ -48,9 +46,8 @@ _ALLOWED = frozenset(
 )
 
 # A file that must be found parsing YAML through the helper. Without this the census below
-# passes vacuously the moment the scan roots move or a glob stops matching — nine guards broke
-# exactly that way in six consecutive PRs (CLAUDE.md, "A check that finds its own subject by
-# pattern ships with a named member it must find").
+# passes vacuously the moment the scan roots move or a glob stops matching (CLAUDE.md, "A
+# check that finds its own subject by pattern ships with a named member it must find").
 _MUST_USE_YAML_FAST = frozenset(
     {
         "ansible/tests/_k8s_render.py",

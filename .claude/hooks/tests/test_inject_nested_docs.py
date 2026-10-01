@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the inject-nested-docs PreToolUse hook (issue #2125).
+"""Tests for the inject-nested-docs PreToolUse hook.
 
 Every rule is a `..._is_flagged` / `..._is_clean` pair: a command naming a role file injects
 that role's CLAUDE.md, and a second command naming the same role in the same session does
@@ -95,7 +95,7 @@ def test_a_different_session_is_flagged_again(repo):
     assert [d for d, _ in chosen] == ["ansible/roles/k8s/foo/CLAUDE.md"]
 
 
-# ── an editing rule waits for a write; a reading rule does not (#2811) ───────────────
+# ── an editing rule waits for a write; a reading rule does not ───────────────
 
 
 def test_a_write_to_a_rule_scoped_path_is_flagged_with_its_rule(repo):
@@ -165,7 +165,7 @@ def test_an_absolute_path_is_flagged(repo):
 
 
 def test_a_git_show_ref_path_is_flagged(repo):
-    """`git show <ref>:<path>` names the path only after the ref is stripped (#2651)."""
+    """`git show <ref>:<path>` names the path only after the ref is stripped."""
     _, chosen = _build(
         repo,
         "git show origin/master:ansible/roles/k8s/foo/templates/deployment.yaml.j2",
@@ -179,7 +179,7 @@ def test_a_git_show_ref_path_under_no_role_is_clean(repo):
 
 
 def test_a_slashed_ref_strips_too(repo):
-    """A ref carrying its own `/` — `refs/tmp/rev2364:<path>` — is the form #2651 measured."""
+    """A ref carrying its own `/` — `refs/tmp/rev2364:<path>` — must parse."""
     _, chosen = _build(
         repo,
         "git show refs/tmp/rev2364:ansible/roles/k8s/foo/templates/deployment.yaml.j2",
@@ -224,7 +224,7 @@ def test_another_sessions_log_row_does_not_suppress(repo, tmp_path):
     assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
 
 
-# ── subagents: same session id, empty context (#2192) ────────────────────────────────
+# ── subagents: same session id, empty context ────────────────────────────────
 
 
 def test_a_subagent_is_flagged_for_a_doc_its_parent_already_got(repo):
@@ -400,8 +400,8 @@ def test_the_real_rules_globs_match_their_own_examples():
 # ── the real entry point ─────────────────────────────────────────────────────────────
 
 # The shim execs this exact interpreter path after `cd /home/ubuntu/server`, so it only runs
-# end to end on a deployed host. #2208 keyed the skip on `uv` being on PATH instead, and CI
-# has one — the shim there fails its `cd`, exits 0 with no stdout, and the JSON parse fails.
+# end to end on a deployed host. Keying the skip on `uv` being on PATH would run it in CI,
+# where the shim fails its `cd`, exits 0 with no stdout, and the JSON parse fails.
 _SHIM_UV = "/home/ubuntu/.local/bin/uv"
 
 
@@ -417,10 +417,9 @@ def test_the_shim_injects_on_the_real_hook_path():
     `readlink -f "$0"` keeps it on this checkout's `.py`, so the row it appends lands in
     this checkout's gitignored `.claude/logs/instructions.log`.
 
-    The shim is the dispatcher's since #2394, so the object also carries whatever the
-    decision arms said about the same command. `sed -n` on a file is a read, which none of
-    them decides since the read-only arm moved to the dotfiles hook (dotfiles #628), so the
-    object carries the context alone.
+    The shim is the dispatcher's, so the object also carries whatever the decision arms
+    said about the same command. `sed -n` on a file is a read, which none of the arms
+    decides, so the object carries the context alone.
     """
     session = f"e2e-{uuid.uuid4().hex}"
     payload = {

@@ -3,8 +3,8 @@
 #
 # OPT-IN, never automatic: `-e media_volume_sync=true`. That gate is not caution, it is
 # correctness. `--delete` makes the destination a mirror of daniel-server, so running this
-# AFTER cutover would delete everything qbittorrent has downloaded since and restore whatever
-# the stale source still holds. Before cutover it is safe to run as often as you like.
+# once qbittorrent has downloaded into the volume would delete those downloads and restore
+# whatever the stale source still holds.
 #
 # NOT roles/k8s/volume-claim, which is the repo's normal way to fill a PVC. That role tars the
 # whole tree through `kubectl exec` and sha256s both ends on every run — right for a 640 M
@@ -27,7 +27,7 @@
   become: false
   changed_when: false
   # A read of the source host, so it runs under --check too and the empty-source refusal
-  # below is exercised (#2323).
+  # below is exercised.
   check_mode: false
   register: media_volume_src_files
 
@@ -51,7 +51,7 @@
 - name: Copy the media tree into {{ media_volume_host_path }} # noqa command-instead-of-module
   tags: [deploy]
   # Trailing slashes on BOTH sides: copy the CONTENTS of data/ into the volume root, so the
-  # volume presents media/ and torrents/ as siblings — the /data contract of D4. Drop either
+  # volume presents media/ and torrents/ as siblings — the /data contract. Drop either
   # slash and the tree lands one level deep, which mounts and starts perfectly well and breaks
   # every absolute path in sonarr's database.
   ansible.builtin.command:
@@ -82,8 +82,7 @@
   tags: [deploy]
   # -c reads and checksums both sides in full. Without it rsync compares size+mtime, which
   # would call a truncated or bit-rotted file identical. Worth the full read here for one
-  # reason: nothing backs up containers/data/ (kopia excluded it, and kopia retired 2026-08-13
-  # without the exclusion changing), so once daniel-server's copy goes there is no
+  # reason: nothing backs up containers/data/, so once daniel-server's copy goes there is no
   # other copy of this library.
   #
   # Same flags as the copy, from the same variable. Verifying with `-a` instead would add
@@ -100,7 +99,7 @@
 
 - name: Fail if the volume does not match the source byte for byte
   tags: [deploy]
-  # --check copies nothing, so there is no copy to compare (#2323).
+  # --check copies nothing, so there is no copy to compare.
   when: not ansible_check_mode
   ansible.builtin.assert:
     that:

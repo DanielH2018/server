@@ -54,7 +54,7 @@
   ansible.builtin.set_fact:
     game_stats_lib_from_file: "--from-file=stats_lib.py={{ game_stats_lib_dest_dir }}/stats_lib.py"
     # Hashed off the source file, not off `game_stats_lib_stage`: the copy above is skipped on a
-    # dry run (#2614), and `.checksum` on a skipped result is Undefined — the caller's
+    # dry run, and `.checksum` on a skipped result is Undefined — the caller's
     # `[own, shared] | sort` would raise at template time. `rstrip=False` makes these the bytes
     # `copy` hashed, so the caller's pod-roll trigger keeps its value either way.
     game_stats_lib_checksum: >-

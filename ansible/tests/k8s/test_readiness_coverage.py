@@ -6,8 +6,7 @@ actively harmful for a sidecar, because pod Ready is the AND of all containers: 
 CrowdSec agent a readinessProbe would take every route in the homelab out of service whenever
 the agent hiccups. `traefik/templates/deployment.yaml.j2` says so in as many words.
 
-The `startupProbe` half of that first sentence is load-bearing, and this guard used to omit it
-(#1354). The kubelet holds a container's Ready condition at its zero value — false — for as long
+The `startupProbe` half of that first sentence is load-bearing. The kubelet holds a container's Ready condition at its zero value — false — for as long
 as its startupProbe runs: `pkg/kubelet/prober/prober_manager.go`, `UpdatePodStatus`, which
 `continue`s past the readiness lookup when `isContainerStarted` is false. A container with a
 startupProbe and no readinessProbe therefore gates its pod's Ready condition anyway, which is the
@@ -47,9 +46,8 @@ _NO_READINESS = {
     # so monitoring would take down the thing it monitors. They keep a livenessProbe, and a
     # dead exporter surfaces as `up == 0` on the `exportarr` scrape job.
     #
-    # These three rows are the ONLY place that rule now lives (#3055):
-    # ansible/tests/services/test_exportarr_sidecars.py asserted it a second time until
-    # 2026-10-01, which split one decision's reasoning across two files. That file keeps the
+    # These three rows are the ONLY place that rule lives.
+    # ansible/tests/services/test_exportarr_sidecars.py keeps the
     # livenessProbe half, which no census here covers.
     ("sonarr", "exportarr"): "metrics sidecar; readiness would gate sonarr's Service",
     ("radarr", "exportarr"): "metrics sidecar; readiness would gate radarr's Service",
@@ -188,7 +186,7 @@ def test_no_exemption_gates_its_service_with_an_unrecorded_startupProbe():
 
 
 def test_an_unrecorded_startup_gated_exemption_is_flagged():
-    """The red half: (uptime-kuma, autokuma) was exactly this shape until #1348."""
+    """The red half: an exempt container with a startupProbe that the record does not name."""
     problems = startup_gating_gaps({("uptime-kuma", "autokuma")}, _STARTUP_GATED)
     assert any("uptime-kuma/autokuma" in p for p in problems), problems
 

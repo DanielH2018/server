@@ -3,8 +3,7 @@
 The readonly ServiceAccount holds `resources: ["*"]` on the traefik.io group
 (`roles/setup/k3s/templates/readonly-rbac.yaml.j2`) while Secrets are withheld. So a credential
 written into a Middleware or an IngressRoute is readable by anything holding the readonly
-kubeconfig, and the Secret it should have lived in is not. Before this module the rule existed
-only as prose in three templates.
+kubeconfig, and the Secret it should have lived in is not.
 """
 
 import re
@@ -109,7 +108,7 @@ _REQUIRED_TRAEFIK_MIDDLEWARES = frozenset(
         "traefik/rate-limit-public-livesync-proxied",
     }
 )
-# Floors for the other two kinds in the group — 47 IngressRoutes and 3 TLSOptions render today.
+# Floors for the other two kinds in the group — 47 IngressRoutes and 3 TLSOptions render.
 _TRAEFIK_KIND_FLOORS = {"IngressRoute": 40, "TLSOption": 3}
 
 

@@ -1,10 +1,10 @@
-"""The home-allowlist cron's failed-push line is one monitor-bridge can read (issue #1943).
+"""The home-allowlist cron's failed-push line is one monitor-bridge can read.
 
 The cron keeps its own tuned curl rather than sourcing kuma-push-lib.sh (the DECIDED block in
-the script), so nothing but this pins its log line to the library's shape. It logged
-`kuma push failed (<status>: <msg>)` until 2026-09-18, which `verdicts/logs.py`'s
-`_SWALLOWED_RE` does not match, so a push Kuma rejected — a token no live tile holds (#1803) —
-reached the Swallowed Push Verdicts tile from every library caller and never from this one.
+the script), so nothing but this pins its log line to the library's shape. A line of the form
+`kuma push failed (<status>: <msg>)` does not match `verdicts/logs.py`'s `_SWALLOWED_RE`, so a
+push Kuma rejects — a token no live tile holds — would reach the Swallowed Push Verdicts tile
+from every library caller and never from this one.
 
 `push()` is sourced by name and run against a stubbed `curl`, the way
 test_kuma_push_retry.py exercises the library, and each logged line goes through the reader's
@@ -63,7 +63,7 @@ def _as_syslog(line: str) -> str:
 
 
 def test_a_kuma_json_404_is_read_as_rejected(tmp_path):
-    # ACCEPT: the measured shape of Kuma refusing a token (curl 8.5.0, `-f`, 2026-09-18).
+    # ACCEPT: the measured shape of Kuma refusing a token (curl 8.5.0, `-f`).
     lines = _run_push(tmp_path, "404 application/json; charset=utf-8", 22)
     assert lines == [
         "push failed (http=404 rc=22 by=kuma) (status=down: home allowlist: v6 prefix rotated)"
@@ -95,8 +95,8 @@ def test_a_delivered_push_logs_nothing(tmp_path):
 
 
 def test_the_pre_1943_line_is_invisible_to_the_reader():
-    # The shape this replaces, kept so the reader's silence on it is a measured fact rather
-    # than an assumption the fix rests on.
+    # The `kuma push failed (...)` shape, kept so the reader's silence on it is a measured
+    # fact rather than an assumption.
     assert (
         parse_push_line(_as_syslog("kuma push failed (down: v6 prefix rotated)"))
         is None

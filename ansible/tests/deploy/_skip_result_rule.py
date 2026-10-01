@@ -1,9 +1,7 @@
 """The skipped-register rule itself: who produces a skip result, and who trips over one.
 
-Split from `test_conditional_register_consumers.py` on 2026-09-24, when the #2351/#2352/#2353
-widenings took that module past its length cap. That module's docstring is the contract — the
-incidents, the two rules and why a static check catches this class at all. This file is the
-mechanics.
+The docstring of `test_conditional_register_consumers.py` is the contract: the incidents, the
+two rules and why a static check catches this class at all. This file is the mechanics.
 """
 
 import re
@@ -96,17 +94,14 @@ def _check_mode_producers(pairs) -> dict[str, str]:
 
     `pairs` is `walk_with_inherited(tasks)`. A producer that also carries a `when:` is
     reported here as well as by the when-based rule, so a consumer is clean only when BOTH
-    rules accept it. Skipping those registers was #2353: the when-based rule accepts a
-    consumer that repeats the producer's condition, which is enough on a real run and not
-    under `--check`, where the producer is skipped whatever its `when:` says. `hypervisor`'s
-    "Stop a running guest whose live interface carries no egress fence" repeats the
-    condition, reads `hypervisor_staging_vm_live_xml.stdout`, and errored under `--check`
-    against a running guest while the guard called it clean.
+    rules accept it. The when-based rule accepts a consumer that repeats the producer's
+    condition, which is enough on a real run and not under `--check`, where the producer is
+    skipped whatever its `when:` says.
 
     `check_mode: false` is the opt-out: the task runs for real under `--check` and its
     register carries a real result. It counts whether the producer carries it itself or
-    inherits it from an enclosing `block:` — reading only the task's own key reported a
-    producer that actually runs, for a consumer that meets a real result (#2379). A `when:`
+    inherits it from an enclosing `block:`. Reading only the task's own key would report a
+    producer that actually runs, for a consumer that meets a real result. A `when:`
     that excludes check mode — on the task or on an enclosing block — means the producer is
     skipped, but so is every consumer beside it.
     """

@@ -1,9 +1,7 @@
-"""A hand-applied plane beside a self-applied role that reaches other hosts (issue #2569).
+"""A hand-applied plane beside a self-applied role that reaches other hosts.
 
 Both `needs-manual-apply` sites end at their plane arm, which sits above the branch that owns
-the remaining-hosts verdict. PR #2568 landed that way on 2026-09-25: the `k3s-bringup.yml`
-line printed, the `initial_setup` library's did not, and daniel-server and daniel-pi kept the
-old `kuma-push-lib.sh`. One file for both sites, because the bug is the arm ordering they
+the remaining-hosts verdict. One file for both sites, because the bug is the arm ordering they
 share.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_plane_keeps_the_remaining_hosts_line.py
@@ -38,7 +36,7 @@ def _landing_at(landing, fakes):
 
 @pytest.mark.parametrize("site", [health_verdict.health, deploy.no_tag_outcome])
 def test_a_plane_does_not_swallow_the_remaining_hosts_line(landing, capsys, site):
-    """PR #2568's shape: both halves are owed a hand, so both commands print."""
+    """Both halves are owed a hand, so both commands print."""
     ln = _landing_at(
         landing,
         Fakes(

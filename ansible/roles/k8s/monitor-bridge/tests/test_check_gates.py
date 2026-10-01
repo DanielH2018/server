@@ -7,7 +7,7 @@ These are the tests that drive `run_once()` end to end with the transport stubbe
 the ones that fail when the wiring changes rather than the logic. Each states the gate
 configuration it means as a `Gates(...)` value; the drivers are `_check_gate_helpers.py`.
 
-Three neighbours own the rest of what this file used to carry: membership of the gate sets is
+Three neighbours own the rest: membership of the gate sets is
 `test_check_gate_dependents.py`, the k8s workload and cluster-target verdicts are
 `test_check_k8s_workload_gates.py`, and the `origin` pin is `test_check_origin_pinning.py`.
 """
@@ -216,9 +216,9 @@ def test_duration_seconds_parses_prometheus_durations():
 
 
 def test_run_once_requires_a_gates_value(cfg):
-    """The red-proof half: `run_once` used to read `gates = Gates() if gates is None else gates`.
+    """The red-proof half: `run_once` must not read `gates = Gates() if gates is None else gates`.
 
-    Under that default this call ran a full cycle against a SECOND production `Gates()` — its
+    That default would run a full cycle against a SECOND production `Gates()` — its
     own `grace_streaks` binding aside, cli.main() already builds the one instance the pod uses,
     so a second one is a silent divergence rather than an error.
     """

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Tests for the SessionStart hook's behind-master warning (`master_moved_problems`).
 
-Split out of test_session_health.py when issue #1306's rejecting half pushed that file past
-the 500-line test cap: these seven tests share one subject and one patch target, and the
-module-length ratchet says split rather than list.
+These seven tests share one subject and one patch target, and the module-length ratchet
+says split rather than list.
 
 Run: uv run pytest .claude/hooks
 """
@@ -27,7 +26,7 @@ def _result(stdout, returncode=0):
     return types.SimpleNamespace(stdout=stdout, stderr="", returncode=returncode)
 
 
-# Issue #1263: the count comes from `lib.git.git`, patched by STRING target (see `git_dirty`).
+# The count comes from `lib.git.git`, patched by STRING target (see `git_dirty`).
 def test_master_moved_silent_when_current(monkeypatch):
     monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("0\n"))
     assert _mod.master_moved_problems() == []
@@ -80,7 +79,7 @@ def test_master_moved_silent_on_unparseable_output(monkeypatch):
 
 
 def test_master_moved_reports_a_broken_import_rather_than_going_quiet(monkeypatch):
-    """Issue #1306's rejecting half: an ImportError says so instead of dropping the section.
+    """An ImportError says so instead of dropping the section.
 
     The git READ still fails silently (the six tests above); only the import is loud, the way
     `other_live_sessions` is. `sys.modules[name] = None` is what makes `from lib.git import

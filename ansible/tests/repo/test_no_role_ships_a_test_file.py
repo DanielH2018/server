@@ -52,7 +52,7 @@ def test_the_scan_finds_python_files_being_shipped() -> None:
     """Guard the guard.
 
     A pattern that stopped matching would pass the check below vacuously, which is the failure this
-    repo has paid for twice.
+    repo has paid for.
     """
     shipped = _shipped_python_names()
     assert len(shipped) >= 5, (

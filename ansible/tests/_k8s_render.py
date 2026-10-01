@@ -60,7 +60,7 @@ def _render_all():
 
         # The shared defaults come with the role's own templates: `k8s/manifests` renders a
         # manifest from `ansible/templates/` for a basename the role names and ships no
-        # template for (#2872, `service.yaml` for 25 roles). Leaving them out would drop 25
+        # template for (`service.yaml` for 25 roles). Leaving them out would drop 25
         # Services out of every guard built on this, silently.
         own = sorted(role_dir.glob("templates/*.j2"))
         for tpl in own + shared_default_templates(role):
@@ -85,8 +85,8 @@ _TEXTS: list[tuple[str, str, str]] = []
 def rendered_docs():
     """The rendered manifests, rendering the tree at most once per process.
 
-    A full render costs ~0.95s and 22 call sites across 13 modules used to each pay it — 43
-    renders and 42s of a 196s suite, measured 2026-08-23. The render is a pure function of the
+    A full render costs ~0.95s, so each call site paying it separately would add tens of
+    seconds to the suite. The render is a pure function of the
     repo tree, which no test writes to, so one result serves the whole session.
 
     # DECIDED: shared docs, not deep copies. Every call site iterates and asserts; none mutates

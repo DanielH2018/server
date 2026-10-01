@@ -1,14 +1,9 @@
 ---
-# Ports daniel-server's Grafana dashboards into the cluster Grafana (slice 3, B4).
-#
-# The JSON is NOT copied into this role. roles/k8s/observability/files/dashboards stays the one
-# source of truth and both Grafanas mount the same files, so a board edited for one is not
-# silently stale in the other — a second copy is how the two Claude Code boards diverged in the
-# first place (see observability_dashboard_folders for why `AI` is excluded).
+# Builds the Grafana dashboard ConfigMaps. roles/k8s/observability/files/dashboards is the one
+# source of truth for the JSON.
 #
 # Built with `kubectl create configmap --from-file --dry-run=client` rather than a Jinja template.
-# The role's other ConfigMap (grafana-dashboard.yaml.j2) inlines its JSON in a raw block, and that
-# does not scale here: ~730 KB across sixteen files, none of which contains any Jinja to render.
+# Inlining the JSON in a raw block does not scale here: ~730 KB across sixteen files, none of which contains any Jinja to render.
 # Generating the YAML instead keeps the dashboards as dashboards and leaves nothing to escape.
 #
 # Applied SERVER-SIDE, in their own directory, deliberately kept out of the one the manifests role
@@ -57,9 +52,8 @@
   tags: [config]
   # The manifests role applies its whole directory, so dropping a file from `manifests_files`
   # only stops it being RE-RENDERED — the previously written copy keeps getting applied on every
-  # deploy, forever. The vendored grafana-dashboard.yaml is gone (its board is now the shared
-  # AI/claude-code.json), so the file and the object it created both have to be removed
-  # explicitly rather than merely un-listed.
+  # deploy, forever. The file and the object it created both have to be removed explicitly
+  # rather than merely un-listed.
   ansible.builtin.file:
     path: /etc/rancher/k3s/manifests/observability/grafana-dashboard.yaml
     state: absent
@@ -79,8 +73,6 @@
 - name: Stage the shared Grafana dashboards on the node
   tags: [config]
   ansible.builtin.copy:
-    # Every folder is role-owned now: `AI` since D7, the rest since the Docker Grafana role
-    # was retired and its shared tree moved into this role's files/.
     src: "dashboards/{{ item }}/"
     dest: "/etc/rancher/k3s/dashboards/{{ item }}/"
     mode: "0644"
@@ -92,13 +84,8 @@
 
 # `copy` with a directory source never deletes anything at the destination, so a dashboard removed
 # or RENAMED in the repo leaves its old file here forever — and the ConfigMap below is built
-# `--from-file` this tree, so the retired board keeps being provisioned. Exactly the failure the
-# vendored-manifest task above already describes: dropping a file from the source "only stops it
-# being RE-RENDERED".
-#
-# `backups.json` was renamed to `backups-b2-usage.json` and the original survived here, so BOTH
-# were live. Retiring the renamed file on 2026-08-28 left the original still provisioning the
-# identical dead board, with every repo-side check green.
+# `--from-file` this tree, so the retired board keeps being provisioned. Dropping a file from the
+# source "only stops it being RE-RENDERED", as the vendored-manifest task above describes.
 - name: Find the staged dashboards that no longer exist in the role
   tags: [config]
   ansible.builtin.find:
@@ -151,8 +138,7 @@
   register: observability_dashboards_annotated
   # The script writes a file only when its content actually differs, so the tree is the honest
   # signal — but the command itself cannot report that. The ConfigMap build below reads this
-  # tree and the manifest write after it carries the real changed verdict, exactly as it did
-  # before this task existed.
+  # tree and the manifest write after it carries the real changed verdict.
   changed_when: false
 
 # The injector writes a file per input and never removes one, so the annotated tree needs the same
@@ -197,7 +183,7 @@
 
 - name: Write the dashboard ConfigMap manifests
   tags: [config]
-  # Not under --check (#2323). The build above is a check-mode skip, and it is left one on
+  # Not under --check. The build above is a check-mode skip, and it is left one on
   # purpose: it reads dashboards-annotated/, which the inject step only simulated, so a
   # check-mode build would diff last run's JSON and report no change for an edited board.
   when: not ansible_check_mode

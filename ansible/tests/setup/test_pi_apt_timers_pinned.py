@@ -1,7 +1,7 @@
 """Guard: the Pi's apt timers are pinned to one daily firing in the quiet window.
 
 Ubuntu's apt-daily.timer fires twice a day with a 12-hour random delay, and on a 456 MB host
-that keeps 10-25 MB free each firing is a four-minute, 60 MB burst (#2007). The drop-in
+that keeps 10-25 MB free each firing is a four-minute, 60 MB burst. The drop-in
 optimize_pi writes has to clear the packaged schedule with an empty `OnCalendar=` before
 setting its own -- a drop-in that only adds a line leaves both schedules live, which is
 green in every way except the one this exists for.

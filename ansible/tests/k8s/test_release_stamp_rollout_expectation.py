@@ -1,4 +1,4 @@
-"""The release record names which workloads an apply must roll — the play half of issue #1867.
+"""The release record names which workloads an apply must roll — the play half.
 
 `probe.py health` reads `rollouts[].restart` from the record `release_stamp.yml` writes and
 fails a workload it names whose `restartedAt` is not newer than the record's `applied_at`.
@@ -10,7 +10,7 @@ a strictly later time).
 The expression is rendered through Ansible's own filters and tests, against fake registers,
 so each branch has an accept and a reject: a changed render queues the primary and every
 extra; an unchanged one queues nothing; a role with `manifests_rollout: ''` records no entry
-at all (six roles roll nothing by design, and a clock-based gate would fail every one); a
+at all (those roles roll nothing by design, and a clock-based gate would fail every one); a
 workload this apply CREATED is not expected to restart, matching the restart tasks' own
 guard.
 
@@ -21,8 +21,7 @@ private tasks (observability's loop and pihole's roll_one.yml) are pinned in
 WHAT THE HARNESS CANNOT REACH. ansible-core 2.21's `default` filter recognises only its own
 Undefined, so every var below is passed defined, and the `| default(...)` fallbacks on
 `manifests_rollout`, `manifests_rollout_kind` and an extra's `kind`/`image` are exercised by
-the real play alone — the same idiom the extra restart task in main.yml has relied on since
-it shipped.
+the real play alone — the same idiom the extra restart task in main.yml relies on.
 
 Run: uv run pytest ansible/tests/k8s/test_release_stamp_rollout_expectation.py
 """
@@ -70,7 +69,7 @@ def test_the_stamp_runs_after_the_image_fact_and_before_the_restarts():
 
 def test_the_template_fingerprints_bracket_the_apply_and_precede_the_stamp():
     """Order in main.yml: before-read -> apply -> after-read -> rolled-by-apply fact -> stamp.
-    The fact is what the record and the restart tasks read (#1988), so it must be set from a
+    The fact is what the record and the restart tasks read, so it must be set from a
     read taken AFTER the apply and BEFORE the record is written; a before-read taken after the
     apply would never see the template move."""
     names = [str(t.get("name", "")) for t in walk_tasks(MAIN)]
@@ -133,7 +132,7 @@ def test_the_expectation_reads_the_same_facts_as_the_restart_task():
         assert ingredient in FACT_EXPR, ingredient
     assert "manifests_image_changed" in when
     assert "k8s_rebuilt_images" in FACT_EXPR
-    # #3115: the config trigger is the render AND the apply's own verdict, on all three sides.
+    # The config trigger is the render AND the apply's own verdict, on all three sides.
     assert "manifests_render is changed and manifests_apply is changed" in when
     assert "manifests_render is changed and manifests_apply is changed" in FACT_EXPR
     extras = " ".join(task_named(MAIN, "Roll the extra deployments")["when"])
@@ -160,7 +159,7 @@ def test_an_unchanged_render_queues_nothing():
 
 
 def test_a_render_change_the_apply_did_not_act_on_queues_nothing():
-    """#3115, the reject half: a YAML comment or whitespace edit moves the rendered bytes, and
+    """The reject half: a YAML comment or whitespace edit moves the rendered bytes, and
     `kubectl apply` prints every object `unchanged`, so the apply's `changed` is false and no
     pod is expected to restart. The accept half is the default `_rollouts()` above, where the
     apply printed `configured` for the same changed render."""
@@ -232,7 +231,7 @@ def test_a_rebuilt_image_queues_only_the_workload_it_belongs_to():
 
 
 def test_a_workload_the_apply_itself_rolled_is_not_expected_to_restart():
-    """The red half of #1988's pair: an image-pin bump changes the render AND the pod
+    """The red half of the pair: an image-pin bump changes the render AND the pod
     template, so the apply rolls prowlarr and no restart is queued for it. flaresolverr's
     template did not move, so the same render change still restarts it."""
     rollouts = _rollouts(

@@ -5,9 +5,8 @@ Pure functions over the payload `test_ui_smoke.py`'s browser evaluate returns, k
 that module so they can be tested WITHOUT a browser — the `ui` marker is deselected in CI,
 so a classifier living only inside a `ui` test would never run there at all.
 
-**Why a classifier and not a bare assertion.** Measured across the 19 provisioned dashboards
-on 2026-08-30, a zero-panel read has two causes that look identical from an assertion and
-must not be treated alike:
+**Why a classifier and not a bare assertion.** A zero-panel read has two causes that look
+identical from an assertion and must not be treated alike:
 
   * The React app never mounted. `document.readyState` is `complete`, the URL is still the
     bare `/d/<uid>/` with no slug appended, the whole document carries ZERO `data-testid`
@@ -21,9 +20,8 @@ must not be treated alike:
     dashboard's real shape, so it is a pass with `rows`, not a failure with `headers`.
 
 Anything else with no panels is the failure this is for: the dashboard mounted and drew
-nothing. That is the shape of the 2026-08-22 incident, where 19 Angular `graph` panels were
-provisioned to a Grafana that had dropped Angular and rendered nothing for 55 minutes while
-the pod read 1/1 with zero errors in the log.
+nothing. That is the shape of provisioning Angular `graph` panels to a Grafana that has dropped
+Angular: nothing renders while the pod reads 1/1 with zero errors in the log.
 """
 
 import re
@@ -32,10 +30,10 @@ from dataclasses import dataclass
 # Grafana is asked for `/d/<uid>/` and the client rewrites the URL to `/d/<uid>/<slug>` once
 # it has the dashboard. A page still showing the bare form never got it, however much of
 # Grafana's own chrome rendered around the hole — and the chrome alone is 27 to 53 testids,
-# which is why a testid count cannot carry this on its own.
-# Above a mid-load skeleton, well below Grafana's chrome. Measured 2026-08-30: a page caught
-# part-way through loading carries 3 testids and can already have rewritten its URL, so the
-# slug test alone lets it through; Grafana's navigation and menus alone are 27 to 53.
+# which is why a testid count cannot carry this on its own. Above a mid-load skeleton, well
+# below Grafana's chrome. A page caught part-way through loading carries 3 testids and can
+# already have rewritten its URL, so the slug test alone lets it through; Grafana's
+# navigation and menus alone are 27 to 53.
 _MOUNTED_MIN_TESTIDS = 10
 _BARE_DASHBOARD_URL = re.compile(r"^/d/[^/]+/?$")
 
@@ -87,10 +85,10 @@ class Verdict:
         """Whether to load the page again before believing this.
 
         A page that mounted and then drew NOTHING — no panel, no row — is the one verdict
-        worth a second load. Measured 2026-08-30: `crowdsec-details-per-machine` drew its 12
-        rows in 2.1s on 6 of 6 isolated loads, and drew nothing as the fourth dashboard of a
-        run in the same browser. Re-navigating cannot hide a real break, because a dashboard
-        that is actually empty is empty on every attempt and still reported.
+        worth a second load. `crowdsec-details-per-machine` draws its 12 rows in 2.1s on an
+        isolated load, and drew nothing as the fourth dashboard of a run in the same browser.
+        Re-navigating cannot hide a real break, because a dashboard that is actually empty is
+        empty on every attempt and still reported.
 
         A partial render is NOT retried: some panels drawn and some missing is a finding, and
         loading again would just average over it.

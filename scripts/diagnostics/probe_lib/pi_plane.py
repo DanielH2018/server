@@ -134,11 +134,11 @@ def run_pi_targets(ns):
 # ps-then-inspect round trip from the CALLER side would be two; running both commands in the
 # one remote shell this ssh opens keeps it to one.
 #
-# Measured against the live Pi (2026-09-03, 7 containers, six consecutive runs): 3.65s, 7.8s,
-# 8.3s, 12.8s, 14.5s, 19.3s — almost entirely ssh/exec overhead on a Zero 2 W under its own
-# cron load, not the inspect itself. A 25s timeout was too tight and timed out on a seventh
-# run. PI_CONTAINERS_TIMEOUT sits well above the observed tail rather than at core.py's 10s
-# HTTP default, which this is not.
+# Measured against the live Pi (7 containers, six consecutive runs): 3.65s, 7.8s, 8.3s,
+# 12.8s, 14.5s, 19.3s — almost entirely ssh/exec overhead on a Zero 2 W under its own cron
+# load, not the inspect itself. A 25s timeout was too tight and timed out on a seventh run.
+# PI_CONTAINERS_TIMEOUT sits well above the observed tail rather than at core.py's 10s HTTP
+# default, which this is not.
 PI_CONTAINERS_TIMEOUT = 45
 
 

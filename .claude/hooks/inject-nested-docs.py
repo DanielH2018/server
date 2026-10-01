@@ -6,11 +6,8 @@
 WHY. Claude Code loads a role's `CLAUDE.md` (`nested_traversal`) and a `.claude/rules/*.md`
 whose `paths:` glob matches (`path_glob_match`) only when the Read, Edit or Write tool touches
 a matching path. Auto mode instructs the model to read files with `cat` / `sed -n` / `head`
-through Bash instead, which fires neither. Measured over 176 transcripts on 2026-09-19: of 113
-session×role pairs that read a role file through Bash and never used Read/Edit/Write on that
-role, 74 (65%) never saw the role's CLAUDE.md; `.claude/rules/secrets.md` loaded 3 times
-against 40 Bash commands naming `ansible/vars/secrets.yml`. `test_k8s_roles_have_claude_md.py`
-guarantees every role has a doc; nothing guaranteed a session loads it. Issue #2125.
+through Bash instead, which fires neither. `test_k8s_roles_have_claude_md.py` guarantees every
+role has a doc; nothing guaranteed a session loads it.
 
 WHAT. Every token in the command that names a path on disk inside a git checkout selects
 the docs the harness would have loaded for it: a `CLAUDE.md` in any ancestor directory below
@@ -20,37 +17,31 @@ subagent (its payload's `agent_id`), whose context starts empty. Every injection
 to `instructions.log` with reason `bash_path_match`, so the same log that measured the gap
 grades the fix. The root `CLAUDE.md` is never injected: it loads at session start.
 
-RE-MEASURED 2026-09-26 (#2192) over the 5 days after the merge, same cross-tab both sides:
-the no-doc share of Bash-only session×role pairs fell from 85% to 14% in main sessions,
-but only from 82% to 56% in subagents, which the session-only key caused.
-
 ONLY DOCS THIS HOOK CHOSE ARE EVER READ. A path lifted from the command selects a directory;
 the files opened are `CLAUDE.md` at an ancestor of that directory and the rule files under
 `.claude/rules/`. Command text never names a file this hook reads.
 
-THE PAYLOAD BUDGET IS A HARNESS PROPERTY. Read from the 2.1.267 bundle: on the local
-command-hook path an `additionalContext` longer than 10,000 chars (`sgr=1e4`) is persisted to
-disk and replaced by a preview stub (`Fme`), and on the remote-control wire path it is
-truncated to 8,000 chars / 200 lines (`Uno`, `Hno`, `Cnn`). A 136 KB role doc therefore
-cannot be inlined — the issue's "loads once" was written before that cap was measured. A doc
-under `INLINE_MAX_CHARS` / `INLINE_MAX_LINES` is inlined; a larger one is injected as its HEAD
-up to the budget, then the headings of the sections the head cut off, then a read pointer.
-111 of 141 nested docs fit inline on 2026-09-21.
+THE PAYLOAD BUDGET IS A HARNESS PROPERTY. On the local command-hook path an
+`additionalContext` longer than 10,000 chars (`sgr=1e4`) is persisted to disk and replaced by
+a preview stub (`Fme`), and on the remote-control wire path it is truncated to 8,000 chars /
+200 lines (`Uno`, `Hno`, `Cnn`). A 136 KB role doc therefore cannot be inlined. A doc under
+`INLINE_MAX_CHARS` / `INLINE_MAX_LINES` is inlined; a larger one is injected as its HEAD up to
+the budget, then the headings of the sections the head cut off, then a read pointer.
 
-EDITING RULES ARRIVE WITH A WRITE (#2811). A rule outside `READ_RULES` is injected only for a
-path the command writes (`block-protected-bash.written_paths`), or for every named path under
-an inline interpreter. Rules were 1.30 MB of 2.36 MB injected in a week, mostly on reads, but
-23% of rule-scoped writes go through Bash, so they are not dropped from Bash outright. The
-measurements are in `docs/claude-tooling.md`.
+EDITING RULES ARRIVE WITH A WRITE. A rule outside `READ_RULES` is injected only for a path the
+command writes (`block-protected-bash.written_paths`), or for every named path under an inline
+interpreter. Rules are mostly injected on reads, but 23% of rule-scoped writes go through
+Bash, so they are not dropped from Bash outright. The measurements are in
+`docs/claude-tooling.md`.
 
 THE HEAD, NOT THE HEADINGS. The over-budget form was the heading outline alone until #2650.
-Sessions read the full doc after 61 of 262 outline injections over 2026-09-21..26 (23%),
-against 69 of 425 Bash-only pairs (16%) before the hook existed, so the headings bought
-almost nothing over no injection at all. The head spends the same budget on text a session
-can act on without a second read: a role doc opens with its generated `## At a glance` block
-and its operative rules. The head path retires only when the `OVER_CEILING` lists in
-`ansible/tests/k8s/test_k8s_roles_have_claude_md.py` and its setup sibling are empty: those
-name every role doc still over `INLINE_MAX_CHARS`, and each entry is a doc to trim (#2826).
+Headings alone bought almost nothing over no injection: sessions read the full doc after only
+23% of outline injections, against 16% of Bash-only pairs with no hook. The head spends the
+same budget on text a session can act on without a second read: a role doc opens with its
+generated `## At a glance` block and its operative rules. The head path retires only when the
+`OVER_CEILING` lists in `ansible/tests/k8s/test_k8s_roles_have_claude_md.py` and its setup
+sibling are empty: those name every role doc still over `INLINE_MAX_CHARS`, and each entry is
+a doc to trim.
 
 Observability-shaped: never emits a decision, swallows every error and exits 0.
 """
@@ -292,8 +283,7 @@ def context_key(session_id, agent_id=None):
 
     A subagent's payload carries its parent's `session_id` plus its own `agent_id`, and its
     context window starts empty. Keyed on the session alone, a doc the parent (or a sibling
-    subagent) already received was never given to the subagent: 95 of the 122 no-doc
-    session×role pairs measured over 2026-09-21..26 were subagents (#2192).
+    subagent) already received would never be given to the subagent.
     """
     return f"{session_id}-agent-{agent_id}" if agent_id else session_id
 
@@ -442,8 +432,7 @@ def _header(doc, trigger):
 def _fits_inline(text, header):
     """True when `render`'s whole-doc block fits the payload after the preamble.
 
-    Measured on the block: a doc between that and `INLINE_MAX_CHARS` fit no command and was
-    deferred forever (`python-layout.md` at 7,271 chars, 2026-09-28).
+    A doc between that and `INLINE_MAX_CHARS` fits no command and is deferred forever.
     """
     block = f"{header}\n{text.rstrip()}\n"
     return len(block) <= INLINE_MAX_CHARS - len(_PREAMBLE) and block.count(
@@ -471,15 +460,14 @@ def render(root, doc, trigger, budget_chars, budget_lines):
 
     A doc that fits the hook budget on its own is inlined, or returns None when earlier
     docs in this command have used up the budget. The caller leaves it unrecorded, so the
-    next command naming the path inlines it. Outlining it instead would be final: 47 of
-    262 outline injections over 2026-09-21..26 were docs that fit alone (#2192). A doc
-    over the budget on its own is injected as its head — see `_head_block`.
+    next command naming the path inlines it. Outlining it instead would be final, so a doc
+    that fits alone would never be inlined. A doc over the budget on its own is injected
+    as its head — see `_head_block`.
 
     Both budgets are what is LEFT of the payload, not the per-doc cap, because the harness
-    caps the whole `additionalContext`. The line budget only started to bind once the head
-    form landed: a heading outline cost a handful of lines, while a head can spend nearly
-    all 190 and push a second doc's block past the 200-line wire truncation (#2650). Which
-    doc gets the budget first is `build_context`'s call.
+    caps the whole `additionalContext`. The line budget binds for the head form: a head
+    can spend nearly all 190 lines and push a second doc's block past the 200-line wire
+    truncation. Which doc gets the budget first is `build_context`'s call.
     """
     text = _read(root, doc)
     header = _header(doc, trigger)
@@ -495,12 +483,11 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     """(context_text, [(doc, trigger)]) for this command, or ("", []) when nothing is new.
 
     Docs that fit whole are rendered before any doc injected as its head, in the order
-    `named_paths` and `docs_for` give. A head spent the payload first until #2775, and
-    deferred a short `.claude/rules` file matched by the same command in 23 of 98 head
-    payloads; in 9 the rule never arrived. The whole docs cannot starve the head in turn,
-    because they only get the budget left after the first head's `head_floor`. A whole doc
-    that does not fit under that reserve is deferred instead. `python-layout.md` is
-    6,960 chars, so it always defers beside a head.
+    `named_paths` and `docs_for` give. A head that spent the payload first would defer a
+    short `.claude/rules` file matched by the same command. The whole docs cannot starve
+    the head in turn, because they only get the budget left after the first head's
+    `head_floor`. A whole doc that does not fit under that reserve is deferred instead.
+    `python-layout.md` is 6,960 chars, so it always defers beside a head.
     """
     key = context_key(session_id, agent_id)
     already = injected_this_session(key)

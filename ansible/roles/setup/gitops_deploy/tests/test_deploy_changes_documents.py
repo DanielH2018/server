@@ -1,11 +1,10 @@
 """Documentation reaches no host: which paths the deployer's mapper must classify as nothing.
 
-A `.md` is prose about a role, never role content a playbook applies. The mapper tested the
-suffix on the k8s arm and the container catch-all only, so a document under the setup plane or
-under `roles/containers/common/` took a broad arm by path and routed prose to an apply
-(issue #1714). The census at the bottom holds the suffix rule's own assumption — that no role
-ships a `.md` as content — to the three READMEs that sit under a `files/` directory
-(issue #1715).
+A `.md` is prose about a role, never role content a playbook applies. Without a suffix test on
+the setup arm and on `roles/containers/common/`, a document there would take a broad arm by
+path and route prose to an apply. The census at the bottom holds the suffix rule's own
+assumption — that no role ships a `.md` as content — to the three READMEs that sit under a
+`files/` directory.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_documents.py
 """
@@ -22,8 +21,8 @@ from deploy_changes import ChangeSet, services_from_changed_paths
 def test_a_setup_roles_document_is_clean():
     """Prose under a setup role reaches no host, so it must classify as nothing at all.
 
-    `ansible/roles/setup/<role>/CLAUDE.md` matches `_BROAD_SETUP_PREFIXES` by path, and the
-    setup arm carried no docs test until issue #1714 — so a docs-only edit routed the deployer
+    `ansible/roles/setup/<role>/CLAUDE.md` matches `_BROAD_SETUP_PREFIXES` by path, and without a docs test on the setup arm
+    a docs-only edit would route the deployer
     to an `initial_setup.yml --tags <role>` apply, or to a defer-and-alert for a role no
     playbook includes. `ansible/roles/containers/common/CLAUDE.md` is the same defect one plane
     over: it matches `_BROAD_DEPLOY_PREFIXES` and named a full `ansible/deploy.yml`.
@@ -54,7 +53,7 @@ def test_a_setup_roles_config_is_still_broad():
 def test_a_readme_under_a_roles_files_dir_ships_with_no_task():
     """The suffix rule assumes no role ships a `.md` as CONTENT. This holds it to that.
 
-    Three READMEs sit under a k8s role's `files/` (issue #1715). Both roles copy a NAMED list
+    Three READMEs sit under a k8s role's `files/`. Both roles copy a NAMED list
     of files — `home_assistant_automation_files` / `home_assistant_script_files` for the two
     under home-assistant, and an explicit `loop:` for configarr's — so none of them reaches a
     pod and classifying the path as undeployable is correct. A role that later copied its

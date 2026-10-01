@@ -1,13 +1,13 @@
 {# Not a macro — a whole manifest. `k8s/manifests` renders this file as `ingressroute.yaml`
    for every role that names `ingressroute.yaml` in its `manifests_files` and ships no
    `templates/ingressroute.yaml.j2` of its own (`manifests_shared_defaults` in that role's
-   defaults). 16 roles' IngressRoute templates were byte-identical wrappers around the
-   `ingressroute()` macro below; this file is that wrapper, rendered once (#3043).
+   defaults). This file is the wrapper around the `ingressroute()` macro below that 16
+   roles' IngressRoute templates would otherwise repeat byte for byte.
 
    THE ENTRY IS THE INPUT. Name, host label, port and Authelia gate all come from the role's
    `containers_list` entry, which is also where the deploy derives the role's traefik ordering
    edge from (`ansible/filter_plugins/toposort.py:build_k8s_dep_map`) — a hostname on the entry
-   is what says "this role is routed", now that the route itself leaves no file in the role.
+   is what says "this role is routed", since the route itself leaves no file in the role.
 
    A role whose route needs anything else — extra middlewares, a second hostname, the
    public-route opt-out, a bypass prefix, a Jinja condition — keeps its own

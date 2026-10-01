@@ -1,5 +1,5 @@
 ---
-# Phase F (slice-7 §F): join THIS host to the existing cluster as an agent.
+# Join THIS host to the existing cluster as an agent.
 # Invoked by the "Join an agent node" play in k3s-bringup.yml, which supplies
 # k3s_join_token (read on daniel-box by the preceding play — no delegation here, see the
 # playbook's three-play comment). The server-side firewall allows (k3s_agent_node_ips +
@@ -8,22 +8,11 @@
 # the server side.
 #
 # Deliberately NOT here:
-#   - the A1 node-DNS drop-in (see below).
-#
-# The no-Docker assert USED to be listed here as deliberately omitted, on the reasoning
-# that "coexistence with the remaining Docker residuals is exactly what §F plans". That
-# was true during the drain and expired when it finished: daniel-server's Docker was
-# purged on 2026-08-14 and has_docker went false the same day. The omission then cost
-# what it was always going to — Docker was reinstalled on 2026-08-19 and ran unnoticed
-# for eight days, because the only guard lives in server.yml under tags: [k3s_server] and
-# this host is the agent. Contradicting that marker deliberately; the assert is below.
-#   - the A1 node-DNS drop-in (checked 2026-08-13): daniel-server does not run
+#   - the A1 node-DNS drop-in: daniel-server does not run
 #     systemd-resolved — its static /etc/resolv.conf is `10.0.0.243` (the in-cluster
 #     Pi-hole VIP) with a `1.1.1.1` fallback and `timeout:2 attempts:1`, so a cold
 #     cluster start falls through to the upstream after 2s, which is the property A1's
-#     drop-in exists to guarantee. Pinning upstream-ONLY would break the Docker
-#     containers' `.local` resolution (they forward to the host's resolv.conf:
-#     promtail's loki push URL, monitor-bridge's check targets). Revisit at the drain.
+#     drop-in exists to guarantee.
 
 - name: Refuse to run on an agent host that already runs Docker
   tags: [k3s_agent]
@@ -60,9 +49,8 @@
 
 - name: Install Longhorn prerequisites
   tags: [k3s_agent]
-  # Same pair the server flow installs (main.yml). Found missing at the §F replica raise:
-  # the join omitted host prep, so daniel-server's Longhorn node sat RequiredPackages:False
-  # (nfs-common). open-iscsi is the not-optional one — without it volumes hang in
+  # Same pair the server flow installs (main.yml). Without it the Longhorn node reports
+  # RequiredPackages:False (nfs-common). open-iscsi is the not-optional one — without it volumes hang in
   # "Attaching" with an error that never names the missing package.
   ansible.builtin.apt:
     name:
@@ -74,7 +62,7 @@
 - name: Blacklist Longhorn devices from multipathd
   tags: [k3s_agent]
   # Same fix as the server flow (main.yml) — multipathd claims fresh /dev/longhorn
-  # devices and mounts fail; found live at the 2026-08-14 drain gate on both nodes.
+  # devices and mounts fail.
   ansible.builtin.blockinfile:
     path: /etc/multipath.conf
     create: true
@@ -171,16 +159,15 @@
     - k3s_unit_logging_dropin is changed
     - k3s_agent_install is not changed
 
-# ── Registry mirror (2026-08-14, nut→k8s port) ────────────────────────────────────────
+# ── Registry mirror ───────────────────────────────────────────────────────────────────
 # Same template as the server node, but the mirror endpoint resolves to the registry
 # Service's pinned ClusterIP instead of a loopback hostPort — this is what lets built
-# images (first: nut) run on this node. Written after the install so a change can
+# images run on this node. Written after the install so a change can
 # restart the running agent; on a first join the installer's own start reads it too
 # late, and the restart below covers that case as well.
 #
 # The directory first: the agent installer never creates /etc/rancher/k3s (nothing else
-# is configured there on an agent), and template does not create parents — hit live at
-# the 2026-08-14 cutover.
+# is configured there on an agent), and template does not create parents.
 - name: Create the k3s config directory
   tags: [k3s_agent]
   ansible.builtin.file:
@@ -212,15 +199,9 @@
   become: true
   when: k3s_agent_registries is changed
 
-# ── VIP kube-proxy bypass — RETIRED 2026-08-14 ────────────────────────────────────────
-# Existed for Docker-bridge (forwarded, non-node-source) traffic dialing the MetalLB
-# VIPs from this host: kube-proxy programs every VIP on every node, and with ETP Local
-# plus no local endpoint that traffic hit a filter-table "no local endpoints" DROP
-# (the Phase F join blackout, 2026-08-13). The Docker uninstall removed the last such
-# client, and the pins-permanent decision (design.md §10 #6) removed the prospect of
-# endpoints ever living here. These absent-state tasks reap the deployed script, unit
-# and timer; the iptables rules die with the timer at the next reboot and were removed
-# live at retirement.
+# ── Reap the retired VIP kube-proxy bypass ────────────────────────────────────────────
+# These absent-state tasks remove the bypass's deployed script, unit and timer from hosts
+# that still carry them.
 - name: Remove the retired VIP bypass units and script
   tags: [k3s_agent]
   ansible.builtin.file:

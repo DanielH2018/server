@@ -9,27 +9,24 @@ has_igpu: true
 has_ample_ram: true
 # Dissolves docker-proxy-codeserver and the `codeserver` net from the docker-proxy compose.
 has_code_server: false
-# Empty since Docker was uninstalled here on 2026-08-14. This host now runs the k3s agent,
-# the nut pod's hardware, and the nut_host shutdown chain — nothing else. Every service
-# that used to be listed here moved to roles/k8s/ or retired; the retired roles and the
-# per-service migration record are in git history and docs/archive/k3s-migration/.
+# Empty, and no Docker: this host runs the k3s agent, the nut pod's hardware, and the
+# nut_host shutdown chain — nothing else.
 containers_list: []
 
 # No engine, so no deployer to run. The gitops watchdog lives on — the cluster bridge
 # watches daniel-box's deployer instead.
 has_docker: false
-# Kept explicit even though group_vars/all.yml now defaults it false: the deployer's own refusal
+# Kept explicit even though group_vars/all.yml defaults it false: the deployer's own refusal
 # (`deploy_inventory.declares_no_gitops`) greps THIS file's text for a top-level
 # `has_gitops: false` and fails open when the key is absent, so deleting the line would disarm
-# the code-side half of the gate a stale payload tripped in #1733.
+# the code-side half of the gate.
 has_gitops: false
 
-# The VM host. This is the only host with VT-x, spare RAM and no control-plane role. It built
-# the retired daniel-stage guest until 2026-09-29 (#2941); what it runs now is the monthly etcd
-# restore drill's throwaway guest — see roles/setup/hypervisor/CLAUDE.md.
+# The VM host. This is the only host with VT-x, spare RAM and no control-plane role. It runs
+# the monthly etcd restore drill's throwaway guest — see roles/setup/hypervisor/CLAUDE.md.
 has_hypervisor: true
 
-# Claude Code session host for issue-fanout agents (spec 2026-09-06). The Remote Control unit
+# Claude Code session host for issue-fanout agents. The Remote Control unit
 # stays on daniel-box; agents here stop at `gh pr create` and a daniel-box session lands the
 # PR, because the k8s play, the connection=local pin and the per-host lock keep deploys there.
 has_claude_code: true
@@ -54,7 +51,7 @@ claude_code_rc_enabled: false
 # With the RC unit disabled, user-1000.slice is the only plane here, so the 11G login cap is
 # the effective per-plane bound and the fleet cap only matters once a second plane appears.
 claude_code_fleet_memory_high: 13G
-# 2G is under a third of this host's 7 GiB swap (`free -g`, measured 2026-09-09) — the same
+# 2G is under a third of this host's 7 GiB swap (`free -g`) — the same
 # shape as daniel-box's "a quarter of its 8 GiB" reasoning in defaults/main.yml:117-119.
 claude_code_fleet_swap_max: 2G
 claude_code_rc_memory_high: 11G

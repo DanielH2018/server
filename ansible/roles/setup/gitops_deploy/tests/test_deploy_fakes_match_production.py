@@ -5,8 +5,7 @@ test that would have caught the divergence fails to be written, because the fake
 input production accepts. That is the "green while checking nothing" class from the repo's
 testing rules, arriving through the test double rather than through the check.
 
-Two seams had drifted. The health-gate seam went with the Docker arm (#2805); the image-diff
-seam's tests below are a pair: an input the aligned fake must ACCEPT
+The image-diff seam's tests below are a pair: an input the aligned fake must ACCEPT
 and one it must REJECT, so a fake that went permissive everywhere fails as loudly as one that
 went strict everywhere.
 
@@ -38,11 +37,11 @@ def tick(tmp_path: pathlib.Path) -> ScriptedTick:
 
 
 def test_an_unscripted_image_diff_is_rejected(tick: ScriptedTick):
-    """The reject half for the one `run()` path that used to default instead of raising.
+    """The reject half for the one `run()` path that could default instead of raising.
 
-    `self.diffs.get(key, "")` handed back an empty diff for a service nobody scripted, and an
-    empty diff is a real production answer meaning "the range touched no line of that file".
-    A test that forgot to script one therefore read as a clean no-op and passed.
+    `self.diffs.get(key, "")` would hand back an empty diff for a service nobody scripted, and
+    an empty diff is a real production answer meaning "the range touched no line of that file".
+    A test that forgot to script one would therefore read as a clean no-op and pass.
     """
     with pytest.raises(AssertionError, match="no test scripted"):
         tick.run(DIFF_ARGV)

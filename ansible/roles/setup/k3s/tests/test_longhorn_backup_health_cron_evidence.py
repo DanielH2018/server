@@ -184,7 +184,7 @@ def test_cron_liveness_reads_trim_chatter_as_silence():
 
 
 def test_cron_liveness_reads_b2_deletions_chatter_as_silence():
-    """The #2545 gap: a run that logged a traceback and died used to read as alive.
+    """A run that logged a traceback and died must not read as alive.
 
     The cron pipes both streams through `logger`, so a traceback IS journal lines under the
     tag. Check 9 stays quiet on it too — a traceback carries no `UNPRICED` — so this arm is
@@ -222,11 +222,11 @@ def test_cron_liveness_accepts_the_summary_line_the_probe_writes():
 
 
 def test_cron_liveness_reads_a_body_line_without_a_summary_as_silence():
-    """#2565: the two shapes the legacy arm used to accept are body rows, not a verdict.
+    """The priced-total row and the nothing-deleted row are body rows, not a verdict.
 
-    `b2_ledger.py` still writes both — the priced total and the nothing-deleted row — but a run
-    that dies after printing one of them never reaches `deletions_summary_line`. Accepting them
-    kept the weaker "any line at all" reading alive for two line shapes.
+    `b2_ledger.py` writes both, but a run that dies after printing one of them never reaches
+    `deletions_summary_line`. Accepting them would keep the weaker "any line at all" reading
+    alive for two line shapes.
     """
     body_rows = [
         "no new B2 backup deletions in the last 26h",

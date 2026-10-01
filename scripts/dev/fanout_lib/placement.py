@@ -1,4 +1,4 @@
-"""Pure placement over (host, cap, current, live_agents) — spec 2026-09-06 §2.
+"""Pure placement over (host, cap, current, live_agents).
 
 Decides; does not fetch. The one read it needs is transport.HOST_READ_COMMAND — READ_COMMAND's
 memory lines plus the signing-key line transport appends — run by transport.read_host.
@@ -30,8 +30,8 @@ RESERVATION_BYTES = 2_684_354_560
 # user service, which systemd places in user-1000.slice (the login plane, capped by
 # claude_code_rc_memory_high), nested under user.slice (the fleet, capped by
 # claude_code_fleet_memory_high). Reading the fleet alone picks a host whose fleet cap has
-# room while the login-plane cap that actually binds the agent is full: daniel-box's login
-# slice peaked at 8.58 GB against its then-8G cap on 2026-09-10.
+# room while the login-plane cap that actually binds the agent is full (daniel-box's login
+# slice has peaked at 8.58 GB against an 8G cap).
 READ_COMMAND = (
     "cat /sys/fs/cgroup/user.slice/memory.current /sys/fs/cgroup/user.slice/memory.high "
     "/sys/fs/cgroup/user.slice/user-1000.slice/memory.current "
@@ -150,9 +150,9 @@ def headroom(reading: HostReading, reservation: int = RESERVATION_BYTES) -> int 
 def _describe(
     readings: Sequence[HostReading], used: dict[str, int], reservation: int
 ) -> str:
-    # Names the side the number came from. It is a min() over two caps now, so a bare "0.7
-    # GiB free" against a fleet an operator knows has 5.3 GiB free reads as a broken tool —
-    # and this string is the whole of what an exit 3 tells them.
+    # Names the side the number came from. It is a min() over two caps, so a bare "0.7 GiB
+    # free" against a fleet an operator knows has 5.3 GiB free reads as a broken tool — and
+    # this string is the whole of what an exit 3 tells them.
     parts = []
     for r in readings:
         rooms = _headrooms(r, reservation)

@@ -1,7 +1,7 @@
 """The rollout half of `probe.py health` — a Deployment or DaemonSet's verdict.
 
-Split out of probe_lib/health.py, which had grown to 938 lines. `format_k8s_health` is pure:
-it takes two parsed kubectl documents and a `now`, and returns what to print plus an exit code.
+`format_k8s_health` is pure: it takes two parsed kubectl documents and a `now`, and returns
+what to print plus an exit code.
 
 WHAT "NOT FOUND" IS ALLOWED TO MEAN governs the message for an absent workload here. The
 canonical statement of that rule is health.py's module docstring; `format_k8s_health`'s own
@@ -68,8 +68,8 @@ def format_k8s_health(deploy, pods, service, now):
     exit_code is 0 only when the rollout is COMPLETE (the observed generation has caught up and
     every replica is updated, ready and available) AND no container restarted within
     RECENT_RESTART_SECONDS. Both halves are load-bearing: readiness alone flips Available before
-    a bad liveness probe starts killing the container, which is the failure that produced a green
-    deploy and a crashlooping kube-state-metrics on 2026-08-07.
+    a bad liveness probe starts killing the container, which produces a green deploy and a
+    crashlooping workload.
     """
     if not deploy:
         return (
@@ -124,18 +124,17 @@ def format_k8s_health(deploy, pods, service, now):
 # `kubectl rollout restart` writes the invocation time here, on the workload's pod template, so
 # the annotation moves exactly when a restart is issued and never otherwise. roles/k8s/manifests
 # issues one whenever a service's rendered manifests, secret manifests or built image changed,
-# and its release record says so (`rollouts[].restart`, release_stamp.yml). Comparing the two
-# is the "did the deploy change something that should have rolled a pod, and did one roll"
-# predicate of issue #1867 — pod age against the deploy's start would fail every idempotent
-# re-run, since an unchanged role rolls no pod by design.
+# and its release record says so (`rollouts[].restart`, release_stamp.yml). Comparing the two is
+# the "did the deploy change something that should have rolled a pod, and did one roll"
+# predicate — pod age against the deploy's start would fail every idempotent re-run, since an
+# unchanged role rolls no pod by design.
 RESTARTED_AT_ANNOTATION = "kubectl.kubernetes.io/restartedAt"
 
 
 def restarted_at(workload):
     """The `restartedAt` annotation on `workload`'s pod template as a datetime, or None.
 
-    None for a workload never restarted through kubectl (58 of this cluster's 72
-    Deployments carry the annotation, measured 2026-09-17) and for a value the parser
+    None for a workload never restarted through kubectl and for a value the parser
     cannot read; `unrolled_reason` treats both as "no restart reached this workload".
     """
     template = (workload.get("spec") or {}).get("template") or {}
@@ -158,7 +157,7 @@ def unrolled_reason(workload, applied_at):
     tasks), so a restart that reached the workload stamps a strictly later time; one that
     never did leaves the previous value, or no annotation at all. Either way the pods that
     were already running satisfy the rollout-complete and no-recent-restart halves of the
-    gate, which is exactly the green-on-a-no-op that issue #1867 names.
+    gate, which is exactly a green-on-a-no-op.
     """
     when = restarted_at(workload)
     if when is None:

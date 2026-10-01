@@ -14,8 +14,7 @@ makes the selector invalid and the webhook denies the delete:
 CREATION NEVER BUILDS THAT SELECTOR. So an over-long snapshot is created happily, and only
 becomes a problem once retention catches up and something tries to prune it — at which point
 every deploy fails, in a different role, with a message about linked clones that never mentions
-name length. Measured 2026-08-22: 13 undeletable snapshots across 4 volumes, and the fourth
-full deploy of the day died 78s in.
+name length.
 
 Three properties, and the second is the one that rots quietly:
 
@@ -59,12 +58,12 @@ TOKEN_LEN = len("20260822141923")
 # at the assert — which is safe, but late, and by then the fix is renaming a live service.
 #
 # 12 is git's own ceiling for a very large repository (the Linux kernel abbreviates to 12), so
-# it is a real bound rather than an arbitrary pad. Measured 2026-08-22: this repo has ~40k
+# it is a real bound rather than an arbitrary pad. This repo has ~40k
 # objects and `--short=8` returns 8, giving an 8-hex collision chance near 0.02%. The margin is
 # insurance against slow growth, not a live problem.
 #
 # THE COST IS DELIBERATE AND WILL SURPRISE SOMEONE. Reserving 4 bytes for a sha nobody has yet
-# leaves 23 for service + claim segment, where production today would allow 27. So this file can
+# leaves 23 for service + claim segment, where production allows 27. So this file can
 # fail a name that the live 8-character sha would fit. That is the point: it fails while there is
 # still slack, rather than at the moment production runs out.
 SHA_LEN = 12
@@ -78,10 +77,9 @@ def _name_expression() -> str:
     layer down.
 
     The WHOLE assigned string is returned and templated as-is. Pulling the inner expression out
-    of its `{{ }}` and re-wrapping it silently drops the literal text between the parts — an
-    earlier draft of this file measured `autodeploy-home-assistant-...` at 60 bytes instead of
-    71, because the leading `autodeploy-` is literal and was being thrown away. It passed on
-    the exact name that broke production.
+    of its `{{ }}` and re-wrapping it silently drops the literal text between the parts: the
+    leading `autodeploy-` is literal, so `autodeploy-home-assistant-...` would measure 60 bytes
+    instead of 71.
     """
     for task in yaml_fast.safe_load(SNAPSHOT.read_text()):
         fact = task.get("ansible.builtin.set_fact") or {}
@@ -167,7 +165,7 @@ def test_the_two_roles_build_the_claim_segment_identically():
 
 
 def test_the_assert_guards_the_name_before_it_is_created():
-    """Shortening fixes today's four; the assert is what stops a fifth arriving unnoticed."""
+    """Shortening fixes the over-long names; the assert is what stops another arriving unnoticed."""
     tasks = yaml_fast.safe_load(SNAPSHOT.read_text())
     guards = [
         t

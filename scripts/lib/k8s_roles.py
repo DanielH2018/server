@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Which roles under ``ansible/roles/k8s/`` the manifest validator renders, and which it skips.
 
-Split out of ``scripts/validate/k8s_manifests.py`` on 2026-09-04; that module re-exports every
-name here, so an existing importer keeps working. The two exemption sets and
-``is_manifest_template`` are the half other guards ask about
+The two exemption sets and ``is_manifest_template`` are the half other guards ask about
 (``scripts/validate/tests/test_skip_roles_classes_hold.py``,
 ``scripts/diagnostics/probe_lib/health.py``), which is why they are their own module rather
 than private to the validator.
@@ -115,8 +113,7 @@ def misplaced_template_lookups(source: str) -> list[str]:
     App config a manifest embeds belongs in `templates/config/`, one level down: the validator
     parses every top-level `templates/*.j2` as a manifest, so config sitting there is
     schema-checked as nothing (a document with no `kind` is skipped) and placement-checked as
-    nothing. Four files sat that way until #1856 — homepage's services/docker/kubernetes.yaml.j2
-    and crowdsec's crowdsec-discord.yaml.j2.
+    nothing.
 
     Only a literal path is judged. A target passed as a variable (image-builder's
     `lookup('template', src)`) resolves at task time from the caller's vars, which a text scan
@@ -158,9 +155,7 @@ def k8s_entries() -> dict[str, dict]:
 #
 # An `import_tasks` of a sibling role's file by path
 # (`{{ role_path }}/../<role>/tasks/<file>.yml`) is the same edge spelled without a role name,
-# and the walk covered it until #2876. No role has used that form since #2813 folded
-# game-stats-lib into its two consumers, and the pattern was left driven by a synthetic test
-# alone. Restore it from git history if a role reaches a sibling by path again.
+# and the walk does not cover it: no role reaches a sibling by path.
 _ROLE_KEYS = (
     "ansible.builtin.include_role",
     "include_role",
@@ -197,7 +192,7 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     no deploy tag of its own, but `deploy.yml` runs it under every caller's tag. A change to it
     is therefore applied by deploying its callers — which is what
     `scripts/deploy_tools/land_tags.py` asks this to decide, so that landing a helper-role
-    change alongside all of its callers stops reading as `needs-manual-apply` (issue #1397).
+    change alongside all of its callers stops reading as `needs-manual-apply`.
 
     Only ``roles/k8s`` is walked. The Pi's Compose roles include `containers/common`, not a k8s
     role, and no k8s role is reachable from them.
@@ -223,8 +218,7 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
 
 # Manifest basenames `k8s/manifests` renders from a shared template under `ansible/templates/`
 # when the owning role ships none of its own, mapped to that template's file name. Mirrors
-# `manifests_shared_defaults` in ansible/roles/k8s/manifests/defaults/main.yml (#2872 for the
-# Service, #3043 for the IngressRoute), which
+# `manifests_shared_defaults` in ansible/roles/k8s/manifests/defaults/main.yml, which
 # `ansible/tests/k8s/test_shared_manifest_defaults.py` holds it equal to.
 #
 # Duplicated here rather than read out of that YAML because every consumer is an offline render
@@ -289,7 +283,7 @@ def manifest_template(role, basename, k8s_roles=None) -> Path | None:
     The one place a reader asks "does this role get a `<basename>`, and from where". Every
     caller that answered it with `(role/'templates'/f'{basename}.j2').is_file()` silently
     returned False for the 25 roles whose Service and the 16 whose IngressRoute moved to a
-    shared default (#2872, #3043) -- a docs generator printing "no route" for a routed service,
+    shared default -- a docs generator printing "no route" for a routed service,
     or a guard skipping the role it was written to cover.
     """
     roles_dir = Path(k8s_roles or K8S_ROLES)

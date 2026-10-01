@@ -1,10 +1,8 @@
-"""Tripwires for the three widenings #2876 deleted as memberless.
+"""Tripwires for three widenings that were deleted as memberless.
 
-#2876 (commit `fb9e4017f`) deleted four mechanisms the #2813 role merges had emptied. Three of
-them were WIDENINGS -- each added something a narrower derivation structurally cannot see -- so
-deleting each turned a loud, wrong answer into a quiet, narrow one. The deletion was the
-operator's call and git history carries every mechanism. What had no owner was the day a member
-of the class reappears (#2947).
+Each was a WIDENING -- it added something a narrower derivation structurally cannot see -- so
+its absence turns a loud, wrong answer into a quiet, narrow one. Git history carries every
+mechanism. This file owns the day a member of the class reappears.
 
 One test per class, keyed on the SHAPE rather than on the name of the member that used to be in
 it. Each reads the live tree and asserts it is clean today; each ships a planted fixture tree
@@ -33,8 +31,8 @@ DELETED_IN = "fb9e4017f"
 # `_BUILD_ROLL_COUPLINGS` mapped a build role that renders no workload of its own to the role
 # that runs what it builds, so deriving the build role from a changed path also derived its
 # consumer. Without it a Renovate Dockerfile bump derives the build role alone, pushes a new
-# image, rolls nothing and reports green -- the 2026-08-08 `@n8n/di` failure, which happened
-# because `k8s_rebuilt_images` is play-scoped and two runs lose it.
+# image, rolls nothing and reports green, because `k8s_rebuilt_images` is play-scoped and two runs
+# lose it.
 
 # Manifest kinds that run a workload. A role rendering one of these deploys what it builds in
 # the same role, so a single tag covers build and roll and the play-scoped fact never crosses a
@@ -108,7 +106,7 @@ def test_the_split_build_census_still_sees_real_builders():
 #
 # `lib.k8s_roles.role_callers` recognised two spellings of "this role runs that role's tasks":
 # `include_role`/`import_role` naming `k8s/<role>`, and an `import_tasks` of a sibling role's
-# file BY PATH. #2876 deleted the second. A role reaching a sibling that way now reads as
+# file BY PATH. Without the second, a role reaching a sibling that way reads as
 # reaching nothing, so `land_tags` reports its change `needs-manual-apply` and
 # `Release Staleness Drift` narrows to the wrong consumer set.
 
@@ -212,11 +210,11 @@ def test_the_tasks_file_census_is_not_empty():
 
 # --- class 3: an entry declaring a second tag hides a recording caller -------------------------
 #
-# `shared_role_callers._co_applied` covered the `n8n-images` `tags: [n8n-images, n8n]` shape
-# (#2666): `_role_tags` stops at a role that has a `containers_list` entry and never reads that
-# entry's OTHER declared tags, so a `--tags n8n` deploy ran the builder and wrote `n8n.json`
-# while the derivation saw no recording caller. An entry declaring a second tag again leaves a
-# `k8s_unapplied` line nothing but a hand clears.
+# `_role_tags` stops at a role that has a `containers_list` entry and never reads that entry's
+# OTHER declared tags, so an entry declaring a second tag (the `tags: [n8n-images, n8n]` shape)
+# hides a recording caller: a `--tags n8n` deploy runs the builder and writes `n8n.json` while
+# the derivation sees no recording caller. That leaves a `k8s_unapplied` line nothing but a hand
+# clears.
 
 
 # Every containers_list source in the inventory. The symptom is k8s-only, because `k8s_unapplied`

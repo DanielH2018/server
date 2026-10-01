@@ -133,17 +133,15 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal(cfg):
 # starts. So a plugin that wedges internally keeps a Running, Ready, fully-available DaemonSet
 # while kubelet deregisters the extended resource - the DaemonSet arm is structurally blind to it,
 # and the only other evidence (jellyfin and tdarr unschedulable) does not appear until they next
-# reschedule. The repo recorded this omission as "covered by monitor-bridge's check", which was a
-# true sentence about a check that reads a different metric.
+# reschedule.
 
 
 def test_the_query_uses_the_label_kube_state_metrics_actually_emits():
     """KSM sanitizes the resource name into the label, so the configured name never matches.
 
-    Live on 2026-08-20: both nodes advertised `devic.es/dri: 4`, KSM emitted
-    `resource="devic_es_dri"`, and the query for the unsanitised name matched nothing - which this
-    check reads as the plugin having deregistered. The monitor went DOWN on a healthy cluster and
-    stayed there until the sanitiser landed. The operator-facing name stays the one
+    Both nodes advertise `devic.es/dri: 4` and KSM emits `resource="devic_es_dri"`, so a query
+    for the unsanitised name matches nothing - which this check reads as the plugin having
+    deregistered, DOWN on a healthy cluster. The operator-facing name stays the one
     `kubectl describe node` prints; only the query is sanitised.
     """
     assert checks.cluster.ksm_resource_label("devic.es/dri") == "devic_es_dri"
@@ -216,8 +214,8 @@ def test_nothing_expected_is_trivially_ok():
 
 
 # ── host-coverage floor (HOST_ORIGINS_MIN) ────────────────────────────────────────────────────
-# THE BUG THESE PIN (2026-08-23): check_disk/check_mem grouped by origin but failed only on a
-# WHOLLY empty vector, so when daniel-box's node-exporter became unreachable for 5.4h both checks
-# evaluated over daniel-server alone and pushed OK — daniel-box's memory and /boot were unwatched
-# behind two green tiles. Scrape Targets cannot stand in for this: node-exporter's normal failure
+# THE BUG THESE PIN: check_disk/check_mem group by origin but, without the floor, fail only on a
+# WHOLLY empty vector, so when daniel-box's node-exporter is unreachable both checks evaluate over
+# daniel-server alone and push OK — daniel-box's memory and /boot go unwatched behind two green
+# tiles. Scrape Targets cannot stand in for this: node-exporter's normal failure
 # mode is per-collector, which leaves `up == 1` and that check green.

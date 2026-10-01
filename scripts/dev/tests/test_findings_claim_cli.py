@@ -19,7 +19,7 @@ WT = "worktree-issue-1132"
 
 # No worktrees at all, so every claim reads stale. Git itself worked (`ok=True`).
 # `LIVE` is the counterpart cmd_claim needs: WT itself checked out and held by a live
-# session, so the stale-at-birth guard lets the claim through (#1278, #1281).
+# session, so the stale-at-birth guard lets the claim through.
 STALE = facts()
 LIVE = live_worktree(WT)
 
@@ -93,7 +93,7 @@ def test_release_refuses_another_worktrees_claim_and_exits_3(capsys):
     """Pairs with `test_release_removes_the_label` above, which exits 0.
 
     Only the plan-level refusal was covered, so nothing proved `cmd_release` turns a
-    `ClaimRefused` into exit 3 rather than a traceback (#1275).
+    `ClaimRefused` into exit 3 rather than a traceback.
     """
     issue = make_issue(
         1132,
@@ -123,7 +123,7 @@ def test_claims_prints_one_row_per_claimed_issue(capsys):
 
 
 def test_claims_json_carries_every_field_of_a_row(capsys):
-    """`claims --json` had no test at all (#1275), so nothing pinned the field names a
+    """`claims --json` had no test at all, so nothing pinned the field names a
     consumer reads — `live` and `reason` above all, since they carry the verdict."""
     held = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     tools, _ = build_tools(Fakes(issues=[held], worktree_facts=STALE))
@@ -146,8 +146,7 @@ def test_reap_releases_a_stale_claim_and_leaves_a_live_one():
     """The pair.
 
     A reap that releases everything and a reap that releases nothing are indistinguishable
-    from a fixture where every claim is stale, which is what an earlier draft of this test
-    had.
+    from a fixture where every claim is stale.
     """
     live_wt = "worktree-issue-1140"
     tree = Worktree(
@@ -287,7 +286,7 @@ def test_closing_a_claimed_issue_as_refuted_releases_before_it_closes():
     assert remove_claimed < add_refuted < closed
 
 
-# --- the stale-at-birth guard: #1278 and #1281, one guard ---------------------------------
+# --- the stale-at-birth guard ---------------------------------
 
 
 def test_claim_is_clean_when_the_worktree_is_live():
@@ -299,7 +298,7 @@ def test_claim_is_clean_when_the_worktree_is_live():
 
 
 def test_claim_is_flagged_when_the_worktree_name_matches_no_branch(capsys):
-    """#1278: the spec's own table puts worktree `issue-1132` beside branch
+    """The spec's own table puts worktree `issue-1132` beside branch
     `worktree-issue-1132`, and `claim_is_live` matches on the BRANCH. So the wrong one of two
     adjacent names wrote a claim that `claim_states` immediately called stale — `reap`
     released it and `next` re-offered the issue while the session was still working it.
@@ -314,12 +313,12 @@ def test_claim_is_flagged_when_the_worktree_name_matches_no_branch(capsys):
 
 
 def test_claim_is_flagged_when_the_worktree_state_makes_the_claim_stale(capsys):
-    """#1281: the name matches a real branch, but `classify` calls it REMOVABLE.
+    """The name matches a real branch, but `classify` calls it REMOVABLE.
 
     Merged, clean and unlocked is what the primary checkout looks like (`--worktree master`)
     and what a crashed-and-resumed orchestrator looks like — the lock names a pid and a
-    process start time, and a container restart on 2026-09-05 brought 14 worktrees back
-    without theirs. Distinct from the test above: there the name matches nothing at all.
+    process start time, and a container restart brings worktrees back without theirs.
+    Distinct from the test above: there the name matches nothing at all.
     """
     tree = Worktree(path="/w/wt", head="abc", branch=WT, locked=False, lock_reason="")
     issue = make_issue(1132)
@@ -355,7 +354,7 @@ def test_claim_proceeds_when_the_worktree_read_fails(capsys):
     assert any(f"Claim: `{WT}`" in a for c in calls.gh for a in c)
 
 
-# --- #1277: every path that closes or reopens releases the claim ---------------------------
+# --- every path that closes or reopens releases the claim ---------------------------
 
 
 def test_close_releases_the_claim_it_closes():
@@ -365,8 +364,7 @@ def test_close_releases_the_claim_it_closes():
     invisible to every view at once — and a later `open` reopening that issue brings it back
     LIVE, blocking `claim` for as long as the claiming worktree exists.
 
-    `verify --close` was the third caller of this helper until `verify` stopped closing
-    anything (#1313); `close` and `open`'s reopen path are the two that remain.
+    `close` and `open`'s reopen path are the two callers of this helper.
     """
     issue = make_issue(
         1132,
@@ -388,15 +386,15 @@ def test_close_writes_no_release_for_an_unclaimed_issue():
     assert any(c[:2] == ["issue", "close"] for c in calls.gh)
 
 
-# --- #1284: the CLI half of the hardening -------------------------------------------------
+# --- the CLI half of the hardening -------------------------------------------------
 
 
 def test_claim_refuses_a_worktree_name_the_trailer_cannot_carry(capsys):
-    """The rejecting half of #1284.3: nothing is written, and the exit says bad argument.
+    """The rejecting half: nothing is written, and the exit says bad argument.
 
-    This name used to write the comment AND the label, then fail to parse its own trailer on
-    read-back and report `lost the race to \\`None\\`` — a race against a rival that does not
-    exist, with the claim already posted.
+    A name the trailer cannot carry must not write the comment AND the label, then fail to
+    parse its own trailer on read-back and report a lost race against `None` — a rival that
+    does not exist, with the claim already posted.
     """
     issue = make_issue(1132)
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
@@ -435,7 +433,7 @@ def test_a_read_back_that_finds_no_claim_does_not_report_a_race(capsys):
 
 
 def test_release_creates_the_claimed_label_before_it_removes_it():
-    """The accepting half of #1284.4: `--remove-label` fails on a label the repo lacks.
+    """The accepting half: `--remove-label` fails on a label the repo lacks.
 
     A claim can arrive with the label never created — hand-posted, or after an `--add-label`
     that failed — and without this sync the release comment is posted and THEN the label

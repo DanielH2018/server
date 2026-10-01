@@ -10,8 +10,6 @@ section no longer exists, which is the way out of a ``section-gone`` finding: a 
 heading is a new unit, and the old row cannot be hand-deleted without tripping the lock's
 own checksum. ``lint`` reports citations that cannot be support. Repo store only until
 slice 4 adds ``--store memory``.
-
-The design is in PR #2138.
 """
 
 import sys as _sys

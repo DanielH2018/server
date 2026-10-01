@@ -1,9 +1,7 @@
 """check_cluster_targets: the hysteresis that separates a rollout's scrape gap from a dead target.
 
-66 DOWN episodes in the 30 days to 2026-09-11 — the highest count in the estate — nearly all of
-them one cycle long and naming a single target that was rolling at the time. `up` goes to 0 for
-a scrape or two whenever a workload restarts, and this check could not tell that from an
-exporter that died.
+`up` goes to 0 for a scrape or two whenever a workload restarts, naming a single rolling
+target, and the check cannot tell that from an exporter that died unless it holds.
 
 Each pair is one input the gate must hold and one it must let through, so a gate that suppressed
 everything and one that suppressed nothing are distinguishable from the passing side.
@@ -73,7 +71,7 @@ def test_one_ok_cycle_resets_the_streak(ccfg):
 
 
 def test_a_threshold_of_one_pages_immediately(ccfg):
-    # The gate is configuration, not a hardcoded 3: set to 1 it restores the old behaviour.
+    # The gate is configuration, not a hardcoded 3: set to 1 it gives no hold.
     # Without this, a CLUSTER_TARGETS_CONSECUTIVE that stopped being read would read green above.
     ok, msg = check_cluster_targets(
         replace(ccfg, CLUSTER_TARGETS_CONSECUTIVE=1), fetch=up_vector(1, 1, 1, 0)

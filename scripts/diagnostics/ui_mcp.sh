@@ -21,7 +21,7 @@
 set -euo pipefail
 
 # `--help` answers from any environment, ahead of every step below — the repo-wide convention
-# `scripts/lib/tests/test_entry_points_answer_help.py` checks (#2854). The awk prints this
+# `scripts/lib/tests/test_entry_points_answer_help.py` checks. The awk prints this
 # file's leading comment block, which is the usage, with the `#` markers stripped.
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
@@ -113,7 +113,7 @@ EOF
 # arrives on a connection opened for a different hostname is answered by Traefik with
 # `421 Misdirected Request`. For a navigation the browser hides that by retrying on a fresh
 # connection; for the page's OWN XHRs it does not, so a dashboard would mount its chrome and
-# then render no panels at all — silently, and only sometimes. Measured 2026-08-30: the
+# then render no panels at all — silently, and only sometimes. Measured: the
 # Grafana panel tier failed this way on 5 dashboards in one run and a disjoint 2 in the next.
 # HTTP/1.1 has no coalescing, so the failure cannot occur.
 

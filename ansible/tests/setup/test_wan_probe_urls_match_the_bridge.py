@@ -1,4 +1,4 @@
-"""The host crons and monitor-bridge must probe the SAME endpoints, issue #2793.
+"""The host crons and monitor-bridge must probe the SAME endpoints.
 
 The WAN gate has two halves: monitor-bridge's `wan_reachable` check, which suppresses the four
 bridge checks that reach the internet, and `wan_reachable` in kuma-push-lib.sh, which the four host
@@ -42,7 +42,7 @@ def test_the_list_names_two_independent_providers():
     declared = yaml_fast.safe_load(ALL_VARS.read_text())["wan_probe_urls"]
     hosts = {re.sub(r"^https?://([^/]+).*$", r"\1", u) for u in declared}
     assert len(hosts) >= 2, hosts
-    # By hostname, never an anycast IP: the 2026-09-18 outage included DNS failure, and an
+    # By hostname, never an anycast IP: a WAN outage can include DNS failure, and an
     # IP-only probe stays green through a DNS-only outage while every dependent fails.
     for host in hosts:
         assert not re.fullmatch(r"[\d.]+", host), f"{host} is an IP, not a hostname"

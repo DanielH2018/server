@@ -1,11 +1,10 @@
 ---
-# Same tag the Docker instance runs, so a behavioural difference between the two is never
-# the version. The CRD manifests below are pinned to the matching minor.
+# The CRD manifests below are pinned to the matching minor.
 # Digest-pinned, like this file's other images: the edge terminates TLS and carries the CrowdSec
 # bouncer and the Authelia forward-auth chain, so it is the last workload that should be able to
 # change underneath a re-pull. The tag alone is exact but mutable — the digest is what makes the
-# pull reproducible. Digest read off the running pod 2026-08-31; Renovate updates `tag@sha256:`
-# pairs in place, as it already does for wg_easy_k8s_image.
+# pull reproducible. Renovate updates `tag@sha256:`
+# pairs in place, as it does for wg_easy_k8s_image.
 traefik_k8s_image: traefik:v3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0
 traefik_k8s_crd_version: v3.7
 
@@ -98,7 +97,7 @@ traefik_k8s_manage_livesync_gate: true
 traefik_k8s_acme_ca_server: ""
 
 # acme.json only. Regenerable — losing it costs one ACME re-issue, not data — so it is
-# small and not the volume the slice-1 backup gate turns on.
+# small.
 traefik_k8s_acme_storage: 128Mi
 
 # "1", not "1.0" — Kubernetes canonicalises quantities, so a manifest saying 1.0 produces a live
@@ -111,10 +110,9 @@ traefik_k8s_mem_limit: 512Mi
 traefik_k8s_cpu_request: "100m"
 traefik_k8s_mem_request: 128Mi
 
-# Slice-6 B1 — the CrowdSec bouncer plugin (same pin as the Docker edge's traefik.yml.j2)
-# and the log-tailing agent sidecar. The sidecar parses this pod's access log locally and
-# ships signals to the in-cluster LAPI, so its collections are the HTTP-side subset — the
-# syslog/authelia parsers stay with the agents that read those logs (daniel-server, B2).
+# The CrowdSec bouncer plugin and the log-tailing agent sidecar. The sidecar parses this pod's
+# access log locally and ships signals to the in-cluster LAPI, so its collections are the
+# HTTP-side subset — the syslog/authelia parsers stay with the agents that read those logs.
 traefik_k8s_bouncer_plugin_version: v1.7.1
 
 # The Cloudflare real-IP middleware: an in-repo Traefik local plugin (files/cloudflare-realip/),
@@ -132,7 +130,7 @@ traefik_k8s_agent_mem_limit: 256Mi
 traefik_k8s_agent_cpu_request: 50m
 traefik_k8s_agent_mem_request: 64Mi
 # The access log lives on an emptyDir shared between traefik, the crowdsec-agent sidecar, and
-# the access-log-rotate sidecar below. sizeLimit is now a BACKSTOP, not a countdown: the
+# the access-log-rotate sidecar below. sizeLimit is a BACKSTOP, not a countdown: the
 # access-log-rotate sidecar copytruncates the file well before this is reached (see its
 # resources/policy below), so hitting this would mean rotation itself has stopped working.
 traefik_k8s_access_log_size: 1Gi

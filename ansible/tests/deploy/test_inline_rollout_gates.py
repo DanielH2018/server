@@ -1,16 +1,16 @@
 """A role that talks to a workload it just rolled must wait for that rollout first.
 
 `k8s/manifests` does not wait. It queues the rollout for `k8s/manifests/tasks/drain.yml`, which drains the
-whole batch at the end — the change that turned 1386s of serial waiting into one max(). Almost
+whole batch at the end. Almost
 every role tolerates that, because nothing in them touches the workload they just rolled. The
 ones that do read the OUTGOING pod, and every assertion they make describes it.
 
-Two were found by a deploy failing against the pod it had just restarted:
+Two roles show the failure, a deploy running against the pod it just restarted:
 
-  * crowdsec, 2026-08-16: 2 of 4 registrations landed, then the pod went down mid-loop, and
-    `no_log` censored the body into a bare "non-zero return code".
-  * registry, 2026-08-20 13:49: the push self-test got `connection refused` on its first pod
-    and passed on its retry, spending the whole of `backoffLimit: 1` to stay green.
+  * crowdsec: some registrations land, then the pod goes down mid-loop, and `no_log` censors
+    the body into a bare "non-zero return code".
+  * registry: the push self-test gets `connection refused` on its first pod and passes on its
+    retry, spending the whole of `backoffLimit: 1` to stay green.
 
 `rollout status`, never `wait --for=condition=Available` — every Deployment here is
 single-replica, so the OLD pod satisfies Available and the wait returns instantly against a
@@ -35,9 +35,9 @@ The derived half recognises three shapes of "inspects a pod", all of them via `k
 The register trace follows the bare `{{ reg.stdout }}` form only. A filter or an index on it
 (`{{ reg.stdout | trim }}`) is unresolved, not resolved-to-nothing, so it fails until excused.
 
-WORKLOAD IDENTITY IS NOT THE DIRECTORY NAME. The first version of this guard matched
-`app={role}` and then looked for the role's directory name inside a `rollout status` command.
-That is true of exactly the four roles it was written for. `observability` renders the workload
+WORKLOAD IDENTITY IS NOT THE DIRECTORY NAME. Matching `app={role}` and then looking for the
+role's directory name inside a `rollout status` command holds for only four roles.
+`observability` renders the workload
 called `grafana`; `pihole` renders two, `pihole` and `pihole-2`, from one template and picks
 between them at runtime. So both the inspection and the gate resolve to a workload NAME taken
 from the role's RENDERED manifests (`_k8s_render.rendered_docs()`), and a gate satisfies an
@@ -93,8 +93,7 @@ _MUST_GATE = {
     "registry": "registry",
     # sonarr reads its library over the Service ClusterIP with `uri`, not through kubectl, so
     # the derived half below cannot see the inspection at all — the same blind spot registry is
-    # here for. Its gate replaced a 120s `until:` poll that was covering the rollout by
-    # accident and timing out inside a 660s first boot (#2235).
+    # here for..
     "sonarr": "sonarr",
 }
 
@@ -170,10 +169,8 @@ def test_the_gate_is_tagged_with_what_it_protects() -> None:
 # ── the derived half ────────────────────────────────────────────────────────────────────────
 
 
-# Derived on 2026-08-27. Named here so a derivation that silently stops matching fails loudly
-# rather than passing an empty set — the failure mode recorded in
-# memory/a-derivation-can-narrow-the-list-it-replaces.md, where replacing a hardcoded list by
-# shape dropped an entry while reading as a widening.
+# Named here so a derivation that silently stops matching fails loudly rather than passing an
+# empty set: replacing a hardcoded list by shape can drop an entry while reading as a widening.
 #
 # crowdsec is in BOTH halves, and that is the point: it is the one role whose shape the
 # derivation and the hand-written set agree on, so the two halves are checked against each
@@ -188,7 +185,7 @@ _KNOWN_SELF_POD_ROLES = {
     "tdarr",
 }
 
-# Measured 2026-08-27: 30 resolved self-pod inspections across those roles. A floor far below
+# 30 resolved self-pod inspections across those roles. A floor far below
 # the real count cannot tell "one role changed shape" from "the matcher broke and half the
 # corpus stopped being read".
 _MIN_SELF_POD_INSPECTIONS = 24
@@ -208,7 +205,7 @@ _UNRESOLVED_TARGETS = {
         "pihole",
         "Rebuild gravity after a blocklist change",
     ): "execs a pod name resolved at runtime; ordering carried by the gated lookup above it",
-    # This read IS the gate (#2884): it refuses to restart one instance while the other is
+    # This read IS the gate: it refuses to restart one instance while the other is
     # terminating. Requiring a rollout to have been proved before it would invert the ordering —
     # the whole point is that it runs before anything rolls.
     (
@@ -311,8 +308,6 @@ def test_the_unresolved_exceptions_are_all_still_needed() -> None:
 
 def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
     # The three primitives that LOOK like gates and are all satisfied by the outgoing pod.
-    # janitorr shipped the middle one and read as gated for as long as nobody checked which pod
-    # its proofs were describing.
     for role in _self_pod_roles():
         owned = set(_owned(role))
         for task in _tasks(role):
@@ -345,12 +340,11 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 # census below resolves that reference (`_helpers.rollout_seconds`), so a role spelling its
 # budget as a variable stays inside this check rather than dropping out of it.
 #
-# What was actually missing is the reason the values differ. Everything else about these gates
-# is already pinned above — that one exists, that it precedes the pod inspection, that it is
-# `rollout status` and not a readiness wait. The number was the one part nothing held, and
-# eleven roles carry one: nine at the 300s default, qbittorrent above it and dri-device-plugin
-# below it. A reader meeting either outlier could not tell a considered budget from a typo
-# without going and looking, and for dri-device-plugin looking does not answer it.
+# The table holds the reason the values differ. Everything else about these gates is pinned
+# above — that one exists, that it precedes the pod inspection, that it is `rollout status` and
+# not a readiness wait. A reader meeting an outlier (qbittorrent above the 300s default,
+# dri-device-plugin below it) could not tell a considered budget from a typo without going and
+# looking, and for dri-device-plugin looking does not answer it.
 _GATE_BUDGETS = {
     "observability": (
         300,
@@ -395,10 +389,10 @@ _GATE_BUDGETS = {
     "tdarr": (300, "default"),
 }
 
-# `--timeout=660s` or `--timeout={{ sonarr_k8s_rollout_timeout }}`. The literal-only form this
-# replaced matched nothing on the templated spelling, and `_inline_gate_budgets` drops a role
-# with no budgets — so a gate naming its budget in a variable left the census silently, and
-# `test_the_gate_budget_census_is_non_vacuous` passed because it was no longer looking at it.
+# `--timeout=660s` or `--timeout={{ sonarr_k8s_rollout_timeout }}`. A literal-only form
+# would match nothing on the templated spelling, and `_inline_gate_budgets` drops a role with
+# no budgets — so a gate naming its budget in a variable would leave the census silently, and
+# `test_the_gate_budget_census_is_non_vacuous` would pass because it was no longer looking at it.
 _TIMEOUT = re.compile(r"--timeout=(\d+s|\{\{\s*\w+\s*\}\})")
 
 

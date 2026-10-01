@@ -4,7 +4,7 @@ prek splits a hook's file list across several CONCURRENT invocations — ten for
 in this repo. Before the lock, all ten started in a fresh worktree with `styles/Google`
 missing, all ten ran `vale sync` into that one directory, and one died with
 `unlinkat .../styles/Google: directory not empty` while a sibling was still unpacking. Every
-invocation reported `0 errors`: the hook failed on the sync alone (issue #1189).
+invocation reported `0 errors`: the hook failed on the sync alone.
 
 WHAT MAKES THIS TEST ABLE TO GO RED. `test_an_unlocked_guard_syncs_concurrently` runs the
 pre-fix one-liner against the same harness and asserts it DOES race. A count of one sync
@@ -102,7 +102,7 @@ def run_concurrently(repo: Path, count: int, script: str = "scripts/validate/val
 
     Every wait carries `DEFAULT_TIMEOUT`, because a guard that wedges on its own lock is
     exactly what this module tests for: unbounded, it parks the CI run instead of failing
-    here (#3073). `communicate` raising `TimeoutExpired` leaves its child alive and the
+    here. `communicate` raising `TimeoutExpired` leaves its child alive and the
     siblings never waited on, and `filterwarnings = ["error"]` turns the `ResourceWarning`
     that follows into a failure on whichever test runs last — so the `finally` reaps both
     halves of every proc whatever the first wait did.
@@ -180,7 +180,7 @@ def test_ten_concurrent_invocations_sync_once_and_all_lint(fake_repo):
 
 
 def test_an_unlocked_guard_syncs_concurrently(fake_repo):
-    """The rejecting input: the pre-fix entry, which is what issue #1189 reported.
+    """The rejecting input: the pre-fix entry.
 
     Without this the assertions above are unfalsifiable — a harness that serialises the
     processes by accident would score a clean single sync for any script at all.

@@ -145,7 +145,7 @@ def test_declares_snapshot_claims_ignores_an_indented_key():
     )
 
 
-# declares_snapshot_claims() is a regex over source text. Since 2026-08-22 it is LOAD-BEARING,
+# declares_snapshot_claims() is a regex over source text. It is LOAD-BEARING,
 # not just cosmetic: split_k8s_auto_deploy() uses it to decide which promotions count against
 # gitops_deploy_k8s_autodeploy_max_claim_services_per_tick. That inverts the safe direction —
 # for alert wording a False on unparseable input under-claims (harmless), but for gating it
@@ -153,9 +153,9 @@ def test_declares_snapshot_claims_ignores_an_indented_key():
 # This test is what holds that closed, so treat a failure here as a deploy-safety failure.
 #
 # roles/k8s/manifests decides the REAL revert from `yaml.safe_load`'d defaults —
-# a different reader of the same file. All 13 roles that declare
-# `k8s_autodeploy_snapshot_pvcs` today write it as a single-line list literal, so nothing has
-# ever exercised the gap: reformat one to block style and the regex returns False (no revert
+# a different reader of the same file. Every role that declares
+# `k8s_autodeploy_snapshot_pvcs` writes it as a single-line list literal, so nothing
+# exercises the gap: reformat one to block style and the regex returns False (no revert
 # applies, says the alert) while the volume still reverts for real. This walks every role's
 # actual defaults/main.yml and pins that the two readers agree on all of them, so a future
 # reformat fails this test instead of surfacing as an incident alert that names the wrong thing.

@@ -1,9 +1,6 @@
 ---
-# autofix-bridge on k8s (Phase F drain): the containerized *arr remediation sidecar,
-# running the SAME files/autofix.py as the Docker role shipped (staged from the
-# containers role, never forked). The host plane it used to carry is gone: the hourly
-# disk-prune cron pruned daniel-server's Docker daemon and retired with it (2026-08-14),
-# and the two fake-remux crons moved to roles/setup/fake_remux.
+# autofix-bridge on k8s: the containerized *arr remediation sidecar. The two fake-remux
+# crons live in roles/setup/fake_remux.
 
 - name: Create the staging directory
   tags: [config]
@@ -50,7 +47,7 @@
 # edit confined to bridge/common.py would deploy, read green, and change nothing live. Sorted
 # before hashing for the same reason as there: the module set, not the list order, rolls the pod.
 # Hashed off the source files rather than the stage's register, for the reason monitor-bridge's
-# identically-named task records: the stage is skipped on a dry run (#2614).
+# identically-named task records: the stage is skipped on a dry run.
 - name: Combine the staged module checksums into one pod-roll trigger
   tags: [config]
   ansible.builtin.set_fact:
@@ -80,10 +77,10 @@
   when: not k8s_dry_run | bool
 
 # Server-side, like monitor-bridge's: client-side apply re-stores the whole object in an
-# annotation capped at 262144 bytes, which the bridge crossed on 2026-09-01. This script is far
+# annotation capped at 262144 bytes, which a bridge ConfigMap can exceed. This script is far
 # smaller, but one apply form across the four script ConfigMaps is one thing to get right.
 # --force-conflicts takes the data keys from the client-side field manager that applied them
-# before the switch. Server-side apply prints the same line whether or not anything changed,
+# earlier. Server-side apply prints the same line whether or not anything changed,
 # so the changed signal is the staged file. ENFORCED by
 # ansible/tests/k8s/test_script_configmaps_apply_server_side.py.
 - name: Apply the script ConfigMap
@@ -94,7 +91,7 @@
       -f /etc/rancher/k3s/autofix-bridge/configmap.yaml
   become: true
   # Skipped on a dry run or --check. k8s/manifests only dry-runs its own apply, so without this
-  # guard a dry run would really write this ConfigMap (#2588).
+  # guard a dry run would really write this ConfigMap.
   when: not k8s_no_mutate
   register: autofix_bridge_cm_apply
   changed_when: autofix_bridge_script is changed

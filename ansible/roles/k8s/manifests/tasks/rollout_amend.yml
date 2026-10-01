@@ -1,9 +1,9 @@
 ---
-# Raise ONE workload's rollout expectation in a release record already written (#2902).
+# Raise ONE workload's rollout expectation in a release record already written.
 #
 # THE PROBLEM. release_stamp.yml runs inside this role, before the owning role's private apply
 # and restart. For a workload whose own manifest that later apply carries — pihole's instance 2,
-# staged as a deferred manifest since #2899 — the stamp cannot decide `restart`: a changed render
+# staged as a deferred manifest — the stamp cannot decide `restart`: a changed render
 # with no roll by the shared apply reads `true`, and then the owner's apply rolls the workload by
 # changing its pod template, which stamps no `restartedAt`. `probe.py health` would fail a roll
 # that did happen, on every image bump. So such an entry declares `rolled_by_role: true`, the
@@ -12,7 +12,7 @@
 # WHAT THE OWNER KNOWS AND THE STAMP DOES NOT: whether it issued `kubectl rollout restart`. That
 # is the only roll that stamps `restartedAt`, so it is the only one `restart: true` may claim. A
 # workload the owner's own apply rolled keeps `restart: false`, exactly as
-# `manifests_rolled_by_apply` keeps it false for the shared apply's own rolls (#1988).
+# `manifests_rolled_by_apply` keeps it false for the shared apply's own rolls.
 #
 # `applied_at` is deliberately left as the shared apply wrote it. The owner's restart happens
 # strictly after it, so a fresh `restartedAt` is still strictly newer — which is the comparison
@@ -21,7 +21,7 @@
 # SKIP DIRECTION. Nothing here can invent an expectation: a missing record, an unparseable one or
 # a play that fails before this file runs all leave `restart: false`, so the gate keeps the
 # meaning it had. That is the direction `probe_lib/health.py:release_expected_restarts` names
-# safe — an expectation the deploy never earned is the false red #1867 rejects, while a missing
+# safe — an expectation the deploy never earned is the false red the gate rejects, while a missing
 # one leaves the rollout-complete and no-recent-restart halves of the gate in force.
 #
 # The caller passes:

@@ -1,10 +1,8 @@
 """The uv tools the hosts install are pinned, and each pin equals its twin elsewhere in the tree.
 
 `roles/setup/initial_setup/tasks/host-basics.yml` installs ansible-core, ansible-lint and prek
-as uv tools. Until #2148 the install carried no version, so the ansible that ran every deploy
-was whatever PyPI served on provisioning day: on 2026-09-21 daniel-server ran 2.21.0 and
-daniel-box 2.21.2 against a 2.21.4 uv.lock. Each tool now names an exact version, and each
-version is already chosen somewhere else:
+as uv tools. Each tool names an exact version, so the ansible that runs every deploy is not
+whatever PyPI served on provisioning day, and each version is already chosen somewhere else:
 
 - ansible-core: pyproject.toml's dev group (`ansible-core==`), the env the tests and
   `uv run ansible-playbook` resolve;
@@ -67,7 +65,7 @@ def test_a_pattern_that_matches_nothing_is_flagged():
 
 
 def test_an_unpinned_host_tool_is_flagged():
-    """The pre-#2148 line, `- ansible-core`, reads as no version at all."""
+    """A bare `- ansible-core` line reads as no version at all."""
     assert (
         versions_in("  loop:\n    - ansible-core\n", host_pattern("ansible-core"))
         == set()

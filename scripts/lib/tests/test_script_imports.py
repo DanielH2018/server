@@ -2,7 +2,7 @@
 
 Matching on the basename alone credited `scripts/lib/gitops_markers.py` with
 `gitops_state.py`'s import of the gitops_deploy role's `files/gitops_markers.py`, and
-`scripts/docs/reference/secrets.py` with the stdlib `secrets` (#3038). The synthetic pairs are
+`scripts/docs/reference/secrets.py` with the stdlib `secrets`. The synthetic pairs are
 the red proof; `test_the_real_tree_*` is the Verify-by from that issue.
 
 Run: uv run pytest scripts/lib/tests/test_script_imports.py

@@ -90,9 +90,9 @@ def _is_disabled_by_packagerule(
     """The rule that disables `current_value` for `rel_path`, or None if none do.
 
     A rule with no `matchFileNames` applies everywhere; one with `matchFileNames` applies only
-    where at least one of its globs matches. This is the check the pre-2026-08-13 disable rule
-    lacked scoping for: it matched every `currentValue: latest` regardless of file, silently
-    disabling 13 k8s roles' worth of deliberately digest-pinned images.
+    where at least one of its globs matches. A rule without file scoping would match every
+    `currentValue: latest` regardless of file, silently disabling deliberately digest-pinned
+    images.
     """
     for rule in rules:
         if not _slash_regex(rule["matchCurrentValue"]).search(current_value):
@@ -108,8 +108,8 @@ def _is_disabled_by_packagerule(
 def _manager_covering(path_fragment: str) -> dict:
     """Selected by the paths a manager watches, not by its datasource.
 
-    There is more than one `docker`-datasource manager now — the compose templates and the k8s
-    role defaults — so picking the first match on datasource alone would silently hand back the
+    More than one `docker`-datasource manager exists — the compose templates and the k8s role
+    defaults — so picking the first match on datasource alone would silently hand back the
     wrong one and make a coverage test assert against files it never looks at.
     """
     for m in _MANAGERS:
@@ -164,10 +164,9 @@ def render_auto_replace(template: str, **values: str | None) -> str:
 # ── the n8n base-pin ledger ──────────────────────────────────────────────────────────────
 #
 # Both n8n FROMs pin a channel tag with a digest beside it, so a bump changes only the digest
-# and no version string appears in the diff for a reader or a test to compare. Renovate PR
-# #1440 proposed a lockstep DOWNGRADE that way and passed every check (issue #1493). The
-# ledger beside the Dockerfiles records the version each adopted digest carries; the helpers
-# here parse it, and the guards in test_renovate_dockerfiles.py assert against it.
+# and no version string appears in the diff for a reader or a test to compare. The ledger
+# beside the Dockerfiles records the version each adopted digest carries; the helpers here
+# parse it, and the guards in test_renovate_dockerfiles.py assert against it.
 N8N_ROLE_DIR = REPO / "ansible/roles/k8s/n8n"
 N8N_PIN_HISTORY = N8N_ROLE_DIR / "base-pin-history.tsv"
 

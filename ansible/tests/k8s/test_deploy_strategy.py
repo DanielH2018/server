@@ -3,11 +3,10 @@
 `strategy: Recreate` stops the old pod before starting the new one, so each deploy of that
 workload has a hard downtime gap. That is the right call for most of this fleet — sqlite
 databases, single-writer TSDBs, a Zigbee radio that accepts one client — and each template
-says so in a comment. A comment is not a gate. Since 2026-09-19 the field comes from
+says so in a comment. A comment is not a gate. The field comes from
 `spec_shell` in `ansible/templates/workload-shell.yml.j2`, whose `strategy` argument has no
-default, so every Deployment states its choice at the call — the 19 that used to leave it at
-the API default now say `RollingUpdate` — and `test_workload_shell_uses_the_macros.py` refuses
-a hand-written `strategy:`. The allowlist below is where the REASON for a Recreate is
+default, so every Deployment states its choice at the call, and
+`test_workload_shell_uses_the_macros.py` refuses a hand-written `strategy:`. The allowlist below is where the REASON for a Recreate is
 recorded, which the call cannot carry.
 
 Two guards:

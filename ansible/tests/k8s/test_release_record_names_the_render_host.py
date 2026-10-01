@@ -1,4 +1,4 @@
-"""The release record names the inventory host that rendered it (#2532).
+"""The release record names the inventory host that rendered it.
 
 `release_stamp.yml` identifies a release by the sha256 of the RENDERED manifests, on the
 grounds that one commit can render differently on two hosts. That reasoning only closes if

@@ -47,9 +47,9 @@ def test_disk_over_threshold_names_mount(monkeypatch, cfg):
 
 
 def test_disk_names_the_breaching_host_not_the_healthy_one(monkeypatch, cfg):
-    """THE BUG THIS PINS (2026-08-15): a full disk was paired with the other host's size.
+    """THE BUG THIS PINS: a full disk was paired with the other host's size.
 
-    avail and size were two separate max() queries, so once both estates reported into one
+    avail and size were two separate max() queries, so with both hosts reporting into one
     Prometheus a full disk on one host could be paired with the other's size. A per-origin
     percentage keeps each host's numerator with its own denominator, and the alert has to name WHICH
     host is full to be actionable.
@@ -146,7 +146,7 @@ def test_cert(monkeypatch, days_left, ok, expect, cfg):
 
 
 def test_cert_names_the_expiring_certificate_and_not_its_healthy_peer(cfg):
-    """The TLS Cert Expiry tile promises the message names the certificate (#3101).
+    """The TLS Cert Expiry tile promises the message names the certificate.
 
     The query is per-series for this reason: `min(traefik_tls_certs_not_after)` aggregated the
     `cn` away, so a two-certificate store produced a DOWN naming neither. Asserted as the whole
@@ -280,12 +280,10 @@ def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(
 ):
     """A recovered pod must drop out of the arm instead of holding the tile red for an hour.
 
-    `increase(...[1h]) > 3` is a pure lookback, so zigbee2mqtt kept `k3s Workload Health` DOWN
-    on `restarts in window: 9` for ~30 min after it recovered on 2026-08-23. The recency clause
-    is the fix and it is invisible to k8s_workloads_verdict, which receives the offenders as an
-    already-filtered list — the query text is the only place it can be enforced. Verified live
-    the same day: with a 2m recency window the recovered pod dropped out while the ungated
-    query still matched it.
+    `increase(...[1h]) > 3` is a pure lookback, so a recovered pod keeps `k3s Workload Health`
+    DOWN on `restarts in window: 9` until the hour passes. The recency clause is the fix and it
+    is invisible to k8s_workloads_verdict, which receives the offenders as an already-filtered
+    list — the query text is the only place it can be enforced.
     """
     queries = []
 
@@ -311,9 +309,8 @@ def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(
 def test_the_recency_window_is_wider_than_the_worst_observed_restart_spacing(cfg):
     """Below the spacing the arm flaps, and `k3s Workload Health` is max_retries: 0.
 
-    The 2026-08-13 homepage incident spread 31 restarts over a night, ~15-19 min apart. A
-    recency window inside that spacing goes UP in the gaps, and every flap is an immediate
-    DOWN plus a notification (the crowdsec-appsec failure: 24 transitions in 3h). Pin the
+    A crash-looping pod restarts ~15-19 min apart. A recency window inside that spacing goes
+    UP in the gaps, and every flap is an immediate DOWN plus a notification. Pin the
     floor so a later "make it clear faster" edit cannot cross it silently.
     """
     # 30m, not 20m: the observed spacing RANGE tops out at ~19 min, so a 20m floor sits at the
@@ -330,9 +327,8 @@ def test_host_origins_floor_defaults_to_both_nodes(cfg):
     """The floor is 2 because node-exporter is a DaemonSet on both nodes.
 
     At 1 the arm is inert and check_disk/check_mem silently report the survivor's numbers as the
-    estate's — which is precisely the 2026-08-23 outage it was added for, where daniel-box went
-    unwatched for 5.4h behind two green tiles. Every other arm here monkeypatches the constant, so
-    nothing pinned the shipped value (2026-08-23b review L3).
+    estate's. Every other arm here monkeypatches the constant, so this test pins the shipped
+    value.
     """
     assert cfg.HOST_ORIGINS_MIN == 2, (
         "HOST_ORIGINS_MIN must default to 2 — one per node. Below that the host-coverage arm "

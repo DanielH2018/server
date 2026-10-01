@@ -1,6 +1,5 @@
 ---
 # Unattended security upgrades, fail2ban, and SSH hardening.
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
 - name: Enable periodic unattended security upgrades
   tags: [unattended-upgrades]
@@ -29,7 +28,7 @@
   #    each entry to `o=X,a=Y` — so it can only match a repo publishing a `Suite:` field.
   #    Origins-Pattern takes `key=value` pairs and can match on `codename`, `label` or `site`
   #    instead. The GitHub CLI repo has no Suite (origin='gh', archive='', codename='stable',
-  #    measured via python-apt on daniel-box 2026-08-24), so `gh:stable` in Allowed-Origins
+  #    measured via python-apt on daniel-box), so `gh:stable` in Allowed-Origins
   #    matched nothing while reading as configured.
   # 2. A `{ ... }` block READS like a replacement. Both forms in fact append (measured with
   #    `apt-config -c`), but a replacement here would silently drop the -security and ESM
@@ -60,7 +59,7 @@
   # that nothing afterwards can match — the credential is re-requested every single time, and
   # no timeout value fixes that because the ticket is never *found*, only ever created.
   # `global` keys the ticket on the user alone, so one authentication covers every pane and
-  # every non-tty shell for the window. Measured on daniel-box 2026-08-16: two `sudo -v` calls
+  # every non-tty shell for the window. Measured on daniel-box: two `sudo -v` calls
   # in one pane prompted once (per-tty caching was already working), while `sudo -n -v` from a
   # `!` command reported "a password is required" — the no-tty path, not expiry.
   #
@@ -103,13 +102,12 @@
 
 - name: Harden the sys user's SSH directory
   tags: [ssh]
-  # THE PATH IS ABSOLUTE, and has to be. This task read `path: ~/.ssh` until 2026-09-24 (#2413),
-  # and hardened root's directory instead of the sys user's on every run. The file module expands
-  # `~` as the BECOME user; this play is `become: true` (ansible/initial_setup.yml) and the sudo
-  # plugin defaults to `-H`, so `~` resolved to /root. The task therefore chowned /root/.ssh to
-  # ubuntu recursively — which StrictModes reads as a wrong-owner key file, refusing root's keys —
-  # while /home/ubuntu/.ssh kept its 640 and 660 modes and its August ctimes. Both hosts recorded
-  # the task as `ok` throughout, because chowning the wrong directory succeeds.
+  # THE PATH IS ABSOLUTE, and has to be. The file module expands `~` as the BECOME user; this
+  # play is `become: true` (ansible/initial_setup.yml) and the sudo plugin defaults to `-H`, so
+  # `~` resolves to /root. A `~/.ssh` path would chown /root/.ssh to ubuntu recursively, which
+  # StrictModes reads as a wrong-owner key file and refuses root's keys, while the sys user's
+  # directory stays unhardened. The task would report `ok` throughout, because chowning the
+  # wrong directory succeeds.
   #
   # `become: true` STAYS. With the path pinned, escalation no longer decides which directory is
   # written, and it is what lets this correct an owner that has already drifted to root.
@@ -135,11 +133,10 @@
 
 - name: Give root back its own SSH directory
   tags: [ssh]
-  # The cleanup half of #2413. Pinning the path above stops the wrong directory being chowned; it
-  # does nothing about the ownership already on disk, which stays ubuntu-owned until something
-  # puts it back. Ownership ONLY — root's modes were never touched by the bug, so they are not
-  # this task's business. Guarded on the stat above so it can never CREATE /root/.ssh: a host
-  # where root has no keys should keep it that way.
+  # Pinning the path above stops the wrong directory being chowned; it does nothing about
+  # ownership already on disk, which stays ubuntu-owned until something puts it back. Ownership
+  # ONLY: root's modes are not this task's business. Guarded on the stat above so it can never
+  # CREATE /root/.ssh: a host where root has no keys should keep it that way.
   ansible.builtin.file:
     path: /root/.ssh
     state: directory
@@ -179,11 +176,11 @@
     - { key: "MaxAuthTries", value: "3" }
     # 10 is OpenSSH's own default and still within the CIS ceiling. MaxSessions caps channels
     # per CONNECTION, not per host, and every interactive session to these hosts is multiplexed
-    # down one ControlMaster connection (chezmoi home/private_dot_ssh/private_config.tmpl) —
-    # so 2 meant two concurrent shells per host. The third got `error: no more sessions` from
-    # sshd, which the client reports as `mux_client_request_session: session request failed:
-    # Session open refused by peer`. It then falls back to its own connection and cannot claim
-    # the control socket, so one refusal produced several error lines.
+    # down one ControlMaster connection (chezmoi home/private_dot_ssh/private_config.tmpl). A
+    # low cap limits concurrent shells per host: the extra one gets `error: no more sessions`
+    # from sshd, which the client reports as `mux_client_request_session: session request
+    # failed: Session open refused by peer`. It then falls back to its own connection and cannot
+    # claim the control socket, so one refusal produces several error lines.
     - { key: "MaxSessions", value: "10" }
     - { key: "ClientAliveCountMax", value: "2" }
     - { key: "LoginGraceTime", value: "30" }

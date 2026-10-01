@@ -44,7 +44,7 @@ def _scrub_git_env(monkeypatch) -> None:
 def test_a_missing_worktree_directory_is_deregistered_and_its_merged_branch_dropped(
     tmp_path, monkeypatch
 ):
-    """Re-review item 1: a worktree `rm -rf`'d by hand rather than through the normal
+    """A worktree `rm -rf`'d by hand rather than through the normal
     removal path stays registered (`prunable`, per git's own porcelain label). `clean_one`
     must deregister it instead of crashing in the real `is_dirty` on a cwd that no longer
     exists — this passes no `dirty` override, so the real default proves that.
@@ -69,9 +69,9 @@ def test_a_missing_worktree_directory_is_deregistered_and_its_merged_branch_drop
 def test_a_present_merged_worktree_is_removed_and_its_branch_dropped(
     tmp_path, monkeypatch
 ):
-    """#2674: removing a landed tree used to leave its `worktree-fanout-<batch>` branch
-    behind, so every cleaned batch left one for the operator. Real git throughout, and no
-    `dirty` override, so the tree really is present and clean.
+    """Removing a landed tree must not leave its `worktree-fanout-<batch>` branch behind
+    for the operator. Real git throughout, and no `dirty` override, so the tree really is
+    present and clean.
     """
     _scrub_git_env(monkeypatch)
     repo = tmp_path / "repo"
@@ -109,7 +109,7 @@ def test_a_missing_worktree_directory_keeps_its_unmerged_branch(tmp_path, monkey
 def test_a_failed_branch_delete_on_a_missing_tree_is_reported_as_kept(
     tmp_path, monkeypatch
 ):
-    """Ruling 23: `removed: … (already gone)` used to be printed even when the branch stayed.
+    """Ruling 23: `removed: … (already gone)` must not be printed when the branch stays.
 
     Real git refuses the delete here — the registered tree is renamed onto a branch that
     does not exist — so this exercises the same `git branch -D` the code runs, not a stub.
@@ -142,7 +142,7 @@ def test_a_failed_branch_delete_on_a_missing_tree_is_reported_as_kept(
 def test_a_worktree_whose_submodule_gitdir_dangles_is_kept_and_names_the_git_error(
     tmp_path, monkeypatch
 ):
-    """#2774: `git status` fatals in a worktree whose submodule `.git` file points nowhere.
+    """`git status` fatals in a worktree whose submodule `.git` file points nowhere.
 
     `is_dirty` raises `CalledProcessError` there, and the traceback reached the operator as
     a truncated `clean failed (exit 1)` line saying nothing about the cause. Real git and

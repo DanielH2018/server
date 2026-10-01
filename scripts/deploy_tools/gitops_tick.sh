@@ -27,7 +27,7 @@
 #   0   the tick ran to completion (which includes a healthy noop / deferral)
 #   1   the tick failed — the unit exited non-zero, or it could not be started
 #   2   the unit is not installed on this host (has_gitops is false here)
-#   64  the command line is wrong (was 1 until 2026-09-30: 64 is a usage error everywhere
+#   64  the command line is wrong (64 is a usage error everywhere
 #       under scripts/, and `scripts/lib/exit_codes.py` is where that scheme is named)
 #   4   `--no-wait` only: a tick was already in flight, so the request JOINED it and started
 #       nothing. That tick fetched before this request arrived, so a commit merged since is
@@ -35,7 +35,7 @@
 #       A caller that needs its own commit fast-forwarded re-runs once the run ends. With a
 #       wait budget the wrapper does that itself: it watches the joined run, and when that
 #       run ends cleanly it starts a FRESH run on the same budget and exits by the fresh
-#       run's outcome (issue #1879). A joined run that failed or hit contention is graded
+#       run's outcome. A joined run that failed or hit contention is graded
 #       as itself.
 #   3   the tick was skipped for lock contention — the unit's `flock -E 75` fired and
 #       `SuccessExitStatus=75` makes systemd call that a success. Nothing deployed,
@@ -66,7 +66,7 @@ UPTIME_SOURCE="${GITOPS_TICK_UPTIME_SOURCE:-/proc/uptime}"
 # How often `watch_run` asks systemd whether the run in flight has ended. A variable for the
 # same reason as UPTIME_SOURCE: the test drives this script against a stubbed systemctl whose
 # run ends within a second, and a fixed 5s poll made each of its wait-mode cases cost more
-# than the whole rest of its module (#2226). Nothing on a host ever sets it; 5s because a
+# than the whole rest of its module. Nothing on a host ever sets it; 5s because a
 # healthy tick takes about five and `systemctl show` on every second would be noise.
 POLL_S="${GITOPS_TICK_POLL_S:-5}"
 
@@ -78,7 +78,7 @@ CONTENTION_MARKER="tick skipped (lock contention)"
 
 # Print the run's one-line verdict and exit with its code. Every exit below goes through this,
 # so a caller reading the last line always gets one: the tick printed free text plus the
-# state markers and left the reader to decide what had happened (#2853). The token/code pairs
+# state markers and left the reader to decide what had happened. The token/code pairs
 # are `scripts/lib/exit_codes.py`'s TICK_* rows, held against these by
 # ansible/tests/deploy/test_gitops_manual_trigger.py.
 tick_verdict() {
@@ -123,7 +123,7 @@ in_flight_seconds() {
   fi
   # `:-0` covers the awk that SUCCEEDS and prints nothing, which is what an empty /proc/uptime
   # gives: its action block never runs. An empty answer renders the joined line as
-  # `already s in flight`, which land.py's parser used to stop matching -- the wait would then
+  # `already s in flight`, which land.py's parser would stop matching -- the wait would then
   # go unbooked and `lock` would read 0 again, the exact defect this line exists to end.
   echo "${seconds:-0}"
 }
@@ -155,7 +155,7 @@ if [[ "$(show ActiveState)" == "activating" ]]; then
   # The stamp read above IS the joined run's, so the wait loop's "a new activation
   # happened" test could never pass for it and the loop ran to its deadline however early
   # the run finished — land.sh sat out the full 540s on a broad tick another session's
-  # merge had started (2026-09-01). For a joined run the state check alone decides.
+  # merge had started. For a joined run the state check alone decides.
   started_before="joined"
 else
   echo "Triggering $UNIT on $(hostname)..."
@@ -172,7 +172,7 @@ if [[ "$WAIT_S" -eq 0 ]]; then
   if [[ "$joined" == 1 ]]; then
     # Exit 4, not 0: the in-flight tick fetched origin BEFORE this request, so a commit merged
     # since is not in it and the checkout stays behind until the next tick. land.sh's kick
-    # read 0 here as "the primary converges while the gate runs" and it did not (issue #1843).
+    # read 0 here as "the primary converges while the gate runs" and it did not.
     echo "Nothing started: the run in flight (already ${joined_after}s) fetched before this"
     echo "request, so a commit merged since is not in it. Re-run once it ends, or wait for"
     echo "the timer. Follow it with:"
@@ -229,7 +229,7 @@ fi
 # arrived, so a commit merged since is not in it, and the markers it leaves describe a tree
 # that predates the caller's change: `behind_since` still set, no `broad_applied` for the
 # caller's plane. land.sh read those as `deferred` or `needs-manual-apply` for work the next
-# timer tick applied a minute later (issue #1879, the wait-mode half of #1843). So once the
+# timer tick applied a minute later. So once the
 # joined run ends cleanly, START A FRESH RUN and grade that one instead: the remaining budget
 # covers it, and a healthy tick takes about five seconds. A joined run that FAILED or hit
 # contention is graded as itself below -- a fresh run after a failure would skip on the hold
@@ -313,7 +313,7 @@ echo
 # The unit sets `flock -E 75` + SuccessExitStatus=75, so contention leaves the unit successful
 # and never `failed`. The exit code itself is not recoverable afterwards: gitops-deploy.service
 # is Type=oneshot with no RemainAfterExit, and systemd resets ExecMainStatus to 0 once such a
-# unit goes inactive (measured 2026-08-23, systemd 255.4). So a contention tick and a real
+# unit goes inactive (measured on systemd 255.4). So a contention tick and a real
 # deploy both read back `Result=success ExecMainStatus=0`, and only the unit's ExecStopPost
 # marker distinguishes them. A genuinely failed unit is different — it stays in `failed`, which
 # is why the branch below can still trust $status.

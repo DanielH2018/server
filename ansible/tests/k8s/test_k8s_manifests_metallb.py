@@ -38,7 +38,7 @@ def test_ingress_pool_is_a_single_address_that_is_never_auto_assigned():
     """`autoAssign: false` is the whole reservation of the ingress address.
 
     Without it MetalLB hands the ingress address to whichever LoadBalancer Service asks first, and
-    ingress moves — after that address is in DNS and, from slice 6, in the router's port-forward.
+    ingress moves — after that address is in DNS and in the router's port-forward.
     """
     ingress = _pools()["ingress-pool"]
     assert ingress["spec"]["autoAssign"] is False
@@ -56,8 +56,7 @@ def test_the_general_pool_narrows_before_the_ingress_pool_is_created():
     """The wide pool has to narrow before the ingress pool exists, or the apply fails.
 
     kubectl applies documents in file order and MetalLB's validating webhook rejects
-    overlapping pools. Applying ingress-pool ahead of it failed on daniel-box (2026-08-02)
-    with:
+    overlapping pools. Applying ingress-pool ahead of it fails with:
 
         CIDR "10.0.0.240/32" in pool "ingress-pool" overlaps with already
         defined CIDR "10.0.0.240/29"
@@ -85,16 +84,14 @@ def _metallb_annotation_lines():
 def test_metallb_service_annotations_use_the_metallb_io_namespace():
     """Service annotations moved to metallb.io/ in MetalLB v0.15; universe.tf/ is deprecated.
 
-    This assertion is inverted from what it said until 2026-08-28, when the cluster still ran
-    v0.14.8 and metallb.io/ genuinely was ignored. v0.16.0 reads both prefixes
-    (controller/service.go valueForAnnotation, metallb.io winning) but emits a
-    `deprecatedAnnotation` Warning Event per Service on every reconcile for the old one.
+    v0.16.0 reads both prefixes (controller/service.go valueForAnnotation, metallb.io winning)
+    but emits a `deprecatedAnnotation` Warning Event per Service on every reconcile for the
+    old one.
 
-    The original hazard is unchanged and is why this guard exists at all: Kubernetes accepts
-    any annotation key and MetalLB ignores unrecognised ones, so a wrong prefix is completely
-    silent — the Service is created, an address is assigned from the auto-assign pool instead
-    of the pinned one, and the deploy is green. Traefik ran on 10.0.0.241 instead of
-    10.0.0.240 through an entire slice-1 bring-up because of this.
+    The hazard behind this guard: Kubernetes accepts any annotation key and MetalLB ignores
+    unrecognised ones, so a wrong prefix is completely silent — the Service is created, an
+    address is assigned from the auto-assign pool instead of the pinned one, and the deploy
+    is green.
     """
     for tpl, i, line in _metallb_annotation_lines():
         if "metallb.universe.tf/" in line.split("#", 1)[0]:
@@ -107,8 +104,7 @@ def test_metallb_service_annotations_use_the_metallb_io_namespace():
 def test_the_metallb_annotation_guard_can_go_red():
     """The rejecting half.
 
-    A guard that matches nothing is indistinguishable from a passing one, and this file has already
-    held this assertion pointing the wrong way for six days.
+    A guard that matches nothing is indistinguishable from a passing one.
     """
     accepted = "    metallb.io/loadBalancerIPs: 10.0.0.240"
     rejected = "    metallb.universe.tf/loadBalancerIPs: 10.0.0.240"

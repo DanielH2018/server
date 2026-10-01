@@ -1,15 +1,14 @@
 ---
 # The GATE, not the exit criterion. These prove the render node is reachable and that VAAPI
-# encode works from inside the running Jellyfin pod — which is what the B1 probe proved for a
-# throwaway pod. They do NOT prove Jellyfin's own transcode path works: that needs a real
+# encode works from inside the running Jellyfin pod. They do NOT prove Jellyfin's own transcode path works: that needs a real
 # playback with a bitrate that forces a transcode, and it is checked by hand. Keep the two
 # claims apart; a green run here is a starting line.
 
 # WITHOUT THIS, EVERY PROOF BELOW RUNS AGAINST THE OUTGOING POD. k8s/manifests does not wait
 # for a rollout — it QUEUES it for k8s/manifests/tasks/drain.yml, which drains the whole batch at the end.
 # So a role's own verify tasks run before its rollout completes, and the pod lookup returns the
-# pod that is being replaced. Found on qbittorrent 2026-08-27, where a proof that genuinely
-# differs between old and new pod failed a deploy that had in fact succeeded.
+# pod that is being replaced, so a proof that genuinely differs between old and new pod can
+# fail a deploy that had in fact succeeded.
 #
 # `rollout status` and NOT a readiness wait. Three primitives look like gates and are all
 # satisfied by the OLD pod: `wait --for=condition=Available deploy/x` (Available is true of the
@@ -36,11 +35,10 @@
   changed_when: false
   register: jellyfin_k8s_pod
 
-# ── the check whose absence let B5 ship a broken library ────────────────────────────────────
-# Every other probe in this file passed while playback failed on every title, because they all
-# ask about the GPU and none of them asked whether the media is where Jellyfin's database says
-# it is. The pod was Ready, the UI listed the full library from its own tables, and each play
-# died with an IO error on /data/tv/... — a mount one level too shallow.
+# ── the media mount depth ───────────────────────────────────────────────────────────────────
+# The GPU probes cannot see a mount one level too shallow: the pod is Ready, the UI lists the
+# full library from its own tables, and every play dies with an IO error on /data/tv/....
+# This check asks whether the media is where Jellyfin's database says it is.
 #
 # Asserting BOTH directions is what makes this precise rather than decorative: the library roots
 # must be present, AND `torrents` must be absent from /data. Presence of the latter is the exact
@@ -71,15 +69,14 @@
   ansible.builtin.debug:
     msg: "{{ jellyfin_k8s_library.stdout_lines }}"
 
-# The exact failure B1 caught: the device NODE is visible via the plugin, but an open() returns
+# The failure this catches: the device NODE is visible via the plugin, but an open() returns
 # EPERM ("Operation not permitted") when the cgroup v2 device filter has not admitted it. A
 # permission problem would say "Permission denied" instead.
 #
-# `: < dev` OPENS AND CLOSES WITHOUT READING, and that distinction is the whole task. B1's probe
-# used `head -c 1`, which is fine while open() is what fails — it never got as far as the read.
-# Once the device plugin makes open() succeed, that same command blocks forever: a DRM render
+# `: < dev` OPENS AND CLOSES WITHOUT READING, and that distinction is the whole task.
+# `head -c 1` would block forever once the device plugin makes open() succeed: a DRM render
 # node has no bytes to hand a sequential read, so the read never returns and the deploy hangs
-# with no output. Measured 2026-08-08, after ~15 minutes of a wedged play.
+# with no output.
 - name: Prove the render node can actually be opened
   tags: [deploy]
   ansible.builtin.command:
@@ -121,22 +118,21 @@
 
 # HDR tone-mapping, tested against the backend Jellyfin ACTUALLY uses on this hardware.
 #
-# An earlier version of this task initialised OpenCL and reported HDR as broken when it failed.
-# That was the wrong dependency, and the alarm was false. On AMD VAAPI, Jellyfin tone-maps with
+# Do not test OpenCL here: it is the wrong dependency and gives a false alarm. On AMD VAAPI, Jellyfin tone-maps with
 # **libplacebo over Vulkan** — its own logs say `VAAPI device ... supports Vulkan DRM interop`
 # and every transcode it launches carries `-init_hw_device vulkan=vk@dr -filter_hw_device vk`.
 # OpenCL is the Intel/NVIDIA path and its absence here costs nothing.
 #
 # The device setup below is copied from a real Jellyfin command line rather than invented, so
-# this exercises the same graph a genuine HDR playback would build. Measured 2026-08-08: passes.
+# this exercises the same graph a genuine HDR playback would build.
 #
 # The one thing that genuinely does NOT work on this GPU is `tonemap_vaapi` (Jellyfin's "VPP
 # tone mapping"), which fails with `VAAPI driver doesn't support HDR` — Mesa's radeonsi exposes
 # VAEntrypointVideoProc but no HDR processing. That is why EnableVppTonemapping is switched off
 # by the conversion in the Deployment, and it should stay off.
 #
-# Reported rather than enforced: the library is currently all bt709, so a regression here would
-# cost nothing today and failing an unrelated deploy over it would be disproportionate.
+# Reported rather than enforced: the library is all bt709, so a regression here costs nothing
+# and failing an unrelated deploy over it would be disproportionate.
 - name: Test the HDR tone-mapping path (libplacebo over Vulkan)
   tags: [deploy]
   ansible.builtin.command:

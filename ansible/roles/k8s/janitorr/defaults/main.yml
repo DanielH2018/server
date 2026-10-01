@@ -1,10 +1,8 @@
 ---
-# Slice 4, B7b — the last of the nine, and the only one that deletes real media.
+# The only role that deletes real media.
 #
-# Digest-pinned and watchtower-irrelevant here, but kept identical to the Docker role's pin so the
-# two copies are the same binary during coexistence: `jvm-stable` is a floating non-semver alias
-# Renovate cannot version-track. Manual update: `docker pull ghcr.io/schaka/janitorr:jvm-stable`,
-# take the new digest.
+# Digest-pinned: `jvm-stable` is a floating non-semver alias Renovate cannot version-track.
+# Manual update: `docker pull ghcr.io/schaka/janitorr:jvm-stable`, take the new digest.
 janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:6becfbed9098d27e6bf81a114976394a091d095ee5aba3ae8d86a4fd94af8e7a
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -15,15 +13,10 @@ janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:6becfbed9098d27e6b
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "probe-less — no readinessProbe on the Deployment; also the only role that deletes real media, so a wedge is not merely inert"  # noqa var-naming[no-role-prefix]
 
-# Flipped to "false" 2026-08-08 (operator decision), after the port shipped dry and verify.yml
-# produced the evidence it exists for: the config the JVM loaded read dry-run: true, sonarr,
-# radarr and jellyfin all accepted connections, and a probe symlink written the way janitorr
-# writes them resolved AND read from inside the jellyfin pod.
-#
-# What no amount of dry running could show, recorded rather than implied: media-deletion is keyed
-# on free-disk percentage and its loosest rung is 20%. daniel-box is at 9% used / 805 G free, so
-# no rung applies and the deletion pass does not execute at all — there was never going to be a
-# dry "would delete" line to wait for, on this host or the old one.
+# "false" is the operator's decision to run live. Dry running cannot show what media-deletion
+# does: it is keyed on free-disk percentage and its loosest rung is 20%. With the disk at
+# 9% used no rung applies and the deletion pass does not execute at all, so there is no dry
+# "would delete" line to wait for.
 #
 # A STRING, not a YAML bool: it is substituted straight into application.yml, and the shared
 # template must render under plain Jinja too (the validate-k8s-manifests hook has no `bool`
@@ -41,17 +34,16 @@ janitorr_k8s_media_claim: media-data
 
 # No PVC. janitorr keeps no state of its own — config comes from a Secret, everything else it
 # needs is in /data. That also keeps it out of the Longhorn backup set, which matters more than
-# usual right now (docs/archive/b2-transaction-cap-monitoring-gaps.md).
+# usual (docs/archive/b2-transaction-cap-monitoring-gaps.md).
 
-# Mirrors resources('1.0', '1024M', '0.10', '128M') from the Docker template.
+# Mirrors resources('1.0', '1024M', '0.10', '128M').
 janitorr_k8s_cpu_limit: "1"
 janitorr_k8s_mem_limit: 1024Mi
 janitorr_k8s_cpu_request: "100m"
 janitorr_k8s_mem_request: 128Mi
 
-# Cluster-side replacement for monitor-bridge's check_janitorr, which read the error count from
-# Loki and the uptime from a cAdvisor series — neither reaches this workload. Same values it used
-# (JANITORR_WINDOW=12h, JANITORR_STARTUP_GRACE_S=600), so the verdict does not change with the host.
+# Cluster-side health check. Values match monitor-bridge's JANITORR_WINDOW=12h and
+# JANITORR_STARTUP_GRACE_S=600, so the verdict does not change with the host.
 janitorr_k8s_error_window_hours: 12
 janitorr_k8s_startup_grace_seconds: 600
 

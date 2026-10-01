@@ -1,8 +1,8 @@
 """Home Assistant: the automation-engine heartbeat and the ip_ban arm.
 
 The heartbeat reads an input_datetime a 1-minute automation stamps, with hysteresis to ride out
-the ~120s deploy restart. The ip_ban arm is separate and skips that grace: on 2026-08-23 a
-banned infra IP 403'd the probes into a crash loop, which the heartbeat alone could not see.
+the ~120s deploy restart. The ip_ban arm is separate and skips that grace: a banned
+infra IP 403s the probes into a crash loop, which the heartbeat alone cannot see.
 """
 
 from datetime import datetime, timezone, timedelta
@@ -62,7 +62,7 @@ def test_ha_heartbeat_fresh(state, ok, must_contain):
 # scheduler a beat behind, so a single cycle can read unreachable OR stale. Like
 # CPU_CONSECUTIVE, only HA_CONSECUTIVE straight down-cycles page; a single blip
 # pushes up with a streak msg. The payload and the check share HB_NOW, so the age the check
-# reads is exactly `age_s` whatever the wall clock (#2158).
+# reads is exactly `age_s` whatever the wall clock.
 def _ha_payload(age_s):
     lc = (HB_NOW - timedelta(seconds=age_s)).isoformat()
     return _ha_state(lc)
@@ -182,7 +182,7 @@ def test_ha_heartbeat_disabled_when_no_url_token(monkeypatch, cfg):
     assert "disabled" in msg
 
 
-# Loki's Kuma /ready probe stays green even if promtail stops shipping (DOCKER_HOST
-# break, positions-file corruption, label regression) — a silently-dead log pipeline.
+# Loki's Kuma /ready probe stays green even if promtail stops shipping (positions-file
+# corruption, label regression) — a silently-dead log pipeline.
 # This check counts ingested log lines for an always-active stream over a window and
 # goes down when zero: a freshness watchdog analogous to the SMART/restore-drill ones.

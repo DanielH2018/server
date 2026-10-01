@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """PersistentVolumeClaim names a rendered manifest declares, and the ones it references.
 
-Split out of ``scripts/validate/k8s_manifests.py`` on 2026-09-04; that module re-exports every
-name here, so an existing importer keeps working. The validator cross-references the two sets
-across the whole tree, which is why the declaring half and the referencing half are separate
-functions rather than one walk.
+The validator cross-references the two sets across the whole tree, which is why the declaring
+half and the referencing half are separate functions rather than one walk.
 
 ``volume_claim_pvc_names`` takes its Jinja environment as a parameter: the caller already has
 one, and a leaf module here never imports back from the validator it was split out of.

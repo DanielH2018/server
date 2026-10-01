@@ -10,10 +10,10 @@ either way:
 
 1. The service restarts on failure and only on failure. `Restart=always` is refused for a
    oneshot, and `on-success` would loop a green check forever.
-2. The timer is `Persistent=true` (decided 2026-09-19): a daily slot missed inside an outage
+2. The timer is `Persistent=true`: a daily slot missed inside an outage
    runs at boot instead of leaving the tile red for a day, and the restart bounds the
    boot-time false `down` that costs.
-3. No `OnFailure=` alert unit. A `down` verdict is now a unit failure by contract, and the
+3. No `OnFailure=` alert unit. A `down` verdict is a unit failure by contract, and the
    Discord alert units page on a unit that broke.
 4. Both directions are wired: `kuma_check_state: absent` stops and disables the timer and
    removes the units and the legacy cron. A one-way door is the reverse-state bug this repo
@@ -265,7 +265,7 @@ def test_every_wired_shell_producer_exits_nonzero_after_a_down_push() -> None:
                 f"{name}: {template.name} must end on the exit contract, after the final push"
             )
         checked += 1
-    # 6 since remember-logs-health retired (#2852); lower it only for a deliberate retirement.
+    # Lower it only for a deliberate retirement.
     assert checked >= 6, (
         f"only {checked} shell producers checked; the census has shrunk"
     )

@@ -1,6 +1,6 @@
 """A test renders Jinja and finds the repo root through the shared helpers, never by hand.
 
-Two things every test module used to re-derive for itself (#2857):
+Two things a test module does not re-derive for itself:
 
 1. A Jinja environment. A bare `jinja2.Environment()` has none of Ansible's whitespace flags
    and none of its filters, so a template renders under it differently from a deploy: a
@@ -47,8 +47,8 @@ JINJA_EXEMPT = {
     "ansible/roles/k8s/home-assistant/tests/jinja_harness.py",
 }
 
-# Modules the census must reach. Each held one of the two forms before #2857, so an empty or
-# partial scan means the walk stopped matching rather than that the tree is clean.
+# Modules the census must reach. An empty or partial scan means the walk stopped matching
+# rather than that the tree is clean.
 KNOWN_MEMBERS = frozenset(
     {
         ".claude/hooks/tests/test_hook_scripts_executable.py",

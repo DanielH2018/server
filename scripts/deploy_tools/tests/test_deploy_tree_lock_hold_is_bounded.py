@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""The two operations `deploy.sh` runs under the tree lock must each have a bound (issue #1845).
+"""The two operations `deploy.sh` runs under the tree lock must each have a bound.
 
 ADR-0017 argues the tree-lock hold is "seconds" -- long enough to copy HEAD into a snapshot
 and no longer -- and the deployer's `TimeoutStartSec` budget assumes it. Two calls inside that
-hold had no bound in code: the full-run tag enumeration (`deploy_tags.py list` via `uv run`,
+hold needs a bound in code: the full-run tag enumeration (`deploy_tags.py list` via `uv run`,
 which a cold `uv sync` can stretch to minutes) and the reaper's per-directory worktree removal
-(a root left with hundreds of dead snapshots). Each now has one, and each is proved here to
+(a root left with hundreds of dead snapshots). Each has one, and each is proved here to
 fire: a bound that is only ever observed not firing is indistinguishable from no bound.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tree_lock_hold_is_bounded.py

@@ -5,8 +5,7 @@
 `files/dashboards/` and the operator reads `git diff --stat` afterwards to see what changed
 live. That read is only meaningful if a board that did NOT change produces no diff — so the
 committed form has to be the writers' form exactly: keys sorted at every depth, 2-space
-indent, non-ASCII literal, one trailing newline. Five boards were committed in Grafana's
-own key order before #2157 and diffed on every export.
+indent, non-ASCII literal, one trailing newline.
 
 The oracle is the writer itself (`export_grafana_dashboards.dump`), not a copy of its rules.
 

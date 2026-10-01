@@ -1,9 +1,9 @@
-"""Staleness narrowed by reading a diff: a `tasks/` change that only gates `--check` (#2416).
+"""Staleness narrowed by reading a diff: a `tasks/` change that only gates `--check`.
 
 Every other staleness rule is a question about a path, and lives in
-`test_probe_releases_stale.py` beside the #1636/#1672 narrowings it belongs with. This one has
-to open the diff -- `releases_diff` is the module, and its docstring says why a path cannot
-settle it -- so it gets its own repos and its own file.
+`test_probe_releases_stale.py` beside the path narrowings. This one has to open the diff --
+`releases_diff` is the module, and its docstring says why a path cannot settle it -- so it gets
+its own repos and its own file.
 
 Each rule is an `..._is_clean` / `..._is_flagged` pair, and the flagged half is what proves the
 narrowing did not swallow a byte-moving change.
@@ -113,7 +113,7 @@ def test_the_manifest_renderers_own_tasks_are_never_narrowed(tmp_path):
     assert "manifests/tasks/main.yml" in stale["tdarr"]
 
 
-# authelia's half of 7fd4189cb, the shape no line match covers (#2436): one task's scalar
+# authelia's half of 7fd4189cb, the shape no line match covers: one task's scalar
 # `when:` becomes the list form with the gate as a second conjunct, and another task's existing
 # list gains the gate as an item. Both render identical manifests on a real deploy.
 _AUTHELIA_TASKS = """\
@@ -156,7 +156,7 @@ _AUTHELIA_TASKS_CHECK_MODE_GATED = """\
 
 
 def test_a_when_rewritten_from_scalar_to_list_is_clean(tmp_path):
-    """authelia's gate, which #2416's line match could not see (#2436).
+    """authelia's gate, which a line match cannot see.
 
     The diff carries a removed `when: <expr>`, an added bare `when:` and added list items.
     Neither spelling is a line shape, so the rule compares the CONDITIONS either side instead:
@@ -176,7 +176,7 @@ def test_a_when_rewrite_that_also_changes_the_condition_is_flagged(tmp_path):
 
     Same scalar-to-list rewrite, but one conjunct is not the one that was there. A rule that
     called this inert would be reading "a `when:` was reshaped" instead of "the conditions did
-    not move", which is the #947 false-GREEN this narrowing must not become.
+    not move", which is the false GREEN this narrowing must not become.
     """
     after = _AUTHELIA_TASKS.replace(
         "  when: authelia_password_hash is not defined\n",

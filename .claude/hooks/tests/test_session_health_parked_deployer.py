@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the SessionStart hook's parked-deployer warning (issues #1416, #1418).
+"""Tests for the SessionStart hook's parked-deployer warning.
 
 A single stray file in the primary checkout `/home/ubuntu/server` makes `gitops_deploy` skip
 every tick, so nothing deploys and every session's `land.sh` fails with `deploy.sh` exit 4
@@ -48,7 +48,7 @@ def _problems(worktrees=_WORKTREES, porcelain="", marker=None, now=0.0):
         now=now,
         # Pinned rather than defaulted: the default reaches the host's real `manual_plane`
         # marker, so on daniel-box a pending setup role would add a line to every assertion
-        # here (issue #1774). `test_session_health_manual_plane.py` owns that line.
+        # here. `test_session_health_manual_plane.py` owns that line.
         read_manual=lambda: None,
         read_manual_tags=lambda: None,
         read_contention=lambda: None,
@@ -96,8 +96,7 @@ def test_dirty_primary_checkout_is_flagged():
     assert len(lines) == 1
     assert "/home/ubuntu/server" in lines[0]
     assert "ansible/tests/services/test_traefik_edge_selfcheck.py" in lines[0]
-    # The consequence, not just the state: exit 4 names the reader's own tree, which is what
-    # sent three landings for PR #1408 to the wrong repair.
+    # The consequence, not just the state: exit 4 names the reader's own tree.
     assert "exit 4" in lines[0]
 
 
@@ -107,7 +106,7 @@ def test_clean_primary_checkout_is_not_flagged():
 
 def test_untracked_only_primary_checkout_is_flagged_with_its_code():
     """`git status --porcelain` counts untracked files, so the tree can be dirty with nothing
-    modified — the case that surprised the operator on 2026-08-30."""
+    modified."""
     lines = _problems(porcelain="?? site/index.html\n")
     assert len(lines) == 1
     assert "?? site/index.html" in lines[0]

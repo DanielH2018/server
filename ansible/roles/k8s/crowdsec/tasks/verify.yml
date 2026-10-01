@@ -1,5 +1,5 @@
 ---
-# Live enforcement gate (slice-6 B1, reusable at B2/B5): ban a real LAN host, prove the
+# Live enforcement gate: ban a real LAN host, prove the
 # bouncer rejects it at the VIP, lift the ban, prove service resumes. Runs only when asked:
 #   uv run ansible-playbook ansible/deploy.yml --tags b1-gate
 # Every task here mutates real state or reaches a real host, so the importer in main.yml
@@ -8,21 +8,19 @@
 # The probe runs FROM daniel-pi because a ban is enforced against the connecting IP — no
 # way to prove enforcement from an unbanned host. The probe MUST name a Host that matches
 # a real router: "entrypoint-wide" middlewares attach to each router's chain, so a request
-# matching no router 404s without ever consulting the bouncer (learned the hard way — the
-# first version probed the bare VIP and the ban never "enforced"; the second sent a bare
-# Host header, which 421s on the SNI mismatch before routing — hence --resolve). jellyfin's
+# matching no router 404s without ever consulting the bouncer, and a bare Host header 421s on
+# the SNI mismatch before routing — hence --resolve. jellyfin's
 # hostname matches from any client IP, unlike unsuffixed names (bridge-ClientIP-gated
 # until k8s_public_route flips).
 
-# The ban, the proof, and the lift are one block (#2752): the lift sits in `always`, so a gate
-# that fails no longer leaves the Pi banned at the edge for the rest of the decision's life.
+# The ban, the proof, and the lift are one block: the lift sits in `always`, so a failed gate
+# does not leave the Pi banned at the edge for the rest of the decision's life.
 # The gate proves each hop separately, so a failure names the hop that broke: the decision
-# lands at LAPI, then the edge bouncer pulls after it, then the edge answers 403. Waiting
-# on the pull, rather than probing on a guessed timer, is what #2752 was missing. On
-# 2026-09-27 the decision landed at 12:25:18Z, and the bouncer then made no pull at all from
-# 12:22:24Z to 12:32:24Z (the plugin's metrics-ticker stall, see the DECIDED marker in
-# roles/k8s/traefik/templates/dynamic.yaml.j2). Eight probes at 10s intervals saw 302
-# throughout, and the gate failed with nothing naming why.
+# lands at LAPI, then the edge bouncer pulls after it, then the edge answers 403. The gate
+# waits on the pull rather than probing on a guessed timer, because the plugin's
+# metrics-ticker stall (see the DECIDED marker in roles/k8s/traefik/templates/dynamic.yaml.j2)
+# can leave the bouncer without a pull for ten minutes. Probes at 10s intervals then see 302
+# throughout, and nothing names why.
 - name: Ban daniel-pi and prove the edge enforces it
   tags: [never, b1-gate]
   block:
@@ -57,7 +55,7 @@
       # value newer than this one means the plugin has fetched a stream that holds the ban.
       # The pulls land on an auto-created `k8straefik@<pod IP>` row, not on `k8straefik`:
       # LAPI adds one per new Traefik pod IP, and the base row never pulls. The hourly
-      # bouncer-prune cron (#2762) removes rows idle for an hour, so the gate reads the
+      # bouncer-prune cron removes rows idle for an hour, so the gate reads the
       # newest `last_pull` across whichever rows are left.
       ansible.builtin.command:
         cmd: >-
@@ -69,7 +67,7 @@
 
     - name: Wait for the edge bouncer to pull after the ban
       # One `updateIntervalSeconds: 60` interval plus slack. This is still a poll, and not
-      # convertible to `kubectl wait` (#2205): `last_pull` is a row in the LAPI database, not
+      # convertible to `kubectl wait`: `last_pull` is a row in the LAPI database, not
       # a field on any cluster object.
       ansible.builtin.command:
         cmd: >-
@@ -138,10 +136,7 @@
       become: true
       changed_when: true
 
-# The Docker-edge leg of this gate ("B2, one LAPI both edges") retired at E7: it probed
-# homepage.<domain> resolved to daniel-server, a route E3 had already moved to the cluster
-# (the leg could only 404), and the Docker edge itself stands down with E7. NB the `never`
-# tag does not protect these tasks from `--tags crowdsec` — deploy.yml's per-role block
+# NB the `never` tag does not protect these tasks from `--tags crowdsec` — deploy.yml's per-role block
 # tag is added to every inner task, so the explicit service tag requests them.
 
 - name: Probe the VIP from the unbanned Pi — expect service to resume
@@ -149,7 +144,7 @@
   # Runs only when the block above passed; a failed gate stops the play at its rescue. The
   # lift is instant at LAPI and reaches the edge only at the plugin's next stream pull, so
   # this polls one interval plus slack. No cluster object carries that pull, so `kubectl
-  # wait` has no condition to name (#2205).
+  # wait` has no condition to name.
   ansible.builtin.command:
     cmd: >-
       ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'

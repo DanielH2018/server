@@ -171,11 +171,11 @@ def test_open_cli_exits_3_on_accepted(tmp_path, capsys, issue, make_tools):
 def test_open_cli_reopen_releases_a_claim_the_closed_issue_still_carries(
     tmp_path, issue, make_tools
 ):
-    """#1277 path 2. The closing mechanism the spec names is the PR body's `Closes #<n>`,
-    which GitHub honours directly — it posts no release comment and leaves the `claimed`
-    label on. `plan_open` then reopens that issue for a later re-observation, and the stale
-    claim comes back LIVE: it blocks `claim` and withholds the issue from `next` for as long
-    as the claiming worktree exists, which for an orchestrator can be a long time.
+    """The closing mechanism the spec names is the PR body's `Closes #<n>`, which GitHub
+    honours directly — it posts no release comment and leaves the `claimed` label on.
+    `plan_open` then reopens that issue for a later re-observation, and the stale claim
+    comes back LIVE: it blocks `claim` and withholds the issue from `next` for as long as
+    the claiming worktree exists, which for an orchestrator can be a long time.
     """
     body = tmp_path / "b.md"
     body.write_text("B")
@@ -217,7 +217,7 @@ def test_open_cli_prints_the_created_number(tmp_path, capsys, make_tools):
     assert "#42 created" in capsys.readouterr().out
 
 
-# --- --repo: filing into another repo's register (#2685) ----------------------------------------
+# --- --repo: filing into another repo's register ----------------------------------------
 
 _OTHER = "DanielH2018/dotfiles"
 

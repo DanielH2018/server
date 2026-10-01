@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""A broad range carrying promoted image bumps deploys them, forward-only (#2348).
+"""A broad range carrying promoted image bumps deploys them, forward-only.
 
 `split_k8s_auto_deploy` moves an eligible bump OUT of `cs.k8s` into `cs.k8s_deploy`, and
-`alert_deferred` fires its k8s channel on `cs.k8s` alone — so before #2348 a broad tick
-fast-forwarded the bumps, deployed none and named none. The loss was silent, not deferred,
-and the ff-merge removed the commits from every later tick's range.
+`alert_deferred` fires its k8s channel on `cs.k8s` alone — so a broad tick that did not deploy
+the bumps itself would fast-forward them, deploy none and name none. The loss is silent, not
+deferred, because the ff-merge removes the commits from every later tick's range.
 
 Each rule is a pair: a range whose promoted half must be deployed, and a range whose k8s half
 must not be — an arm that fired on every k8s path and one that fired on none read the same
@@ -60,7 +60,7 @@ def test_a_mixed_range_applies_the_setup_plane_then_deploys_the_bump(
 def test_a_setup_role_the_deployer_cannot_apply_still_deploys_the_bump(
     gitops_deploy, tick, settings, state_dir
 ):
-    """#2348 itself: the range that lost nine bumps behind one `roles/setup/k3s` commit.
+    """A range with an unapplyable `roles/setup/k3s` commit still deploys its bumps.
 
     The role is recorded in `manual_plane` and owed to a hand — and that says nothing about
     the image bumps beside it, which nothing in `roles/setup/k3s` gates.
@@ -79,7 +79,7 @@ def test_a_setup_role_the_deployer_cannot_apply_still_deploys_the_bump(
 def test_an_unapplyable_setup_role_alone_runs_no_playbook(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The rejecting half: with no bump in the range there is nothing for the new arm to run."""
+    """The rejecting half: with no bump in the range there is nothing for the arm to run."""
     config = mixed(settings, tick, UNAPPLYABLE_ROLE)
     tick.paths = [UNAPPLYABLE_ROLE]
     assert gitops_deploy.main(tick.tools, config) == 0
@@ -93,7 +93,7 @@ def test_a_bump_auto_deploy_never_promoted_is_deferred_not_deployed(
     """The second rejecting half: the arm keys on `cs.k8s_deploy`, not on any k8s path.
 
     With auto-deploy disarmed the same range leaves sonarr in `cs.k8s`, which is the
-    defer-and-alert channel it has always taken.
+    defer-and-alert channel.
     """
     config = mixed(settings, tick, UNAPPLYABLE_ROLE, promote=False)
     assert gitops_deploy.main(tick.tools, config) == 0
@@ -109,9 +109,9 @@ def test_a_failed_bump_holds_the_sha_and_its_plane_and_does_not_reset(
 ):
     """Forward-only. A reset here would undo the ff-merge under an applied setup plane.
 
-    The hold names the run that failed, `deploy.yml --tags sonarr`. With no `hold_plane` the
-    next unrelated service deploy cleared it through `clear_service_hold`, and GitOps Deploy —
-    Status went green over the failed pin.
+    The hold names the run that failed, `deploy.yml --tags sonarr`. Without a `hold_plane` the
+    next unrelated service deploy would clear it through `clear_service_hold`, and GitOps Deploy —
+    Status would go green over the failed pin.
     """
     config = mixed(settings, tick, UNAPPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("image manifest unknown")]
@@ -199,10 +199,11 @@ def test_a_bump_the_remaining_budget_cannot_fit_is_deferred(
 def test_a_failed_bump_keeps_an_earlier_plane_held_past_the_bumps_fix(
     gitops_deploy, tick, settings, state_dir, earlier, broad_path, outcomes
 ):
-    """#878's class: the bump's fix-forward deploy must clear the bump's entry and no other.
+    """The bump's fix-forward deploy must clear the bump's entry and no other.
 
-    Overwriting `hold_plane` with the bump's entry let a later sonarr deploy clear both
-    markers while the earlier plane was still unapplied, and GitOps Deploy — Status read green.
+    Overwriting `hold_plane` with the bump's entry would let a later sonarr deploy clear both
+    markers while the earlier plane was still unapplied, and GitOps Deploy — Status would read
+    green.
     """
     (state_dir / "hold_sha").write_text("e" * 40)
     (state_dir / "hold_plane").write_text(earlier)
@@ -217,7 +218,7 @@ def test_a_failed_bump_keeps_an_earlier_plane_held_past_the_bumps_fix(
 def test_a_failed_plane_keeps_an_earlier_plane_held_beside_its_own(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The broad loop's own failure arm overwrote the marker the same way."""
+    """The broad loop's own failure arm must not overwrite the marker either."""
     (state_dir / "hold_sha").write_text("e" * 40)
     (state_dir / "hold_plane").write_text("ansible/deploy.yml radarr")
     config = mixed(settings, tick, APPLYABLE_ROLE)
@@ -242,11 +243,11 @@ def test_a_failed_bump_still_annotates_the_bump_the_plane_applied(
 def test_a_contended_bump_annotates_nothing_the_next_tick_will_annotate_again(
     gitops_deploy, tick, settings
 ):
-    """#2453: the reset makes the plane's own apply something the next tick redoes.
+    """The reset makes the plane's own apply something the next tick redoes.
 
     radarr really did go out under this tick, and the annotation is still wrong: the tree is
     back on `local`, the next tick re-crosses the range and re-applies the same plane, and
-    Grafana drew two deploy annotations for one deploy.
+    Grafana would draw two deploy annotations for one deploy.
     """
     config = plane_applies_radarr(settings, tick)
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy("lock sonarr busy")]
@@ -263,12 +264,11 @@ PLANE_APPLIED = f"{ORIGIN} ansible/deploy.yml radarr"
 def test_a_contended_bump_takes_back_the_planes_broad_applied(
     gitops_deploy, tick, settings, state_dir
 ):
-    """#2382's widened path (#2459): the bump's own contention arm restores the marker too.
+    """The bump's own contention arm restores the marker too.
 
-    The loop's arm was pinned when #2382 landed; this one never was. The plane applied and
-    recorded `broad_applied`, then the bump's lock wait reset the tree to `local` — and
-    `land.sh` reads that marker to tell a plane the tick APPLIED from one it merely
-    fast-forwarded past (#1537), which after the reset this tree carries neither of.
+    The plane applied and recorded `broad_applied`, then the bump's lock wait reset the tree to
+    `local` — and `land.sh` reads that marker to tell a plane the tick APPLIED from one it
+    merely fast-forwarded past, which after the reset this tree carries neither of.
     """
     config = plane_applies_radarr(settings, tick)
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy("lock sonarr busy")]

@@ -2,9 +2,9 @@
 
 Since dnsmasq 2.86 an `address=` line carrying only an IPv4 sends every other record type
 upstream, so the `.local.` wildcard needs a second directive to keep AAAA lookups local.
-Until #2010 that directive was `address=/local.<domain>/::`, which answers `::` — the IPv6
-NULL address — to every client that asks. A client preferring IPv6 tries `::` first:
-Happy Eyeballs falls back after a stall, grpc-go retried `[::]:443` forever (2026-08-10).
+A directive `address=/local.<domain>/::` answers `::` — the IPv6 NULL address — to every
+client that asks. A client preferring IPv6 tries `::` first: Happy Eyeballs falls back after
+a stall, and grpc-go retries `[::]:443` forever.
 `local=/local.<domain>/` keeps the query local and answers it NODATA, the form dnsmasq's
 manual names for restoring the pre-2.86 behaviour.
 
@@ -42,7 +42,7 @@ def test_the_local_wildcard_is_declared_local_so_aaaa_stays_nodata():
 
 
 def test_no_address_line_answers_the_ipv6_null_address():
-    # The rejecting half: the line #2010 removed, and the shape a well-meant "keep AAAA
+    # The rejecting half: the `::` line, and the shape a well-meant "keep AAAA
     # local" revert would put back.
     lines = _directives(_dnsmasq_conf())
     offenders = [line for line in lines if re.fullmatch(r"address=/[^/]+/(::|#)", line)]

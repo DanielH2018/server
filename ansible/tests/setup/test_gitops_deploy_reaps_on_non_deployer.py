@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""daniel-server ran a live gitops-deploy.timer with has_gitops: false (spec 2026-09-06).
+"""A host with has_gitops: false must reap the gitops-deploy timer, not keep running it.
 
-The role was gated in initial_setup.yml, so a false flag skipped it and reaped nothing. The
-role is now a dispatcher; this pins the three parts that make the false branch reachable.
+The role is a dispatcher rather than gated in initial_setup.yml, which would skip it on a
+false flag and reap nothing. This pins the three parts that make the false branch reachable.
 Run: uv run pytest ansible/tests/setup/test_gitops_deploy_reaps_on_non_deployer.py
 """
 
@@ -87,7 +87,7 @@ def _kuma_check_imports(tasks_file, state: str) -> dict[str, str]:
 
 
 def test_the_teardown_reaps_both_timers_and_their_legacy_crons():
-    # The GitHub checks are kuma-check timers since 2026-09-19. The install imports them
+    # The GitHub checks are kuma-check timers. The install imports them
     # present; the teardown imports the same names absent, and the shared task file's absent
     # arm removes the units AND the cron each replaced, by the same cron_file.
     installed = _kuma_check_imports("install.yml", "present")
@@ -124,8 +124,8 @@ def test_the_directory_census_is_not_vacuous():
 
 
 def test_the_teardown_removes_every_directory_install_creates():
-    """#1732: the teardown reaped units and crons and left all three directories — the stale
-    payload, the 0600 config env file and the state — on daniel-server."""
+    """The teardown must remove all three directories — the stale payload, the 0600 config env
+    file and the state — not just the units and crons."""
     removal = task_named(
         load_tasks(ROLE / "teardown.yml"),
         "Remove the deployer's payload, config and state directories",

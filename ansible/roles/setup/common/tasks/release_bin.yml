@@ -31,8 +31,8 @@
 #
 # NEVER PUT A SECRET-RENDERING SCRIPT IN A GROUP. Every host script that renders a credential
 # inline carries `no_log: true` for it (ENFORCED by
-# ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py, on both planes since
-# #2016), but `no_log` is not what makes it ineligible: it hides the value from the deploy log
+# ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py, on both planes), but
+# `no_log` is not what makes it ineligible: it hides the value from the deploy log
 # and says nothing about what the rendered file holds, so it is a symptom of ineligibility
 # rather than the test for it. Retention is the
 # problem, not the render: keeping five releases of those would leave five copies of a rotated
@@ -93,9 +93,9 @@
     - name: Read the deploy commit for host scripts
       # On the CONTROLLER, not the target. This names the commit whose scripts are being
       # shipped, and those are rendered from the controller's checkout — so the target's HEAD
-      # was never the right answer, it merely agreed on the `connection=local` hosts. On
-      # daniel-pi it could disagree, stamping a release with the Pi's own checkout SHA; on
-      # daniel-stage there is no checkout and the task failed the run outright.
+      # is the wrong answer: it agrees only on the `connection=local` hosts. On daniel-pi it
+      # can disagree, stamping a release with the Pi's own checkout SHA, and a host with no
+      # checkout fails the run outright.
       delegate_to: localhost
       become: false
       ansible.builtin.command:
@@ -158,11 +158,10 @@
 
 - name: Ship the release pruner inside the release for {{ release_bin_group }}
   # The pruner rides in the release it prunes, not in the repo checkout. Every other artifact
-  # in a group reaches the target as content copied from the controller; until 2026-09-03 the
-  # pruner alone ran from `{{ playbook_dir }}/../scripts/`, which does not exist on a host with
-  # no checkout, so it needed a `has_repo_checkout` gate and a gated host kept every superseded
-  # release forever (issue #923). Shipping it here removes the dependency rather than gating
-  # it. It is not in `common_release_names`, so it gets no /usr/local/bin link: nothing but the
+  # in a group reaches the target as content copied from the controller. A pruner run from
+  # `{{ playbook_dir }}/../scripts/` would not exist on a host with no checkout, so it would
+  # need a `has_repo_checkout` gate and a gated host would keep every superseded release
+  # forever. Shipping it here removes the dependency rather than gating it. It is not in `common_release_names`, so it gets no /usr/local/bin link: nothing but the
   # task below calls it. It cannot delete itself, because the release it runs from is the one
   # `current` points at, and the pruner's first rule keeps that one whatever its age.
   ansible.builtin.copy:
@@ -242,8 +241,8 @@
   changed_when: "'removing ' in common_release_prune.stdout"
   # become resets HOME to /root, where uv keeps no managed Pythons: the pin is installed
   # `become: false` under the connecting user (initial_setup/tasks/host-basics.yml). Without
-  # this, root found 3.14.6 only through a `.venv` above the cwd, and lost it the day a patch
-  # install moved that venv's minor-version link (#2490). Same export as the root crons'
+  # this, root finds the pinned Python only through a `.venv` above the cwd, and loses it when
+  # a patch install moves that venv's minor-version link. Same export as the root crons'
   # templates, which cron_checks.py enforces.
   environment:
     UV_PYTHON_INSTALL_DIR: "/home/{{ sys_user }}/.local/share/uv/python"

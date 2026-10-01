@@ -4,8 +4,8 @@ The Longhorn HTTP API is reachable from a node's host network namespace only thr
 node's OWN longhorn-manager pod. `longhorn-manager`'s NetworkPolicy `from:` is entirely
 podSelectors, so host-originated traffic — the kind Ansible sends — matches no rule and a
 cross-node manager refuses the connection. The `longhorn-backend` ClusterIP load-balances
-across every node's manager, one endpoint each, which makes it a coin flip: measured
-2026-08-21, 2 of 8 GETs succeeded. `ansible/seed_volume_backup.yml:14-17` records the same
+across every node's manager, one endpoint each, which makes it a coin flip: 2 of 8
+GETs succeeded. `ansible/seed_volume_backup.yml:14-17` records the same
 finding from the other direction and chose CRs instead of the HTTP API for that reason.
 
 So the one thing this test pins is the field-selector that keeps the resolve pinned to THIS
@@ -46,7 +46,7 @@ def _named(path: Path, fragment: str) -> dict:
 def test_the_resolve_selects_this_nodes_own_manager_pod() -> None:
     """The longhorn-manager NetworkPolicy's `from:` is all podSelectors, so host-originated
     traffic reaches only the pod on THIS node. A ClusterIP or an unfiltered pod list is a coin
-    flip — measured 2026-08-21, 2 of 8 GETs succeeded. This test is what stops someone
+    flip — 2 of 8 GETs succeeded. This test is what stops someone
     'simplifying' the field-selector away."""
     argv = _named(_RESOLVE, "Resolve this node's own longhorn-manager pod IP")[
         "ansible.builtin.command"
@@ -54,9 +54,8 @@ def test_the_resolve_selects_this_nodes_own_manager_pod() -> None:
     assert "--field-selector" in argv
     # The exact templated token, not just "some nodeName clause": a hardcoded node name
     # ("spec.nodeName=daniel-server") satisfies every weaker check here and resolves the
-    # WRONG node's manager — verified 2026-08-21, all four tests in this file stayed green
-    # against that mutation, including the live one, which happily returned the other node's
-    # pod IP. Node-locality is the entire reason this role exists, so it gets a pinned assert.
+    # WRONG node's manager — every other test in this file stays green against that mutation,
+    # including the live one, which happily returns the other node's pod IP. Node-locality is the entire reason this role exists, so it gets a pinned assert.
     assert "spec.nodeName={{ ansible_hostname }}" in argv
     assert not any("longhorn-backend" in str(t) for t in argv)
     # `[*]`, not `[0]`. Reverting to `{.items[0].status.podIP}` makes kubectl error out (rc=1,
@@ -167,7 +166,7 @@ def test_the_resolve_returns_a_pod_ip_on_this_node() -> None:
     """The synthetic assertions above are only worth something if the real command produces a
     pod IP. Run the role's own argv, field-selector included, against the live API server —
     with `hostname` standing in for `ansible_hostname`, which is the same value on every node
-    in this cluster (verified 2026-08-21: `kubectl get nodes` and `hostname` agree).
+    in this cluster (`kubectl get nodes` and `hostname` agree).
 
     A ground-truth listing (an independent, correctly-labelled query) decides what counts as
     "reachable but this node has none" versus a real failure of the command under test — a

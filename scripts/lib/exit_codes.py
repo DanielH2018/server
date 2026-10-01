@@ -1,16 +1,13 @@
 """Every exit-code contract this repo's entry points share, named once.
 
-WHY ONE MODULE. `scripts/deploy.sh`'s contract used to be decoded twice: `land_lib/deploy.py`
-compared a return code to the bare integers 2, 75 and 20, while the staging gate named the
-same numbers in a frozenset. Nothing tied the two together, so a change to one could not fail
-the other. Every consumer now imports the names from here.
+WHY ONE MODULE. A contract decoded in two places drifts: a bare integer in one consumer and
+a frozenset in another are tied together by nothing, so a change to one cannot fail the other.
+Every consumer imports the names from here.
 
-WHY IT SITS IN `scripts/lib/` RATHER THAN `scripts/deploy_tools/`. It moved on 2026-09-30
-(issue #2854). Every one of its importers lived in `deploy_tools`, which made the scheme read
-as one tool family's private business, and the rest of `scripts/` grew four codings of its own:
-64 meant a usage error to `deploy.sh` and 2 to `land.sh`, and 3 meant both `DEPLOY_BROAD` and
-`TICK_LOCK_CONTENTION`. `lib/` is the directory every other script can already import, so a
-new entry point takes the spine below instead of inventing a fifth coding.
+WHY IT SITS IN `scripts/lib/` RATHER THAN `scripts/deploy_tools/`. `lib/` is the directory
+every other script can already import. A scheme kept in `deploy_tools` reads as one tool
+family's private business, and the rest of `scripts/` grows codings of its own. A new entry
+point takes the spine below instead of inventing another coding.
 
 THE SYSEXITS SPINE. `OK`, `FAILED`, `USAGE_ERROR` and `TEMP_FAIL` are the four values every
 family reuses, taken from `sysexits.h` so an operator reading a bare number gets the same
@@ -49,17 +46,16 @@ FAILED = 1
 USAGE_ERROR = 64
 TEMP_FAIL = 75
 
-# -- scripts/deploy.sh ------------------------------------------------------------------
-# The wrapper's own contract: 2, 3, 4 and 64 are refused by its front half `deploy_run.py`,
-# 20 and 75-79 by its locked half `deploy_under_locks.py` (and `deploy_detach.py`).
-# `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed, and every member is
-# a resume point. Read the frozenset rather than this sentence: it enumerated five of them
-# until 77 was added. 20 is the inverse -- the playbook RAN and a task failed, so whatever
-# applied before it is live. ansible-playbook's own 2/3/4 are collapsed onto 20 by the wrapper
-# for exactly that reason; `tests/test_deploy_exit_codes.py` pins the disjointness. One case
-# never reaches 20: ansible-playbook exits 2 on a USAGE error too, and
-# `deploy_flags.check_passthrough` asks its parser before the lock and refuses with 64,
-# because there no play ran and nothing is live (issue #3024).
+# -- scripts/deploy.sh ------------------------------------------------------------------ The
+# wrapper's own contract: 2, 3, 4 and 64 are refused by its front half `deploy_run.py`, 20 and
+# 75-79 by its locked half `deploy_under_locks.py` (and `deploy_detach.py`).
+# `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed, and every member is a
+# resume point. Read the frozenset rather than a list in prose. 20 is the inverse -- the
+# playbook RAN and a task failed, so whatever applied before it is live. ansible-playbook's own
+# 2/3/4 are collapsed onto 20 by the wrapper for exactly that reason;
+# `tests/test_deploy_exit_codes.py` pins the disjointness. One case never reaches 20:
+# ansible-playbook exits 2 on a USAGE error too, and `deploy_flags.check_passthrough` asks its
+# parser before the lock and refuses with 64, because there no play ran and nothing is live.
 DEPLOY_OK = OK
 DEPLOY_TAG_MISS = 2
 DEPLOY_BROAD = 3
@@ -69,7 +65,7 @@ DEPLOY_BAD_FLAGS = USAGE_ERROR
 DEPLOY_LOCK_BUSY = TEMP_FAIL
 # flock failed for a reason that is not contention: a bad descriptor, a lock file the deploy
 # user cannot open. Nothing was deployed either way, so it is a refusal — but retrying clears
-# 75 and never clears this one, which is why it is its own code (issue #1775).
+# 75 and never clears this one, which is why it is its own code.
 DEPLOY_LOCK_UNAVAILABLE = 76
 # The snapshot worktree could not be created, so the wrapper had no tree to render from. Its
 # own code rather than 76's: 76 points at the lock file, this points at the snapshot root or
@@ -78,13 +74,13 @@ DEPLOY_SNAPSHOT_FAILED = 77
 # The playbook reached PLAY RECAP naming no host. ansible exits 0 for that -- no play matched,
 # so no task failed -- and the wrapper reads the recap to tell it apart from a deploy. Nothing
 # was deployed, and unlike 77 the fault is in the inventory or the host pattern, not the
-# snapshot (issue #1814).
+# snapshot.
 DEPLOY_NO_HOSTS = 78
 # `deploy_locks.py plan` did not print the service locks -- it exited non-zero, timed out, or
 # printed nothing -- so the wrapper had nothing to take and deployed nothing. It refuses rather
 # than fall back to a lock order of its own: the plan is the ONE implementation of the lock
 # names and their order, and a second one is what a deadlock between a hand deploy and a tick
-# is made of (issue #2054). Its own code because the remedy is the helper itself.
+# is made of. Its own code because the remedy is the helper itself.
 DEPLOY_LOCK_PLAN_FAILED = 79
 
 # The subset that means staging (or a landing) never formed an opinion, because deploy.sh
@@ -105,9 +101,9 @@ DEPLOY_SH_NO_VERDICT = frozenset(
 # -- scripts/deploy_tools/gitops_tick.sh ------------------------------------------------
 # 3 = the tick was skipped because the tree lock was held, so it fast-forwarded NOTHING.
 # 4 = `--no-wait` joined a tick already in flight and started none. That tick fetched before
-#     the request, so a commit merged since is not in it (issue #1843). Never seen with a wait
+#     the request, so a commit merged since is not in it. Never seen with a wait
 #     budget: there the wrapper watches the joined run and, when it ends cleanly, starts a
-#     fresh run on the same budget and exits by THAT run's outcome (issue #1879).
+#     fresh run on the same budget and exits by THAT run's outcome.
 # 75 = the wrapper stopped watching a run still in flight, which is not a failure.
 TICK_OK = OK
 TICK_FAILED = FAILED
@@ -128,9 +124,9 @@ CI_PENDING = TEMP_FAIL
 
 # -- scripts/deploy_tools/land.sh -------------------------------------------------------
 # Documented in land.py's module docstring, which is what `--help` prints.
-# LAND_BAD_ARGS was 2 until 2026-09-30 (issue #2854): argparse's own SystemExit(2) set it, and
-# a caller could not tell "you typed the command wrong" from `CI_DISARMED` or `DEPLOY_TAG_MISS`
-# arriving through the same pipeline. `land.py` now remaps argparse's 2 onto the spine's 64.
+# LAND_BAD_ARGS is the spine's 64. argparse's own SystemExit(2) would leave a caller unable
+# to tell "you typed the command wrong" from `CI_DISARMED` or `DEPLOY_TAG_MISS` arriving
+# through the same pipeline, so `land.py` remaps argparse's 2 onto 64.
 LAND_SETTLED = OK
 LAND_FAILED = FAILED
 LAND_BAD_ARGS = USAGE_ERROR
@@ -159,9 +155,8 @@ class Code:
     """One row of a script's exit contract.
 
     `meaning` is the one line `docs/reference/scripts.md` renders. `remedy` is the operator's
-    next step, printed by the entry point itself on a non-zero exit — it was the
-    `_DEPLOY_EXITS` table in `.claude/hooks/auto-mode-bridge.py` until 2026-09-30, where it
-    only reached Claude and never a human at a terminal (issue #2853). `verdict` is the
+    next step, printed by the entry point itself on a non-zero exit, so it reaches a human at
+    a terminal as well as Claude. `verdict` is the
     one-token name of this outcome for the verdict line below, empty where the entry point
     prints none.
     """
