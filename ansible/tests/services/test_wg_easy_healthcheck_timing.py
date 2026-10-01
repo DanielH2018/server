@@ -15,32 +15,19 @@ Run: uv run pytest ansible/tests/services/test_wg_easy_healthcheck_timing.py
 
 import pytest
 
-from _helpers import ANSIBLE, load_yaml
-from lib import yaml_fast
-from lib.ansible_jinja_env import template_env
-from lib.render_guard import ALL_VARS, BASE_CONTEXT, HOST_VARS, render_or_error
-
-PI_HOST_VARS = HOST_VARS / "daniel-pi.yml"
-TEMPLATE = (
-    ANSIBLE / "roles" / "containers" / "wg-easy" / "templates" / "docker-compose.yml.j2"
-)
+from _compose_render import host_vars, render_service
 
 TIMING_KEYS = ("interval", "timeout", "retries")
 
 
-def _render(host_vars: dict) -> dict:
-    """The wg-easy service as the Pi deploys it, with `host_vars` layered over the base."""
-    entry = next(c for c in host_vars["containers_list"] if c["name"] == "wg-easy")
-    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **host_vars, "container_item": entry}
-    ctx.pop("containers_list", None)
-    rendered, err = render_or_error(template_env(TEMPLATE.parent), TEMPLATE.name, ctx)
-    assert rendered is not None, err
-    return yaml_fast.safe_load(rendered)["services"]["wg-easy"]
+def _render(vars_: dict) -> dict:
+    """The wg-easy service as the Pi deploys it, with `vars_` layered over the base."""
+    return render_service("wg-easy", vars_)
 
 
 @pytest.fixture(scope="module")
 def pi_vars() -> dict:
-    return load_yaml(PI_HOST_VARS)
+    return host_vars("daniel-pi")
 
 
 def test_timing_comes_from_the_pi_host_vars(pi_vars: dict) -> None:
