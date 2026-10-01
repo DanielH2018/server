@@ -239,7 +239,10 @@ def handle_broad(
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:
             log(f"broad apply failed ({playbook} {tags}): {exc}")
-            state.hold_failed_apply(origin, playbook, tags)
+            # `broad.held`, not `tags`: a narrowed setup apply holds the role tags it
+            # narrowed from, so the apply that fixes it clears the hold. The property
+            # carries the derivation.
+            state.hold_failed_apply(origin, playbook, broad.held)
             # The range is merged and this arm never resets, so nothing re-derives what it
             # carried: the deferred pages go out now, and the failure post below names the
             # promoted bumps, which no later tick's range will contain.
@@ -264,7 +267,7 @@ def handle_broad(
                 deploy_alert_text.broad_failure_alert(
                     config.hostname,
                     playbook,
-                    tags,
+                    broad.held,
                     origin,
                     exc,
                     state.path("hold"),

@@ -4,33 +4,28 @@ WHY THIS IS A CHECK AND NOT PROSE. `register:` writes a host variable that outli
 that produced it, so a producer and a consumer under different tags come apart the moment a run
 is scoped. `ansible/roles/setup/initial_setup/CLAUDE.md`'s fact-dependency rule has said so
 since the granular tags were added — a task whose `register:` feeds other blocks carries ALL
-its consumers' tags, the home-dir resolver being `[tooling, git-hooks]`. It held because the
-only thing passing a narrow `--tags` value was a human who had read that file.
+its consumers' tags. It held because the only thing passing a narrow `--tags` value was a human
+who had read that file.
 
 The deployer now derives those tags and applies them unattended
 (`scripts/deploy_tools/narrow_setup.py`, reached from `deploy_narrow.plan`). A violation is no
-longer a mistake an operator makes; it is a GitOps tick that fails on an undefined variable,
-holds the SHA and parks every other session's landing behind it. So the invariant the narrowing
-rests on is asserted here.
+longer an operator's mistake; it is a GitOps tick that fails on an undefined variable, holds
+the SHA and parks every other session's landing. So the invariant is asserted here.
 
-WHAT MAKES THE INVARIANT SUFFICIENT. It closes both directions at once.
+WHAT MAKES THE INVARIANT SUFFICIENT. It closes both directions at once. A change reaching the
+CONSUMER narrows to the consumer's tags, which the producer carries, so the producer runs too.
+A change reaching the PRODUCER narrows to the producer's tags, a superset of every consumer's
+by this rule, so every consumer runs as well.
 
-  - A change reaching the CONSUMER narrows to the consumer's tags. The producer carries them,
-    so the producer runs too.
-  - A change reaching the PRODUCER narrows to the producer's tags, which by this rule are a
-    superset of every consumer's, so every consumer runs as well.
+That is why `narrow_setup` needs no `register:` edge of its own, the way it needs one for
+`set_fact` (#2384). The edge was written and withdrawn in #3120: it is file-granular, so one
+cross-tag read widened `initial_setup`'s answer from five tags to eight, and one of the three
+added (`debloat`) is declared by a second role, which `foreign_tags` then refuses — the
+narrowing stopped firing on the ranges it had fired on. This rule is the same safety per TASK.
 
-That is why `narrow_setup` does not need a `register:` edge of its own, the way it needs one
-for `set_fact` (#2384). The edge was written and withdrawn in #3120: it is file-granular, so
-a single cross-tag read widened `initial_setup`'s answer from five tags to eight, and one of
-the three added (`debloat`) is declared by a second role, which `foreign_tags` then refuses —
-the narrowing stopped firing on the ranges it had been firing on. This rule gets the same
-safety per TASK.
-
-SCOPE, and the guard that keeps it honest. Only tasks are read. A register name inside a
-`templates/` file would make the task that RENDERS the template a consumer, and this check
-would not see it; `test_no_setup_role_template_reads_a_registered_name` is what says the tree
-has no such case, so the scope limit is measured rather than assumed.
+SCOPE, and the two guards that keep it honest. Only tasks of ONE role are read: a register name
+in a `templates/` file would make the rendering task a consumer, and a name produced in another
+role is a pair no role's derivation sees. The two scope tests below measure both limits.
 
 Run: uv run pytest ansible/tests/setup/test_register_producers_carry_consumer_tags.py
 """
@@ -480,3 +475,26 @@ def test_a_producer_imported_only_under_another_tag_is_flagged(tmp_path: Path):
     found = offenders(role_tasks(role))
     assert len(found) == 1, found
     assert "demo_server" in found[0]
+
+
+def test_no_setup_role_reads_a_name_another_role_registered():
+    """The second scope guard: a `register:` outlives its role, and this check is per role.
+
+    The narrowing derives one role's tags at a time, so nothing above judges a cross-role
+    pair. Nothing in the tree makes one; a first one fails here.
+    """
+    produced = {
+        name: role.name
+        for role in _roles()
+        for task in role_tasks(role)
+        for name in task.registers
+    }
+    assert produced, "no setup role registers anything — the census went empty"
+    found = []
+    for role in _roles():
+        for task in role_tasks(role):
+            for name in task.reads:
+                owner = produced.get(name)
+                if owner is not None and owner != role.name:
+                    found.append(f"{role.name}:{task.rel} reads {name} from {owner}")
+    assert not found, "\n".join(found)

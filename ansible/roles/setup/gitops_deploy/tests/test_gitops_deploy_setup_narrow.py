@@ -148,15 +148,73 @@ def test_a_role_this_deployer_cannot_apply_is_not_narrowed(gitops_deploy, tick):
     assert tick.playbooks == []
 
 
-def test_a_failed_narrowed_setup_apply_holds_the_tags_it_tried(
+def test_a_failed_narrowed_setup_apply_holds_the_role_tag_it_narrowed_from(
     gitops_deploy, tick, state_dir
 ):
-    """The hold names the narrowed plane, so only an apply covering those tags clears it."""
+    """The hold names the ROLE, not the block tags the apply ran.
+
+    `broad_hold_cleared_by` compares tag strings, so a hold naming `gitops-config` would
+    survive a later `--tags gitops_deploy` apply that reruns that very block. The paired
+    clear-side test below is the half that makes this one load-bearing.
+    """
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "gitops-config")}
     tick.playbook_outcomes = [RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools) == 0
+    assert _playbook_argv(tick)[-1] == "gitops-config", (
+        "it still APPLIES the narrow tags"
+    )
     assert (state_dir / "hold_sha").read_text() == ORIGIN
     assert (
         state_dir / "hold_plane"
-    ).read_text() == "ansible/initial_setup.yml gitops-config"
+    ).read_text() == "ansible/initial_setup.yml gitops_deploy"
+
+
+def test_the_whole_role_fallback_clears_a_hold_a_narrowed_apply_left(
+    gitops_deploy, tick, state_dir
+):
+    """The way out: the apply that fixes a held setup role clears the hold.
+
+    A sticky `hold_sha` parks every session's landing, so the hold a narrowed apply writes
+    has to be one a later apply of the same role covers.
+    """
+    (state_dir / "hold_sha").write_text("1" * 40)
+    (state_dir / "hold_plane").write_text("ansible/initial_setup.yml gitops_deploy")
+    tick.paths = [GITOPS_TEMPLATE]
+    tick.narrow_setup = {"gitops_deploy": (1, "")}
+    assert gitops_deploy.main(tick.tools) == 0
+    assert _playbook_argv(tick)[-1] == "gitops_deploy"
+    assert not (state_dir / "hold_sha").exists()
+    assert not (state_dir / "hold_plane").exists()
+
+
+def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
+    """One shared budget for the loop, not one per role.
+
+    `plan` runs before the ff-merge and inside the unit's `TimeoutStartSec`, which the phase
+    budgets in `defaults/main.yml` already fill. Nothing bounds how many setup roles a range
+    carries, so without a shared deadline a wide range spends the per-role budget once per
+    role before anything is applied.
+    """
+    import deploy_narrow
+
+    asked = []
+    # The deadline, then one reading per role: the second is past the budget.
+    clock = iter([0.0, 0.0, deploy_narrow.NARROW_SETUP_TOTAL_BUDGET_S + 1.0])
+
+    def narrow_setup(repo, role, role_tag, playbook, old, new, timeout):
+        asked.append(role)
+        return 0, "gitops-config"
+
+    config = type("C", (), {"repo": "/repo"})()
+    target = type("T", (), {"local": "1" * 40, "origin": ORIGIN})()
+    tags = deploy_narrow.narrowed_setup_tags(
+        narrow_setup,
+        config,
+        target,
+        {"gitops_deploy", "renovate_notify"},
+        {"gitops_deploy": "gitops_deploy", "renovate_notify": "renovate_notify"},
+        now=lambda: next(clock),
+    )
+    assert asked == ["gitops_deploy"], "the second role must not be asked"
+    assert tags == ["gitops-config", "renovate_notify"]

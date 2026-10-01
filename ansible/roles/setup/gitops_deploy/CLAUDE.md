@@ -3,12 +3,12 @@
 Installs a systemd **timer** (every `gitops_deploy_tick_interval`, 10 min) that runs
 `/opt/gitops-deploy/gitops_deploy.py` as `{{ sys_user }}`. The script fetches `origin/master`;
 if it advanced, it maps each changed path to a service or a plane, `--ff-only` merges, and
-deploys what it is allowed to. `tasks/` and a role `CLAUDE.md` are deliberately NOT
+deploys what it may. `tasks/` and a role `CLAUDE.md` are deliberately NOT
 auto-deployed, and triggering a tick by hand is the **`gitops-tick` skill**.
 
-Config is `/etc/gitops-deploy/config.env` (0600), templated from the SOPS var
-`gitops_deploy_discord_webhook`; liveness is `/var/lib/gitops-deploy/last_run`, which
-`monitor-bridge` reads. This file carries the rules; `docs/gitops-pipeline.md`'s *The
+Config is `/etc/gitops-deploy/config.env` (0600), from the SOPS var
+`gitops_deploy_discord_webhook`; liveness is `/var/lib/gitops-deploy/last_run`, read by
+`monitor-bridge`. This file carries the rules; `docs/gitops-pipeline.md`'s *The
 deployer's record* carries the incident behind each, the budget arithmetic, the module layout
 and the trade-offs.
 
@@ -34,7 +34,7 @@ non-deployer still writes it: the record page says why.
 ## Autonomous-role contract (it deploys to production with no human in the loop)
 
 Every 10 minutes this role may fast-forward the primary checkout, run `deploy.yml` against the
-cluster, and on a failed health gate roll the tree and the service back.
+cluster, and roll the tree and service back on a failed health gate.
 
 - **Scope / exclusions:** a k8s role ONLY for an image-pin bump to a non-denylisted service, plus
   every setup-plane change it can apply itself. **Never** a Pi Docker role, the bring-up
@@ -48,7 +48,7 @@ cluster, and on a failed health gate roll the tree and the service back.
 - **Required evidence:** `last_run` every tick (GitOps-Alive expires without it), a Discord post
   per deploy, rollback, hold and deferral, and a `hold_sha` that pages **GitOps Deploy — Status**.
 - **Next-run review:** before widening scope, read the last week's Discord log for the holds and
-  rollbacks that actually fired; the record page lists what an earlier widening cost.
+  rollbacks that fired; the record page lists what an earlier widening cost.
 
 ## Safety
 
@@ -83,7 +83,7 @@ Each arm is a rule and the function that holds it. The record page has the incid
   `*_image:` var. One tick promotes at most 3 services, 1 claim-declaring.
 - **The denylist derives from each role's own `k8s_autodeploy` declaration**
   (`filter_plugins/k8s_autodeploy.py`, fail-closed), so `k8s_autodeploy: false` is how you stop a
-  role; `deploy_phases.reconcile_denylist` re-renders `config.env` itself.
+  role; `deploy_phases.reconcile_denylist` re-renders `config.env`.
 - **Pi Docker changes are never auto-deployed**, and an encrypted-vars-only push merges without
   redeploying, alerting once per SHA.
 - **A new module in `files/` goes in the copy `loop:` and `stamp_deployed_pairs` in
@@ -96,11 +96,11 @@ apply, each dropped by an apply covering it (`clear_broad_hold` / `clear_service
 untagged run covers any tag set, a tagged run a held set it is a superset of, never an untagged
 hold. Every consumer gates on `hold_sha` alone, so an early clear turns the tile green over an
 unapplied plane (#878). A hand `ansible-playbook` run clears nothing, and the deploy UI's Clear
-button drops EVERY entry at once as the operator's override.
+button drops EVERY entry at once as the operator's override. **A narrowed setup apply holds its
+ROLE tag**: this match is over tag strings (#3138).
 
 ## Traps
 
 Five live in `docs/gitops-pipeline.md`: the failed-run error string, the tree-lock self-deadlock,
 the config source that changes an alert's remediation, the two timeout budgets, and the
-`restore_sha=origin[:8]` fixed slice. Read them before editing an alert, moving a config
-value or raising a cap.
+`restore_sha=origin[:8]` fixed slice. Read them before editing an alert or raising a cap.
