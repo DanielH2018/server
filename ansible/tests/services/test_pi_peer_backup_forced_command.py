@@ -9,11 +9,14 @@ are on what the Pi would execute, not on the wrapper's text.
 """
 
 import os
+import re
 
 import pytest
 from lib import yaml_fast
+from lib.k8s_context import resolve_vars, role_defaults
 from lib.proc_testing import fake_bin, path_with, run
 from _helpers import ROLES, stub_logger_on_path
+from _k8s_render import host_context, rendered_docs
 
 ROLE = ROLES / "k8s/pi-peer-backup"
 WRAPPER = ROLE / "files/pi-peer-backup-shell.sh"
@@ -108,9 +111,23 @@ def test_the_key_is_pinned_to_the_wrapper_installed_one_task_earlier():
     authorize = tasks[names.index("Authorize the pull key on daniel-pi")]
     assert names.index(install["name"]) < names.index(authorize["name"])
     dest = install["ansible.builtin.copy"]["dest"]
-    options = authorize["ansible.posix.authorized_key"]["key_options"]
+    base = host_context()
+    options = resolve_vars(
+        {"key_options": authorize["ansible.posix.authorized_key"]["key_options"]},
+        {**base, **role_defaults("pi-peer-backup", base)},
+    )["key_options"]
     assert options.startswith("restrict,")
-    assert f'command="{dest} {{{{ pi_peer_backup_src_dir }}}}"' in options
-    # The CronJob reads the same directory the key is pinned to, through the same variable.
-    cronjob = (ROLE / "templates/cronjob.yaml.j2").read_text()
-    assert ":{{ pi_peer_backup_src_dir }}" in cronjob
+    pinned = re.fullmatch(rf'restrict,command="{re.escape(dest)} (\S+)"', options)
+    assert pinned, options
+    # The CronJob pulls the same directory the key is pinned to, and the wrapper tests above
+    # exercise it: all three agree at the value a deploy renders, not at a variable name.
+    env = next(
+        container["env"]
+        for role, _tpl, doc in rendered_docs()
+        if role == "pi-peer-backup" and doc.get("kind") == "CronJob"
+        for container in doc["spec"]["jobTemplate"]["spec"]["template"]["spec"][
+            "containers"
+        ]
+    )
+    pi_src = next(e["value"] for e in env if e["name"] == "PI_SRC")
+    assert pi_src.rpartition(":")[2] == pinned.group(1) == SRC, (pi_src, options)
