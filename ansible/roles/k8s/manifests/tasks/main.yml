@@ -648,6 +648,13 @@
   # `changed` is recorded here, not recomputed at the drain: it decides whether the stabilisation
   # gate watches this workload, and manifests_render/manifests_secret_render are role-scoped facts
   # that the next role in the batch overwrites.
+  #
+  # The config arm is the SAME render-and-apply conjunction the restart task above uses (#3125).
+  # `manifests_render is changed` alone compares rendered file bytes, so a YAML-comment or
+  # whitespace edit queued the workload with changed=true, restarted nothing, and still cost the
+  # play the stabilisation gate's soak over a workload that never moved. The drain waits on every
+  # queued entry regardless of this flag; only its restart-count snapshot and desired-count read
+  # select on it, and those are what build k8s_stabilise_watch for the gate.
   ansible.builtin.set_fact:
     k8s_pending_rollouts: >-
       {{ (k8s_pending_rollouts | default([])) + [{
@@ -655,7 +662,8 @@
            'namespace': k8s_namespace,
            'kind': manifests_rollout_kind | default('deploy'),
            'timeout': manifests_rollout_timeout | default(manifests_rollout_timeout_default),
-           'changed': (manifests_render is changed) or (manifests_secret_render is changed)
+           'changed': (manifests_render is changed and manifests_apply is changed)
+                      or (manifests_secret_render is changed)
                       or manifests_image_changed,
          }] }}
   # Leaving the queue empty under dry-run is what makes roles/k8s/manifests/tasks/drain.yml and the
@@ -705,6 +713,7 @@
   # manifests_service, so reusing it here would queue a runners-only rebuild with changed=false
   # and the stabilisation gate would skip the very workload whose image just moved — a restart
   # that fires but is never soaked.
+  # The config arm is the same render-and-apply conjunction as the primary queue above (#3125).
   ansible.builtin.set_fact:
     k8s_pending_rollouts: >-
       {{ (k8s_pending_rollouts | default([])) + [{
@@ -712,7 +721,8 @@
            'namespace': k8s_namespace,
            'kind': item.kind | default(manifests_rollout_kind | default('deploy')),
            'timeout': manifests_rollout_timeout | default(manifests_rollout_timeout_default),
-           'changed': (manifests_render is changed) or (manifests_secret_render is changed)
+           'changed': (manifests_render is changed and manifests_apply is changed)
+                      or (manifests_secret_render is changed)
                       or ((item.image | default(item.name)) in (k8s_rebuilt_images | default([]))),
          }] }}
   loop: "{{ manifests_extra_rollouts | default([]) }}"
