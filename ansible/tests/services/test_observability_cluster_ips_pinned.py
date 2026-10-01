@@ -14,11 +14,11 @@ later, on another machine, in a tool this repo does not contain. Hence a test.
 
 import ipaddress
 import pathlib
-import re
 
 import pytest
 from lib import yaml_fast
 from _helpers import ALL_VARS, K8S_ROLES
+from _k8s_render import rendered_docs
 
 ROLE = K8S_ROLES / "observability"
 DEFAULTS = ROLE / "defaults" / "main.yml"
@@ -60,27 +60,27 @@ def defaults():
     return yaml_fast.safe_load(DEFAULTS.read_text())
 
 
-def service_spec(name):
-    """The `spec:` block of the named Service, as raw template text.
-
-    Parsed textually rather than with yaml: these are Jinja templates and the
-    `{{ ... }}` values are not valid YAML scalars everywhere they appear.
-    """
-    text = (ROLE / "templates" / f"{name}.yaml.j2").read_text()
-    for document in text.split("\n---\n"):
-        if re.search(r"^kind: Service$", document, re.M) and re.search(
-            rf"^  name: {name}$", document, re.M
+def rendered_service(name):
+    """The named Service as the observability role renders it at daniel-box's inventory."""
+    for role, _tpl, doc in rendered_docs():
+        if (
+            role == ROLE.name
+            and doc.get("kind") == "Service"
+            and (doc.get("metadata") or {}).get("name") == name
         ):
-            return document
-    raise AssertionError(f"no Service named {name} in {name}.yaml.j2")
+            return doc
+    raise AssertionError(
+        f"the observability render produced no Service named {name}, so its pin is unchecked"
+    )
 
 
 @pytest.mark.parametrize(("name", "variable"), sorted(PINNED.items()))
-def test_service_pins_its_cluster_ip(name, variable):
-    spec = service_spec(name)
-    assert f"clusterIP: {{{{ {variable} }}}}" in spec, (
-        f"the {name} Service must pin clusterIP to {variable}; without it the "
-        "address is reassigned on recreate and otelq's fallback strands"
+def test_service_pins_its_cluster_ip(name, variable, defaults):
+    pinned = (rendered_service(name).get("spec") or {}).get("clusterIP")
+    assert str(pinned) == str(defaults[variable]), (
+        f"the rendered {name} Service has clusterIP {pinned!r}, not {variable} "
+        f"({defaults[variable]}); without the pin the address is reassigned on recreate and "
+        "otelq's fallback strands"
     )
 
 
