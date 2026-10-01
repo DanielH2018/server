@@ -138,8 +138,9 @@ same resources.
   unchanged, as is every restart. The `secret` trigger deliberately stays on
   `manifests_secret_render`: `verify_secret_keys.yml` patches a stale key out of a Secret after
   an apply that printed `unchanged`, and that change needs the restart. Pihole's private restarts
-  read the same conjunction per instance (#3127, see its `CLAUDE.md`); the queued `changed` flag
-  for the stabilisation gate still reads the render bytes.
+  read the same conjunction per instance (#3127, see its `CLAUDE.md`), and so does the queued
+  `changed` flag the stabilisation gate selects on (#3125) — an inert edit restarts nothing, so
+  there is nothing for the gate to soak.
 - **The restart is skipped for a workload the apply itself rolled.** The two `rollout
   restart` tasks fire on the render and the apply both changing, which an image-pin bump satisfies —
   and the apply already rolls that Deployment, because its pod template changed. The second
@@ -390,6 +391,11 @@ whole rolling update. That wait would return before the new pod is even schedule
 
 The tasks are guarded on an empty queue (`k8s_pending_rollouts | length > 0`). So `--skip-tags
 deploy`, which skips the queueing task above, leaves the drain a no-op rather than an error.
+
+**The drain waits on every queued entry, whatever its `changed` flag says.** Only the
+restart-count snapshot and the desired-count read select on `changed`, and those two build
+`k8s_stabilise_watch` for `ansible/post_tasks/k8s_stabilise_gate.yml`, which reads nothing else.
+So the flag decides the soak alone — never the wait.
 
 An edit to `drain.yml` changes how a deploy runs, never what it applies. `probe.py releases`
 therefore exempts this one file from the release-staleness census
