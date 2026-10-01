@@ -138,10 +138,61 @@ def test_mem_metric_unavailable_alerts(monkeypatch, cfg):
     ],
 )
 def test_cert(monkeypatch, days_left, ok, expect, cfg):
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: days_left)
+    vec = [] if days_left is None else [({"cn": "daniel-hunter.com"}, days_left)]
+    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: vec)
     result_ok, msg = checks.host.check_cert(cfg)
     assert result_ok is ok
     assert expect in msg
+
+
+def test_cert_names_the_expiring_certificate_and_not_its_healthy_peer(cfg):
+    """The TLS Cert Expiry tile promises the message names the certificate (#3101).
+
+    The query is per-series for this reason: `min(traefik_tls_certs_not_after)` aggregated the
+    `cn` away, so a two-certificate store produced a DOWN naming neither. Asserted as the whole
+    message, so the healthy peer's absence is part of the claim.
+    """
+    ok, msg = checks.host.check_cert(
+        cfg,
+        prom_vector=lambda _cfg, *a, **k: [
+            ({"cn": "daniel-hunter.com"}, 61.0),
+            ({"cn": "vpn.daniel-hunter.com"}, 3.2),
+        ],
+    )
+    assert not ok
+    assert msg == "cert expires within 14d: vpn.daniel-hunter.com in 3.2d"
+
+
+def test_cert_pages_for_every_breaching_certificate_soonest_first(cfg):
+    ok, msg = checks.host.check_cert(
+        cfg,
+        prom_vector=lambda _cfg, *a, **k: [
+            ({"cn": "vpn.daniel-hunter.com"}, 9.0),
+            ({"cn": "daniel-hunter.com"}, 2.5),
+        ],
+    )
+    assert not ok
+    assert msg == (
+        "cert expires within 14d: daniel-hunter.com in 2.5d, vpn.daniel-hunter.com in 9.0d"
+    )
+
+
+def test_cert_healthy_message_names_the_soonest_expiring_certificate(cfg):
+    ok, msg = checks.host.check_cert(
+        cfg,
+        prom_vector=lambda _cfg, *a, **k: [
+            ({"cn": "daniel-hunter.com"}, 61.0),
+            ({"cn": "vpn.daniel-hunter.com"}, 22.0),
+        ],
+    )
+    assert ok
+    assert msg == "cert valid 22d (soonest: vpn.daniel-hunter.com)"
+
+
+def test_cert_without_a_cn_label_reports_the_breach_rather_than_crashing(cfg):
+    ok, msg = checks.host.check_cert(cfg, prom_vector=lambda _cfg, *a, **k: [({}, 1.0)])
+    assert not ok
+    assert msg == "cert expires within 14d: unnamed cert in 1.0d"
 
 
 # ── scrutiny SMART-data freshness (collector runs daily; web API holds last report) ──
