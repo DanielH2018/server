@@ -183,6 +183,8 @@ otelq
 [Bb]uildkit
 [Bb]uildkitd
 [Dd]eadsnakes
+# The CNI plugin that installs a hostPort's DNAT rule.
+[Pp]ortmap
 [Dd]istro
 [Ee]nv
 [Ee]xec

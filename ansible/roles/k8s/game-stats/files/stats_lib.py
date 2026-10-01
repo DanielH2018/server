@@ -63,6 +63,28 @@ def http_get_json(url, timeout, user_agent):
         return json.load(resp)
 
 
+# DECIDED: this builder stays here rather than routing through
+# `scripts/diagnostics/probe_lib/obs_api.py`, the shared Prometheus/Loki client #2860 minted
+# (#3096, evaluated 2026-10-01). Three reasons, in order of weight.
+#
+# The window semantics differ, and that is the part a shared builder would have to express. This
+# one is a CURSOR resume over the half-open interval `(start_ns, end_ns]` — hence `start_ns + 1`,
+# which is what keeps the last entry of the previous page from being re-folded into the stats. A
+# shared `loki_query_url` passes `start` through verbatim, correct for its own callers and off by
+# one entry for this one; `obs_api.trailing_window_ns` is inapplicable outright, because nothing
+# here reads a trailing window — the start comes out of SQLite (`initial_cursor`).
+#
+# The cost side is a staging path, not a line count. obs_api's own docstring says an edit there
+# maps to no deploy tag: homelab-mcp's image keeps the previous copy until its next deploy. Two
+# more pods on that footing, each with a third `--from-file` entry in its ConfigMap and a third
+# file folded into its `checksum/stats-script` annotation, is the real bill — and a stale obs_api
+# in a game pod is a stats gap nobody is watching for.
+#
+# What would be shared is one `urlencode` call. The transports also differ: `http_get_json` here
+# sends a User-Agent, which `obs_api.get_json` does not.
+#
+# Contradict this with evidence at a cited file:line, naming this marker. The thing that would
+# overturn it is obs_api growing a cursor-shaped window with a deploy tag behind it.
 def build_query_range_url(loki_url, query, start_ns, end_ns, page_limit):
     """Builds a Loki query_range URL for entries in (start_ns, end_ns], one page."""
     qs = urllib.parse.urlencode(

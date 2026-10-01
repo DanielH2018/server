@@ -66,6 +66,9 @@ class IoConfig:
     SHIPPER_DROPPED_SERVER_METRIC: str
     SHIPPER_DROPPED_WINDOW: str
     SHIPPER_DROPPED_MAX: float
+    OTELCOL_SEND_FAILED_METRICS: str
+    OTELCOL_SEND_FAILED_WINDOW: str
+    OTELCOL_SEND_FAILED_MAX: float
     SWALLOWED_VERDICTS_WINDOW_S: int
     BOOT_SETTLE_S: int
     SHIPPER_BACKLOG_GRACE_S: int
@@ -387,6 +390,33 @@ def io_config(
         # was rejected on its own evidence: that episode ran 11 cycles, so a streak would have
         # removed 3 of them and left the tile red for 40 minutes.
         SHIPPER_DROPPED_MAX=_num("SHIPPER_DROPPED_MAX", "3000"),
+        # The THIRD side of the same pipe, folded in from the observability role's
+        # telemetry-health.sh host cron on 2026-10-01 (#3094): the OTel collector's own
+        # export-failure counters. A failed export leaves no trace in Loki or Tempo by
+        # definition, and the collector's receiver counters keep climbing, so a stack dropping
+        # 100% of Claude Code's telemetry looks identical from every other angle to one working
+        # perfectly.
+        #
+        # A `__name__` regex, not a bare name, for the reason SHIPPER_DROPPED_METRICS gives: the
+        # family is one counter per signal — `otelcol_exporter_send_failed_log_records`,
+        # `_metric_points` and `_spans` — and naming one would read the other two as "0 failed
+        # forever". Measured on daniel-box's Prometheus 2026-10-01: the family has NO live series,
+        # because the collector emits a send-failed counter only once it has failed. Its `sent`
+        # twins DO exist and pin the naming — `otelcol_exporter_sent_log_records`,
+        # `otelcol_exporter_sent_metric_points`, `otelcol_exporter_sent_spans`, none of them
+        # `_total`-suffixed. An absent family makes the query return no series, which
+        # `bridge.net.prom_scalar` reads as None and the verdict counts as 0, so the arm stays
+        # clean until the first real failure.
+        OTELCOL_SEND_FAILED_METRICS=_env(
+            "OTELCOL_SEND_FAILED_METRICS",
+            "otelcol_exporter_send_failed_.*",
+        ),
+        # Its own window and threshold rather than SHIPPER_DROPPED_WINDOW/_MAX: those two are
+        # sized for log-line churn that tops out near 1020/h, and an export failure is not churn
+        # at any rate. 15m and 0 are the values the host cron used since it was written, carried
+        # over unchanged so the fold does not also change what pages.
+        OTELCOL_SEND_FAILED_WINDOW=_env("OTELCOL_SEND_FAILED_WINDOW", "15m"),
+        OTELCOL_SEND_FAILED_MAX=_num("OTELCOL_SEND_FAILED_MAX", "0"),
         # How far back check_swallowed_verdicts reads the host crons' push-outcome lines. Long
         # enough that a lost DOWN verdict stays paged past a cycle or two of Loki ingest lag,
         # and past the next run of a */30 producer that may land; short enough that the fetch

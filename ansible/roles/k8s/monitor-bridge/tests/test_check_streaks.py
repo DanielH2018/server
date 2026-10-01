@@ -330,6 +330,93 @@ def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch, cfg):
     )
 
 
+# ── arm 3: the OTel collector's export failures, folded in from the host cron (#3094) ──
+
+
+@pytest.mark.parametrize(
+    ("failed", "ok", "must_contain"),
+    [
+        # The normal state: the send-failed family has no series at all, because the collector
+        # mints one only once an export has failed. That must read clean, not unknown.
+        pytest.param(
+            None, True, ("no collector export failures",), id="no_series_is_clean"
+        ),
+        pytest.param(0.0, True, ("no collector export failures",), id="zero_is_clean"),
+        # Threshold 0, so one item pages. `increase()` extrapolates, hence the fraction.
+        pytest.param(
+            1.7, False, ("collector dropped 1 ", "15m"), id="any_failure_is_flagged"
+        ),
+        pytest.param(
+            412.0, False, ("collector dropped 412 ",), id="a_burst_names_its_count"
+        ),
+    ],
+)
+def test_otelcol_export_failures(failed, ok, must_contain):
+    result_ok, msg = checks.logs.otelcol_export_failures(failed, "15m", 0)
+    assert result_ok is ok
+    for s in must_contain:
+        assert s in msg
+
+
+def _shipper_queries(cfg, otelcol_answer):
+    """Run `check_shipper_dropped` with both Prometheus seams stated, collecting the queries.
+
+    Through the check's own `prom_scalar`/`prom_vector` parameters rather than a monkeypatch on
+    `bridge.net`, which is what those seams exist for — `test_module_length_ratchet.py` holds
+    this file to its patch count, and a stated seam needs none.
+    """
+    queries = []
+
+    def fake_scalar(_cfg, q):
+        queries.append(q)
+        return otelcol_answer if "otelcol" in q else 0.0
+
+    def fake_vector(_cfg, q):
+        queries.append(q)
+        return []
+
+    ok, msg = checks.logs.check_shipper_dropped(
+        cfg,
+        uptime_s=_unread_clock,
+        prom_scalar=fake_scalar,
+        prom_vector=fake_vector,
+    )
+    return ok, msg, queries
+
+
+def test_check_shipper_dropped_reads_the_collector_send_failed_family(cfg):
+    """Arm 3 queries the send-failed family by `__name__` regex over its OWN window.
+
+    Its own window matters: SHIPPER_DROPPED_WINDOW is 1h, sized for log-line churn, and this
+    arm carries the 15m the host cron used. A regex rather than a bare name matters because the
+    family is one counter per signal — naming `_log_records` alone would read a spans-only
+    export failure as zero forever.
+    """
+    ok, msg, queries = _shipper_queries(cfg, 3.0)
+    assert not ok
+    assert "collector dropped 3 " in msg
+    # The shipper verdict survives in the message rather than being replaced by arm 3's.
+    assert "shipper drops ok" in msg
+    assert any(
+        'increase({__name__=~"otelcol_exporter_send_failed_.*"}[15m])' in q
+        for q in queries
+    ), queries
+
+
+def test_check_shipper_dropped_disables_the_collector_arm_on_an_empty_selector(cfg):
+    """An empty selector disables arm 3 and queries nothing, the convention every check follows.
+
+    Without this, repointing the knob at "" to ride out a collector rename would leave a query
+    for `{__name__=~""}` — which matches every series in Prometheus.
+    """
+    ok, msg, queries = _shipper_queries(
+        replace(cfg, OTELCOL_SEND_FAILED_METRICS=""), 3.0
+    )
+    assert ok
+    assert "collector" not in msg
+    assert not any("otelcol" in q for q in queries), queries
+
+
 def test_check_shipper_dropped_reads_server_side_by_reason(monkeypatch, cfg):
     """The SERVER-side arm queries Loki's own discard counter, grouped `by (reason)` (#993).
 

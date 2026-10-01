@@ -99,8 +99,9 @@ The stack has run 47h with every pod Ready, zero export failures and a green hea
 carrying one metric name, no logs and zero spans — with nothing wrong. **Run `claude -p` on the
 quiet host before investigating its collector**, and read the logs before the metrics rather
 than diagnosing from counters alone. The four behaviours behind that appearance are measured on
-the docs page. `telemetry-health.sh` checks reachability and export *failures* deliberately — it
-cannot detect "nobody is using it".
+the docs page. `telemetry-health.sh` checks the OTLP door's reachability deliberately, and
+monitor-bridge's `with_export_failures` arm the collector's export failures — neither can detect
+"nobody is using it".
 
 ## Content logging is on
 

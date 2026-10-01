@@ -1113,7 +1113,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`/`LOKI_PI_STREAM`. Pure
   `loki_ingestion_fresh()` + `loki_count()` are unit-tested. A freshness watchdog in the same
   idiom as the SMART/restore-drill checks.)
-- **Log Shipper Dropped Entries** (two arms, `down` on whichever counted MORE — added
+- **Log Shipper Dropped Entries** (three arms. Two log-pipe arms, `down` on whichever counted MORE — added
   2026-09-03, #993, after the CLIENT-only arm was measured understating the server-side total
   by ~150x with nothing reading the server side at all. **Arm 1, client-side:**
   `sum(increase({__name__=~"loki_write_dropped_entries_total"}[1h]))` from Prometheus, which
@@ -1169,7 +1169,29 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   reason alone is dropped from the server-side total and named in the `up` message. Every
   other reason and the whole client-side arm stay live, so a throughput fault on a reboot
   morning still pages; suppressing the check outright would be six hours of weekly blindness
-  on partial log loss.)
+  on partial log loss.
+  **Arm 3, the collector's export failures**, folded in on 2026-10-01 from the
+  `observability` role's `telemetry-health.sh` host cron (#3094), which ran this same query with
+  its own Prometheus client: `sum(increase({__name__=~"otelcol_exporter_send_failed_.*"}[15m]))`,
+  `down` above `OTELCOL_SEND_FAILED_MAX` (0). It is the third producer on the same pipe — the
+  collector exports Claude Code's logs, metrics and traces to Loki, Prometheus and Tempo — and
+  the only evidence this particular loss leaves anywhere: a failed export writes nothing to Loki
+  or Tempo by definition while the collector's receiver counters keep climbing, so a stack
+  dropping 100% of its data reads identically to one working perfectly from every other angle.
+  Its own window and threshold rather than the two arms above, because an export failure is not
+  log-line churn at any rate: there is no ordinary rate of giving up. The selector is a
+  `__name__` regex for the reason arm 1's is — the family is one counter per signal
+  (`_log_records`, `_metric_points`, `_spans`) and naming one would read the other two as 0
+  forever. Measured on daniel-box 2026-10-01: the send-failed family has NO live series, because
+  the collector mints a send-failed counter only once an export has failed; its `sent` twins
+  (`otelcol_exporter_sent_log_records`, `_sent_metric_points`, `_sent_spans`, none `_total`-
+  suffixed) are live and are what pins the naming. An absent family returns no series, which
+  `prom_scalar` reads as None and the verdict counts as 0, so the arm is clean until the first
+  real failure. Pure `otelcol_export_failures()` is unit-tested; an empty
+  `OTELCOL_SEND_FAILED_METRICS` disables the arm. **What did NOT fold** is the OTLP hostPort
+  probe: that door is a CNI portmap DNAT on the node's 127.0.0.1, so no in-cluster pod can reach
+  it, and `telemetry-health.sh` survives as that one TCP connect — the `DECIDED:` marker at the
+  top of the template carries the rejected alternatives.)
 - **Swallowed Push Verdicts** (a host cron's DOWN verdict that `kuma-push-lib.sh` logged
   and then lost — added 2026-09-17, #1869. The library returns 0 after a failed push by
   design, so the cron does not fail, and the verdict reached nobody until the tile's

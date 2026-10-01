@@ -282,8 +282,10 @@
 
 - name: Deploy the telemetry-stack heartbeat
   tags: [cron]
-  # Runs as {{ sys_user }}, not root: it reads the cluster through that user's read-only
-  # kubeconfig, which is the whole point — the cron cannot mutate anything.
+  # Runs as {{ sys_user }}, not root: all it does is open a TCP connection to the node's own
+  # loopback and push the outcome, so it needs no privilege at all. It read the cluster through
+  # that user's read-only kubeconfig until the 2026-10-01 fold into monitor-bridge (#3094) left
+  # it with the one probe no in-cluster pod can run — the template's own DECIDED marker has why.
   #
   # DECIDED: the heartbeat keeps the name `claude-otel-health` though the role was renamed to
   # `observability` on 2026-10-01 (#2911). That string is a join key in four places outside

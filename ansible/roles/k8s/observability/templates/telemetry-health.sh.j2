@@ -1,20 +1,31 @@
 #!/usr/bin/env bash
-# Claude Code telemetry-stack heartbeat — managed by Ansible (k8s/observability role); edits overwritten.
+# Claude Code telemetry OTLP-door heartbeat — managed by Ansible (k8s/observability role); edits overwritten.
 #
-# The stack watches Claude Code. Nothing watched the stack: if the collector crashed, the
-# hostPort DNAT broke, or Loki started rejecting writes, export would stop and the first
-# symptom would be an empty dashboard days later — the same shape as the Longhorn backup
-# target that sat unavailable for 13h on 2026-08-02 because nothing polled it.
+# ONE check: is the ingest door open? This is the property no k8s object reports and no
+# in-cluster pod can test. The OTLP receiver is a `hostPort` DNAT installed by the CNI portmap
+# plugin — not a socket, so it is invisible to `ss` — and a broken rule leaves every pod Running
+# and Ready while Claude Code, a HOST process rather than a container, silently fails to export.
 #
-# Push, not poll: this is a host cron that reports its own verdict. It was written when
-# monitor-bridge ran on daniel-server against that host's Docker socket and genuinely could
-# not see the cluster; monitor-bridge moved in-cluster at the 2026-08-14 Docker uninstall, so
-# the split is now cron ownership rather than visibility. Same curl as longhorn-backup-health.sh.
+# DECIDED: this cron survives the 2026-10-01 fold into monitor-bridge (#3094) because the door
+# is pinned to the node's LOOPBACK — `observability_otlp_host_ip` is 127.0.0.1, which this role's
+# own "Fail if the OTLP receiver is not pinned to loopback" task asserts against the live
+# collector, because content logging ships prompts verbatim. A pod's 127.0.0.1 is its own
+# loopback, so monitor-bridge cannot reach this address from inside the cluster; the only route
+# that would is `hostNetwork: true` on monitor-bridge, which re-addresses every NetworkPolicy
+# that admits it by pod selector, on the one workload that cannot page about its own breakage.
+# The substitute that needs no host — querying the receiver's `otelcol_receiver_accepted_*`
+# throughput instead — is refused by this role's CLAUDE.md "The trap: an idle stack is
+# indistinguishable from a broken one": the stack has run 47h with nothing wrong and nothing
+# flowing, so a throughput query reads the same for a quiet host as for a dead door.
 #
-# Reads the cluster through the read-only ServiceAccount kubeconfig, so the cron needs no
-# sudo and cannot mutate anything. The two in-cluster HTTP calls go to ClusterIPs resolved at
-# runtime — a ClusterIP is stable for the Service's life but is NOT stable across a delete,
-# so resolving beats hardcoding.
+# What DID fold into monitor-bridge, and is deliberately not here any more: the four Deployments
+# plus the DaemonSet readiness arm, already read cluster-wide by `check_k8s_workloads`, and the
+# `otelcol_exporter_send_failed_*` arm, now `checks/logs.py:with_export_failures` on the Log
+# Shipper Dropped Entries tile. Nothing here reads Prometheus or the cluster any more, which is
+# why the kubeconfig and the ClusterIP resolution are gone with them.
+#
+# Push, not poll: this is a host cron that reports its own verdict. Same curl as
+# longhorn-backup-health.sh, through kuma-push-lib.sh.
 set -uo pipefail
 
 # shellcheck source=/dev/null
@@ -23,80 +34,18 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
-# Cron's PATH is /usr/bin:/bin, which omits /usr/local/bin where k3s lives. Without this the
-# cron run dies on "k3s: command not found" instead of reporting cluster state.
-export PATH="/usr/local/bin:${PATH}"
-export KUBECONFIG=/home/{{ sys_user }}/.kube/config
-KUBECTL="k3s kubectl -n {{ k8s_observability_namespace }}"
-
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_URL="https://${KUMA_HOST}/api/push/{{ claude_otel_push_token }}"
 
-PROBLEMS=""
-add() { PROBLEMS="${PROBLEMS:+$PROBLEMS; }$1"; }
-
-# 1. Are the workloads actually up? readyReplicas is absent (not 0) on a Deployment whose
-#    pods have never become ready, so the ${:-0} default matters — a bare comparison against
-#    an empty string succeeds and reports a dead Deployment as healthy.
-for DEP in loki prometheus tempo grafana; do
-  READY=$($KUBECTL get deploy "$DEP" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
-  WANT=$($KUBECTL get deploy "$DEP" -o jsonpath='{.spec.replicas}' 2>/dev/null)
-  if [[ -z "$WANT" ]]; then
-    add "$DEP missing"
-  elif (( ${READY:-0} < WANT )); then
-    add "$DEP ${READY:-0}/$WANT ready"
-  fi
-done
-
-# otel-collector runs as a DaemonSet (one pod per node), not a Deployment, so its readiness
-# is numberReady vs desiredNumberScheduled rather than readyReplicas vs spec.replicas.
-READY=$($KUBECTL get daemonset otel-collector -o jsonpath='{.status.numberReady}' 2>/dev/null)
-WANT=$($KUBECTL get daemonset otel-collector -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null)
-if [[ -z "$WANT" ]]; then
-  add "otel-collector missing"
-elif (( ${READY:-0} < WANT )); then
-  add "otel-collector ${READY:-0}/$WANT ready"
-fi
-
-# 2. Is the ingest door open? This is the one property no k8s object reports: hostPort is an
-#    iptables DNAT installed by the CNI portmap plugin, not a socket, so it is invisible to
-#    `ss` and a broken rule leaves every pod Running and Ready while Claude Code — a HOST
-#    process, not a container — silently fails to export.
-if ! timeout 5 bash -c "exec 3<>/dev/tcp/{{ observability_otlp_host_ip }}/{{ observability_otlp_port }}" 2>/dev/null; then
-  add "OTLP receiver unreachable on {{ observability_otlp_host_ip }}:{{ observability_otlp_port }}"
-fi
-
-# 3. Is anything being dropped between the collector and its backends? send_failed_* is the
-#    ONLY evidence of this: a failed export leaves no trace in Loki or Tempo by definition,
-#    and the receiver counters keep climbing, so from every other angle a stack dropping 100%
-#    of its data looks identical to one working perfectly.
-#
-#    increase() over 15m rather than the raw counter: the counters are cumulative, so a single
-#    failure during a restart would otherwise hold this DOWN forever.
-PROM_IP=$($KUBECTL get svc prometheus -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
-if [[ -z "$PROM_IP" ]]; then
-  add "prometheus Service has no ClusterIP"
-else
-  FAILED=$(curl -fsS --max-time 10 -G "http://${PROM_IP}:9090/api/v1/query" \
-    --data-urlencode 'query=sum(increase({__name__=~"otelcol_exporter_send_failed_.*"}[15m])) or vector(0)' \
-    2>/dev/null | sed -n 's/.*"value":\[[^,]*,"\([^"]*\)".*/\1/p')
-
-  if [[ -z "$FAILED" ]]; then
-    add "prometheus not answering queries"
-  elif [[ "${FAILED%%.*}" -gt 0 ]]; then
-    add "collector dropped ${FAILED%%.*} item(s) in 15m"
-  fi
-fi
-
-if [[ -z "$PROBLEMS" ]]; then
+if timeout 5 bash -c "exec 3<>/dev/tcp/{{ observability_otlp_host_ip }}/{{ observability_otlp_port }}" 2>/dev/null; then
   STATUS=up
-  MSG="4 deployments + otel-collector daemonset ready, OTLP receiver reachable, no export failures"
+  MSG="OTLP receiver reachable on {{ observability_otlp_host_ip }}:{{ observability_otlp_port }}"
 else
   STATUS=down
-  MSG="$PROBLEMS"
+  MSG="OTLP receiver unreachable on {{ observability_otlp_host_ip }}:{{ observability_otlp_port }}"
 fi
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" claude-otel-health

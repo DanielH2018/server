@@ -99,9 +99,10 @@ wrong. Four behaviours combine to produce that appearance.
    after a short probe reads as failure while the logs already prove it worked. Check the logs first.
 
 So: **do not diagnose this stack from counters alone.** Rising metric points prove the transport
-works, not that anything useful is flowing. `telemetry-health.sh` deliberately checks reachability
-and export *failures* — it cannot detect "nobody is using it," and a no-data alarm would fire every
-time daniel-box sits idle.
+works, not that anything useful is flowing. The two watchers deliberately check reachability and
+export *failures* — `telemetry-health.sh` the OTLP door, monitor-bridge's `with_export_failures`
+the collector's send-failed counters. Neither can detect "nobody is using it," and a no-data alarm
+would fire every time daniel-box sits idle.
 
 ## Verifying the pipeline in one command
 
