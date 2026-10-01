@@ -46,6 +46,11 @@ _NO_READINESS = {
     # readinessProbe here would let an EXPORTER outage pull its *arr out of its own Service,
     # so monitoring would take down the thing it monitors. They keep a livenessProbe, and a
     # dead exporter surfaces as `up == 0` on the `exportarr` scrape job.
+    #
+    # These three rows are the ONLY place that rule now lives (#3055):
+    # ansible/tests/services/test_exportarr_sidecars.py asserted it a second time until
+    # 2026-10-01, which split one decision's reasoning across two files. That file keeps the
+    # livenessProbe half, which no census here covers.
     ("sonarr", "exportarr"): "metrics sidecar; readiness would gate sonarr's Service",
     ("radarr", "exportarr"): "metrics sidecar; readiness would gate radarr's Service",
     (
