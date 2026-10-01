@@ -21,10 +21,11 @@
   capability — root that cannot read another uid's files is weaker than the pod's own uid, not
   stronger. It does not render Jinja, so a root securityContext built through this macro is
   invisible to it. The guard has zero violations today and its own docstring records that a rule
-  matching nothing passes identically to a rule that works, so silently removing its three real
-  accept cases would be indistinguishable from breaking it. code-server's deployment.yaml.j2 and
-  loki-homelab's promtail-daemonset.yaml.j2 are the two `runAsUser: 0` sites in this family and
-  stay written out in full. See "Textual guard checks break on an indirection" in project memory.
+  matching nothing passes identically to a rule that works, so silently removing its six real
+  accept cases would be indistinguishable from breaking it. code-server's deployment.yaml.j2,
+  loki-homelab's alloy-daemonset.yaml.j2 and the CrowdSec seeding init containers in authelia's
+  and traefik's deployment.yaml.j2 are the `runAsUser: 0` sites in this family and stay written
+  out in full. See "Textual guard checks break on an indirection" in project memory.
 
   Arguments:
     read_only      emit `readOnlyRootFilesystem: true`.
