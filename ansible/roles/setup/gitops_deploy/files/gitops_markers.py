@@ -138,8 +138,8 @@ MARKERS: dict[str, str] = {
     # ONE KEYED FILE RATHER THAN SEVEN `<channel>_alerted_sha` FILES (#3047), and nothing
     # outside the deployer reads it. `dirty_alerted` below is keyed by DATE rather than SHA,
     # and `denylist_rendered` gates a git read rather than a page, so neither is a slot.
-    # `DeployerState.migrate_alerted` folds a host's seven old files in before the tick asks
-    # any channel whether it has already paged.
+    # `deploy_state_alerts.AlertSlotMarkers` reads and writes it; the one-shot migration that
+    # folded a host's seven old files in was deleted once daniel-box had ticked past it (#3075).
     "alerted": "alerted_shas",
     # The checkout SHA the denylist reconcile last ran against — the once-per-SHA guard on
     # `deploy_phases.reconcile_denylist`. It bounds BOTH directions: the git read is skipped
@@ -181,14 +181,6 @@ MARKERS: dict[str, str] = {
 ALERT_SLOTS: frozenset[str] = frozenset(
     {"broad", "secrets", "tasks", "meta", "k8s", "stale_denylist", "ci"}
 )
-
-# The file each slot held before #3047 collapsed them. Live hosts carry these, and a tick that
-# read only the collapsed file would re-page every SHA it had already paged on — so
-# `DeployerState.migrate_alerted` folds them in and removes them. Delete this table, and the
-# migration with it, once no host holds one.
-LEGACY_ALERT_MARKERS: dict[str, str] = {
-    slot: f"{slot}_alerted_sha" for slot in sorted(ALERT_SLOTS)
-}
 
 # What the playbook field of a `manual_plane` line holds for a role no playbook applies
 # (`common`).

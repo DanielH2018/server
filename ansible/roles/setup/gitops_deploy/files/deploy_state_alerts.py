@@ -3,7 +3,8 @@
 
 One `alerted` marker holds every channel as a `"<slot> <origin_sha>"` line, and
 `gitops_markers.ALERT_SLOTS` is the set of slots. Seven `<channel>_alerted_sha` files held the
-same state before #3047; `migrate_alerted` is what folds a live host's copies in.
+same state before #3047. A one-shot `migrate_alerted` folded a live host's copies in; it was
+deleted in #3075, once daniel-box's first tick after #3047 had run it and removed the files.
 
 Split out for the reason `deploy_state_k8s` was (#2663): `deploy_state.py` stood at the
 600-line module cap, so the collapse had nowhere to land.
@@ -17,15 +18,7 @@ place.
 Stdlib only, plus `gitops_markers` — the same leaf contract `deploy_state` carries.
 """
 
-import os
-
-from deploy_config import log
-from gitops_markers import (
-    ALERT_SLOTS,
-    LEGACY_ALERT_MARKERS,
-    format_alerted,
-    parse_alerted,
-)
+from gitops_markers import ALERT_SLOTS, format_alerted, parse_alerted
 
 
 class AlertSlotMarkers:
@@ -59,52 +52,6 @@ class AlertSlotMarkers:
         if alerted.pop(self._alert_slot(slot), None) is None:
             return
         self.write("alerted", format_alerted(alerted))
-
-    def migrate_alerted(self) -> list[str]:
-        """Fold any pre-#3047 `<channel>_alerted_sha` file into the keyed marker, then remove it.
-
-        Returns:
-            The slots migrated, sorted — empty on every tick after the first.
-
-        Live hosts hold the seven old files, and a tick that read only the collapsed marker
-        would find nothing and re-page every SHA it had already paged on. So the FIRST tick
-        after this lands imports them, ahead of the drain and of every channel's own read.
-
-        Idempotent and crash-safe in that order: the keyed marker is written (atomically)
-        before any old file is removed, and a slot it ALREADY holds is left alone rather than
-        overwritten. A death between the write and the removals leaves the old files to be
-        re-read and dropped by the next tick, which imports nothing and reaches the same end
-        state. Gating the whole import on the collapsed file being absent would instead strand
-        those files forever.
-        """
-        legacy = {}
-        for slot, basename in LEGACY_ALERT_MARKERS.items():
-            path = os.path.join(self.directory, basename)
-            try:
-                with open(path) as fh:
-                    value = fh.read().strip()
-            except FileNotFoundError:
-                continue
-            legacy[slot] = (path, value or None)
-        if not legacy:
-            return []
-        alerted = parse_alerted(self.read("alerted"))
-        migrated = [
-            slot
-            for slot, (_, value) in sorted(legacy.items())
-            if value is not None and slot not in alerted
-        ]
-        for slot in migrated:
-            alerted[slot] = legacy[slot][1]
-        if migrated:
-            self.write("alerted", format_alerted(alerted))
-            log(f"alert markers collapsed into one file: {', '.join(migrated)}")
-        for path, _ in legacy.values():
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
-        return migrated
 
     @staticmethod
     def _alert_slot(slot: str) -> str:

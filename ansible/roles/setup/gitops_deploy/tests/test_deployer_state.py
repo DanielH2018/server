@@ -435,31 +435,3 @@ def test_an_unknown_alert_slot_is_a_typo_not_a_new_channel(state):
         state.record_alerted("k9s", SHA)
     with pytest.raises(KeyError):
         state.alerted_sha("k9s")
-
-
-def test_the_migration_folds_in_every_legacy_file_and_removes_it(state):
-    """A host carrying the pre-#3047 per-channel files reads as already-paged after one call.
-
-    This is the migration's first tick: every slot answers with the SHA its own file held, so
-    nothing re-pages, and no `<channel>_alerted_sha` file is left behind.
-    """
-    legacy = {"broad": SHA, "k8s": "deadbeef" * 5, "ci": "c0ffee99" * 5}
-    for slot, sha in legacy.items():
-        pathlib.Path(state.directory, f"{slot}_alerted_sha").write_text(sha)
-    assert state.migrate_alerted() == ["broad", "ci", "k8s"]
-    assert {slot: state.alerted_sha(slot) for slot in legacy} == legacy
-    assert not list(pathlib.Path(state.directory).glob("*_alerted_sha"))
-    # Idempotent: a second call has nothing to import and changes nothing.
-    assert state.migrate_alerted() == []
-    assert {slot: state.alerted_sha(slot) for slot in legacy} == legacy
-
-
-def test_the_migration_does_not_overwrite_a_slot_the_keyed_file_already_holds(state):
-    """The crash-safe half: the keyed write lands before the removals, so a death between
-    them leaves a legacy file whose slot is already migrated. Re-importing it would walk the
-    dedupe BACKWARDS to an older SHA and re-page."""
-    state.record_alerted("broad", SHA)
-    pathlib.Path(state.directory, "broad_alerted_sha").write_text("0ldc0mm1" * 5)
-    assert state.migrate_alerted() == []
-    assert state.alerted_sha("broad") == SHA
-    assert not pathlib.Path(state.directory, "broad_alerted_sha").exists()

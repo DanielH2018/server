@@ -110,29 +110,6 @@ def test_alert_once_marks_detection_not_delivery(gitops_deploy, state_dir, setti
     assert queued == {f"meta:{ORIGIN}": "changed"}
 
 
-def test_a_tick_after_the_marker_collapse_re_alerts_for_nothing(
-    gitops_deploy, state_dir, settings
-):
-    """The migration's end-to-end half (#3047): a host holding the pre-collapse files stays silent.
-
-    `test_deployer_state.py` covers the import itself. This drives `alert_once` on the other
-    side of it, which is what an operator would see page a second time if the migration were
-    missing.
-    """
-    (state_dir / "tasks_alerted_sha").write_text(ORIGIN)
-    gitops_deploy.STATE.migrate_alerted()
-    tools, seen = _posts(state_dir)
-    deploy_alerts.alert_once(
-        tools, gitops_deploy.STATE, settings, "tasks", ORIGIN, "changed"
-    )
-    assert seen == [], "the SHA this host already paged on paged again"
-    # The rejecting half: a SHA it had NOT paged on still pages.
-    deploy_alerts.alert_once(
-        tools, gitops_deploy.STATE, settings, "tasks", LATER, "again"
-    )
-    assert seen == [(f"tasks:{LATER}", "again")]
-
-
 # ── alert_secrets_deferred() ──────────────────────────────────────────────────────────────────
 def test_a_secrets_change_pages_once_naming_the_sha(
     gitops_deploy, monkeypatch, state_dir, settings
