@@ -3,11 +3,11 @@
 
 `deploy_logic.is_doc` reads every `.md` as prose no playbook applies, and the tick, the
 deploy-plane narrowing (`narrow_paths.is_prose`) and the setup-role narrowing
-(`narrow_setup._reaches_no_host`) all ask it. Before #2810 the two narrowings carved out a
+(`narrow_setup._reaches_no_host`) all ask it. A narrowing that carved out a
 `.md` under a role's `files/` or `templates/` directory as shippable, because a task CAN copy
-or render one — so the same file was prose to the tick and role content to the derivation.
+or render one, would make the same file prose to the tick and role content to the derivation.
 
-Deciding it once turns that carve-out into the invariant this guard holds: a `.md` the deployer
+Deciding it once makes the invariant this guard holds: a `.md` the deployer
 skips must also be a `.md` no host receives. A role that started shipping one would otherwise
 get a change to a deployed file fast-forwarded and never applied — silent, and green from
 every other repo-side check. `test_no_role_ships_a_test_file.py` holds the same invariant for
@@ -46,9 +46,8 @@ _SHIP = re.compile(
 # task or template names literally.
 _ROLE_DIRS = ("tasks", "templates", "handlers", "defaults", "vars")
 
-# `.md` files that live under a role's `files/` or `templates/` directory today. They are the
-# reason the carve-out existed; each is documentation beside the data it describes, named by no
-# list. The census below must still find them — a glob that stopped matching would pass every
+# `.md` files that live under a role's `files/` or `templates/` directory. Each is
+# documentation beside the data it describes, named by no list. The census below must still find them — a glob that stopped matching would pass every
 # check here vacuously.
 KNOWN_MARKDOWN_UNDER_FILES = frozenset(
     {

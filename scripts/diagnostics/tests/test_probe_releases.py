@@ -218,7 +218,7 @@ def test_service_present_in_records_is_not_missing(tmp_path):
 
 
 def test_a_role_that_never_applies_manifests_is_never_missing(tmp_path):
-    """The retired n8n-images shape: a `containers_list` k8s entry whose role only builds an image
+    """A `containers_list` k8s entry whose role only builds an image
     (`k8s/image-builder`) and never includes `k8s/manifests`, so it is never release-stamped and
     must not read as permanently missing -- 'a monitor nobody trusts is worse than none'."""
     roles_dir = tmp_path / "roles"
@@ -263,7 +263,7 @@ def test_a_retired_roles_pycache_debris_is_not_a_shared_role(tmp_path):
 
     The fast-forward that retires a role removes its tracked files; a gitignored
     `__pycache__/` keeps the directory. It has no `containers_list` entry, so without the
-    leftover skip it reads as a shared role and marks every service stale (#2882). Paired
+    leftover skip it reads as a shared role and marks every service stale. Paired
     with the real entry-less role below, which must still read as shared.
     """
     roles_dir = tmp_path / "roles"
@@ -319,7 +319,7 @@ def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():
 
 
 def test_manifest_affecting_shared_roles_drops_the_deploy_time_roles():
-    """The roles holding only `tasks/` and `defaults/` must stay out (#1636).
+    """The roles holding only `tasks/` and `defaults/` must stay out.
 
     Each changes how a deploy runs, never what it applies, so a change to one invalidates no
     release stamp. `volume-snapshot` is the one that marked all 53 services stale.

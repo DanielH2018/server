@@ -60,7 +60,7 @@ def test_merge_poll_defaults_to_30s(monkeypatch):
 
 
 def test_land_require_author_names_the_only_author_arm_merge_accepts(monkeypatch):
-    """renovate-agent.service sets it; the agent's landings inherit it (#2170)."""
+    """renovate-agent.service sets it; the agent's landings inherit it."""
     monkeypatch.setenv("LAND_REQUIRE_AUTHOR", "app/renovate")
     assert options.parse_args(["--pr", "7"], "d").require_author == "app/renovate"
 
@@ -83,9 +83,9 @@ def test_help_prints_the_description(capsys):
 
 
 def test_an_abbreviated_flag_is_rejected_rather_than_silently_resolved():
-    """bash's `case` rejected any flag it didn't name outright: `--su x` was `land: unknown
+    """An unknown flag is rejected outright: `--su x` is `land: unknown
     argument '--su'`. argparse's default abbreviation matching would instead silently
-    resolve `--su` to `--subject` and `--sin` to `--since` (#1085 item 1)."""
+    resolve `--su` to `--subject` and `--sin` to `--since`."""
     with pytest.raises(SystemExit) as exc:
         options.parse_args(["--pr", "7", "--su", "text"], "d")
     assert exc.value.code == 2
@@ -100,7 +100,7 @@ def test_main_renumbers_argparses_two_onto_the_shared_usage_error():
     """`land.sh` answers a bad command line with 64, the number every entry point here uses.
 
     `parse_args` still raises argparse's own 2 -- the tests above assert that -- and `main` is
-    the one place it becomes `LAND_BAD_ARGS` (issue #2854).
+    the one place it becomes `LAND_BAD_ARGS`.
     """
     import land
 

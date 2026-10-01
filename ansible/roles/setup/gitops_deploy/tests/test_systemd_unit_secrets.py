@@ -26,22 +26,17 @@ _SECRET_VAR = re.compile(
 def _unit_templates() -> list[pathlib.Path]:
     """Every systemd unit template in the repo, minus retired code.
 
-    A TREE WALK, not an enumeration. The enumeration this replaces named two paths and so
-    could only ever prove the two units its own fix had touched — `claude-rc-alert.service.j2`
-    landed the same morning carrying the identical embed and the guard could not see it
-    (2026-08-24 review M-2). A guard written alongside its fix inherits the fix's scope unless
-    it derives its own corpus.
+    A TREE WALK, not an enumeration. A guard that names its paths can only prove the units its
+    own fix touched, so it derives its own corpus.
     """
     return sorted(_ROLES.rglob("*.service.j2"))
 
 
 def test_no_unit_template_embeds_a_secret_in_execstart():
-    # 2026-08-23b review M5, re-scoped by 2026-08-24 review M-2. Units used to interpolate the
-    # SOPS webhook straight into ExecStart and rely on `mode: 0600` to protect it. The mode is
-    # real and irrelevant: systemd serves unit content over the system bus, so
-    # `systemctl show <unit> -p ExecStart` printed the full webhook URL to any local user with
-    # no sudo. Reproduced on every affected unit, and reproduced again after each fix to confirm
-    # EnvironmentFile makes the same command print the literal ${ALERT_WEBHOOK}.
+    # A unit that interpolates the SOPS webhook straight into ExecStart cannot rely on
+    # `mode: 0600` to protect it: systemd serves unit content over the system bus, so
+    # `systemctl show <unit> -p ExecStart` prints the full webhook URL to any local user with
+    # no sudo. With EnvironmentFile the same command prints the literal ${ALERT_WEBHOOK}.
     #
     # A comment claiming the protection is the least reliable evidence in the file, so the claim
     # gets a test — and the test derives which files it covers rather than being told.

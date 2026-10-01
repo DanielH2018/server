@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Exit 77 carries the snapshot command's own stderr (issue #2094).
+"""Exit 77 carries the snapshot command's own stderr.
 
-`make_snapshot` ran `git worktree add --detach ... >/dev/null 2>&1`, so a run that could not
-snapshot printed only the snapshot root and a guess at what to check. On 2026-09-19 two
-landings released from the tick's tree lock in the same second, one snapshot failed, and
-the swallowed stderr left "a `.git/worktrees` lock collision" a hypothesis. The message now
-carries the `fatal:` line, and this pair proves the capture reaches it.
+Swallowing the stderr of `git worktree add --detach ...` would leave a run that could not
+snapshot printing only the snapshot root and a guess at what to check. The message carries
+the `fatal:` line, and this pair proves the capture reaches it.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_snapshot_failure_names_its_cause.py
 """
@@ -81,7 +79,7 @@ def test_an_unwritable_snapshot_root_names_the_add_that_refused(tmp_path):
     assert result.returncode == _SNAPSHOT_FAILED, result.stderr
     assert "nothing was deployed" in result.stderr
     assert "fatal:" in result.stderr, result.stderr
-    # The guess the message used to make is gone: the cause above is what to fix.
+    # The message makes no guess: the cause above is what to fix.
     assert "Check the directory is writable" not in result.stderr
 
 

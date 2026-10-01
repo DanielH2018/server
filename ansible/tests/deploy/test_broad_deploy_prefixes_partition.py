@@ -6,10 +6,10 @@
 them, and `PLAY_PREFIXES` are the rest — paths every play reads, which `broad_path_tags`
 refuses outright.
 
-The two halves were listed independently until #3048, so a prefix added to the deployer's
-broad set could land in neither. A deploy-plane path in neither half reads as narrowable by a
-rule that has none, which is the silent direction. `PLAY_PREFIXES` is now derived as the
-subtraction, and this is the guard that it stays one.
+`PLAY_PREFIXES` is derived as the subtraction, so a prefix added to the deployer's broad set
+cannot land in neither half. A deploy-plane path in neither half would read as narrowable by a
+rule that has none, which is the silent direction. This is the guard that the derivation stays
+a partition.
 
 Run: uv run pytest ansible/tests/deploy/test_broad_deploy_prefixes_partition.py
 """

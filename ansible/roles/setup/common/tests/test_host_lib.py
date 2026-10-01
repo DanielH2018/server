@@ -212,9 +212,8 @@ def test_the_rest_of_the_environment_survives(monkeypatch):
 
 # ── rfc3339_to_epoch: shared with longhorn_backup_health_logic.py and longhorn_reap_logic.py ──
 #
-# Moved here 2026-09-04 (issue #1088, delta 7): the two modules each carried their own copy, and
-# they had already diverged — only the backup-health copy stripped fractional seconds, so the
-# same Longhorn `snapshotCreatedAt` parsed in one module and returned None in the other.
+# The parser is shared because separate copies diverge: a copy that does not strip fractional
+# seconds returns None for a Longhorn `snapshotCreatedAt` that another copy parses.
 
 
 def test_rfc3339_to_epoch_parses_a_plain_z_timestamp():

@@ -40,9 +40,8 @@ def test_backups_dry_run_emits_no_delete_call(tmp_path):
 
 
 def test_backups_dry_run_prints_all_four_columns_for_a_reapable_row(tmp_path):
-    # bash printed "NAME VOL CREATED JOB" per candidate/orphaned row; an earlier draft here
-    # printed only "NAME VOL", silently dropping the two columns an operator reads to decide
-    # whether a stray is safe to delete.
+    # Each candidate/orphaned row prints "NAME VOL CREATED JOB"; dropping the last two columns
+    # would silently hide what an operator reads to decide whether a stray is safe to delete.
     fixtures = {
         "volumes": [_volume("vol-a", "daily-backup")],
         "backups": [
@@ -167,7 +166,7 @@ def test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket(tmp_path
     # --apply-deleted-volumes, never under a bare --apply.
     fixtures = {
         # A live volume alongside the deleted one. An empty volume list is the separate case
-        # classify_backups refuses outright (#1062): it means the volume read returned nothing,
+        # classify_backups refuses outright: it means the volume read returned nothing,
         # not that every volume was deleted, and orphaning the whole backup set on it deletes
         # the entire B2 set under this very flag.
         "volumes": [_volume("live-vol", "daily-backup")],
@@ -205,7 +204,7 @@ def test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket(tmp_path
 
 
 def test_backups_apply_deleted_volumes_refuses_on_an_empty_volume_list(tmp_path):
-    # The rejecting half of the test above (#1062). A volume read that succeeds with zero items
+    # The rejecting half of the test above. A volume read that succeeds with zero items
     # -- wrong namespace, a context with no Longhorn, an RBAC that lists nothing rather than
     # erroring -- makes EVERY labelled backup fail `vol in existing_volumes` and land in the
     # orphaned bucket, so this flag would delete the whole B2 set. classify_backups raises

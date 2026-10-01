@@ -6,10 +6,7 @@
 `ansible.log` (`log_path = ./ansible.log`, ansible.cfg). A script that interpolates a Kuma push
 token is therefore a credential in the log the moment someone types `--diff`. `no_log: true` is
 the one setting that keeps the body out of the callback whatever the flags say, and
-`.claude/rules/ansible.md` requires it on any task that handles a secret. Five k8s siblings
-carried it; three did not until 2026-09-17 (#1932), and nothing had censused them. The census
-then globbed `roles/k8s/` only, and six setup-plane tasks sat outside it until 2026-09-18
-(#2016).
+`.claude/rules/ansible.md` requires it on any task that handles a secret.
 
 The census: every `template` task under `roles/{k8s,setup}/*/tasks/` whose `src` is a
 `*.sh.j2`, whose body references a name in `ansible/secret_rotation.yml` INSIDE a Jinja
@@ -20,10 +17,10 @@ expression. A whole-body match would flag a script that only names a secret in a
 (`_helpers.registry_secret_names`) is shared with the release_bin guard so the two cannot
 disagree about what counts as a secret.
 
-LIMIT: a script rendering a name the registry does not carry is invisible here. `registry-gc`
-was, until its token was registered (#1937); `eval-run.sh.j2` renders `homelab_eval_push_token`
-and `anthropic_api_key`, neither of which exists in SOPS yet, so its task carries `no_log`
-by hand and joins KNOWN_SECRET_SCRIPTS only when the token is minted and registered.
+LIMIT: a script rendering a name the registry does not carry is invisible here.
+`eval-run.sh.j2` renders `homelab_eval_push_token` and `anthropic_api_key`, neither of which
+exists in SOPS yet, so its task carries `no_log` by hand and joins KNOWN_SECRET_SCRIPTS only
+when the token is minted and registered.
 
 Run: uv run pytest ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py
 """
@@ -36,8 +33,7 @@ from _helpers import ROLES, load_tasks, registry_secret_names, walk_tasks
 TEMPLATE_MODULES = {"ansible.builtin.template", "template"}
 PLANES = ("k8s", "setup")
 
-# The three #1932 found without no_log, plus two of the siblings that had it, plus the five
-# setup-plane scripts #2016 found. Named so the census cannot go vacuous: a rename of the tasks
+# Named so the census cannot go vacuous: a rename of the tasks
 # file, of the src, or of the registry entry the body references drops the script out of the
 # set silently, and the assertion below would pass over nothing.
 KNOWN_SECRET_SCRIPTS = frozenset(
@@ -46,8 +42,6 @@ KNOWN_SECRET_SCRIPTS = frozenset(
         ("k8s", "crowdsec", "crowdsec-appsec-verify.sh.j2"),
         ("k8s", "janitorr", "janitorr-health.sh.j2"),
         ("k8s", "configarr", "configarr-health.sh.j2"),
-        # Invisible to this census until 2026-09-18: its token was referenced nowhere but the
-        # script, so no registry name matched the body (#1937).
         ("k8s", "registry", "registry-gc.sh.j2"),
         ("setup", "initial_setup", "docs-refresh.sh.j2"),
         ("setup", "optimize_pi", "pi-sd-health.sh.j2"),

@@ -1,9 +1,4 @@
 ---
-# Slice-7 Phase D (2026-08-10): scrutiny to the cluster — see
-# docs/archive/k3s-migration/slice-7-phase-d-scrutiny.md (SC1–SC6). The collector DaemonSet adds
-# daniel-box's never-monitored NVMe; daniel-server's Docker collector stays as a spoke
-# pushing to this web API until the Phase F join absorbs it.
-
 - name: Create the influxdb history volume claim
   tags: [deploy]
   ansible.builtin.include_role:
@@ -30,12 +25,11 @@
   vars:
     manifests_service: scrutiny
     manifests_rollout: scrutiny-web
-    # networkpolicy-influxdb.yaml is listed HERE rather than in netpol-baseline on purpose
-    # (#1620, the same defect #1609 closed for authelia). scrutiny-web panics rather than
-    # retries when InfluxDB is unreachable, so the policy admitting it is part of this workload
-    # rather than part of the fleet baseline — shipped one role away, `--tags scrutiny` staged a
-    # web pod whose `wait-for-influxdb` gate could only time out. The file carries the
-    # reasoning.
+    # networkpolicy-influxdb.yaml is listed HERE rather than in netpol-baseline on purpose.
+    # scrutiny-web panics rather than retries when InfluxDB is unreachable, so the policy
+    # admitting it is part of this workload rather than part of the fleet baseline. Shipped one
+    # role away, `--tags scrutiny` would stage a web pod whose `wait-for-influxdb` gate could
+    # only time out. The file carries the reasoning.
     manifests_files:
       - influxdb.yaml
       - networkpolicy-influxdb.yaml

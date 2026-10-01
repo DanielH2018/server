@@ -1,4 +1,4 @@
-"""Snapshot-space headroom against a capped Longhorn volume's spec.snapshotMaxSize (#1627).
+"""Snapshot-space headroom against a capped Longhorn volume's spec.snapshotMaxSize.
 
 Every behaviour gets an accept/reject pair, so a rule that stopped matching fails its own test
 rather than reading green. The last test is the non-vacuity half: it derives the capped volumes
@@ -23,7 +23,7 @@ ROLES = Path(__file__).resolve().parents[3]
 ENV_SECRET = Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
 
 # jellyfin-config, the one capped volume: 16 GiB, against 2,081,329,152 bytes of snapshots
-# measured 2026-09-10 (12.1% of the cap). Used as the realistic clean case below.
+# (12.1% of the cap). Used as the realistic clean case below.
 JELLYFIN_CAP = 17179869184
 JELLYFIN_USED = 2081329152
 
@@ -179,7 +179,7 @@ def _roles_that_cap_a_volume() -> dict[str, str]:
     """Role name -> the claim it caps, derived from the tree rather than from the declaration.
 
     A role caps a volume by writing `spec.snapshotMaxSize` (roles/k8s/jellyfin/tasks/main.yml is
-    the only one today). The census matches the FIELD NAME anywhere under a k8s role's tasks,
+    the only one). The census matches the FIELD NAME anywhere under a k8s role's tasks,
     minus the roles that only READ it, rather than jellyfin's `kubectl patch` payload: a future
     role capping a volume through `kubernetes.core.k8s` or `--type=json` writes the same field
     with different syntax, and a payload-shaped pattern would miss it and pass. The claim comes
@@ -232,11 +232,11 @@ def test_every_volume_a_role_caps_is_declared_to_the_monitor():
 
 
 def test_the_push_token_is_armed_and_wired_to_a_monitor_declaration():
-    """Both halves must read the token BARE, which is what "armed" means here (#1627).
+    """Both halves must read the token BARE, which is what "armed" means here.
 
-    The check shipped inert: `{{ var | default('') }}` in the env-secret and a matching `{% if %}`
-    around the Kuma declaration, so an absent secret pushed nowhere and declared no monitor. That
-    form also dodges `test_every_push_token_env_is_wired_to_a_monitor`, whose regex matches
+    `{{ var | default('') }}` in the env-secret and a matching `{% if %}` around the Kuma
+    declaration leave the check inert: an absent secret pushes nowhere and declares no monitor.
+    That form also dodges `test_every_push_token_env_is_wired_to_a_monitor`, whose regex matches
     `KUMA_PUSH_X: "{{ var }}"` exactly — an invisible token is how a check ends up pushing to a
     monitor nobody declared. Reverting either half to the defaulted or guarded form silently
     disarms the monitor while every other guard stays green, so this pins the armed shape by name

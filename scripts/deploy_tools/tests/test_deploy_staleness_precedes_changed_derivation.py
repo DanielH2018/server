@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """`scripts/deploy.sh --changed` asks whether the tree is stale BEFORE it derives its tags.
 
-Issue #1593, one path over from #1566. The `--changed` pre-parse resolved its tag list at the
-top of the script, ahead of every gate, and both of its answers reached the caller before
-anything asked whether the checkout was behind origin/master:
+The `--changed` pre-parse resolves its tag list ahead of every gate, so both of its answers
+would reach the caller before anything asked whether the checkout was behind origin/master:
 
 * `deploy_tags.py changed` exits 3 on a broad change and deploy.sh propagates it.
 * The derived list is EMPTY on a tree that is only BEHIND -- every commit of its own already
@@ -15,7 +14,7 @@ Both halves, per CLAUDE.md: a stale tree must refuse as STALE before the derivat
 half the bug got wrong), and a current tree must still reach the derivation and deploy what it
 finds (the half a naive reorder could delete by refusing everything).
 
-The gates run in process in `deploy_run.py` (#2412), so `run_front_half` injects their
+The gates run in process in `deploy_run.py`, so `run_front_half` injects their
 verdicts; the order they are asked in is the real code.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_changed_derivation.py
@@ -38,7 +37,7 @@ def _run(tmp_path, monkeypatch, *, stale, changed=(0, ""), args=("--changed",)):
 def test_a_stale_tree_deriving_no_tags_refuses_as_stale_rather_than_exiting_zero(
     tmp_path, monkeypatch
 ):
-    """RED half: the shape issue #1593 reported -- silence wearing the success code."""
+    """RED half: silence wearing the success code."""
     code, names, _ = _run(tmp_path, monkeypatch, stale=1)
     assert code == _STALE_EXIT
     assert "changed" not in names and "deploy" not in names, names

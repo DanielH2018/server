@@ -19,8 +19,7 @@ from _k8s_render import render_role_template
 
 ROLE = "n8n"
 # The two Deployments the n8n role ships, and the image each one runs. They differ: the app image
-# is named after the role, the runners image is not — the same asymmetry that left a runners-only
-# rebuild rolling nothing before manifests_extra_rollouts existed.
+# is named after the role, the runners image is not.
 TEMPLATES = {
     "deployment.yaml.j2": "n8n",
     "deployment-runners.yaml.j2": "n8n-runners",

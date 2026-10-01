@@ -146,11 +146,10 @@ def test_check_flag_is_repeatable_and_filters_like_checks_only(monkeypatch, cfg)
 def test_check_flag_unions_in_the_gate_a_named_check_depends_on(monkeypatch, cfg):
     """`--check disk` alone must not trip the "gate disabled under its dependents" refusal.
 
-    disk is PROM_DEPENDENT; naming only it used to leave `prometheus` out of `only`, and
-    validate_check_filter refused to start with a gate off under an enabled dependent —
-    `main(["--once", "--check", "disk"])` used to exit 2 for this exact reason. `--check` now
-    unions in the gate a named check depends on automatically (expand_gates_for_cli), unlike
-    CHECKS_ONLY below, which stays strict.
+    disk is PROM_DEPENDENT. `--check` unions in the gate a named check depends on
+    automatically (expand_gates_for_cli), so naming only disk does not leave `prometheus` out of
+    `only` and trip validate_check_filter's refusal to start with a gate off under an enabled
+    dependent. CHECKS_ONLY below stays strict.
     """
     pushes, ran = [], []
     wired = _silence(
@@ -205,8 +204,8 @@ def test_a_gate_disabled_under_its_dependents_exits_two(monkeypatch):
 def test_a_malformed_number_is_recorded_rather_than_raised():
     """Building the config with a garbage numeric must succeed and record one problem.
 
-    A ValueError here used to kill the pod during import, before the heartbeat file existed and
-    before any monitor could be told, with a traceback naming neither the variable nor its
+    A ValueError here would kill the pod during import, before the heartbeat file exists and
+    before any monitor can be told, with a traceback naming neither the variable nor its
     value. The environment is stated to `load_config` rather than set on the process and the
     module reloaded, so nothing outside this call sees it.
     """

@@ -5,9 +5,9 @@ healthchecks.io `/fail`, which alerts IMMEDIATELY — the check's own period and
 say. That is why the fix is a skipped run rather than a wider grace, and why it is guarded here:
 the failure mode of a boot guard is silence, so nothing observes it working.
 
-The 2026-08-30 restart is the worked example. daniel-box booted at 07:39:48, the */10 crons ran at
-07:40:00, and the last pod reached Ready at 07:45:06 — 5m18s of boot-to-Ready against a 12-second
-head start. `longhorn-backup-health` and `uptime-kuma-alive` both paged.
+Measured boot-to-Ready on daniel-box is 5m18s (boot at 07:39:48, last pod Ready at 07:45:06)
+against the 12-second head start of the */10 crons, which ran at 07:40:00. Without the guard,
+`longhorn-backup-health` and `uptime-kuma-alive` both page.
 """
 
 import re
@@ -29,7 +29,7 @@ DAILY_SCRIPTS = ("etcd-snapshot-offbox.sh.j2",)
 # Daily checks on a kuma-check timer: the guard IS wired there, with a different skip shape.
 DAILY_TIMER_SCRIPTS = ("manifest-prune-check.sh.j2",)
 
-# Worst boot-to-Ready measured on 2026-08-30: 07:39:48 boot -> 07:45:06 last pod Ready.
+# Worst boot-to-Ready measured: 07:39:48 boot -> 07:45:06 last pod Ready.
 WORST_BOOT_TO_READY_S = 318
 
 
@@ -50,7 +50,7 @@ def _run_guard(uptime: str, grace: int) -> int:
 
 
 def test_guard_skips_the_run_just_after_boot():
-    # ACCEPT: 12s of uptime is the 2026-08-30 case — the cron must not run.
+    # ACCEPT: 12s of uptime is the measured case — the cron must not run.
     assert _run_guard("echo 12", GRACE_S) == 0
 
 

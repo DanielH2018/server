@@ -6,7 +6,7 @@
 
   A container-level securityContext is a DIFFERENT object from a pod-level one, and only the
   container-level one governs capabilities — see ansible/tests/k8s/test_container_security_context.py
-  for why that distinction has already cost a fleet-wide audit once. This macro emits the
+  for why that distinction matters. This macro emits the
   container-level block only; a pod-level `securityContext` (fsGroup, supplementalGroups,
   sysctls) stays written out at its call site.
 

@@ -1,7 +1,7 @@
 """Guard on daniel-pi's `ansible_ssh_timeout` — the escalation-prompt budget for the Pi.
 
-An apply against the 456 MB Zero 2 W intermittently failed at Gathering Facts with
-`Timeout (12s) waiting for privilege escalation prompt` and read as UNREACHABLE (#1747). The
+An apply against the 456 MB Zero 2 W intermittently fails at Gathering Facts with
+`Timeout (12s) waiting for privilege escalation prompt` and reads as UNREACHABLE. The
 12 s is `2 + timeout` in ansible-core's ssh connection plugin, and the per-host spelling of
 that option is `ansible_ssh_timeout` — NOT `ansible_become_timeout`, which the pinned core does
 not define, so a var by that name is a placebo that reads as a fix. The accepting half asserts
@@ -19,7 +19,7 @@ from lib import yaml_fast
 
 PI_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
 
-# The ssh plugin waits 2 + timeout; the fleet default of 10 gave the 12 s in the report.
+# The ssh plugin waits 2 + timeout; the fleet default of 10 gives 12 s.
 VAR = "ansible_ssh_timeout"
 PLACEBO = "ansible_become_timeout"
 FLOOR = 30

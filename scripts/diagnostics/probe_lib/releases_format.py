@@ -141,7 +141,7 @@ def _kuma_reason(reason):
 def format_stale_kuma(stale, missing, pending=None, grace_seconds=0):
     """The `--stale-only` verdict as one line grouped by reason, for the Kuma push. Pure.
 
-    57 services carrying one identical reason are one group, not 57 lines (#2013); the group
+    57 services carrying one identical reason are one group, not 57 lines; the group
     lists the names once. Shares the exit code contract with `format_stale_only`, including
     the pending line: named on an `up`, never counted. A DOWN message omits it, because that
     message is capped and the stale services are the part a reader needs.
@@ -168,7 +168,7 @@ def write_counted_names(path, stale, missing):
     """Write the services the verdict COUNTS, sorted, one per line, to `path`.
 
     release-staleness-check.sh compares this set against its previous DOWN run to re-alert
-    when the set changes while the tile stays DOWN (#2378). The `--kuma` line cannot stand in
+    when the set changes while the tile stays DOWN. The `--kuma` line cannot stand in
     for it: it is grouped and capped at 900 chars. Services inside the grace window are left
     out, because they do not move the verdict either. An empty set writes an empty file, and
     a `path` of None (no `--names-out`) writes nothing.

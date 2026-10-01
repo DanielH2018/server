@@ -155,14 +155,14 @@ def _run(tmp_path, curl_body=None, curl_rc=0, branch_body=None):
 
     # sudo stub: the script's token lookup is `sudo -n -u <user> -H gh auth token`, and on the
     # box these tests run on the real sudo is passwordless and the real gh is logged in — so
-    # without this stub a unit test reached out to a live credential. The stub fails the way
+    # without this stub a unit test reaches out to a live credential. The stub fails the way
     # a host with no gh login does, which is the anonymous path every case here exercises.
     fake_bin(binstub, sudo="#!/usr/bin/env bash\nexit 1\n")
 
     # logger stub: the script's journal line. Recorded rather than sent, so a case can assert the
     # verdict reached the journal without reading the host's own. The real logger is what a
-    # `journalctl -t github-ruleset-drift` on the deployer reads, which is how #1781's verify-by
-    # confirms this producer ran; until that line existed a clean run left nothing there.
+    # `journalctl -t github-ruleset-drift` on the deployer reads, which is how a verify-by
+    # confirms this producer ran.
     fake_bin(
         binstub,
         logger=(
@@ -237,9 +237,8 @@ def _journal(tmp_path):
 def test_a_clean_run_reaches_the_journal(tmp_path):
     """The accepting half of the journal line: a clean run logs its verdict, not only a failed one.
 
-    The push library logs a push only when it fails, so before this line a clean run left no
-    trace on the host — and #1781's verify-by, "confirmed green from its journal", could not be
-    met for this producer at all.
+    The push library logs a push only when it fails, so without this line a clean run leaves no
+    trace on the host and a verify-by of "confirmed green from its journal" cannot be met.
     """
     _run(tmp_path, curl_body=_ruleset_body(DECLARED))
     lines = _journal(tmp_path)
@@ -288,9 +287,9 @@ def test_inactive_enforcement_is_flagged(tmp_path, enforcement):
 def test_a_missing_renovate_exclusion_is_flagged(tmp_path):
     """The rejecting half of the branch-ruleset arm: merge gate clean, exclusion absent -> down.
 
-    This is the live state that let #1741 and #1743 automerge empty: with `renovate/**` under
-    the deletion and non_fast_forward rules, Renovate can neither delete a merged branch nor
-    rebase it, so the next PR reuses a SHA that already carries a green verdict."""
+    With `renovate/**` under the deletion and non_fast_forward rules, Renovate can neither
+    delete a merged branch nor rebase it, so the next PR reuses a SHA that already carries a
+    green verdict and automerges empty."""
     rc, status, msg = _run(
         tmp_path,
         curl_body=_ruleset_body(DECLARED),

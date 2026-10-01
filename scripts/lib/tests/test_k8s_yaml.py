@@ -6,9 +6,6 @@ goes green, and only the losing setting is gone. It bit homepage's pod spec, whi
 both `automountServiceAccountToken: true` (needed by its kubernetes widget) and a `false` from
 an estate-wide sweep when the two edits met in a rebase.
 
-Split out of scripts/validate/tests/test_validate_k8s_manifests.py on 2026-09-04, with the
-code it covers.
-
 Run: uv run pytest scripts/lib/tests/test_k8s_yaml.py
 """
 

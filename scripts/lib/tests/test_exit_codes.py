@@ -2,8 +2,7 @@
 
 The failure guarded is the one the module exists to close. `DEPLOY_SH_NO_VERDICT` and the
 individual `DEPLOY_*` names describe the same contract twice, so a change to one that misses
-the other is exactly the drift the retired `staging_gate.py` and `land_lib/deploy.py` had
-before this module existed.
+the other is exactly the drift this module exists to prevent.
 
 Every rule has a reject half, per CLAUDE.md: a set that quietly stopped containing a member
 and a set that quietly gained one are both invisible from a `<=` assertion alone.
@@ -57,7 +56,7 @@ def test_the_codes_that_are_not_refusals_stay_out_of_the_set(name):
 
 
 def test_the_playbook_failure_code_is_disjoint_from_every_wrapper_refusal():
-    """That disjointness IS the 2026-09-02 fix for issue #840, so it is asserted here too."""
+    """The disjointness is asserted here too."""
     assert ec.DEPLOY_PLAYBOOK_FAILED not in ec.DEPLOY_SH_NO_VERDICT
     assert ec.DEPLOY_PLAYBOOK_FAILED != ec.DEPLOY_OK
 
@@ -143,7 +142,7 @@ def test_the_importers_take_their_values_from_here():
 def test_each_family_takes_its_usage_and_temp_fail_from_the_spine(name, spine):
     """One coding across the repo: 64 is always a usage error, 75 always a temporary failure.
 
-    `LAND_BAD_ARGS` is the member this was filed for (issue #2854) -- it was 2, argparse's own
+    `LAND_BAD_ARGS` is the member this was filed for -- it was 2, argparse's own
     code, while `deploy.sh` had always used 64 for the same answer.
     """
     assert getattr(ec, name) == getattr(ec, spine)

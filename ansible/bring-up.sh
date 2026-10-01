@@ -127,8 +127,8 @@ fi
 # the host nor decrypts secrets, so it answers on a machine that has not been onboarded yet.
 #
 # Assigned to a variable rather than tested inside an `if` pipeline: a failed read there would
-# read as "not a server node" and silently skip the cluster step, which is the shape of the
-# bug this call was added to fix. As an assignment, `set -e` aborts on it instead.
+# read as "not a server node" and silently skip the cluster step. As an assignment, `set -e`
+# aborts on it instead.
 k3s_server_nodes() {
   uv run ansible-inventory --host "$HOST" |
     uv run python -c 'import json, sys; print("\n".join(json.load(sys.stdin).get("k3s_server_hosts") or []))'
@@ -140,9 +140,9 @@ if [[ "$CONTINUE" == true ]]; then
   uv run ansible-playbook ansible/preflight.yml -e target="$HOST"
   echo ">> initial_setup (OS hardening) ..."
   uv run ansible-playbook ansible/initial_setup.yml -e target="$HOST"
-  # README §8 lists this between initial_setup and deploy for a cluster node, and leaving it
-  # out is how a rebuilt control-plane node reached deploy.yml with no cluster to apply
-  # manifests to (#2861). Skipped with a named reason on every other host, rather than run
+  # README §8 lists this between initial_setup and deploy for a cluster node; leaving it
+  # out lets a rebuilt control-plane node reach deploy.yml with no cluster to apply
+  # manifests to. Skipped with a named reason on every other host, rather than run
   # and left to fail k3s-bringup.yml's `inventory_hostname in k3s_server_hosts` assert.
   SERVER_NODES="$(k3s_server_nodes)"
   if printf '%s\n' "$SERVER_NODES" | grep -qxF "$HOST"; then

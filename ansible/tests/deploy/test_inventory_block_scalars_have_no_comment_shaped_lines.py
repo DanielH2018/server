@@ -6,7 +6,7 @@ skipping every whole-line comment. That rule is wrong for one shape: inside a bl
 not a comment. A key consumed only on such a line would be skipped in the unsafe direction:
 the narrowing deploys fewer services than the change reaches instead of refusing.
 
-`_defines_only` relies on no such line existing (#1848). This guard makes that a fact the
+`_defines_only` relies on no such line existing. This guard makes that a fact the
 suite checks rather than one the docstring asserts. The scan is a function over text, so
 the reject half of the pair below runs on a synthetic scalar — the tree holds none, which
 is the point.

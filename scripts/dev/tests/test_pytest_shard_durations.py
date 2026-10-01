@@ -1,12 +1,12 @@
-"""The measured half of the shard-weight coverage gate (#2238).
+"""The measured half of the shard-weight coverage gate.
 
 `pytest_shard.durations_problems` is what CI's `--check-durations` step runs against the
 durations report its own test step produced. The static half is the ratchet in
 `ansible/tests/repo/test_pytest_shards_partition_the_suite.py`.
 
 It has two arms over that one report. `heavy_unweighted` asks whether a costly file is MISSING
-from the table (#2238); `stale_overweight` asks whether a recorded number is still roughly what
-the file costs (#2514). Both are exercised through `durations_problems` with an explicit
+from the table; `stale_overweight` asks whether a recorded number is still roughly what
+the file costs. Both are exercised through `durations_problems` with an explicit
 weights dict rather than through the CLI: a synthetic path reads as unweighted against the
 committed table, which is what lets the CLI tests below skip a monkeypatch, but no synthetic
 path can be OVER-recorded in it.
@@ -51,7 +51,7 @@ def test_the_parser_sums_every_phase_of_a_file():
 
 
 def test_a_heavy_unweighted_module_is_flagged():
-    """The reject half, and the #2238 case itself: a heavy file in a directory whose recorded
+    """The reject half: a heavy file in a directory whose recorded
     siblings say nothing about it, which the ratchet's neighbour arm cannot see."""
     problems = pytest_shard.durations_problems(REPORT, RECORDED)
     assert len(problems) == 1
@@ -80,8 +80,8 @@ def test_the_threshold_decides():
 
 
 def test_a_recorded_weight_far_above_what_it_measured_is_flagged():
-    """The #2514 case: the census module recorded at 17.31s, measuring 0.09s here — a stale
-    entry the three missing-from-the-table arms cannot see."""
+    """A stale entry: the census module recorded at 17.31s, measuring 0.09s here, which the three
+    missing-from-the-table arms cannot see."""
     stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
     problems = pytest_shard.durations_problems(report, RECORDED | {NEW_MODULE: 26.4})
@@ -92,7 +92,7 @@ def test_a_recorded_weight_far_above_what_it_measured_is_flagged():
 
 def test_a_recorded_weight_inside_the_runner_noise_is_clean():
     """The accept half, at the bound that decides it. Controls measured 1.10x to 1.46x their
-    recorded values on 2026-09-24, so 17.31s recorded against 14.00s measured is the scale
+    recorded values, so 17.31s recorded against 14.00s measured is the scale
     difference between the runner and the recording workstation, not a stale entry."""
     stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "14.00s call     " + stale.split()[-1])

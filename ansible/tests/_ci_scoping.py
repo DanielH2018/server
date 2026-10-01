@@ -5,8 +5,7 @@ Both the `hooks` and the `ansible_lint` job decide `mode=full|scoped|none` in a 
 (an empty merge fails) and `test_hook_config_changes_run_the_hook.py` (a hook-config edit forces
 the full sweep). The harness lives here, at the `pythonpath` root, so neither imports the other.
 
-The scratch repository itself comes from `lib.git_testing`; `leakguard.py` names this
-module's old private copy of that scrub as the shape the shared one was promoted from.
+The scratch repository itself comes from `lib.git_testing`.
 
 The script is extracted from the workflow and run with the step's own `env:` block, so a
 variable the step declares (`FULL_SWEEP_PATHS`) reaches it the way the runner supplies it, and

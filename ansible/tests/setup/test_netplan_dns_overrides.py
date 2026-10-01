@@ -8,8 +8,8 @@ node-exporter).
 
 TWO SEPARATE KNOBS, AND THE SECOND IS THE ONE THAT BITES. `dhcp6-overrides` does NOT govern
 IPv6 resolvers supplied by router advertisement — those need `ra-overrides`, which maps to
-networkd's `[IPv6AcceptRA] UseDNS=false`. The first deploy set only the two DHCP overrides,
-took the file from 6 nameservers to 4, and kubelet went on warning with
+networkd's `[IPv6AcceptRA] UseDNS=false`. Setting only the two DHCP overrides takes the file
+from 6 nameservers to 4, and kubelet goes on warning with
 `1.1.1.1 1.0.0.1 2001:558:feed::1` still present.
 
 WHY IT NEEDS A GUARD RATHER THAN THE COMMENT IT ALREADY HAS. Dropping `ra-overrides` breaks

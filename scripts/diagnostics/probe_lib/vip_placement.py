@@ -1,17 +1,14 @@
 """`probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node?
 
-Split out of probe_lib/health.py, which carried three unrelated subcommands (health, readonly-rbac,
-vip-placement) in one file.
-
 `externalTrafficPolicy: Local` preserves the client IP (CrowdSec needs it) at the cost of a
 hard placement rule: kube-proxy programs the VIP on EVERY node, and a node with no local
 endpoint installs a filter-table KUBE-EXTERNAL-SERVICES DROP for it. So when the L2 announcer
 and the backing pod sit on different nodes, every forwarded LAN packet dies at the announcer —
 silently, with the Service Ready and the pod 1/1.
 
-This has fired twice (2026-08-13 node join, 2026-08-14 cold-boot reschedule; the second took
-LAN DNS down). Both times a host-originated probe read green, because kube-proxy gives
-node-local clients the cluster-policy path. Nothing else in the fleet notices.
+This has fired on a node join and on a cold-boot reschedule; the second took LAN DNS down. Both
+times a host-originated probe read green, because kube-proxy gives node-local clients the
+cluster-policy path. Nothing else in the fleet notices.
 
 A workload deliberately parked at zero replicas has no endpoint by design, and nothing is
 dropped because nothing is meant to be listening. Such a row is reported `scaled-to-zero`

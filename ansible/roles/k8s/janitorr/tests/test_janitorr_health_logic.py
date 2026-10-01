@@ -48,7 +48,7 @@ def test_none_count_is_treated_as_zero():
 
 
 def test_message_points_at_kubectl_not_docker():
-    # The Docker-era message said `docker logs janitorr`, which is the wrong host now.
+    # The message must not point at `docker logs janitorr`: janitorr is not a Docker container.
     _, msg = janitorr_errors_ok(1, 4 * HOUR, WINDOW, GRACE)
     assert "kubectl" in msg and "docker" not in msg
 

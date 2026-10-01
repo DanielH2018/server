@@ -1,10 +1,11 @@
 """Every `.claude/rules/*.md` has a `paths:` glob that matches at least one tracked file.
 
 A rule whose globs match nothing parses fine, loads never, and every other test stays green.
-`docker.md` carried `containers/**` until #2127 — a directory this repo never tracks, since
-Ansible renders it onto the target host — so the rule reached a session only through its
-second glob. The globs are matched the way `inject-nested-docs.py` matches them
-(`rule_globs` + `Path.full_match`), so a rule this test accepts is one the injector can fire.
+A glob such as `containers/**` matches nothing here, since Ansible renders that directory
+onto the target host and the repo never tracks it, so a rule keyed on it would reach a
+session only through its other globs. The globs are matched the way `inject-nested-docs.py`
+matches them (`rule_globs` + `Path.full_match`), so a rule this test accepts is one the
+injector can fire.
 
 Run: uv run pytest .claude/hooks/tests/test_rules_globs_match_a_tracked_file.py
 """

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """A rotation is only finished when every consumer holds the new value.
 
-`secret_rotation.py audit` answers "what is due". Until 2026-08-29 nothing answered "who is
-still holding the old one", and that gap cost a real outage: the Sonarr and Radarr API keys
-were rotated, six of seven consumers were missed, and exportarr 401'd for ~40 minutes across
-seven Kuma monitors before anyone noticed. The seventh consumer, `setup/fake_remux`, is the
-one `deploy.sh` structurally cannot reach.
+`secret_rotation.py audit` answers "what is due"; this census answers "who is still holding
+the old one". A rotation that misses a consumer leaves it holding a dead credential: a missed
+Sonarr or Radarr API key makes exportarr 401 across seven Kuma monitors. `setup/fake_remux` is
+the consumer `deploy.sh` structurally cannot reach.
 
 `tree_consumers()` measures the answer from the tree. These tests pin the two invariants that
 make it trustworthy, each with the input it must accept AND the input it must reject — a
@@ -28,8 +27,8 @@ from secrets_mgmt.consumers import (
 from secrets_mgmt.rotation_tools import sops_names
 
 
-# The incident this file exists for, kept as the accept case. Verified by hand on 2026-08-29
-# against the live cluster: each of these renders or reads sonarr_api_key.
+# The incident this file exists for, kept as the accept case: each of these renders or reads
+# sonarr_api_key.
 SONARR_KEY_CONSUMERS = {
     "autofix-bridge": "deploy",
     "configarr": "deploy",
@@ -55,11 +54,9 @@ def _consumers(name: str):
 def _phantom_tags(name: str, tags) -> list[str]:
     """Tags claiming a role that does not reference the secret.
 
-    This is the 2026-08-25 defect (review M-8b) in executable form: nine of 41
-    `monitor_bridge_*` tokens routed by name prefix to a role that renders them NOWHERE, so
-    `rotate --deploy` wrote a new value, deployed the wrong role, left the real pusher on the
-    old token and stamped `last_rotated` green. The fix was a hand-run `grep -rl`; this makes
-    that grep repeatable.
+    A `monitor_bridge_*` token routed by name prefix to a role that renders it NOWHERE makes
+    `rotate --deploy` write a new value, deploy the wrong role, leave the real pusher on the
+    old token and stamp `last_rotated` green. This makes the `grep -rl` check repeatable.
     """
     census = _consumers(name)
     return [tag for tag in tags if tag not in census]
@@ -139,7 +136,7 @@ def test_the_phantom_check_goes_red_on_a_tag_that_references_nothing():
     """The reject half of the guard above — proof it can fail.
 
     Without this, a `_phantom_tags` that had quietly stopped matching would keep the suite
-    green forever, which is precisely how the original mis-routing survived 41 tokens.
+    green forever.
     """
     phantom = _phantom_tags("sonarr_api_key", ("sonarr", "a-role-that-does-not-exist"))
 
@@ -150,7 +147,7 @@ def test_the_setup_plane_check_goes_red_when_a_setup_consumer_is_claimed_deploya
     """The reject half: a setup-plane consumer claimed auto-deployable must be flagged.
 
     sonarr_api_key genuinely has a setup-plane consumer, so claiming it is auto-deployable must be
-    flagged. This is today's incident, replayed.
+    flagged.
     """
     blind = _setup_plane_blind_spots("sonarr_api_key", ("sonarr",))
 

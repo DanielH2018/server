@@ -17,13 +17,13 @@ from dev.prune_worktrees import Worktree, _memoised_merged
 
 WT = "worktree-issue-1132"
 # Every age_days assertion dates its comments against this instant and hands the same one to
-# `claim_states`, so "5 days" is exactly 5 whatever the wall clock reads (#2158).
+# `claim_states`, so "5 days" is exactly 5 whatever the wall clock reads.
 NOW = datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC)
 PATH = "/home/ubuntu/server/.claude/worktrees/issue-1132"
 
 
 def _foreign_claim(worktree=WT, created=None):
-    """A claim trailer any GitHub account could post on this public repo (#1280)."""
+    """A claim trailer any GitHub account could post on this public repo."""
     fields = {"createdAt": created} if created else {}
     return foreign_comment(claim_comment(worktree, None, "t"), **fields)
 
@@ -73,8 +73,8 @@ def test_claim_is_live_when_its_worktree_exists_and_is_dirty():
 
 
 def test_claim_is_not_stale_when_its_worktree_is_dirty_with_a_dead_owner():
-    # The 2026-09-05 restart: 14 agents died, their worktrees kept uncommitted edits, and
-    # every session was resumed in place. Expiring these is the failure this rule prevents.
+    # A restart kills the agents, their worktrees keep uncommitted edits, and every session
+    # is resumed in place. Expiring these is the failure this rule prevents.
     dead = _tree(reason="claude session x (pid 999999 start 999999)")
     live, reason = claim_is_live(WT, [dead], dirty=_always, merged=_never)
     assert live is True
@@ -90,9 +90,9 @@ def test_claim_is_stale_when_its_worktree_is_merged_and_clean():
 
 
 def test_claim_is_live_while_a_session_still_holds_the_worktree_lock():
-    # The condition an earlier draft dropped. An orchestrator worktree is clean and at
-    # master's tip, so `merged` says True — only the live lock keeps its claim alive for
-    # the duration of the fan-out it is running.
+    # The live-session-lock condition. An orchestrator worktree is clean and at master's
+    # tip, so `merged` says True — only the live lock keeps its claim alive for the
+    # duration of the fan-out it is running.
     alive = _tree(reason=f"claude session x (pid {os.getpid()} start {_own_start()})")
     live, reason = claim_is_live(WT, [alive], dirty=_never, merged=_always)
     assert live is True
@@ -193,7 +193,7 @@ def test_a_prunable_worktree_holds_its_claim_instead_of_crashing():
 
     `git worktree list --porcelain` keeps listing a worktree whose directory was removed by
     hand, so `dirty` runs git in a directory that does not exist and raises. That took
-    `claims`, `reap` and `next` down at once under an error blaming gh (#1276).
+    `claims`, `reap` and `next` down at once under an error blaming gh.
     """
     live, reason = claim_is_live(
         WT, [_tree()], dirty=_raises_missing_dir, merged=_never
@@ -229,7 +229,7 @@ def test_a_foreign_claim_produces_no_claim_row_at_all():
     """`claim_states` folds through `current_claim`, so a drive-by claim is not a row.
 
     Without this, a single foreign comment made `claims` show a claim, `next` withhold the
-    issue and `claim` refuse it (#1280).
+    issue and `claim` refuse it.
     """
     issues = [{"number": 1132, "comments": [_foreign_claim()]}]
     assert claim_states(issues, [_tree()], dirty=_always, merged=_never) == []
@@ -272,7 +272,7 @@ def test_claim_is_stale_when_locked_with_dead_owner_clean_and_merged():
     assert "lock owner is dead" in reason
 
 
-# --- #1279: the merged read is asked once per worktree, not once per claim ------------------
+# --- the merged read is asked once per worktree, not once per claim ------------------
 #
 # `claim_states` calls `merged(tree)` once per claimed issue, and a fan-out's claims all name
 # ONE orchestrator worktree. For an unmerged branch each of those calls is four git layers

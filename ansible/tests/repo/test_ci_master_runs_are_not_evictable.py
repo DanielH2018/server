@@ -4,16 +4,12 @@ WHY THIS IS A TEST. Every master SHA needs its own CI verdict: the deployer's CI
 `await_ci.py` read check-runs per commit, and a commit with no verdict reads `cancelled`
 forever, so every landing behind it waits on a later SHA's full sweep instead.
 
-`cancel-in-progress: false` was set on 2026-09-01 to buy that, and it does not. It governs the
-RUNNING run and says nothing about a QUEUED one. GitHub keeps at most one pending run per
-concurrency group, so when master moves faster than a sweep, each push evicts the pending run
-ahead of it. Measured 2026-09-05 with eight sessions landing: nine master runs cancelled
-between 16:34:07 and 16:37:31, each 4-52s after creation, every one with zero jobs — evicted
-while queued, never started.
+`cancel-in-progress: false` does not buy that. It governs the RUNNING run and says nothing
+about a QUEUED one. GitHub keeps at most one pending run per concurrency group, so when master
+moves faster than a sweep, each push evicts the pending run ahead of it, and the evicted run
+is cancelled with zero jobs.
 
-That fix read as correct in the file for four days while doing nothing, which is why the
-replacement is asserted here rather than only explained in a comment. The property that
-matters is not the literal expression: it is that no two master pushes can share a group. An
+The property that matters is not the literal expression: it is that no two master pushes can share a group. An
 expression keyed on `github.sha` has that property; one keyed on `github.ref` does not,
 because every push to master carries the same ref.
 
@@ -72,9 +68,9 @@ def test_a_pull_request_still_groups_by_ref_so_a_force_push_supersedes_itself():
 def test_the_ref_arm_is_conditional_rather_than_unconditional():
     """The reject half — proof this pair can go red.
 
-    The pre-2026-09-05 value, `${{ github.workflow }}-${{ github.ref }}`, satisfies the
-    pull-request assertion above on its own. Without this, reverting to it would leave the
-    suite green while master went back to losing verdicts.
+    A group of `${{ github.workflow }}-${{ github.ref }}` satisfies the pull-request
+    assertion above on its own. Without this, reverting to it would leave the suite green
+    while master went back to losing verdicts.
     """
     group = _concurrency()["group"]
 

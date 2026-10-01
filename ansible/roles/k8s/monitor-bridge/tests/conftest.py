@@ -16,10 +16,9 @@ def cfg():
     number, a derived field, a `_FILE`-mounted secret — calls `load_config({...})` directly
     with the environment it means.
 
-    This replaces the 118 `monkeypatch.setattr(bridge.config, "X", ...)` sites the suite
-    carried until 2026-09-04. A patch mutates a process-wide global for the duration of one
-    test; a fixture hands the code under test the object it reads, so two tests can state
-    different configurations without either seeing the other's.
+    A `monkeypatch.setattr(bridge.config, "X", ...)` mutates a process-wide global for the
+    duration of one test; a fixture hands the code under test the object it reads, so two
+    tests can state different configurations without either seeing the other's.
     """
     return load_config({})
 
@@ -29,10 +28,8 @@ def _reset_down_streaks():
     """Zero check.py's consecutive-down-streak state before every test.
 
     `_down_streaks` (check_ups/check_ha_heartbeat/check_discord/check_longhorn_volumes)
-    accumulates across calls, so a streak left over from one test used to leak into the
-    next test's first call — every test that cared used to open with its own
-    `check._down_streaks["x"] = 0` line. This fixture replaces those ~27 hand-written
-    resets with one reset applied to every test.
+    accumulates across calls, so a streak left over from one test would leak into the
+    next test's first call. This fixture applies one reset to every test.
     """
     bridge.streaks._down_streaks.clear()
 

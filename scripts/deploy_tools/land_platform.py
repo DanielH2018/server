@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Which of a PR's derived tags its own changed paths PROVE are a k3s change (#2730).
+"""Which of a PR's derived tags its own changed paths PROVE are a k3s change.
 
 One tag name can select two services on two platforms: `wg-easy` is a `platform: k8s` entry on
 daniel-box and a Compose entry on daniel-pi. `render_guard.hosts_for_tags` takes a `k8s_only`
-subset that routes such a tag to the k8s entry alone, and #2718 filled it with the tags the k8s
-role-caller graph named. A tag a changed PATH named was left out, so a PR touching only
+subset that routes such a tag to the k8s entry alone, and `classify` fills it with the tags the
+k8s role-caller graph names. A tag a changed PATH named was left out, so a PR touching only
 `ansible/roles/k8s/wg-easy/templates/` still ran `deploy.sh -e target=daniel-pi --tags wg-easy`
 — one extra ssh deploy of a Compose service the change never touched, recreating nothing.
 
 THE PROOF IS THE TREE THE PATH SITS IN, and it has to be EVERY path that names the tag. A PR
 touching both `roles/k8s/wg-easy/` and `roles/containers/wg-easy/` changes both services, so
-that tag keeps routing to both hosts. Narrowing host routing is the dangerous direction --
-issue #929 was a tag that reached no host while land.sh read `settled` and the Pi ran the old
+that tag keeps routing to both hosts. Narrowing host routing is the dangerous direction -- a
+tag that reaches no host leaves the landing reading `settled` while the Pi runs the old
 container -- so this answers only for a tag whose whole path set sits under one tree.
 
 A TAG NO PATH NAMES IS NEVER IN HERE, because this reads paths rather than `derived_tags`'
@@ -65,7 +65,7 @@ def diff_range(ref: str) -> str:
 
     Three dots, and HEAD on the right: `changed` reads `<ref>...HEAD` in the primary checkout
     (`deploy_tags._git_diff_paths`). The landing's fallback derivation reads the same range's
-    paths to prove a tag's platform (#2738), so the two spellings have to be one spelling --
+    paths to prove a tag's platform, so the two spellings have to be one spelling --
     a two-dot range would prove the platform of a different file set than the tags came from.
     `test_land_platform.py` holds this against that helper.
     """

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the own-role digest-provable derivation (#3110).
+"""Tests for the own-role digest-provable derivation.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_digest_provable.py
 """

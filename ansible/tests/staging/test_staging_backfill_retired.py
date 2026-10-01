@@ -3,7 +3,7 @@
 `teardown.yml` runs only where `has_gitops` is false, so it never reaches daniel-box, the one
 host that ran the ratchet. Deleting the templates from `install.yml` alone would have left the
 timer ticking there from its last rendered unit file, driving a harness that no longer exists.
-These tests pin the tasks in `install.yml` that converge daniel-box (#2414).
+These tests pin the tasks in `install.yml` that converge daniel-box.
 
 Run: uv run pytest ansible/tests/staging/test_staging_backfill_retired.py
 """

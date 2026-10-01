@@ -5,12 +5,12 @@ justification and, if it renders a pod spec, its own test." `image-builder` rend
 with a full pod spec and got only the justification. Its exemption reads "reasoned Unconfined
 seccomp/AppArmor for rootless BuildKit", and that reason is narrower than the gate it excuses —
 joining `_UNCOVERED_ROLES` also silently waives uid, `privileged`, `capabilities.add`, hostPath
-and host namespaces, none of which the sentence mentions (2026-08-23b review M17). The role is
+and host namespaces, none of which the sentence mentions. The role is
 also in `validate.k8s_manifests.SKIP_ROLES`, so the manifest validator does not see it either.
 
 The manifest is sound today: uid 1000, not privileged, no added capabilities, no hostPath,
-`automountServiceAccountToken: false`. Every one of those is prose with no executable backing,
-which is the entire finding. This file gives them one.
+`automountServiceAccountToken: false`. Every one of those is prose with no executable backing;
+this file gives them one.
 
 WHAT THIS DELIBERATELY DOES NOT ASSERT: that seccomp and AppArmor are Confined, or that
 `allowPrivilegeEscalation` is false. Both are load-bearing and build-job.yaml.j2:94-100 records

@@ -35,9 +35,8 @@ the code is derived here rather than typed.
 
 That split is what makes the two_factor tier unattended. code-server, n8n and longhorn are
 `two_factor` (`roles/k8s/authelia/templates/config-secret.yaml.j2`), so a one_factor cookie
-bounces off them, and until 2026-09-06 the only way past that was a code read off the
-operator's phone — which meant `test_two_factor_service_serves_its_own_ui` skipped rather
-than ran, for eight days at a stretch.
+bounces off them, and a code read off the operator's phone would make
+`test_two_factor_service_serves_its_own_ui` skip rather than run.
 
 Deriving a code needs the shared secret readable, so the second factor is another value
 under the same age key as the first. A dedicated user is what makes that an acceptable
@@ -373,8 +372,8 @@ def mint_hint(two_factor):
     """The flags that mint the tier being reported on.
 
     A function rather than an inline conditional so a test can hold it to naming the
-    unattended path. Both tiers mint without a typed code since `claude-ui` arrived, and a
-    message still saying `--totp <code>` sends the reader to the phone they no longer need.
+    unattended path. Both tiers mint without a typed code, and a message still saying
+    `--totp <code>` sends the reader to the phone they no longer need.
     """
     return "--two-factor" if two_factor else "no arguments"
 

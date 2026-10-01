@@ -1,9 +1,7 @@
 ---
-# Dispatcher, the docker_install shape. This role was gated in initial_setup.yml by
-# `when: has_gitops`, so a host with has_gitops: false skipped it and nothing reaped what an
-# earlier true run installed. daniel-server ran a live gitops-deploy.timer that way until
-# 2026-09-09: it took daniel-server's git-tree lock every ten minutes and pulled a checkout
-# nothing else used. The role is included unconditionally; has_gitops picks the half.
+# Dispatcher, the docker_install shape. The role is included unconditionally and has_gitops
+# picks the half, so a host with has_gitops: false still reaps what an earlier true run
+# installed.
 
 - name: Install the GitOps deployer on the host that owns it
   ansible.builtin.include_tasks: install.yml

@@ -1,6 +1,6 @@
 ---
 # The render-record producer: an hourly dry-run render of every renderable k8s service at the
-# newest green origin/master commit (#2587). CLAUDE.md beside this file has the contract.
+# newest green origin/master commit. CLAUDE.md beside this file has the contract.
 #
 # Both directions live here. initial_setup.yml applies this role on render_records_host only,
 # and `render_records_enabled: false` (group_vars/all.yml) selects the absent arm, which leaves

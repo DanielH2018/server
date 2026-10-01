@@ -1,4 +1,4 @@
-"""check_kubelet_plugin_readonly — #1243's detection arm.
+"""check_kubelet_plugin_readonly — the detection arm for a read-only CSI mount.
 
 A CSI global mount ext4 remounts read-only after a journal abort with Volume CRs staying
 `attached healthy` throughout, so this is the only signal that sees it. No grace: unlike
@@ -45,8 +45,7 @@ def test_one_readonly_mount_pages_naming_host_and_mountpoint(monkeypatch, cfg):
 
 def test_a_breach_gets_no_grace_and_pages_on_the_first_cycle(monkeypatch, cfg):
     # THE BUG THIS PINS: a Longhorn-style consecutive-down streak here would hold the first
-    # cycle `up` and turn #1243's 50-minute silent outage into a merely-shorter one instead of
-    # a one-cycle detection. Two consecutive calls with the same breach must both be `down`.
+    # cycle `up` and delay detection instead of making it a one-cycle detection. Two consecutive calls with the same breach must both be `down`.
     mp = "/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount"
     monkeypatch.setattr(
         bridge.net, "prom_vector", lambda _cfg, *a, **k: [_ro_series(mp)]
@@ -83,7 +82,7 @@ def test_several_offenders_are_named_and_sorted(monkeypatch, cfg):
 def test_the_query_scopes_to_the_plugins_subtree_and_is_not_origin_pinned(cfg):
     # This is a node_filesystem_* family: origin_sel() would pin it to `origin="daniel-server"`
     # in the deployed env (PROM_ORIGIN), which hides the exact same fault on daniel-box behind a
-    # green tile — the mistake HOST_ORIGINS_MIN was added to stop for check_disk/check_mem.
+    # green tile — the mistake HOST_ORIGINS_MIN stops for check_disk/check_mem.
     # host_metric_sel() must be what builds the selector, not origin_sel() — so the pin set
     # here (matching the deployed env, whose PROM_ORIGIN default pins) must NOT reach it.
     cfg = replace(cfg, PROM_ORIGIN='origin="daniel-server"')

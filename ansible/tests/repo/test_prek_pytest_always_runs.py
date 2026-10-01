@@ -1,16 +1,14 @@
 """Guard: the prek `pytest` hook must run unconditionally, with no `files` gate.
 
-This replaces a guard that kept the hook's `files` regex in sync with pyproject's `testpaths`.
-That regex is gone (see the comment on the hook in prek.toml), so the drift it policed can no
-longer happen — but the reason it existed can come back the moment someone re-adds a `files`
-gate to make PR runs marginally cheaper.
+The hook carries no `files` regex to keep in sync with pyproject's `testpaths` (see the
+comment on the hook in prek.toml), but the drift that regex caused can come back the moment
+someone re-adds a `files` gate to make PR runs marginally cheaper.
 
 Why a gate here is always wrong: the hook is `pass_filenames = false`, so it runs the whole
 suite whenever it fires. Gating it saves nothing when it runs and loses coverage when it
 doesn't. And several tests in this repo discover their own inputs by walking the tree
 (test_validate_shell_templates' pinned roster, test_healthchecks_pings' rglob), so a gate means
-they cannot fail on the PR that breaks them — only on the push to master afterwards. That is
-what put master red for six consecutive pushes on 2026-08-15.
+they cannot fail on the PR that breaks them — only on the push to master afterwards.
 """
 
 import tomllib
@@ -49,8 +47,8 @@ def test_pytest_hook_takes_no_filenames() -> None:
 
 
 def test_pytest_hook_runs_at_the_pre_push_stage() -> None:
-    """The stage decides WHEN, where `always_run` decides WHETHER. #2827 moved the hook off the
-    commit — the suite measured 235s on daniel-server on 2026-09-28 — and two crons now run it
+    """The stage decides WHEN, where `always_run` decides WHETHER. The hook is off the
+    commit because the suite measures 235s on daniel-server, and two crons run it
     themselves, so a silent move back to pre-commit would make them pay it twice."""
     assert _pytest_hook().get("stages") == ["pre-push"], (
         'the prek `pytest` hook must carry stages = ["pre-push"] (#2827)'

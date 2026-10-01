@@ -1,9 +1,8 @@
 """The review skills and agents name the standing-list memory by the slug the store holds.
 
-#3016: `/homelab-review` step 2 primed from `homelab-review-standing-donot-reflag`, a slug no
-memory store on this host has ever held — the file is `review-standing-decisions`. A missing
-memory is not an error the harness reports, so the run proceeded unprimed and the fan-out
-re-derived settled decisions.
+The standing-list memory file is `review-standing-decisions`. A missing memory is not an
+error the harness reports, so a skill that primes from any other slug proceeds unprimed and
+the fan-out re-derives settled decisions.
 
 The memory store lives outside the repo (`~/.claude/projects/-home-ubuntu-server/memory/`),
 is not tracked by git or chezmoi, and does not exist in CI, so no test here can assert a file

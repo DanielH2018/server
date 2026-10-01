@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Run the stop conditions of `docs/longhorn-upgrade.md` in order, exit code naming the first failure.
 
-Longhorn supports no downgrade, so the backup is the whole safety net and the runbook's gate
-section is what proves the net is there. The section listed its checks as shell blocks the
-operator ran by hand; here each is a verdict over what the cluster or the drill answered, the
-runner stops at the first failure, and the exit code is the gate number (#2216, the shape
-`k3s_upgrade_gates.py` set in #2162).
+Longhorn supports no downgrade, so the backup is the whole safety net and the runbook's gate section
+is what proves the net is there. Each is a verdict over what the cluster or the drill answered, the
+runner stops at the first failure, and the exit code is the gate number (the shape
+`k3s_upgrade_gates.py` sets).
 
 The gates, in the order the runbook gives them:
 
@@ -24,7 +23,7 @@ The gates, in the order the runbook gives them:
      so engines do not follow the manager; a previous hop's image still holding references
      means engine lag that compounds across hops. Every engine image must be `deployed`.
 
-Every cluster read goes through `lib.kubectl` with the cluster named `prod` (#1663). The drill
+Every cluster read goes through `lib.kubectl` with the cluster named `prod`. The drill
 stamp exists only on daniel-box, the host that runs the drill, so gate 2 fails on any other
 host rather than reading an absent directory as a fresh pass. Set `LONGHORN_DRILL_STATE_DIR`
 to point it elsewhere.

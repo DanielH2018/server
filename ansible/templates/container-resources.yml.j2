@@ -1,8 +1,6 @@
 {#
   Container `resources:` requests and limits — the four-quantity block ~100 container specs
-  across the k8s roles share, differing only in the values and in whether `limits` or
-  `requests` was typed first (69 templates one way, 23 the other, for no reason beyond which
-  sibling each role was copied from).
+  across the k8s roles share, differing only in the values.
 
   NOT the same key as two other `resources:` in this tree, and this macro is for neither:
   a PersistentVolumeClaim's `spec.resources.requests.storage` (see pvc.yml.j2), and an RBAC
@@ -20,13 +18,11 @@
   raw template text for `requests:` and `limits:`. It asserts the two appear together, because
   a request with no limit takes the namespace default and is REFUSED at admission if the
   request is higher — surfacing hours later as a failed image build. Behind this macro that
-  check compares False to False and passes on nothing. build-job.yaml.j2 was converted during
-  this macro's own rollout and caught exactly that way; the guard now asserts its own coverage.
+  check compares False to False and passes on nothing, so the guard asserts its own coverage.
 
   QUANTITIES ARE EMITTED QUOTED. Every value in this family is a Kubernetes quantity string —
   `250m`, `128Mi`, `1` — so quoting is a no-op to the parsed YAML while making the emitted form
-  uniform. That is checked, not assumed: rendering the fleet before and after this macro landed
-  produced identical parsed YAML for all 281 manifests.
+  uniform.
 
   Arguments:
     cpu_limit, mem_limit, cpu_request, mem_request

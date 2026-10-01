@@ -1,11 +1,10 @@
 """A role that ships `files/**/*.py` has a `tests/` directory, and that directory is in `testpaths`.
 
 Root CLAUDE.md (Python & Tests): "A role that ships a `files/*.py` with logic adds its `tests/`
-directory to `testpaths`." Nothing enforced it. The two sibling guards start from TEST files —
+directory to `testpaths`." The two sibling guards start from TEST files —
 `test_testpaths_covers_every_test_file.py` asks whether each test lies under a testpath, and
 `test_no_role_ships_a_test_file.py` asks whether a test sits beside shipped code — so a role
-with code and no tests at all is invisible to both. `karakeep/files/karakeep-time-tagger.py`
-(479 lines, run from a ConfigMap) had no `tests/` and no `testpaths` entry until #1853.
+with code and no tests at all is invisible to both.
 
 This starts from the CODE: every tracked `ansible/roles/<plane>/<role>/files/**/*.py` names a
 role, and each such role must have a tracked `tests/` directory listed in `testpaths`. A test

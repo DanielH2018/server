@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """Run an interactive Ansible deploy under the locks the automated deployers take.
 
-Invoke it as ``./scripts/deploy.sh``, which execs this file; every doc, skill, hook and
-consumer names the shim. The port from bash is issue #2412. Its plan is archived at
-``docs/archive/deploy-sh-python-port.md``, and its *The frozen contract* section lists the
-exit codes, output lines and variables other processes read, as of the port. This module holds
-the FRONT half: argument parsing and every gate that runs before the tree lock. The locked half -- tree lock, snapshot, service
-locks, playbook -- is ``deploy_under_locks.py``, and ``--detach``'s is ``deploy_detach.py``;
-this module calls one of them once every gate has passed.
+Invoke it as ``./scripts/deploy.sh``, which execs this file; every doc, skill, hook and consumer names the shim. Its plan is
+archived at ``docs/archive/deploy-sh-python-port.md``, and its *The frozen contract* section lists the exit codes, output lines
+and variables other processes read. This module holds the FRONT half: argument parsing and every gate that runs before the tree
+lock. The locked half -- tree lock, snapshot, service locks, playbook -- is ``deploy_under_locks.py``, and ``--detach``'s is
+``deploy_detach.py``; this module calls one of them once every gate has passed.
 
 Usage::
 
@@ -185,8 +183,6 @@ def expand_shared_roles(plan: Plan) -> None:
     A shared role — `volume-snapshot`, `manifests`, `image-builder` — has no `containers_list`
     entry, so Ansible selects nothing for `--tags volume-snapshot` and exits 0. It runs under
     its callers' tags with their variables, so deploying every caller is what applies it.
-    PR #2701 changed only `volume-snapshot/tasks/claim.yml` and was left for the next full
-    deploy for want of this (#2704).
 
     Runs before the staleness gate, so the gate, the tag validation and the per-service locks
     all see the services that actually deploy. A name no declared role runs is left as typed,
@@ -297,8 +293,9 @@ def resolve_at_and_changed(raw: list[str], plan: Plan) -> list[str]:
             plan.at_given = True
             i += 1
             # A missing value, and a next argument that is itself a flag, both leave at_ref
-            # empty and are refused below. Reading past the end used to leave it empty
-            # SILENTLY, and `--at "$sha"` with an unset variable deployed the checkout's tip.
+            # empty and are refused below. Without this check, reading past the end would
+            # leave it empty SILENTLY, and `--at "$sha"` with an unset variable would deploy
+            # the checkout's tip.
             if i < n and not raw[i].startswith("-"):
                 plan.at_ref = raw[i]
                 i += 1
@@ -379,7 +376,7 @@ def staleness_gate(plan: Plan, tools: Tools) -> None:
 def derive_changed_tags(plan: Plan, args: list[str], tools: Tools) -> list[str]:
     """Resolve `--changed` into `--tags <derived>`, or end the run.
 
-    The staleness gate runs FIRST (issue #1593). On a checkout that is only behind, the
+    The staleness gate runs FIRST. On a checkout that is only behind, the
     three-dot range the derivation reads is empty by construction, so it derives no tags and
     the run would exit 0 having deployed nothing -- the one code no consumer treats as a
     resume point. Exit 4 is the honest answer, and land.sh already retries it.
@@ -461,7 +458,7 @@ def check_mode_conflicts(plan: Plan) -> None:
 
 
 def validate_tags(plan: Plan, tools: Tools) -> None:
-    """Refuse with 2 when a tag names no service. Runs AFTER staleness (issue #1566).
+    """Refuse with 2 when a tag names no service. Runs AFTER staleness.
 
     A tag check against a stale tree answers about the wrong tree: the first landing of a NEW
     role reads as a tag miss whenever the tick has not fast-forwarded the merge commit yet,
@@ -493,7 +490,7 @@ def prepare_stdio() -> None:
 
     Ansible refuses to start on a non-blocking stdout or stderr ("Ansible requires blocking IO
     on stdin/stdout/stderr"), and Claude Code's Bash tool hands its child a file with
-    O_NONBLOCK set (#834). The flag lives on the open file description that exec and fork
+    O_NONBLOCK set. The flag lives on the open file description that exec and fork
     share, so clearing it here clears it for every process this run starts.
     """
     for fd in (0, 1, 2):
@@ -503,9 +500,9 @@ def prepare_stdio() -> None:
 
 def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
     """Resolve and gate one invocation; exec the locked half, or return a refusal's code."""
-    # Ahead of `git rev-parse` and every gate below it: `--help` used to reach the staleness
-    # gate and be answered with exit 4 and a `git rebase` remedy, on the one question an
-    # operator asks a script they have not run before (#2854).
+    # Ahead of `git rev-parse` and every gate below it: `--help` must not reach the
+    # staleness gate and be answered with exit 4 and a `git rebase` remedy, on the one
+    # question an operator asks a script they have not run before.
     answer_help(__doc__, argv)
     top = git("rev-parse", "--show-toplevel", check=False)
     if top.returncode != 0:
@@ -526,7 +523,7 @@ def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
         # An argument ansible-playbook's parser refuses, asked before the fact cache, the
         # staleness gate and the tag validation: no play can run, so it must not cost a
         # subprocess, a lock wait or a snapshot, and it must read as a bad command line on
-        # every path out of here rather than as a playbook that failed mid-deploy (#3024).
+        # every path out of here rather than as a playbook that failed mid-deploy.
         check_passthrough(plan.args)
         expand_shared_roles(plan)
         # The fact cache is shared by host across every worktree on this machine and pins
@@ -556,12 +553,8 @@ ENTRY_POINT = "scripts/deploy.sh"
 def report(rc: int, argv: list[str], out=None) -> None:
     """Print what `rc` means and the run's one-line verdict, both from `lib.exit_codes`.
 
-    The wrapper exited with a bare number until 2026-09-30. Claude was told what it meant by
-    a table inside a hook (`auto-mode-bridge.py`'s `_DEPLOY_EXITS`) and an operator at a
-    terminal was told nothing at all, so the same contract was written out in the hook, the
-    root CLAUDE.md, the `deploy` skill, `docs/deploying.md` and `docs/claude-tooling.md` --
-    five copies, of which 77 and 78 reached only some. The script that exits is the one place
-    that cannot go stale (issue #2853).
+    The script that exits is the one place that cannot go stale, so the meaning of each code
+    is printed here rather than copied into hooks and docs.
 
     Args:
       rc: the code `run` returned.

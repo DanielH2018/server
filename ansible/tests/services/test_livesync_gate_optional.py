@@ -2,12 +2,11 @@
 
 Every router in `livesync-gate-secret.yaml.j2` routes to CouchDB or homelab-mcp, and neither
 is in the staging subset. The Secret also reads `homelab_mcp_token` and `livesync_sync_token`,
-which staging's secrets file does not carry — a census of the traefik role on 2026-08-28 found
-those two to be the ONLY variables still unaccounted for once ACME and CrowdSec are gated, so
-this flag is what lets Traefik deploy to a staging cluster at all.
+which staging's secrets file does not carry — those two are the ONLY variables left
+unaccounted for once ACME and CrowdSec are gated, so this flag is what lets Traefik deploy to a
+staging cluster at all.
 
-Slice 2a recorded that this needed no flag, on the reasoning that generated staging tokens
-would render harmless routes. That was wrong on both halves. The routers name backends the
+Generated staging tokens would not make the flag unnecessary. The routers name backends the
 cluster does not run, and staging's secrets file is encrypted to daniel-server's key alone and
 holds one key by design (docs/archive/staging-cluster.md, Decision 5), so there is nowhere for a
 generated token to go.

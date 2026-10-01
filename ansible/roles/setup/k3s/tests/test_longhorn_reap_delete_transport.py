@@ -165,10 +165,9 @@ def test_purge_accepts_a_pod_whose_containers_are_all_ready():
 
 
 def test_purge_rejects_a_pod_with_no_containerstatuses():
-    # The rejecting half. An earlier comment here claimed bash's
-    # `select([.status.containerStatuses[].ready] | all)` counted such a pod as vacuously ready;
-    # it did not -- `.[]` over a null field raises "Cannot iterate over null", jq exits nonzero,
-    # and bash took its "no ready manager pod" branch. A pod whose containers have not started
+    # The rejecting half. Bash's `select([.status.containerStatuses[].ready] | all)` does not
+    # count such a pod as vacuously ready: `.[]` over a null field raises "Cannot iterate over
+    # null", jq exits nonzero, and bash takes its "no ready manager pod" branch. A pod whose containers have not started
     # cannot serve the purge POST.
     assert snapshots_mod._purge(_kubectl_returning(_pod()), "this-node", {"vol-a"}) == 1
 

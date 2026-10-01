@@ -61,15 +61,15 @@ def test_next_action_dirty_tree_never_deploys():
 
 
 def test_next_action_clean_tree_still_deploys():
-    # Regression: a clean tree (the default) behaves exactly as before.
+    # A clean tree (the default) leaves the other outcomes unchanged.
     assert next_action("aaa", "bbb", None, dirty=False) == "deploy"
 
 
 # The deployer is pull-based and only ever fast-forwards: it must act ONLY when
 # origin is strictly ahead of local. When the operator has committed locally but
-# not pushed, origin is an *ancestor* of local (origin_ahead=False). The old code
-# saw origin != local and returned "deploy", then diffed local..origin (the reverse
-# of the un-pushed commits) and mis-fired a deploy + false rollback. Must be a no-op.
+# not pushed, origin is an *ancestor* of local (origin_ahead=False). Deploying then
+# would diff local..origin (the reverse of the un-pushed commits) and mis-fire a
+# deploy + false rollback. Must be a no-op.
 def test_next_action_noop_when_local_ahead_of_origin():
     assert next_action("localnew", "originold", None, origin_ahead=False) == "noop"
 
@@ -88,7 +88,7 @@ def test_next_action_dirty_precedes_origin_ahead_check():
 
 
 # is_diverged: local↔origin diverged (neither an ancestor of the other) → the deployer noops
-# forever while origin's new commits never deploy; surfaced via GitOps Status (review L3).
+# forever while origin's new commits never deploy; surfaced via GitOps Status.
 def test_is_diverged_true_when_neither_is_ancestor():
     assert is_diverged("originX", "localY", origin_ahead=False, local_ahead=False)
 
@@ -109,10 +109,9 @@ def test_is_diverged_false_when_in_sync():
 
 # ── the dirty skip's journal line ───────────────────────────────────────────────────────────
 #
-# The skip itself is deliberate and healthy (operator mid-edit). What was missing is any trace
-# of it in the journal between the two throttled Discord slots: on 2026-08-30 one untracked
-# file parked the primary checkout 7 commits behind for ~40 minutes while `journalctl -t
-# gitops-deploy` read `-- No entries --`, identical to "ticked, nothing to do".
+# The skip itself is deliberate and healthy (operator mid-edit). The journal line leaves a
+# trace of it between the two throttled Discord slots, so `journalctl -t gitops-deploy`
+# never reads `-- No entries --`, identical to "ticked, nothing to do".
 
 
 def test_an_untracked_file_is_named_with_its_code():
@@ -241,8 +240,7 @@ def test_dirty_alert_suppressed_when_already_alerted_this_morning():
 def test_dirty_alert_fires_in_evening_after_morning_alert():
     # Still dirty at night after the morning page -> the evening slot fires once.
     # 21:00, not 20:00: the boundary itself is test_dirty_alert_at_exactly_8pm_boundary_
-    # inclusive's job, and using it here made the two tests the same case, so the evening
-    # slot's interior was never covered by either.
+    # inclusive's job, so this test covers the evening slot's interior.
     now = datetime(2026, 6, 20, 21, 0, tzinfo=CT)
     assert should_alert_dirty(now, "2026-06-20:am") is True
 

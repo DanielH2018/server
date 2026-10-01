@@ -1,8 +1,5 @@
 """`probe.py health <svc>` — the post-deploy gate, from a deploy tag to a per-workload verdict.
 
-Split out of probe.py, which had grown to 1349 lines across thirteen subcommands, and split
-again at 938 lines into four helper modules this one drives:
-
   - `health_kubectl.py` — the kubectl argument builders and `pod_selector`
   - `health_rollout.py` — `format_k8s_health`, the Deployment/DaemonSet verdict
   - `health_cronjob.py` — `format_cronjob_health`, the CronJob verdict
@@ -29,8 +26,9 @@ marker is positional, not a property of any one message:
     skip: the manifests say that object should exist, so its absence is a failed deploy.
 
 Every message across the four modules is written to that rule, and the `test_probe_health*.py`
-suites assert each one lands on the intended side of it. PR #685 is the reason: `land.sh`
-printed `VERDICT: settled` for a observability deploy whose health gate never ran.
+suites assert each one lands on the intended side of it. A message that reads as a skip when the
+deploy failed would let `land.sh` print `VERDICT: settled` for a deploy whose health gate never
+ran.
 """
 
 import json
@@ -218,7 +216,7 @@ def format_role_health(role, checked, now, expected_restarts=None):
 
     `expected_restarts` is {workload name: applied_at} from the service's release record
     (`release_expected_restarts`): each named workload must carry a `restartedAt` newer than
-    that apply, or it FAILS the gate as NOT ROLLED (issue #1867). Empty or None — no record,
+    that apply, or it FAILS the gate as NOT ROLLED. Empty or None — no record,
     a record from before the field shipped, or an apply that changed nothing — leaves the
     verdict exactly as it was, which is what keeps a standalone `probe.py health` and an
     idempotent re-run green.
@@ -306,8 +304,8 @@ def release_expected_restarts(record):
     record, no `rollouts` key (a record from before the field shipped), an unreadable
     `applied_at` — so the gate's meaning does not change until a deploy has written the
     field. Empty is the SAFE direction here, unlike the rest of this gate: an expectation
-    invented from a clock is the false red issue #1867 rejects, while a missing one leaves
-    the two existing halves of the gate in force.
+    invented from a clock is a false red, while a missing one leaves the two existing halves
+    of the gate in force.
     """
     if not isinstance(record, dict):
         return {}
@@ -379,10 +377,7 @@ _UNSET = object()
 def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
-    k8s first because that is where ~50 of the ~55 services live since the 2026-08-14 Docker
-    retirement. Before that this command ran `docker inspect` unconditionally and had been
-    dead on both cluster nodes ever since — it died with `FileNotFoundError: 'docker'`,
-    because neither node has the binary at all.
+    k8s first because that is where ~50 of the ~55 services live.
     """
     if docker:
         # daniel-pi is the only Docker host left, and probe.py runs on daniel-box, so this is
@@ -402,7 +397,7 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
     # wrong cluster, but the gate checks first so the refusal is one line with the container
     # name rather than an exception out of the first fetch. Without any check, `probe.py health`
     # run after a `-e target=daniel-stage` deploy gated production's workload and exited 0 — a
-    # green verdict about a cluster the deploy never touched (#1663).
+    # green verdict about a cluster the deploy never touched.
     served_name = served_cluster() if served is _UNSET else cast("str | None", served)
     refusal = cluster_refusal(cluster, served_name)
     if refusal:

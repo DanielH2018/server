@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Tests for the SessionStart banner's deferred-image-bump line (issue #2470).
+"""Tests for the SessionStart banner's deferred-image-bump line.
 
 A BROAD tick returns before the k8s arm runs, so it merges a promoted image bump and never
 applies it. `behind_since` is empty on that path, the defer-and-alert post fires once, and no
 later tick's range carries the bump again — `k8s_deferred` is the only durable record.
-monitor-bridge read it from the day it existed (#2449); this line is where it reaches the
+monitor-bridge read it from the day it existed; this line is where it reaches the
 session that can clear it with one deploy.
 
 Every test drives `parked_deployer_problems` through its injected seams rather than patching

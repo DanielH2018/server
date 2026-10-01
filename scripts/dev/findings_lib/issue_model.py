@@ -1,11 +1,11 @@
 """The finding vocabulary and the pure reads over a gh issue: no gh, no shell, no argv.
 
-One issue per fingerprint is the rule that makes the register a register, so the fingerprint
-and the trailer that carries it live here rather than beside the code that files them. The
-same goes for the `## Verify-by` section: `findings.py open` writes it and `findings.py
-verify` reads it back, and neither owns the format. That section holds prose — a description
-of how to check the finding — and `parse_verify_by` also reads the fenced shell command every
-body filed before 2026-09-06 carries, because those bodies are still in the register.
+One issue per fingerprint is the rule that makes the register a register, so the fingerprint and
+the trailer that carries it live here rather than beside the code that files them. The same goes
+for the `## Verify-by` section: `findings.py open` writes it and `findings.py verify` reads it
+back, and neither owns the format. That section holds prose — a description of how to check the
+finding — and `parse_verify_by` also reads the fenced shell command that older bodies carry,
+because those bodies are still in the register.
 
 Everything here takes plain values and returns plain values. `findings_lib/plans.py` turns these
 answers into gh argv, `findings_lib/gh_calls.py` runs them, and `findings.py` is the CLI over both.
@@ -30,8 +30,8 @@ DOMAINS = (
 # The two closes nothing reopens. A finding closes as `fixed` (completed), or as one of these
 # two, which close as not planned and carry a label of the same name: `refuted` means a
 # skeptic disproved it, `accepted` means it is TRUE and the operator chose to live with it.
-# `plan_open` returning early on both is the whole point — without `accepted`, an accepted
-# trade-off had to be closed by hand, and the next review re-filed it as a regression.
+# `plan_open` returning early on both is the whole point — otherwise an accepted trade-off
+# would have to be closed by hand, and the next review would re-file it as a regression.
 NO_REOPEN = frozenset(("refuted", "accepted"))
 
 # name -> (colour, description). Colours are Catppuccin Mocha so the label set reads as one
@@ -96,16 +96,16 @@ _REOBSERVED = "Re-observed"
 # to the end of the body. DOTALL so `.` crosses the paragraph's newlines.
 #
 # The heading must be `## Verify-by` ALONE on its line. `[ \t]*$` rather than `\s*` is
-# load-bearing, and the whole reason a wider match is not used: #1308, #1313 and #1351 each
-# carry a `## Verify-by, deliberately omitted` heading whose body explains why they have no
+# load-bearing, and the whole reason a wider match is not used: some bodies carry a `##
+# Verify-by, deliberately omitted` heading whose body explains why they have no
 # instructions. A heading pattern that admitted a suffix would read those explanations back
 # as the instructions themselves — the register would report three findings as verifiable
 # when what their sections say is the opposite.
 _VERIFY_BY_RE = re.compile(
     r"^## Verify-by[ \t]*\n(.*?)(?=^## |^---[ \t]*$|\Z)", re.M | re.S
 )
-# A body filed before 2026-09-06 stores a shell command inside a fence. Seventeen of them are
-# in the register and every one is still valid prose once the fence comes off.
+# An older body stores a shell command inside a fence. Seventeen of them are in the register
+# and every one is still valid prose once the fence comes off.
 _FENCED_RE = re.compile(r"\A```[^\n]*\n(.*?)\n?```[ \t]*\Z", re.S)
 
 
@@ -142,8 +142,8 @@ def parse_verify_by(body: str) -> str | None:
     parses. A body fetched from the API can carry CRLF line endings, so they are normalized
     first.
 
-    A fence around the whole section is stripped, which is what keeps every body filed before
-    2026-09-06 readable: `open --verify-by` used to store a shell command in a code block.
+    A fence around the whole section is stripped, which keeps older bodies readable: `open
+    --verify-by` once stored a shell command in a code block.
     """
     m = _VERIFY_BY_RE.search((body or "").replace("\r\n", "\n"))
     if not m:
@@ -159,7 +159,7 @@ def parse_verify_by(body: str) -> str | None:
 # in a file extension, the first segment a bare directory name (`scripts`, `.claude`) so a
 # hostname (`docs.local.example.com/...`) never matches. An optional `:<line>` is dropped.
 # Files only — a directory citation (`ansible/roles/k8s/monitor-bridge/`) is the role-level
-# grouping the fan-out already does, and the shared-code hazard #1798 records is one FILE.
+# grouping the fan-out already does, and the shared-code hazard is one FILE.
 _CITED_PATH_RE = re.compile(
     r"(?<![\w/.:-])(\.?[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)(?::\d+)?(?![\w/])"
 )
@@ -175,12 +175,9 @@ def cited_paths(body: str) -> list[str]:
 
     The trailer is cut first: it is `findings.py`'s own text, not the finding's.
 
-    This is the input to the fan-out's file-level collision check (#1798): two issues that
-    cite one script are one batch, whatever their `domain` label says — #1780, #1784 and #1782
-    all carried `backup-observability`, and two of them were dispatched to two agents that
-    wrote the same regex into `scripts/diagnostics/probe_lib/alerts.py`. The `--file` an
-    issue was filed with lands only in the fingerprint, so the body's own citations are the
-    record.
+    This is the input to the fan-out's file-level collision check: two issues that cite one
+    script are one batch, whatever their `domain` label says. The `--file` an issue was filed
+    with lands only in the fingerprint, so the body's own citations are the record.
     """
     text = _TRAILER_RE.sub("", (body or "").replace("\r\n", "\n"))
     return sorted({m.group(1) for m in _CITED_PATH_RE.finditer(text)})
@@ -200,8 +197,7 @@ def not_before(issue: dict) -> date | None:
     Read from a `not-before:<YYYY-MM-DD>` LABEL, not a body trailer, and on purpose: this
     repo is public, so a trailer needs the author check `current_claim` does, while only a
     collaborator can apply a label. Being a label also means it expires on its own — the
-    callers compare it to today and nobody has to clear it, which is what `manual` lacks and
-    why #1288 was claimed and released six times (#1739).
+    callers compare it to today and nobody has to clear it, which is what `manual` lacks.
 
     A label whose date does not parse counts as no deferral: `issue_rows` feeds the docs
     cron, which must not fall over on a hand-typed label. Several labels take the LATEST
@@ -272,7 +268,7 @@ _RELEASE_RE = re.compile(r"^Released: `([^`\n]+)`\s*$", re.M)
 # A claim trailer is therefore only trusted from the operator: without this check a drive-by
 # comment reading ``Released: `<branch>` `` closed a live claim — handing an issue somebody
 # was working to a second session — and one reading ``Claim: `<any live branch>` `` withheld
-# an issue from `next` and made `claim` refuse it for as long as that branch existed (#1280).
+# an issue from `next` and made `claim` refuse it for as long as that branch existed.
 #
 # TWO SIGNALS, EITHER SUFFICES. `viewerDidAuthor` is true for the account gh is authenticated
 # as, which is the operator in a session and in the docs-refresh cron alike. The association
@@ -297,7 +293,7 @@ def is_operator_comment(comment: dict) -> bool:
 def _one_line(text: str) -> str:
     """``text`` with every line break collapsed to a space.
 
-    THE PROSE ABOVE A TRAILER IS PARSED TOO (#1284). `current_claim` tests `_CLAIM_RE` before
+    THE PROSE ABOVE A TRAILER IS PARSED TOO. `current_claim` tests `_CLAIM_RE` before
     `_RELEASE_RE` on the WHOLE comment body, and `release_comment` puts the reason above the
     trailer — so a reason carrying a line ``Claim: `x` `` makes a release read as a claim by
     `x`. That is not a hypothetical hand-typed `--reason`: `cmd_reap` builds its own reason
@@ -320,7 +316,7 @@ def validate_worktree_name(name: str) -> str | None:
     `_CLAIM_RE` captures `[^`\\n]+` between backticks, so a name holding a backtick or a line
     break writes a comment and a label and then fails to parse its own trailer on read-back —
     and `cmd_claim` reported `lost the race to \\`None\\``, telling the operator they lost a
-    race that never happened (#1284). Refusing the name up front is the fix; the read-back
+    race that never happened. Refusing the name up front is the fix; the read-back
     message below it is the second half, for a read that comes back empty for any other
     reason.
     """
@@ -361,7 +357,7 @@ def release_comment(worktree: str, when: str, reason: str | None) -> str:
     """The comment body that releases ``worktree``'s claim.
 
     The reason is collapsed to one line — see `_one_line` for why a multi-line reason turns
-    a release into a claim by whoever the reason names (#1284).
+    a release into a claim by whoever the reason names.
     """
     why = f" — {_one_line(reason)}" if reason else ""
     return f"Released by `{worktree}` at {when}{why}\n\nReleased: `{worktree}`\n"
@@ -370,7 +366,7 @@ def release_comment(worktree: str, when: str, reason: str | None) -> str:
 # What `gh issue view --json comments` returns at most: its GraphQL query asks for
 # `comments(first: 100)` and nothing paginates. Past this the fold stops seeing new
 # trailers — a release at #101 would leave the issue claimed forever, and a claim at #101
-# would make `cmd_claim`'s read-back report a race against nobody (#1284). Latent while the
+# would make `cmd_claim`'s read-back report a race against nobody. Latent while the
 # busiest issue in the register carries a handful of comments, so this WARNS rather than
 # changing the read: a wrong claim verdict that announces itself is the point.
 COMMENT_PAGE_CAP = 100
@@ -396,7 +392,7 @@ def ordered_comments(issue: dict) -> list[dict]:
 
     THE ORDER IS THE PROTOCOL. `current_claim` folds forward and implements FIRST WRITER
     WINS, so the fold's answer is only correct if the list really is oldest-first. gh returns
-    them that way — measured ascending across 17 issues — but nothing enforced it (#1284).
+    them that way — measured ascending across 17 issues — but nothing enforced it.
 
     SORTS ONLY WHEN EVERY COMMENT CARRIES A TIMESTAMP. A mixed list is the dangerous case: a
     key of `c.get("createdAt") or ""` hoists every unstamped comment to the front, which can
@@ -472,8 +468,8 @@ PR_REPO = "DanielH2018/server"
 # work `next` exists to prevent. The optional `owner/repo` group is captured rather than
 # pinned to `PR_REPO` in the pattern, so `pr_refs` can tell a same-repo reference (withheld)
 # from one aimed at another repository (ignored): `Closes DanielH2018/dotfiles#558` must not
-# withhold server issue #558 (#2119). GitHub also closes on the full URL,
-# `Closes https://github.com/DanielH2018/server/issues/558` (#2189); that arm captures its
+# withhold server issue #558. GitHub also closes on the full URL,
+# `Closes https://github.com/DanielH2018/server/issues/558`; that arm captures its
 # `owner/repo` into a second group, so a match is (url_repo, slug_repo, number) with exactly
 # one of the first two set.
 _PR_REF_RE = re.compile(

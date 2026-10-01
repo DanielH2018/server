@@ -64,13 +64,11 @@ def test_a_poll_on_a_module_that_observes_nothing_is_not_a_gate(widget_role) -> 
 
 
 def test_a_trailing_comment_arguing_against_a_wait_is_not_a_gate(widget_role) -> None:
-    """The fifth instance of this slice's running defect, pinned.
+    """A trailing comment must not credit a gate.
 
-    Measured before the fix: a task carrying a TRAILING
-    `# we deliberately do not use wait --for=condition=complete` satisfied
-    `_has_completion_gate`, because the first branch was a whole-file substring test while the
-    stripping only removed whole-line comments. configarr carried a comment of exactly that
-    kind. Two shapes, closed by two different mechanisms: on a plain scalar YAML itself drops
+    A task carrying a TRAILING `# we deliberately do not use wait --for=condition=complete`
+    would satisfy a whole-file substring test whose stripping removed only whole-line
+    comments. Two shapes, closed by two different mechanisms: on a plain scalar YAML itself drops
     the comment, so reading the parsed task instead of the file text is what closes that one;
     inside a `shell: |` block scalar the `#` is literal content and YAML keeps it, so
     `_strip_comments` is what closes that one.
@@ -92,10 +90,10 @@ def test_a_trailing_comment_arguing_against_a_wait_is_not_a_gate(widget_role) ->
 
 
 def test_a_debug_describing_a_wait_is_not_a_completion_gate(widget_role) -> None:
-    """Measured before the fix: a debug describing a wait satisfied the completion-gate check.
+    """A debug describing a wait must not satisfy the completion-gate check.
 
-    An `ansible.builtin.debug` whose `msg:` names the wait satisfied `_has_completion_gate`, because
-    `_task_command_text`'s module discipline was applied in `_batch_gated_names` and not here.
+    An `ansible.builtin.debug` whose `msg:` names the wait would satisfy a check that skips
+    `_task_command_text`'s module discipline.
     """
     role = widget_role(
         "- name: Tell the operator what to do\n"
@@ -133,10 +131,10 @@ def test_a_dead_wait_is_not_a_completion_gate(widget_role) -> None:
 
 
 def test_failure_escalation_needs_a_fail_task_that_runs(widget_role) -> None:
-    """W2's half: `"ansible.builtin.fail" in text` credited a comment and a dead task.
+    """A `"ansible.builtin.fail" in text` check credits a comment and a dead task.
 
     This is the only thing standing behind `_batch_gated_names` crediting every
-    `k8s/cronjob-gate` caller, so a fail-open here reaches five promoted roles.
+    `k8s/cronjob-gate` caller, so a fail-open here reaches every promoted caller.
     """
     live = widget_role(
         "- name: Fail on a bad image\n  ansible.builtin.fail:\n    msg: bad image\n",

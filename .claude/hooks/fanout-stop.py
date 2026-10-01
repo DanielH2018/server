@@ -102,7 +102,7 @@ def open_item(
         root: the fan-out worktree, read for a `land<n>.log` when a landing is owed.
         lands: whether this batch's brief tells it to land the PR with `land.sh`. On the
             landing host a PR URL alone is not a finish — `gh pr create` returning says
-            nothing about whether the PR merged and deployed (issue #2890).
+            nothing about whether the PR merged and deployed.
     """
     if BLOCKER.search(message):
         return None

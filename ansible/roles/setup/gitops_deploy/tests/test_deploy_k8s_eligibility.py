@@ -177,7 +177,7 @@ def test_split_k8s_pilot_scope_restricts_eligibility():
 
 
 def test_split_k8s_empty_pilot_means_the_denylist_governs():
-    # Slice 3 (2026-08-16) cleared the pilot list. An empty pilot must mean "everything not
+    # An empty pilot must mean "everything not
     # denylisted", never "nothing" — the opposite reading of the same falsy value, and the one
     # that would silently disarm the feature instead of widening it.
     paths = [_SPEEDTEST_DEFAULTS, _defaults_for("littlelink"), _defaults_for("sonarr")]
@@ -187,9 +187,8 @@ def test_split_k8s_empty_pilot_means_the_denylist_governs():
 
 
 def test_split_k8s_denies_the_services_the_pilot_used_to_mask():
-    # These six sat outside the denylist only because the pilot named neither them nor anything
-    # else; each matches an exclusion class the design already publishes. Clearing the pilot
-    # without adding them would have armed all six at once.
+    # Each of these six matches an exclusion class the design already publishes; with an empty
+    # pilot, only the denylist keeps all six from being armed.
     masked = ("qbittorrent", "bazarr", "tdarr", "livesync", "valheim", "valheim-stats")
     cs = _split([_defaults_for(s) for s in masked], denylist=set(masked))
     assert cs.k8s_deploy == set()
@@ -197,11 +196,10 @@ def test_split_k8s_denies_the_services_the_pilot_used_to_mask():
 
 
 def test_split_k8s_promotes_beside_a_pi_docker_change():
-    """#2836: the bump is promoted, and the Pi half rides along merged-and-unapplied.
+    """The bump is promoted, and the Pi half rides along merged-and-unapplied.
 
-    The early return this replaces was for the Docker deploy and health gate the k8s branch
-    would have skipped. #2805 removed that arm, so no `has_gitops` host applies a Pi role and
-    the k8s branch skips nothing. `deploy_handlers.log_pi_changes` names the Pi half.
+    No `has_gitops` host applies a Pi role, so the k8s branch skips nothing.
+    `deploy_handlers.log_pi_changes` names the Pi half.
     """
     paths = [
         _SPEEDTEST_DEFAULTS,
@@ -214,11 +212,10 @@ def test_split_k8s_promotes_beside_a_pi_docker_change():
 
 
 def test_split_k8s_promotes_beside_a_pi_shared_change():
-    """The other Pi shape, which the removed guard never read at all.
+    """The other Pi shape.
 
-    `roles/containers/common/` set `cs.pi_shared` and not `cs.services`, so a bump sharing a
-    tick with it was already promoted while one sharing with a Pi service role was not — the
-    inconsistency #2836 was filed about.
+    `roles/containers/common/` sets `cs.pi_shared` and not `cs.services`, so a bump sharing a
+    tick with it and one sharing a tick with a Pi service role must both be promoted.
     """
     paths = [_SPEEDTEST_DEFAULTS, "ansible/roles/containers/common/tasks/main.yml"]
     cs = _split(paths, denylist={"traefik"})
@@ -233,7 +230,7 @@ def test_split_k8s_combined_push_deploys_eligible_defers_denylisted():
     assert cs.k8s == {"traefik"}
 
 
-# ── the claim-declaring cap (2026-08-22 review H2) ──────────────────────────────────────────
+# ── the claim-declaring cap ──────────────────────────────────────────
 # Each claim-declaring service pays its own snapshot+revert phase SERIALLY inside the single
 # rollback playbook run, while K8S_ROLLBACK_TIMEOUT_S is derived for the worst SINGLE one — so
 # two co-batched already exceed it and killpg lands mid-revert, after volume-revert has scaled

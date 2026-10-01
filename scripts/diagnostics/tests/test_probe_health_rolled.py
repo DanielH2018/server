@@ -1,9 +1,8 @@
-"""`probe.py health` tells a workload that ROLLED from one that was merely healthy — issue #1867.
+"""`probe.py health` tells a workload that ROLLED from one that was merely healthy.
 
-THE GAP. The gate reads rollout-complete plus no restart in 180s, and the pods that were
-already running satisfy both. A deploy that matched a host, changed the rendered manifests,
-and rolled no pod read `settled`. The recap check (#1814, exit 78) catches only the no-host
-case.
+THE GAP. The gate reads rollout-complete plus no restart in 180s, and the pods that were already
+running satisfy both. A deploy that matched a host, changed the rendered manifests, and rolled no
+pod read `settled`. The recap check (exit 78) catches only the no-host case.
 
 THE PREDICATE. Not the clock: "a pod newer than the deploy's start" fails every idempotent
 re-run, which is every `land.sh` of a change that leaves the rendered manifests alone. The

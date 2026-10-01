@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Tests for the Grafana dashboard validator.
 
-The duplicate-uid rule is the one with a live incident behind it. Grafana does not resolve a
-duplicate uid by picking a winner — its file provisioner disables database writes for the whole
-provider, so ONE duplicated pair freezes every dashboard in the estate at its last-written
-version while the pod stays 1/1 Running and its health probe stays green.
+Grafana does not resolve a duplicate uid by picking a winner — its file provisioner disables
+database writes for the whole provider, so ONE duplicated pair freezes every dashboard in the
+estate at its last-written version while the pod stays 1/1 Running and its health probe stays
+green.
 
 Run: uv run pytest scripts/validate/tests/test_validate_grafana_dashboards.py
 """
@@ -18,8 +18,8 @@ from validate import grafana_dashboards as vgd
 
 
 def test_a_uid_claimed_by_two_files_is_flagged():
-    """The rejecting half — the exact shape of the 2026-08-28 incident, where running the
-    exporter wrote slug-named copies beside hand-named originals."""
+    """The rejecting half: running the exporter writes slug-named copies beside hand-named
+    originals."""
     errors = vgd.duplicate_dashboard_uids(
         {
             "longhorn-storage": [
@@ -83,10 +83,7 @@ def test_the_census_of_an_empty_tree_fails_the_non_vacuity_check(tmp_path):
 
 
 def test_the_real_tree_has_no_duplicate_uids():
-    """The regression guard over the real dashboards.
-
-    19 boards, all uids distinct when the eight legacy copies were deleted.
-    """
+    """The regression guard over the real dashboards."""
     assert set(vgd.dashboard_uids()) >= REQUIRED_DASHBOARD_UIDS
     assert [e for e in vgd.validate() if "claimed by" in e] == []
 

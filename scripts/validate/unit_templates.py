@@ -98,8 +98,8 @@ RULES_TEMPLATE = (
 # v257 dropped the ` name` and squared the section brackets
 # (src/shared/conf-parser.c: "Unknown key name '%s' in section '%s', ignoring." →
 # "Unknown key '%s' in section [%s], ignoring."), so the old `Unknown key name` alternative
-# matched nothing on systemd 259 — the version the ubuntu-26.04 runner image carries — and
-# this check went vacuous for the exact class it exists to catch (GitHub issue #2302).
+# matches nothing on systemd 259 — the version the ubuntu-26.04 runner image carries — and
+# this check would go vacuous for the exact class it exists to catch.
 # The other two alternatives are unchanged from v255 through v259.
 _FAIL_MESSAGE = re.compile(r"Unknown key|Failed to parse|Assignment outside of section")
 

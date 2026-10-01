@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""`deploy.sh --tags <shared role>` deploys every role that runs it (issue #2704).
+"""`deploy.sh --tags <shared role>` deploys every role that runs it.
 
 A shared k8s role has no `containers_list` entry, so Ansible selects nothing for its name and
-exits 0. PR #2701 changed only `volume-snapshot/tasks/claim.yml` and had to wait for the next
-full deploy. `deploy_run.expand_shared_roles` swaps the name for its callers' tags before any
+exits 0. `deploy_run.expand_shared_roles` swaps the name for its callers' tags before any
 gate runs, and these cases drive it against a throwaway repo whose role graph they write.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_expands_shared_roles.py

@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 """A role that dispatches on a has_* flag must handle both values of it.
 
-WHY THIS IS A TEST AND NOT A COMMENT. docker_install was install-only, gated in
-initial_setup.yml by `when: has_docker`. Flipping a host to has_docker: false therefore
-skipped the role entirely, and nothing declarative reaped what Docker left behind -- so
-`has_docker: false` in host_vars described an intention that no code converged to.
+WHY THIS IS A TEST AND NOT A COMMENT. A role gated in initial_setup.yml by `when: has_docker`
+is install-only: flipping a host to has_docker: false skips the role entirely, and nothing
+declarative reaps what Docker left behind, so `has_docker: false` in host_vars describes an
+intention that no code converges to.
 
-The bill arrived twice. daniel-server's 2026-08-14 uninstall was done imperatively and
-missed a still-enabled docker-compose unit and two crons. Then docker-ce was reinstalled
-on 2026-08-19 and ran for eight days, because the flag that said it should not be there
-drove nothing on the false branch.
-
-The fix was to make the role dispatch internally on the flag, with an install half and a
-teardown half. This asserts the shape stays that way: a tasks/main.yml that includes one
+So docker_install dispatches internally on the flag, with an install half and a teardown
+half. This asserts the shape stays that way: a tasks/main.yml that includes one
 file `when: <flag>` must also include one `when: not <flag>`. Roles gated in a playbook
 rather than internally are not matched -- the pattern here is specifically the dispatcher.
 
@@ -31,10 +26,10 @@ from _role_census import role_dirs
 SETUP_ROLES = ANSIBLE / "roles" / "setup"
 
 # The DISPATCH shape: a task that pulls in a whole file on a bare has_* flag. Matching every
-# bare `when: has_*` instead was too loose -- a plain task gated on a capability flag is not a
-# dispatcher and has no teardown half to write. That over-match first bit on 2026-09-02, when
-# sops_setup gated one task on `has_repo_checkout` and was told to write a teardown for a
-# collections install. Read from the parsed YAML rather than by regex, so the include and its
+# bare `when: has_*` instead would be too loose -- a plain task gated on a capability flag is
+# not a dispatcher and has no teardown half to write (sops_setup gates one task on
+# `has_repo_checkout` for a collections install). Read from the parsed YAML rather than by
+# regex, so the include and its
 # `when` are known to belong to the same task.
 _INCLUDE_KEYS = ("ansible.builtin.include_tasks", "ansible.builtin.import_tasks")
 _NEGATIVE = re.compile(r"^\s*when:\s*not\s+(has_\w+)\s*$", re.M)

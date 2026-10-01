@@ -2,10 +2,9 @@
 """Guards that a built-in Renovate manager never shadows a custom one.
 
 Renovate runs built-in managers alongside custom ones, and both can match the same file. When they
-do, every bump opens TWO PRs — and only one carries the packageRules keyed on
-`matchManagers: ["custom.regex"]`. community.general 13.3.0 arrived exactly that way on 2026-08-20:
-#257 through the grouped custom manager, and #204 through the built-in `ansible-galaxy` manager,
-outside the manual-lockstep group and outside its deliberate `automerge: false`.
+do, every bump opens TWO PRs — and only one carries the packageRules keyed on `matchManagers:
+["custom.regex"]`. The other arrives through the built-in `ansible-galaxy` manager, outside the
+manual-lockstep group and outside its deliberate `automerge: false`.
 
 What let it hide for months is that the config asserted the opposite in prose — the custom
 manager's own description said the built-in one "isn't reliably matching this path here". Renovate's

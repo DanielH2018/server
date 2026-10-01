@@ -11,8 +11,8 @@ the pod log to Loki.
 This guard closes that by shape instead of by list: any field whose NAME looks like a
 credential must be hidden from the repr, whether or not anyone remembered a sentinel.
 
-The census reads `fields(Config)` rather than grepping the four `config_*.py` modules the
-issue's remedy named. `repr(cfg)` is GENERATED from `fields(Config)`, so that set is not a
+The census reads `fields(Config)` rather than grepping the four `config_*.py` modules.
+`repr(cfg)` is GENERATED from `fields(Config)`, so that set is not a
 proxy for the leak surface — it is the leak surface. A grep over four hardcoded module paths is
 the proxy, and it would miss a credential added to a fifth domain module composed into `Config`
 later. Each domain base is also constructed standalone by its builder (`config_io.io_config()`
@@ -38,7 +38,7 @@ _NOT_A_CREDENTIAL: frozenset[str] = frozenset()
 
 # The non-vacuity anchor. A census that finds nothing — a broken pattern, a moved module, a
 # `Config` that failed to compose its bases — makes every assertion below vacuously true. These
-# are the 16 credential-bearing fields PR #1147 marked; the census must still contain all of
+# are the 16 credential-bearing fields marked `repr=False`; the census must still contain all of
 # them, and the failure message names whichever went missing.
 _KNOWN_CREDENTIAL_FIELDS = frozenset(
     {

@@ -1,4 +1,4 @@
-"""The launch gates: what `launch` refuses before it spends an ssh connection (#2889).
+"""The launch gates: what `launch` refuses before it spends an ssh connection.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_launch_gates.py
 """
@@ -32,7 +32,7 @@ def _launch(tools, tmp_path, *args):
 
 
 def test_live_batches_from_an_earlier_run_count_against_the_hosts_cap(tmp_path, capsys):
-    """#2889: headroom alone underprices agents launched minutes ago, so count them."""
+    """Headroom alone underprices agents launched minutes ago, so count them."""
     earlier = [
         Batch(f"{n}", "daniel-box", "/w", "b", "u", [n], "t") for n in (91, 92, 93)
     ]

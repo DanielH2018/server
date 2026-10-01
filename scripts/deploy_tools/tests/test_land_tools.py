@@ -86,7 +86,7 @@ def test_the_tick_runs_from_beside_land_py(monkeypatch):
 
 
 def test_helpers_whose_code_must_match_are_imported_from_beside_land_py():
-    """Issue #851: a helper this script passes new flags to must be the same release."""
+    """A helper this script passes new flags to must be the same release."""
     assert Path(tools.await_ci.__file__).resolve().parent == tools.HERE
     assert Path(tools.land_tags.__file__).resolve().parent == tools.HERE
     gate_file = sys.modules[tools.health_gate.__module__].__file__
@@ -121,9 +121,9 @@ def _fake_fuser_then_ps(monkeypatch, fuser_stdout: str, ps_stdout: str = ""):
 
 
 def test_lock_holder_names_the_pid_alongside_etimes_and_command(monkeypatch):
-    """bash's printed `lock held by pid $pid (etimes, command): ...` line named the pid
-    separately from the etimes+command ps read; this single string is the only value
-    callers get, so the pid must be folded in here rather than dropped (#1085 item 3)."""
+    """The printed `lock held by pid $pid (etimes, command): ...` line names the pid
+    together with the etimes+command ps read; this single string is the only value
+    callers get, so the pid must be folded in here rather than dropped."""
     _fake_fuser_then_ps(monkeypatch, "12345", "42 ansible-playbook --tags sonarr")
     assert (
         tools.lock_holder()
@@ -387,7 +387,7 @@ def test_the_gate_snapshot_lands_in_the_pinned_root_its_docstring_names(
 def test_the_watched_tick_inherits_the_working_directory(monkeypatch):
     """`cwd=None`, not `HERE`.
 
-    The SCRIPT comes from beside land.py (issue #851), but pinning the working directory is
+    The SCRIPT comes from beside land.py, but pinning the working directory is
     the re-aiming tools.py's own docstring warns about -- deploy.sh renders from its cwd and
     deploy_tags reads ranges relative to it.
     """

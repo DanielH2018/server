@@ -1,10 +1,9 @@
 """Guards for docs-refresh.sh's commit-failure path (initial_setup role, tag `crons`).
 
-One failed commit in this cron used to park EVERY deploy on daniel-box. `git commit || git reset`
-unstages and nothing more, so the regenerated pages stayed MODIFIED in the primary checkout;
+One failed commit in this cron can park EVERY deploy on daniel-box. `git commit || git reset`
+unstages and nothing more, so the regenerated pages stay MODIFIED in the primary checkout;
 deploy_git.py reads any porcelain output as dirty and gitops_deploy.py takes its healthy-skip
-path, still writing `last_run`. It fired live on 2026-09-04 at 18:18:19 and a human cleaned the
-tree at 18:23:15 — as a human had after each of the three earlier commit failures.
+path, still writing `last_run`. Only a human cleaning the tree ends it.
 
 The functions below are executed, not pattern-matched. Each one is lifted out of the template by
 name and sourced into a scratch git repository, so what these tests exercise is the production
@@ -13,7 +12,7 @@ can go red:
 
 - **restore_generated_tree leaves the checkout clean**, for a modified page and for a newly
   generated one — an untracked leftover parks the deployer exactly as a modified one does. The
-  rejecting half runs the old `git reset` body against the same fixture and requires it dirty.
+  rejecting half runs a bare `git reset` body against the same fixture and requires it dirty.
 - **dirty_tree_status distinguishes this cron's own dirt from a human's**, via a stamp outside
   the repo. Path-based attribution cannot: a human running build_docs.py by hand dirties the
   same files.
@@ -180,7 +179,7 @@ def test_the_restore_does_not_touch_a_hand_edit_it_never_staged(tmp_path):
 
 
 def test_the_restore_reports_a_leftover_a_hook_wrote_after_git_add(tmp_path):
-    """ACCEPT: the case that decides the check's scope, and the reason 2026-09-04 went wrong.
+    """ACCEPT: the case that decides the check's scope.
 
     prek's gen-doc-fragments hook regenerates the WHOLE fragment set, so it rewrites fragments
     this run's generators never touched. That happens after `git add`, so the file is dirty, it
@@ -200,7 +199,7 @@ def test_the_restore_reports_a_leftover_a_hook_wrote_after_git_add(tmp_path):
 
 
 def test_a_reset_only_failure_path_leaves_the_tree_dirty(tmp_path):
-    """REJECT: the pre-fix body, minimised, against the same fixture.
+    """REJECT: a bare `git reset` body, minimised, against the same fixture.
 
     Without this half a restore that silently stopped restoring would be indistinguishable from
     one that works — the fixture would simply never have been dirty.
@@ -285,8 +284,8 @@ def _alert(log_text: str, tmp_path: Path) -> str:
 def test_the_alert_names_the_failing_hook(tmp_path):
     """ACCEPT: prek keeps going past a failure and mkdocs-strict is the last hook.
 
-    The 400-byte tail of the whole run therefore always ends `...Passed`. This log is the shape
-    of 2026-09-04's: the failure is early and buried under far more than 400 bytes of later
+    The 400-byte tail of the whole run therefore always ends `...Passed`. This log has the shape
+    of the real failure: the failure is early and buried under far more than 400 bytes of later
     output.
     """
     log = (
@@ -340,8 +339,8 @@ def _hook_rewrites_a_staged_page(repo: Path) -> None:
 def test_the_kept_log_names_the_file_a_hook_rewrote(tmp_path):
     """ACCEPT: the evidence capture names the modified path.
 
-    The 2026-09-06 18:18 failure said `files were modified by this hook` over 9063 passing tests
-    and named no file, so the recurrence could not be attributed (#1436).
+    The log line `files were modified by this hook` names no file, so a recurrence cannot be
+    attributed without this capture.
     """
     repo, stamp = _tree(tmp_path), tmp_path / "stamp"
     _stage_a_regeneration(repo, stamp)

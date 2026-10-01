@@ -1,4 +1,4 @@
-"""The tick, retried while the unit's own flock gives up -- one implementation (#1013).
+"""The tick, retried while the unit's own flock gives up -- one implementation.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tick.py
 """
@@ -35,7 +35,7 @@ def test_exit_75_is_not_a_failure(landing, capsys):
 
 
 def test_an_outright_failure_dies(landing):
-    """#1031: the tick failing is deploy-failed, not the verdict-less `aborted` bucket."""
+    """The tick failing is deploy-failed, not the verdict-less `aborted` bucket."""
     ln, _ = landing(Fakes(tick=[1]))
     with pytest.raises(Outcome) as exc:
         tick.run_tick(ln)
@@ -45,7 +45,7 @@ def test_an_outright_failure_dies(landing):
 
 
 def test_the_lock_holder_is_sampled_before_the_attempt(landing):
-    """#1031: read after the losing attempt, the holder has usually already released.
+    """Read after the losing attempt, the holder has usually already released.
 
     Two halves, because the recorded value alone cannot tell the orders apart -- a
     post-attempt read consumes the same first fake answer. The ORDER assertion is the one
@@ -96,9 +96,9 @@ def test_a_failed_kick_does_not_end_the_landing(landing, capsys):
 
 
 def test_a_kick_that_joined_a_run_in_flight_is_not_booked_as_started(landing, capsys):
-    """Issue #1843: exit 4 is "a tick was already running, none was started". That run fetched
-    before the merge, so it does not carry this landing's commit; reading it as `started` is
-    what let the primary sit behind until the timer."""
+    """Exit 4 is "a tick was already running, none was started". That run fetched
+    before the merge, so it does not carry this landing's commit; reading it as `started` would
+    let the primary sit behind until the timer."""
     ln, _ = landing(Fakes(tick=[4]))
     tick.kick_tick(ln)
     assert ln.ledger.kick == "joined"

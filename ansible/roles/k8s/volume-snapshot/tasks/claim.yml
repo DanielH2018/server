@@ -12,8 +12,7 @@
   tags: [deploy]
   # argv, not a folded `cmd:` string. `ansible.builtin.command` shlex-splits a `cmd`, so a
   # jsonpath is only safe there while it happens to contain no spaces — and a later edit that
-  # adds a `{range ...}` turns the whole call into a silently wrong one. Slice 4 shipped exactly
-  # that and made a branch dead code for a round. argv invokes no shell and has no quoting layer
+  # adds a `{range ...}` turns the whole call into a silently wrong one. argv invokes no shell and has no quoting layer
   # to get wrong.
   ansible.builtin.command:
     argv:
@@ -48,8 +47,8 @@
 
 - name: Name the pre-deploy snapshot for {{ volume_snapshot_claim }}
   tags: [deploy]
-  # The name is deterministic from service + deploy tag + claim + this run's token. 7b
-  # reconstructs `autodeploy-<svc>-<sha8>-<claim>` without being told what the CR was called, and
+  # The name is deterministic from service + deploy tag + claim + this run's token.
+  # k8s/volume-revert reconstructs `autodeploy-<svc>-<sha8>-<claim>` without being told what the CR was called, and
   # that string survives verbatim as a PREFIX of the real name — never as the whole name, because
   # the run token below makes it non-unique by design.
   #
@@ -59,13 +58,13 @@
   # of taking a second snapshot.
   #
   # The run-token suffix (main.yml, once per role run) exists so redeploying an older commit —
-  # the manual rollback this slice exists to enable — never collides with that commit's earlier
+  # a manual rollback — never collides with that commit's earlier
   # deploy. Without it, `autodeploy-<svc>-<sha8>-<claim>` alone would already name a Snapshot CR
   # from that earlier deploy, markRemoved but not yet gone, and `apply` would report "unchanged"
   # or fail against the markRemoved CR instead of taking a fresh snapshot. The consequence: one
-  # SHA can now own SEVERAL snapshots sharing the `autodeploy-<svc>-<sha8>-<claim>` prefix (a
-  # dirty tree deployed twice from the same commit is the other way to get here). 7b's prefix
-  # match is therefore not a unique lookup — it must pick the NEWEST of however many it finds.
+  # SHA can own SEVERAL snapshots sharing the `autodeploy-<svc>-<sha8>-<claim>` prefix (a
+  # dirty tree deployed twice from the same commit is the other way to get here). The revert's
+  # prefix match is therefore not a unique lookup — it must pick the NEWEST of however many it finds.
   #
   # `volume_snapshot_prefix` deliberately omits the tag AND the token: it is what the prune below
   # selects on, and it must match this service's snapshots from EVERY deploy, not just this one.
@@ -80,14 +79,14 @@
   #     snapshot ... is a linked-clone entrypoint: ... must be no more than 63 bytes
   #
   # Creation never builds that selector, so an over-long snapshot is created happily and can
-  # then never be pruned. It bit on 2026-08-22: `autodeploy-qbittorrent-8a74b5b8-
-  # qbittorrent-config-<token>` is 65 bytes, and the fourth deploy of the day — the first to
-  # prune past `volume_snapshot_retain` — died on it, as would every deploy after.
+  # then never be pruned. `autodeploy-qbittorrent-8a74b5b8-qbittorrent-config-<token>` is 65
+  # bytes, so the first deploy to prune past `volume_snapshot_retain` dies on it, as does every
+  # deploy after.
   #
-  # Nearly every claim here is named `<service>-<something>`, so the service name was being
-  # spent twice. Dropping the redundant copy takes the worst offender (home-assistant, 71) to
+  # Nearly every claim here is named `<service>-<something>`, so the service name would be
+  # spent twice. Dropping the redundant copy takes the longest name (home-assistant, 71) to
   # 55. `volume-revert` applies the IDENTICAL expression when it reconstructs this prefix — the
-  # two must stay in step or 7b silently matches nothing, which is why
+  # two must stay in step or the revert silently matches nothing, which is why
   # `ansible/tests/longhorn/test_snapshot_name_length.py` compares them rather than trusting a comment.
   #
   # Stripping is skipped when it would empty the segment (a claim named exactly for its
@@ -99,8 +98,8 @@
     volume_snapshot_name: >-
       autodeploy-{{ volume_snapshot_service }}-{{ volume_snapshot_sha.stdout | trim }}-{{ volume_snapshot_claim | regex_replace('^' ~ (volume_snapshot_service | regex_escape) ~ '-', '') | default(volume_snapshot_claim, true) }}-{{ volume_snapshot_run_token }}
 
-# The assert, not just the shortening. Shortening fixes the four claims that are over today;
-# this is what stops a fifth arriving unnoticed. The failure it replaces is the worst kind —
+# The assert, not just the shortening. Shortening alone would let a future over-long claim
+# arrive unnoticed; this assert stops it. The failure it replaces is the worst kind —
 # silent at creation, then a hard deploy failure three deploys later, in a different role, with
 # a message about linked clones that says nothing about names being too long.
 - name: Assert the snapshot name fits Longhorn's delete validation for {{ volume_snapshot_claim }}
@@ -116,7 +115,7 @@
       service or claim name, or shorten volume_snapshot_run_token.
     quiet: true
 
-# the snapshot-space cap (#1560)
+# the snapshot-space cap
 #
 # Longhorn does not prune when a volume's `spec.snapshotMaxSize` is reached — it REFUSES new
 # snapshots until some are deleted (longhorn.io/docs/1.12.1, Snapshot Space Management). This
@@ -259,7 +258,7 @@
 # there and the earlier of the two snapshots stands as the recovery point for both. Every other
 # run — a retry a moment later, a redeploy of an older commit, a dirty tree deployed twice — gets
 # its own token and its own snapshot; CLAUDE.md's "the tag's determinism" section records what
-# that means for 7b's prefix match.
+# that means for the revert's prefix match.
 - name: Take a pre-deploy Longhorn snapshot of {{ volume_snapshot_claim }}
   tags: [deploy]
   when: not (k8s_no_mutate | bool)
@@ -280,10 +279,8 @@
         volume: {{ volume_snapshot_volume }}
         createSnapshot: true
   become: true
-  # Its own register, read only by this task's own changed_when. #2740 removed the second,
-  # detached-path apply that made the distinct name load-bearing; the name stays distinct
-  # because a SKIPPED task still sets the variable it registers to, so any apply added back
-  # here must not share a register with this one.
+  # Its own register, read only by this task's own changed_when. A SKIPPED task still sets the
+  # variable it registers to, so any apply added here must not share a register with this one.
   register: volume_snapshot_apply_attached
   changed_when: "'created' in volume_snapshot_apply_attached.stdout"
 
@@ -312,15 +309,13 @@
   register: volume_snapshot_ready
   until: volume_snapshot_ready.stdout | default('') | split('|') | first == 'true'
   # Polls at volume_snapshot_poll_interval, the cadence the maintenance-attach waits below
-  # already use — not the hardcoded 5 this carried until 2026-08-22. Nothing here got faster;
-  # the deploy was paying poll granularity rather than snapshot time. Measured on a full deploy
-  # (pid 2004861): all 15 of these waits took 5.54-5.59s, which is one failed first poll plus a
-  # full five-second sleep. The snapshots were ready well inside that sleep — a Longhorn
-  # snapshot is a marker in the volume's chain, not a data copy, as volume_snapshot_timeout's
-  # own comment says.
+  # already use. A hardcoded 5 would make each wait one failed first poll plus a full
+  # five-second sleep, so the deploy would pay poll granularity rather than snapshot time: a
+  # Longhorn snapshot is a marker in the volume's chain, not a data copy, as
+  # volume_snapshot_timeout's own comment says.
   #
   # retries is derived from the interval so the timeout budget stays volume_snapshot_timeout
-  # seconds either way; only the granularity changed.
+  # seconds whatever the interval.
   retries: "{{ (volume_snapshot_timeout | int / volume_snapshot_poll_interval | int) | round | int }}"
   delay: "{{ volume_snapshot_poll_interval }}"
   # Suppressed so the tasks below can explain WHY, rather than Ansible aborting on the last
@@ -356,11 +351,9 @@
   failed_when: false
   register: volume_snapshot_volume_state
 
-# Every unready snapshot fails the deploy, including one on a detached volume. Until #2740 a
-# detached claim was attached in maintenance mode first and, when that failed, warned and
-# skipped — two drills (2026-08-21 task 6, and #2698 on 2026-09-27 for a never-attached volume)
-# measured Longhorn v1.12.1 snapshotting a detached volume on the ordinary path, so that branch
-# never ran on a deploy and was retired. `status.state` is still read above and named here: if
+# Every unready snapshot fails the deploy, including one on a detached volume: Longhorn v1.12.1
+# snapshots a detached volume on the ordinary path, a never-attached one included, so there is no
+# maintenance-mode branch. `status.state` is still read above and named here: if
 # Longhorn ever stops snapshotting a detached volume, this failure is where it surfaces, and the
 # state is what tells the operator that is what happened.
 - name: Fail on a snapshot that never became usable for {{ volume_snapshot_claim }}
@@ -403,7 +396,7 @@
 # retention window on the volume makes that impossible instead of merely unlikely.
 #
 # The volume filter is one comparison because kubectl's jsonpath has no `&&` — verified
-# 2026-08-21, `unrecognized character in action: U+0026`. markRemoved and the name prefix are
+# `unrecognized character in action: U+0026`. markRemoved and the name prefix are
 # therefore filtered in Jinja below.
 - name: List this service's live snapshots of {{ volume_snapshot_claim }}
   tags: [deploy]
@@ -482,7 +475,7 @@
 
 # `--wait=false` is not optional. A Snapshot CR carries a `longhorn.io` finalizer: the delete
 # sets `markRemoved: true` and waits for the volume to coalesce the data, and a default
-# `kubectl delete` blocks on that — measured hanging a drill for twelve minutes on 2026-08-21.
+# `kubectl delete` blocks on that — it hung a drill for twelve minutes.
 #
 # So the CR persisting after a successful delete is the expected outcome, not a failure. A
 # snapshot whose only child is `volume-head` cannot be folded away while the volume is attached
@@ -510,18 +503,16 @@
   # Defensive `default()` on both sides of the slice, for a run where
   # `volume_snapshot_live`/`volume_snapshot_keep` are never set (the "Choose which older
   # snapshots" task above shares this task's `k8s_no_mutate` guard, so it is skipped
-  # too). Verified 2026-08-21: when a task's `when:` does not reference `item` and evaluates
-  # false, Ansible skips it without templating `loop:` at all, so this is not observed to be
-  # reachable today — but relying on that rather than stating it costs nothing here, and it is
+  # too). When a task's `when:` does not reference `item` and evaluates
+  # false, Ansible skips it without templating `loop:` at all, so this is not reachable — but relying on that rather than stating it costs nothing here, and it is
   # exactly the "registered var from a skipped task" trap this repo has hit before. `default([])`
   # on an empty list slices to `[]` at any start index, which is why `default(1)` on the keep
   # side is only for symmetry, not because a bad value would otherwise matter.
   loop: "{{ (volume_snapshot_live | default([]))[(volume_snapshot_keep | default(1) | int) :] }}"
   changed_when: true
   # Tolerate ONE rejection: Longhorn 1.12's delete webhook refusing a snapshot whose name is
-  # over 63 bytes. Those snapshots were created before the naming fix above and cannot be
-  # deleted through the Kubernetes API at all, so without this every deploy dies here on a
-  # backlog it can do nothing about. 13 such snapshots existed across 4 volumes on 2026-08-22.
+  # over 63 bytes. Such snapshots cannot be deleted through the Kubernetes API at all, so
+  # without this every deploy dies here on a backlog it can do nothing about.
   #
   # Matched on the message rather than blanket-ignored, because every other prune failure is
   # still a real one — a webhook that is down, RBAC, a wedged finalizer — and swallowing those
@@ -533,16 +524,13 @@
     - "'must be no more than 63 bytes' not in (volume_snapshot_prune.stderr | default(''))"
 
 # A tolerated rejection is not a non-event: the snapshot stays, is selected for pruning again on
-# the next deploy, and is denied again. It costs no space — the eleven remaining CRs were
-# measured on 2026-09-27 to appear in no running engine's `status.snapshots`, so they pin no
-# blocks. See CLAUDE.md, "The 13 over-long CRs the prune retries and Longhorn refuses".
+# the next deploy, and is denied again. It costs no space — the remaining CRs appear in no running
+# engine's `status.snapshots`, so they pin no blocks. See CLAUDE.md, "The 13 over-long CRs the prune retries and Longhorn refuses".
 # Named here so it appears in the deploy output instead of only in a register nobody reads.
 #
-# The message names NO removal route, deliberately (#2733). It used to send the operator at the
-# Longhorn manager API — `?action=snapshotDelete` then `?action=snapshotPurge`, or the UI's
-# per-volume delete, which is the same call — and neither can work: on longhorn-manager v1.12.1
-# `snapshotDelete` acts on the engine chain and never touches the CR, and `snapshotCRDelete` is
-# a Kubernetes DELETE the same webhook denies. The role's CLAUDE.md holds the reading of the
+# The message names NO removal route, deliberately: on longhorn-manager v1.12.1 the manager
+# API's `snapshotDelete` (also the UI's per-volume delete) acts on the engine chain and never
+# touches the CR, and `snapshotCRDelete` is a Kubernetes DELETE the same webhook denies. The role's CLAUDE.md holds the reading of the
 # v1.12.1 source; the operator decision left open is #2734.
 - name: Report snapshots Longhorn refuses to delete for {{ volume_snapshot_claim }}
   tags: [deploy]

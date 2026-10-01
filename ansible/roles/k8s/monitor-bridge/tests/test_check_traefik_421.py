@@ -1,4 +1,4 @@
-"""check_traefik_421: the arm that would have caught #2747's and #2749's wedged clients.
+"""check_traefik_421: the arm that catches wedged clients.
 
 A client whose connection SNICheck pinned to the wrong TLS options gets 421 at the router for
 the life of that connection. The request never reaches a service, so the 5xx and latency
@@ -32,7 +32,7 @@ def _cycles(cfg, rates, n):
 
 
 def test_a_one_shot_handshake_mismatch_is_clean(cfg):
-    # The only 421 outside a wedge in the week to 2026-09-27: one window on uptime-kuma at
+    # A 421 outside a wedge: one window on uptime-kuma at
     # 0.0083 rps. Below the threshold, so it never starts a streak.
     rates = {"homelab-uptime-kuma-18c8147211c6d20211f0@kubernetescrd": 0.0083}
     for ok, msg in _cycles(cfg, rates, 5):
@@ -41,7 +41,7 @@ def test_a_one_shot_handshake_mismatch_is_clean(cfg):
 
 
 def test_a_wedged_router_pages_on_the_consecutive_cycle(cfg):
-    # #2747's and #2749's shape: Loki push at 0.18 rps and authelia at a steady 0.1 rps.
+    # A wedge's shape: Loki push at 0.18 rps and authelia at a steady 0.1 rps.
     results = _cycles(
         cfg, {AUTHELIA: 0.1, LOKI_PUSH: 0.18}, cfg.TRAEFIK_421_CONSECUTIVE
     )

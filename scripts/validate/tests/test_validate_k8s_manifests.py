@@ -8,8 +8,7 @@ any object no schema checked.
 
 The unit tests for the pieces `main()` calls live beside those pieces: `test_k8s_yaml.py`,
 `test_k8s_pvc.py` and `test_k8s_context.py` under `scripts/lib/tests/`, and `test_k8s_schema.py`
-and `test_k8s_net_rules.py` in this directory. They were split out of this file on
-2026-09-04 with the code they cover. What stays here is what needs the real tree.
+and `test_k8s_net_rules.py` in this directory. What stays here is what needs the real tree.
 
 Run: uv run pytest scripts/validate/tests/test_validate_k8s_manifests.py
 """
@@ -69,7 +68,7 @@ def test_real_tree_passes_the_schema(real_tree_run):
 
 
 def test_no_real_role_shadows_an_inventory_key(real_tree_run):
-    """The regression guard, over the real tree: 54 roles, zero collisions when this landed."""
+    """The regression guard, over the real tree: zero collisions."""
     _rc, err = real_tree_run
     assert "redefines inventory key" not in err
 
@@ -143,5 +142,5 @@ def test_a_role_with_defaults_is_rendered_is_clean(tmp_path):
 
 
 def test_a_pycache_only_directory_is_flagged_as_no_role(tmp_path):
-    """A retired role's leftover shell renders nothing and proves nothing (#2888)."""
+    """A retired role's leftover shell renders nothing and proves nothing."""
     assert vkm.role_names(_ghost_and_real(tmp_path)) == ["real"]

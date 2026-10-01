@@ -11,7 +11,7 @@
 # roles/setup/common/templates/. The contract is the exit code: the script exits 1 after it
 # pushes `down` and 0 after `up`, and `Restart=on-failure` reruns it every `RestartSec` until
 # it exits 0. Nothing is persisted by hand; a pending restart lost to a reboot is replaced by
-# the timer's own `Persistent=true` catch-up run. Decided 2026-09-19 over a marker-file runner
+# the timer's own `Persistent=true` catch-up run. Chosen over a marker-file runner
 # (a third scheduler beside cron and monitor-bridge) and over moving the checks into
 # monitor-bridge (most read the host checkout, root-only files or the host's `gh` login).
 #

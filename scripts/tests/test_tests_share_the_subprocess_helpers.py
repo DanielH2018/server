@@ -59,7 +59,7 @@ EXEMPT = {
     "scripts/tests/test_tests_share_the_subprocess_helpers.py",
     # The helpers themselves. `test_proc_testing.py`'s subject is the exec bit and the prefix.
     "scripts/lib/tests/test_proc_testing.py",
-    # The exec bit IS the subject: `hook_files` must read a hook committed WITHOUT it (#361),
+    # The exec bit IS the subject: `hook_files` must read a hook committed WITHOUT it,
     # so the fixture writes one file with the bit and one without.
     "scripts/dev/tests/test_gen_hook_settings.py",
 }
@@ -68,12 +68,11 @@ EXEMPT = {
 # subject — the exec bit, the `PATH` prefix — cannot be written any other way. Rule 3's can: a
 # launch that must outlive every deadline passes `timeout=None`, which satisfies the rule and
 # puts the decision at the line that made it. A module-wide exemption would blanket that
-# module's OTHER launches too, which is the cost rules 1 and 2 accept and rule 3 need not.
-# #3066 predicted one entry here, `ansible/tests/deploy/test_gitops_deploy_subprocess.py`; no
-# such file exists, and no site in the 2026-10-01 census needed an unbounded launch.
+# module's OTHER launches too, which is the cost rules 1 and 2 accept and rule 3 need not. No
+# site in the census needs an unbounded launch.
 
-# The rules' own census must reach these. Each held one of the two forms before #3056, so an
-# empty or partial scan means the walk stopped matching rather than that the tree is clean.
+# The rules' own census must reach these. An empty or partial scan means the walk stopped
+# matching rather than that the tree is clean.
 KNOWN_MEMBERS = frozenset(
     {
         ".claude/hooks/tests/conftest.py",

@@ -14,8 +14,8 @@ import pytest
 from dev.findings_lib.issue_model import parse_verify_by, trailer, verify_by_section
 from dev.findings_lib.verify import verification_instructions, verification_report
 
-# The real #1345 body text, the register's only live verify-by when this changed. It is prose
-# describing a deploy, which the old executable verify-by could only ever report as an error.
+# A real issue body's verify-by text. It is prose describing a deploy, which the old
+# executable verify-by could only ever report as an error.
 LIVE_PROSE = (
     "deploy traefik with a nonexistent traefik_k8s_bouncer_plugin_version and confirm the "
     "container log shows a fresh download attempt on the second and third restart"
@@ -57,9 +57,9 @@ PARSER_CASES = {
     "no section at all": ("details\n\n---\nFingerprint: `f`\n", None),
     "an empty body": ("", None),
     "an empty section": ("details\n\n## Verify-by\n\n---\nFingerprint: `f`\n", None),
-    # The refusing half that matters most. #1308, #1313 and #1351 each carry a heading whose
-    # text says they have NO instructions. A heading pattern admitting a suffix would read
-    # those explanations back as instructions and report the findings as verifiable.
+    # The refusing half that matters most. Some issues carry a heading whose text says they
+    # have NO instructions. A heading pattern admitting a suffix would read those
+    # explanations back as instructions and report the findings as verifiable.
     "a `deliberately omitted` heading is not a verify-by": (
         "details\n\n## Verify-by, deliberately omitted\n\nAttaching a predicate here would "
         "need the guarantee this issue says nothing provides.\n",
@@ -199,7 +199,7 @@ def test_verify_with_numbers_loads_each_issue_by_number(capsys, issue, make_tool
 
 
 def test_verify_takes_no_close_flag(make_tools):
-    """The removal, asserted: `verify` cannot be talked into writing anything (#1313)."""
+    """The removal, asserted: `verify` cannot be talked into writing anything."""
     tools, _ = make_tools()
     with pytest.raises(SystemExit):
         findings.main(["verify", "--all", "--close"], tools)

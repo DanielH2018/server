@@ -2,8 +2,8 @@
 
 The role's contract is narrower than "the deploy succeeded": it proves the new image RUNS, not
 that the workload did its job. That split is a decision, not an implementation detail —
-`configarr/tasks/main.yml` records the incident behind it, where a wrapper was retired for
-failing deploys over transient *arr outages — and it only holds because auto-deploy fires on an
+failing a deploy over a transient *arr outage is what it avoids; `configarr/tasks/main.yml`
+has the reasoning — and it only holds because auto-deploy fires on an
 `_image:`-only diff, so the single thing that changed is the image:
 
   * the container never reached its entrypoint  -> the new image's fault -> FAIL the deploy;
@@ -23,20 +23,16 @@ ImagePullBackOff or a genuine non-zero exit cannot be constructed here — the l
 broken image through to a failed play is **unexercised**, and nothing below should be read as
 covering it.
 
-**Read this before adding a case.** The first version of this module injected synthetic
-`stdout_lines` straight into the `set_fact` — and the command that produces `stdout_lines` was
-broken. `ansible.builtin.command` shlex-splits a `cmd:` string, the space inside
-`{range .items[*]}` tore the jsonpath in two, kubectl returned rc=1, and `failed_when: false`
-turned that into an empty read on every deploy. Empty classifies as fatal, so the entire
-non-fatal branch was unreachable and the shipped behaviour was the blanket fail this role was
-narrowed to avoid. Every test here passed, and four mutation tests passed, because all of them
-operated downstream of the break.
+**Read this before adding a case.** A synthetic payload must enter at the same seam the real
+one does, or the test proves nothing about the path in between. Injecting synthetic
+`stdout_lines` straight into the `set_fact` would test the classification while the command
+that produces `stdout_lines` is broken: `ansible.builtin.command` shlex-splits a `cmd:` string,
+the space inside `{range .items[*]}` tears the jsonpath in two, kubectl returns rc=1, and
+`failed_when: false` turns that into an empty read on every deploy. Empty classifies as fatal,
+so the non-fatal branch would be unreachable behind passing tests.
 
-That is the `argparse-only test hid a dead path` shape, occurring inside a module whose own
-docstring already named that hazard. Naming a hazard is not covering it. The transport tests
-below cover it — they assert the argv token list and run the jsonpath against the live API —
-and the rule that follows from it is: **a synthetic payload must enter at the same seam the
-real one does, or the test proves nothing about the path in between.**
+That is the `argparse-only test hid a dead path` shape. The transport tests below cover it:
+they assert the argv token list and run the jsonpath against the live API.
 
 Three further limits, stated rather than papered over:
 
@@ -44,7 +40,7 @@ Three further limits, stated rather than papered over:
     strings "True"/"False", which the tasks' `when: cronjob_gate_fatal | bool` coerces
     identically. `test_the_decision_is_wired_to_the_two_outcome_tasks` is what keeps that
     coupling honest — without it these would test an expression nothing consumes, the shape
-    that once left two `probe.py` commands broken behind passing argparse tests;
+    that leaves a command broken behind passing argparse tests;
   * the expressions are read out of the live role by task name. A rename fails the extraction
     loudly rather than skipping the assertions;
   * the live check proves kubectl PARSES the jsonpath, not that a broken image produces the
@@ -80,9 +76,8 @@ def _classify(stdout_lines: list[str]) -> dict:
 
     Both set_fact tasks, in file order, threading `cronjob_gate_reasons` from the first into the
     second — because that is how Ansible runs them. Rendering only the second and injecting a
-    hand-built `cronjob_gate_reasons` would skip the PodInitializing filter, which is exactly
-    the "inject past the step you are supposed to be testing" mistake this module already made
-    once, one layer further out.
+    hand-built `cronjob_gate_reasons` would skip the PodInitializing filter, which is the
+    "inject past the step you are supposed to be testing" mistake.
     """
     env = jinja_env()
     context = {
@@ -154,13 +149,12 @@ def test_container_state_decides_whether_the_gate_fails_the_deploy(
     `unknown-reason-fails-closed` is the case that distinguishes the allowlist from a
     denylist: OOMKilled is in neither list, and it must be fatal. Under a denylist over
     `cronjob_gate_start_failure_reasons` it would pass silently, and so would every reason
-    string added to Kubernetes after this was written.
+    string Kubernetes adds later.
 
     `no-pods-at-all` is not hypothetical either — a Job that hits its `activeDeadlineSeconds`
     has its pods deleted by the Job controller, so a hung run reaches exactly this payload.
 
-    The three `PodInitializing` cases cover the direction the allowlist reasoning originally
-    missed. An init container that FAILS leaves the main container at
+    The three `PodInitializing` cases cover a direction the allowlist reasoning alone misses. An init container that FAILS leaves the main container at
     `waiting.reason: PodInitializing`, which is in neither list — so left in the stream it would
     make an application failure fatal, the exact case this role exists not to fail on. The role
     drops it before classifying, which leaves the decision resting on the init container's own
@@ -177,8 +171,7 @@ def test_start_failure_reasons_only_choose_the_message_never_the_outcome() -> No
 
     The list names reasons for the operator's benefit — "the new image could not start" rather
     than "unrecognised state" — and it must not be load-bearing for the decision. A list that
-    looked like it narrowed the fatal set would read as a guarantee it cannot give: this repo
-    has already been bitten by a rule that appeared to narrow a verb and did not.
+    looked like it narrowed the fatal set would read as a guarantee it cannot give.
     """
     facts = _task(_CLASSIFY)["ansible.builtin.set_fact"]
     env = jinja_env()
@@ -212,8 +205,7 @@ def test_the_decision_is_wired_to_the_two_outcome_tasks() -> None:
     """`cronjob_gate_fatal` must actually gate the fail task and the warning, in that polarity.
 
     Without this the expressions above could be perfectly correct and consumed by nothing —
-    the failure shape that left two `probe.py` commands broken since the k3s cutover behind
-    tests that only ever exercised argparse.
+    the failure shape of a command left broken behind tests that only exercise argparse.
     """
     fail_when = " ".join(str(c) for c in _task(_FAIL)["when"])
     report_when = " ".join(str(c) for c in _task(_REPORT)["when"])
@@ -268,19 +260,16 @@ def _jsonpath_argv() -> list[str]:
 def test_the_state_read_never_goes_back_to_a_shell_string() -> None:
     """The container-state read must use `argv:`, and the jsonpath must be one whole token.
 
-    This is the regression that already happened, so it is the one worth pinning.
     `ansible.builtin.command` shlex-splits a `cmd:` string. The space inside `{range .items[*]}`
-    tore the jsonpath into two arguments and the quotes around the newlines were stripped;
-    kubectl answered `error: name cannot be provided when a selector is specified` with rc=1,
-    `failed_when: false` swallowed it, and `stdout_lines` came back empty on every run. Empty
+    tears the jsonpath into two arguments and strips the quotes around the newlines; kubectl
+    answers `error: name cannot be provided when a selector is specified` with rc=1,
+    `failed_when: false` swallows it, and `stdout_lines` comes back empty on every run. Empty
     reads as "no state readable", which is fatal — so the whole non-fatal branch this role
-    exists to provide was unreachable code, and every application failure failed the deploy.
+    exists to provide would be unreachable code, and every application failure would fail the
+    deploy.
 
-    It survived a full round of review and four mutation tests because those injected synthetic
-    `stdout_lines` straight into the set_fact, downstream of the break. That is the
-    `argparse-only test hid a dead path` shape occurring inside the module whose own docstring
-    warns about it — which is the clearest available demonstration that naming a hazard is not
-    the same as covering it. This test covers it: it asserts the transport, not the decision.
+    Tests that inject synthetic `stdout_lines` straight into the set_fact sit downstream of that
+    break and cannot see it. This test asserts the transport, not the decision.
     """
     module = _read_module()
     assert "cmd" not in module, (
@@ -396,10 +385,10 @@ _JINJA_VAR = re.compile(r"^\{\{\s*([\w.]+)\s*\}\}$")
 def _active_deadlines(role: Path) -> list[tuple[str, int]]:
     """Every `activeDeadlineSeconds` the role renders, as (template, seconds).
 
-    Resolves a single-variable Jinja value against the role's own defaults — configarr writes
-    `activeDeadlineSeconds: {{ configarr_k8s_timeout }}`. Anything else raises rather than being
-    skipped: a deadline this cannot read is a deadline the rule below silently stops covering,
-    and that is how the rule got broken in the first place.
+     Resolves a single-variable Jinja value against the role's own defaults — configarr writes
+     `activeDeadlineSeconds: {{ configarr_k8s_timeout }}`. Anything else raises rather than being
+     skipped: a deadline this cannot read is a deadline the rule below silently stops covering,
+    .
     """
     out: list[tuple[str, int]] = []
     defaults = load_defaults(role)
@@ -430,11 +419,8 @@ def test_gate_timeout_exceeds_every_callers_active_deadline() -> None:
     way, the Job reaches a terminal `Failed` condition first, the poll returns, and the operator
     gets the role's own failure text saying what it could and could not read.
 
-    Executable rather than prose because the prose version was already violated by the shipped
-    default on the day it was written: `cronjob_gate_timeout: 300` against pi-peer-backup's
-    `activeDeadlineSeconds: 600`. This repo's escalation ladder says a rule a machine enforces
-    beats a paragraph an agent has to remember, and this was the third prose-only rule in one
-    slice found already broken.
+    Executable rather than prose: a rule a machine enforces beats a paragraph an agent has to
+    remember.
 
     Scoped to roles that actually include the gate, so it starts covering a caller on the commit
     that wires it rather than needing to be remembered then.
@@ -466,10 +452,10 @@ def test_a_comment_mentioning_the_gate_does_not_make_a_role_a_caller(
 ) -> None:
     """Only a real include counts, so the timeout guard fires on the right roles.
 
-    A raw substring search over tasks/main.yml pulled in any role that merely NAMED
-    k8s/cronjob-gate — a comment, a TODO, a note about why it is not used — and then checked
-    that role's unrelated activeDeadlineSeconds against a timeout it never sets. Over-inclusive
-    rather than unsafe, but a guard that fails on a role it has no business reading is a guard
+    A raw substring search over tasks/main.yml would pull in any role that merely NAMES
+    k8s/cronjob-gate — a comment, a TODO, a note about why it is not used — and then check
+    that role's unrelated activeDeadlineSeconds against a timeout it never sets. That is
+    over-inclusive rather than unsafe, but a guard that fails on a role it has no business reading is a guard
     people learn to skip.
     """
     role = tmp_path / "widget"
@@ -500,13 +486,12 @@ def test_no_operator_message_carries_an_embedded_newline() -> None:
     """A folded `>-` scalar must fold, and a more-indented line silently stops it folding.
 
     YAML preserves a more-indented line inside a folded block verbatim and keeps a newline at
-    the transition back to the base indent. A Jinja ternary whose `else` sat one level in was
-    enough: the failure message broke mid-sentence at "does not\\nrecognise", in the very text
-    added so an operator could tell an activeDeadlineSeconds hang from a broken image.
+    the transition back to the base indent. A Jinja ternary whose `else` sits one level in is
+    enough: the failure message breaks mid-sentence at "does not\\nrecognise", in the text that
+    tells an operator an activeDeadlineSeconds hang from a broken image.
 
-    Cosmetic, and caught by a reviewer rather than by anything here — which is the argument for
-    the assertion. Re-indenting is the fix; nothing about the message's content prevents it
-    recurring the next time one is edited.
+    Cosmetic, but nothing about the message's content prevents it recurring the next time one
+    is edited. Re-indenting is the fix.
     """
     offenders = []
     for task in load_tasks(_TASKS):
@@ -524,16 +509,15 @@ def test_no_operator_message_carries_an_embedded_newline() -> None:
 def test_pi_peer_backup_pins_the_gate_job_name_it_hardcodes() -> None:
     """pull-pi-peers.sh's hardcoded gate-run hostname prefix must match cronjob_gate_name.
 
-    task-3-rulings-2.md S3. The Job cronjob-gate creates is named
+    The Job cronjob-gate creates is named
     `<cronjob_gate_name>-deploy-gate` (see its CLAUDE.md), and pi-peer-backup's
     `files/pull-pi-peers.sh` independently hardcodes `pi-peer-backup-deploy-gate` to recognise
     that Job's pod by hostname prefix and skip pushing its Kuma/Healthchecks signals for it. The
-    reviewer grepped every `.py`, `.yml` and `.sh` under `ansible/` and `scripts/` and found the
-    only link between the two strings was prose in three CLAUDE.md files — renaming the Job
-    suffix, changing `cronjob_gate_name`, or adding a timestamp to either would silently stop
-    the script from recognising a gate run, and every deploy would resume pushing Kuma and
+    only other link between the two strings is prose in three CLAUDE.md files, so renaming the
+    Job suffix, changing `cronjob_gate_name`, or adding a timestamp to either would silently
+    stop the script from recognising a gate run, and every deploy would resume pushing Kuma and
     pinging the dead-man with no test failure and no log line. This is the machine-enforced
-    link, escalated per this repo's rule that a recurring prose-only defect becomes a check.
+    link.
     """
     role = _ROLE.parent / "pi-peer-backup"
     include = _gate_include(role)

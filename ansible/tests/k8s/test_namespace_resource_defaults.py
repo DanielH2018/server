@@ -3,13 +3,13 @@
 Two levels, because either one alone leaves a hole:
 
   * **Per container, in the manifests.** Every container this repo renders sets requests and
-    limits. That was true when measured (105 of 105) and nothing enforced it — the sibling
+    limits. Nothing else enforces it — the sibling
     guard, test_container_security_context.py, covers securityContext and stops there. An
     unenforced 100% is one merge away from 99%, and the container that loses its limits is
     invisible: it schedules, it runs, and it is the one that takes the node down.
   * **Per namespace, as a LimitRange.** That covers exactly what the guard above cannot — an
     object that never went through Ansible. The `ctx-probe` pod in homelab is the standing
-    example, hand-created on 2026-08-14 with no resources at all.
+    example: hand-created with no resources at all.
 
 The LimitRange's own risk is that it grows teeth. `min`/`max` REJECT every pod outside the
 band; a default only fills in what a container left out. That difference is what keeps this
@@ -128,9 +128,8 @@ def test_every_rendered_container_sets_requests_and_limits() -> None:
     )
 
     # Per KEY, not per dict. Asserting the `limits` dict is merely truthy passes a container
-    # that sets `memory` and omits `cpu` — which is how the exportarr sidecar sat on the
-    # LimitRange's `cpu: "2"` default, 400x its own 5m request, as the fleet's only container
-    # inheriting it (2026-08-25 review M-12).
+    # that sets `memory` and omits `cpu`, which then inherits the LimitRange's `cpu: "2"`
+    # default.
     missing = [
         f"{role}/{name} {which} ({section}.{key})"
         for role, name, which, container in containers
@@ -270,8 +269,7 @@ def test_no_resourcequota_is_declared_anywhere() -> None:
             r"kind: ResourceQuota|create (resource)?quota",
             "--",
             "ansible/",
-            # This file states the pattern, so it matches itself — which passed while the
-            # file was untracked and failed on the commit that added it. Tests apply nothing
+            # This file states the pattern, so it matches itself. Tests apply nothing
             # to the cluster, so excluding them costs no coverage.
             ":!ansible/tests/",
         ],

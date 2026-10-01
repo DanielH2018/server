@@ -3,16 +3,14 @@
 
 Two failures, one relation read in both directions.
 
-AN ENTRY WITH NO ROLE DEPLOYS NOTHING, and until this test nothing said so:
-validate/compose_templates.py returned "nothing to validate" for a missing template, which
-prints [ok]. That is how a broken glances role shipped. The validator now errors on it; this
-test is the durable half, checking the inventory against the role trees directly.
+AN ENTRY WITH NO ROLE DEPLOYS NOTHING. validate/compose_templates.py errors on a missing
+template, and this test is the durable half, checking the inventory against the role trees
+directly.
 
-A ROLE WITH NO ENTRY reads as a service that exists and is deployed by nothing. Since the
-2026-08-14 migration `roles/containers/` holds only the Pi's Docker services (repo CLAUDE.md,
-*`roles/containers/` is now only the Pi*), and `containers_list` in `host_vars/daniel-pi.yml`
-is the source of truth for which are deployed. That census held 6/6 at the time of writing and
-was asserted nowhere. The reverse direction is asserted for the Pi alone, because it is the
+A ROLE WITH NO ENTRY reads as a service that exists and is deployed by nothing. `roles/containers/`
+holds only the Pi's Docker services (repo CLAUDE.md, *`roles/containers/` is now only the
+Pi*), and `containers_list` in `host_vars/daniel-pi.yml` is the source of truth for which are
+deployed. The reverse direction is asserted for the Pi alone, because it is the
 only host whose role tree is a complete census of its services — a k8s role may exist for a
 workload no host declares yet.
 
@@ -34,11 +32,11 @@ HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 DOCKER_ROLES = ANSIBLE / "roles" / "containers"
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
 
-# `common` is the shared deploy path every Pi role includes and `archive/` holds the roles the
-# migration retired; neither is a service.
+# `common` is the shared deploy path every Pi role includes and `archive/` holds retired roles;
+# neither is a service.
 NOT_SERVICES = frozenset({"common", "archive"})
 
-# Two services the Pi has run since before the migration, so an emptied census fails by name
+# Two services the Pi runs, so an emptied census fails by name
 # rather than passing on `set() == set()`.
 KNOWN_PI_SERVICES = frozenset({"wg-easy", "docker-proxy"})
 
@@ -80,7 +78,7 @@ def service_roles(roles_dir: Path) -> set[str]:
 
     The skip is `role_dirs`'s job, not a name in `NOT_SERVICES`: the assertion below is a set
     equality against `containers_list`, so a shell left by the deployer's fast-forward reads
-    as an undeclared Pi role and fails this guard in any long-lived checkout (#2964).
+    as an undeclared Pi role and fails this guard in any long-lived checkout.
     """
     return {p.name for p in role_dirs(roles_dir) if p.name not in NOT_SERVICES}
 

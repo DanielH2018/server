@@ -35,8 +35,7 @@ def test_batch_templates_sees_every_document_in_a_multi_job_template() -> None:
     registry/templates/selftest-pull-job.yaml.j2 is the live instance: it renders
     registry-selftest-pull and registry-selftest-pull-agent in one file. A `_batch_templates`
     that stops at the first `name:` in the file would see only the former — an ungated
-    second Job that no offender list would ever name, the same fail-open shape this whole
-    task exists to close.
+    second Job that no offender list would ever name, the same fail-open shape.
     """
     role = _K8S_ROLES / "registry"
     found = {
@@ -50,13 +49,13 @@ def test_batch_templates_sees_every_document_in_a_multi_job_template() -> None:
 def test_commented_out_wait_does_not_count_as_gated(widget_role) -> None:
     """A `wait --for=condition=complete job/<name>` inside a `#` comment must not gate.
 
-    Synthetic rather than a live role, per R5's own standard: a fixture pins the behavior
-    against a mutation instead of a role that might be retired. The vulnerable shape is a
+    Synthetic rather than a live role: a fixture pins the behavior against a mutation
+    instead of a role that might be retired. The vulnerable shape is a
     single-line comment — the whole `wait ... job/<name>` command on one line with a `#`
     only at its start, so nothing sits between "complete" and "job/" to break the match. A
     disabled task folded across two YAML lines (each independently `#`-prefixed) happens to
     self-defeat the same regex for an unrelated reason — the `#` on the second line lands
-    between "complete" and "job/" — so that shape would pass even before this fix and is not
+    between "complete" and "job/" — so that shape passes regardless and is not
     the case this test needs to cover.
     """
     role = widget_role(
@@ -69,7 +68,7 @@ def test_commented_out_wait_does_not_count_as_gated(widget_role) -> None:
 def test_a_wait_in_a_trailing_shell_comment_does_not_count_as_gated(
     widget_role,
 ) -> None:
-    """The W1 shape on the higher-stakes path: `_batch_gated_names`, not the shared-role check.
+    """The same shape on the higher-stakes path: `_batch_gated_names`, not the shared-role check.
 
     A `#` inside a `shell: |` block scalar is literal content to YAML, so the command text a
     live task hands over can still carry a comment — and a `# TODO: wait
@@ -106,9 +105,9 @@ def test_single_wait_naming_two_jobs_credits_both(widget_role) -> None:
 def test_a_from_cronjob_token_in_the_same_command_is_not_credited(widget_role) -> None:
     """An unrelated `job/<name>`-shaped token in the same command must not be credited.
 
-    task-3-rulings-2.md S6: before `_WAIT_JOB_NAMES` anchored the scan to the run of tokens
-    immediately after the wait flag, a `--from=cronjob/otherthing` earlier in the same
-    one-liner was picked up as if the wait had named it too.
+    `_WAIT_JOB_NAMES` anchors the scan to the run of tokens immediately after the wait flag,
+    so a `--from=cronjob/otherthing` earlier in the same one-liner is not picked up as if the
+    wait had named it too.
     """
     role = widget_role(
         "- name: Create and wait for widget-job\n"
@@ -124,9 +123,8 @@ def test_a_from_cronjob_token_in_the_same_command_is_not_credited(widget_role) -
 def test_a_jinja_job_name_in_a_wait_is_refused_outright(widget_role) -> None:
     """A `job/<name>` token that isn't a full literal must be refused, not truncated.
 
-    task-3-rulings-2.md S7, the live instance: image-builder's wait names
-    `job/build-{{ image_builder_name }}`. Truncating at the first non-`[\\w.-]` character used
-    to credit the shorter, wrong-but-plausible literal `build-`; refusing the whole token
+    The live instance: image-builder's wait names `job/build-{{ image_builder_name }}`.
+    Truncating at the first non-`[\\w.-]` character would credit the shorter, wrong-but-plausible literal `build-`; refusing the whole token
     credits nothing instead — still fail-closed, but honest about why.
     """
     role = widget_role(
@@ -143,8 +141,7 @@ def test_a_jinja_job_name_in_a_wait_is_refused_outright(widget_role) -> None:
 def test_argv_form_wait_is_credited(widget_role) -> None:
     """An `argv:` list form of the wait command must be credited, same as `cmd:`.
 
-    task-3-rulings-2.md S8: `k8s/cronjob-gate` itself uses `argv:` for its own container-state
-    read, with a comment recording that the `cmd:` form shipped broken once — so `argv:` is an
+    `k8s/cronjob-gate` itself uses `argv:` for its own container-state read, so `argv:` is an
     established spelling in this codebase, and a guard that cannot read it would false-offend
     the next role that follows the precedent.
     """
@@ -189,8 +186,7 @@ def test_batch_templates_sees_quoted_and_commented_kind(widget_role) -> None:
     """`kind: "Job"` and `kind: Job  # comment` must both be seen as batch templates.
 
     Both are valid YAML that kubectl applies identically to the bare `kind: Job` form. No
-    live template uses either spelling today, so this is prophylactic — pinned here rather
-    than left to a mutation that was only ever run by hand.
+    live template uses either spelling, so this is prophylactic.
     """
     role = widget_role(
         templates={
@@ -208,7 +204,7 @@ def test_batch_templates_sees_quoted_and_commented_kind(widget_role) -> None:
 def test_a_debug_message_describing_a_wait_does_not_count(widget_role) -> None:
     """A `debug` task whose message merely describes a wait must not credit its Job.
 
-    R1, and the finding that matters most: this needs no sabotage, only plausible prose — a
+    The case that matters most: this needs no sabotage, only plausible prose — a
     comment-shaped instruction telling the operator to run the wait by hand. A `debug` module
     runs nothing; `_task_command_text` only reads `ansible.builtin.command`/`.shell`, so this
     task contributes no command text at all regardless of its `tags:`/`when:`.
@@ -226,9 +222,9 @@ def test_a_debug_message_describing_a_wait_does_not_count(widget_role) -> None:
 def test_a_wait_inside_a_when_false_block_does_not_count(widget_role) -> None:
     """A wait task must not credit its Job when the FALSEY `when:` sits on the enclosing block.
 
-    task-3-rulings-2.md S1: a raw top-level walk finds the nested task but does not carry the
-    block's own `when:`/`tags:` down to it, so all four R1 constructions credit again the
-    moment they sit on the `block:` instead of the task. This pins the `when: false` case.
+    A raw top-level walk finds the nested task but does not carry the block's own
+    `when:`/`tags:` down to it, so all four dead-gate constructions credit again the moment they
+    sit on the `block:` instead of the task. This pins the `when: false` case.
     """
     role = widget_role(
         "- name: Gate group\n"
@@ -243,7 +239,7 @@ def test_a_wait_inside_a_when_false_block_does_not_count(widget_role) -> None:
 
 
 def test_a_wait_inside_a_never_tagged_block_does_not_count(widget_role) -> None:
-    """S1: the `tags: [never]` case, with the tag on the enclosing block."""
+    """The `tags: [never]` case, with the tag on the enclosing block."""
     role = widget_role(
         "- name: Gate group\n"
         "  tags: [never]\n"
@@ -256,7 +252,7 @@ def test_a_wait_inside_a_never_tagged_block_does_not_count(widget_role) -> None:
 
 
 def test_a_wait_inside_a_config_tagged_block_does_not_count(widget_role) -> None:
-    """S1: the `tags: [config]` case, with the tag on the enclosing block rather than the task.
+    """The `tags: [config]` case, with the tag on the enclosing block rather than the task.
 
     The inner task carries no tags of its own at all — its effective tags come entirely from
     the block, which is exactly the shape a bare per-task tag check misses.
@@ -273,7 +269,7 @@ def test_a_wait_inside_a_config_tagged_block_does_not_count(widget_role) -> None
 
 
 def test_a_nested_block_when_false_propagates_two_levels_down(widget_role) -> None:
-    """S1: a block inside a block must still propagate a falsey `when:` to the innermost task.
+    """A block inside a block must still propagate a falsey `when:` to the innermost task.
 
     `_iter_task_dicts` accumulates as it descends rather than reading only the immediate
     parent, so this is the case that would catch a merge that stopped one level too soon.
@@ -305,21 +301,21 @@ def _wait_task(header: str) -> str:
 # the fail-open direction. The last two rows are the controls: without them a check that simply
 # refused every `when:` would pass this whole table.
 _LIVENESS_CASES = [
-    # task-3-rulings.md R1: the text-matching predecessor read no `when:` at all, so a wait
-    # disabled as a temporary "skip this slow probe" edit still granted the exemption.
+    # A text-matching check reads no `when:` at all, so a wait disabled as a temporary "skip
+    # this slow probe" edit would still grant the exemption.
     ("  tags: [deploy]\n  when: false\n", set(), "when-false"),
-    # S2: the string spellings skip exactly like the literal boolean.
+    # The string spellings skip exactly like the literal boolean.
     ('  tags: [deploy]\n  when: "false"\n', set(), "when-string-false"),
     ("  tags: [deploy]\n  when: 'no'\n", set(), "when-no"),
     ("  tags: [deploy]\n  when: 'False'\n", set(), "when-capital-false"),
     ("  tags: [deploy]\n  when: 0\n", set(), "when-integer-zero"),
-    # S2: a `when:` list ANDs its entries, so one falsy entry skips the task whatever else is
+    # A `when:` list ANDs its entries, so one falsy entry skips the task whatever else is
     # in the list.
     ('  tags: [deploy]\n  when:\n    - "false"\n', set(), "when-list-with-falsy"),
-    # R1: `never` is Ansible's own reserved exclusion tag — it runs only when a play asks for
+    # `never` is Ansible's own reserved exclusion tag — it runs only when a play asks for
     # it by name, which an auto-deploy never does.
     ("  tags: [never]\n", set(), "tagged-never"),
-    # R1: every real gate task here is `tags: [deploy]`. `--skip-tags deploy` is a documented
+    # Every real gate task here is `tags: [deploy]`. `--skip-tags deploy` is a documented
     # invocation that skips the apply-and-wait pair, so a wait tagged only `config` would read
     # the role as gated under a run where nothing was applied for it to wait on.
     ("  tags: [config]\n", set(), "tagged-config"),
@@ -396,14 +392,13 @@ def test_gating_shared_roles_actually_wait() -> None:
     `failed_when: false` on the very task that observes the outcome, so accepting it would
     have made this half of the check pass on its own inverse.
 
-    BOTH halves walk the role's tasks through `_live_tasks` rather than searching its text.
-    Neither used to. `configarr/tasks/main.yml` (not a member of this set, but the risk is
-    general) explained in a comment why it deliberately did NOT use
-    `kubectl wait --for=condition=complete`, and a substring check read that explanation as the
-    gate it was arguing against; the same trailing-comment and prose-in-a-`debug` shapes
-    satisfied the `ansible.builtin.fail` half, as did a real `fail` under `when: false` or
-    `tags: [never]`. `_has_completion_gate` and `_has_failure_escalation` carry the module and
-    liveness discipline now, so a comment, a `debug`, and a dead task all fail to credit.
+    BOTH halves walk the role's tasks through `_live_tasks` rather than searching its text. A
+    substring check reads a comment explaining why a role deliberately does NOT use
+    `kubectl wait --for=condition=complete` as the gate it argues against; the same
+    trailing-comment and prose-in-a-`debug` shapes satisfy the `ansible.builtin.fail` half, as
+    does a real `fail` under `when: false` or `tags: [never]`. `_has_completion_gate` and
+    `_has_failure_escalation` carry the module and liveness discipline, so a comment, a `debug`,
+    and a dead task all fail to credit.
     """
     for shared in sorted(_GATING_SHARED_ROLES):
         role = _K8S_ROLES / shared

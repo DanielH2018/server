@@ -155,10 +155,10 @@ def claude_hook_files(repo: Path = REPO) -> list[Path]:
 def systemd_exec_lines(repo: Path = REPO) -> list[tuple[str, str]]:
     """(location, line text) for every `ExecStart*=` line in a systemd `*.service.j2`.
 
-    No unit currently execs a `scripts/...` path directly (verified by hand 2026-08-27):
-    every `ExecStart` that reaches this repo's tooling runs a copy already staged to
-    `/opt`. Kept live rather than removed so the day a unit DOES call into `scripts/`
-    directly, this catches it instead of staying silently zero forever.
+    No unit execs a `scripts/...` path directly: every `ExecStart` that reaches this repo's
+    tooling runs a copy already staged to `/opt`. Kept live rather than removed so the day a
+    unit DOES call into `scripts/` directly, this catches it instead of staying silently zero
+    forever.
     """
     out = []
     for svc in sorted(repo.glob("ansible/roles/**/*.service.j2")):

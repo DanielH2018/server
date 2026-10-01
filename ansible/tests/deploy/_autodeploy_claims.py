@@ -23,8 +23,8 @@ def _pvc_names(text: str) -> list[str]:
     """`metadata.name` for every `kind: PersistentVolumeClaim` document in `text`.
 
     Reads the metadata block by indentation rather than assuming `name:` is the line
-    immediately after `metadata:` — the earlier regex required exactly that, so a PVC whose
-    metadata carried `labels:` before `name:` yielded no claim and no complaint (R6). A key at
+    immediately after `metadata:`, so a PVC whose metadata carries `labels:` before `name:`
+    still yields its claim. A key at
     the same indentation as the block's first key is a sibling of `name:`; a shallower
     indentation means the metadata block ended.
 
@@ -38,7 +38,7 @@ def _pvc_names(text: str) -> list[str]:
       "still deployed".
 
     So this predicate is not fail-closed: it is fail-open in both of those shapes, and
-    fail-closed only against the metadata-ordering gap R6 fixed.
+    fail-closed only against the metadata-ordering gap.
     """
     names = []
     for kind_match in _PVC_KIND.finditer(text):
@@ -93,7 +93,7 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2` —
        zigbee2mqtt's data claim and code-server's workspace claim are the only two.
     2. A `vars: volume_claim_name: ...` on a task that includes `k8s/volume-claim` — how the
-       other twelve claims are actually created. Read through `_live_tasks`, the same walker
+       other claims are created. Read through `_live_tasks`, the same walker
        `_batch_gated_names` uses, so a commented-out or `when: false`-gated include credits
        nothing, the same "argument-against read as the thing itself" trap this file's other
        matchers are written against.
@@ -128,9 +128,9 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     return resolved, unresolved
 
 
-# The macro call every Deployment makes since 2026-09-19 (`spec_shell` in
-# ansible/templates/workload-shell.yml.j2), and the literal it replaced — kept so a template
-# that predates the macro, or a CronJob-shaped one outside the call-site guard, still counts.
+# The `spec_shell` macro call every Deployment makes (ansible/templates/workload-shell.yml.j2),
+# and the literal form, so a template that writes the strategy out, or a CronJob-shaped one
+# outside the call-site guard, still counts.
 _STRATEGY_RECREATE = re.compile(
     r"^\s*strategy:\s*$\n\s*type:\s*Recreate\s*$"
     r"|\{\{\s*spec_shell\(\s*['\"]Recreate['\"]",
@@ -163,17 +163,11 @@ def _migrating_state(role: Path) -> bool:
     This is the mechanical definition, read off what the role actually renders — NOT off
     `k8s_autodeploy_reason` text.
 
-    Measured 2026-08-21: this predicate is true for 31 roles, not the thirteen slice 7a task 3
-    declared `k8s_autodeploy_snapshot_pvcs` for. `_migrating_state` is broad on purpose — it reads
-    `strategy: Recreate` plus a rendered RWO claim off every role, whether or not that role is
-    auto-deployable. Before slice 7b task 7 promoted twelve of those thirteen, the 31 roles this
-    predicate flagged and the 14 `_auto_deployable` roles did not intersect at all, which is what
-    made `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` below vacuous. Task 7
-    made the two sets overlap on those twelve; the same-day scope decision then re-denied three of
-    them (zigbee2mqtt, livesync, qbittorrent — state coupled outside the volume, not a snapshot
-    gap), and a later audit re-denied tdarr for the same reason — so the overlap the guard actually
-    exercises today is the remaining eight. Every count along the way is non-empty, so the guard
-    bites instead of matching an empty loop.
+    `_migrating_state` is broad on purpose: it reads `strategy: Recreate` plus a rendered RWO
+    claim off every role, whether or not that role is auto-deployable. Its flagged roles overlap
+    the `_auto_deployable` roles, so
+    `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` iterates a non-empty set
+    and bites instead of matching an empty loop.
 
     Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes `accessModes:
     [ReadWriteOnce]` (both direct templates and k8s/volume-claim's shared one), so a rendered claim
@@ -189,21 +183,20 @@ def _migrating_state(role: Path) -> bool:
     )
 
 
-# ── state coupled OUTSIDE the volume (2026-08-22 review M2) ─────────────────────────────────
+# ── state coupled OUTSIDE the volume ─────────────────────────────────
 # The exclusion class every other guard in this file misses. The checks above ask whether a role
 # protects the claims it OWNS; this one asks whether it mounts a claim it does not own and
 # therefore cannot revert.
 #
 # `_rendered_pvc_claims` reads only what a role CAUSES to exist — a PVC document in its own
 # templates, or a `k8s/volume-claim` include. `media-data` is rendered by `k8s/media-volume`, so
-# every *arr role mounting it is invisible to that reader. tdarr's promotion was caught by a
-# human audit on 2026-08-22, not by a test; sonarr/radarr/bazarr/jellyfin were weighed and kept.
-# The gap this closes is the NEXT role added with such a mount, promoted with nobody asked.
+# every *arr role mounting it is invisible to that reader. The gap this closes is the NEXT role
+# added with such a mount, promoted with nobody asked.
 #
 # The ack key is a list of claim names, not a prose reason — mechanically diffable, and the same
 # shape as k8s_autodeploy_snapshot_pvcs. It proves the question was asked, never that the answer
 # was right; that is the honest limit of a guard here, and it converts a silent omission into a
-# visible one, which is what tdarr needed.
+# visible one.
 _CLAIM_REF_RE = re.compile(r"^\s*claimName:\s*(?P<token>\S.*?)\s*$", re.MULTILINE)
 
 

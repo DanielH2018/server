@@ -1,8 +1,7 @@
 """Every staging opt-out flag must render valid manifests on both branches and default on.
 
 A staging cluster runs a subset of prod, so four `*_k8s_manage_*` flags switch a feature off
-where its backend or credential does not exist (docs/archive/staging-cluster.md, Decisions 4
-and 5). Each flag gates several blocks at once, and each has the same three failure shapes,
+where its backend or credential does not exist. Each flag gates several blocks at once, and each has the same three failure shapes,
 which this module checks once over the whole table:
 
 - A stray conditional shifts indentation. That shows up as a parse error here and nowhere else.

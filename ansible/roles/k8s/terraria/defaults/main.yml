@@ -1,15 +1,14 @@
 ---
-# Built in-cluster rather than pulled, since 2026-08-31. The upstream image cannot run as a
+# Built in-cluster rather than pulled. The upstream image cannot run as a
 # non-root uid — its entrypoint hardcodes /root, which is 0700 — so a one-layer image that chowns
 # HOME is what lets this workload drop root and its DAC_OVERRIDE. templates/Dockerfile.j2 carries
-# the evidence and the CrashLoopBackOff it came from.
+# the evidence.
 #
-# The upstream DIGEST PIN did not go away, it moved into that Dockerfile's FROM line, which is
-# where Renovate's built-in dockerfile manager reads it. What changes is how a bump is realised:
-# built images carry automerge: false, so a digest PR is applied by an operator rebuild
-# (`./scripts/deploy.sh --tags terraria`) rather than by the deployer applying a pin. That is a
-# small delta here precisely because k8s_autodeploy is already false below — nothing was applying
-# this pin automatically anyway.
+# The upstream DIGEST PIN lives in that Dockerfile's FROM line, which is where Renovate's
+# built-in dockerfile manager reads it. Built images carry automerge: false, so a digest PR is
+# applied by an operator rebuild (`./scripts/deploy.sh --tags terraria`) rather than by the
+# deployer applying a pin. That is a small difference here because k8s_autodeploy is false
+# below.
 terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_tags.get('terraria', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -21,19 +20,14 @@ terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_ta
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO volume-claim PVC holding irreplaceable worlds"  # noqa var-naming[no-role-prefix]
 
-# 36 M of worlds + config at the port — `longhorn`, BACKED UP: this is the one
-# irreplaceable dataset the backup consolidation (backup-consolidation-longhorn.md, BL1)
-# moved the whole service for.
+# 36 M of worlds + config — `longhorn`, BACKED UP: this is the one irreplaceable dataset in
+# the service.
 terraria_k8s_claim: terraria-config
 terraria_k8s_size: 1Gi
 terraria_k8s_storage_class: longhorn
-# Migration history (until 2026-08-14). The SOURCE on the pre-migration Docker host had world
-# files root-owned 600; the unprivileged copy required a sudo staging step. The live volume,
-# migrated via this role until 2026-09-01, holds uid-1000 and measured 1000:1000 drwxr-xr-x on
-# 2026-08-31. The epoch is spelled out because reading the old source state as live state is
-# what kept a DAC_OVERRIDE grant looking necessary for three weeks after it had stopped being so.
+# The live volume's files are owned 1000:1000 (drwxr-xr-x), so the server needs no
+# DAC_OVERRIDE grant.
 
-# Mirrors resources('2.0', '2048M', '0.25', '512M').
 terraria_k8s_cpu_limit: "2"
 terraria_k8s_mem_limit: 2048Mi
 terraria_k8s_cpu_request: "250m"
@@ -41,4 +35,4 @@ terraria_k8s_mem_request: 512Mi
 
 # terraria_k8s_replicas is NOT here: it lives in inventory (group_vars/all.yml), because
 # k8s/game-stats renders the terraria-stats exporter at the same count and role defaults do
-# not cross a role boundary. The park rationale and the #822 restore checklist moved with it.
+# not cross a role boundary.

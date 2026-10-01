@@ -11,12 +11,9 @@ Everything else is a leaf. Two rules keep that shape, and both fail silently wit
 2. **`deploy_logic.py` defines nothing.** A `def` added to the index is a def the layer map
    cannot place, and the first step back toward one 1.4k-line module.
 
-This replaces `test_gitops_deploy_patch_boundary.py`, which required a patched name to be
-defined on the module it was patched on. That rule existed because about 30 tests reached the
-deployer's I/O by patching a module attribute. `DeployTools` (in
-`ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py`, with `tests/_deploy_fakes.py`)
-replaced those patches with an injected object, so the rule now governs almost nothing and the
-direction is what needs holding.
+`DeployTools` (in `ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py`, with
+`tests/_deploy_fakes.py`) injects the deployer's I/O boundaries, so tests do not patch module
+attributes and the direction of the imports is what needs holding.
 
 Run: uv run pytest ansible/tests/deploy/test_gitops_deploy_imports.py
 """
@@ -78,7 +75,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "gitops_markers",
     },
     "deploy_tick_types": {"deploy_changes"},
-    # The k8s half of a broad range: applying the promoted bumps a plane did not (#2348).
+    # The k8s half of a broad range: applying the promoted bumps a plane did not.
     "deploy_broad_k8s": {
         "deploy_alert_text",
         "deploy_alerts",
@@ -127,7 +124,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_release",
     },
     # Every message body, and nothing that sends one: the ChangeSet its signatures take, the
-    # error-text slicers and the k8s remediation it appends. No transport, no state (#2600).
+    # error-text slicers and the k8s remediation it appends. No transport, no state.
     "deploy_alert_text": {
         "deploy_changes",
         "deploy_failtext",
@@ -301,8 +298,8 @@ def test_deploy_io_and_deploy_alerts_are_reached_qualified():
 
     Those two modules are the deployer's I/O surface, and the suite reads the argv their
     functions build. A from-import binds a second name for one of them, which a reader
-    chasing a call site cannot tell from a local def — and it is the shape that made the
-    retired `test_gitops_deploy_patch_boundary.py` necessary in the first place.
+    chasing a call site cannot tell from a local def — and it is the shape that makes
+    tests patch a module attribute instead of using `DeployTools`.
     """
     plain = set()
     for name in sorted(_modules_on_disk()):
@@ -341,9 +338,8 @@ def test_deploy_logic_imports_without_the_common_files_path():
     the deployer's decisions through `deploy_logic`, and each puts only this directory on
     `sys.path`. `host_lib` lives in `roles/setup/common/files`, which those tools never add, so
     any module-level import chain from `deploy_logic` down to `deploy_config` breaks `land.sh`
-    with a `ModuleNotFoundError` five frames from anything the tool is about. That happened when
-    the staging gate's I/O shell was moved into a module `deploy_logic` re-exported, and the
-    suite only caught it because `test_land_shim.py` shells out. This asserts it directly.
+    with a `ModuleNotFoundError` five frames from anything the tool is about. Only a test that
+    shells out notices a re-export that drags such a chain in. This asserts it directly.
 
     A subprocess rather than an import: the in-process `sys.path` already carries every role's
     files/ by the time this test runs, so nothing checked in-process can see the difference.

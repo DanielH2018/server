@@ -284,8 +284,8 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
     A fourth piece pairs with the RBAC rules rather than the widget: `ingress: false`. Upstream's
     `ingress-list.js` destructures `const { ingress = true }`, so `mode: cluster` alone makes the
     pod list `ingresses.networking.k8s.io` on every page load. This ClusterRole deliberately does
-    not grant that read, so the two must move together — grant nothing, ask for nothing (#1428,
-    #1459). Drop the key and the pod logs an RBAC denial per page load; grant the read instead and
+    not grant that read, so the two must move together — grant nothing, ask for nothing.
+    Drop the key and the pod logs an RBAC denial per page load; grant the read instead and
     a read-only identity lists an empty set forever.
     """
     role = K8S / "homepage"
@@ -327,7 +327,7 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
 def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     """`view` covers no CRDs and nothing aggregates into it, so a group missing from the
     list degrades silently: the kubeconfig still works, that one `kubectl get` says
-    Forbidden, and the caller falls back to sudo — which is the thing this replaced."""
+    Forbidden, and the caller falls back to sudo."""
     groups = set(K3S_DEFAULTS["k3s_readonly_crd_api_groups"])
     route = (ANSIBLE / "templates" / "ingressroute.yml.j2").read_text()
     # Match the apiVersion line itself, not a bare substring: `traefik.io` appears in

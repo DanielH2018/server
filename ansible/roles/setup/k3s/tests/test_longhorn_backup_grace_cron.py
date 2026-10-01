@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """The first-run grace pair: whether LONGHORN_BACKUP_CRON parses decides a new volume's fate.
 
-Split out of `test_longhorn_backup_health.py`, which keeps the pure decision arms. These two are
+`test_longhorn_backup_health.py` keeps the pure decision arms. These two are
 the `_is_clean`/`_is_flagged` pair for one behaviour and stay together: a well-formed cron graces
 a volume created moments ago, and a malformed one degrades to no grace and pages it — rather than
-raising at module scope and taking down all eight checks, which is what it did before the
-2026-09-04 review's finding #4. Both run the reader for real, because the bug was in the reader's
-import-time work rather than in the pure core.
+raising at module scope and taking down all eight checks. Both run the reader for real, because
+the failure sits in the reader's import-time work rather than in the pure core.
 
 The stub `kubectl` and the required-env builder are shared with the reader suite in
 `_longhorn_reader_stubs.py`.
@@ -26,11 +25,10 @@ from _longhorn_reader_stubs import (
 
 
 def test_malformed_cron_pages_the_new_volume_instead_of_gracing_it(tmp_path):
-    """FLAGGED half: a malformed LONGHORN_BACKUP_CRON used to raise IndexError before main() ran.
+    """FLAGGED half: a malformed LONGHORN_BACKUP_CRON must not raise IndexError before main() runs.
 
-    _hhmm_from_two_field_cron() executed at module scope, so a bad value took down all eight
-    checks at once, not just the daily tier's first-run grace (2026-09-04 review finding #4).
-    With the fix, a malformed value degrades to `first_run_after(..., None, ...)`, which
+    A bad value must take down only the daily tier's first-run grace, not all eight checks at
+    once. A malformed value degrades to `first_run_after(..., None, ...)`, which
     check_tier() already treats as "no grace" — `pvc-new`, created moments ago, is paged as
     uncovered instead of silently excused, and the reader still completes and emits a verdict.
     """

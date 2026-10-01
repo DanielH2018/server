@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Tests for fetch_grafana_dashboards' Prometheus lookup.
 
-`prom_label_values` is how every query-type template variable gets a working default. It
-reached Prometheus through `docker exec grafana` until 2026-09-10, which raised
-FileNotFoundError on both cluster nodes — neither has Docker since the k3s migration. These
-pin the replacement to the HTTP seam the rest of scripts/ uses.
+`prom_label_values` is how every query-type template variable gets a working default.
+These tests pin it to the HTTP seam the rest of scripts/ uses.
 
 Run: uv run pytest scripts/grafana/tests/test_fetch_grafana_dashboards.py
 """
@@ -93,7 +91,7 @@ def test_adapt_writes_the_same_form_as_the_exporter():
     )
 
 
-# Revision pinning (#2858). `revisions/latest` made a re-fetch return whatever grafana.com had
+# Revision pinning. `revisions/latest` made a re-fetch return whatever grafana.com had
 # published since, so an unrelated re-run could rewrite 13,746 lines of node-exporter-full.json.
 # The named members keep the census non-vacuous: a renamed key would otherwise leave the
 # `all(...)` below iterating an empty dict and passing.
@@ -135,7 +133,7 @@ def test_the_download_url_names_the_pinned_revision_and_never_latest():
     assert "latest" not in seen[0]
 
 
-# Seeding, not refreshing (#2912). The committed boards carry hand edits the script does not
+# Seeding, not refreshing. The committed boards carry hand edits the script does not
 # reproduce, so a fresh fetch that differs from them must be refused rather than written. The
 # stub boards carry no query variables, so `adapt` never reaches Prometheus. Two boards rather
 # than the one the repo ships, because the all-or-nothing rule is about a refusal on one board

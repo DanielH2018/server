@@ -1,8 +1,7 @@
 ---
 # Where this host's upsmon finds upsd. The UPS host reaches it over the pod's loopback hostPort;
-# every other host has to cross nodes, and the LAN publish that would once have served that
-# (the Docker-era `server_ip:3493` + its DOCKER-USER firewall) was deliberately retired with the
-# port. The remaining path is the ClusterIP, which a node's own host netns can reach through
+# every other host has to cross nodes, and there is no LAN publish. The path is the ClusterIP,
+# which a node's own host netns can reach through
 # kube-proxy's rules, and which the nut NetworkPolicy already admits: it carries both flannel.1
 # /32s precisely because "a cross-node host->pod packet arrives as the SENDING node's flannel.1
 # address". No policy change is needed for this.
@@ -13,13 +12,13 @@
 nut_host_upsd_host: "{{ '127.0.0.1' if inventory_hostname == ups_host else nut_host_upsd_clusterip | default('') }}"
 
 # ── Runtime watchdog for the secondary's upsd link ──────────────────────────────
-# The assert in tasks/main.yml proves reachability exactly once, at deploy. Nothing re-checked
-# it afterwards, and the two things that would break it in between — the nut Service being
+# The assert in tasks/main.yml proves reachability exactly once, at deploy. The two things
+# that would break it in between — the nut Service being
 # recreated with a different ClusterIP, or nut-monitor dying — are both invisible until the
 # power cut this chain exists for. The k8s "nut (upsd)" Kuma tile does not cover it: that probe
 # runs from a POD and re-resolves Service DNS every cycle, while this host's upsmon connects
 # from the host netns to a ClusterIP frozen into /etc/nut/upsmon.conf at deploy time. A green
-# tile there says nothing about this path (2026-08-29 review M-8).
+# tile there says nothing about this path.
 nut_host_watchdog_armed: true
 
 # One value drives both the cron cadence and the Kuma tile's interval below, so a schedule

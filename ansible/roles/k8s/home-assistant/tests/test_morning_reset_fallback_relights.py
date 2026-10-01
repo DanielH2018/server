@@ -4,8 +4,7 @@
 09:00 fallback. The fallback hands the room back to automatic lighting when the night ran all the
 way to 09:00 — without it the bedtime nightlight (RGB amber at 3%) holds the bedroom there for the
 rest of the day, because colour tracking needs colour-temp mode, the presence branch is a noop
-while the light is on, and only the wake-ramp release clears Adaptive Lighting's manual_control
-(#2509).
+while the light is on, and only the wake-ramp release clears Adaptive Lighting's manual_control.
 
 Its discriminator is `input_boolean.bedroom_sleep_mode`, which `script.bedroom_clear_overrides`
 turns off. HA evaluates a `variables:` step when it reaches it, so the capture has to sit BEFORE

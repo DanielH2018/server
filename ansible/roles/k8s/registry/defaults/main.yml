@@ -1,7 +1,5 @@
 ---
-# 3.0.0 -> 3.1.1 (2026-08-22) for CVE-2026-41888 and a bounds check in the PurgeUploads walk.
-# Same major, filesystem driver unchanged — 3.1.x's other headline is S3 Express support, which
-# this registry does not use (REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY, see deployment.yaml.j2).
+# Filesystem storage driver (REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY, see deployment.yaml.j2).
 registry_k8s_image: registry:3.1.1
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -25,10 +23,10 @@ registry_k8s_storage_class: longhorn-nobackup
 registry_k8s_size: 10Gi
 
 # ── garbage collection (registry-gc.sh, gc-job.yaml) ───────────────────────────────────────
-# Nothing reclaimed this volume for its first nine days: DELETE_ENABLED only permits deletes,
-# and the registry never collects on its own. Every rebuild pushes the same `latest` tag, which
-# orphans the previous manifest, so the store grew until it filled and every cluster image build
-# failed. Weekly is sized to that observed fill rate with room to spare.
+# DELETE_ENABLED only permits deletes, and the registry never collects on its own. Every rebuild
+# pushes the same `latest` tag, which orphans the previous manifest, so the store grows until it
+# fills and every cluster image build fails. Weekly is sized to the observed fill rate with room
+# to spare.
 # The weekly garbage collection: the gc-job manifest, the script, its state directory and the
 # cron that runs it. False for a cluster Kuma does not watch — registry-gc.sh pushes its result
 # to `uptime-kuma.local.<domain>`, so leaving it on elsewhere reports a foreign registry's
@@ -88,8 +86,8 @@ registry_k8s_probe_repo: registry-selftest
 registry_k8s_netpol_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 # The CNI bridge gateway on daniel-box — `ip -4 addr show cni0` reads `10.42.0.1/24`, matching
-# the live podCIDR `kubectl get node daniel-box -o jsonpath='{.spec.podCIDR}'` = 10.42.0.0/24
-# (checked 2026-08-13). hostPort traffic (containerd's pull, see networkpolicy.yaml.j2) is
+# the live podCIDR `kubectl get node daniel-box -o jsonpath='{.spec.podCIDR}'` = 10.42.0.0/24.
+# hostPort traffic (containerd's pull, see networkpolicy.yaml.j2) is
 # SNAT'd to this address before it reaches the pod, so a podSelector cannot admit it — only an
 # ipBlock can. Single-node today, so daniel-box's own entry is exhaustive; a second node
 # joining before slice 7's TLS/LAN-hostname rework would need this widened to the full
@@ -99,8 +97,8 @@ registry_k8s_netpol_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e68
 # single entry instead of the full pair netpol-baseline admits.
 registry_k8s_netpol_cni_gateway: "{{ k3s_cni0_gateways[0] }}"
 
-# daniel-server's flannel.1 address — `ip -4 addr show flannel.1` there reads 10.42.1.0/32
-# (checked 2026-08-14). Its containerd's pulls of the ClusterIP mirror endpoint arrive
+# daniel-server's flannel.1 address — `ip -4 addr show flannel.1` there reads 10.42.1.0/32.
+# Its containerd's pulls of the ClusterIP mirror endpoint arrive
 # SNAT'd to this; admitted so built images can run on that node (first consumer: nut).
 #
 # This pair is the pinned node's own cni0 gateway plus the OTHER node's flannel.1 address, and it

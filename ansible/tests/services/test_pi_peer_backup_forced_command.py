@@ -1,7 +1,7 @@
-"""Guards for the pi-peer-backup key's sshd forced command (issue #1927).
+"""Guards for the pi-peer-backup key's sshd forced command.
 
-The key was authorized on daniel-pi with no options, so anyone who could read the
-`pi-peer-backup-ssh` Secret held a shell as a NOPASSWD-sudo user there. The fix pins the key
+A key authorized on daniel-pi with no options gives anyone who can read the
+`pi-peer-backup-ssh` Secret a shell as a NOPASSWD-sudo user there. The key is pinned
 to `files/pi-peer-backup-shell.sh`, which re-derives one `sudo rsync --server --sender` of the
 wg-easy directory from SSH_ORIGINAL_COMMAND and refuses everything else. The wrapper is run
 for real here with `sudo` shadowed by a stub on PATH that prints its argv, so the assertions
@@ -20,7 +20,7 @@ WRAPPER = ROLE / "files/pi-peer-backup-shell.sh"
 SRC = "/home/ubuntu/server/containers/wg-easy/config/"
 
 # The request rsync 3.2.7 sends for the CronJob's exact client invocation
-# (`rsync -a --chmod=D700 --timeout=120 --rsync-path='sudo rsync'`), captured 2026-09-17 by
+# (`rsync -a --chmod=D700 --timeout=120 --rsync-path='sudo rsync'`), captured by
 # pointing `-e` at a script that printed its argv. `--chmod` is client-side and never reaches
 # the server; `--timeout` does, and the short-option blob after `e` is version-negotiated.
 CAPTURED = f"sudo rsync --server --sender -logDtpre.iLsfxCIvu --timeout=120 . {SRC}"
@@ -65,7 +65,7 @@ def test_the_captured_nightly_request_is_executed_as_sudo_rsync(fake_sudo):
         f"sudo rsync --server --sender -logDtpre.iLsfxCIvu --remove-source-files . {SRC}",
         f"sudo rsync --server --sender -logDtpre.iLsfxCIvu --timeout=120; id . {SRC}",
         # `-s` (--secluded-args) makes rsync read the path off the protocol stream instead
-        # of argv, so the pinned SRC would be bypassed (#2015). Both spellings: its own word,
+        # of argv, so the pinned SRC would be bypassed. Both spellings: its own word,
         # and folded into the blob BEFORE the `e` that starts the capability list.
         f"sudo rsync --server --sender -s -logDtpre.iLsfxCIvu . {SRC}",
         f"sudo rsync --server --sender -slogDtpre.iLsfxCIvu . {SRC}",

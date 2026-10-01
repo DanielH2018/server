@@ -1,10 +1,9 @@
 """Step 5: deploy what the tick deferred, one deploy.sh per host, riding out a stale tree.
 
-A deploy reaches only the host the play runs against. PR #928 changed roles/containers/alloy,
-a role only daniel-pi declares; `deploy.sh --tags alloy` on daniel-box matched no service,
-exited 0, and land.sh printed `settled` while the Pi ran the old container (issue #929).
-deploy_tags.py hosts says which host declares each tag. daniel-stage is never on the list
-(issue #935; HOSTS_LAND_SH_NEVER_DEPLOYS in scripts/lib/render_guard.py).
+A deploy reaches only the host the play runs against. A role only daniel-pi declares needs
+`deploy.sh --tags <tag>` on daniel-pi: on daniel-box the tag matches no service and deploy.sh
+exits 0. deploy_tags.py hosts says which host declares each tag. daniel-stage is never on the
+list (HOSTS_LAND_SH_NEVER_DEPLOYS in scripts/lib/render_guard.py).
 """
 
 from typing import NoReturn
@@ -38,26 +37,23 @@ from deploy_tools.land_lib.outcome import (
 
 
 def _narrowed(ln: Landing):
-    """The deployer's own narrowing of the range, or None when it refuses too (#2520).
+    """The deployer's own narrowing of the range, or None when it refuses too.
 
     `deploy_tags.py changed` refuses a range wholesale as soon as ONE path is broad, so a
-    >100-file PR that touches `group_vars` alongside a service role derived no tags at all —
-    and the service half went undeployed behind whatever verdict the broad half reached. #2448
-    measured it on PR #2437, where the tick's own broad apply happened to cover the services;
-    a range the tick does not apply would have left them stale.
+    >100-file PR that touches `group_vars` alongside a service role derives no tags at all,
+    and the service half goes undeployed behind whatever verdict the broad half reached.
 
     `narrow` is the mapper the deployer already trusts for this question, and it answers MORE
     than the service half: it maps each broad path to the services whose render it reaches, so
     a list it returns accounts for the whole deploy plane of the range rather than leaving a
     residue. Where it cannot — a path no rule reads, or a list covering most of the fleet — it
-    refuses, and the landing falls back to grading from the deployer's markers exactly as
-    before. The setup plane is untouched either way: `narrow` never answers for it, and
+    refuses, and the landing falls back to grading from the deployer's markers. The setup
+    plane is untouched either way: `narrow` never answers for it, and
     `plane_note` and `self_applied` still own it.
 
     The range is WIDER than this PR, as `--since` always is here, so this can deploy a service
-    another session's merge inside the range reached. That is what `deploy.sh --changed
-    <since>` did before #2448, and it is the safe direction: wider than the truth is
-    recoverable, narrower is not.
+    another session's merge inside the range reached. That is the safe direction: wider than
+    the truth is recoverable, narrower is not.
     """
     r = ln.tools.deploy_tags(ln.opts.primary, ["narrow", ln.opts.since, "HEAD"])
     if r.returncode != DEPLOY_OK:
@@ -82,10 +78,7 @@ def derive_from_diff(ln: Landing) -> None:
         r = alt or r
     if r.returncode == DEPLOY_BROAD:
         # The tick is the apply for this range, so the deployer's own markers answer this
-        # landing and `no_tag_outcome` is where they are read. This used to exit 1 with NO
-        # `VERDICT:` line at all: PR #2437's landing said "deploy it by hand" while the tick
-        # was applying the whole play at that very merge commit, and `broad_applied` read that
-        # commit once the apply returned (issue #2448).
+        # landing and `no_tag_outcome` is where they are read.
         #
         # Gated on `self_applied or plane`, because `--since` bounds a range WIDER than this
         # PR: another session's broad merge inside it can refuse the derivation for a PR that
@@ -113,12 +106,12 @@ def derive_from_diff(ln: Landing) -> None:
 
 
 def record_k8s_only(ln: Landing) -> None:
-    """Which of the FALLBACK derivation's tags the diff's own paths prove are k3s (#2738).
+    """Which of the FALLBACK derivation's tags the diff's own paths prove are k3s.
 
     `classify` fills `k8s_only` from the PR's file list, and a PR over `gh`'s 100-file page has
     no such list: `derive_from_diff` rebuilds the tags from `deploy_tags.py changed`, which
-    prints tags and keeps no paths. Nothing proved a platform, so `wg-easy` kept routing to
-    daniel-pi as well -- one extra ssh deploy of a Compose service the change never touched.
+    prints tags and keeps no paths. With no proved platform, `wg-easy` routes to daniel-pi as
+    well -- one extra ssh deploy of a Compose service the change never touched.
 
     The paths come from the range `changed` derived the tags from, `land_platform.diff_range`,
     read in the primary checkout because that is the tree `changed` read. Two things narrow the
@@ -128,7 +121,7 @@ def record_k8s_only(ln: Landing) -> None:
       A tag another session's merge in the range contributed would otherwise reach the
       `--k8s-only=` argv for a service this landing never deploys.
     Every failure leaves `k8s_only` empty and routes to every declaring host, which is the
-    direction a wrong answer here must fall (issue #929).
+    direction a wrong answer here must fall.
 
     The `_narrowed` sub-branch does not come here at all. Its tags map broad paths to the
     services whose render they reach, which no path names, so the derivation would return
@@ -166,11 +159,11 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
     if ln.plane:
         print(f"  it needs applying by hand: {ln.plane}")
         # Both remediations, because this arm ends the landing and the one at the foot of
-        # this function never runs (#2569).
+        # this function never runs.
         if ln.remaining_setup:
             print(remaining_hosts_note(ln.remaining_setup))
         # The tick's own half too: a PR carrying BOTH ends here without ever reading the
-        # deployer's state, so every tick state went unreported (#2579, #2601). Reported,
+        # deployer's state, so every tick state would go unreported. Reported,
         # not re-verdicted — `Landing.tick_half_open_lines` carries why.
         for line in ln.tick_half_open_lines():
             print(line)
@@ -184,9 +177,9 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
             # No plane, no tag, and nothing the tick applies -- and still a host owes a hand.
             # A PR whose only loud path is a repo file a setup role ships out of the checkout
             # (`scripts/deploy_tools/staging_gate_remote.sh` -> `/usr/local/bin/staging-gate-run`)
-            # puts no role in the change set, so `self_applied` is False and this arm used to
-            # end the landing at `nothing-to-deploy` with the remediation already computed and
-            # never printed (issue #2798).
+            # puts no role in the change set, so `self_applied` is False and this arm would
+            # end the landing at `nothing-to-deploy` with the remediation computed and never
+            # printed.
             print(remaining_hosts_note(ln.remaining_setup))
             ln.finish(
                 Verdict.NEEDS_MANUAL_APPLY,
@@ -242,8 +235,7 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
         # `broad_applied` is written by `handle_broad` only after the apply RETURNS, so a run
         # still applying reads exactly like a tick that converged without applying — and a
         # tick that already ff-merged this PR answers CONVERGED, never BEHIND, so the arm
-        # above cannot catch it. Issue #2448 is that landing: PR #2437 was told to deploy by
-        # hand while the apply that covered it was still running.
+        # above cannot catch it.
         if ln.tick_watch_abandoned:
             print(ABANDONED_WATCH_NOTE)
             ln.finish(
@@ -282,18 +274,18 @@ def deploy_by_host(ln: Landing, at: str = "") -> int:
 
     The hosts come from the same tree the deploy renders. Under `at`, `containers_list` is read
     at that commit (`tools.landing_hosts_at`): a PR adding a Pi role and its entry together
-    declares the role in no checkout until the tick fast-forwards, and the primary read routed
-    it to no host, so the first landing of every new Pi role ran locally without
-    `-e target=daniel-pi` and failed closed at the health gate (issue #1839). A ref that
+    declares the role in no checkout until the tick fast-forwards, and the primary read would
+    route it to no host, so the landing would run locally without
+    `-e target=daniel-pi` and fail closed at the health gate. A ref that
     cannot be read falls back to `deploy_tags.py hosts` against the primary, whose own
     failure arm below stays the one that ends the landing. A tag under no host in either read
     falls through to one local deploy, which is right for a new cluster role.
 
     `k8s_only` routes to a `platform: k8s` entry only, through both reads. `wg-easy` is declared
-    on daniel-box as k8s and on daniel-pi as Docker, so a change to either used to deploy both
+    on daniel-box as k8s and on daniel-pi as Docker, so without it a change to either deploys both
     -- one extra ssh deploy of a service the change never touched. A tag the k8s caller graph
-    reached names a k3s role (issue #2718), and so does one whose every changed path sits under
-    `ansible/roles/k8s/` (issue #2730); `classify` records the union of the two.
+    reached names a k3s role, and so does one whose every changed path sits under
+    `ansible/roles/k8s/`; `classify` records the union of the two.
     """
     o, t = ln.opts, ln.tools
     by_host = (
@@ -310,7 +302,7 @@ def deploy_by_host(ln: Landing, at: str = "") -> int:
         r = t.deploy_tags(o.primary, argv)
         if r.returncode != DEPLOY_OK:
             # deploy.sh was never invoked for any host, so nothing here overlaps with the
-            # catch-all in deploy_outcome, which really did run it (issue #1016).
+            # catch-all in deploy_outcome, which really did run it.
             ln.ledger.cause = Cause.HOST_LOOKUP
             ln.die(
                 "deploy_tags.py hosts failed before any deploy.sh ran; nothing was touched; "
@@ -337,7 +329,7 @@ def deploy_by_host(ln: Landing, at: str = "") -> int:
                 f"{host_tags}: declared on {host}, deploying there with -e target={host}"
             )
         # Only the local host's tags: the tick's broad apply names no `-e target=`, so its
-        # marker says nothing about what the Pi runs (issue #929 is the shape of the bug).
+        # marker says nothing about what the Pi runs.
         elif _skip_tick_applied(ln, host, tags):
             ln.deployed_hosts.add(host)
             continue
@@ -353,8 +345,7 @@ def _skip_tick_applied(ln: Landing, host: str, tags: list[str]) -> bool:
 
     Step 5 exists for what the tick DEFERRED. A deploy-plane PR whose tick applied the whole
     play at the merge commit deferred nothing, and the deploy this step would run is the
-    same render again -- paid for with a second wait on the tree lock, and on 2026-09-19
-    with an exit 77 that graded live work `deploy-failed` (issue #2094). Step 6 still gates
+    same render again -- paid for with a second wait on the tree lock. Step 6 still gates
     the tags and still reads the deployer's markers; only the `deploy.sh` run is skipped.
     """
     if not ln.tick_already_deployed(ln.merge_sha, tags):
@@ -386,8 +377,7 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
         return
     if rc == DEPLOY_TAG_MISS:
         # deploy.sh refused the WHOLE list and deployed nothing, including every valid
-        # service beside the bad tag. This read as nothing-to-deploy until 2026-08-29,
-        # which is how PR #617 left 22 digest pins undeployed behind a green verdict.
+        # service beside the bad tag. That must not read as nothing-to-deploy.
         ln.ledger.cause = Cause.TAG_MISS
         ln.finish(
             Verdict.DEPLOY_FAILED,
@@ -403,8 +393,7 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
     if rc == DEPLOY_LOCK_UNAVAILABLE:
         # Not contention, so `retry_while_locked` above did not retry it and retrying here
         # would not help either: flock failed on the lock FILE. Nothing was deployed, which
-        # is what this message has to say — the wrapper used to fall through to 20 (issue
-        # #1775), whose text promises the opposite.
+        # is what this message has to say.
         ln.ledger.cause = Cause.DEPLOY_EXIT_LOCK_UNAVAILABLE
         ln.finish(
             Verdict.DEPLOY_FAILED,
@@ -414,8 +403,7 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
         )
     if rc == DEPLOY_NO_HOSTS:
         # The playbook matched no host and ansible exited 0; the wrapper read the empty PLAY
-        # RECAP. Nothing was deployed, and until 2026-09-17 this exited 0, so the health gate
-        # graded the OLD pods and the landing read `settled` (issue #1814).
+        # RECAP. Nothing was deployed, so the health gate would grade the OLD pods.
         ln.ledger.cause = Cause.DEPLOY_EXIT_NO_HOSTS
         ln.finish(
             Verdict.DEPLOY_FAILED,
@@ -425,7 +413,7 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
     if rc == DEPLOY_LOCK_PLAN_FAILED:
         # `deploy_locks.py plan` did not print the service locks, so the wrapper took none
         # and started no playbook. Its own arm, ahead of the generic `exit {rc}` line below,
-        # because "nothing deployed" is the fact the operator acts on (issue #2054).
+        # because "nothing deployed" is the fact the operator acts on.
         ln.ledger.cause = Cause.DEPLOY_EXIT_LOCK_PLAN_FAILED
         ln.finish(
             Verdict.DEPLOY_FAILED,
@@ -434,7 +422,7 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
             f"deployed; tags: {tags}",
         )
     if rc == DEPLOY_PLAYBOOK_FAILED:
-        # The playbook RAN and a task failed: everything before it is live (issue #840).
+        # The playbook RAN and a task failed: everything before it is live.
         # Not a resume point; re-running it is not automatically safe.
         ln.ledger.cause = Cause.PLAYBOOK_FAILED
         ln.finish(
@@ -455,7 +443,7 @@ def deploy_phase(ln: Landing) -> None:
         no_tag_outcome(ln)
     ln.ledger.tags_label = ln.tags_csv
     # The merge commit, rendered from a snapshot of itself rather than from the primary
-    # checkout. Step 4 no longer waits for the tick to fast-forward that checkout, so nothing
+    # checkout. Step 4 does not wait for the tick to fast-forward that checkout, so nothing
     # before this point has moved it -- `--at` is what makes that safe.
     #
     # Unless the tick applies part of this PR itself, in which case step 4 DID await it and the
@@ -498,19 +486,14 @@ def deploy_phase(ln: Landing) -> None:
     # retry above already is. The wait normally returns at once, because step 3 already waited
     # on the same SHA; it is kept because a retry can reach here without step 3 having run.
     #
-    # It waited on the CURRENT TIP until the ancestor walk landed, and that is what the
-    # `tip-outran-retries` verdict measured: six landings in 14 days spent 400-614s chasing a
-    # tip that moved again while they waited, on merge commits whose own CI was already green.
-    # Issue #1084 is the older half: PR #1051's landing retried three times in ~25s with no
-    # backoff and, because the wait used to be gated behind `tip_sha != merge_sha`, no CI wait
-    # either, while master CI on the merge commit was still 2m48s from green.
+    # Waiting on the CURRENT TIP would chase a tip that moves again while the landing waits,
+    # on merge commits whose own CI is already green; the ancestor walk avoids that.
     for attempt in range(1, o.stale_retries + 1):
         if rc != DEPLOY_STALE:
             break
         # The backoff DOUBLES each attempt (60s, 120s, 240s). A fixed 60s spends three
-        # attempts inside ~4 minutes, and PR #1460's landing on 2026-09-09 met a merge rate of
-        # roughly one every 2 minutes: the checkout went from 7 to 9 commits behind DURING the
-        # landing and every retry lost the same race (#1466). Three attempts that cannot
+        # attempts inside ~4 minutes, which loses the same race against a merge rate of
+        # roughly one every 2 minutes. Three attempts that cannot
         # converge are worse than two that can, so each wait is longer than the gap that beat
         # the last one.
         backoff = o.lock_backoff * 2 ** (attempt - 1)
@@ -535,7 +518,7 @@ def deploy_phase(ln: Landing) -> None:
         # CI time, not deploy time: shift both later stamps so the board books it under
         # wait_ci with no new field to learn. Includes the backoff sleep above (mirrors
         # `deploy_with_lock_retry`'s own `+ o.lock_backoff`), or that time falls into
-        # t_deploy instead -- the exact mis-attribution this comment exists to prevent.
+        # t_deploy instead.
         waited = t.clock() - started + backoff
         ln.ledger.t_ci = (ln.ledger.t_ci or 0.0) + waited
         ln.ledger.t_tick = (ln.ledger.t_tick or 0.0) + waited
@@ -548,17 +531,16 @@ def deploy_phase(ln: Landing) -> None:
         # re-derived as a parity bug.
         ticked = t.clock()
         tick.run_tick(ln)
-        # Into t_tick ALONE, so `tick=` on the board stops reading 0 for a landing that
-        # awaited a tick. The seconds come out of `deploy=`, where they were being counted:
-        # step 4 stamped t_tick = t_ci for the fast path, and the shift above moves both by
-        # the same amount, so without this the wait here is invisible as a tick.
+        # Into t_tick ALONE, so `tick=` on the board reads nonzero for a landing that
+        # awaited a tick. The seconds come out of `deploy=`: step 4 stamps t_tick = t_ci for the
+        # fast path, and the shift above moves both by the same amount, so without this the
+        # wait here is invisible as a tick.
         ln.ledger.t_tick = (ln.ledger.t_tick or 0.0) + (t.clock() - ticked)
         rc = deploy_by_host(ln)
     if rc == DEPLOY_STALE:
         # Every retry lost the tip race. `deploy-failed` is the wrong word for it: exit 4 means
         # NOTHING was deployed and re-running is safe, while `deploy-failed` reads as "the
-        # deploy broke" and sends a session looking at its own change. PR #1460 ended that way
-        # twice on 2026-09-09 with four other sessions merging (#1466). Exit 75, the resume-point
+        # deploy broke" and sends a session looking at its own change. Exit 75, the resume-point
         # code, for the same reason `lock-busy` uses it.
         ln.ledger.cause = Cause.DEPLOY_EXIT_STALE
         ln.die(

@@ -1,10 +1,8 @@
 """check_k8s_workloads: the hysteresis on the unavailable-replica arm, and its boundaries.
 
-k3s Workload Health opened 48 DOWN episodes over the 30 days to 2026-09-11, and the ones the
-bridge's own log attributes to replicas are all one cycle long naming one rolling workload —
-`unavailable replicas: uptime-kuma(1)` and five like it. A Deployment rolling has one
-unavailable replica by definition, so that arm could not tell an ordinary rollout from a
-workload that will not come back.
+A Deployment rolling has one unavailable replica by definition, so without a hold that arm
+cannot tell an ordinary rollout (`unavailable replicas: uptime-kuma(1)`) from a workload that
+will not come back.
 
 The gate is ARM-SELECTIVE, and that is what these tests have to prove. A blanket streak over the
 whole check would pass a naive accept/reject pair while silently delaying every crash-loop page

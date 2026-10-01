@@ -33,8 +33,8 @@ def _run(paths, monkeypatch, comment_only=frozenset()) -> int:
 
 
 def test_a_comment_only_bringup_edit_does_not_block(monkeypatch):
-    """PR #746's one-line comment in k3s-bringup.yml parked three landings; the tick now
-    crosses it, so reporting it as a blocker would stop a landing for nothing."""
+    """The tick crosses a one-line comment in k3s-bringup.yml, so reporting it as a blocker
+    would stop a landing for nothing."""
     rc = _run(
         ["ansible/k3s-bringup.yml"],
         monkeypatch,
@@ -53,11 +53,8 @@ def test_a_comment_only_edit_beside_a_real_one_still_blocks(monkeypatch):
 
 
 def test_a_deployer_change_no_longer_blocks(monkeypatch):
-    """The #570 blocker was another session's edit to gitops_deploy.py.
-
-    Since 2026-09-01 the deployer applies its own role like any other setup role, so the tick
-    crosses it and a landing behind it must NOT be told to stop -- three landings were, that day
-    alone.
+    """The deployer applies its own role like any other setup role, so the tick crosses it and a
+    landing behind it must NOT be told to stop.
     """
     rc = _run(["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"], monkeypatch)
     assert rc == 0

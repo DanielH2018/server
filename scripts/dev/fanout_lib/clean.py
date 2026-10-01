@@ -17,7 +17,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # `scripts/lib` sits two levels up from this package, one above the `scripts/dev` insert
-# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh (issue #2136).
+# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.manifest import Batch
@@ -68,7 +68,7 @@ def _drop_merged_branch(repo: str, tree: Worktree, merged: bool, brancher) -> st
     """Delete a removed tree's branch when it landed; return the `kept` reason, or `""`.
 
     Removing a worktree leaves its branch, so without this every cleaned batch left a
-    `worktree-fanout-<batch>` branch for the operator to delete by hand (#2674).
+    `worktree-fanout-<batch>` branch for the operator to delete by hand.
     """
     if not (tree.branch and merged):
         return ""
@@ -106,7 +106,7 @@ def clean_one(
     `FileNotFoundError` says the cwd itself is gone, which is the goal state — that tree is
     handed to `_clean_missing_tree` to deregister. A `CalledProcessError` says the directory
     is there and git refuses to read it, which a worktree carrying a submodule whose `.git`
-    file points at a missing gitdir does (#2774). Unreadable is not clean: the tree is kept,
+    file points at a missing gitdir does. Unreadable is not clean: the tree is kept,
     naming git's own first line, so the operator reads why instead of a truncated traceback.
 
     Args:
@@ -157,9 +157,9 @@ def _clean_missing_tree(
     this worktree never landed, so it is dropped only when `merged` says it already landed.
 
     A branch delete that FAILS reports `kept`, naming the branch and git's own first line.
-    It used to report `removed: … (already gone)` regardless, which told the operator the
-    branch was gone while it was still there — and `cmd_clean` deleted the run manifest on
-    that word, leaving nothing pointing at what survived. `kept` keeps the manifest.
+    It must not report `removed: … (already gone)` regardless: that tells the operator the
+    branch is gone while it is still there, and `cmd_clean` deletes the run manifest on that
+    word, leaving nothing pointing at what survived. `kept` keeps the manifest.
 
     Returns:
         `("removed", "(already gone)")` once the registration and any merged branch are
@@ -187,7 +187,7 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
         proc: the finished remote call.
 
     A failed leg is reported by its first non-empty stderr line, except when stderr holds a
-    Python traceback (#2788). There the first line is the `Traceback (most recent call
+    Python traceback. There the first line is the `Traceback (most recent call
     last):` header, which names nothing, so the last non-empty line is reported instead:
     that is the exception type and message. The check is for the header anywhere, not only
     first, because `uv` can print a warning ahead of the interpreter's output.
@@ -211,14 +211,14 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
 def remote_clean_command(b: Batch, repo: str = REPO) -> str:
     """The command `clean` runs on `b.host` to clean up one batch.
 
-    Refuses while `b.unit` is still active, before anything else runs (#1872). On the
-    2026-09-17 fan-out a `clean` run to clear one batch's failed launch also removed two
-    batches whose units were still running: their trees were clean and at master, so the
-    merge check judged them landed, and the units carried on against a deleted cwd. An
-    active unit is a batch still working, so it reads `kept:` — the verdict that exits 0 and
-    tells the operator to come back — naming the unit and `stop` as the way through. A
-    `systemctl` that cannot reach the bus exits non-zero here and the chain proceeds as it
-    did before the check existed; the local leg's bus is pinned in `transport.local_env`.
+    Refuses while `b.unit` is still active, before anything else runs. A `clean` run to clear
+    one batch's failed launch must not also remove batches whose units are still running:
+    their trees are clean and at master, so the merge check judges them landed, and the units
+    carry on against a deleted cwd. An active unit is a batch still working, so it reads
+    `kept:` — the verdict that exits 0 and tells the operator to come back — naming the unit
+    and `stop` as the way through. A `systemctl` that cannot reach the bus exits non-zero here
+    and the chain proceeds as it did before the check existed; the local leg's bus is pinned
+    in `transport.local_env`.
 
     Resets `b.unit` next (Ruling 11): the unit runs without `--collect`, so a failed run
     lingers in the user manager and a relaunch of the same batch id dies with "unit already
@@ -243,12 +243,12 @@ def remote_clean_command(b: Batch, repo: str = REPO) -> str:
 
     That copy goes with the worktree the first pass deletes, so the absent-tree case is
     answered in shell BEFORE the interpreter is needed (Ruling 30). Without this the second
-    pass ran a script path that no longer exists, python exited 2, the batch read `kept`,
-    and the run manifest was never deleted — the re-run-once-merged flow `clean` itself
-    prints could not converge.
+    pass runs a script path that no longer exists, python exits 2, the batch reads `kept`, and
+    the run manifest is never deleted — the re-run-once-merged flow `clean` itself prints
+    could not converge.
 
     "Absent" is decided by the `.git` file every linked worktree carries, not by the
-    directory (#1948). An agent that removes its own worktree on exit leaves a `.remember/`
+    directory. An agent that removes its own worktree on exit leaves a `.remember/`
     stub at the same path — a plugin hook writes it into the session's cwd after the tree
     is gone — so the directory exists while the checkout does not, and a `-e` test on the
     path sent the chain into the interpreter leg with the same exit 2. Both legs run this
@@ -266,28 +266,27 @@ def remote_clean_command(b: Batch, repo: str = REPO) -> str:
     Ruling 23's contract: a gone branch is `removed:`, a merged one is deleted first and
     only then `removed:`, and an unmerged one is `kept:`.
 
-    The merged test is `gh pr list --state merged --head <branch> --json headRefOid`, the
-    same forge oracle `prune_worktrees.is_merged` ends on, because this repo squash-merges: a
+    The merged test is `gh pr list --state merged --head <branch> --json headRefOid`, the same
+    forge oracle `prune_worktrees.is_merged` ends on, because this repo squash-merges: a
     squashed branch is never an ancestor of `origin/master`, so `merge-base --is-ancestor`
-    calls every landed branch unmerged. Measured against two branches that really did land —
-    the slice-1 work as PR #1484 and slice-2 as #1495 — ancestry exits 1 for both (Ruling 36).
+    calls every landed branch unmerged. Ancestry exits 1 for a branch that landed by squash or
+    rebase (Ruling 36).
 
     It matches on the head SHA, never on "a merged PR exists under this branch name" (Ruling
-    38). Branch names are reused here — one session landed three PRs from
-    `worktree-pi-detached-container-arm` on 2026-08-27, each with a different tip — and a
-    fan-out batch id is per-run, so a name match would delete a branch holding work that
-    never landed. `show-ref` has already found the local branch by the time this runs, so
-    `rev-parse` has a tip to compare. The count is forced to 0 unless it is all digits, so a
-    `gh` that is missing, unauthenticated or offline reads as not merged and the branch
-    survives with a `kept:` line.
+    38). Branch names are reused here — one branch can land several PRs, each with a different
+    tip — and a fan-out batch id is per-run, so a name match would delete a branch holding
+    work that never landed. `show-ref` has already found the local branch by the time this
+    runs, so `rev-parse` has a tip to compare. The count is forced to 0 unless it is all
+    digits, so a `gh` that is missing, unauthenticated or offline reads as not merged and the
+    branch survives with a `kept:` line.
 
     The stale registration goes FIRST, before anything looks at the branch. Git refuses
     `branch -D` for a branch a registered worktree still holds, and a `rm -rf`'d directory
     leaves that registration behind — so deleting the branch first could never work. It
     printed `kept: … not deleted` for every merged gone-tree batch, and `cmd_clean` reads
     `kept` as a tree to come back to once the PR merges, which it already had. Only an
-    executing test finds this: the chain's shape was asserted for months while this ordering
-    was wrong (issue #1677).
+    executing test finds an ordering error here: the chain's shape can be asserted while the
+    ordering is wrong.
 
     Deregistering is by path, naming this batch's own worktree, which replaces Ruling 37's
     repo-global `git worktree prune` per the same issue. Ruling 37's safety claim held —

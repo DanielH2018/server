@@ -1,20 +1,18 @@
 """Guards on the deferred k8s rollout gate.
 
-`roles/k8s/manifests` used to wait on its own rollout inline and then run `assert_stable.yml`
-inline too. Both are now hoisted out: the role QUEUES into `k8s_pending_rollouts`,
-`roles/k8s/manifests/tasks/drain.yml` waits for a whole batch at once, and one stabilisation window runs in
-`deploy.yml`'s post_tasks for the entire play.
+`roles/k8s/manifests` QUEUES into `k8s_pending_rollouts`,
+`roles/k8s/manifests/tasks/drain.yml` waits for a whole batch at once, and one stabilisation
+window runs in `deploy.yml`'s post_tasks for the entire play.
 
-That refactor moved a crashloop gate away from the role it protects, which makes it quietly
+That placement keeps the crashloop gate away from the role it protects, which makes it quietly
 droppable. Every failure mode below is a FALSE GREEN — the deploy reports success and the gate
 simply never ran:
 
   * `manifests` waits inline again -> batching silently reverts to serial (no failure, just the
-    59-minute deploy back);
+    slow serial deploy back);
   * `manifests` stops queueing -> nothing is ever waited on OR soaked;
   * `deploy.yml` loses the post_tasks gate -> rollouts are waited on but never soaked, which is
-    exactly the kube-state-metrics failure of 2026-08-07 (clean logs, ok=41 failed=0, pod
-    crashlooping on a liveness 404);
+    a pod crashlooping on a liveness 404 behind clean logs and failed=0;
   * the drain stops clearing the queue -> later batches re-wait earlier workloads, and the
     restart snapshot is taken twice for the same service;
   * `configarr` loses its drain -> its reconcile Job fires into sonarr's ~5-minute startup and
@@ -247,8 +245,7 @@ def test_batch_width_is_declared_and_conservative() -> None:
 def test_drain_and_gate_tasks_are_tagged_always() -> None:
     """`tags: [deploy]` here makes the whole gate vanish on a tag-filtered deploy.
 
-    Caught by a real `--tags littlelink` run on 2026-08-15, which reported ok=94 failed=0 while
-    executing none of the drain. `k8s_batch.yml` unions the service tag onto roles/k8s/manifests
+    `k8s_batch.yml` unions the service tag onto roles/k8s/manifests
     via `apply:`, so its `[deploy]` tasks match `--tags <svc>`. The drain and the gate get no such
     union, so tasks tagged only `[deploy]` are filtered out — meaning no rollout is ever waited on
     and the crashloop gate never runs, on every gitops-deploy run (which is always tag-filtered).
@@ -281,7 +278,7 @@ def test_configarr_drains_before_reconciling() -> None:
         "configarr no longer drains pending rollouts before reconciling. Its Job would fire into "
         "sonarr's ~5-minute startup and reconcile against a dead API."
     )
-    # The reconcile Job is created by k8s/cronjob-gate now, not by an inline `kubectl create
+    # The reconcile Job is created by k8s/cronjob-gate, not by an inline `kubectl create
     # job` in this role, so the ordering is asserted against the include that reaches it.
     gate_at = next(
         (
@@ -309,8 +306,7 @@ def test_batch_applies_the_service_tag_to_the_included_role() -> None:
     `--tags <svc>` onto the role's `[deploy]`-tagged apply/reconcile/rollout tasks.
 
     Drop it and every gitops tick and every documented per-service deploy applies nothing while
-    reporting success — the same silent-success shape as the drain bug 5eea64e6/e3b7d84e produced,
-    which a real `--tags littlelink` run reported as ok=94 failed=0. A MISTYPED key fails
+    reporting success — the silent-success shape of a drain that never runs. A MISTYPED key fails
     ansible-lint in CI, so this guards the removal case, which is syntactically valid and silent.
     """
     run_roles = [t for t in _tasks(_BATCH) if t.get("name") == "Run k8s roles"]
@@ -361,11 +357,10 @@ def test_every_built_image_reaches_a_running_pod() -> None:
     fires. That trigger keys on `manifests_service`, which assumes one built image per role,
     named after the role that deploys it.
 
-    `n8n-runners` broke both halves of that assumption: it is built under its own name (then by
-    a separate n8n-images role, folded into n8n by #2813) and deployed by the n8n role as a
-    SECOND Deployment. So the trigger never
-    matched, and even if it had, the rollout targets a single name. The rebuilt image reached the
-    registry and never reached a pod, with the deploy reporting green. This is the executable
+    `n8n-runners` breaks both halves of that assumption: it is built under its own name and
+    deployed by the n8n role as a SECOND Deployment. So the trigger never matches, and even if
+    it did, the rollout targets a single name. The rebuilt image reaches the registry and never
+    reaches a pod, with the deploy reporting green. This is the executable
     form of that finding: it fails until every built image is either rolled or opted out.
     """
     built = {
@@ -414,8 +409,8 @@ def test_manifests_queues_the_drain_under_the_deploy_tag() -> None:
         for t in _tasks(_MANIFESTS)
         if str(t.get("name", "")).startswith("Queue the batch drain")
     ]
-    # Two: the primary Deployment, and the optional manifests_extra_rollouts list added
-    # 2026-08-16 for roles that render more than one Deployment (n8n + n8n-runners).
+    # Two: the primary Deployment, and the optional manifests_extra_rollouts list for
+    # roles that render more than one Deployment (n8n + n8n-runners).
     assert len(queueing) == 2, (
         "roles/k8s/manifests must queue both the primary rollout and the extra rollouts; "
         f"found {len(queueing)} queueing task(s)"

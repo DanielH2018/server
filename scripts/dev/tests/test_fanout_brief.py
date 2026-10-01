@@ -25,7 +25,7 @@ def test_daniel_box_brief_lands_and_daniel_server_brief_stops_at_the_pr():
 
 
 def test_the_landing_brief_tells_the_agent_what_a_pending_host_apply_needs():
-    """Issue #2683: five headless sessions merged a PR and left the apply in prose only.
+    """Five headless sessions merged a PR and left the apply in prose only.
 
     The FLAGGED half. The pending apply arises at land time, so only the landing host's brief
     carries it; `test_..._not_the_non_landing_brief` below is the clean half.
@@ -64,7 +64,7 @@ def test_both_briefs_carry_issue_bodies_verbatim_and_the_claim_note():
 
 
 def test_both_briefs_state_the_completion_condition_the_stop_hook_checks():
-    """Issue #2816: the Stop hook allows a stop on a PR URL or a blocker line, so the brief
+    """The Stop hook allows a stop on a PR URL or a blocker line, so the brief
     has to name both before the hook's reason is the first place the agent reads them."""
     for host in ("daniel-box", "daniel-server"):
         text = render_brief(ISSUES, host, "1345-1386", "worktree-orch", [])
@@ -74,7 +74,7 @@ def test_both_briefs_state_the_completion_condition_the_stop_hook_checks():
 
 
 def test_only_the_landing_brief_asks_for_the_verdict_line_in_the_final_message():
-    """#2890: the hook blocks a landing-host stop without one, so the brief must ask."""
+    """The hook blocks a landing-host stop without one, so the brief must ask."""
     box = render_brief(ISSUES, "daniel-box", "1345-1386", "worktree-orch", [])
     server = render_brief(ISSUES, "daniel-server", "1345-1386", "worktree-orch", [])
     box_finishing = box.split("## Finishing\n", 1)[1].split("\n## ", 1)[0]

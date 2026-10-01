@@ -3,9 +3,9 @@
 
 `roles/setup/common/files/host_lib.py` has no single home on a host. Each consumer is a
 directly-invoked script, so it gets its own directory on `sys.path` and nothing else, and the
-file has to be copied in beside it. Seven roles do that, at eight sites, and until
-`roles/setup/common/tasks/install_host_lib.yml` each wrote its own `copy:` task with its own
-spelling of the source path, the `host_lib.py` basename and the 0755 mode.
+file has to be copied in beside it. Seven roles do that, at eight sites, through
+`roles/setup/common/tasks/install_host_lib.yml`, which owns the source path, the `host_lib.py`
+basename and the 0755 mode.
 
 WHAT THIS GUARD IS FOR. The shared task file cannot enforce its own adoption: a role that stops
 including it still deploys, still passes ansible-lint, and dies at `import host_lib` on its next
@@ -21,7 +21,7 @@ group is the caller's knowledge, not the shared file's. The copy and the pair ar
 joined here rather than in the task file, in both directions:
 `test_a_declared_stamp_pair_names_a_directory_the_include_installs_into` catches a pair naming the
 wrong directory, and `test_every_consumer_that_stamps_its_code_also_stamps_host_lib_is_clean`
-catches a pair that is missing (#2564).
+catches a pair that is missing.
 
 Run: uv run pytest ansible/tests/setup/test_host_lib_sibling_copies.py
 """
@@ -37,8 +37,8 @@ SHARED_TASK = "common/tasks/install_host_lib.yml"
 HOST_LIB_SRC = "ansible/roles/setup/common/files/host_lib.py"
 
 # The census's non-vacuity assertion. A scan that finds its own subject by glob returns an empty
-# set the moment those files move, and an `all()` over nothing passes — the repo has been bitten
-# by that nine times. Naming the members means the failure says WHICH role went missing rather
+# set the moment those files move, and an `all()` over nothing passes. Naming the members
+# means the failure says WHICH role went missing rather
 # than that a count moved. Compared with `==`, not `<=`: a new consumer that forgets the include
 # is exactly what this exists to catch, and `<=` would wave it through.
 EXPECTED_CONSUMERS = frozenset(
@@ -161,7 +161,7 @@ def hand_copies(roles_root: Path) -> list[str]:
     """Task files that still `copy:` host_lib.py themselves instead of including the shared task.
 
     Rooted like `consumers()` so the rejecting half can build its offender in tmp_path. Reads
-    `src`, `dest` and `loop` together because the eight sites this replaced spelled it three
+    `src`, `dest` and `loop` together because a hand copy can spell it three
     ways: a dedicated task with the path in `src`, a loop item, and a `dest` naming the file.
     Walks nested task files too (`tasks/sub/*.yml`), skipping only the shared install task
     itself — the one file that legitimately copies host_lib.py — rather than every task file
@@ -285,10 +285,9 @@ def test_every_consumer_that_stamps_its_code_also_stamps_host_lib_is_clean():
     """The forward half of the copy↔stamp invariant: a stamped role stamps host_lib too.
 
     The test above catches a pair that names the WRONG directory. It cannot catch a pair that is
-    simply absent, and that is the live failure (#2564): fake_remux recorded its seven scripts and
-    omitted the host_lib copy beside them, so on 2026-09-25 the drift check named
-    /opt/renovate-notify/host_lib.py as stale and stayed silent about
-    /opt/autofix-fake-remux/host_lib.py, which was stale by the same commit.
+    simply absent: a role that stamps its own scripts and omits the host_lib copy beside them
+    leaves the drift check naming one role's host_lib.py as stale and silent about another's,
+    which is stale by the same commit.
 
     An unstamped copy is invisible to setup-drift-lib.sh's arm 2, and host_lib is the one file
     every consumer shares — one repo-side change strands a copy in every role at once.
@@ -375,7 +374,7 @@ def test_the_shared_task_file_carries_no_tags():
 
 
 def test_no_role_still_copies_host_lib_by_hand_is_clean():
-    """The duplication this replaced, kept from creeping back one role at a time."""
+    """Hand copies of host_lib.py must not creep back one role at a time."""
     offenders = hand_copies(ROLES)
     assert not offenders, (
         f"{offenders} copy host_lib.py by hand again. Include "
@@ -390,8 +389,8 @@ def test_a_hand_written_host_lib_copy_is_flagged(tmp_path):
     it guards — so from the passing side a detector that stopped matching is indistinguishable
     from one that works. This is the only thing that tells them apart.
 
-    Nested one level down (`tasks/sub/health.yml`), not `tasks/main.yml`: `hand_copies` used to
-    glob only the top level, so a hand copy tucked in an included sub-file read as clean.
+    Nested one level down (`tasks/sub/health.yml`), not `tasks/main.yml`: `hand_copies` must walk
+    sub-files, or a hand copy tucked in an included sub-file reads as clean.
     """
     role = tmp_path / "setup" / "backslider" / "tasks"
     nested = role / "sub"

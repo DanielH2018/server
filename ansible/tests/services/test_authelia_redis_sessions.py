@@ -16,7 +16,7 @@ real rendered manifests behind a non-vacuity assertion:
   not enough — a policy on the wrong port renders, applies, and silently drops the traffic.
 - **`authelia-redis` is not in `manifests_extra_rollouts`.** That list rolls a Deployment on
   every change to the authelia role's manifests, which is several times a day. Adding redis to
-  it would destroy the sessions this whole change exists to keep, and would read as a tidy-up.
+  it would destroy the sessions this setup exists to keep, and would read as a tidy-up.
 """
 
 import pytest
@@ -61,7 +61,7 @@ def test_a_redis_backed_session_is_clean():
 
 
 def test_a_session_with_no_redis_block_is_flagged():
-    """The state this whole change exists to leave: the provider silently falls back to memory."""
+    """The state this setup exists to prevent: the provider silently falls back to memory."""
     assert not sessions_are_stored_in_redis({"secret": "x"})
 
 
@@ -163,14 +163,13 @@ def test_the_role_does_not_roll_redis_with_the_portal():
     )
 
 
-# --- the policy ships with the workload it lets start (#1609) -------------------------
+# --- the policy ships with the workload it lets start ---------------------------------
 #
-# A fourth invariant, added after the 2026-09-10 outage. The three above all hold while the
-# NetworkPolicy sits in a DIFFERENT role: `rendered_docs()` sweeps the whole tree, so the port
-# comparison finds the policy wherever it lives. That is exactly the state that took SSO down —
-# the policy shipped in netpol-baseline, `--tags authelia` staged a portal with no path to its
-# session store, and Authelia exits rather than degrades when the session provider fails its
-# startup check.
+# A fourth invariant. The three above all hold while the NetworkPolicy sits in a DIFFERENT
+# role: `rendered_docs()` sweeps the whole tree, so the port comparison finds the policy
+# wherever it lives. With the policy in another role such as netpol-baseline, `--tags authelia`
+# stages a portal with no path to its session store, and Authelia exits rather than degrades
+# when the session provider fails its startup check.
 #
 # `build_k8s_dep_map` cannot cover this: it derives a role's edges from templates inside that
 # role's own directory (ansible/filter_plugins/toposort.py), so a dependency expressed in a
@@ -198,7 +197,7 @@ def test_a_co_located_policy_is_clean():
 
 
 def test_a_policy_in_a_sibling_role_is_flagged():
-    """The literal 2026-09-10 state: the Deployment in authelia, the policy in netpol-baseline."""
+    """The split state: the Deployment in authelia, the policy in netpol-baseline."""
     assert not the_policy_ships_with_the_workload("authelia", "netpol-baseline")
 
 
@@ -270,11 +269,10 @@ def the_portal_waits_for_its_session_store(pod_spec):
     """True when an init container gates on the redis Service before the portal starts.
 
     Authelia retries the session backend 19 times at 500ms and then EXITS, about 9.5s of
-    tolerance (`internal/session/provider.go`, `StartupCheck` at v4.39.21). Deploying #1599
-    outran it and SSO was down for ~7 minutes. The cause was not an image pull — redis came up
-    1/1 on its first try and the log named an `i/o timeout`, so the packets were dropped by
-    `networkpolicy-authelia-redis` not yet being programmed for the new pod. That recurs on any
-    recreation of the redis pod, so the wait is not first-deploy-only scaffolding (#1626).
+    tolerance (`internal/session/provider.go`, `StartupCheck` at v4.39.21). A new redis pod
+    outruns it while `networkpolicy-authelia-redis` is not yet programmed for that pod: redis is
+    1/1, the log names an `i/o timeout`, and the packets are dropped. That recurs on any
+    recreation of the redis pod, so the wait is not first-deploy-only scaffolding.
 
     Reads the container's own command for the Service name and the port, never its comment.
     """

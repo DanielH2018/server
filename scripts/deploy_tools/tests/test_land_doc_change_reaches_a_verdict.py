@@ -1,20 +1,13 @@
 """A PR whose only change under a role is that role's document, from mapper to verdict.
 
-WHAT WENT WRONG (issue #1701). `land.sh --pr 1696` deployed n8n and registry, both healthy,
-then exited 1 with `needs-manual-apply` for `ansible/roles/k8s/manifests/` -- whose only
-changed file in that PR was CLAUDE.md. `manifests` has no `containers_list` entry, so
-`shared_roles` named it and the remedy printed was a full `ansible/deploy.yml` run for prose.
-The comment-only exemption could not reach it: that test reads YAML content lines, and a
-Markdown file is not comments.
+`manifests` has no `containers_list` entry, so `shared_roles` would name it and the remedy printed would be a full `ansible/deploy.yml` run for prose. The comment-only exemption could not reach it: that
+test reads YAML content lines, and a Markdown file is not comments.
 
-TWO PLACES A `.md` USED TO REACH A VERDICT, and both are covered here. `role_for` feeds
-`shared_roles`, which is the k8s half; the broad prefixes are the setup half, which a `.md`
-under `roles/setup/` still matches by path and only `quiet_paths` can drop.
+TWO PLACES A `.md` COULD REACH A VERDICT, and both are covered here. `role_for` feeds `shared_roles`, which is the k8s half; the broad prefixes are the setup half, which a `.md` under `roles/setup/` still
+matches by path and only `quiet_paths` can drop.
 
-THE VERDICT IS ASSERTED for the doc-only half, not just `plane_note`. A `tasks/` change deploys the role's callers since #2704, so its half asserts those tags instead. `plane_note` returning "" is not the
-outcome -- `no_tag_outcome` reads it together with `self_applied`, and only their combination
-decides between `nothing-to-deploy` (exit 0) and `needs-manual-apply` (exit 1). That
-combination is the issue's own Verify-by.
+THE VERDICT IS ASSERTED for the doc-only half, not just `plane_note`. A `tasks/` change deploys the role's callers, so its half asserts those tags instead. `plane_note` returning "" is not the outcome --
+`no_tag_outcome` reads it together with `self_applied`, and only their combination decides between `nothing-to-deploy` (exit 0) and `needs-manual-apply` (exit 1).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_doc_change_reaches_a_verdict.py
 """
@@ -34,7 +27,7 @@ _SETUP_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
 
 
 def test_a_role_document_is_clean():
-    """PR #1696's shape: the only change under a tag-less role is that role's CLAUDE.md."""
+    """The only change under a tag-less role is that role's CLAUDE.md."""
     assert land_tags.role_for(_DOC) is None
     assert land_tags.shared_roles([_DOC]) == []
     assert land_tags.plane_note([_DOC]) == ""
@@ -45,7 +38,7 @@ def test_a_role_document_is_clean():
 
 
 def test_a_role_task_file_is_flagged():
-    """The reject half: the same role's tasks/ is code, deployed through its callers (#2704)."""
+    """The reject half: the same role's tasks/ is code, deployed through its callers."""
     assert land_tags.role_for(_TASKS) == "manifests"
     assert land_tags.shared_roles([_TASKS]) == ["manifests"]
     assert "sonarr" in land_tags.shared_caller_tags([_TASKS])["manifests"]
@@ -97,5 +90,5 @@ def test_a_doc_only_change_to_a_tagless_role_ends_nothing_to_deploy(landing):
 
 def test_a_task_change_to_the_same_role_owes_no_hand_because_its_callers_deploy():
     """Its verdict is the tag path's, not `no_tag_outcome`'s: the landing deploys the callers
-    `test_a_role_task_file_is_flagged` names, so nothing is left for a hand (#2704)."""
+    `test_a_role_task_file_is_flagged` names, so nothing is left for a hand."""
     assert land_tags.plane_note([_TASKS]) == ""

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Provision the pinned Google style package, then run Vale over the files prek hands us.
 #
-# WHY THIS IS A SCRIPT AND NOT A `bash -c` ENTRY. The hook's entry was
-# `[ -d styles/Google ] || vale sync || exit 1; exec vale "$@"` until 2026-09-05, and prek
+# WHY THIS IS A SCRIPT AND NOT A `bash -c` ENTRY. An entry of
+# `[ -d styles/Google ] || vale sync || exit 1; exec vale "$@"` fails, because prek
 # splits a hook's file list across SEVERAL CONCURRENT invocations — ten of them for
 # `--all-files` here. In a fresh worktree all ten start with styles/Google missing, so all
 # ten run `vale sync` into the same directory at once and one of them dies with
 # `unlinkat .../styles/Google: directory not empty` while a sibling is still unpacking into
-# it. Every invocation reported `0 errors`; the hook failed on the sync alone (issue #1189).
-# A second run passed, because by then the package was there — which is what makes this an
+# it. Every invocation reports `0 errors`; the hook fails on the sync alone.
+# A second run passes, because by then the package is there — which is what makes this an
 # only-in-a-fresh-worktree failure.
 #
 # THE LOCK IS ON styles/, NOT styles/Google. The critical section removes styles/Google, so
@@ -36,7 +36,7 @@
 set -euo pipefail
 
 # `--help` answers from any environment, ahead of the sync below, which needs the `vale`
-# binary that a CI pytest shard does not install (#2854's convention). The awk prints this
+# binary that a CI pytest shard does not install. The awk prints this
 # file's leading comment block, which is the usage, with the `#` markers stripped.
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"

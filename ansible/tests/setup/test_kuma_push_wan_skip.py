@@ -1,10 +1,10 @@
-"""Guards for the host-side WAN gate in kuma-push-lib.sh, issue #2793.
+"""Guards for the host-side WAN gate in kuma-push-lib.sh.
 
 monitor-bridge's `wan_reachable` gate suppresses the four bridge checks that reach the internet,
 so one WAN outage pages once. It cannot reach the crons that run on the host and push their own
-tiles: they are outside its loop. On 2026-09-18 those crons lit four more tiles beside the WAN
-tile — crowdsec-home-allowlist for 3.8h, github-ruleset-drift, release-staleness-check for 3h and
-docs-refresh.
+tiles: they are outside its loop. During a WAN outage those crons light four more tiles
+beside the WAN tile — crowdsec-home-allowlist, github-ruleset-drift, release-staleness-check
+and docs-refresh.
 
 `wan_reachable` and `reachout_verdict` are the host-side half. The behaviour that has to stay
 true, each held by an accept/reject pair so a rule that stopped matching fails its own test:
@@ -110,7 +110,7 @@ def test_an_unreachable_wan_turns_the_failure_into_a_named_skip(tmp_path):
     assert "note=[skipped: WAN unreachable — ]" in out
 
 
-# The four crons the 2026-09-18 outage lit, and the function each one has to reach the gate
+# The four crons that push their own tiles, and the function each one has to reach the gate
 # through. A frozen census rather than a glob: a cron renamed or a wiring silently dropped is the
 # regression this guard exists to name, and an `all()` over an empty census passes.
 WIRED_CRONS = {

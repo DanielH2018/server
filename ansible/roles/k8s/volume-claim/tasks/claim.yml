@@ -1,21 +1,19 @@
 ---
 # WHY THE CLAIM IS STAGED IN A SIBLING DIRECTORY, not in the consuming role's own
-# `/etc/rancher/k3s/manifests/<service>/` (#1654). That directory belongs to `k8s/manifests`,
+# `/etc/rancher/k3s/manifests/<service>/`. That directory belongs to `k8s/manifests`,
 # whose "Prune staged manifests dropped from the file lists" task deletes every file in it that
 # the caller does not name in `manifests_files`/`manifests_secret_files`. No caller names this
-# claim — it is this role's file, not theirs — so the prune deleted it on every single deploy,
-# leaving a permanently `changed` task on an otherwise idempotent run and a staged claim that
-# was never re-applied from the role's own directory. `k8s/manifests` is included by nearly
-# every k8s role, so widening its prune to spare a volume-claim file would land on all of them;
-# moving one file is the narrower fix. The name follows the precedent already set by
-# `headlamp-netpol`, `prowlarr-netpol` and `media-volume-probe`: a sibling directory under the
-# manifest root that no role's `manifests_service` claims, so no `kubectl apply -f <dir>/`
-# sweeps it.
+# claim — it is this role's file, not theirs — so the prune would delete it on every deploy.
+# `k8s/manifests` is included by nearly every k8s role, so widening its prune to spare a
+# volume-claim file would land on all of them; staging one file elsewhere is the narrower fix.
+# The directory follows the precedent of `headlamp-netpol`, `prowlarr-netpol` and
+# `media-volume-probe`: a sibling directory under the manifest root that no role's
+# `manifests_service` claims, so no `kubectl apply -f <dir>/` sweeps it.
 #
 # THE FILENAME IS THE CLAIM NAME, not `pvc.yaml`. Three callers — scrutiny, tdarr and
 # uptime-kuma — include this role twice under one `volume_claim_service`, so a fixed filename
-# meant the second claim's render overwrote the first and only the last claim of a service was
-# ever staged. Keying the file on `volume_claim_name` stages every claim a service owns.
+# would let the second claim's render overwrite the first. Keying the file on
+# `volume_claim_name` stages every claim a service owns.
 - name: Create the claim staging directory for {{ volume_claim_service }}
   tags: [config]
   ansible.builtin.file:

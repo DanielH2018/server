@@ -5,7 +5,7 @@
 question that comes after it. A role under ansible/roles/k8s/ with no `containers_list` entry
 has no tag, but `deploy.yml` runs it under the tag of EVERY role whose tasks include it -- so a
 landing whose own tags cover all of its callers has applied it, and reporting it as STILL
-UNAPPLIED sends an operator at a full `deploy.yml` for nothing (issue #1397).
+UNAPPLIED sends an operator at a full `deploy.yml` for nothing.
 
 Split from test_land_tags.py rather than appended to it: that module is at its length cap.
 
@@ -21,10 +21,10 @@ import land_tags
 # fact under test.
 _DECLARED = {"configarr", "jellyfin", "radarr", "sonarr", "tdarr"}
 
-# PR #1393's real 13-path file list, read from `gh pr view 1393 --json files` on 2026-09-06.
-# `arr-notification` is a helper with no containers_list entry, and the PR carries BOTH of its
-# callers -- so the landing deployed sonarr and radarr, which ran arr-notification's tasks
-# under each of their tags, and land.sh still asked for a full deploy.yml (issue #1397).
+# A PR's real 13-path file list, read from `gh pr view <n> --json files`. `arr-notification`
+# is a helper with no containers_list entry, and the PR carries BOTH of its callers -- so the
+# landing deployed sonarr and radarr, which ran arr-notification's tasks under each of their
+# tags, and land.sh still asked for a full deploy.yml.
 _PR_1393_FILES = [
     "ansible/roles/k8s/arr-notification/CLAUDE.md",
     "ansible/roles/k8s/arr-notification/defaults/main.yml",
@@ -61,7 +61,7 @@ def test_a_helper_role_landed_without_its_callers_reaches_every_caller():
     """One caller deployed is not the helper applied, so the landing deploys all of them.
 
     Deploying sonarr re-runs arr-notification's tasks for sonarr alone, and radarr would keep
-    the old behaviour. Until #2704 that was reported to a hand; now radarr is deployed too.
+    the old behaviour. So radarr is deployed too, not reported to a hand.
     """
     files = [
         "ansible/roles/k8s/arr-notification/tasks/main.yml",

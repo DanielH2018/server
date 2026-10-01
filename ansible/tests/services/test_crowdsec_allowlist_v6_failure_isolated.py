@@ -1,15 +1,11 @@
-"""Guards for the home-allowlist cron's v6-failure path (issue #1248).
+"""Guards for the home-allowlist cron's v6-failure path.
 
-`fail()` calls `exit 1`. It used to sit on the v6 fetch, ahead of the IPv4 sync — so a v6
-routing loss took the IPv4 half down with it, even though nothing was wrong with IPv4.
-Confirmed live on daniel-box 2026-09-05: systemd-networkd put `eno1` into `routable (failed)`
-during the memory-exhaustion outage (`networkctl status eno1`), leaving the host with SLAAC
-addresses (`valid_lft` still counting down) but no v6 default route — `curl -v` to
-api6.ipify.org returned "Network is unreachable", not a DNS failure, and the cron logged
-`status=down host has global IPv6 but failed to resolve public IPv6 from ipify` every 5
-minutes from 16:08 onward with the IPv4 sync never running.
+`fail()` calls `exit 1`, so it must not sit on the v6 fetch ahead of the IPv4 sync: a v6
+routing loss would take the IPv4 half down with it, even though nothing is wrong with IPv4.
+A host can keep its SLAAC addresses (`valid_lft` still counting down) and lose its v6 default
+route — `curl -v` to api6.ipify.org then returns "Network is unreachable", not a DNS failure.
 
-The fix carries the v6 fault forward as `V6_STATUS`/`V6_MSG` instead of exiting, falls
+The script carries the v6 fault forward as `V6_STATUS`/`V6_MSG` instead of exiting, falls
 `CURRENT_PREFIX6` back to the stored value so `sync_entry` (empty `current` means "remove it")
 never truncates the good entry, and reports the whole run `down` even when the IPv4 half is
 clean — a stale v6 prefix can rotate out from under a green tile, so laundering the fault into
@@ -18,10 +14,10 @@ clean — a stale v6 prefix can rotate out from under a green tile, so launderin
 Two things are executed (sourced by name, not pattern-matched), one is structural because there
 is no clean way to execute a fast-path `if` in isolation without re-deriving it:
 
-- `sync_entry` (unchanged, real production code) proves the empty-vs-fallback distinction: an
+- `sync_entry` (real production code) proves the empty-vs-fallback distinction: an
   empty `current` really does remove the stored entry and truncate the state file, and a
   `current` equal to `stored` really does leave both alone.
-- `decide_final_push` (new, extracted in the same fix) proves the down-overrides-clean-sync
+- `decide_final_push` proves the down-overrides-clean-sync
   decision, run against a stubbed `push`.
 - The fast-path guard and the v6 block's exit-freedom are checked as text, each with a fixture
   showing the check can go red.
@@ -139,7 +135,7 @@ def test_an_empty_v6_value_removes_the_stored_entry_and_truncates_state(tmp_path
 
 
 def test_a_v6_failure_reports_down_with_its_reason_even_with_no_ipv4_change(tmp_path):
-    """ACCEPT: the exact shape of the 2026-09-05 incident — IPv4 unchanged, v6 unreachable."""
+    """ACCEPT: IPv4 unchanged, v6 unreachable."""
     calls_log = tmp_path / "calls.log"
     run = _bash(
         'decide_final_push down "host has global IPv6 but failed to resolve public IPv6 '
@@ -180,7 +176,7 @@ def test_a_clean_run_still_reports_up_with_the_changes(tmp_path):
 
 
 def test_the_pre_fix_unconditional_up_would_have_hidden_a_v6_failure(tmp_path):
-    """REJECT: the pre-#1248 body, minimised, against the same down-with-no-changes case.
+    """REJECT: a body that ignores V6_STATUS, minimised, against the same down-with-no-changes case.
 
     Without this half, `test_a_v6_failure_reports_down_...` above would still pass against a
     function that never learned about V6_STATUS at all.
@@ -234,7 +230,7 @@ def test_the_v6_block_never_exits_early():
 
 
 def test_a_block_that_calls_fail_on_v6_failure_is_flagged():
-    """REJECT: the pre-#1248 body — `fail` on the v6 fetch — against the same style of check."""
+    """REJECT: a body that calls `fail` on the v6 fetch, against the same style of check."""
     old_block = (
         "if ip -6 addr show scope global 2>/dev/null | grep -q inet6; then\n"
         "  if ! CURRENT_IP6=$(curl -sf https://api6.ipify.org); then\n"

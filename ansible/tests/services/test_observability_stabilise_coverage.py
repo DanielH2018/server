@@ -4,13 +4,9 @@ observability is the one k8s role that rolls its own workloads. It sets `manifes
 so the shared `k8s/manifests` role neither waits nor queues anything, and the role restarts and
 waits on six workloads of its own in a different namespace.
 
-Until 2026-08-22 it soaked them by importing `k8s/manifests`'s `assert_stable.yml`, which
-carried a second 60s `pause` on top of the play-level one in
-`post_tasks/k8s_stabilise_gate.yml`. Measured on a full deploy (pid 2004861) that pause was
-60.02s of the role's 69.0s — the second-most expensive task in a 20-minute run, spent
-duplicating a window the play already pays once. The role now snapshots restart counts itself
-and appends to `k8s_stabilise_watch`, so the play gate soaks these six alongside everything
-else.
+The role snapshots restart counts itself and appends to `k8s_stabilise_watch`, so the
+play-level gate in `post_tasks/k8s_stabilise_gate.yml` soaks these six alongside everything
+else, with no second soak of its own.
 
 Three things can silently break that, and none of them fails a deploy:
 
@@ -76,7 +72,7 @@ def test_the_role_lists_its_workloads_the_same_way_everywhere() -> None:
     )
 
     # Deliberately not a count. The role spells the workloads out once today (the wait loop;
-    # the restart loop was pointed at observability_stabilise_workloads in #2858), and pointing
+    # the restart loop reads observability_stabilise_workloads), and pointing
     # the last one at the variable too is a correct consolidation — a test that pinned the
     # number would fail for that improvement. What must hold is that every literal copy still
     # standing agrees with the declared list.
@@ -136,8 +132,7 @@ def test_the_role_feeds_the_play_level_gate() -> None:
 
 
 def test_assert_stable_is_gone() -> None:
-    # It duplicated post_tasks/k8s_stabilise_gate.yml, pause and all. Re-adding it is how the
-    # 60s comes back.
+    # It would duplicate post_tasks/k8s_stabilise_gate.yml, pause and all.
     assert not (_MANIFESTS / "tasks" / "assert_stable.yml").exists(), (
         "roles/k8s/manifests/tasks/assert_stable.yml is back. It carries its own 60s pause on "
         "top of the play-level window; use post_tasks/k8s_stabilise_gate.yml instead."

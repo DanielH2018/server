@@ -1,4 +1,4 @@
-"""The file-level collision check (#1798): two batches citing one file are refused at launch."""
+"""The file-level collision check: two batches citing one file are refused at launch."""
 
 from fanout_lib.brief import Issue
 from fanout_lib.collisions import shared_files
@@ -7,7 +7,7 @@ from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 
-# The 2026-09-11 shape: three issues under one domain label, two batches, one shared script.
+# The shape: three issues under one domain label, two batches, one shared script.
 ALERTS = "scripts/diagnostics/probe_lib/alerts.py"
 ISSUES = [
     Issue(

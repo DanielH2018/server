@@ -43,13 +43,13 @@ def test_dedupes():
 
 
 def test_config_required_images_are_still_emitted():
-    # These four are the shapes that used to be filtered out by _SKIP_BARE_BOOT: two that
-    # hard-exit without their config, one whose baked healthcheck never reaches "healthy" in
-    # the poll window, and one whose Cmd is a CLI binary that prints help and exits 1.
+    # These four are the shapes a bare boot cannot run: two that hard-exit without their
+    # config, one whose baked healthcheck never reaches "healthy" in the poll window, and one
+    # whose Cmd is a CLI binary that prints help and exits 1.
     #
     # Emitting them is the point. The workflow's fatal checks do not execute the image, so a
-    # config-required entrypoint no longer decides anything; excluding them had also excluded
-    # them from the `docker pull`, leaving those refs verified by nothing at all.
+    # config-required entrypoint decides nothing; excluding them would also exclude them from
+    # the `docker pull`, leaving those refs verified by nothing at all.
     diff = (
         "+    image: authelia/authelia:4.39.20\n"
         "+    image: couchdb:3.5.2@sha256:abc123\n"

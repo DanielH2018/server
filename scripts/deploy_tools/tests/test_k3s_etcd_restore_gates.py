@@ -234,7 +234,7 @@ def test_the_exit_codes_are_the_gate_positions():
     assert gates.GATES[2].check is gates._gate_snapshot
 
 
-# ── `--gate N`, which is how the weekly drill exercises gate 3 (#2420) ──────────────────────
+# ── `--gate N`, which is how the weekly drill exercises gate 3 ──────────────────────
 
 
 def _run_only(only, drill_dir, homelab_dir, tools, snapshot=SNAPSHOT, now=NOW):

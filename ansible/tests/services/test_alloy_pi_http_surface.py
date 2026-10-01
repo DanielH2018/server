@@ -4,8 +4,8 @@
 daniel-pi's Alloy publishes 12345 on the LAN IP because two consumers reach it from off-box:
 observability's `alloy-pi` Prometheus job (a STATIC target, so it cannot use a loopback or a
 bridge address) and monitor-bridge's detached-container arm, which expects `alloy` to report a
-published mapping. Closing the port is therefore not available — issue #1130 was closed by
-narrowing what answers on it instead.
+published mapping. Closing the port is therefore not available, so the hardening narrows
+what answers on it instead.
 
 Three things hold that narrowing, and each can be undone by an edit that looks harmless:
 the two `--server.http.*` flags that drop /debug/pprof and /-/support, the `http.auth` block
@@ -72,7 +72,7 @@ def test_a_compose_template_missing_a_flag_is_flagged():
 
 
 def test_a_compose_template_that_stopped_publishing_is_flagged():
-    # Binding to loopback is the obvious "fix" for #1130 and it silently blinds the
+    # Binding to loopback is the obvious "fix" and it silently blinds the
     # `alloy-pi` scrape job and monitor-bridge's detached arm.
     unpublished = COMPOSE.read_text().replace(
         ":12345:12345/tcp", "127.0.0.1:12345:12345"

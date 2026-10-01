@@ -1,36 +1,30 @@
-"""Guards for `kuma_push`'s retry (kuma-push-lib.sh), issues #994 and #1010.
+"""Guards for `kuma_push`'s retry (kuma-push-lib.sh).
 
 The static Kuma monitors run `max_retries: 0`, so a single dropped push leaves the tile STALE
-rather than red until the next cycle — the loss is invisible. Measured on daniel-box over the
-24h to 2026-09-03 17:45 UTC: 49 `push failed` lines across 11 crons, clustered at exactly three
-uptime-kuma rollouts. Every one of those checks had computed `status=up` and thrown the verdict
-away.
+rather than red until the next cycle — the loss is invisible. Dropped pushes cluster at
+uptime-kuma rollouts, and every one of those checks has computed `status=up` and thrown the
+verdict away.
 
-#994 shipped a retry that stopped on ANY 4xx, on the premise that an uptime-kuma `Recreate`
-rollout reaches Traefik as a 503 (a real window with zero ready endpoints, from the Recreate
-strategy on two RWO Longhorn PVCs). #1010 measured that premise wrong: Traefik's KubernetesCRD
-provider drops a router entirely once its service has no endpoints, rather than keeping the
-route and answering through it with a 503 — so a rollout's dropped pushes arrive as Traefik's
-own 404 (empty RouterName, OriginStatus 0), not a 5xx. Over the 3 days to 2026-09-03, non-200
-responses to `/api/push/` were 88 x 404 against 5 x 503, 5 x 500 and 2 x 403 — the #994 retry was
-therefore inert against the DOMINANT case it was written for, while passing every test below
-(this module's own prior docstring asserted the 503 premise as settled fact — the guard
-confirmed the wrong thing instead of catching it, the "green and inert" shape repo-root
-CLAUDE.md names).
+A retry that stops on ANY 4xx assumes an uptime-kuma `Recreate` rollout reaches Traefik as a
+503. It does not: Traefik's KubernetesCRD provider drops a router entirely once its service
+has no endpoints, rather than keeping the route and answering through it with a 503. A
+rollout's dropped pushes therefore arrive as Traefik's own 404 (empty RouterName,
+OriginStatus 0), not a 5xx. Measured over 3 days, non-200 responses to `/api/push/` were
+88 x 404 against 5 x 503, 5 x 500 and 2 x 403, so a retry that stops on 4xx is inert against
+the DOMINANT case while every other test still passes.
 
-The fix (#1010) retries on anything that isn't Kuma answering with a genuine permanent
+So `kuma_push` retries on anything that isn't Kuma answering with a genuine permanent
 rejection — HTTP 401 or 403 — and stops only on those. Everything else retries: curl itself
-failing before a response exists (couldn't connect / timeout / TLS), a 5xx *response*, and any
-OTHER 4xx, in particular the 404 above. A no-router 404 and a bad-token 404 share a code, so a
-genuinely bad token burns the retry budget before its log line appears — the same trade the
-sibling cron `crowdsec-update-home-allowlist.sh.j2` already accepted. Since #1803 the final
-line says which of the two it was: Kuma's own rejection is `application/json`, Traefik's
+failing before a response exists (couldn't connect / timeout / TLS), a 5xx *response*, and
+any OTHER 4xx, in particular the 404 above. A no-router 404 and a bad-token 404 share a
+code, so a genuinely bad token burns the retry budget before its log line appears — the
+same trade the sibling cron `crowdsec-update-home-allowlist.sh.j2` accepts. The final line
+says which of the two it was: Kuma's own rejection is `application/json`, Traefik's
 no-router page is `text/plain`, and the library appends `by=kuma` from the content type (the
-body stays discarded). The retry
-budget also grew from two attempts to three: a single 30s backoff is under the 31s longest
-endpoint-less window #1010 measured, so a lone retry could still land inside the outage; three
-attempts at a fixed 30s backoff put the second retry at t=60s, ~2x that window. Each behaviour
-below is therefore guarded by an accept/reject pair.
+body stays discarded). The retry budget is three attempts: a single 30s backoff is under the
+31s longest endpoint-less window measured, so a lone retry could still land inside the
+outage; three attempts at a fixed 30s backoff put the second retry at t=60s, ~2x that
+window. Each behaviour below is therefore guarded by an accept/reject pair.
 """
 
 from _helpers import ANSIBLE
@@ -41,7 +35,7 @@ LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
 # What real curl writes to stderr when the transport fails and `-S` is in effect. The stub
 # reproduces it so that `test_a_recovered_transport_failure_writes_nothing_to_stderr` is not
 # vacuous: an assertion on empty stderr passes trivially against a stub that never writes any
-# (#2511). `test_the_stub_curl_writes_the_transport_error_to_stderr` is the control that holds
+# stderr. `test_the_stub_curl_writes_the_transport_error_to_stderr` is the control that holds
 # this line real.
 _CURL_STUB_STDERR = '[[ "${RCS[$idx]}" == 0 ]] || echo "curl: (${RCS[$idx]}) stub transport failure" >&2'
 
@@ -112,7 +106,7 @@ def test_connection_failure_then_success_delivers_the_beat(tmp_path):
 
 
 def test_a_recovered_transport_failure_writes_nothing_to_stderr(tmp_path):
-    # ACCEPT #2511: cron mails whatever a job writes, so curl's `curl: (7) ...` on an attempt
+    # ACCEPT: cron mails whatever a job writes, so curl's `curl: (7) ...` on an attempt
     # that attempt two recovers turns a healthy run into a mail. The library reports each failed
     # attempt through `logger` instead, which is the surface that has a reader.
     result, calls, _, logs = _run_push(tmp_path, [("000", 7), ("200", 0)])
@@ -156,10 +150,10 @@ def test_503_then_success_delivers_the_beat(tmp_path):
 
 
 def test_404_then_success_delivers_the_beat(tmp_path):
-    # ACCEPT: THE regression #1010 exists to fix. A Traefik router drop (empty RouterName,
+    # ACCEPT: the dominant rollout case. A Traefik router drop (empty RouterName,
     # OriginStatus 0) during an uptime-kuma rollout answers 404, not 503 — curl connects fine
-    # (curl_rc=0), it's the HTTP status that says "not yet." The #994 classifier stopped on
-    # this exact code, which is why the retry was inert for 88 of 100 non-200 rollout responses.
+    # (curl_rc=0), it's the HTTP status that says "not yet." A classifier that stops on every
+    # 4xx never retries this code, which is 88 of 100 non-200 rollout responses.
     result, calls, sleeps, _logs = _run_push(tmp_path, [("404", 0), ("200", 0)])
     assert "rc=0 ok=1" in result.stdout
     assert calls == 2
@@ -167,7 +161,7 @@ def test_404_then_success_delivers_the_beat(tmp_path):
 
 
 def test_a_kuma_json_404_is_logged_as_answered_by_kuma(tmp_path):
-    # ACCEPT (#1803): Kuma's push route rejecting the token answers 404 as application/json.
+    # ACCEPT: Kuma's push route rejecting the token answers 404 as application/json.
     # The final line carries `by=kuma` so the swallowed-verdicts check can tell a token no live
     # monitor holds from an edge with no route. The retry itself is unchanged — three attempts,
     # since the code alone still decides the classification.
@@ -186,7 +180,7 @@ def test_a_kuma_json_404_is_logged_as_answered_by_kuma(tmp_path):
 
 def test_a_traefik_text_404_is_not_attributed_to_kuma(tmp_path):
     # REJECT (the pair): Traefik's no-router 404 is text/plain, and a bare code with no content
-    # type (an older curl, a stub) is not attributed either — the line keeps its #1010 shape.
+    # type (an older curl, a stub) is not attributed either — the line carries no `by=` field.
     _result, _calls, _sleeps, logs = _run_push(
         tmp_path,
         [("404 text/plain; charset=utf-8", 0), ("404", 0), ("404 text/plain", 0)],
@@ -233,7 +227,7 @@ def test_403_is_not_retried(tmp_path):
 
 
 def test_retries_survive_a_set_dash_e_caller(tmp_path):
-    # Every current caller runs `set -uo pipefail`, not `-e` (verified separately below), but
+    # Every caller runs `set -uo pipefail`, not `-e` (verified separately below), but
     # the library is sourced into whatever the caller sets. A curl failure that trips `set -e`
     # before the retry runs would silently skip both the retry and the final `push failed` log
     # — a regression the other tests, which run without `-e`, cannot see.
@@ -263,9 +257,9 @@ def test_retry_budget_is_well_under_the_fastest_affected_cron_period():
 
 
 def test_retry_window_covers_close_to_twice_the_observed_outage():
-    # The #1010 derivation for going from two attempts to three: a single 30s backoff (60s
-    # short of 2x the 31s outage) is under the 31s longest endpoint-less window measured
-    # 2026-09-03, so a lone retry could still land inside a live outage. Two 30s backoffs land
+    # The derivation for three attempts: a single 30s backoff (60s
+    # short of 2x the 31s outage) is under the 31s longest endpoint-less window measured,
+    # so a lone retry could still land inside a live outage. Two 30s backoffs land
     # the last attempt at t=60s — under the observed outage's exact double (62s) but within 2s
     # of it, the same order-of-magnitude margin the crowdsec sibling script sized its own retry
     # window to (ansible/tests/services/test_crowdsec_allowlist_push_retry.py). Asserted as a
@@ -281,7 +275,7 @@ def test_retry_window_covers_close_to_twice_the_observed_outage():
 
 def test_kuma_push_still_never_fails_the_cron():
     # A push failure must not become a cron failure (a second alert for the same event) — the
-    # retry must preserve this pre-existing contract, not just add attempts on top of it.
+    # retry must preserve this contract, not just add attempts on top of it.
     text = LIB.read_text()
     tail = text[text.index("kuma_push() {") :]
     assert "return 0\n}" in tail

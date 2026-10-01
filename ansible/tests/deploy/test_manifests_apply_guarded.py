@@ -10,7 +10,7 @@ command result — it raises, mid-loop:
 
     Error while evaluating conditional: object of type 'dict' has no attribute 'stdout'
 
-Observed on a real `deploy.yml --tags observability` run on 2026-08-22, four times in one play.
+Seen on a real `deploy.yml --tags observability` run, four times in one play.
 Ansible leaves a register set on a task that was skipped, and a skipped task's register is a
 plain dict carrying `skipped: true` and no `stdout` — so any path that reaches a consumer
 without the apply having produced output turns a deploy red at a task that is not the problem.
@@ -79,8 +79,6 @@ def test_the_guard_is_actually_present_somewhere() -> None:
         len(re.findall(r"manifests_apply\.stdout\s*\|\s*default", p.read_text()))
         for p in _yaml_sources()
     )
-    # Lowered from 5 on 2026-09-02: loki-homelab's private DaemonSet restart became a
-    # manifests_extra_rollouts entry, so the shared role's guard now covers it.
     assert guarded >= 4, (
         f"expected at least the four known rollout consumers to carry the guard, found {guarded} "
         "— if a consumer was removed on purpose, lower this number deliberately"

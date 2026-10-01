@@ -1,11 +1,11 @@
 """`probe.py health --cluster`: the gate must be about the cluster it says it is.
 
-Run after a `-e target=daniel-stage` deploy on daniel-box, the gate used to read whatever the
-local kubectl served — PRODUCTION — and exited 0: a healthy verdict about a cluster the deploy
-never touched (#1663). That is worse than no gate: an inert check reports nothing, this one
-reported a pass about the wrong subject.
+Run after a `-e target=daniel-stage` deploy on daniel-box, a gate that read whatever the local
+kubectl served would read PRODUCTION and exit 0: a healthy verdict about a cluster the deploy
+never touched. That is worse than no gate: an inert check reports nothing, this one reported a
+pass about the wrong subject.
 
-The identity check itself lives in `lib.kubectl` since #2062 and is tested there
+The identity check itself lives in `lib.kubectl` and is tested there
 (`scripts/lib/tests/test_kubectl.py`). What stays here is the gate's own use of it: the
 refusal comes first and is one line, and it is a failure rather than a skip when
 `deploy_detach_notify.py` reads it.

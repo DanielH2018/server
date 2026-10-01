@@ -40,7 +40,7 @@ def test_a_branch_nothing_speaks_for_is_flagged():
 
 
 def test_any_dashboard_verb_counts_not_only_the_known_three():
-    # #1629: a section marker with an unmatched verb made every branch under it an orphan.
+    # A section marker with an unmatched verb made every branch under it an orphan.
     assert orphans(["renovate/d"], [], DASHBOARD) == []
 
 
@@ -62,7 +62,7 @@ def test_the_dashboard_is_matched_by_title_and_renovate_author():
 
 
 def test_an_absent_dashboard_is_refused_not_read_as_empty():
-    # #1629 through a different door: an empty body would orphan every branch it names.
+    # An empty body would orphan every branch it names.
     with pytest.raises(NoDashboard):
         dashboard_body([])
     with pytest.raises(NoDashboard):

@@ -85,8 +85,8 @@ class _FakeCluster:
     """Discovery resolves and `get nodes` answers as prod; every other call returns `{}`.
 
     `tools` is the `lib.kubectl.Tools` to hand the collector, `seen` the argvs it ran. The
-    collector goes through the shared invoker since #2062, so its seams are the invoker's,
-    not a private `_run`.
+    collector goes through the shared invoker, so its seams are the invoker's, not a private
+    `_run`.
     """
 
     def __init__(self, kubeconfig, binary="/usr/local/bin/kubectl"):
@@ -179,8 +179,8 @@ def test_refresh_cron_sets_kubeconfig():
 
 
 def _refresh_cron_job():
-    # main.yml became a list of import_tasks in the 2026-08-15 split, so scan every task
-    # file in the directory — the cron now lives in crons.yml, not the entry point.
+    # main.yml is a list of import_tasks, so scan every task file in the directory — the cron
+    # lives in crons.yml, not the entry point.
     task_dir = REPO_ROOT / "ansible/roles/setup/initial_setup/tasks"
     if not task_dir.is_dir():
         pytest.skip("ansible role tree not present")

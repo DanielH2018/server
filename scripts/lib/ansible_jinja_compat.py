@@ -31,9 +31,9 @@ def ansible_bool(value) -> bool:
     filter exists for, so the test would pass while production took the other branch.
 
     The filter is `to_bool`, NOT `module_utils.parsing.convert_bool.boolean` — that one serves
-    module argument parsing and accepts `t`, `y`, `f`, `n` and any non-zero int. Until #2074
-    the shim mirrored `boolean`, so `'t'`, `'y'`, `2`, `-1` and `' True '` rendered True under
-    the guard and False in production. `to_bool` lowercases without stripping, stringifies
+    module argument parsing and accepts `t`, `y`, `f`, `n` and any non-zero int. Mirroring
+    `boolean` would render `'t'`, `'y'`, `2`, `-1` and `' True '` as True under the guard and
+    False in production. `to_bool` lowercases without stripping, stringifies
     ints (so `bool` lands in the tables), and coerces anything outside the tables with
     `value == 1` — a fallback it deprecates for removal in ansible-core 2.23. This mirrors the
     pinned filter's control flow, fallback included; the parity test flags the removal.

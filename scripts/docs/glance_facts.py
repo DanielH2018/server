@@ -1,10 +1,10 @@
 """The setup-plane and Pi-plane fact readers behind `gen_role_glance.py`, and what every plane shares.
 
-`gen_role_glance.py` owns the k8s readers, the in-place writer and the CLI; its docstring
-says which facts each role shape prints and why. This module holds the readers for the two
-planes #2096 added — a setup role's applying playbook, crons and timers; a Pi compose role's
-image pins, `containers_list` facts, `meta/deps.yml` ordering and `common_config_changed`
-wiring — and `image_repository`, which every plane's image line goes through.
+`gen_role_glance.py` owns the k8s readers, the in-place writer and the CLI; its docstring says which
+facts each role shape prints and why. This module holds the readers for the setup and Pi planes — a
+setup role's applying playbook, crons and timers; a Pi compose role's image pins, `containers_list`
+facts, `meta/deps.yml` ordering and `common_config_changed` wiring — and `image_repository`, which
+every plane's image line goes through.
 
 STATIC PARSING ONLY: tasks and playbooks through `yaml.safe_load`, templates by line with
 a regex. A cron schedule or timer key's Jinja resolves to its fleet-wide value where no host
@@ -85,10 +85,10 @@ def setup_role_dirs(setup_roles: Path = SETUP_ROLES) -> list[Path]:
     """Every setup role directory the generator writes a block for, sorted.
 
     `is_leftover_dir` skips a retired role's debris: the deployer's fast-forward removes the
-    role's tracked files, and a gitignored `__pycache__/` keeps its directory on disk. The
-    generator then wrote a block for a role that no longer exists in git, and the staleness
-    gate raised on its missing `CLAUDE.md` (#2964). Same predicate, same reasoning, as
-    `catalog_backup.role_dirs`.
+    role's tracked files, and a gitignored `__pycache__/` keeps its directory on disk.
+    Without it the generator would write a block for a role that no longer exists in git,
+    and the staleness gate would raise on its missing `CLAUDE.md`. Same predicate, same
+    reasoning, as `catalog_backup.role_dirs`.
     """
     return sorted(
         d

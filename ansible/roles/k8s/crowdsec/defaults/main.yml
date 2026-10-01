@@ -1,8 +1,8 @@
 ---
-# Slice 6, B1 — the in-cluster CrowdSec engine: LAPI + AppSec + the decision DB.
+# The in-cluster CrowdSec engine: LAPI + AppSec + the decision DB.
 # Log-parsing agents live NEXT TO the logs, not here: the k8s traefik pod carries a
-# tailing sidecar (roles/k8s/traefik), and daniel-server's engine demotes to an agent
-# against this LAPI at B2. See docs/archive/k3s-migration/slice-6-edge-cutover.md (D1-D3).
+# tailing sidecar (roles/k8s/traefik), and the node-agent DaemonSet below reads each node's
+# auth.log.
 
 # crowdsec_k8s_image / crowdsec_k8s_agent_username / crowdsec_k8s_lapi_port /
 # crowdsec_k8s_appsec_port live in group_vars/all.yml — the traefik role's sidecar and
@@ -16,7 +16,7 @@ crowdsec_k8s_metrics_port: 6060
 # the primary reason. crowdsec_k8s_image itself lives in group_vars/all.yml (shared with the
 # traefik sidecar and bouncer middleware), not here — this declaration covers the role, and
 # renovate.json's `manual — k8s_autodeploy: false` rule names group_vars/all.yml beside this
-# file so the pin's bump opens without automerge like any denied role's (#1936).
+# file so the pin's bump opens without automerge like any denied role's.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "platform — LAPI/AppSec/decision engine every bouncer queries; a failed deploy can open or close traffic unpredictably fleet-wide. COUPLING NOTE for a future promotion: crowdsec-db also holds LAPI machine registrations; a revert past an agent registration leaves that agent's stored password valid but the machine unknown"  # noqa var-naming[no-role-prefix]
 
@@ -43,14 +43,13 @@ crowdsec_k8s_mem_limit: 512Mi
 crowdsec_k8s_cpu_request: 100m
 crowdsec_k8s_mem_request: 128Mi
 
-# ── node-agent DaemonSet (Phase F drain, 2026-08-13) ────────────────────────────────────
-# Per-node auth.log/SSH agents — the demoted Docker agent's successor, extended to
-# daniel-box (whose host SSH signal nothing covered before). Machine names must match
+# ── node-agent DaemonSet ────────────────────────────────────────────────────────────────
+# Per-node auth.log/SSH agents. Machine names must match
 # the DaemonSet's AGENT_USERNAME pattern k8s-node-agent-<nodeName>; add a line when a
 # node joins the cluster.
 crowdsec_k8s_node_agent_machines:
   - k8s-node-agent-daniel-box
   - k8s-node-agent-daniel-server
-# Same pair the demoted Docker agent ran: linux for auth.log/SSH scenarios,
+# linux for auth.log/SSH scenarios,
 # whitelist-good-actors to suppress good-actor false positives on them.
 crowdsec_k8s_node_agent_collections: "crowdsecurity/linux crowdsecurity/whitelist-good-actors"

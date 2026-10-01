@@ -1,11 +1,10 @@
 """Step 4, the GitOps tick, retried while the unit's own flock gives up.
 
-Exit 3 means the tick fast-forwarded NOTHING. A landing that carried on from there left
-the primary checkout behind origin with every later step reading that as "the tick
-deferred" (#723, 2026-09-01). Each attempt already waits 180s inside the unit, so five of
-them cover a long deploy. This is the one implementation both call sites use -- step 4 and
-the stale retry in the deploy phase. land.sh's stale-retry copy had none of the retry or
-the accounting (#1013).
+Exit 3 means the tick fast-forwarded NOTHING. A landing that carried on from there would
+leave the primary checkout behind origin with every later step reading that as "the tick
+deferred". Each attempt already waits 180s inside the unit, so five of them cover a long
+deploy. This is the one implementation both call sites use -- step 4 and the stale retry
+in the deploy phase. land.sh's stale-retry copy had none of the retry or the accounting.
 """
 
 import sys as _sys
@@ -116,8 +115,7 @@ def run_tick(ln: Landing) -> None:
         say(f"tick exit {rc}")
         # Booked because every later read of the deployer's markers then races the apply this
         # landing gave up watching: `hold_sha` is legitimately empty while the apply is still
-        # running, which is indistinguishable from a settled deferral. Issue #1607 -- a landing
-        # reported `deferred` during the very apply that failed and parked the whole fleet.
+        # running, which is indistinguishable from a settled deferral.
         #
         # ASSIGNED, not raised: this is the second call site (the deploy phase's stale retry
         # runs the tick again), and a retry that returns 0 watched a tick to completion. Left
@@ -132,6 +130,6 @@ def run_tick(ln: Landing) -> None:
         )
     # gitops_tick.sh exit 1 is "the unit exited non-zero" -- the one verdict-less path that
     # maps to a recurring operational event, so it names deploy-failed rather than landing in
-    # the board's `aborted` bucket (issue #1031).
+    # the board's `aborted` bucket.
     ln.ledger.cause = Cause.TICK_FAILED
     ln.die(f"gitops tick failed (exit {rc})", 1, Verdict.DEPLOY_FAILED)

@@ -60,7 +60,7 @@ def test_failed_job_is_down():
 
 
 def test_error_line_on_a_succeeded_job_is_still_down():
-    # The reason configarr_status exists: the 2026-06-10 recyclarr breakage exited 0 every night.
+    # The reason configarr_status exists: a recyclarr breakage can exit 0 every night.
     ok, msg = decide(
         job("configarr-1", completion="2026-08-08T04:30:12Z"),
         "Loaded config\nERROR: invalid trash_id foo",

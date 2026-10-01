@@ -12,9 +12,7 @@ two different ways, and only one of them needs an annotation:
       `manifests_render`'s bytes and the central rollout-restart
       (`roles/k8s/manifests/tasks/main.yml`, guarded on `manifests_render is changed`) fires
       on its own. See "A config edit won't restart the pod (k3s)" in the repo CLAUDE.md.
-      Not this census's subject at all — fourteen roles do this today (artifacts, authelia,
-      configarr, crowdsec, freshrss, home-assistant, homepage, image-builder, janitorr,
-      karakeep, livesync, loki-homelab, traefik, zigbee2mqtt) and none of them needs anything
+      Not this census's subject at all — none of the roles that do this needs anything
       from this file.
 
   (b) Staged outside the cycle. A role's `tasks/*.yml` runs `kubectl create configmap
@@ -56,9 +54,8 @@ def from_file_configmap_roles(roles_dir: Path = K8S_ROLES) -> set[str]:
     uses for its own (narrower — one exact task name) version of this predicate.
 
     Reads the command each task runs, not the file's text: `game-stats/tasks/stage.yml`
-    documents the `kubectl create configmap` command its callers run, and a text scan counted
-    the helper role it used to live in — which staged nothing and rendered no workload — as
-    one of them.
+    documents the `kubectl create configmap` command its callers run, and a text scan would
+    count that helper role — which stages nothing and renders no workload — as one of them.
     """
     found = set()
     for role_dir in sorted(roles_dir.iterdir()):

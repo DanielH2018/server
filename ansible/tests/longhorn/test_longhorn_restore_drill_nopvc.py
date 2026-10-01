@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The restore drill publishes the backed-up volumes it skips for having no bound PVC (#2706).
+"""The restore drill publishes the backed-up volumes it skips for having no bound PVC.
 
 The drill restores into a PVC in the source namespace, so its eligible set drops any volume
 whose `kubernetesStatus.pvcName` is empty. Check 8 iterates only the candidates file, so such a
-volume left the rotation and the coverage check together, and nothing reported it. The drill now
-writes `excluded_nopvc` beside `excluded_oversize`, and the backup-health reader names every
+volume leaves the rotation and the coverage check together, unreported. The drill writes
+`excluded_nopvc` beside `excluded_oversize`, and the backup-health reader names every
 volume in it.
 
 These tests RUN the rendered script through the shared harness in `_restore_drill.py`.

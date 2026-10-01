@@ -2,18 +2,14 @@
 # The activation lever, and the rollback lever: set false and redeploy. NOT a deletion —
 # `kubectl apply` does not prune, so removing this role's template would leave the live policy
 # enforcing with nothing in the repo describing it.
-#
-# Landed false so the role could be applied and its list position verified without fencing
-# anything; flipped true 2026-08-16 once the six slice-1 workloads were deployed carrying
-# `netpol-baseline: enforced` and confirmed as exactly six selected pods.
 netpol_baseline_enforced: true
 
-# `label`     — the policy selects only pods carrying `netpol-baseline: enforced` (slices 1-4)
-# `namespace` — the policy selects every pod EXCEPT those carrying `netpol-baseline-exempt`
-#               (slice 5). Not a bare `podSelector: {}`: see the template for why.
+# `label`     — the policy selects only pods carrying `netpol-baseline: enforced`
+# `namespace` — the policy selects every pod EXCEPT those carrying `netpol-baseline-exempt`.
+#               Not a bare `podSelector: {}`: see the template for why.
 #
-# This is also the rollback lever for slice 5 — set back to `label` and redeploy. Every workload
-# still carries its opt-in label, so nothing else has to move.
+# Setting `label` and redeploying is the rollback lever for `namespace`. Every workload still
+# carries its opt-in label, so nothing else has to move.
 netpol_baseline_scope: namespace
 
 # The workloads that opt OUT under namespace scope, by `app` label. Each owns a NetworkPolicy
@@ -24,7 +20,7 @@ netpol_baseline_scope: namespace
 # from the cluster is a widening about to happen, and a name in the cluster but not here is a pod
 # fenced by nothing at all. `ansible/tests/k8s/test_netpol_baseline_labels.py` pins the same set
 # against the rendered templates; the gate exists because the templates and the cluster can
-# disagree, and did for ~16 hours during slice 4.5.
+# disagree.
 netpol_baseline_exempt_workloads:
   - flaresolverr    # roles/k8s/prowlarr/templates/networkpolicy-flaresolverr.yaml.j2 (app=prowlarr, :8191)
   - headlamp        # roles/k8s/headlamp/templates/networkpolicy.yaml.j2
@@ -48,7 +44,7 @@ netpol_baseline_node_cidrs: "{{ k3s_cni0_gateways }}"
 # reach the `.local.` names direct; and the whole pod CIDR, because in-cluster callers of a
 # `.local.` route (the Kuma prober, monitor-bridge, homepage's widgets, ~14 roles) reach the
 # VIP as their own 10.42.x.y address. Composed here rather than in the template so a test can
-# read the list by name and a fifth source is a one-line change (#1974).
+# read the list by name and a fifth source is a one-line change.
 #
 # `cloudflare_ips` is the same list traefik's forwardedHeaders.trustedIPs reads, so a Cloudflare
 # range change needs a netpol-baseline deploy as well as traefik's — cloudflare-ip-drift.sh
@@ -62,9 +58,9 @@ netpol_baseline_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "renders NetworkPolicies plus five probe Jobs, all gated to completion; an _image:-only diff touches only the pinned probe image, the policies re-apply unchanged, and the role hard-fails if the live exempt set has drifted"  # noqa var-naming[no-role-prefix]
 
-# Slice 3 fences the observability namespace. It carries its OWN enforcement flag and its
+# The observability namespace fence. It carries its OWN enforcement flag and its
 # OWN node-CIDR list, deliberately: the shared netpol_baseline_node_cidrs is read by the 16
-# workloads slices 1 and 2 already deployed, and widening it would re-scope all of them.
+# homelab workloads, and widening it would re-scope all of them.
 netpol_baseline_obs_enforced: true
 
 # Observability's own scope lever, separate from netpol_baseline_scope for the same reason its
@@ -92,8 +88,8 @@ netpol_baseline_obs_exempt_workloads: []
 #
 # prometheus has no node pin, so it can also land on daniel-server. When it does, the observability
 # health cron — installed on daniel-box only (`containers_list` in host_vars/daniel-box.yml; no
-# entry, and no `delegate_to`, for daniel-server) — calling its ClusterIP is cross-node. By
-# slice 2's own evidence, a cross-node host->pod packet arrives as the SENDING node's flannel.1,
+# entry, and no `delegate_to`, for daniel-server) — calling its ClusterIP is cross-node. A
+# cross-node host->pod packet arrives as the SENDING node's flannel.1,
 # so that caller needs daniel-box's own flannel.1 (10.42.0.0/32), not daniel-server's.
 #
 # Only the daniel-server flannel.1 entry (10.42.1.0/32) has no caller nameable today — kept
@@ -109,15 +105,14 @@ netpol_baseline_obs_node_cidrs:
   - 10.42.0.0/32    # daniel-box flannel.1 (the observability cron, and the API server's proxy for Headlamp's Prometheus plugin, when prometheus is cross-node)
   - 10.42.1.0/32    # daniel-server flannel.1 (no caller nameable today; deliberate over-inclusion)
 
-# The slice-4.5 probe's targets, in one place because THREE things must agree about them: the
+# The probe's targets, in one place because THREE things must agree about them: the
 # readiness gate in tasks/main.yml, the assertions in netpol-probe-slice45-job.yaml.j2, and the
 # ports that template hardcodes. Adding an assertion there without adding its target here reopens
 # the silent-green hole the gate exists to close.
 #
-# terraria is ABSENT, and its absence is the whole reason this list exists as a variable. It was
-# scaled to `replicas: 0` by #836 (2026-09-02 15:10) and its EndpointSlice emptied ten minutes
-# later, at which point every full `deploy.yml` began failing here — three times on 2026-09-02
-# before anyone read the task name, because a scoped per-service deploy never reaches this role.
+# terraria is ABSENT, and its absence is the whole reason this list exists as a variable. It is
+# scaled to `replicas: 0` and its EndpointSlice is empty, so a probe against it would fail every
+# full `deploy.yml` (a scoped per-service deploy never reaches this role).
 # Its probe leg is gated on this same list, so restoring terraria to a running replica count is a
 # one-line change here and the coverage comes back with it.
 netpol_baseline_slice45_targets:

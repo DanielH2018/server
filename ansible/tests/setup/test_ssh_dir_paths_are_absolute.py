@@ -1,11 +1,12 @@
 """The SSH-directory tasks name the directory they mean, and no role task leaves `~` to sudo.
 
-`Harden the sys user's SSH directory` read `path: ~/.ssh` with no `become:` of its own, under a
-play that becomes root. Ansible's file module expands `~` as the become user and the sudo plugin
-passes `-H`, so the task chowned /root/.ssh to ubuntu recursively on every run and never touched
-/home/ubuntu/.ssh — while reporting `ok` both times (daniel-box, 2026-09-23 and 2026-09-24).
-Nothing in the task's own text says which directory it writes, which is why the bug survived
-every reading of it: the answer is in the play's `become:` and in sudo's default flags.
+A task such as `Harden the sys user's SSH directory` that names `path: ~/.ssh` with no
+`become:` of its own, under a play that becomes root, writes to /root/.ssh rather than
+/home/ubuntu/.ssh: Ansible's file module expands `~` as the become user and the sudo plugin
+passes `-H`. The task chowns /root/.ssh to ubuntu recursively on every run and never touches
+/home/ubuntu/.ssh, while reporting `ok`. Nothing in the task's own text says which directory
+it writes, which is why the bug survives every reading of it: the answer is in the play's
+`become:` and in sudo's default flags.
 
 The first two tests pin the fix at the two tasks. The last pair is the class guard — a
 home-relative path in a role task is never right here, because every playbook in this repo
@@ -77,7 +78,7 @@ def test_roots_ssh_directory_is_given_back_and_never_created() -> None:
 
 
 def test_a_home_relative_path_is_flagged() -> None:
-    """FLAGGED half: the exact shape #2413 shipped, so the scan below cannot go inert."""
+    """FLAGGED half: the exact shape of the bug above, so the scan below cannot go inert."""
     assert _home_relative_paths(
         {
             "name": "Set SSH directory permissions",

@@ -9,8 +9,7 @@ name: image-smoke
 # workflow_dispatch takes an explicit list instead of the diff, for two jobs the PR trigger
 # cannot do. It is the only way to exercise a change to the check itself — a PR that edits this
 # file changes no image pin, so the diff is empty and the checks below never run. And it is how
-# to sweep refs the PR path has not seen: 12 of the 81 tracked pins were excluded from even the
-# `docker pull` until 2026-08-21, so nothing has ever verified that those tags resolve.
+# to sweep refs the PR path has not seen, which nothing else verifies resolve.
 on:
   pull_request:
   # Inert: merge queues are not offered on this user-owned repository (see the note in
@@ -48,7 +47,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          # Kept, though this job no longer needs a specific interpreter (see below): the pin is
+          # Kept, though this job needs no specific interpreter (see below): the pin is
           # asserted in lockstep with ci.yml and .python-version by
           # scripts/tests/test_renovate_dockerfiles.py::test_python_version_pins_in_lockstep. The
           # step is free while the runner image's toolcache holds this patch, and a download
@@ -56,10 +55,10 @@ jobs:
           python-version: "3.14.7"
 
       # No setup-uv step: scripts/dev/smoke_extract.py imports `re` and `sys` and nothing else, so it
-      # needs no project env — `uv run` here was resolving the whole `dev` group (uncached, since
-      # this workflow never set enable-cache) to run a stdlib script, ~3s of a ~10s job. If that
-      # script ever grows a third-party import, add `astral-sh/setup-uv` back WITH enable-cache
-      # and restore the `uv run` form below.
+      # needs no project env, and `uv run` would resolve the whole `dev` group (uncached, since
+      # this workflow does not set enable-cache) to run a stdlib script, ~3s of a ~10s job. If
+      # that script ever grows a third-party import, add `astral-sh/setup-uv` WITH enable-cache
+      # and invoke it through `uv run`.
       - name: Collect changed image refs
         id: images
         env:
@@ -98,8 +97,8 @@ jobs:
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
             fetch --no-tags origin "$BASE_REF"
           # Scope is the k8s image plane: role defaults plus group_vars/all.yml (crowdsec_k8s_image
-          # lives there). The compose half was dropped 2026-08-14 — both cluster hosts are drained
-          # and daniel-pi has no CI deploy path, so that glob matched nothing deployable.
+          # lives there). Compose templates are out of scope: both cluster hosts are drained
+          # and daniel-pi has no CI deploy path, so that glob would match nothing deployable.
           #
           # A Renovate bump to a version-bearing Dockerfile FROM (ical-proxy python:3.14-slim,
           # peanut debian:bookworm-slim) is deliberately NOT boot-smoked here — those are
@@ -130,13 +129,11 @@ jobs:
       # does not start it, so a config-required entrypoint is irrelevant. That is what lets
       # this run over EVERY changed ref with no exception list.
       #
-      # Layer 2 is the bare `docker run` this job used to be, kept but downgraded to an
-      # annotation. It was fatal until 2026-08-21 and had, across 11 failures and 14 months,
-      # never once caught a real image problem — every failure was an image that needs config
-      # to boot, which is the normal case for a service. Making it advisory is what let
-      # `_SKIP_BARE_BOOT` be deleted; that list had grown to 11 repositories, one red PR at a
-      # time, and because it filtered refs out ahead of the pull it left 12 of the 81 tracked
-      # pins checked by nothing at all.
+      # Layer 2 is the bare `docker run`, an annotation rather than a failure. As a fatal
+      # check it never once caught a real image problem across 11 failures and 14 months —
+      # every failure was an image that needs config to boot, which is the normal case for a
+      # service. An exception list would grow one red PR at a time, and because it filters
+      # refs out ahead of the pull it would leave tracked pins checked by nothing at all.
       - name: Pull + boot each image
         if: steps.images.outputs.list != ''
         env:
@@ -168,7 +165,7 @@ jobs:
             else
               # Three shapes, and they resolve against three different things. Getting this
               # wrong produces a false failure on a perfectly good image, so each was checked
-              # against real images on 2026-08-21 rather than assumed:
+              # against real images rather than assumed:
               #
               #   /app/entrypoint.sh   absolute — assert as given (authelia, tempo, dozzle)
               #   tini                 no slash — resolved through PATH at runtime (couchdb,

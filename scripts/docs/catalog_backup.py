@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Longhorn backup tier and GitOps auto-deploy eligibility for one ``containers_list`` entry.
 
-Split out of ``scripts/docs/service_catalog.py`` on 2026-09-04. Both facts are read from a
-k8s role's own files — its PVC claims and their StorageClass for the tier, its
-``k8s_autodeploy`` default for eligibility — and both report a reason rather than a guess
-when the role does not say. The FIELD NOTES in the generator's own docstring record which
-cases those are and why.
+Both facts are read from a k8s role's own files — its PVC claims and their StorageClass for
+the tier, its ``k8s_autodeploy`` default for eligibility — and both report a reason rather
+than a guess when the role does not say. The FIELD NOTES in the generator's own docstring
+record which cases those are and why.
 """
 
 import sys as _sys
@@ -88,7 +87,7 @@ _SIMPLE_VAR_RE = re.compile(r"^\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$")
 # parameter the call site binds (`arr-deployment.yml.j2`, radarr's and sonarr's whole
 # Deployment). The claim is still the role's — it is mounted by its pod — but no line of the
 # role's own templates names it, so a scan that stops at `templates/` drops it silently. radarr
-# and sonarr lost `media-data` from their At-a-glance blocks exactly that way (#2871).
+# and sonarr lost `media-data` from their At-a-glance blocks exactly that way.
 _SHARED_IMPORT_RE = re.compile(
     r"\{%-?\s*from\s*'(?P<file>[^']+)'\s*import\s+(?P<names>[^%]*?)\s*(?:with context\s*)?-?%\}"
 )
@@ -331,7 +330,7 @@ def role_dirs(k8s_roles: Path) -> list[Path]:
 
     A retired role's gitignored `__pycache__/` keeps its directory on disk after the
     deployer's fast-forward removes the tracked files. That shell declares no claims, so
-    walking it is harmless today, but it is not a role (#2888).
+    walking it is harmless today, but it is not a role.
     """
     return sorted(
         p for p in k8s_roles.iterdir() if p.is_dir() and not is_leftover_dir(str(p))

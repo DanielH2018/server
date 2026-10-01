@@ -57,8 +57,8 @@ def test_the_current_version_is_the_first_one_returned():
 
 
 def test_a_hidden_file_is_not_counted_as_live():
-    """Reading `action == upload` across all versions made a finished deletion look like a
-    no-op on 2026-08-19, and produced a false 'Longhorn strands objects' finding."""
+    """Reading `action == upload` across all versions would make a finished deletion look like a
+    no-op."""
     versions = [
         _v("deleted", "hide", "h"),
         _v("deleted", "upload", "u"),

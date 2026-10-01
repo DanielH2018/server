@@ -254,7 +254,7 @@ def test_an_unlabelled_issue_is_refused_and_a_labelled_one_launches(tmp_path, ca
 
 
 def test_a_host_whose_signing_key_github_verifies_is_placed_on(tmp_path):
-    """The accept half of the #1615 gate: HOST_KEY is in the fake's registered set."""
+    """The accept half of the signing gate: HOST_KEY is in the fake's registered set."""
     tools, run = fake_tools(answers={"daniel-server": ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 0
     assert [c for c in run.calls if "worktree add" in c[1]]
@@ -314,7 +314,7 @@ def _health_calls(run):
 
 
 def test_no_session_health_is_read_from_a_host_the_signing_gate_dropped(tmp_path):
-    """#1676: the health read follows placement, not the set of hosts placement looked at.
+    """The health read follows placement, not the set of hosts placement looked at.
 
     daniel-box is read for headroom and then dropped for its key, so it receives no batch.
     A health read there would spend an ssh connection against that host's 5-per-30s `ufw
@@ -451,7 +451,7 @@ def test_a_reordered_or_narrowed_spec_cannot_slip_past_the_live_guard(tmp_path, 
 
 
 def test_a_first_batch_refused_writes_no_manifest_at_all(tmp_path, capsys):
-    """F15: an empty manifest records no work, and `launch` now reads every manifest."""
+    """F15: an empty manifest records no work, and `launch` reads every manifest."""
     tools, _run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
     _run.answers_by_call = [
         ok(HEADROOM),

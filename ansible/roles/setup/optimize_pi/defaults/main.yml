@@ -29,12 +29,12 @@ optimize_pi_apt_timers:
     at: "05:20"
 
 # node_exporter as a host unit (tasks/main.yml, section 10). The same version the cluster's
-# DaemonSet pins (roles/k8s/node-exporter/defaults/main.yml) and the container ran; noble's
+# DaemonSet pins (roles/k8s/node-exporter/defaults/main.yml); noble's
 # prometheus-node-exporter package is 1.7.0, five minors behind, so the upstream tarball keeps
 # the pin. The checksum is the linux-arm64 line of the release's sha256sums.txt. Renovate does
 # not track this; bump it by hand alongside the cluster's. The URL sits beside the digest, not
 # inline in the get_url task, so `scripts/validate/asset_pins.py` pairs the two and fetches the
-# tarball to check the digest (#2224).
+# tarball to check the digest.
 optimize_pi_node_exporter_version: "1.12.1"
 optimize_pi_node_exporter_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ optimize_pi_node_exporter_version }}/node_exporter-{{ optimize_pi_node_exporter_version }}.linux-arm64.tar.gz"
 optimize_pi_node_exporter_sha256: "ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7"
@@ -60,14 +60,14 @@ optimize_pi_log2ram_comp_alg: lz4
 #
 # BOTH roots, and /var/hdd.log is the load-bearing one: /var/log is log2ram's RAM tmpfs, while
 # /var/hdd.log is the copy on the SD card and the destination of the sync that corrupted 37
-# files in #2694. Run against the live Pi on 2026-09-27 the sweep found 37 of 144 files failing,
-# every one of them under /var/hdd.log and none under /var/log.
+# files. Against the live Pi the sweep found 37 of 144 files failing, every one of them under
+# /var/hdd.log and none under /var/log.
 optimize_pi_gz_integrity_roots:
   - /var/log
   - /var/hdd.log
 # Non-vacuity floor: a glob that matches nothing passes `gzip -t` trivially, so a logrotate
-# config change or a moved root would turn the sweep green forever. 144 files across both roots
-# on 2026-09-27; /var/log alone swings 35-72 over a logrotate cycle, so 40 sits below the
+# config change or a moved root would turn the sweep green forever. 144 files across both roots;
+# /var/log alone swings 35-72 over a logrotate cycle, so 40 sits below the
 # trough of either root and well above zero.
 optimize_pi_gz_integrity_min_files: 40
 # /var/lib, NOT /var/log: a verdict written into log2ram's tmpfs is gone after a reboot, and the
@@ -84,9 +84,8 @@ optimize_pi_gz_integrity_max_age_h: 26
 # run silently undoes. Set it per host in `inventory/host_vars/daniel-pi.yml`, so the intent
 # lives in the inventory rather than in a working tree.
 #
-# It ships TRUE, unlike renovate_agent's switch. The cron has been installed unconditionally
-# since #1910 and is the only thing that restarts a container whose *create* failed at the OCI
-# runtime — `restart: unless-stopped` does not (autoheal, 2026-08-29, down ~50 min). A
+# It ships TRUE, unlike renovate_agent's switch: the cron is the only thing that restarts a
+# container whose *create* failed at the OCI runtime — `restart: unless-stopped` does not. A
 # default-off flag would make the next `--tags recovery-health` run remove the live cron.
 #
 # Detection and remediation share one script, so disarming ends the heartbeat too: the "Daniel

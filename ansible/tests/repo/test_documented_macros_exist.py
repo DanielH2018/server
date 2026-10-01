@@ -1,20 +1,16 @@
 """Every shared macro named in the operator docs must still exist in ansible/templates/.
 
-`healthcheck.yml.j2` was deleted and its jittered-interval body inlined into the one compose
-file that still used it, but three places went on naming it: the repo CLAUDE.md's macro list,
-the `/new-container` skill's macro list, and -- the one that actually breaks -- that skill's
-canonical skeleton, which opens with `{% from 'healthcheck.yml.j2' import healthcheck %}`.
-Copying the skeleton produced a template that could not render (2026-08-25 review M-5).
+A deleted macro can stay named in several places: the repo CLAUDE.md's macro list, the
+`/new-container` skill's macro list, a live agent brief, and -- the one that actually breaks --
+that skill's canonical skeleton, which opens with a `{% from '<macro>.yml.j2' import ... %}`.
+Copying the skeleton then produces a template that cannot render.
 
-Nothing caught it because the skeleton is prose: it lives inside a fenced block in a Markdown
-file, so no renderer, linter or template validator ever reads it.
+Nothing else catches it because the skeleton is prose: it lives inside a fenced block in a
+Markdown file, so no renderer, linter or template validator ever reads it.
 
-The original guard checked only two files (the repo CLAUDE.md and the `/new-container` skill),
-which is why it stayed green while `.claude/agents/homelab-container-reviewer.md` went on
-naming the same deleted macro in a live agent brief (2026-08-27 review). DOCS is now every
-`CLAUDE.md` in the tree plus every `*.md` under `.claude/`, excluding retired trees whose docs
-describe code that no longer runs, and excluding the generated findings register (see
-`GENERATED_REGISTER` below).
+DOCS is every `CLAUDE.md` in the tree plus every `*.md` under `.claude/`, excluding retired
+trees whose docs describe code that no longer runs, and excluding the generated findings
+register (see `GENERATED_REGISTER` below).
 """
 
 import re
@@ -25,8 +21,7 @@ MACROS = REPO / "ansible" / "templates"
 
 # `docs/reference/backlog.md` renders the open-findings register, so its rows are GitHub issue
 # titles rather than prose this repo wrote. An issue that proposes deleting a macro names that
-# macro in its title, which reddened this guard from the moment the issue was filed until it
-# closed (#2973, the issue that deleted `expose.yml.j2`). Nothing is copyable from a register
+# macro in its title, which would redden this guard until the issue closes. Nothing is copyable from a register
 # row, which is the harm this guard exists to catch. Same shape and same reason as
 # `test_documented_paths_exist.py::test_node_corpus_excludes_the_generated_decisions_page`.
 GENERATED_REGISTER = "docs/reference/backlog.md"
@@ -35,14 +30,13 @@ DOCS = [d for d in discover_docs() if not d.as_posix().endswith(GENERATED_REGIST
 
 # THE CORPUS FLOOR LIVES IN test_documented_paths_exist.py, not here.
 # `discover_docs()` is shared, and that module's `test_the_corpus_covers_the_whole_doc_tree`
-# floors it at 100 (131 today). This module carried an identical assertion floored at 50, which
-# could only fire in a run where the stronger one already had -- so it added no coverage and
-# two floors on one corpus invited them to drift apart. One corpus, one floor.
+# floors it at 100. A second floor here could only fire in a run where the stronger one already
+# had, and two floors on one corpus invite them to drift apart. One corpus, one floor.
 
 # A `<name>.yml.j2`, whether bare (a `{% from %}` line or an inline bullet mention) or with
-# one directory level in front of it -- widening DOCS to every CLAUDE.md pulled in role-local
-# app config the roles happen to name with the same extension (`templates/config/config.yml.j2`
-# in configarr, `templates/config/application.yml.j2` in janitorr). Capturing the directory
+# one directory level in front of it -- role-local app config shares the extension
+# (`templates/config/config.yml.j2` in configarr, `templates/config/application.yml.j2` in
+# janitorr). Capturing the directory
 # lets the loop below tell those apart from a shared-macro reference, which this repo's docs
 # always give bare or as `templates/<macro>.yml.j2` -- never `templates/config/...`.
 NAMED = re.compile(r"\b((?:[a-z0-9_-]+/)?[a-z0-9_-]+\.yml\.j2)\b")

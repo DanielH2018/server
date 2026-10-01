@@ -32,7 +32,7 @@ DASHBOARD = {
 
 
 # The digest-clock key `main()` writes beside the branch key for the fixture's one item: the
-# dwell is keyed on the update, so the state file carries both clocks (#3076).
+# dwell is keyed on the update, so the state file carries both clocks.
 _PROMTAIL_DIGEST_KEY = pl.content_key(
     "renovate/promtail", "Update grafana/promtail Docker tag to v3.6.11"
 )
@@ -162,7 +162,7 @@ def test_clamp_trims_a_message_past_discords_cap():
     assert clamped.endswith("…(truncated)")
 
 
-# --- Dwell-state loss (issue #1526) ---------------------------------------------------------
+# --- Dwell-state loss ---------------------------------------------------------
 # `pending_state_lost` is the only thing telling a wiped clock apart from the intended first-run
 # bootstrap, and both halves are load-bearing: firing on a legitimately empty map pages every
 # quiet day, and not firing on a lost one leaves the arm inert for up to 14 days in silence.
@@ -200,7 +200,7 @@ def test_a_genuine_first_run_is_clean(tmp_path):
 
 
 def test_a_wiped_clock_reaches_discord_and_names_the_date(monkeypatch, tmp_path):
-    """The verify-by for #1526: the run reports the reset rather than completing healthy.
+    """The run reports the reset rather than completing healthy.
 
     The item below is inside its allowance, so `stuck_pending` is empty — exactly the state
     the reset creates, and the one that used to post nothing at all.
@@ -224,7 +224,7 @@ def test_a_first_run_does_not_report_a_reset(monkeypatch, tmp_path):
 def test_a_churning_branch_reaches_discord_when_no_digest_ever_ages_out(
     monkeypatch, tmp_path
 ):
-    """The arm the digest clock makes necessary, end to end (#3076).
+    """The arm the digest clock makes necessary, end to end.
 
     The branch has been in the section 30 days — past (1-day soak + 7-day grace) * 3 — while
     the digest on it arrived two days ago, so the dwell arm cannot fire and this one must.
@@ -253,9 +253,9 @@ def test_a_churning_branch_reaches_discord_when_no_digest_ever_ages_out(
 def test_a_re_pushed_branch_inside_the_churn_allowance_stays_silent(
     monkeypatch, tmp_path
 ):
-    """The same inputs, 20 days in: neither arm may fire, which is #3076's over-report closed.
+    """The same inputs, 20 days in: neither arm may fire.
 
-    Pre-#3076 this posted — the branch clock was the dwell, and 20 days is past the 1+7
+    A dwell keyed on the branch clock would post here: 20 days is past the 1+7
     allowance the digest on the branch has never come close to.
     """
     posts = []

@@ -85,9 +85,9 @@ LAPI_ONLY_METRICS = frozenset(
 )
 
 # Metrics the node agents cannot emit, so pinning one to their job is the same dead panel with
-# the selector written the other way round (#1690). `cs_bucket_pour_seconds_bucket` comes from
-# the central pod's AppSec datasource and from the traefik sidecar (`crowdsec-traefik-agent`,
-# #1694); the node agents read auth.log and pour into no bucket, which is why `Bucket pour
+# the selector written the other way round. `cs_bucket_pour_seconds_bucket` comes from
+# the central pod's AppSec datasource and from the traefik sidecar (`crowdsec-traefik-agent`);
+# the node agents read auth.log and pour into no bucket, which is why `Bucket pour
 # time` matched nothing while carrying `job="crowdsec-node-agents"` alongside `node="$node"`.
 NOT_ON_THE_NODE_AGENTS = frozenset(
     {"cs_bucket_pour_seconds_bucket"} | LAPI_ONLY_METRICS
@@ -206,7 +206,7 @@ def engine_metrics_pinned_to_the_node_agents(board: Path) -> list[str]:
 
 
 def test_no_board_pins_an_engine_metric_to_the_node_agent_job():
-    """The other half of #1690: `node` scoping and job scoping fail the same panel."""
+    """The other half of the rule above: `node` scoping and job scoping fail the same panel."""
     offenders = {
         b.name: engine_metrics_pinned_to_the_node_agents(b)
         for b in SECURITY.glob("*.json")
@@ -327,13 +327,13 @@ def test_a_board_that_broke_each_rule_would_be_reported(tmp_path):
     assert engine_metrics_pinned_to_the_node_agents(pour) == [pour_expr]
 
 
-# --- #1709: a stat panel whose green threshold the fleet can never reach ----------------
+# --- a stat panel whose green threshold the fleet can never reach -------------------------
 #
 # A DIFFERENT failure from the ones above: the query returns data, so no dead-panel audit sees
-# it. `Running Crowdsec` plotted `sum(up{job=~"crowdsec.*"})` against a green step at 10, sized
+# it. `Running Crowdsec` plots `sum(up{job=~"crowdsec.*"})` against a green step at 10, sized
 # by the upstream for a fleet of ten machines. This cluster runs four scraped CrowdSec targets,
-# so the tile read red on a fully healthy fleet and stayed red however many agents came up —
-# no signal in either direction, the inverse of the dead panels #1690 fixed.
+# so a raw-count tile reads red on a fully healthy fleet and stays red however many agents come
+# up — no signal in either direction, the inverse of the dead panels above.
 #
 # The rule that survives the next agent: a panel COUNTING `up` targets must express itself as a
 # ratio, so 1 means "every agent reports" whatever the fleet size, and no threshold may sit
@@ -371,7 +371,7 @@ def test_no_board_gates_an_up_count_tile_on_a_fleet_size_constant():
 
 
 def test_a_tile_that_can_never_go_green_is_flagged(tmp_path):
-    """The pre-#1709 `Running Crowdsec` panel, and the ratio that replaced it."""
+    """The raw-count `Running Crowdsec` panel, and the ratio form."""
 
     def board(expr, steps):
         f = tmp_path / f"b{abs(hash((expr, str(steps))))}.json"
@@ -431,7 +431,7 @@ def test_the_boards_the_rules_read_are_all_still_there():
         for e in _prometheus_exprs(json.loads(b.read_text()))
     )
     assert scoped >= 15, scoped
-    # And the metric #1690's rule reads is still on a board, so that rule is not a no-op.
+    # And the metric the not-on-the-node-agents rule reads is still on a board, so that rule is not a no-op.
     named = {
         m
         for b in SECURITY.glob("*.json")
@@ -440,7 +440,7 @@ def test_the_boards_the_rules_read_are_all_still_there():
         if m + "{" in e
     }
     assert "cs_bucket_pour_seconds_bucket" in named, named
-    # And a board still carries an `up`-counting tile, so #1709's rule reads something.
+    # And a board still carries an `up`-counting tile, so the ratio rule reads something.
     up_tiles = {
         panel.get("title")
         for b in SECURITY.glob("*.json")

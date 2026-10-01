@@ -13,7 +13,7 @@
 # Longhorn backup deletion walks the volume's whole block tree, about 1.28 B2 Class C
 # transactions per stored block (`probe.py b2-budget` prints the per-volume figure). The
 # b2-drain mode goes through the B2 API instead: one listing for the entire store (5 Class C,
-# measured 2026-08-19) plus Class A deletes, which are unmetered. It reaches B2 only, never R2.
+# measured) plus Class A deletes, which are unmetered. It reaches B2 only, never R2.
 # Scoping and measurements: docs/archive/b2-api-drain-scoping.md.
 #
 # Usage:
@@ -55,7 +55,7 @@
 # WHY THEY NEED RETIRING. A seed carries no RecurringJob label, so no job's `retain` ever counts
 # it and no job ever prunes it — retention is per job, over that job's own backups. Every seed is
 # therefore stranded by construction, and the orphan reaper leaves it alone too: a backup with
-# no job label reads as the current tier's own. On 2026-09-02 the eleven seeds from the 16 MiB
+# no job label reads as the current tier's own. Eleven seeds from the 16 MiB
 # migration held 5.4 G nominal against a 10 G B2 storage cap, valheim-config's alone 1.76 G.
 #
 # THE SAFETY CONDITION. A seed is the only copy a volume has until its weekday shard has run,
@@ -96,9 +96,9 @@
     # the scripts reference page (scripts/lib/script_classify.py) credits a script's caller only
     # from a line in a top-level playbook that runs it.
     prune_drain_argv: [uv, run, python, scripts/backup/b2_drain.py]
-    # The repo this playbook is part of, not a fixed path. It used to name the worktree the
-    # drain was written in; that worktree was removed after the 2026-08-20 run, so the play
-    # failed as shipped from then on — the one path nobody re-runs after a successful drain.
+    # The repo this playbook is part of, not a fixed path: a path naming a worktree goes stale
+    # when the worktree is removed, and the drain is the one path nobody re-runs after a
+    # success.
     prune_repo: "{{ playbook_dir | dirname }}"
     prune_drain_live_file: /tmp/longhorn-live-volumes.txt
   pre_tasks:

@@ -1,4 +1,4 @@
-"""Tests for validate.setup_templates — the setup-plane render guard (GitHub issue #1468).
+"""Tests for validate.setup_templates — the setup-plane render guard.
 
 Every rule here is an accept/reject pair, the convention
 `scripts/validate/tests/test_validate_compose_templates.py` sets: a guard that fires on
@@ -63,7 +63,7 @@ def test_every_real_setup_template_renders_with_no_unresolved_variable(ctx, know
 
 
 def test_an_undefined_variable_is_flagged(tmp_path, ctx, known):
-    """The rejecting half, in the shape issue #1468 describes: a consumer left on an old name."""
+    """The rejecting half, in the shape a rename takes: a consumer left on an old name."""
     tpl = tmp_path / "role" / "templates" / "creds.yaml.j2"
     tpl.parent.mkdir(parents=True)
     tpl.write_text('key: "{{ longhorn_b2_key_id_that_no_rename_left_behind }}"\n')

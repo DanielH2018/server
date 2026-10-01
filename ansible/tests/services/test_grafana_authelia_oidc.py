@@ -1,6 +1,6 @@
 """Grafana's Authelia OIDC login: the two settings pairs that fail silently when they drift.
 
-Grafana logs in through Authelia's OIDC provider (issue #1374) instead of asking for the admin
+Grafana logs in through Authelia's OIDC provider instead of asking for the admin
 password a second time behind a route Authelia had already authenticated. Two couplings across
 the two roles decide whether that works, and neither shows up as a broken pod:
 
@@ -14,7 +14,7 @@ the two roles decide whether that works, and neither shows up as a broken pod:
 - **The `groups` claim in the ID TOKEN.** Granting the scope is not enough. Authelia serves
   `groups` from the userinfo endpoint by default, Grafana evaluates the role path against the
   ID token first, and this role path always yields a value there because of its `|| 'Viewer'`
-  branch — so userinfo is never consulted. Measured live 2026-09-06: a user in `admins` got
+  branch — so userinfo is never consulted. Measured live: a user in `admins` got
   `[{"orgId":1,"name":"Main Org.","role":"Viewer"}]` from `/api/user/orgs` behind a green pod,
   a green health gate and a passing `-m ui` suite. A `claims_policy` fixes it.
 

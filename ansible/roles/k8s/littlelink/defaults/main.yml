@@ -1,13 +1,11 @@
 ---
-# Digest-pinned 2026-08-06, once the Docker twin was retired and this became the only copy.
-# `:latest` was inherited from the Docker role rather than chosen, and a k8s rollout re-pulls
-# on every pod recreate, so an upstream push silently changed what ran. The digest is the one
-# taken from the running pod at cutover.
+# Digest-pinned because a k8s rollout re-pulls `:latest` on every pod recreate, so an upstream
+# push would silently change what runs.
 #
 # The tag is KEPT (repo:latest@sha256) so Renovate's docker manager still tracks it and opens
 # digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal, which is worse
-# than the floating tag it replaces. That tracking is what the k8s-defaults custom manager in
-# renovate.json provides; before it existed no image in any k8s role was watched at all.
+# than the floating tag. That tracking is what the k8s-defaults custom manager in
+# renovate.json provides.
 littlelink_k8s_image: ghcr.io/techno-tim/littlelink-server:latest@sha256:e84ea9d93b60362cf9e292dba43adb604e375d9206d5fcf1de6bb766a20aabd1
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).

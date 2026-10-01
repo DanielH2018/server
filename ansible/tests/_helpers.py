@@ -97,10 +97,9 @@ _SECONDS = re.compile(r"^(\d+)s$")
 _ROLE_VAR = re.compile(r"^\{\{\s*(\w+)\s*\}\}$")
 
 
-# The shared default is READ from `k8s/manifests`'s own defaults rather than pinned here. It was
-# pinned at 300 while that role said 300, so the two agreed by coincidence; #2377 moved the shared
-# default to 600, and a pinned copy would have sized every unoverridden role at half its real
-# budget with every guard green.
+# The shared default is READ from `k8s/manifests`'s own defaults rather than pinned here. A pinned
+# copy would agree with the role only by coincidence, and the day the role's default moved it
+# would size every unoverridden role wrongly with every guard green.
 def _manifests_rollout_default_s() -> int:
     """`manifests_rollout_timeout_default` from `roles/k8s/manifests/defaults/main.yml`.
 
@@ -215,9 +214,9 @@ def imported_task_files(role: Path) -> list[Path]:
     Follows `ansible.builtin.import_tasks` only — never a glob over `tasks/`. The k3s role's
     directory holds `agent.yml`, `agent_verify.yml` and `storage_smoke.yml`, which main.yml
     does not import and which a server-side assertion is not about; a glob would fold them in
-    and put every ordering assertion one file off. A `when:` on an import is ignored, as both
-    readers this replaced ignored it: the file is expanded whether or not the deploy would run
-    it, so an assertion here is about what the role CAN run.
+    and put every ordering assertion one file off. A `when:` on an import is ignored: the file
+    is expanded whether or not the deploy would run it, so an assertion here is about what the
+    role CAN run.
     """
     tasks_dir = role / "tasks"
     return [
@@ -230,7 +229,7 @@ def imported_task_files(role: Path) -> list[Path]:
 def imported_tasks(role: Path) -> list[dict]:
     """`leaf_tasks` of a role's `tasks/main.yml` with every `import_tasks` expanded in place.
 
-    A main.yml that is nothing but imports (the k3s role since its 2026-08-15 split) reads as
+    A main.yml that is nothing but imports (the k3s role) reads as
     an empty task list through `load_tasks`, and an ordering or presence assertion over that
     list passes vacuously. A non-import entry in main.yml keeps its position among the
     expansions, so the result is the order the role runs in.
@@ -321,11 +320,9 @@ def discover_docs() -> list[Path]:
     them judges this commit against other sessions' history and fails on paths that moved
     perfectly legitimately.
 
-    That is not hypothetical: it broke the `docs-refresh` cron. Its commit runs the prek hooks,
-    both doc guards failed on citations inside sibling worktrees, and the script took its
-    designed failure path — "commit failed (hook rejection?); unstaged, nothing published" —
-    so the generated reference pages silently stopped publishing. Master CI stayed green
-    throughout, because a CI runner has no worktrees on disk. Found 2026-08-27.
+    The `docs-refresh` cron hits this: its commit runs the prek hooks, and a guard that counts
+    citations inside sibling worktrees makes the script take its failure path and stop
+    publishing. CI never shows it, because a CI runner has no worktrees on disk.
 
     `git ls-files` answers with what this commit actually contains, which is the only thing
     these guards have any business asserting about.
@@ -475,9 +472,7 @@ def stub_logger_on_path(tmp_path_factory, monkeypatch) -> Path:
     asserting the stub RECORDED a call.
 
     Why it matters: the tags under test are shipped to Loki, so a fixture verdict written to
-    the real syslog sits on a dashboard beside real ones. `scripts/deploy_tools/tests/conftest.py`
-    measured 84% of the Landings board as fixtures before its copy of this existed, and issue
-    #1052 found the backup-health reader's fixture verdicts in the Alert History board.
+    the real syslog sits on a dashboard beside real ones.
     """
     stub_dir = fake_bin(tmp_path_factory.mktemp("logger-stub"), logger=_LOGGER_STUB)
 

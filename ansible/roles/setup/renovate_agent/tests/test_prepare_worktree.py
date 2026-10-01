@@ -113,11 +113,10 @@ class TestUnlocksBeforeRemovingItsOwnTree:
 
 
 class TestReclaimsAnUnregisteredDirectory:
-    """#1477: a killed session leaves a directory git has no worktree record of.
+    """A killed session leaves a directory git has no worktree record of.
 
-    `worktree remove` refuses a path it does not know, the return code was discarded, and the
-    `worktree add` that followed died on `fatal: ... already exists` — every tick from
-    2026-09-08 to 2026-09-10.
+    `worktree remove` refuses a path it does not know, so the `worktree add` that follows
+    dies on `fatal: ... already exists` unless the directory is reclaimed first.
     """
 
     def test_an_unregistered_directory_is_removed_and_the_add_proceeds(
@@ -295,9 +294,9 @@ class TestContainmentFailsClosed:
 
 
 class TestTheForgeSettlesADriftedSquash:
-    """The live tree #2014 found was already past merge-tree: master had drifted into a
-    conflict on base-pin-history.tsv, so `merge-tree` exits 1. Only the forge knows it merged
-    PR #1812 from that tip. Matching is on the head SHA — the branch name is reused every tick.
+    """A live tree can be past merge-tree: master drifts into a conflict on
+    base-pin-history.tsv, so `merge-tree` exits 1. Only the forge knows it merged the PR from
+    that tip. Matching is on the head SHA — the branch name is reused every tick.
     """
 
     _CONFLICT = (1, "0123abcd\nCONFLICT (content): a.txt\n")

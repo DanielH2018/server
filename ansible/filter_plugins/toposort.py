@@ -152,8 +152,8 @@ def expand_with_deps(containers_list, deps_map, requested_tags, running_names):
 # 'ingressroute.yml.j2' import ingressroute %}`) -- there is no third way in this repo to
 # emit one from a file inside the role.
 #
-# This scan is the SECOND of the two routed tests below, not the only one. It stopped being
-# sufficient when #3043 moved 16 roles' IngressRoute to `ansible/templates/`: a route rendered
+# This scan is the SECOND of the two routed tests below, not the only one. It is not sufficient
+# alone: 16 roles' IngressRoute is rendered from `ansible/templates/`, and a route rendered
 # from there leaves no string in the role, so a scan-only derivation would drop the traefik
 # edge for all 16 and apply their routes before the CRDs exist. The entry's `hostname` is the
 # first test and the one that covers them.

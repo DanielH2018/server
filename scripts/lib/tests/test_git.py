@@ -111,7 +111,7 @@ def test_an_ambient_git_dir_cannot_redirect_the_answer(tmp_path, monkeypatch):
     assert git_dirty(clean) is False
 
 
-# --- the object-store repair (#1435) ----------------------------------------------------
+# --- the object-store repair ----------------------------------------------------
 #
 # Real git rather than mocks, because what is asserted here is what git DELETES: a mocked
 # `git prune` proves the argv and nothing about whether the grace period holds.
@@ -119,7 +119,7 @@ def test_an_ambient_git_dir_cannot_redirect_the_answer(tmp_path, monkeypatch):
 
 # An mtime `git prune --expire=1.day.ago` reads as old under any clock this suite runs on. The
 # fresh case leaves the mtime alone: a file just written is new by construction, so neither
-# half reads the clock (#2158).
+# half reads the clock.
 LONG_AGO = 946_684_800.0  # 2000-01-01T00:00:00Z
 
 

@@ -5,8 +5,7 @@ The container *compose* templates already have this guard (validate/compose_temp
 the bind-mounted *config* templates did not — yet they re-render on every deploy of the
 monitoring-critical services below. A Jinja indentation bug here is exactly the class
 ``check-yaml`` and ``ansible-lint`` miss (they don't render ``.j2``), so it would pass CI and
-only surface at deploy. The authelia/traefik entries this list once carried retired at E7
-(2026-08-13, the Docker edge's removal) — the k8s edge's manifests get the equivalent guard from
+only surface at deploy. The k8s edge's manifests get the equivalent guard from
 ``validate/k8s_manifests.py``.
 
 Structural check only: secrets and host vars are stubbed (StubUndefined), so no SOPS access is
@@ -43,15 +42,13 @@ ROLES = ANSIBLE / "roles" / "containers"
 # auth / reverse-proxy / monitoring. The role's own templates dir takes loader precedence, so
 # `traefik/traefik.yml.j2` resolves to Traefik's STATIC config, not the shared labels macro.
 CONFIG_TEMPLATES = [
-    # grafana/promtail-config.yml.j2 retired 2026-08-14 with the Docker promtail — the
-    # successor's config renders inside the loki-homelab ConfigMap, covered by the k8s
+    # The shipper config renders inside the loki-homelab ConfigMap, covered by the k8s
     # manifest validator. The list may be empty between config-bearing eras.
     #
-    # A Docker promtail opened the next such era on daniel-pi (2026-08-29 to 2026-09-02) and
-    # closed it: its Alloy successor's config is River, not YAML, so this parser cannot check
-    # it. ansible/tests/services/test_alloy_pi_config_labels.py reads that template's text
-    # instead, and the cluster shipper's River config was parsed by the real `alloy validate`
-    # before it shipped (PR #909) — the Pi's copy is the same shape.
+    # The Pi's Alloy config is River, not YAML, so this parser cannot check it.
+    # ansible/tests/services/test_alloy_pi_config_labels.py reads that template's text
+    # instead, and the cluster shipper's River config is parsed by the real `alloy validate`
+    # before it ships — the Pi's copy is the same shape.
 ]
 
 

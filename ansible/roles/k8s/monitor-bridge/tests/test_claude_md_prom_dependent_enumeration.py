@@ -1,10 +1,9 @@
 """This role's CLAUDE.md enumerates `PROM_DEPENDENT`, and the enumeration must stay true.
 
 `test_check_gate_dependents.py` pins the SET to the live registry, so the set itself cannot
-drift. The prose describing it could, and did: the paragraph said "the ten prom-dependent
-checks" and listed ten of them while the set held fourteen (#1359). Nothing reads the prose to
-decide anything, so nothing failed — a reader just underestimated what a Prometheus outage
-suppresses.
+drift. The prose describing it could drift: a paragraph saying "the ten prom-dependent checks"
+while the set holds fourteen. Nothing reads the prose to decide anything, so nothing fails — a
+reader just underestimates what a Prometheus outage suppresses.
 
 A fragment under `docs/assets/generated/fragments/` is the repo's usual way to stop prose
 drifting, but a `--8<--` include only resolves in the mkdocs build. A role CLAUDE.md is read raw
@@ -53,7 +52,7 @@ def test_claude_md_enumerates_exactly_prom_dependent():
 
 
 def test_a_short_enumeration_is_flagged():
-    """The red half: the exact sentence this guard was written against (#1359)."""
+    """The red half: a sentence that undercounts the set."""
     stale = (
         "when Prometheus is unreachable, every\n"
         "    prom-dependent check (disk/cert/memory) is\n"

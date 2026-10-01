@@ -1,10 +1,10 @@
 """The verdict a landing reaches when its diff derivation refuses the range as broad.
 
-PR #2437 (330 files) ended with no `VERDICT:` line: the truncated file list sent it to
-`deploy.sh --changed`, which refused the broad range, and `land.sh` exited 1 telling the
-session to deploy by hand — while the tick it had kicked was applying that very merge commit
-(#2448). The pairs here are the three ways that range can end: the tick's marker covers it,
-the marker was read mid-apply, or the tick is not the apply at all.
+A truncated file list sends the landing to `deploy.sh --changed`, which refuses a broad
+range, and `land.sh` must still end with a `VERDICT:` line while the tick it kicked is
+applying that very merge commit -- not exit 1 telling the session to deploy by hand. The
+pairs here are the three ways that range can end: the tick's marker covers it, the marker
+was read mid-apply, or the tick is not the apply at all.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_broad_fallback_verdict.py
 """
@@ -34,8 +34,8 @@ def _broad_fallback(landing, fakes, **opts):
 
 
 def test_a_broad_fallback_grades_from_the_deployers_markers(landing):
-    """PR #2437 exited 1 with no `VERDICT:` line while the tick was applying its own merge
-    commit; `broad_applied` read that commit minutes later (#2448)."""
+    """A landing must end with a `VERDICT:` line while the tick is applying its own merge
+    commit; `broad_applied` reads that commit minutes later."""
     ln, _calls = _broad_fallback(
         landing,
         Fakes(
@@ -53,7 +53,7 @@ def test_a_broad_fallback_grades_from_the_deployers_markers(landing):
 def test_a_broad_fallback_over_an_abandoned_tick_watch_is_deferred(landing):
     """`broad_applied` is written only after the apply RETURNS, and a tick that already
     ff-merged this PR answers CONVERGED rather than BEHIND — so the marker read mid-apply is
-    not evidence the tick skipped it (#2448)."""
+    not evidence the tick skipped it."""
     ln, _calls = _broad_fallback(
         landing, Fakes(changed_rc=DEPLOY_BROAD, state={}, merge_applied_rc=0)
     )
@@ -67,7 +67,7 @@ def test_a_broad_fallback_over_an_abandoned_tick_watch_is_deferred(landing):
 def test_a_broad_fallback_the_tick_does_not_apply_still_names_a_verdict(landing):
     """`--since` bounds a range wider than this PR, so another session's broad merge can
     refuse the derivation for a PR that touched nothing broad. That one is still owed to a
-    hand — but with a `VERDICT:` line, which is what #2448 is about."""
+    hand — but with a `VERDICT:` line."""
     ln, _calls = _broad_fallback(landing, Fakes(changed_rc=DEPLOY_BROAD))
     ln.self_applied = False
     with pytest.raises(Outcome) as exc:
@@ -75,7 +75,7 @@ def test_a_broad_fallback_the_tick_does_not_apply_still_names_a_verdict(landing)
     assert (exc.value.verdict, exc.value.rc) == ("needs-manual-apply", 1)
 
 
-# ── the deployer's own narrowing, tried before the range is called broad (issue #2520) ──
+# ── the deployer's own narrowing, tried before the range is called broad ──
 
 
 def test_a_broad_fallback_the_narrowing_can_scope_deploys_those_tags(landing):

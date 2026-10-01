@@ -111,10 +111,10 @@ def test_b2_longhorn_lines_reports_pages_plus_the_authorize_as_class_c():
 def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
     """The regression this rewrite exists for.
 
-    `probe.py b2-longhorn` shelled out to `docker exec kopia rclone ...` and died with
-    FileNotFoundError on both k3s nodes from the day Docker was removed (2026-08-14) —
-    while the tests stayed green because they only covered the argv builder and the parser.
-    Neither binary exists on these hosts, so naming them here is a dead path by definition.
+    A `probe.py b2-longhorn` that shells out to `docker exec kopia rclone ...` dies with
+    FileNotFoundError on both k3s nodes, while tests covering only the argv builder and the
+    parser stay green. Neither binary exists on these hosts, so naming them here is a dead
+    path by definition.
     """
     seen = {}
 
@@ -144,7 +144,7 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
     # And no `"docker"` argv literal survives in the executable code of either module the
     # command runs through: b2_api.py holds the B2 calls the rewrite replaced, longhorn.py the
     # subcommand that drives them. Scanning longhorn.py alone would assert nothing about the
-    # code that regressed, since b2_curl no longer lives there.
+    # B2 calls, which live in b2_api.py.
     source = ""
     for module in (b2_api, longhorn):
         with open(module.__file__) as fh:
@@ -228,9 +228,9 @@ def test_stranded_counts_backups_the_current_tier_does_not_own():
     """Stranded means "no job will ever prune this", not "past retain".
 
     Longhorn's retain counts only a job's OWN backups, so a daily-era backup on a volume that
-    has since moved to a weekday shard is pruned by nothing, ever. Until 2026-08-19 this was
-    computed as `max(0, backups - retain)`, which under-reported the live cluster by 4.7x — 7
-    against a true 33 — on the number an operator reads before deciding what to delete.
+    has since moved to a weekday shard is pruned by nothing, ever. Computing it as `max(0,
+    backups - retain)` under-reports the live cluster by 4.7x (7 against a true 33) on the
+    number an operator reads before deciding what to delete.
     """
     vols = {"pvc-moved": {"prune": 10, "blocks": 100, "backups": 5}}
     owners = {"pvc-moved": {"daily-backup": 4, "weekly-backup-d2": 1}}
@@ -266,9 +266,9 @@ def test_format_backup_budget_reports_stranded_backups_not_pending_deletes():
     counting only its own backups — so a volume that moved tier keeps its old backups forever and
     only the reaper clears them.
 
-    This asserted `backups - retain` until 2026-08-19, which is a different quantity and made the
-    check ratify the bug: 11 backups against retain 4 read as 7 stranded, when the answer depends
-    entirely on who owns them. Here the d5 job owns 2, so the other 9 are the strays.
+    `backups - retain` is a different quantity: 11 backups against retain 4 would read as 7
+    stranded, when the answer depends entirely on who owns them. Here the d5 job owns 2, so the
+    other 9 are the strays.
     """
     vols = {"pvc-a": {"prune": 100, "blocks": 50, "backups": 11}}
     owners = {"pvc-a": {"daily-backup": 9, "weekly-backup-d5": 2}}

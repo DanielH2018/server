@@ -14,12 +14,7 @@
 # deadline, goes Failed, and the poll returns to the role's own failure text.
 #
 # `ansible/tests/deploy/test_cronjob_gate_decision.py` enforces that ordering against every caller's
-# rendered CronJob, because the prose version of this rule was violated by the shipped default
-# on the day it was written.
-#
-# It is deliberately NOT configarr's old `configarr_k8s_timeout: 300`. That value was
-# timeout-preserving and equal to configarr's own deadline, which is the racing case the rule
-# above rules out.
+# rendered CronJob.
 cronjob_gate_timeout: 660  # noqa var-naming[no-role-prefix]
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -52,9 +47,7 @@ k8s_autodeploy_reason: "deploys no workload of its own — a gate other roles in
 #              to either list would be the wrong fix.
 #   Error      the container ran and exited non-zero. On an `_image:`-only diff this is the
 #              application failing, not the image: a transient *arr outage for configarr, a
-#              briefly unreachable Pi for pi-peer-backup. configarr/tasks/main.yml records the
-#              incident behind that call — "failing the deploy over a transient *arr outage is
-#              exactly what the retired wrapper avoided by always exiting 0" — and the health
+#              briefly unreachable Pi for pi-peer-backup. The health
 #              cron already pages for it within configarr_k8s_max_age_hours.
 cronjob_gate_ran_reasons:  # noqa var-naming[no-role-prefix]
   - Completed
@@ -66,9 +59,8 @@ cronjob_gate_ran_reasons:  # noqa var-naming[no-role-prefix]
 # message, never a missed failure. That is the only shape a list like this is safe in: a rule
 # that looked like it narrowed the fatal set would read as a guarantee it cannot give.
 #
-# StartError and ImagePullBackOff are both live in this repo, not hypothetical: peanut's image
-# has no `cp` (StartError, "executable file not found" at first deploy) and n8n's build sat in
-# ImagePullBackOff until the registry's TLS was fixed.
+# StartError (for example a missing executable) and ImagePullBackOff (an image the registry
+# cannot serve) are both real outcomes in this repo, not hypothetical.
 cronjob_gate_start_failure_reasons:  # noqa var-naming[no-role-prefix]
   - ImagePullBackOff
   - ErrImagePull

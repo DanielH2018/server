@@ -4,9 +4,9 @@
 The failure this guards is an exit code that means the OPPOSITE of what a consumer reads it
 as. ansible-playbook returns 2 on a failed host, 3 on an unreachable one and 4 on a parse
 error; deploy.sh reserves 2/3/4 for a tag miss, a broad change and a stale tree, all three of
-which mean nothing was deployed. Until 2026-09-02 the wrapper returned ansible's status
-verbatim, so a play that applied its manifests and then failed on a post-apply assert exited 2
-and `land.sh` reported "a derived tag matched no service, so nothing deployed" (issue #840).
+which mean nothing was deployed. A wrapper that returned ansible's status verbatim would exit
+2 for a play that applied its manifests and then failed on a post-apply assert, and `land.sh`
+would report "a derived tag matched no service, so nothing deployed".
 
 Every rule here has both halves, per CLAUDE.md: a playbook failure must NOT read as a wrapper
 refusal, and a real wrapper refusal must still read as itself. Without the second half a table
@@ -53,7 +53,7 @@ esac
 """.replace("{locks}", UV_WRAPPER_ARMS)
 
 # What ansible prints when no play matched a host: the banner, and nothing under it. It exits
-# 0 for this, which is the whole reason the wrapper reads the recap (issue #1814).
+# 0 for this, which is the whole reason the wrapper reads the recap.
 _EMPTY_RECAP = 'echo "PLAY RECAP *********"'
 # A run that never reached the recap at all: killed mid-play, or a parse error before any play.
 _NO_RECAP = "true"
@@ -131,10 +131,10 @@ def test_a_successful_playbook_is_clean(tmp_path):
 
 
 def test_a_recap_naming_no_host_is_not_a_deploy(tmp_path):
-    """RED half for issue #1814: ansible exits 0 having matched no host; the wrapper must not.
+    """RED half: ansible exits 0 having matched no host; the wrapper must not.
 
-    This is the run that landed PR #1812 as `settled` with the 2.38.6 pods still up: an
-    empty PLAY RECAP, exit 0, and a health gate that read the old workloads as healthy.
+    Such a run would land as `settled` with the old pods still up: an empty PLAY RECAP, exit
+    0, and a health gate that reads the old workloads as healthy.
     """
     result = _run_with_stubs(tmp_path, 0, recap=_EMPTY_RECAP)
     assert result.returncode == _NO_HOSTS_MATCHED, result.stderr
@@ -181,10 +181,10 @@ def test_a_real_tag_miss_is_still_exit_2():
     this touches nothing. If exit 2 ever stopped meaning a tag miss, the fix above would have
     been a rename rather than a separation.
 
-    `--skip-staleness-check` because the staleness check now runs FIRST (issue #1566): a
-    checkout that happens to sit behind origin/master while this test runs would answer 4, and
-    that would be the wrapper reporting correctly rather than the tag miss regressing. The
-    ordering itself is pinned by test_deploy_staleness_precedes_tag_validation.py.
+    `--skip-staleness-check` because the staleness check runs FIRST: a checkout that happens
+    to sit behind origin/master while this test runs would answer 4, and that would be the
+    wrapper reporting correctly rather than the tag miss regressing. The ordering itself is
+    pinned by test_deploy_staleness_precedes_tag_validation.py.
     """
     result = subprocess.run(
         [
@@ -202,15 +202,14 @@ def test_a_real_tag_miss_is_still_exit_2():
     assert result.returncode == 2, result.stdout + result.stderr
 
 
-# -- what the wrapper says about its own exit (issue #2853) --------------------------------
+# -- what the wrapper says about its own exit --------------------------------
 
 
 @pytest.mark.parametrize(
     "rc", sorted(ec.DEPLOY_SH_NO_VERDICT | {ec.DEPLOY_PLAYBOOK_FAILED})
 )
 def test_every_failing_exit_prints_its_name_meaning_and_verdict(rc, capsys):
-    """The wrapper exited with a bare number until 2026-09-30, and five prose copies of the
-    table said what it meant. This is the copy that cannot go stale."""
+    """The wrapper itself prints what each code means: the copy that cannot go stale."""
     deploy_run.report(rc, ["--tags", "sonarr"])
     err = capsys.readouterr().err
     row = next(c for c in ec.contract("scripts/deploy.sh") if c.value == rc)

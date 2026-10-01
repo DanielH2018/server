@@ -20,8 +20,8 @@
 # authelia) plus a priority. Traefik merges routers across IngressRoute objects, so the two
 # coexist exactly as the two Docker routers do.
 {# One IngressRoute per hostname, same split and same reasons as the ingressroute() macro: the
-   public name arrives through Cloudflare, keys its limiter on the forwarded client (#1955) and
-   requires Cloudflare's origin-pull client certificate (#1990); the `.local.` name arrives
+   public name arrives through Cloudflare, keys its limiter on the forwarded client and
+   requires Cloudflare's origin-pull client certificate; the `.local.` name arrives
    direct, keys on the remote address and asks for no certificate. `spec.tls.options` is per
    object and picked by SNI, so the two hosts cannot share one. #}
 {% set ping_host = container_item.hostname | default(container_item.name) %}

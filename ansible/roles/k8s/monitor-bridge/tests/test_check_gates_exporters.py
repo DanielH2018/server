@@ -44,8 +44,8 @@ from lib.repo_paths import REPO as _REPO
         pytest.param(
             [({"job": "node"}, 0.0), ({"job": "cadvisor"}, 0.0)],
             {"node"},
-            # cadvisor left EXPORTER_DEPENDENT when it retired (2026-08-14) — a down series under
-            # its old job name must no longer trigger suppression of anything.
+            # cadvisor is not in EXPORTER_DEPENDENT — a down series under its old job name
+            # must not trigger suppression of anything.
             id="flags_only_mapped_exporters",
         ),
         pytest.param(
@@ -80,10 +80,10 @@ def test_exporter_dependent_values_are_real_checks():
 
 
 # ── EXPORTER_DEPENDENT's KEYS, the axis the test above cannot cover ─────────────────────────
-# The guard above checks the map's VALUES. Its keys went unchecked until 2026-08-29, and the map
-# shipped carrying only `node` while daniel-pi scrapes under `node-pi` — so the Pi's exporter death
-# suppressed nothing and double-paged. A value guard structurally cannot see a missing key: the
-# entries that ARE there stay correct, and the test reads green.
+# The guard above checks the map's VALUES. A map carrying only `node` while daniel-pi scrapes
+# under `node-pi` would leave the Pi's exporter death suppressing nothing and double-paging. A
+# value guard structurally cannot see a missing key: the entries that ARE there stay correct,
+# and the test reads green.
 #
 # Derived from the scrape config rather than transcribed, for the reason _promtail_relabel_targets
 # gives in test_check_loki.py — a transcribed list cannot follow a rename. Renaming a scrape job
@@ -149,7 +149,7 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check(cf
     """The other half of the same defect: the two axes have to agree.
 
     EXPORTER_DEPENDENT keys by job; check_disk and check_mem exclude by ORIGIN. A host added to one
-    axis and not the other is exactly what shipped on 2026-08-29. Only statically-labelled jobs are
+    axis and not the other is exactly this defect. Only statically-labelled jobs are
     readable here — `node` discovers its origins from k8s at scrape time — so this covers `node-pi`.
     """
     excluded = re.compile(cfg.HOST_METRIC_ORIGIN_EXCLUDE)
@@ -302,7 +302,7 @@ def test_check_cpu_throttle_tiny_loss_stays_up(monkeypatch, cfg):
 
 
 def test_run_once_suppression_without_cadvisor_series(monkeypatch, cfg):
-    # Post-retirement shape: only the node job exists in `up`.
+    # Only the node job exists in `up`.
     up = [({"job": "node"}, 0.0)]
     ran, _ = _wire_run_once_prom_up(
         cfg,
@@ -348,7 +348,7 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch, cfg):
 
 # ── The origin pin the stub above cannot see ────────────────────────────────────────────────
 # `_wire_run_once_prom_up` answers the literal query "up" and nothing else, which is exactly how
-# a Prometheus honouring a selector behaves. What hid the fault (#2779) is the `cfg` fixture:
+# a Prometheus honouring a selector behaves. What hides the fault is the `cfg` fixture:
 # PROM_ORIGIN is empty there, so the probe's `up%s % origin_sel(cfg)` rendered as a bare `up` and
 # the pin the pod actually runs with never appeared in a test.
 
@@ -366,8 +366,8 @@ def test_pi_exporter_death_suppresses_its_dependents_under_the_deployed_origin_p
 ):
     """The Pi's node-exporter is down; pi_pressure and host_temp must not also page.
 
-    This is the 2026-09-21 15:09 incident: pi_pressure paged with "node-pi series missing
-    load/mem/fs", which is exactly what EXPORTER_DEPENDENT["node-pi"] exists to suppress. Under
+    Unsuppressed, pi_pressure pages with "node-pi series missing load/mem/fs", which is
+    exactly what EXPORTER_DEPENDENT["node-pi"] exists to suppress. Under
     the pinned probe the whole vector was invisible — daniel-server's only series is healthy, so
     `up{origin="daniel-server"}` carried no dead exporter to suppress on.
     """

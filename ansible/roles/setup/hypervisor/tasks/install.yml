@@ -5,8 +5,8 @@
 - name: Read the CPU virtualisation flags
   tags: [hypervisor]
   # /proc/cpuinfo rather than a fact: ansible.builtin.setup exposes no CPU flag list, so
-  # `ansible_processor_flags` -- the obvious-looking name -- is simply undefined. That was
-  # shipped once and reached a real host, because no lint or test evaluates a conditional.
+  # `ansible_processor_flags` -- the obvious-looking name -- is simply undefined, and no lint
+  # or test evaluates a conditional to catch that.
   # Reading the file is also independent of whether the kvm module has loaded yet, which a
   # /dev/kvm stat would not be at this point in the role.
   ansible.builtin.command:
@@ -14,7 +14,7 @@
   register: hypervisor_virt_flags
   changed_when: false
   # A read of /proc/cpuinfo, so it runs under --check too: skipped, it leaves no stdout and
-  # the assert below reports a CPU with no virtualisation flags (#2316).
+  # the assert below reports a CPU with no virtualisation flags.
   check_mode: false
   failed_when: false
   become: true
@@ -73,7 +73,7 @@
   changed_when: false
   failed_when: false
   # A read, so it runs under --check too: skipped, it leaves no stdout and the two guards
-  # below error on the attribute instead of skipping (#2323).
+  # below error on the attribute instead of skipping.
   check_mode: false
   become: true
 
@@ -109,8 +109,7 @@
   # ansible optimises become away entirely when the target user equals the connection user,
   # which sys_user is on this host -- so the check inherits the controller's own group set
   # from before the add and fails with "Permission denied" on every first run. That is a
-  # verification that can only pass on a re-run, which is no verification at all. Observed
-  # 2026-08-27. `sg` starts a new session with the group applied, so the result reflects the
+  # verification that can only pass on a re-run, which is no verification at all. `sg` starts a new session with the group applied, so the result reflects the
   # host rather than the age of the ansible process.
   ansible.builtin.command:
     cmd: sg libvirt -c "virsh --connect qemu:///system version"
@@ -132,10 +131,9 @@
 
 - name: Deauthorize retired staging-gate keys
   tags: [hypervisor]
-  # Every public half this role has ever authorized lives here now, including the last live one
-  # — the staging gate was retired with the daniel-stage guest on 2026-09-29 (#2941), and
-  # `authorized_key` ran `state: present` with `exclusive` left false, so it only ever ADDED.
-  # Deleting files/staging-gate.pub alone would have left that key working on this host forever.
+  # Every public half this role has ever authorized lives here, including the staging gate's
+  # key. `authorized_key` runs `state: present` with `exclusive` left false, so it only ever
+  # ADDS, and deleting the key's file alone would leave that key working on this host forever.
   #
   # A directory rather than one more filename, so a rotation appends instead of overwriting the
   # record of what was withdrawn. `with_fileglob` over an empty directory is a skip, not an

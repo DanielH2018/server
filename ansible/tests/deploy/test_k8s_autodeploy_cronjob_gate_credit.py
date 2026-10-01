@@ -18,8 +18,8 @@ def test_cronjob_gate_delegation_credits_the_named_cronjob(widget_role) -> None:
     Verbatim is the whole point. The Job the shared role creates is `<name>-deploy-gate`, but
     what `_batch_templates` yields for the caller is the CronJob's own `metadata.name` — so
     crediting the Job's name would produce a string no rendered manifest can equal, gating
-    nothing while reporting the role as gated. That is the shape a delegation marker took in
-    this same slice before it was deleted; this test is what stops it coming back.
+    nothing while reporting the role as gated. A delegation marker that credited the Job's name
+    would be that shape; this test is what stops it coming back.
     """
     role = widget_role(
         "- name: Gate the widget deploy on a one-off run\n"
@@ -36,9 +36,9 @@ def test_cronjob_gate_vars_above_the_include_are_credited(widget_role) -> None:
     """`vars:` written above `ansible.builtin.include_role:` is the same task and must count.
 
     Valid YAML, and Ansible runs it identically — mapping keys are unordered. Reading forward
-    from the include's own `name:` line saw nothing after it and called the role ungated, which
-    would tell a maintainer to add an include the role already has. Scoping to the whole task
-    removes the ordering assumption rather than documenting it.
+    from the include's own `name:` line would see nothing after it and call the role ungated,
+    telling a maintainer to add an include the role already has. Scoping to the whole task
+    removes the ordering assumption.
     """
     role = widget_role(
         "- name: Gate the widget deploy on a one-off run\n"
@@ -75,8 +75,8 @@ def test_commented_out_cronjob_gate_include_does_not_credit(tmp_path: Path) -> N
 
     Two shapes, both rejected by parsing rather than by text-matching. A wholly commented block
     is not data at all once parsed — `yaml.safe_load` on an all-`#` file yields `None`, so the
-    task loop below never runs. The PARTIAL comment is the one that mattered under the old
-    text-scanning approach: disabling only the include's `name:` line left the `vars:` block
+    task loop below never runs. The PARTIAL comment is the one that matters to a
+    text-scanning approach: disabling only the include's `name:` line leaves the `vars:` block
     underneath as live text an unstripped raw-text read would still credit. Parsed as YAML,
     `ansible.builtin.include_role:` with a commented-out value is simply a key mapped to
     `None` — not a dict — so `isinstance(include, dict)` is False and the task is never read as

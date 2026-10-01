@@ -1,9 +1,8 @@
 """Every entry at the repo root is tracked by git or in the set the root ignore expects.
 
 `.gitignore` opens with `/*` and allow-lists each tracked root entry by name, so a new
-root-level file is invisible to `git status` and never reaches a commit. That is the
-mechanism that once left a tool's output directory untracked at the root until it parked the
-deployer (repo CLAUDE.md, *Pre-commit Hooks*: "one untracked file parks the deployer"). The
+root-level file is invisible to `git status` and never reaches a commit. A tool's output
+directory left untracked at the root parks the deployer (repo CLAUDE.md, *Pre-commit Hooks*: "one untracked file parks the deployer"). The
 inverse also hides: a tool that writes a root file nobody expects, e.g. a `.pytest_cache` or
 a `site/` from a bare `mkdocs build`, sits there ignored and unexplained.
 

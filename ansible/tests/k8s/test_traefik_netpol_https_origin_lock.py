@@ -1,9 +1,9 @@
 """traefik's :8443 admits Cloudflare, the LAN, the WireGuard clients and the pod CIDR, and nothing else.
 
-Port 8443 is the https entrypoint's POD port, and until #1974 it was open to every source: a
-client that resolved the origin IP and sent a public Host header reached the backend without
-passing Cloudflare's WAF, with no trusted X-Forwarded-For, and so shared one rate-limit bucket
-keyed on "" with every other origin-direct request. The ipBlock list in
+Port 8443 is the https entrypoint's POD port, and a policy open to every source lets a client
+that resolved the origin IP and sent a public Host header reach the backend without passing
+Cloudflare's WAF, with no trusted X-Forwarded-For, sharing one rate-limit bucket keyed on ""
+with every other origin-direct request. The ipBlock list in
 networkpolicy-traefik.yaml.j2 is the origin lock; `netpol_baseline_traefik_https_sources` in
 the role's defaults composes it from the four inventory ranges.
 

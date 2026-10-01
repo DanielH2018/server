@@ -6,9 +6,8 @@
 # they are overwritten in place on every deploy and carry no identity, so the tree is a mutable
 # working copy rather than a release. `deploy.sh` renders from whatever git tree it runs in
 # (scripts/deploy_tools/deploy_staleness.py states the problem in full), which makes the
-# question genuinely open rather than merely unrecorded: on 2026-08-19 a worktree 48 commits
-# behind master reverted observability for nine minutes, and the only reason anyone noticed was a
-# scrape-target count moving for no reason the diff explained.
+# question genuinely open rather than merely unrecorded: a worktree far behind master reverts
+# a service, and nothing on the node says which tree the live manifests came from.
 #
 # Three guards already compensate for this — the /var/lock/server-git-tree.lock, deploy.sh's
 # exit-4 staleness refusal, and the fact cache pinning a deleted worktree's venv. Each is
@@ -25,15 +24,12 @@
 # manifests and one commit can render differently on two hosts; only the rendered bytes
 # distinguish those cases.
 #
-# SECRET MANIFESTS ARE DIGESTED UNDER A HOST-LOCAL KEY, NEVER PLAIN-HASHED (#2574). The files in
-# manifests_secret_files are rendered under `no_log: true` from decrypted SOPS values. Until
-# 2026-09-26 they were recorded by name only, because hashing them opened a new read path over
-# that output -- a task result, a fact, and anything that later prints either.
-# `grep-on-a-script-prints-the-secret-it-embeds` has three occurrences in this homelab's memory
-# and every one ended in a rotation. The cost was that a digest match could clear only the
-# services with no secret manifest, 25 of 58, so the operator approved digesting them too.
-#
-# The concern still binds, so the digest is built to leave no read path. `secret_digest` is
+# SECRET MANIFESTS ARE DIGESTED UNDER A HOST-LOCAL KEY, NEVER PLAIN-HASHED. The files in
+# manifests_secret_files are rendered under `no_log: true` from decrypted SOPS values. Hashing
+# them plain would open a new read path over that output -- a task result, a fact, and
+# anything that later prints either. A secret that reaches printed output ends in a rotation
+# (memory: `grep-on-a-script-prints-the-secret-it-embeds`), so the digest is built to leave no
+# read path. Without it, a digest match could clear only the services with no secret manifest. `secret_digest` is
 # HMAC-SHA256 under a root-only 0600 key that never leaves the host (`manifests_secret_digest_key`),
 # so a record reader cannot test guesses at a low-entropy secret against it. files/secret_hmac.py
 # computes it from paths alone, one `no_log` task per file, and prints only the hex digest: no
@@ -72,7 +68,7 @@
   # workload they would target: the primary (`manifests_rollout`, empty for a role that rolls
   # its own or nothing) and every `manifests_extra_rollouts` entry. `probe.py health` reads
   # `restart: true` as "this apply queued a restart, so the workload's `restartedAt` must be
-  # newer than `applied_at`" -- the predicate issue #1867 asks for. A gate that compared pod
+  # newer than `applied_at`". A gate that compared pod
   # age against a deploy's start would fail every idempotent re-run; this fires only where the
   # play itself decided a roll was due. `kubectl rollout restart` stamps `restartedAt` on the
   # workload's pod template, so a queued restart that never reached the workload reads as one.
@@ -80,18 +76,18 @@
   # The `created` clause is the same one the restart tasks carry: a workload this apply created
   # is not restarted (it races the initial rollout), so none is expected of it either. So is
   # the `manifests_rolled_by_apply` clause: a workload whose pod template the apply changed is
-  # already rolling and is not restarted (#1988), so no `restartedAt` is expected of it -- the
+  # already rolling and is not restarted, so no `restartedAt` is expected of it -- the
   # drain and the rollout-complete half of the gate still cover the roll the apply started. An
   # extra entry's own `kind` and `image` win over the defaults, as in the extra restart task.
   #
   # An entry may narrow WHICH of the three signals queues a restart for it, with `restart_on`
   # (`manifests_restart_triggers_default`, defaults/main.yml). `manifests_render is changed` is a
   # per-ROLE signal: it fires when ANY of the role's manifests changed, which for a six-workload
-  # role meant every workload expected a restart for one workload's edit. An entry whose
+  # role would expect a restart of every workload for one workload's edit. An entry whose
   # ConfigMap is hashed into its own pod template needs none of the three — the apply rolls it
-  # and `manifests_rolled_by_apply` already zeroes the expectation. Issue #2858.
+  # and `manifests_rolled_by_apply` already zeroes the expectation.
   #
-  # AN ENTRY MAY DISCLAIM THE DECISION ENTIRELY, with `rolled_by_role: true` (issue #2902). The
+  # AN ENTRY MAY DISCLAIM THE DECISION ENTIRELY, with `rolled_by_role: true`. The
   # record is written here, before the owning role's private apply and restart run, so for a
   # workload whose OWN manifest that later apply carries this task cannot decide `restart` at
   # all: the render changed and this apply did not roll it, which reads `true`, and then the
@@ -101,7 +97,7 @@
   # actually issued. A skipped amend therefore leaves NO expectation rather than a false one,
   # which is the direction probe_lib/health.py:release_expected_restarts calls safe.
   #
-  # `manifests_self_rollouts` is the third source (issue #1902): the workloads a role with
+  # `manifests_self_rollouts` is the third source: the workloads a role with
   # `manifests_rollout: ''` restarts through a PRIVATE task after this role returns
   # (observability's loop, pihole's roll_one.yml). Those tasks gate on the same three facts, so
   # the record can hold the expectation for them; appending from the private task itself is
@@ -189,13 +185,13 @@
       # still gets a starting point, and knows not to read it as exact.
       tree_dirty: "{{ manifests_release_dirty }}"
       applied_at: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
-      # The inventory host whose host_vars layered into this render (#2532). The header's own
+      # The inventory host whose host_vars layered into this render. The header's own
       # justification for hashing rendered bytes is that one commit can render differently on
       # two hosts, so without this the record states a fact it cannot be traced back to. It is
       # implicit only while a record is read on the node that wrote it; a reader comparing a
-      # record against a fresh render needs to know which vars layered in. A record written
-      # before this field carries no host, and a reader must read that absence as "unknown"
-      # rather than as a mismatch — each service gains the field on its next deploy.
+      # record against a fresh render needs to know which vars layered in. A record without
+      # this field carries no host, and a reader must read that absence as "unknown"
+      # rather than as a mismatch.
       host: "{{ inventory_hostname }}"
       render_dir: "{{ manifests_dest_dir }}"
       manifests: "{{ manifests_release_files }}"

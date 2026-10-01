@@ -7,10 +7,8 @@ role that renders a workload into it. A second role landing a pod in this namesp
 free, unrestricted ingress to every already-fenced workload here, with no policy change of its
 own — the fence would look intact while quietly covering less than it claims to.
 
-This is the third time this finding has surfaced in review (see the "Slice 3 specifics" section
-of docs/networkpolicy-default-deny.md and the comment above `podSelector: {}` in
-networkpolicy-observability.yaml.j2) — per this repo's own escalate-on-recurrence rule, a third
-occurrence becomes a check, not another paragraph.
+See the "Slice 3 specifics" section of docs/networkpolicy-default-deny.md and the comment above
+`podSelector: {}` in networkpolicy-observability.yaml.j2.
 
 Run: uv run pytest ansible/tests/k8s/test_observability_sole_tenancy.py
 """

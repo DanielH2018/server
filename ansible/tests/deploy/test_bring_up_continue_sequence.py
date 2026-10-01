@@ -3,12 +3,12 @@
 Two facts about that sequence are load-bearing and neither is visible from a green run.
 
 THE CLUSTER STEP. `ansible/README.md` §8 lists `k3s-bringup.yml` between `initial_setup.yml`
-and the deploy for a cluster node. The script ran the other three and skipped it, so rebuilding
-a control-plane node reached the deploy with no cluster for it to apply manifests to (#2861).
+and the deploy for a cluster node. A `--continue` that skips it
+reaches the deploy on a rebuilt control-plane node with no cluster to apply manifests to.
 
 THE DEPLOY STEP. A bare `ansible-playbook deploy.yml` takes none of the locks the GitOps
-deployer and the weekly secret-rotate cron take on this tree, so a bring-up that overlapped
-either interleaved two writers. `scripts/deploy.sh` is the entry point that holds them.
+deployer and the weekly secret-rotate cron take on this tree, so a bring-up that overlaps
+either interleaves two writers. `scripts/deploy.sh` is the entry point that holds them.
 
 Run: uv run pytest ansible/tests/deploy/test_bring_up_continue_sequence.py
 """

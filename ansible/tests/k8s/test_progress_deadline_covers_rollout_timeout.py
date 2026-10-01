@@ -4,11 +4,9 @@ WHY THIS EXISTS. k8s/manifests/tasks/drain.yml runs `kubectl rollout status --ti
 budget taken from the role's `manifests_rollout_timeout`. `rollout status` also exits non-zero
 as soon as the Deployment is marked `ProgressDeadlineExceeded`, which Kubernetes does after
 `progressDeadlineSeconds` (default 600) without progress. A pod stuck `Pulling` makes no
-progress, so a budget above the deadline is unreachable. valheim measured that on 2026-08-13.
-prowlarr then raised its budget to 780s for a flaresolverr cold pull that took 8m54s (#2369),
-and that budget holds only because both of its templates raise the deadline to match. sonarr
-and radarr each carried a 660s budget against the default deadline until #2370; both now
-render the deadline from the same role variable the budget comes from.
+progress, so a budget above the deadline is unreachable. prowlarr's 780s budget (a flaresolverr
+cold pull takes 8m54s) holds only because both of its templates raise the deadline to match.
+sonarr and radarr render the deadline from the same role variable the budget comes from.
 
 Run: uv run pytest ansible/tests/k8s/test_progress_deadline_covers_rollout_timeout.py
 """
@@ -21,14 +19,12 @@ _DEFAULT_DEADLINE_S = 600
 
 # Non-vacuity: the Deployments whose budget exceeds the Kubernetes default deadline and that DO
 # cover it. If the census stops finding them, the check below passes over nothing. sonarr and
-# radarr are named here because the check was written for them (#2370) — the guard has no
-# exception set, so a role that stopped rendering its deadline would otherwise leave the census
-# quietly smaller.
+# radarr are named here because the guard has no exception set, so a role that stopped
+# rendering its deadline would otherwise leave the census quietly smaller.
 #
 # The floor this census tests against is `_DEFAULT_DEADLINE_S` (600), NOT the shared rollout
-# budget, and the two stopped being different numbers when #2377 raised that budget from 300s to
-# 600s. Every role that passes no override now sits AT the floor and contributes nothing here, so
-# these five carry the whole census: sonarr and radarr clear it by 60s, prowlarr and flaresolverr
+# budget, though both are 600s. Every role that passes no override sits AT the floor and
+# contributes nothing here, so these five carry the whole census: sonarr and radarr clear it by 60s, prowlarr and flaresolverr
 # by 180s, valheim by 1200s. A bump of `_DEFAULT_DEADLINE_S` past 660 would make the first two
 # vacuous rather than red — re-derive the set if that number moves.
 _MUST_COVER = frozenset({"prowlarr", "flaresolverr", "valheim", "sonarr", "radarr"})

@@ -1,10 +1,10 @@
 """Pi-hole answers for the cluster nodes' own hostnames.
 
 Nothing else on the LAN does. A node reaches its peer through a client-side alias in an SSH
-client config, and that file is deliberately absent from all three homelab hosts, so before
-these records `daniel-box` resolved nowhere from daniel-server. The visible cost was
-otel-sweep-watch reporting `box: unreachable (Could not resolve hostname daniel-box)` on
-every run it made there — a daily false finding on a check that only works if it is believed.
+client config, and that file is deliberately absent from all three homelab hosts, so without
+these records `daniel-box` resolves nowhere from daniel-server. otel-sweep-watch then reports
+`box: unreachable (Could not resolve hostname daniel-box)` on every run it makes there — a
+daily false finding on a check that only works if it is believed.
 
 The bare name is the half that matters. otel-sweep addresses its machines from a fixed enum
 holding `daniel-box` and `daniel-server`, deliberately not caller-configurable, so a
@@ -76,7 +76,7 @@ def test_the_lan_alias_is_present_too_but_is_not_what_the_sweep_uses():
     # written only as `daniel-box.lan` satisfies the naming convention daniel-pi sets while
     # leaving otel-sweep's fixed enum resolving nothing. Asserting the bare name alone would
     # not catch a later tidy-up that moved these under `.lan` only, and asserting the alias
-    # alone would not catch the bug this fixes.
+    # alone would not catch the otel-sweep failure.
     names = _host_record_names(_dnsmasq_conf())
     for host in REQUIRED:
         assert f"{host}.lan" in names, (
@@ -99,8 +99,7 @@ def test_the_addresses_are_derived_from_inventory_not_typed_in():
 def test_the_census_reads_real_directives():
     # Non-vacuity. Every assertion above is a membership test against `_host_record_names`,
     # and an empty set would fail them loudly — but only because REQUIRED is non-empty. This
-    # pins the parser itself against a record that predates this change and that nothing
-    # here touches, so a parser that quietly stopped matching cannot read as a clean tree.
+    # pins the parser itself against a record that nothing here touches, so a parser that quietly stopped matching cannot read as a clean tree.
     # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
     assert any(n == "daniel-pi.lan" for n in _host_record_names(_dnsmasq_conf())), (
         "the parser stopped reading host-record lines it used to read"

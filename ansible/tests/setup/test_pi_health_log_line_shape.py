@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """What the Pi health crons WRITE is what probe_lib/alerts.py can READ.
 
-Two halves had to land together for a daniel-pi DOWN to become an episode: the crons had to
+Two halves must hold together for a daniel-pi DOWN to become an episode: the crons must
 emit a `status=` line at all (kuma-push-lib only calls `logger` when the PUSH fails), and the
-Pi had to ship it (no rsyslog, and the Promtail build of the day was a journal stub -- so it goes to a
-file the Pi's shipper tails under `job="syslog"`). This pins the join between them.
+Pi must ship it (no rsyslog, so it goes to a file the Pi's shipper tails under
+`job="syslog"`). This pins the join between them.
 
 The join is a FORMAT, which is the part that rots silently. `_SYSLOG_LINE_RE` wants exactly
 two whitespace-free tokens before the tag, because that is rsyslog's own prefix on the server

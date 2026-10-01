@@ -35,7 +35,7 @@ def test_broad_remediation_deploy_only_names_deploy_yml():
 
 
 def test_broad_remediation_setup_only_names_initial_setup_not_deploy():
-    # The M1 fix: a setup-plane broad change must NOT tell the operator to run deploy.yml (a no-op
+    # A setup-plane broad change must NOT tell the operator to run deploy.yml (a no-op
     # for roles/setup/**) — it names initial_setup.yml --tags <role>.
     cmd = broad_remediation(False, True)
     assert "ansible/initial_setup.yml --tags <role>" in cmd
@@ -49,7 +49,7 @@ def test_broad_remediation_both_planes_names_both():
 
 
 def test_broad_remediation_names_the_playbook_that_includes_the_role():
-    """PR #702's failure: roles/setup/k3s is in k3s-bringup.yml, never initial_setup.yml."""
+    """roles/setup/k3s is in k3s-bringup.yml, never initial_setup.yml."""
     cmd = broad_remediation(False, True, {"k3s"})
     assert "ansible/k3s-bringup.yml --tags k3s" in cmd
     assert "initial_setup.yml" not in cmd
@@ -78,8 +78,7 @@ def test_broad_remediation_without_roles_keeps_the_generic_placeholder():
 
 def test_broad_remediation_puts_the_ff_merge_before_the_playbook():
     """Ansible renders from the working tree, so a playbook run before the merge copies the
-    PRE-merge files and recaps `changed=0` — a clean-looking run over the old code. An operator
-    following the reverse order shipped the previous deploy_logic.py on 2026-09-01."""
+    PRE-merge files and recaps `changed=0` — a clean-looking run over the old code."""
     cmd = broad_remediation(False, True)
     assert cmd.index("git merge --ff-only") < cmd.index("ansible-playbook"), cmd
 
@@ -91,10 +90,9 @@ def test_broad_remediation_names_the_branch_it_is_given():
     assert "origin/master" in broad_remediation(False, True)
 
 
-# review-M1: the deploy path used to evaluate the tasks/meta defer-and-alert ONLY inside
-# `if not cs.services:`, so a COMBINED push (svcA's template + svcB's meta/tasks) deployed svcA
-# and silently swallowed svcB's unapplied structural change. deferred_service_alerts(cs, deployed)
-# is what main() now calls on BOTH branches; it returns the (tasks, meta) remainder that was NOT
+# The tasks/meta defer-and-alert runs on BOTH branches of main(), so a COMBINED push (svcA's
+# template + svcB's meta/tasks) cannot swallow svcB's unapplied structural change.
+# deferred_service_alerts(cs, deployed) returns the (tasks, meta) remainder that was NOT
 # redeployed. deployed == cs.services on the deploy path, set() on the docs-only branch.
 def test_deferred_alerts_combined_push_flags_other_services_meta():
     # svcA template + svcB meta: svcA deploys, but svcB's graph change is ff-merged with no
@@ -165,9 +163,9 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
 
     deploy.yml includes k8s roles per containers_list entry with tags: [<entry name>], so a tag
     matching no entry selects nothing and Ansible EXITS 0 — the operator runs the prescribed
-    command, sees green, and the change is never applied. Eight roles are in that position and
-    they are the shared plane (manifests is the apply+rollout path for every workload;
-    volume-revert is the auto-deploy rollback path).
+    command, sees green, and the change is never applied. Those roles are the shared plane
+    (manifests is the apply+rollout path for every workload; volume-revert is the auto-deploy
+    rollback path).
 
     Cross-checked against scripts/deploy_tools/deploy_tags.known_tags(), the same source ./scripts/deploy.sh
     validates against, so the alert and the wrapper cannot drift apart.
@@ -212,9 +210,8 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
 def test_a_shared_module_edit_names_every_consumer_role():
     """`role_of` maps a path to the role whose directory holds it, which is right for a
     manifest and wrong for a shared library. bridge/common.py lives under monitor-bridge and
-    autofix-bridge imports it, so after the #407 split an edit there emitted
-    `--tags monitor-bridge` alone and autofix-bridge's ConfigMap kept the old copy with
-    nothing reporting it (2026-08-25 review M-2).
+    autofix-bridge imports it, so an edit there must name autofix-bridge too, or its ConfigMap
+    keeps the old copy with nothing reporting it.
     """
     paths = ["ansible/roles/k8s/monitor-bridge/files/bridge/common.py"]
     consumers = shared_module_consumers(paths, REPO)
@@ -258,12 +255,10 @@ def _k8s_tree(tmp_path, files):
 def test_a_shared_module_inside_a_package_is_still_seen(tmp_path):
     """The detector sees `files/bridge/common.py`, in every spelling a consumer can use.
 
-    The first version matched one level (`files/<name>.py`) and a bare `import bridge.common`.
-    Moving the shared module into a package would have made it invisible to the one check that
-    exists for it, and the deployer would have gone back to emitting `--tags monitor-bridge`
-    alone -- the M-2 silence, reintroduced by a rename. The live-tree test above cannot be this
-    red-proof while the tree is flat; this one exercises depth on both sides, the owner's and
-    the consumer's.
+    Moving the shared module into a package must not make it invisible to the one check that
+    exists for it, or the deployer goes back to emitting `--tags monitor-bridge` alone. The
+    live-tree test above cannot be this red-proof while the tree is flat; this one exercises
+    depth on both sides, the owner's and the consumer's.
     """
     repo = _k8s_tree(
         tmp_path,
@@ -333,7 +328,7 @@ def test_a_scoped_setup_run_fits_the_budget():
 
 
 def test_a_full_deploy_plus_rollback_is_flagged_over_budget():
-    """Measured 2026-08-22: a full deploy plus rollback leaves 96s against TimeoutStartSec.
+    """Measured: a full deploy plus rollback leaves 96s against TimeoutStartSec.
 
     A full deploy.yml is 1212s. 180 + 1212 + 1212 = 2604 against TimeoutStartSec=2700 leaves 96s, so
     a run four percent slower than measured is SIGTERMed mid-rollback -- which strands the tree at
@@ -351,12 +346,10 @@ def test_the_budget_predicate_tracks_the_units_real_timeout():
     If TimeoutStartSec is raised in gitops-deploy.service.j2, this fails and the decision gets
     revisited deliberately rather than drifting.
 
-    It fired as designed on 2026-08-29, when the staging gate's budgets raised the ceiling to 60min,
-    and again on 2026-09-25, when #2397's forward cap raised it to 70min. The verdict below is
-    unchanged at 70min: a ceiling that fits at 3600 fits at 4200.
-    Re-derived at that ceiling: 180 + 1212 + 1212 + 300 = 2904 against 3600 now FITS, so the budget
-    is no longer what makes the deploy-plane arm forward-only. Nothing was armed by that —
-    broad_budget_ok has no production caller; it is the reasoning made executable, and
+    The verdict below is the same at 70min as at 60min: a ceiling that fits at 3600 fits at 4200.
+    Derived at that ceiling: 180 + 1212 + 1212 + 300 = 2904 against 3600 FITS, so the budget
+    is not what makes the deploy-plane arm forward-only. broad_budget_ok has no production
+    caller; it is the reasoning made executable, and
     gitops_deploy.py's broad arm is forward-only in code either way. Funding a broad rollback is a
     deliberate change to make on its own evidence (a re-measured deploy.yml, and a decision about a
     rollback that can still be SIGTERMed), not a side effect of a ceiling raised for an unrelated
@@ -378,14 +371,13 @@ def test_the_budget_predicate_tracks_the_units_real_timeout():
     )
 
 
-# ── #2294: the role tag is the maximal apply, and the printed command says so ──────────────
-# A three-line RBAC addition to `k3s_readonly_crd_api_groups` was answered with
-# `ansible-playbook ansible/k3s-bringup.yml --tags k3s` on 2026-09-22. That command restarts
-# k3s and re-encrypts etcd; the change needed `--tags kubeconfig` (ok=15 changed=2).
+# ── the role tag is the maximal apply, and the printed command says so ──────────────────────
+# `ansible-playbook ansible/k3s-bringup.yml --tags k3s` restarts k3s and re-encrypts etcd. A
+# change that needs only `--tags kubeconfig` must not be answered with it.
 
 
 def test_the_k3s_role_tag_carries_what_running_it_does():
-    """The command is still the role tag, now carrying a warning.
+    """The command is the role tag, carrying a warning.
 
     No assertion on the warning's prose: asserting a sentence copied out of the module that
     defines it proves only that the file equals itself. What the warning CLAIMS is held up by
@@ -449,8 +441,7 @@ def test_every_gate_the_warning_names_is_read_by_the_role():
 
     Asserting the identifiers against `tasks/server.yml` rather than the warning's sentence:
     a gate removed there makes the warning understate what `--tags k3s` does, which is the
-    direction that gets an operator hurt. The claims come from reading that file, not from
-    issue #2294's body, which described all three effects as unconditional.
+    direction that gets an operator hurt. The claims come from reading that file.
     """
     server = (_K3S_TASKS / "server.yml").read_text()
     assert "secrets-encrypt rotate-keys" in server

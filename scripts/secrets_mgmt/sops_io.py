@@ -10,9 +10,8 @@ import re
 # Uptime Kuma rejects a push token that is not exactly 32 letters/digits, and it rejects it at
 # monitor-CREATION time — so the tile is never made and every repo-side gate stays green: the
 # template interpolates the bad value fine, the manifest renders, CI passes, and the only
-# evidence is a validation error in the autokuma sidecar log. `ruleset_drift_push_token`
-# shipped 30 chars in PR #675 and its monitor never existed for a day before anyone noticed.
-# `cmd_rotate` mints `token_hex(16)`, which satisfies this, so the auto-rotation path agrees.
+# evidence is a validation error in the autokuma sidecar log. `cmd_rotate` mints
+# `token_hex(16)`, which satisfies this, so the auto-rotation path agrees.
 PUSH_TOKEN_RE = re.compile(r"^[A-Za-z0-9]{32}$")
 
 

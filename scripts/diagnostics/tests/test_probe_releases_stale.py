@@ -5,9 +5,9 @@ lookup, loading, missing_services). Everything here drives a throwaway git repo,
 staleness is a question about history rather than about a record's fields. Shared fixtures are
 in `_release_fixtures.py`.
 
-Every rule is a `..._is_clean` / `..._is_flagged` pair, and the #1672 narrowing carries a third
-assertion that it did not widen -- a service's own `tasks/` and the renderer's `tasks/` must
-still count stale.
+Every rule is a `..._is_clean` / `..._is_flagged` pair, and the shared-role narrowing carries a
+third assertion that it did not widen -- a service's own `tasks/` and the renderer's `tasks/`
+must still count stale.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_stale.py
 """
@@ -67,7 +67,7 @@ def test_named_role_is_clean_when_its_record_is_the_tip(tmp_path):
 
 def test_shared_role_change_marks_the_consuming_service_stale(tmp_path):
     """Without widening onto the shared role, a `manifests`-only change reads clean for every
-    service -- the exact false-GREEN issue #947 names."""
+    service -- the exact false GREEN."""
     repo = tmp_path / "repo"
     _init_repo(repo)
     base = _commit(
@@ -138,11 +138,11 @@ def test_unresolvable_commit_is_stale_not_skipped(tmp_path):
     assert stale.get("sonarr") == "commit unknown to this checkout"
 
 
-# ── a shared role's tasks/ is deploy-time, not applied bytes (#1672) ─────────────────────────
+# ── a shared role's tasks/ is deploy-time, not applied bytes ─────────────────────────
 
 
 def test_a_shared_roles_tasks_change_does_not_mark_every_service_stale(tmp_path):
-    """The live incident: `volume-claim`'s staging-directory move (0b86a7d7).
+    """`volume-claim`'s staging-directory move.
 
     That commit touched one non-doc, non-test file -- `volume-claim/tasks/claim.yml` -- and
     marked all 53 services stale, parking `Release Staleness Drift` DOWN with no deploy tag able
@@ -243,8 +243,8 @@ def test_a_services_own_tasks_change_still_marks_it_stale(tmp_path):
     """The narrowing is scoped to SHARED roles.
 
     A service's own `tasks/main.yml` names its `manifests_files` -- the list `k8s/manifests`
-    stages -- so a change there does move its applied bytes. Excluding it would be a
-    false-GREEN of the #947 class the check exists to catch.
+    stages -- so a change there does move its applied bytes. Excluding it would be a false
+    GREEN, the class the check exists to catch.
     """
     repo = tmp_path / "repo"
     _init_repo(repo)
@@ -298,13 +298,13 @@ def test_drop_retired_keeps_a_declared_service_and_an_unreadable_record():
 
 
 def test_drop_retired_drops_a_service_no_entry_declares():
-    """terraria-stats' record outlived its role (#2813); judged, it read stale for good."""
+    """terraria-stats' record outlived its role; judged, it read stale for good."""
     records = [{"service": "sonarr"}, {"service": "terraria-stats"}]
     assert pr.drop_retired(records, {"sonarr", "game-stats"}) == [{"service": "sonarr"}]
 
 
 def test_is_real_change_is_clean_for_the_renderers_drain():
-    """The rollout wait lives in `manifests/tasks/` but applies nothing (#2813)."""
+    """The rollout wait lives in `manifests/tasks/` but applies nothing."""
     assert pr._is_real_change("ansible/roles/k8s/manifests/tasks/drain.yml") is False
 
 
@@ -320,7 +320,7 @@ def test_is_real_change_is_flagged_for_the_paths_the_narrowing_must_not_touch():
         assert pr._is_real_change(path, deploy_time) is True, path
 
 
-# ── the deploy plane: an inventory key or shared macro a service's render reads (#1993) ──
+# ── the deploy plane: an inventory key or shared macro a service's render reads ──
 
 _DECLARED = {"sonarr", "jellyfin"}
 
@@ -354,7 +354,7 @@ def _stale(repo, records):
 
 def test_an_inventory_key_a_service_reads_is_flagged(tmp_path):
     """Without the deploy-plane census, a key change reads clean for the service whose
-    render it moved -- the gap #1993 names."""
+    render it moved."""
     repo, base = _deploy_plane_repo(tmp_path)
     tip = _commit(
         repo,

@@ -1,4 +1,4 @@
-"""`remote_clean_command`'s gone-tree shell chain, EXECUTED against a scratch repo — #1677.
+"""`remote_clean_command`'s gone-tree shell chain, EXECUTED against a scratch repo.
 
 Its siblings in test_fanout_clean_convergence.py assert the chain by shape, which a quoting
 regression in the `gh pr list … --json headRefOid` / `grep -c -x` pair would pass. These run
@@ -156,7 +156,7 @@ def test_a_gh_that_is_not_installed_leaves_the_branch_alone(tmp_path):
 
 
 def test_the_chain_deregisters_only_this_batchs_worktree(tmp_path):
-    """#1677's scoping complaint, executed: a sibling stale registration must survive.
+    """The scoping check, executed: a sibling stale registration must survive.
 
     Ruling 37's repo-global `git worktree prune` took every registration whose directory was
     missing. This asserts the narrowed `worktree remove` does not.
@@ -183,7 +183,7 @@ def test_the_chain_resets_the_units_failed_state(tmp_path):
 
 
 def test_an_active_unit_is_kept_and_nothing_is_touched(tmp_path):
-    """FLAGGED half for #1872: a batch still running is never cleaned out from under itself.
+    """FLAGGED half: a batch still running is never cleaned out from under itself.
 
     Executed with the merged answer that would otherwise delete the branch: the refusal has
     to come before the merge check, because a clean tree at master is exactly what a running
@@ -225,13 +225,13 @@ def _stub_uv(stub_bin):
 
 
 def test_a_directory_that_is_no_longer_a_checkout_reads_as_gone(tmp_path):
-    """#1948: a worktree removed on exit leaves a `.remember/` stub where the tree was.
+    """A worktree removed on exit leaves a `.remember/` stub where the tree was.
 
-    `-e` on that path is true, so the chain used to take the checkout branch and run the
-    script inside a tree that no longer carries one — `python: can't open file`, exit 2,
-    the leg `failed`, and the manifest never converged. The discriminator is the `.git`
-    file every linked worktree carries, not the directory. The stub goes with the tree: a
-    relaunch of the same batch id refuses on `test ! -e <worktree>`.
+    `-e` on that path is true, so a chain keyed on it would take the checkout branch and
+    run the script inside a tree that no longer carries one — `python: can't open file`,
+    exit 2, the leg `failed`, and the manifest never converging. The discriminator is the
+    `.git` file every linked worktree carries, not the directory. The stub goes with the
+    tree: a relaunch of the same batch id refuses on `test ! -e <worktree>`.
     """
     repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
     (worktree / ".remember" / "logs").mkdir(parents=True)

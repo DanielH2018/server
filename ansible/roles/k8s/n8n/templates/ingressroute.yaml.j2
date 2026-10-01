@@ -15,21 +15,13 @@
   )
 }}
 {#
-  There was an `n8n-monitoring` route here until 2026-08-16: a rate-limited-only door onto
-  /api/v1/workflows and /api/v1/executions, admitted so monitor-bridge's check_n8n could poll
-  n8n from daniel-server. That caller moved in-cluster on 2026-08-14 and now reaches n8n over
-  the Service DNS name, leaving the route with no known caller.
+  No `n8n-monitoring` route exists: monitor-bridge's check_n8n reaches n8n over the Service DNS
+  name, so nothing needs a door onto /api/v1/workflows and /api/v1/executions.
 
-  The route's own comment demanded a caller census before removal, because "looks unused" is
-  how two of three past allowlist narrowings broke a real caller. That census was run on
-  2026-08-16: `traefik_router_requests_total{router=~".*n8n-monitoring.*"}` returned zero
-  series across the full 30-day Prometheus retention — not zero requests recently, no series at
-  all. So it was deleted rather than narrowed.
+  /api/v1 is READ-WRITE — it can create, modify, activate and delete workflows — so such a route
+  would reach it with X-N8N-API-KEY as the only gate unless it carries Authelia or a ClientIP
+  matcher.
 
-  It mattered because /api/v1 is READ-WRITE — it can create, modify, activate and delete
-  workflows — and this was the one route in the fleet reaching it with neither Authelia nor a
-  ClientIP matcher in front. X-N8N-API-KEY was the only gate.
-
-  If a future caller needs this again, add it through the shared monitoring_route() macro so it
-  inherits the ClientIP matcher, rather than reintroducing a hand-rolled twin.
+  If a future caller needs this, add it through the shared monitoring_route() macro so it
+  inherits the ClientIP matcher, rather than writing a hand-rolled twin.
 #}

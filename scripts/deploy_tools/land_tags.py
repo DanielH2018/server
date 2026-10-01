@@ -9,9 +9,8 @@ session's scope.
 WHY A ROLE NAME IS NOT AUTOMATICALLY A TAG. Only a role with a `containers_list` entry has
 one. Eight roles under ansible/roles/k8s/ have no entry because other roles include them by
 literal name, and handing one to `--tags` makes deploy.sh refuse the WHOLE list (exit 2) --
-so the valid services beside it are refused too. PR #617 landed 22 digest pins that way and
-none of them deployed. Those roles come out of the tags, and `shared_caller_tags` puts
-the tags of every role that runs them back in (#2704).
+so the valid services beside it are refused too. Those roles come out of the tags, and
+`shared_caller_tags` puts the tags of every role that runs them back in.
 
 WHY THE COUNT ASSERTION. `gh pr view --json files` paginates at 100. A 137-file PR returns
 100 entries with no error and no marker, so the derived tag list is a silent subset of what
@@ -71,9 +70,7 @@ from shared_role_callers import caller_tags
 
 # The one directory under the role trees that is not a service: `common`, the shared Docker
 # deploy path. `--tags common` matches no containers_list entry, and Ansible exits 0 on a tag
-# selecting nothing. `archive` sat here too until #2540 — it classified DIFF paths rather than
-# a tree at a ref, so it had to outlive the tree #2385 deleted until the deployer's `local`
-# was past that merge commit.
+# selecting nothing.
 _NOT_SERVICES = frozenset({"common"})
 
 # The remediation for a rotated secret. Flat text rather than derived from the file list,
@@ -109,15 +106,15 @@ def landing_hosts_at(
     A landing that deploys its PR's merge commit (`deploy.sh --at`) must route each tag from
     that commit's inventory: a PR adding a Pi role and its containers_list entry together
     declares the role on daniel-pi in NO checkout until the tick fast-forwards, so the primary
-    read routed it to no host and the landing ran deploy.sh locally without `-e target=`
-    (issue #1839). Same routing rule and the same staging exclusion as the tree read, through
+    read would route it to no host and the landing would run deploy.sh locally without
+    `-e target=`. Same routing rule and the same staging exclusion as the tree read, through
     the one definition of each.
 
     None when the ref cannot be read, for `service_records_at_or_none`'s reason: an empty
     answer here would route every tag to no host, and the caller falls back to the tree.
 
     `k8s_only` is `hosts_for_tags`' per-tag platform restriction, and the landing passes its
-    caller-expanded tags (#2718). `land_lib/deploy.deploy_by_host` is the one caller that
+    caller-expanded tags. `land_lib/deploy.deploy_by_host` is the one caller that
     fills it.
     """
     records = service_records_at_or_none(ref, cwd)
@@ -133,15 +130,12 @@ def role_for(path: str) -> str | None:
     `containers_list` entry, and eight of them do not.
 
     A `.md` under a role belongs to no role HERE, which is the answer the deployer's own
-    mapper already gives: `services_from_changed_paths` drops one ahead of every plane branch,
-    because a document is not something a playbook applies. This mapper did not, so a PR whose
-    only change under `roles/k8s/manifests/` was that role's CLAUDE.md came out of
-    `shared_roles` as a tag-less role owed to a hand, and land.sh ended `needs-manual-apply`
-    asking for a full `ansible/deploy.yml` run for prose (issue #1701).
+    mapper gives: `services_from_changed_paths` drops one ahead of every plane branch,
+    because a document is not something a playbook applies.
     `test_land_tags_shared_mapper_agreement.py` pins the two answers together.
 
     The path shape itself is the deployer's `deploy_changes.role_of`, reached through the
-    index, so one function answers which role a path sits in (#3048). The `.md` rule and
+    index, so one function answers which role a path sits in. The `.md` rule and
     `_NOT_SERVICES` stay HERE: `role_of` is the plain mapper, and this is the caller that reads
     DIFF paths rather than a tree at a ref.
     """
@@ -156,10 +150,9 @@ def role_for(path: str) -> str | None:
 def tag_for(path: str, declared: set[str] | None = None) -> str | None:
     """The deploy tag a changed path maps to, or None.
 
-    A role's own `tests/` maps to no tag (issue #1735). PR #1734 dropped that path from
-    `shared_roles` only, to keep the change to what land.sh reports; dropping it here changes
-    what land.sh DEPLOYS. That is the intended half of the fix: a tests-only PR to a declared
-    role used to cost a rollout, a restart window and a health gate for pytest guards nothing
+    A role's own `tests/` maps to no tag. Dropping it only from `shared_roles` would leave
+    land.sh DEPLOYING it: a tests-only PR to a declared
+    role would cost a rollout, a restart window and a health gate for pytest guards nothing
     stages to the cluster. The deployer's own `_is_test_only_path` in `deploy_changes.py`
     already drops every test path before it maps changes to services, so this is the two
     mappers agreeing rather than a new rule.
@@ -179,25 +172,25 @@ def is_role_test_path(path: str) -> bool:
     Answers about segment 4 of `ansible/roles/<plane>/<role>/<sub>/...` alone, so it is only
     meaningful for a path `role_for` has already named a role for. `shared_roles` and `tag_for`
     are the callers, and both drop such a path: a role's `tests/` is work no deploy applies, the same class as the
-    `.md` rule in `role_for` (#1701). Pytest guards over the role's `files/*.py` are staged by
+    `.md` rule in `role_for`. Pytest guards over the role's `files/*.py` are staged by
     nothing — `ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide — so
     they reach no cluster and no deploy can apply them. `_is_real_change` in
     `scripts/diagnostics/probe_lib/releases.py` drops a role's `tests/` for that reason.
 
-    `tasks/` is NOT dropped, which is what issue #1729 proposed and three facts refute. A role
+    `tasks/` is NOT dropped, for three reasons. A role
     with no `containers_list` entry and no caller has no path to being applied at all, and a
     tasks-only PR adding one must still be reported
-    (`tests/test_land_classify.py:110`, issue #1544). A helper's tasks apply live state to each
+    (`tests/test_land_classify.py:110`). A helper's tasks apply live state to each
     caller separately — arr-notification's seed a Discord Connect notification into the *arr's
     own database — so deploying one caller is not the change applied
-    (`tests/test_land_tags_caller_coverage.py:76`, issue #1397). And `_supplies_manifest_bytes`,
-    the predicate #1729 cites as its precedent, puts `volume-claim` in the reported set by name:
+    (`tests/test_land_tags_caller_coverage.py:76`). And `_supplies_manifest_bytes`
+    puts `volume-claim` in the reported set by name:
     the role ships `templates/pvc.yaml.j2`.
 
     Read HERE rather than folded into `role_for`, which stays the plain "which role directory is
     this path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's
     own `services_from_changed_paths`. The segment itself comes off `role_of`, which already
-    carries it, rather than off a fourth `split("/")` of the same path (#3048).
+    carries it, rather than off a fourth `split("/")` of the same path.
     """
     at = role_of(path)
     return at is not None and at.subdir == "tests"
@@ -209,7 +202,7 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     These are the shared k3s plane — `manifests` is the apply-and-roll path every workload
     includes, `volume-claim` and `volume-revert` are storage paths several include. Naming one
     in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2), so they must be split off the
-    tags and reported as work a human still owes. PR #617 is the measured case.
+    tags and reported as work a human still owes.
 
     A role's own `tests/` does not put it here at all — `is_role_test_path`.
     """
@@ -225,12 +218,12 @@ def derived_tags(files, declared: set[str] | None = None) -> set[str]:
 
 
 def shared_caller_tags(files, declared: set[str] | None = None) -> dict[str, set[str]]:
-    """For each shared role `files` changes, the tags of EVERY role that runs it (#2704).
+    """For each shared role `files` changes, the tags of EVERY role that runs it.
 
     A helper role has no tag of its own, but `deploy.yml` runs it under the tag of every role
-    whose tasks include it, so deploying all of its callers applies it (#1397). All of them,
-    not one: PR #617 deployed 22 of `manifests`' callers, which re-applied it for those 22
-    alone. Transitive, so `longhorn-api` reaches the services behind `volume-snapshot`.
+    whose tasks include it, so deploying all of its callers applies it. All of them,
+    not one: a caller deployed alone re-applies the helper for that caller only.
+    Transitive, so `longhorn-api` reaches the services behind `volume-snapshot`.
 
     The landing deploys these tags, and `plane_note` drops every role this gives a non-empty
     set. An empty set is a role nothing deploys, which stays in the note.
@@ -245,7 +238,7 @@ def confirmed_narrow_tags(
 ) -> dict[str, frozenset[str]]:
     """The deployer's narrowing for each setup role this PR touches, where it covers this PR.
 
-    What prints is the deployer's `manual_plane_tags` row (#2307): it spans every range that
+    What prints is the deployer's `manual_plane_tags` row: it spans every range that
     made the role pending, and the note ends in the command clearing all of them. A row is
     quoted only when it CONTAINS this PR's own `narrow_setup.role_tags` over `pr_range`,
     because nothing else ties it to this PR. Read before the tick records this range, it is
@@ -261,7 +254,7 @@ def confirmed_narrow_tags(
 
 
 def own_narrow_tags(files, pr_range: str, repo, only=None) -> dict[str, frozenset[str]]:
-    """`narrow_setup.role_tags` over this PR's own range, per setup role it touches (#3126).
+    """`narrow_setup.role_tags` over this PR's own range, per setup role it touches.
 
     A landing that never awaits the tick prints this directly: no row exists for its range
     yet, and the narrowed clear drops only these tags, so a wider row recorded later keeps
@@ -296,29 +289,26 @@ def plane_note(
 
     A deploy tag covers roles/k8s and roles/containers. It does not cover the setup plane,
     which `deploy.yml` cannot apply at all -- so a PR touching only roles/setup derives zero
-    tags and land.sh used to call that `nothing-to-deploy`. True about service tags, silent
-    about the operator: PR #587 needed `initial_setup.yml --tags gitops_deploy` and was
-    reported as needing nothing (2026-08-29).
+    tags. That must not read as `nothing-to-deploy`: a setup-role change needs its own
+    `initial_setup.yml --tags <role>` run.
 
     Returned for the tag-carrying case too. A PR can touch a k8s role AND the setup plane,
     where the deploy genuinely succeeds and half the change is still unapplied -- the harder
     version of the same silence, because the verdict reads `settled`.
 
     A shared k8s role is the same shape, one plane over: `--tags manifests` matches nothing.
-    The landing deploys its callers instead (`shared_caller_tags`, #2704), so only a shared
+    The landing deploys its callers instead (`shared_caller_tags`), so only a shared
     role that no declared role runs is still named here. `shared_role_reach` drops the paths
-    of one whose change reaches no rendered manifest before either reads them (#2462).
+    of one whose change reaches no rendered manifest before either reads them.
 
     A rotated secret is the third shape, and the one with no path to match at all. A secret's
     value lives in no role's template, so `ansible/vars/secrets.yml` derives zero tags however
-    many roles consume it: PR #695 rotated `ruleset_drift_push_token`, whose two consumers --
-    the uptime-kuma tile and the gitops_deploy pusher cron -- both kept rendering the old
-    value, and this reported `nothing-to-deploy` (2026-09-01).
+    many roles consume it: every consumer keeps rendering the old value, and the landing
+    would report `nothing-to-deploy`.
 
     `quiet` is the broad-plane paths whose diff carries no content change, from
     `deploy_tags.comment_only_paths`. They are dropped from the BROAD half only: a playbook
-    named for three edited comments has nothing to apply, and PR #843 ended
-    `needs-manual-apply` for exactly that (issue #848). The secrets half reads the unfiltered
+    named for three edited comments has nothing to apply. The secrets half reads the unfiltered
     list -- `comment_only_broad_changes` cannot return `ansible/vars/secrets.yml`, and
     keeping the reads separate means a later widening there cannot silently mute a rotation.
     """
@@ -340,15 +330,15 @@ def plane_note(
         # any deployable role it is given, and land.sh has already deployed those itself.
         notes.append(k8s_remediation(set(shared), declared))
     cs = services_from_changed_paths(files)
-    # Only the broad changes the deployer will NOT apply itself are owed to a human. Since
-    # 2026-08-29 the tick fast-forwards and applies a deploy-plane change as a full deploy.yml
-    # and a setup-plane change as `initial_setup.yml --tags <role>`; since #719 that includes
-    # the deployer's own role. What is left for a hand: the bring-up playbooks
+    # Only the broad changes the deployer will NOT apply itself are owed to a human. The tick
+    # fast-forwards and applies a deploy-plane change as a full deploy.yml and a setup-plane
+    # change as `initial_setup.yml --tags <role>`, including the deployer's own role.
+    # What is left for a hand: the bring-up playbooks
     # (`_BROAD_MANUAL_PREFIXES`, which park the tick outright), and a setup role that
     # initial_setup.yml does not include (k3s lives in k3s-bringup.yml, common in no playbook),
     # for which `setup_tags_for` derives nothing and the tick defers. Reporting the self-applied
-    # roles here made land.sh exit 1 with `needs-manual-apply` for #723 while the next tick was
-    # applying exactly those roles (2026-09-01). land.sh reads the deployer's own state for
+    # roles here would make land.sh exit 1 with `needs-manual-apply` while the next tick is
+    # applying exactly those roles. land.sh reads the deployer's own state for
     # that case instead.
     loud = changes_for(files, quiet)
     unroutable = {
@@ -374,7 +364,7 @@ def plane_note(
         # a range carrying BOTH a bring-up playbook and an unapplyable role parks outright and
         # writes no marker, so printing the clear command there sends an operator after a file
         # that does not exist.
-        # `--applied` where the apply above was narrowed; see `manual_plane_clear_for` (#2349).
+        # `--applied` where the apply above was narrowed; see `manual_plane_clear_for`.
         cmd = manual_plane_clear_for(unroutable, narrow_tags or {})
         notes.append(f"Then clear the deployer's marker: `{cmd}`.")
     if cs.secrets:
@@ -434,8 +424,7 @@ def self_applied_command(files, quiet=()) -> str:
     THE TICK CONVERGING IS NOT PROOF IT APPLIED ANYTHING. Any session's `git merge --ff-only`
     also makes local == origin, and from then on `next_action()` returns `noop` for every later
     tick — so the plane is stranded permanently and the one mechanism that would apply it never
-    sees the range again. PR #1529's `renovate_agent` change landed `settled` that way and was
-    four days stale on disk (issue #1537). This is the line `land.sh` prints when the deployer
+    sees the range again. This is the line `land.sh` prints when the deployer
     recorded no apply covering the PR.
     """
     cs = changes_for(files, quiet).changes
@@ -471,8 +460,8 @@ def derive(files, changed_files: int, declared: set[str] | None = None) -> Deriv
     than none, because it looks like an answer.
 
     A changed role with no `containers_list` entry yields no tag. It is not dropped silently
-    -- `plane_note` names it and what applies it -- because dropping it from BOTH is how the
-    setup plane used to read as `nothing-to-deploy`.
+    -- `plane_note` names it and what applies it -- because dropping it from BOTH would let the
+    setup plane read as `nothing-to-deploy`.
     """
     files = list(files)
     if len(files) != changed_files:
@@ -497,14 +486,14 @@ def quiet_paths(paths: list[str], range_: str) -> set[str]:
     """The broad paths in `paths` a landing owes nothing for: docs, and comment-only edits.
 
     Documentation is quiet on its own terms, before any range is read: a `.md` under
-    `roles/setup/k3s/` still takes the broad arm by prefix, so a docs-only PR there ended
-    `needs-manual-apply` naming `k3s-bringup.yml` with nothing to apply (issue #1701, the
-    setup-plane half of it). The comments-only test below cannot reach that case -- it reads
+    `roles/setup/k3s/` still takes the broad arm by prefix, so a docs-only PR there would end
+    `needs-manual-apply` naming `k3s-bringup.yml` with nothing to apply. The comments-only
+    test below cannot reach that case -- it reads
     YAML content lines, and prose is not comments.
 
     Empty of comment-only paths when no range was given, or when the range is malformed, or
     when git cannot read a side of it -- every one of those keeps the path broad, which is the
-    direction a wrong answer here must fall (issue #848). The docs half survives all three,
+    direction a wrong answer here must fall. The docs half survives all three,
     because it asks nothing of the range.
 
     A RANGE NARROWER THAN THE FILE LIST is the same failure wearing a valid range, and it

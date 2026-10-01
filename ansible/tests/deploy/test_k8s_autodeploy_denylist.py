@@ -67,7 +67,7 @@ def test_a_directory_holding_only_pycache_is_not_a_role(tmp_path: Path) -> None:
 
     The fast-forward that retires a role removes its tracked files; a `__pycache__/` left by
     a pytest run in the primary checkout keeps the directory itself alive. Reading that shell
-    as a role raised, which failed the deployer's `Write deployer config` task (#2882).
+    as a role would raise, which fails the deployer's `Write deployer config` task.
     """
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
@@ -245,10 +245,8 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     denied = k8s_autodeploy_denylist(str(_ANSIBLE))
     assert denied == sorted(set(denied)), "duplicated or unsorted"
     # Roles whose exclusion is load-bearing: losing the ingress or auth plane removes the
-    # ability to see or fix a failed deploy. sonarr and speedtest sat here until slice 7b task 7
-    # promoted them (and seven siblings) behind the pre-apply Longhorn snapshot and revert — they
-    # are asserted OUT of this list below, not just dropped, so a re-denial of either fails loud
-    # rather than reading as this test simply not having been updated.
+    # sonarr and speedtest are asserted OUT of this list below, not just dropped, so a re-denial
+    # of either fails loud rather than reading as this test not having been updated.
     for role in (
         "traefik",
         "authelia",
@@ -259,9 +257,8 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     # A SECOND, DISTINCT denial category — state coupled to something OUTSIDE the volume, so
     # the pre-apply snapshot and revert cannot see it and a revert can desynchronise the two.
     # Not the load-bearing reasons above, and not "migrating state with no recovery point"
-    # either (that is what the snapshot/revert solved for these three same roles). Slice 7b task
-    # 7 promoted all three on deploy mechanics alone; the scope decision the same day (2026-08-22)
-    # held them back once someone asked the coupling question per service:
+    # either (the snapshot/revert covers that for these three). Each is denied for the coupling
+    # question asked per service:
     #   - zigbee2mqtt — the SLZB-06M coordinator's own NVRAM (network key, frame counters)
     #   - livesync    — CouchDB revisions already synced to connected Obsidian clients
     #   - qbittorrent — the media-data volume qbittorrent-config's bookkeeping references
@@ -273,19 +270,17 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         "zigbee2mqtt",
     ):
         assert role in denied
-    # A FOURTH denial reason, tdarr alone. Slice 7b task 7 promoted it with the other eight on
-    # deploy mechanics; two read-only audits held it back the same day (2026-08-22), after this
-    # one. The snapshot/revert machinery works fine for tdarr — this is not the trio's hazard
-    # recurring — the compounding reasons are specific to it: it also mounts media-data (shared
-    # RWX, never reverted) and rewrites library files there IN PLACE, so a revert can't undo an
-    # already-committed transcode; its own two claims (tdarr-configs, tdarr-server) revert
-    # non-atomically; and until #1886 the digest pin's "stays manual" intent was unenforced by
-    # renovate.json, which automerged a digest re-push after a 3-day soak — the denylist now
-    # turns automerge off too (test_renovate_automerge_follows_the_autodeploy_denylist.py).
+    # A FOURTH denial reason, tdarr alone. The snapshot/revert machinery works fine for tdarr —
+    # this is not the trio's hazard recurring — the compounding reasons are specific to it: it
+    # also mounts media-data (shared RWX, never reverted) and rewrites library files there IN
+    # PLACE, so a revert can't undo an already-committed transcode; its own two claims
+    # (tdarr-configs, tdarr-server) revert non-atomically; and the digest pin's "stays manual"
+    # intent needs renovate.json not to automerge a digest re-push, so the denylist turns
+    # automerge off too (test_renovate_automerge_follows_the_autodeploy_denylist.py).
     # Checked by name for the same reason as the groups above.
     for role in ("tdarr",):
         assert role in denied
-    # The eight slice 7b roles actually left promoted, checked by name so a regression reads as
+    # The promoted roles, checked by name so a regression reads as
     # a specific assertion failure rather than a shrunk floor further down.
     for role in (
         "bazarr",
@@ -327,12 +322,9 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         is False
     ]
     assert len(denied) == len(actually_false)
-    # Measured 36 on 2026-08-22 (uv run python scripts/dev/k8s_autodeploy_counts.py): slice 7b task
-    # 7's twelve promotions dropped this from 44 to 32, the same-day scope decision re-denied
-    # three of the twelve for state coupling (35), then the two post-7b audits re-denied a
-    # fourth, tdarr, for a compounding reason of its own (36). The floor sits two below the
-    # measured count — enough to catch an accidental bulk flip without needing an edit for every
-    # single-role promotion.
+    # 36 measured (uv run python scripts/dev/k8s_autodeploy_counts.py). The floor sits two below
+    # the measured count — enough to catch an accidental bulk flip without needing an edit for
+    # every single-role promotion.
     assert len(denied) >= 34
 
 

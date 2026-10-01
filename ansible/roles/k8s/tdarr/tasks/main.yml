@@ -1,10 +1,6 @@
 ---
-# Slice 4, B6 — tdarr.
-#
-# It moves alone, like jellyfin. What makes it its own batch is not the seam but the workload:
-# it holds the GPU for minutes at a time on real files and rewrites the library IN PLACE, so it
-# is the one media service where a wrong mount does lasting damage rather than a failed request.
-
+# tdarr holds the GPU for minutes at a time on real files and rewrites the library IN PLACE, so
+# it is the one media service where a wrong mount does lasting damage rather than a failed request.
 
 # Two claims, created BEFORE the workload so the pod has PVCs to mount when it starts.
 - name: Seed the tdarr server database
@@ -42,5 +38,5 @@
   ansible.builtin.include_tasks: verify.yml
   # Every proof in verify.yml is about the pod this deploy rolled out. --check rolls nothing
   # out and skips the pod lookup, so the proofs would exec against nothing and their reports
-  # would error on check-mode skip results. Same gate as jellyfin's (#2351).
+  # would error on check-mode skip results. Same gate as jellyfin's.
   when: not ansible_check_mode

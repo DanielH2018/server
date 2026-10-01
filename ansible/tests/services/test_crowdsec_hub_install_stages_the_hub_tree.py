@@ -10,13 +10,11 @@ staged and the agent drops the parser:
     lstat /etc/crowdsec/hub/parsers/s02-enrich/crowdsecurity/geoip-enrich.yaml: no such file
     or directory"
 
-Measured on both pods on 2026-09-05 (#1211): six occurrences per authelia start, eight in
-traefik's last 500 lines. GeoIP enrichment stays dead behind a 2/2 Running pod, which is why
-a guard over the rendered command text is the only cheap check — nothing about it is visible
-from pod status, and the datafiles half (#1177/#1208) reads green throughout.
+GeoIP enrichment stays dead behind a 2/2 Running pod, which is why a guard over the
+rendered command text is the only cheap check — nothing about it is visible from pod status.
 
 The reject cases below are what proves the predicate can go red. Two of them are the shapes
-most likely to be reached for by someone fixing this again: copying the tree without making
+most likely to be reached for as a fix: copying the tree without making
 it readable (the mode is the whole defect), and widening the rsync's tolerance to `|| true`
 instead, which the `DECIDED:` marker in the authelia template rules out.
 
@@ -39,7 +37,7 @@ def _stages_the_hub_readably(command: str) -> bool:
 
     Both halves are load-bearing. A copy that preserves the 0600 root:root staged modes
     leaves the non-root agent unable to read through the symlink, which is the same defect
-    one directory over that #1177 fixed for the datafiles.
+    as an unreadable datafiles directory.
     """
     if "/staging/etc/crowdsec/hub" not in command:
         return False
@@ -53,8 +51,8 @@ def _hands_the_hub_to(command: str, uid: int) -> bool:
 
     `cp -a` as root keeps root ownership, and the agent's entrypoint writes into the hub on
     every start (`cscli parsers install`, then `cscli hub update`). A tree the agent can only
-    read fails that with `permission denied` and exits the sidecar, which took Traefik and
-    Authelia down together on the first deploy of this container (2026-09-05).
+    read fails that with `permission denied` and exits the sidecar, which takes Traefik and
+    Authelia down together.
     """
     return f"chown -R {uid}:" in command and "u+w" in command
 
@@ -96,7 +94,7 @@ def test_every_pod_with_the_sidecar_owns_its_hub_tree() -> None:
 
 
 def test_a_root_owned_hub_tree_is_flagged() -> None:
-    """The reject half: the shape that shipped on 2026-09-05 and took the edge down."""
+    """The reject half: a root-owned copy the non-root agent cannot write into."""
     assert not _hands_the_hub_to(
         "mkdir -p /etc/crowdsec/hub && cp -a /staging/etc/crowdsec/hub/. /etc/crowdsec/hub/"
         " && chmod -R a+rX /etc/crowdsec/hub || echo fail >&2; exit 0",

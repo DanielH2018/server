@@ -1,9 +1,9 @@
 """Tests for `_claude_worktree.py`, the bootstrap onto the deployed `claude_worktree` module.
 
-`prune_worktrees.py` imports its readers through it (#2133). What has to hold: a missing
+`prune_worktrees.py` imports its readers through it. What has to hold: a missing
 deploy raises, and removes nothing, rather than falling back to a stale copy; and the env
 var names the copy that gets imported. CI links a pinned dotfiles checkout into the deployed
-path (#2812), so every test here runs there too.
+path, so every test here runs there too.
 
 Run: uv run pytest scripts/dev/tests/test_claude_worktree_import.py
 """
@@ -106,9 +106,9 @@ def test_the_pruner_imports_as_a_library_with_only_scripts_on_the_path(tmp_path)
     """`backlog.py` and `findings_lib` load the pruner as `dev.prune_worktrees`.
 
     That puts `scripts/` on `sys.path` but not `scripts/dev/`, so a bare sibling import that
-    works when the pruner runs directly raises here instead. PR #2578's
-    `from foreign_owned import` did exactly that, and the docs-refresh cron's `backlog.py`
-    generator failed on every run until it was spelled `dev.foreign_owned` (2026-09-25).
+    works when the pruner runs directly raises here instead. A bare `from foreign_owned
+    import` does exactly that, and the docs-refresh cron's `backlog.py` generator would fail
+    on every run unless it is spelled `dev.foreign_owned`.
     """
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     env["CLAUDE_WORKTREE_HOME"] = str(DEPLOYED.parent)

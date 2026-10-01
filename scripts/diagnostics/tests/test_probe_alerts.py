@@ -3,7 +3,7 @@
 Kuma keeps only current state, so an episode that has ended exists nowhere else. The reader
 takes TWO streams — monitor-bridge's own log, and the `{job="syslog"}` status=down lines the
 host crons emit, which push Kuma directly and so leave no other durable record. Reading only the
-first left the whole backup/drift plane with no episode history anywhere.
+first leaves the whole backup/drift plane with no episode history anywhere.
 """
 
 import json
@@ -40,12 +40,11 @@ def test_rows_from_loki_handles_empty_and_missing_keys():
     assert core._rows_from_loki({"data": {"result": [{"values": None}]}}) == []
 
 
-#
 # These pin the TRANSPORT, deliberately, and the reason is recorded rather than assumed. Three
 # assertions already covered `loki_query_url` output and `plan()` argv, and every one of them
 # sits UPSTREAM of the defect they would have had to catch: `run_query` built its own URL and
 # passed no window, so the formatted path inherited Loki's one-hour server-side default while
-# `--dry-run`/`--json` honoured `--since`. Measured before the fix, `--since 3d` returned a
+# `--dry-run`/`--json` honoured `--since`. Without the explicit window, `--since 3d` returns a
 # 60-minute slice — and an empty slice prints "no logs", which reads as health. A fourth
 # builder-level assertion would have missed it exactly as the first three did. So: capture the
 # url `fetch` is actually called with.
@@ -91,9 +90,8 @@ def test_since_window_ns_span_matches_the_requested_duration():
 
 def test_run_query_omits_direction_so_limit_keeps_the_newest_lines(monkeypatch):
     # Loki's default `backward` is what makes --limit return the newest N, which format_loki
-    # then sorts. `run_alerts` asks for that same end by name; it passed `forward` until #1782,
-    # on a rationale (episode reconstruction walks oldest-first) that alert_episodes' own sort
-    # already covers.
+    # then sorts. `run_alerts` asks for that same end by name, since `alert_episodes`' own sort
+    # already covers oldest-first episode reconstruction.
     seen = _capture_fetch(monkeypatch)
     ns = cli_parser._build_parser().parse_args(
         ["loki-query", '{job="syslog"}', "--since", "6h"]
@@ -112,11 +110,10 @@ def test_run_query_serves_metric_which_has_no_since_flag(monkeypatch):
     assert "/api/v1/query?" in seen[0]
 
 
-#
 # monitor-bridge polls no Kuma state, so its container log says nothing about the host crons
-# that push Kuma directly. Reading only that log left the backup plane's sole DOWN signal
-# unrecorded: measured 2026-08-22, 465 `longhorn-backup-health: status=down` lines over 7 days
-# appeared in no episode list, while `alerts --check manifest` printed "no DOWN alerts" with
+# that push Kuma directly. Reading only that log would leave the backup plane's sole DOWN
+# signal unrecorded: `longhorn-backup-health: status=down` lines would appear in no episode
+# list, while `alerts --check manifest` printed "no DOWN alerts" with
 # `monitor_status{monitor_name="Manifest Prune Drift"}` reading 0.
 
 SYSLOG_DOWN = (
@@ -268,14 +265,12 @@ def test_alerts_dry_run_prints_a_command_per_stream(monkeypatch, capsys):
     assert out.count("query_range") == len(alerts.ALERT_SOURCES)
 
 
-#
-# #1782: which fetched lines reach the view, and which end a hit `--limit` cuts. monitor-bridge
-# dropped the bracketed stamp from its log lines on 2026-09-04 and `_DOWN_RE` still required it,
-# so `alerts --days 2 --check traefik` printed "no DOWN alerts" over a window whose `--raw` view
-# held 21 traefik_latency DOWN lines. The same run exposed two more: `--check` and `--pi` did not
-# filter `--raw` at all, and a hit `--limit` threw away the NEWEST lines, so a wider window
-# listed fewer recent episodes than a narrower one. The parse half is pinned against the real
-# emitter in ansible/tests/services/test_monitor_bridge_down_line_shape.py.
+# Which fetched lines reach the view, and which end a hit `--limit` cuts. monitor-bridge's log
+# lines carry no bracketed stamp, so a `_DOWN_RE` that required it would print "no DOWN alerts"
+# over a window whose `--raw` view holds DOWN lines. The same run exposed two more: `--check` and
+# `--pi` did not filter `--raw` at all, and a hit `--limit` threw away the NEWEST lines, so a
+# wider window listed fewer recent episodes than a narrower one. The parse half is pinned against
+# the real emitter in ansible/tests/services/test_monitor_bridge_down_line_shape.py.
 
 
 def test_keep_alert_row_admits_an_unparsed_line_only_when_unfiltered():
@@ -367,7 +362,7 @@ def test_a_wider_window_lists_every_episode_the_narrower_one_shows(monkeypatch, 
 
 def test_a_truncated_window_says_so_before_it_reports_an_all_clear(monkeypatch, capsys):
     # Every fetched line is filtered out, so the episode view is empty while the fetch was
-    # capped — the run that used to read as a clean bill of health.
+    # capped — a run that would read as a clean bill of health.
     _route_alert_fetch(
         monkeypatch, {alerts.ALERT_LOGQL: _two_day_log()}, respect_limit=True
     )

@@ -1,8 +1,7 @@
 """The rendered-drill harness both restore-drill selection suites run against.
 
-Extracted when the retry suite needed the same thing the operator-pin suite already built: the
-drill rendered from its own defaults, with `k3s` and `logger` stubbed by bash functions exported
-into the child. Bash resolves a function name before it searches PATH, which is why a stub on
+The drill is rendered from its own defaults, with `k3s` and `logger` stubbed by bash functions
+exported into the child. Bash resolves a function name before it searches PATH, which is why a stub on
 PATH would lose to the real `/usr/local/bin/k3s` the script prepends.
 
 The stub answers the drill's reads from fixtures and either refuses the `apply` — which stops a

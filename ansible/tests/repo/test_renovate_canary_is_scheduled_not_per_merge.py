@@ -1,9 +1,8 @@
 """The unpinned Renovate config canary runs on a schedule, and the PR-side job still exists.
 
-The push-to-master run of `renovate config validator` moved to a daily workflow on 2026-09-10
-(#1269): per-merge bought nothing over daily, and the unpinned fetch fails for minutes after
-each of Renovate's ~8 daily npm publishes. Two things must both stay true afterwards, and each
-is easy to lose alone:
+The push-to-master run of `renovate config validator` is a daily workflow: per-merge buys
+nothing over daily, and the unpinned fetch fails for minutes after each of Renovate's ~8 daily
+npm publishes. Two things must both stay true, and each is easy to lose alone:
 
 - ci.yml's job must NOT run on push (or the flake is back), yet MUST still run on a PR, because
   `renovate config validator` is a required merge context. A job that skipped on PRs too would
@@ -72,7 +71,7 @@ def test_both_workflows_run_the_one_retrying_script():
 
 
 def test_the_canary_runs_one_at_a_time_in_its_own_group():
-    """#2152: a `workflow_dispatch` near 09:00 UTC overlapped the scheduled run.
+    """A `workflow_dispatch` near 09:00 UTC can overlap the scheduled run.
 
     The group must be keyed on the workflow alone. The file exists to keep the canary out of
     ci.yml's head-SHA group, so a key carrying `github.ref` or `github.sha` would undo that.

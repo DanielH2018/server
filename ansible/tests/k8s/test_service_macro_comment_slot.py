@@ -10,7 +10,7 @@ YAML, and a parser drops comments, so a slot that emitted the comment in the wro
 
 The second test is the other half. A slot that emits a stray blank line for the plain form
 would change the rendered bytes of the 25 roles `ansible/templates/service-default.yaml.j2`
-renders a Service for (#2872), and a blank line inside a YAML block sequence is invisible in
+renders a Service for, and a blank line inside a YAML block sequence is invisible in
 review. bazarr is asked as one of those 25 — it ships no Service template of its own, so the
 plain call under test is the shared default's.
 

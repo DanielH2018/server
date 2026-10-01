@@ -1,5 +1,4 @@
-"""B2 free-tier STORAGE headroom — the half of the B2 budget that went unwatched when kopia
-retired on 2026-08-10 and took `kopia_b2_billable_bytes` with it.
+"""B2 free-tier STORAGE headroom — the stored-bytes half of the B2 budget.
 
 The live API call is not exercised here (it spends the transaction cap it guards); these cover the
 pure summing and verdict logic, and `docs/archive/b2-transaction-cap-monitoring-gaps.md` carries the
@@ -94,15 +93,12 @@ def test_storage_is_gated_by_b2_reachable():
 
 
 # ── the pagination cursor ─────────────────────────────────────────────────────────────────────
-# Carried as an open register row for four review runs as "the live B2 call shape is deliberately
-# unverified — testing it spends the cap it guards". That reasoning covers the AUTH shape, which
-# is pinned above; it never covered the cursor. b2_list_versions had no test of any kind until
-# 2026-08-23, and its failure direction is the dangerous one: `truncated` is set True ONLY by
+# b2_list_versions fails in the dangerous direction: `truncated` is set True ONLY by
 # exhausting B2_STORAGE_MAX_PAGES, so ANY early stop — a renamed cursor field, a page carrying
 # files but neither nextFileName nor nextFileId — returns (pages, False) and b2_storage_verdict
-# reports a partial sum as a confident total. Dormant in production today (753 versions against a
-# 1000 maxFileCount, so one page), which is exactly the shape that breaks silently the first time
-# the bucket crosses 1000. None of this needs a live call: _post_json is stubbed, zero B2 spend.
+# reports a partial sum as a confident total. A bucket under the 1000 maxFileCount fits one page,
+# which is the shape that breaks silently the first time the bucket crosses 1000. None of this
+# needs a live call: _post_json is stubbed, zero B2 spend.
 
 
 def _paging_stub(pages):

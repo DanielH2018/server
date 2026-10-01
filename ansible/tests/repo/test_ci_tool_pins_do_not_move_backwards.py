@@ -1,11 +1,11 @@
 """The tooling pins in ci.yml move forwards, and every copy of one moves together.
 
 Two ways a Renovate bump to a CI tool pin silently no-ops, neither of which any existing check
-reads (#1527, #1629):
+reads:
 
-- **It writes a version OLDER than the one on master.** `renovate/prek` carried
-  `prek==0.5.0` into a `ci.yml` already on `0.5.2` (PR #1513). CI was green — the pin installs
-  whatever it names — so the PR read as a bump while it was a downgrade. Renovate rebases a
+- **It writes a version OLDER than the one on master.** A branch carries `prek==0.5.0` into
+  a `ci.yml` already on `0.5.2`. CI is green — the pin installs
+  whatever it names — so the PR reads as a bump while it is a downgrade. Renovate rebases a
   stale branch rather than recomputing it, so a branch cut before an earlier bump landed keeps
   naming the older version.
 - **It rewrites one copy of a version and leaves another.** `pip install prek==` appears in TWO
@@ -110,7 +110,7 @@ def test_an_unchanged_pin_is_clean():
 
 
 def test_a_backwards_bump_is_flagged():
-    """PR #1513 exactly: the branch wrote 0.5.0 into a ci.yml already on 0.5.2."""
+    """The branch wrote 0.5.0 into a ci.yml already on 0.5.2."""
     assert pin_moved_backwards("0.5.2", "0.5.0")
 
 

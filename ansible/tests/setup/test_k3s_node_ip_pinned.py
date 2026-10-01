@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
-"""Guards that k3s never autodetects its own node IP again.
+"""Guards that k3s never autodetects its own node IP.
 
-The failure this encodes actually happened (daniel-box, 2026-08-01). The host was
-multi-homed at install time — a USB ethernet adapter on 10.0.0.153 alongside eno1
-on 10.0.0.215, both carrying equal-metric default routes — and k3s autodetected
-the USB one, registering the node's InternalIP as 10.0.0.153.
+Autodetection on a multi-homed host picks the wrong address. With a USB ethernet adapter on
+10.0.0.153 alongside eno1 on 10.0.0.215, both carrying equal-metric default routes, k3s
+autodetects the USB one and registers the node's InternalIP as 10.0.0.153.
 
-When that adapter later disappeared, the node's address stopped existing:
+When that adapter disappears, the node's address stops existing:
 
     failed to validate nodeIP: node IP: "10.0.0.153" not found in the host's
     network interfaces
     dial tcp 10.0.0.153:6443: connect: no route to host
 
-The kubernetes Service still resolved (kube-proxy's DNAT was intact) but pointed at
-an endpoint on a dead address, so every pod failed to reach 10.43.0.1. Longhorn's
-csi-provisioner could not create a single volume and every PVC sat Pending. It stayed
+The kubernetes Service still resolves (kube-proxy's DNAT is intact) but points at
+an endpoint on a dead address, so every pod fails to reach 10.43.0.1. Longhorn's
+csi-provisioner cannot create a single volume and every PVC sits Pending. It stays
 invisible for hours because `k3s kubectl` from the host talks to 127.0.0.1:6443 and
-went on working the whole time.
+keeps working the whole time.
 
 Run: uv run pytest ansible/tests/setup/test_k3s_node_ip_pinned.py
 """

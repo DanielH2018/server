@@ -1,14 +1,14 @@
-"""Guards on the capability flags that replaced host-name literals in `initial_setup` (#2975).
+"""Guards on the capability flags that replaced host-name literals in `initial_setup`.
 
-Sixteen tasks across three of the role's task files gated on `inventory_hostname ==
-'<host>'`. Each literal named a machine where the task actually reads a hardware fact, so
-replacing either host meant editing sixteen literals. Three flags carry those facts now:
+Sixteen tasks across three of the role's task files gate on a hardware fact. Each reads a flag
+instead of an `inventory_hostname == '<host>'` literal, so replacing a host edits one host_vars
+entry. Three flags carry those facts:
 `has_low_memory_board`, `has_raspi_kernel` and `has_ample_ram`.
 
 WHERE THE FLAGS LIVE IS PART OF THE GUARD, for the reason
 `test_ops_cron_host_gate.py` gives: `scripts/deploy_tools/land_reach.py:_eval_when` resolves a
 gate against `group_vars/all.yml` + `host_vars` only, and a name it cannot resolve reads as
-"every host" — the over-broad verdict issue #2073 closed. A flag moved into the role's
+"every host" — an over-broad verdict. A flag moved into the role's
 `defaults/` would pass every assertion about the task files and still break the reach reader.
 
 NOT every literal became a flag. The governor-unit cleanup, the LXD-snap debloat and the
@@ -35,10 +35,9 @@ _HOST_LITERAL = re.compile(r"inventory_hostname\s*[!=]=\s*['\"]")
 
 HOSTS = ("daniel-box", "daniel-pi", "daniel-server")
 
-# The effective value each flag must have on every host — the intended per-host truth, which
-# started as the truth value the literal each flag replaced gave. `has_ample_ram` has since
-# diverged from that literal: #2981 armed it on daniel-box (28 GiB control-plane node) as a
-# deliberate tuning change, so two hosts carry it while the literal named only daniel-server.
+# The effective value each flag must have on every host — the intended per-host truth.
+# `has_ample_ram` is armed on both daniel-server and daniel-box (a 28 GiB control-plane node) as a
+# deliberate tuning choice.
 EXPECTED_FLAGS = {
     "has_low_memory_board": {
         "daniel-box": False,
@@ -153,7 +152,7 @@ def test_every_host_the_table_arms_opts_in_from_its_own_host_vars():
     """Non-vacuity on the host_vars side: a flag nobody sets true gates nothing.
 
     A flag may arm more than one host — `has_ample_ram` arms both daniel-server and
-    daniel-box (#2981) — so the count is "at least one", and every armed host must carry
+    daniel-box — so the count is "at least one", and every armed host must carry
     the opt-in itself rather than inheriting it from `group_vars`.
     """
     for flag, per_host in EXPECTED_FLAGS.items():

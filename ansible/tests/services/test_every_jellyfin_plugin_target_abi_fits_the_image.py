@@ -8,14 +8,14 @@ constraint is `max` over the declared `targetAbi` values — the slowest plugin,
 
 Two gaps that leaves, and this file closes both:
 
-- **A sixth plugin added without its own guard is unchecked.** The census in
+- **A plugin added without its own guard is unchecked.** The census in
   `test_webhook_plugin_install.py` fails when an installer appears with no guard, but nothing
   reads a new `_target_abi` var against the image. This test finds its subjects by GLOBBING the
   vars, so a new one is covered the moment it is written.
-- **The floor was wrong in prose.** The role's CLAUDE.md claimed Media Cleaner's `10.11.9.0` was
-  the tightest declared; it is not — ani-sync and Intro Skipper both declare `10.11.11.0`,
-  which is why the image sits at `10.11.11`. A sentence a reader consults before bumping the
-  image should not be the thing that decides it, so the floor is derived here instead.
+- **The floor is derived, not written in prose.** ani-sync and Intro Skipper declare the
+  tightest `targetAbi`, `10.11.11.0`, which is why the image sits at `10.11.11`. A sentence a
+  reader consults before bumping the image should not be the thing that decides it, so the
+  floor is derived here instead.
 
 A glob-based census returns an empty set the moment the vars are renamed, and `all(...)` over
 nothing passes — so `REQUIRED_PLUGINS` names members this must find. That is the non-vacuity
@@ -76,8 +76,7 @@ def _declared_abis(defaults: dict) -> dict[str, tuple[int, ...]]:
     # four-part (`10.11.11.0`) while ani-sync's ABI comes off an asset filename and parses to
     # three (`10.11.11`). Python compares tuples element-wise and a prefix loses, so
     # (10, 11, 11) < (10, 11, 11, 0) — two SEMANTICALLY EQUAL values. Unnormalised, `max` picks
-    # the longer one and the holders list silently omits ani-sync, which is how the prose this
-    # test replaced came to name the wrong plugin.
+    # the longer one and the holders list silently omits ani-sync.
     width = max(len(abi) for abi in found.values())
     return {plugin: abi + (0,) * (width - len(abi)) for plugin, abi in found.items()}
 
@@ -134,10 +133,8 @@ def test_the_image_satisfies_every_plugin_target_abi():
 def test_the_binding_floor_is_the_slowest_plugin():
     """States WHICH plugin pins the image, derived rather than written in prose.
 
-    The role's CLAUDE.md carried this as a sentence and the sentence was wrong — it named Media
-    Cleaner's 10.11.9.0, where the real floor is ani-sync's and Intro Skipper's 10.11.11.0. A
-    reader consults that before bumping the image, so the claim belongs somewhere a rename or a
-    new plugin moves it automatically.
+    The floor is ani-sync's and Intro Skipper's 10.11.11.0. A reader consults it before bumping
+    the image, so the claim belongs somewhere a rename or a new plugin moves it automatically.
     """
     defaults = load_defaults(JELLYFIN)
     abis = _declared_abis(defaults)
@@ -156,9 +153,9 @@ def test_the_binding_floor_is_the_slowest_plugin():
     # sit AT it, or `max` was computed over an empty or malformed set.
     assert holders, "no plugin holds the computed floor — the census is malformed"
 
-    # NAMED, because this is the claim the role's CLAUDE.md makes in prose and got wrong. An
-    # assertion on the computed value alone would pass whichever plugin held the floor, so it
-    # could not have caught that error. When a plugin bump moves the floor, this fails and names
+    # NAMED, because this is the claim the role's CLAUDE.md makes in prose. An
+    # assertion on the computed value alone would pass whichever plugin held the floor.
+    # When a plugin bump moves the floor, this fails and names
     # the new holders — update both this set and the CLAUDE.md sentence together.
     assert set(holders) == {"anisync", "introskipper"}, (
         f"the binding targetAbi floor is {'.'.join(map(str, floor))}, now held by {holders} "
@@ -172,9 +169,8 @@ def test_the_binding_floor_is_the_slowest_plugin():
 @pytest.mark.parametrize(
     ("what", "before", "after"),
     [
-        # NAMED with its var, not the bare ABI string: `"10.11.9.0"` alone matches both
-        # mediacleaner's and trakt's pin while Trakt was installed (#1617), and `.replace(..., 1)`
-        # would silently mutate whichever came first. Kept named so a new sibling cannot reopen it.
+        # NAMED with its var, not the bare ABI string: a bare ABI string can match more than one
+        # plugin's pin, and `.replace(..., 1)` would silently mutate whichever came first.
         (
             "a plugin targeting a newer server",
             'jellyfin_k8s_mediacleaner_target_abi: "10.11.9.0"',
@@ -212,8 +208,7 @@ def test_the_census_rejects_a_renamed_var():
     """The red half for non-vacuity, which the pair above cannot reach.
 
     A glob census that stops matching goes EMPTY, and both halves of an ordinary red-proof pair
-    still pass on an empty set — they are only ever handed inputs that fire. This is the failure
-    mode nine guards in this repo shipped with.
+    still pass on an empty set — they are only ever handed inputs that fire.
     """
     mutated = yaml_fast.safe_load(
         DEFAULTS.read_text().replace(

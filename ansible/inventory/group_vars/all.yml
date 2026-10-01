@@ -24,9 +24,9 @@ cloudflare_ips:
   - "2a06:98c0::/29"
   - "2c0f:f248::/32"
 
-# Exact patch, not `3.14`. uv resolves a bare minor to whatever it already has, which is how
-# the two hosts ended up on 3.14.6 and 3.14.5 with nothing asking for either. Eighteen host
-# scripts run on this and must be the same interpreter on both machines. The minor must track
+# Exact patch, not `3.14`. uv resolves a bare minor to whatever it already has, so two hosts
+# drift apart with nothing asking for either. Eighteen host scripts run on this and must be the
+# same interpreter on both machines. The minor must track
 # .python-version — ansible/tests/setup/test_host_python_pin.py enforces both halves.
 host_python_version: "3.14.6"
 
@@ -43,15 +43,14 @@ pgid: 1000
 # Every entry MUST use the `key=value,key=value` form, never the legacy `origin:archive` form
 # that 50unattended-upgrades uses. unattended-upgrade rewrites a legacy entry to `o=X,a=Y`
 # (see get_allowed_origins_legacy in /usr/bin/unattended-upgrade), so it can only ever match a
-# repo that publishes a `Suite:` field. The GitHub CLI repo does not: measured on daniel-box
-# 2026-08-24 via python-apt, its package file reads origin='gh', archive='', codename='stable'.
+# repo that publishes a `Suite:` field. The GitHub CLI repo does not: measured via python-apt,
+# its package file reads origin='gh', archive='', codename='stable'.
 # `gh:stable` therefore matched nothing and upgraded nothing while reading as configured — it
 # shipped that way in 2fc0b537 and this is the fix. ENFORCED by
 # ansible/tests/setup/test_unattended_origins_pattern.py.
 #
 # `origin=Ubuntu,archive=<codename>-updates` is the non-security pocket the login MOTD counts
-# as "N updates can be applied immediately". Security-only was the policy until 2026-08-24;
-# without it those sit unapplied forever, which is what the MOTD was reporting. Kernel upgrades
+# as "N updates can be applied immediately". Without it those sit unapplied. Kernel upgrades
 # land here, and Automatic-Reboot stays false — the Sunday 07:30 restart cron takes them.
 #
 # `origin=gh,codename=stable` is the GitHub CLI's own repo. Third-party origins are opt-in one
@@ -67,7 +66,7 @@ docker_network: proxy
 # Intel iGPU/QuickSync passthrough (jellyfin/tdarr hardware transcode via /dev/dri).
 # False by default — override to true in a host's host_vars if the machine has one.
 has_igpu: false
-# ── Host hardware capability flags (#2975) ─────────────────────────────────────────────────
+# ── Host hardware capability flags ─────────────────────────────────────────────────
 # Each names ONE hardware fact that a task in roles/setup/initial_setup gates on. They
 # replace `inventory_hostname == '<host>'` literals, so replacing a machine is a host_vars
 # edit rather than a sweep through three task files.
@@ -75,7 +74,7 @@ has_igpu: false
 # They live here rather than in the role's defaults for the reason `ops_cron_host` gives
 # below: `scripts/deploy_tools/land_reach.py:_eval_when` resolves a gate against
 # `group_vars/all.yml` + `host_vars` only, and a name it cannot resolve reads as "every
-# host" — the over-broad verdict issue #2073 closed.
+# host" — an over-broad verdict.
 #
 # ENFORCED by ansible/tests/setup/test_initial_setup_host_gates.py, which censuses the gates
 # and asserts each flag's effective value on all three hosts.
@@ -90,9 +89,7 @@ has_low_memory_board: false
 has_raspi_kernel: false
 # Whether this host has enough RAM that reclaiming page cache beats swapping service heaps,
 # so initial_setup lowers vm.swappiness to 10. False by default; daniel-server (30 GB) and
-# daniel-box (28 GiB, the control plane) override it true. daniel-box was armed by #2981,
-# which is why the flag reads true on two hosts while the host literal it replaced named
-# only daniel-server.
+# daniel-box (28 GiB, the control plane) override it true.
 has_ample_ram: false
 # AutoKuma id of the managed notification provider (a static entity defined in the
 # uptime-kuma role); the kuma() macro links every monitor to it via notification_name_list.
@@ -113,7 +110,7 @@ lan_subnet: "10.0.0.0/24"
 # The LAN's default gateway. It is also the LAN's DHCP server, so it is the only host that
 # knows the names of the devices it leased addresses to — Pi-hole's dnsmasq config forwards
 # the LAN reverse zone here so PTR lookups return those names instead of nothing. Verified
-# against the live router 2026-09-10: `dig -x 10.0.0.1 @10.0.0.1` answers `Docsis-Gateway`.
+# against the live router: `dig -x 10.0.0.1 @10.0.0.1` answers `Docsis-Gateway`.
 lan_router_ip: "10.0.0.1"
 # The production cluster's pod and Service ranges — k3s's defaults, which this cluster has
 # never overridden. Global rather than k3s role defaults because the consumer is the
@@ -121,9 +118,9 @@ lan_router_ip: "10.0.0.1"
 # role's defaults are not visible to a different role in a different playbook.
 #
 # Anything reachable in these two ranges is reachable from the staging guest unless the fence
-# names them, and that is not theoretical: on 2026-08-28 the guest read prod's Longhorn API
-# unauthenticated at 10.43.152.244, including its mutating `diskUpdate` action. lan_subnet
-# alone does not cover it — a ClusterIP is not on the LAN.
+# names them, and that includes prod's Longhorn API, which is unauthenticated and carries a
+# mutating `diskUpdate` action. lan_subnet alone does not cover it — a ClusterIP is not on the
+# LAN.
 k3s_pod_cidr: "10.42.0.0/16"
 k3s_service_cidr: "10.43.0.0/16"
 # The two k3s nodes' cni0 bridge gateway addresses, verified per node with
@@ -204,10 +201,10 @@ jellyfin_k8s_lan_ip: 10.0.0.241
 # the other: roles/k8s/terraria's Deployment IS the server, and roles/k8s/game-stats'
 # terraria-stats exporter only has a console to tail while the server is up. Role defaults
 # are invisible across roles, so a `terraria_k8s_replicas | default(1)` written in game-stats
-# would have rendered 1 forever and never said so (#2877).
+# would render 1 forever and never say so.
 #
-# Scaled to zero on 2026-09-02, on operator request — the server is not wanted up right now,
-# and on 1.4.5.7 it cannot stay up while anything opens a TCP connection to it (issue #822).
+# Scaled to zero on operator request — the server is not wanted up, and on 1.4.5.7 it cannot
+# stay up while anything opens a TCP connection to it (issue #822).
 #
 # Declarative rather than a live `kubectl scale`, for two reasons. The next
 # `./scripts/deploy.sh --tags terraria` re-applies that Deployment and would reset a live scale
@@ -247,8 +244,8 @@ crowdsec_k8s_appsec_port: 7422
 slzb_ip: 10.0.0.127
 zigbee_pan_id: 6754
 zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
-# `k8s_hostname_suffix` (was "-k8s") is retired: every service answers on its plain name.
-# Do not reintroduce it — `hostname:` in host_vars is the whole story.
+# Every service answers on its plain name: `hostname:` in host_vars is the whole story, and no
+# hostname-suffix variable exists.
 #
 # Namespace every workload lands in. One namespace rather than one per service: Traefik
 # Middleware references are namespace-scoped, and cross-namespace references would cost a
@@ -266,8 +263,8 @@ k8s_namespace: homelab
 # variable only answers "which node is the primary one here".
 k8s_primary_node: daniel-box
 
-# Hosts k3s-bringup.yml will install a k3s SERVER on. One entry since the staging cluster was
-# retired (#2941): daniel-box is prod's control plane. daniel-server is deliberately absent —
+# Hosts k3s-bringup.yml will install a k3s SERVER on. One entry: daniel-box is prod's control
+# plane. daniel-server is deliberately absent —
 # it is an agent in prod's cluster, and installing a server there would give one node two
 # control planes.
 #
@@ -280,9 +277,6 @@ k3s_server_hosts:
 # report a stale render. That check is installed by roles/setup/k3s/tasks/health-crons.yml,
 # imported only from that role's main.yml, which k3s-bringup.yml asserts onto k3s_server_hosts —
 # so it exists on daniel-box alone, while daniel-server renders the entire UPS shutdown chain.
-# Confirmed live 2026-08-29: daniel-server had no /var/lib/homelab/setup-render-manifest.d at
-# all, and its /etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28
-# (review M-10).
 #
 # An allowlist for the same reason as k3s_server_hosts above, though the failure directions
 # differ: naming a host that already runs manifest-prune-check gives it a second, redundant
@@ -293,11 +287,11 @@ k3s_server_hosts:
 setup_drift_check_hosts:
   - daniel-server
 
-# Hosts that witness the Loki read route, one Kuma monitor each (issue #1712). That route's only
+# Hosts that witness the Loki read route, one Kuma monitor each. That route's only
 # caller is `probe.py loki-labels` / `loki-query` running as a HOST process, and its guard is a
 # ClientIP set of node-owned addresses — so a pod cannot witness it, and a single host cannot
-# either: #1693 left the route dead from daniel-server and reachable from daniel-box, because
-# which address a host arrives as depends on where the traefik pod sits.
+# either: which address a host arrives as depends on where the traefik pod sits, so the route
+# can be dead from one node and reachable from the other.
 #
 # Both prod cluster nodes and nothing else. daniel-pi is not in the ClientIP set at all. An
 # allowlist for the same reason as k3s_server_hosts above. ENFORCED by
@@ -307,14 +301,14 @@ loki_route_witness_hosts:
   - daniel-server
 
 # The endpoints the host crons probe to tell "this house's link is gone" from "the source I asked
-# refused me" (issue #2793). Read by `wan_reachable` in kuma-push-lib.sh, which is the host-side
+# refused me". Read by `wan_reachable` in kuma-push-lib.sh, which is the host-side
 # peer of monitor-bridge's `wan_reachable` gate — that gate runs in the bridge's loop and cannot
 # reach a cron pushing its own tile from the host.
 #
 # Two independent providers, by hostname, never an anycast IP. The reasoning is
-# `ansible/roles/k8s/monitor-bridge/files/checks/wan.py`'s docstring: the 2026-09-18 outage
-# included DNS failure, so resolution has to be part of what is probed, and one provider's own
-# outage must not silence a caller reading the other.
+# `ansible/roles/k8s/monitor-bridge/files/checks/wan.py`'s docstring: an outage can include DNS
+# failure, so resolution has to be part of what is probed, and one provider's own outage must
+# not silence a caller reading the other.
 #
 # The SAME two URLs the bridge defaults to (`bridge/config_io.py:WAN_PROBE_DEFAULT`), pinned equal
 # by ansible/tests/setup/test_wan_probe_urls_match_the_bridge.py — two halves of one gate
@@ -325,9 +319,9 @@ wan_probe_urls:
   - https://www.google.com/generate_204
 
 # Seconds after boot in which the witness skips its run. Shorter than its hourly cron, so at most
-# one slot is ever skipped — the constraint kuma-push-lib.sh's boot_grace_active documents. The
-# 2026-08-30 restart had the last pod reach Ready 5m18s after boot, so a witness firing inside
-# this window would report the route down while Traefik was still starting.
+# one slot is ever skipped — the constraint kuma-push-lib.sh's boot_grace_active documents. After
+# a restart the last pod reached Ready 5m18s after boot, so a witness firing inside this window
+# would report the route down while Traefik was still starting.
 loki_route_witness_boot_grace_s: 600
 
 # Hosts that get the developer tooling `initial_setup --tags tooling` installs: uv, the uv-
@@ -336,12 +330,9 @@ loki_route_witness_boot_grace_s: 600
 # hook runs. The same list gates `Install Git hooks`, because prek is what that task runs.
 #
 # The predicate is "somebody commits from this host", not "this host holds a checkout".
-# daniel-pi is deliberately absent: it holds a checkout, so the `has_repo_checkout` gate these
-# tasks used to carry admitted it, but it is driven remotely over ssh and nobody commits from
-# it — the gate was a proxy for a property the Pi does not have. Measured 2026-09-10 (issue
-# #1726): the Pi has neither uv nor vale and runs the distro's Python 3.12, so the tag has
-# never been applied there, and provisioning a pinned Python 3.14 on a 512 MB Zero 2 W was the
-# outcome the operator rejected.
+# daniel-pi is deliberately absent: it holds a checkout, but it is driven remotely over ssh and
+# nobody commits from it. The Pi has neither uv nor vale and runs the distro's Python 3.12, and
+# provisioning a pinned Python 3.14 on a 512 MB Zero 2 W is not wanted.
 #
 # An allowlist for the same reason as k3s_server_hosts above — a host nobody thought about is
 # refused rather than provisioned. ENFORCED by ansible/tests/setup/test_dev_tooling_hosts.py.
@@ -351,16 +342,15 @@ dev_tooling_hosts:
 
 # Past this, the checkout the drift arms compare against is reported as its own fault. A host
 # without gitops-deploy does not refresh its tree — daniel-server was measured 39 commits behind
-# origin on 2026-08-17 — and a stale tree makes the render arm compare a stale render against
+# origin — and a stale tree makes the render arm compare a stale render against
 # the stale template it came from, which agree. So the arm reads green exactly when the host is
 # furthest behind, which is the laundering this threshold exists to prevent.
 setup_drift_tree_max_days: 14
 
 # Which SOPS file `pre_tasks/load_secrets.yml` decrypts, chosen per host. Production is the
 # default so a host nobody thought about gets the production file and fails closed on a
-# missing key, rather than silently running with no secrets at all. No host overrides it since
-# daniel-stage and its own secrets file were retired (#2941); the per-host mechanism stays,
-# because what it buys is that adding such a host is a var rather than a code change.
+# missing key, rather than silently running with no secrets at all. No host overrides it; the
+# per-host mechanism makes adding such a host a var rather than a code change.
 #
 # Resolved relative to ansible/vars/. ENFORCED by ansible/tests/deploy/test_load_secrets_by_host.py,
 # which also checks every file named by any host actually exists.
@@ -472,16 +462,13 @@ k3s_etcd_expose_metrics: false
 k8s_rollout_stabilise_seconds: 60
 
 # How many k8s roles deploy.yml applies before draining their rollouts (tasks/k8s_batch.yml).
-# THIS IS A CONCURRENCY LIMIT ON ROLLOUTS, NOT ON WATCHING THEM. The inline `rollout status`
-# that used to sit in every role is what held the cluster to one rolling service at a time;
-# batching removes it, so the width is now the only thing bounding how many workloads
-# restart at once.
+# THIS IS A CONCURRENCY LIMIT ON ROLLOUTS, NOT ON WATCHING THEM. Roles carry no inline
+# `rollout status`, so the width is the only thing bounding how many workloads restart at once.
 #
 # Sized deliberately low. 37 of the 50 Deployments here use strategy `Recreate`, which
 # deletes the old pod before starting the new one — so a wide batch is not "extra surge
 # replicas", it is N simultaneous Longhorn RWO detach/attach cycles and N simultaneous
-# availability gaps. This cluster has been bitten by Longhorn under exactly that load.
-# Widen only against a measured run.
+# availability gaps. Widen only against a measured run.
 k8s_rollout_batch_width: 5
 
 # Opt-in no-mutation mode for the k8s plane: `-e k8s_dry_run=true`, or `scripts/deploy.sh
@@ -500,8 +487,8 @@ k8s_rollout_batch_width: 5
 k8s_dry_run: false
 # "This run must not change the cluster", whichever mode asked for it. `--check` and
 # k8s_dry_run want the same tasks skipped for different reasons, and a role that guards only
-# one of them is guarded against neither in practice — image-builder was fully `--check`-clean
-# and would still have built and PUSHED an image under a dry run.
+# one of them is guarded against neither in practice — a `--check`-clean image-builder would
+# still build and PUSH an image under a dry run.
 k8s_no_mutate: "{{ ansible_check_mode or (k8s_dry_run | bool) }}"
 # Telemetry lives apart from the service workloads. Global rather than a role default
 # because TWO roles need it: observability puts its workloads here, and the traefik role must
@@ -532,8 +519,8 @@ k8s_public_route: true
 # The `tls:` block stays present either way, and that is load-bearing rather than tidy: an
 # IngressRoute on the `https` entrypoint with NO `spec.tls` becomes a non-TLS router and is
 # never a candidate for an HTTPS request at all. That failure is invisible from the object —
-# it applies cleanly, `kubectl get` shows it, Traefik logs nothing — and it cost most of
-# 2026-08-07. See the header of monitoring_route in ansible/templates/ingressroute.yml.j2.
+# it applies cleanly, `kubectl get` shows it, Traefik logs nothing. See the header of
+# monitoring_route in ansible/templates/ingressroute.yml.j2.
 # ENFORCED by ansible/tests/k8s/test_k8s_manifests.py, which fails any rendered IngressRoute
 # serving the https entrypoint without a tls block.
 #
@@ -617,12 +604,12 @@ ups_host: daniel-server
 # `when:` in initial_setup.yml, which is why it lives here rather than in the role's defaults
 # alongside the other `_armed` switches.
 #
-# daniel-box DOES draw from the same UPS, measured 2026-08-20: sampling `upsc
+# daniel-box DOES draw from the same UPS, measured by sampling `upsc
 # apc-ups@127.0.0.1` every 3s while modulating a 16-core burn on daniel-box (daniel-server
 # idle) moved ups.load by ~5 points ≈ 45 W, three transitions phase-locked to the burn across
-# two cycles. Before 2026-08-28 that meant daniel-server powered off cleanly while daniel-box —
-# etcd, Longhorn's primary replicas, Kuma, Prometheus, Traefik, LAN DNS — was hard-cut at
-# battery end. daniel-box is now armed in host_vars/daniel-box.yml, where the reasoning sits.
+# two cycles. Without a secondary upsmon there, daniel-server powers off cleanly while daniel-box
+# — etcd, Longhorn's primary replicas, Kuma, Prometheus, Traefik, LAN DNS — is hard-cut at
+# battery end. daniel-box is armed in host_vars/daniel-box.yml, where the reasoning sits.
 #
 # DEFAULT FALSE ON PURPOSE, and it stays false here. A secondary upsmon's entire job is to power
 # the machine off, so a mistake is an unplanned shutdown, and a wrong SHUTDOWNCMD or an
@@ -654,10 +641,10 @@ fake_remux_host: daniel-box
 #
 # Here rather than in the role's defaults for the reason fake_remux_host gives above, plus one
 # the reader in scripts/deploy_tools/land_reach.py adds: `_eval_when` resolves a gate against
-# group_vars + host_vars only, and a name it cannot resolve reads as "every host", which is the
-# over-broad verdict issue #2073 closed.
+# group_vars + host_vars only, and a name it cannot resolve reads as "every host", which is an
+# over-broad verdict.
 ops_cron_host: daniel-box
-# The one host that writes k8s render records (roles/setup/render_records, #2587). It must be
+# The one host that writes k8s render records (roles/setup/render_records). It must be
 # the host the release records name, because the staleness reader refuses a render record
 # whose `host` differs, and the host whose primary checkout the GitOps deployer fetches.
 render_records_host: daniel-box
@@ -665,16 +652,16 @@ render_records_host: daniel-box
 # and removes the units, the worktree and the role's directories. To move the producer, apply
 # false on the old host first, then change render_records_host.
 #
-# Armed by #2587. It shipped false until #2614 guarded every host write in a role this renders
-# on `not k8s_dry_run | bool`. Before that, an hourly dry run would have installed that tree's
-# host scripts, crons and node-staged modules ahead of their landing. The uptime-kuma tile is
-# gated on this too, so setting it false again leaves no tile red.
+# Arming presupposes that every host write in a role this renders is guarded on
+# `not k8s_dry_run | bool`; without that guard an hourly dry run would install that tree's host
+# scripts, crons and node-staged modules ahead of their landing. The uptime-kuma tile is gated
+# on this too, so setting it false leaves no tile red.
 render_records_enabled: true
 # The producer runs hourly at this minute. Here rather than in the role's defaults because the
 # uptime-kuma role derives the monitor's interval from the same cadence below.
 render_records_minute: 17
 # The render-records push monitor's interval. One hourly period, plus the ~8-minute render
-# (8m16s for 58 services on 2026-09-25), plus one 40-minute restart of a run that deferred on a
+# (8m16s for 58 services), plus one 40-minute restart of a run that deferred on a
 # pending CI walk, rounded up. A shorter one flaps on an ordinary deferral; a longer one leaves
 # a stopped producer unread for longer than the records it last wrote stay useful.
 render_records_push_interval_s: 7200
@@ -694,30 +681,26 @@ weekly_reboot_weekday: 0
 # window's length is derived from it, so shortening the delay shortens the window.
 weekly_reboot_shutdown_delay_minutes: 5
 # The clock those three fields are read on. A host crontab fires on the HOST's local time, and
-# every host here runs Etc/UTC (`timedatectl` on daniel-box and daniel-server, 2026-09-29) — NOT
+# every host here runs Etc/UTC (`timedatectl` on daniel-box and daniel-server) — NOT
 # `tz`, which is America/Chicago and is the containers' display timezone. The two differ by five
 # or six hours, so a maintenance window derived from these values in `tz` would open at an
 # arbitrary Sunday midday and page straight through the reboot.
 weekly_reboot_timezone: UTC
-# Whether this host runs its own gitops_deploy pull-based auto-deployer. FALSE by default since
-# 2026-09-30 (#2810): daniel-box is the one deployer, and the other three hosts in the inventory
-# each carried `has_gitops: false` to say so. The default now matches `has_docker` below — a host
-# nobody has thought about yet gets the teardown arm rather than a timer that deploys to
-# production on its own. Arming a host is `has_gitops: true` in its host_vars plus
+# Whether this host runs its own gitops_deploy pull-based auto-deployer. FALSE by default:
+# daniel-box is the one deployer, and a host nobody has thought about yet gets the teardown arm
+# rather than a timer that deploys to production on its own. Arming a host is `has_gitops: true` in its host_vars plus
 # `initial_setup.yml --tags gitops_deploy`; see gitops_deploy CLAUDE.md.
 has_gitops: false
-# Whether this host runs Docker. FALSE by default since the 2026-08-14 k3s migration, which
-# left daniel-pi as the only Docker host: both cluster nodes run k3s's own containerd, and a
-# bare initial_setup.yml run once installed Docker on daniel-box and tripped the k3s role's
-# fail-closed "already runs Docker" guard. The default is the safe direction of that incident,
-# so a host nobody thought about gets the teardown arm rather than a second container runtime.
-# daniel-pi overrides this true.
+# Whether this host runs Docker. FALSE by default: daniel-pi is the only Docker host, both
+# cluster nodes run k3s's own containerd, and the k3s role fails closed on a node that already
+# runs Docker. A host nobody thought about gets the teardown arm rather than a second container
+# runtime. daniel-pi overrides this true.
 has_docker: false
 # The Docker engine packages, listed once because three tasks must agree on the set:
 # docker_install installs them, initial_setup's host-basics HOLDS them before its
 # dist-upgrade, and docker_install's teardown unholds them before its purge. An upgrade of
 # docker-ce or containerd.io restarts the daemon and replaces the containerd shim under every
-# running container (the 2026-09-18 Pi incident, #1961), so on a has_docker host these move
+# running container, so on a has_docker host these move
 # only through `--tags docker-engine-upgrade`, which stops the containers first and recreates
 # them after. docker-ce-rootless-extras is not here: it arrives as a Recommends of docker-ce,
 # and upgrading it restarts nothing.
@@ -731,7 +714,7 @@ docker_engine_packages:
 # which promtail ships and the crowdsec node agent tails. daniel-pi overrides this false:
 # optimize_pi MASKS rsyslog there (journald is the log of record, and rsyslog's text logs
 # landed in the RAM-backed log2ram tmpfs), so initial_setup's rsyslog filter tasks skip it --
-# their `Restart rsyslog` handler fails on a masked unit (#1946).
+# their `Restart rsyslog` handler fails on a masked unit.
 has_rsyslog: true
 # Whether this host runs VMs under KVM/libvirt. Default OFF and opted into per host, like
 # has_github_cli: exactly one host needs it (daniel-server, for the monthly etcd restore
@@ -740,17 +723,17 @@ has_rsyslog: true
 has_hypervisor: false
 # Whether this host holds a checkout of THIS repository at ~/server. True by default — every
 # host built by initial_setup.yml has had one, which is why a handful of tasks reach for
-# `{{ playbook_dir }}` or `~/server/...` with no gate at all. No host overrides it false since
-# daniel-stage was retired (#2941); the gate stays because those tasks would fail outright on
-# a host that is driven over ssh and never checks the repo out.
+# `{{ playbook_dir }}` or `~/server/...` with no gate at all. No host overrides it false; the
+# gate stays because those tasks would fail outright on a host that is driven over ssh and
+# never checks the repo out.
 #
 # NOT derivable from ansible_connection. daniel-pi is `connection=ssh` and DOES hold a
-# checkout (verified 2026-09-02: /home/ubuntu/server/ansible exists there), so deriving this
+# checkout (/home/ubuntu/server/ansible exists there), so deriving this
 # from the connection type would skip three tasks that work on the Pi today.
 has_repo_checkout: true
 
-# The libvirt NAT network the hypervisor host builds, as a CIDR. It outlived the daniel-stage
-# guest (#2941) because the monthly etcd restore drill's throwaway guest attaches to it. Here
+# The libvirt NAT network the hypervisor host builds, as a CIDR. The monthly etcd restore
+# drill's throwaway guest attaches to it. Here
 # rather than in the hypervisor role's defaults because two roles need one source of truth: the
 # hypervisor role builds the network from a gateway plus a netmask, while `initial_setup`
 # fences that network off the production LAN and needs the prefix form. A fence keyed to the
@@ -758,8 +741,8 @@ has_repo_checkout: true
 # ansible/tests/staging/test_staging_egress_fence.py asserts this prefix contains the role's
 # gateway and matches its netmask.
 staging_net_cidr: "192.168.140.0/24"
-# The full etcd restore drill, run monthly in a throwaway guest on the hypervisor host (issue
-# #1175; the mechanism is the hypervisor_etcd_drill_* block in roles/setup/hypervisor). Here
+# The full etcd restore drill, run monthly in a throwaway guest on the hypervisor host (the
+# mechanism is the hypervisor_etcd_drill_* block in roles/setup/hypervisor). Here
 # rather than in that role because two roles read them: the hypervisor role installs the cron,
 # and k8s/uptime-kuma sizes the push tile's deadline from the same cadence.
 #
@@ -767,8 +750,7 @@ staging_net_cidr: "192.168.140.0/24"
 # runs as often as it is cheap — one ~8 MB snapshot download from R2 and ~5 minutes of a 2-vCPU
 # guest. Daytime, clear of every backup window (02:45 snapshot, 03:30/04:30 Longhorn, 04:10
 # Longhorn drill), and off the Monday 10:20 list-only slot on daniel-box so the two never read
-# as one event. Issue #1175 named a 1-year staleness budget as the floor; this exceeds it
-# twelvefold, and the deadline below is derived from THIS cadence rather than that floor — a
+# as one event. The deadline below is derived from THIS cadence rather than a yearly floor — a
 # yearly alarm over a monthly cron would let eleven failures pass in silence.
 etcd_drill_full_cron: "20 11 1 * *"
 # DEADLINE IS DERIVED FROM THE CRONTAB: the longest gap between two 1st-of-month runs is 31
@@ -780,8 +762,7 @@ etcd_drill_full_kuma_interval_s: 3024000
 # Claude Code. Both default OFF and are opted into per host — daniel-server already has both
 # installed by hand and shouldn't have them re-provisioned underneath it, and the Pi
 # (512 MB Zero 2 W) can carry neither. has_chezmoi needs no credential of its own: the
-# dotfiles repo is public, so chezmoi clones it anonymously (#2805 — PR #2838 dropped
-# chezmoi_setup's `gh auth status` precheck along with the claim). has_github_cli still runs
+# dotfiles repo is public, so chezmoi clones it anonymously. has_github_cli still runs
 # first where a host sets both, for the reason initial_setup.yml gives at its entry.
 has_github_cli: false
 has_chezmoi: false

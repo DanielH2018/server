@@ -4,11 +4,10 @@
 `deploy.sh` queues behind `gitops-deploy.service` rather than giving up, so its wait has to
 cover the longest that unit can legitimately hold the lock: the staging gate, the staging
 expect, the k8s deploy and the k8s rollback, which run sequentially inside one activation.
-LOCK_WAIT was left at 1500 while those grew, and a deploy launched during a pathological
-gitops run gave up having deployed nothing.
+A LOCK_WAIT below that sum makes a deploy launched during a pathological gitops run give up
+having deployed nothing.
 
-The comment at LOCK_WAIT named this guard from 2026-09-02 and no such test existed
-(issue #1775). The four values are read from the role defaults the unit renders its
+The four values are read from the role defaults the unit renders its
 `config.env` from, not copied here, so raising any one of them fails this rather than
 silently shortening the wait again. The value read is `deploy_under_locks.LOCK_WAIT`,
 which both the foreground and `--detach` wait with.

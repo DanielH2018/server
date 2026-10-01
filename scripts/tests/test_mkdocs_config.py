@@ -103,12 +103,12 @@ def test_every_doc_is_either_in_the_nav_or_explicitly_excluded():
     """The whole tree, not just the top level.
 
     `test_nav_covers_every_toplevel_doc` globs `*.md` — one directory deep — which is the
-    scope of the change it shipped with. Everything in a SUBDIRECTORY was outside it, and
+    scope of the change it shipped with. Everything in a SUBDIRECTORY is outside it, and
     mkdocs builds and serves those pages regardless of the nav, logging an unlinked page at
-    INFO so `--strict` does not fail either (2026-08-25 review M-7).
+    INFO so `--strict` does not fail either.
 
     A page must therefore be one of two things on purpose: linked, or named in
-    `exclude_docs`. Silence is no longer an option.
+    `exclude_docs`. Silence is not an option.
 
     Note what this can and cannot bind. It walks the CHECKOUT, so the 11 gitignored
     `superpowers/` pages are absent in CI and this passes over them vacuously -- their

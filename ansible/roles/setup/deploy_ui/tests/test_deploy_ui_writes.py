@@ -68,7 +68,7 @@ def test_non_service_tags_matches_deploy_tags_own_block_set():
 
 
 def test_guard_deploy_block_tag_is_flagged():
-    """A block tag `deploy.sh --list-services` prints is still refused by this API (#1596)."""
+    """A block tag `deploy.sh --list-services` prints is still refused by this API."""
     refusal = w.guard_deploy("config", {"homepage"}, "")
     assert "config" in refusal and "block tags" in refusal
 
@@ -101,7 +101,7 @@ def test_clear_hold_mismatch_touches_nothing_is_flagged(state_dir):
 
 
 def test_hold_cleared_message_names_every_dropped_plane_is_clean():
-    """A Clear drops every entry at once, and each is a plane nobody has applied (#2453)."""
+    """A Clear drops every entry at once, and each is a plane nobody has applied."""
     message = w.hold_cleared_message(
         ["ansible/initial_setup.yml k3s", "ansible/deploy.yml sonarr"]
     )
@@ -125,9 +125,9 @@ def test_spawn_logged_writes_output_and_returns_log(tmp_path):
 
 
 def test_spawn_logged_never_takes_a_name_already_on_disk(tmp_path):
-    """The collision case from #1597, staged rather than raced.
+    """The collision case, staged rather than raced.
 
-    The victim file is the exact name the old second-granular scheme derived, written before
+    The victim file is the exact name a second-granular scheme would derive, written before
     the spawn — so a `<action>-<ts>.log` name would open it `wb` and truncate a log another
     process was still writing to, plus overwrite its `.pid`. Staging it is what makes this
     deterministic: two live spawns need not land in the same second.

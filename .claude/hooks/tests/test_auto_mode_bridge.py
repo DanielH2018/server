@@ -131,12 +131,12 @@ def test_every_deploy_resume_point_is_decoded(code, marker):
 
 
 def test_a_playbook_failure_is_decoded_as_changes_being_live():
-    """The inverse of the four above, and the reason exit 20 exists (issue #840).
+    """The inverse of the four above, and the reason exit 20 exists.
 
-    deploy.sh returned ansible-playbook's own status until 2026-09-02, so a play that applied
-    its manifests and then failed exited 2 and was decoded as the tag miss -- telling an
-    operator nothing was deployed when everything before the failing task had been. The note
-    must carry the opposite claim, in the words the wrapper and CLAUDE.md use.
+    A play that applied its manifests and then failed must not be decoded as the tag miss,
+    which would tell an operator nothing was deployed when everything before the failing task
+    had been. The note must carry the opposite claim, in the words the wrapper and CLAUDE.md
+    use.
     """
     note = _mod.deploy_exit_note(failure(error="Exit code 20\nsome output"))
     assert note is not None
@@ -188,10 +188,8 @@ def test_main_says_nothing_on_an_unrelated_event(capsys):
 
 
 def test_every_refusal_code_is_named_a_refusal_and_points_at_the_wrappers_own_lines():
-    """The hook decoded the whole table until 2026-09-30, as the fifth copy of it.
-
-    `deploy_run.py:report` now prints the name, meaning and remedy, so what is left here is
-    the framing an exit code cannot carry: this was a refusal, and the wrapper already said
+    """`deploy_run.py:report` prints the name, meaning and remedy, so what is left here is the
+    framing an exit code cannot carry: this was a refusal, and the wrapper already said
     which one.
     """
     from lib.exit_codes import DEPLOY_SH_NO_VERDICT
@@ -203,7 +201,7 @@ def test_every_refusal_code_is_named_a_refusal_and_points_at_the_wrappers_own_li
 
 
 def test_the_one_exit_where_changes_are_live_is_not_called_a_refusal():
-    """The reject half, and the fix for issue #840: 20 means the playbook RAN."""
+    """The reject half: 20 means the playbook RAN."""
     from lib.exit_codes import DEPLOY_PLAYBOOK_FAILED
 
     note = _mod.deploy_exit_note(_deploy_failure(DEPLOY_PLAYBOOK_FAILED))

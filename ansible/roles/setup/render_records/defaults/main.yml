@@ -1,5 +1,5 @@
 ---
-# The render-record producer (#2587). The host that runs it (`render_records_host`) and the
+# The render-record producer. The host that runs it (`render_records_host`) and the
 # schedule the Kuma monitor's interval is derived from live in group_vars/all.yml, because
 # initial_setup.yml's `when:` and the uptime-kuma role read them outside this role.
 

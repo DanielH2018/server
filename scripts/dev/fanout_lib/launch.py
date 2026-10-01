@@ -21,16 +21,16 @@ LAUNCH_TIMEOUT_S = 120.0
 TICK_HOST = "daniel-box"
 # The early-stop paragraph from Anthropic's Opus 5.5 guide (*Unattended agentic runs*),
 # adapted: a text-only end of turn is a progress report, and the brief's completion condition
-# is what ends the run (issue #2816). A path relative to the unit's WorkingDirectory, the
+# is what ends the run. A path relative to the unit's WorkingDirectory, the
 # worktree, which `worktree add` checks out from origin/master, so the file is always there.
 # It goes through this headless launch only; an interactive session never reads it.
 SYSTEM_PROMPT_FILE = "scripts/dev/fanout_lib/headless_system_prompt.md"
-# A runaway bound, not a tight one. Over 84 fan-out sessions to 2026-09-28 the largest read
-# 64M cached tokens and wrote 152k output tokens: about $18 at Opus 5.5's list prices ($0.20
-# per million cache reads, $20 per million output, $8 per million 1h cache writes).
+# A runaway bound, not a tight one. Over 84 fan-out sessions the largest read 64M cached
+# tokens and wrote 152k output tokens: about $18 at Opus 5.5's list prices ($0.20 per
+# million cache reads, $20 per million output, $8 per million 1h cache writes).
 # `renovate_agent.py` bounds its own headless session the same way. A spent budget ends the
-# session with `is_error: true` and `terminal_reason: budget_exhausted` (probed 2026-09-28),
-# which `status` reports as `failed`.
+# session with `is_error: true` and `terminal_reason: budget_exhausted`, which `status`
+# reports as `failed`.
 BUDGET_USD = 40
 CLAUDE_ARGS = (
     "claude -p --model opus --permission-mode auto --output-format json"
@@ -77,11 +77,12 @@ def _step(command: str, name: str) -> str:
 def exists_check_command(batch: str) -> str:
     """Refuse before `fetch` when this batch's worktree or branch is already there.
 
-    A relaunch of a failed batch used to reach `worktree add`, which fails precisely
+    A relaunch of a failed batch would reach `worktree add`, which fails precisely
     because the tree and branch exist — and `worktree add` is a cleanup step, so the
-    cleanup then force-removed that tree and deleted its branch. The failed agent's work
-    went with it, with nothing in the output saying so. Checking first turns that into a
-    refusal: `exists` is deliberately NOT in `_CLEANUP_STEPS`, so nothing is touched.
+    cleanup would then force-remove that tree and delete its branch. The failed agent's
+    work went with it, with nothing in the output saying so. Checking first turns that
+    into a refusal: `exists` is deliberately NOT in `_CLEANUP_STEPS`, so nothing is
+    touched.
     """
     return _step(
         f"test ! -e {worktree_path(batch)} && "

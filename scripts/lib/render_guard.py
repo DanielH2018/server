@@ -250,9 +250,9 @@ def service_records_at(ref: str, cwd: Path) -> list[tuple[str, str, str]]:
 
     A PR that adds a role and its ``containers_list`` entry together is the case a checkout
     answers wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as
-    one nobody registered (issue #1544; ``land_lib/classify.py`` carries the argument), and a
+    one nobody registered (``land_lib/classify.py`` carries the argument), and a
     new Pi role reads as declared on NO host, so its first landing deploys locally instead of
-    with ``-e target=daniel-pi`` (issue #1839). Names are listed at ``ref`` too, so a host_vars
+    with ``-e target=daniel-pi``. Names are listed at ``ref`` too, so a host_vars
     file the same PR adds counts, and ``_example.yml`` is excluded for the reason
     ``host_files`` excludes it. The host is the file's stem, as ``deploy_tags.service_records``
     names it from a path.
@@ -313,7 +313,7 @@ def service_records_at_or_none(
 
     AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. ``[]`` says no service is declared anywhere,
     which for a caller validating deploy tags refuses every tag there is; for one classifying
-    roles it marks every changed role unregistered (issue #1331); for one routing tags to
+    roles it marks every changed role unregistered; for one routing tags to
     hosts it routes every tag to no host. A ref this checkout cannot resolve raises inside
     ``git``, and an empty answer is indistinguishable from that here, so both become None and
     the caller falls back to the tree it can read.
@@ -336,24 +336,24 @@ def hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
     ``records`` is a ``(host, platform, tag)`` list: the working tree's
     (``deploy_tags.service_records``) or a git ref's (``service_records_at``). The routing
     rule lives once, here, so ``land_tags.landing_hosts_at`` -- records read at a merge
-    commit, issue #1839 -- cannot route a tag differently from ``deploy_tags.tags_by_host``.
+    commit -- cannot route a tag differently from ``deploy_tags.tags_by_host``.
     A tag no host declares lands under none.
 
     ``k8s_only`` names the tags whose change is known to be a k3s one, and they route to a
     ``platform: k8s`` entry alone. One tag name can select two entries on two platforms --
     ``wg-easy`` is k8s on daniel-box and Docker on daniel-pi -- and a caller-expanded tag
     names a k8s role by construction, so routing it to the Pi as well deployed a Compose
-    service the change never touched (issue #2718).
+    service the change never touched.
 
     NARROWING HOST ROUTING IS THE DANGEROUS DIRECTION, which is why this is opt-in per tag
-    rather than derived here. Issue #929 is a tag that reached no host and read ``settled``
-    while the Pi ran old code, so a caller may only pass a tag it can PROVE is k3s-only.
-    Empty by default: every existing caller keeps routing to both.
+    rather than derived here. A tag that reaches no host reads ``settled`` while the Pi runs
+    old code, so a caller may only pass a tag it can PROVE is k3s-only. Empty by default: a
+    caller that passes nothing routes to both.
 
     A named tag that ``records`` declares on NO k8s entry drops out of the restriction rather
     than out of the routing. The restriction would otherwise leave it under no host at all,
-    which is issue #929 again -- the landing falls through to one local deploy that matches
-    nothing and reads ``settled``. No tag the caller graph produces is Docker-only today; this
+    so the landing falls through to one local deploy that matches nothing and reads
+    ``settled``. No tag the caller graph produces is Docker-only; this
     keeps that from becoming a silent failure if a Pi-only role ever takes a k8s role's name.
     """
     wanted = set(tags)
@@ -394,7 +394,7 @@ def landing_hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
     Beside ``hosts_for_tags`` rather than in each caller, because the landing routes from two
     reads -- ``deploy_tags.landing_hosts`` over the working tree and
     ``land_tags.landing_hosts_at`` over a merge commit -- and the pair dropping a different
-    host is the shape issue #935 already cost a good landing.
+    host is the shape that loses a landing.
     """
     return {
         host: host_tags

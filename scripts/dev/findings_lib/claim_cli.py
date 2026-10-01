@@ -59,29 +59,28 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     REAP-THEN-CLAIM. `next` offers an issue whose claim is stale — deliberately, since that
     is what `reap` exists to clear — but `plan_claim` refused ANY claim, live or not. So a
     session did what `next` told it to and got exit 3 with no route forward, and nothing in
-    the repo invoked `reap` to clear the claim (#1274). A stale claim is now released here,
-    under the reason `reap` would have given, and the claim proceeds.
+    the repo invoked `reap` to clear the claim. A stale claim is released here, under the
+    reason `reap` would have given, and the claim proceeds.
 
-    STALE AT BIRTH. One guard covers #1278 and #1281, because both are the same question
-    asked of the same value: would the claim this command is about to write read as stale
-    the moment it lands? `claim_is_live` answers it whole — a `--worktree` naming no branch
-    at all ("no worktree — the claim names a branch nothing has checked out", which is what
-    `claim 1132 --worktree issue-1132` gets when the branch is `worktree-issue-1132`), and a
-    `--worktree` naming a real branch whose state is REMOVABLE (`master`, or a resumed
-    orchestrator that came back without the lock its claims leaned on). Both end the same
-    way: `next` re-offers the issue and `reap` releases it while the session is still working
-    it, which is the exact double-assignment the protocol exists to prevent. Two guards with
-    two exit codes would be worse than the bug, so there is one, and it exits 3 like every
-    other "nothing was written" refusal. `--force` is the way past it, because the resumed
-    orchestrator is a legitimate case and a one-way door is not acceptable here.
+    STALE AT BIRTH. One guard covers both, because both are the same question asked of the
+    same value: would the claim this command is about to write read as stale the moment it
+    lands? `claim_is_live` answers it whole — a `--worktree` naming no branch at all ("no
+    worktree — the claim names a branch nothing has checked out", which is what `claim 1132
+    --worktree issue-1132` gets when the branch is `worktree-issue-1132`), and a `--worktree`
+    naming a real branch whose state is REMOVABLE (`master`, or a resumed orchestrator that
+    came back without the lock its claims leaned on). Both end the same way: `next` re-offers
+    the issue and `reap` releases it while the session is still working it, which is the
+    exact double-assignment the protocol exists to prevent. Two guards with two exit codes
+    would be worse than the bug, so there is one, and it exits 3 like every other "nothing
+    was written" refusal. `--force` is the way past it, because the resumed orchestrator is a
+    legitimate case and a one-way door is not acceptable here.
 
     Returns 0 when every issue was taken, 3 when any was refused.
     """
     # Hoisted out of the loop: `args.worktree` does not vary across the batch, so the guard
-    # below needs the read once, and the reap path further down reuses the same tuple. That
-    # retires the lazy read this function used to do — its point was to skip several git
-    # calls per registered worktree on a batch where nothing was blocked, and the guard
-    # needs them on every batch anyway.
+    # below needs the read once, and the reap path further down reuses the same tuple. A
+    # lazy read would skip several git calls per registered worktree on a batch where
+    # nothing was blocked, but the guard needs them on every batch anyway.
     bad = validate_worktree_name(args.worktree)
     if bad:
         sys.stderr.write(
@@ -161,7 +160,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             continue
         if already_mine:
             # A reclaim planning something is `plan_claim` repairing a `claimed` label a
-            # failed `--add-label` left off (#1277). No comment is posted, so there is no
+            # failed `--add-label` left off. No comment is posted, so there is no
             # race to read back for — and saying "claimed" would misreport a repair as a
             # first claim.
             run(plans, args.dry_run, tools)
@@ -181,7 +180,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             # NOT a race. The comment was posted and the read-back found nothing holding the
             # issue at all, so the READ is what failed — an unparseable trailer, or a
             # comment past gh's 100-comment page cap. Reporting that as `lost the race to
-            # \`None\`` told the operator they lost to a rival that does not exist (#1284).
+            # \`None\`` told the operator they lost to a rival that does not exist.
             print(
                 f"#{number} claim posted, but the read-back found no claim at all — the "
                 "trailer did not parse, or the comment is past gh's comment page cap"
@@ -202,7 +201,7 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     if bad:
         sys.stderr.write(f"release: --worktree `{args.worktree}` {bad}\n")
         return 2
-    # The same label sync `cmd_claim` makes, for the mirror-image reason (#1284): `gh issue
+    # The same label sync `cmd_claim` makes, for the mirror-image reason: `gh issue
     # edit --remove-label` fails on a label the repo does not have, and a claim can arrive
     # with the label never created — hand-posted, or after an `--add-label` that failed.
     # Without this the release comment is posted and THEN the label edit exits 1, leaving
@@ -254,7 +253,7 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         print("reap: could not read git; refusing to release anything")
         return 1
     # Same reason as `cmd_release`: a `--remove-label` on a label the repo lacks fails after
-    # the release comment is already posted, leaving the reap half-applied (#1284).
+    # the release comment is already posted, leaving the reap half-applied.
     run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     issues = load_issues("open", tools)
     by_number = {i["number"]: i for i in issues}

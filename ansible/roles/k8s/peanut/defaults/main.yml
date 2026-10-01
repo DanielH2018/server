@@ -1,11 +1,8 @@
 ---
-# Same image the Docker role runs — both copies stay on the same tag through coexistence so
-# a difference in behaviour between them is never the image. Tag KEPT alongside the digest
-# (repo:latest@sha256) so Renovate's k8s-defaults manager still tracks it for digest-bump PRs —
-# a bare repo@sha256 would freeze it with zero update signal (2026-08-13 pin).
+# Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
+# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 peanut_k8s_image: brandawg93/peanut:latest@sha256:6629dce915da8b313f08b2e73dd2e54b60e7c0f642c21a8ebc37fe0a820bf41e
-# peanut's image has no cp (StartError "executable file not found" at first deploy), so the
-# seed-config initContainer uses alpine instead. Same init image zigbee2mqtt and
+# peanut's image has no cp, so the seed-config initContainer uses alpine instead. Same init image zigbee2mqtt and
 # home-assistant use.
 peanut_k8s_init_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
@@ -20,6 +17,5 @@ peanut_k8s_cpu_limit: "500m"
 peanut_k8s_mem_limit: 256Mi
 peanut_k8s_cpu_request: "50m"
 peanut_k8s_mem_request: 32Mi
-# upsd's port on the in-cluster `nut` Service (D6 reversed 2026-08-14 — the daemon left
-# daniel-server's Docker, and the LAN publish + DOCKER-USER lock retired with it).
+# upsd's port on the in-cluster `nut` Service.
 peanut_k8s_nut_port: 3493

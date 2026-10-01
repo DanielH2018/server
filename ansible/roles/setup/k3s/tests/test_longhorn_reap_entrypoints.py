@@ -42,7 +42,7 @@ def test_snapshots_entrypoint_resolves_its_sibling_imports_when_run_directly(tmp
 
 
 def test_backups_aborts_cleanly_when_the_volume_list_body_is_null(tmp_path):
-    # A well-formed but non-object body (`kubectl` emitting a bare `null`) used to reach
+    # A well-formed but non-object body (`kubectl` emitting a bare `null`) must not reach
     # `.get("items", [])` and raise AttributeError -- a traceback where every other unreadable
     # read here prints ABORT. See longhorn_reap_logic.parse_kubectl_json_items.
     proc, calls = _run(
@@ -130,7 +130,7 @@ def test_snapshots_purge_warns_cleanly_when_the_pod_list_body_is_null(tmp_path):
 def test_snapshots_aborts_cleanly_on_a_non_integral_min_age_days(tmp_path):
     # k3s_longhorn_snapshot_reap_min_age_days is an int in defaults/main.yml, but a host_vars
     # override or a typo could set a non-integral value; `int(os.environ.get(...))` at module
-    # scope used to raise before main() could print a named ABORT.
+    # scope must not raise before main() can print a named ABORT.
     proc, calls = _run(
         SNAPSHOTS_ENTRY,
         [],

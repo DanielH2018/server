@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Guard that `uv run pytest scripts` collects without help from another testpath.
 
-CLAUDE.md's Python & Tests section documents scoping to one suite, and for months
-`scripts/diagnostics/tests/test_grafana_panel_report.py` imported `grafana_panel_report`
-by bare name with nothing under `scripts/` resolving it. The whole-suite run passed only
-because collecting `ansible/tests/setup/test_pi_health_log_line_shape.py` put
-`scripts/diagnostics` on `sys.path` first. Reorder collection and two unrelated modules
-stop importing.
+CLAUDE.md's Python & Tests section documents scoping to one suite.
+`scripts/diagnostics/tests/test_grafana_panel_report.py` imports `grafana_panel_report`
+by bare name, and only `scripts/conftest.py` resolves it. A whole-suite run can pass without
+that load when collecting another testpath's module puts `scripts/diagnostics` on `sys.path`
+first; reorder collection and the importers stop importing.
 
-The red proof is the fix itself: drop the `grafana_panel_report` load from
-`scripts/conftest.py` and this fails. The green proof is that it passes now.
+The red proof: drop the `grafana_panel_report` load from `scripts/conftest.py` and this fails.
 """
 
 from _helpers import REPO

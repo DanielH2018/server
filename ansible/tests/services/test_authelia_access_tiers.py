@@ -1,10 +1,9 @@
 """Every SSO service's Authelia policy is the `auth_tier` declared on its containers_list entry.
 
-Until #2057 the per-service rules were hand-written in the Authelia template and joined to
-the inventory by a hostname string: four services had a rule and 24 rode the
-`*.local.<domain>` one_factor wildcard by omission, and the only guard was one test naming one
-service (deploy). `filter_plugins/authelia_access.py` now renders the rules from the entries
-themselves and refuses an entry that attaches the middleware without declaring a tier.
+`filter_plugins/authelia_access.py` renders the rules from the entries themselves and refuses
+an entry that attaches the middleware without declaring a tier. A rule joined to the inventory
+by a hostname string would let a service ride the `*.local.<domain>` one_factor wildcard by
+omission.
 
 The filter is checked as a `..._is_clean` / `..._is_flagged` pair on hand-built entries, and
 then against the real render: for every `use_authelia: true` entry, the rendered rules must
@@ -137,7 +136,7 @@ def _matches(rule, host, source):
     """Authelia's first-match test for a UI request to `/`, so a path-scoped bypass never
     matches: `*.x` matches any host ending in `.x`, and `networks` scopes by source.
 
-    The wildcard is a suffix match here, as it was in the guard this replaced. Every host the
+    The wildcard is a suffix match here. Every host the
     tests below resolve is either named exactly by a generated rule or is one label under
     the wildcard, so no verdict depends on whether Authelia matches deeper labels."""
     domains = rule["domain"] if isinstance(rule["domain"], list) else [rule["domain"]]

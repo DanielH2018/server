@@ -82,7 +82,7 @@ def test_plain_warning_is_not_a_candidate():
 
 
 def test_warning_with_dangerous_message_is_candidate():
-    # the 2026-07-01 poisoned-.exe class
+    # the poisoned-.exe class
     assert (
         autofix.is_candidate(
             _item(
@@ -108,17 +108,17 @@ def test_import_pending_with_messages_is_not_a_candidate():
 
 
 def test_error_with_client_outage_phrase_in_errormessage_is_a_candidate():
-    # The CLIENT_ERROR_PATTERNS exemption was retired 2026-09-18 (#1951): at the pinned
-    # Sonarr/Radarr a client outage empties the queue rather than flipping items to
-    # `error`, and no outage phrase reaches errorMessage. A bare `error` is a candidate
-    # whatever its errorMessage says; re-adding an exemption fails here.
+    # There is no CLIENT_ERROR_PATTERNS exemption: at the pinned Sonarr/Radarr a client
+    # outage empties the queue rather than flipping items to `error`, and no outage phrase
+    # reaches errorMessage. A bare `error` is a candidate whatever its errorMessage says;
+    # adding an exemption fails here.
     item = _item(status="error", error_message="qBittorrent is not responding")
     assert autofix.is_candidate(item, PATTERNS) is True
 
 
 def test_error_with_release_carried_phrase_in_statusmessage_still_candidate():
     # A release named to carry a client-error phrase reaches statusMessages[].messages
-    # through the *arr's own import rejection text (#1934). It must not exempt itself.
+    # through the *arr's own import rejection text. It must not exempt itself.
     item = _item(
         status="error",
         state="failedPending",
@@ -191,7 +191,7 @@ def test_item_key_falls_back_to_queue_id_without_download_id():
 
 
 def test_item_key_distinct_across_apps_for_same_id():
-    # regression test for the cross-app streak-key collision fix
+    # streak keys must not collide across apps
     sonarr_item = _item(download_id=None, qid=7)
     radarr_item = _item(download_id=None, qid=7)
     assert autofix.item_key("Sonarr", sonarr_item) != autofix.item_key(

@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
-"""The k8s karakeep role vendors the time-tagger script; the Docker role downloaded it.
+"""The karakeep role vendors the time-tagger script, held to a pinned commit plus sha256.
 
-Those were two different mechanisms for getting the same bytes into the same program, and the
-whole reason the Docker role was safe is its pinned commit plus sha256 — a guarantee a vendored
-copy does not inherit. This guard holds the vendored copy to that pin.
+A vendored copy does not inherit a download's pin by itself, so this guard holds the copy to
+`PINNED_URL` and `PINNED_SHA256` below.
 
-The vendored copy exists because a ConfigMap renders from a file that must be present at render
+The script is vendored because a ConfigMap renders from a file that must be present at render
 time, and CI renders every manifest template on a machine that has never run a deploy, so a
 lookup on a download destination could only ever fail there.
 
-The Docker role was archived on 2026-08-09 (karakeep runs only in k8s now), and #2385 deleted
-the archive. Its get_url task was the sole record of the pinned commit URL + sha256 the vendored
-bytes were taken from, so `PINNED_URL` and `PINNED_SHA256` below carry that record. To read the
-original, run `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/karakeep/tasks/main.yml`.
 To update the vendored script, re-download it from a new commit and change all three together.
 
 Run: uv run pytest ansible/tests/services/test_karakeep_time_tagger_script.py

@@ -1,18 +1,17 @@
 """Every setup-plane task that reads the repo checkout ON THE TARGET is gated.
 
-`daniel-stage` was the one host Ansible drove over ssh that held no checkout of this repo, so
-`{{ playbook_dir }}` and `~/server/...` named paths that exist on the controller and not on the
-target. It is retired (#2941) and every host in the inventory now holds a checkout, so the gate
-is latent rather than live — kept because adding such a host again is meant to be a var, and
-because these five tasks are exactly the ones that would break on the day it happened. The
-staging audit found two of them by hand; this census finds five.
+A host Ansible drives over ssh that holds no checkout of this repo makes `{{ playbook_dir }}`
+and `~/server/...` name paths that exist on the controller and not on the target. Every
+host in the inventory holds a checkout, so the gate is latent rather than live — kept
+because adding such a host is meant to be a var, and because these five tasks are exactly
+the ones that would break on the day it happened.
 
 WHICH SIDE READS THE PATH IS THE WHOLE QUESTION. `template.src` and `copy.src` are read by
 Ansible on the CONTROLLER and shipped as content, so naming the checkout there is fine whatever
 the target is — the same reasoning `staging-cluster.md` already applies to `lookup()`. But
 `command.argv`, `cron.job`, `args.chdir` and `copy.dest` resolve ON THE TARGET, and those are
 the ones that break. Classifying by module argument rather than by grepping the task is what
-separates them, and grepping is what made the hand audit come up short.
+separates them.
 
 THE REJECTING HALF MATTERS MORE THAN USUAL. Of the five, two fail loudly and three install a
 cron SUCCESSFULLY against a path that does not exist — the deploy reads green and the failure
@@ -50,11 +49,11 @@ KNOWN_HITS = frozenset(
     }
 )
 
-# Tasks this census once found and that were then FIXED rather than gated. Listed so a fix
+# Tasks that are FIXED rather than gated. Listed so a fix
 # that regresses — the pruner reaching back into `{{ playbook_dir }}` — fails as a named
 # member, not as one more entry in the gated list. `release_bin.yml` ships the pruner inside
-# the release and runs it through `current` (issue #923); the release-commit read moved to the
-# controller with `delegate_to: localhost` (PR #919).
+# the release and runs it through `current`; the release-commit read runs on the
+# controller with `delegate_to: localhost`.
 KNOWN_FIXED = frozenset(
     {
         "Prune superseded releases for {{ release_bin_group }}",
@@ -143,7 +142,7 @@ def _gated(when: object) -> bool:
 
     A host pin counts too: `inventory_hostname == 'daniel-box'` says strictly more than the gate,
     since daniel-box holds a checkout by construction. So does membership of one NAMED host
-    allowlist: `dev_tooling_hosts` (issue #1726) is daniel-box and daniel-server, both of which
+    allowlist: `dev_tooling_hosts` is daniel-box and daniel-server, both of which
     hold a checkout, and test_dev_tooling_hosts.py asserts that exact membership. A list is
     accepted here by name rather than by shape, because `inventory_hostname in <anything>` says
     nothing on its own — an allowlist nobody has pinned could hold a checkout-less host.
@@ -249,8 +248,8 @@ def test_the_gate_is_accepted_in_both_when_forms():
 
 
 def test_a_pinned_host_allowlist_counts_as_a_gate():
-    """`Install Git hooks` moved onto `dev_tooling_hosts` in #1726. Both members hold a
-    checkout, so the task still cannot reach a host that has none."""
+    """`Install Git hooks` is gated on `dev_tooling_hosts`. Both members hold a
+    checkout, so the task cannot reach a host that has none."""
     assert _gated("inventory_hostname in dev_tooling_hosts")
 
 
@@ -261,7 +260,7 @@ def test_an_unpinned_host_allowlist_does_not():
 
 
 def test_the_gate_defaults_true_and_no_host_declares_itself_checkout_free():
-    """The census half. No host sets it false since daniel-stage was retired (#2941), so a
+    """The census half. No host sets it false, so a
     host appearing here is the point at which these five tasks start being skipped for real."""
     declared = {
         f.stem: value
@@ -280,7 +279,7 @@ def test_the_gate_defaults_true_and_no_host_declares_itself_checkout_free():
 
 
 def test_daniel_pi_keeps_its_checkout_despite_being_a_remote_host():
-    """Verified against the live host on 2026-09-02: /home/ubuntu/server/ansible exists on the
-    Pi. Deriving this gate from `ansible_connection` would have skipped tasks that work there."""
+    """/home/ubuntu/server/ansible exists on the Pi. Deriving this gate from `ansible_connection`
+    would skip tasks that work there."""
     pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
     assert pi.get(GATE, True) is True

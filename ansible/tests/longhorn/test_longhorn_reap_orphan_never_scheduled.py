@@ -2,11 +2,10 @@
 """The two Longhorn reapers are operator-invoked only; nothing may schedule them.
 
 `longhorn-reap-orphan-backups.sh` and `longhorn-reap-orphan-snapshots.sh` delete stranded
-recovery points, and which ones are safe to delete depends on live state — on 2026-08-16 the
-answer was "none of them", because the weekly tier had produced nothing and the strays were the
-only recovery those volumes had. The k3s role's autonomous-role contract therefore lists them
-under **Never a cron**, and until this guard existed nothing checked it: a `cron:` task or a
-kuma-check timer naming either script would have landed green.
+recovery points, and which ones are safe to delete depends on live state — when the
+weekly tier has produced nothing, the strays are the only recovery a volume has. The k3s role's
+autonomous-role contract therefore lists them under **Never a cron**, and this guard fails a
+`cron:` task or a kuma-check timer naming either script.
 
 The census is STRUCTURAL, not textual. The names appear on purpose in `defaults/main.yml`
 comments, in the templates' own headers and in the role docs, so "the name appears nowhere under

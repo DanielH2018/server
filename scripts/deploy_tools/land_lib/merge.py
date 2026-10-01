@@ -2,19 +2,18 @@
 
 --arm-merge exists so an unattended session never issues `gh pr merge` itself: it sits on
 the ask list, and auto mode suspends the allow list, so a session with nobody to answer the
-prompt times out as a denial (three attempts, three denials, 2026-09-03, issue #979).
+prompt times out as a denial.
 Idempotent: a MERGED PR is left alone, a CLOSED one dies.
 
 GitHub's `enablePullRequestAutoMerge` mutation (what `--auto` calls) rejects a PR that is
-already CLEAN -- there is nothing to defer -- so --arm-merge used to fail on exactly the PRs
-that were ready to merge (issue #1008, reproduced on PRs #998/#1001/#1002/#1004 on
-2026-09-03). A CLEAN rejection falls through to a direct `gh pr merge --squash`; a PR that
+already CLEAN -- there is nothing to defer -- so a plain `--auto` fails on exactly the PRs
+that are ready to merge. A CLEAN rejection falls through to a direct `gh pr merge --squash`; a PR that
 merged in the gap between the idempotency check and the `--auto` attempt is a no-op, not a
 failure; anything else GitHub calls not-yet-mergeable (BLOCKED, DIRTY, ...) still dies.
 
-`--auto` exiting 0 is not proof the merge was armed either (issue #1029): on PR #1026 it
-exited 0, `autoMergeRequest` stayed null, and the landing polled 35 minutes toward
-merge-timeout on a PR that was CLEAN with every check green. One read-back answers all three
+`--auto` exiting 0 is not proof the merge was armed either: it can exit 0 with
+`autoMergeRequest` still null, leaving the landing to poll toward merge-timeout on a PR that is
+CLEAN with every check green. One read-back answers all three
 questions the arm can have gone wrong in -- merged in the gap, armed, or silently not armed --
 and an unarmed CLEAN PR takes the same direct-merge path a CLEAN rejection does. An unarmed
 PR that is NOT CLEAN dies: direct-merging it would only fail the same way. The read-back
@@ -22,20 +21,19 @@ itself failing is not a reason to fail a landing whose arm may well have worked,
 so and trusts the exit code.
 
 --await-merge polls the PR's state until merged, so `gh pr create` -> `gh pr merge --auto`
--> one backgrounded land.sh is the whole procedure. Every landing on 2026-09-01 hand-wrote
-that wait.
+-> one backgrounded land.sh is the whole procedure.
 
 --arm-merge also refuses a PR whose body carries a closing keyword outside a `Closes #N` line,
 before any merge call. A "Filed and not fixed: #N" line closes #N on merge, because GitHub
-reads the keyword and not the sentence around it (issue #2513). `stray_closing_refs` owns the
+reads the keyword and not the sentence around it. `stray_closing_refs` owns the
 rule.
 
 `opts.require_author` (from `LAND_REQUIRE_AUTHOR`, which renovate-agent.service sets to
 `app/renovate`) makes --arm-merge refuse a PR by anyone else, before any merge call. The
-agent's contract said "never a PR by another author" and nothing checked (#2170); an
+agent's contract says "never a PR by another author", and this is the check; an
 interactive session leaves the variable unset and is unaffected. The refusal names the hand-off
 rather than the `--any-author` override: only the unattended session ever reads it, and the
-operator chose that the superseding PR it opens for a `manual —` bump goes to a person (#2746).
+operator chose that the superseding PR it opens for a `manual —` bump goes to a person.
 """
 
 import re
@@ -64,8 +62,8 @@ def arm_merge_fallback_decision(state: str, merge_state_status: str) -> ArmDecis
 
     GitHub's `enablePullRequestAutoMerge` mutation only accepts a PR that is genuinely
     blocked. A PR that is already CLEAN has nothing to defer, so `--auto` fails on exactly
-    the PRs that are ready to merge right now (issue #1008; PRs #998, #1001, #1002, #1004 on
-    2026-09-03). A pure function of two strings so the branch is testable without gh.
+    the PRs that are ready to merge right now. A pure function of two strings so the branch is
+    testable without gh.
     """
     if state == "MERGED":
         return ArmDecision.ALREADY_MERGED
@@ -95,7 +93,7 @@ def _reference_is_deliberate(prefix: str) -> bool:
 
     Deliberate means the keyword opens a clause of its own: it starts the line, follows
     another closing reference, or follows a finished sentence. `Filed and not fixed: #N`
-    fails all three, which is the accident issue #2513 is about.
+    fails all three.
     """
     rest = _DECORATION.sub("", _CANONICAL_REF.sub("", prefix))
     return not rest or _SENTENCE_END.search(rest) is not None
@@ -104,9 +102,9 @@ def _reference_is_deliberate(prefix: str) -> bool:
 def stray_closing_refs(body: str) -> list[str]:
     """The lines of `body` whose closing keyword is not a deliberate closing reference.
 
-    PR #2510's body said "Filed and not fixed: #2509". GitHub read `fixed: #2509` as a closing
-    keyword and closed the unfixed follow-up two seconds after the merge, which dropped it from
-    `findings.py list` until the operator reopened it by hand (issue #2513).
+    GitHub reads the `fixed: #N` in a body that says "Filed and not fixed: #N" as a closing
+    keyword, and closes the unfixed follow-up on merge, which drops it from
+    `findings.py list` until someone reopens it by hand.
 
     Set membership cannot tell the two apart: the intentional form and the accidental one are
     the same construct, so a closing reference the PR does not intend looks exactly like one it
@@ -114,11 +112,10 @@ def stray_closing_refs(body: str) -> list[str]:
     PR body here writes, and one buried mid-sentence is the accident. A body naming an unfixed
     follow-up writes it without a keyword in front of the number: `Filed for later: #N`.
 
-    The clause test is what the corpus forced. Read against 60 merged PR bodies on 2026-09-24,
-    a keyword-opens-the-LINE rule flagged 13, of which 12 were the repo's ordinary
-    `Closes #A. Closes #B.` on one line — a guard that refuses a fifth of all landings is one
-    the operator turns off. Flagging only a keyword that opens no clause leaves exactly PR
-    #2510 flagged out of those 60.
+    The clause test is what the corpus forces. A keyword-opens-the-LINE rule flags the repo's
+    ordinary `Closes #A. Closes #B.` on one line, and a guard that refuses a fifth of all
+    landings is one the operator turns off. Flagging only a keyword that opens no clause
+    avoids that.
 
     Known limits, both deliberate. A keyword inside a fenced code block is still flagged:
     over-flagging costs one `gh pr edit` and under-flagging costs a silently closed finding.
@@ -184,7 +181,7 @@ def _require_author(ln: Landing) -> None:
     """Die unless the PR's author is `opts.require_author`; a no-op when it is unset.
 
     Its own `gh pr view --json author` rather than a field on the state read, so a session
-    with no author requirement makes exactly the calls it made before. `login` is what
+    with no author requirement makes no extra call. `login` is what
     `gh pr list --author` matches on too (`app/renovate` for the bot), so the unit's value
     and the wrapper's census name the author the same way.
     """
@@ -234,7 +231,7 @@ def arm_merge(ln: Landing) -> None:
             f"(mergeStateStatus={retry.get('mergeStateStatus', '')})",
             1,
         )
-    # --auto exiting 0 is not proof the merge was armed (issue #1029). One read-back
+    # --auto exiting 0 is not proof the merge was armed. One read-back
     # answers every way it can have gone wrong; a read-back that itself fails must not turn
     # a possibly-successful arm into a failed landing. Only the read is guarded: an Outcome
     # raised by anything after it is a real verdict and must not be swallowed here.
@@ -268,8 +265,8 @@ def await_merge(ln: Landing) -> None:
     """Poll until merged. Bail early only on the two states an auto-merge never leaves.
 
     Only CONFLICTING may bail, and only on two consecutive polls: GitHub computes
-    mergeability asynchronously and serves UNKNOWN until it settles (PR #657 read UNKNOWN on
-    a live open PR), and master moving under the PR flips the field for one poll. A red PR
+    mergeability asynchronously and serves UNKNOWN until it settles, and master moving under
+    the PR flips the field for one poll. A red PR
     CI is the other way an armed auto-merge never fires; GitHub says only `BLOCKED`, the
     same word it uses while checks run, so await_ci owns that verdict, one-shot. Only its
     exit 1 bails: `pending` IS the grace period, derived rather than guessed.

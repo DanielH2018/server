@@ -78,7 +78,7 @@ def test_the_error_keeps_the_fatal_line_behind_an_overlong_stdout(
 def test_the_error_keeps_the_fatal_line_ahead_of_a_profile_tasks_timing_table(
     gitops_deploy, tmp_path: pathlib.Path
 ) -> None:
-    """Issue #907: the timing table after the recap is bigger than the budget on deploy.yml.
+    """The timing table after the recap is bigger than the budget on deploy.yml.
 
     A positional tail of that output is `ok=1950 failed=1` plus twenty timing rows, and the
     task that failed is the one thing not in it.
@@ -205,7 +205,7 @@ def test_the_alert_excerpt_keeps_the_argv_line_and_the_tail(gitops_deploy) -> No
     assert FATAL in excerpt
 
 
-# The nine bumps the 2026-09-24 01:45 tick carried (#2348): the longest list a post has named.
+# Nine bumps: the longest list a post has named.
 NINE_BUMPS = {
     "bentopdf",
     "flaresolverr",
@@ -306,8 +306,7 @@ def test_the_alert_excerpt_keeps_the_failing_task_ahead_of_a_long_stderr(
 ) -> None:
     """The Discord post is 700 chars of a 4000+4000 error string.
 
-    A tail of that is stderr's deprecation warnings, which is what the 21:26 alert on
-    2026-09-02 carried (issue #907). The failing task is the part worth the budget.
+    A tail of that is stderr's deprecation warnings, not the failing task. The failing task is the part worth the budget.
     """
     stderr = "\n".join(
         "[DEPRECATION WARNING]: Conditionals should not be surrounded by templating delimiters"

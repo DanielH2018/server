@@ -48,12 +48,11 @@ hypervisor_staging_net_dhcp_end: 192.168.140.99
 
 # The Ubuntu cloud image every guest on this host is built from, and the local copy that is
 # kept so a rebuild does not re-download it. Only the etcd restore drill's throwaway guest
-# reads these now; until 2026-09-29 the retired `daniel-stage` guest shared them, which is why
-# the download lived in a task file of its own.
+# reads these.
 # The path deliberately does NOT end in `_image`: in a setup role's defaults that suffix means
 # a container image pin, and scripts/tests/test_renovate_managers.py reads every such key as one
-# Renovate must be able to bump. This is a file on disk, so naming it `_image` made it fail a
-# guard that was reading it correctly.
+# Renovate must be able to bump. This is a file on disk, so an `_image` name would fail that
+# guard.
 hypervisor_base_image_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
 # DECIDED: pin the checksum even though `current` rotates (2026-08-27). Upstream moves this
 # roughly monthly, so a host that has not downloaded the image yet WILL eventually fail here
@@ -65,9 +64,8 @@ hypervisor_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.
 
 # ── Reaping the retired daniel-stage guest ───────────────────────────────────────────────
 #
-# The staging guest was removed on 2026-09-29 (#2941): no tick consults it and no manual
-# staging sessions continue, so 8 GiB of RAM and a 100 GB qcow2 sat allocated for a guest
-# nothing drives. The hypervisor role stays for the monthly etcd restore drill.
+# The staging guest is retired: nothing drives it, so its 8 GiB of RAM and 100 GB qcow2 are
+# reclaimed. The hypervisor role stays for the monthly etcd restore drill.
 #
 # DECIDED: reap the domain from install.yml rather than leave it to teardown.yml. teardown.yml
 # runs only when has_hypervisor goes false, and that flag stays TRUE on daniel-server for the
@@ -91,10 +89,10 @@ hypervisor_retired_staging_vm_xml: "{{ hypervisor_net_source_dir }}/{{ hyperviso
 # the guest — nothing consults staging any more — so these are reap targets, named here because
 # both reap_staging.yml and teardown.yml remove them by path.
 #
-# The key's public half moved to files/staging-gate-retired/, so the withdrawal task in
-# install.yml deauthorizes it on the next apply. Swapping the live file alone would have left the
-# key authorized forever: `authorized_key` here runs `state: present` with `exclusive` false, so
-# it only ever ADDS. That directory is the other half of every rotation this role has done.
+# The key's public half lives in files/staging-gate-retired/, so the withdrawal task in
+# install.yml deauthorizes it on apply. Swapping the live file alone would leave the key
+# authorized forever: `authorized_key` here runs `state: present` with `exclusive` false, so
+# it only ever ADDS.
 hypervisor_retired_staging_gate_repo: /home/ubuntu/server-staging
 hypervisor_retired_staging_gate_lock: /var/lock/staging-gate.lock
 hypervisor_retired_staging_gate_dispatch_path: /usr/local/bin/staging-gate-dispatch
@@ -102,8 +100,8 @@ hypervisor_retired_staging_gate_runner_path: /usr/local/bin/staging-gate-run
 
 # ── The etcd restore drill guest ─────────────────────────────────────────────────────────
 #
-# A THROWAWAY guest that exists only while a FULL etcd restore drill runs in it (issue #1175,
-# path 1). `scripts/backup/etcd_restore_drill.sh` restores the newest off-box snapshot into a
+# A THROWAWAY guest that exists only while a FULL etcd restore drill runs in it.
+# `scripts/backup/etcd_restore_drill.sh` restores the newest off-box snapshot into a
 # scratch data-dir and reads the object graph back — but `k3s server --cluster-reset` assumes it
 # is the only k3s on the host, and on daniel-box every workaround found the next thing it assumes
 # (five structural failures, listed in that script's header). A guest with no k3s of its own has
@@ -121,7 +119,7 @@ hypervisor_retired_staging_gate_runner_path: /usr/local/bin/staging-gate-run
 # pruned at hypervisor_etcd_drill_log_retention_days.
 #
 # Sizing: the drill runs one API server against one restored etcd (~8 MB compressed snapshot) and
-# nothing else — no kubelet, no CNI, no pods. Measured on daniel-box 2026-08-22 at 6 s of CPU for
+# nothing else — no kubelet, no CNI, no pods. Measured on daniel-box at 6 s of CPU for
 # the restore stage. 2 GiB / 2 vCPU / 20 G is generous; the cloud image itself needs ~2.5 G.
 hypervisor_etcd_drill_armed: true
 # The cadence (`etcd_drill_full_cron`) and the Kuma deadline derived from it
@@ -158,15 +156,15 @@ hypervisor_etcd_drill_runner_path: /usr/local/bin/etcd-restore-drill-vm
 # says why the snapshot is fetched with curl and drilled as a local file.
 hypervisor_etcd_drill_guest_script_path: /usr/local/lib/etcd-drill-guest-run.sh
 # scripts/backup/etcd_restore_drill.sh, installed by the role from the checkout it runs from.
-# The orchestrator used to read it straight out of /home/<user>/server, so a cron depended on
-# whatever that checkout happened to hold — and a hand run from a worktree drilled the OLD
-# script while the new one sat beside it (2026-09-11). Installing it makes the apply the one
-# thing that changes what the drill runs, the same as every other file the role ships.
+# Reading it straight out of /home/<user>/server would make the cron depend on whatever that
+# checkout holds, and a hand run from a worktree would drill the OLD script. Installing it makes
+# the apply the one thing that changes what the drill runs, the same as every other file the
+# role ships.
 hypervisor_etcd_drill_script_path: /usr/local/lib/etcd-restore-drill.sh
 # Read by the orchestrator, copied INTO the guest as /etc/rancher/k3s/etcd-s3.env for the drill's
 # run, and deleted with the guest. 0600 root: these are the R2 write credentials for the bucket
 # that also holds every Longhorn backup — the same residency daniel-box already carries in
-# /etc/rancher/k3s/etcd-s3.env, now on this host too because the drill has to fetch its snapshot
+# /etc/rancher/k3s/etcd-s3.env, and on this host too because the drill has to fetch its snapshot
 # from somewhere and the guest cannot reach daniel-box through the fence. The token the guest also
 # needs is this host's own K3S_TOKEN from the k3s-agent unit's env file: k3s writes the same value
 # to server/token and server/node-token when no --agent-token is set, and the join copied
@@ -179,7 +177,7 @@ hypervisor_etcd_drill_kuma_env: /etc/homelab/etcd-drill-kuma-push.env
 # pinned to daniel-box's copy); the Kuma push is the alarm, this is the local record.
 hypervisor_etcd_drill_stamp_dir: /var/lib/etcd-restore-drill
 hypervisor_etcd_drill_log_dir: /var/log/etcd-restore-drill
-# Longer than the issue's 1-year budget by a margin, so the evidence of the last pass is still
+# Longer than a year, so the evidence of the last pass is still
 # on disk for the whole window an operator might ask "when did this last work".
 hypervisor_etcd_drill_log_retention_days: 400
 # One run at a time. A second `virsh create` of the same transient name fails anyway, but failing
@@ -201,8 +199,8 @@ hypervisor_etcd_drill_fence_probe_timeout: 6
 # out at once (6 x 6 s) with ssh setup on top, because the leg runs outside the orchestrator's
 # RUN_TIMEOUT and a wedged dial would otherwise hang the monthly cron.
 hypervisor_etcd_drill_fence_deadline: 90
-# The Service-CIDR target: Longhorn's frontend Service, the thing actually found exposed from
-# the guest on 2026-08-28 — answering unauthenticated on this ClusterIP with a mutating
+# The Service-CIDR target: Longhorn's frontend Service, the thing known to be exposed from
+# the guest — answering unauthenticated on this ClusterIP with a mutating
 # `diskUpdate` action in its payload.
 #
 # DECIDED: an allocated address written here rather than a pinned one from the inventory.

@@ -1,13 +1,13 @@
 """Guards on `ops_cron_host` — the single-host gate in `initial_setup/tasks/crons.yml`.
 
-Thirteen tasks there installed the repo-level ops crons behind `inventory_hostname ==
-'daniel-box'`, so moving those crons to another host meant editing thirteen literals and the
-page that documents them (#2861). One variable makes it one edit.
+Thirteen tasks there install the repo-level ops crons behind one variable instead of an
+`inventory_hostname == 'daniel-box'` literal, so moving those crons to another host is one
+edit.
 
 WHERE THE VARIABLE LIVES IS PART OF THE GUARD. `scripts/deploy_tools/land_reach.py:_eval_when`
 resolves a gate against `group_vars/all.yml` + `host_vars` only, and returns "every host"
 for a name it cannot resolve. Moved to the role's `defaults/`, this gate would put the
-over-broad verdict of issue #2073 back on every change to this file.
+over-broad verdict back on every change to this file.
 
 THE CENSUS GLOBS FOR ITS OWN SUBJECT, so KNOWN_GATED_TASKS names members it must find: a
 rename that emptied the census would pass the literal assertion over nothing.

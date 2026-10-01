@@ -1,9 +1,8 @@
 """The release record's rollout expectation, rendered the way Ansible renders it.
 
 Shared by the two test modules that pin `release_stamp.yml`'s `rollouts[]` decision:
-`k8s/test_release_stamp_rollout_expectation.py` (the shared restart, #1867 and #1988) and
-`k8s/test_self_rollouts_follow_the_apply.py` (the two roles that roll their own workloads,
-#1902 and #1994). The expression is rendered through Ansible's own filters and tests against
+`k8s/test_release_stamp_rollout_expectation.py` (the shared restart) and
+`k8s/test_self_rollouts_follow_the_apply.py` (the two roles that roll their own workloads). The expression is rendered through Ansible's own filters and tests against
 fake registers, one append per loop target, exactly as the play accumulates it.
 """
 

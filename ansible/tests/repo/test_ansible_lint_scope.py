@@ -1,17 +1,16 @@
 """Guard: prek's ansible-lint scope must never hand ansible-lint a file `.ansible-lint` excludes.
 
 `exclude_paths` in `.ansible-lint` is honoured when ansible-lint WALKS the tree, and ignored for
-files named explicitly on the command line. Verified 2026-08-14: `ansible-lint -c .ansible-lint
+files named explicitly on the command line. `ansible-lint -c .ansible-lint
 .github/workflows/ci.yml` lints that file happily, reporting "1 files processed", despite
 `.github/` sitting in exclude_paths.
 
-That did not matter while the prek hook ran with `pass_filenames = false` and let ansible-lint do
-its own walking. It matters now: the hook passes filenames, so prek's `files`/`exclude` regexes
+That matters because the prek hook passes filenames, so prek's `files`/`exclude` regexes
 are the ONLY thing keeping an excluded file out of the lint. Two lists, one intent, and drift
 between them is silent in the direction that hurts — widen `files` (or drop an `exclude`) and
 excluded files start being linted, producing failures whose cause points nowhere near the change
 that caused them. The vendored `ansible/collections/` changelog YAMLs are the live example: they
-trip `yaml[indentation]`, and today they stay out only because they are gitignored AND the regex
+trip `yaml[indentation]`, and they stay out only because they are gitignored AND the regex
 is scoped to what prek tracks.
 
 This is the same class of drift test_prek_pytest_always_runs.py addresses, though that one
@@ -88,9 +87,9 @@ def test_ansible_lint_hook_passes_filenames_serially() -> None:
     """The two settings the scope guard above depends on, asserted so they can't quietly revert.
 
     `pass_filenames` is what makes prek's regexes load-bearing at all. `require_serial` is what
-    stops prek sharding the list across parallel invocations — measured 2026-08-14 at 16 batches
-    for a full run, each re-running the hook's `ansible-galaxy install` and paying ansible-lint's
-    startup again, which made `--all-files` slower (43.8s) than the walk it replaced (37.0s).
+    stops prek sharding the list across parallel invocations — measured at 16 batches for a
+    full run, each re-running the hook's `ansible-galaxy install` and paying ansible-lint's
+    startup again, which made `--all-files` slower (43.8s) than the walk (37.0s).
     """
     hook = _ansible_lint_hook()
     assert hook.get("pass_filenames") is True, (

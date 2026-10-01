@@ -3,8 +3,8 @@
 
 WHY THIS EXISTS. PyYAML's `safe_load` uses a parser written in Python, and this repo
 parses a lot of YAML: every guard that renders the k8s tree, every validator that reads
-`roles/**/tasks/*.yml`, every test that loads a manifest. Measured 2026-09-03 over the
-184 `ansible/**/tasks/*.yml` files, warm, the two parsers differ by 10x:
+`roles/**/tasks/*.yml`, every test that loads a manifest. Measured over the 184
+`ansible/**/tasks/*.yml` files, warm, the two parsers differ by 10x:
 
     yaml.safe_load (pure Python):   0.42s
     yaml.load(..., CSafeLoader):    0.04s

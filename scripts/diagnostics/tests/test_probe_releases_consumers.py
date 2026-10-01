@@ -1,4 +1,4 @@
-"""A shared k8s role makes only its consumers stale (#2504).
+"""A shared k8s role makes only its consumers stale.
 
 The other staleness rules narrow by path SHAPE and live in `test_probe_releases_stale.py`;
 `test_probe_releases_check_mode.py` holds the one that reads a diff. This one narrows by the
@@ -24,9 +24,7 @@ from _release_fixtures import (
 _SHARED = frozenset({"game-stats-lib", "manifests"})
 
 # terraria-stats reaches game-stats-lib by name, the way every live consumer of a shared role
-# does. sonarr reaches only the renderer. (Before #2813 merged the three roles, the reach here
-# was an `import_tasks` of the sibling role's file by path; `lib.k8s_roles` stopped walking
-# that form in #2876, once no role had used it for a release.)
+# does. sonarr reaches only the renderer.
 _CONSUMER_TASKS = """\
 - name: Stage the shared stats module
   ansible.builtin.include_role:
@@ -67,10 +65,10 @@ def _repo_with_a_shared_library(tmp_path, before, after):
 
 
 def test_a_shared_librarys_files_change_marks_only_the_roles_that_stage_it(tmp_path):
-    """PR #2503's red proof: `game-stats-lib/files/` reaches two services, not the fleet.
+    """Red proof: `game-stats-lib/files/` reaches two services, not the fleet.
 
     Left fleet-wide, `Release Staleness Drift` stays DOWN listing every service for a file
-    none of them embeds, and no deploy tag can clear it (#2504).
+    none of them embeds, and no deploy tag can clear it.
     """
     stale = _repo_with_a_shared_library(tmp_path, "VERSION = 1\n", "VERSION = 2\n")
     assert sorted(stale) == ["terraria-stats", "valheim-stats"]
@@ -99,7 +97,7 @@ def test_a_shared_role_nothing_reaches_stays_fleet_wide(tmp_path):
 
     The repo here holds no tasks file naming `image-builder`, so its consumer set is empty --
     and sonarr, which embeds nothing of it, must still read stale. That posture is what keeps
-    a derivation this reader cannot make into a visible flag instead of a false GREEN (#947).
+    a derivation this reader cannot make into a visible flag instead of a false GREEN.
     """
     repo = tmp_path / "repo"
     _init_repo(repo)

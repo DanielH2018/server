@@ -4,31 +4,30 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # `domain` is inherited from SOPS (secrets.yml → daniel-hunter.com), exactly like
 # daniel-server — the Pi carries no host-specific override. The only domain consumer
 # here is wg-easy's WG_HOST (wireguard.daniel-hunter.com — the one hostname with a DNS
-# record at the public IP; verified resolving). A former `domain: daniel-pi.com` override
-# was removed 2026-06-11: that zone does not resolve, and it was only harmless because the
-# SOPS value shadowed it (un-shadowed it would have broken the VPN endpoint). To give a
-# future Pi-exposed service a "daniel-pi" hostname, use a `pi.`-prefixed subdomain of the
+# record at the public IP). A host-specific `domain: daniel-pi.com` override would be wrong:
+# that zone does not resolve, and the SOPS value is what keeps it out of the VPN endpoint. To
+# give a future Pi-exposed service a "daniel-pi" hostname, use a `pi.`-prefixed subdomain of the
 # working zone (e.g. glances.pi.daniel-hunter.com — real DNS via cloudflare-ddns), not a
 # separate daniel-pi.com zone.
 # Escalation-prompt budget for a 456 MB Zero 2 W. ansible-core's ssh plugin waits
 # `2 + timeout` seconds for sudo's prompt (plugins/connection/ssh.py, "Timeout (%ds) waiting
 # for privilege escalation prompt"), and `timeout` defaults to 10 — so a sudo that takes
-# longer than 12 s to prompt reads as UNREACHABLE, not as slow (#1747). Measured 2026-09-11
-# 01:10 UTC with every container in its limit (alloy 30 MiB of 96): 456 MB total, 308 used,
+# longer than 12 s to prompt reads as UNREACHABLE, not as slow. Measured with every container
+# in its limit (alloy 30 MiB of 96): 456 MB total, 308 used,
 # 148 available, 319 MB of swap in use on the SD card, load average 1.21 — the host daemons
 # (alloy, dockerd, containerd, node_exporter) hold the RAM, and sudo pages in behind them.
 # 30 s (32 s at the prompt) is four times the observed floor and still fails fast. This is the
 # per-host spelling of `[defaults] timeout`; there is no become-specific timeout var in the
 # pinned core. A retry loop is the wrong shape: the wait is the whole cost.
 ansible_ssh_timeout: 30
-# No GitOps auto-deploy path to the Pi (accepted, 2026-06-30) — memory-constrained and driven
+# No GitOps auto-deploy path to the Pi (accepted) — memory-constrained and driven
 # manually over SSH. See gitops_deploy CLAUDE.md.
-# Kept explicit even though group_vars/all.yml now defaults it false: the deployer's own refusal
+# Kept explicit even though group_vars/all.yml defaults it false: the deployer's own refusal
 # (`deploy_inventory.declares_no_gitops`) greps THIS file's text for a top-level
 # `has_gitops: false` and fails open when the key is absent, so deleting the line would disarm
-# the code-side half of the gate a stale payload tripped in #1733.
+# the code-side half of the gate.
 has_gitops: false
-# The only Docker host left after the 2026-08-14 k3s migration, so this is the one host that
+# The only Docker host, so this is the one host that
 # opts IN to the engine (group_vars/all.yml defaults it false). Every service in
 # containers_list below runs on it.
 has_docker: true
@@ -41,7 +40,7 @@ has_raspi_kernel: true
 # optimize_pi masks rsyslog here (journald is the log of record; rsyslog's text logs landed in
 # the RAM-backed log2ram tmpfs), so initial_setup must not render its rsyslog filter or
 # notify `Restart rsyslog` -- a masked unit fails that handler and the recap reads failed=1
-# for a run whose changes are all live (#1946). See group_vars/all.yml for the default.
+# for a run whose changes are all live. See group_vars/all.yml for the default.
 has_rsyslog: false
 # Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (optimize_pi) can't add
 # real capacity, so heavy one-shot apt/dpkg steps (apt-show-versions cache build, `upgrade: dist`,
@@ -55,15 +54,14 @@ pi_swapfile_size: 1G
 # the journal) and 13% CPU PSI at idle. Templates fall back to their own defaults where
 # this is unset (the server keeps 10s/30s).
 container_healthcheck_interval: 60s
-# Wide timeout and retries on the same board, for the same reason autoheal lost its own
-# probe (#1789, #1910): a Pi deploy's memory thrash (load1 8-17, PSI full 20-25% in every
-# window measured over the 20 days to 2026-09-17) stalls a `wget`/`pgrep` exec through runc
+# Wide timeout and retries on the same board: a Pi deploy's memory thrash (load1 8-17, PSI
+# full 20-25% in every window measured over 20 days) stalls a `wget`/`pgrep` exec through runc
 # past a 5-10s timeout — and past Docker's 30s default — three times running. The container
 # reads `unhealthy`, autoheal restarts it, and the `start` half can fail at the OCI runtime
 # ("Timeout waiting for systemd to create scope"), leaving it Exited until pi-recovery-health
 # starts it. An exec that eventually returns is not a failure; 60s covers the stalls seen and
 # 5 retries cover a window that outlasts one. wg-easy reads them too, over the probe its
-# image ships (its compose block carries timing and no `test:`, #1921). Templates fall back
+# image ships (its compose block carries timing and no `test:`). Templates fall back
 # to their own values (5-10s, 3) where these are unset. Detection latency worst-case =
 # 5 x (60s interval + 60s timeout)
 # = 10 min, against a 5-min Kuma monitor from outside for wg-easy — the reason a
@@ -72,8 +70,7 @@ container_healthcheck_interval: 60s
 container_healthcheck_timeout: 60s
 container_healthcheck_retries: 5
 containers_list:
-  # Read-only Docker socket proxy — serves Alloy's docker_sd log discovery (glances read it too
-  # until it retired 2026-09-18);
+  # Read-only Docker socket proxy — serves Alloy's docker_sd log discovery;
   # the hardcoded docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.
   - name: docker-proxy
     use_authelia: false
@@ -90,39 +87,15 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
-  # glances retired 2026-09-18 (#2004). It held 66 MB of anonymous memory (7 MB resident,
-  # 59 MB in zram) on a 456 MB board that keeps 10-25 MB free — the largest single zram
-  # tenant — plus a containerd shim, for load/memory/disk facts node_exporter already
-  # exports on the `node-pi` scrape job. Its last reader, monitor-bridge's Pi Pressure
-  # check, reads those series now (PR #2038); its Kuma HTTP monitor went with it. Container
-  # and image removed by hand at retire time, like dozzle below. The role is in git history
-  # only (#2385 deleted the archive).
-  # dozzle retired 2026-08-29. It was a live-tail UI for container logs, and promtail has
-  # shipped this host's container logs to loki-homelab since the slice-7 work — so Grafana
-  # already answers what dozzle answered, with history dozzle never had. What it still cost
-  # was ~15 MiB of a 456 MB board (9.3 MiB RSS plus its ~6 MiB containerd-shim), on a host
-  # measured at 8% sustained full memory stall, where that shim tax is the only lever left
-  # short of removing a container. This contradicts the marker in
-  # the retired portainer-agent role's CLAUDE.md ("dozzle stays … dozzle is 6 MB, a
-  # nicer merged live-tail"): it is 9.3 MiB now, and the log path it was kept ahead of has
-  # since been built. Its container and image were removed from the Pi imperatively at
-  # retire time; nothing in Ansible recreates them. The role is in git history only.
-  # portainer-agent retired 2026-08-09 with the server's Portainer (slice-7 Phase B, design
-  # decision 4). Its host artifacts — /etc/portainer-agent-firewall.sh, the systemd oneshot,
-  # and the DOCKER-USER rules for :9001 — were removed imperatively at retire time; nothing
-  # in Ansible recreates them. The role is in git history only.
   - name: autoheal
     use_authelia: false
     networks:
       # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
       - lifecycle
-  # Host metrics for the central Prometheus are NOT a container here since 2026-09-18:
-  # node_exporter runs as a host unit from roles/setup/optimize_pi (section 10), on the same
-  # LAN IP and port 9100 the container published, so the cluster's `node-pi` scrape job did
-  # not move (#2005; the container role is in git history only). The Pi's history
-  # still holds: until node-exporter landed here the Pi contributed no time series at all —
-  # the cluster `node` scrape job uses pod discovery, so it covers the two k3s nodes and
-  # structurally cannot reach a host that runs no kubelet.
+  # Host metrics for the central Prometheus are NOT a container here: node_exporter runs as a
+  # host unit from roles/setup/optimize_pi (section 10), on the LAN IP and port 9100 the
+  # cluster's `node-pi` scrape job reads. The cluster `node` scrape job uses pod discovery, so
+  # it covers the two k3s nodes and structurally cannot reach a host that runs no kubelet.
   #
   # NOTE for whoever adds the next node-exporter host: check_disk and check_mem scan every
   # origin reporting node_*, and this host is excluded from both (HOST_METRIC_ORIGIN_EXCLUDE
@@ -137,7 +110,6 @@ containers_list:
   # template and the cap is 96M; if the measured RSS sits near the cap rather than near
   # 48 MiB, this host cannot afford a log shipper and the right answer is a syslog forwarder,
   # not a bigger limit. Host logs are deliberately NOT shipped: rsyslog is inactive here.
-  # Grafana Alloy since 2026-09-02 (Promtail reached end of life on 2026-03-02).
   - name: alloy
     port: 12345
     use_authelia: false

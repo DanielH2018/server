@@ -15,7 +15,7 @@ import sys
 # `scripts/diagnostics` is deliberately absent from `pythonpath` in pyproject.toml, so each test
 # here puts its own parent directory on `sys.path` — the same insert its siblings carry. Without
 # it this module imported only when a sibling that HAS the insert happened to be collected first,
-# which held for the whole suite and broke the moment CI sharded it (#1270).
+# which held for the whole suite and broke the moment CI sharded it.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ui_login
@@ -311,10 +311,10 @@ def test_totp_parameters_match_the_seeding_task():
 
 # --- the remint hints must name the unattended path ----------------------------------
 
-# Both tiers mint without a typed code since `claude-ui` arrived. A hint still naming
-# `--totp <code>` is not merely stale — it sends the reader to a phone to solve a problem a
-# flag solves, which is the exact failure the dedicated identity was added to remove. These
-# strings are the only place a person meets that instruction, so they get a guard.
+# Both tiers mint without a typed code. A hint still naming `--totp <code>` is not merely
+# stale — it sends the reader to a phone to solve a problem a flag solves, which is the
+# exact failure the dedicated identity was added to remove. These strings are the only
+# place a person meets that instruction, so they get a guard.
 
 
 def test_the_two_factor_hint_names_the_unattended_flag():

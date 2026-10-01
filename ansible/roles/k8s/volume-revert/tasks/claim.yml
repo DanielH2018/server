@@ -10,8 +10,8 @@
 # multi-claim service (tdarr, code-server) claim 2's own checks run AFTER claim 1 has already
 # scaled the Deployment to zero, so "before the scale-down" bounds each claim's own failure, not
 # the service's overall replica count — see CLAUDE.md. A step that fails after ITS OWN scale-down
-# leaves the service down AND unreverted, which is worse than never having tried. Measured
-# 2026-08-21 on `speedtest-config`, Longhorn v1.12.1: a revert with the frontend enabled returns
+# leaves the service down AND unreverted, which is worse than never having tried. On
+# Longhorn v1.12.1 a revert with the frontend enabled returns
 # HTTP 500 `failed to revert snapshot for volume ... with frontend enabled`, and a revert on a
 # plainly detached volume returns 500 because no engine is running. Maintenance mode — attached
 # with `disableFrontend: true` — is the only state that works.
@@ -26,7 +26,7 @@
 - name: Resolve the Longhorn volume backing {{ volume_revert_claim }}
   tags: [deploy]
   # argv, not a folded `cmd:` string. `ansible.builtin.command` shlex-splits a `cmd`, which
-  # silently tears any argument containing a space in half — how slice 4's gate never ran.
+  # silently tears any argument containing a space in half.
   ansible.builtin.command:
     argv:
       - k3s
@@ -84,7 +84,7 @@
 - name: List the snapshots taken by this deploy of {{ volume_revert_claim }}
   tags: [deploy]
   # Filtered by volume in the jsonpath and by name in Jinja, because kubectl's jsonpath has no
-  # `&&` — verified 2026-08-21, `unrecognized character in action: U+0026`. The volume filter is
+  # `&&` — `unrecognized character in action: U+0026`. The volume filter is
   # the one comparison it can express; the name prefix and markRemoved are filtered below.
   #
   # `{range ...}` over `.items`, never an indexed `[0]`: an indexed jsonpath against a
@@ -111,7 +111,7 @@
   # lexicographically by wall-clock only while the format never changes, and a sort that is
   # right by accident is how a rollback restores the wrong recovery point.
   #
-  # `markRemoved` snapshots are rejected outright. Measured 2026-08-21: a snapshot already
+  # `markRemoved` snapshots are rejected outright: a snapshot already
   # markRemoved cannot be reverted to, and a retention pass racing a rollback is exactly how the
   # newest becomes one. `ne 'true'` rather than `equalto 'false'`: a snapshot read moments after
   # creation can have the field unpopulated, and not-removed is the correct read of an empty
@@ -130,7 +130,7 @@
 
 - name: Fail when no snapshot matches this deploy for {{ volume_revert_claim }}
   tags: [deploy]
-  # The fail-open direction is the bug this slice exists to close: a rollback that finds no
+  # The fail-open direction is the bug this role exists to close: a rollback that finds no
   # snapshot and proceeds redeploys the old manifests against migrated data. There is no
   # `failed_when: false` here and there must never be one.
   #
@@ -297,8 +297,8 @@
   tags: [deploy]
   when: not (k8s_no_mutate | bool)
   # This is a precondition, not a formality. A revert against an attached volume whose frontend
-  # is live returns HTTP 500 `failed to revert snapshot for volume ... with frontend enabled` —
-  # measured 2026-08-21 — and by then the workload is already at zero replicas. Checking the
+  # is live returns HTTP 500 `failed to revert snapshot for volume ... with frontend enabled`,
+  # and by then the workload is already at zero replicas. Checking the
   # flag here converts that late failure into an early one, with the service in the same state
   # either way but the message naming the real cause.
   ansible.builtin.assert:

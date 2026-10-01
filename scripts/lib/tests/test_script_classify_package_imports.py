@@ -1,8 +1,7 @@
 """A module its own package imports is a library, however the package spells the import.
 
-Three shapes reached `docs/reference/scripts.md` as "no automated caller in the tree", and none
-of the thirteen modules could be run at all — not one has an `if __name__ == "__main__"` guard
-(#3020):
+Three shapes read as "no automated caller in the tree" on `docs/reference/scripts.md` for
+modules that cannot be run at all, because none has an `if __name__ == "__main__"` guard:
 
 - a relative import, `from .citations import Citation` in `scripts/lib/facts/atoms.py`;
 - an absolute import naming the importer's OWN package directory,
@@ -10,7 +9,7 @@ of the thirteen modules could be run at all — not one has an `if __name__ == "
   against `scripts/dev` and not against `scripts/`;
 - a module whose only importers are its tests, `grafana_panel_report.py`.
 
-A fourth shape followed (#2860): a role's tasks naming a guardless module to ship it into an
+A fourth shape: a role's tasks naming a guardless module to ship it into an
 image, `obs_api.py`, which read as a deploy-time gate.
 
 The synthetic cases below are the red proof for each shape. `test_the_real_tree_*` is the

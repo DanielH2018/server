@@ -14,11 +14,11 @@ def _fake_loki(lines):
 
 
 # Loki's own rejection of a `limit` above `max_entries_limit_per_query`: HTTP 400 with this
-# plaintext body, which `curl -sS` returns with exit 0. Copied from a live 2026-09-17 call.
+# plaintext body, which `curl -sS` returns with exit 0. Copied from a live call.
 LOKI_OVER_CAP_BODY = "max entries limit per query exceeded, limit > max_entries_limit_per_query ({limit} > {cap})"
 
 # The two-day log is dated back from this epoch and the tests hand the same one to
-# `run_alerts`, so each row sits a known number of hours inside or outside the window (#2158).
+# `run_alerts`, so each row sits a known number of hours inside or outside the window.
 NOW = 1_780_000_000.0
 
 

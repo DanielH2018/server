@@ -7,9 +7,9 @@
 # Why a stop/upgrade/recreate cycle rather than an in-place upgrade: live-restore keeps
 # containers running across a dockerd restart, but a containerd.io upgrade replaces the
 # containerd shim binary under every running container, and a docker.socket restart gives
-# /var/run/docker.sock a new inode that a container bind-mounting the FILE never sees. On
-# 2026-09-18 the dist-upgrade did both on daniel-pi: autoheal's shim died and docker-proxy
-# sat unhealthy (503) until a hand redeploy recreated it (#1961). Stopping the projects
+# /var/run/docker.sock a new inode that a container bind-mounting the FILE never sees. A
+# dist-upgrade does both: autoheal's shim dies and docker-proxy sits unhealthy (503) until a
+# redeploy recreates it. Stopping the projects
 # first means no shim is live when dpkg swaps it; the forced recreate afterwards gives every
 # container the new socket.
 #
@@ -35,9 +35,9 @@
   # The hold is released before the containers stop, because the pending check needs it
   # released: it is the apt module's own check mode, whose `changed` is the module's verdict
   # on whether installing the pinned versions would change anything. A held package reads as
-  # current. The pins are docker_install_package_specs (defaults/main.yml, #2153): "pending"
+  # current. The pins are docker_install_package_specs (defaults/main.yml): "pending"
   # means the host is not at the pin, never "download.docker.com has something newer" -- that
-  # signal is Renovate's PR now. A pin BELOW the installed version fails at the upgrade task
+  # signal is Renovate's PR. A pin BELOW the installed version fails at the upgrade task
   # (apt refuses a downgrade without allow_downgrade), which is the right verdict for a pin
   # nobody meant to lower.
   # `always:` re-holds on every exit, so a no-op run, a failed apt run and a good one all
@@ -104,7 +104,7 @@
 - name: Recreate every Compose project on the upgraded engine
   # `recreate: always`, not `auto`: the compose config-hash did not change, so `auto` would
   # only start the stopped containers -- and the one that bind-mounts the daemon socket would
-  # come back holding the old inode. This is the recreate the incident needed by hand.
+  # come back holding the old inode.
   community.docker.docker_compose_v2:
     project_src: "/home/{{ sys_user }}/server/containers/{{ item.name }}"
     state: present

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """The two renderings of the service catalogue: the MkDocs page and the standalone HTML.
 
-Split out of ``scripts/docs/service_catalog.py`` on 2026-09-04. Both read the same rows —
-``build_rows`` in the generator stays the only place that reads the tree — so a fact can never
-differ between the page and the artifact. The provenance banner and the prose still name
-``scripts/docs/service_catalog.py``, because that is the file a reader has to open to find the
-FIELD NOTES those sentences point at.
+Both read the same rows — ``build_rows`` in the generator stays the only place that reads the
+tree — so a fact can never differ between the page and the artifact. The provenance banner and
+the prose still name ``scripts/docs/service_catalog.py``, because that is the file a reader
+has to open to find the FIELD NOTES those sentences point at.
 """
 
 import sys as _sys

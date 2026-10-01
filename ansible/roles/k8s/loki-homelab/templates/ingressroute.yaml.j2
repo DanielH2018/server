@@ -3,10 +3,9 @@
 {# monitoring_route, not ingressroute(): a LogQL client can't 302-dance through Authelia, so the
    ClientIP guard is the gate, as on every monitoring route. LAN-only by construction.
 
-   The caller list this comment used to give — promtail's pusher, terraria-stats, monitor-bridge,
-   homelab-mcp — was already wrong: all of them reach Loki on the ClusterIP
-   (loki-homelab.<ns>.svc.cluster.local:3100), not through this route. As of 2026-08-24 the ONLY
-   caller here is probe.py, which runs on a host rather than in a pod. See below. #}
+   The in-cluster callers (the log shipper, terraria-stats, monitor-bridge, homelab-mcp) reach
+   Loki on the ClusterIP (loki-homelab.<ns>.svc.cluster.local:3100), not through this route.
+   The ONLY caller here is probe.py, which runs on a host rather than in a pod. See below. #}
 {{ monitoring_route(
     container_item.name,
     container_item.hostname | default(container_item.name),

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Every consumer of `claude_cgroup_*` must name a metric the writer actually emits.
 
-Issue #1258 added the two consumers: monitor-bridge's `with_claude_cgroups` arm and the
+The two consumers are monitor-bridge's `with_claude_cgroups` arm and the
 `AI/claude-code-host-cgroups` Grafana board. Both select by metric name across a tree boundary —
 the names are written by `roles/setup/claude_code/files/claude-cgroup-metrics.sh` — and a
 name-based selector that stops matching returns an EMPTY vector rather than an error. The board
 then renders "No data" behind a healthy Grafana pod, and the alert arm's third verdict is the only
-thing standing between that and a silent green. `Apps/backups-b2-usage.json` sat in exactly that
-state for two weeks after kopia retired: the datasource resolved perfectly the whole time.
+thing standing between that and a silent green.
 
 THIS IS THE NON-VACUITY HALF of the red-proof pair in
 `roles/k8s/monitor-bridge/tests/test_check_claude_cgroups.py`. That file proves the verdict can go
@@ -40,7 +39,7 @@ BOARD = (
     / "claude-code-host-cgroups.json"
 )
 
-# The metric families PR #1251 shipped. Named rather than counted, so a writer that drops one
+# The metric families the writer ships. Named rather than counted, so a writer that drops one
 # fails with the name it dropped. Any consumer selector outside this set is a typo or a rename.
 EMITTED = frozenset(
     {
@@ -55,7 +54,7 @@ EMITTED = frozenset(
 
 # The `cgroup` label values the writer labels its series with. `claude-rc` is the one whose absence
 # the alert arm treats as a fault; `fleet` is the shared `user.slice` parent that carries the
-# fleet's single MemoryHigh/MemorySwapMax since #1264; `user-1000-slice` exists only once somebody
+# fleet's single MemoryHigh/MemorySwapMax; `user-1000-slice` exists only once somebody
 # has logged in since boot, so it is watched-when-present rather than required. The alert arm and
 # the board both select by metric rather than by cgroup, so a label added here is judged and graphed
 # the moment it reports — this set exists so that ADDING one is a decision somebody makes rather
@@ -78,10 +77,9 @@ def _writer_cgroup_labels() -> set[str]:
     """Every key the script assigns into its `CGROUPS` map, in either form.
 
     Both forms are read across the whole file rather than by slicing the `declare -A CGROUPS=(`
-    block: #1264 added a comment inside that block containing a `)`, and slicing to the first one
-    truncated the map to nothing — an empty set that a subset assertion would have passed. The
-    equality assertion at the call site is what caught it, which is the argument for asserting a
-    named set rather than a bound.
+    block: a comment inside that block containing a `)` would truncate a slice to nothing — an
+    empty set that a subset assertion would pass. That is the argument for asserting a named set
+    rather than a bound.
     """
     text = WRITER.read_text()
     literal = re.findall(r"^\s*\[([A-Za-z0-9_-]+)\]=", text, re.MULTILINE)
@@ -122,9 +120,8 @@ def test_the_alert_arm_selects_only_emitted_metrics():
 def test_the_board_selects_only_emitted_metrics_and_graphs_every_family():
     """Every family is graphed somewhere on the board — that is the point of the board.
 
-    The board exists because #1258 found six scraped families with no panel. Asserting the whole
-    set rather than "at least one panel" is what stops the board drifting back toward the state
-    the issue was filed about.
+    The board exists because a scraped family with no panel is invisible. Asserting the whole
+    set rather than "at least one panel" stops the board drifting back to that state.
     """
     exprs = _board_exprs()
     assert exprs, "the board declares no panel targets"

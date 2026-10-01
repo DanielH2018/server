@@ -1,14 +1,11 @@
-"""The setup-plane drift reader for hosts that run no manifest-prune-check (2026-08-29 M-10).
+"""The setup-plane drift reader for hosts that run no manifest-prune-check.
 
 THE GAP: manifest-prune-check.sh is installed by roles/setup/k3s/tasks/health-crons.yml, imported
 only from that role's main.yml, which k3s-bringup.yml asserts onto k3s_server_hosts. So it exists
-on daniel-box and nowhere else — while daniel-server renders the whole UPS shutdown chain. Live on
-2026-08-29: daniel-server had no /var/lib/homelab/setup-render-manifest.d at all, and its
-/etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28.
+on daniel-box and nowhere else — while daniel-server renders the whole UPS shutdown chain.
 
-THE REFUTED FIX, and why the tests below are shaped the way they are: adding the stamp to
-roles/setup/nut_host was vetted LAUNDERS, because it writes a fragment on a host with no reader. So
-every arm here is EXECUTED against a real fixture rather than asserted from the script's text —
+WHY THE TESTS ARE SHAPED AS THEY ARE: adding the stamp to roles/setup/nut_host alone would
+launder the finding, because it writes a fragment on a host with no reader. So every arm here is EXECUTED against a real fixture rather than asserted from the script's text —
 a shell library is only ever observed passing, and the accept half alone cannot tell a working
 arm from one that fires on nothing.
 """
@@ -26,7 +23,6 @@ _CHECK = _REPO / "ansible/roles/setup/initial_setup/templates/setup-drift-check.
 _CRONS = _REPO / "ansible/roles/setup/initial_setup/tasks/crons.yml"
 _GROUP_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _TILE = _REPO / "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
-# The cross-host set moved out of secret_rotation.py with the rest of the consumer routing.
 _CONSUMERS = _REPO / "scripts/secrets_mgmt/consumers.py"
 
 
@@ -70,8 +66,7 @@ def _source(path: Path) -> str:
 
     These scripts explain themselves at length, and the explanations name the very paths and
     calls the assertions below forbid or order — so a text search over the whole file matches
-    the prose and reports a defect that is not there. Same trap as the UPS watchdog's own guard
-    on 2026-08-29.
+    the prose and reports a defect that is not there.
     """
     return "\n".join(
         line
@@ -89,9 +84,8 @@ def _old_repo(tmp_path, permissive_system_config=False):
 
     The env pins every git config scope the fixture does not own, because the ownership tests
     below are decided by exactly those scopes. A `safe.directory = *` in the SYSTEM config makes
-    git accept any repo, which suppresses the refusal those tests are built on — that is not
-    hypothetical, it is how this pair failed on the GitHub runner while passing on a host with
-    no /etc/gitconfig. `permissive_system_config` reproduces the runner deliberately, so the
+    git accept any repo, which suppresses the refusal those tests are built on — a runner
+    with that config behaves differently from a host with no /etc/gitconfig. `permissive_system_config` reproduces the runner deliberately, so the
     neutralisation has a test of its own rather than being an unproven precaution.
     """
     repo = tmp_path / "repo"
@@ -125,7 +119,7 @@ def _old_repo(tmp_path, permissive_system_config=False):
     return repo, env
 
 
-# ── arm 3: the render-staleness arm, the one M-10 is about ────────────────────────────────────
+# ── arm 3: the render-staleness arm ────────────────────────────────────
 
 
 def test_a_current_render_is_clean(tmp_path):
@@ -155,7 +149,7 @@ def test_a_changed_template_is_reported_stale(tmp_path):
     tpl = repo / "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2"
     tpl.write_text("MONITOR x\n")
     stale_sha = _sha(tpl)
-    tpl.write_text("MONITOR x\nMONITOR y\n")  # the 2026-08-28 template change
+    tpl.write_text("MONITOR x\nMONITOR y\n")
     frag = f"ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2 {stale_sha}\n"
     got = _run_scan(tmp_path, rendered=[frag])
     assert "host-upsmon.conf.j2" in got["STALE"]
@@ -208,10 +202,9 @@ def test_an_absent_manifest_reads_as_unarmed_not_clean(tmp_path):
 
 
 def test_a_zero_byte_fragment_cannot_disarm_an_arm(tmp_path):
-    """L2, executed rather than grepped.
+    """Executed rather than grepped.
 
-    WHAT THIS DOES AND DOES NOT PROVE, because the distinction was measured rather than assumed:
-    the `-s` fragment guard is NOT what saves this case. Mutating it back to `-r` leaves both
+    WHAT THIS DOES AND DOES NOT PROVE: the `-s` fragment guard is NOT what saves this case. Mutating it back to `-r` leaves both
     assertions below passing, because an empty file contributes no lines either way and the
     ENTRY COUNTER is what turns "no lines" into an unarmed note. The counter is the load-bearing
     guard and this is its red-proof; `-s` is belt-and-braces and is pinned textually by
@@ -229,7 +222,7 @@ def test_a_zero_byte_fragment_cannot_disarm_an_arm(tmp_path):
 
 def test_the_tree_age_arm_reads_the_checkout(tmp_path):
     """arm 3 compares a render against the tree on THIS host, and a host without gitops-deploy
-    does not refresh that tree — daniel-server was 39 commits behind on 2026-08-17. A stale
+    does not refresh that tree. A stale
     checkout makes the stamp and the template agree, so the arm reads green exactly when the
     host is furthest behind. The age is reported so that cannot pass unnoticed."""
     repo, env = _old_repo(tmp_path)
@@ -263,9 +256,9 @@ def test_an_unreadable_checkout_is_a_fault_not_a_pass(tmp_path):
 # ── the arm under the uid it actually runs as ─────────────────────────────────────────────────
 #
 # The two tests above run git as the user that owns the fixture, which is the precise reason
-# they were green while the arm was dead. The cron runs as root against an ubuntu-owned
+# they would stay green while the arm is dead. The cron runs as root against an ubuntu-owned
 # checkout, git refuses on dubious ownership, and `2>/dev/null` hides the reason — so every
-# real run reported "cannot read the checkout" and the tile sat DOWN from the day it shipped.
+# real run would report "cannot read the checkout" and the tile would sit DOWN.
 # GIT_TEST_ASSUME_DIFFERENT_OWNER=1 is git's own hook for forcing that path without a second
 # uid, so the pair below can run unprivileged in CI.
 
@@ -275,8 +268,8 @@ def test_a_permissive_system_gitconfig_defeats_the_refusal(tmp_path):
 
     A `safe.directory = *` in the system config makes git accept a repo it would otherwise
     refuse, so the control below reports no refusal and the pair silently stops testing
-    anything. That is the shape of the CI failure on 2026-08-30: green on a host with no
-    /etc/gitconfig, red on the GitHub runner.
+    anything. That is the shape of a CI-only failure: green on a host with no
+    /etc/gitconfig, red on a runner that has one.
     """
     repo, env = _old_repo(tmp_path, permissive_system_config=True)
     env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
@@ -291,9 +284,8 @@ def test_a_foreign_owned_checkout_refuses_a_bare_git_read(tmp_path):
     """The CONTROL for the test below, and the red half of the pair.
 
     Without it, asserting that the helper returns an age under GIT_TEST_ASSUME_DIFFERENT_OWNER
-    proves nothing: an env var that silently did nothing would leave that test green for the
-    same bad reason the original pair was green. This pins the simulation by showing the bare
-    read — the code as it shipped — does fail.
+    proves nothing: an env var that silently did nothing would leave that test green for no good
+    reason. This pins the simulation by showing the bare read does fail.
     """
     repo, env = _old_repo(tmp_path)
     env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
@@ -308,8 +300,8 @@ def test_a_foreign_owned_checkout_refuses_a_bare_git_read(tmp_path):
 def test_the_tree_age_arm_reads_a_foreign_owned_checkout(tmp_path):
     """The accept half: under the same refusal the helper must still return an age.
 
-    This is the arm as the cron runs it. It fails against the pre-2026-08-30 helper, which
-    called git with no safe.directory exception.
+    This is the arm as the cron runs it. It fails against a helper that calls git with
+    no safe.directory exception.
     """
     repo, env = _old_repo(tmp_path)
     env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}

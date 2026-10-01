@@ -7,16 +7,8 @@ task burns every retry and FAILS the play. The dry run reports a red that says n
 the tree, and `.claude/rules/ansible.md` asks for a `--check` before touching production
 state — a tag that always fails under `--check` trains an operator to skip it.
 
-Measured 2026-09-22 (#2293): `ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig
---check --diff` failed at `Read the read-only ServiceAccount token` after 12 attempts and a
-minute of `delay: 5`, while the real run of the same tag passed with the token read
-succeeding first try.
-
-THE SCOPE IS TREE-WIDE, AND WAS NOT WHEN THIS FILE WAS WRITTEN. The #2293 version checked
-`setup/k3s/tasks/kubeconfig.yml` alone, because a census that read each task in isolation
-reported 19 more offenders and the note here said most of them should not be changed. That
-census was wrong, and #2305 is the correction: of the 20 retried command tasks outside
-kubeconfig, 12 already exclude check mode at a level a per-task read cannot see.
+THE SCOPE IS TREE-WIDE. A census that reads each task in isolation reports offenders that
+already exclude check mode at a level a per-task read cannot see:
 
   - Nine carry `when: not (k8s_no_mutate | bool)`, and
     `ansible/inventory/group_vars/all.yml:k8s_no_mutate` is defined as `ansible_check_mode or
@@ -29,12 +21,12 @@ kubeconfig, 12 already exclude check mode at a level a per-task read cannot see.
 
 `excludes_check_mode`, `importer_guards` and `walk_with_inherited_when` teach the predicate
 to see all three, which is what makes a tree-wide census honest rather than a demand for
-twelve wrong changes. The remaining eight are fixed in the same commit as this widening.
-Those three live in `_check_mode` because `test_conditional_register_consumers.py` asks
-the same questions of the same tasks — see its docstring for the class it catches (#2315).
+wrong changes. Those three live in `_check_mode` because
+`test_conditional_register_consumers.py` asks the same questions of the same tasks — see its
+docstring for the class it catches.
 
 TWO KINDS OF FIX, AND ONLY A HUMAN READING THE TASK SORTS THEM. `changed_when: false` does
-not: 19 of the 21 carry it, the waits included.
+not: the waits carry it too.
 
   - A **read of state that exists independently of this play** takes `check_mode: false` +
     `changed_when: false`. It runs for real under `--check` and writes nothing. Forced when a
@@ -81,11 +73,11 @@ KNOWN_RETRIED_COMMAND_TASKS = frozenset(
 )
 
 
-# The one fix in #2305 that carries no `retries`/`until`, so the census above cannot see it.
+# A fix that carries no `retries`/`until`, so the census above cannot see it.
 # `Point cluster DNS at Pi-hole first` compares this register's `stdout` in its `when:`, and
 # under `--check` that conditional errors before the retried probe further down coredns.yml is
 # ever reached — the tag fails whatever the retried task carries. Pinned by name here so a
-# revert reopens the tag loudly instead of silently. The general class is #2315.
+# revert reopens the tag loudly instead of silently.
 NON_RETRIED_READS_THAT_MUST_OPT_OUT = (
     (ROLES / "setup" / "k3s" / "tasks" / "coredns.yml", "Read the live Corefile"),
 )

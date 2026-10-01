@@ -55,14 +55,14 @@ def usage_error(args: list[str]) -> bool:
     ansible-playbook and hand its status out as the wrapper's own `DEPLOY_TAG_MISS`, while the
     locked and detached halves map it onto `DEPLOY_PLAYBOOK_FAILED` and tell the operator that
     changes applied before a failing task ARE live. Nothing ran at all -- argparse refused
-    before the first play (issue #3024). Asking the parser here answers it once, ahead of the
+    before the first play. Asking the parser here answers it once, ahead of the
     lock, for all three paths, and 64 is what `land.sh` exits on a bad argument too.
 
     `PlaybookCLI.parse()` parses and nothing else: it does not read an `-e @file`, open the
     playbook or touch inventory, so a run whose vars file exists only in the snapshot cannot be
-    refused here. Measured against the ansible-core in `uv.lock` on 2026-09-30 -- `-e
-    @/nonexistent.json`, a missing playbook path, `-i`, `--limit`, `--check` and `-vv` all
-    parse clean, and only a usage error exits 2.
+    refused here. Checked against the ansible-core in `uv.lock`: `-e @/nonexistent.json`, a
+    missing playbook path, `-i`, `--limit`, `--check` and `-vv` all parse clean, and only a
+    usage error exits 2.
 
     Ansible's parser prints its own usage and the offending argument to stderr as it refuses,
     which names the fault better than this wrapper could, so nothing is printed here.

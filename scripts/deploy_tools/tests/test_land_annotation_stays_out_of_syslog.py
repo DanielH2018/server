@@ -21,10 +21,7 @@ _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
 # call runs there, so it is the expected PWD rather than a forbidden one.
 _LAND_SH_CHECKOUT = _LAND_SH.resolve().parents[2]
 # The tree a landing is AIMED at, handed over as `LAND_PRIMARY`. A sentinel directory under
-# tmp_path, which cannot be any real checkout. Until issue #1268 this module instead asserted
-# that no gh call ran in the literal `/home/ubuntu/server`; from the primary checkout that path
-# IS `_LAND_SH_CHECKOUT`, so the test failed for anyone running `uv run pytest` from the repo
-# root while passing from every worktree and on CI, which checks out elsewhere.
+# tmp_path, which cannot be any real checkout.
 _SENTINEL_PRIMARY = "primary-under-test"
 
 
@@ -64,8 +61,8 @@ def _run_land(tmp_path: Path) -> subprocess.CompletedProcess[str]:
     primary.mkdir(exist_ok=True)
     env = {**os.environ, "PATH": path_with(bin_dir), "LAND_PRIMARY": str(primary)}
     # cwd is the stub tree, not the suite's own: land.sh's gh calls inherit the process cwd,
-    # so from a worktree the assertion below held for the wrong reason and from the primary
-    # checkout it failed, which broke the docs-refresh cron's commit on 2026-09-04.
+    # so from a worktree the assertion below would hold for the wrong reason and from the
+    # primary checkout it would fail.
     return subprocess.run(
         ["bash", str(_LAND_SH), "--pr", "939", "--arm-merge"],
         env=env,
@@ -101,7 +98,7 @@ def test_land_annotation_is_intercepted(tmp_path, logger_calls):
     # that DOES reach git is pinned by test_land_arm_merge_through_the_shim.py, which runs
     # that far. Stated positively, so it holds wherever this checkout sits: the only PWD any gh
     # call may have is land.sh's own repo root. A landing that cd'd into the `LAND_PRIMARY`
-    # sentinel, or anywhere else, fails here — and no hardcoded live path is involved (#1268).
+    # sentinel, or anywhere else, fails here — and no hardcoded live path is involved.
     gh_calls = (tmp_path / "gh-calls").read_text().splitlines()
     assert gh_calls, (
         "the gh stub recorded nothing, so this proves nothing about where it ran"

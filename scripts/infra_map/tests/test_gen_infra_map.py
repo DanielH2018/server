@@ -342,18 +342,14 @@ def test_load_roles_derives_ownership_from_the_role_trees():
     roles = g.load_roles()
     if not roles.container_owners:
         pytest.skip("role trees not present")
-    # node-exporter was the fixture until its role archived (2026-08-14, Phase F drain —
-    # it is a k8s DaemonSet now); autoheal is the same un-inventoried-companion shape.
+    # autoheal is an un-inventoried companion.
     assert roles.container_owners.get("autoheal") == "autoheal"
-    # Both are CronJob-only k8s roles. configarr used to qualify via its Docker
-    # compose declaring no container_name; that compose was deleted with the rest of
-    # the migrated roles' plumbing, so the classification is derived from the k8s
-    # manifests now — and pi-peer-backup, which the compose rule never saw, qualifies too.
+    # Both are CronJob-only k8s roles; the classification is derived from the k8s manifests.
     assert "configarr" in roles.batch_roles
     assert "pi-peer-backup" in roles.batch_roles
     # Roles whose templates hold no long-running workload at all: a route onto a
-    # chart-owned Deployment, a PVC, NetworkPolicies. All three sat in the map as
-    # "Missing · no deployment found" until 2026-09-01.
+    # chart-owned Deployment, a PVC, NetworkPolicies. None may read "Missing · no deployment
+    # found".
     for role in ("longhorn-ui", "media-volume", "netpol-baseline"):
         assert role in roles.batch_roles, role
     # And a DaemonSet-only role is a real workload the collector must find.
@@ -416,10 +412,9 @@ def test_place_on_nodes_is_empty_for_a_service_with_no_workloads():
 
 
 #
-# The bug these guard: daniel-server's Docker was uninstalled on 2026-08-14 and
-# its containers_list emptied, so inferring the plane from that list fell through
-# to "docker". The map then ssh-ed a healthy k3s agent for a binary that is gone
-# and rendered it as an unreachable Docker host, every 15 minutes.
+# What these guard: daniel-server has no Docker and an empty containers_list, so inferring
+# the plane from that list would fall through to "docker" and the map would ssh a healthy
+# k3s agent for a binary that is not there.
 
 
 def test_daniel_server_is_modelled_as_a_k3s_host_not_a_docker_one():

@@ -2,11 +2,11 @@
 
 Every homepage config file — `services.yaml`, `settings.yaml`, `widgets.yaml`, `custom.css` —
 reaches the pod as one key of the `homepage-config` Secret that `config-secret.yaml.j2` renders.
-The guards in this directory used to read `templates/config/*.j2` as text instead, and each one
-paid the same price: a Jinja template is not loadable YAML, so every guard hand-rolled a line
-scanner and pinned source literals (`{{ domain }}`, `{{ k8s_namespace }}`) that say nothing
-about what the pod ends up with. Rendered, the same files are ordinary YAML and CSS, so a guard
-asserts on the parsed document and a `fields:` list is a Python list rather than a regex group.
+A guard that read `templates/config/*.j2` as text would pay a price: a Jinja template is not
+loadable YAML, so it would hand-roll a line scanner and pin source literals (`{{ domain }}`,
+`{{ k8s_namespace }}`) that say nothing about what the pod ends up with. Rendered, the same files
+are ordinary YAML and CSS, so a guard asserts on the parsed document and a `fields:` list is a
+Python list rather than a regex group.
 
 The render itself comes from `_k8s_render.rendered_texts()`, which the whole suite shares — so
 reading the config here costs a YAML parse, not a second render of the tree.

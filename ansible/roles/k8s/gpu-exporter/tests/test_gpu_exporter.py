@@ -1,6 +1,6 @@
-"""The DRM sysfs GPU exporter (#1446).
+"""The DRM sysfs GPU exporter.
 
-The trees built here are copies of what the two nodes actually expose, measured 2026-09-10:
+The trees built here are copies of what the two nodes actually expose:
 daniel-box is `card1` on `amdgpu` with `gpu_busy_percent` and an hwmon `freq1_input` in Hz;
 daniel-server is `card0` on `i915` with no busy percentage at all, `power/rc6_residency_ms`
 and `gt_act_freq_mhz`. Every test asserts a rendered VALUE against the file it came from, so a

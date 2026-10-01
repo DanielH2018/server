@@ -1,15 +1,13 @@
 ---
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
-# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal
-# (2026-08-13 pin).
+# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest@sha256:6816d2b144b1eb97665f886e41e18a14d026ba78c9d0953fc68a1211ea819433
 qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:3abfd4b82212106e357989750b9c0c9859aa511f5305a9a55c18c8de7198b655
 
 # The throwaway pod verify.yml runs to prove the tunnel's return path. It is a defaults key
 # here rather than a cross-role read from sonarr, because a cross-role default is only in
-# scope when that role ran in the same play. The Jinja `default()` that covered the miss was
-# invisible to Renovate's k8s-defaults manager, so it sat on alpine:3.22 while every other
-# alpine pin moved to 3.24 with nothing to raise a PR about it.
+# scope when that role ran in the same play. A Jinja `default()` covering the miss would be
+# invisible to Renovate's k8s-defaults manager, so the pin would never get a PR.
 qbittorrent_k8s_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -29,17 +27,16 @@ k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]  # noqa var-naming[no-role-pr
 # looks like a mistake and is not — they write different subtrees, and splitting them would
 # strand wg0.conf away from the mod that regenerates it.
 qbittorrent_k8s_claim: qbittorrent-config
-# Backed up. Excluding it was tried and reverted the same day: the exclusion left this volume
-# with a single frozen restore point, and whether steady-state incrementals actually drive
-# B2's transaction cap cannot be read off anything Longhorn or B2 expose. So it is being
-# tested rather than assumed — docs/archive/b2-transaction-cap-monitoring-gaps.md.
+# Backed up. Excluding it would leave this volume with a single frozen restore point, and
+# whether steady-state incrementals actually drive B2's transaction cap cannot be read off
+# anything Longhorn or B2 expose. So it is tested rather than assumed —
+# docs/archive/b2-transaction-cap-monitoring-gaps.md.
 qbittorrent_k8s_storage_class: longhorn
 qbittorrent_k8s_size: 1Gi
 
-# torrents/ ONLY, via subPath — NOT the whole media tree (2026-07-02 review M2): qbittorrent
-# handles the fleet's largest
-# untrusted-input surface, and it has no business with write access to the book and film
-# library. The hardlink-import concern that unifies the \*arr mounts is theirs alone — link()
+# torrents/ ONLY, via subPath — NOT the whole media tree: qbittorrent handles the fleet's
+# largest untrusted-input surface, and it has no business with write access to the book and
+# film library. The hardlink-import concern that unifies the \*arr mounts is theirs alone — link()
 # happens inside sonarr/radarr, whose single mount spans torrents/ AND media/.
 qbittorrent_k8s_media_claim: media-data
 qbittorrent_k8s_torrents_subpath: torrents
@@ -65,8 +62,8 @@ qbittorrent_k8s_mullvad_mod: linuxserver/mods:wireguard-mullvad
 #     RTNETLINK answers: File exists
 #
 # which wg-quick treats as fatal: it tears the interface back down and reports
-# "Tunnel /config/wg_confs/wg0.conf failed", with nothing in the message about routes. Measured
-# 2026-08-07 during B4c. The /15 duplicates nothing and yields the same ACCEPT coverage.
+# "Tunnel /config/wg_confs/wg0.conf failed", with nothing in the message about routes. The /15
+# duplicates nothing and yields the same ACCEPT coverage.
 qbittorrent_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.42.0.0/15"
 
 # NOT /run/secrets: /var/run/secrets is where Kubernetes projects the ServiceAccount token,

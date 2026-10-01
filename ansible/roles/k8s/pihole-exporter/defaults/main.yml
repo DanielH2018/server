@@ -1,10 +1,10 @@
 ---
-# ekofr/pihole-exporter. v1.0.0 is the release that added Pi-hole v6 support; v1.2.0 is the
-# newest. Pinned by tag (Renovate k8s-defaults manager), like the pihole role's own images.
+# ekofr/pihole-exporter. v1.0.0 is the release that added Pi-hole v6 support. Pinned by tag
+# (Renovate k8s-defaults manager), like the pihole role's own images.
 #
 # An exporter is needed at all because Pi-hole v6 serves no Prometheus endpoint of its own.
-# Measured against the live pod on 2026-09-10: `GET /metrics` on the pihole Service returns 404,
-# and `GET /api/info/version` returns 401 — the v6 JSON API exists but is authenticated, and
+# Against the live pod, `GET /metrics` on the pihole Service returns 404, and
+# `GET /api/info/version` returns 401 — the v6 JSON API exists but is authenticated, and
 # nothing there speaks the exposition format. Re-check before replacing this with a native
 # scrape; an upstream that grew `/metrics` would make the whole role redundant.
 pihole_exporter_k8s_image: ekofr/pihole-exporter:v1.2.0

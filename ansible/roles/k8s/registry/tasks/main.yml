@@ -9,7 +9,7 @@
       - networkpolicy.yaml
       - deployment.yaml
       - service.yaml
-    # Pilot role for #1076's live prune (see k8s/manifests defaults/main.yml manifests_prune
+    # Live prune (see k8s/manifests defaults/main.yml manifests_prune
     # DECIDED comment). pvc.yaml is deliberately unlabeled and deliberately absent from
     # this kinds list — deleting a live PVC is the one prune outcome worse than the orphan
     # this feature exists to clean up.
@@ -25,12 +25,11 @@
 # rolled. This one does: every self-test below dials registry over its Service, and the batch
 # drain runs long after them.
 #
-# Bit a 2026-08-20 13:49 deploy. registry-selftest-push's first pod got `connection refused` to
-# the registry ClusterIP while the Deployment was still rolling; the Job's ONE retry then
-# succeeded, so the deploy stayed green on its last attempt. That is the whole failure mode —
-# not a broken deploy, a deploy whose proof-of-loop spends its entire `backoffLimit: 1` budget
-# racing the pod it just restarted. A rollout slower than one retry backoff exhausts it and the
-# deploy dies on a registry that is merely slow to start.
+# registry-selftest-push's first pod can get `connection refused` to the registry ClusterIP
+# while the Deployment is still rolling. The Job's ONE retry (`backoffLimit: 1`) then absorbs
+# the race, so the proof-of-loop spends its entire retry budget racing the pod it just
+# restarted. A rollout slower than one retry backoff exhausts it, and the deploy fails on a
+# registry that is merely slow to start.
 #
 # `rollout status`, not `wait --for=condition=Available`: this Deployment is single-replica, so
 # the OLD pod satisfies Available and the wait returns instantly. Returns immediately when
@@ -49,35 +48,34 @@
   changed_when: false
 
 # ── proof of loop ───────────────────────────────────────────────────────────
-# The registry ran for a day with an empty catalog: healthy by every signal, and unproven. Its
-# readiness probe only says the process answers, which is true of a registry that no builder can
-# reach and no node can pull from. Nothing else in the fleet exercises it until n8n depends on
-# it, and discovering a broken push path while also debugging a first build is the situation
-# this exists to avoid.
+# A registry with an empty catalog is healthy by every signal and unproven. Its readiness probe
+# only says the process answers, which is true of a registry that no builder can reach and no
+# node can pull from. Nothing else in the fleet exercises it until n8n depends on it, and
+# discovering a broken push path while also debugging a first build is the situation this
+# proof avoids.
 #
 # Runs on every deploy rather than once, and the reason is the same as docker-user-verify's: the
 # two things it checks are host and cluster state that can regress without anyone touching this
 # role. registries.yaml is written by roles/setup/k3s, so a change there — or a containerd
 # restart that never re-read it — breaks the pull path silently.
 
-# THE JOB MANIFESTS GO IN THEIR OWN DIRECTORY, not `manifests/registry/` (#1669). That
-# directory belongs to `k8s/manifests`, whose prune task deletes every file in it that the
-# caller does not name in `manifests_files`/`manifests_secret_files`. These four are this
-# role's own files rather than manifests of the workload, so no caller names them and the
-# prune deleted all four at the start of every registry deploy, re-rendering them a few tasks
-# later — four permanently `changed` prune items on an idempotent run. `manifests_prune: true`
-# above is the LIVE-object prune and is orthogonal to that staged-file prune.
+# THE JOB MANIFESTS GO IN THEIR OWN DIRECTORY, not `manifests/registry/`. That directory
+# belongs to `k8s/manifests`, whose prune task deletes every file in it that the caller does
+# not name in `manifests_files`/`manifests_secret_files`. These four are this role's own files
+# rather than manifests of the workload, so no caller names them and the prune would delete
+# all four at the start of every registry deploy. `manifests_prune: true` above is the
+# LIVE-object prune and is orthogonal to that staged-file prune.
 #
 # `gc-job.yaml` is why this is more than cosmetic. `registry-gc.sh` reads it at CRON time, not
-# at deploy time, so the window between the prune and the re-render was one in which a GC run
-# failed on a missing manifest. `registry_k8s_manage_gc: false` (daniel-stage) widened it to
-# permanent: the render was skipped while the prune still fired.
+# at deploy time, so a prune before the re-render opens a window in which a GC run fails on a
+# missing manifest. With `registry_k8s_manage_gc: false` (daniel-stage) the render is skipped,
+# so the window would be permanent.
 #
 # ONE directory for all four, rather than a `-selftest`/`-netpol`/`-gc` split. The reason
 # headlamp gives for a probe's own directory is that `kubectl apply -f <dir>` sweeps a whole
 # directory; registry applies each of these per-FILE, so that reason does not bite here, and
 # every additional sibling name is another reservation under the manifest root that nothing
-# enforces (#1670).
+# enforces.
 - name: Create the registry job manifest directory
   tags: [config, deploy, registry-gc]
   ansible.builtin.file:
@@ -244,8 +242,7 @@
 # a real operator. Same reasoning as k3s_manage_health_crons, and the same shape — the gate is on the
 # whole unit, because a GC script with no cron and a cron with no script are both worse than neither.
 # The inverse of the block below, and OUTSIDE it — a task inside a `when:`-guarded block can
-# never run when the flag is false. The staged-file prune used to clear this file for a host
-# that does not manage GC; nothing sweeps `registry-jobs/` now, so the removal is explicit.
+# never run when the flag is false. Nothing sweeps `registry-jobs/`, so the removal is explicit.
 # daniel-stage sets the flag false.
 - name: Remove the registry garbage-collection job manifest where GC is unmanaged
   tags: [config, registry-gc]

@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """Guards on the etcd restore drill's schedule.
 
-The off-box etcd snapshot has been taken, uploaded and alarmed since 2026-08-16. Nothing proved
-it comes BACK on a schedule: `scripts/backup/etcd_restore_drill.sh` wrote a stamp that no code
-read and that no cron kept fresh, so the off-box leg was verified once by hand on 2026-08-22 and
-drifted from there (2026-08-28 review, M-2, open since 2026-08-23). etcd is the tier that carries
-the Longhorn `Backup` CRs needed to FIND the volume backups, so it is the worse one to leave
-unproven — the Longhorn plane beside it has had a scheduled drill and a fail-closed stamp reader
-for weeks.
+The off-box etcd snapshot is taken, uploaded and alarmed, and only a scheduled drill proves
+it comes BACK. `scripts/backup/etcd_restore_drill.sh` writes a stamp, and the cron keeps that
+stamp fresh. etcd is the tier that carries the Longhorn `Backup` CRs needed to FIND the
+volume backups, so it is the worse one to leave unproven.
 
 Three properties carry the weight here, and two of them are ways this cron could be actively
 worse than no cron at all:
@@ -147,7 +144,7 @@ def test_the_cadence_is_weekly_and_clear_of_every_backup_window() -> None:
 def test_the_scripts_ordering_note_still_matches_reality() -> None:
     """The script's DECIDED block sequenced cron-then-reader.
 
-    The cron now exists, so the block must no longer claim the drill is never scheduled — a stale
+    The cron exists, so the block must not claim the drill is never scheduled — a stale
     precondition is how the next reviewer re-derives a closed decision.
     """
     header = DRILL.read_text()

@@ -306,7 +306,7 @@ def test_deployable_tags_drops_the_listed_block_tags(app):
 
 
 def test_deploy_block_tag_is_flagged(app):
-    """A tag `--list-services` prints must still not start a fleet-wide deploy (#1596).
+    """A tag `--list-services` prints must still not start a fleet-wide deploy.
 
     `config` selects the config half of every container role, so this arriving as a 202 is
     the defect: the page's only deploy button posts one service name from the stale panel.
@@ -336,7 +336,7 @@ def test_deploy_known_tag_spawns_deploy_sh_is_clean(app, monkeypatch, tmp_path):
 
 
 def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
-    """Both markers go, and the reply names every plane that went with them (#2453).
+    """Both markers go, and the reply names every plane that went with them.
 
     A Clear drops each `hold_plane` entry whatever is still unapplied, so the reply is the
     last place that can name them: nothing records those planes afterwards.

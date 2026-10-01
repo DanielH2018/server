@@ -1,8 +1,6 @@
 ---
-# monitor-bridge: THE bridge since the Docker uninstall (2026-08-14). Born at the
-# Phase F drain as the cluster twin of the daniel-server sidecar; the remnant retired
-# with Docker, check.py moved into this role's files/, and every check runs here (the
-# gitops pair against daniel-box's own deployer via hostPath).
+# monitor-bridge: every check runs here, the gitops pair against daniel-box's own deployer
+# via hostPath. check.py lives in this role's files/.
 
 - name: Create the staging directory
   tags: [config]
@@ -47,10 +45,10 @@
 # this the pod keeps running the code it started with until something else rolls it — and an
 # edit confined to a split-out module would deploy, read green, and change nothing live.
 # Sorted before hashing so the trigger is a function of the module SET, not the list order
-# in defaults — a reorder there is not an edit worth a pod roll (#2157).
+# in defaults — a reorder there is not an edit worth a pod roll.
 #
 # Hashed off the SOURCE files, not off the `monitor_bridge_script` register, because the stage
-# above is skipped on a dry run (#2614) and a skipped loop leaves `.results` undefined —
+# above is skipped on a dry run and a skipped loop leaves `.results` undefined —
 # `default([]) | join(',') | hash('sha1')` is the sha1 of the empty string, a real digest that
 # silently moves the annotation rather than falling back to the macro's `unstaged`. `rstrip=False`
 # is what makes these bytes the ones `copy` hashed, so the value is unchanged either way; the
@@ -91,14 +89,12 @@
 
 # Server-side apply, because the client-side form stores the WHOLE object again in the
 # `last-applied-configuration` annotation, and annotations are capped at 262144 bytes. Every
-# module in `monitor_bridge_modules` goes into one ConfigMap and the total is already well past
-# that (~322 KB across 24 modules on 2026-09-05, and the list only grows); JSON-escaped into
-# that annotation it crossed the cap on 2026-09-01 and `kubectl apply` refused the ConfigMap
-# ("metadata.annotations: Too long") while the pod kept running the previous code. Read the
-# count off the ship list rather than trusting the figure here. Server-side apply writes no
-# such annotation.
-# `--force-conflicts` takes ownership of the data keys from the client-side field manager that
-# applied them before the switch; without it the first server-side apply is rejected.
+# module in `monitor_bridge_modules` goes into one ConfigMap and the total is well past that
+# (~322 KB across 24 modules); JSON-escaped into that annotation it exceeds the cap and
+# `kubectl apply` refuses the ConfigMap ("metadata.annotations: Too long") while the pod keeps
+# running the previous code. Server-side apply writes no such annotation.
+# `--force-conflicts` takes ownership of the data keys from a client-side field manager that
+# applied them earlier; without it a first server-side apply is rejected.
 # Server-side apply prints the same line whether or not anything changed, so the changed
 # signal is the staged files, the same register the render task uses.
 # ENFORCED by ansible/tests/k8s/test_script_configmaps_apply_server_side.py.
@@ -110,7 +106,7 @@
       -f /etc/rancher/k3s/monitor-bridge/configmap.yaml
   become: true
   # Skipped on a dry run or --check. k8s/manifests only dry-runs its own apply, so without this
-  # guard a dry run would really write this ConfigMap (#2588).
+  # guard a dry run would really write this ConfigMap.
   when: not k8s_no_mutate
   register: monitor_bridge_cm_apply
   changed_when: monitor_bridge_script is changed
@@ -125,7 +121,7 @@
       - deployment.yaml
     manifests_secret_files:
       - env-secret.yaml
-      # Listed here so verify_secret_keys reconciles it too — and so the three keys removed
-      # from env-secret.yaml are patched OUT of the live monitor-bridge-env Secret, which
+      # Listed here so verify_secret_keys reconciles it too, and so keys removed from
+      # env-secret.yaml are patched OUT of the live monitor-bridge-env Secret, which
       # `kubectl apply` would otherwise leave behind indefinitely.
       - credentials-secret.yaml

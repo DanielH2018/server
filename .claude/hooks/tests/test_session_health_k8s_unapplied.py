@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The SessionStart banner's line for a k8s role the deployer will never apply (#2570).
+"""The SessionStart banner's line for a k8s role the deployer will never apply.
 
 A hand-edited or denylisted k8s role is fast-forwarded and dropped: the defer-and-alert post
 fires once per SHA, no later tick's range carries the change, and `Release Staleness Drift` is

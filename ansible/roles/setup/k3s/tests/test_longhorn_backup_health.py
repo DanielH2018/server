@@ -4,7 +4,7 @@
 Every arm gets an `..._is_clean` / `..._is_flagged` pair (CLAUDE.md's red-proof rule): one input
 that must read UP, and one that must read DOWN naming that specific arm — so a guard that stopped
 matching (fires on everything, or on nothing) fails its own test rather than reading green
-forever. The incidents each threshold exists for are documented in
+forever. The reasoning behind each threshold is documented in
 longhorn_backup_health_logic.py and in longhorn-backup-health.sh.j2's header.
 
 The I/O layer is pinned by real subprocess runs in `test_longhorn_backup_health_reader.py` and
@@ -44,7 +44,7 @@ def test_target_availability_is_flagged_when_a_target_is_unavailable():
 
 
 def test_target_availability_falls_back_to_raw_when_no_reason():
-    """The 2026-08-02 outage: kubectl itself failed and there was no condition message to read."""
+    """When kubectl itself fails there is no condition message to read, so the raw error shows."""
     problems = logic.check_target_availability(
         {"default": {"raw": "Error from server: etcdserver timeout", "reason": ""}}
     )
@@ -123,7 +123,7 @@ def test_errored_backups_is_clean_when_nothing_errored():
 
 
 def test_errored_backups_is_flagged_within_the_age_window():
-    """daily-backup-29775090's failure at 03:30 on 2026-08-12 — this is the check it fed."""
+    """A failed daily backup inside the age window is reported by name."""
     problem = logic.check_errored_backups(
         [_backup("Error", "2027-01-15T07:00:00Z")], NOW - 24 * HOUR, 24
     )
@@ -131,7 +131,7 @@ def test_errored_backups_is_flagged_within_the_age_window():
 
 
 def test_errored_backups_self_clears_once_the_object_ages_out():
-    """The 11-immortal-Error-objects incident: unbounded, this would page forever."""
+    """An Error object never prunes itself, so unbounded this would page forever."""
     old = "2027-01-01T00:00:00Z"
     assert (
         logic.check_errored_backups([_backup("Error", old)], NOW - 24 * HOUR, 24)
@@ -163,7 +163,7 @@ def test_coverage_is_clean_when_the_volume_has_a_fresh_tier_backup():
 
 
 def test_coverage_is_flagged_when_the_tiers_own_job_has_gone_stale():
-    """2026-08-16: matching by (volume, job) is what makes a dead TIER visible.
+    """Matching by (volume, job) is what makes a dead TIER visible.
 
     A daily backup exists for pvc-1, but nothing from `weekly-backup-d0` ever landed — a
     volume-only match would have borrowed the daily evidence and stayed green.
@@ -200,7 +200,7 @@ def test_coverage_suppresses_a_disarmed_targets_volume():
 
 
 def test_coverage_grace_counts_a_new_volume_rather_than_dropping_it_silently():
-    """2026-08-20: the grace branch's bare `continue` left 14 of 25 volumes invisible."""
+    """A bare `continue` in the grace branch would leave grace-period volumes invisible."""
     result = logic.TierResult()
     created = (
         "2027-01-15T07:50:00Z"  # 10 minutes before NOW; first 3:30 run is still ahead
@@ -306,7 +306,7 @@ def test_failed_jobs_is_flagged_within_the_window():
 
 
 def test_failed_jobs_is_dated_by_the_condition_not_creation():
-    """An 8h retry window separates the two on the run this check was written for."""
+    """An 8h retry window separates creation from the failure condition."""
     problem = logic.check_failed_jobs(
         [
             _job(

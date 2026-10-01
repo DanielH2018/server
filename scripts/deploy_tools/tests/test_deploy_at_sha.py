@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """`scripts/deploy.sh --at <sha>` renders a snapshot of <sha> rather than of HEAD.
 
-A landing used to wait up to 540s for the GitOps tick to fast-forward the primary checkout
-onto its PR's merge commit, because deploy.sh rendered whatever tree it ran in. `--at` moves
-the commit into the wrapper's own argument list: the snapshot is cut from <sha>, and the two
-gates that would otherwise answer about the wrong commit -- the staleness check and the tag
-validation -- are scoped to it as well.
+Without it a landing waits up to 540s for the GitOps tick to fast-forward the primary
+checkout onto its PR's merge commit, because deploy.sh renders whatever tree it runs in.
+`--at` moves the commit into the wrapper's own argument list: the snapshot is cut from <sha>,
+and the two gates that would otherwise answer about the wrong commit -- the staleness check
+and the tag validation -- are scoped to it as well.
 
 Both halves everywhere, per CLAUDE.md. The default path must keep rendering HEAD (a test that
 only asserts `--at` reached the right commit passes for an implementation that snapshots the
@@ -194,7 +194,7 @@ def test_at_with_changed_is_refused(tmp_path):
 def _gate_calls(tmp_path, monkeypatch, *argv: str) -> tuple[str, dict[str, tuple]]:
     """(first sha, the staleness and validate calls) for a front-half run of `argv`.
 
-    The gates run in process (#2412), so what they are asked is read off the harness rather
+    The gates run in process, so what they are asked is read off the harness rather
     than off a helper's argv.
     """
     repo, first, _second = _prepared(tmp_path)
@@ -234,11 +234,11 @@ def test_without_at_tag_validation_reads_the_working_tree(tmp_path, monkeypatch)
 
 
 def test_an_at_with_no_value_is_refused(tmp_path):
-    """FLAGGED half: reading past the end of argv used to leave `--at` empty, silently.
+    """FLAGGED half: reading past the end of argv must not leave `--at` empty, silently.
 
     An empty `at_ref` passes every check below it and `make_snapshot` falls through to
     `${at_sha:-HEAD}`, so `--at "$sha"` with an unset variable deployed this checkout's tip and
-    said nothing about it. Measured before the fix: rc=0, deployed == HEAD, empty stderr.
+    said nothing about it.
     """
     repo, _first, _second = _prepared(tmp_path)
     cases = (("--tags", "x", "--at"), ("--tags", "x", "--at", ""), ("--at=",))

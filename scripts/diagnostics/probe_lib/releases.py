@@ -7,23 +7,22 @@ nobody can see, which is half a feature. This is the reader.
 WHAT IT ANSWERS THAT NOTHING ELSE DOES. `kubectl` reports what is running; git reports what is
 committed; neither knows which commit produced the running manifests. `deploy.sh` renders from
 whatever tree it is invoked in, so those two can disagree without anything going red -- a
-worktree 48 commits behind master reverted observability for nine minutes on 2026-08-19 and the
-only symptom was a scrape-target count moving.
+worktree far behind master can revert a role while the only symptom is a scrape-target count
+moving.
 
 THREE FLAGS. `dirty` means the tree had uncommitted tracked changes, so no commit reproduces
 those bytes. `unmerged` means the commit is not an ancestor of origin/master -- a service
 running code that never landed. `stale` means origin/master has moved past the applied commit
 under the service's own role, or one of the shared roles every service's manifests depend on
 (`manifest_affecting_shared_roles()` -- `manifests` and the other entry-less roles that supply
-bytes to what is applied), or under an inventory key or shared macro the service's render
-reads (`_deploy_plane_stale`, which asks `narrow_broad` the same per-path question the
-deployer's tick asks -- #1993). `stale` is what makes a deferred k8s change visible: the
-gitops deployer ff-merges a non-auto-deployable k8s role change and pages Discord once, and
-every other monitored marker then reads clean while the cluster still runs the old manifests
-(issue #947). All three flags are normal mid-slice and alarming a week later, which is why they
-are reported rather than judged. The path rules here are the FALLBACK (#3046):
-`releases_render` compares the render digest against the release record's, and that verdict
-outranks every one of them, in both directions.
+bytes to what is applied), or under an inventory key or shared macro the service's render reads
+(`_deploy_plane_stale`, which asks `narrow_broad` the same per-path question the deployer's tick
+asks). `stale` is what makes a deferred k8s change visible: the gitops deployer ff-merges a
+non-auto-deployable k8s role change and pages Discord once, and every other monitored marker
+then reads clean while the cluster still runs the old manifests. All three flags are normal
+mid-slice and alarming a week later, which is why they are reported rather than judged. The path
+rules here are the FALLBACK: `releases_render` compares the render digest against the release
+record's, and that verdict outranks every one of them, in both directions.
 
 Exit codes: 0 when every record is clean, 1 when any service is dirty, unmerged or stale, 2 when
 no records exist at all (nothing has been deployed since the stamp shipped). `--stale-only`
@@ -76,7 +75,7 @@ from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
     role_paths_for,
 )
 
-# The digest verdict, which outranks the path verdict computed here (#2586, inverted by #3046).
+# The digest verdict, which outranks the path verdict computed here.
 from diagnostics.probe_lib.releases_render import apply_digest_verdicts, path_reason  # noqa: E402
 from diagnostics.probe_lib.releases_retired import drop_retired  # noqa: E402
 from diagnostics.probe_lib.releases_retired import role_dir_names  # noqa: E402
@@ -166,9 +165,9 @@ def shared_k8s_roles(k8s_roles_dir=None, host_vars=None):
     """The k8s role directories no service's own role_paths would otherwise cover.
 
     Without this widening, a change to `roles/k8s/manifests/` -- the role that renders every
-    service's manifests -- reads clean for every one of them, which is the false-GREEN issue
-    #947 names: the deployer defers a shared-role change exactly like a per-service one, but
-    nothing short of this widening can see it.
+    service's manifests -- reads clean for every one of them (a false GREEN): the deployer
+    defers a shared-role change exactly like a per-service one, but nothing short of this
+    widening can see it.
     """
     deploy_tags = _deploy_tags()
     k8s_roles_dir = k8s_roles_dir or (REPO_ROOT / "ansible/roles/k8s")
@@ -195,16 +194,16 @@ def _supplies_manifest_bytes(role_dir):
 
     Only `manifests` supplies bytes the render digest covers. The other three act outside
     `manifests_digest`, which is why `releases_render.apply_verdicts` never lets a matching
-    digest clear their path hits (#3090).
+    digest clear their path hits.
 
-    That distinction is the whole point (#1636). A deploy-time role's change is live for the
+    That distinction is the whole point. A deploy-time role's change is live for the
     next deploy the moment the deployer fast-forwards the primary checkout -- `deploy.sh`
     renders from the tree it is invoked in -- so it invalidates no release stamp and no drift
     exists. Sweeping those roles in marked all 53 services stale for `volume-snapshot`'s
     snapshot-space cap (b7b9bded6), which rendered no manifest at all.
 
     The same reasoning has a file-granularity twin one level down -- a `tasks/` file inside a
-    role that IS in the census supplies no bytes either. `_is_real_change` applies it (#1672).
+    role that IS in the census supplies no bytes either. `_is_real_change` applies it.
 
     `image-builder` stays in, deliberately: its `build-job.yaml.j2` decides the bytes of an
     image nine services then run, which a stamp cannot otherwise see. It is still wider than it
@@ -246,9 +245,9 @@ def _deploy_time_shared_roles(shared_roles):
 
     `manifests` is excluded because it ships no templates of its own -- its `tasks/` IS the
     render, prune and apply logic that produces every service's bytes, so a change there is
-    exactly the false-GREEN issue #947 exists to catch. Every other byte-supplying shared role
-    (`volume-claim`, `image-builder`, `arr-notification`) is in the census for
-    its `templates/` or `files/`, and its `tasks/` is deploy-time behaviour.
+    exactly the false GREEN this reader exists to catch. Every other byte-supplying shared
+    role (`volume-claim`, `image-builder`, `arr-notification`) is in the census for its
+    `templates/` or `files/`, and its `tasks/` is deploy-time behaviour.
     """
     return frozenset(shared_roles) - {MANIFEST_RENDERER}
 
@@ -259,17 +258,17 @@ def _is_real_change(path, deploy_time_roles=frozenset()):
     Three classes. Docs, because no playbook applies prose. A role's own `tests/`, which holds
     pytest guards over its `files/*.py` and never something `k8s/manifests` stages
     (`ansible/tests/repo/test_no_role_ships_a_test_file.py` enforces that tree-wide). And a
-    SHARED role's `tasks/`, which is #1636's role-granularity narrowing applied one level down.
+    SHARED role's `tasks/`, which is the role-granularity narrowing applied one level down.
 
-    That third class is the one this repo paid for twice. #1636 dropped the five shared roles
-    holding only `tasks/` and `defaults/` from the census, because a deploy-time change is live
-    the moment the deployer fast-forwards the primary checkout and invalidates no release stamp.
-    The same is true of a `tasks/` file inside a shared role that DOES supply bytes -- but that
-    role sits in every service's `role_paths`, so `volume-claim`'s staging-directory move
-    (0b86a7d7) marked all 53 services stale and parked `Release Staleness Drift` DOWN with no
-    deploy tag able to clear it (#1672). The narrowing is scoped to shared roles: a SERVICE's
-    own `tasks/main.yml` names its `manifests_files`, so a change there does move its bytes and
-    must still count. The renderer's rollout wait (`drain.yml`, #2813) runs, renders nothing.
+    That third class is the one that matters: the five shared roles holding only `tasks/` and
+    `defaults/` are out of the census, because a deploy-time change is live the moment the
+    deployer fast-forwards the primary checkout and invalidates no release stamp. The same is
+    true of a `tasks/` file inside a shared role that DOES supply bytes -- but that role sits in
+    every service's `role_paths`, so `volume-claim`'s staging-directory move (0b86a7d7) marked
+    all 53 services stale and parked `Release Staleness Drift` DOWN with no deploy tag able to
+    clear it. The narrowing is scoped to shared roles: a SERVICE's own `tasks/main.yml` names
+    its `manifests_files`, so a change there does move its bytes and must still count. The
+    renderer's rollout wait (`drain.yml`) runs, renders nothing.
     """
     if path.endswith(".md"):
         return False
@@ -295,7 +294,7 @@ def _changed_files(commit, paths, repo_root, ref, deploy_time_roles=frozenset())
 
     `_is_real_change` settles every path on its own, bar one: a SERVICE role's own `tasks/`
     file, where the path says nothing about whether the diff reached a manifest.
-    `releases_diff` reads that diff, and only when such a path survived the filter (#2416).
+    `releases_diff` reads that diff, and only when such a path survived the filter.
     """
     try:
         result = _git(
@@ -341,7 +340,7 @@ def _narrow_broad():
 def _deploy_plane_stale(commit, services, changed, context):
     """{service: [hit, ...]} for `changed`, the deploy-plane paths moved since `commit`.
 
-    The gap this closes (#1993). `role_paths_for` covers a service's own role and the shared
+    The gap this closes. `role_paths_for` covers a service's own role and the shared
     roles, so a change under `ansible/inventory/` or `ansible/templates/` moved nothing this
     reader read: a denied role whose render reads a changed key sat behind a clean monitor
     until something unrelated redeployed it. The deployer's tick already derives which tags
@@ -349,17 +348,11 @@ def _deploy_plane_stale(commit, services, changed, context):
     this asks the same question per path, from the record's commit to `ref`.
 
     A path no rule can attribute -- a key the play itself reads, `hosts.ini` -- marks EVERY
-    service sharing `commit` stale, with the refusal as the
-    reason. That is the tick's own answer to the same doubt: it runs the whole play, which
-    re-stamps every service, so the set this marks is exactly the set that run refreshes. It
-    is not the #1672 shape -- a deploy-time change flagging the fleet with no tag able to
-    clear it -- because the full run the tick takes for that range IS the clear, and the
-    only records left behind it are ones a hand deploy from an older tree wrote, which is the
-    incident this module's docstring opens with. Measured over the 600 commits to
-    2026-09-18: two refusals (a play-read key, a removed entry), at most 1.7s per record commit.
-    The tick honoured that contract for a range carrying ONLY the deploy plane until
-    2026-09-18: a mixed range planned the setup half alone, and a removed Pi entry beside a
-    `roles/setup/` edit left the fleet marked here with no run to clear it (#2046).
+    service sharing `commit` stale, with the refusal as the reason. That is the tick's own
+    answer to the same doubt: it runs the whole play, which re-stamps every service, so the set
+    this marks is exactly the set that run refreshes. It does not flag the fleet with no tag
+    able to clear it, because the full run the tick takes for that range IS the clear, and the
+    only records left behind it are ones a hand deploy from an older tree wrote.
 
     `context` is built by the caller, once per `compute_stale`, because it reads host_vars
     at its ref and walks the role tree. Only called when the range changed a census path, so
@@ -455,14 +448,13 @@ def compute_stale(
     `repo_root` at `ref` when omitted. They are parameters so a test can drive a throwaway
     repo that declares no host_vars; production never passes them.
 
-    `grace_seconds` is the window a merge gets before its drift counts. The monitor pushed
-    DOWN on the first */30 run after ANY merge, which caught code-server at 13:00 on
-    2026-09-21 while its own landing had been building the image since 12:50. A service
-    whose OLDEST offending commit reached `ref` less than `grace_seconds` ago is left out of
-    the result and written to `pending` ({service: seconds since that commit}) when the
-    caller passes a dict (`_drift_started` says why oldest). A range git cannot date stays
-    stale. `now` is epoch seconds, for the tests. The default of 0 keeps every caller that
-    never asked for a grace on the old contract.
+    `grace_seconds` is the window a merge gets before its drift counts. Without it the monitor pushes
+    DOWN on the first */30 run after ANY merge, even while that merge's own landing is still building
+    the image. A service whose OLDEST offending commit reached `ref` less than `grace_seconds` ago is
+    left out of the result and written to `pending` ({service: seconds since that commit}) when the
+    caller passes a dict (`_drift_started` says why oldest). A range git cannot date stays stale.
+    `now` is epoch seconds, for the tests. The default of 0 keeps every caller that never asked for a
+    grace on the old contract.
 
     `hits_out`, when a dict, gets every hit for each stale or pending service. The reason names
     only three, and `apply_digest_verdicts` needs them all to see a hit no digest covers.
@@ -540,9 +532,9 @@ def missing_services(records, host_vars=None, k8s_roles_dir=None):
     """k8s-platform service tags, expected to be release-stamped, with no record at all.
 
     Deployed before the release stamp shipped, or never deployed -- either way this must read
-    UNKNOWN rather than being silently excluded from a fleet audit, per issue #947's design.
-    Scoped to roles that actually consume `k8s/manifests` (see `consumes_manifests`); a role
-    that never applies manifests never gets a record to be missing.
+    UNKNOWN rather than being silently excluded from a fleet audit. Scoped to roles that
+    actually consume `k8s/manifests` (see `consumes_manifests`); a role that never applies
+    manifests never gets a record to be missing.
     """
     deploy_tags = _deploy_tags()
     host_vars = host_vars or deploy_tags.HOST_VARS

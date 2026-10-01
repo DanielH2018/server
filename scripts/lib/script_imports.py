@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Which scripts under ``scripts/`` import which, read from the source without running it.
 
-Split out of ``lib/script_classify.py`` on 2026-09-30, when resolving a bare-name import
-against the directories each file puts on ``sys.path`` took it over the module-length cap
-(#3038). ``script_classify`` decides how a script runs; this module answers the one question
+``script_classify`` decides how a script runs; this module answers the one question
 that decision needs from the import statements: which module stem a given import names.
 
 An import credits a script only when the first directory that holds the module lies under
@@ -143,8 +141,7 @@ def _roots(path: Path, scripts: Path) -> list[Path]:
     and pytest's `pythonpath` lists `scripts/` and its subdirectories. So a sibling inside
     `scripts/dev/fanout_lib` spells the import `from fanout_lib.manifest import Batch` — a head
     naming its OWN package directory, which resolves against `scripts/dev` and against no other
-    root. Resolving against `scripts/` alone read those ten modules as imported by nobody
-    (#3020). The roots stop at `scripts/`: looking further up would let a directory outside the
+    root. The roots stop at `scripts/`: looking further up would let a directory outside the
     tree manufacture an edge.
     """
     roots = [path.parent]
@@ -158,7 +155,7 @@ def _head(dotted: str, roots: list[Path], scripts: Path) -> str:
 
     A root outside `scripts/` that holds the module means the import resolves there, so it
     names no script: `gitops_state.py` imports `gitops_markers` from the gitops_deploy role's
-    `files/`, not `scripts/lib/gitops_markers.py` (#3038).
+    `files/`, not `scripts/lib/gitops_markers.py`.
     """
     for root in roots:
         stem = _resolve(dotted.split("."), root)
@@ -196,7 +193,7 @@ def import_graph(scripts: Path, keep: Callable[[Path], bool]) -> dict[str, set[s
         # `_roots` first, then what the file puts on `sys.path` itself, then, for a test,
         # pytest's `pythonpath`. An import none of them explains resolves outside `scripts/`
         # (the stdlib, a role's `files/`) and credits nothing: matching on the bare name
-        # credited `scripts/docs/reference/secrets.py` with `import secrets` (#3038).
+        # credited `scripts/docs/reference/secrets.py` with `import secrets`.
         roots = _roots(path, scripts) + _path_inserts(tree, path)
         if is_test_file(path):
             roots += pythonpath
@@ -207,7 +204,7 @@ def import_graph(scripts: Path, keep: Callable[[Path], bool]) -> dict[str, set[s
                 # A relative import resolves against the package directory `node.level` says,
                 # and against nothing else. `from .citations import Citation` in
                 # `scripts/lib/facts/atoms.py` is how a package's own members reach each other,
-                # and skipping those read `citations.py` as a script nobody runs (#3020).
+                # and skipping those read `citations.py` as a script nobody runs.
                 if node.level:
                     base = path.parent
                     for _ in range(node.level - 1):

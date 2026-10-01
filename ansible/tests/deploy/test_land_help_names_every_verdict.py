@@ -4,11 +4,9 @@
 Landings board groups by it. `land.py`'s module docstring is what `--help` prints, and it is
 what an operator at a terminal reads to decode the line.
 
-This module also pinned the paragraph in `.claude/skills/land-after-merge/SKILL.md` that
-enumerated the same members, until 2026-09-30. That paragraph is gone: the skill now points at
-`--help` and at `land_lib/outcome.py` rather than restating them, which is the copy this guard
-existed to catch drifting (issue #2853). The `--help` half stays, because it IS the copy an
-operator reads.
+`.claude/skills/land-after-merge/SKILL.md` points at `--help` and at `land_lib/outcome.py`
+rather than restating the members, so the `--help` line is the one copy this guard holds, and
+it IS the copy an operator reads.
 """
 
 import ast

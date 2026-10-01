@@ -7,13 +7,13 @@ Two readers need the tags that DO run it.
 
 WHO CALLS IT. `deploy_run` reads `expand_shared_tags` to turn `deploy.sh --tags
 volume-snapshot` into a deploy of every caller, and `land_tags` reads `caller_tags` to deploy a
-shared role's callers instead of reporting `needs-manual-apply` (#2704). The deployer runs
+shared role's callers instead of reporting `needs-manual-apply`. The deployer runs
 `main` as a SUBPROCESS through `deploy_narrow.shared_role_callers`, because this parses YAML
 and the unit runs under `uv run --no-project` — the boundary `narrow_setup.py` sits behind for
 the same reason. It prints one JSON object, role to sorted `caller_tags`, and
 `deploy_defer.discharge_k8s_unapplied` drops a shared role's `k8s_unapplied` line once every
-one of those tags carries the change (#2643). How a tag proves that, by its release record or
-by a matching render, is the deployer's question; this module only names the tags (#3057).
+one of those tags carries the change. How a tag proves that, by its release record or
+by a matching render, is the deployer's question; this module only names the tags.
 
 Usage: shared_role_callers.py [--repo PATH] ROLE [ROLE ...]
 """

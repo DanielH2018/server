@@ -70,12 +70,12 @@ def test_wake_brightness_is_gentle_then_steep():
 
 
 def test_wake_brightness_takes_only_elapsed():
-    """The short-night softening was removed 2026-08-16 with its dead sensor.
+    """The macro has no short-night softening argument.
 
-    A second `sleep_min` argument scaled the mid/knee down for a night under 6 h, but its only
-    source (sensor.pixel_9_pro_sleep_duration) no longer exists on any device, so every caller
-    passed 0 and the branch was unreachable. Pinning the arity keeps a caller from silently
-    reintroducing an argument the macro would ignore.
+    A second `sleep_min` argument would scale the mid/knee down for a night under 6 h, but its
+    only possible source (sensor.pixel_9_pro_sleep_duration) exists on no device, so every caller
+    would pass 0 and the branch would be unreachable. Pinning the arity keeps a caller from
+    silently reintroducing an argument the macro would ignore.
     """
     with pytest.raises(TypeError):
         render_macro(LIGHT, "wake_brightness", 15, 300)

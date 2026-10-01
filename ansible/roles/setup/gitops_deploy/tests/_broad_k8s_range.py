@@ -20,8 +20,7 @@ K8S_DEFAULTS = "ansible/roles/k8s/sonarr/defaults/main.yml"
 DECLARES_SONARR = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
 
 # A setup role NO playbook this deployer runs can apply: it fast-forwards and is recorded in
-# `manual_plane`. The 2026-09-24 incident's range was this shape, nine bumps behind one such
-# commit.
+# `manual_plane`.
 UNAPPLYABLE_ROLE = "ansible/roles/setup/k3s/tasks/main.yml"
 # A deploy-plane path: `deploy_narrow.plan` gives the range an `ansible/deploy.yml` plan whose
 # tag list `tick.narrow` scripts.
@@ -64,7 +63,7 @@ def marker(state_dir, name: str) -> str | None:
 
 
 def alerted(state_dir, slot: str) -> str | None:
-    """The SHA one alert slot has paged on, out of the one keyed marker file (#3047)."""
+    """The SHA one alert slot has paged on, out of the one keyed marker file."""
     return parse_alerted(marker(state_dir, "alerted_shas")).get(slot)
 
 

@@ -5,12 +5,11 @@ task, tagged with the tag families of every heartbeat script that sources it. Ea
 scripts is deployed by its own `release_bin.yml` import, tagged with its OWN tag family — so the
 two tag lists are two places that must agree, and nothing forced them to.
 
-They stopped agreeing on 2026-09-03: `release-staleness-check.sh.j2` shipped sourcing
-`kuma-push.env` (PR #977), tagged `release-staleness`, but the env task's tag list was not
-extended to match. `--tags release-staleness` installed the cron and never re-rendered the env
-file, so the script logged `RELEASE_STALENESS_PUSH_TOKEN not set — skipping push` and the Kuma
-tile stayed dead behind a green play — a tag-scoped run that installs a consumer without
-rendering its input reads green.
+If they disagree, a script such as `release-staleness-check.sh.j2` (tagged
+`release-staleness`, sourcing `kuma-push.env`) installs under `--tags release-staleness`
+while the env file is never re-rendered, so the script logs `RELEASE_STALENESS_PUSH_TOKEN
+not set — skipping push` and the Kuma tile stays dead behind a green play — a tag-scoped run
+that installs a consumer without rendering its input reads green.
 
 Run: uv run pytest ansible/tests/setup/test_kuma_env_renders_for_every_cron_tag.py
 """
@@ -91,8 +90,8 @@ def test_every_kuma_consuming_cron_tag_renders_the_env_file():
 def test_census_finds_the_known_cron_families():
     """A census that silently found nothing would pass regardless of what drifted.
 
-    Names two families deliberately: `manifest-prune` was already correctly tagged before this
-    guard existed, and `release-staleness` is the family that drifted — both must survive
+    Names two families deliberately: `manifest-prune` is a correctly tagged family, and
+    `release-staleness` is the family that drifted — both must survive
     whatever the census logic becomes.
     """
     env_tags = _env_task_tags()

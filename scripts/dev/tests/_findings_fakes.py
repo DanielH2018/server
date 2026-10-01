@@ -1,14 +1,13 @@
 """Fakes for findings.py's three boundaries: canned gh answers keyed by argv, calls recorded.
 
-`gh_json` dispatches on the first two argv elements — `issue list`, `label list`,
-`issue view` — so a test names the answer it wants without restating the argv that
-`load_issues` and `_existing_labels` assemble. That is the point of keying it this way:
-both of those functions were monkeypatched wholesale until 2026-09-04, so no test ever ran
-the argv they build or the label planning that reads their result. An argv pair no fake
-answers is an AssertionError rather than an empty list, because a silent `[]` reads as "the
-register is empty" and would pass most of these assertions. `issue view` with no `view=` set
-is the same mistake wearing a different mask — `None` would reach `cmd_touch` as an issue
-with no state — so it asserts too.
+`gh_json` dispatches on the first two argv elements — `issue list`, `label list`, `issue
+view` — so a test names the answer it wants without restating the argv that `load_issues` and
+`_existing_labels` assemble. That is the point of keying it this way: monkeypatching those
+functions wholesale means no test runs the argv they build or the label planning that reads
+their result. An argv pair no fake answers is an AssertionError rather than an empty list,
+because a silent `[]` reads as "the register is empty" and would pass most of these
+assertions. `issue view` with no `view=` set is the same mistake wearing a different mask —
+`None` would reach `cmd_touch` as an issue with no state — so it asserts too.
 
 `Calls` records BOTH boundaries, as lists either way. Several tests exist to prove nothing
 was written, and the label read is a `gh_json` call — recording only `gh` would let them
@@ -50,7 +49,7 @@ def foreign_comment(body: str, **fields) -> dict:
     """A comment any GitHub account could post on this PUBLIC repo's issues.
 
     `authorAssociation` is `NONE` and `viewerDidAuthor` is False, which is what gh returns
-    for a drive-by commenter. Nothing it says may open, close or age a claim (#1280).
+    for a drive-by commenter. Nothing it says may open, close or age a claim.
     """
     return {
         "body": body,
@@ -78,7 +77,7 @@ def make_issue(
     the claim protocol must ignore.
 
     `claude` is always in the labels, because every issue in the register carries it —
-    `load_issues` filters on it — and `plan_claim` refuses an issue without it (#1277). A
+    `load_issues` filters on it — and `plan_claim` refuses an issue without it. A
     fixture that omitted it would be refused for a reason no test meant to state.
     """
     labels = ("claude", *(n for n in labels if n != "claude"))
@@ -162,7 +161,7 @@ def live_worktree(branch: str):
     is someone else's, and guessing wrong destroys work" — so a plain reason string is the
     shortest live fixture there is, and `classify` short-circuits to KEEP before it looks at
     merged or dirty. This is what `cmd_claim`'s stale-at-birth guard needs to let a claim
-    through (#1278, #1281); `facts()` with no worktrees is its refusing counterpart.
+    through; `facts()` with no worktrees is its refusing counterpart.
     """
     tree = Worktree(
         path=f"/w/{branch}", head="abc", branch=branch, locked=True, lock_reason="held"

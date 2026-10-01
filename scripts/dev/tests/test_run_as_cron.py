@@ -71,8 +71,8 @@ def test_the_child_runs_under_sh_not_the_interactive_shell() -> None:
 
 
 def test_a_shell_builtin_still_runs() -> None:
-    # Regression: an `exec "$@"` implementation failed every builtin with a 127 that read
-    # exactly like the PATH trap. A crontab line is a shell line, so builtins must work.
+    # An `exec "$@"` implementation fails every builtin with a 127 that reads exactly
+    # like the PATH trap. A crontab line is a shell line, so builtins must work.
     result = run("--", "cd / && echo ok")
     assert result.returncode == 0
     assert "ok" in result.stdout

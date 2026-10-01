@@ -42,7 +42,7 @@ def test_gh_pr_checks_with_watch_flag_is_a_watch():
 
 
 def test_gh_pr_checks_web_flag_is_a_status_read():
-    """`-w` is `--web`, not a short `--watch`: it opens a browser and returns (#2959)."""
+    """`-w` is `--web`, not a short `--watch`: it opens a browser and returns."""
     assert _mod.classify("gh pr checks 1 -w") == "status"
 
 
@@ -77,9 +77,9 @@ def test_a_later_pipeline_stage_is_still_matched():
 
 
 def test_a_semicolon_joined_later_stage_is_still_matched():
-    """Issue #1020: `;` joined the same way as `&&` above must still be caught — `shlex.split`
-    glues an unquoted `;` onto the word before it, so the `gh run watch` after it was never
-    its own stage until `_hook_common.split_stages` learned to cut on `;` first."""
+    """`;` joined the same way as `&&` above must still be caught — `shlex.split`
+    glues an unquoted `;` onto the word before it, so `_hook_common.split_stages` must cut on
+    `;` first for the `gh run watch` after it to be its own stage."""
     assert _mod.classify("git fetch; gh run watch 1") == "watch"
 
 
@@ -112,7 +112,7 @@ def test_a_word_merely_containing_gh_is_not_matched():
     assert _mod.classify("highlight run watch") is None
 
 
-# --- classify: repository scope (#2901) ---------------------------------------------------
+# --- classify: repository scope ---------------------------------------------------
 
 
 def test_another_repos_checks_are_out_of_scope():

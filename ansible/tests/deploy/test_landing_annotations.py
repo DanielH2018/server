@@ -82,12 +82,9 @@ def test_a_label_the_ledger_does_not_write_would_be_caught():
 
 
 def test_the_board_breaks_deploy_failed_down_by_cause():
-    """The reader half of issue #1031.
+    """The reader half: writing `cause` into the annotation splits nothing on its own.
 
-    Writing `cause` into the annotation splits nothing on its own: the board reported one
-    `deploy-failed` bucket for six situations, and the field it needed was there for two
-    days before a panel read it. This asserts the panel exists, not merely that the field
-    can be parsed.
+    This asserts a panel reads it, not merely that the field can be parsed.
     """
     exprs = _board_exprs()
     assert any("by (cause)" in e and 'verdict="deploy-failed"' in e for e in exprs), (
@@ -108,7 +105,7 @@ def test_the_board_filters_on_a_literal_the_ledger_writes():
 def test_a_field_the_ledger_does_not_write_would_be_caught():
     """The rejecting half, driven through the same comparison the real test uses.
 
-    Asserting only that the sample line lacks `not_a_real_phase` proved nothing about the
+    Asserting only that the sample line lacks `not_a_real_phase` proves nothing about the
     comparison -- it would pass with the subtraction deleted. A planted expr must be
     reported as missing.
     """
@@ -129,7 +126,7 @@ def test_the_datasource_uid_matches_the_provisioned_one():
 
 
 def test_a_deploy_failed_line_names_its_cause():
-    """Issue #1031: `deploy-failed` alone cannot tell "nothing deployed" from "changes are
+    """`deploy-failed` alone
     live", so the cause rides on the same line. Every other verdict leaves it empty, like an
     unreached stamp."""
     line = annotation_line(

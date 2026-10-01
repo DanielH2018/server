@@ -1,15 +1,12 @@
-"""Guards for the AutoKuma static entity files (slice-7 Phase D, KD7).
+"""Guards for the AutoKuma static entity files.
 
-The static-monitors Secret is the alerting spine's declaration set after Kuma moves to the
-cluster. Two silent failure modes get guards here:
+The static-monitors Secret is the alerting spine's declaration set. Two silent failure modes
+get guards here:
 
 - A monitor without a notification link is created and never pages (the macro's
-  conditional-emission trap, now a per-file responsibility).
-- A push monitor with retries > 0 flaps on a single missed cron beat. This file is now the
-  SOLE guard of that rule: scripts/test_push_monitor_retries.py enforced it over the Docker
-  compose templates, but that corpus reached zero push monitors on 2026-08-14 when the
-  retired cloudflare-ddns role was archived (its two dead-men are declared here anyway), so
-  the guard was vacuous and was removed.
+  conditional-emission trap, a per-file responsibility).
+- A push monitor with retries > 0 flaps on a single missed cron beat. This file is the
+  SOLE guard of that rule.
 
 Every entity also carries the fields AutoKuma v2.0.0 parses (`type` mandatory), and ids —
 the filenames — must stay unique.
@@ -47,7 +44,7 @@ def test_every_monitor_is_linked_to_the_discord_notification():
 
 
 def test_push_monitors_never_retry():
-    # The only remaining enforcement of this rule (see the module docstring): a cron-fed push
+    # The only enforcement of this rule: a cron-fed push
     # monitor with retries > 0 turns one missed beat into interval*retries of silence
     # instead of a page.
     for name, entity in _entities().items():
@@ -65,9 +62,7 @@ def test_push_monitors_never_retry():
 # the template so that adding one is a visible decision and forgetting to remove one is a test
 # that keeps naming it.
 #
-# Empty since 2026-08-21. `k3s Longhorn Backup` was the only entry, held from 2026-08-16 while
-# the weekly tier had never completed a backup; its shard run completed at 04:30 on 2026-08-21
-# and the hold lifted. An empty set is the normal state — it means every push monitor re-notifies.
+# An empty set is the normal state — it means every push monitor re-notifies.
 RESEND_HELD: set[str] = set()
 
 
@@ -76,16 +71,10 @@ def test_autokuma_pin_carries_resend_interval_on_push_monitors():
 
     In AutoKuma v2.0.0, `resendInterval` was declared on exactly three monitor variants —
     MonitorHttp, MonitorJsonQuery and MonitorKeyword. MonitorPush had no such field, so serde
-    dropped it as unknown and the value never reached Kuma. The fleet-wide 360 introduced on
-    2026-08-16 therefore applied to the 25 http tiles and to none of the 50 push tiles: those
-    notified once on the down transition and then stayed silent, which is the exact failure that
-    change was made to fix.
-
-    Observed 2026-08-21: editing `k3s Longhorn Backup`'s resendInterval from 0 to 360 produced
-    no `Updating push:` line, while a notification-list edit on `R2 Free Tier Headroom` in the
-    same deploy did. Upstream moved the field into `with_monitor_common_fields_impl!` in
-    2.1.0-rc.1 ("Fix resend_interval missing for most monitor types, see #152"), where every
-    variant carries it, and the pin moved to 2.1.0-rc.2 the same day to pick it up.
+    dropped it as unknown and the value never reached Kuma: push tiles notified once on the
+    down transition and then stayed silent. Upstream moved the field into
+    `with_monitor_common_fields_impl!` in 2.1.0-rc.1 ("Fix resend_interval missing for most
+    monitor types, see #152"), where every variant carries it.
 
     Below that version the assertions in test_push_monitors_re_notify_while_still_down are
     statements about this repo rather than about what deploys. This test fails when the pin
@@ -106,10 +95,8 @@ def test_autokuma_pin_carries_resend_interval_on_push_monitors():
 
 def test_push_monitors_re_notify_while_still_down():
     # Kuma's `resendInterval` default is 0, meaning "notify once on the down transition, then
-    # never again". Every push monitor here ran that way until 2026-08-16: the Longhorn backup
-    # tile went down at 04:30, sent one Discord message, and was silent for the rest of the day
-    # while 11 backups stayed failed. The known instance was the GitOps tile; the actual scope
-    # was all 48. Asserted for every push monitor so a new one cannot be added without it.
+    # never again", which leaves a tile that stays down silent. Asserted for every push monitor
+    # so a new one cannot be added without it.
     for name, entity in _entities().items():
         if entity["type"] != "push":
             continue
@@ -139,7 +126,7 @@ def test_notification_configs_declare_apply_existing():
     `JSON.stringify`, server/notification.js), and AutoKuma's `config_eq` compares the NUMBER of
     config keys after dropping six ignored ones — a set that does not include applyExisting. So
     a declaration that omits it is permanently one key short, never matches, and is rewritten on
-    every sync pass. That ran from the k3s cutover to 2026-08-21 at ~34k SQLite writes a day.
+    every sync pass.
 
     The value must be false: Kuma reads the flag before forcing it (`applyExisting || false`),
     and true would attach the notification to every existing monitor.
@@ -156,8 +143,8 @@ def test_notification_configs_declare_apply_existing():
 
 # Monitors whose failure is invisible on Discord alone and cannot wait for someone to notice a
 # muted channel — the tier that also mails. Enumerated rather than pattern-matched: "has 'B2' in
-# the name" is exactly the rule that put B2's headroom tile on this tier and left R2's off it
-# until 2026-08-21, though both watch a Longhorn backup target's remaining free-tier capacity.
+# the name" is exactly the rule that would put B2's headroom tile on this tier and leave R2's off
+# it, though both watch a Longhorn backup target's remaining free-tier capacity.
 EMAIL_TIER = {
     "k3s Longhorn Backup",
     "Longhorn Volume Redundancy",
@@ -177,22 +164,22 @@ EMAIL_TIER = {
     "Kubelet CSI Mount Read-Only",
     # The snapshot-space axis of the same storage layer as the three Longhorn/PVC tiles above,
     # and on the tier for the same reason: the fix is an operator deleting snapshots or raising
-    # the cap, and a reached cap fails every later deploy of that service (#1560, #1627).
+    # the cap, and a reached cap fails every later deploy of that service.
     "Longhorn Snapshot Headroom",
     # Not a "the fix cannot wait a day" tile like the fifteen above — it is on the tier for the
     # transport, not the urgency. A fleet-wide recovery bursts every tile's UP notification into
-    # the same second, and Discord's per-webhook bucket dropped five of them on 2026-09-06
-    # (#1342). SMTP is a different bucket, so this one all-clear lands.
+    # the same second, and Discord's per-webhook bucket drops some of them. SMTP is a different
+    # bucket, so this one all-clear lands.
     "Homelab Edge (all-clear)",
     # On the tier for the transport as well: it pages when Kuma dropped a Discord send, and a
-    # page for that carried only by the Discord webhook is the failure it reports (#1891).
+    # page for that carried only by the Discord webhook is the failure it reports.
     "Kuma Notification Delivery",
     # The transport reason above at its strongest: no Discord webhook can deliver at all.
     "WAN Reachable",
     # The single existential risk on a one-server control plane: at its backend quota etcd
     # rejects every write and the cluster stops accepting changes. The fix is an operator
     # compacting and defragmenting, or raising the quota, so it cannot wait for someone to
-    # notice a muted channel (#2403).
+    # notice a muted channel.
     "etcd DB Size",
 }
 
@@ -209,14 +196,13 @@ def _bridge_push_tokens() -> set[str]:
     """The push-token variable names monitor-bridge itself pushes, read from its env-secret.
 
     Derived, not listed: four monitors carry a `monitor_bridge_*` token name while being fed by
-    something else entirely (CrowdSec Home Allowlist moved to a cron on daniel-box, and the two
-    Pi monitors and Arr Auto-Block never were bridge checks). A hand-kept list here would put
+    something else entirely (CrowdSec Home Allowlist is fed by a cron on daniel-box, and the two
+    Pi monitors and Arr Auto-Block are not bridge checks). A hand-kept list here would put
     those on the bridge's heartbeat window and relax a tile whose feeder runs on another clock.
 
     A token awaiting its secret renders as `{{ var | default('') }}`, so the filter is optional in
     the pattern. Without that such a tile reads as a non-bridge monitor wired to the bridge's
-    window, which is the opposite of what it is. snapshot_headroom (#1627) shipped that way and
-    was armed to the bare form on 2026-09-10; the optional group stays for the next one.
+    window, which is the opposite of what it is.
     """
     return set(
         re.findall(
@@ -239,7 +225,7 @@ def _monitor_tokens() -> dict[str, str]:
 
 def test_bridge_push_monitors_share_one_interval():
     # Every tile the bridge feeds must take its heartbeat window from kuma_bridge_push_interval,
-    # so widening the window after the 2026-08-30 restart is one edit rather than 34. A new bridge
+    # so widening the window is one edit rather than one per tile. A new bridge
     # check that hardcodes an interval reads as covered while sitting on the old, tighter window —
     # which is the flap this variable exists to stop.
     bridge_tokens = _bridge_push_tokens()
@@ -282,7 +268,7 @@ def test_non_bridge_push_monitors_keep_their_own_interval():
 
 def test_bridge_push_interval_is_a_multiple_of_the_loop():
     # The window must be a whole number of bridge cycles, and must tolerate more than one missed
-    # push — at exactly 2x it is back to the 600s that flapped on 2026-08-30.
+    # push — at exactly 2x it is back to the 600s window that flaps.
     want = ROLE_DEFAULTS["kuma_bridge_push_interval"]
     assert want % BRIDGE_LOOP_INTERVAL_S == 0, (
         "%s is not a whole number of %ss bridge cycles" % (want, BRIDGE_LOOP_INTERVAL_S)
@@ -305,9 +291,7 @@ def test_email_tier_membership_is_exactly_declared():
 
 
 # A monitor that accepts 404 without also checking the BODY is green through a total-404 edge:
-# Traefik answers 404 for every host when it has lost its routers, which is what happened for
-# 3.5 hours on 2026-09-06 (#1322). Measured at 09:17Z that day, `k3s healthchecks` and
-# `k3s homelab-mcp (edge gate)` both read 1 while 33 other monitors read 0 (#1341).
+# Traefik answers 404 for every host when it has lost its routers.
 #
 # Accepting 404 is still legitimate — a probe path that legitimately 404s on a healthy service
 # is the cheapest unauthenticated signal several routes offer. What is not legitimate is
@@ -339,7 +323,7 @@ def test_a_404_accepting_monitor_with_an_inverted_keyword_is_clean():
 
 
 def test_a_404_accepting_monitor_without_a_keyword_is_flagged():
-    # The exact shape both offending tiles carried until 2026-09-06.
+    # An http monitor accepting 404 with no keyword.
     assert _accepts_404_without_a_body_check(
         {"type": "http", "accepted_statuscodes": ["404"], "max_redirects": 0}
     )
@@ -371,16 +355,15 @@ def test_no_live_monitor_accepts_404_without_checking_the_body():
     )
 
 
-# ── the fleet-level all-clear tile (#1342) ────────────────────────────────────────────────
+# ── the fleet-level all-clear tile ────────────────────────────────────────────────
 # Its value rests on the target, not on the notification list. `Homelab Edge (all-clear)` is
 # the one tile that must go DOWN for a fleet-wide edge failure and come back with a single
 # message, so it has to probe something no workload can break: `ping@internal` behind
 # `PathPrefix(/.well-known/traefik-edge-selfcheck)`, which answers only when Traefik built a
 # routing table at all.
 #
-# Repointing it at an app route is the regression this guards, and it is a repeat of #1341:
-# `k3s homelab-mcp (edge gate)` was named for the edge while probing a body Traefik also
-# returns, and read 1 for all 3.5 hours of the total-404 outage of #1322. An app route fails
+# Repointing it at an app route is the regression this guards: an app route's body is one
+# Traefik also returns, so the tile reads green through a total-404 edge. An app route fails
 # the other way too — the app can be down while the edge is fine, which pages a fleet outage
 # that is not happening.
 _EDGE_SELFCHECK_PATH = "/.well-known/traefik-edge-selfcheck"
@@ -402,7 +385,7 @@ def test_an_all_clear_on_the_edge_selfcheck_path_is_clean():
 
 
 def test_an_all_clear_pointed_at_an_app_route_is_flagged():
-    # The shape #1341 already paid for once: an app's own health path, named for the edge.
+    # An app's own health path, named for the edge.
     assert _all_clear_is_app_coupled(
         {
             "type": "keyword",
@@ -422,15 +405,13 @@ def test_the_fleet_all_clear_probes_the_edge_selfcheck_route():
         "the fleet all-clear must probe the edge self-check route, not an app: %s"
         % entity.get("url")
     )
-    # A status code alone reads green through a total-404 edge (#1341), so the body is checked.
+    # A status code alone reads green through a total-404 edge, so the body is checked.
     assert entity["type"] == "keyword" and entity["keyword"] == "OK", entity
 
 
-# The probe HOST matters as much as the path, and this half was found by deploying it.
-# Traefik ranks routers by rule length. `PathPrefix(`/.well-known/traefik-edge-selfcheck`)` is
+# The probe HOST matters as much as the path. Traefik ranks routers by rule length. `PathPrefix(`/.well-known/traefik-edge-selfcheck`)` is
 # 48 characters, and littlelink's `Host(`www...`) || Host(`www.local...`)` is 68 — so on
-# `www.local` the all-clear tile got littlelink's own 404 body, measured 2026-09-06 minutes
-# after the deploy that added it. Any host that fronts a workload can lose the same way, and
+# `www.local` the all-clear tile gets littlelink's own 404 body. Any host that fronts a workload can lose the same way, and
 # it can start losing later, when someone lengthens that workload's rule.
 #
 # `edge-selfcheck.local` fronts nothing and is pinned to the ingress VIP in the Kuma pod's
@@ -454,7 +435,7 @@ def _route_rules_naming(label: str) -> list[str]:
 
 
 def test_a_host_that_fronts_a_workload_is_flagged():
-    # www.local is the host this tile was first pointed at, and the one that broke it. It is
+    # www.local is a host whose router outranks the path router. It is
     # also this rule's non-vacuity check: an IngressRoute corpus that stopped rendering would
     # make the assertion below pass while inspecting nothing.
     assert _route_rules_naming("www.local."), (
@@ -477,8 +458,8 @@ def test_the_all_clear_probe_host_is_pinned_to_the_ingress_vip():
 
     hostAliases is otherwise derived from containers_list, and every other name in it fronts a
     workload. The probe host is the one literal, so a template edit that drops it would leave
-    the tile resolving `edge-selfcheck.local` through public DNS — which answers the Docker
-    edge, not this cluster (see the hostAliases comment in deployment.yaml.j2).
+    the tile resolving `edge-selfcheck.local` through public DNS (see the hostAliases comment in
+    deployment.yaml.j2).
     """
     from _k8s_render import rendered_docs
 

@@ -2,22 +2,16 @@
 - name: Set variables
   # Dual-tagged: vars are consumed by the gpu_mem task AND the zram task.
   # The zram percentage is the device's UNCOMPRESSED capacity, not its RAM cost: zram holds
-  # only what is swapped, at the measured 4.61:1 (`mm_stat`, 2026-09-18: 274 MB stored in
-  # 59 MB). 75% (~343 MB) was sized 2026-08 for +115 MB of capacity over the old 50% device.
-  # Measured 2026-09-18 it was 77% full with 31 MB spilled to the SD-card swapfile at
-  # priority -2, and ~44 of the host's ~300 swap-ins a second were reading that spill — the
-  # slow faults, on the card whose page cache the same reclaim is already thrashing at
-  # 2.1 MB/s. 100% (~456 MB) moves the spill into zram for ~7 MB of RAM and leaves ~180 MB
-  # of capacity before the swapfile is touched again. The RAM a full device would cost
-  # (~100 MB) is bounded by the same earlyoom `-m 10` guard as before: it ignores swap by
-  # design (`-s 100,100`, below), so this changes nothing about when it fires. A change
-  # here reboots the Pi (`notify: Reboot Pi`, the same handler gpu_mem and log2ram use),
-  # never a live `systemctl restart zramswap`: measured 2026-09-18 16:27Z, that restart
-  # swapoffs the device onto the SD swapfile with ~15 MB free, systemd's 90 s stop timeout
-  # killed the swapoff half-way, the device stayed active at the OLD size, the start half
-  # failed (`Error: setting compression algo to zstd`, the device still in use), the unit
-  # read `failed`, and 150 MB of swap sat on the SD card with memory PSI `full avg60` 42%
-  # until a reboot. The Pi memory budget review of 2026-09-18 has the host's numbers.
+  # only what is swapped, at the measured 4.61:1 (`mm_stat`: 274 MB stored in 59 MB).
+  # 100% (~456 MB) keeps the swap spill in zram rather than on the SD-card swapfile at
+  # priority -2, whose slow faults hit a card whose page cache the same reclaim is already
+  # thrashing. The RAM a full device would cost (~100 MB) is bounded by the earlyoom `-m 10`
+  # guard, which ignores swap by design (`-s 100,100`, below). A change here reboots the Pi
+  # (`notify: Reboot Pi`, the same handler gpu_mem and log2ram use), never a live
+  # `systemctl restart zramswap`: that restart swapoffs the device onto the SD swapfile with
+  # ~15 MB free, systemd's 90 s stop timeout kills the swapoff half-way, the device stays
+  # active at the OLD size, and the start half fails (`Error: setting compression algo to
+  # zstd`, the device still in use) until a reboot.
   tags: [gpu-mem, zram]
   ansible.builtin.set_fact:
     optimize_pi_gpu_memory_mb: 16
@@ -238,7 +232,7 @@
 # 6. DEBLOAT (Reclaim RAM on the 512 MB board)
 - name: Purge Open vSwitch (unused) and snapd (no snaps installed)
   tags: [debloat]
-  # Found 2026-06-11: openvswitch-switch-dpdk was installed (apt-mark: manual) but
+  # openvswitch-switch-dpdk was installed (apt-mark: manual) but
   # `ovs-vsctl show` had no bridges and netplan has no OVS stanzas — yet ovs-vswitchd
   # ran with --mlockall, pinning ~14 MB of unswappable RAM. snapd ran with zero snaps
   # installed. netplan-generator only *Suggests* openvswitch-switch, so this purge is
@@ -256,7 +250,7 @@
 
 - name: Purge fwupd (no LVFS-updatable firmware on a Pi; daemon start thrashes 512 MB RAM)
   tags: [debloat]
-  # Found 2026-06-11: fwupd-refresh.timer fired ~hourly; each dbus activation of
+  # fwupd-refresh.timer fired ~hourly; each dbus activation of
   # fwupd.service swapped the Zero 2 W into the ground (zram 100% full, IO PSI
   # full>40%, RCU stalls) — every container healthcheck timed out and autoheal
   # restart-stormed (RestartCount=20 on itself). fwupd never even started: it hit
@@ -273,7 +267,7 @@
 
 - name: Check the purged fwupd units for stale failed state # noqa command-instead-of-module
   tags: [debloat]
-  # Found 2026-06-12: apt purge removes the unit files but never runs reset-failed,
+  # apt purge removes the unit files but never runs reset-failed,
   # so units that were `failed` at purge time (fwupd.service hit the 25 s dbus
   # timeout every activation) stay pinned in memory as not-found/failed and pollute
   # `systemctl --failed` until a reset or reboot.
@@ -296,8 +290,8 @@
   become: true
 
 # Reclaim ~17 MB more on the 512 MB board by shedding a redundant logger, an unused radio's
-# supplicant, and a stale init log — all found 2026-07-06 while auditing where the ~310 MB used
-# goes (dockerd+containerd+shims are ~108 MB of it and can't be trimmed). Pi-only, since this whole
+# supplicant, and a stale init log (dockerd+containerd+shims are ~108 MB of the ~310 MB used and
+# can't be trimmed). Pi-only, since this whole
 # role is `when: inventory_hostname == 'daniel-pi'` — the server keeps these (it has RAM to spare).
 
 - name: Disable + mask rsyslog (journald is the log of record here)
@@ -362,17 +356,15 @@
 
 # 7. LOG RAM BUDGET (log2ram tmpfs is 128 MB of REAL RAM)
 #
-# Declare the tmpfs size first: every cap below is computed from it, and until this task the
-# role asserted none of it (#2714).
+# Declare the tmpfs size first: every cap below is computed from it.
 - name: Declare the log2ram sizes the rest of this section is computed from
   tags: [log2ram]
   # log2ram 1.7.2 SHIPS all four of these values, and daniel-pi's /etc/log2ram.conf is
   # byte-identical to upstream's (md5 f62aef1aeae1473882baba0e521f752e, which is also the
-  # conffile md5 dpkg recorded — so nothing in that file was ever hand-edited, contrary to
-  # #2714's reading of the duplicate JOURNALD_AWARE line, which upstream ships twice at 1.7.2
-  # and once on master).
+  # conffile md5 dpkg recorded — so nothing in that file was hand-edited; upstream ships
+  # the duplicate JOURNALD_AWARE line twice at 1.7.2 and once on master).
   #
-  # That makes declaring them free TODAY — lineinfile writes nothing and the conffile stays
+  # That makes declaring them free — lineinfile writes nothing and the conffile stays
   # pristine — and it costs something only at the moment an upstream default MOVES, which is
   # exactly when the caps below need the number pinned. log2ram shipped SIZE=40M before it
   # shipped 128M, and a reinstall or a fresh Pi provision under a 40M tmpfs runs a 32M journald
@@ -434,10 +426,10 @@
   changed_when: false
   failed_when: optimize_pi_log2ram_journald_aware_values.stdout | trim | int != 1
 
-# Everything under /var/log lives in log2ram's RAM-backed tmpfs. Found 2026-06-11
-# at 81% (103/128 MB): journald carried the server-sized 1G cap from initial_setup
-# (would overflow the tmpfs and fail log writes), and acct's savelog kept 30 daily
-# pacct generations (36 MB and growing toward ~90 MB). Cap both.
+# Everything under /var/log lives in log2ram's RAM-backed tmpfs. Two server-sized defaults
+# would fill it: journald's 1G cap from initial_setup (would overflow the tmpfs and fail log
+# writes), and acct's savelog, which keeps 30 daily pacct generations (36 MB and growing toward
+# ~90 MB). Cap both.
 
 - name: Cap journald to fit the log2ram tmpfs (overrides initial_setup's 1G)
   tags: [log2ram]
@@ -457,10 +449,9 @@
 
 - name: Keep 2 days of sysstat history, not 7 (HISTORY)
   tags: [log2ram]
-  # The fourth server-sized default in this tmpfs, and the one the auditd census above
-  # missed. initial_setup installs sysstat with its shipped HISTORY=7 (accounting.yml),
+  # The fourth server-sized default in this tmpfs. initial_setup installs sysstat with its shipped HISTORY=7 (accounting.yml),
   # which on this host is 18 sa/sar files and 9.9 MB of the 128 MB log2ram tmpfs —
-  # measured 2026-08-29, second only to journald.
+  # second only to journald.
   #
   # CAP, DO NOT DISABLE, for the same reason auditd is capped rather than masked:
   # docs/security-tools.md gives `sar` its own triage row, so a machine-side census that
@@ -483,23 +474,20 @@
     line: 'ACCT_LOGGING="3"'
   become: true
 
-# auditd was the third server-sized default in this tmpfs and the last one left. Measured
-# 2026-08-29: /var/log/audit was 28 MB of 128 MB, and 20 MB of that was rotated history dating to
-# June 21 and July 15 — auditd's shipped defaults are max_log_file=8 MB with num_logs=5, a 40 MB
-# ceiling written for a server disk. It fills slowly (roughly 8 MB every three weeks here), which
-# is exactly why it went unnoticed: nothing about it ever moves.
+# auditd is the third server-sized default in this tmpfs. Its shipped defaults are
+# max_log_file=8 MB with num_logs=5, a 40 MB ceiling written for a server disk. It fills slowly
+# (roughly 8 MB every three weeks here), so nothing about it ever moves and the ceiling goes
+# unnoticed.
 #
-# CAP, DO NOT DISABLE. A review proposed masking auditd on the grounds that nothing reads it, and
-# the machine-side census behind that was right as far as it went — fail2ban uses `backend =
+# CAP, DO NOT DISABLE. A census of machine consumers finds none — fail2ban uses `backend =
 # systemd` (/etc/fail2ban/jail.d/defaults-debian.conf:4) and promtail ships only container logs.
-# What it missed is the HUMAN reader: docs/security-tools.md documents auditd as a deployed
-# security tool with a runbook, and its triage table routes "Sensitive file modified" to
-# `ausearch -k identity` / `-k sshd`. The same check clears sysstat and acct, which that review
-# also proposed removing — `sar` and `lastcomm` have their own sections and triage rows. A census
-# that only looks for machine consumers cannot see a documented operator procedure.
+# The HUMAN reader remains: docs/security-tools.md documents auditd as a deployed security tool
+# with a runbook, and its triage table routes "Sensitive file modified" to
+# `ausearch -k identity` / `-k sshd`. The same holds for sysstat and acct — `sar` and
+# `lastcomm` have their own sections and triage rows. A census that only looks for machine
+# consumers cannot see a documented operator procedure.
 #
-# Capping keeps the tool and takes back the RAM, which is also what this section already decided
-# for journald and acct above.
+# Capping keeps the tool and takes back the RAM, as it does for journald and acct above.
 - name: Cap auditd's rotation to fit the log2ram tmpfs
   tags: [log2ram]
   ansible.builtin.lineinfile:
@@ -524,16 +512,13 @@
   # fast-forwarding, parking every other session's unrelated commits until someone applies
   # the bring-up playbook by hand. A Pi log cap is not worth that, so the reload stays here.
   #
-  # `restarted`, and the reverse was tried first. This said `reloaded`, on the general claim
-  # that auditd.service ships RefuseManualStop=yes with an ExecReload — which is written about
-  # Debian/Ubuntu widely enough to sound safe, and is FALSE on this host. Measured 2026-08-29
-  # with `systemctl show auditd`: `CanReload=no` and `RefuseManualStop=no`, the opposite of
-  # both halves. The apply failed with:
+  # `restarted`, not `reloaded`: `systemctl show auditd` reports `CanReload=no` and
+  # `RefuseManualStop=no` on this host, so a reload fails with:
   #
   #   Unable to reload service auditd: Job type reload is not applicable for unit auditd.service
   #
-  # `--check` could not catch it. Check mode does not execute a service action, so the dry run
-  # reported this task `changed` against a unit that cannot do what was being asked. A green
+  # `--check` cannot catch it. Check mode does not execute a service action, so the dry run
+  # reports this task `changed` against a unit that cannot do what is being asked. A green
   # dry run says the task is well-formed, never that the service accepts the verb.
   #
   # Restarting drops nothing that matters here: auditd is running with no rules loaded, and
@@ -562,7 +547,7 @@
   # The index-based find above collects generations the NEW num_logs excludes. It cannot see
   # the other half of the problem: a rotation written under the OLD 8 MB max_log_file is
   # double the capped size, and keeping index 1 and 2 is exactly what num_logs=3 asks for.
-  # Measured 2026-08-29, after the cap had already landed: audit.log 4.1 MB (correctly capped)
+  # Measured after the cap had landed: audit.log 4.1 MB (correctly capped)
   # but audit.log.1 and audit.log.2 at 8.39 MB each — 20.9 MB against the 12 MB ceiling this
   # section set. auditd only replaces a generation when it rotates, ~3 weeks apart here, so
   # the surplus outlives the cap by months.
@@ -606,18 +591,17 @@
   # largest process, then SIGKILLs it at half the threshold.
   # --avoid shields the processes whose death would be worse than the stall.
   #
-  # THE SWAP CONDITION IS DELIBERATELY NON-BINDING, and this reverses an earlier choice
-  # here. This read `-s 10`, described as firing "once BOTH avail mem < 10% AND free swap
-  # < 10% — a true OOM spiral, not the swap-heavy-but-stable steady state this box likes
-  # to run". The intent was right; the setting could never express it. earlyoom's own help
+  # THE SWAP CONDITION IS DELIBERATELY NON-BINDING. A `-s 10` setting reads as firing "once
+  # BOTH avail mem < 10% AND free swap < 10% — a true OOM spiral, not the swap-heavy-but-stable
+  # steady state this box likes to run", but it cannot express that. earlyoom's own help
   # states the rule: "both memory and swap must be below minimum for earlyoom to act". This
   # host has 1.37 GB of combined swap (350 MB zram at priority 100, a 1 GB SD-card swapfile
   # at -2), so free swap < 10% means less than 137 MB free across both — a state reached
   # only after hours of SD-card thrashing, long past the point the guard exists to prevent.
-  # Measured 2026-08-29 over four hours of earlyoom's own report lines: mem avail never left
-  # 30-34%, free swap never left 77-79%. The guard was inert for its whole life, which is
-  # why the 2026-08-29 autoheal failure ("Timeout waiting for systemd to create scope",
-  # /proc/pressure/memory full avg10=30.74) hit a box with no escape hatch at all.
+  # Measured over four hours of earlyoom's own report lines: mem avail never left 30-34%,
+  # free swap never left 77-79%. Such a guard stays inert, and a failure like autoheal's
+  # ("Timeout waiting for systemd to create scope", /proc/pressure/memory full avg10=30.74)
+  # would hit a box with no escape hatch at all.
   #
   # `-s 100,100` makes both swap thresholds always true, so the memory condition alone
   # decides. That is not a loosening in practice: `-m 10` still means 45 MB available of
@@ -662,10 +646,10 @@
 - name: Pin the apt timers to the quiet hour, once a day
   tags: [apt-timers]
   # Ubuntu's apt-daily.timer is `*-*-* 6,18:00` with RandomizedDelaySec=12h, so it fires
-  # twice a day at any hour, and apt-daily-upgrade.timer is 06:00 plus up to an hour. On
-  # 2026-09-18 the 15:05Z firing ran `apt-get -d dist-upgrade` for four minutes at 57 MB RSS:
-  # memory PSI `full avg10` 45%, load 9.9, an RCU stall in the journal — on a 456 MB host
-  # that keeps 10-25 MB free, the shape of the 2026-08-29 incident (#2007). The engine
+  # twice a day at any hour, and apt-daily-upgrade.timer is 06:00 plus up to an hour. A
+  # firing runs `apt-get -d dist-upgrade` for four minutes at 57 MB RSS: memory PSI `full
+  # avg10` 45%, load 9.9, an RCU stall in the journal — on a 456 MB host that keeps 10-25 MB
+  # free. The engine
   # packages are held (docker_install), so the download half serves the rest of the system.
   # 04:20 and 05:20 sit in the one window nothing else here uses: the midnight cluster
   # (log2ram-daily 23:55, logrotate, dpkg-db-backup, sysstat-summary 00:07) is over, man-db
@@ -703,9 +687,9 @@
 
 # 10. NODE EXPORTER AS A HOST UNIT (one containerd shim fewer)
 # Every container on this box costs a containerd shim of ~5 MB anonymous memory on a host
-# that keeps 10-25 MB free (Pi memory budget review, 2026-09-18). node-exporter is the one
-# container whose host form changes no decision: it reads /proc and /sys, needs no Docker
-# API, and the cluster's Prometheus scrapes it on the LAN IP either way (#2005). Alloy is
+# that keeps 10-25 MB free. node-exporter is the one container whose host form changes no
+# decision: it reads /proc and /sys, needs no Docker API, and the cluster's Prometheus scrapes
+# it on the LAN IP either way. Alloy is
 # not in this position — its container-log source needs the Docker API, and the only
 # host-side shapes are the bare socket or a LAN-published proxy, both decided against.
 - name: Create the node_exporter system user
@@ -783,9 +767,8 @@
   # Same check-mode gate as the unpack: on a first --check the unit file does not exist yet.
   when: not ansible_check_mode
 
-# The Kuma-push helper both health crons below source is no longer installed here. It moved to
-# the initial_setup role as /usr/local/lib/kuma-push-lib.sh once the cluster's own health crons
-# needed the same six-line curl; initial_setup runs on every host and runs earlier in
+# The Kuma-push helper both health crons below source is /usr/local/lib/kuma-push-lib.sh, which
+# the initial_setup role installs. initial_setup runs on every host and runs earlier in
 # initial_setup.yml than this role, so the file is on disk before either script is rendered.
 
 - name: Remove the superseded Pi-only Kuma-push helper
@@ -866,7 +849,7 @@
     user: "{{ sys_user }}"
   become: true
 
-# The rotated-log integrity sweep the heartbeat above reads (#2715). Dual-tagged `sd-health`
+# The rotated-log integrity sweep the heartbeat above reads. Dual-tagged `sd-health`
 # throughout: the heartbeat reads a missing verdict as a down, so a `--tags sd-health` run has to
 # install the whole chain it depends on, the same reason sd-health and recovery-health both
 # create /var/log/pi-health.
@@ -933,7 +916,7 @@
 
 - name: Deploy the container-recovery heartbeat script
   tags: [recovery-health]
-  # AutoKuma reads only the server's docker socket, so the Pi's containers have no liveness
+  # AutoKuma cannot reach the Pi's docker socket, so the Pi's containers have no liveness
   # monitor of their own (autoheal and docker-proxy die silently; the rest sit Exited after a
   # failed start). This script pushes the running-state of every container in containers_list
   # (plus the docker-proxy sub-proxies) to the static "Daniel Pi Recovery" Kuma push monitor
@@ -970,17 +953,16 @@
 
 # SUDO RESOLVES THE LOCAL HOSTNAME ON EVERY INVOCATION, and this file is the first hop. Without
 # a line here the lookup falls through to /etc/resolv.conf, whose first nameserver is the
-# cluster's Pi-hole VIP — so every `sudo` on the Pi printed `unable to resolve host daniel-pi:
-# Name or service not known` (2026-09-27, #2724) and a `sudo` during a cluster outage waits on
-# the resolver timeout first. That is exactly when an operator needs this host.
+# cluster's Pi-hole VIP — so every `sudo` on the Pi prints `unable to resolve host daniel-pi:
+# Name or service not known`, and a `sudo` during a cluster outage waits on the resolver
+# timeout first. That is exactly when an operator needs this host.
 #
-# The Pi's image shipped without the line; daniel-server and daniel-box both carry their own
-# `127.0.1.1 <hostname>`, so this only brings the Pi up to what the other two already have.
+# daniel-server and daniel-box both carry their own `127.0.1.1 <hostname>`, so this brings the
+# Pi up to what the other two have.
 #
-# CLOUD-INIT DOES NOT OWN THIS FILE, checked on the live host 2026-09-27: `manage_etc_hosts` is
-# set in neither /etc/cloud/cloud.cfg nor /etc/cloud/cloud.cfg.d/, and cloud-init defaults it to
-# False, which makes the `update_etc_hosts` module in cloud_init_modules a no-op. /etc/hosts was
-# last written 2025-08-05, the image build. So the line survives a reboot.
+# CLOUD-INIT DOES NOT OWN THIS FILE: `manage_etc_hosts` is set in neither /etc/cloud/cloud.cfg
+# nor /etc/cloud/cloud.cfg.d/, and cloud-init defaults it to False, which makes the
+# `update_etc_hosts` module in cloud_init_modules a no-op. So the line survives a reboot.
 - name: Resolve the Pi's own hostname locally so sudo never waits on DNS
   tags: [pi-dns]
   # ansible_hostname, not inventory_hostname: sudo resolves what the kernel reports, and an
@@ -1048,8 +1030,8 @@
     enabled: false
   become: true
 
-# PR #693's drop-in is inert once resolved is disabled, and an inert config file that still
-# reads like the active mechanism is how the next reader gets it wrong.
+# A systemd-resolved drop-in is inert once resolved is disabled, and an inert config file that
+# still reads like the active mechanism is how the next reader gets it wrong.
 - name: Remove the retired systemd-resolved drop-in
   tags: [pi-dns]
   ansible.builtin.file:
@@ -1058,13 +1040,12 @@
   become: true
 
 # DOCKER PINS ITS UPSTREAM RESOLVERS AT CONTAINER START, so changing the host's resolv.conf
-# leaves every running container forwarding to whatever was there before. Measured on the
-# 2026-09-01 cutover: after resolved was disabled, all seven containers still carried
-# `ExtServers: [host(127.0.0.53)]` — the stub that had just been stopped — and `getent hosts
-# github.com` inside promtail returned nothing. Nothing went unhealthy and no monitor fired;
-# promtail simply stopped resolving its Loki push URL. A restart is enough, verified the same
-# day: Docker rewrites a container's /etc/resolv.conf from the host's on start, so this needs
-# no recreate.
+# leaves every running container forwarding to whatever was there before. After resolved is
+# disabled, running containers still carry `ExtServers: [host(127.0.0.53)]` — the stub that
+# was just stopped — and `getent hosts github.com` inside one returns nothing. Nothing goes
+# unhealthy and no monitor fires; the container simply stops resolving names. A restart is
+# enough: Docker rewrites a container's /etc/resolv.conf from the host's on start, so this
+# needs no recreate.
 - name: List the Pi's running containers # noqa no-handler
   tags: [pi-dns]
   community.docker.docker_host_info:

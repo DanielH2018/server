@@ -1,4 +1,4 @@
-"""Tests for the churn arm — the floor under a dwell keyed on the digest (issue #3076).
+"""Tests for the churn arm — the floor under a dwell keyed on the digest.
 
 Its own module rather than more of test_pending_soak.py, which is at its length cap. The seam
 is the clock each arm reads: the dwell arm times the digest on the branch, this one times the

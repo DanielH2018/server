@@ -92,7 +92,7 @@
   tags: [deploy]
   # The whole probe chain above is `command` tasks, so `--check` creates no Job and reads no
   # logs. This debug is the only task left running, onto a skip result with no
-  # `stdout_lines` (#2351).
+  # `stdout_lines`.
   when: not k8s_no_mutate
   ansible.builtin.debug:
     msg: "{{ headlamp_k8s_netpol_log.stdout_lines }}"

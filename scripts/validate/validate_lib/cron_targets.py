@@ -62,31 +62,30 @@ BARE_K8S_INVOCATION = re.compile(r"(?<![\w/])k3s(?![\w/])")
 # `env: yes/true` + `name: PATH` is the ansible.builtin.cron idiom for a crontab-level `PATH=...`
 # line (distinct from the module's `job:` — see the ansible.builtin.cron docs on `env`), which
 # would fix every job in that cron_file without an in-script export. No cron task in this repo
-# uses it today (checked 2026-08-17), so this branch is currently unexercised — kept as a real
-# alternative rather than assuming every fix must be an in-script export.
+# uses it, so this branch is unexercised — kept as a real alternative rather than assuming every
+# fix must be an in-script export.
 CRONTAB_PATH_ENV = re.compile(
     r"env:\s*(?:yes|true)\b[\s\S]{0,200}?/usr/local/bin|/usr/local/bin[\s\S]{0,200}?env:\s*(?:yes|true)\b"
 )
 # A cron `job:` naming a wrapper, with any leading `VAR=value` assignments captured rather than
-# rejected. The regex used to demand the job be EXACTLY the script path, which silently put
-# docs-refresh.sh — whose job line sets PATH and KUBECONFIG inline — outside every rule below.
-# A guard that skips the one job doing something interesting with its environment is the guard
-# scope drifting from the hazard, so the assignments are parsed and consulted instead.
-# The trailing `2>&1 | logger -t <tag>` is the journal routing #2466 gave every cron that
-# prints on a successful run, and it must not take the script back out of scope: the `$` anchor
-# alone silently dropped longhorn-trim-volumes.sh.j2 and docs-refresh.sh.j2 the moment they were
-# routed, which is the same coverage loss the `env` group above was added to stop. Only this one
-# suffix is accepted — anything else after the script name is a job shape nothing here has
-# parsed, and reading it as a plain target would claim coverage of a line this does not
-# understand.
+# rejected. The regex must not demand the job be EXACTLY the script path, which would silently
+# put docs-refresh.sh — whose job line sets PATH and KUBECONFIG inline — outside every rule
+# below. A guard that skips the one job doing something interesting with its environment is the
+# guard scope drifting from the hazard, so the assignments are parsed and consulted instead. The
+# trailing `2>&1 | logger -t <tag>` is the journal routing every cron that prints on a
+# successful run carries, and it must not take the script out of scope: the `$` anchor alone
+# would silently drop longhorn-trim-volumes.sh.j2 and docs-refresh.sh.j2, which is the same
+# coverage loss the `env` group above stops. Only this one suffix is accepted — anything else
+# after the script name is a job shape nothing here has parsed, and reading it as a plain target
+# would claim coverage of a line this does not understand.
 CRON_JOB_TARGET = re.compile(
     r"^(?P<env>(?:\w+=\S+\s+)*)/usr/local/bin/(?P<script>[\w.-]+\.sh)"
     r"(?:\s+2>&1\s*\|\s*logger\s+-t\s+[\w.-]+)?$"
 )
-# Root reads /etc/rancher/k3s/k3s.yaml automatically; nobody else can. Measured 2026-08-27 on
-# daniel-box: the file is 0640 root:root, so `ubuntu` cannot read it. `ansible.builtin.cron`
-# defaults `user` to the connection user (ubuntu here), so a MISSING user: is non-root and must
-# provide KUBECONFIG — this fails closed on the omission rather than assuming root.
+# Root reads /etc/rancher/k3s/k3s.yaml automatically; nobody else can. Measured on daniel-box:
+# the file is 0640 root:root, so `ubuntu` cannot read it. `ansible.builtin.cron` defaults
+# `user` to the connection user (ubuntu here), so a MISSING user: is non-root and must provide
+# KUBECONFIG — this fails closed on the omission rather than assuming root.
 CRON_ROOT_USER = "root"
 # Unlike the PATH rule, an absolute path does NOT excuse this one: /usr/local/bin/k3s still
 # needs a kubeconfig it can read. Two of the three KUBECONFIG-less wrappers invoke it that way.
@@ -114,11 +113,11 @@ def _collapse_jinja(text: str) -> str:
 def _template_pairs(task: dict, mod: dict):
     """Yield (src, dest) for a template task, whether it names them directly or loops.
 
-    The looped form — `src: "{{ item.src }}"` over a `loop:` of src/dest dicts — was invisible
-    to this resolver until 2026-08-27, and it is the form k3s uses for EVERY longhorn wrapper.
-    So the cron rules silently skipped exactly the scripts that talk to the cluster: they read
-    `[ok]` because no rule applied, not because they satisfied one. Widening the parser is what
-    makes the rules reach the hazard they were written for.
+    The looped form — `src: "{{ item.src }}"` over a `loop:` of src/dest dicts — is the form
+    k3s uses for EVERY longhorn wrapper. So the cron rules silently skipped exactly the scripts
+    that talk to the cluster: they read `[ok]` because no rule applied, not because they
+    satisfied one. Widening the parser is what makes the rules reach the hazard they were
+    written for.
     """
     src, dest = str(mod.get("src", "")), str(mod.get("dest", ""))
     if "{{" not in src and "{{" not in dest:
@@ -138,9 +137,8 @@ def _release_bin_pairs(task: dict, task_file: Path):
     A third deploy shape, after the direct `template:` and the looped one. A role hands
     release_bin.yml a GROUP NAME and the file list lives in that role's defaults, so nothing in
     the task file itself names a template — which made every script in a converted group
-    invisible to this resolver. That is the same coverage loss the looped form caused before
-    2026-08-27: the cron rules would read `[ok]` because no rule applied, not because the script
-    satisfied one.
+    invisible to this resolver. That is the same coverage loss the looped form causes: the cron
+    rules would read `[ok]` because no rule applied, not because the script satisfied one.
 
     The resolution lives in `scripts/lib/release_bin_groups.py` because the secrets guard needs
     the same answer, and two resolvers that can disagree about a group's contents is the defect

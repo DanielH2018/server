@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""`k8s/manifests` renders a shared manifest for a role that ships none of its own (#2872).
+"""`k8s/manifests` renders a shared manifest for a role that ships none of its own.
 
-WHY THIS EXISTS. 25 roles' `templates/service.yaml.j2` were byte-identical three-line wrappers
-around the `service()` macro, and 16 roles' `templates/ingressroute.yaml.j2` were the same
-shape around `ingressroute()` (#3043). They are gone, and `k8s/manifests` renders
-`ansible/templates/service-default.yaml.j2` and `ansible/templates/ingressroute-default.yaml.j2`
-for each of them instead. Three things have to stay true for that to keep working, and each
-fails silently on its own:
+WHY THIS EXISTS. `k8s/manifests` renders `ansible/templates/service-default.yaml.j2` and
+`ansible/templates/ingressroute-default.yaml.j2` for a role that ships no
+`templates/service.yaml.j2` or `templates/ingressroute.yaml.j2`. Three things have to stay true
+for that to keep working, and each fails silently on its own:
 
 * The deploy's map (`manifests_shared_defaults`, a role default) and the offline harnesses' map
   (`lib.k8s_roles.SHARED_MANIFEST_DEFAULTS`) name the same files. Drift here does not break a
@@ -18,7 +16,7 @@ fails silently on its own:
 * The render task actually resolves the shared source. A `src` that lost the fallback fails the
   deploy loudly for those 25 roles, but only on a deploy — nothing else runs that task.
 
-The last test is each issue's own verify-by: no two roles carry a byte-identical
+The last test is the verify-by: no two roles carry a byte-identical
 `templates/service.yaml.j2`, or a byte-identical `templates/ingressroute.yaml.j2`.
 
 Run: uv run pytest ansible/tests/k8s/test_shared_manifest_defaults.py
@@ -40,7 +38,7 @@ SHARED_TPL = ANSIBLE / "templates"
 
 # The roles whose Service the shared default renders. A census the tests below size themselves
 # against, so a fallback that silently stopped resolving fails by name rather than by an
-# `all(...)` over an empty set. Members, not just a count: #2872 deleted exactly these.
+# `all(...)` over an empty set. Members, not just a count.
 ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
     {
         "artifacts",
@@ -72,7 +70,7 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
 )
 
 
-# The roles whose IngressRoute the shared default renders — #3043's half of the census above.
+# The roles whose IngressRoute the shared default renders — the IngressRoute half of the census above.
 # Every one of them is routed (its entry carries a `hostname`), which is also what
 # `ansible/filter_plugins/toposort.py` now derives their traefik ordering edge from.
 ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
@@ -134,7 +132,7 @@ def test_every_shared_default_template_exists():
 
 @pytest.mark.parametrize("basename", sorted(SHARED_DEFAULT_CENSUS))
 def test_the_census_of_roles_taking_a_shared_default_holds(basename):
-    """Non-vacuity: the fallback resolves for exactly the roles the move deleted a template from."""
+    """Non-vacuity: the fallback resolves for exactly the roles that ship no template of their own."""
     template, census = SHARED_DEFAULT_CENSUS[basename]
     resolved = {
         d.name
@@ -214,7 +212,7 @@ def _own_template_digests(basename: str) -> dict[str, list[str]]:
 
 @pytest.mark.parametrize("basename", sorted(SHARED_DEFAULT_CENSUS))
 def test_no_two_roles_ship_a_byte_identical_template(basename):
-    """Each issue's verify-by. A duplicate pair is a pair the shared default should render."""
+    """The verify-by. A duplicate pair is a pair the shared default should render."""
     template, _census = SHARED_DEFAULT_CENSUS[basename]
     by_digest = _own_template_digests(basename)
     assert by_digest, f"no role ships a {basename}.j2 at all — has the tree moved?"

@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
-"""A setup role's own `tests/` reaches no host -- issue #1885.
+"""A setup role's own `tests/` reaches no host .
 
-WHAT WENT WRONG. Landing PR #1884 ended `needs-manual-apply`, prescribing
-`initial_setup.yml --tags gitops_deploy` on daniel-server and daniel-pi. Nothing there needed
-applying: the role dispatches on `has_gitops` inside `tasks/main.yml`, `setup_file_hosts`
-already follows that `include_tasks` gate, and every `files/*.py` the PR touched read as
-daniel-box only. The three `tests/*.py` beside them did not: `tests/` is not a shipped
-directory, so each fell through to the ROLE-level reach (all three hosts, the role has no
-playbook gate), and `remaining_setup_hosts_note`'s union over the PR's files widened the
-box-only answer back out. The issue's stated cause -- that the include gate was not
-followed -- was already fixed by the time it was filed; the tests/ fall-through was the bug.
+A role's own `tests/*.py` must not fall through to the ROLE-level reach: `tests/` is not a
+shipped directory, and with no playbook gate the role-level reach is all three hosts, so
+`remaining_setup_hosts_note`'s union over a PR's files would widen the box-only answer for the
+role's `files/*.py` back out to every host. The role dispatches on `has_gitops` inside
+`tasks/main.yml`, and `setup_file_hosts` follows that `include_tasks` gate.
 
 Each narrowing has a reject half. The reject here is `tasks/teardown.yml`: a change to the
 half of the dispatcher that runs where `has_gitops` is false must still name daniel-server
-and daniel-pi. It did so through the "unknown stays wide" fallback until #2073, and now
-through the `not has_gitops` gate on the include that pulls it in; this file pins the
-answer either way, so a later narrowing of `tasks/` cannot silence it.
+and daniel-pi, through the `not has_gitops` gate on the include that pulls it in; this file pins
+the answer, so a later narrowing of `tasks/` cannot silence it.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_role_tests.py
 """
@@ -30,8 +25,8 @@ _FILES = "ansible/roles/setup/gitops_deploy/files/deploy_state.py"
 _TESTS = "ansible/roles/setup/gitops_deploy/tests/test_deployer_state.py"
 _TEARDOWN = "ansible/roles/setup/gitops_deploy/tasks/teardown.yml"
 _INSTALL = "ansible/roles/setup/gitops_deploy/tasks/install.yml"
-# PR #1884's file list, verbatim (`gh pr view 1884 --json files`), minus the paths outside
-# the setup plane -- those derive tags or nothing and never reach this note.
+# A PR's file list, verbatim (`gh pr view <n> --json files`), minus the paths outside the
+# setup plane -- those derive tags or nothing and never reach this note.
 _PR_1884_SETUP_PATHS = [
     "ansible/roles/setup/gitops_deploy/CLAUDE.md",
     "ansible/roles/setup/gitops_deploy/files/deploy_defer.py",
@@ -71,14 +66,14 @@ def test_a_role_test_file_reaches_no_host():
 
 
 def test_a_shipped_file_still_reaches_the_gitops_host_only():
-    """The include gate is followed (the issue's remediation was already in place)."""
+    """The include gate is followed."""
     assert land_reach.setup_file_hosts(_ROLE, _FILES) == frozenset({"daniel-box"})
 
 
 def test_the_teardown_half_still_reaches_the_other_hosts():
     """The reject half: `tasks/` is NOT dropped (`is_role_test_path`'s docstring says why),
-    and the file that runs where `has_gitops` is false must keep naming those hosts. Since
-    #2073 a `tasks/` path reads the include chain above it, so each half of the dispatcher
+    and the file that runs where `has_gitops` is false must keep naming those hosts. A
+    `tasks/` path reads the include chain above it, so each half of the dispatcher
     names exactly the hosts its `include_tasks` gate admits."""
     assert land_reach.setup_file_hosts(_ROLE, _TEARDOWN) == frozenset(
         {"daniel-server", "daniel-pi"}
@@ -87,7 +82,7 @@ def test_the_teardown_half_still_reaches_the_other_hosts():
 
 
 def test_pr_1884_owes_no_host_beyond_the_tick():
-    """The verdict PR #1884 should have read: `settled`, not `needs-manual-apply`."""
+    """The verdict is `settled`, not `needs-manual-apply`."""
     assert (
         land_reach.remaining_setup_hosts_note(_PR_1884_SETUP_PATHS, "daniel-box") == ""
     )

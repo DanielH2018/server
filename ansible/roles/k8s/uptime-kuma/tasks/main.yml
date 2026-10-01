@@ -1,6 +1,5 @@
 ---
-# Slice-7 Phase D step 3 (2026-08-10): Uptime Kuma + AutoKuma sidecar. Built ahead of the
-# cutover, deployed only inside it — see the flag comment in defaults.
+# Uptime Kuma + AutoKuma sidecar.
 
 - name: Create the Kuma data volume claim
   tags: [deploy]

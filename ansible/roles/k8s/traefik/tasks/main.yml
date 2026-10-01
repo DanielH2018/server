@@ -25,7 +25,7 @@
   become: true
   changed_when: false
 
-# Templated, not copied, since 2026-08-24: the file now carries one namespaced Role +
+# Templated, not copied: the file carries one namespaced Role +
 # RoleBinding per watched namespace alongside the cluster-scoped role, and those need
 # k8s_namespace / k8s_observability_namespace / k8s_longhorn_namespace.
 #
@@ -96,10 +96,8 @@
   # Kubernetes accepts any annotation key and MetalLB ignores the ones it does not recognise,
   # so a wrong or misspelled request annotation costs nothing at apply time: the Service comes
   # up, an address is assigned out of the auto-assign pool, every pod is healthy and the
-  # deploy is green — on the wrong address. That is exactly what the wrong annotation prefix
-  # did here during slice 1, and it survived a full bring-up unnoticed. (The prefixes have
-  # since swapped roles: metallb.io/ is correct as of MetalLB v0.15, universe.tf/ deprecated.
-  # The lesson survives the swap — assert the address, not the spelling.)
+  # deploy is green — on the wrong address. Assert the address, not the spelling of the
+  # prefix (metallb.io/ is correct as of MetalLB v0.15, universe.tf/ deprecated).
   # The address is the one thing DNS and the router port-forward both hardcode, so
   # assert it rather than trusting the annotation was honoured.
   ansible.builtin.assert:
@@ -110,11 +108,10 @@
       pools or annotations change — delete the Service and redeploy to force reallocation.
     success_msg: "Traefik holds the reserved ingress VIP {{ k3s_metallb_ingress_vip }}"
 
-# The Cloudflare IP drift check moved into monitor-bridge on 2026-09-19
+# The Cloudflare IP drift check lives in monitor-bridge
 # (roles/k8s/monitor-bridge/files/checks/cloudflare_ips.py): it reads no host state, and the
-# bridge re-probes a failure every cycle where the daily cron here left the tile red until the
-# next 05:25. These two tasks are the way out for the host that ran it, and stay until every
-# cluster host has seen a traefik deploy after that date. Ungated on purpose: removing this
+# bridge re-probes a failure every cycle. These two tasks remove the host cron that used to run
+# it, and stay until every cluster host has seen a traefik deploy since the move. Ungated on purpose: removing this
 # cron is right on any host, whichever cluster it serves.
 - name: Remove the Cloudflare IP drift cron
   tags: [cron]

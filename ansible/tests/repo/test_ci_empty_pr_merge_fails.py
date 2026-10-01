@@ -1,15 +1,14 @@
 """The `hooks` job's scoping step fails a PR whose merge would change no files.
 
 On a `pull_request` event the checkout is the merge ref, so the step's three-dot diff against
-the base branch is exactly what merging the PR would land. An empty result used to fall through
-to a green full sweep. That is how #1741 and #1743 automerged on 2026-09-11 with empty squash
-commits: Renovate reused the previous bump's branch under the next version's title, and master
-already held its content (#1755). The step now exits non-zero there, which fails the `prek`
-gate the ruleset requires.
+the base branch is exactly what merging the PR would land. An empty result would fall through
+to a green full sweep and let an empty squash commit automerge, as when Renovate reuses the
+previous bump's branch under the next version's title and master already holds its content.
+The step exits non-zero there, which fails the `prek` gate the ruleset requires.
 
 This runs the step's own `run:` script, extracted from ci.yml, against a scratch repository
-built into each of the three shapes the step distinguishes. The empty fixture reproduces the
-#1741 geometry rather than a branch with no commits: a branch off an older master carrying a
+built into each of the three shapes the step distinguishes. The empty fixture reproduces that
+geometry rather than a branch with no commits: a branch off an older master carrying a
 commit, master carrying the same content from a separate commit, and a merge commit of the two
 checked out detached with `origin/master` set.
 
@@ -54,7 +53,7 @@ def test_a_pr_that_only_deletes_runs_the_full_sweep(
 def test_a_pr_whose_content_master_already_holds_fails(
     clone: Path, tmp_path: Path
 ) -> None:
-    # The #1741 shape: the PR branch carries the bump from an older master ...
+    # The PR branch carries the bump from an older master ...
     git(clone, "checkout", "-q", "-b", "pr")
     commit(clone, "bump to 4.39.21", **{"README.md": "4.39.21\n"})
     # ... and master landed the same content by another commit (the earlier PR's squash).

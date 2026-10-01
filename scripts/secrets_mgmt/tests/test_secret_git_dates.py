@@ -135,9 +135,9 @@ def test_reencrypt_guard_does_not_fire_on_an_ordinary_rotation():
 def test_reencrypt_guard_suppresses_the_reencrypt_but_finds_the_real_earlier_rotation():
     """Reject half: a commit that changes every shared key's ciphertext is not 10 for 10 rotations.
 
-    The guard must carry the walk past it to the real, earlier rotation one commit further
-    back — exactly the shape 3e731bcec needed: it re-encrypted everything, but
-    `arr_discord_webhook_url` had genuinely rotated days before.
+    The guard must carry the walk past it to the real, earlier rotation one commit further back — a
+    commit re-encrypted everything, but `arr_discord_webhook_url` had genuinely rotated days
+    before.
     """
     stable = _stable_keys(9)
     tools = _history_tools(
@@ -270,7 +270,7 @@ def test_a_revived_listed_departure_is_flagged():
 
 
 def test_the_git_fake_names_an_unscripted_ref_with_its_argv():
-    """The red-proof half: the blob lookup used to raise a bare `KeyError` naming the sha.
+    """The red-proof half.
 
     A `KeyError('deadbeef')` reads as "that sha is not in this history" — a plausible answer —
     where the sibling fakes (`_findings_fakes.py`, `_land_fakes.py`, `_deploy_fakes.py`) raise a

@@ -1,15 +1,10 @@
 ---
-# Slice 4, B5 — the media server, and the slice's exit criterion.
-#
-# Unlike the five that cut over in B4c, jellyfin has no hardlink seam to share: it only READS the
-# library. What makes it the exit criterion is the GPU — it is the first workload to request the
-# `devic.es/dri` extended resource the B1 device plugin advertises, so a wrong answer here is a
-# wrong answer about the whole media plane on this host.
-# 10.11.10ubu2404-ls35 was the tag the Docker copy ran, kept through the migration so a
-# behavioural difference between the two was never the image. Raised to 10.11.11 on 2026-09-02
-# because jellyfin-ani-sync 4.4.0.0 targets that ABI (see the plugin pin below); linuxserver
-# builds 10.11.11 on the ubu2604 base from ls43 on, so the base moved with it. NOT the
-# opencl-intel DOCKER_MODS variant — see D8/D12.
+# The media server. jellyfin has no hardlink seam to share: it only READS the library. Its
+# risk is the GPU — it is the first workload to request the `devic.es/dri` extended resource
+# the device plugin advertises, so a wrong answer here is a wrong answer about the whole media
+# plane on this host.
+# 10.11.11 because jellyfin-ani-sync 4.4.0.0 targets that ABI (see the plugin pin below).
+# NOT the opencl-intel DOCKER_MODS variant — see D8/D12.
 jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.11ubu2604-ls47
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -19,37 +14,32 @@ jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.11ubu2604-ls47
 # redeploy against data it can no longer read. Also the fleet's only workload requesting the
 # `devic.es/dri` GPU resource — a wrong image can wedge transcoding in a way a plain
 # readinessProbe never sees.
-# Promoted in slice 7b (2026-08-21): k8s/manifests now takes a pre-apply Longhorn snapshot of
-# the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
+# k8s/manifests takes a pre-apply Longhorn snapshot of the claim below and reverts it if the
+# deploy fails, so a bad swap reverts to the snapshot
 # instead of leaving the library database, artwork and trickplay data unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert; also the only GPU (devic.es/dri) workload in the fleet. WEIGHED: jellyfin also mounts media-data (shared RWX, not reverted); a revert rewinds the library cache and watch history, self-healing on a rescan"  # noqa var-naming[no-role-prefix]
-# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
-# is what this role's auto-deploy now depends on.
+# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot. Declared
+# regardless of k8s_autodeploy — protects a manual deploy too, and the revert is what this
+# role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [jellyfin-config]  # noqa var-naming[no-role-prefix]
 # Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
 # where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
-# what this role creates can see the coupling (2026-08-22 review M2).
+# what this role creates can see the coupling.
 k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
-# 206 M at B5 (2026-08-16); grew past 3Gi's headroom by 2026-09-09 — see the jellyfin_k8s_size
-# comment below. data/ holds the library database, artwork and trickplay. longhorn, not
+# data/ holds the library database, artwork and trickplay. longhorn, not
 # longhorn-nobackup: re-scanning a library rebuilds the metadata but loses watch state, user
 # accounts and API keys.
 jellyfin_k8s_claim: jellyfin-config
-# `longhorn` — backed up. Briefly `longhorn-nobackup` on 2026-08-08, after B2's TRANSACTION cap
-# fired twice in a week (08-02, 08-08) as slice 4 took Longhorn's daily run from 4 to 15 backups and
-# incremental backups bound bandwidth, not transactions. Returned the same day: the exclusion left
-# this volume with a single frozen 08-08 restore point, and whether steady-state incrementals are
-# actually the problem cannot be read off anything Longhorn or B2 expose. So it is being tested
-# rather than assumed, with B2 Reachable as the readout. docs/archive/b2-transaction-cap-monitoring-gaps.md.
+# `longhorn` — backed up. Excluding it (`longhorn-nobackup`) leaves a single frozen restore
+# point, and nothing Longhorn or B2 expose shows whether steady-state incrementals drive B2's
+# TRANSACTION cap. B2 Reachable is the readout. docs/archive/b2-transaction-cap-monitoring-gaps.md.
 jellyfin_k8s_storage_class: longhorn
-# Raised from 3Gi to 8Gi on 2026-09-09: the library database, artwork and trickplay data in
-# data/ outgrew 3Gi at 20 days old and tripped Jellyfin's own startup capacity check
-# (StorageHelper.TestDataDirectorySize requires 2GiB free). Cache and transcode scratch have
-# been on an emptyDir since 2026-08-16 (see the `jellyfin-cache` volume below), so this is
-# ordinary durable-data growth, not a leak of transient files onto this PVC. Longhorn's
+# 8Gi: the library database, artwork and trickplay data in data/ outgrew 3Gi and tripped
+# Jellyfin's own startup capacity check (StorageHelper.TestDataDirectorySize requires 2GiB
+# free). Cache and transcode scratch live on an emptyDir (see the `jellyfin-cache` volume
+# below), so this is ordinary durable-data growth. Longhorn's
 # `allowVolumeExpansion` is true on the `longhorn` StorageClass, and 8Gi (8589934592 bytes) is
 # a multiple of 16MiB and of every smaller block-size candidate, so the expansion is real
 # regardless of which size Longhorn checks against.
@@ -73,7 +63,7 @@ jellyfin_k8s_size: 8Gi
 # fails `scripts/validate/k8s_manifests.py` with "No filter named ...". The `Gi` suffix the
 # slice assumes is asserted by the test, so a unit change fails loudly rather than silently
 # producing a wrong number.
-# 16 GiB against ~1.9 GiB of live snapshots (2026-09-10) is roughly 8x headroom — deliberately
+# 16 GiB against ~1.9 GiB of live snapshots is roughly 8x headroom — deliberately
 # loose, because a cap that is REACHED does not prune, it refuses: Longhorn stops accepting new
 # snapshots until some are deleted, and k8s/volume-snapshot snapshots BEFORE it prunes. A tight
 # cap would latch, failing every jellyfin deploy and the weekly backup job with it.
@@ -83,22 +73,21 @@ jellyfin_k8s_snapshot_max_size: "{{ (jellyfin_k8s_size[:-2] | int) * 2 * 1024 * 
 jellyfin_k8s_media_claim: media-data
 
 # ── the GPU ─────────────────────────────────────────────────────────────────────────────────
-# The extended resource the B1 device plugin advertises. Requesting it is what gets the render
-# node into the container's cgroup device allowlist; `hostPath` alone does not, which B1 proved
-# with an EPERM (not EACCES) on open(). The GID below is the other half — the plugin gets the
+# The extended resource the device plugin advertises. Requesting it is what gets the render
+# node into the container's cgroup device allowlist; `hostPath` alone does not, and fails with
+# an EPERM (not EACCES) on open(). The GID below is the other half — the plugin gets the
 # container past the cgroup, group membership gets it past the file mode.
 jellyfin_k8s_dri_resource: devic.es/dri
 
 # ── the LAN address (D7) ────────────────────────────────────────────────────────────────────
-# The Docker copy bound 8096 to daniel-server's LAN IP for direct-by-IP clients. That becomes a
-# MetalLB LoadBalancer, PINNED rather than pool-assigned: `homelab-pool` has autoAssign, so an
+# Direct-by-IP clients reach 8096 through a MetalLB LoadBalancer, PINNED rather than pool-assigned: `homelab-pool` has autoAssign, so an
 # unpinned Service takes whatever is free and can move on recreate — and this address is typed
 # into TV and phone clients by hand. A moving one is worse than a chosen one.
 #
 # The two UDP discovery ports (1900 SSDP, 7359 auto-discovery) are deliberately NOT here. Both
-# are multicast/broadcast and MetalLB in L2 mode does not carry multicast to pods; D7 resolved
-# this by establishing nobody uses DLNA. That is what keeps this pod off `hostNetwork`.
-# jellyfin_k8s_lan_ip moved to group_vars/all.yml (cross-role: the uptime-kuma VIP tile
+# are multicast/broadcast and MetalLB in L2 mode does not carry multicast to pods; nobody uses
+# DLNA, which keeps this pod off `hostNetwork`.
+# jellyfin_k8s_lan_ip lives in group_vars/all.yml (cross-role: the uptime-kuma VIP tile
 # reads it, and role defaults are invisible across roles).
 
 # What the server advertises to clients as its own address — the LAN VIP above.
@@ -149,12 +138,12 @@ jellyfin_k8s_introskipper_url: "https://github.com/intro-skipper/intro-skipper/r
 jellyfin_k8s_introskipper_sha256: "719c7131455bb12461ed88cdbdec8bca02fd2ae406e7c4cbf0e18e458d8d5755"
 
 # ── Webhook (playback / library events out to HTTP endpoints) ───────────────────────────────
-# Jellyfin's own first-party plugin (owner `jellyfin` in the official manifest), added so
-# playback and library events can drive Home Assistant. Nothing consumes them yet — installing
+# Jellyfin's own first-party plugin (owner `jellyfin` in the official manifest), installed so
+# playback and library events can drive Home Assistant. Installing
 # the plugin is the half that has to live in the repo; the destination is configured in the
 # dashboard and stored on the config PVC, exactly as ani-sync's OAuth token is.
 #
-# 21.0.0.0, NOT the newest. Version 22.0.0.0 (2026-09-08) declares targetAbi 12.0.0.0, and
+# 21.0.0.0, NOT the newest. Version 22.0.0.0 declares targetAbi 12.0.0.0, and
 # Jellyfin's loader rejects a plugin built for a NEWER server silently — the same trap the two
 # pins above record. 21.0.0.0 declares 10.11.8.0, which the 10.11.11 image satisfies.
 #
@@ -168,7 +157,7 @@ jellyfin_k8s_webhook_url: "https://repo.jellyfin.org/files/plugin/webhook/webhoo
 jellyfin_k8s_webhook_md5: "fa75f479e66fba83827d4542dbff5f95"
 
 # ── Merge Versions (collapses duplicate quality versions into one library entry) ─────────────
-# Fourth plugin installed by this role. It merges the several files a movie can have — 1080p and
+# It merges the several files a movie can have — 1080p and
 # 2160p, or a remux beside a web-dl — into a single library entry whose versions the client
 # offers in a picker, instead of listing the same film three times. Third-party
 # (`danieladov/jellyfin-plugin-mergeversions`), and NOT in the official
@@ -184,7 +173,7 @@ jellyfin_k8s_mergeversions_version: "10.11.0.1"
 # (danieladov/JellyfinPluginManifest, master manifest.json). The CHECKSUM does not: that
 # manifest publishes an MD5, and this pins the sha256 GitHub itself reports for the asset, the
 # stronger digest Intro Skipper's pin already uses. Verified by downloading the zip and hashing
-# it (2026-09-10) — sha256 79afd802…, and the manifest's own MD5 ea467eb9… agrees on the same
+# it — sha256 79afd802…, and the manifest's own MD5 ea467eb9… agrees on the same
 # bytes, so two independent digests attest to one download.
 jellyfin_k8s_mergeversions_target_abi: "10.11.0.0"
 jellyfin_k8s_mergeversions_guid: "f21bbed8-3a97-4d8b-88b2-48aaa65427cb"
@@ -197,12 +186,10 @@ jellyfin_k8s_mergeversions_sha256: "79afd80219176cadccb05752971072a9fc74dc112232
 
 
 # ── Media Cleaner (rule-based deletion of watched media) ─────────────────────────────────────
-# Fifth plugin installed by this role, and the one with the largest blast radius: it DELETES
-# MEDIA FILES on a schedule, by rule. It ran unmanaged on the `jellyfin-config` PVC from a
-# dashboard install until #1619 — no pinned version, no checksum, no recorded targetAbi and no
-# test — which for a plugin that deletes is a different risk class from the four beside it. The
-# operator's call on #1619 was to KEEP it and pin it, so it is installed here on the pattern the
-# other four use, and an image bump can no longer drop it silently.
+# The plugin with the largest blast radius: it DELETES MEDIA FILES on a schedule, by rule. It
+# is pinned with a version, checksum, recorded targetAbi and a test like the four beside it,
+# because a plugin that deletes is a different risk class from an unpinned dashboard install,
+# and an image bump must not drop it silently.
 #
 # WHAT IS STILL NOT IN GIT, and cannot be: which libraries it may delete from, and every rule
 # that decides what goes. That is plugin configuration under
@@ -211,17 +198,9 @@ jellyfin_k8s_mergeversions_sha256: "79afd80219176cadccb05752971072a9fc74dc112232
 # from the dashboard's Troubleshooting tab, which renders a DRY-RUN report of what a real run
 # would delete, before changing anything there.
 #
-# The first pin, 3.2.0.101109, is what the pod already loaded before this pin existed (read from
-# `kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'`, 2026-09-10), so pinning it
-# changed no running version — it only made the version a thing git decides. v3.4.0 (Renovate
-# #2720) is the first bump; from v3.4.0 on, the release also ships a MediaCleaner-12.0.zip.
-#
-# 3.7.0.101109 is the SECOND bump, and it is the version the pod was already running (#2905):
-# Jellyfin's own `Update Plugins` scheduled task fetched it, unpinned and unverified, because
-# the installer's early exit skipped its superseded-version sweep. Pinning UP was the operator's
-# option 1 — the alternative downgraded a media-deleting plugin onto the configurations/ XML that
-# 3.7 last wrote. The deployment template now sets `autoUpdate: false` in every plugin's
-# meta.json, which is what stops the task fetching an unpinned build again.
+# From v3.4.0 on, the release also ships a MediaCleaner-12.0.zip. The deployment template sets
+# `autoUpdate: false` in every plugin's meta.json, which stops Jellyfin's own `Update Plugins`
+# scheduled task fetching an unpinned build.
 #
 # THE VERSION ENCODES THE SERVER ABI IN ITS FOURTH SEGMENT, which no sibling pin here does.
 # Upstream ships ONE release tag (`v3.2.0`) carrying three per-ABI assets —
@@ -238,7 +217,7 @@ jellyfin_k8s_mediacleaner_version: "3.7.0.101109"
 jellyfin_k8s_mediacleaner_target_abi: "10.11.9.0"
 jellyfin_k8s_mediacleaner_url: "https://github.com/shemanaev/jellyfin-plugin-media-cleaner/releases/download/v3.7.0/MediaCleaner-10.11.9.zip"
 # sha256, the digest GitHub reports for the asset itself — verified by downloading the zip and
-# hashing it (2026-09-28, v3.7.0). The plugin's published manifest (shemanaev/jellyfin-plugin-repo,
+# hashing it (v3.7.0). The plugin's published manifest (shemanaev/jellyfin-plugin-repo,
 # master manifest.json) carries an MD5, 6580d2fa3aa033dc2cfe317a2dfa4be3, and it agrees on the
 # same bytes, so two independent digests attest to one download. The zip's own meta.json declares
 # version 3.7.0.101109 and targetAbi 10.11.9.0, matching the two pins above.
@@ -250,23 +229,15 @@ jellyfin_k8s_mediacleaner_sha256: "8d66770e1d7253bc391c60bae9091677f41a1ea797efb
 # already bound to, which is why a dashboard-installed copy and this one are the same plugin to
 # Jellyfin rather than two.
 
-# ── SSO-Auth: REMOVED 2026-09-10, not merely unpinned ───────────────────────────────────────
-# Installed under #1648, removed at the operator's request. There are no `jellyfin_k8s_sso_*`
-# variables any more, and the deployment template's `sweep-unlisted-plugins` init container
-# removes the plugin directory from the PVC, as it does for every plugin not installed here.
+# ── No SSO-Auth plugin ──────────────────────────────────────────────────────────────────────
+# The deployment template's `sweep-unlisted-plugins` init container removes the plugin
+# directory from the PVC, as it does for every plugin not installed here. Upstream
+# 9p4/jellyfin-plugin-sso publishes no Jellyfin 12 build — its newest release, 4.0.0.4, still
+# declares targetAbi 10.11.0.0 — so it blocks any move to the 12 image line.
 #
-# WHY: #1674 identified it as the blocker on any move to the Jellyfin 12 image line. Upstream
-# 9p4/jellyfin-plugin-sso publishes no 12 build — its newest release, 4.0.0.4, still declares
-# targetAbi 10.11.0.0 (read from the manifest-release branch, 2026-09-10).
-#
-# WHAT IT COST, which no health check can show. This role runs `use_authelia: false` and
-# jellyfin.<domain> is a PUBLIC route, so this plugin was the only authentication layer in front
-# of it. The route now falls back to Jellyfin's own local accounts: no OIDC, no 2FA. The
-# operator made that call explicitly on 2026-09-10 with the alternative (`use_authelia: true`,
-# which protects the route but breaks native clients) on the table.
-#
-# The authelia role's `jellyfin` OIDC client was retired in the same change rather than left
-# pointing at a redirect path nothing serves.
+# This role runs `use_authelia: false` and jellyfin.<domain> is a PUBLIC route, so the route
+# falls back to Jellyfin's own local accounts: no OIDC, no 2FA. `use_authelia: true` would
+# protect the route but breaks native clients.
 
 # The image every plugin container runs on — the five installers and the allowlist sweep
 # alike. Python, not the alpine:3.24 the sibling init
@@ -280,10 +251,9 @@ jellyfin_k8s_plugin_init_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9
 jellyfin_k8s_cpu_limit: "4"
 jellyfin_k8s_mem_limit: 4096Mi
 jellyfin_k8s_cpu_request: "250m"
-# 2Gi against measured working-set peaks of 1.85GiB and 2.8GiB across two pod incarnations
-# (2026-08-29). The request is the kubelet's eviction datum — it ranks pods that exceed their
+# 2Gi against measured working-set peaks of 1.85GiB and 2.8GiB across two pod incarnations.
+# The request is the kubelet's eviction datum — it ranks pods that exceed their
 # request ahead of those that don't — so a 256Mi request put jellyfin in the worst bucket while
 # genuinely needing several GiB. Stays under the 4096Mi limit, so QoS remains Burstable.
-# Preventative: 37 pods at homelab-best-effort priority evict ahead of it, and no pod on this
-# cluster has ever OOMKilled.
+# Preventative: 37 pods at homelab-best-effort priority evict ahead of it.
 jellyfin_k8s_mem_request: 2Gi

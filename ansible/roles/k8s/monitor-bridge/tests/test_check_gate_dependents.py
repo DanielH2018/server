@@ -33,16 +33,6 @@ def test_b2_dependent_set_matches_real_checks():
     assert gates.B2_DEPENDENT <= names
 
 
-# `test_b2_dependent_excludes_backup` was deleted here on 2026-09-01. It asserted `"backup" not
-# in B2_DEPENDENT` to keep the B2 gate from suppressing the one check that polled B2's real
-# state — sound while it was written, dead since Kopia retired on 2026-08-13 (ADR-0014) and backup
-# moved to Longhorn. No check named `backup` exists in the registry or STARTUP_GRACE any more, so
-# the assertion could not fail, and its comment described two behaviours that had stopped being
-# true. Both invariants it pointed at are still enforced, by name: `B2_DEPENDENT <= names`
-# directly above, and the STARTUP_GRACE disjointness in
-# test_check_streaks.py::test_startup_grace_disjoint_from_run_once_skip_sets.
-
-
 def _dependents_are_real_checks(dependents_map: dict, names: set) -> bool:
     """True when every check named across `dependents_map`'s values is a real registry name.
 
@@ -122,9 +112,8 @@ def test_cluster_targets_is_prom_dependent():
 
 # ── The COMPLETENESS axis: a Prometheus reader missing from every gate set ──────────────────
 # The guards above assert `<SET> <= names` — every member is a real check. That direction
-# cannot see a check that reads Prometheus and is in NO set, which is what shipped for
-# `traefik_latency` until 2026-09-27 (#2778): it co-fired with the `prometheus` gate on
-# 2026-09-18 and in both Sunday reboots, one root cause paging twice.
+# cannot see a check that reads Prometheus and is in NO set: it co-fires with the
+# `prometheus` gate, one root cause paging twice.
 
 
 def prom_readers(checks) -> set[str]:
@@ -167,7 +156,7 @@ def test_every_prometheus_reader_is_gated():
 
 
 def test_a_reader_dropped_from_the_gate_sets_is_flagged():
-    """The reject half: the exact state #2778 describes must not read as clean."""
+    """The reject half: a Prometheus reader in no gate set must not read as clean."""
     readers = prom_readers(registry.build_checks())
     without_latency = gates.PROM_DEPENDENT - {"traefik_latency"}
     assert readers - without_latency == {"traefik_latency"}

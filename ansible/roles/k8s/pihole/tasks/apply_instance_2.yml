@@ -3,17 +3,17 @@
 # rolled it.
 #
 # Included from roll_one.yml for the `pihole-2` iteration only, after the sibling checks have
-# proved instance 1 is serving. That ordering is the whole point: while both Deployments sat in
-# one file, `kubectl apply -f <dir>/` changed both pod templates in one request and both pods
-# terminated in the same second. Instance 2's new pod also pulled its image through the resolver
-# it was replacing and failed with `lookup registry-1.docker.io: Try again`; applying it while
-# instance 1 serves removes that dependency without a pre-pull, because the registry name still
-# resolves (#2884).
+# proved instance 1 is serving. That ordering is the whole point: with both Deployments in one
+# file, `kubectl apply -f <dir>/` changes both pod templates in one request and both pods
+# terminate in the same second. Instance 2's new pod would also pull its image through the
+# resolver it was replacing and fail with `lookup registry-1.docker.io: Try again`; applying it
+# while instance 1 serves removes that dependency without a pre-pull, because the registry name
+# still resolves.
 
 # The same fingerprint the shared role takes across its own apply, for the same reason and with
 # the same failure handling: a pod template that differs across the apply is a roll the apply
 # started, and a `rollout restart` on top of it would delete the pod the apply just created while
-# the kubelet is mid-pull (#1988/#1994). Hashed in the shell so the register carries 64 hex
+# the kubelet is mid-pull. Hashed in the shell so the register carries 64 hex
 # characters rather than a pod template, which can inline an env value. `failed_when: false`
 # because on the first-ever deploy the Deployment does not exist on the before side; a non-zero rc
 # on either side reads as "not rolled", which restarts -- the recoverable direction.
@@ -33,7 +33,7 @@
   check_mode: false
 
 # `manifests_deferred_dir` is the shared role's published path for the directory it rendered
-# instance 2 into (#2899) — /etc/rancher/k3s/manifests/pihole-instance-2 on a real run. Reading
+# instance 2 into — /etc/rancher/k3s/manifests/pihole-instance-2 on a real run. Reading
 # its fact rather than repeating the literal keeps the render and the apply on one answer.
 #
 # No --prune: the shared role prunes this directory from `manifests_deferred_files`, the same way
@@ -46,7 +46,7 @@
   become: true
   register: pihole_k8s_instance_2_apply
   # Pinned false under a dry run, like the shared apply's. This verdict now decides whether
-  # roll_one.yml restarts pihole-2 (#3127), and kubectl prints `configured` for objects a dry
+  # roll_one.yml restarts pihole-2, and kubectl prints `configured` for objects a dry
   # run did not persist. The pin is belt and braces: roll_one.yml is gated on `k8s_no_mutate`.
   changed_when: >-
     not (k8s_dry_run | bool)
@@ -71,8 +71,8 @@
 # `created` is its own clause because the before-side read fails on a Deployment this apply
 # creates, so the fingerprint comparison cannot see that roll. Restarting a just-created
 # Deployment races its initial rollout, which is the case the shared role's own `created` guard
-# skips -- and after the split the shared apply's own output never names pihole-2, so that guard
-# no longer covers it and this clause is what replaces it.
+# skips -- and the shared apply's own output never names pihole-2, so that guard does not cover
+# it and this clause does.
 - name: Note whether pihole-2's own apply rolled it
   # Keyed by instance name, like the shared role's own `manifests_rolled_by_apply`, rather than a
   # bare boolean: the restart gate in roll_one.yml runs once per instance, and a bare fact set

@@ -3,19 +3,19 @@
 
 The tick runs on ONE host (`has_gitops`, daniel-box), and `initial_setup.yml` runs against
 one host per invocation, so a role it reaches on more hosts than that leaves the others
-unconverged after a green tick (issue #1009). `setup_role_hosts` reads the role's own gate
+unconverged after a green tick. `setup_role_hosts` reads the role's own gate
 in the playbook, or, for a role the playbook does not gate, the gates on its own tasks
-(issue #2073: `deploy_ui` is one `block:` under `when: has_gitops`); `setup_file_hosts`
+(`deploy_ui` is one `block:` under `when: has_gitops`); `setup_file_hosts`
 reads the gate on the task that ships a changed file, which is what decides where a FILE
-lands when the role reaches more hosts than the file does (PR #1241's shape: box-only cron
-templates under the ungated `initial_setup` role read as reaching every host);
+lands when the role reaches more hosts than the file does (box-only cron
+templates under the ungated `initial_setup` role would otherwise read as reaching every host);
 `setup_repo_file_hosts` reads the same gate for a changed file OUTSIDE the role's directory
-that one of its tasks copies out of the checkout (issue #2795).
+that one of its tasks copies out of the checkout.
 `remaining_setup_hosts_note` is the string land.sh prints and the verdict hangs on.
 
-Split out of `land_tags.py` at the module-length cap; the path-to-tag mappers stay there.
-The traversal that reads a role's `tasks/` tree for those gates is `setup_role_chains.py`,
-split out of this module at the same cap; this one evaluates the chains it returns.
+The path-to-tag mappers stay in `land_tags.py`.
+The traversal that reads a role's `tasks/` tree for those gates is `setup_role_chains.py`;
+this one evaluates the chains it returns.
 """
 
 import functools
@@ -161,17 +161,14 @@ def setup_role_hosts(
     `initial_setup.yml`'s own `hosts:` is `{{ target | default(lookup('pipe','hostname')) }}`
     -- one host per run -- so a role with NO `when:` gate (`initial_setup` itself among them)
     reaches every host the playbook is EVER run on, and the tick converging on daniel-box says
-    nothing about the other two. Issue #1009: PR #1002 changed
-    `roles/setup/initial_setup/files/kuma-push-lib.sh`, the tick converged, and land.sh read
-    `settled` while daniel-server and daniel-pi kept running the old library.
+    nothing about the other two.
 
     A role with no playbook gate is read from its own tasks instead of assumed to reach
     every host. `deploy_ui` wraps its whole `tasks/main.yml` in one `block:` under `when:
     has_gitops`, so the play visits all three hosts and every task skips on two of them; a
     change to its `defaults/`, `handlers/` or `tasks/main.yml` -- none of which names a
-    shipped file -- read as owing those two a hand-run, and landing PR #2071 ended
-    `needs-manual-apply` over four commands that would each run a play in which nothing
-    fires (issue #2073). The gate that decides is the union over the role's leaf tasks:
+    shipped file -- would read as owing those two a hand-run of a play in which nothing
+    fires. The gate that decides is the union over the role's leaf tasks:
     a host is reached when at least one task's `when:` chain -- the block and static-import
     gates above it included -- passes there. `gitops_deploy` keeps all three this way, since
     its `not has_gitops` branch tears the deployer down on the other two. A tasks tree that
@@ -230,19 +227,18 @@ def setup_file_hosts(
     """Which hosts a change to `path` (one file of setup role `role`) actually lands on.
 
     `setup_role_hosts` answers at role level, and `initial_setup` has no role gate, so
-    every change to it read as reaching all three hosts. The files that change are cron
+    every change to it would read as reaching all three hosts. The files that change are cron
     templates its `tasks/crons.yml` ships under `when: has_gitops` or `inventory_hostname
-    == 'daniel-box'`: 7 of the 18 `needs-manual-apply` verdicts in the two days to
-    2026-09-05 (PRs 1049, 1079, 1093, 1187, 1207, 1241, 1244) prescribed playbook runs on
-    daniel-pi and daniel-server for a file neither host installs. The gate that decides
+    == 'daniel-box'`, so a playbook run on daniel-pi or daniel-server would install nothing
+    for them. The gate that decides
     where a FILE lands is the one on the task that ships it, so this reads that gate --
     an `import_tasks` `when:` above it included -- and keeps only the role's hosts that
     pass at least one shipping task's chain.
 
     A `tasks/<file>.yml` path reaches the hosts that run a task IN that file: the leaf
-    tasks it holds, each under the include chain that pulls the file in. PR #2071 changed
-    `gitops_deploy/tasks/install.yml`, which `tasks/main.yml` includes under `when:
-    has_gitops`, and the path read as every host (issue #2073); `tasks/teardown.yml`, the
+    tasks it holds, each under the include chain that pulls the file in. For example
+    `gitops_deploy/tasks/install.yml` is included by `tasks/main.yml` under `when:
+    has_gitops`, so it reaches only daniel-box; `tasks/teardown.yml`, the
     `not has_gitops` half of the same dispatcher, reaches the other two the same way. A
     task file holding only includes -- `main.yml` of a dispatcher -- has no leaf of its
     own and returns the role-level answer, which for a dispatcher is the union.
@@ -264,19 +260,16 @@ def setup_file_hosts(
     role_hosts = setup_role_hosts(role, playbook, all_vars, host_vars_dir, roles_dir)
     if path.endswith(".md"):
         # Docs ship nowhere: no task under roles/setup/*/tasks names a .md file, and the
-        # deployer's k8s branch already reads *.md as docs. PR #1079 was three box-only
-        # templates plus the role CLAUDE.md, and the CLAUDE.md alone reached every host.
+        # deployer's k8s branch already reads *.md as docs.
         return frozenset()
     parts = Path(path).parts
     if parts[4:5] == ("tests",):
         # A role's own pytest guards ship nowhere either: nothing stages a `tests/` file
         # (`ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide), so
         # no host runs the old copy. `land_tags.is_role_test_path` is the same predicate,
-        # inlined because land_tags imports this module. Without it a `tests/` path fell
-        # through to the ROLE-level reach, and the union over a PR's files widened a
-        # box-only `files/` change back out to every host: PR #1884 touched
-        # gitops_deploy's `files/*.py` (daniel-box only) and its `tests/*.py`, and land.sh
-        # prescribed initial_setup.yml runs on daniel-server and daniel-pi (issue #1885).
+        # inlined because land_tags imports this module. Without it a `tests/` path falls
+        # through to the ROLE-level reach, and the union over a PR's files widens a
+        # box-only `files/` change back out to every host.
         return frozenset()
     prefix = ("ansible", "roles", "setup", role)
     if not role_hosts or parts[: len(prefix)] != prefix or len(parts) < 6:
@@ -313,15 +306,13 @@ def setup_repo_file_hosts(
 
     THE HOLE THIS CLOSES. `setup_file_hosts` keys on the path sitting under
     `ansible/roles/setup/<role>/`, and `remaining_setup_hosts_note` only ever handed it paths
-    with that prefix, so a repo file a role's task copies from the checkout was invisible to
-    the reach. PR #2792 changed `scripts/deploy_tools/staging_gate_remote.sh`, which
-    `hypervisor/tasks/install.yml` installs as `/usr/local/bin/staging-gate-run` on the one
-    host with `has_hypervisor: true`, plus `hypervisor/tasks/teardown.yml`. The union over
-    the role's own files was `{daniel-box, daniel-pi}` from the teardown half alone, so the
-    note named daniel-pi and omitted **daniel-server** -- the only host the changed script
-    actually runs on. An operator following that line applies the teardown half to the Pi and
-    leaves the staging gate on the old script, which is what happened on 2026-09-27: the
-    hand-run on daniel-server went from 0 to 3 `ignore-submodules` matches (issue #2795).
+    with that prefix, so a repo file a role's task copies from the checkout would be invisible to
+    the reach. For example `scripts/deploy_tools/staging_gate_remote.sh` is installed by
+    `hypervisor/tasks/install.yml` as `/usr/local/bin/staging-gate-run` on the one host with
+    `has_hypervisor: true`, while `hypervisor/tasks/teardown.yml` reaches the others. The
+    union over the role's own files is `{daniel-box, daniel-pi}` from the teardown half alone,
+    so a note built from it names daniel-pi and omits **daniel-server** -- the only host the
+    changed script actually runs on.
 
     Evidence only: a role that ships nothing named `path` contributes the empty set, not its
     role-level reach. `task_gates_shipping_repo_path`'s docstring has why -- the inverse
@@ -353,8 +344,8 @@ def _setup_apply_command(role: str, host: str, local_host: str = "") -> str:
     its own controller against its own `/home/ubuntu/server`, and nothing keeps that current
     -- the crons that `git pull` (secret-rotate.sh.j2, docs-refresh.sh.j2) are both `when:
     has_gitops`, daniel-box only. Skipping the pull renders the PRE-merge tree and reports
-    `changed=0`, the exact trap `broad_remediation`'s docstring records an operator hitting
-    on 2026-09-01 -- so the pull is folded into the same command rather than left as a
+    `changed=0`, the exact trap `broad_remediation`'s docstring records -- so the pull is
+    folded into the same command rather than left as a
     separate step a copy-paste can drop. daniel-pi has no such hazard: `-e target=daniel-pi`
     renders on THIS host's already-current checkout and only executes remotely over SSH.
     """
@@ -386,12 +377,12 @@ def remaining_setup_hosts_note(
 
     A role reached ONLY through a changed repo file it ships is named too, and named
     differently: `cs.setup_roles` is built from path classification, so a PR whose only loud
-    path is `scripts/deploy_tools/staging_gate_remote.sh` put no role in the change set at all
-    and got no line, while daniel-server kept running the old `/usr/local/bin/staging-gate-run`
-    (issue #2798). The tick applied that role on no host, so its remediation includes
-    `local_host`.
+    path is `scripts/deploy_tools/staging_gate_remote.sh` puts no role in the change set at all
+    and would get no line, while daniel-server kept running the old
+    `/usr/local/bin/staging-gate-run`. The tick applied that role on no host, so its
+    remediation includes `local_host`.
 
-    Empty for the #723 shape -- `gitops_deploy` is `when: has_gitops`, true only on
+    Empty for a role like `gitops_deploy`, which is `when: has_gitops`, true only on
     daniel-box, so a PR touching only a role whose sole reached host is `local_host` stays
     unowed to a hand, exactly as `plane_note` already keeps it.
     """
@@ -428,7 +419,7 @@ def remaining_setup_hosts_note(
     # A role NO path in this PR sits under, which nonetheless ships one of the changed repo
     # files. `local_host` is NOT subtracted here: the role entered through the file alone, so
     # `cs.setup_roles` never held it, the tick applied it on no host at all, and the host the
-    # tick ran on is owed the apply like every other (issue #2798).
+    # tick ran on is owed the apply like every other.
     for role in _repo_file_only_roles(cs.setup_roles, roles_dir) if repo_files else []:
         hosts = frozenset().union(
             *(

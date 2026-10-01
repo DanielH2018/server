@@ -1,25 +1,19 @@
 #!/usr/bin/env python3
 """File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues.
 
-WHY A WRAPPER. The homelab-review skill, the review-and-fix command and an ordinary session
-all produce findings nobody fixes that day. Until 2026-09-02 they landed in a memory table
-with no status field, a gitignored triage file that suppressed them, and session notes.
-GitHub Issues has the status field; this script owns the three rules that make issues a
-register rather than a pile: one issue per fingerprint, a re-observation is a comment and
-the third one escalates, and a refuted finding stays closed.
+WHY A WRAPPER. The homelab-review skill, the review-and-fix command and an ordinary session all produce findings
+nobody fixes that day. GitHub Issues has the status field; this script owns the three rules that make issues a
+register rather than a pile: one issue per fingerprint, a re-observation is a comment and the third one
+escalates, and a refuted finding stays closed.
 
 Every command PLANS a list of gh argv first (pure, unit-tested), then runs it. `--dry-run`
 prints the plan and writes nothing.
 
-VERIFY-BY. `open --verify-by '<how to check it>'` stores prose in the issue body under a
-`## Verify-by` heading; `verify` prints those descriptions back so a person or an agent can
-act on them. NOTHING IS EXECUTED. Until 2026-09-06 a verify-by was a shell command whose exit
-code `verify` read as a verdict, gated by the repo's read-only classifier — and of the 17
-findings that ever carried one, 12 were genuine read-only commands the classifier refused, so
-the executable half mostly never ran. Prose describes any check, including the ones no safe
-command can express, and it removes the need to execute text read out of a GitHub issue body
-(#1313, #1351). A verify-by written before that change is still read back correctly: the
-fence around it is stripped and the command shown as the instruction it always was.
+VERIFY-BY. `open --verify-by '<how to check it>'` stores prose in the issue body under a `## Verify-by` heading;
+`verify` prints those descriptions back so a person or an agent can act on them. NOTHING IS EXECUTED. Prose
+describes any check, including the ones no safe command can express, and it removes the need to execute text read
+out of a GitHub issue body. A verify-by written before that change is still read back correctly: the fence around
+it is stripped and the command shown as the instruction it always was.
 
 This file is the CLI: the `cmd_*` handlers and the exit contract. Argument parsing is
 `findings_lib/cli.py`, the vocabulary and the pure reads are `findings_lib/issue_model.py`, the gh argv are
@@ -56,7 +50,7 @@ register, with the same labels, trailer and fingerprint dedup it gets here: ever
 the `open` path, reads included, carries the flag. A dedup read against this repo while the
 create went elsewhere would re-file the finding on every run. Only `open` takes it. The other
 subcommands read this repo's register alone, and a finding filed elsewhere closes through
-that repo's own PR (#2685).
+that repo's own PR.
 
 CLOSING A FINDING. `--fixed` closes as completed. The other two close as not planned and are
 terminal, so `open` refuses to re-file the same fingerprint afterwards: `--refuted` records
@@ -65,13 +59,10 @@ to live with the trade-off. Both need `--reason`. Reach for `--accepted` rather 
 by hand — a hand-close is invisible to the dedup, so the next review re-files an accepted
 decision and the comment on it reads "treat as a regression".
 
-RELEASING A STRANDED CLAIM. Every path that ends or restarts an issue's life releases the
-claim on it first, whoever holds it — `close` and `open`'s reopen path alike, both through
-`plan_release_held`. `claims`, `reap` and `next` read OPEN issues, so a claim left on a
-closed one is invisible to every view at once rather than merely wrong, and a reopen brings
-it back LIVE (#1277). `verify` was a third such path until it stopped closing anything; the
-live-claim refusal it grew in #1302 went with the close, since a command that only prints
-cannot take an issue out from under the session working it.
+RELEASING A STRANDED CLAIM. Every path that ends or restarts an issue's life releases the claim on it first,
+whoever holds it — `close` and `open`'s reopen path alike, both through `plan_release_held`. `claims`, `reap` and
+`next` read OPEN issues, so a claim left on a closed one is invisible to every view at once rather than merely
+wrong, and a reopen brings it back LIVE.
 
 CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label, so a
 worktree fanning out several issues at once knows which are its own; `release` reverses
@@ -95,14 +86,11 @@ offered, marked with who holds it — `claim` reaps that claim on the way past, 
 clears every one of them at once. `--limit N` bounds the list; there is no default bound,
 because one truncated the free set silently and the reader took ten rows for all of them.
 
-DEFERRING AN ISSUE. `defer <n> --until <date>` (or `open --not-before <date>`) puts a
-`not-before:<YYYY-MM-DD>` label on the issue. `next` and `claim` withhold it while today is
-before that date and offer it ON the date, with nothing to clear: the label expires by
-comparison, which `manual` cannot. `next` still names a deferred issue — under a `deferred:`
-line, and on stderr under `--json` so the array stays the free set — because a silently
-withheld issue reads as a closed one to whoever looks at the backlog. `defer <n> --clear`
-lifts it early. This exists because #1288, workable only once seven days of a metric existed,
-was claimed, read and released unchanged six times in four days (#1739).
+DEFERRING AN ISSUE. `defer <n> --until <date>` (or `open --not-before <date>`) puts a `not-before:<YYYY-MM-DD>`
+label on the issue. `next` and `claim` withhold it while today is before that date and offer it ON the date, with
+nothing to clear: the label expires by comparison, which `manual` cannot. `next` still names a deferred issue —
+under a `deferred:` line, and on stderr under `--json` so the array stays the free set — because a silently
+withheld issue reads as a closed one to whoever looks at the backlog. `defer <n> --clear` lifts it early.
 
 RESERVING AN ISSUE FOR THE OPERATOR. `manual <n>` (or `open --manual`) adds the `manual`
 label: `next` withholds the issue, `claim` refuses it, and `list` still marks it `[manual]`.
@@ -266,7 +254,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         # A `Closes #<n>` merge closes an issue without going through `close`, so the claim
         # is still on it. Reopening for a later re-observation brings that claim back LIVE,
         # where it blocks `claim` and withholds the issue from `next` for as long as the
-        # claiming worktree exists — an orchestrator's can be a long time (#1277). Released
+        # claiming worktree exists — an orchestrator's can be a long time. Released
         # as its OWN comment rather than folded into the regression note, so the body never
         # carries two claim trailers at once (see `current_claim`'s DECIDED marker).
         plans += _aimed(
@@ -398,7 +386,7 @@ def cmd_verify(args: argparse.Namespace, tools: FindingsTools) -> int:
 
     A verify-by is prose, so this command reports and does not decide. It executes no stored
     text, reaches no verdict, and closes nothing — closing stays with `close`, where a human
-    or an agent chooses it after doing what the instructions describe (#1313).
+    or an agent chooses it after doing what the instructions describe.
 
     Args:
         args: parsed CLI namespace carrying ``all`` and ``numbers``.
@@ -498,7 +486,7 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     rows = rows[: args.limit]
     # Named, not hidden: withheld silently, a deferred issue reads as a closed one. Under
     # `--json` the note goes to stderr, because the array IS the free set an orchestrator
-    # claims (`issue-fanout`), and a deferred row inside it would be #1739 inverted.
+    # claims (`issue-fanout`), and a deferred row inside it would be claimed.
     held_back = [
         f"deferred: #{r['number']} until {r['not_before']}  {r['title']}"
         for r in deferred(issues, today=today)
@@ -547,9 +535,8 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     """
     # The FIRST NON-BLANK line, not `[1]`. Line 1 of a module docstring is the blank line
     # after the summary, so `[1]` passed argparse an empty description and `--help` printed
-    # none at all (#1272). Reading the line rather than restating it keeps one copy: an
-    # earlier round replaced the broken expression with a hardcoded paraphrase, which a
-    # reviewer rejected as a second copy that can drift.
+    # none at all. Reading the line rather than restating it keeps one copy that cannot
+    # drift.
     summary = next(line for line in __doc__.splitlines() if line.strip())
     args = _parser(summary).parse_args(argv)
     handler = {

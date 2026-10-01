@@ -2,15 +2,15 @@
 
 WHY THIS IS A TEST AND NOT A COMMENT. `limit` REJECTs a source IP that opens 6 connections in
 30 seconds on a rolling window, so retries hold the block open rather than riding it out.
-Several Claude sessions work this repo at once and each reaches daniel-server over ssh; twice
-now that quorum has crossed the threshold and locked every session out of the host for as long
-as anything kept retrying. `roles/setup/initial_setup/tasks/network.yml` carries the reasoning;
+Several Claude sessions work this repo at once and each reaches daniel-server over ssh; when
+that quorum crosses the threshold, every session is locked out of the host for as long as
+anything keeps retrying. `roles/setup/initial_setup/tasks/network.yml` carries the reasoning;
 this pins the two properties that reasoning depends on.
 
 BOTH properties matter, and the second is the one that fails silently. ufw matches rules in
 order and takes the first hit, so an `allow` appended BELOW the `limit` rule is inert — present
-in `ufw status`, changing nothing. That is the exact shape #508 already cost this role once (the
-staging route-deny that deployed cleanly, listed correctly and fenced nothing), and it is why
+in `ufw status`, changing nothing. Such a rule deploys cleanly, lists correctly and fences
+nothing, and it is why
 the allow rule has to declare a top insert rather than rely on task order alone: every host this
 has ever deployed to already carries the `limit` rule, so a plain append lands after it.
 """

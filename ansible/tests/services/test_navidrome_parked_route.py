@@ -3,7 +3,7 @@
 Traefik's kubernetescrd provider re-reads every IngressRoute on each config refresh and logs
 `no servers found for homelab/navidrome` whenever the EndpointSlice behind one is empty. With
 the workload parked at `navidrome_k8s_replicas: 0` that fired every ~20s forever and buried
-every other router error in the traefik log (issue #1323).
+every other router error in the traefik log.
 
 Both halves are tested because either alone is only half a retirement: rendering nothing leaves
 the live IngressRoute serving, since `kubectl apply` only adds and updates.
@@ -52,7 +52,7 @@ def test_the_route_renders_when_navidrome_has_a_pod():
     is the documented way to bring the workload back, and it must bring the route with it.
     """
     docs = [d for d in yaml_fast.safe_load_all(_render_route(1)) if d]
-    # One object per host since #1990: the `.local.` route and its public twin.
+    # One object per host: the `.local.` route and its public twin.
     assert [d["metadata"]["name"] for d in docs] == ["navidrome", "navidrome-public"], (
         docs
     )

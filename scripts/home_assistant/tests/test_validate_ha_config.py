@@ -268,8 +268,7 @@ def test_script_file_list_flags_unlisted_file(tmp_path):
 
 
 def test_template_file_list_flags_unlisted_macro(tmp_path):
-    # The case the role docs used to describe as "ships automatically": a new .jinja that
-    # nothing lists would validate clean and never reach the pod.
+    # A new .jinja that nothing lists would validate clean and never reach the pod.
     errors = _role_with_shipped_list(
         tmp_path,
         ["fan.jinja"],
@@ -372,7 +371,7 @@ def test_uncoerced_macro_bool_uses_truth_table():
 
 def test_macro_bool_coercion_clean_on_real_role(real_role_errors):
     # The real role must pass — no current macro is a raw boolean operand (error_in_scope is
-    # `| bool`-coerced). Pure future-tightening; this guards against a false-positive regression.
+    # `| bool`-coerced). This guards against a false-positive regression.
     assert all("boolean and/or/not operand" not in e for e in real_role_errors), (
         real_role_errors
     )

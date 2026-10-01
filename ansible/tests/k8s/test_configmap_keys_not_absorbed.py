@@ -7,8 +7,8 @@ manifest holds one key whose value is the previous value with `known_services.js
 onto the end. Nothing about that is malformed YAML, which is why the existing validator cannot
 see it: `scripts/validate/k8s_manifests.py` parses the manifest and then parses the embedded
 blob (lines 234-258), and both parses stay green either way. The failure only shows up at
-runtime — on 2026-08-16 the artifacts pod crash-looped on `SyntaxError: invalid syntax`,
-because the ConfigMap key had been appended to the Python program it sits next to.
+runtime — a pod crash-loops on `SyntaxError: invalid syntax` when the ConfigMap key is
+appended to the Python program it sits next to.
 
 The check here is deliberately one-directional: every key name written at the `data:` indent in
 the SOURCE must appear as a key in the PARSED render. Absorption removes a key from the parsed
@@ -97,8 +97,7 @@ def unconditional_source_keys(template: Path) -> list[str]:
             continue
         # `{{ lookup('file', ...) | indent(4, true) }}` at column 0 is how a role embeds a file
         # as a key's value. It is not a dedent out of the `data:` map, so it must not reset the
-        # scan — before this line was skipped, every key after the first embedded file was
-        # dropped, which silently un-covered home-assistant's ten keys and left it checking one.
+        # scan.
         if not stripped or stripped.startswith(("{%", "{#", "{{")):
             continue
         match = KEY_RE.match(line)
@@ -148,11 +147,11 @@ def test_the_scan_finds_keys_across_most_configmaps() -> None:
     """Guard the guard: a broken scan reports no keys and every assertion below vacuously passes."""
     templates = len(CASES)
     keys = sum(len(k) for _, _, _, k in CASES)
-    # Measured 2026-08-21: 51 templates, 321 keys. The floors sit just under that, high enough
-    # to catch the two ways this scan has already lost coverage silently: stopping at a
-    # multi-line `{# ... #}` header dropped it to 49/312, and stopping at the first column-0
-    # `{{ lookup(...) }}` line dropped home-assistant from ten checked keys to one. Both still
-    # left the great majority of templates passing, which is why the floor is close to the
+    # Measured: 51 templates, 321 keys. The floors sit just under that, high enough
+    # to catch the two ways this scan can lose coverage silently: stopping at a
+    # multi-line `{# ... #}` header drops it to 49/312, and stopping at the first column-0
+    # `{{ lookup(...) }}` line drops home-assistant from ten checked keys to one. Both still
+    # leave the great majority of templates passing, which is why the floor is close to the
     # measured value rather than a round number well below it.
     assert templates >= 50, (
         f"only {templates} templates carry scanned keys — the source scan broke"

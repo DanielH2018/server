@@ -2,8 +2,8 @@
 
 This Prometheus holds ~11.5 days. A `[30d]` selector returns those eleven days with no error,
 no warning and no partial-data marker, so a ratio derived from it quotes a denominator nearly
-three times the covered one — issue #1314, and issue #1186's table before it. The warning is
-the thing under test; the value itself is unchanged.
+three times the covered one. The warning is the thing under test; the value itself is
+unchanged.
 """
 
 from diagnostics.probe_lib import cli_parser

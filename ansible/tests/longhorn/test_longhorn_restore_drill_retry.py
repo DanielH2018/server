@@ -2,9 +2,8 @@
 """The restore drill's retry: a failed attempt is re-drilled once, ahead of the rotation.
 
 Selection is least-recently-attempted, and the attempt stamp is refreshed whatever the outcome,
-so a failed volume's next slot was a whole rotation away — 26 nights against check 8's 31-day
-coverage window. tdarr-configs (2026-09-07, byte floor) and n8n-files (2026-08-30, empty volume)
-both paged that way, and neither could be re-proven without a root shell (#2270).
+so without a retry a failed volume's next slot is a whole rotation away — 26 nights against
+check 8's 31-day coverage window.
 
 The bound is the half that matters: a volume that fails every time it is drilled must not take
 every night, which is the property the attempt-stamp selection was built for in the first place.

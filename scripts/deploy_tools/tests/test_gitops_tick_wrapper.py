@@ -30,22 +30,22 @@ _TICK_SH = _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh"
 # stamp from the real /proc/uptime cannot work: on a runner whose uptime is under
 # `_IN_FLIGHT_S`, `uptime - 300` is negative, the script's `^[0-9]+$` guard rejects it, and
 # the test silently lands in the `${seconds:-0}` fallback instead of the arithmetic it exists
-# to check. That is how PR #1769 read `already 0s in flight` on CI and 300s here.
-# Whole seconds so the subtraction is exact in floating point.
+# to check. That reads `already 0s in flight` on CI and 300s on a long-running host. Whole
+# seconds so the subtraction is exact in floating point.
 _UPTIME_S = 123456
 _IN_FLIGHT_S = 300
 _UPTIME_FIXTURE = f"{_UPTIME_S}.00 98765.43\n"
 _MONOTONIC_US = (_UPTIME_S - _IN_FLIGHT_S) * 1_000_000
 
 # The wrapper polls the stub every 5s by default, and every wait-mode case below watches at
-# least one activation end -- at 5s a poll the module took 30s and was the pole of the whole
-# sharded suite (#2226). The stub answers in milliseconds, so the poll can too.
+# least one activation end -- at 5s a poll the module takes 30s and is the pole of the whole
+# sharded suite. The stub answers in milliseconds, so the poll can too.
 _POLL_S = "0.2"
 
 # `show <property>` expands to `systemctl show <unit> -p <property> --value`, so the property
 # is $4 here. ActiveState answers `activating` once and then `inactive`, which is a tick that
 # finished while this script was watching it. A joined run that ends cleanly is followed by a
-# FRESH run (issue #1879), so once `start` has been asked the stub runs a second activation
+# FRESH run, so once `start` has been asked the stub runs a second activation
 # under a NEW monotonic stamp -- what the watch loop needs to see that run finish.
 #
 # The joined run takes ONE WHOLE SECOND to end, once, on its first `inactive`. The wrapper
@@ -169,7 +169,7 @@ def _kick(tmp_path: Path, systemctl: str) -> tuple[subprocess.CompletedProcess, 
 
 
 def test_a_no_wait_kick_that_joins_a_run_in_flight_exits_4_and_starts_nothing(tmp_path):
-    """Issue #1843: the run in flight fetched before the caller's commit merged, so exit 0
+    """The run in flight fetched before the caller's commit merged, so exit 0
     here told land.sh the primary was converging when nothing would converge it."""
     result, started = _kick(tmp_path, _SYSTEMCTL_IN_FLIGHT)
     assert result.returncode == ec.TICK_JOINED, result.stdout
@@ -187,9 +187,9 @@ def test_a_no_wait_kick_on_an_idle_unit_starts_one_and_exits_0(tmp_path):
 
 
 # `-w` answering 75 is a real timeout (deploy.sh passes `-E "$LOCK_BUSY"`); `-w` answering 1
-# is any OTHER flock failure, which must not be reported as contention. Measured 2026-09-11
+# is any OTHER flock failure, which must not be reported as contention.
 
-# ── issue #1879: a joined run in WAIT mode is followed by a fresh one ─────────────────────────
+# ── a joined run in WAIT mode is followed by a fresh one ─────────────────────────
 # The joined run fetched origin before this request arrived, so grading it grades a tick that
 # never carried the caller's commit. `_SYSTEMCTL` above runs the second activation.
 _JOURNALCTL_CONTENDED = """#!/bin/bash
@@ -222,7 +222,7 @@ def _wait_on_joined(
 
 
 def test_a_joined_run_that_ends_cleanly_is_followed_by_a_fresh_run(tmp_path):
-    """FLAGGED half (#1879): the joined run is not this request's tick, so one is started.
+    """FLAGGED half: the joined run is not this request's tick, so one is started.
 
     The joined run fetched before the request; grading it left `land.sh` reading `deferred`
     or `needs-manual-apply` off markers a tick a minute later cleared. The fresh run is

@@ -1,4 +1,4 @@
-"""The signing-key gate: which host GitHub verifies, and which it does not — issue #1615.
+"""The signing-key gate: which host GitHub verifies, and which it does not.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_signing.py
 """
@@ -12,9 +12,9 @@ from fanout_lib.signing import (
     unverified_reason,
 )
 
-# daniel-server's real signing key, the one whose registration closed #1615. Used here as a
-# syntactically real key the gate accepts when the registered set holds it — nothing in the
-# gate compares against a constant, so rotating it breaks no test.
+# daniel-server's real signing key. Used here as a syntactically real key the gate accepts
+# when the registered set holds it — nothing in the gate compares against a constant, so
+# rotating it breaks no test.
 SERVER_KEY = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINLm/Wigk9BPb5s+SAPzJFnOzOhyKEWcBf3WbeCqfndo"
 )
@@ -46,7 +46,7 @@ def test_normalize_key_is_flagged_on_anything_that_is_not_a_public_key():
 
 
 def test_fingerprint_matches_what_ssh_keygen_prints():
-    """Measured with `ssh-keygen -l -f` against this key on 2026-09-10."""
+    """Measured with `ssh-keygen -l -f` against this key."""
     assert fingerprint(SERVER_KEY) == SERVER_FINGERPRINT
 
 

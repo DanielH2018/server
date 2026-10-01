@@ -7,7 +7,7 @@ k8s SERVICE role's own `tasks/main.yml` names its `manifests_files`, and passes
 count. Usually is not always. `7fd4189cb` added `check_mode: false` and `when: not
 ansible_check_mode` guards across nineteen roles; every one renders byte-identical manifests
 on a real deploy, and tdarr's marked it stale with nothing able to clear it but a hand-run
-no-op of a deploy (#2416).
+no-op of a deploy.
 
 So this module reads the diff rather than the path, for that one class. A changed line a real
 (non-check) run cannot see moves no bytes: `check_mode: false` is a no-op outside `--check`,
@@ -18,7 +18,7 @@ module does not recognise, a diff git cannot produce, a rename carrying no chang
 `check_mode: true` is deliberately not inert. That one DOES change a real run: it puts a task
 into check mode that would otherwise have made its change.
 
-WHY A `when:` IS COMPARED RATHER THAN MATCHED (#2436). `7fd4189cb` spelled its gate three
+WHY A `when:` IS COMPARED RATHER THAN MATCHED. `7fd4189cb` spelled its gate three
 ways. tdarr, headlamp and prowlarr each got `when: not ansible_check_mode` on its own line, and
 a line-shape match settled those. authelia instead turned a scalar `when: <expr>` into the list
 form and added `- not ansible_check_mode` as a second conjunct, so its diff carries a removed
@@ -39,25 +39,24 @@ whole file would read a `when: A` removed from one task against a `- A` added to
 five hunks away, as a respelling of one condition.
 
 The narrowing skips `manifests`, the role whose tasks render every service's bytes. Three
-docstrings in `releases.py` name it as the one path that must never read clean (#947), the
+docstrings in `releases.py` name it as the one path that must never read clean, the
 argument here would hold there too, and `7fd4189cb` did not touch it -- so applying it there
 buys zero unstuck services for one more thing a reviewer of #947 has to re-check.
 
-WHY THIS RULE AND THE OTHER FOUR NARROWINGS ARE NOT REPLACED BY A DIGEST COMPARISON (#2505).
-The five are #1636 and #1672 in `releases.py`, #2416 and #2436 here, and #2504 in
+WHY THIS RULE AND THE OTHER FOUR NARROWINGS ARE NOT REPLACED BY A DIGEST COMPARISON. The five are
+the role-granularity and shared-role narrowings in `releases.py`, two here, and one in
 `releases_consumers.py`. A release record already carries `manifests_digest` for the bytes the apply
-wrote, so comparing it against a fresh render would answer all five questions at once. The
-repo's offline render harness cannot produce that render: it stubs SOPS values and supplies its
-own placeholder `domain`, and on 2026-09-25 it reproduced 9 of 57 records. A dry run with
-`-e manifests_render_record=true` can: it writes a render record whose digest comes from the
-same task file as the release record's, and it reproduced all 45 services a dry run can reach
-(#2574). `releases_render` lets a match clear path hits for a service with secret manifests
-only when both records also carry a matching keyed `secret_digest`, because
-`manifests_digest` excludes them (#2586, #2574). Two gaps remain before a narrowing
-can go. Nothing produces render records on a schedule (#2587). 13 stamped services cannot be
-dry-run at all (#2588). `ansible/roles/k8s/manifests/CLAUDE.md`,
-under `## Release records`, carries the measurement. Do not delete a narrowing for a digest
-comparison until both have landed.
+wrote, so comparing it against a fresh render would answer all five questions at once. The repo's
+offline render harness cannot produce that render: it stubs SOPS values and supplies its own
+placeholder `domain`, and it reproduced 9 of 57 records. A dry run with `-e
+manifests_render_record=true` can: it writes a render record whose digest comes from the same task
+file as the release record's, and it reproduced all 45 services a dry run can reach.
+`releases_render` lets a match clear path hits for a service with secret manifests only when both
+records also carry a matching keyed `secret_digest`, because `manifests_digest` excludes them. Two
+gaps remain before a narrowing can go. Nothing produces render records on a schedule. 13 stamped
+services cannot be dry-run at all. `ansible/roles/k8s/manifests/CLAUDE.md`, under `## Release
+records`, carries the measurement. Do not delete a narrowing for a digest comparison until both have
+landed.
 """
 
 import re

@@ -5,10 +5,8 @@ pinned to the module a test imported it from. The defaults are the real implemen
 
 THREE BOUNDARIES, AND NO SHELL. `gh` and `gh_json` are the GitHub Issues register;
 `worktree_facts` is the git read that decides whether a claim is still live. There is
-deliberately nothing here that executes a command: a verify-by is prose describing how to
-check a finding, and `findings.py verify` prints it rather than running it (#1313). The
-`run_verify` field, and the read-only classifier that gated the text it ran, were removed
-together with the execution they existed to make safe.
+deliberately nothing here that executes a command: a verify-by is prose describing how to check
+a finding, and `findings.py verify` prints it rather than running it.
 
 `worktree_facts` arrived fourth because its absence was measurable: `monkeypatch_allowlist.txt`
 carried 8 `monkeypatch.setattr` calls across two test modules, every one of them standing in

@@ -4,8 +4,8 @@
 The deployer's Python lives in `roles/setup/gitops_deploy/files/`, and the role names each file
 twice in `tasks/install.yml`: the `loop:` of the copy task that installs it under
 `/opt/gitops-deploy/`, and the `stamp_deployed_pairs` that records its render provenance for
-`manifest-prune-check.sh`. Neither list is derived from the directory, and until this test
-nothing asserted that either covered `files/*.py`.
+`manifest-prune-check.sh`. Neither list is derived from the directory, and this test
+asserts that each covers `files/*.py`.
 
 That gap has the same shape as the one `test_monitor_bridge_modules.py` closes for
 monitor-bridge, and the same failure: pytest imports the modules from disk, so a module added
@@ -15,8 +15,7 @@ next tick —
     ModuleNotFoundError: No module named 'deploy_classify'
 
 — on the component that deploys everything else. A split is exactly when a new module appears
-here: `deploy_logic.py` split into the `deploy_*` decision modules and became an index, and
-`deploy_io.py` then shed `deploy_config`, `deploy_state` and `deploy_failtext`.
+here.
 
 `host_lib.py` is installed by its own task from `roles/setup/common/files/` and is not in this
 role's files/, so it is outside the set this test derives. Its stamp pair is asserted directly.

@@ -1,30 +1,25 @@
 ---
 # The observability plane: the Claude Code telemetry stack (collector, Tempo, Loki) and the
-# cluster's metrics plane (Prometheus, kube-state-metrics, Grafana). Built as slice 1 —
-# collector + Loki + Prometheus — which is what the slice notes below date from.
+# cluster's metrics plane (Prometheus, kube-state-metrics, Grafana).
 #
 # Claude Code runs on the daniel-box HOST and exports to localhost:4317 — that endpoint is
 # fixed by the chezmoi settings template, which enables telemetry on every host except
 # daniel-pi and states the intent plainly: "Every host exports to localhost:4317 and every
 # host keeps its own data."
-#
-# Tempo (traces) and Grafana are deliberately out of slice 1. Data lands and is queryable
-# without them; adding either changes nothing about whether collection works.
 
-# Pinned, Renovate-tracked. Same collector build the Docker side runs so config stays portable.
+# Pinned, Renovate-tracked.
 observability_collector_image: otel/opentelemetry-collector-contrib:0.161.0
 observability_loki_image: grafana/loki:3.7.8
 observability_prometheus_image: prom/prometheus:v3.14.0
-# 11.6.16 -> 13.2.0 (2026-08-22), crossing the Grafana 12 removal of Angular. Safe only
-# because the 19 `graph` panels this repo shipped were converted to `timeseries` first and
-# deployed against 11.6.16 — do that before any future major, not alongside it.
+# Grafana 12 removed Angular, so every `graph` panel must be converted to `timeseries` and
+# deployed before a major bump, not alongside it.
 #
 # DECIDED: grafana-data stays on longhorn-nobackup (operator declined a backup 2026-08-21);
 # dashboards and datasources are provisioned from git.
 # Grafana's schema migrations are one-way, which is tolerable because of that: the DB holds
 # only preferences, version history and annotations. Recovery is deleting the PVC.
 observability_grafana_image: grafana/grafana:13.2.2
-# Slice 3 (D8). Distinct from the metrics-server k3s already bundles: that serves the
+# Distinct from the metrics-server k3s already bundles: that serves the
 # resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
 # kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
 observability_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
@@ -40,7 +35,7 @@ k8s_autodeploy_reason: "observability — the cluster metrics plane and Claude C
 
 # longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
 #   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.
-#     Both are the "bulky, regenerable state" the Docker side already keeps out of Kopia.
+#     Both are bulky, regenerable state.
 #   - Sensitivity: content logging is ON, so Loki holds prompts, responses and tool output
 #     verbatim. The default class would copy transcript-grade data into B2 automatically.
 observability_storage_class: longhorn-nobackup
@@ -51,7 +46,7 @@ observability_prometheus_storage: 12Gi
 # nothing but UI state — it is on the no-backup class for that reason, not just size.
 # allowUiUpdates is true, so a UI-edited board DOES live only here until
 # scripts/grafana/export_grafana_dashboards.py round-trips it into the git tree — git is the
-# backup, the export is the save step. Reaffirmed nobackup 2026-08-13 (operator decision).
+# backup, the export is the save step.
 observability_grafana_storage: 1Gi
 
 # OTLP gRPC, bound to loopback ON THE NODE via hostPort. Deliberately not a MetalLB VIP:
@@ -73,11 +68,11 @@ observability_query_host_ip: 127.0.0.1
 # They are pinned because they are quoted as constants outside this repo. Loki, Prometheus
 # and Tempo are single-replica Deployments with no nodeSelector, publishing their query
 # ports on a hostPort bound to observability_query_host_ip — so only the node they happen to
-# run on answers on loopback. A reboot on 2026-08-23 moved all three from daniel-box to
-# daniel-server, and every host-side query tool broke while the telemetry itself stayed
-# healthy. `otelq` and `otel-sweep` (chezmoi: home/dot_local/bin/) now try loopback first
-# and these addresses second, which works from either node. That fallback is only sound
-# while the addresses cannot be reassigned under it, which is what pinning buys.
+# run on answers on loopback. When all three reschedule to the other node, every host-side
+# query tool breaks while the telemetry itself stays healthy. `otelq` and `otel-sweep`
+# (chezmoi: home/dot_local/bin/) try loopback first and these addresses second, which works
+# from either node. That fallback is only sound while the addresses cannot be reassigned
+# under it, which is what pinning buys.
 #
 # spec.clusterIP is immutable: changing a value here is rejected on apply, and actually
 # moving one means deleting the Service and updating the constants in both repos together.
@@ -85,19 +80,11 @@ observability_loki_cluster_ip: 10.43.99.158
 observability_prometheus_cluster_ip: 10.43.39.218
 observability_tempo_cluster_ip: 10.43.4.147
 
-# 744h (31d), carried over from the bundle's loki-config.yaml along with the compactor that
-# enforces it. Retention matters more here than in a normal log store: every prompt and
+# 744h (31d). Retention matters more here than in a normal log store: every prompt and
 # response is retained verbatim for this window.
 observability_loki_retention: 744h
-# Dashboard folders ported from daniel-server's Grafana (slice 3, B4). These are the
-# subdirectories of roles/k8s/observability/files/dashboards, which stays the single source of
-# truth for the JSON — the cluster mounts the same files rather than keeping a second copy.
-#
-# `AI` was excluded during B4 (uid collision with a vendored copy), reconciled 2026-08-07 into
-# the shared tree ("one file, both Grafanas"), then re-homed HERE at D7 (2026-08-10): the Docker
-# Grafana lost its Tempo datasource and its claude metrics stream when the otel-collector became
-# a forwarder into this stack, so this cluster's Grafana is the board's only consumer — the AI
-# folder now stages from this role's files/dashboards/AI, the rest still from the shared tree.
+# Dashboard folders. These are the subdirectories of roles/k8s/observability/files/dashboards,
+# which is the single source of truth for the JSON.
 # DECIDED: this list has no folder-level prune, and that is deliberate (operator 2026-08-28).
 # Dropping a name here removes the folder's volume and volumeMount from grafana.yaml.j2 (both
 # rendered by `{% for folder in observability_dashboard_folders %}`, at the volumeMounts and volumes
@@ -135,29 +122,23 @@ observability_prometheus_retention: 30d
 #
 # Deliberately well under observability_prometheus_storage (12Gi), not close to it. What the cap
 # counts is persisted blocks PLUS the WAL and the m-mapped head chunks; what it does NOT cover is
-# compaction, which needs room for the output block alongside its inputs. (This comment said
-# "BLOCKS only" until 2026-08-29 — measured that day, the accounting was 2.70GB against 2.55GB of
-# blocks, so the cap was understated by ~6%.) Sizing it near the volume is how a size-capped
-# Prometheus still fills its disk; the ~58% ratio below is the thing to hold, not the absolute.
+# compaction, which needs room for the output block alongside its inputs. Sizing it near the
+# volume is how a size-capped Prometheus still fills its disk; the ~58% ratio below is the
+# thing to hold, not the absolute.
 #
-# 3GB/5Gi until 2026-08-29, and the size cap was binding: `retention: 30d` was configured while the
-# TSDB held 3.67 DAYS. Raising it is not deferring a cardinality problem — the same-day relaxation
-# of the four control-plane jobs to 1m cut ingest 66.5%, and at the post-cut rate 30 days costs
-# ~6.6GB (1957.7 samples/s x 1.297 bytes/sample = 219 MB/day). The model is validated against
-# history rather than assumed: the pre-cut 5,734 samples/s predicts 642 MB/day, and the blocks
-# actually grew at 695 MB/day — 8% agreement.
-#
-# Expect the window to widen over WEEKS, not on the next deploy. The existing blocks hold
-# old-rate data, so they age out at the old cost before the new rate shows in the retained span.
+# Raising it does not defer a cardinality problem. With the four control-plane jobs at a 1m
+# scrape interval, 30 days costs ~6.6GB (1957.7 samples/s x 1.297 bytes/sample = 219 MB/day).
+# The model matches measured history: an earlier 5,734 samples/s predicts 642 MB/day, and the
+# blocks grew at 695 MB/day — 8% agreement.
 observability_prometheus_retention_size: 7GB
 
-# Traces (slice 3). Claude Code emits spans only with both CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
+# Traces. Claude Code emits spans only with both CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
 # and OTEL_TRACES_EXPORTER set — the chezmoi settings template already sets both, so this is
 # purely a matter of giving them somewhere to land.
-# 2.10.8 -> 3.0.3 (2026-08-22). 3.0 removed the ingester module and replaced the compactor with
-# backend_scheduler/backend_worker; tempo.yaml.j2 carries both changes and says why. The hard
-# prerequisite was the block format — 3.0 refuses vParquet3 and earlier, and this instance was
-# already writing vParquet4 (read off /status/config before upgrading).
+# Tempo 3.0 removed the ingester module and replaced the compactor with
+# backend_scheduler/backend_worker; tempo.yaml.j2 carries both changes and says why. 3.0 refuses
+# vParquet3 and earlier blocks, so the instance must already write vParquet4 (read
+# /status/config).
 observability_tempo_image: grafana/tempo:3.0.3
 observability_tempo_storage: 5Gi
 # 720h (30d) — the same window as the Prometheus retention, a day under Loki's 744h. Its own
@@ -183,9 +164,8 @@ observability_health_cron_minute: "*/10"
 # `restart_on` names which of roles/k8s/manifests's three change signals queues a
 # `rollout restart` for that workload, and so which makes the release record expect a fresh
 # `restartedAt` from it (`manifests_restart_triggers_default`, that role's defaults/main.yml).
-# All six read `[config, secret, image]` until 2026-09-28, which is where restarting all six for
-# one workload's edit came from: `manifests_render is changed` fires when ANY of this role's
-# eight manifests changed, and prometheus.yaml.j2 alone changed in 49 commits in 90 days.
+# The shared default `[config, secret, image]` would restart all six for one workload's edit:
+# `manifests_render is changed` fires when ANY of this role's eight manifests changed.
 #
 # `[]` means nothing this role renders needs a restart TASK for that workload. Its ConfigMap is
 # hashed into its own pod template (`checksum/config`), so the apply moves the pod template and
@@ -194,7 +174,7 @@ observability_health_cron_minute: "*/10"
 # cover: prometheus file-mounts `prometheus-scrape-credentials` and grafana reads `grafana-admin`
 # through `env.valueFrom`, and hashing a Secret's bytes into a world-readable annotation would
 # open a read path over it. Those two restart on a secret render, which is one register over all
-# three secret manifests — so rotating grafana's password also restarts prometheus. Issue #2858.
+# three secret manifests — so rotating grafana's password also restarts prometheus.
 observability_stabilise_workloads:
   - { kind: deploy, name: loki, restart_on: [] }
   - { kind: deploy, name: prometheus, restart_on: [secret] }

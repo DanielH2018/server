@@ -1,9 +1,7 @@
 ---
-# Host flip 1 (2026-08-14): successor to the daniel-server peer-pull host cron. A
-# nightly CronJob rsyncs daniel-pi's wg-easy peer configs into a Longhorn PVC (the
-# 03:30 daily-backup group carries it to B2, replacing the retired Kopia scope) and
-# pushes the "WG Pi Peer Backup" Kuma monitor directly — the monitor-bridge `pi_peers`
-# state-file check retired with this flip.
+# A nightly CronJob rsyncs daniel-pi's wg-easy peer configs into a Longhorn PVC (the
+# 03:30 daily-backup group carries it to B2) and pushes the "WG Pi Peer Backup" Kuma
+# monitor directly.
 
 # The wrapper lands BEFORE the key is pinned to it: the reverse order would leave a key whose
 # forced command does not exist, and the nightly would fail until the next task ran. Root-owned
@@ -22,8 +20,7 @@
 
 # `restrict` drops pty, port/agent/X11 forwarding and user-rc; `command=` replaces whatever the
 # client asked for with the wrapper, which re-derives one `sudo rsync --server --sender` from
-# SSH_ORIGINAL_COMMAND and refuses everything else (#1927). Before these options the key was
-# an interactive shell as a NOPASSWD-sudo user. Ansible reaches the Pi over a different key
+# SSH_ORIGINAL_COMMAND and refuses everything else. Ansible reaches the Pi over a different key
 # (`ubuntu@daniel-server-ansible`), so pinning this one cannot lock the deploy out.
 - name: Authorize the pull key on daniel-pi
   tags: [config]
@@ -35,8 +32,7 @@
     state: present
 
 # Over Ansible's own (operator-trusted) connection, so the job VERIFIES rather than
-# TOFU-accepts — same pattern the retired wg-easy peer-pull block used. Hard-fails on
-# an unreachable Pi by design: without the pin the Secret below cannot render.
+# TOFU-accepts. Hard-fails on an unreachable Pi by design: without the pin the Secret below cannot render.
 - name: Read daniel-pi's SSH host key for the known_hosts pin
   tags: [config]
   delegate_to: daniel-pi
@@ -79,13 +75,12 @@
       - secret.yaml
 
 # A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved.
-# pi-peer-backup is a retention-free rsync mirror and sets concurrencyPolicy: Forbid. Resolved
-# 2026-08-21, favourably: `kubectl create job --from=cronjob` DOES set a controller
-# ownerReference — verified on a live manual Job — so the gate run lands in the CronJob's
-# `.status.active` and Forbid suppresses the next scheduled firing while it is in flight. The
-# reverse direction is not protected: a gate run created into an already-running scheduled run
-# still overlaps. That window is this CronJob's own run duration, live 21s (04:30:00 →
-# 04:30:21), and the mirror is idempotent across it. Idempotence is not the whole story inside
+# pi-peer-backup is a retention-free rsync mirror and sets concurrencyPolicy: Forbid.
+# `kubectl create job --from=cronjob` DOES set a controller ownerReference, so the gate run
+# lands in the CronJob's `.status.active` and Forbid suppresses the next scheduled firing
+# while it is in flight. The reverse direction is not protected: a gate run created into an
+# already-running scheduled run still overlaps. That window is this CronJob's own run
+# duration (21s measured), and the mirror is idempotent across it. Idempotence is not the whole story inside
 # that window, though: the PVC is ReadWriteOnce and neither pod carries a node constraint, so
 # two coexisting pods on different nodes give the second a Multi-Attach wedge until
 # activeDeadlineSeconds (600s) kills it — the controller then deletes the pod, cronjob-gate

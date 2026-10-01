@@ -4,25 +4,19 @@
 # (scripts/tests/test_renovate_managers.py) and gets ZERO Renovate tracking — the fully-manual
 # pull-digest-redeploy loop tdarr is on.
 karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:b069e4307dec06ea06d16989c6861c30a1ff208568be44ed5fb5d422cd3e950c
-# karakeep's own headless-shell build, taken 2026-09-01. It replaces zenika/alpine-chrome:124,
-# which this pin had already been moved off gcr.io/zenika-hub once and whose upstream last saw a
-# commit on 2025-11-15. karakeep now publishes the sidecar its app is tested against
+# karakeep's own headless-shell build. karakeep publishes the sidecar its app is tested against
 # (docker/chrome/Dockerfile: chromedp/headless-shell pinned by digest, plus USER 65534:65534), so
 # the browser tracks the app's release cadence instead of a third party's.
 #
 # `release` is a moving tag behind a digest, the same shape as karakeep_k8s_image above, so the
 # k8s-defaults manager's `matchUpdateTypes: [digest]` rule bumps it after its soak.
 karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:5b19bbb160e9ff60681a3abd97e1c4ec9f64212301410de658c3900ab7ef31e7
-# (2026-08-13): permanent Renovate lookup failure there ("Repository Problems" on the dashboard) —
-# switched to the Docker Hub mirror, verified to carry the same :124 tag before the swap. No digest
-# pin: a registry mirror doesn't guarantee an identical index digest to the gcr.io original.
 karakeep_k8s_meili_image: getmeili/meilisearch:v1.53.2
-# Built in-cluster since #2672, so the pin this pair used to hold — the uv
-# `python3.14-bookworm-slim` digest, and the 3.12 -> 3.14 reasoning behind it — moved to
-# `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. The one
-# fact to carry forward: all five pinned pip deps below must resolve wheel-only under the base's
-# interpreter, because bookworm-slim ships no compiler and an sdist fallback crashloops the
-# boot-time `uv pip install`.
+# Built in-cluster. The base-image pin (uv `python3.14-bookworm-slim` digest) lives in
+# `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. All five
+# pinned pip deps below must resolve wheel-only under the base's interpreter, because
+# bookworm-slim ships no compiler and an sdist fallback crashloops the boot-time
+# `uv pip install`.
 #
 # `k8s_built_image_tags` is a play-scoped fact k8s/image-builder publishes, so the `.get` fallback
 # is what a deploy that skipped the build renders — see that role's CLAUDE.md.
@@ -41,9 +35,7 @@ k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "three reasons: (1) stateful — meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger sub-deployment; (3) migrating state — Recreate + RWO volume-claim PVC. COUPLING NOTE for a future promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting karakeep-data alone desyncs the search index until a manual reindex"  # noqa var-naming[no-role-prefix]
 # The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot. Declared
 # regardless of k8s_autodeploy — it protects a manual deploy too, and an app bump runs
-# karakeep's own one-way DB migration on db.db at boot (0.32.0 -> 0.33.2 did, 2026-09-18).
-# The CLAUDE.md said this pair covered karakeep-data from 2026-09-03; nothing declared it until
-# now, so the weekly backup was the only recovery point. karakeep-meili stays out on purpose:
+# karakeep's own one-way DB migration on db.db at boot. karakeep-meili stays out on purpose:
 # it is rebuilt by reindexing, and the COUPLING NOTE above records the desync a revert causes.
 k8s_autodeploy_snapshot_pvcs: [karakeep-data]  # noqa var-naming[no-role-prefix]
 
@@ -62,20 +54,19 @@ karakeep_k8s_meili_mem_limit: 1024Mi
 karakeep_k8s_meili_cpu_request: "100m"
 karakeep_k8s_meili_mem_request: 128Mi
 # Mirrors resources('1.0', '512M', '0.05', '64M'). cpu 1.0 is deliberate: the boot-time
-# `uv pip install` plus the per-cycle tag burst CFS-throttled ~67% of periods at the old 0.5.
+# `uv pip install` plus the per-cycle tag burst CFS-throttled ~67% of periods at 0.5.
 karakeep_k8s_tagger_cpu_limit: "1"
 karakeep_k8s_tagger_mem_limit: 512Mi
 karakeep_k8s_tagger_cpu_request: "50m"
 karakeep_k8s_tagger_mem_request: 64Mi
 
-# 487M at migration time — the bookmark library, archived page snapshots and db.db. On
-# `longhorn` (backed up), matching the Docker side, where the bind mount under containers/ is
-# deliberately in Kopia scope for exactly this reason.
+# 487M — the bookmark library, archived page snapshots and db.db. On `longhorn` (backed up)
+# because it holds the only copy of the library.
 karakeep_k8s_claim: karakeep-data
 karakeep_k8s_storage_class: longhorn
 karakeep_k8s_size: 4Gi
 
-# The Meilisearch index: 286M today, and deliberately NOT seeded and NOT backed up. It is a
+# The Meilisearch index: 286M, and deliberately NOT seeded and NOT backed up. It is a
 # derived artifact: karakeep rebuilds it by reindexing from db.db, which IS seeded and backed
 # up. The upgrade runbook in the role's CLAUDE.md already ends in "Reindex All Bookmarks".
 karakeep_k8s_meili_claim: karakeep-meili
@@ -85,4 +76,4 @@ karakeep_k8s_meili_size: 2Gi
 # The time-tagger's script is vendored at files/karakeep-time-tagger.py rather than downloaded,
 # because a ConfigMap must render from something that exists at render time and CI renders every
 # template on a machine that has never deployed. It is 17K, far inside the 1M ConfigMap ceiling.
-# test_karakeep_time_tagger_script.py pins it to the Docker role's get_url checksum.
+# test_karakeep_time_tagger_script.py pins it to the upstream commit URL and sha256.

@@ -32,7 +32,7 @@ def _repo(tmp_path):
 
 
 def test_the_suite_carrying_the_modules_stem_wins_a_local_tie(tmp_path):
-    """Locality alone left the winner to alphabetical order (issue #1133).
+    """Locality alone left the winner to alphabetical order.
 
     Three suites in `scripts/validate/tests/` import `shell_templates`, so the local-first
     sort settled nothing and `test_backup_health_shim.py` -- a suite about one rendered
@@ -105,7 +105,7 @@ def test_two_importers_get_no_importer_tie_break(tmp_path):
 
 
 def test_a_split_out_leaf_inherits_its_importers_test(tmp_path):
-    """Splitting a module well must not read as coverage lost (issue #1136).
+    """Splitting a module well must not read as coverage lost.
 
     A leaf extracted from a tested module is exercised by its parent's suite, which neither
     is called `test_<leaf>.py` nor names the leaf anywhere -- so `findings.py`'s split
@@ -253,7 +253,7 @@ def test_a_dotted_path_import_credits_the_suite(tmp_path):
 
     `from deploy_tools.land_lib.landing import Landing` binds only capitalised names, so
     neither the top-level branch nor the `from X import <stem>` branch saw it, and
-    `land_lib/landing.py` read untested with its suite green (issue #1169).
+    `land_lib/landing.py` read untested with its suite green.
     """
     repo, scripts = _repo(tmp_path)
     _write(scripts / "pkg" / "sub" / "leaf.py", '"""Summary."""\n')

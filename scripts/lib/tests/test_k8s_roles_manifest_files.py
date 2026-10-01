@@ -1,8 +1,8 @@
 """`declared_manifest_files` reads every value shape a caller writes `manifests_files` in.
 
 The offline render harnesses ask this which manifests a role's tasks name, so they can render
-the shared default `k8s/manifests` would render for a basename the role ships no template for
-(#2872). A shape it fails to read returns fewer names, the harness renders one manifest fewer,
+the shared default `k8s/manifests` would render for a basename the role ships no template for.
+A shape it fails to read returns fewer names, the harness renders one manifest fewer,
 and every guard built on the corpus passes with less coverage than yesterday.
 
 Three shapes exist in the tree, and the third is the one a YAML load cannot reach: authelia,
@@ -126,7 +126,7 @@ def test_a_role_that_names_no_service_gets_no_default(tmp_path):
 def test_the_real_tree_answers_both_ways():
     """Non-vacuity against the repo itself, not just synthetic roles."""
     assert "service.yaml" in declared_manifest_files(TAKES_THE_DEFAULT)
-    # bazarr takes both shared defaults: its Service since #2872, its route since #3043.
+    # bazarr takes both shared defaults: its Service and its route.
     assert [p.name for p in shared_default_templates(TAKES_THE_DEFAULT)] == [
         "ingressroute-default.yaml.j2",
         "service-default.yaml.j2",

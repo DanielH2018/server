@@ -96,9 +96,9 @@ def test_audit_summary_caps_the_overdue_name_list():
 
 # ── the unattended pick-up window ───────────────────────────────────────────
 def test_unattended_rotation_picks_tokens_up_before_they_go_overdue():
-    # Weekly cron + rotate-only-when-overdue left every token overdue up to 6 days while
-    # the daily audit paged DOWN on it (2026-07-09 review). The pick-up window must catch
-    # anything due within the next cron interval, and still catch a genuinely missed one.
+    # Weekly cron + rotate-only-when-overdue would leave every token overdue up to 6 days
+    # while the daily audit pages DOWN on it. The pick-up window must catch anything due
+    # within the next cron interval, and still catch a genuinely missed one.
     rows = [
         ("due_next_week_push_token", "auto", dt.date(2026, 7, 14), 5),
         ("missed_push_token", "auto", dt.date(2026, 7, 6), -3),
@@ -121,12 +121,11 @@ def test_unattended_rotation_lead_exceeds_the_cron_interval():
 
 # ── cmd_rotate: the new token must not reach sops via argv ──────────────────
 def test_rotate_commit_sends_new_token_on_stdin_not_argv():
-    """Regression guard for the 2026-08-27 fix: the new token travels on stdin, not argv.
+    """Regression guard: the new token travels on stdin, not argv.
 
-    `sops set` used to take the freshly minted token as a CLI argument, which sits in
-    /proc/<pid>/cmdline for the call's lifetime (no hidepid here — see secret-rotate.sh.j2's own
-    argv-avoidance comment for curl). The value must travel on stdin, and --value-stdin still
-    requires the JSON-quoted form.
+    A CLI argument to `sops set` would sit in /proc/<pid>/cmdline for the call's lifetime (no
+    hidepid here — see secret-rotate.sh.j2's own argv-avoidance comment for curl). The value
+    must travel on stdin, and --value-stdin still requires the JSON-quoted form.
     """
     name = "monitor_bridge_test_token"
     # A real overdue auto-tier row, so the REAL `audit` selects it — the row the rotation
@@ -255,7 +254,7 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
     )
 
 
-# ── `source: record` keys (issue #1914) ─────────────────────────────────────
+# ── `source: record` keys ─────────────────────────────────────
 #
 # For authelia_password, healthchecks_password and bazarr_api_key, SOPS holds a copy of a
 # credential the app owns: nothing in the tree writes the value to the app, so `sops set` plus
@@ -324,19 +323,19 @@ def test_unattended_rotate_still_writes_the_same_key_without_the_record_field():
     assert len(process_calls(recorded)) == 1
 
 
-# ── rotate judges due-ness from git-advanced dates, as audit does (issue #2020) ─────────
+# ── rotate judges due-ness from git-advanced dates, as audit does ─────────
 #
 # `sync` leaves an existing `last_rotated` alone, so a token rotated by hand and committed
 # without its date moved reads as overdue from the registry alone. `audit` closes that gap by
-# advancing the date to git's; until #2020, `rotate` selected from the raw dates and would have
-# rotated such a token a second time. Both names carry the `monitor_bridge_` prefix so that
+# advancing the date to git's, and `rotate` selects from the same advanced dates, so it does
+# not rotate such a token a second time. Both names carry the `monitor_bridge_` prefix so that
 # `consumer_tags` resolves them and the batch filter is not what keeps one out of the run.
 HAND_ROTATED = "monitor_bridge_hand_rotated_token"
 STALE = "monitor_bridge_stale_token"
 
 
 def _two_token_fixture() -> Fakes:
-    # Both recorded 2026-01-01: overdue at TODAY (2026-09-01) under the 180-day auto tier.
+    # Both recorded 2026-01-01: overdue at TODAY under the 180-day auto tier.
     # Git shows HAND_ROTATED's ciphertext changed on 2026-08-01 — a hand rotation nobody
     # dated — while STALE's has not changed since the oldest revision, so git agrees with
     # the registry there and the entry is genuinely overdue.
@@ -400,7 +399,7 @@ def test_rotate_commit_writes_back_only_the_dates_it_rotated():
     )
 
 
-# ── record: the carry-over that used to be a hand edit ─────────────────────
+# ── record: the carry-over ─────────────────────────────────────────────────
 
 
 def _record_args(key: str, last_rotated: str):

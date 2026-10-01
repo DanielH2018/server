@@ -1,9 +1,8 @@
 ---
 # The post-rollout stabilisation gate, hoisted out of roles/k8s/manifests and run ONCE for the
-# whole play. Previously roles/k8s/manifests/tasks/assert_stable.yml paused
-# k8s_rollout_stabilise_seconds inline, per changed service: 26 changed services on 2026-08-15 meant
-# 1561s — 26 minutes — of serial sleep in a 59-minute run, for a check that is a wall-clock window,
-# not work.
+# whole play. Pausing k8s_rollout_stabilise_seconds inline, per changed service, costs one pause
+# each: 26 changed services meant 1561s — 26 minutes — of serial sleep in a 59-minute run, for a
+# check that is a wall-clock window, not work.
 #
 # WHY OVERLAPPING THE WINDOWS IS SAFE, and in fact stricter. A crashlooping pod accumulates
 # container restarts whether or not anybody is watching that particular minute. Deferring the
@@ -11,21 +10,20 @@
 # remainder of the run rather than for exactly 60s — strictly more sensitive, never less. The 60s
 # floor still applies to the last batch, which is the only one that has not already had longer.
 #
-# WHAT THE GATE IS FOR (unchanged, from assert_stable.yml). `kubectl rollout status` returns on
+# WHAT THE GATE IS FOR. `kubectl rollout status` returns on
 # Available, and Available is driven by READINESS. A container whose LIVENESS probe is misconfigured
 # passes readiness, flips the Deployment to Available, and only THEN starts getting killed — so the
-# rollout reports success while the workload settles into CrashLoopBackOff. Hit for real
-# 2026-08-07: kube-state-metrics' liveness probe pointed at a port where /livez does not exist,
-# every start logged clean, the kubelet killed it ~35s later on a 404, and the deploy reported
-# ok=41 failed=0.
+# rollout reports success while the workload settles into CrashLoopBackOff. For example, a
+# liveness probe pointed at a path that does not exist logs every start clean, the kubelet
+# kills the container ~35s later on a 404, and the deploy reports failed=0.
 #
 # THE TWO CHECKS ARE NOT REDUNDANT, and batching changes which one does the work. Restart counts
 # catch a workload that flaps and recovers (invisible to every readiness-derived field — with the
 # probe re-broken deliberately the Deployment read desired=1 ready=1 updated=1 while the pod sat at
 # RESTARTS 3). Readiness catches one that stays down. Under batching a workload that finished
 # rolling early, crashlooped, and settled into a long backoff can show a zero restart-delta across
-# the final window — so the readiness assert is the PRIMARY check for early finishers, not the
-# backstop it was when every service had its own freshly-started window. Do not make it conditional.
+# the final window — so the readiness assert is the PRIMARY check for early finishers, not a
+# backstop. Do not make it conditional.
 
 - name: Let liveness probes run before declaring the deploy healthy
   tags: [always]

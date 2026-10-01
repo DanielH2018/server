@@ -1,14 +1,12 @@
-"""The Claude Code cgroup arm folded into check_mem (issue #1258).
+"""The Claude Code cgroup arm folded into check_mem.
 
-PR #1251 (#1238) started scraping `claude_cgroup_*` for `claude-rc.service` and
-`user.slice/user-1000.slice`, and nothing read them: no alert, no panel. What they expose is the
-opening move of the 2026-09-05 incident (#1243) — the claude-rc cgroup stalled in memory reclaim
-for about ten minutes before anything downstream failed.
+The arm reads `claude_cgroup_*` for `claude-rc.service` and `user.slice/user-1000.slice`. What
+they expose is the opening move of a memory stall: the claude-rc cgroup stalls in memory reclaim
+for about ten minutes before anything downstream fails.
 
 Per this repo's red-proof rule every behaviour here is a PAIR: one input the arm must pass and
 one it must flag. A check is only ever observed passing, and an arm that fires on everything is
-indistinguishable from one that fires on nothing when you only look at the green side —
-`volume-claim` shipped behind 16 passing tests and then fired for 0 of 25 claims.
+indistinguishable from one that fires on nothing when you only look at the green side.
 
 `test_the_queries_name_metrics_and_labels_the_writer_actually_emits` in
 `ansible/tests/services/` is the non-vacuity half: it pins the metric names and cgroup labels
@@ -32,7 +30,7 @@ EVENT_METRIC = "claude_cgroup_memory_events_total"
 
 CHECKS = Path(__file__).resolve().parents[1] / "files" / "checks"
 
-# Two of the cgroups the writer labels (`fleet` is the third, added by #1264). `claude-rc` is the
+# Two of the cgroups the writer labels (`fleet` is the third). `claude-rc` is the
 # one whose absence is a fault; `user-1000-slice` exists only once somebody has logged in since
 # boot. `ansible/tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py` holds the
 # full set and fails when the writer's changes.
@@ -174,7 +172,7 @@ def test_a_firing_arm_leads_the_message_and_pages(armed):
 
 
 def test_hysteresis_holds_the_first_cycle_then_pages(armed):
-    """CLAUDE_CGROUP_CONSECUTIVE=2 is ten minutes at INTERVAL=300 — the incident's own duration.
+    """CLAUDE_CGROUP_CONSECUTIVE=2 is ten minutes at INTERVAL=300.
 
     It also absorbs the weekly claude-rc restart, which recreates the cgroup and zeroes every
     counter: Prometheus extrapolates across a reset, so one `increase()` window spanning one can
@@ -197,7 +195,7 @@ def test_the_event_set_pages_on_kills_and_not_on_high(armed):
     """`high` is excluded on purpose, and it is the one exclusion worth pinning.
 
     MemoryHigh throttling is the cap doing its job, and `high` is keyed to a value another role
-    owns and is actively changing (#1264 moves claude_code_rc_memory_high / _swap_max). Every
+    owns (claude_code_rc_memory_high / _swap_max). Every
     event kept means the same thing whatever those caps become. `high` is graphed instead.
     """
     watched = set(armed.CLAUDE_CGROUP_EVENTS.split("|"))
@@ -207,11 +205,11 @@ def test_the_event_set_pages_on_kills_and_not_on_high(armed):
 
 
 def test_the_queries_are_instant_not_subqueries(armed):
-    """The measured query must be the shipped query — the PR #482 trap.
+    """The measured query must be the shipped query.
 
     A `[6h:1m]` subquery derived the threshold and is far more expensive than what runs every
-    cycle. Both shipped queries were timed against the live Prometheus three times each on
-    2026-09-06 at 0.125-0.139s end to end.
+    cycle. Both shipped queries were timed against the live Prometheus three times each at
+    0.125-0.139s end to end.
     """
     queries = []
     checks.host.check_mem(armed, _vectors([(RC, 0.0)], [], queries))

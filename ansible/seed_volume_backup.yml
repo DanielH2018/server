@@ -1,11 +1,10 @@
 ---
 # Give one Longhorn volume its first backup, now, instead of waiting for its recurring job.
 #
-# WHY THIS EXISTS. When the block-size migration rebuilt a volume, it came back with no
+# WHY THIS EXISTS. A volume rebuilt by a block-size migration comes back with no
 # backup history and no tier label. `k3s-bringup.yml --tags longhorn` restores the label, which
 # puts the volume back in a weekly shard — and a weekly shard runs on ONE weekday, so the
-# replacement waits up to 6 days for its first recovery point. On 2026-08-20 fourteen volumes
-# sat in exactly that state at once: no backup in either store, and the longest wait was 5.4 days.
+# replacement waits up to 6 days for its first recovery point.
 #
 # The backup-health check does not page for this, correctly: its first-run grace excuses a volume
 # until its first scheduled run, because a service deployed this afternoon must not redden the
@@ -16,8 +15,7 @@
 # unreachable from a node's host netns (measured: connect fails, not 403). The CRs are the reachable
 # path, and they are what that API creates anyway.
 #
-# WHAT IT COSTS. One full backup of the volume's used blocks. Volumes rebuilt at 16 MiB cost roughly
-# an eighth of the 2 MiB-era figures in the estate's notes. It still counts against
+# WHAT IT COSTS. One full backup of the volume's used blocks. It counts against
 # `k3s_longhorn_daily_backup_budget` — Longhorn's share of B2's transaction cap — so seeding a batch
 # larger than the day's remaining headroom turns the backup-health monitor red for 24 hours. Check
 # the budget line in `journalctl -t longhorn-backup-health` before seeding more than a few.
@@ -30,7 +28,7 @@
 # disarmed target. None of those is a fault worth spending a transaction on.
 #
 # The seed is labelled as the owning recurring job's own, so that job's retain prunes the backup
-# and the snapshot on its normal cadence. Seeds made before 2026-09-03 carry no such label: their
+# and the snapshot on its normal cadence. Older seeds carry no such label: their
 # backups are prune_backups.yml's (`-e prune_mode=seeds`), and their snapshots have to be
 # deleted by hand.
 - name: Give a Longhorn volume its first backup now
@@ -190,10 +188,9 @@
 
     # `RecurringJob: <job>` on BOTH CRs is what makes the seed prunable. Longhorn's retain counts
     # only backups carrying its own job's label, and auto-cleanup-recurring-job-backup-snapshot
-    # deletes only snapshots carrying it. A seed without the label is unowned: its backup sat in
-    # B2 until prune_backups.yml's seeds mode, and its snapshot pinned every block beneath it against trim
-    # — valheim-config carried 3.5 GB of deleted files into every weekly backup that way
-    # (issue #942). `seeded-by` stays so a seed remains recognisable as one.
+    # deletes only snapshots carrying it. A seed without the label is unowned: its backup sits in
+    # B2 until prune_backups.yml's seeds mode, and its snapshot pins every block beneath it
+    # against trim, carrying deleted files into every weekly backup. `seeded-by` stays so a seed remains recognisable as one.
     - name: Create the snapshot to back up
       ansible.builtin.command:
         argv: [k3s, kubectl, apply, -f, "-"]

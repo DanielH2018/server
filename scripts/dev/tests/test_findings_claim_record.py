@@ -26,19 +26,19 @@ def _issue(*bodies):
     }
 
 
-# --- who may write a claim trailer: this repo is PUBLIC (#1280) -----------------------------
+# --- who may write a claim trailer: this repo is PUBLIC -----------------------------
 
 
 def test_a_claim_from_a_foreign_author_holds_nothing():
-    """Denial of the backlog. A drive-by ``Claim:`` used to withhold the issue from `next`
-    and make `claim` refuse it for as long as the named branch existed."""
+    """Denial of the backlog. A drive-by ``Claim:`` must not withhold the issue from `next`
+    and make `claim` refuse it for as long as the named branch exists."""
     issue = _issue(foreign_comment(claim_comment("worktree-issue-1132", None, "t")))
     assert current_claim(issue) is None
 
 
 def test_a_release_from_a_foreign_author_closes_nothing():
     """The double-assignment case. Branch names are public through PR heads, so a comment
-    reading ``Released: `<branch>` `` used to hand a live claim's issue to a second session."""
+    reading ``Released: `<branch>` `` must not hand a live claim's issue to a second session."""
     issue = _issue(
         claim_comment("worktree-issue-1132", None, "t"),
         foreign_comment(
@@ -135,13 +135,13 @@ def test_an_ordinary_comment_is_not_a_claim():
     assert current_claim(issue) is None
 
 
-# --- one body carrying BOTH trailers: the claim wins (#1283) --------------------------------
+# --- one body carrying BOTH trailers: the claim wins --------------------------------
 
 _BOTH = f"Claim: `{WT}`\n\nReleased: `{WT}`\n"
 
 
 def test_a_body_carrying_both_trailers_holds_the_claim():
-    """Settles #1283's third mutation: `continue` in `current_claim`'s fold is load-bearing.
+    """`continue` in `current_claim`'s fold is load-bearing.
 
     Neither `claim_comment` nor `release_comment` ever emits both trailers, so a body with
     both is malformed input. Every fail-safe in this protocol resolves ambiguity by HOLDING —
@@ -180,11 +180,11 @@ def test_a_release_in_its_own_comment_still_closes_the_claim():
     assert current_claim(issue) is None
 
 
-# --- #1284: the trailer's parsing and its writes, hardened against their own inputs --------
+# --- the trailer's parsing and its writes, hardened against their own inputs --------
 
 
 def test_a_release_reason_cannot_turn_a_release_into_a_claim():
-    """The rejecting half of #1284.1: free text above the trailer is parsed too.
+    """The rejecting half: free text above the trailer is parsed too.
 
     `current_claim` tests `_CLAIM_RE` before `_RELEASE_RE` over the whole body, so a reason
     carrying its own `Claim:` line made a release read as a claim by whoever it named. The
@@ -210,7 +210,7 @@ def test_a_session_id_cannot_smuggle_a_release_into_a_claim():
 
 
 def test_validate_worktree_name_accepts_the_names_this_repo_writes():
-    """The accepting half of #1284.3: every worktree name the protocol really uses."""
+    """The accepting half: every worktree name the protocol really uses."""
     for name in ("worktree-issue-1132", "worktree-issue-1132+1140", "master"):
         assert validate_worktree_name(name) is None, name
 
@@ -227,7 +227,7 @@ def test_validate_worktree_name_refuses_a_name_the_trailer_cannot_carry():
 
 
 def test_comment_cap_warning_fires_at_ghs_page_cap():
-    """The accepting half of #1284.2: the fold goes blind past `comments(first: 100)`."""
+    """The accepting half: the fold goes blind past `comments(first: 100)`."""
     issue = {"number": 9, "comments": [{"body": "x"}] * COMMENT_PAGE_CAP}
     warning = comment_cap_warning(issue)
     assert warning is not None
@@ -241,7 +241,7 @@ def test_comment_cap_warning_is_silent_below_the_cap():
 
 
 def test_comments_are_folded_in_created_at_order_not_the_order_gh_returned():
-    """The accepting half of #1284.2's ordering half: FIRST WRITER WINS needs a real order.
+    """The accepting half of the ordering half: FIRST WRITER WINS needs a real order.
 
     gh returns comments ascending — measured across 17 issues — but nothing enforced it, and
     the whole verdict of the fold rests on it.
@@ -276,7 +276,7 @@ def test_a_comment_with_no_timestamp_leaves_the_order_alone():
     assert current_claim(issue) == "worktree-second"
 
 
-# --- #1285: the non-vacuity assertion the spec asked for and nobody wrote ------------------
+# --- the non-vacuity assertion ------------------
 #
 # A parser test that counts is vacuous the moment its fixtures move — `all(...)` over an
 # empty set passes. So the fixture set is NAMED, a census asserts every name is present, and

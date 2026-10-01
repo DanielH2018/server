@@ -49,8 +49,7 @@ SKIP_UIDS = {
 }
 
 # Stale/foreign datasource uids found in hand-imported boards, remapped onto the canonical
-# Prometheus datasource so every panel resolves. (CrowdSec "Details per Machine" shipped a
-# panel pointing at a datasource uid that no longer exists -> "datasource not found".)
+# Prometheus datasource so every panel resolves.
 DS_UID_REMAP = {"IH0jqv6nz": PROM_UID}
 
 # Title slug -> filename would collide with a community file; force a distinct name.
@@ -68,7 +67,7 @@ def gapi(path):
     """
     # Imported here, not at module scope: `lib.kubectl` resolves a kubeconfig on import and
     # raises `MissingKubectl` where there is none, so a module-level import made `--help` die
-    # on every host but the cluster's (#2854).
+    # on every host but the cluster's.
     from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
     out = kubectl(
@@ -126,7 +125,7 @@ def dump(d):
     on an unchanged dashboard is exactly the spurious diff the drift check must not see.
     `ensure_ascii=False` keeps a hand-authored description's em-dash as the character the
     author typed, so a re-export leaves it byte-identical. `fetch_grafana_dashboards.py`
-    and the committed files under OUTDIR use this same call (#2157).
+    and the committed files under OUTDIR use this same call.
     """
     return json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Every Longhorn PVC size must be an integer multiple of the backup block size.
 
-Longhorn's admission webhook enforces this, and it started mattering on 2026-08-19 when
-`default-backup-block-size` moved from 2 MiB to 16 MiB. A 100Mi PVC is a multiple of 2 MiB and
-not of 16 MiB, so it provisioned happily before the change and is refused after it:
+Longhorn's admission webhook enforces this, and it matters because
+`default-backup-block-size` is 16 MiB rather than 2 MiB. A 100Mi PVC is a multiple of 2 MiB and
+not of 16 MiB, so the webhook refuses it:
 
     admission webhook "validator.longhorn.io" denied the request: volume size 104857600 must
     be an integer multiple of the backup block size 16777216
@@ -14,15 +14,9 @@ something recreates it: a node rebuild, a restore, a disaster-recovery bring-up.
 precisely the path the 16 MiB change exists to make survivable, so a silent violation here
 converts a cost optimisation into a recovery failure.
 
-`pi-peer-backup` was the one violator, found by probing with a throwaway 100Mi PVC rather than
-by reading the setting. It holds the Pi's un-rebuildable WireGuard peer keys.
-
-A CLAIM BUILT THROUGH `ansible/templates/pvc.yml.j2` HAS NO `storage:` LINE OF ITS OWN, and
-until 2026-09-01 this file could not see one. Four roles had already adopted that macro —
-authelia, crowdsec, karakeep, loki-homelab — so their sizes had never been checked here, while
-the suite read green. `PVC_CALL_RE` closes that by reading the macro's third argument, taking
-coverage from 21 declared sizes to 31. The floor assertion below is what surfaced it: five more
-roles adopted the macro, resolution fell to 14, and the floor failed instead of the suite
+A CLAIM BUILT THROUGH `ansible/templates/pvc.yml.j2` HAS NO `storage:` LINE OF ITS OWN, so a
+scan for `storage:` cannot see one. `PVC_CALL_RE` closes that by reading the macro's third
+argument. The floor assertion below makes a fall in resolution fail loudly instead of the suite
 quietly checking less. Keep the floor above the real count for that reason.
 
 Run: uv run pytest ansible/tests/longhorn/test_pvc_sizes_match_block_size.py
@@ -46,11 +40,11 @@ JINJA_RE = re.compile(r"^\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}$")
 # A claim built through ansible/templates/pvc.yml.j2 has no `storage:` line of its own — the
 # macro carries it. Its third argument is the size, so that is what this reads. Without it a
 # converted role drops out of this suite silently, which is how the check would end up passing
-# on almost nothing; `test_the_var_map_resolves_most_templated_sizes` is the floor that caught
-# exactly that when the first five roles adopted the macro.
+# on almost nothing; `test_the_var_map_resolves_most_templated_sizes` is the floor that catches
+# exactly that.
 #
-# The trailing `(?:,\s*namespace=[^,()]+)?` is for observability's four claims (#1230): the macro
-# grew an optional `namespace=` kwarg so they could pass `k8s_observability_namespace` instead
+# The trailing `(?:,\s*namespace=[^,()]+)?` is for observability's four claims: the macro
+# takes an optional `namespace=` kwarg so they can pass `k8s_observability_namespace` instead
 # of the module default, and a plain 3-arg regex stops matching the moment a 4th argument
 # follows the size — which is exactly how a converted role drops out silently. See the accept
 # case below that pins this shape.
@@ -148,8 +142,7 @@ def test_pvc_size_is_a_multiple_of_the_backup_block_size(
 
 # The macro-call extraction is itself a check, so it ships with a proof it can go red: one
 # shape it must find, one it must not. A rule that matched nothing would leave every converted
-# role unchecked while this file still passed — the exact state that held for four roles until
-# 2026-09-01.
+# role unchecked while this file still passed.
 @pytest.mark.parametrize(
     "text",
     [
@@ -187,8 +180,8 @@ def test_the_macro_call_regex_ignores_a_non_call(text: str) -> None:
 def test_a_bad_size_behind_the_macro_is_still_caught() -> None:
     """The point of the extraction: a non-multiple size must fail even with no `storage:` line.
 
-    100Mi is a multiple of 2Mi and not of 16Mi — the exact value that made pi-peer-backup a
-    violator when the block size moved on 2026-08-19.
+    100Mi is a multiple of 2Mi and not of 16Mi — the exact kind of value the
+    webhook refuses.
     """
     raw = PVC_CALL_RE.findall("{{ pvc(c, sc, widget_size) }}")[0]
     assert raw == "widget_size"

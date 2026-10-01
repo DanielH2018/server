@@ -5,9 +5,6 @@ An https IngressRoute with no `spec.tls` is not a TLS router at all, and a Netwo
 holding a Service's published number fences nothing. Both objects apply cleanly and then match
 no traffic, which is why each needs a rule rather than a schema.
 
-Split out of scripts/validate/tests/test_validate_k8s_manifests.py on 2026-09-04, with the
-code it covers.
-
 Run: uv run pytest scripts/validate/tests/test_k8s_net_rules.py
 """
 

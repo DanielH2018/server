@@ -1,8 +1,7 @@
-"""check_k8s_workloads: the zero-available arm and its shorter grace (#1802).
+"""check_k8s_workloads: the zero-available arm and its shorter grace.
 
 A Deployment with no available replicas is down, not rolling, and the unavailable-replica arm's
-K8S_WORKLOADS_CONSECUTIVE grace held one (authelia, 2026-09-10, 11 minutes at zero) as if it
-were mid-rollout. This arm reads the same Deployments through `available == 0` and pages at
+K8S_WORKLOADS_CONSECUTIVE grace would hold one as if it were mid-rollout. This arm reads the same Deployments through `available == 0` and pages at
 K8S_ZERO_AVAILABLE_CONSECUTIVE, which is shorter. The proofs: a Recreate swap (one cycle at
 zero) is held, the second straight cycle pages, the two streaks are independent, and a
 Deployment scaled to zero on purpose is not an offender — the query excludes it, and the test
@@ -95,7 +94,7 @@ def test_one_cycle_at_zero_is_a_recreate_swap_and_is_held(kcfg, run):
 def test_the_second_straight_cycle_at_zero_pages_before_the_replica_arm_would(
     kcfg, run
 ):
-    # The red proof, and the #1802 verify-by: a Deployment at zero pages within two cycles,
+    # The red proof: a Deployment at zero pages within two cycles,
     # while the unavailable-replica arm holding the same workload is still one cycle short.
     assert run(kcfg, _at_zero())[0]
     ok, msg = run(kcfg, _at_zero())

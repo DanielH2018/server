@@ -1,10 +1,9 @@
-"""The etcd restore drill's gate-3 call and the order it runs in, issue #2420.
+"""The etcd restore drill's gate-3 call and the order it runs in.
 
 `scripts/deploy_tools/k3s_etcd_restore_gates.py` gate 3 asks the cluster whether a named
-snapshot has an `ETCDSnapshotFile` reporting `readyToUse`. Until 2026-09-24 the runbook was its
-only caller, so the gate ran on the day of a real restore and never before it — a k3s change to
-that CR, or to the readonly ServiceAccount's access to it, would first surface during the
-outage. The weekly `--list-only` drill now runs it against the snapshot it just listed.
+snapshot has an `ETCDSnapshotFile` reporting `readyToUse`. The weekly `--list-only` drill
+runs it against the snapshot it just listed, so a k3s change to that CR, or to the readonly
+ServiceAccount's access to it, surfaces before a real restore rather than during an outage.
 
 Two behaviours, and the second is the one that makes the first worth anything:
 

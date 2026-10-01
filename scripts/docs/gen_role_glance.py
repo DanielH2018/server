@@ -197,7 +197,7 @@ def glance_lines(
         lines.append(f"- **{label}:** {pins}")
 
     route = k8s_route(entry, k8s_roles, all_vars)
-    # `k8s_route` resolves the shared default too (#3043), so this branch is reached only by a
+    # `k8s_route` resolves the shared default too, so this branch is reached only by a
     # role that declares no `ingressroute.yaml` at all — for which the wording still holds.
     if route.startswith("no route"):
         lines.append("- **Route:** none (no `templates/ingressroute.yaml.j2`)")

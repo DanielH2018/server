@@ -90,7 +90,7 @@
   become: true
 
 # Render provenance for manifest-prune-check.sh's stale-script arm — see the gitops_deploy role
-# for why these were previously watched by nothing (2026-08-23b review H1).
+# for the reasoning.
 - name: Stamp the rendered renovate-agent units
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
@@ -100,7 +100,7 @@
       - ansible/roles/setup/renovate_agent/templates/renovate-agent-alert.service.j2
       - ansible/roles/setup/renovate_agent/templates/renovate-agent.timer.j2
       # The stamp and the check both hash the repo source, never the rendered file, so an
-      # .env.j2 carries no secret into either (2026-08-24 review M-9).
+      # .env.j2 carries no secret into either.
       - ansible/roles/setup/renovate_agent/templates/config.env.j2
       - ansible/roles/setup/renovate_agent/templates/alert-webhook.env.j2
       - ansible/roles/setup/renovate_agent/templates/prompt.txt.j2

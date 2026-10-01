@@ -88,8 +88,8 @@ def test_runs_ignore_grep_shells_and_list_services_is_flagged():
     assert not {412, 5200, 7000} & set(_rows())
 
 
-# The same queued deploy after #2412: the shim has exec'd `uv run … deploy_run.py`, which
-# stays the family root (measured 2026-09-24: `uv run` spawns, it does not exec), and its
+# The same queued deploy once the shim has exec'd `uv run … deploy_run.py`, which
+# stays the family root (measured: `uv run` spawns, it does not exec), and its
 # python child blocks in flock(2) itself. A `--detach` run's forked child calls setsid, so
 # it is reparented to 1 and is its own family root, holding the service lock alone.
 PORTED_PS = """\
@@ -179,7 +179,7 @@ def test_read_state_present_reads_value_is_flagged(state_dir):
 
 
 def test_read_state_splits_hold_plane_into_its_entries_is_clean(state_dir):
-    """One entry per failed apply since #2381, and the page lists them before a Clear (#2453)."""
+    """One entry per failed apply, and the page lists them before a Clear."""
     (state_dir / "hold_plane").write_text(
         "ansible/initial_setup.yml k3s; ansible/deploy.yml sonarr\n"
     )
@@ -196,7 +196,7 @@ def test_read_state_with_no_hold_plane_lists_no_entry_is_flagged(state_dir):
 def test_read_state_lists_a_deferred_bump_with_its_deploy_then_clear_is_clean(
     state_dir,
 ):
-    """A merged, unapplied image bump is the one park the page could not name (#2522)."""
+    """A merged, unapplied image bump is the one park the page could not name."""
     marker = f"{'a' * 40} sonarr 2000.0\n{'b' * 40} radarr 1000.0\n"
     (state_dir / "k8s_deferred").write_text(marker)
     rows = reads.k8s_deferred_rows(marker)

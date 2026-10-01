@@ -26,13 +26,12 @@ ssh_config_path: /etc/ssh/sshd_config
 # Each entry may carry `platform: docker|k8s` (default `docker`). It selects which deploy
 # stack owns the service: deploy.yml skips anything marked `k8s`, and the k8s manifests
 # become that service's source of truth instead. Leave it unset for a Compose service, which
-# `daniel-pi` is the only host still running. The Docker to k3s migration finished on
-# 2026-08-14 and `docs/archive/k3s-migration/` is its record.
+# `daniel-pi` is the only host still running.
 containers_list: []
 
 # Bring-up: revert once the host is established
 
-# Default: false since 2026-09-30 (#2810), so a new host is not a deployer until it says it is.
+# Default: false, so a new host is not a deployer until it says it is.
 # Leave it false until this host's first `deploy.yml` succeeds by hand: the gitops_deploy role's
 # "Run gitops-deploy once" handler shells a full deploy at the end of initial_setup.yml and fails
 # the play if it fails, so on a fresh host one bad service takes down the OS-hardening run. Write
@@ -42,7 +41,7 @@ has_gitops: false
 
 # Whether this host holds a checkout of THIS repo at ~/server.
 # Default: true. Set false for a host Ansible drives over ssh that never checks the repo out.
-# No host in the inventory does today — daniel-stage was the one, retired 2026-09-29 (#2941).
+# No host in the inventory sets it false.
 # Six setup-plane tasks read `{{ playbook_dir }}` or
 # `~/server/...` on the TARGET; without this gate two fail the run and three install a cron
 # against a path that does not exist, which SUCCEEDS and so reads green.

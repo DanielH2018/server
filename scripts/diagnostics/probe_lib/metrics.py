@@ -29,7 +29,7 @@ from diagnostics.probe_lib.core import (
 # --- Range-window truncation ---------------------------------------------------------------
 #
 # Prometheus here retains ~11.5 days, so a `[30d]` range selector returns eleven days of
-# samples with no error, no warning and no partial-data marker (issue #1314). A derivation
+# samples with no error, no warning and no partial-data marker. A derivation
 # over that window then quotes a denominator three times the covered one. `metric` therefore
 # measures what Prometheus actually holds and says so when the query asks for more.
 
@@ -165,7 +165,7 @@ def format_loki(data):
         return "no logs"
     rows.sort(key=lambda r: r[0])
     # HA's `_handle_signal_show_view` records carry the cast refresh_token, and Loki keeps the
-    # ones shipped before the Alloy redaction stage for its 744h retention (issue #3015). `--json`
+    # ones shipped before the Alloy redaction stage for its 744h retention. `--json`
     # streams the raw body through curl and never reaches here, so it stays unredacted.
     return core.redact_log_secrets("\n".join(line for _, line in rows))
 
@@ -187,8 +187,8 @@ def run_query(ns):
         # `metric` shares this function and its subparser declares no --since, so read the
         # attribute defensively. No `direction`: Loki's default `backward` is what makes
         # --limit return the NEWEST N lines, which format_loki then sorts oldest-first.
-        # run_alerts asks for the same end explicitly (`direction=backward`); it read `forward`
-        # until #1782, which spent a capped window's whole limit on its oldest lines.
+        # run_alerts asks for the same end explicitly (`direction=backward`), since `forward`
+        # spends a capped window's whole limit on its oldest lines.
         start, end = since_window_ns(getattr(ns, "since", None))
         url = loki_query_url(base, ns.logql, ns.limit, start=start, end=end)
         formatter = format_loki

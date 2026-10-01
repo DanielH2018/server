@@ -4,10 +4,9 @@
 #
 # Sibling of stamp_render.yml and per-host by the same construction: a fragment exists only
 # where its role ran, so a host that does not deploy renovate-notify never claims to be
-# watching it. The arm it feeds used to hardcode three paths (gitops-deploy's), which meant
-# renovate-notify's notifier, fake-remux's five scripts, live-drift-check.py and the shared
-# kuma-push-lib.sh could all run stale on a host whose drift check reported "deployed scripts
-# match the repo" (2026-08-24 review M-5).
+# watching it. Without it the arm could not see renovate-notify's notifier, fake-remux's five
+# scripts, live-drift-check.py or the shared kuma-push-lib.sh, and any of them could run stale
+# on a host whose drift check reported "deployed scripts match the repo".
 #
 # Why a pair and not a hash, unlike stamp_render.yml: a `copy:`-deployed file is byte-identical
 # to its source, so the check can compare live against repo directly and catch drift in EITHER.

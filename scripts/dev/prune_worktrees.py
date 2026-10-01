@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 """Report and remove Claude session worktrees under .claude/worktrees/ that are done with.
 
-Several Claude sessions work this repo at once, each in its own worktree. Nothing removed
-them when the work merged, so merged trees accumulated on disk alongside the live ones and
-it stopped being obvious which was which.
+Several Claude sessions work this repo at once, each in its own worktree.
 
 A worktree is removable only when all three hold: its branch is merged into
 origin/master, it has no uncommitted changes, and no live session holds its lock.
 
-It also sweeps the BRANCHES those worktrees leave behind. Removing a worktree leaves its
-`worktree-*` branch, and nothing here removed those: the dotfiles `prune-worktrees.py`
-SessionStart hook did until its PR #626 (2026-09-24) made it skip any repo shipping this
-script. There were roughly 249 of them on that date. See orphan_branches.
+It also sweeps the BRANCHES those worktrees leave behind. See orphan_branches.
 
 "Merged" is checked three ways, cheapest first: ancestry, then patch-id, then content. PRs
 land here rebased or squashed, never fast-forwarded, so the branch tip is not an ancestor of
@@ -56,7 +51,7 @@ from lib.repo_paths import REPO
 
 # The readers — the Worktree record, the porcelain parser, the lock-liveness check, the
 # cherry and merge-tree verdicts — are shared with the dotfiles prune-worktrees.py hook
-# through the deployed claude_worktree module (#2133); `_claude_worktree` is the
+# through the deployed claude_worktree module; `_claude_worktree` is the
 # bootstrap onto it and says why a missing deploy raises rather than falls back. The
 # names are re-exported: `findings_lib`, `fanout_lib` and the SessionStart banner import
 # them from here, and `parse_worktree_list`/`session_is_alive` are this module's public
@@ -143,15 +138,11 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
         return True
     # Fourth and last: squash-merged AND master has since drifted into a conflict on a file the
     # branch also touched. `git merge-tree` then exits non-zero, which is the right local answer
-    # ("no verdict") and the wrong final one — the branch landed days ago and the tree sits there
-    # forever. Observed 2026-08-27: worktree-review-2026-08-24-remediation, landed as PR #400 on
-    # 2026-08-24, held by a later master change to wg-easy/tasks/main.yml.
+    # ("no verdict") and the wrong final one.
     #
     # Ask the forge, which knows what it merged. This runs LAST because it is the only check
     # needing a network round-trip and credentials; every branch the local checks settle never
     # reaches it. No `gh`, no auth, or no answer all mean no verdict, which reads as not merged.
-    # The lookup and its SHA-equality rule live in the deployed claude_worktree module, which
-    # the dotfiles pruner and Stop hook also use (dotfiles #629).
     return forge_says_merged(repo, branch, head)
 
 
@@ -161,7 +152,7 @@ def locally_landed(repo: str, head: str, ancestry_known: bool = False) -> bool:
     Split out for the branch sweep, which asks this question of every orphan `worktree-*`
     branch and must not reach the forge to answer it. `is_merged`'s fourth layer is one
     `gh pr list` per unsettled branch; the memo on `_memoised_merged` records what that class
-    of traffic already cost once (#1279), and a sweep over a couple of hundred branches is the
+    of traffic already cost once, and a sweep over a couple of hundred branches is the
     same bug at a larger N.
 
     `ancestry_known` says the caller has already settled the ancestry layer in bulk, through
@@ -200,10 +191,7 @@ def orphan_branches(repo: str) -> list[str]:
     """Local `worktree-*` branches that no worktree has checked out.
 
     `EnterWorktree` derives a branch from the worktree name, so every session branch here
-    carries the prefix and nothing else does. Removing the worktree leaves the branch, and
-    nothing swept those: the dotfiles `prune-worktrees.py` SessionStart hook did until its
-    PR #626 (2026-09-24) made it skip any repo shipping this script, and it only ever accepted
-    what `git branch -d` accepted. On 2026-09-24 there were roughly 249 such branches here.
+    carries the prefix and nothing else does.
 
     The prefix is the outer refusal: a branch outside it is not a session branch and this
     never touches it. A branch a worktree still holds is excluded too, which is also what
@@ -227,9 +215,7 @@ def ancestry_landed_branches(repo: str) -> set[str]:
     """Every local branch whose tip is an ancestor of origin/master, in ONE git call.
 
     The bulk layer, and the reason the sweep is cheap enough to run from the SessionStart
-    banner. A per-branch `merge-base --is-ancestor` over a couple of hundred branches is a
-    couple of hundred processes; `git branch --merged` is one, and the issue's own count says
-    it settles most of them (172 of 249 on 2026-09-24).
+    banner.
 
     An empty set on failure, which reads as "nothing settled" — the KEEP direction, because
     every caller of this decides what to delete.
@@ -335,14 +321,14 @@ def _memoised_merged(
     A fan-out claims every issue under ONE orchestrator worktree, so `claim_states` asks the
     identical question once per claimed issue — and for an unmerged branch `is_merged` is four
     layers deep, ending in a `gh pr list` NETWORK call. N claimed issues meant N of those on
-    every `claims`, `reap` and `next` (#1279); the memory entry
+    every `claims`, `reap` and `next`; the memory entry
     `agent-polling-starves-the-deployers-ci-gate` records what that class of traffic costs.
 
     The memo is keyed on the worktree PATH, whose answer is stable for the duration of one
-    command. It deliberately does NOT touch `classify`: an earlier attempt made the read lazy
-    by guarding on `not tree.locked`, which re-derived `classify`'s branch structure outside
-    `classify` and got it wrong — `classify` skips the merged read only on `locked AND
-    session_is_alive`. `classify` still receives an eagerly-computed bool.
+    command. It deliberately does NOT touch `classify`: guarding on `not tree.locked` would
+    re-derive `classify`'s branch structure outside `classify` and get it wrong — `classify`
+    skips the merged read only on `locked AND session_is_alive`. `classify` still receives an
+    eagerly-computed bool.
 
     ``ask`` is the read itself, defaulted to `is_merged`. A test counts its calls through
     this parameter rather than by patching the module attribute, which is the direction the
@@ -402,10 +388,8 @@ def prune_all(
     """Remove each tree, printing one line per outcome.
 
     Shared by both report shapes so that `--prune` cannot mean one thing with `--brief` and
-    another without it. It used to live inline in main(), below an early `return brief()`,
-    so `--prune --brief` printed the removable list and removed nothing while exiting 0 —
-    a silent no-op that read as a successful prune (#1190). A failed removal is followed by
-    `advise`'s lines, which name any path git could not delete because another uid owns it.
+    another without it. A failed removal is followed by `advise`'s lines, which name any
+    path git could not delete because another uid owns it.
     """
     for tree in trees:
         ok, error = remove(repo, tree)

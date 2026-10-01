@@ -1,5 +1,5 @@
 ---
-# Phase F: server-side verification of a just-joined agent node. Runs ON daniel-box
+# Server-side verification of a just-joined agent node. Runs ON daniel-box
 # (the kubectl credential lives here); k3s_join_node / k3s_join_node_ip are supplied by
 # the verify play in k3s-bringup.yml.
 
@@ -21,7 +21,7 @@
   register: k3s_join_registered_ip
   changed_when: false
   # A read of the node object k3s already holds, so it runs under --check too: skipped, it
-  # leaves no stdout and the assert below fails on an address it never read (#2323).
+  # leaves no stdout and the assert below fails on an address it never read.
   check_mode: false
 
 - name: Fail if the node registered an address the host does not own
@@ -33,13 +33,12 @@
       {{ k3s_join_node_ip }}. Check for a second NIC winning autodetection (the daniel-box
       2026-08-01 lesson).
 
-# The create-default-disk=false node-label turned out to be INERT here (found at the
-# 2026-08-13 join): Longhorn only honors it when the cluster-level
-# `create-default-disk-labeled-nodes` setting is true, which this cluster never set — so
-# a default disk appeared on the new node with allowScheduling:true. The enforceable
-# lever is the node CR itself. Through the join window (k3s_agent_longhorn_scheduling:
-# false) this pair disables scheduling declaratively and proves no replica landed; the
-# §F replica raise flips the var, after which the same patch asserts participation.
+# The create-default-disk=false node-label is INERT here: Longhorn only honors it when the
+# cluster-level `create-default-disk-labeled-nodes` setting is true, which this cluster never
+# sets — so a default disk appears on the new node with allowScheduling:true. The enforceable
+# lever is the node CR itself. While k3s_agent_longhorn_scheduling is false this pair
+# disables scheduling declaratively and proves no replica landed; flipping the var to true
+# makes the same patch assert participation.
 # The Longhorn node CR appears asynchronously after longhorn-manager starts; patching it
 # before then is a NotFound. `--for=create` returns the moment the CR exists.
 - name: Wait for the node's Longhorn node CR to exist

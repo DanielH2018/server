@@ -15,9 +15,7 @@ Facts with a message that names a module rather than the cache:
     was not found.
     "msg": "The following modules failed to execute: ansible.legacy.setup."
 
-`PLAY RECAP` reads `ok=0 changed=0 failed=1` — nothing was built or deployed. Observed
-2026-08-27 after the `texbrain-mjs-mime` worktree went away mid-session, and again within
-minutes when a second session's `./scripts/deploy.sh --dry-run` re-pinned a third worktree.
+`PLAY RECAP` reads `ok=0 changed=0 failed=1` — nothing was built or deployed.
 
 WHY IT NEEDS A GUARD RATHER THAN A HABIT. Three things make it hard to catch by hand. The
 two-hour TTL means it does not self-heal inside a session. The error points at Ansible, not
@@ -37,12 +35,9 @@ refusal would only tell the operator to run the `rm` themselves. `deploy_run.py`
 this with --clear in its preflight. Run without --clear it reports and exits 1, which is what
 the tests and an interactive check use.
 
-NOT THE AUTOMATED PIPELINE, WHICH HAS A CACHE OF ITS OWN. gitops_deploy.py invokes
-ansible-playbook from the primary checkout, whose `.venv` is never pruned, so it cannot PIN a
-doomed path. It could READ one: it shared this cache until the 2026-09-03 12:36 broad apply
-died on a pruned worktree's interpreter (#2862). Its unit now sets
-ANSIBLE_CACHE_PLUGIN_CONNECTION to ~/.cache/gitops-deploy/ansible-facts, so no worktree
-writes the cache it reads, and this guard stays a deploy.sh preflight.
+NOT THE AUTOMATED PIPELINE, WHICH HAS A CACHE OF ITS OWN. gitops_deploy.py invokes ansible-playbook from the primary checkout,
+whose `.venv` is never pruned, so it cannot PIN a doomed path. Its unit sets ANSIBLE_CACHE_PLUGIN_CONNECTION to
+~/.cache/gitops-deploy/ansible-facts, so no worktree writes the cache it reads, and this guard stays a deploy.sh preflight.
 
 Usage:
     uv run python scripts/deploy_tools/fact_cache_guard.py            # report, exit 1 if stale

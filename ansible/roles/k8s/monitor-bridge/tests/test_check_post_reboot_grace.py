@@ -1,8 +1,7 @@
-"""The two arms that stop the weekly reboot holding a tile red for hours, issue #2783.
+"""The two arms that stop the weekly reboot holding a tile red for hours.
 
-The Sunday 07:30 restart left `shipper_dropped` red for 4.4h and `swallowed_verdicts` for 2.9h on
-2026-09-27, long after every other tile recovered. Both read a window that still contained the
-reboot, and both are keyed here on the NODE's uptime rather than this pod's age — a deploy
+After the Sunday 07:30 restart, `shipper_dropped` and `swallowed_verdicts` stay red long after
+every other tile recovers. Both read a window that still contains the reboot, and both are keyed here on the NODE's uptime rather than this pod's age — a deploy
 restarts the bridge without rebooting anything, and each arm suppresses a fault only a reboot
 produces.
 
@@ -194,6 +193,6 @@ def test_a_shortened_window_still_pages_on_a_verdict_lost_after_the_reboot(cfg):
 
 
 def test_a_zero_settle_window_disables_the_skip(cfg):
-    # The operator switch. BOOT_SETTLE_S=0 restores the pre-#2783 reading exactly.
+    # The operator switch. BOOT_SETTLE_S=0 disables the hold exactly.
     _, _, windows = _window_seen(dataclasses.replace(cfg, BOOT_SETTLE_S=0), uptime=60.0)
     assert windows == [60, 60]

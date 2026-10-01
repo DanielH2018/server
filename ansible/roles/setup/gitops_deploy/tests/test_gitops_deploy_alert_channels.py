@@ -56,7 +56,7 @@ def _marker(state_dir: pathlib.Path, name: str) -> str | None:
 
 
 def _alerted(state_dir, slot: str) -> str | None:
-    """The SHA one alert slot has paged on, out of the one keyed marker file (#3047)."""
+    """The SHA one alert slot has paged on, out of the one keyed marker file."""
     return parse_alerted(_marker(state_dir, "alerted_shas")).get(slot)
 
 
@@ -147,7 +147,7 @@ def test_an_empty_changeset_pages_nothing(
         tools, gitops_deploy.STATE, settings, ORIGIN, set(), ChangeSet()
     )
     assert seen == []
-    # The keyed marker itself, not a glob for the old per-channel basenames: since #3047 those
+    # The keyed marker itself, not a glob for per-channel basenames: those
     # files do not exist at all, so `not any(...endswith("_alerted_sha"))` would pass over a
     # slot this call had written.
     assert _marker(state_dir, "alerted_shas") is None
@@ -275,9 +275,8 @@ def test_state_dir_repoints_every_state_path_in_the_module(gitops_deploy, gitops
 
     Every marker path is reached through `STATE`, which the fixture replaces. A path built any
     other way (a literal, an f-string, `os.path.join`) would keep pointing at the host and the
-    test writing through it would pass against /var/lib. The 22 module-level constants that
-    used to carry the paths were the last such literals (issue #2051); this guard is what
-    keeps them from coming back.
+    test writing through it would pass against /var/lib. This guard keeps module-level path
+    constants from coming back.
     """
     prefix = deploy_state.STATE_DIR
     literals = {
@@ -363,7 +362,7 @@ def test_a_parked_tick_keeps_the_existing_behind_since_stamp(
 def test_a_tick_that_did_not_defer_on_a_lock_clears_the_contention_streak(
     gitops_deploy, tick, state_dir
 ):
-    """CLEAN half of #1847: a converged noop tick means the lock stopped wedging the deployer."""
+    """CLEAN half: a converged noop tick means the lock stopped wedging the deployer."""
     (state_dir / "contention_since").write_text(f"{ORIGIN} sonarr 1000.0 1000.0 3")
     tick.origin = tick.local
     assert gitops_deploy.entrypoint(tick.tools) == 0
@@ -382,7 +381,7 @@ def test_a_crashed_tick_leaves_the_contention_streak(gitops_deploy, tick, state_
 def test_a_parked_range_keeps_its_stamp_while_green_commits_land_above_it(
     gitops_deploy, tick, state_dir
 ):
-    """Issue #1846, refuted: a wedge cannot game the re-stamp, because a fast-forward to any
+    """A wedge cannot game the re-stamp, because a fast-forward to any
     commit above it crosses it and every deferral that stops the tick leaves HEAD in place.
 
     Three ticks, each with a new green commit landed above a bring-up change that parks.

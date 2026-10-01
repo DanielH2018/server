@@ -1,9 +1,9 @@
 """Guard: the host forwarder's metrics listener must bind the wildcard, not a node address.
 
 WHY. A `prometheus <addr>:<port>` line naming the node's own routable address can only bind
-once that address is assigned. On the 2026-09-09 boot of daniel-box it was not: CoreDNS came
-up, served DNS on `bind 127.0.0.1`, bound no metrics listener, and systemd reported the unit
-healthy with `NRestarts=0` all day (GitHub issue #1476). A wildcard bind depends on no address
+once that address is assigned. If it is not, CoreDNS comes up, serves DNS on
+`bind 127.0.0.1`, binds no metrics listener, and systemd reports the unit healthy with
+`NRestarts=0`. A wildcard bind depends on no address
 being assigned first, so it cannot fail that way.
 
 WHY IT NEEDS A GUARD. Nothing on the node reports the missing listener — not the unit, not the

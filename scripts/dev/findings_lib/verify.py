@@ -3,13 +3,10 @@
 `findings.py open --verify-by` stores a description of how to verify the finding in the issue
 body; `findings.py verify` prints those descriptions back. Nothing here executes anything.
 
-WHY NOT A COMMAND. Until 2026-09-06 a verify-by was a shell command, and `verify` ran it and
-read its exit code as the verdict. Measured over the register on that date: of the 17 closed
-findings that carried one, 3 cleared the read-only classifier guarding the run and 12 were
-genuine read-only commands it refused, so the executable half mostly never executed. It also
-required running text read out of a GitHub issue body, which is why the classifier and a
-hand-written `uv run` allowlist stood in front of it at all. Prose cannot execute, so both the
-gate and the thing it guarded are gone (#1313, #1351).
+WHY NOT A COMMAND. A verify-by that is a shell command means running text read out of a
+GitHub issue body, which needs a read-only classifier and a hand-written `uv run` allowlist in
+front of it, and most genuine read-only checks fail such a classifier. Prose describes any
+check, and nothing executes it.
 
 The rendering lives here rather than in `findings.py` so the report — including its counts —
 is a pure function a test can call without a CLI or a gh read.

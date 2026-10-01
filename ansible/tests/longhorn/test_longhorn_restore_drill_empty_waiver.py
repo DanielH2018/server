@@ -5,8 +5,8 @@ checks their message. This file runs the whole drill, because the claim the waiv
 what gets STAMPED: check 7 reads `last-success` and check 8 reads `success/<pvc>`, and a waiver
 that fires wrongly writes both for a restore that brought nothing back.
 
-Until 2026-09-24 the waiver applied by name alone (#2393), so the day n8n-files starts holding
-data an empty restore would still have stamped success. The ceiling is what makes the list a
+The waiver applies only below a ceiling, because a waiver by name alone would stamp success on
+an empty restore the day n8n-files starts holding data. The ceiling is what makes the list a
 claim about the volume rather than a permanent exemption.
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiver.py
@@ -19,7 +19,7 @@ from _helpers import load_yaml
 from _restore_drill import harness
 
 DEFAULTS = ROLES / "setup" / "k3s" / "defaults" / "main.yml"
-# n8n-files' own actualSize on 2026-09-22 — the reading the ceiling was derived from.
+# n8n-files' own recorded actualSize, the reading the ceiling was derived from.
 RECORDED_BARE_EXT4_BYTES = 51712000
 
 

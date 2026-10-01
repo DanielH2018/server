@@ -19,8 +19,8 @@ the file list lives in that role's `defaults/main.yml`:
             | first).templates }}
 
 `release_bin_templates` therefore parses as a folded Jinja STRING, not a list. A resolver that
-iterates it and keeps the dict entries finds nothing and reports a clean result — which is
-exactly how the secrets guard shipped on 2026-08-29 scanning zero files while passing. Resolve
+iterates it and keeps the dict entries finds nothing and reports a clean result, scanning
+zero files while passing. Resolve
 the group from the defaults instead; the literal-list form is still accepted because a caller may
 pass one directly.
 """

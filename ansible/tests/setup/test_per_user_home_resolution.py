@@ -8,8 +8,7 @@ sudo don't need --ask-become-pass — which makes ansible_env.HOME `/root` for t
 whole play.
 
 So a task can set become: false, run as `ubuntu`, and still resolve
-ansible_env.HOME to /root. That is exactly what happened on daniel-box
-(2026-08-01):
+ansible_env.HOME to /root. The task then fails:
 
     TASK [chezmoi_setup : Ensure the per-user directories exist]
     failed: (item=/root/.local/bin) ... Permission denied: b'/root/.local'

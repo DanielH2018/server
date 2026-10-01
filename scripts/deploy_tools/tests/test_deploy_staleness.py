@@ -1,8 +1,8 @@
 """Tests for the deploy staleness guard.
 
-The guard exists because of a measured incident (2026-08-19): a worktree 48 commits
-behind master deployed stale templates and reverted live config for ~9 minutes, while
-every repo-side check stayed green. See scripts/deploy_tools/deploy_staleness.py for the mechanism.
+The guard exists because a worktree behind master deploys stale templates and reverts live config
+while every repo-side check stays green. See scripts/deploy_tools/deploy_staleness.py for the
+mechanism.
 
 The git fixtures here build throwaway repos in tmp_path. They MUST scrub GIT_* from the
 environment: when pytest runs from a pre-commit hook, GIT_DIR/GIT_INDEX_FILE are set and
@@ -65,7 +65,7 @@ def test_a_tree_behind_is_detected(repos):
 
 
 def test_the_incident_shape_is_behind_and_ahead(repos):
-    """2026-08-19 was both: 48 behind and 15 ahead. Being ahead must not mask being behind."""
+    """A tree can be both behind and ahead. Being ahead must not mask being behind."""
     origin, clone = repos
     _commit(origin, "theirs")
     _commit(clone, "mine")
@@ -94,7 +94,7 @@ def test_main_refuses_when_behind(repos):
 
 
 def test_refusal_names_the_count_and_the_fix(repos):
-    """The message has to say what to run. The incident's cost was not knowing to look."""
+    """The message has to say what to run."""
     msg = format_refusal(behind=48, ahead=15, ref="origin/master")
     assert "48" in msg
     assert "rebase" in msg
@@ -133,7 +133,7 @@ def test_a_tree_behind_on_an_unrelated_role_still_deploys(repos, capsys):
 
 
 def test_a_tree_behind_on_the_role_being_deployed_is_refused(repos, capsys):
-    """The rejecting half, and the incident shape: that commit renders the role's templates."""
+    """The rejecting half: that commit renders the role's templates."""
     clone = _behind_on(repos, SONARR)
     rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr,radarr"])
     err = capsys.readouterr().err
@@ -167,8 +167,8 @@ def test_a_tree_behind_on_the_secrets_file_is_refused(repos, capsys):
     """A rotation commit in the tail maps to no service, and every template can read it.
 
     Deploying from a tree behind one renders the OLD credential and pushes it live — the
-    reversion this guard exists to refuse, through a field the narrowing does not consult
-    (issue #1785).
+    reversion this guard exists to refuse, through a field the narrowing does not
+    consult.
     """
     clone = _behind_on(repos, SECRETS)
     rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
@@ -221,7 +221,7 @@ def test_exit_four_names_the_parked_deployer_when_one_is_parked(
     """A rebase of THIS tree is the wrong repair when the primary checkout is what is stuck.
 
     Time is not injectable through the CLI, so the stamp is a fixed epoch old enough that the
-    park window has elapsed under any clock this suite runs on (#2158).
+    park window has elapsed under any clock this suite runs on.
     """
     origin, clone = repos
     _commit(origin, "theirs")

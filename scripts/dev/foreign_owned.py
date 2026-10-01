@@ -1,9 +1,9 @@
 """Find the paths under a directory that another uid owns, and say how to clear them.
 
-An Ansible play escalated with `become` once wrote root-owned `__pycache__` into worktree
-venvs. #2456 stopped new ones. The trees that already hold them fail `git worktree remove`
-with an error that names no path, and a session cannot run sudo to clear them.
-`prune_worktrees.py` prints this module's advice beside such a failure (#2572).
+An Ansible play escalated with `become` can write root-owned `__pycache__` into worktree
+venvs. The trees that already hold them fail `git worktree remove` with an error that
+names no path, and a session cannot run sudo to clear them. `prune_worktrees.py` prints
+this module's advice beside such a failure.
 """
 
 import os

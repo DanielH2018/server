@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The full etcd restore drill's throwaway guest, its cron, and the alarm derived from it (#1175).
+"""The full etcd restore drill's throwaway guest, its cron, and the alarm derived from it.
 
 roles/setup/hypervisor builds a transient libvirt guest per run and drives
 scripts/backup/etcd_restore_drill.sh inside it. Three things here can drift silently and each
@@ -8,11 +8,10 @@ reads green from every other gate:
 - the guest's MAC and the staging network's DHCP reservation for it (a mismatch boots a guest
   on a dynamic lease, and the orchestrator waits on an address nothing answers);
 - the Kuma tile's deadline and the cron it is derived from (a deadline shorter than the period
-  pages every month for nothing; one far longer lets a dead drill sit green for a year — the
-  exact failure #1175's "1-year budget" would have built in over a monthly cron);
+  pages every month for nothing; one far longer lets a dead drill sit green for a year);
 - the cron task's shape: root, armed by the flag, day-of-month cadence, off every backup window.
 
-Since daniel-stage was retired (#2941) this guest is the only one on the staging network, so
+This guest is the only one on the staging network, so
 these checks are also what holds the network template to a shape a guest can actually use. Run:
 uv run pytest ansible/tests/staging/test_etcd_drill_vm.py
 """
@@ -235,7 +234,7 @@ def test_the_orchestrator_is_registered_as_a_cross_host_token_consumer():
 
 
 def test_the_fence_verdict_has_a_kuma_tile_and_a_token_of_its_own():
-    """#3021: the fence's non-fatal verdict has to reach the alert chain on its own tile.
+    """The fence's non-fatal verdict has to reach the alert chain on its own tile.
 
     An unmeasured range leaves the restore drill passing, so the drill's tile is `up` and the
     label is only message text. This tile shares the drill's deadline because the same monthly

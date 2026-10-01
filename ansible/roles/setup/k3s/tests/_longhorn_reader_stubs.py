@@ -22,7 +22,7 @@ HOST_LIB_DIR = Path(__file__).resolve().parents[2] / "common" / "files"
 
 # The epoch every dated fixture here is measured from — the same one test_longhorn_backup_health
 # pins. A fixture stamped `time.time() - age` would measure its age across the suite's own
-# runtime, which is the straddle #2158 removed from the in-process suites (#2220).
+# runtime, which is the straddle a pinned clock avoids.
 NOW = 1_800_000_000.0
 
 # Runs the reader with main(now=NOW) instead of `python longhorn_backup_health.py`, still as a
@@ -49,10 +49,9 @@ def reader_argv(now: float | None = None) -> list[str]:
 def _reader_env(tmp_path, **overrides) -> dict:
     """Every LONGHORN_* env var the reader requires, with permissive defaults a test can override.
 
-    Every one of these is REQUIRED by the reader (`_require_env` et al — no hardcoded fallback,
-    the 2026-09-04 review's finding #3), so a subprocess test that used to set only a couple of
-    vars and rely on module-level defaults for the rest now has to set all seventeen or the reader
-    exits nonzero before doing anything else. Centralised here so each test only names the ONE
+    Every one of these is REQUIRED by the reader (`_require_env` et al — no hardcoded fallback),
+    so a subprocess test has to set all seventeen or the reader exits nonzero before doing
+    anything else. Centralised here so each test only names the ONE
     var it cares about overriding. LONGHORN_BACKUP_KUBECTL is the exception: every subprocess
     test points it at its own stub, so it has no default here.
     """

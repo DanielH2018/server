@@ -9,9 +9,9 @@ k3s_agent_node_ips:
 # value here fails initial_setup.yml outright.
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # 28 GiB of RAM on the control-plane node — etcd, Longhorn and Prometheus hold heaps that
-# must not be swapped, so initial_setup lowers vm.swappiness to 10 here. Measured
-# 2026-09-29 before the change: swappiness 60, 18 GiB available, 15 GiB page cache,
-# 166 MiB already in swap (#2981). group_vars/all.yml defaults this false.
+# must not be swapped, so initial_setup lowers vm.swappiness to 10 here. Measured at the
+# default swappiness of 60: 18 GiB available, 15 GiB page cache, 166 MiB already in swap.
+# group_vars/all.yml defaults this false.
 has_ample_ram: true
 # Reconciler mode: live = grab a genuine replacement, verify (host ffprobe), delete the
 # fake + import. off/shadow also available.
@@ -118,8 +118,7 @@ containers_list:
   # needs inside longhorn-system. `port` is longhorn-frontend's Service port. use_authelia
   # is the entire access control — Longhorn's UI has no login of its own. two_factor: the UI
   # deletes volumes, replicas and their B2 backup chain on a stolen password alone, a heavier
-  # blast radius than code-server/n8n. It rode the one_factor wildcard from 2026-08-15 until
-  # its own rule landed.
+  # blast radius than code-server/n8n.
   - name: longhorn-ui
     platform: k8s
     hostname: "longhorn"
@@ -354,7 +353,7 @@ containers_list:
     service_port_name: http
   # Brings three unrouted workloads with it — headless Chrome, Meilisearch and the
   # time-tagger — reached in-cluster by Service name. Those names are load-bearing:
-  # karakeep addresses them exactly as it addressed the Compose service keys.
+  # karakeep addresses them by those names.
   - name: karakeep
     platform: k8s
     hostname: "karakeep"
@@ -366,8 +365,9 @@ containers_list:
     # key-gates (packages/api/index.ts in the pinned image): the extension and the app speak
     # tRPC at /api/trpc/, the app uploads to /api/assets and reads /api/assets/<id>, and
     # /api/v1/ is the REST API. The list is an allow-list, not `/api/` — that prefix also
-    # reached next-auth's /api/auth/* (password login, no app-side throttle) and cookie-session
-    # auth on every other child, so the app password was the only gate on the internet (#1929).
+    # reaches next-auth's /api/auth/* (password login, no app-side throttle) and cookie-session
+    # auth on every other child, which would leave the app password as the only gate on the
+    # internet.
     # The trailing slashes are load-bearing: PathPrefix(`/api`) would also match siblings like
     # /api-docs. /api/assets has none because the mobile upload POSTs to exactly that path;
     # nothing else under /api/ starts with `assets`.
@@ -380,7 +380,7 @@ containers_list:
   # the LAN.
   - name: registry
     platform: k8s
-  # two_factor even on the LAN (decided 2026-08-13): arbitrary workflow execution on a stolen
+  # two_factor even on the LAN: arbitrary workflow execution on a stolen
   # password alone. /webhook/ below is unaffected — that route carries no forward-auth at all,
   # and monitor-bridge's check_n8n rides the API-key route.
   - name: n8n
@@ -455,9 +455,7 @@ containers_list:
 
   # The tunnel answers on the node IP (the wg-easy-udp Service's externalIP) rather than a
   # VIP: router UIs forward to devices, and VIPs have no lease. There is no password_hash on
-  # either side: v15 owns its admin credentials in its own SQLite DB, so the Secret template
-  # this comment used to point at was deleted with the v14 auth model (96eeeb49), and
-  # `wg_easy_password_hash` left secrets.yml on 2026-08-24. Rotation is `cli db:admin:reset`
+  # either side: v15 owns its admin credentials in its own SQLite DB. Rotation is `cli db:admin:reset`
   # inside the pod — see roles/k8s/wg-easy/defaults/main.yml.
   - name: wg-easy
     platform: k8s
@@ -475,10 +473,9 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
 
-  # Ported WITHOUT its docker plumbing (operator decision) — no DOCKER_HOST, so the in-IDE
-  # docker CLI and devcontainers are gone. Image built in-cluster from the containers
-  # role's Dockerfile, which stays the build source. two_factor even on the LAN (decided
-  # 2026-08-13): a shell as the repo user on a stolen password alone.
+  # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
+  # Image built in-cluster from the containers role's Dockerfile, which is the build source.
+  # two_factor even on the LAN: a shell as the repo user on a stolen password alone.
   - name: code-server
     platform: k8s
     hostname: "code-server"
@@ -512,8 +509,7 @@ containers_list:
     platform: k8s
     depends_on: [loki-homelab]
   # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
-  # every metric/API check (same check.py as the Docker remnant, split by
-  # CHECKS_SKIP/CHECKS_ONLY); autofix-bridge is the *arr remediation loop.
+  # every metric/API check; autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge
     platform: k8s
   # Host metrics for BOTH nodes.
@@ -535,8 +531,7 @@ containers_list:
   # Nightly CronJob: the Pi's WireGuard peer keys land on a Longhorn PVC the WEEKLY tier
   # carries to B2 on its Saturday shard (`k3s_longhorn_weekly_volumes`, `# Sat`), and the job
   # pushes the "WG Pi Peer Backup" monitor directly. The job is nightly; the OFF-SITE copy is
-  # weekly — this comment said "the 03:30 daily-backup group" until 2026-08-24, which would
-  # have an operator expect a same-day restore point that does not exist.
+  # weekly, so there is no same-day off-site restore point.
   - name: pi-peer-backup
     platform: k8s
   # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
@@ -590,9 +585,8 @@ has_gitops: true
 gitops_deploy_k8s_autodeploy_enabled: true
 gitops_deploy_k8s_autodeploy_pilot: []
 # This is the k3s node — it must NOT have Docker. k3s brings its own containerd and its
-# flannel/kube-proxy iptables rules. A bare `initial_setup.yml` (no --tags) once installed
-# Docker here, which tripped the k3s role's fail-closed guard and blocked k3s-bringup.yml.
-# Keep this false — it is what makes the removal hold.
+# flannel/kube-proxy iptables rules, and the k3s role's fail-closed guard blocks
+# k3s-bringup.yml on a node that runs Docker. Keep this false.
 has_docker: false
 # Developer environment, opted in (both default false in group_vars/all.yml). Claude Code
 # still needs one interactive `claude login` here afterwards — the role installs the binary
@@ -618,13 +612,13 @@ render_gid: 993
 # Run the host-side secondary upsmon here, so a UPS shutdown powers this node off cleanly
 # instead of letting it run to battery end and lose power mid-write. This node holds etcd,
 # Longhorn's primary replicas, Traefik, Kuma, Prometheus and LAN DNS, so the unclean cut was the
-# most expensive one in the fleet. It draws from the same UPS as daniel-server (measured
-# 2026-08-20, see group_vars/all.yml).
+# most expensive one in the fleet. It draws from the same UPS as daniel-server (measured,
+# see group_vars/all.yml).
 #
-# NOT A LONE EDIT. Arming at the old 120 s ONBATT delay would have stopped the control plane two
-# minutes into any blip — worse availability than the hard cut it replaces, since most outages
-# never reach two minutes. The delay was raised to 300 in roles/k8s/nut/defaults/main.yml in the
-# same change, and that ordering is what the role's own comment prescribes.
+# NOT A LONE EDIT. Arming at a 120 s ONBATT delay would stop the control plane two minutes into
+# any blip — worse availability than the hard cut it replaces, since most outages never reach
+# two minutes. The delay is 300 in roles/k8s/nut/defaults/main.yml, and that ordering is what
+# the role's own comment prescribes.
 #
 # DEPLOY ORDER, and it is not optional: run the console-attended `upsmon -c fsd` drill from
 # roles/k8s/nut/CLAUDE.md before this reaches the host. Setting it true installs a chain whose
@@ -634,7 +628,7 @@ render_gid: 993
 # is what re-checks it afterwards, every 10 minutes via ups-secondary-health.sh.
 nut_host_secondary_armed: true
 
-# The unattended Renovate agent (roles/setup/renovate_agent). Armed 2026-09-03. The timer
+# The unattended Renovate agent (roles/setup/renovate_agent). The timer
 # fires at 15:00 UTC daily and spends one headless session over the open Renovate PRs, merging
 # and landing up to renovate_agent_max_prs of them. Setting this back to false stops and
 # disables the timer; that is the rollback. There is no alive monitor yet, so a timer that

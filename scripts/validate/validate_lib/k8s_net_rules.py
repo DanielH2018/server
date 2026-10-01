@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """The two semantic rules on rendered manifests that no schema can make.
 
-Split out of ``scripts/validate/k8s_manifests.py`` on 2026-09-04; that module re-exports every
-name here, so an existing importer keeps working.
-
 Both bug classes fail silently the same way: the object applies cleanly and then matches
 nothing. An https IngressRoute with no ``tls:`` is never a TLS router, and a NetworkPolicy
 holding a Service's published port fences no traffic. Pure functions over parsed documents —

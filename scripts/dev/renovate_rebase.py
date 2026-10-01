@@ -4,9 +4,7 @@
 A Renovate branch pins what was current when it was cut — the base commit and the image
 digest. When either has moved, the refresh is Renovate's job, not a hand edit: the next run
 would rewrite a hand-bumped digest anyway. Renovate watches for its own checkbox in the PR
-body, `- [ ] <!-- rebase-check -->`, and rebases within a cycle once it reads `[x]`. The
-`renovate-prs` skill (§5) did this as `mktemp` → `sed` → `gh pr edit --body-file`; this is
-that sequence as one command (#2163).
+body, `- [ ] <!-- rebase-check -->`, and rebases within a cycle once it reads `[x]`.
 
 Idempotent: a box already ticked writes nothing and exits 0. A body with no box at all is
 an error, not a no-op — Renovate did not author that PR, or the box was edited away, and
@@ -14,15 +12,14 @@ either way a `gh pr edit` would change nothing and report success.
 
 A PR still inside its `minimumReleaseAge` is refused (exit 3) rather than ticked. Renovate
 skips updating a soaking branch, including a requested rebase: it answers the tick with a
-"Rebase not applied" comment and LEAVES THE BOX TICKED. #2335 sat CONFLICTING for 38 hours
-in exactly that state, and an agent read the stall as a broken rebase because this script
-exited 0 on the standing tick (#2368, #2630).
+"Rebase not applied" comment and LEAVES THE BOX TICKED, so a script that exits 0 on the
+standing tick reads the stall as a broken rebase.
 
 Whether the standing tick is spent is not settled. Renovate's own source
 (`lib/workers/repository/update/branch/index.ts`) rereads `rebaseRequested` from the body on
 every run, and its pending-rebase comment says it rebases the branch once the soak clears. So
 the first run after the soak should honour a box left ticked. Nothing here has observed that
-yet. `--retick` is the recovery if that run does not rebase (#2655). It writes the box
+yet. `--retick` is the recovery if that run does not rebase. It writes the box
 unticked, then ticked, as two separate edits, because one write of an unchanged body changes
 nothing on the PR. It refuses unless `renovate/stability-days` reads SUCCESS. An absent status
 is refused too, because a renamed context would read as absent, and that must not reopen a
@@ -30,11 +27,10 @@ way to spend a tick during the soak.
 
 The soak status lags the soak itself, so "still PENDING" is not "still soaking". Renovate
 writes `renovate/stability-days` when it processes the branch and never between runs, and
-`renovate.json`'s `schedule` holds it to one run a day: #2335's status still read PENDING from
-2026-09-24T01:31 on 2026-09-26T14:00, hours after its digest cleared its 3-day age at
-2026-09-26T01:53, because that day's run fired 00:09-01:04 UTC — before the expiry. A refusal
-here therefore lasts until Renovate's next run, and a branch that reads conflicted in that
-window is waiting for Renovate rather than failing to rebase.
+`renovate.json`'s `schedule` holds it to one run a day: a status can still read PENDING hours
+after the digest cleared its 3-day age, because that day's run fired before the expiry. A
+refusal here therefore lasts until Renovate's next run, and a branch that reads conflicted in
+that window is waiting for Renovate rather than failing to rebase.
 
 Usage:
     uv run python scripts/dev/renovate_rebase.py <pr-number>
@@ -128,7 +124,7 @@ def _edit_body(gh: Gh, number: str, body: str) -> str | None:
 def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
     argv = sys.argv[1:] if argv is None else argv
     # `--help` is a question; the refusal below answered it with 64 and the docstring on
-    # stderr, which is a usage error (#2854).
+    # stderr, which is a usage error.
     answer_help(__doc__, argv)
     retick = "--retick" in argv
     positional = [a for a in argv if a != "--retick"]

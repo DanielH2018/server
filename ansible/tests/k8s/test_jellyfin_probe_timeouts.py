@@ -1,14 +1,13 @@
 """Jellyfin's probes must set `timeoutSeconds` rather than inherit the 1s default.
 
 Kubernetes defaults `timeoutSeconds` to 1, so a `/health` slower than one second counts as a
-probe failure. On jellyfin that failed into two different symptoms on 2026-09-09 (#1500): the
-readiness probe emptied the endpoint list, which made Traefik drop the `jellyfin` router and
-return 404 for every request to the hostname, and the liveness probe killed the container 14
-times with exit 137.
+probe failure. On jellyfin that fails into two different symptoms: the readiness probe empties
+the endpoint list, which makes Traefik drop the `jellyfin` router and return 404 for every
+request to the hostname, and the liveness probe kills the container with exit 137.
 
-The guard is scoped to jellyfin on purpose. Only 8 of 60 k8s roles set `timeoutSeconds` at all,
-so a repo-wide census would flag 52 roles that have never had a probe-timeout incident — a
-different change, with a different argument behind it.
+The guard is scoped to jellyfin on purpose. Most k8s roles do not set `timeoutSeconds`, so a
+repo-wide census would flag roles that have never had a probe-timeout incident — a different
+change, with a different argument behind it.
 
 `_EXPECTED` is the non-vacuity half: the render must actually produce both probes. Without it a
 template rename or a change to what `_k8s_render` collects would leave the loop iterating over

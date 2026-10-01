@@ -2,16 +2,16 @@
 
 Two failure modes, both silent:
 
-  * An UNPINNED `uv python install 3.14` resolves to whatever uv offers per host. That already
-    happened: daniel-box carried 3.14.6 and daniel-server 3.14.5 with nothing requesting either.
+  * An UNPINNED `uv python install 3.14` resolves to whatever uv offers per host, so one host can
+    carry 3.14.6 and another 3.14.5 with nothing requesting either.
     Once 18 host scripts run on it, a patch-level difference between the two hosts is a
     difference in what actually executes.
   * A pin that DRIFTS from `.python-version` puts the hosts on one minor while `uv run`, CI and
-    the image pins move to the next — reintroducing the split-interpreter problem this migration
-    exists to end, in the other direction.
+    the image pins move to the next — recreating the split-interpreter problem in the other
+    direction.
 
-`.python-version` is deliberately not edited by this plan; it is the source of truth this pin
-follows. test_python_version_pins_in_lockstep already couples it to both workflows.
+`.python-version` is the source of truth this pin follows. test_python_version_pins_in_lockstep
+already couples it to both workflows.
 """
 
 import re

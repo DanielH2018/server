@@ -1,12 +1,12 @@
 """Every initial_setup task answers to a tag narrower than the role and narrower than `crons`.
 
 WHY. `initial_setup` is the largest setup role, and its CLAUDE.md promises that every task
-carries a block tag, so one slice runs with `--tags <block>` instead of the whole role. Until
-2026-10-01, 16 cron tasks broke that promise. They carried `crons` and nothing else, so the
-secret-rotation wrappers, the weekly restart, the ansible.log truncation, the worktree sweep and
-the apt-hygiene crons could only be reached by a run that also reapplied every other cron on the
-host. Two render stamps were worse: `--tags docs` and `--tags evals` installed their wrappers and
-skipped the stamp that records them, because the stamps carried `crons` alone.
+carries a block tag, so one slice runs with `--tags <block>` instead of the whole role. A cron
+task carrying `crons` and nothing else breaks that promise: the secret-rotation wrappers, the
+weekly restart, the ansible.log truncation, the worktree sweep and the apt-hygiene crons could
+then only be reached by a run that also reapplied every other cron on the host. A render stamp
+carrying `crons` alone is worse: `--tags docs` and `--tags evals` would install their wrappers
+and skip the stamp that records them.
 
 `crons` stays on every cron task as the umbrella. This check refuses only a task whose effective
 tags are empty or are `crons` alone. A `block:` wrapper's tags count for its children, the way
@@ -70,9 +70,9 @@ def test_every_initial_setup_task_has_a_subject_tag() -> None:
         seen.update(dict(_leaves_with_tags(doc)))
         offenders += [f"{path.name}: {name}" for name in untagged_or_umbrella_only(doc)]
 
-    # A walk that silently matched nothing would pass. This task is one of the 16 that read
-    # `crons` alone before 2026-10-01, so finding it with its subject tag proves the walk reached
-    # crons.yml and read the tags this check is about.
+    # A walk that silently matched nothing would pass. This task carries a subject tag in
+    # crons.yml, so finding it with that tag proves the walk reached crons.yml and read the tags
+    # this check is about.
     assert "weekly-restart" in seen.get(
         "Schedule sudo crontab for weekly restart", set()
     )

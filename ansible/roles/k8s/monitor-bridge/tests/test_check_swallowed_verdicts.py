@@ -1,9 +1,9 @@
-"""swallowed_verdicts: a host cron's DOWN verdict that kuma-push-lib.sh logged and lost (#1869).
+"""swallowed_verdicts: a host cron's DOWN verdict that kuma-push-lib.sh logged and lost.
 
 Each fixture line is one rsyslog shipped, copied from the daniel-box journal, so the parser is
 tested against what the emitters write rather than what their source suggests. The positive
-input is the lone release-staleness-check http=500 of 2026-09-10 13:01; the negative inputs are
-the daniel-box-down burst of 2026-09-09, where every push failed and nothing landed.
+input is a lone release-staleness-check http=500; the negative inputs are a daniel-box-down
+burst, where every push failed and nothing landed.
 """
 
 import re
@@ -52,7 +52,7 @@ _PI_SWALLOWED = (
 _SWALLOWED_UP = _H + (
     "release-staleness-check: push failed (http=404 rc=0) (status=up: 0 service(s) stale)"
 )
-# Kuma's own `Monitor not found or not active.` answer, as the library marks it since #1803.
+# Kuma's own `Monitor not found or not active.` answer, as the library marks it.
 _REJECTED_UP = _H + (
     "release-staleness-check: push failed (http=404 rc=0 by=kuma) (status=up: 0 service(s) "
     "stale)"
@@ -115,7 +115,7 @@ def test_a_swallowed_down_that_the_next_run_landed_is_clean():
 
 
 def test_a_fleet_wide_loss_where_nothing_lands_is_clean_and_names_the_owner():
-    # 2026-09-09 18:31-19:01: daniel-box down, every cron on the estate lost its push. The
+    # daniel-box down, every cron on the estate loses its push. The
     # host and edge tiles page for that; a second page here is one root cause twice.
     ups = _SIBLING_SWALLOWED.replace("longhorn-backup-health", "ups-secondary-health")
     ok, msg = swallowed_verdicts(
@@ -134,7 +134,7 @@ def test_a_swallowed_up_is_not_a_lost_verdict():
 
 
 def test_a_push_kuma_rejected_is_flagged_whatever_its_status_and_company():
-    # ACCEPT (#1803): the token the cron holds is not a live monitor. An `up` verdict, no
+    # ACCEPT: the token the cron holds is not a live monitor. An `up` verdict, no
     # sibling in the window — both of the conditions that keep a plain swallowed push quiet —
     # and it still pages, because nothing else can: Kuma answered, so the edge tiles are green,
     # and a token with no monitor has no tile to reach a deadline.
@@ -240,13 +240,13 @@ def test_a_fetch_error_fails_open_and_names_the_owner(monkeypatch, cfg):
 
 
 # pi-peer-backup's CronJob container, the one pusher that is a pod rather than a host cron
-# (#1943). Its script echoes the syslog shape, host = the pod name, so the reader sees it.
+# Its script echoes the syslog shape, host = the pod name, so the reader sees it.
 _POD_H = "2026-09-10T13:05:00Z pi-peer-backup-29312345-x7k2q pi-peer-backup: "
 _POD_RUN_UP = _POD_H + "status=up pulled 2 peer file(s) from daniel-pi"
 _POD_REJECTED = _POD_H + (
     "push failed (http=404 rc=0 by=kuma) (status=up: pulled 2 peer file(s) from daniel-pi)"
 )
-# The shape the CronJob wrote before #1943, which the reader must still not match: a line
+# The CronJob's earlier shape, which the reader must still not match: a line
 # it silently read as a verdict would be a second way to be green while blind.
 _POD_PRE_1943 = _POD_H + "kuma push failed (up: pulled 2 peer file(s) from daniel-pi)"
 

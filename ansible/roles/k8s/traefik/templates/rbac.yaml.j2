@@ -1,7 +1,6 @@
 {# Traefik's RBAC. DERIVED from the pinned upstream at
      https://raw.githubusercontent.com/traefik/traefik/v3.7/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
-   but NO LONGER a verbatim copy. This file was `files/rbac.yaml`, applied as-is, with a header
-   saying to re-sync it from that URL and "change nothing but the binding".
+   but not a verbatim copy.
 
    DECIDED: (2026-08-24) split upstream's single ClusterRole into a cluster-scoped role holding
    only what is genuinely cluster-scoped, plus one namespaced Role per watched namespace.

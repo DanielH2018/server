@@ -246,7 +246,7 @@ def test_census_is_clean_when_every_file_declares_something():
 def test_hook_files_reads_sh_and_py_one_level_only_regardless_of_the_exec_bit(
     tmp_path: Path,
 ):
-    """A hook committed without its exec bit is still a hook file (#361), so the bit does not
+    """A hook committed without its exec bit is still a hook file, so the bit does not
     decide; `tests/` and `hooklib/` sit one level down and are reached by import, never by
     a registration; a README beside the hooks is not a hook either."""
     (tmp_path / "a.sh").write_text(DECLARED)

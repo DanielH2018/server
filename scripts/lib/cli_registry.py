@@ -1,10 +1,10 @@
 """A small named-entry registry shared by this repo's CLI dispatchers.
 
-Extracted from monitor-bridge's ``CHECKS`` list (``ansible/roles/k8s/monitor-bridge/files/
-check.py``) — the same shape, generalised: a name maps to a description and a callable, plus
-optional flags. monitor-bridge itself keeps its own copy (it ships inside a container image
-and must not import from ``scripts/``); this module is for everything that CAN import from
-``scripts/`` — ``probe.py``.
+Same shape as monitor-bridge's ``CHECKS`` list (``ansible/roles/k8s/monitor-bridge/files/
+check.py``), generalised: a name maps to a description and a callable, plus optional flags.
+monitor-bridge itself keeps its own copy (it ships inside a container image and must not import
+from ``scripts/``); this module is for everything that CAN import from ``scripts/`` —
+``probe.py``.
 
 The name carries the ``cli_`` prefix because monitor-bridge's copy is
 ``ansible/roles/k8s/monitor-bridge/files/registry.py``, and both directories sit on
@@ -15,10 +15,7 @@ container image), so a second top-level ``registry`` would shadow one of them de
 
 Argparse still owns argument parsing in every caller. This module owns two things argparse
 does not: a `--list` renderer, and a completeness guard so a new entry point can't ship
-unregistered. It carried monitor-bridge's ``CHECKS_ONLY``/``CHECKS_SKIP`` selection too until
-2026-09-24, when ``scripts/validate/run_all.py`` — its only caller — was deleted (#2386);
-monitor-bridge's own copy of that selection is unaffected, and a caller that wants it again
-takes it from git history.
+unregistered. It has no ``CHECKS_ONLY``/``CHECKS_SKIP`` selection; monitor-bridge keeps its own.
 
 Import it through the same bootstrap as any other ``lib`` module::
 

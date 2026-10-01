@@ -3,7 +3,7 @@
 
 The runbook listed the gates as four shell blocks the operator ran by hand, each "a stop
 condition, not a checklist item". Nothing enforced the order or the stop: a skipped block was
-a paragraph nobody read (#2162). Here each gate is a function over what the cluster answered,
+a paragraph nobody read. Here each gate is a function over what the cluster answered,
 the runner stops at the first failure, and the exit code IS the gate number, so a caller —
 or a transcript — can tell which condition refused without parsing the message.
 
@@ -17,7 +17,7 @@ The gates, in the order the runbook gives them:
   4. Every production node is Ready.
 
 Every cluster read goes through `lib.kubectl` with the cluster named `prod`, so the same
-identity check that guards `probe.py health` refuses a staging kubectl here (#1663). The
+identity check that guards `probe.py health` refuses a staging kubectl here. The
 hold marker is read from the deployer's own state directory (`lib.gitops_markers`), which
 exists only on the host that runs the tick — so gate 3 fails on any other host rather than
 reading an absent directory as "no hold". Set `GITOPS_STATE_DIR` to point it elsewhere.

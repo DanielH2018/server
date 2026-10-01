@@ -1,7 +1,7 @@
 """flaresolverr's media loading stays a flippable default, not a manifest literal.
 
 DISABLE_MEDIA stops the headless browser fetching images, CSS and other media while it solves a
-Cloudflare challenge (#2893). Its failure mode lands on the indexers, not on this pod: a
+Cloudflare challenge. Its failure mode lands on the indexers, not on this pod: a
 challenge type that needs an image or a stylesheet stops solving, and the operator sees Prowlarr
 indexers go red. The revert therefore has to be one edit to
 `ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_disable_media`, with the rationale

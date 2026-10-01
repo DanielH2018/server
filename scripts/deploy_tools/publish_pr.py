@@ -29,8 +29,8 @@ is "do not stack on an open PR", and an unreachable GitHub is reported by the pu
 that follows, not here. A ``gh`` TIMEOUT is the one exception and prints ``unknown``, which
 is non-empty so a caller gating on ``[ -n "$OPEN_PR" ]`` refuses rather than publishing a
 second branch -- see ``OPEN_PR_UNKNOWN``. That sentinel is load-bearing inside ``unlanded``,
-which is what the three crons call now; the subcommand stays because the lookup on its own
-is the useful thing to run by hand.
+which is what the three crons call; the subcommand stays because the lookup on its own is
+the useful thing to run by hand.
 
 ``unlanded`` answers "is there work from a previous run that never landed", which is the
 guard the three crons need BEFORE they regenerate and commit. It reads origin rather than
@@ -79,9 +79,8 @@ from lib import git as git_mod
 FAILURE_TAIL = 400
 
 # Two contracts over the same integers -- `publish` says what state the tree is in, `unlanded`
-# says what it found on origin. Both are defined in `lib/exit_codes.py`, whose
-# prefixes are what tell a reader which of the two a value belongs to; the old names here were
-# `RC_*` for both, so 2 read as one number with two meanings.
+# says what it found on origin. Both are defined in `lib/exit_codes.py`, whose prefixes are
+# what tell a reader which of the two a value belongs to.
 
 # What a PR lookup reports when it timed out. Non-empty on purpose: `unlanded` and the
 # `open-pr` shell idiom both read an empty answer as "no PR", which would let a run publish a

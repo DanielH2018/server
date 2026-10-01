@@ -1,12 +1,10 @@
-"""Issues #1694 and #1706: two CrowdSec sidecars parsed their logs unseen.
+"""Every CrowdSec pod sidecar must be scraped by Prometheus.
 
-Prometheus scraped two CrowdSec jobs — the central LAPI (`crowdsec`) and the node-agent
-DaemonSet (`crowdsec-node-agents`) — and the pod sidecars were in neither. Measured 2026-09-10:
-`group by (job, node) (up{job=~"crowdsec.*"})` returned exactly three series, the LAPI and the
-two node agents. The traefik sidecar parses the busiest log in the fleet (#1694) and the
-authelia one parses the portal's failed logins (#1706), so their parser, acquisition and bucket
-counters existed nowhere — a sidecar that stopped parsing read as nothing at all rather than as
-a drop.
+The central LAPI (`crowdsec`) and the node-agent DaemonSet (`crowdsec-node-agents`) have their
+own scrape jobs, and the pod sidecars need theirs. The traefik sidecar parses the busiest log in
+the fleet and the authelia one parses the portal's failed logins, so a sidecar in no scrape job
+has its parser, acquisition and bucket counters nowhere — a sidecar that stops parsing reads as
+nothing at all rather than as a drop.
 
 Three parts have to hold together per sidecar, and each fails silently on its own:
 
@@ -33,9 +31,8 @@ from lib import yaml_fast
 SIDECAR = "crowdsec-agent"
 METRICS_PORT = 6060
 
-# Named rather than counted, and asserted as a SUBSET of the rendered jobs below: the fleet
-# went two jobs -> three (#1694) -> four (#1706) and will move again, so an equality check
-# would fail on the next addition rather than on a regression.
+# Named rather than counted, and asserted as a SUBSET of the rendered jobs below: the set of
+# jobs grows, so an equality check would fail on the next addition rather than on a regression.
 SIDECAR_PODS = (
     # (the role and app label, the scrape job that must cover its sidecar, the NetworkPolicy)
     ("traefik", "crowdsec-traefik-agent", "traefik"),
@@ -115,7 +112,7 @@ def test_a_job_pointed_at_another_pod_is_flagged():
 
 
 def test_a_sidecar_declaring_no_port_is_flagged():
-    """The pre-fix sidecar: a container with volumeMounts and probes and no `ports`."""
+    """A sidecar container with volumeMounts and probes and no `ports`."""
     assert not the_container_declares_the_port(
         {"name": SIDECAR, "volumeMounts": []}, METRICS_PORT
     )
@@ -128,7 +125,7 @@ def test_a_sidecar_declaring_no_port_is_flagged():
 
 
 def test_a_policy_granting_only_the_dashboard_port_is_flagged():
-    """The pre-#1694 traefik policy: prometheus admitted to 8080 alone."""
+    """A traefik policy that admits prometheus to 8080 alone."""
     dashboard_only = {
         "spec": {
             "ingress": [
@@ -144,7 +141,7 @@ def test_a_policy_granting_only_the_dashboard_port_is_flagged():
 
 
 def test_a_port_appended_to_someone_elses_rule_is_flagged():
-    """The #1706 near-miss: 6060 added to authelia's traefik rule instead of its own.
+    """The near-miss: 6060 added to authelia's traefik rule instead of its own.
 
     Reads as a grant in a diff and grants prometheus nothing — the rule ANDs `from` with
     `ports`, so this admits TRAEFIK to the agent's metrics and nobody else.

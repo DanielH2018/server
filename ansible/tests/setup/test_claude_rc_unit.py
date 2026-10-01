@@ -23,9 +23,9 @@ whole cgroup, so one runaway session would take the OOM kill for the host and ev
 session with it.
 
 3. `PYTEST_XDIST_AUTO_NUM_WORKERS` must be exported, and both it and `MemoryHigh` must render
-   from variables rather than hardcoded numbers. This is the same silent class: on 2026-09-05
-   nine concurrent `-n auto` pytest runs resolved to ~144 workers, filled the cgroup and took
-   all 8 GB of the system's swap, and the host stalled unreachable for ~30 minutes while the
+   from variables rather than hardcoded numbers. This is the same silent class: nine
+   concurrent `-n auto` pytest runs resolve to ~144 workers, fill the cgroup and take all 8 GB
+   of the system's swap, and the host stalls unreachable while the
    unit read `active (running)`. A cap hardcoded in the template would pass a presence check
    while ignoring the default it is supposed to read, so each is tested as a pair: one render
    it must accept, one override it must follow.
@@ -120,7 +120,7 @@ def test_pytest_fanout_is_capped(unit: str) -> None:
 
     `addopts` in pyproject.toml carries `-n auto`. On daniel-box's 16 cores that is 16
     workers for one run, and nothing caps how many runs the sessions on this host start at
-    once: on 2026-09-05 nine concurrent runs put ~144 workers in the cgroup and took all 8 GB
+    once: nine concurrent runs put ~144 workers in the cgroup and take all 8 GB
     of the system's swap. xdist reads PYTEST_XDIST_AUTO_NUM_WORKERS before any CPU detection,
     so setting it on the unit bounds every run a session makes while leaving CI at full width.
     """
@@ -148,7 +148,7 @@ def test_pytest_fanout_cap_follows_the_variable(unit: str) -> None:
 def test_memory_high_follows_the_variable(unit: str) -> None:
     """MemoryHigh throttles the whole cgroup, so its value is an operational decision.
 
-    It was hardcoded at 6G until 2026-09-05. Raising it is a trade against the ~13 GB k3s +
+    Raising it is a trade against the ~13 GB k3s +
     kubepods baseline on this 28 GB box — the throttle stalls whichever cgroup loses the
     race, and the homelab plane is the one that must not. That belongs in defaults where the
     reasoning sits beside the number, not inline in the template.
@@ -166,9 +166,9 @@ def test_memory_high_follows_the_variable(unit: str) -> None:
 def test_memory_swap_max_bounds_the_cgroups_swap(unit: str) -> None:
     """MemoryHigh throttles rather than caps, and a throttled cgroup's anon pages go to swap.
 
-    With no MemorySwapMax the throttle above therefore has no ceiling: on 2026-09-05 this
-    cgroup took all 8 GiB of the host's swap and starved k3s and kubepods.slice while the
-    unit read `active (running)`. Issue #1154. Like MemoryHigh, the value is an operational
+    With no MemorySwapMax the throttle above therefore has no ceiling: the cgroup can take all
+    8 GiB of the host's swap and starve k3s and kubepods.slice while the unit reads
+    `active (running)`. Like MemoryHigh, the value is an operational
     trade against the rest of the box, so it renders from defaults rather than the template.
     """
     assert re.search(
@@ -216,7 +216,7 @@ def render(unit_text: str, **overrides: object) -> str:
         "claude_code_rc_pytest_workers": 4,
         "claude_code_rc_memory_high": "8G",
         "claude_code_rc_memory_swap_max": "2G",
-        # The fleet's shared parent (#1264) — the unit's Slice= line renders from these.
+        # The fleet's shared parent — the unit's Slice= line renders from these.
         # test_claude_fleet_slice_cap.py owns what they must produce.
         "claude_code_login_uid": 1000,
         "claude_code_fleet_caps_enabled": True,
@@ -232,7 +232,7 @@ def test_bg_shell_pressure_reap_is_disabled_by_default(unit: str) -> None:
 
     Claude Code kills every running backgrounded Bash task on a Node `memoryPressure` event.
     The `land-after-merge` skill runs `land.sh --arm-merge` that way, so a reap between the
-    arm and the CI wait merges the PR and deploys nothing — issue #1096.
+    arm and the CI wait merges the PR and deploys nothing.
     """
     assert re.search(rf"^{REAP_VAR}: *true\b", DEFAULTS.read_text(), re.M), (
         f"{REAP_VAR} must default to true in the role defaults, or an unattended landing "

@@ -246,7 +246,7 @@ def test_stale_worktree_lines_swallows_a_timeout(monkeypatch):
 
 
 # settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
-# buffers — the whole banner, parked-deployer warning included (#2388). The worktree read is
+# buffers — the whole banner, parked-deployer warning included. The worktree read is
 # the slow step (it reaches GitHub), so it is bounded inside that budget and runs after a flush.
 
 
@@ -289,10 +289,10 @@ def test_main_flushes_the_banner_before_the_worktree_read(monkeypatch):
     assert any("loki" in s and "old-thing" not in s for s in out.flushed)
 
 
-# `other_live_sessions` imports prune_worktrees off a hand-built sys.path. That path pointed at
-# scripts/ while the module lived in scripts/dev/ from the #443 regrouping until 2026-09-01, and
-# nothing failed: the except returned [], which reads identically to "no other sessions are
-# running". These two pin the import and the fail-loud, because a silent [] is what hid the bug.
+# `other_live_sessions` imports prune_worktrees off a hand-built sys.path. That path must point
+# at scripts/dev/, where the module lives, and a wrong path fails silently: the except returns
+# [], which reads identically to "no other sessions are running". These two pin the import and
+# the fail-loud, because a silent [] is what hid the bug.
 def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess(fenced_calls):
     """Accept case, and it MUST be a subprocess with a clean PYTHONPATH.
 
@@ -371,14 +371,14 @@ def _fake_subprocess_run_for_other_sessions(diff_stdout):
     return fake
 
 
-# Issue #1223: the per-tree dirty check delegates to `lib.git.git_dirty` now, not its own `git
-# status --porcelain` read. Pins "(+ uncommitted)" to follow git_dirty's answer, including a
+# The per-tree dirty check delegates to `lib.git.git_dirty`, not its own `git status
+# --porcelain` read. Pins "(+ uncommitted)" to follow git_dirty's answer, including a
 # git_dirty failure (tree vanished mid-scan) degrading to not-dirty rather than crashing the
-# section — matching the old `_run(check=False)` silence. Patches stdlib `subprocess.run`
-# (uncounted) instead of `_mod._run`, and `git_dirty` by its STRING target because
-# `other_live_sessions` imports it inside the function, so `_mod` never holds the name. That
-# string target IS counted by the monkeypatch ratchet (issue #1271) — these three patches are
-# three of this file's entry, and only a seam on `other_live_sessions` would shed them.
+# section. Patches stdlib `subprocess.run` (uncounted) instead of `_mod._run`, and `git_dirty`
+# by its STRING target because `other_live_sessions` imports it inside the function, so `_mod`
+# never holds the name. That string target IS counted by the monkeypatch ratchet — these three
+# patches are three of this file's entry, and only a seam on `other_live_sessions` would shed
+# them.
 def test_other_live_sessions_dirty_marker_follows_lib_git(monkeypatch):
     monkeypatch.setattr(
         subprocess, "run", _fake_subprocess_run_for_other_sessions("file.py\n")
@@ -413,11 +413,12 @@ def _hook_copy_with_a_broken_hooklib(tmp_path):
 def test_a_hooklib_that_will_not_compile_is_named_rather_than_killing_the_banner(
     tmp_path,
 ):
-    """#1678: a SyntaxError is not an ImportError, so the narrower catch let one through.
+    """A SyntaxError is not an ImportError, so an `except ImportError` alone would let one
+    through.
 
     These modules use PEP 758 syntax, and `session-health.sh` sends stderr to /dev/null and
     exits 0. An uncaught SyntaxError at import would take the whole banner out with nothing
-    a session could see — the #1566 contract says nothing at module scope may do that.
+    a session could see, and nothing at module scope may do that.
     """
     proc = subprocess.run(
         [sys.executable, str(_hook_copy_with_a_broken_hooklib(tmp_path))],

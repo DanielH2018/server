@@ -1,7 +1,7 @@
 """Guard: no module in `ansible/tests/` derives a repo root from `__file__`.
 
-Every guard in this directory reads the repo's own sources, so 50 of them each re-derived the
-same roots with a hardcoded `Path(__file__).resolve().parents[N]`. The duplication is the small
+Every guard in this directory reads the repo's own sources, so each would otherwise re-derive
+the same roots with a hardcoded `Path(__file__).resolve().parents[N]`. The duplication is the small
 half. The index is position-dependent, and it fails silently: from one directory deeper,
 `parents[2]` resolves to `ansible/` — a real directory, not an error. A guard that globs and
 asserts inside the loop then passes on an empty glob, reporting green while checking nothing.
@@ -9,8 +9,8 @@ That is the same silent-coverage-loss shape as monitor-bridge's monkeypatch rule
 check rather than a paragraph.
 
 `_helpers.py` publishes REPO, ANSIBLE, ROLES, K8S_ROLES, SETUP_ROLES and CONTAINER_ROLES for
-everyone else to import, and takes REPO itself from `lib.repo_paths` (#2857), so no module here
-holds the anchor any more. `scripts/tests/test_tests_share_render_and_path_helpers.py` holds the
+everyone else to import, and takes REPO itself from `lib.repo_paths`, so no module here
+holds the anchor. `scripts/tests/test_tests_share_render_and_path_helpers.py` holds the
 same line for the repo root across every test root; this guard is narrower in scope and wider in
 shape, since it also flags a `parents[N]` that stops short of the root.
 
@@ -31,9 +31,8 @@ EXEMPT = {"test_path_anchors_come_from_helpers.py"}
 # `Path(__file__).resolve().parents[N]` in any of the spellings this directory has used:
 # `Path`, `_Path`, `pathlib.Path`. `parents[0]` is the file's own directory, which is a local
 # fact rather than a repo root, so the pattern deliberately starts at 1. The chained form
-# `.parent.parent` is the same anchor spelled differently: four modules carried it past the
-# `parents[N]` rule, and every one of them resolved to `ansible/` instead of the repo when the
-# 2026-09-01 move into subdirectories put them one level deeper.
+# `.parent.parent` is the same anchor spelled differently: it passes the `parents[N]` rule and
+# resolves to `ansible/` instead of the repo once the module sits one level deeper.
 _ANCHOR = re.compile(
     r"(?:_?Path|pathlib\.Path)\(__file__\)\.resolve\(\)(?:\.parents\[[1-9]\d*\]|(?:\.parent){2,})"
 )
@@ -65,7 +64,7 @@ def test_a_module_re_deriving_the_root_is_flagged():
 
 
 def test_the_pathlib_qualified_spelling_is_flagged():
-    """Three spellings were in use; a pattern that misses one lets the class back in."""
+    """Three spellings exist; a pattern that misses one lets the class back in."""
     assert _offenders("_REPO = pathlib.Path(__file__).resolve().parents[2]\n")
     assert _offenders("_REPO = _Path(__file__).resolve().parents[2]\n")
 
@@ -83,6 +82,6 @@ def test_the_files_own_directory_is_not_flagged():
 
 
 def test_the_scan_reaches_the_subdirectories():
-    """The guards live one level down since 2026-09-01; a flat glob would scan nothing."""
+    """The guards live one level down; a flat glob would scan nothing."""
     scanned = [p for p in TESTS.rglob("test_*.py") if p.parent != TESTS]
     assert len(scanned) > 100, len(scanned)

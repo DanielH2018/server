@@ -4,31 +4,25 @@ prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.6.5.5623-ls162
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume (indexer definitions + API keys)
 # is seeded through k8s/volume-claim (hardcoded ReadWriteOnce). This role renders TWO
-# Deployments (prowlarr + flaresolverr) and gates both correctly via manifests_extra_rollouts —
-# briefly removed from the denylist under an "ungated sub-deployment" reason that turned out to
-# be stale, then restored (2026-08-20) once review found the real, unrelated reason below.
-# Gatedness was never the issue; the PVC/Recreate shape is. The linuxserver -lsNN scheme also
-# hides a breaking bump as a routine patch bump (currently 2.4.0.5397-ls150).
-# Promoted in slice 7b (2026-08-21): k8s/manifests now takes a pre-apply Longhorn snapshot of
-# the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
-# instead of leaving the indexer definitions and API keys unreadable by the old image.
+# Deployments (prowlarr + flaresolverr) and gates both correctly via manifests_extra_rollouts,
+# so gatedness is not the issue; the PVC/Recreate shape is. The linuxserver -lsNN scheme also
+# hides a breaking bump as a routine patch bump.
+# k8s/manifests takes a pre-apply Longhorn snapshot of the claim below and reverts it if the
+# deploy fails, so a bad swap reverts to the snapshot instead of leaving the indexer
+# definitions and API keys unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump. NOT about gatedness: both rendered Deployments (prowlarr + flaresolverr) gate correctly. WEIGHED: prowlarr pushes indexer config to the *arr apps, which store Prowlarr-assigned indexer IDs back; a revert desyncs those IDs until the next reconciliation or a manual re-sync. UNATTENDED RECOVERY DOES NOT APPLY HERE: sonarr, radarr, bazarr and jellyfin all self-heal a revert (rescan / re-download / existence check), so an operator reading the rollback alert for prowlarr should expect to re-sync indexers by hand"  # noqa var-naming[no-role-prefix]
-# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
+# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Only the seeded config claim, not prowlarr_k8s_flaresolverr_claim — flaresolverr's PVC holds
 # nothing but a disposable browser profile, not migrating state. Declared regardless of
-# k8s_autodeploy — protects a manual deploy too, and slice 7b's revert is what this role's
-# auto-deploy now depends on.
+# k8s_autodeploy — protects a manual deploy too, and this role's auto-deploy depends on the
+# revert.
 k8s_autodeploy_snapshot_pvcs: [prowlarr-config]  # noqa var-naming[no-role-prefix]
 
-# 84 M at B4a. Holds the indexer definitions and their API keys.
+# 84 M. Holds the indexer definitions and their API keys.
 prowlarr_k8s_claim: prowlarr-config
-# `longhorn` — backed up. Briefly `longhorn-nobackup` on 2026-08-08, after B2's TRANSACTION cap
-# fired twice in a week (08-02, 08-08) as slice 4 took Longhorn's daily run from 4 to 15 backups and
-# incremental backups bound bandwidth, not transactions. Returned the same day: the exclusion left
-# this volume with a single frozen 08-08 restore point, and whether steady-state incrementals are
-# actually the problem cannot be read off anything Longhorn or B2 expose. So it is being tested
-# rather than assumed, with B2 Reachable as the readout. docs/archive/b2-transaction-cap-monitoring-gaps.md.
+# `longhorn` — backed up. `longhorn-nobackup` would leave this volume with a single frozen
+# restore point.
 prowlarr_k8s_storage_class: longhorn
 prowlarr_k8s_size: 2Gi
 
@@ -37,10 +31,10 @@ prowlarr_k8s_size: 2Gi
 # `progressDeadlineSeconds` in both deployment templates. The deadline has to move with the
 # timeout: at the 600s Kubernetes default, `rollout status` fails on ProgressDeadlineExceeded
 # whatever `--timeout` says (the valheim role measured exactly that).
-# Sized from a cold pull (#2369): on 2026-09-24 daniel-server pulled the 292 MB flaresolverr
-# digest in 8m53.87s while it pulled prowlarr's own 80 MB image in 3m40.96s, both uncached.
-# The 300s default failed that deploy after its apply while the old flaresolverr pod served
-# throughout. That pod started 535s after it was scheduled.
+# Sized from a cold pull: daniel-server pulls the 292 MB flaresolverr digest in 8m53.87s and
+# prowlarr's own 80 MB image in 3m40.96s, both uncached. The 300s default fails the deploy after
+# its apply while the old flaresolverr pod serves throughout. That pod starts 535s after it is
+# scheduled.
 # DECIDED: 780s, the most the rollback budget allows. A failed auto-deploy's rollback run must fit
 # the snapshot, the revert, the netpol probe's own 300s wait, this wait and the stabilisation soak
 # inside gitops_deploy_k8s_rollback_timeout_s (1620s), and those other terms take 840s.
@@ -62,8 +56,7 @@ prowlarr_k8s_rollout_timeout: 780s
 # the probe beside it says so rather than assuming.
 #
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
-# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal
-# (2026-08-13 pin).
+# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 prowlarr_k8s_flaresolverr_image: ghcr.io/flaresolverr/flaresolverr:latest@sha256:c80ae007ce2ccdcd217a12426e4f039ef763ff90738c808d38810c3e59323767
 prowlarr_k8s_flaresolverr_port: 8191
 prowlarr_k8s_flaresolverr_claim: prowlarr-flaresolverr-config
@@ -77,20 +70,18 @@ prowlarr_k8s_mem_limit: 1024Mi
 prowlarr_k8s_cpu_request: "100m"
 prowlarr_k8s_mem_request: 128Mi
 
-# flaresolverr's memory pair is sized from measurement, not from the 1024Mi / 128Mi it started
-# at. It launches a fresh headless Chromium per solve, so its footprint tracks
+# flaresolverr's memory pair is sized from measurement. It launches a fresh headless Chromium per solve, so its footprint tracks
 # how many solves overlap, and a full deploy restarts most of the *arr stack at once: prowlarr
 # then re-syncs its indexers and a cold flaresolverr pod takes that whole burst.
 #
-# On 2026-09-28 the burst OOM-killed it at the 1024Mi limit, 10 minutes after a rollout restarted
-# it (exit 137, #2883), which failed the whole deploy.yml run at the post-deploy stabilisation
-# gate. `max_over_time(container_memory_working_set_bytes{container="flaresolverr"}[30d])` on the
-# same day put the highest SURVIVING pod at 934Mi, against 74-676Mi for the nine others — so
-# 1024Mi was not a comfortable cap that one burst overshot, it was a cap the steady fleet was
-# already brushing. 934Mi is a sampled figure and therefore a lower bound on real demand: the
-# scrapes never caught the burst that actually died. 2048Mi is one doubling over the highest
-# observation, and daniel-server carries it — 31Gi allocatable against 2.6Gi of requests and
-# 16.8Gi of limits when this was measured.
+# A burst at a 1024Mi limit OOM-kills it (exit 137) minutes after a rollout restarts it, which
+# fails the whole deploy.yml run at the post-deploy stabilisation gate.
+# `max_over_time(container_memory_working_set_bytes{container="flaresolverr"}[30d])` puts the
+# highest SURVIVING pod at 934Mi, against 74-676Mi for the nine others — so 1024Mi is not a
+# comfortable cap that one burst overshoots, it is a cap the steady fleet already brushes. 934Mi
+# is a sampled figure and therefore a lower bound on real demand: the scrapes never caught the
+# burst that died. 2048Mi is one doubling over the highest observation, and daniel-server
+# carries it — 31Gi allocatable against 2.6Gi of requests and 16.8Gi of limits at measurement.
 #
 # Upstream exposes NO concurrency cap to fix this at the source: FlareSolverr's README documents
 # no env var for concurrent sessions or browser-pool size, and tells the operator to size RAM
@@ -102,16 +93,15 @@ prowlarr_k8s_mem_request: 128Mi
 # and 2048Mi held out of a scheduler that only sees 128Mi used steady-state would hoard a
 # gigabyte to cover minutes per deploy. 512Mi covers the observed steady range so the scheduler
 # stops placing this pod as if it were 128Mi, and the pod stays Burstable either way.
-# Stops the headless browser loading images, CSS and other media while it solves a challenge
-# (#2893). The lever the memory limit above works around: the limit absorbs a burst of
+# Stops the headless browser loading images, CSS and other media while it solves a challenge.
+# The lever the memory limit above works around: the limit absorbs a burst of
 # overlapping solves, while this makes each solve cheaper.
 #
 # HONESTLY SCOPED — upstream documents DISABLE_MEDIA as a BANDWIDTH saving, not a memory one
 # ("To disable loading images, CSS, and other media in the web browser to save network
 # bandwidth"). The memory reduction is an inference: a renderer that never fetches an image
 # never decodes it into a bitmap buffer either. Nothing here measures it, so the limit above
-# stays at 2048Mi until the 7d working-set peak is re-measured against the 934Mi figure #2883
-# recorded.
+# stays at 2048Mi until the 7d working-set peak is re-measured against the 934Mi figure above.
 #
 # THE REGRESSION IT RISKS points at the indexers, not at this pod. A Cloudflare interstitial is
 # a rendered widget, and the flag strips STYLESHEETS as well as images — upstream gives no

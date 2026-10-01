@@ -32,13 +32,10 @@ from diagnostics.probe_lib.core import (
 
 from lib.repo_paths import REPO
 
-# Git-managed automation source (repo-root relative to this file) — the "expected" set for
-# the verify-automations post-deploy gate. The deployed config is copied from here verbatim,
-# one file per topic, merged by `!include_dir_merge_list` in configuration.yaml.
-# `k8s`, not `containers`: HA moved at the slice-5 B3 cutover and this constant did not follow,
-# so the gate raised FileNotFoundError from the cutover until the 2026-08-16 review. The old
-# test only asserted argparse wiring and never opened the file — test_verify_automations_path_exists
-# now pins the path itself.
+# Git-managed automation source (repo-root relative to this file) — the "expected" set for the
+# verify-automations post-deploy gate. The deployed config is copied from here verbatim, one file
+# per topic, merged by `!include_dir_merge_list` in configuration.yaml. `k8s`, not `containers`: HA
+# runs on the cluster. test_verify_automations_path_exists pins the path itself.
 AUTOMATIONS_DIR = os.path.join(
     REPO,
     "ansible",
@@ -225,9 +222,9 @@ def vanished_snapshot_entities(snapshot_ids, live_entity_ids):
     only rewritten by an explicit `ha_state_model.py refresh`. That makes the resolution guard
     good at catching a TYPO and structurally blind to a DISAPPEARANCE: an integration entity
     that goes away stays in the snapshot, so every reference to it keeps validating clean while
-    `states()` quietly returns 'unknown' at runtime. That is exactly how
-    sensor.pixel_9_pro_do_not_disturb_sensor and _sleep_duration disabled three bedroom features
-    without any check going red (2026-08-16 review). This turns that class into a live gate.
+    `states()` quietly returns 'unknown' at runtime. A renamed entity, such as
+    sensor.pixel_9_pro_do_not_disturb_sensor, can disable features without any check going red.
+    This turns that class into a live gate.
     """
     live = set(live_entity_ids)
     return sorted(e for e in set(snapshot_ids) if e not in live)

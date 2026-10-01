@@ -6,10 +6,10 @@ as a host process, and a host process reaching the ingress VIP arrives at Traefi
 cluster-internal addresses: its node's cni0 gateway when the traefik pod is on that same node,
 its node's flannel.1 address when the pod is on the other one.
 
-The route admitted the cni0 pair alone until 2026-09-10, so from daniel-server — where traffic
-crosses the overlay to daniel-box's pinned traefik pod — every request 404'd (#1693). A 404 is
-Traefik reporting that no router matched, which is indistinguishable from a broken query to the
-operator reading it, and this route has no other caller to notice.
+A route that admits the cni0 pair alone 404s every request from daniel-server, where traffic
+crosses the overlay to daniel-box's pinned traefik pod. A 404 is Traefik reporting that no
+router matched, which is indistinguishable from a broken query to the operator reading it,
+and this route has no other caller to notice.
 
 Run: uv run pytest ansible/tests/k8s/test_loki_read_route_admits_probe_py.py
 """
@@ -58,7 +58,7 @@ def test_the_route_admits_both_host_source_families_is_clean():
 
 
 def test_the_cni0_pair_alone_is_flagged():
-    """The rejecting half — the exact set the route carried before #1693.
+    """The rejecting half — the cni0 pair alone.
 
     Both halves have to be real addresses for this to mean anything: if the flannel pair were
     dropped from the inventory this test would still pass while the one above stopped checking

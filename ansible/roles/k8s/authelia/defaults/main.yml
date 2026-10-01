@@ -1,6 +1,4 @@
 ---
-# Same tag the Docker instance runs, so a behavioural difference between the two portals is
-# never the version.
 authelia_k8s_image: authelia/authelia:4.39.28
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -42,29 +40,21 @@ authelia_k8s_manage_crowdsec: true
 authelia_k8s_manage_oidc: true
 
 # Deliver identity-verification codes by email rather than to a file inside the pod. False
-# falls back to the filesystem notifier, which is what this role used before 2026-09-09 and
-# what no host takes today — daniel-stage took it until #1464, and now rehearses the SMTP
-# branch on a fake credential instead (its host_vars carries the reasoning). Leave it true;
-# false is the break-glass path for a cluster with no usable `smtp_notify_app_password`.
+# falls back to the filesystem notifier. Leave it true; false is the break-glass path for a
+# cluster with no usable `smtp_notify_app_password`.
 authelia_k8s_smtp_notifier: true
 
-# Session cookie name. MUST differ from the Docker instance's `authelia_session_local`.
-# Both portals serve the cookie domain local.<domain>, and a browser holds one cookie per
-# (domain, name) pair — with a shared name, logging in at one portal overwrites the other's
-# cookie, and since sessions are in-memory per instance the overwritten side then bounces the
-# user back to login. Symptom: signing in here silently signs you out of daniel-server.
-# This is a cookie NAME, not a credential. The session secret is `authelia_secret`, which
+# Session cookie name. This is a cookie NAME, not a credential. The session secret is `authelia_secret`, which
 # the rotation registry tracks under that name — see this role's CLAUDE.md.
 authelia_k8s_cookie_name: authelia_session_k8s
 
 # --- Redis session store ----------------------------------------------------------------
 # Authelia's session provider is IN-MEMORY unless a `session.redis` block exists — v4.39.21's
 # own config.template.yml says "Memory is the provider unless redis is defined". So every roll
-# of this Deployment destroyed every session, remember-me ones included: `remember_me` only
+# of this Deployment destroys every session, remember-me ones included: `remember_me` only
 # overrides the cookie lifetime and disables the inactivity timer, it does not change where the
-# session lives. This pod rolls whenever its rendered manifests change, which with several
-# concurrent worktrees editing this role was several times a day. Redis moves the sessions out
-# of the process so a roll stops logging the fleet out.
+# session lives. This pod rolls whenever its rendered manifests change. Redis moves the
+# sessions out of the process so a roll does not log the fleet out.
 #
 # The rollback lever: set false and redeploy. Authelia goes back to memory sessions and the
 # redis Deployment and Service stay applied but unused. Flipping it either way logs everyone
@@ -77,9 +67,8 @@ authelia_k8s_redis_image: redis:8.10-alpine
 
 # Sessions are a CACHE with a one-month ceiling, not a record, so redis runs on an emptyDir and
 # persists nothing. A node reboot, an eviction or a Renovate bump of the image still logs
-# everyone out; a roll of THIS role no longer does, which is what the change is for. A Longhorn
-# PVC would buy back the remaining cases at the price of a backed-up volume holding live
-# session credentials.
+# everyone out; a roll of THIS role does not. A Longhorn PVC would buy back the remaining cases
+# at the price of a backed-up volume holding live session credentials.
 authelia_k8s_redis_cpu_limit: "0.5"
 authelia_k8s_redis_mem_limit: 128Mi
 authelia_k8s_redis_cpu_request: 10m
@@ -89,15 +78,9 @@ authelia_k8s_redis_mem_request: 16Mi
 # of being OOM-killed, which would drop all of them at once. allkeys-lru because every key here
 # is a session and Authelia simply re-authenticates a user whose key is gone.
 authelia_k8s_redis_maxmemory: 96mb
-# Its own SQLite database on its own volume. This is the slice-1 hazard named in
-# docs/archive/k3s-migration/design.md: two Authelias writing one SQLite file corrupts it for both.
-# The storage encryption key (authelia_storage) was shared with the Docker instance so the
-# slice-6 cutover could be a plain file copy with no re-encryption. That instance is gone — its
-# role was deleted by #2385 (`git show
-# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/authelia/`), and
-# Docker was uninstalled from both cluster nodes on
-# 2026-08-14 — so this role is the key's only consumer and it rotates on its own. The
-# procedure is in docs/secret-rotation.md under `pinned`; it is not a `sops set`.
+# Its own SQLite database on its own volume. This role is the only consumer of the storage encryption key (authelia_storage), so the key
+# rotates on its own. The procedure is in docs/secret-rotation.md under `pinned`; it is not a
+# `sops set`.
 authelia_k8s_storage: 1Gi
 
 # "1", not "1.0" — see the same note in the traefik role. Kubernetes canonicalises quantities, so
@@ -113,7 +96,7 @@ authelia_k8s_mem_request: 64Mi
 # `-e authelia_k8s_log_level=debug` rather than committing a noisy default.
 authelia_k8s_log_level: info
 
-# Slice-6 B2 follow-up — the CrowdSec agent sidecar that parses this portal's auth log.
+# The CrowdSec agent sidecar that parses this portal's auth log.
 # Collections are the authelia-specific subset (the traefik/http ones belong to the agents
 # reading those logs). The machine NAME is crowdsec_k8s_authelia_agent_machine in group_vars —
 # the k8s/crowdsec role registers it, and only group_vars crosses that role boundary.

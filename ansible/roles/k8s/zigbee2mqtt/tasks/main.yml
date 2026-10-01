@@ -1,10 +1,7 @@
 ---
-# The k8s/volume-claim include this role used to open was dropped on 2026-09-01, when that role
-# stopped seeding and became PVC creation alone. It named the SAME claim this role's own
-# pvc.yaml.j2 renders, so the two created one claim twice. wg-easy dropped its include for the
-# same reason at the v15 upgrade (2026-08-23); see the note at the top of its tasks/main.yml.
-# The PVC is created by the manifests role below, from pvc.yaml.j2, which is already first in
-# manifests_files.
+# No k8s/volume-claim include: it would name the SAME claim this role's own pvc.yaml.j2
+# renders, creating one claim twice. The manifests role below creates the PVC from pvc.yaml.j2,
+# which is first in manifests_files.
 - name: Deploy zigbee2mqtt to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

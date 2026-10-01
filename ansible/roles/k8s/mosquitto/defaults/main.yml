@@ -1,6 +1,4 @@
 ---
-# Same image the Docker role runs — both copies stay on the same tag through coexistence so a
-# difference in behaviour between them is never the image.
 mosquitto_k8s_image: eclipse-mosquitto:2.1.2-alpine
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -17,14 +15,13 @@ mosquitto_k8s_mem_limit: 64Mi
 mosquitto_k8s_cpu_request: "25m"
 mosquitto_k8s_mem_request: 16Mi
 
-# MQTT crosses hosts on this pinned VIP (slice-5 D2): raw TCP with its own auth, so the HTTP
+# MQTT crosses hosts on this pinned VIP: raw TCP with its own auth, so the HTTP
 # ingress machinery has nothing to offer it. Value lives in group_vars (mqtt_k8s_vip) because
-# daniel-server's Docker-side clients render it into their configs too.
+# other roles render it into their configs too.
 mosquitto_k8s_lan_ip: "{{ mqtt_k8s_vip }}"
 
 mosquitto_k8s_claim: mosquitto-data
-# nobackup regardless of the D6 verdict for the other slice-5 PVCs: the persistence file holds
-# only retained messages and queued QoS state, all of which the three known clients republish on
+# nobackup: the persistence file holds only retained messages and queued QoS state, all of which the three known clients republish on
 # reconnect. Nothing here is worth a B2 transaction.
 mosquitto_k8s_storage_class: longhorn-nobackup
 mosquitto_k8s_size: 1Gi

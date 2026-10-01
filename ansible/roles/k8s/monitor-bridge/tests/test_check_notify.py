@@ -299,9 +299,8 @@ def test_check_discord_email_backstop_failure_pages(monkeypatch, cfg):
 
 
 #
-# The 2026-08-02 B2 transaction-cap outage paged for 13h as "backup check error: timed out",
-# which names neither the service nor the cause. These cover what the message must now carry —
-# and, just as importantly, what it must never carry.
+# A message like "backup check error: timed out" names neither the service nor the cause.
+# These cover what the message must carry — and, just as importantly, what it must never carry.
 
 
 def test_endpoint_label_keeps_host_and_port():

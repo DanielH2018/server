@@ -71,7 +71,7 @@ def plan_defer(
 
     Every `not-before:` label already on the issue is removed, whatever its date, so the
     issue carries at most one and `not_before` never has to pick. The comment is what the
-    thread reads later — the six releases on #1288 each re-derived the date from the body.
+    thread reads later, so nobody re-derives the date from the body.
 
     Raises:
         ClaimRefused: the issue is closed, or clearing an issue that carries no deferral.
@@ -104,7 +104,7 @@ def plan_release_held(issue: dict, *, when: str, reason: str) -> list[list[str]]
     `next` all read OPEN issues, so a claim left on a closed one is invisible to every view
     at once — wrong rather than merely stale, and unreapable.
 
-    Shared by `close`, `open`'s reopen path and `manual` (#1277). A `Closes #<n>` merge strands
+    Shared by `close`, `open`'s reopen path and `manual`. A `Closes #<n>` merge strands
     a claim too, and `plan_open` reopening that issue for a later re-observation brought the
     stale claim back LIVE, blocking `claim` and withholding the issue from `next` for as long
     as the claiming worktree existed.
@@ -200,7 +200,7 @@ def plan_claim(
     is on, so re-running a claim is idempotent rather than a second comment on the same
     thread. A reclaim whose label is MISSING plans the label edit alone — see below.
 
-    LABEL-AWARE, IN BOTH DIRECTIONS (#1277). The comment is the claim and the label is
+    LABEL-AWARE, IN BOTH DIRECTIONS. The comment is the claim and the label is
     decorative, so the two can disagree: `cmd_claim` posts the comment first, and a failed
     `--add-label` (rate limit, transient 502) exits 1 with the claim held and the label off.
     Returning `[]` for every reclaim made that unrepairable — the retry short-circuited
@@ -218,7 +218,7 @@ def plan_claim(
     # An issue outside the register is invisible to `claims`, `reap` and `next` alike: all
     # three read `load_issues`, which filters `--label claude`, while `_load_issue` does not.
     # So a claim on one could only ever be cleared by a hand-typed `release`, and nothing
-    # would tell anyone it was there (#1277).
+    # would tell anyone it was there.
     if "claude" not in names:
         raise ClaimRefused(
             "not in the register — no `claude` label, so `claims`, `reap` and `next` "
@@ -230,8 +230,8 @@ def plan_claim(
         )
     day = not_before(issue)
     if day is not None and today < day:
-        # The date is the issue's own precondition, so a claim before it is the wasted
-        # dispatch #1739 counted six of. The way out is named, unlike `manual`'s.
+        # The date is the issue's own precondition, so a claim before it is a wasted
+        # dispatch. The way out is named, unlike `manual`'s.
         raise ClaimRefused(
             f"deferred until {day.isoformat()} — `defer {issue['number']} --clear` lifts it"
         )
@@ -256,7 +256,7 @@ def plan_release(
 ) -> list[list[str]]:
     """Plans the gh argv to release ``worktree``'s claim on ``issue``.
 
-    LABEL-AWARE, the mirror of `plan_claim` (#1277). A release whose `--remove-label` failed
+    LABEL-AWARE, the mirror of `plan_claim`. A release whose `--remove-label` failed
     left the comment posted and the label on, and the retry then raised `ClaimRefused("not
     claimed")` — so a stuck `claimed` label could never be removed. An issue nobody holds
     that still carries the label therefore plans the label edit alone rather than refusing.

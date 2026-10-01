@@ -73,9 +73,9 @@ def _flag(data: dict, key: str, defaults: dict | None = None) -> str:
     """Host value, else the group default, else unknown.
 
     A host that declares nothing still inherits group_vars/all.yml, so "not in host_vars"
-    is not the same as "nobody said". Reading host_vars alone reported `unknown (has_docker
-    not declared)` for daniel-pi — which inherits `has_docker: true` — on the same page
-    whose own text calls the Pi the only remaining Docker host (2026-08-25 review M-14).
+    is not the same as "nobody said". Reading host_vars alone would report `unknown
+    (has_docker not declared)` for daniel-pi — which inherits `has_docker: true` — on the
+    same page whose own text calls the Pi the only remaining Docker host.
 
     The provenance stays visible rather than collapsing into a bare "yes": the convention
     here is to never let a default read as something the host asserted.

@@ -3,13 +3,12 @@
 Each daemon runs `GOGC=off` under `GOMEMLIMIT` (roles/setup/docker_install, go-runtime.yml),
 so the limit is the only GC trigger and the slack between the daemon's live set plus the
 runtime's non-heap classes and the limit is one cycle's allocation. A limit near the live
-set makes the runtime collect continuously, bounded only by the GC CPU limiter -- the shape
-the first Pi Alloy ran in for seven days (#932). A limit under 120 s of allocation is the
+set makes the runtime collect continuously, bounded only by the GC CPU limiter. A limit
+under 120 s of allocation is the
 subtler failure: the Go runtime forces a cycle every two minutes when GOGC is on, and
 GOGC=off exists to escape that floor, so a limit that cycles faster than the floor is worse
-than the default it replaced. That is what the issue's own "live + 50% + non-heap" recipe
-would have shipped: 7 MB of slack on a 14 MB heap, a cycle every ~60 s against ~85 s
-today (#2003).
+than the default. A "live + 50% + non-heap" recipe lands there: 7 MB of slack on a 14 MB
+heap is a cycle every ~60 s, against ~85 s with the shipped limits.
 
 The ceiling is not a cgroup cap -- these are host daemons -- but the limit IS the daemon's
 steady-state footprint under GOGC=off, since the heap grows to it before every collection,
@@ -37,7 +36,7 @@ _DEFAULTS = _ROLE / "defaults" / "main.yml"
 _GO_RUNTIME = _ROLE / "tasks" / "go-runtime.yml"
 _INSTALL = _ROLE / "tasks" / "install.yml"
 
-# Measured 2026-09-18 on daniel-pi over the first 4.3 h of the scrapes, both daemons on
+# Measured on daniel-pi over the first 4.3 h of the scrapes, both daemons on
 # go1.26.8 under the default GOGC=100. Live peak is next_gc's ceiling halved (28.0 and
 # 27.3 MB); the floors were 10.7 and 10.4 MB.
 MEASURED = {
@@ -107,7 +106,7 @@ def test_committed_limit_clears_the_floor_and_the_cap(daemon):
 
 
 def test_each_daemon_has_its_own_tag_and_the_shim_override_rides_with_containerds():
-    """The stagger the issue asks for is one daemon per day, so each needs its own tag,
+    """The stagger is one daemon per day, so each needs its own tag,
     and containerd's must also select the config.toml block that stops its shims
     inheriting the pairing."""
     imports = [

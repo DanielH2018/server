@@ -8,11 +8,8 @@ only to a backend on *itself* — so a VIP-backed pod scheduled onto daniel-serv
 its own service black-hole every packet.
 
 The failure is silent in the worst way: the pod passes its probes, `kubectl get pods`
-shows Running, and only traffic from the LAN disappears. It has already happened twice
-in production here (the 2026-08-14 post-boot DNS blackout, and the node-join blackout
-before it), and on 2026-08-14 an audit found two more workloads — valheim and wg-easy —
-that had been carrying a VIP with no pin since the day they went live, surviving purely
-because the scheduler happened to place them correctly.
+shows Running, and only traffic from the LAN disappears. A VIP-backed workload with no pin
+survives only while the scheduler happens to place it correctly.
 
 A comment cannot catch the next one. This can: add a `type: LoadBalancer` service with
 ETP Local and no pin, and the suite fails.
@@ -32,8 +29,8 @@ METALLB_POOL = (
 )
 ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 
-# The variable the workload pins read since the staging-cluster work made them
-# cluster-relative. A pin may name the announcing node literally OR through this.
+# The variable the workload pins read, which makes them cluster-relative. A pin may name the
+# announcing node literally OR through this.
 PRIMARY_NODE_VAR = "k8s_primary_node"
 
 
@@ -43,8 +40,8 @@ JINJA_VAR = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 def _announcing_node_expr():
     """The raw nodeSelector value in the L2Advertisement — a literal or a Jinja variable.
 
-    Matches to end of line rather than `(\\S+)`: the value became `{{ k8s_primary_node }}`
-    on 2026-08-27, and a non-greedy `\\S+` captures `{{` and silently compares that.
+    Matches to end of line rather than `(\\S+)`: the value can be `{{ k8s_primary_node }}`,
+    and a non-greedy `\\S+` captures `{{` and silently compares that.
     """
     m = re.search(
         r"kubernetes\.io/hostname:[ \t]*(\S.*?)[ \t]*$", METALLB_POOL.read_text(), re.M

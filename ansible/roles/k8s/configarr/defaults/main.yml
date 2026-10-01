@@ -1,7 +1,6 @@
 ---
-# Slice 4, B7a. configarr is the one of the nine that is not a service: it is a nightly
-# reconcile that reads the *arrs and exits. So it ports to a CronJob, not a Deployment, and
-# its health is reported by a host cron on this node that READS the last Job and pushes Kuma —
+# configarr is not a service: it is a nightly reconcile that reads the *arrs and exits. So it
+# is a CronJob, not a Deployment, and its health is reported by a host cron on this node that READS the last Job and pushes Kuma —
 # the same shape as longhorn-backup-health.sh and telemetry-health.sh, and for the same reason
 # (monitor-bridge runs on daniel-server and cannot see this cluster).
 configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.30.2
@@ -10,11 +9,10 @@ configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.30.2
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS (a container that never starts fails the deploy) but deliberately does not enforce a successful sync; concurrencyPolicy Forbid is set, and the reconciler is convergent, so even if the gate's one-off run does overlap a scheduled one, running the same sync twice is harmless"  # noqa var-naming[no-role-prefix]
 
-# Unchanged from the Docker cron. The health cron below reads whatever the last run produced,
+# The health cron below reads whatever the last run produced,
 # so the two schedules are independent — this one can move without touching monitoring.
 configarr_k8s_schedule: "30 4 * * *"
 
-# Carried over from CONFIGARR_TIMEOUT_S in the Docker-era sync cron.
 configarr_k8s_timeout: 300
 
 # Deliberately kept: `kubectl logs job/<n>` is the only record of what a run did, and the health
@@ -23,8 +21,7 @@ configarr_k8s_timeout: 300
 configarr_k8s_successful_history: 3
 configarr_k8s_failed_history: 3
 
-# Same 26 h ceiling monitor-bridge applied to the state file's `ts` (CONFIGARR_MAX_AGE_H=26),
-# so a daily 04:30 sync that skips one night goes red rather than coasting on yesterday's log.
+# 26 h ceiling, so a daily 04:30 sync that skips one night goes red rather than coasting on yesterday's log.
 configarr_k8s_max_age_hours: 26
 
 # */10 like the other two k8s-side health crons, and for a reason that is easy to miss: the
@@ -33,7 +30,7 @@ configarr_k8s_max_age_hours: 26
 # turns a stale one red.
 configarr_k8s_health_cron_minute: "*/10"
 
-# Mirrors resources('0.50', '256M', '0.05', '16M') from the Docker template.
+# Mirrors resources('0.50', '256M', '0.05', '16M').
 configarr_k8s_cpu_limit: "500m"
 configarr_k8s_mem_limit: 256Mi
 configarr_k8s_cpu_request: "50m"

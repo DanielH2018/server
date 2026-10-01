@@ -84,7 +84,7 @@ _SKIP_PATH_PARTS = (".claude/worktrees",)
 # `docs/facts.lock` is the one entry that is not this generator's own: it keys each cited
 # marker by its text and records a hash beside it, so every marker a CLAUDE.md cites re-appears
 # there as a row whose "decision" is a 64-hex digest. gitleaks reads such a row as a generic API
-# key, so a regenerated page carrying one fails the commit (#2812).
+# key, so a regenerated page carrying one fails the commit.
 _SELF_PATHS = frozenset(
     {
         "scripts/docs/reference/decisions.py",
@@ -121,12 +121,11 @@ _DUPLICATE_THRESHOLD = 0.90
 # A repo-relative path a marker names: a top-level directory, slash-separated segments, and one
 # of these extensions. The top-level directory must exist under `root` (checked at match time,
 # see `_pointers_in`), so a fixture tree resolves its own paths and a stray `foo/bar.md` in
-# prose is not read as a repo path. The extension set is what the census found markers
-# pointing at (2026-09-17: 43 pointers in 312 markers, every one of them in this set); a
-# pointer with no extension (`gitops_deploy.py`'s bare module name, a directory) is not a path
-# this can resolve and is left alone. The trailing lookahead refuses a `.`-then-word so
-# `foo.sh.j2` is taken whole rather than as `foo.sh`, while a sentence-ending `foo.md.` still
-# matches `foo.md`.
+# prose is not read as a repo path. The extension set is what a census found markers pointing
+# at (43 pointers in 312 markers, every one of them in this set); a pointer with no extension
+# (`gitops_deploy.py`'s bare module name, a directory) is not a path this can resolve and is
+# left alone. The trailing lookahead refuses a `.`-then-word so `foo.sh.j2` is taken whole
+# rather than as `foo.sh`, while a sentence-ending `foo.md.` still matches `foo.md`.
 _REPO_PATH_RE = re.compile(
     r"(?<![\w/.-])([\w.-]+(?:/[\w.-]+)+\.(?:md|py|j2|yml|yaml|sh|toml|json))(?!\.?[\w/-])"
 )

@@ -1,4 +1,4 @@
-"""Guard: every prek hook that runs through `uv run` carries `--frozen` (#2151).
+"""Guard: every prek hook that runs through `uv run` carries `--frozen`.
 
 The unattended production paths (`gitops_deploy`, `secret-rotate`, `secret-rotation-audit`)
 run `uv run --frozen`, which installs the committed `uv.lock` as-is. A bare `uv run` in a

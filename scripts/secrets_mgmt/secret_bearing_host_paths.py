@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Deployed host paths whose content embeds a credential, derived from the tree.
 
-WHY THIS EXISTS. `grep-on-a-script-prints-the-secret-it-embeds` records three occurrences,
-every one ending in a rotation. The leak each time was an *inspection*, not an execution: a
-`grep -nE "rotate|--commit|sops set|push"` on `/usr/local/bin/secret-rotation-audit.sh` matched
-the wrapper's own `export SECRET_ROTATION_KUMA=https://.../api/push/<token>` line and printed a
-token minted an hour earlier into the terminal and the transcript.
+WHY THIS EXISTS. `grep-on-a-script-prints-the-secret-it-embeds` records three occurrences, every
+one ending in a rotation. The leak is an *inspection*, not an execution: a `grep -nE
+"rotate|--commit|sops set|push"` on `/usr/local/bin/secret-rotation-audit.sh` matches the
+wrapper's own `export SECRET_ROTATION_KUMA=https://.../api/push/<token>` line and prints the
+token into the terminal and the transcript.
 
 WHY A DERIVATION RATHER THAN A LIST. `block-dangerous-bash.sh` guards reads by matching a fixed
 alternation of conventional secret paths — `.env`, `.ssh/`, `id_rsa`. A deployed wrapper script
@@ -64,11 +64,11 @@ HOST_BIN_PREFIXES = ("/usr/local/bin", "/opt/homelab")
 GENERIC_NAMES = frozenset()
 
 # The registry's own word for "tracked, but not a value anyone rotates". `domain` carries it,
-# and reading the tier is what keeps this derivation honest: matching on `domain` flagged five
-# more host scripts (disk-health, etcd-snapshot-offbox, registry-gc, fake-remux-health, and
-# remember-logs-health, retired since) that embed no credential at all. A guard that fires on those is one that
-# gets switched off. Derived from the registry rather than hand-listed in GENERIC_NAMES,
-# because the registry already states the fact.
+# and reading the tier is what keeps this derivation honest: matching on `domain` would flag
+# host scripts (disk-health, etcd-snapshot-offbox, registry-gc, fake-remux-health) that embed no
+# credential at all. A guard that fires on those is one that gets switched off. Derived from the
+# registry rather than hand-listed in GENERIC_NAMES, because the registry already states the
+# fact.
 NON_SECRET_TIERS = frozenset({"ignore"})
 
 

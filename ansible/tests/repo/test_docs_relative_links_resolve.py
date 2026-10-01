@@ -6,14 +6,12 @@ checks repo paths named in prose, and `scripts/tests/test_mkdocs_config.py` chec
 inline `[text](../thing.md)` inside a page falls through all three. A dead one renders as a
 link that 404s on the built site, with nothing red anywhere.
 
-That is not hypothetical. Regrouping `docs/archive/` into per-programme subdirectories needed
-every relative link inside the moved files deepened by one level, and the sweep that did it
-also deepened a link in `k3s-migration/`, which had not moved. Every existing gate stayed
-green.
+Regrouping `docs/archive/` into subdirectories is the case: every relative link inside the
+moved files must deepen by one level, and a sweep that does it can also deepen a link in a
+directory that did not move. Every other gate stays green.
 
 A **bare** same-directory link — `[text](sibling.md)`, no `./` — is the same defect and the
-easier one to miss. The first version of this guard matched only paths starting with `.` and
-passed two dead bare links straight through; `mkdocs build --strict` in CI is what caught them.
+easier one to miss, because a pattern matching only paths starting with `.` passes it.
 So the pattern below accepts any target that is not a URL, a fragment or an absolute path.
 
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED.
@@ -51,8 +49,7 @@ def broken_links(text: str, base: Path) -> list[str]:
 def site_pages() -> list[Path]:
     """Every markdown page mkdocs builds, archive included.
 
-    Deliberately NOT `_helpers.discover_docs()`, which excludes `docs/archive/` — and the two
-    dead links this guard was written for were both in there. mkdocs builds and serves the
+    Deliberately NOT `_helpers.discover_docs()`, which excludes `docs/archive/`. mkdocs builds and serves the
     archive (`not_in_nav` keeps it out of the nav, not out of the site), so a link that 404s
     there 404s for a reader who followed one into it.
 
@@ -106,7 +103,7 @@ def test_an_anchor_on_a_real_file_is_clean(tmp_path):
 
 
 def test_a_bare_sibling_link_is_checked_in_both_directions(tmp_path):
-    """No `./` prefix. Two of these survived the first version of this guard."""
+    """No `./` prefix. A pattern matching only `.`-prefixed targets misses these."""
     (tmp_path / "there.md").write_text("")
     assert broken_links("[x](there.md)", tmp_path) == []
     assert broken_links("[x](gone.md)", tmp_path) == ["gone.md"]

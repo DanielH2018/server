@@ -1,28 +1,24 @@
 ---
-# Crons written by Compose roles that #2385 deleted, so those roles can no longer reap them.
+# Crons written by Compose roles that no longer exist, so those roles cannot reap them.
 # ansible.builtin.cron matches on the exact `#Ansible: <name>` marker, so these are the
-# literal `name:` values from the roles that created them. Both source files are history —
-# read them under `git show 2460d0675fd748e70fcbcde87185371ffd62402b:<path>`:
-#   Redeploy ical-proxy               ansible/roles/containers/common/tasks/redeploy_cron.yml
-#   Clean stale tdarr transcode cache ansible/roles/containers/archive/tdarr/tasks/main.yml
+# literal `name:` values from the roles that created them.
 # Add an entry here when a Compose role that owned a cron is retired.
 docker_install_stale_crons:
   - Redeploy ical-proxy
   - Clean stale tdarr transcode cache
 
-# The engine versions this role installs (#2153). Before these, a fresh install took whatever
-# download.docker.com served that day and the deliberate upgrade moved to whatever it served
-# on the day it ran, so the Pi's engine was a function of the calendar. Four upstream
+# The engine versions this role installs. Without pins, a fresh install takes whatever
+# download.docker.com serves that day and the deliberate upgrade moves to whatever it serves
+# on the day it runs, so the Pi's engine would be a function of the calendar. Four upstream
 # versions, not one: docker-ce and docker-ce-cli share the Moby version, and the other three
 # packages each carry their own. Renovate tracks each on the `deb` datasource against
 # download.docker.com's own noble/arm64 index (docker-ce, containerd.io,
-# docker-compose-plugin, docker-buildx-plugin) in ONE manual group. It read the upstream
-# GitHub releases until #2341: Docker packages a release days-to-weeks after upstream tags
-# it, so a bump could name a version apt had no package for, and the play that applies it
+# docker-compose-plugin, docker-buildx-plugin) in ONE manual group. It does not read the
+# upstream GitHub releases: Docker packages a release days-to-weeks after upstream tags
+# it, so a bump could name a version apt has no package for, and the play that applies it
 # would fail AFTER stopping every Compose project. Merging a bump still moves nothing on the
 # Pi by itself; tasks/install.yml refuses to move an installed engine and engine-upgrade.yml
-# is the path that applies it (it stops every Compose project first, #1961). Pinned
-# 2026-09-21 to what daniel-pi already ran, so the first run with these is a no-op.
+# is the path that applies it (it stops every Compose project first).
 docker_install_engine_version: "29.8.1"
 docker_install_containerd_version: "2.3.5"
 docker_install_compose_plugin_version: "5.5.1"
@@ -62,7 +58,7 @@ docker_install_package_specs: >-
 
 # The gate on the deliberate engine upgrade (tasks/install.yml). Tags cannot gate it on
 # their own -- the role tag inherits onto the `never`-tagged include and overrides it
-# (#1998) -- so the upgrade needs `-e docker_install_engine_upgrade=true` as well as
+# -- so the upgrade needs `-e docker_install_engine_upgrade=true` as well as
 # `--tags docker-engine-upgrade`.
 docker_install_engine_upgrade: false
 
@@ -70,16 +66,16 @@ docker_install_engine_upgrade: false
 # (tasks/go-runtime.yml, tags `docker-go-runtime-dockerd` / `docker-go-runtime-containerd`).
 # With GOGC off the limit is the only thing that starts a collection, so the distance from
 # the daemon's live set plus the runtime's non-heap classes up to the limit is one cycle's
-# allocation. Measured 2026-09-18 on daniel-pi over the first 4.3 h of the `dockerd-pi` and
+# allocation. Measured on daniel-pi over 4.3 h of the `dockerd-pi` and
 # `containerd-pi` scrapes (roles/k8s/observability): live heap 11-14 MB each
 # (`go_memstats_heap_alloc_bytes` floor 10.7 / 10.4 MB, `go_memstats_next_gc_bytes` up to
 # 28.0 / 27.3 MB under the default GOGC=100), non-heap runtime 10.3 / 8.2 MB, allocation
 # 114 / 97 KB/s, 0.70 / 0.68 GC cycles a minute -- ABOVE the two-minute forced-cycle floor,
 # so today the heap goal is the trigger, not the timer. 64 MiB leaves ~40 MB of slack for
 # dockerd (a cycle every ~350 s) and ~42 MB for containerd (every ~430 s), the cadence the
-# Pi Alloy runs at (#1967), against ~85 s today. The issue's own "live + 50% + non-heap"
+# Pi Alloy runs at, against ~85 s with the default GOGC. A "live + 50% + non-heap"
 # recipe would give 31 / 28 MiB, 7 MB of slack, and a cycle every ~60 s -- more often than
-# now; a percentage of a 14 MB heap is not slack. The guard that holds these above the
+# that; a percentage of a 14 MB heap is not slack. The guard that holds these above the
 # floor is ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py; its docstring
 # carries the re-measure queries.
 #

@@ -1,11 +1,10 @@
-"""claude-cgroup-metrics.sh must actually emit the counters issue #1238 asks for.
+"""claude-cgroup-metrics.sh must emit the cgroup counters Prometheus needs for the Claude hosts.
 
 claude-rc.service is bounded (MemoryHigh/MemorySwapMax) and user-1000.slice (SSH-started
-sessions, #1213) is not, but neither cgroup's counters reached Prometheus before this script:
-this host sets DefaultMemoryAccounting/CPUAccounting=yes, so the counters were already free and
-populated on cgroupfs, and nothing read them. The script writes them as a node-exporter textfile
-gauge set (roles/k8s/node-exporter/CLAUDE.md: the `--collector.textfile.directory` hook was "an
-empty hook, not yet used").
+sessions) is not, so each cgroup needs its own counters. This host sets
+DefaultMemoryAccounting/CPUAccounting=yes, so the counters are populated on cgroupfs. The
+script writes them as a node-exporter textfile gauge set (roles/k8s/node-exporter/CLAUDE.md
+describes the `--collector.textfile.directory` hook).
 
 Per this repo's red-proof rule, each behaviour below is a pair: one fixture it must read
 correctly, one it must not choke on (a missing file, a missing textfile directory).
@@ -24,8 +23,8 @@ SCRIPT = (
     ANSIBLE / "roles" / "setup" / "claude_code" / "files" / "claude-cgroup-metrics.sh"
 )
 
-# claude-rc.service sits under the fleet's shared parent since #1264 — user.slice, not
-# system.slice — and claude_code_fleet_caps_enabled: false puts it back. The script resolves
+# claude-rc.service sits under the fleet's shared parent, user.slice, and
+# claude_code_fleet_caps_enabled: false puts it back in system.slice. The script resolves
 # between the two, so both paths are exercised below.
 RC_UNDER_FLEET_PARENT = "user.slice/claude-rc.service"
 RC_UNDER_SYSTEM_SLICE = "system.slice/claude-rc.service"
@@ -112,9 +111,8 @@ def test_emits_every_metric_family_for_both_cgroups(
                 f"{family} missing a sample for cgroup={label}: {out}"
             )
 
-    # The one counter #1238 names specifically: memory.events' `high` field, which counts
-    # every time MemoryHigh throttled the cgroup — the number that would have narrated the
-    # 2026-09-05 stall as it happened.
+    # The counter the script exists for: memory.events' `high` field, which counts every time
+    # MemoryHigh throttled the cgroup.
     assert 'claude_cgroup_memory_events_total{cgroup="claude-rc",event="high"} 3' in out
 
 
@@ -151,9 +149,9 @@ def test_missing_cgroup_directory_is_skipped_not_fatal(tmp_path: Path) -> None:
 
 
 def test_claude_rc_is_found_under_the_fleet_parent_slice(tmp_path: Path) -> None:
-    """The accepting half of the path resolution (#1264): the unit's Slice= line moved its
-    cgroup from system.slice to user.slice, so a hardcoded system.slice path would emit
-    nothing for this plane while the scrape stayed green."""
+    """The accepting half of the path resolution: the unit's Slice= line puts its cgroup in
+    user.slice, so a hardcoded system.slice path would emit nothing for this plane while the
+    scrape stayed green."""
     cgroot = tmp_path / "cgroup"
     _write_cgroup_fixture(cgroot, RC_UNDER_FLEET_PARENT)
     textfile_dir = tmp_path / "textfile"
@@ -168,7 +166,7 @@ def test_claude_rc_is_found_under_the_fleet_parent_slice(tmp_path: Path) -> None
 
 def test_claude_rc_is_still_found_under_system_slice(tmp_path: Path) -> None:
     """The rejecting half, and the rollback direction: claude_code_fleet_caps_enabled: false
-    returns the unit to system.slice, so resolving only the new path would lose the plane
+    returns the unit to system.slice, so resolving only the user.slice path would lose the plane
     exactly when the shared parent has been turned off."""
     cgroot = tmp_path / "cgroup"
     _write_cgroup_fixture(cgroot, RC_UNDER_SYSTEM_SLICE)
@@ -183,7 +181,7 @@ def test_claude_rc_is_still_found_under_system_slice(tmp_path: Path) -> None:
 
 
 def test_missing_textfile_directory_exits_clean(tmp_path: Path) -> None:
-    """Matches the kopia-era b2-usage.sh guard: a host without the textfile hook (or before
+    """Matches the b2-usage.sh guard: a host without the textfile hook (or before
     node-exporter is deployed there) must not fail the timer, just produce nothing."""
     cgroot = tmp_path / "cgroup"
     for rel in CGROUPS.values():

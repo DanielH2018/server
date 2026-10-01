@@ -3,10 +3,10 @@
   config PVC at /config and the shared media tree at /data.
 
   WHY A WHOLE-DOCUMENT MACRO, where the other shared templates here carry a field block. The two
-  templates were 94 lines each and differed on 22 of them (#2871), and every one of those 22 is
+  templates are 94 lines each and differ on 22 of them, and every one of those 22 is
   either a name derived from the app or a value the role already holds in `defaults/main.yml`.
-  There was no shape to share short of the document: splitting it into a container macro and a
-  volumes macro would have left the metadata, the selector, the labels and both shell calls
+  There is no shape to share short of the document: splitting it into a container macro and a
+  volumes macro would leave the metadata, the selector, the labels and both shell calls
   copied in two places, which is where a field drifts. `service.yml.j2`, `pvc.yml.j2` and
   `ingressroute.yml.j2` already emit a whole object from this directory; this is the same move
   for a Deployment.
@@ -23,7 +23,7 @@
   `workload-shell.yml.j2`'s `spec_shell`/`pod_shell` and `security-context.yml.j2`'s
   `hardened_security_context` — inside THIS file rather than at the caller, so
   `ansible/tests/k8s/test_workload_shell_uses_the_macros.py` scans this file for them the way
-  it scans pihole's shared Deployment macro instead of pihole's two callers (#2884).
+  it scans pihole's shared Deployment macro instead of pihole's two callers.
 
   Arguments. Everything textual derives from `app`: `metadata.name`, both `app:` labels, the
   container name, the config volume name, the `<APP>__LOG__*` env keys and the exportarr
@@ -35,13 +35,12 @@
                             var one directory up is invisible to Renovate's k8s-images manager
                             (exportarr.yml.j2 has the incident).
     port                    `container_item.port`. Interpolated into the capability comment
-                            rather than written out: that comment said 8989 in prowlarr, copied
-                            from sonarr, until 2026-08-23b L6.
+                            rather than written out.
     rollout_timeout         the role's `<app>_k8s_rollout_timeout` STRING (`660s`), which this
                             body converts to `progressDeadlineSeconds`. One variable feeds both
                             the drain's `rollout status --timeout` and the deadline, or
                             `rollout status` fails at the 600s Kubernetes default whatever the
-                            budget says (#2370).
+                            budget says.
     log_level, log_rotate, docker_mods
                             the three env values.
     config_claim, media_claim

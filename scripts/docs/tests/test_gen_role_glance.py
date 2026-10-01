@@ -2,9 +2,9 @@
 
 The gate is the one that matters day to day: `test_every_deployed_role_block_matches_what_the_
 generator_writes_now` fails the moment a role's defaults, templates, tasks, playbook entry or
-`containers_list` entry move without the block being regenerated, which is the drift #2058
-(k8s) and #2096 (setup and Pi compose) were filed on. Each shape has its own red-proof pair
-over a fixture role under `tmp_path`, and a non-vacuity pin naming members its census must find.
+`containers_list` entry move without the block being regenerated. Each shape has its own
+red-proof pair over a fixture role under `tmp_path`, and a non-vacuity pin naming members its
+census must find.
 """
 
 from pathlib import Path
@@ -309,10 +309,10 @@ def test_the_gate_covers_the_known_setup_roles_and_pi_services():
 
 
 def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):
-    """A retired setup role's `__pycache__`-only directory is not a role (#2964).
+    """A retired setup role's `__pycache__`-only directory is not a role.
 
-    Without the filter the generator wrote a block for a role that no longer exists in git,
-    and the staleness gate above raised on its missing `CLAUDE.md`.
+    Without the filter the generator would write a block for a role that no longer exists in
+    git, and the staleness gate above would raise on its missing `CLAUDE.md`.
     """
     (tmp_path / "retired" / "__pycache__").mkdir(parents=True)
     (tmp_path / "retired" / "__pycache__" / "x.cpython-314.pyc").write_bytes(b"\x00")
@@ -322,7 +322,7 @@ def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):
 
 
 def test_every_setup_and_pi_doc_carries_the_marker_under_the_heading():
-    """#2096's verify-by: the heading, then the marker directly under it, on every doc."""
+    """The heading, then the marker directly under it, on every doc."""
     docs = [d / "CLAUDE.md" for d in g.setup_role_dirs()] + [
         g.CONTAINERS_ROLES / e["name"] / "CLAUDE.md" for e in g.pi_service_entries()
     ]
@@ -382,7 +382,7 @@ def _claims_line(entry, role_dir, roles, k3s_defaults):
 
 
 def test_claims_line_carries_each_claims_tier_and_moves_with_the_tier_lists(tmp_path):
-    """#2105: a tier beside every named claim, read from the lists — never typed (red-proof pair)."""
+    """A tier beside every named claim, read from the lists — never typed (red-proof pair)."""
     roles = tmp_path / "roles"
     entry = {"name": "svc", "platform": "k8s"}
     role = roles / "svc"

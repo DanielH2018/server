@@ -5,9 +5,8 @@ line in, a parse or an episode list out. The fetch path (which stream is queried
 and `--pi` admit, which end a hit `--limit` cuts) stays in test_probe_alerts.py.
 
 Two streams are parsed, because monitor-bridge polls no Kuma state and so says nothing about the
-host crons that push Kuma directly. Reading only its log left the backup plane's sole DOWN signal
-unrecorded: measured 2026-08-22, 465 `longhorn-backup-health: status=down` lines over 7 days
-appeared in no episode list.
+host crons that push Kuma directly. Reading only its log would leave the backup plane's sole DOWN
+signal unrecorded.
 """
 
 from datetime import UTC, datetime
@@ -95,10 +94,9 @@ def test_parse_syslog_down_line_survives_rsyslog_truncation():
     assert msg.startswith("push failed: backups in Error state:")
 
 
-# The two pushers #1787 named as writing no `status=` line. Both are real lines from Loki on
-# 2026-09-14 and 2026-09-17 (the live-drift one with `up` swapped for `down` — it has not been
-# DOWN inside Loki's retention), so a reader that stops matching either fails here rather than
-# reading "no logs" the way the 2026-08-22 query did.
+# Two pushers whose lines carry the `status=` token. Both are real lines from Loki (the
+# live-drift one with `up` swapped for `down` — it has not been DOWN inside Loki's retention),
+# so a reader that stops matching either fails here rather than reading "no logs".
 SYSLOG_SECRET_ROTATION_AUDIT = (
     "2026-09-14T08:00:01.885103+00:00 daniel-box secret-rotation-audit: status=down unlanded "
     "rotation branch secret-rotate/2026-09-13-0902 is on origin >6h"
@@ -107,7 +105,7 @@ SYSLOG_LIVE_DRIFT = (
     "2026-09-17T05:45:02.793486+00:00 daniel-box live-drift-check: status=down 2 object(s) "
     "changed since applied"
 )
-# kuma-push-lib.sh's final-failure line since the retry landed (#1010), verbatim from the
+# kuma-push-lib.sh's final-failure line since the retry landed, verbatim from the
 # daniel-box journal, and the transient line that precedes it twice.
 SYSLOG_PUSH_FAILED_WITH_CODE = (
     "2026-09-10T13:01:13.997804+00:00 daniel-box release-staleness-check: push failed "
@@ -145,7 +143,7 @@ def test_parse_syslog_down_line_unwraps_the_retry_era_failed_push():
 
 
 def test_parse_syslog_down_line_unwraps_a_push_kuma_rejected():
-    # The pair grows a ` by=kuma` word when Kuma answered the push itself (#1803); the word is
+    # The pair grows a ` by=kuma` word when Kuma answered the push itself; the word is
     # a class marker like the pair and stays out of the message with it.
     line = SYSLOG_PUSH_FAILED_WITH_CODE.replace(
         "(http=500 rc=0)", "(http=404 rc=0 by=kuma)"
@@ -171,13 +169,12 @@ def test_parse_syslog_down_line_ignores_up_and_unrelated_lines():
     )
 
 
-#
-# Episode splitting and timestamp rendering. Both halves of the 2026-09-04 misdating (#1104):
-# a `*/30` cron's ticks landed exactly on a fixed 30-minute splitting gap, so one 13.5-hour
-# outage rendered as 16 episodes and the newest-first list put a mid-incident fragment on top;
-# and every row was stamped America/Chicago with no marker, five hours off the `journalctl
-# --utc` output beside it. Each rule below is an accept/reject pair — a splitter that merges
-# everything and one that merges nothing are indistinguishable from the passing side alone.
+# Episode splitting and timestamp rendering. Both halves of the misdating: a `*/30` cron's
+# ticks land exactly on a fixed 30-minute splitting gap, so one 13.5-hour outage renders as 16
+# episodes and the newest-first list puts a mid-incident fragment on top; and every row must
+# be stamped UTC with a marker, to match the `journalctl --utc` output beside it. Each rule
+# below is an accept/reject pair — a splitter that merges everything and one that merges
+# nothing are indistinguishable from the passing side alone.
 
 _MIN_NS = int(60 * 1e9)
 
@@ -231,8 +228,8 @@ def test_episode_gap_s_honours_an_explicit_gap_over_the_cadence():
 
 
 def test_format_alert_episodes_stamps_utc_and_carries_the_episode_end():
-    # 2026-09-04 00:30 -> 14:00 UTC is the real release-staleness-check outage from #1104,
-    # which the Chicago-stamped view rendered as 2026-09-03 19:30.
+    # 2026-09-04 00:30 -> 14:00 UTC is a real release-staleness-check outage; a
+    # Chicago-stamped view would render it as 2026-09-03 19:30.
     first = int(datetime(2026, 9, 4, 0, 30, tzinfo=UTC).timestamp() * 1e9)
     last = int(datetime(2026, 9, 4, 14, 0, tzinfo=UTC).timestamp() * 1e9)
     out = alerts.format_alert_episodes(

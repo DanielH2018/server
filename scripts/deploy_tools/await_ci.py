@@ -3,8 +3,7 @@
 
 THE PROBLEM. After a merge a session must know whether master CI went green before it
 deploys: PR CI is scoped to changed files, so a whole-tree failure can appear only after
-the merge. Nothing exposed that wait, so sessions hand-polled -- 835 polls across 213 wait
-episodes, measured 2026-08-29.
+the merge.
 
 `deploy_logic.ci_verdict` is already the right logic and the deployer's own gate reads it.
 This is a CLI over that same function against that same endpoint, so a session's verdict
@@ -75,7 +74,7 @@ def fetch_check_runs(sha: str) -> list[dict]:
     The anonymous limit is 60/hour per source IP and this poll shares it with the deployer's
     own gate on the same host: at one request per 20s for up to 900s, one landing costs 45 of
     those 60, so the second landing in an hour starved the tick's gate into deferring on a
-    403 (2026-09-01). deploy_logic.github_token carries the numbers.
+    403. deploy_logic.github_token carries the numbers.
     """
     return _github_get(f"commits/{sha}/check-runs?per_page=100").get("check_runs", [])
 
@@ -183,10 +182,10 @@ def _cancelled_before_any_run_registered(
     zero runs. Two merges seconds apart cancel the first one's CI workflow before its
     `prek` job registers a check-run, so the check-runs list never carries a required
     name. To `_has_only_no_verdict_conclusions` that is indistinguishable from a
-    freshly-pushed SHA, and the wait sat out its whole budget twice on #766 (2026-09-02:
-    900s, then 1500s) with the tip green the entire time. The check-suite is the record
-    that survives: `completed cancelled` with `latest_check_runs_count == 0`. A suite
-    still `queued` or `in_progress` is a run that may yet register, and is left alone.
+    freshly-pushed SHA, and the wait would sit out its whole budget with the tip green
+    the entire time. The check-suite is the record that survives: `completed cancelled`
+    with `latest_check_runs_count == 0`. A suite still `queued` or `in_progress` is a
+    run that may yet register, and is left alone.
     """
     if any(r.get("name") in required for r in runs):
         return False

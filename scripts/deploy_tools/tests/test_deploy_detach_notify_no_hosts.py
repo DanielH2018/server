@@ -2,9 +2,9 @@
 """`deploy_detach_notify.py` names a no-host run as deploy.sh's own exit, not ansible's.
 
 deploy.sh exit 78 means the playbook reached PLAY RECAP naming no host; ansible itself exited
-0 for that, and the wrapper read the recap (issue #1814). The Discord post for a --detach run
-used to say "ansible-playbook exited non-zero -- see the log" for every non-zero status, which
-for 78 sends the reader to a log whose ansible run looks clean.
+0 for that, and the wrapper read the recap. A generic "ansible-playbook exited non-zero -- see
+the log" for every non-zero status would, for 78, send the reader to a log whose ansible run
+looks clean.
 
 `--no-post` keeps the test off the webhook, and a non-zero status returns before any probe
 runs, so nothing here needs patching.

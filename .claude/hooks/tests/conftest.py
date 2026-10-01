@@ -1,18 +1,18 @@
 """Shared fixtures for the SessionStart hook tests.
 
-`test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess` runs session-health.py
-as a real subprocess (deliberately -- see that test's own docstring), which means `main()`
-runs for real and reaches whatever it reaches: `gh pr list` once per stale worktree
-candidate (an authenticated GitHub API call), `sops -d` to decrypt `ansible/vars/secrets.yml`
-for the `domain` key, `curl` against the live Prometheus endpoint, and `journalctl` for the
-release-staleness cron's last verdict (#1993). A main() test that hand-rolled its own
-monkeypatches instead of going through `_run_main` let `stale_worktree_lines` run for real too
-and made 5 `gh` calls. Measured 2026-09-04. None of that is what either test is checking.
+`test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess` runs session-health.py as
+a real subprocess (deliberately -- see that test's own docstring), which means `main()` runs
+for real and reaches whatever it reaches: `gh pr list` once per stale worktree candidate (an
+authenticated GitHub API call), `sops -d` to decrypt `ansible/vars/secrets.yml` for the
+`domain` key, `curl` against the live Prometheus endpoint, and `journalctl` for the
+release-staleness cron's last verdict. A main() test that hand-rolled its own monkeypatches
+instead of going through `_run_main` would let `stale_worktree_lines` run for real too and
+make `gh` calls. None of that is what either test is checking.
 
 Same mechanism as `ansible/tests/_helpers.py`'s `stub_logger_on_path` and
-`scripts/deploy_tools/tests/conftest.py`'s `_no_syslog`. All three now write their stubs and
-their `PATH` through `lib.proc_testing` (#3056); what stays per-suite is WHICH binaries each
-fences and what their bodies record.
+`scripts/deploy_tools/tests/conftest.py`'s `_no_syslog`. All three write their stubs and their
+`PATH` through `lib.proc_testing`; what stays per-suite is WHICH binaries each fences and what
+their bodies record.
 """
 
 import sys

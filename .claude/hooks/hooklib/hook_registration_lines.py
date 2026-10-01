@@ -5,11 +5,11 @@ into the session's worktree. A worktree cut from a fresher `origin/master` than 
 checkout therefore registers hook scripts the primary checkout does not have: `/bin/sh` exits
 127, Claude Code logs a non-blocking hook error, and the matching tool call runs with the guard
 skipped. About 2,100 Bash calls ran that way on daniel-server across two windows in September
-2026 (issue #2675).
+2026.
 
 `fanout_lib/launch.py:fast_forward_primary_command` closed the fan-out half by fast-forwarding
 the host's primary checkout before it creates the worktree. This arm covers the hand-made half —
-a worktree `EnterWorktree` created — where nothing fast-forwards anything (issue #2697).
+a worktree `EnterWorktree` created — where nothing fast-forwards anything.
 
 Two limits, stated rather than implied:
 
@@ -19,7 +19,7 @@ Two limits, stated rather than implied:
     where it is missing THIS one stays open, and only a fast-forward closes it.
   * **It rules on the `.py` sibling only where the shim names it by the shared idiom.** Five
     shims run their sibling as `"$(dirname "$(readlink -f "$0")")/<name>.py"`, and that form is
-    matched literally rather than parsed as shell (issue #2709). A shim naming its `.py` some
+    matched literally rather than parsed as shell. A shim naming its `.py` some
     other way, or composing the path from a variable, gets
     no verdict — abstaining is the posture `script_path` already takes for a path it cannot
     resolve, and `test_the_repos_own_shims_name_the_siblings_this_parse_must_find` is what
@@ -136,11 +136,11 @@ def script_path(command, checkout):
 #     exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python \
 #       "$(dirname "$(readlink -f "$0")")/bash-pretool.py"
 #
-# One literal idiom, matched as text. Reading a shim in general means parsing shell, which is
-# why #2697 left the siblings out; five of this repo's eight shims share this one form, so
-# matching the form covers every sibling that exists without a parser. Anything else abstains,
-# because a banner line that cries wolf over a working hook is worse than one that stays quiet
-# about an odd one — `script_path`'s own docstring makes the same trade.
+# One literal idiom, matched as text. Reading a shim in general means parsing shell; five of
+# this repo's eight shims share this one form, so matching the form covers every sibling that
+# exists without a parser. Anything else abstains, because a banner line that cries wolf over
+# a working hook is worse than one that stays quiet about an odd one — `script_path`'s own
+# docstring makes the same trade.
 _SIBLING_PY = re.compile(
     r"""\$\(\s*dirname\s+"?\$\(\s*readlink\s+-f\s+"\$0"\s*\)"?\s*\)/([A-Za-z0-9_.-]+\.py)"""
 )
@@ -215,9 +215,9 @@ def missing_hook_script_lines(
     reading one diagnosis must not be handed the other's:
 
       * a registered `.sh` the primary checkout lacks — `/bin/sh` exits 127 and Claude Code
-        logs a non-blocking hook error (issue #2697);
+        logs a non-blocking hook error;
       * a `.py` sibling that shim runs, which the primary checkout lacks — the shim RUNS, so
-        nothing exits 127 and the guard is skipped anyway (issue #2709).
+        nothing exits 127 and the guard is skipped anyway.
 
     Args:
         checkout: the session's checkout. Defaults to `session_checkout(cwd=cwd)`.

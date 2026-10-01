@@ -70,7 +70,7 @@ WHOLE_FILE_GUARDS = (
 )
 
 # `is_test_file` decides both the cap a path gets and which files the patch census covers, so
-# it is a guard source. The rest of `_helpers.py` is not: 198 modules import that file, and
+# it is a guard source. The rest of `_helpers.py` is not: many modules import that file, and
 # comparing all of it would let an unrelated edit wave through a forbidden addition.
 HELPERS = "ansible/tests/_helpers.py"
 CAP_DECIDER = "is_test_file"
@@ -243,7 +243,7 @@ _HELPERS_BEFORE = (
 
 
 def test_an_edit_elsewhere_in_the_file_leaves_the_watched_function_unchanged():
-    """198 modules import `_helpers`; only `is_test_file` decides a cap."""
+    """Many modules import `_helpers`; only `is_test_file` decides a cap."""
     other_edit = _HELPERS_BEFORE.replace("X = 1", "X = 2\nY = 3")
     assert not function_differs(_HELPERS_BEFORE, other_edit, CAP_DECIDER)
 

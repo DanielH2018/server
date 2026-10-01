@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Guards that the Longhorn StorageClass never pins a replica count again.
+"""Guards that the Longhorn StorageClass never pins a replica count.
 
-The failure this encodes actually happened (daniel-box, 2026-08-01). The k3s role
-patches `settings.longhorn.io default-replica-count` to k3s_longhorn_replica_count
-(1, until daniel-server joins at slice 7), and that patch applied cleanly — reading
-the setting back returned 1. But every PVC still bound at 3 replicas:
+The k3s role patches `settings.longhorn.io default-replica-count` to
+k3s_longhorn_replica_count, and that patch applies cleanly — reading the setting back
+returns the patched value. But a StorageClass parameter beats the global setting, so
+every PVC can still bind at 3 replicas:
 
     kubectl -n longhorn-system get settings.longhorn.io default-replica-count  -> 1
     kubectl get sc longhorn -o jsonpath='{.parameters.numberOfReplicas}'       -> 3
@@ -13,11 +13,10 @@ Upstream's deploy/longhorn.yaml hardcodes `numberOfReplicas: "3"` in the
 longhorn-storageclass ConfigMap, and a StorageClass parameter beats the global
 setting. On a one-node cluster that means every volume asks for 3 replicas it can
 never schedule and sits permanently Degraded — the exact "real fault buried in
-expected noise" k3s_longhorn_replica_count exists to prevent. It failed slice 0's
-exit criteria; see docs/archive/k3s-migration/slice-0-cluster-foundation.md.
+expected noise" k3s_longhorn_replica_count exists to prevent.
 
-The fix replaces upstream's class with files/longhorn-storageclass.yaml, which omits
-the parameter so the setting governs. The risk now is re-syncing that file from a
+The role replaces upstream's class with files/longhorn-storageclass.yaml, which omits
+the parameter so the setting governs. The risk is re-syncing that file from a
 newer upstream and pasting the parameter back in, which is what these tests catch.
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_storageclass.py
@@ -149,8 +148,8 @@ def test_storageclass_is_applied_after_upstream_longhorn():
 # how often: r2 (daily, Cloudflare), weekly (sharded across weekdays, B2), nobackup (neither).
 # They are plain YAML with no schema and no cross-check, and the consequence of a typo is
 # silent: a misspelt weekly entry leaves that volume in the daily group, so it keeps paying
-# daily B2 transactions — the exact spend the weekday sharding exists to cut, and the sixth cap
-# event is what sharding was the response to. Nothing would report it.
+# daily B2 transactions — the exact spend the weekday sharding exists to cut. Nothing would
+# report it.
 
 _ROUTING_LISTS = (
     "k3s_longhorn_r2_volumes",

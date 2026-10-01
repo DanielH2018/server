@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """The wait lines `deploy.sh` prints, and that land.py books them.
 
-`land_lib/landing.py:retry_while_locked` books a wait only when an attempt EXITS 75. Both
-wrappers can wait a long time and exit 0 instead -- deploy.sh inside `flock -w LOCK_WAIT`,
-gitops_tick.sh watching a tick another actor started (`test_gitops_tick_wrapper.py`) -- so over the 14 days to 2026-09-11
-every ledger row read `lock=0` while the tree lock was busy 17% of one day. These are the
-lines that close that gap, asserted together with the parser that reads them: a wording
-change on either side that the other does not follow is exactly the drift this file catches.
+`land_lib/landing.py:retry_while_locked` books a wait only when an attempt EXITS 75. Both wrappers can wait a long time
+and exit 0 instead -- deploy.sh inside `flock -w LOCK_WAIT`, gitops_tick.sh watching a tick another actor started
+(`test_gitops_tick_wrapper.py`) -- so without these lines every ledger row would read `lock=0` while the tree lock was
+busy. These are the lines that close that gap, asserted together with the parser that reads them: a wording change on
+either side that the other does not follow is exactly the drift this file catches.
 
 No test here touches /var/lock/server-git-tree.lock, the real systemd units, or the host's
 syslog. A foreground deploy takes real flock(2) locks on tmp_path files, contended by a
@@ -44,19 +43,19 @@ _TICK_SH = _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh"
 def _deploy_repo_env(tmp_path: Path, bin_dir: Path) -> tuple[Path, dict[str, str]]:
     """A throwaway repo for deploy.sh to snapshot, and the env that keeps the run inside it.
 
-    deploy.sh now copies HEAD into a detached worktree before it runs the playbook. Run
-    against this checkout, every test here would register a real worktree under the real
-    `.git`; `git_free_env` is what stops a prek hook's `GIT_DIR` overriding `cwd` and doing
-    that anyway. The snapshot root and the per-service lock directory are redirected for the
-    same reason: nothing here may write under /var/lock or /tmp/homelab-deploy-snapshots.
+    deploy.sh copies HEAD into a detached worktree before it runs the playbook. Run against
+    this checkout, every test here would register a real worktree under the real `.git`;
+    `git_free_env` is what stops a prek hook's `GIT_DIR` overriding `cwd` and doing that
+    anyway. The snapshot root and the per-service lock directory are redirected for the same
+    reason: nothing here may write under /var/lock or /tmp/homelab-deploy-snapshots.
     """
     return make_snapshot_repo(tmp_path / "repo"), deploy_sh_env(tmp_path, bin_dir)
 
 
 # Records how many descriptors the CALLER already has on the lock file, which is the thing
-# real `fuser` would have reported as a holder. Measured on 2026-09-11: `fuser` scans every
-# process's descriptors, so a deploy.sh that opens the lock before sampling reports itself --
-# and `fuser "$LOCK" {fd}>&-` does not help, because the parent shell still holds it.
+# real `fuser` would have reported as a holder. `fuser` scans every process's descriptors, so
+# a deploy.sh that opens the lock before sampling reports itself -- and `fuser "$LOCK"
+# {fd}>&-` does not help, because the parent shell still holds it.
 _FUSER = """#!/bin/bash
 ls -l "/proc/$PPID/fd" 2>/dev/null |
   awk '/server-git-tree.lock/ { n++ } END { print n + 0 }' >"$FUSER_STUB_SELF_FDS"
@@ -87,7 +86,7 @@ exit 0
 
 
 def _run_deploy(tmp_path: Path, **env_extra: str) -> subprocess.CompletedProcess:
-    """A foreground deploy. Its locks are real flock(2) on tmp_path files (#2412 slice 3)."""
+    """A foreground deploy. Its locks are real flock(2) on tmp_path files ."""
     bin_dir = stub_bin(
         tmp_path, {"fuser": _FUSER, "ps": _PS, "uv": _UV, "logger": _LOGGER}
     )
@@ -134,7 +133,7 @@ def _held(path: Path, release_after_contention: float | None = None):
     it that many seconds after deploy.sh BLOCKS on it, which is how the two tests that assert
     on the reported seconds stop depending on how long this host takes to start a deploy: a
     fixed hold expires during `stub_bin`, `make_snapshot_repo` and deploy.sh's own startup on
-    a loaded box, and the run then takes the lock uncontended and reports nothing (#2521).
+    a loaded box, and the run then takes the lock uncontended and reports nothing.
 
     Yields the event that says the waiter was SEEN. A release on the fallback deadline would
     hold for a minute and still pass every assertion here, so the two tests that ask for one
@@ -202,7 +201,7 @@ def test_a_contended_acquire_is_reported_with_its_seconds_and_its_holder(tmp_pat
 def test_an_uncontended_acquire_says_nothing(tmp_path):
     """CLEAN half: a line on every deploy would make `lock=0` rows unreadable as evidence.
 
-    A lock taken at once reports no wait whatever the clock says (#1881): `flock -n`
+    A lock taken at once reports no wait whatever the clock says: `flock -n`
     succeeding is 0s by construction, so a slow fork cannot book a phantom `lock=1`.
     """
     result = _run_deploy(tmp_path)
@@ -212,7 +211,7 @@ def test_an_uncontended_acquire_says_nothing(tmp_path):
 
 
 def test_a_contended_service_lock_reports_its_tag_and_its_seconds(tmp_path):
-    """FLAGGED half: most of what a landing waits for is now THIS lock, not the tree lock.
+    """FLAGGED half: most of what a landing waits for is THIS lock, not the tree lock.
 
     Without this line a landing behind another deploy of the same service books `lock=0` and
     charges the wait to `deploy` — the same gap the tree-lock line closed for the tree lock.
@@ -278,7 +277,7 @@ def test_any_other_flock_failure_is_not_reported_as_contention(tmp_path):
 
 
 def test_a_flock_failure_that_is_not_contention_exits_its_own_code(tmp_path):
-    """FLAGGED half for issue #1775: it used to fall through to 20.
+    """FLAGGED half: it must not fall through to 20.
 
     20 promises "a task failed AFTER applying; some changes are live", which land.py prints
     verbatim — for a run that never started ansible. 76 says what happened instead.

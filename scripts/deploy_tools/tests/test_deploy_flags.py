@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`deploy.sh` refuses an argument ansible-playbook's parser rejects, with 64 (issue #3024).
+"""`deploy.sh` refuses an argument ansible-playbook's parser rejects, with 64.
 
 ansible-playbook exits 2 on an argparse error, which is the same number it uses for "a host
 failed". The wrapper read that 2 as a run that happened: `./scripts/deploy.sh --no-such-flag`
@@ -25,8 +25,8 @@ from lib import exit_codes as ec
 
 from _deploy_sh_fakes import make_snapshot_repo, run_front_half
 
-# What the wrapper returned for a usage error until 2026-09-30, and the one code that means
-# changes are live. It must never be this gate's answer.
+# The code the wrapper must not return for a usage error: it means changes are live. It
+# must never be this gate's answer.
 _PLAYBOOK_FAILED = 20
 
 

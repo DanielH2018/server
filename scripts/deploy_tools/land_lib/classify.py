@@ -2,9 +2,7 @@
 
 A PR that reaches no service tag, no plane a hand applies and nothing the tick applies
 itself has nothing to wait for: the deployer fast-forwards it on its own tick, and CI on
-the merge commit is the deployer's gate, not this landing's. Sixteen of the 45 landings
-before 2026-09-02 ended nothing-to-deploy after a median seven minutes of PR CI plus
-master CI.
+the merge commit is the deployer's gate, not this landing's.
 """
 
 import sys as _sys
@@ -52,10 +50,10 @@ def pr_range(ln: Landing) -> str:
     """`<merge-base>..<pr-head>` from refs/pull/<n>/head, or '' when it cannot be read.
 
     `--since` covers every other session's merged work, and `MERGE_SHA^` is wrong for a
-    rebase merge of a multi-commit PR (PR #843 was two commits). The pull ref's merge base
+    rebase merge of a multi-commit PR. The pull ref's merge base
     with the merge commit is the branch point under every merge method. Any step failing
     leaves the range empty, which classifies every broad path as loud -- the direction a
-    wrong answer must fall (issue #848).
+    wrong answer must fall.
     """
     if ln.git("fetch", "-q", "origin", f"refs/pull/{ln.opts.pr}/head").returncode == 0:
         head = ln.git("rev-parse", "FETCH_HEAD")
@@ -103,8 +101,7 @@ def classify(ln: Landing) -> None:
     # What a self-applied setup role still needs beyond the host the tick runs on.
     # initial_setup.yml applies to ONE target per run, so a role with no `when:` gate reaches
     # every host the playbook is ever run on, and the tick converging here says nothing about
-    # the others (issue #1009, PR #1002: two hosts kept the old kuma-push-lib.sh for three
-    # days behind a `settled` verdict).
+    # the others.
     ln.remaining_setup = _classified(
         ln,
         "remaining-setup-hosts classification",
@@ -133,8 +130,8 @@ def classify(ln: Landing) -> None:
     # fast-forwards, so a checkout answers "this role is unregistered" — the same thing it says
     # about a role somebody forgot to register, and `needs-manual-apply` then prints the
     # expensive remedy (a full `ansible/deploy.yml`) for a role one `--tags` run deploys.
-    # PR #1539 landed that way (issue #1544). None means the read failed, and every reader
-    # below falls back to its own tree exactly as it did before.
+    # None means the read failed, and every reader
+    # below falls back to its own tree.
     declared = _classified(
         ln, "declared-tag read", t.declared_at, ln.merge_sha, ln.opts.primary
     )
@@ -146,8 +143,8 @@ def classify(ln: Landing) -> None:
         )
     # A shared role whose change reaches no rendered manifest is live for the next deploy of
     # any caller, so no hand applies it: `manifests_rollout_timeout_default` is read as a
-    # `--timeout` while a deploy runs, and PR #2460's landing asked for a 20-minute
-    # `ansible/deploy.yml` that would have changed nothing (#2462). Its paths come out of the
+    # `--timeout` while a deploy runs, so a 20-minute
+    # `ansible/deploy.yml` for it would change nothing. Its paths come out of the
     # list the note is built from; every failure inside returns the list unchanged.
     ln.plane_paths = _classified(
         ln,
@@ -174,16 +171,16 @@ def classify(ln: Landing) -> None:
     )
     ln.resolved_tags = list(tags)
     if source == DeriveSource.PR:
-        # Which of these tags a changed PATH proves is a k3s change (#2730). Read over `paths`
+        # Which of these tags a changed PATH proves is a k3s change. Read over `paths`
         # rather than `tags`, so that a tag `derive` reached some other way than by path stays
         # unproven rather than being credited to a tree. The FALLBACK path
         # answers the same question in step 5 instead, over the diff's paths rather than this
-        # file list, which `gh` truncated -- `deploy.record_k8s_only` (#2738).
+        # file list, which `gh` truncated -- `deploy.record_k8s_only`.
         ln.k8s_only = _classified(
             ln, "k8s-only tag classification", c.k8s_only_tags, paths, declared
         )
-        # A shared role deploys through every role that runs it, so `plane_note` no longer
-        # names one (#2704). Read over `plane_paths`, the list that note read, so a change
+        # A shared role deploys through every role that runs it, so `plane_note` does not
+        # name one. Read over `plane_paths`, the list that note read, so a change
         # `shared_role_reach` found deploy-time only fans out to nothing.
         reached = _classified(
             ln,
@@ -200,7 +197,7 @@ def classify(ln: Landing) -> None:
                 )
         extra = set().union(*reached.values()) - set(tags)
         if extra:
-            # The caller graph is the provenance, so these ARE proven k3s (#2718).
+            # The caller graph is the provenance, so these ARE proven k3s.
             ln.k8s_only = sorted(set(ln.k8s_only) | extra)
             ln.resolved_tags = sorted(set(tags) | extra)
     if source == DeriveSource.FALLBACK:
@@ -217,26 +214,23 @@ def classify(ln: Landing) -> None:
 
 
 def narrow_plane(ln: Landing, awaited: bool = True) -> None:
-    """Re-render `plane` with the narrow tags this PR's setup-role change needs (#2307).
+    """Re-render `plane` with the narrow tags this PR's setup-role change needs.
 
     `plane` is classified in step 1, before the tick has recorded this PR's range, so it
     names the whole-role tag. The deployer then records the narrowest tags in its
     `manual_plane_tags` sidecar. After an `awaited` tick this reads that sidecar, and
     `land_tags.confirmed_narrow_tags` quotes a row only where it contains this PR's own
-    derivation, so a stale row from an earlier range cannot be printed (#2324 review,
-    finding 1).
+    derivation, so a stale row from an earlier range cannot be printed.
 
     A landing that deploys its own merge commit never awaits the tick (`awaited=False`), so
-    no row exists for its range. It prints the PR's own derivation instead (#3126): PR #3091
-    touched observability and one k3s template, took that path, and printed `--tags k3s`,
-    which arms the control-plane tasks, where `release-staleness` and its sibling cron tags
-    were what the change needed.
+    no row exists for its range. It prints the PR's own derivation instead, so the note names
+    the narrow tags the change needs rather than the whole-role tag.
 
     Every failure keeps the note as step 1 wrote it, with the whole-role tag: an unreadable
     or absent sidecar, no PR range, a derivation that refuses or raises. The re-render is
-    INSIDE the try for the same reason (#2350): step 1 already called `plane_note` on these
-    inputs, so a raise here is unlikely — and if one happened, `land.py` would end in a
-    traceback instead of a verdict, which is a worse answer than the role tag.
+    INSIDE the try because a raise here, though unlikely (step 1 already called `plane_note`
+    on these inputs), would end `land.py` in a traceback instead of a verdict, which is a
+    worse answer than the role tag.
     """
     if not ln.plane or not ln.pr_range:
         return

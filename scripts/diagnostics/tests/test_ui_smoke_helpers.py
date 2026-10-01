@@ -113,7 +113,7 @@ def test_settled_rows_waits_out_a_panel_that_has_not_fetched_yet():
 def test_settled_rows_returns_zero_when_the_panel_never_fills():
     """The rejecting half: an `unavailable` panel must reach the assertion as 0, not hang.
 
-    Zero rows is exactly the state issue #1598 says the old title-only case scored green.
+    Zero rows is exactly the state a title-only case would score green.
     """
     client = client_returning(*[with_result(0)] * smoke._PANEL_ATTEMPTS)
     assert smoke.settled_rows(client, "#state table tr", interval=0) == 0
@@ -124,8 +124,8 @@ def test_close_closes_every_pipe_and_reaps_the_process():
 
     `filterwarnings = ["error"]` promotes the ResourceWarning an unclosed `stdout`/`stderr`
     raises at GC into an ERROR, and it lands on whichever test happens to run last — reading
-    as that test having failed. Closing only `stdin`, as this did until 2026-09-06, errored
-    the final dashboard of every `-m ui -k grafana` run.
+    as that test having failed. Closing only `stdin` would error the final dashboard of
+    every `-m ui -k grafana` run.
     """
     client = object.__new__(McpClient)
     client.proc = subprocess.Popen(
@@ -166,9 +166,8 @@ def test_assert_serves_ui_passes_on_the_expected_title():
 def test_assert_serves_ui_names_the_config_less_default_on_a_wrong_title():
     """The rejecting half, and the reason the message says what it says.
 
-    `Homepage` is gethomepage's own fallback for a page rendered with no settings. Issue #1399
-    read exactly that failure as a stale expectation and proposed relaxing the check to match
-    it. The message has to send the next reader at the app's config, not at this line.
+    `Homepage` is gethomepage's own fallback for a page rendered with no settings. The message
+    has to send the next reader at the app's config, not at this line.
     """
     with pytest.raises(AssertionError) as excinfo:
         smoke.assert_serves_ui(

@@ -1,11 +1,10 @@
 """Guard: homelab-mcp's pip deps are exact, and mcp stays on the line Renovate is capped to.
 
-The Dockerfile held `pip install 'mcp<2' httpx uvicorn` behind a digest-pinned base — a range
-plus two unbounded names, re-resolved on every rebuild (#2150). The range existed because mcp
-2.0.0 removed `mcp.server.fastmcp`, which app.py imports, and crash-looped the container. The
-exact pin replaces the range, and renovate.json's `allowedVersions: "<2"` rule on `mcp`
-replaces what the range used to say to a resolver. The two must agree: a pin that crossed the
-cap by hand, or a cap that went missing, each recreates the crash-loop one way or the other.
+The Dockerfile pins each pip dependency exactly behind a digest-pinned base, so a rebuild
+resolves nothing. mcp must stay below 2: mcp 2.0.0 removes `mcp.server.fastmcp`, which app.py
+imports, and the container would crash-loop. renovate.json's `allowedVersions: "<2"` rule on
+`mcp` holds that line for Renovate. The two must agree: a pin that crossed the cap by hand, or
+a cap that went missing, each recreates the crash-loop one way or the other.
 
 Run: uv run pytest ansible/tests/services/test_homelab_mcp_pins.py
 """

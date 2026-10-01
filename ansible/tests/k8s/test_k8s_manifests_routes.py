@@ -6,7 +6,7 @@ public host rule; a public host rule must be reachable only from the Docker edge
 route's TLSOption must exist and not be the one named `default`. None of these fails a render.
 
 Each route renders with its own role's defaults, not group_vars alone: a role may gate its
-route on one of them (navidrome renders no route while `navidrome_k8s_replicas` is 0, #1323),
+route on one of them (navidrome renders no route while `navidrome_k8s_replicas` is 0),
 and rendering without them raises `UndefinedError` rather than reproducing what deploys.
 """
 
@@ -52,12 +52,7 @@ def _k8s_authelia_config() -> dict:
 
 
 def test_k8s_session_cookie_name_is_set():
-    """The Docker Authelia this once guarded against retired at E7 (2026-08-13; its role was
-    deleted by #2385 and reads as `git show
-    2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/authelia/`)
-    — the k8s portal is the only one now, so the
-    cookie-collision risk this test used to check is moot. What's left worth pinning: the
-    session cookie name actually comes from the intended var, and every cookie variant
+    """The session cookie name actually comes from the intended var, and every cookie variant
     (the `.local.` LAN one and the public one) is named off it."""
     k8s_name = yaml_fast.safe_load(
         (K8S / "authelia" / "defaults" / "main.yml").read_text()
@@ -69,10 +64,9 @@ def test_k8s_session_cookie_name_is_set():
 
 
 def test_k8s_authelia_database_is_on_its_own_volume():
-    """The slice-1 hazard from design.md: two Authelias writing one SQLite file corrupt it.
+    """Two Authelias writing one SQLite file corrupt it.
 
-    The database must live under the mount backed by the PVC, never on a path shared with
-    daniel-server's bind mount.
+    The database must live under the mount backed by the PVC.
     """
     db_path = _k8s_authelia_config()["storage"]["local"]["path"]
     assert db_path.startswith("/config/")
@@ -109,31 +103,24 @@ AUTHELIA_BYPASS_ROUTES = {
         "loudly — every check would silently go red while the jobs kept working. Carried over "
         "from the Docker role's hand-rolled healthchecks-ping router."
     ),
-    # The public name's twin of the route above, split off on 2026-09-18 so the public host
-    # can require Cloudflare's origin-pull client certificate (#1990) and the .local. host
+    # The public name's twin of the route above, split off so the public host
+    # can require Cloudflare's origin-pull client certificate and the .local. host
     # cannot. Same callers, same reason.
     "healthchecks-ping-public": (
         "Monitored jobs POST to /ping/<uuid> with no credentials, through Cloudflare. Same "
         "silent-red failure mode as healthchecks-ping; the two are one route on two hosts."
     ),
-    # ("n8n-monitoring" retired 2026-08-16: monitor-bridge moved in-cluster on 2026-08-14 and
-    # a 30-day Traefik access-log census found no other caller, so the route was deleted
-    # rather than narrowed. It was the only route reaching a read-write API with neither
-    # Authelia nor a ClientIP matcher.)
-    # The three below are the B5-prep NATIVE public bypasses on the UNSUFFIXED names —
-    # emitted by the ingressroute() macro from each entry's bridge_bypass_prefixes once
-    # k8s_public_route flipped. Each reproduces a hole the Docker edge already serves for the
-    # same session-less callers; post-B5 those callers arrive at this edge directly.
-    # ("healthchecks-public-ping" retired 2026-08-15 with the -k8s suffix: once
-    # `healthchecks-ping` covered the public name too, this was a strict subset of it.)
+    # The three below are the NATIVE public bypasses on the UNSUFFIXED names —
+    # emitted by the ingressroute() macro from each entry's bridge_bypass_prefixes.
+    # Each serves session-less callers that arrive at this edge directly.
     "n8n-public-webhook": (
         "External services POST /webhook/ with no session; gating it silently breaks every "
         "registered webhook while the callers keep reporting success."
     ),
     # karakeep's session-less callers are the browser extension and the mobile app, Bearer
     # API-key clients that cannot pass 2FA. Three prefixes rather than `/api/`: that width
-    # also reached next-auth's /api/auth/* and the cookie-authenticated children, where the
-    # app password was the only gate on the internet (#1929). Each entry names the gate the
+    # also reaches next-auth's /api/auth/* and the cookie-authenticated children, where the
+    # app password is the only gate on the internet. Each entry names the gate the
     # app itself applies to that prefix, which is what makes it safe to leave Authelia off.
     "karakeep-public-api-v1": (
         "The REST API; every /api/v1 route sits behind the app's authMiddleware, which 401s "
@@ -158,7 +145,7 @@ AUTHELIA_BYPASS_ROUTES = {
 def test_every_authed_service_carries_forward_auth_and_rate_limit():
     """The check that has to scale.
 
-    Slice 2 hand-authors ~33 more IngressRoutes, and a missing middleware is an ungated service that
+    IngressRoutes are hand-authored, and a missing middleware is an ungated service that
     returns 200 and looks fine.
 
     Iterates every document, not just the first: a role may ship more than one IngressRoute
@@ -201,11 +188,10 @@ def test_every_https_route_carries_tls():
     request is only ever matched against TLS routers.
 
     The route still applies cleanly, `kubectl get` still shows it, and Traefik logs nothing.
-    Requests just fall through to whatever other router matches the host. That is how the three
-    `-monitoring` routes were dead from B4c until 2026-08-07 while looking correct, and it cost
-    an investigation that chased priority and ClientIP instead. Reads every route template so a
-    route in a second template is covered too — the monitoring routes live in their own file,
-    and 16 roles' main route is the shared default under `ansible/templates/`.
+    Requests just fall through to whatever other router matches the host. Reads every route
+    template so a route in a second template is covered too — the monitoring routes live in
+    their own file, and a role's main route can be the shared default under
+    `ansible/templates/`.
     """
     for entry in _k8s_entries():
         for route_tpl in _route_templates(entry["name"]):
@@ -339,10 +325,9 @@ def test_no_monitoring_route_serves_a_bare_path_prefix():
     """A `-monitoring` route matching PathPrefix(`/`) exposes the whole backend API.
 
     The macro says guard 2 is "only the endpoint the check reads" (ansible/templates/
-    ingressroute.yml.j2), and until 2026-08-24 two of eight call sites ignored it:
-    loki-homelab and ical-proxy, both also widened to the entire pod CIDR. On an
-    `auth_enabled: false` Loki that combination gave every pod read of every log line, a push
-    path to forge entries, and the delete handler — verified live, not inferred.
+    ingressroute.yml.j2). A call site that ignores it and also widens the ClientIP to the
+    entire pod CIDR, on an `auth_enabled: false` Loki, gives every pod read of every log line,
+    a push path to forge entries, and the delete handler.
 
     The ClientIP guard cannot be relied on to compensate. Everything arriving through Traefik
     carries Traefik's identity, so a NetworkPolicy cannot tell callers apart, and the CIDR is
@@ -388,7 +373,7 @@ def _dashboard_route_match() -> str:
 
 def _assert_dashboard_match_does_not_serve_api(match: str) -> None:
     """`api@internal` answers `/api/http/routers` with every router's `rule` string verbatim
-    (issue #951) — two file-provider routers in livesync-gate-secret.yaml.j2 embed
+    — two file-provider routers in livesync-gate-secret.yaml.j2 embed
     `livesync_sync_token` and the `homelab_mcp_token` bearer in `Header()` matchers, so a
     match that routes `/api` behind this Authelia session reads both credentials back.
     """
@@ -407,7 +392,7 @@ def test_dashboard_route_does_not_serve_api():
 
 
 def test_dashboard_route_guard_rejects_an_api_prefix_fixture():
-    """Red-proof: a rule shaped like the pre-#951 route (Host-only, no PathPrefix at all) or
+    """Red-proof: a rule shaped like a Host-only route (no PathPrefix at all) or
     the upstream-documented form (`PathPrefix(`/dashboard`) || PathPrefix(`/api`)`) both route
     `/api` and must fail the guard above, not pass it silently.
     """
@@ -456,8 +441,8 @@ def _bypass_permits_mutation(rule: dict, path: str) -> bool:
 
 
 def test_scrutiny_bypass_is_read_only_and_path_scoped():
-    """The bypass granted `^/api/.*$` with no `methods` key until 2026-09-05, handing the LAN
-    and every pod scrutiny's whole mutating route table (#1120). Two callers cross this route
+    """A bypass granting `^/api/.*$` with no `methods` key hands the LAN
+    and every pod scrutiny's whole mutating route table. Two callers cross this route
     and both only read: `probe.py scrutiny` (/api/summary) and the Kuma monitor `k3s Scrutiny`
     (/api/health). Every writer addresses the ClusterIP, so nothing here needs a verb past
     HEAD."""
@@ -482,7 +467,7 @@ def test_scrutiny_bypass_is_read_only_and_path_scoped():
 
 
 def test_scrutiny_bypass_guard_rejects_the_old_wildcard():
-    """Red-proof: the pre-#1120 rule — every method, `^/api/.*$` — must be flagged by the
+    """Red-proof: a rule with every method and `^/api/.*$` must be flagged by the
     helper above, so a guard that quietly stopped matching fails here rather than passing on
     an empty set."""
     old = {"resources": ["^/api/.*$"]}

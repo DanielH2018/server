@@ -4,7 +4,7 @@
 `devic.es/dri` is what the dri-device-plugin DaemonSet advertises, what jellyfin and tdarr
 request in their pod specs, and what monitor-bridge watches for deregistration. Those are three
 independent string literals in three roles that happen to match — tdarr's comment calls the pair
-a lockstep, which it is not (2026-08-23b review L7).
+a lockstep, which it is not.
 
 A single Ansible variable cannot cover all three: monitor-bridge's is a Python default inside a
 container image, reachable only through `K8S_EXTENDED_RESOURCES`, which the env-secret does not
@@ -14,7 +14,7 @@ What goes wrong without it is quiet in both directions. Rename the plugin's reso
 consumers' pods stay Pending with an unschedulable message naming a resource nobody grep'd for.
 Rename it in a consumer only, and monitor-bridge keeps watching the old name — which its own
 extended-resource arm reads as "advertised by no node", the fail-closed page recorded in that
-role's CLAUDE.md as the 2026-08-20 false alarm.
+role's CLAUDE.md as a false alarm.
 
 Run: uv run pytest ansible/tests/services/test_dri_resource_name_agrees.py
 """

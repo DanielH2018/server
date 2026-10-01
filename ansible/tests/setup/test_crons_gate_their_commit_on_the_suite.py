@@ -1,11 +1,9 @@
 """The two crons that publish a commit run the suite themselves, and skip it again at push.
 
-Until #2827 the prek `pytest` hook ran at the pre-commit stage, so `git commit` was the gate:
-docs-refresh could not publish generated pages the suite rejected, and eval-run could not
-publish a sweep. That hook now runs at pre-push, so the commit no longer gates anything and
-each cron runs the suite on its own line instead. Losing that silently is the failure this
-module exists to catch — both crons would keep publishing, and only CI would say the suite was
-red, after the pages were already live.
+The prek `pytest` hook runs at the pre-push stage, so `git commit` gates nothing and each
+cron runs the suite on its own line instead. Losing that silently is the failure this
+module exists to catch — both crons would keep publishing generated pages or a sweep, and
+only CI would say the suite was red, after the pages were already live.
 
 The second half is the push. The publisher (`publish_pr.py`) pushes a branch, which is exactly
 where the pre-push hook fires, so without `SKIP=pytest` each cron would pay the suite twice and
@@ -20,7 +18,7 @@ import pytest
 from _helpers import REPO
 
 TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
-# The crons whose commit used to be gated by the prek hook, and now is not.
+# The crons whose commit the prek hook does not gate.
 GATED_CRONS = ("docs-refresh.sh.j2", "eval-run.sh.j2")
 # Every cron that reaches publish_pr.py, so every cron whose push meets the pre-push hook.
 PUBLISHING_CRONS = (*GATED_CRONS, "secret-rotate.sh.j2")
@@ -70,8 +68,8 @@ def test_the_publisher_skips_the_pre_push_hook(name):
 
 
 def test_no_cron_still_carries_the_retired_deselect():
-    """The reject half, and the #2830 cleanup. `PYTEST_ADDOPTS` here deselected a weights
-    ratchet that no longer exists, so a copy left behind names a node id pytest cannot find."""
+    """The reject half. A leftover `PYTEST_ADDOPTS` that deselects the retired weights ratchet
+    names a node id pytest cannot find."""
     stale = [
         name
         for name in PUBLISHING_CRONS

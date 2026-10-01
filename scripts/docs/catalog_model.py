@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """The service catalogue's row type, its "cannot be derived" marker, and its path anchors.
 
-Split out of ``scripts/docs/service_catalog.py`` on 2026-09-04. Every other catalogue module
-reads ``UNKNOWN`` or a path constant from here, so this is the one leaf with no first-party
-dependency beyond ``lib.repo_paths`` — which is what keeps the derivation modules from having
-to import the generator they were split out of.
+Every other catalogue module reads ``UNKNOWN`` or a path constant from here, so this is the
+one leaf with no first-party dependency beyond ``lib.repo_paths`` — which is what keeps the
+derivation modules from having to import the generator they were split out of.
 """
 
 import sys as _sys

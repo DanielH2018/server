@@ -5,7 +5,7 @@
 # credential.helper = !gh auth git-credential.
 #
 # chezmoi_setup is NOT one of the readers. DanielH2018/dotfiles is public and clones
-# anonymously (#2805), so the dotfiles land whether or not this host has logged in.
+# anonymously, so the dotfiles land whether or not this host has logged in.
 
 - name: Ensure the APT keyring directory exists
   tags: [github_cli]
@@ -21,9 +21,9 @@
   tags: [github_cli]
   # Explicit mode, never a umask-inheriting `command`: initial_setup sets UMASK 027 earlier
   # in this play, and a 0640 keyring is unreadable by apt's unprivileged _apt user, which
-  # reports the repo as unsigned. See docker_install for the failure that taught us this.
+  # reports the repo as unsigned. See docker_install for the failure this causes.
   #
-  # The checksum is the bytes of the keyring as published 2026-09-21. Unlike docker_install
+  # The checksum is the bytes of the keyring as published. Unlike docker_install
   # there is no fingerprint check after this task, so the checksum is the ONLY thing standing
   # between a swapped key and apt trusting it. A keyring GitHub re-publishes fails here as a
   # mismatch: verify the new fingerprint against cli.github.com, then update the hash.
@@ -87,7 +87,7 @@
   changed_when: false
   failed_when: false
   # A read of gh's stored credential, so it runs under --check too: skipped, it leaves no rc
-  # and the report below errors on the attribute (#2323).
+  # and the report below errors on the attribute.
   check_mode: false
 
 - name: Report that an interactive GitHub login is still required

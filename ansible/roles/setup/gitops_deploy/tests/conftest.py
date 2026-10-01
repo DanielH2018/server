@@ -46,7 +46,7 @@ os.environ["GITOPS_DEPLOY_CONFIG"] = str(pathlib.Path(__file__).with_name("confi
 def service_lock_dir(tmp_path, monkeypatch) -> pathlib.Path:
     """Point the per-service locks at tmp_path, and hand back the directory to read them from.
 
-    Every deploy this suite drives now flocks one file per service (ADR-0017). Left at
+    Every deploy this suite drives flocks one file per service (ADR-0017). Left at
     /var/lock those would sit beside the real locks, so a test would flock what a live deploy
     holds and block on it. Autouse and directory-wide, because the set of modules that reach a
     deploy function is not closed.

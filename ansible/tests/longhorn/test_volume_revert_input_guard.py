@@ -1,21 +1,21 @@
 """Behaviour anchor for k8s/volume-revert's input guard — the first task the rollback path runs.
 
-WHY THIS EXISTS. The guard's SHA clause was written as a bare filter::
+WHY THIS EXISTS. A SHA clause written as a bare filter::
 
     - volume_revert_sha | default('') | regex_search('^[0-9a-f]{8,}$')
 
-`regex_search` returns the MATCHED STRING or None, and ansible-core 2.21 refuses a conditional
-whose result is not a boolean:
+would fail because `regex_search` returns the MATCHED STRING or None, and ansible-core 2.21
+refuses a conditional whose result is not a boolean:
 
     Conditional result (True) was derived from value of type 'str' ...
     Conditionals must have a boolean result.
 
-So the assert aborted on every invocation, with a VALID sha, before the role touched anything.
-k8s/volume-revert is the rollback half of the k8s auto-deploy design — it could never have run.
-The task-6 drill hit this on the first real call, 2026-08-21.
+The assert would then abort on every invocation, with a VALID sha, before the role touched
+anything. k8s/volume-revert is the rollback half of the k8s auto-deploy design, so it could
+never run.
 
-Every existing test of this guard asserted its source text and passed throughout. That is the
-gap this module closes: it runs the role and lets Ansible judge the conditional.
+A test that asserts the guard's source text passes either way. This module runs the role and
+lets Ansible judge the conditional.
 """
 
 import shutil

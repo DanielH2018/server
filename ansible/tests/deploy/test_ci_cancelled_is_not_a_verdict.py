@@ -3,8 +3,7 @@
 Two merges in quick succession cancel the first run, so a merge commit whose merge was
 immediately followed by another reads `completed cancelled` forever. The post-merge procedure in
 the repo CLAUDE.md tells an operator to poll that commit's own check-runs, so without this the
-documented gate waits on a run that can never go green. Measured 2026-08-27: `449c46d2` (#497)
-reads cancelled because #498 merged seconds later, and green arrived on `17d71879`.
+documented gate waits on a run that can never go green.
 
 `deploy_logic.py` already gets this right. What these guard is that it keeps getting it right,
 and that the doc keeps naming the constant an operator would go read.
@@ -15,8 +14,7 @@ from _helpers import REPO
 
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
 CLAUDE_MD = (REPO / "CLAUDE.md").read_text()
-# `docs/landing.md` owns the rule since 2026-09-30: the skill it was in kept the invocation and
-# sent every measurement here (issue #2853). The root CLAUDE.md pointer is unchanged.
+# `docs/landing.md` owns the rule; the root CLAUDE.md keeps a pointer.
 LANDING_DOC = (REPO / "docs" / "landing.md").read_text()
 
 

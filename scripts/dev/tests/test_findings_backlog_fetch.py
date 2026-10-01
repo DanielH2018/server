@@ -1,11 +1,10 @@
 """The backlog cron's fetch reads three narrow slices, never the whole register.
 
-`--state all` grew past its own `REGISTER_FETCH_TIMEOUT`: 995 issues and 58.4s on
-2026-09-28, about 350 more a week, which put it on course to break at about 5,100 issues —
-and a fetch that times out never reaches the `ISSUE_LIST_CAP` warning that would have
-explained it, so the backlog page would have gone silently stale behind a bare `gh failed`
-(#2892). `backlog.render_markdown` only ever renders open findings and closed `refuted` or
-`accepted` ones, so those three are what `load_backlog_issues` asks for.
+`--state all` grows past its own `REGISTER_FETCH_TIMEOUT` (995 issues take 58.4s, and the
+register grows about 350 issues a week), and a fetch that times out never reaches the
+`ISSUE_LIST_CAP` warning that would explain it, so the backlog page would go silently stale
+behind a bare `gh failed`. `backlog.render_markdown` only ever renders open findings and
+closed `refuted` or `accepted` ones, so those three are what `load_backlog_issues` asks for.
 
 `_findings_fakes` answers `issue list` from one list whatever the argv, which is exactly the
 distinction under test here, so these tests answer gh themselves.
@@ -49,7 +48,7 @@ def test_the_backlog_fetch_asks_only_for_the_rows_the_page_renders():
 
 
 def test_the_backlog_fetch_never_asks_for_the_whole_register():
-    """The rejecting half: `--state all` is the fetch this replaced, and it must not return."""
+    """The rejecting half: `--state all` must not be the fetch."""
     tools, seen = _tools()
     load_backlog_issues(tools)
     assert not [argv for argv in seen if _query(argv)[0] == "all"]

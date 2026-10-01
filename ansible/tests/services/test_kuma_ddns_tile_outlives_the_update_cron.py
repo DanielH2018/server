@@ -3,7 +3,7 @@
 The DECIDED marker above `cloudflare-ddns-proxied-push.json` in `static-monitors.yaml.j2`
 derives 360s: both DDNS pods run the image's default `UPDATE_CRON=@every 5m`, ping Kuma at
 the END of a cycle, and the image caps a cycle's work at 5s of IP detection plus 30s of record
-updating — so the latest beat lands at 335s, and a 300s tile flapped ~7 times a day. The
+updating — so the latest beat lands at 335s, which a 300s tile would miss. The
 derivation has two inputs that live in two roles, and either can move alone: someone sets
 `UPDATE_CRON` on a deployment to cure a monitoring artifact, or someone rounds the tile back
 to 300. This reads both and re-derives the bound.

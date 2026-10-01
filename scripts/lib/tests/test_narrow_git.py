@@ -36,7 +36,7 @@ def test_a_recursive_alias_refuses_rather_than_blowing_the_stack():
 
 
 def test_both_narrowing_modules_raise_the_same_class():
-    """The drift #2419 closed: two `CannotNarrow` classes no single `except` could catch.
+    """The drift guarded: two `CannotNarrow` classes no single `except` could catch.
 
     `shared_role_reach` imports the setup half and `probe_lib/releases` catches the broad
     half, so a raise crossing that boundary had to match whichever class the catch site

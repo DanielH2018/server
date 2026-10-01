@@ -1,9 +1,9 @@
 """The CrowdSec bouncer Middleware runs no usage-metrics ticker.
 
-#2752: the plugin's 600s metrics tick lands on every tenth 60s stream tick, and on some of those
-coincidences the stream ticker skips every LAPI pull until a later metrics tick — 13 silent
-stalls of exactly 600s or 1200s in 3 days, one of which failed a fleet deploy at crowdsec's
-edge ban gate. `metricsUpdateIntervalSeconds: 0` is the only setting under which the plugin
+The plugin's 600s metrics tick lands on every tenth 60s stream tick, and on some of those
+coincidences the stream ticker skips every LAPI pull until a later metrics tick — silent
+stalls of exactly 600s or 1200s that can fail a fleet deploy at crowdsec's edge ban gate.
+`metricsUpdateIntervalSeconds: 0` is the only setting under which the plugin
 starts no metrics ticker, and the plugin's own default is 600, so both dropping the key and
 restoring any positive value bring the stall back. The reasoning lives at the DECIDED marker in
 roles/k8s/traefik/templates/dynamic.yaml.j2.

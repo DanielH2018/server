@@ -1,15 +1,11 @@
 ---
-# Slice 4, B7c — the fake-remux detector + reconciler on daniel-box.
-#
-# Scripts and the config template moved INTO this role at the Docker uninstall
-# (2026-08-14): containers/autofix-bridge — which had owned them since the sidecar era —
-# archived, and this became their only consumer.
+# The fake-remux detector + reconciler on daniel-box. The scripts and the config template live
+# in this role.
 
 - name: Ensure the media-inspection tools are installed
   tags: [fake_remux]
-  # Both crons probe on this host now. The scan used to reach jellyfin's bundled ffmpeg through
-  # `docker exec`; there is no Docker here, and the library is a local directory, so the probe is
-  # a plain binary against a plain path.
+  # Both crons probe on this host. There is no Docker here, and the library is a local
+  # directory, so the probe is a plain binary against a plain path.
   #
   # mkvtoolnix rides along for mkvpropedit, which rewrites an mkv header in place without
   # re-encoding. jellyfin-ffmpeg 7.1 rejects a font attachment whose filename holds anything
@@ -78,7 +74,7 @@
   become: true
   changed_when: false
   # A read of the cluster's Service, so it runs under --check too: skipped, it leaves no stdout
-  # and the assert and the config render below error on the attribute (#2323).
+  # and the assert and the config render below error on the attribute.
   check_mode: false
   register: fake_remux_sonarr_ip
 
@@ -125,9 +121,9 @@
     hour: "{{ fake_remux_scan_cron_hour }}"
     minute: "{{ fake_remux_scan_cron_minute }}"
     user: "{{ sys_user }}"
-    # No config override: the script's own default IS fake_remux_config_dir/config.env. An earlier
-    # version passed CONFIG_PATH=, which is not the variable either script reads (they use
-    # FAKE_REMUX_CONFIG / FAKE_REMUX_REPLACE_CONFIG) — so it read nothing and reported "disabled".
+    # No config override: the script's own default IS fake_remux_config_dir/config.env. Passing
+    # CONFIG_PATH= would read nothing and report "disabled": it is not the variable either script
+    # reads (they use FAKE_REMUX_CONFIG / FAKE_REMUX_REPLACE_CONFIG).
     job: >-
       /usr/bin/flock -w 600 {{ fake_remux_lock }}
       /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/fake_remux_scan.py
@@ -186,10 +182,8 @@
 
 - name: Deploy the fake-remux heartbeats
   tags: [fake_remux]
-  # No no_log: this renders no secret. Both Kuma push tokens moved to the env file above, and the
-  # script sources them at runtime. Leaving the old `no_log: true # renders both Kuma push tokens`
-  # here would outlive the thing it described and tell the next reader the opposite of what that
-  # extraction achieved (2026-08-23b review L4).
+  # No no_log: this renders no secret. Both Kuma push tokens live in the env file above, and the
+  # script sources them at runtime.
   ansible.builtin.template:
     src: fake-remux-health.sh.j2
     dest: /usr/local/bin/fake-remux-health.sh
@@ -208,7 +202,7 @@
     cron_file: fake-remux-health
   become: true
 
-# Render provenance for manifest-prune-check.sh's stale-script arm (2026-08-23b review H1).
+# Render provenance for manifest-prune-check.sh's stale-script arm.
 # Stamped on whichever host fake_remux_host names — the manifest is per-host by construction,
 # so a host that does not run this role simply has no fragment for it.
 - name: Stamp the rendered fake-remux health script
@@ -218,21 +212,19 @@
     stamp_render_templates:
       - ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2
       # Same reasoning as the renovate_notify list: the stamp and the check both hash the repo
-      # source, never the rendered file, so an .env.j2 carries no secret into either
-      # (2026-08-24 review M-9).
+      # source, never the rendered file, so an .env.j2 carries no secret into either.
       - ansible/roles/setup/fake_remux/templates/fake-remux-push.env.j2
 
-# The five scripts this role `copy:`-deploys were covered by nothing (2026-08-24 review M-5).
+# The five scripts this role `copy:`-deploys, recorded for the deployed-code drift check.
 - name: Record the deployed fake-remux code
   tags: [fake_remux]
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:
     stamp_deployed_name: fake-remux
     stamp_deployed_pairs:
-      # The sibling host_lib copy, listed with the scripts that import it (#2564). It was the one
-      # artifact of this role's eight that the drift check could not see, and it is the one every
-      # consumer shares — so a single repo-side change to host_lib.py strands a stale copy in
-      # every role at once, which is exactly what happened on 2026-09-24.
+      # The sibling host_lib copy, listed with the scripts that import it. Every consumer shares
+      # it, so a single repo-side change to host_lib.py strands a stale copy in every role at
+      # once unless the drift check can see it.
       - live: "{{ fake_remux_opt_dir }}/host_lib.py"
         src: ansible/roles/setup/common/files/host_lib.py
       - live: "{{ fake_remux_opt_dir }}/state_push.py"

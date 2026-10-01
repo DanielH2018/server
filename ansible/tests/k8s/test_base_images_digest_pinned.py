@@ -8,15 +8,12 @@ because the tags this repo pins are exact upstream releases (`traefik:v3.7.11`,
 rare and newsworthy. The base images are the opposite case on both counts. `alpine:3.24` and
 `python:3.14-alpine` name a patch *stream*, so upstream re-pushes them as a matter of routine,
 and they are the init containers, probes and sidecars nobody watches — 20 of the 56 tag-only
-references on the k8s plane, measured 2026-08-29.
+references on the k8s plane.
 
 WHAT THAT COSTS, concretely. A tag-only reference means the bytes a run validates are not the
-bytes a later run gets. The staging gate made that concrete — it asked daniel-stage about a
-COMMIT and then deployed prod, so a base image re-pushed between the two runs was invisible to
-it — and both the gate and the guest are retired (#2859, #2941). What remains is the same
-weakness against every read that assumes a name identifies bytes: a `--dry-run`, a digest in a
-rollback, an image the deployer thinks it already pinned. Leaving the most-frequently-re-pushed
-images unpinned undercuts all of them.
+bytes a later run gets. That weakens every read that assumes a name identifies bytes: a
+`--dry-run`, a digest in a rollback, an image the deployer thinks it already pinned. Leaving
+the most-frequently-re-pushed images unpinned undercuts all of them.
 
 WHY A DENYLIST OF REPOS rather than a rule about tag shape. "Is this tag an exact release?"
 has no textual answer — `2.9` is a stream for influxdb and `v1.7.8` is exact for crowdsec, and

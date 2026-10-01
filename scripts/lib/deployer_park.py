@@ -4,21 +4,21 @@ TWO READERS ASK THIS AND MUST ANSWER IT IDENTICALLY. The SessionStart banner
 (``.claude/hooks/session-health.py``) reaches a session at the moment it opens.
 ``scripts/deploy_tools/deploy_staleness.py`` reaches a session that has been running for an
 hour and hits ``deploy.sh`` exit 4 mid-landing, where the refusal names a rebase of the
-reader's own worktree — the wrong repair when the primary checkout is what has to converge
-(issue #1429). A second derivation of "is this a park?" would drift, and the two would then
+reader's own worktree — the wrong repair when the primary checkout is what has to converge.
+A second derivation of "is this a park?" would drift, and the two would then
 disagree about the same marker on the same host.
 
 ``behind_since`` holds ``"<origin_sha> <unix_ts_first_seen>"`` while the host is behind
 origin/master. The stamp survives a tick that moved nothing and is renewed by any tick that
 fast-forwarded, so its age is HOW LONG THE DEPLOYER HAS NOT FAST-FORWARDED — not how long the
 host has been behind the tip, and not how long ago the last tick ran. The distinction is load
-bearing since the tick started landing at the newest green ancestor: a deployer working
-normally is behind the tip on nearly every tick, and only one that stops moving ages this.
+bearing because the tick lands at the newest green ancestor: a deployer working normally is
+behind the tip on nearly every tick, and only one that stops moving ages this.
 
 The third marker is ``contention_since``, written while consecutive ticks defer on one busy
 service lock — an operator ``deploy.sh`` that never returned. The tick resets its tree on that
 path, so ``behind_since`` ages toward a six-hour page sized for a dirty tree while the lock's
-legitimate holder is a deploy no longer than thirty minutes (issue #1847). Same three readers
+legitimate holder is a deploy no longer than thirty minutes. Same three readers
 as ``manual_plane`` below.
 
 The second marker is ``manual_plane``, one line per setup role the tick fast-forwarded past and
@@ -27,13 +27,12 @@ nothing while the change sits merged and unapplied — only the banner names it.
 
 ``k8s_deferred`` is the same shape for the k8s plane: one line per promoted image bump a BROAD
 tick merged and then could not apply, because the broad arm returns before the k8s arm runs. It
-too leaves ``behind_since`` empty. monitor-bridge reported it from the day it existed (#2449) and
-the banner did not, so a session opening on daniel-box — the reader who can clear it with one
-deploy — was the one surface not told (#2470).
+too leaves ``behind_since`` empty. The banner names it so that a session opening on
+daniel-box — the reader who can clear it with one deploy — is told.
 
 ``k8s_unapplied`` is that same shape again for the k8s changes this deployer never applies at
 all: a hand-edited role, or one of the forty denylisted ones. Nothing pages on it, by
-construction — that is what lets the class have a durable record at all (#2570) — so this
+construction — that is what lets the class have a durable record at all — so this
 banner and the deployer's journal are its only readers.
 
 The directory, the basenames and the line parsers come from ``lib.gitops_markers``, a
@@ -156,7 +155,7 @@ def read_manual_plane_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
 def read_manual_plane_tags_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     """The host's `manual_plane_tags` marker text, or None when it cannot be read.
 
-    The sidecar naming the narrowest `--tags` value each pending role's change needs (#2307).
+    The sidecar naming the narrowest `--tags` value each pending role's change needs.
     Absent and unreadable collapse to the same answer for the reason the two readers above
     give, and that answer is the safe one here: a caller with no narrowing prints the
     whole-role tag, which is what every surface printed before the sidecar existed.
@@ -239,7 +238,7 @@ def contention_lines(marker, now):
 
     A contention defer resets the tree and returns 0, so `last_run` advances, `hold_sha` stays
     empty and only `behind_since` ages — toward the six-hour page sized for a dirty tree. This
-    names the lock and its holder's shape instead (issue #1847). Age-gated like
+    names the lock and its holder's shape instead. Age-gated like
     `behind_park_lines`: one operator deploy holding a lock for a tick is routine.
     """
     pending = parse_contention(marker)

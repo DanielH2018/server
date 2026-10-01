@@ -3,7 +3,7 @@
 Weekly hermetic run of every evals/cases/ case, rolled into evals/history.json by
 evals/trend.py. Modeled on docs-refresh.sh: same git-tree lock, same PR-based publish (that
 half is covered generically for every unattended committing cron by
-test_cron_scripts_publish_via_pr.py, which now includes eval-run.sh.j2 in its SCRIPTS list).
+test_cron_scripts_publish_via_pr.py, which includes eval-run.sh.j2 in its SCRIPTS list).
 
 What's specific to this cron, and what this file guards:
 

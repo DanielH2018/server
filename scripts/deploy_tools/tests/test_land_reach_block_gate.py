@@ -1,29 +1,20 @@
 #!/usr/bin/env python3
-"""A `block: ... when:` at the top of a role's main.yml narrows the files it ships (#1904) and the role's own reach (#2073).
+"""A `block: ... when:` at the top of a role's main.yml narrows the files it ships and the role's own reach.
 
-WHAT WENT WRONG. Landing PR #1901 (merge fdd19ea7) ended `needs-manual-apply`, prescribing
-`initial_setup.yml --tags deploy_ui` on daniel-server and daniel-pi. Nothing there needed
-applying: deploy_ui's main.yml is one `block:` under `when: has_gitops`, true on daniel-box
-alone. The issue read the cause as `_gates_in` following an `include_tasks` gate but not a
-block-level `when:`. It was not: `_gates_in` recursed into `block:` bodies with the block's
-`when:` inherited since the shipping-task gate shipped (2ec4d882), and `files/deploy_ui.py`
-read as daniel-box only on the land_reach that landed #1901. What widened the note was the
-PR's three `tests/*.py` beside them, which fell through to the role-level reach -- the same
-fall-through issue #1885 named, fixed in 9cd36ae0, which merged minutes before #1901 and
-after the landing session's copy of land_reach was loaded. Measured on this tree: the
-9cd36ae0^ module over #1901's file list prints the bad note; the current one prints ''.
+deploy_ui's main.yml is one `block:` under `when: has_gitops`, true on daniel-box alone, so a
+change to its files must not prescribe `initial_setup.yml --tags deploy_ui` on daniel-server and
+daniel-pi. `_gates_in` recurses into `block:` bodies with the block's `when:` inherited, so
+`files/deploy_ui.py` reads as daniel-box only. A role's own `tests/*.py` beside them must not
+fall through to the role-level reach.
 
-So the #1904 half of this file pins the block shape rather than changes it, and holds the two
-halves apart: the accept half is deploy_ui's own files (box only, through the block gate) and
-the note over #1901's whole file list (empty); the reject half is an ungated shipping task in
-a role with no playbook gate, which must keep reaching every host.
+The accept half is deploy_ui's own files (box only, through the block gate) and the note over
+the role's whole file list (empty); the reject half is an ungated shipping task in a role with
+no playbook gate, which must keep reaching every host.
 
-ISSUE #2073 IS THE SAME ROLE ONE LEVEL UP. Landing PR #2071 ended `needs-manual-apply` over
-`deploy_ui/tasks/main.yml` and `gitops_deploy/tasks/install.yml`. Neither path names a
-shipped file, so both fell through to the ROLE-level reach, and a role with no playbook gate
-read as every host however its own tasks were gated. The issue named the block and include
-gates as unread; both were read, and #2071's `files/*.py` paths were box-only on that tree.
-`setup_role_hosts` now derives a gateless role's reach from its leaf tasks, so `deploy_ui`'s
+A `tasks/<file>.yml` path that names no shipped file (`deploy_ui/tasks/main.yml`,
+`gitops_deploy/tasks/install.yml`) must not fall through to the ROLE-level reach, which for a
+role with no playbook gate reads as every host however its own tasks are gated.
+`setup_role_hosts` derives a gateless role's reach from its leaf tasks, so `deploy_ui`'s
 role-level answer is the block gate's answer, and a `tasks/<file>.yml` path reaches the hosts
 that run a task IN that file. The reject half is a synthetic role with one ungated leaf, which
 must keep every host, beside the gated one that must not.
@@ -47,10 +38,10 @@ _SHIPPED = (
     "ansible/roles/setup/deploy_ui/files/deploy_ui.html",
     "ansible/roles/setup/deploy_ui/templates/deploy-ui.service.j2",
 )
-# An ungated `copy` under a role initial_setup.yml applies everywhere: PR #1002's file, the
-# one issue #1009 was filed over. If this ever narrows, the narrowing lost its evidence.
+# An ungated `copy` under a role initial_setup.yml applies everywhere. If this ever
+# narrows, the narrowing lost its evidence.
 _UNGATED = "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"
-# PR #1901's file list, verbatim (`git show --name-only fdd19ea7`).
+# A real PR's file list for `deploy_ui`, verbatim.
 _PR_1901_PATHS = [
     "ansible/roles/setup/deploy_ui/CLAUDE.md",
     "ansible/roles/setup/deploy_ui/files/deploy_ui.html",
@@ -77,7 +68,7 @@ def test_the_paths_under_test_still_exist():
 def test_deploy_ui_is_still_one_block_gated_on_has_gitops():
     """The shape this file pins: every top-level task is a `block:` carrying `when:
     has_gitops`, and the role itself has no playbook gate (so the block is the ONLY thing
-    keeping its files -- and, since #2073, the role -- off the other hosts)."""
+    keeping its files -- and the role -- off the other hosts)."""
     tasks = yaml_fast.safe_load((REPO_ROOT / _MAIN).read_text())
     assert tasks and all(
         "block" in t and t.get("when") == "has_gitops" for t in tasks
@@ -99,7 +90,7 @@ def test_an_ungated_shipping_task_still_reaches_every_host():
     """The reject half, so a later narrowing of `_gates_in` cannot go quiet: no block, no
     when, no playbook gate -- all three hosts. The role-level read must agree: the live
     `initial_setup` role has ungated leaves, and a role-level answer that narrowed it would
-    silently bring issue #1009 back for every file it ships."""
+    silently skip hosts that need an apply for every file it ships."""
     assert land_reach.setup_role_hosts("initial_setup") == frozenset(land_reach._HOSTS)
     assert land_reach.setup_file_hosts("initial_setup", _UNGATED) == frozenset(
         land_reach._HOSTS
@@ -107,7 +98,7 @@ def test_an_ungated_shipping_task_still_reaches_every_host():
 
 
 def test_pr_1901_owes_no_host_beyond_the_tick():
-    """The verdict PR #1901 should have read, and reads on this tree: `settled`."""
+    """The verdict is `settled`."""
     assert land_reach.remaining_setup_hosts_note(_PR_1901_PATHS, "daniel-box") == ""
 
 
@@ -118,9 +109,9 @@ def test_pr_1901_from_another_host_still_names_the_gitops_host():
     assert "daniel-pi" not in note
 
 
-# PR #2071's setup-plane paths, verbatim (`git show --name-only` of its merge commit), minus
-# the paths outside `ansible/roles/setup/` -- those derive tags or nothing and never reach
-# this note. The two `tasks/` entries are the ones that widened it (issue #2073).
+# A PR's setup-plane paths, verbatim (`git show --name-only` of its merge commit), minus the
+# paths outside `ansible/roles/setup/` -- those derive tags or nothing and never reach this
+# note. The two `tasks/` entries are the ones that widened it.
 _PR_2071_SETUP_PATHS = [
     "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
     "ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py",
@@ -148,14 +139,14 @@ _PR_2071_SETUP_PATHS = [
 
 
 def test_pr_2071_paths_still_exist():
-    """Non-vacuity for the #2073 cases below."""
+    """Non-vacuity for the cases below."""
     missing = [p for p in _PR_2071_SETUP_PATHS if not (REPO_ROOT / p).exists()]
     assert not missing, f"paths moved, so these cases check nothing: {missing}"
 
 
 def test_deploy_ui_paths_outside_the_shipped_dirs_reach_the_gitops_host_only():
-    """The #2073 accept half at role level: a path no shipping task names -- the tasks file
-    itself, the defaults -- takes the role-level answer, which now reads through the block."""
+    """The accept half at role level: a path no shipping task names -- the tasks file
+    itself, the defaults -- takes the role-level answer, which reads through the block."""
     for path in (_MAIN, "ansible/roles/setup/deploy_ui/defaults/main.yml"):
         assert land_reach.setup_file_hosts(_ROLE, path) == frozenset({"daniel-box"}), (
             path
@@ -163,7 +154,7 @@ def test_deploy_ui_paths_outside_the_shipped_dirs_reach_the_gitops_host_only():
 
 
 def test_pr_2071_owes_no_host_beyond_the_tick():
-    """The verdict PR #2071 should have read: `settled`, not `needs-manual-apply`."""
+    """The verdict is `settled`, not `needs-manual-apply`."""
     assert (
         land_reach.remaining_setup_hosts_note(_PR_2071_SETUP_PATHS, "daniel-box") == ""
     )

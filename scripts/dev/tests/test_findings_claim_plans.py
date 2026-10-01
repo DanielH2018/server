@@ -15,7 +15,7 @@ TODAY = date(2026, 9, 11)
 
 
 def _issue(number=1132, labels=(), comments=()):
-    """One issue, always carrying `claude` — `plan_claim` refuses one without it (#1277)."""
+    """One issue, always carrying `claude` — `plan_claim` refuses one without it."""
     return {
         "number": number,
         "state": "OPEN",
@@ -81,7 +81,7 @@ def test_claiming_an_issue_another_worktree_holds_is_refused():
 def test_claiming_an_issue_outside_the_register_is_refused():
     """`_load_issue` has no label filter, so `claim 3 --worktree X` reached Renovate's
     Dependency Dashboard. `load_issues` DOES filter `--label claude`, so `claims`, `reap` and
-    `next` were all blind to the claim and only a hand-typed `release` could clear it (#1277).
+    `next` were all blind to the claim and only a hand-typed `release` could clear it.
     """
     outsider = {"number": 3, "state": "OPEN", "labels": [], "comments": []}
     with pytest.raises(ClaimRefused) as exc:
@@ -98,7 +98,7 @@ def test_reclaiming_an_issue_you_already_hold_is_a_no_op():
 def test_reclaiming_an_issue_whose_label_edit_failed_plans_the_label_alone():
     """The repairing half. `cmd_claim` posts the comment first, so a failed `--add-label`
     leaves the claim held and the label off. Returning `[]` for EVERY reclaim made that
-    unrepairable — the retry short-circuited before the label plan ever ran (#1277).
+    unrepairable — the retry short-circuited before the label plan ever ran.
     """
     issue = _issue(comments=[claim_comment(WT, None, "t")])
     assert plan_claim(issue, worktree=WT, session=None, when="t", today=TODAY) == [
@@ -130,7 +130,7 @@ def test_releasing_an_unclaimed_issue_is_refused():
 def test_releasing_an_unclaimed_issue_whose_label_stuck_removes_the_label():
     """The repairing half. A release whose `--remove-label` failed left the comment posted
     and the label on, and the retry then raised `not claimed` — so a stuck `claimed` label
-    could never be removed in either direction (#1277).
+    could never be removed in either direction.
     """
     issue = _issue(labels=["claimed"])
     assert plan_release(issue, worktree=WT, when="t", reason=None) == [

@@ -104,11 +104,10 @@ def _run_dry_run(monkeypatch, current_preferences: dict[str, object]) -> int:
     return apply_prefs.main(["--dry-run", "--url", "http://qbittorrent.test:8080"])
 
 
-# THE MUTATION: apply_prefs.py:190-191 used to `return 0` unconditionally on --dry-run, so a
-# cron branching on exit code could never tell "found drift" from "nothing to do". These two
-# tests are the pair that catches a regression back to that shape — flip EXIT_DRIFT back to
-# EXIT_OK in main() and test_dry_run_exits_drift_when_a_preference_has_changed fails while its
-# sibling keeps passing, which is exactly the signature of the bug this closes.
+# THE MUTATION: a cron branching on exit code must be able to tell "found drift" from "nothing
+# to do". These two tests are the pair that catches a regression to `return 0` on --dry-run —
+# flip EXIT_DRIFT back to EXIT_OK in main() and
+# test_dry_run_exits_drift_when_a_preference_has_changed fails while its sibling keeps passing.
 def test_dry_run_exits_ok_when_nothing_has_changed(monkeypatch) -> None:
     exit_code = _run_dry_run(monkeypatch, dict(apply_prefs.DESIRED))
     assert exit_code == apply_prefs.EXIT_OK

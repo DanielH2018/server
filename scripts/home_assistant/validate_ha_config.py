@@ -16,10 +16,10 @@ It also does NOT prove an entity still exists. The state-model guardrails below 
 reference against `state/external_entities.yml`, which is a **snapshot** refreshed only by an
 explicit `ha_state_model.py refresh`. So this catches a **typo** (a name that never existed) and
 is structurally blind to a **disappearance** (a name that stopped existing) — both read as
-"reference resolves". On 2026-08-16 two Pixel sensors vanished from every device, stayed listed
-in the snapshot, and three bedroom features went inert behind a green run here: `states()` on a
-missing entity renders `unknown`, which sat inside the automation's own exclusion list, and
-`| float(0)` latched a zero the curve treats as a normal night.
+"reference resolves". A vanished sensor stays listed in the snapshot, so features can go inert
+behind a green run here: `states()` on a missing entity renders `unknown`, which can sit inside
+an automation's own exclusion list, and `| float(0)` latches a zero the curve treats as a
+normal night.
 
 Only live HA can see a disappearance: `uv run python scripts/diagnostics/probe.py ha
 verify-entities` diffs the snapshot against live state and exits non-zero on anything that went
@@ -195,7 +195,7 @@ def _construct_include_dir_merge_list(loader: HAConfigLoader, node: yaml.Node):
 def _construct_include_dir_merge_named(loader: HAConfigLoader, node: yaml.Node):
     """`!include_dir_merge_named dir/`: the files' mappings merged into one mapping.
 
-    HA lets a later file silently override a key an earlier file defined; here a key that
+    HA lets a later file silently override a key an earlier file defined. Here a key that
     appears in two files is an error, so a script cannot be shadowed by a same-named copy.
     """
     merged: dict = {}

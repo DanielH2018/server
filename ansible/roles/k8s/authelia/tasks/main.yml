@@ -1,11 +1,9 @@
 ---
-# The password hash is generated at deploy time rather than stored, matching the Docker role
-# — but that role shells `docker run`, and daniel-box deliberately has no Docker (it is the
-# k3s node). A one-shot pod is the equivalent.
+# The password hash is generated at deploy time rather than stored, in a one-shot pod because
+# daniel-box has no Docker.
 #
 # Read-back first, because argon2 salts are random: regenerating on every run would change
-# the Secret every deploy and trigger a rollout restart that changes nothing. This is the k8s
-# form of the Docker role's first-run-only users_database.yml guard.
+# the Secret every deploy and trigger a rollout restart that changes nothing.
 - name: Fail if the claude-ui credentials are missing
   tags: [config]
   # The role defaults carry empty stand-ins for both, so a cluster that manages this user and
@@ -27,8 +25,8 @@
   tags: [config]
   # Fetches the whole .data map rather than jsonpath={.data.users_database\.yml}. A key
   # containing a dot cannot be addressed that way: kubectl does not error, it returns an
-  # empty string and exit 0. The guard below then read that as "no existing hash", so every
-  # deploy regenerated the argon2 hash with a fresh salt, rewrote the Secret and rolled the
+  # empty string and exit 0. The guard below would read that as "no existing hash", so every
+  # deploy would regenerate the argon2 hash with a fresh salt, rewrite the Secret and roll the
   # pod — the exact churn the read-back exists to prevent, with nothing in the output saying so.
   ansible.builtin.command:
     cmd: >-
@@ -49,7 +47,7 @@
 - name: Read the users already in the cluster's Authelia database
   tags: [config]
   # Parsed as YAML and keyed by username, NOT regex-searched for the first `$argon2` run.
-  # The database holds two users now — the operator and the UI tier's `claude-ui` — so a
+  # The database holds two users — the operator and the UI tier's `claude-ui` — so a
   # regex that anchors on the hash itself cannot say whose hash it found. It would hand
   # both users the first block's digest, which is one password opening two accounts.
   #
@@ -82,9 +80,6 @@
 
 - name: Hash the Authelia password
   tags: [config]
-  # Same algorithm and parameters as the Docker role, so the two instances' users databases
-  # stay interchangeable for the slice-6 cutover.
-  #
   # authelia's CLI (4.39.20) has no --password-file or env-var form — only a literal
   # --password flag or an interactive terminal prompt (confirmed against the CLI
   # reference), so the value has to reach `authelia` as an argv token somewhere. Putting
@@ -126,7 +121,7 @@
     # says and leaves a skip result with no `stdout`. On a cluster that already holds the
     # Secret the read-back defines the hash and neither task is reached; on a fresh one a
     # dry run falls through to here, and without this it errors on the attribute instead
-    # of reaching the assert below, which says what is actually wrong (#2353).
+    # of reaching the assert below, which says what is actually wrong.
     - not ansible_check_mode
     - authelia_password_hash is not defined
   no_log: true
@@ -157,7 +152,7 @@
   ansible.builtin.set_fact:
     authelia_claude_password_hash: "{{ authelia_k8s_claude_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
   when:
-    # Same reasoning as the operator digest above (#2353).
+    # Same reasoning as the operator digest above.
     - not ansible_check_mode
     - authelia_k8s_manage_claude_user | bool
     - authelia_claude_password_hash is not defined
@@ -194,17 +189,16 @@
     # rolling the session store on that cadence would destroy the sessions it exists to keep.
     #
     # networkpolicy-redis.yaml rides the same lever as the pair above, and it is listed HERE
-    # rather than in netpol-baseline on purpose (#1609). Authelia cannot start without its
+    # rather than in netpol-baseline on purpose. Authelia cannot start without its
     # session store, so the policy admitting it to redis is part of this workload rather than
-    # part of the fleet baseline — shipped one role away, `--tags authelia` staged a portal
-    # that CrashLoopBackOffs, which is how every forwardAuth route returned 500 for 25 minutes
-    # on 2026-09-10. Gated with the pair so the three cannot drift apart: with the lever off
-    # there is no redis pod for the policy to select.
+    # part of the fleet baseline — shipped one role away, `--tags authelia` would stage a portal
+    # that CrashLoopBackOffs and returns 500 on every forwardAuth route. Gated with the pair so the three cannot
+    # drift apart: with the lever off there is no redis pod for the policy to select.
     #
     # `kubectl apply -f <dir>` is alphabetical, so on a cluster with no redis yet
     # deployment.yaml lands before networkpolicy-redis.yaml and the portal may crashloop once
-    # before the policy admits it. It self-heals within a backoff, which is the whole
-    # difference from the outage: the policy arrives in the same deploy rather than never.
+    # before the policy admits it. It self-heals within a backoff because the policy arrives
+    # in the same deploy.
     manifests_files: >-
       {{ ['pvc.yaml', 'deployment.yaml', 'service.yaml', 'ingressroute.yaml',
           'forwardauth-middleware.yaml']

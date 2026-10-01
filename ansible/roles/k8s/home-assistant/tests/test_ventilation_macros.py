@@ -24,23 +24,22 @@ def test_smoke_guard_blocks_when_outdoor_pm_unsafe():
 
 def test_scrubbed_indoor_does_not_veto_safe_outdoor():
     # A HEPA purifier keeps indoor PM very low (4); outdoor (12) is higher but under pm_safe and
-    # clean+comfortable -> still advise. There is NO relative "dirtier than indoors" veto: the bare
-    # op>ip term used to falsely block CO2/cooling ventilation whenever the purifier scrubbed indoor
-    # below outdoor. The absolute pm_safe/pm10_safe caps are the only air-quality gate now.
+    # clean+comfortable -> still advise. There is NO relative "dirtier than indoors" veto: a bare
+    # op>ip term would falsely block CO2/cooling ventilation whenever the purifier scrubbed indoor
+    # below outdoor. The absolute pm_safe/pm10_safe caps are the only air-quality gate.
     assert _advice(75, 65, 4, 12, True) == "stale"
 
 
 def test_safe_but_moderate_outdoor_ventilates_over_scrubbed_indoor():
-    # The recurring purifier regression (3rd fix): outdoor PM 18 is safe-but-moderate (< pm_safe 25)
-    # while a scrubbed indoor sits at 2. The old relative floor (15) still vetoed the whole [15, 25)
-    # band; with the relative term dropped, safe-but-moderate air now ventilates for both stale-air ...
+    # Outdoor PM 18 is safe-but-moderate (< pm_safe 25) while a scrubbed indoor sits at 2. With no
+    # relative floor, the whole [15, 25) band ventilates for both stale-air ...
     assert _advice(75, 65, 2, 18, True) == "stale"
     # ... and free-cooling advice (warm inside, cooler + safe outside).
     assert _advice(82, 70, 2, 18, False) == "cool"
 
 
 def test_safe_outdoor_above_scrubbed_indoor_still_ventilates():
-    # Real 2026-06-29 incident: HEPA purifier scrubs indoor to ~0.5, outdoor 12 is objectively safe
+    # HEPA purifier scrubs indoor to ~0.5, outdoor 12 is objectively safe
     # (well under pm_safe). Must keep advising instead of vetoing all CO2/free-cooling advice.
     assert _advice(75, 65, 0.5, 12, True) == "stale"
 

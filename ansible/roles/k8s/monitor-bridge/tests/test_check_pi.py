@@ -1,7 +1,7 @@
 """daniel-pi: resource pressure, and the ports arm that catches a detached container.
 
 `pi_pressure` reads load, memory and disk headroom off the Pi's own node-exporter series in
-Prometheus (glances until 2026-09-18, #2004), plus whether the SD card's root or firmware
+Prometheus, plus whether the SD card's root or firmware
 partition has remounted read-only, the one Pi failure every other arm reads green through. The
 ports arm is separate: a Pi reboot leaves
 containers `Up (healthy)` with an empty network, so the published port is dead while every

@@ -136,10 +136,10 @@ def test_the_arr_key_check_asks_for_the_path_its_route_admits_is_clean(monkeypat
     """Each *arr is asked for the path its `-monitoring` IngressRoute admits.
 
     `get_via_service` falls back to the Traefik route whenever the ClusterIP does not answer,
-    which is every run where the pod is on the other node. The check asked for
-    `/api/<ver>/system/status`, which is on no monitoring route's PathPrefix, so the fallback
-    fell through to the app's own Authelia'd route and 302'd — §9.3 was structurally SKIP
-    (#1642). The route side is guarded by
+    which is every run where the pod is on the other node. A check that asked for
+    `/api/<ver>/system/status`, which is on no monitoring route's PathPrefix, would fall
+    through to the app's own Authelia'd route and 302 — §9.3 would be structurally SKIP. The
+    route side is guarded by
     ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py.
     """
     seen = []
@@ -203,8 +203,8 @@ def test_an_unreachable_jellyfin_skips_too(monkeypatch):
 def test_the_resolver_reads_a_clusterip_not_a_docker_bridge_ip(monkeypatch):
     """Docker is gone from both cluster nodes, so a bridge-IP lookup raises FileNotFoundError.
 
-    Every check reaching a workload directly was dead that way from the 2026-08-14 retirement
-    until 2026-08-25, and reported the FileNotFoundError as the check's own result.
+    A bridge-IP lookup would make every check reaching a workload directly report the
+    FileNotFoundError as the check's own result.
     """
     seen = []
     monkeypatch.setattr(
@@ -232,7 +232,7 @@ def on_host(monkeypatch, hostname):
 def test_the_service_ip_read_names_the_cluster_this_host_stands_in(
     monkeypatch, stub_host
 ):
-    """#2069: the read took lib.kubectl's `prod` default whichever node ran postflight.
+    """The read took lib.kubectl's `prod` default whichever node ran postflight.
 
     The invoker refuses on a mismatch, so on daniel-stage the check raised `WrongCluster`
     rather than reading about the wrong cluster — but postflight never named its own. The
@@ -292,10 +292,10 @@ def test_authelia_missing_oidc_material_fails(monkeypatch):
 
 
 def test_an_unreachable_authelia_skips_rather_than_reporting_an_outage(monkeypatch):
-    """The accept half of #1564.
+    """The accept half.
 
     A ClusterIP that does not answer this node is a placement fact — Authelia's pod is on the
-    other node. Reporting it as "Authelia is not serving" was a false outage on the most
+    other node. Reporting it as "Authelia is not serving" would be a false outage on the most
     load-bearing service in the fleet.
     """
     respond(monkeypatch, 0, "curl: (7) Failed to connect to 10.43.0.9 port 9091")
@@ -323,7 +323,7 @@ def test_authelia_oidc_material_is_checked_on_a_node_it_cannot_reach(monkeypatch
 
 
 def test_kuma_drift_reads_its_constants_from_the_module_that_holds_them(monkeypatch):
-    """#1562: postflight read four names off `probe`, which holds none of them.
+    """Postflight read four names off `probe`, which holds none of them.
 
     Exercising the check is the point — a `hasattr` census would pass before and after the
     fix. This raised `AttributeError: module 'probe' has no attribute 'STATIC_MONITORS_PATH'`,
@@ -382,13 +382,13 @@ GATED_AND_ABSENT = {
 def test_a_gated_monitors_absence_is_judged_against_its_secret(
     monkeypatch, gate_is_set, expected, expected_text
 ):
-    """#1632's red-proof pair, and the whole point of the section.
+    """The red-proof pair, and the whole point of the section.
 
-    §9.1 passed no gate_states, so `format_kuma_drift` fell through to its excused arm for
-    every gated monitor whatever the secret said — seven of them on 2026-09-10, under an [OK].
-    A gated monitor is the one nothing else watches, so the drift half could not see the case
-    it exists for. Measured 2026-08-22: `etcd_snapshot_push_token` was set, its monitor was not
-    live, and the check called that correctly skipped.
+    Without gate_states, `format_kuma_drift` falls through to its excused arm for every gated
+    monitor whatever the secret says — all seven, under an [OK]. A gated monitor is the one
+    nothing else watches, so the drift half could not see the case it exists for. A set
+    `etcd_snapshot_push_token` with a monitor that is not live must not be called correctly
+    skipped.
 
     The unset row is not padding: without it the fix is a louder check that cries wolf on
     every gate, and a check that fires on everything is as useless as one that fires on
@@ -412,7 +412,7 @@ def test_the_route_hostname_comes_from_inventory_not_the_service_name():
 
 
 def test_an_unanswered_clusterip_falls_back_to_the_traefik_route(monkeypatch):
-    """#1633: postflight runs on daniel-box only, so a pod on daniel-server had no asker.
+    """Postflight runs on daniel-box only, so a pod on daniel-server had no asker.
 
     The ClusterIP answers only a caller on the pod's own node — each workload's NetworkPolicy
     admits pod selectors and no ipBlock for the node — which made §9.5 and §9.3 structurally
@@ -438,9 +438,9 @@ def test_a_forward_auth_redirect_skips_rather_than_blaming_the_key(monkeypatch):
     """An Authelia 302 fires in the middleware, so the app never saw the request.
 
     The *arr routes carry `use_authelia: true` and their monitoring routes pin ClientIP to
-    daniel-server, so both 302 for this host — measured 2026-09-10. Letting that reach the
-    tail arm read `HTTP 302 — prowlarr_api_key doesn't match`, sending someone to rotate a
-    working credential: strictly worse than the SKIP it replaced.
+    daniel-server, so both 302 for this host. Letting that reach the tail arm would read
+    `HTTP 302 — prowlarr_api_key doesn't match`, sending someone to rotate a working
+    credential: strictly worse than a SKIP.
     """
     respond(monkeypatch, 302)
     status, detail = postflight.check_arr_key("prowlarr")

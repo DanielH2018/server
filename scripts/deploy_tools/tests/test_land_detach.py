@@ -7,10 +7,10 @@ The end-to-end half runs the shim as a process against the same `gh`/`git` stubs
 flags reaching `Options`, the fork, the logfile, and the parent exiting with the CHILD's code
 and printing the CHILD's verdict. A unit test against a fake `Tools` cannot see any of that.
 
-THE PROVEN PATH MUST STAY BYTE-IDENTICAL. `--detach` was added to a script that lands every PR
-in this repo, unattended, so `test_no_flags_reaches_the_same_landing_as_before` asserts a run
+THE PROVEN PATH MUST STAY BYTE-IDENTICAL. `--detach` is in a script that lands every PR in
+this repo, unattended, so `test_no_flags_reaches_the_same_landing_as_before` asserts a run
 with neither flag never forks and never resolves `--since` for itself. That is the invariant
-that makes the new mode safe to ship before it has been exercised on a real landing (#2853).
+that makes the new mode safe to ship before it has been exercised on a real landing.
 """
 
 import io
@@ -160,7 +160,7 @@ def test_the_verdict_is_read_out_of_the_log(tmp_path):
     ],
 )
 def test_a_log_with_no_verdict_line_reads_as_none(tmp_path, text):
-    """The reject half. PR #2437 exited 1 having printed no verdict at all."""
+    """The reject half: a landing must print a verdict."""
     log = tmp_path / "land7.log"
     log.write_text(text)
     assert detach.verdict_in(log) is None
@@ -197,7 +197,7 @@ def test_await_verdict_gives_up_on_its_budget_and_leaves_the_child_running(tmp_p
 
 
 def test_await_verdict_reports_a_child_that_finished_without_a_verdict(tmp_path):
-    """PR #2437 exited 1 with no `VERDICT:` line. The exit code is the authority, so the wait
+    """The exit code is the authority, so the wait
     must end on the child rather than sit out its whole budget waiting for a line."""
     log = tmp_path / "land7.log"
     log.write_text("a traceback, and nothing else\n")

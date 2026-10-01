@@ -1,5 +1,5 @@
 """A not-before date: `defer` plans it, `open --not-before` files with it, `next` and `list`
-show it, and it expires by comparison rather than by anyone clearing it (#1739).
+show it, and it expires by comparison rather than by anyone clearing it.
 
 `main(...)` reads the real clock, so the end-to-end cases use dates far enough either side of
 today that the verdict cannot flip: 2099 is still deferred, 2000 is long past.
@@ -237,7 +237,7 @@ def test_next_offers_an_issue_whose_date_has_passed(capsys, make_tools):
 def test_next_json_keeps_the_array_free_and_notes_the_deferral_on_stderr(
     capsys, make_tools
 ):
-    """The array is what `issue-fanout` claims; a deferred row inside it is #1739 inverted."""
+    """The array is what `issue-fanout` claims; a deferred row inside it would be claimed."""
     tools, _ = make_tools(
         Fakes(
             issues=[make_issue(1288, labels=[FUTURE]), make_issue(1140)],

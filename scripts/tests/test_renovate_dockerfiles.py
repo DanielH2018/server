@@ -28,12 +28,11 @@ from _renovate import (
 
 
 # Renovate's BUILT-IN dockerfile manager's default managerFilePatterns, copied verbatim from source
-# (lib/modules/manager/dockerfile/index.ts, verified against upstream 2026-07-13). The fleet's
-# Dockerfile base pins are tracked ONLY by that manager (no custom manager covers them), so a build
-# file renamed/added outside these shapes drops out of update tracking with no signal. NB the 2nd
-# pattern's `[^/]*$` matches suffixed names too (`Dockerfile-runners.j2` IS visible), so this guard
-# reflects exactly what Renovate scans — the earlier `[Cc]ontain` was a typo (matched a nonexistent
-# `Containfile`, missed a real `Containerfile`); upstream is `[Cc]ontainer`.
+# (lib/modules/manager/dockerfile/index.ts). The fleet's Dockerfile base pins are tracked ONLY by
+# that manager (no custom manager covers them), so a build file renamed/added outside these shapes
+# drops out of update tracking with no signal. NB the 2nd pattern's `[^/]*$` matches suffixed names
+# too (`Dockerfile-runners.j2` IS visible), so this guard reflects exactly what Renovate scans;
+# upstream is `[Cc]ontainer`.
 DOCKERFILE_MANAGER_FILE_RES = [
     re.compile(r"(^|/|\.)([Dd]ocker|[Cc]ontainer)file$"),
     re.compile(r"(^|/)([Dd]ocker|[Cc]ontainer)file[^/]*$"),
@@ -83,20 +82,14 @@ _FROM_RE = re.compile(
 def test_no_built_image_floats_on_an_unpinned_base(tracked: list[str]) -> None:
     """No FROM may float: every base needs an explicit version tag or a digest.
 
-    This test used to be the exemption it now forbids. The sibling above blessed untagged
-    and `:latest` FROMs as "the deliberate rolling tier (build-on-recreate semantics)" —
-    which was true only under Docker Compose, where `build: always` plus the weekly
-    roles/containers/common/tasks/redeploy_cron.yml redeploy forced the rebuild that picked
-    up new base layers. The k3s migration archived that cron's last caller on 2026-08-14 and
-    put nothing in its place, so from then on a floating FROM had NO updater whatsoever:
-    Renovate has no version to bump, so no PR is raised, so no commit lands, so gitops never
-    ticks and no rebuild ever runs. Three images (n8n, n8n-runners, code-server) drifted that
-    way until 2026-08-19 — n8n stuck on 2.34.6 while upstream shipped 2.35.4.
+    A floating FROM has NO updater whatsoever: Renovate has no version to bump, so no PR is
+    raised, so no commit lands, so gitops never ticks and no rebuild ever runs. The base
+    drifts silently behind upstream.
 
-    So the rule inverts: an explicit tag is what makes the base a tracked dependency with a
-    PR, CI and a review, exactly like every pulled image in the fleet. A `:latest@sha256:...`
-    digest pin is accepted — that is a real, Renovate-bumpable pin, and it is the shape the
-    k8s roles already use for mutable-tag upstreams.
+    An explicit tag is what makes the base a tracked dependency with a PR, CI and a review,
+    exactly like every pulled image in the fleet. A `:latest@sha256:...` digest pin is accepted
+    — that is a real, Renovate-bumpable pin, and it is the shape the k8s roles already use for
+    mutable-tag upstreams.
 
     Multi-stage internal references (`FROM builder`) are skipped: a stage name declared
     earlier in the same file is not an upstream image and has nothing to pin.
@@ -188,10 +181,8 @@ def test_n8n_base_pins_in_lockstep() -> None:
 # ── the n8n base-pin ledger: a channel pin's version has to appear SOMEWHERE ─────────────
 #
 # The lockstep guard above compares the two TAGS, and both tags are `stable`, which never
-# moves. So it passes equally on a lockstep DOWNGRADE — which is what Renovate PR #1440
-# proposed on 2026-09-09, from the 2.37.10 digests to the 2.37.9 digests, through nine green
-# checks. Nothing in the repo read the version behind either digest; a human did, by hand.
-# Issue #1493.
+# moves. So it passes equally on a lockstep DOWNGRADE (the 2.37.10 digests to the 2.37.9
+# digests). Nothing in the repo read the version behind either digest; a human did, by hand.
 #
 # The ledger (ansible/roles/k8s/n8n/base-pin-history.tsv) is where the version lands,
 # appended once per bump. These guards tie it to the live FROMs and to each other. The check
@@ -378,12 +369,11 @@ def test_python_version_pins_in_lockstep() -> None:
 def test_node_version_pins_in_lockstep() -> None:
     """ci.yml and renovate-config-canary.yml must pin the same three-part Node release.
 
-    The node customManager scans every workflow file since #2152 (it was ci.yml-only, and the
-    canary's twin pin was untracked from the day it split out). One depName groups both files
-    into one bump PR; this asserts the coupling held, the way the python test above does. Both
-    jobs run the same `renovate_config.sh`, so a skew would validate renovate.json under two
-    Node releases. Three-part, because `\\d+` read the major alone and the runner then
-    installed whatever 24.x the toolcache held that day.
+    The node customManager scans every workflow file. One depName groups both files into one
+    bump PR; this asserts the coupling held, the way the python test above does. Both jobs run
+    the same `renovate_config.sh`, so a skew would validate renovate.json under two Node
+    releases. Three-part, because `\\d+` read the major alone and the runner then installed
+    whatever 24.x the toolcache held that day.
     """
     ci = (_REPO / ".github/workflows/ci.yml").read_text()
     canary = (_REPO / ".github/workflows/renovate-config-canary.yml").read_text()

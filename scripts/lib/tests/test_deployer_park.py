@@ -1,4 +1,4 @@
-"""Tests for the shared parked-deployer decision (issue #1429).
+"""Tests for the shared parked-deployer decision.
 
 Two readers ask it — the SessionStart banner and `deploy.sh` exit 4 — so every rule here is a
 must-fire / must-not-fire pair: a decision that answered "parked" for everything and one that
@@ -64,7 +64,7 @@ def test_a_missing_state_directory_reads_as_no_marker(tmp_path):
     assert read_behind_marker(str(tmp_path / "nope")) is None
 
 
-# ── the manual_plane marker (issue #1774); its parser is tested with `gitops_markers` ──────
+# ── the manual_plane marker; its parser is tested with `gitops_markers` ──────
 # The shape the deployer writes: origin SHA, the playbook that applies the role (or `none`),
 # the role, and when it was first recorded.
 _PENDING = (

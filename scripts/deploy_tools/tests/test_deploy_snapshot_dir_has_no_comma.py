@@ -6,7 +6,7 @@ relative path. ansible-core resolves that path against cwd and treats any comma 
 resolved string as an inline comma-separated host list rather than a file path -- so a snapshot
 named `authelia,traefik-<stamp>` breaks inventory parsing with `Origin.path must be … instead
 of … _AnsibleTaggedStr`, and the deploy reports "no hosts matched" while exiting 0. Reproduced
-2026-09-16 against the real ansible-core in this repo's `.venv`; a single tag (no comma in the
+against the real ansible-core in this repo's `.venv`; a single tag (no comma in the
 directory name) and an explicit `-i` both work.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_snapshot_dir_has_no_comma.py
@@ -101,8 +101,8 @@ def test_single_tag_snapshot_dir_is_unaffected(tmp_path: Path) -> None:
     assert "authelia" in Path(snapshot_dir).name
 
 
-# The 58 callers `--tags volume-snapshot` expanded to on 2026-09-27. Joined in full they name
-# a directory past the 255-byte filename limit, and `git worktree add` refused it.
+# The 58 callers `--tags volume-snapshot` expands to. Joined in full they name a directory
+# past the 255-byte filename limit, and `git worktree add` refused it.
 _SHARED_ROLE_CALLERS: list[str] = (
     "artifacts authelia autofix-bridge bazarr bento-pdf observability cloudflare-ddns "
     "code-server configarr crowdsec deploy-ui docs dri-device-plugin freshrss gpu-exporter "

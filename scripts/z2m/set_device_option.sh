@@ -8,11 +8,11 @@
 #     scripts/z2m/set_device_option.sh 'Aqara FP300' motion_sensitivity high
 #     scripts/z2m/set_device_option.sh 'Aqara FP300' absence_delay_timer 60
 #
-# The four steps the z2m-device-setting skill used to spell out by hand, in one place: read
+# The four steps of a device setting, in one place: read
 # the broker credentials out of SOPS, subscribe to the device's state topic, publish
 # `{"<key>": <value>}` to `zigbee2mqtt/<device>/set`, and compare the state Z2M republishes
 # against what was asked. The subscribe starts BEFORE the publish so a fast republish is not
-# missed; the skill's original sequence subscribed afterwards and raced it.
+# missed, which subscribing afterwards would risk.
 #
 # <value> is JSON when it parses as JSON (60, true, {"a":1}) and a string otherwise (high),
 # so a number is not sent quoted. To force a string that looks like a number, quote it
@@ -43,7 +43,7 @@ usage() {
 }
 
 # `--help` is a question, not a usage error, so it prints the leading comment block on stdout
-# and exits 0 — the repo-wide convention `scripts/lib/cli_help.py` states (#2854).
+# and exits 0 — the repo-wide convention `scripts/lib/cli_help.py` states.
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
   exit 0

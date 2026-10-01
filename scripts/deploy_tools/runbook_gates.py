@@ -1,8 +1,8 @@
 """The runner and the shared verdicts behind every `scripts/deploy_tools/*_gates.py`.
 
 A runbook whose safety is step order lists its stop conditions as gates, and each runbook's
-gates run as one script (`k3s_upgrade_gates.py` first, #2162; the other four, #2216). Every
-one of those scripts has the same shape, and this module is that shape written once:
+gates run as one script. Every one of those scripts has the same shape, and this module is
+that shape written once:
 
   * A gate is a pure verdict function over what the cluster or the tree answered — it returns
     the offenders, and an empty list is a pass. Nothing in a verdict runs a process.
@@ -11,7 +11,7 @@ one of those scripts has the same shape, and this module is that shape written o
     "could not look": no kubectl, no readable kubeconfig, the wrong cluster, or a list that
     returned nothing parseable. That is not a graded verdict, so it is not a gate number.
   * Every cluster read goes through `lib.kubectl` naming the cluster, so the identity check
-    that guards `probe.py health` refuses a staging kubectl here too (#1663).
+    that guards `probe.py health` refuses a staging kubectl here too.
   * A state directory that does not exist means "wrong host", never "clean": the deployer's
     hold marker and the drills' stamps live on the host that runs them, and reading an absent
     directory as a pass is the vacuous pass the gate exists to refuse (`stamp_dir_missing`).
@@ -163,7 +163,7 @@ def cli(
     flag, and no gate script has one, so it is usage rather than a positional.
 
     `--help` is the exception, and it comes first: these scripts printed `doc` on stderr and
-    exited 64 for it, so asking one of the five what it gates read as a usage error (#2854).
+    exited 64 for it, so asking one of the five what it gates read as a usage error.
     """
     argv = sys.argv[1:] if argv is None else argv
     answer_help(doc, argv)

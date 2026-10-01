@@ -1,8 +1,8 @@
-"""Tests for the Pending-Status-Checks dwell check (issue #886).
+"""Tests for the Pending-Status-Checks dwell check.
 
 Its own module rather than more of test_notify_logic.py: this check owns a real captured
 dashboard fixture, and keeping the fixture beside the tests that read it makes the coupling
-obvious. `dashboard_body.txt` is issue #3's body as of 2026-09-02, with the Detected
+obvious. `dashboard_body.txt` is issue #3's body at capture time, with the Detected
 Dependencies listing truncated — nothing in notify_logic parses it.
 """
 
@@ -196,7 +196,7 @@ def test_item_soak_is_seven_days_for_a_version_bump():
     assert pl.item_soak_days("something else entirely") == 7
 
 
-# One real grouped row from issue #3, captured 2026-09-28: tdarr's pin is `latest@sha256:...`,
+# One real grouped row from issue #3: tdarr's pin is `latest@sha256:...`,
 # so this is a digest bump whose title says nothing of the sort.
 GROUPED_DIGEST_ROW = (
     "Update k8s image ghcr.io/haveagitgat/tdarr "
@@ -205,7 +205,7 @@ GROUPED_DIGEST_ROW = (
 
 
 def test_item_soak_is_three_days_for_a_grouped_row():
-    """A grouped title carries no update type, and most such rows are digest bumps (#2885)."""
+    """A grouped title carries no update type, and most such rows are digest bumps."""
     assert pl.item_soak_days(GROUPED_DIGEST_ROW) == pl.DIGEST_SOAK_DAYS
 
 
@@ -213,7 +213,7 @@ def test_stale_pending_flags_a_grouped_digest_row_at_its_own_threshold():
     now = 1_000_000.0
     current = {"renovate/k8s-image-ghcr.iohaveagitgattdarr": GROUPED_DIGEST_ROW}
     seen = {"renovate/k8s-image-ghcr.iohaveagitgattdarr": now - 10.3 * DAY}
-    # The dwell measured on 2026-09-28: past 3+7, short of 7+7 — it must fire, not wait.
+    # A measured dwell past 3+7 and short of 7+7 must fire, not wait.
     assert [i[0] for i in pl.stale_pending(seen, current, now)] == [
         "renovate/k8s-image-ghcr.iohaveagitgattdarr"
     ]
@@ -294,7 +294,7 @@ def test_update_pending_seen_drops_departed_items():
 
 
 def test_a_re_push_resets_the_digest_clock_and_keeps_the_branch_clock():
-    """The two clocks the fix turns on: #3076's whole claim in one assertion."""
+    """The two clocks the fix turns on, in one assertion."""
     t0 = 1_000_000.0
     first = pl.update_pending_seen(
         {}, {"renovate/nginx": "...Docker digest to aaaaaaa"}, t0
@@ -315,7 +315,7 @@ def test_a_re_push_resets_the_digest_clock_and_keeps_the_branch_clock():
 
 
 def test_stale_pending_reports_the_age_of_the_digest_on_the_branch_now():
-    """#3076's verify-by, driven through the writer so a key-derivation mismatch fails here.
+    """Driven through the writer so a key-derivation mismatch fails here.
 
     The branch has been in the section 20 days — past the 3+7 digest allowance — but the digest
     now on it arrived today, so the arm must stay quiet rather than report 20 days.
@@ -430,7 +430,7 @@ def test_render_pending_does_not_truncate_a_short_list():
     assert "…and" not in msg
 
 
-# --- Dwell-state loss (issue #1526) ---------------------------------------------------------
+# --- Dwell-state loss ---------------------------------------------------------
 # A reset is only useful if it names when the check is trustworthy again, so the dates are
 # asserted as literal strings against a fixed epoch: deriving them from VERSION_SOAK_DAYS +
 # PENDING_GRACE_DAYS inside the test would assert the file equals itself and would still pass
@@ -449,7 +449,7 @@ def test_pending_clock_ready_names_a_nearer_date_for_a_digest_clock():
 
 
 def test_render_pending_reset_carries_every_date_and_the_dashboard():
-    """Three dates, because a loss restarts the branch clocks the churn arm reads too (#3076)."""
+    """Three dates, because a loss restarts the branch clocks the churn arm reads too."""
     msg = pl.render_pending_reset(_RESET_NOW, "o/r")
     assert "2026-09-23" in msg
     assert "2026-09-19" in msg

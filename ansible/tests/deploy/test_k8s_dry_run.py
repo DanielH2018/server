@@ -177,8 +177,7 @@ def test_the_render_directory_fact_survives_every_tag_selection() -> None:
 
     `[config, deploy]` looks like it covers both and does the opposite: tags union, so the task
     is skipped by `--skip-tags deploy` — the config-only form CLAUDE.md documents — and the
-    renders then die on `'manifests_dest_dir' is undefined`. Measured 2026-08-16 with
-    `--tags freshrss --skip-tags deploy`. Only `always` survives all three selections.
+    renders then die on `'manifests_dest_dir' is undefined`. Only `always` survives all three selections.
     """
     tasks = load_tasks(_MANIFESTS)
     for fragment in (
@@ -269,17 +268,17 @@ def _unguarded_mutations(role: Path) -> list[str]:
     """Every task in the role that writes to the cluster with no k8s_no_mutate guard on it.
 
     The guard has to sit ON the mutating task (or on the guarded include that pulled its whole
-    file in), not merely somewhere in the role. `_GUARD_FACT.search(task_file.read_text())` is
-    what this replaces, and it matched cronjob-gate's COMMENTS alone: deleting
-    `when: not (k8s_no_mutate | bool)` from its `kubectl create job` left this file green while
-    `./scripts/deploy.sh --tags configarr --dry-run` fired a real gate run and reconciled the
-    live *arr stack. configarr stopped being refused outright on the strength of that guard,
-    so this is the check that removal rests on.
+    file in), not merely somewhere in the role. A raw-text search of the file
+    (`_GUARD_FACT.search(task_file.read_text())`) would match cronjob-gate's COMMENTS alone:
+    deleting `when: not (k8s_no_mutate | bool)` from its `kubectl create job` would leave this
+    file green while `./scripts/deploy.sh --tags configarr --dry-run` fires a real gate run and
+    reconciles the live *arr stack. configarr relies on that guard instead of being refused
+    outright, so this is the check that reliance rests on.
 
     Fail-closed in two directions. A trailing comment is stripped from the guard search, so a
     `# k8s_no_mutate` in prose credits nothing. And the rule is per-task: a role that guarded a
     `block:` rather than the tasks inside it would be reported here, even though Ansible would
-    propagate that `when`. No role in this tree does that today; if one is written, either move
+    propagate that `when`. No role in this tree does that; if one is written, either move
     the guard onto the tasks or make this walker read block ancestry the way
     `_autodeploy.py::_iter_task_dicts` does.
     """
@@ -310,19 +309,15 @@ def _guarded_at_entry(role: Path) -> bool:
     Requires at least one mutating task, and a guard on every one of them. The "at least one"
     half is what keeps a role that applies its objects some other way — `_bypasses_manifests`,
     with nothing this file recognises as a kubectl write — from reading as guarded on an empty
-    loop. n8n-images was that role until #2813 folded it into n8n.
+    loop.
     """
     return bool(_mutates_outside_manifests(role)) and not _unguarded_mutations(role)
 
 
 def test_every_role_that_mutates_outside_manifests_guards_itself() -> None:
-    """This is what replaced the `k8s_dry_run_unsupported` refusal list (#2876).
+    """Every role takes the `k8s_no_mutate` guard; there is no refusal list.
 
-    While the list existed, a role that mutated the cluster from its own tasks could either
-    guard those tasks on `k8s_no_mutate` or join the list and have `deploy.yml` refuse the
-    whole run. #2588 guarded the last unguarded role and #2813 folded away the last listed
-    one, so the list went empty and the refusal became dead code. Every role now takes the
-    guard, and that is the invariant to keep: a new role that mutates outside
+    That is the invariant to keep: a new role that mutates outside
     `roles/k8s/manifests` half-applies under a dry run unless it guards itself.
     """
     scanned = [
@@ -366,8 +361,7 @@ def test_no_role_hides_a_dependency_the_tag_refusal_cannot_see() -> None:
 
     This is not hypothetical: `--tags freshrss` named one role and still ran volume-claim,
     which started and removed a pod against freshrss's live Longhorn PVC. Any role reachable
-    as a dependency must therefore guard itself. The refusal list this once argued against
-    (`k8s_dry_run_unsupported`) is gone for the same reason it could not help here (#2876).
+    as a dependency must therefore guard itself.
     """
     assert not list(_K8S_ROLES.glob("*/meta/main.yml")), (
         "a k8s role grew a meta/main.yml — role `dependencies:` there are invisible to the "
@@ -397,13 +391,11 @@ _CREATE_JOB = (
 def test_a_guard_named_only_in_a_comment_does_not_excuse_a_mutating_task(
     tmp_path: Path,
 ) -> None:
-    """The W3 defect, pinned: `_guarded_at_entry` was a raw-text search over the whole file.
+    """`_guarded_at_entry` must not be a raw-text search over the whole file.
 
-    cronjob-gate's comments alone satisfied it, so deleting the `when:` from its
-    `kubectl create job` left both derivation tests green while a real dry run created the Job.
-    Watched failing with that `when:` deleted from the live role: both
-    `test_unsupported_list_matches_the_roles_that_actually_mutate` and
-    `test_no_role_hides_a_dependency_the_tag_refusal_cannot_see` name cronjob-gate.
+    cronjob-gate's comments alone would satisfy one, so deleting the `when:` from its
+    `kubectl create job` would leave both derivation tests green while a real dry run created
+    the Job.
     """
     commented = _role_with_tasks(
         tmp_path / "a",

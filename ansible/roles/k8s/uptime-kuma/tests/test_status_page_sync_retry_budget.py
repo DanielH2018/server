@@ -23,13 +23,13 @@ DEFAULTS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
 # What the job actually has to absorb, which is NOT the length of the outage. The reboot cron
 # and the schedule are both fixed, so the ticks either side of the outage are known: the 07:30
 # run finishes before `shutdown -r +5` fires at 07:35, and the 07:45 run is the one that has to
-# wait. Measured 2026-09-06: daniel-server booted at 07:48:25 and Kuma was Ready at ~07:51, so
+# wait. Measured: daniel-server booted at 07:48:25 and Kuma was Ready at ~07:51, so
 # the 07:45 run needed ~6 minutes. Boot time varies week to week (07:38 and 07:41 on the two
 # preceding Sundays), hence the margin asserted below rather than a bare comparison.
 SUNDAY_REBOOT_WAIT_SECONDS = 6 * 60
 # A deploy rollout removes the endpoint for longer than Kuma itself is down: `strategy: Recreate`
 # leaves no old pod, and autokuma's startupProbe holds the new pod NotReady past the point where
-# uptime-kuma is serving. Measured 2026-09-06: SIGTERM 11:03:35, pod Ready 11:05:18.
+# uptime-kuma is serving. Measured: SIGTERM 11:03:35, pod Ready 11:05:18.
 ROLLOUT_ENDPOINT_GAP_SECONDS = 103
 # `*/15 * * * *`. A deadline past this would let `concurrencyPolicy: Forbid` skip more than the
 # single following tick.
@@ -118,9 +118,9 @@ PUSH_MONITOR_SILENCE_SECONDS = 1800
 
 
 def test_a_finished_job_is_reaped_after_its_logs_have_outlived_the_down_window():
-    """A failed Job used to sit in `get pods` as Init:Error until two later failures displaced
-    it — 14h on 2026-09-19, for a run that hit the #2076 wipe (#2120). The TTL must keep the
-    logs past the push monitor's silence window, and must not keep them for days."""
+    """A failed Job sits in `get pods` as Init:Error until two later failures displace it. The
+    TTL must keep the logs past the push monitor's silence window, and must not keep them for
+    days."""
     doc = yaml.safe_load(render())
     ttl = doc["spec"]["jobTemplate"]["spec"]["ttlSecondsAfterFinished"]
     assert ttl == DEFAULTS["kuma_status_page_sync_job_ttl_seconds"]

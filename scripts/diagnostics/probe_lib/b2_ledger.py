@@ -4,10 +4,9 @@ Backs the `b2-spend` and `b2-deletions` subcommands. B2 charges per transaction 
 reports the totals nowhere an API can reach: the Native API has no usage operation, and the
 per-class Usage Reports are Partner-tier. Backup spend is recoverable from Longhorn's logs
 (see BACKUP_BLOCKS_RE), but MAINTENANCE spend — the drains, inventories and verification
-listings an operator runs by hand — leaves no trace at all once the terminal scrolls. On
-2026-08-17 that was most of a 2,000-transaction day and had to be reconstructed from memory,
-badly. Anything that talks to B2 records what it spent here, so the controllable half of the
-bill stops being guesswork.
+listings an operator runs by hand — leaves no trace at all once the terminal scrolls.
+Anything that talks to B2 records what it spent here, so the controllable half of the bill
+stops being guesswork.
 
 Patched in tests via the module attribute (`ledger.B2_LEDGER_DIR`), so keep callers inside
 this module referring to the bare name and let the tests patch here. See core's
@@ -162,8 +161,8 @@ def run_b2_spend(ns):
 #        &volume=pvc-c2ca0afb-74f0-4507-a29a-3cf40aac175d"
 #
 # Anchor on Complete, never Start. Counting both doubles every deletion, the pair straddles a
-# window edge routinely (measured 2026-09-03: one pair spanned 03:30:52 to 03:33:39), and
-# Complete is the line that means the block-tree walk actually spent the transactions.
+# window edge routinely (one pair can span 03:30:52 to 03:33:39), and Complete is the line that
+# means the block-tree walk actually spent the transactions.
 DELETE_COMPLETE_RE = re.compile(
     r"Complete deleting backup (?P<target>s3://[^\s?\"]+)\?"
     r"backup=(?P<backup>[A-Za-z0-9_-]+)&volume=(?P<volume>pvc-[0-9a-f-]{36})"
@@ -301,9 +300,7 @@ def deletions_summary_line(charged, skipped, unpriced):
     Check 10 of the Longhorn backup heartbeat reads it to decide whether this cron is still
     alive (`ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py`), the way it reads
     `trimmed N volume(s), N skipped, N failed` for the trim. The shape is the interface, so a
-    reword here blinds that check and its tests match this text as written. Before #2545 the
-    check judged the b2 half on ANY journal line, so a run that logged a traceback and exited
-    non-zero read as healthy.
+    reword here blinds that check and its tests match this text as written.
     """
     return "b2-deletions: charged %d, skipped %d, unpriced %d" % (
         charged,
@@ -402,11 +399,11 @@ def format_backup_deletions(priced, unpriced, skipped, window, measured_at, name
 def run_b2_deletions(ns):
     """Charge Longhorn's completed backup deletions to today's ledger, after the fact.
 
-    The ledger's gap until 2026-09-03: `record_b2_spend` was called only from the two read-only
-    listing commands, so the one class of operation it exists to capture — a deletion, which
-    walks a whole block tree at ~1.28 Class C per stored block — wrote no line at all. Deriving
-    it from `longhorn-manager`'s own logs needs no cooperation from whoever ran the deletion,
-    which is the property a manual record call inside each drop playbook would still lack.
+    `record_b2_spend` is called only from the two read-only listing commands, so the one class
+    of operation it exists to capture — a deletion, which walks a whole block tree at ~1.28
+    Class C per stored block — would otherwise write no line at all. Deriving it from
+    `longhorn-manager`'s own logs needs no cooperation from whoever ran the deletion, which is
+    the property a manual record call inside each drop playbook would still lack.
 
     Reads Loki and the Kubernetes API only. It spends nothing on B2, so it is safe on a timer.
     """

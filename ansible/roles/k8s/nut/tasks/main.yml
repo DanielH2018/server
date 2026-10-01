@@ -1,9 +1,8 @@
 ---
-# Design decision D6 REVERSED (operator, 2026-08-14): nut moves in-cluster, pinned to
-# daniel-server (the UPS's USB host), so Docker can be removed from that host entirely.
+# nut runs in-cluster, pinned to daniel-server (the UPS's USB host).
 # The host-side half of the stack — udev rule + secondary upsmon that performs the real
-# poweroff — lives in the nut_host role (initial_setup.yml), unchanged at cutover
-# because the pod re-creates the same 127.0.0.1:3493 loopback publish as a hostPort.
+# poweroff — lives in the nut_host role (initial_setup.yml). The pod publishes the
+# 127.0.0.1:3493 loopback as a hostPort, which is what that secondary upsmon connects to.
 
 - name: Build the nut image
   ansible.builtin.include_role:

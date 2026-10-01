@@ -8,9 +8,9 @@ manifests fires an unwaited `rollout restart deploy/prowlarr` a few tasks earlie
 initialDelay — so at the moment the Job starts, the prowlarr Service routinely has no ready
 endpoint.
 
-With the original single-shot `nc`, that meant the probe reported CONTROL FAILED and failed the
-deploy on precisely the runs that changed something, which is every run worth probing. The fix is
-a bounded retry, and it only holds while three numbers stay in the right order:
+A single-shot `nc` would report CONTROL FAILED and fail the deploy on precisely the runs that
+changed something, which is every run worth probing. The control therefore retries within a
+bound, and that only holds while three numbers stay in the right order:
 
     control retry budget  <  Job activeDeadlineSeconds  <  Ansible `kubectl wait --timeout`
 

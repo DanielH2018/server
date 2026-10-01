@@ -49,7 +49,7 @@ def test_container_streams_are_job_pi_on_machine_daniel_pi(alloy_config: str) ->
 
 
 def test_the_journal_is_not_shipped(alloy_config: str) -> None:
-    """The role's CLAUDE.md records why: RSS, not line volume (#1922).
+    """The role's CLAUDE.md records why: RSS, not line volume.
 
     The shipper peaks at 75-82 MB every day against a 96 MiB cap, and a journal reader's own
     footprint on top of that is unmeasured. Enabling it is a deliberate decision that starts
@@ -66,8 +66,7 @@ def test_storage_path_is_not_under_the_images_own_var_lib_alloy() -> None:
     """The image's /var/lib/alloy is 0770 uid 473; uid 1000 cannot traverse it.
 
     A bind mount inside it is unreachable and Alloy dies at startup with
-    `mkdir /var/lib/alloy/data: permission denied` — the first deploy of this role did
-    exactly that, every two minutes, while the spike (root) had run for an hour.
+    `mkdir /var/lib/alloy/data: permission denied`.
     """
     compose = _COMPOSE.read_text()
     assert "--storage.path=/data" in compose
@@ -87,7 +86,7 @@ def _resolver_attempts(compose: str) -> int:
     """Return the `attempts:` value the compose's `dns_opt` sets, or 1 (resolv.conf's default).
 
     Docker copies the host's `timeout:2 attempts:1` into the container otherwise, and one 2s
-    try against the embedded resolver is what issue #927 measured failing.
+    try against the embedded resolver fails.
     """
     block = _DNS_OPT_BLOCK.search(re.sub(r"#[^\n]*", "", compose))
     if block is None:

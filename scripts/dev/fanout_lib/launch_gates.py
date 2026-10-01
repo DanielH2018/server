@@ -26,7 +26,7 @@ MAX_BATCHES_PER_REMOTE_HOST = 3
 # (`claude_code_rc_memory_high`), so four live agents fit and five do not. Unlike the ssh
 # budget above, this one stacks ACROSS runs: a second launch minutes after the first measures
 # a memory.current the first run's agents have not yet grown into, so headroom alone underprices
-# them (issue #2889). Counted from the run manifests, which cost no ssh to read.
+# them. Counted from the run manifests, which cost no ssh to read.
 MAX_LIVE_BATCHES_PER_HOST = 3
 
 

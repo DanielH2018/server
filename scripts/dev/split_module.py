@@ -18,9 +18,8 @@ does not name. Imports are NOT rewritten: the header carries the target's import
 `uv run ruff check --fix` afterwards removes the ones SRC no longer uses and reports the
 ones a target still lacks (F401 / F821).
 
-This is the tool that split the 1,000-line guards under `ansible/tests/` during the
-2026-09-02 reorganization (PRs #762 and #768). It works on the AST, so a name that only
-appears inside a string or a comment is neither moved nor counted as a reference.
+It works on the AST, so a name that only appears inside a string or a comment is neither
+moved nor counted as a reference.
 """
 
 import argparse
@@ -98,11 +97,9 @@ def _check_spec(spec: Spec) -> None:
 
     `main()` hands this the result of `json.loads`, which is untyped, so the `Target` TypedDict
     documents the shape without enforcing it anywhere. The body then indexes `cfg["header"]` and
-    iterates `cfg["names"]` as a str and a list of str -- so a spec with `"header": 123` used to
-    write a file headed `123` (the old `str()` coercion), and after that coercion was dropped it
-    raised AttributeError instead. `main()` catches only ValueError, so either way the operator
-    got the wrong thing: a nonsense file, or a traceback where every other spec bug prints
-    `error: ...` and exits 1.
+    iterates `cfg["names"]` as a str and a list of str -- so a spec with `"header": 123` would
+    raise AttributeError instead of a clear error. `main()` catches only ValueError, so the
+    operator would get a traceback where every other spec bug prints `error: ...` and exits 1.
     """
     for target, cfg in spec.items():
         if not isinstance(cfg, dict):

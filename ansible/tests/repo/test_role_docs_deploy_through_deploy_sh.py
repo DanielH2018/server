@@ -3,9 +3,8 @@
 The root CLAUDE.md routes every deploy through `scripts/deploy.sh`, which takes the tree lock
 the GitOps deployer and the secret-rotate cron share, snapshots HEAD, and checks the tag and
 staleness before it runs the playbook. A bare `uv run ansible-playbook ansible/deploy.yml` does
-none of that. The 2026-09-26 CLAUDE.md audit (#2678) found 38 role docs giving the bare form in
-their Editing section, spread by copying a sibling rather than by any scaffold, so a guard is
-what stops the next copy.
+none of that. The bare form spreads by copying a sibling doc rather than by any scaffold, so a
+guard is what stops the next copy.
 
 Run: uv run pytest ansible/tests/repo/test_role_docs_deploy_through_deploy_sh.py
 """

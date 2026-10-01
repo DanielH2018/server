@@ -2,7 +2,7 @@
 """The k8s services a render-record run renders on one host, derived from the tree.
 
 `render_records` (roles/setup/render_records) runs `deploy.sh --dry-run -e
-manifests_render_record=true` hourly, and this module is its `--tags` list (#2587). A service
+manifests_render_record=true` hourly, and this module is its `--tags` list. A service
 qualifies when two things hold:
 
   * the host's `containers_list` declares it with `platform: k8s`, because a deploy reaches

@@ -1,7 +1,7 @@
 # Repo policy for shellcheck's OPTIONAL rules (the default gate in prek.toml runs with
 # optional checks off and is clean — this file only governs `-o all` / editor sweeps, and
 # a disable here wins even when `-o all` is passed).
-# Each rule below was triaged 2026-07-24 and rejected deliberately; delete a line to adopt it.
+# Each rule below was triaged and rejected deliberately; delete a line to adopt it.
 
 # 167 hits. Repo convention is unbraced "$var"; braces-everywhere is taste, not correctness.
 disable=SC2250
