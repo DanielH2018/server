@@ -273,28 +273,69 @@ def test_soak_constants_match_renovate_json():
 
 def test_update_pending_seen_stamps_new_items_and_keeps_old_ones():
     seen = pl.update_pending_seen({"a": 100.0}, {"a": "x", "b": "y"}, 500.0)
-    assert seen == {"a": 100.0, "b": 500.0}
+    assert seen == {
+        "a": 100.0,
+        pl.content_key(
+            "a", "x"
+        ): 100.0,  # legacy branch-only entry seeds its digest clock
+        "b": 500.0,
+        pl.content_key("b", "y"): 500.0,
+    }
 
 
 def test_update_pending_seen_drops_departed_items():
-    # The item left the section (its PR was raised), so its clock must not survive to re-page.
-    assert pl.update_pending_seen({"a": 100.0}, {"b": "y"}, 500.0) == {"b": 500.0}
+    # The item left the section (its PR was raised), so neither clock may survive to re-page.
+    assert pl.update_pending_seen(
+        {"a": 100.0, pl.content_key("a", "x"): 100.0}, {"b": "y"}, 500.0
+    ) == {
+        "b": 500.0,
+        pl.content_key("b", "y"): 500.0,
+    }
 
 
-def test_stale_pending_is_clean_inside_the_allowance():
-    now = 1_000_000.0
-    current = {"renovate/x": "Update foo Docker tag to v2"}
-    seen = {"renovate/x": now - 13 * DAY}  # 7-day soak + 7-day grace = 14
-    assert pl.stale_pending(seen, current, now) == []
+def test_a_re_push_resets_the_digest_clock_and_keeps_the_branch_clock():
+    """The two clocks the fix turns on: #3076's whole claim in one assertion."""
+    t0 = 1_000_000.0
+    first = pl.update_pending_seen(
+        {}, {"renovate/nginx": "...Docker digest to aaaaaaa"}, t0
+    )
+    assert first == {
+        "renovate/nginx": t0,
+        pl.content_key("renovate/nginx", "...Docker digest to aaaaaaa"): t0,
+    }
+    later = pl.update_pending_seen(
+        first, {"renovate/nginx": "...Docker digest to bbbbbbb"}, t0 + 20 * DAY
+    )
+    assert later["renovate/nginx"] == t0, "the branch clock must survive a re-push"
+    assert (
+        later[pl.content_key("renovate/nginx", "...Docker digest to bbbbbbb")]
+        == t0 + 20 * DAY
+    )
+    assert pl.content_key("renovate/nginx", "...Docker digest to aaaaaaa") not in later
 
 
-def test_stale_pending_is_flagged_past_the_allowance():
-    now = 1_000_000.0
-    current = {"renovate/x": "Update foo Docker tag to v2"}
-    seen = {"renovate/x": now - 20 * DAY}
-    assert pl.stale_pending(seen, current, now) == [
-        ("renovate/x", "Update foo Docker tag to v2", 20)
-    ]
+def test_stale_pending_reports_the_age_of_the_digest_on_the_branch_now():
+    """#3076's verify-by, driven through the writer so a key-derivation mismatch fails here.
+
+    The branch has been in the section 20 days — past the 3+7 digest allowance — but the digest
+    now on it arrived today, so the arm must stay quiet rather than report 20 days.
+    """
+    t0 = 1_000_000.0
+    old_desc = "Update nginx Docker digest to aaaaaaa"
+    new_desc = "Update nginx Docker digest to bbbbbbb"
+    seen = pl.update_pending_seen({}, {"renovate/nginx": old_desc}, t0)
+    now = t0 + 20 * DAY
+    seen = pl.update_pending_seen(seen, {"renovate/nginx": new_desc}, now)
+    assert pl.stale_pending(seen, {"renovate/nginx": new_desc}, now) == []
+    # The same input, with the digest unchanged across those 20 days, still fires.
+    stable = pl.update_pending_seen(
+        pl.update_pending_seen({}, {"renovate/nginx": old_desc}, t0),
+        {"renovate/nginx": old_desc},
+        now,
+    )
+    assert [
+        i[0] for i in pl.stale_pending(stable, {"renovate/nginx": old_desc}, now)
+    ] == ["renovate/nginx"]
 
 
 def test_stale_pending_uses_the_shorter_allowance_for_a_digest_item():
@@ -407,10 +448,13 @@ def test_pending_clock_ready_names_a_nearer_date_for_a_digest_clock():
     assert pl.pending_clock_ready(_RESET_NOW, pl.DIGEST_SOAK_DAYS) == "2026-09-19"
 
 
-def test_render_pending_reset_carries_both_dates_and_the_dashboard():
+def test_render_pending_reset_carries_every_date_and_the_dashboard():
+    """Three dates, because a loss restarts the branch clocks the churn arm reads too (#3076)."""
     msg = pl.render_pending_reset(_RESET_NOW, "o/r")
     assert "2026-09-23" in msg
     assert "2026-09-19" in msg
+    # (7-day soak + 7-day grace) * 3 = 42 days out, the latest of the three.
+    assert "2026-10-21" in msg
     assert "https://github.com/o/r/issues/3" in msg
 
 

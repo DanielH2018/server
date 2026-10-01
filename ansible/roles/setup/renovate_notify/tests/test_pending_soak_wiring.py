@@ -15,6 +15,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
+import pending_logic as pl
 import renovate_notify as rn
 
 DAY = 86400.0
@@ -30,8 +31,32 @@ DASHBOARD = {
 }
 
 
-def _wire(monkeypatch, tmp_path, posts, now):
-    """Point main() at a fake GitHub + Discord and a state dir under tmp_path."""
+# The digest-clock key `main()` writes beside the branch key for the fixture's one item: the
+# dwell is keyed on the update, so the state file carries both clocks (#3076).
+_PROMTAIL_DIGEST_KEY = pl.content_key(
+    "renovate/promtail", "Update grafana/promtail Docker tag to v3.6.11"
+)
+
+# A dashboard whose one pending item is a mutable-tag digest bump on a branch Renovate reuses.
+CHURN_DASHBOARD = {
+    "title": "Dependency Dashboard",
+    "user": {"login": "renovate[bot]"},
+    "updated_at": "2999-01-01T00:00:00Z",
+    "body": (
+        "## Pending Status Checks\n\n"
+        " - [ ] <!-- unpend-branch=renovate/k8s-image-nginx -->"
+        "Update nginx:alpine Docker digest to bbbbbbb\n"
+    ),
+}
+
+
+def _wire(monkeypatch, tmp_path, posts, now, dashboard=DASHBOARD):
+    """Point main() at a fake GitHub + Discord and a state dir under tmp_path.
+
+    `dashboard` selects which captured body the fake GitHub returns. Patching it here rather
+    than re-patching `get` in a wrapper keeps the module's monkeypatch count where
+    `test_no_test_module_patches_more_modules_than_its_allowlist_entry` holds it.
+    """
     monkeypatch.setattr(
         rn,
         "cfg",
@@ -42,7 +67,7 @@ def _wire(monkeypatch, tmp_path, posts, now):
         },
     )
     monkeypatch.setattr(rn, "github_token", lambda *_a, **_k: "")
-    monkeypatch.setattr(rn, "get", lambda url: [DASHBOARD] if "/issues" in url else [])
+    monkeypatch.setattr(rn, "get", lambda url: [dashboard] if "/issues" in url else [])
     monkeypatch.setattr(
         rn, "discord", lambda hook, content: posts.append(content) or True
     )
@@ -56,7 +81,7 @@ def test_clock_is_written_on_a_run_that_posts_nothing(monkeypatch, tmp_path):
     assert rn.main() == 0
     assert posts == [], "no backlog and no stuck item should post nothing"
     seen = json.loads((tmp_path / "pending_seen.json").read_text())
-    assert seen == {"renovate/promtail": now}
+    assert seen == {"renovate/promtail": now, _PROMTAIL_DIGEST_KEY: now}
 
 
 def test_an_aged_clock_reaches_discord_and_names_the_item(monkeypatch, tmp_path):
@@ -94,7 +119,7 @@ def test_the_clock_survives_across_runs(monkeypatch, tmp_path):
     _wire(monkeypatch, tmp_path, posts, start + 5 * DAY)
     rn.main()
     seen = json.loads((tmp_path / "pending_seen.json").read_text())
-    assert seen == {"renovate/promtail": start}
+    assert seen == {"renovate/promtail": start, _PROMTAIL_DIGEST_KEY: start}
     assert posts == []
     # ...and once the accumulated dwell passes the allowance, it fires.
     _wire(monkeypatch, tmp_path, posts, start + 20 * DAY)
@@ -194,3 +219,58 @@ def test_a_first_run_does_not_report_a_reset(monkeypatch, tmp_path):
     _wire(monkeypatch, tmp_path, posts, 1_788_990_155.26)
     assert rn.main() == 0
     assert posts == [], "seeding an empty state file is not a loss"
+
+
+def test_a_churning_branch_reaches_discord_when_no_digest_ever_ages_out(
+    monkeypatch, tmp_path
+):
+    """The arm the digest clock makes necessary, end to end (#3076).
+
+    The branch has been in the section 30 days — past (1-day soak + 7-day grace) * 3 — while
+    the digest on it arrived two days ago, so the dwell arm cannot fire and this one must.
+    """
+    posts = []
+    now = 1_000_000.0
+    branch = "renovate/k8s-image-nginx"
+    (tmp_path / "pending_seen.json").write_text(
+        json.dumps(
+            {
+                branch: now - 30 * DAY,
+                pl.content_key(
+                    branch, "Update nginx:alpine Docker digest to bbbbbbb"
+                ): (now - 2 * DAY),
+            }
+        )
+    )
+    _wire(monkeypatch, tmp_path, posts, now, dashboard=CHURN_DASHBOARD)
+    assert rn.main() == 0
+    assert len(posts) == 1, "a 30-day churning branch must post"
+    assert "branch pending 30 days" in posts[0]
+    assert "only 2" in posts[0]
+    assert branch in posts[0]
+
+
+def test_a_re_pushed_branch_inside_the_churn_allowance_stays_silent(
+    monkeypatch, tmp_path
+):
+    """The same inputs, 20 days in: neither arm may fire, which is #3076's over-report closed.
+
+    Pre-#3076 this posted — the branch clock was the dwell, and 20 days is past the 1+7
+    allowance the digest on the branch has never come close to.
+    """
+    posts = []
+    now = 1_000_000.0
+    branch = "renovate/k8s-image-nginx"
+    (tmp_path / "pending_seen.json").write_text(
+        json.dumps(
+            {
+                branch: now - 20 * DAY,
+                pl.content_key(
+                    branch, "Update nginx:alpine Docker digest to bbbbbbb"
+                ): (now - 2 * DAY),
+            }
+        )
+    )
+    _wire(monkeypatch, tmp_path, posts, now, dashboard=CHURN_DASHBOARD)
+    assert rn.main() == 0
+    assert posts == []

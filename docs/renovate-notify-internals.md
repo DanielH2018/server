@@ -50,9 +50,25 @@ The role doc names both shapes; these are the measurements behind them.
 - **A lost `pending_seen.json` restarts every clock at zero.** The arm then finds nothing for
   soak plus grace: 14 days for a version bump, 10 for a digest one, with every run reporting
   healthy. A package in `pending_logic.py:FAST_DIGEST_SOAK_DAYS` waits 8 rather than 10: the two
-  nginx alpine pins soak 1 day in `renovate.json` since #2886. `pending_state_lost` tells a wiped state file from a bootstrap using `last_run` as
-  the witness that this host has completed a run before, and the digest names the date the
-  clocks become usable again (#1526).
+  nginx alpine pins soak 1 day in `renovate.json` since #2886. The churn arm is blind for its
+  own, longer window — a loss restarts the branch clocks too, so it can find nothing for
+  `PENDING_CHURN_MULTIPLIER` times soak plus grace, 42 days for a version row (#3076).
+  `pending_state_lost` tells a wiped state file from a bootstrap using `last_run` as
+  the witness that this host has completed a run before, and the digest names all three dates
+  the clocks become usable again (#1526).
+- **A branch-keyed dwell over-reported a mutable tag.** Renovate reuses one branch across
+  every re-push of a mutable tag, so a dwell keyed on the branch measured how long some digest
+  had been pending: this arm reported the freshrss cache digest stuck 18.8 days when no
+  single digest had been pending more than about 3 (#2886, #3076). Keying on the description
+  instead would have under-reported to zero — nine of the 22 items live on 2026-09-02 were
+  mutable-tag digest bumps whose description changes on every re-push — so the fix keeps both
+  clocks: `content_key` keys the digest clock `stale_pending` times, and the branch key stays
+  for `churning_pending`. The digest clock alone cannot page for `nginx:alpine`, re-pushed about
+  every 3.6 days against a 1-day soak and 7-day grace, which is why the churn arm exists:
+  `PENDING_CHURN_MULTIPLIER` times soak plus grace, so three consecutive allowances pass with
+  the item never once leaving the section before it pages. A legacy state file's branch-only
+  entry seeds its digest clock from the branch clock rather than from now, so the upgrade run
+  does not blind the arm for 14 days the way a lost file does.
 - **A grouped row took the wrong soak.** `groupSingleUpdates: true` (#2646) titles a
   single-dependency update with its GROUP name, so the row reads `Update k8s image
   ghcr.io/haveagitgat/tdarr (manual — ...)` where an ungrouped digest row says `Docker digest
