@@ -129,15 +129,36 @@ def check_disk(cfg: Config) -> tuple[bool, str]:
     return True, "all mounts under %.0f%%" % cfg.DISK_MAX_PCT
 
 
-def check_cert(cfg: Config) -> tuple[bool, str]:
-    days = bridge.net.prom_scalar(
-        cfg, "(min(traefik_tls_certs_not_after) - time()) / 86400"
-    )
-    if days is None:
+def check_cert(cfg: Config, prom_vector: PromVector | None = None) -> tuple[bool, str]:
+    """Checks whether any certificate Traefik serves expires within cfg.CERT_MIN_DAYS.
+
+    Per-series, not `min(...)`: the aggregation discarded the labels, so a DOWN said a
+    certificate was expiring and could not say which (#3101). The series carry `cn`, `sans`
+    and `serial` rather than the `origin` the host checks group by, so the message names the
+    `cn` — and every breaching one, the way check_disk names every full mountpoint.
+
+    `prom_vector` is the fetch seam, an ARGUMENT rather than a module global a test patches,
+    the same shape check_mem gives it. None resolves `bridge.net.prom_vector` at call time,
+    which is what the pod does.
+    """
+    fetch = bridge.net.prom_vector if prom_vector is None else prom_vector
+    vec = fetch(cfg, "(traefik_tls_certs_not_after - time()) / 86400")
+    if not vec:
         return False, "cert metric unavailable"
-    if days < cfg.CERT_MIN_DAYS:
-        return False, "cert expires in %.1fd (< %.0fd)" % (days, cfg.CERT_MIN_DAYS)
-    return True, "cert valid %.0fd" % days
+    breaching = sorted(
+        (days, labels.get("cn") or "unnamed cert")
+        for labels, days in vec
+        if days < cfg.CERT_MIN_DAYS
+    )
+    if breaching:
+        return False, "cert expires within %.0fd: %s" % (
+            cfg.CERT_MIN_DAYS,
+            ", ".join("%s in %.1fd" % (cn, days) for days, cn in breaching),
+        )
+    soonest, cn = min(
+        (days, labels.get("cn") or "unnamed cert") for labels, days in vec
+    )
+    return True, "cert valid %.0fd (soonest: %s)" % (soonest, cn)
 
 
 def check_mem(cfg: Config, prom_vector: PromVector | None = None) -> tuple[bool, str]:

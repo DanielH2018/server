@@ -59,7 +59,11 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
 - **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`** — old kernels
   filling /boot quietly breaks upgrades, and a full ESP breaks firmware/bootloader
   updates the same way; server-only, the Pi's disk lives in the Pi Pressure check)
-- **TLS Cert Expiry** (`traefik_tls_certs_not_after`)
+- **TLS Cert Expiry** (`traefik_tls_certs_not_after`) — per-series, so the message names each
+  breaching certificate's `cn`. It read `min(traefik_tls_certs_not_after)` until 2026-10-01,
+  which aggregated the labels away and left the tile promising a name the message could not
+  carry (#3101). Latent while Traefik's store holds the one wildcard; a page naming nothing is
+  what a second certificate would have produced.
 - **Memory** (host `node_memory_*` pressure only)
 - **Host coverage floor** — not a monitor of its own, but a second arm inside **Root Disk** and
   **Memory** (`_host_origin_shortfall`, added 2026-08-23; documented here 2026-08-23b review
@@ -1319,8 +1323,9 @@ no successor.
 
 ## Push-monitor mechanics, and what set each number
 
-- The restart/OOM/cpu/target/5xx checks use `prom_vector()` (keeps series labels) so the alert
-  names *which* container / target / route is failing; the others use `prom_scalar()`.
+- The restart/OOM/cpu/target/5xx/cert checks use `prom_vector()` (keeps series labels) so the
+  alert names *which* container / target / route / certificate is failing; the others use
+  `prom_scalar()`.
 - Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval
   (`kuma_bridge_push_interval`, 1200 s = 4× the loop) is the backstop for "the bridge itself
   died". Same dead-man's-switch idea as `cloudflare-ddns` — see [[its CLAUDE.md]] and the
