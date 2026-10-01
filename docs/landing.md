@@ -291,9 +291,19 @@ Four things sit in that position:
   `manifests`, `volume-claim`, `volume-snapshot`, `image-builder`, `arr-notification` and the
   rest have no `containers_list` entry, but `deploy.yml` runs each under the tag of every role
   that includes it, so the landing adds the tags of every caller, followed through callers that
-  are themselves shared. A `tasks/` change to `volume-snapshot` or `manifests` reaches about 58
+  are themselves shared. A `tasks/` change to `volume-snapshot` reaches about 58
   services. A shared-role change reaching no rendered manifest fans out to nothing.
-  `deploy.sh --tags <shared role>` performs the same expansion by hand.
+  `deploy.sh --tags <shared role>` performs the same expansion by hand, for every caller, even
+  where the landing narrows (#2717).
+  **`manifests` is the one exception, and only for a change confined to `tasks/` or
+  `handlers/`** (#3124). That role acts through the bytes it renders, so such a change moves no
+  live object: the landing deploys ONE caller as a smoke test — the cheapest render target, as
+  `shared_role_callers.smoke_caller` derives it — and the other 56 take the new task logic on
+  their own next deploy. PR #3117 was the measured case: 57 tags, about 20 minutes, and 0 of 60
+  release records showed the restart it was changing. The `# DECIDED:` at `smoke_caller` holds
+  the ruling and the gap it accepts, and `deploy_defer.discharge_k8s_unapplied` still reads
+  every caller, because its question is whether the change is applied rather than whether it
+  runs.
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
   `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run
   `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a

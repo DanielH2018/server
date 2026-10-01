@@ -306,7 +306,8 @@ def test_a_shared_role_alone_derives_no_tag_of_its_own_and_reaches_its_callers()
     files = ["ansible/roles/k8s/manifests/tasks/main.yml"]
     tags, source = land_tags.derive(files, changed_files=1)
     assert (tags, source) == ([], "pr")
-    assert "sonarr" in land_tags.shared_caller_tags(files)["manifests"]
+    # One caller since #3124; `test_shared_role_smoke_caller.py` owns the narrowing itself.
+    assert len(land_tags.shared_caller_tags(files)["manifests"]) == 1
 
 
 def test_an_ordinary_service_role_is_neither_dropped_nor_reported():

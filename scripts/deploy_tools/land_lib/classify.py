@@ -192,8 +192,24 @@ def classify(ln: Landing) -> None:
             ln.plane_paths,
             declared,
         )
+        smoke = _classified(
+            ln,
+            "shared-role smoke narrowing",
+            c.smoke_narrowed_roles,
+            ln.plane_paths,
+            declared,
+        )
         for role, role_tags in sorted(reached.items()):
-            if role_tags:
+            if role in smoke:
+                # The operator line must not claim the fleet: this change moves no rendered
+                # byte, so one caller proves the task logic runs and the rest pick it up on
+                # their own next deploy (#3124).
+                say(
+                    f"`{role}` renders no different bytes for this change; deploying "
+                    f"{', '.join(sorted(role_tags))} as a smoke test, and its other callers "
+                    "take the new task logic on their own next deploy"
+                )
+            elif role_tags:
                 say(
                     f"`{role}` has no deploy tag of its own; deploying the "
                     f"{len(role_tags)} service(s) that run it"

@@ -11,9 +11,11 @@ TWO PLACES A `.md` USED TO REACH A VERDICT, and both are covered here. `role_for
 `shared_roles`, which is the k8s half; the broad prefixes are the setup half, which a `.md`
 under `roles/setup/` still matches by path and only `quiet_paths` can drop.
 
-THE VERDICT IS ASSERTED for the doc-only half, not just `plane_note`. A `tasks/` change deploys the role's callers since #2704, so its half asserts those tags instead. `plane_note` returning "" is not the
-outcome -- `no_tag_outcome` reads it together with `self_applied`, and only their combination
-decides between `nothing-to-deploy` (exit 0) and `needs-manual-apply` (exit 1). That
+THE VERDICT IS ASSERTED for the doc-only half, not just `plane_note`. A `tasks/` change
+deploys the role's callers since #2704 -- one of them, since #3124 narrowed a deploy-run-only
+change to `manifests` to a single smoke caller -- so its half asserts that tag instead.
+`plane_note` returning "" is not the outcome -- `no_tag_outcome` reads it together with
+`self_applied`, and only their combination decides between `nothing-to-deploy` (exit 0) and `needs-manual-apply` (exit 1). That
 combination is the issue's own Verify-by.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_doc_change_reaches_a_verdict.py
@@ -45,15 +47,20 @@ def test_a_role_document_is_clean():
 
 
 def test_a_role_task_file_is_flagged():
-    """The reject half: the same role's tasks/ is code, deployed through its callers (#2704)."""
+    """The reject half: the same role's tasks/ is code, so a caller is deployed (#2704).
+
+    One caller, not every caller: a `tasks/`-only change to `manifests` renders no different
+    bytes, so #3124 deploys the cheapest render target as a smoke test.
+    """
     assert land_tags.role_for(_TASKS) == "manifests"
     assert land_tags.shared_roles([_TASKS]) == ["manifests"]
-    assert "sonarr" in land_tags.shared_caller_tags([_TASKS])["manifests"]
+    assert len(land_tags.shared_caller_tags([_TASKS])["manifests"]) == 1
 
 
 def test_a_document_beside_a_real_change_does_not_excuse_it():
     """One quiet document must not take the role change it documents with it."""
-    assert "sonarr" in land_tags.shared_caller_tags([_DOC, _TASKS])["manifests"]
+    beside = land_tags.shared_caller_tags([_DOC, _TASKS])["manifests"]
+    assert beside and beside == land_tags.shared_caller_tags([_TASKS])["manifests"]
 
 
 def test_a_setup_role_document_is_clean_whatever_the_range():
