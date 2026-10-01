@@ -17,7 +17,6 @@ almost none of these.
 import argparse
 import json
 import socket
-import subprocess
 import sys
 from pathlib import Path as _Path
 
@@ -35,8 +34,6 @@ from diagnostics.probe_lib import ha
 from diagnostics.probe_lib import monitors
 from lib import k8s_roles
 from lib.kubectl import cluster_for_host
-
-TIMEOUT = 10
 
 OK, FAIL, SKIP = "OK", "FAIL", "SKIP"
 
@@ -64,48 +61,6 @@ def host_cluster():
             f"{hostname} is a node of no known cluster — no kubectl to read from here"
         )
     return cluster
-
-
-def get(url, header=None, timeout=TIMEOUT, resolve=None):
-    """GET url, returning (http_status, body).
-
-    `header` is a full `curl --config` body (e.g. `header = "X-Api-Key: ..."`) fed via stdin so
-    credentials stay out of argv. `resolve` is a curl --resolve pin (core.k8s_endpoint's second
-    element) for cluster routes the host shell can't resolve. status 0 means curl itself failed
-    (connection refused, DNS, timeout).
-    """
-    argv = [
-        "curl",
-        "-sS",
-        "--max-time",
-        str(timeout),
-        "-o",
-        "-",
-        "-w",
-        "\n%{http_code}",
-    ]
-    if resolve:
-        argv += ["--resolve", resolve]
-    if header:
-        argv += ["--config", "-"]
-    argv.append(url)
-    # `--max-time` bounds curl's own transfer; the subprocess timeout is the backstop for a
-    # curl that never gets that far (a wedged DNS resolver, a stalled TLS handshake). Either
-    # way the check reads as a transport failure rather than hanging the whole postflight.
-    try:
-        out = subprocess.run(
-            argv,
-            input=header or "",
-            capture_output=True,
-            text=True,
-            timeout=timeout + 5,
-        )
-    except subprocess.TimeoutExpired:
-        return 0, f"curl did not return within {timeout + 5}s"
-    if out.returncode != 0:
-        return 0, out.stderr.strip()
-    body, _, code = out.stdout.rpartition("\n")
-    return int(code or 0), body
 
 
 def service_ip(name):
@@ -159,11 +114,11 @@ def get_via_service(service, path, port, header=None):
     workload is not deployed on this cluster.
     """
     ip = service_ip(service)
-    status, body = get(f"http://{ip}:{port}{path}", header)
+    status, body = core.get_status(f"http://{ip}:{port}{path}", header)
     if status:
         return status, body
     base, pin = core.k8s_endpoint(route_host(service))
-    return get(f"{base}{path}", header, resolve=pin)
+    return core.get_status(f"{base}{path}", header, resolve=pin)
 
 
 def _forward_auth_intercepted(app, status):
@@ -200,7 +155,7 @@ def _cluster_prom_query(promql):
     cluster edge.
     """
     base, pin = core.prom_endpoint()
-    return get(core.prom_query_url(base, promql), resolve=pin)
+    return core.get_status(core.prom_query_url(base, promql), resolve=pin)
 
 
 def check_kuma_monitors():
@@ -277,7 +232,7 @@ def check_kuma_scrape():
 def _unreachable(app, detail):
     """A ClusterIP that does not answer the host is a placement fact, not a bad credential.
 
-    `get()` returns status 0 when curl itself failed. Reporting that as "the key doesn't
+    `core.get_status()` returns status 0 when curl itself failed. Reporting that as "the key doesn't
     match" sends someone to rotate a key that is fine. Each *arr's NetworkPolicy admits
     specific pod selectors and no ipBlock for the node, so a host-originated GET only
     reaches an app scheduled on THIS node — confirmed 2026-08-17 and again 2026-08-25,
@@ -371,7 +326,9 @@ def check_ha_token(name):
     token, err = secret(name)
     if not token:
         return FAIL, err
-    status, _ = get(ha.ha_get_url(core.ha_base(), ""), ha.ha_curl_config(token))
+    status, _ = core.get_status(
+        ha.ha_get_url(core.ha_base(), ""), ha.ha_curl_config(token)
+    )
     if status == 200:
         return OK, "token accepted"
     return FAIL, f"HTTP {status} — re-mint under Profile → Security"

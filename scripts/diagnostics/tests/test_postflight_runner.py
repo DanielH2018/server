@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for postflight.py's runner shell: `main()`, the curl transport and the parser.
+"""Tests for postflight.py's runner shell: `main()` and the parser.
 
-The per-check tests are in test_postflight.py. What lives here reaches no service and
+The per-check tests are in test_postflight.py. The curl transport, `core.get_status`, is
+tested in test_probe.py. What lives here reaches no service and
 decrypts nothing, so it needs none of that module's autouse stubs.
 
 Run: uv run pytest scripts/diagnostics/tests/test_postflight_runner.py
@@ -9,7 +10,6 @@ Run: uv run pytest scripts/diagnostics/tests/test_postflight_runner.py
 
 import os
 import socket
-import subprocess
 import sys
 
 import pytest
@@ -24,11 +24,6 @@ import postflight
 def only_checks(monkeypatch, checks):
     """Run `main()` over `checks` alone, so a test isn't at the mercy of the real registry."""
     monkeypatch.setattr(postflight, "CHECKS", checks)
-
-
-def stub_curl(monkeypatch, run):
-    """Replace the subprocess `get()` shells out to."""
-    monkeypatch.setattr(subprocess, "run", run)
 
 
 def stub_secret(monkeypatch):
@@ -69,77 +64,6 @@ def test_check_raising_does_not_abort_the_run(monkeypatch):
         monkeypatch, [("9.1", "x", boom), ("9.2", "y", lambda: (postflight.OK, "fine"))]
     )
     assert postflight.main([]) == 1
-
-
-def test_get_parses_status_and_body(monkeypatch):
-    class Result:
-        returncode = 0
-        stdout = '{"a": 1}\n200'
-        stderr = ""
-
-    stub_curl(monkeypatch, lambda *a, **kw: Result())
-    assert postflight.get("http://x") == (200, '{"a": 1}')
-
-
-def test_get_reports_curl_failure_as_status_zero(monkeypatch):
-    class Result:
-        returncode = 7
-        stdout = ""
-        stderr = "connection refused"
-
-    stub_curl(monkeypatch, lambda *a, **kw: Result())
-    assert postflight.get("http://x") == (0, "connection refused")
-
-
-def test_get_reports_a_curl_that_never_returns_as_status_zero(monkeypatch):
-    """The subprocess timeout is what turns a hung curl into a failed check (issue #2156)."""
-
-    def hang(argv, **kw):
-        raise subprocess.TimeoutExpired(argv, kw["timeout"])
-
-    stub_curl(monkeypatch, hang)
-    status, body = postflight.get("http://x", timeout=3)
-    assert status == 0
-    assert "8s" in body
-
-
-def test_get_bounds_the_subprocess_beyond_curls_own_max_time(monkeypatch):
-    seen = {}
-
-    class Result:
-        returncode = 0
-        stdout = "\n200"
-        stderr = ""
-
-    def fake_run(argv, **kw):
-        seen["timeout"] = kw.get("timeout")
-        seen["max_time"] = argv[argv.index("--max-time") + 1]
-        return Result()
-
-    stub_curl(monkeypatch, fake_run)
-    postflight.get("http://x", timeout=3)
-    assert seen["max_time"] == "3"
-    assert seen["timeout"] is not None and seen["timeout"] > 3
-
-
-def test_credentials_never_reach_argv(monkeypatch):
-    """The auth header goes in on stdin — a secret in argv would land in `ps`."""
-    seen = {}
-
-    class Result:
-        returncode = 0
-        stdout = "\n200"
-        stderr = ""
-
-    def fake_run(argv, input=None, **kw):
-        seen["argv"] = argv
-        seen["input"] = input
-        return Result()
-
-    stub_curl(monkeypatch, fake_run)
-    postflight.get("http://x", 'header = "X-Api-Key: hunter2"\n')
-    assert "hunter2" not in " ".join(seen["argv"])
-    assert "hunter2" in seen["input"]
 
 
 # ── `--help` must not run the sweep (#1685) ──────────────────────────────────────────

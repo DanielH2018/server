@@ -342,8 +342,21 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     for script, cron in _scheduled(repo).items():
         record(script, "scheduled", f"cron: {cron}")
 
+    by_path = by_name(scripts)
+    roles = repo / "ansible" / "roles"
     for path, kind, evidence in _invocation_sites(repo):
         for script in _invoked_by(path, scripts):
+            # A role's tasks naming a Python module with no `__main__` guard carry it into an
+            # image rather than run it: homelab-mcp's ship `obs_api.py` as a library (#2860).
+            # A hook, or a role's own `files/` runner, naming one still runs it.
+            if (
+                path.is_relative_to(roles)
+                and path.parent.name == "tasks"
+                and script.endswith(".py")
+                and not _has_main_guard(file_text(by_path[script]))
+            ):
+                record(script, "library", f"no `__main__` guard; carried by {evidence}")
+                continue
             record(script, kind, evidence)
 
     imported = importers(scripts)
@@ -354,7 +367,6 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     # `deploy_staleness.main` on every deploy -- runs as often as that caller does, exactly as
     # it did when the caller spawned it. Only a module with its own `__main__` guard counts:
     # a plain library module has no run of its own to inherit.
-    by_path = by_name(scripts)
     entry_points = {
         stem
         for stem in imported
