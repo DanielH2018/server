@@ -267,6 +267,18 @@ pass_filenames = false
 # scope: this reads template text and renders nothing, so no variable can change its verdict.
 files = "^(ansible/.*\\.j2|scripts/validate/jinja_bash_collisions\\.py)$"
 
+# Fail when a root-level file exists that `.gitignore`'s `/*` hides from git. Such a file
+# stages nothing and lands nothing through a green CI and a clean merge (#561, #3114). A
+# hidden file is by definition never staged, so no `files` pattern can trigger this: it runs
+# on every commit, and on a clean CI checkout it finds nothing to report.
+[[repos.hooks]]
+id = "validate-root-ignored-files"
+name = "Root-level files hidden by .gitignore's deny-all"
+entry = "uv run --frozen python scripts/validate/root_ignored_files.py"
+language = "system"
+pass_filenames = false
+always_run = true
+
 # Render every setup-plane template and fail on a variable nothing defines. The guards above
 # stop at their own trees — containers, k8s, *.sh.j2, *.service.j2 — so a setup template with
 # an undefined variable, a Jinja syntax error, or a rename its consumer missed passed the whole
