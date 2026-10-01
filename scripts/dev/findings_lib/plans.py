@@ -97,6 +97,48 @@ def plan_defer(
     return plans
 
 
+def plan_manual(issue: dict, *, clear: bool) -> list[list[str]]:
+    """Plans the gh argv that reserves ``issue`` for the operator, or hands it back.
+
+    `next` withholds a `manual` issue and `claim` refuses one. Unlike `not-before:`, nothing
+    expires it, so `--clear` is the only way back. The comment records the change in the
+    thread, as `plan_defer`'s does. Releasing a claim the issue already carries is the
+    caller's job (`findings._release_held_claim`), since `reap` skips `manual` issues.
+
+    Raises:
+        ClaimRefused: the issue is closed, already `manual`, or `clear` finds no label.
+    """
+    if issue.get("state", "OPEN") != "OPEN":
+        raise ClaimRefused("closed — nothing to mark")
+    n = str(issue["number"])
+    marked = "manual" in label_names(issue)
+    if clear:
+        if not marked:
+            raise ClaimRefused("not manual — no `manual` label to clear")
+        return [
+            ["issue", "edit", n, "--remove-label", "manual"],
+            [
+                "issue",
+                "comment",
+                n,
+                "--body",
+                "Manual cleared: `next` may offer it again.",
+            ],
+        ]
+    if marked:
+        raise ClaimRefused("already manual")
+    return [
+        ["issue", "edit", n, "--add-label", "manual"],
+        [
+            "issue",
+            "comment",
+            n,
+            "--body",
+            "Marked manual: reserved for the operator; `next` and `claim` skip it.",
+        ],
+    ]
+
+
 def _flat(flag: str, values: list[str]) -> list[str]:
     return [arg for v in values for arg in (flag, v)]
 
@@ -165,7 +207,9 @@ def plan_claim(
             "would all be blind to the claim"
         )
     if "manual" in names:
-        raise ClaimRefused("labelled `manual` — reserved for the operator")
+        raise ClaimRefused(
+            f"labelled `manual` — reserved for the operator; `manual {issue['number']} --clear` lifts it"
+        )
     day = not_before(issue)
     if day is not None and today < day:
         # The date is the issue's own precondition, so a claim before it is the wasted

@@ -33,10 +33,11 @@ Usage::
         --severity high --kind gap [--domain network] [--file path/to/file.py:12] \\
         [--source review-2026-09-02] [--no-vetted-remediation] \\
         [--verify-by 'Run probe.py health <svc>; it should exit 0.'] \\
-        [--not-before 2026-09-12] [--repo DanielH2018/dotfiles] [--dry-run]
+        [--not-before 2026-09-12] [--manual] [--repo DanielH2018/dotfiles] [--dry-run]
     uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
     uv run python scripts/dev/findings.py defer 688 --until 2026-09-12
     uv run python scripts/dev/findings.py defer 688 --clear
+    uv run python scripts/dev/findings.py manual 688 [--clear]
     uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \\
         [--session id] [--force]
     uv run python scripts/dev/findings.py release 688 --worktree worktree-foo [--reason "..."]
@@ -103,12 +104,19 @@ withheld issue reads as a closed one to whoever looks at the backlog. `defer <n>
 lifts it early. This exists because #1288, workable only once seven days of a metric existed,
 was claimed, read and released unchanged six times in four days (#1739).
 
+RESERVING AN ISSUE FOR THE OPERATOR. `manual <n>` (or `open --manual`) adds the `manual`
+label: `next` withholds the issue, `claim` refuses it, and `list` still marks it `[manual]`.
+Unlike a date, it never expires; `manual <n> --clear` removes it. Marking an issue manual also
+releases any claim on it, because `reap` skips `manual` issues and would never clear that
+claim. `open --manual` labels an issue the dedup matched as well as a new one, so the flag is
+never dropped silently.
+
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 2 bad arguments, which includes a `--worktree` name the claim trailer
 could not carry; 3 nothing was written because the issue refuses it — closed, `manual`,
 deferred to a later date, outside the register, held by another worktree, not claimed, or
 lost a race to another claim — or because `claim`'s own `--worktree` would read stale at
-birth.
+birth, or because `manual` found the label already in the state it was asked for.
 """
 
 import argparse
@@ -158,6 +166,7 @@ from dev.findings_lib.plans import (
     plan_close,
     plan_defer,
     plan_ensure_label,
+    plan_manual,
     plan_open,
     plan_release,
     plan_sync_labels,
@@ -229,6 +238,8 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         labels.append(f"domain/{args.domain}")
     if args.no_vetted_remediation:
         labels.append("no-vetted-remediation")
+    if args.manual:
+        labels.append("manual")
     # `gh issue create --label` fails on a label the repo does not have, so the first `open`
     # in a fresh repo has to create the label set before it can use it.
     have = _existing_labels(tools)
@@ -280,6 +291,17 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         plans += _aimed(
             _release_held_claim(existing, "reopened after a re-observation"), repo
         )
+    if args.manual and "manual" not in label_names(existing):
+        # The create carries the label; a matched issue would otherwise drop the flag silently,
+        # which for "a human must do this" is the wrong way to fail. A reopened issue is open by
+        # the time these run, and its claim is already released above.
+        opened = {**existing, "state": "OPEN"}
+        marking = (
+            plan_manual(opened, clear=False)
+            if outcome == "reopened"
+            else _manual_plans(opened)
+        )
+        plans += _aimed(marking, repo)
     run(plans, args.dry_run, tools)
     print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
     return 0
@@ -327,6 +349,37 @@ def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
         "deferral cleared" if args.clear else f"deferred until {args.until.isoformat()}"
     )
     print(f"#{args.number} {what}")
+    return 0
+
+
+def _manual_plans(issue: dict) -> list[list[str]]:
+    """The gh argv marking ``issue`` manual, plus the release of any claim it carries.
+
+    The release is load-bearing: `reap` skips `manual` issues (`another_claim_blocks`), so a
+    claim left on one is never cleared and keeps the `claimed` label on it for good.
+
+    Raises:
+        ClaimRefused: as `plan_manual` does.
+    """
+    return plan_manual(issue, clear=False) + _release_held_claim(
+        issue, "marked manual: reserved for the operator"
+    )
+
+
+def cmd_manual(args: argparse.Namespace, tools: FindingsTools) -> int:
+    """Handles the ``manual`` subcommand: reserves an issue for the operator, or clears that.
+
+    Returns:
+        3 if the issue is closed, already `manual`, or ``--clear`` finds no label; 0 otherwise.
+    """
+    issue = _load_issue(args.number, tools)
+    try:
+        plans = plan_manual(issue, clear=True) if args.clear else _manual_plans(issue)
+    except ClaimRefused as exc:
+        print(f"#{args.number} refused: {exc.reason}")
+        return 3
+    run(plans, args.dry_run, tools)
+    print(f"#{args.number} {'manual cleared' if args.clear else 'marked manual'}")
     return 0
 
 
@@ -532,6 +585,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "open": cmd_open,
         "touch": cmd_touch,
         "defer": cmd_defer,
+        "manual": cmd_manual,
         "claim": cmd_claim,
         "release": cmd_release,
         "claims": cmd_claims,

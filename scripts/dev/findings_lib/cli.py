@@ -77,6 +77,12 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "precondition (a metric window, a cron firing) is not met before it",
     )
     o.add_argument(
+        "--manual",
+        action="store_true",
+        help="reserve for the operator: `next` withholds it and `claim` refuses it. On an "
+        "issue the dedup matches, adds the label there too",
+    )
+    o.add_argument(
         "--repo",
         metavar="OWNER/NAME",
         help="file into another repo's `claude` register (the dotfiles repo, say); the "
@@ -98,6 +104,16 @@ def _parser(description: str) -> argparse.ArgumentParser:
     )
     when.add_argument(
         "--clear", action="store_true", help="remove the not-before date now"
+    )
+
+    mn = sub.add_parser(
+        "manual",
+        help="reserve an issue for the operator, releasing any claim on it, or clear that",
+    )
+    _add_dry_run(mn, suppress=True)
+    mn.add_argument("number", type=int)
+    mn.add_argument(
+        "--clear", action="store_true", help="remove `manual`; `next` offers it again"
     )
 
     t = sub.add_parser(
