@@ -14,67 +14,48 @@ A healthcheck block that only says `disable: true` is the accepted shape. Anythi
 gives Docker a probe to run — `test:`, an `interval:` that inherits the image's baked test,
 or no `healthcheck:` key at all (which also inherits it) — is the regression.
 
+The check reads the RENDERED service, not the template text (#2809). A text scan passed a
+template whose whole `healthcheck:` block sat inside a Jinja `{# … #}` comment, which renders
+no healthcheck at all and so inherits the image's probe.
+
 Run: uv run pytest ansible/tests/services/test_autoheal_does_not_watch_itself.py
 """
 
-import re
-
-from _helpers import ANSIBLE
-
-COMPOSE = (
-    ANSIBLE
-    / "roles"
-    / "containers"
-    / "autoheal"
-    / "templates"
-    / "docker-compose.yml.j2"
-)
+from _compose_render import render_service
 
 # The keys that hand Docker a probe. `interval:` counts: with `test:` omitted, Docker runs
 # the image's own HEALTHCHECK at that cadence, which is exactly the pre-#1789 shape.
-_PROBE_KEYS = re.compile(
-    r"^\s+(test|interval|timeout|retries|start_period):", re.MULTILINE
-)
-_DISABLED = re.compile(
-    r"^\s+healthcheck:\s*\n(?:\s+#.*\n)*\s+disable:\s*true\s*$", re.MULTILINE
-)
+_PROBE_KEYS = ("test", "interval", "timeout", "retries", "start_period")
 
 
-def self_watch_gaps(text: str) -> list[str]:
-    """Why a compose template lets autoheal probe itself. Empty when it cannot."""
+def self_watch_gaps(service: dict) -> list[str]:
+    """Why a rendered compose service lets autoheal probe itself. Empty when it cannot."""
+    healthcheck = service.get("healthcheck")
+    if healthcheck is None:
+        return ["no healthcheck: key, so the image's baked pgrep probe is inherited"]
     gaps: list[str] = []
-    if "healthcheck:" not in text:
-        gaps.append(
-            "no healthcheck: key, so the image's baked pgrep probe is inherited"
-        )
-        return gaps
-    if not _DISABLED.search(text):
+    if healthcheck.get("disable") is not True:
         gaps.append("healthcheck: block lacks `disable: true`")
-    for m in _PROBE_KEYS.finditer(text):
-        gaps.append(
-            f"healthcheck carries `{m.group(1)}:`, which hands Docker a probe to run"
-        )
+    gaps.extend(
+        f"healthcheck carries `{key}:`, which hands Docker a probe to run"
+        for key in _PROBE_KEYS
+        if key in healthcheck
+    )
     return gaps
 
 
 def test_the_shipped_template_gives_autoheal_no_probe() -> None:
-    assert self_watch_gaps(COMPOSE.read_text()) == []
+    assert self_watch_gaps(render_service("autoheal")) == []
 
 
 def test_an_interval_only_override_is_flagged() -> None:
     """The rejecting half: the exact pre-#1789 shape, `test` omitted and the image's inherited."""
-    text = "    healthcheck:\n      interval: 60s\n"
-    gaps = self_watch_gaps(text)
+    gaps = self_watch_gaps({"healthcheck": {"interval": "60s"}})
     assert any("interval" in g for g in gaps), gaps
     assert any("disable" in g for g in gaps), gaps
 
 
 def test_a_missing_healthcheck_key_is_flagged() -> None:
-    assert self_watch_gaps(
-        "    environment:\n      - AUTOHEAL_CONTAINER_LABEL=all\n"
-    ) == ["no healthcheck: key, so the image's baked pgrep probe is inherited"]
-
-
-def test_a_commented_disable_block_is_clean() -> None:
-    text = "    healthcheck:\n      # DECIDED: no self-probe\n      # more\n      disable: true\n"
-    assert self_watch_gaps(text) == []
+    assert self_watch_gaps({"environment": ["AUTOHEAL_CONTAINER_LABEL=all"]}) == [
+        "no healthcheck: key, so the image's baked pgrep probe is inherited"
+    ]
