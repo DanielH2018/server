@@ -472,7 +472,8 @@ stay).
     its own green CI verdict.** One line names the choice: `origin <tip8>: CI
     <pending|fail>; fast-forwarding to the newest green ancestor <sha8> (<n> behind the tip)`.
   - `fail` on the tip with no green ancestor → `next_action` returns **`ci_failed`**: no
-    ff-merge, no deploy, and a Discord alert throttled once per SHA (`ci_alerted_sha`).
+    ff-merge, no deploy, and a Discord alert throttled once per SHA (the `ci` slot of the
+`alerted_shas` marker).
     A red tip the tick fast-forwarded PAST still pages, once for that same SHA — `main()` calls
     `deploy_handlers.alert_red_tip` on the deploying path, keyed on `target.tip`. Without it a
     red master would go unreported the moment any earlier commit was green.
@@ -811,7 +812,7 @@ stay).
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
   rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
   value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
-  `secrets_alerted_sha` marker) to redeploy the consumers. On a broad tick that page fires
+  the `secrets` slot of `alerted_shas`) to redeploy the consumers. On a broad tick that page fires
   from every exit that leaves the range merged (#2383): each of them returns with the range
   already fast-forwarded, and `alert_once` advances its marker on detection — so a page
   skipped there is never sent, and the rotation sits merged and stale with nothing naming it.
@@ -919,7 +920,7 @@ stay).
     secondary cause, an operator who rendered locally before pushing (`git push` it). It includes
     the read exception's type and message when the declarations couldn't be read at all. The disarm
     itself is stateless: it is recomputed every tick, so it self-clears the moment the config is
-    re-rendered. Only the page is throttled, on the `stale_denylist_alerted` marker. The regex is deliberately
+    re-rendered. Only the page is throttled, on the `stale_denylist` alert slot. The regex is deliberately
     biased toward denied — unanimity is required across every match, an absent or unparseable
     declaration counts as denied, and a shared role skips the check entirely — so a parsing bug
     here almost always produces a spurious disarm rather than a permitted deploy. The one gap is
@@ -1057,7 +1058,7 @@ stay).
   redeploy and no alert (verified 2026-08-13). `deploy_logic._ACTIVE_K8S` now matches the whole
   role dir into `ChangeSet.k8s`, and `alert_deferred` (the same call site tasks/meta already use,
   reached on both the no-services branch and after a successful deploy) alerts on it once per SHA
-  (`k8s_alerted_sha` marker) — still `--ff-only` merges, still doesn't deploy. **Compose/GitOps
+  (the `k8s` alert slot) — still `--ff-only` merges, still doesn't deploy. **Compose/GitOps
   mechanisms in this doc — `tasks/`, `meta/deps.yml`, `containers_for()`, the health gate — are
   inert for k8s roles**; they only ever act on `containers/<svc>/docker-compose.yml`, which no k8s
   role renders. Redeploy a k8s change by hand the same way the alert says:
@@ -1070,7 +1071,7 @@ stay).
   but **not applied**" for those same roles, prescribing the command it had just run.
 - **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`) and `meta/deps.yml`**
   are ff-merged but NOT auto-deployed, so the deployer defers-and-alerts (once per SHA,
-  `tasks_alerted_sha` / `meta_alerted_sha`) to redeploy the affected services by hand. `tasks/` and
+  the `tasks` / `meta` alert slots) to redeploy the affected services by hand. `tasks/` and
   the `defaults`/`vars`/`handlers` catch-all (`deploy_logic._ACTIVE_ROLE`) share the `tasks` channel;
   `*.md` (CLAUDE.md/README) stays a silent ff-merge. This fires whether or not the tick deployed something else: a
   *combined* push (`svcA`'s template + `svcB`'s `meta/deps.yml`) deploys `svcA` but still flags `svcB`'s
@@ -1660,7 +1661,7 @@ a delete: an earlier tick's `broad_applied` is still true. The promoted bumps a 
 plane applied are not annotated on this path either, for the same reason — the next tick
 re-applies the plane, and Grafana drew two annotations for one deploy (#2453). `restore_broad_applied`
 is pinned on this path from the bump's own contention arm as well as the plan loop's
-(`test_a_contended_bump_takes_back_the_planes_broad_applied`). There is no `secrets_alerted_sha`
+(`test_a_contended_bump_takes_back_the_planes_broad_applied`). There is no `secrets` alert slot
 to take back: the secrets page is sent from the non-contention exits only, so a contended tick
 never wrote one (#2459).
 

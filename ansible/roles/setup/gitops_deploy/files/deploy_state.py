@@ -6,7 +6,8 @@ files — the directory literal, every basename and the line parsers live there,
 every other tree that reads them; this module holds the reading and the writing.
 This is a leaf: `gitops_markers`, `deploy_config` for `log`, `deploy_git` for the two pure
 hold-marker decisions `clear_broad_hold` makes, `deploy_state_k8s` for the `k8s_deferred` and
-`k8s_unapplied` families, `host_lib` and the standard library. Nothing
+`k8s_unapplied` families, `deploy_state_alerts` for the alert dedupe slots, `host_lib` and the
+standard library. Nothing
 else from this role, and nothing that reaches a process — a hold is written to a file, and
 who decides to write one is the caller's business. Callers reach these names qualified —
 `deploy_state.DeployerState(...)`. `deploy_io` re-exports them for the suite, which reads them
@@ -28,6 +29,7 @@ from deploy_git import (
     hold_plane_marker,
     hold_plane_with,
 )
+from deploy_state_alerts import AlertSlotMarkers
 from deploy_state_k8s import K8sLineMarkers
 from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are re-exported
     MARKERS,
@@ -44,17 +46,18 @@ from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are r
 from host_lib import atomic_write
 
 
-class DeployerState(K8sLineMarkers):
+class DeployerState(AlertSlotMarkers, K8sLineMarkers):
     """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
 
-    The two k8s marker families come from `deploy_state_k8s.K8sLineMarkers`, so
-    `state.record_k8s_unapplied(...)` and its five siblings are reached here as they always
-    were. This class stays the one place a marker file is read or written.
+    The two k8s marker families come from `deploy_state_k8s.K8sLineMarkers` and the alert
+    dedupe slots from `deploy_state_alerts.AlertSlotMarkers`, so `state.record_k8s_unapplied(...)`
+    and `state.alerted_sha(...)` are reached here as they always were. This class stays the one
+    place a marker file is read or written.
 
     The files record what this host believes — the held SHA, the plane that failed, how long
-    it has been behind origin, the setup roles no tick can apply, one dedupe marker per alert
-    channel and the undelivered-alert queue. `tests/test_deployer_state.py` pins every marker
-    by name against `MARKERS`.
+    it has been behind origin, the setup roles no tick can apply, one keyed file holding every
+    alert channel's dedupe SHA and the undelivered-alert queue.
+    `tests/test_deployer_state.py` pins every marker by name against `MARKERS`.
 
     Attributes:
         directory: where the markers live. `/var/lib/gitops-deploy` on a host; a tmp_path
@@ -110,8 +113,8 @@ class DeployerState(K8sLineMarkers):
             atomic_write(self.path(marker), value)
 
     # The four markers with a reader outside this deployer (monitor-bridge reads three of them
-    # off the same mount) get a named property; the per-channel dedupe markers are reached
-    # through read()/write() by the alert code that owns them.
+    # off the same mount) get a named property; the alert dedupe slots are reached through
+    # `alerted_sha`/`record_alerted` by the alert code that owns them.
     @property
     def hold_sha(self) -> str | None:
         """The commit this host refuses to redeploy, or None."""

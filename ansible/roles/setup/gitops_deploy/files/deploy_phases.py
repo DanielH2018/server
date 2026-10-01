@@ -432,7 +432,6 @@ def _promote_k8s_auto_deploys(
                 tools,
                 state,
                 config,
-                "stale_denylist_alerted",
                 "stale_denylist",
                 target.origin,
                 deploy_alert_text.stale_denylist_alert(target.origin, detail, fix),

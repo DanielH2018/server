@@ -19,6 +19,7 @@ import pytest
 
 import deploy_locks
 from _broad_k8s_range import (
+    alerted,
     APPLY_GITOPS_DEPLOY,
     APPLYABLE_ROLE,
     DEPLOY_PLANE,
@@ -97,7 +98,7 @@ def test_a_bump_auto_deploy_never_promoted_is_deferred_not_deployed(
     config = mixed(settings, tick, UNAPPLYABLE_ROLE, promote=False)
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks == []
-    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert alerted(state_dir, "k8s") == ORIGIN
 
 
 # ── a failed bump holds the SHA and rolls nothing back ────────────────────────────────────
@@ -167,7 +168,7 @@ def test_a_bump_the_remaining_budget_cannot_fit_is_deferred(
     assert tick.playbooks == [APPLY_GITOPS_DEPLOY]
     assert tick.head == ORIGIN
     assert marker(state_dir, "hold_sha") is None
-    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert alerted(state_dir, "k8s") == ORIGIN
     deferral = next(post for post in tick.posts if "sonarr" in post)
     assert "`k8s_autodeploy`" in deferral, (
         "the deferral post names the auto-deploy this bump was eligible for, rather than "

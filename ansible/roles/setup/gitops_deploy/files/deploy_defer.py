@@ -144,7 +144,6 @@ def park(
         tools,
         state,
         config,
-        "broad_alerted",
         "broad",
         origin,
         deploy_alert_text.broad_deferred_alert(origin, remediation),
@@ -283,7 +282,6 @@ def record(
         tools,
         state,
         config,
-        "broad_alerted",
         "broad",
         origin,
         deploy_alert_text.manual_plane_alert(
@@ -331,8 +329,8 @@ def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
     # Only when this tick appended a line. A tick that only widened an already-pending role's
     # row leaves the role pending either way, so clearing the dedupe there re-paged the same
     # SHA on every contended tick.
-    if recorded.roles and state.read("broad_alerted") == origin:
-        state.write("broad_alerted", None)
+    if recorded.roles and state.alerted_sha("broad") == origin:
+        state.clear_alerted("broad")
 
 
 def pending_k8s_deferred(state: DeployerState) -> set[str]:

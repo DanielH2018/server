@@ -17,6 +17,7 @@ import dataclasses
 
 import deploy_locks
 from _broad_k8s_range import (
+    alerted,
     APPLYABLE_ROLE,
     DECLARES_SONARR,
     DEPLOY_PLANE,
@@ -44,7 +45,7 @@ def test_a_failed_broad_apply_still_pages_a_secret_riding_the_same_range(
     config = mixed(settings, tick, APPLYABLE_ROLE, SECRETS)
     tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
     assert gitops_deploy.main(tick.tools, config) == 0
-    assert marker(state_dir, "secrets_alerted_sha") == ORIGIN
+    assert alerted(state_dir, "secrets") == ORIGIN
     assert any("`secrets.yml` changed" in post for post in tick.posts)
 
 
@@ -55,7 +56,7 @@ def test_a_failed_broad_apply_pages_no_secret_the_range_never_carried(
     config = mixed(settings, tick, APPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
     assert gitops_deploy.main(tick.tools, config) == 0
-    assert marker(state_dir, "secrets_alerted_sha") is None
+    assert alerted(state_dir, "secrets") is None
     assert not [post for post in tick.posts if "`secrets.yml` changed" in post]
 
 
@@ -75,12 +76,12 @@ def test_a_contended_tick_pages_no_secret_until_the_retry_merges(
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == LOCAL, "the ff-merge was undone"
     assert not [post for post in tick.posts if "`secrets.yml` changed" in post]
-    assert marker(state_dir, "secrets_alerted_sha") is None
+    assert alerted(state_dir, "secrets") is None
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == ORIGIN, "the retry merged and applied"
     secrets_posts = [post for post in tick.posts if "`secrets.yml` changed" in post]
     assert len(secrets_posts) == 1, "the retry owes exactly one page"
-    assert marker(state_dir, "secrets_alerted_sha") == ORIGIN
+    assert alerted(state_dir, "secrets") == ORIGIN
 
 
 # ── a k8s role the deploy plane applied is not reported as deferred ───────────────────────
@@ -113,7 +114,7 @@ def test_a_k8s_role_the_narrowed_plane_applied_is_not_called_unapplied(
     tick.narrow = (0, "radarr,sonarr")
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks == [[*DEPLOY_SONARR[:-1], "radarr,sonarr"]]
-    assert marker(state_dir, "k8s_alerted_sha") is None
+    assert alerted(state_dir, "k8s") is None
     assert not [post for post in tick.posts if "radarr" in post]
 
 
@@ -130,7 +131,7 @@ def test_a_k8s_role_a_refused_narrowing_applied_is_not_called_unapplied(
     tick.narrow = (3, "")
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks == [DEPLOY_PLANE_FULL]
-    assert marker(state_dir, "k8s_alerted_sha") is None
+    assert alerted(state_dir, "k8s") is None
 
 
 def test_a_k8s_role_this_host_does_not_declare_is_still_called_unapplied(
@@ -146,7 +147,7 @@ def test_a_k8s_role_this_host_does_not_declare_is_still_called_unapplied(
     tick.narrow = (3, "")
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks == [DEPLOY_PLANE_FULL]
-    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert alerted(state_dir, "k8s") == ORIGIN
     assert any("radarr" in post for post in tick.posts)
 
 
@@ -157,7 +158,7 @@ def test_a_k8s_role_the_deploy_plane_missed_is_still_called_unapplied(
     config = _hand_edited_radarr(settings, tick, declared=True)
     tick.narrow = (0, "jellyfin")
     assert gitops_deploy.main(tick.tools, config) == 0
-    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert alerted(state_dir, "k8s") == ORIGIN
     assert any("radarr" in post for post in tick.posts)
 
 
@@ -171,7 +172,7 @@ def test_a_budget_deferred_bump_is_still_named_by_the_deferral_post(
     would leave the bump merged, unapplied and named nowhere.
     """
     assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
-    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert alerted(state_dir, "k8s") == ORIGIN
     assert any("sonarr" in post for post in tick.posts)
 
 
@@ -261,7 +262,5 @@ def test_a_hand_edited_k8s_role_is_not_recorded(
     """
     config = mixed(settings, tick, APPLYABLE_ROLE, HAND_EDITED_K8S)
     assert gitops_deploy.main(tick.tools, config) == 0
-    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN, (
-        "it took the defer-and-alert path"
-    )
+    assert alerted(state_dir, "k8s") == ORIGIN, "it took the defer-and-alert path"
     assert marker(state_dir, "k8s_deferred") is None

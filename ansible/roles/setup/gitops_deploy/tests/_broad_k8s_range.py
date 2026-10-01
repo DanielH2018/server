@@ -11,6 +11,7 @@ Not a test module: `pytest` collects nothing here, and the `_` prefix is the sam
 """
 
 import dataclasses
+from gitops_markers import parse_alerted
 
 LOCAL = "1" * 40
 ORIGIN = "2" * 40
@@ -60,6 +61,11 @@ def marker(state_dir, name: str) -> str | None:
     """One marker's stripped contents, or None when the file is not there."""
     path = state_dir / name
     return path.read_text().strip() if path.exists() else None
+
+
+def alerted(state_dir, slot: str) -> str | None:
+    """The SHA one alert slot has paged on, out of the one keyed marker file (#3047)."""
+    return parse_alerted(marker(state_dir, "alerted_shas")).get(slot)
 
 
 def mixed(settings, tick, *broad_paths, promote: bool = True):

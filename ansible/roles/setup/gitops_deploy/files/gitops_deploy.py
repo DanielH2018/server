@@ -231,6 +231,11 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     # Ahead of the drain and every state write: a host whose inventory says has_gitops: false
     # is not this deployer, whatever payload is installed here (#1733).
     deploy_phases.refuse_unless_deployer(config)
+    # Ahead of the drain and of every channel's own read: a host that still holds the
+    # pre-#3047 `<channel>_alerted_sha` files must have them folded into the one keyed marker
+    # BEFORE anything asks a channel whether it has already paged on this SHA. A no-op on
+    # every tick after the first.
+    STATE.migrate_alerted()
     # Resend any alert a prior tick failed to deliver, BEFORE any short-circuit below: the ff-merged
     # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
     # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
