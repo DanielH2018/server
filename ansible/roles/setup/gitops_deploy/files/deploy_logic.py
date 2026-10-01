@@ -37,16 +37,12 @@ definitions, and holds every module's sibling imports to its declared set.
 # cost something, not with a line count.
 
 from deploy_changes import (  # noqa: F401
-    _ACTIVE_CONFIG,
-    _ACTIVE_K8S,
-    _ACTIVE_META,
-    _ACTIVE_ROLE,
-    _ACTIVE_TASKS,
+    _BROAD_CENSUS_PREFIXES,
     _BROAD_DEPLOY_PREFIXES,
     _BROAD_MANUAL_PREFIXES,
+    _BROAD_PLAY_PREFIXES,
     _BROAD_SETUP_PREFIXES,
     _SECRETS_FILE,
-    _SETUP_ROLE,
     _SETUP_ROLE_TAG_OVERRIDES,
     _SETUP_ROLES_OUTSIDE_INITIAL_SETUP,
     ChangeSet,
@@ -54,6 +50,7 @@ from deploy_changes import (  # noqa: F401
     _note_setup_role,
     comment_only_broad_changes,
     is_doc,
+    role_of,
     services_from_changed_paths,
     setup_role_playbook,
     setup_role_tag,

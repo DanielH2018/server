@@ -13,44 +13,49 @@ from __future__ import annotations
 import re
 import subprocess
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
-# A bind-mounted file under an active container role's templates/ or files/ dir — the
-# docker-compose.yml.j2 OR any config template / files/ asset (e.g. prometheus.yml.j2,
-# authelia configuration.yml.j2, monitor-bridge/files/check.py). A change here only reaches the
-# container on its next deploy, so it maps to a scoped, health-gated redeploy — closing the GitOps
-# loop instead of a silent ff-merge. tasks/ and the role CLAUDE.md are deliberately NOT matched
-# (structural / docs — deploy those manually).
-_ACTIVE_CONFIG = re.compile(r"^ansible/roles/containers/([^/]+)/(?:templates|files)/")
-# A change under an active container role's tasks/ dir. tasks/ is deliberately NOT auto-deployed
-# (structural — deploy manually), but unlike a CLAUDE.md/doc edit it DOES change what a deploy would
-# do, so a tasks-only push must be flagged (defer-and-alert), not silently ff-merged and left
-# unapplied with no signal — the same asymmetry the secrets / requirements.yml paths already close.
-# common/tasks is caught earlier by the _BROAD_PREFIXES check.
-_ACTIVE_TASKS = re.compile(r"^ansible/roles/containers/([^/]+)/tasks/")
-# A change under an active container role's meta/ dir (meta/deps.yml). meta/ is NOT auto-deployed
-# (structural, like tasks/), but unlike a doc edit it DOES change what a deploy does:
-# `ansible/filter_plugins/toposort.py` reads meta/deps.yml to build the cross-service deploy ORDER
-# and the dep CLOSURE a scoped `--tags` deploy expands. So a meta-only push must be flagged
-# (defer-and-alert), not silently ff-merged as an invisible graph change — the same asymmetry the
-# tasks / secrets / requirements paths already close. (The toposort LOGIC in filter_plugins/ is
-# already _BROAD_PREFIXES; this is its DATA.) common/meta is caught earlier by the
-# _BROAD_PREFIXES check.
-_ACTIVE_META = re.compile(r"^ansible/roles/containers/([^/]+)/meta/")
-# Catch-all for ANY other non-doc file under an active container role — `defaults/`, `vars/`,
-# `handlers/`, or a future dir. Like tasks/ these change what a deploy of that service does but
-# aren't auto-deployed, so a change here must defer-and-alert (via the tasks channel) rather than
-# fall through to the silent docs-only ff-merge. Checked LAST, so templates/files (deploy), tasks/,
-# and meta/ have already claimed their paths; only the structural remainder reaches it. CLAUDE.md /
-# *.md are docs and keep the silent path (the caller excludes them).
-_ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/([^/]+)/")
-# A change under a k8s-platform role's dir (ansible/roles/k8s/<role>/...). The deployer applies
-# one of these only as a promoted image-pin bump (`split_k8s_auto_deploy`, `cs.k8s_deploy`);
-# every other k8s role change defer-and-alerts. Without this regex a path under
-# ansible/roles/k8s/** matched none of the containers/-scoped regexes above and fell through
-# to a silent docs-only ff-merge. Matches the WHOLE role dir (not split into templates/tasks/meta
-# like containers/), since the alert just needs to name the role. *.md (role CLAUDE.md) stays a
-# silent ff-merge, same as the containers/ catch-all.
-_ACTIVE_K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
+# Which role directory a changed path sits in, as ONE question asked once (#3048). Six regexes
+# answered it before — `_ACTIVE_CONFIG`, `_ACTIVE_TASKS`, `_ACTIVE_META`, `_ACTIVE_ROLE`,
+# `_ACTIVE_K8S` and `_SETUP_ROLE` — plus a copy in `narrow_broad.py` and a pair in
+# `land_tags.py`, each re-deriving the same three path segments and differing only in which
+# plane and which subdirectory it accepted.
+#
+# The third group takes a TRAILING SLASH, so a file at a role's own root reports no
+# subdirectory rather than its own basename. The catch-all branch in
+# `services_from_changed_paths` reads that field.
+_ROLE_PATH = re.compile(r"^ansible/roles/(containers|k8s|setup)/([^/]+)/(?:([^/]+)/)?")
+
+
+class RolePath(NamedTuple):
+    """The role directory a changed path sits in.
+
+    Attributes:
+        plane: `containers`, `k8s` or `setup` — the tree, which decides what can apply it.
+        role: the role directory's name. NOT necessarily a deploy tag: only a role with a
+            `containers_list` entry has one, which is `land_tags.tag_for`'s question.
+        subdir: the directory under the role the path sits in (`templates`, `tasks`, `meta`,
+            `files`), or `""` for a file at the role's own root.
+    """
+
+    plane: str
+    role: str
+    subdir: str
+
+
+def role_of(path: str) -> RolePath | None:
+    """Which role directory `path` belongs to, or None when it belongs to none.
+
+    The PLAIN mapper, deliberately: it answers the path shape and nothing else. Every policy
+    about which roles and which files count stays with the caller, because the callers
+    genuinely differ — this module routes `containers/common/` to the Pi before the role
+    branches below are reached, `narrow_broad` reads a tree at a ref where
+    `containers/archive/` no longer exists, and `land_tags.role_for` reads DIFF paths and so
+    still excludes `common` and drops a `.md`. Folding one in would change what deploys.
+    """
+    m = _ROLE_PATH.match(path)
+    return RolePath(m.group(1), m.group(2), m.group(3) or "") if m else None
+
 
 # The Pi's shared Compose deploy path, which daniel-box's play never reads: Pi work
 # (`ChangeSet.pi_shared`), not a broad change buying a full `deploy.yml` run here (#2805).
@@ -65,7 +70,7 @@ _BROAD_DEPLOY_PREFIXES = (
     "ansible/inventory/",  # host_vars / group_vars
     "ansible/deploy.yml",
     # The task files deploy.yml imports. deploy.yml itself was already broad, but its three
-    # sibling task dirs matched nothing: every _ACTIVE_* regex is anchored to ansible/roles/, so a
+    # sibling task dirs matched nothing: `role_of` is anchored to ansible/roles/, so a
     # change to `pre_tasks/load_secrets.yml`, `tasks/k8s_batch.yml` (the k8s rollout-batch path) or
     # `post_tasks/k8s_stabilise_gate.yml` (the post-deploy stabilisation gate) returned a fully
     # EMPTY ChangeSet. main() has no catch-all branch — `if not cs.services:` ff-merges
@@ -93,6 +98,20 @@ _BROAD_DEPLOY_PREFIXES = (
     # already caught pre-merge by CI `uv lock --check` and at deploy by the health-gate rollback, so
     # letting them take the silent ff-merge path (pre-2026-07-15 behavior) is the safer trade.
     "ansible.cfg",
+)
+# The two deploy-plane trees a per-path consumer rule exists for: a variable or a macro can be
+# traced to the roles that read it. `narrow_broad.broad_path_tags` derives tags for these, and
+# `probe_lib/releases.py` takes a staleness census over them.
+_BROAD_CENSUS_PREFIXES = ("ansible/inventory/", "ansible/templates/")
+# The rest of the deploy plane: paths whose content EVERY play reads, so no `--tags` value
+# scopes a change to them.
+#
+# DERIVED rather than listed (#3048). `narrow_broad.PLAY_PREFIXES` restated the complement by
+# hand, so a prefix added to `_BROAD_DEPLOY_PREFIXES` could go missing from it — and a
+# deploy-plane path in neither half reads as narrowable by a rule that has none. Subtraction
+# makes the two exhaustive by construction.
+_BROAD_PLAY_PREFIXES = tuple(
+    p for p in _BROAD_DEPLOY_PREFIXES if p not in _BROAD_CENSUS_PREFIXES
 )
 # Broad changes applied by initial_setup.yml, NOT deploy.yml — deploy.yml renders NOTHING for these,
 # so the defer-alert must point the operator at `initial_setup.yml --tags <role>`. Naming deploy.yml
@@ -283,7 +302,7 @@ class ChangeSet:
     secrets: bool = False
     pi_shared: bool = False  # a `_PI_SHARED_PREFIX` change: merged, never applied here
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
-    # tasks/ plus the _ACTIVE_ROLE catch-all (defaults/, vars/, handlers/, …). The alert names all
+    # tasks/ plus the role-root catch-all (defaults/, vars/, handlers/, …). The alert names all
     # of them, so the field keeps its name for continuity even though it's no longer tasks/-only.
     tasks: set[str] = field(default_factory=set)
     meta: set[str] = field(default_factory=set)
@@ -305,7 +324,7 @@ class ChangeSet:
 def shared_module_consumers(paths, repo_root) -> set[str]:
     """k8s roles that import a changed `files/**/*.py` module owned by a DIFFERENT role.
 
-    `_ACTIVE_K8S` maps a path to the role whose directory it sits in, which is right for a
+    `role_of` maps a path to the role whose directory it sits in, which is right for a
     manifest and wrong for a shared library. `bridge/common.py` lives under monitor-bridge and
     is imported by autofix-bridge too, so the #407 five-module split made an edit there emit
     `--tags monitor-bridge` alone -- autofix-bridge's ConfigMap kept the old copy, and nothing
@@ -461,40 +480,50 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.broad = True
             cs.broad_deploy = True
             continue
-        m = _ACTIVE_CONFIG.match(p)
-        if m:
-            cs.services.add(m.group(1))
+        at = role_of(p)
+        if at is None:
             continue
-        t = _ACTIVE_TASKS.match(p)
-        if t:
-            cs.tasks.add(t.group(1))
+        if at.plane == "k8s":
+            # A k8s role change the deployer applies only as a promoted image-pin bump
+            # (`split_k8s_auto_deploy`, `cs.k8s_deploy`); every other one defer-and-alerts.
+            # The WHOLE role dir, not split by subdirectory the way containers/ is below,
+            # because the alert only needs to name the role.
+            cs.k8s.add(at.role)
+        elif at.plane != "containers":
+            # A setup-plane path, which `_BROAD_SETUP_PREFIXES` consumes before this loop
+            # reaches here. Named rather than left to fall through, because the branches
+            # below are about a CONTAINER role and `role_of` can hand them a setup path —
+            # the `containers/`-anchored regexes it replaced could not.
             continue
-        mt = _ACTIVE_META.match(p)
-        if mt:
-            cs.meta.add(mt.group(1))
-            continue
-        k = _ACTIVE_K8S.match(p)
-        if k:
-            cs.k8s.add(k.group(1))
-            continue
-        # Catch-all: any other file under an active container role (defaults/, vars/,
-        # handlers/, …). Not auto-deployed but it changes what a deploy does — defer-and-alert
-        # via the tasks channel instead of a silent ff-merge. A *.md never reaches here; the
-        # single docs test at the top of the loop keeps it on the silent path.
-        r = _ACTIVE_ROLE.match(p)
-        if r:
-            cs.tasks.add(r.group(1))
+        elif at.subdir in ("templates", "files"):
+            # A bind-mounted file under a container role: the docker-compose.yml.j2 OR any
+            # config template / files/ asset. It reaches the container on its next deploy, so
+            # it maps to a scoped, health-gated redeploy rather than a silent ff-merge.
+            cs.services.add(at.role)
+        elif at.subdir == "meta":
+            # meta/deps.yml is NOT auto-deployed (structural, like tasks/), but unlike a doc
+            # edit it DOES change what a deploy does: `ansible/filter_plugins/toposort.py`
+            # reads it for the cross-service deploy ORDER and the dep CLOSURE a scoped
+            # `--tags` deploy expands. So it defer-and-alerts rather than ff-merging as an
+            # invisible graph change. (filter_plugins/ is the toposort LOGIC and is already a
+            # broad prefix; this is its DATA.)
+            cs.meta.add(at.role)
+        else:
+            # tasks/, and the catch-all for any other file under a container role —
+            # `defaults/`, `vars/`, `handlers/`, a file at the role's root, or a future dir.
+            # None is auto-deployed, and each changes what a deploy of that service does, so
+            # it defer-and-alerts on the tasks channel instead of taking the silent docs-only
+            # ff-merge — the same asymmetry the secrets / requirements.yml paths close. A
+            # *.md never reaches here: the docs test at the top of the loop keeps it silent.
+            cs.tasks.add(at.role)
     return cs
-
-
-_SETUP_ROLE = re.compile(r"^ansible/roles/setup/([^/]+)/")
 
 
 def _note_setup_role(cs: "ChangeSet", path: str) -> None:
     """Record which setup role a broad path belongs to, if any. A bring-up playbook has none."""
-    m = _SETUP_ROLE.match(path)
-    if m:
-        cs.setup_roles.add(m.group(1))
+    at = role_of(path)
+    if at is not None and at.plane == "setup":
+        cs.setup_roles.add(at.role)
 
 
 # Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.
@@ -558,9 +587,9 @@ def setup_tags_for(paths) -> set[str]:
             # Installed by sops_setup — see the comment on _BROAD_SETUP_PREFIXES.
             tags.add("collections")
             continue
-        m = _SETUP_ROLE.match(p)
-        if m:
-            role = m.group(1)
+        at = role_of(p)
+        if at is not None and at.plane == "setup":
+            role = at.role
             # A role initial_setup.yml does not include cannot be applied by the automatic
             # arm at all, so it must return NOTHING and route to defer-and-alert. Returning
             # the role name here is the guess this function's docstring forbids: the run

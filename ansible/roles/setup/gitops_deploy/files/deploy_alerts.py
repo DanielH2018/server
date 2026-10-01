@@ -135,7 +135,6 @@ def alert_once(
     tools: DeployTools,
     state: DeployerState,
     config: Config,
-    marker: str,
     channel: str,
     origin: str,
     content: str,
@@ -143,20 +142,26 @@ def alert_once(
     """Deliver a per-SHA-deduped alert on `channel`.
 
     Args:
-        marker: the `DeployerState` marker holding the last SHA alerted on this channel.
-        channel: the queue key's prefix.
+        channel: the channel, which is both the queue key's prefix and the
+            `gitops_markers.ALERT_SLOTS` slot holding the last SHA this channel paged on.
+            ONE argument since #3047 collapsed the seven `<channel>_alerted_sha` files into
+            one keyed marker: every call site passed `"<channel>_alerted"` beside the channel
+            itself, so the pair could disagree and could not be told to.
         origin: the SHA being alerted about.
         content: the message body, from `deploy_alerts`.
 
-    No-op if this origin SHA was already alerted (marker == origin). Otherwise mark DETECTION here
-    (advance the marker once per SHA) and hand delivery + retry to deliver()/the pending queue — the
-    marker advances on DETECTION, NOT delivery, so a transient webhook blip is redelivered by
+    No-op if this origin SHA was already alerted on this channel. Otherwise mark DETECTION here
+    (advance the slot once per SHA) and hand delivery + retry to deliver()/the pending queue — the
+    slot advances on DETECTION, NOT delivery, so a transient webhook blip is redelivered by
     drain_pending() rather than silently dropped, and an ff-merged path that noops next tick doesn't
     re-page.
+
+    Raises:
+        KeyError: `channel` is not an `ALERT_SLOTS` member.
     """
-    if state.read(marker) == origin:
+    if state.alerted_sha(channel) == origin:
         return
-    state.write(marker, origin)
+    state.record_alerted(channel, origin)
     deliver(tools, state, config, f"{channel}:{origin}", content)
 
 
@@ -185,7 +190,6 @@ def alert_secrets_deferred(
         tools,
         state,
         config,
-        "secrets_alerted",
         "secrets",
         origin,
         deploy_alert_text.secrets_deferred_alert(origin),
@@ -224,7 +228,6 @@ def alert_deferred(
             tools,
             state,
             config,
-            "tasks_alerted",
             "tasks",
             origin,
             deploy_alert_text.tasks_deferred_alert(origin, pending_tasks),
@@ -234,7 +237,6 @@ def alert_deferred(
             tools,
             state,
             config,
-            "meta_alerted",
             "meta",
             origin,
             deploy_alert_text.meta_deferred_alert(origin, pending_meta),
@@ -255,7 +257,6 @@ def alert_deferred(
             tools,
             state,
             config,
-            "k8s_alerted",
             "k8s",
             origin,
             deploy_alert_text.k8s_deferred_alert(

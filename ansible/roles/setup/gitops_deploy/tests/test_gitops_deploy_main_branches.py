@@ -18,6 +18,7 @@ from collections.abc import Sequence
 
 import deploy_alerts
 from _deploy_fakes import fits_budget
+from gitops_markers import parse_alerted
 
 # The SHAs the `tick` fixture starts from; `from conftest import` is avoided because the
 # repo has several conftest.py files and the name resolves to whichever sys.path saw first.
@@ -35,6 +36,11 @@ DECLARES_SONARR = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
 def _marker(state_dir, name: str) -> str | None:
     path = state_dir / name
     return path.read_text().strip() if path.exists() else None
+
+
+def _alerted(state_dir, slot: str) -> str | None:
+    """The SHA one alert slot has paged on, out of the one keyed marker file (#3047)."""
+    return parse_alerted(_marker(state_dir, "alerted_shas")).get(slot)
 
 
 # ── the short-circuits: nothing merges, nothing deploys ───────────────────────────────────────
@@ -78,7 +84,7 @@ def test_pending_ci_defers_silently(gitops_deploy, tick, state_dir):
     tick.paths = [DOCKER_TEMPLATE]
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.posts == []
-    assert _marker(state_dir, "ci_alerted_sha") is None
+    assert _alerted(state_dir, "ci") is None
 
 
 def test_red_ci_parks_and_pages_once_per_sha(gitops_deploy, tick, state_dir):
@@ -88,7 +94,7 @@ def test_red_ci_parks_and_pages_once_per_sha(gitops_deploy, tick, state_dir):
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == []
     assert len(tick.posts) == 1 and "CI is RED" in tick.posts[0]
-    assert _marker(state_dir, "ci_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "ci") == ORIGIN
 
 
 def test_a_red_tip_over_a_green_ancestor_deploys_the_ancestor_and_still_pages(
@@ -108,7 +114,7 @@ def test_a_red_tip_over_a_green_ancestor_deploys_the_ancestor_and_still_pages(
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [GREEN_ANCESTOR]
     assert len(tick.posts) == 1 and "CI is RED" in tick.posts[0]
-    assert _marker(state_dir, "ci_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "ci") == ORIGIN
 
 
 # ── the diverged marker is managed every tick, ahead of the action ────────────────────────────
@@ -218,7 +224,7 @@ def test_a_bring_up_playbook_push_parks_and_pages(gitops_deploy, tick, state_dir
     tick.files[f"{ORIGIN}:ansible/bootstrap.yml"] = "- hosts: all\n  become: true\n"
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [] and tick.playbooks == []
-    assert _marker(state_dir, "broad_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "broad") == ORIGIN
     assert "needing a hand" in tick.posts[0]
 
 
@@ -337,7 +343,7 @@ def test_a_secrets_change_bundled_with_an_image_bump_is_still_flagged(
     _image_bump(gitops_deploy, monkeypatch, tick, ["ansible/vars/secrets.yml"])
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.playbooks == [DEPLOY_SONARR]
-    assert _marker(state_dir, "secrets_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "secrets") == ORIGIN
     assert any("nothing was redeployed" in post for post in tick.posts)
 
 
@@ -348,4 +354,4 @@ def test_a_non_image_k8s_change_is_ff_merged_and_flagged_not_deployed(
     tick.diffs["sonarr"] = "--- a\n+++ b\n+sonarr_replicas: 2\n"
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN] and tick.playbooks == []
-    assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "k8s") == ORIGIN

@@ -316,7 +316,7 @@ def k8s_remediation(
 ) -> str:
     """The redeploy instruction for a set of changed k8s roles, given this host's declared set.
 
-    `_ACTIVE_K8S` matches every `ansible/roles/k8s/<role>/` path, but only a role with a
+    `role_of` matches every `ansible/roles/k8s/<role>/` path, but only a role with a
     `containers_list` entry has a deploy tag. deploy.yml includes k8s roles per entry with
     `tags: [<entry name>]`, so `--tags <role>` for a role with no entry matches nothing and
     ANSIBLE EXITS 0 — the operator runs the prescribed command, sees green, and the change is

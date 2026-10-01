@@ -10,7 +10,7 @@ Each Docker role has separate channels (the compose or a config template deploys
 
 import pytest
 
-from deploy_changes import services_from_changed_paths
+from deploy_changes import role_of, services_from_changed_paths
 
 
 def test_single_service_template():
@@ -216,7 +216,7 @@ def test_k8s_and_docker_service_changes_are_independent():
 
 # L2: a change under a container role's defaults/, vars/, or handlers/ matched none of the
 # config/tasks/meta regexes and fell through to the silent docs-only ff-merge — a structural change
-# that alters what a deploy does, applied with no signal. The _ACTIVE_ROLE catch-all flags it on the
+# that alters what a deploy does, applied with no signal. The role-root catch-all flags it on the
 # tasks channel (defer-and-alert), so a future role adding one of these dirs can't regress silently.
 def test_role_defaults_change_flags_tasks_not_deploy():
     cs = services_from_changed_paths(
@@ -272,3 +272,38 @@ def test_config_change_with_compose_change_dedupes_to_one_service():
         ]
     )
     assert cs.services == {"traefik"}
+
+
+# ── role_of: the one answer to "which role directory is this path in" (#3048) ──────────────
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        (
+            "ansible/roles/containers/cadvisor/templates/docker-compose.yml.j2",
+            ("containers", "cadvisor", "templates"),
+        ),
+        ("ansible/roles/k8s/sonarr/defaults/main.yml", ("k8s", "sonarr", "defaults")),
+        ("ansible/roles/setup/k3s/tasks/server.yml", ("setup", "k3s", "tasks")),
+        # A file at the role's own root reports NO subdirectory rather than its own basename.
+        # The catch-all branch of `services_from_changed_paths` reads that field.
+        ("ansible/roles/k8s/sonarr/README", ("k8s", "sonarr", "")),
+    ],
+)
+def test_role_of_names_the_plane_the_role_and_the_subdirectory(path, expected):
+    assert role_of(path) == expected
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/gitops-pipeline.md",
+        "ansible/deploy.yml",
+        "ansible/templates/traefik.yml.j2",
+        # A role TREE with no role under it: two segments, not three.
+        "ansible/roles/k8s/",
+        # A tree this deployer knows nothing about.
+        "ansible/roles/staging/thing/tasks/main.yml",
+    ],
+)
+def test_role_of_is_none_for_a_path_in_no_role_directory(path):
+    assert role_of(path) is None

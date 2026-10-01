@@ -30,7 +30,7 @@ def is_image_only_diff(diff_text: str) -> bool:
     """True when every changed line in `diff_text` assigns an `*_image:` var.
 
     The diff-shape half of k8s auto-deploy eligibility. Gating on the service NAME alone is not
-    enough: `_ACTIVE_K8S` matches the whole role dir, so a name-only gate would also auto-deploy
+    enough: `role_of` matches the whole role dir, so a name-only gate would also auto-deploy
     configmap / tasks/ / template pushes — none of which carry a Renovate soak behind them.
 
     Fails closed: a diff with no changed lines (empty, unreadable, header-only) returns False, so

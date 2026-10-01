@@ -5,7 +5,7 @@ Marker files were read through a bare `_read_marker(path)` helper and a module c
 them. Nothing about the on-disk layout changed, so what this module pins is that nothing
 about it changed:
 
-- the table is exactly the 22 named pairs below, and each resolves under the host directory;
+- the table is exactly the named pairs below, and each resolves under the host directory;
 - a MISSING file, an EMPTY file and an UNREADABLE directory are still told apart the way the
   old helper told them apart — the first two read as None, the third RAISES.
 
@@ -34,7 +34,7 @@ def state(tmp_path: pathlib.Path) -> deploy_io.DeployerState:
 
 
 # ── the paths did not move ────────────────────────────────────────────────────────────────
-# The 23 markers by name, as `MARKERS` key -> basename on disk. A frozenset of pairs rather
+# Every marker by name, as `MARKERS` key -> basename on disk. A frozenset of pairs rather
 # than a count: a renamed basename or a swapped pair fails naming the marker, where a count
 # would pass either. Add a pair here when a marker is added, and nowhere else (issue #2051 —
 # these were 22 module-level constants in gitops_deploy.py with no production reader).
@@ -51,14 +51,8 @@ EXPECTED_MARKERS = frozenset(
         ("last_run", "last_run"),
         ("diverged", "diverged_sha"),
         ("behind", "behind_since"),
-        ("broad_alerted", "broad_alerted_sha"),
-        ("secrets_alerted", "secrets_alerted_sha"),
-        ("tasks_alerted", "tasks_alerted_sha"),
-        ("meta_alerted", "meta_alerted_sha"),
-        ("k8s_alerted", "k8s_alerted_sha"),
-        ("stale_denylist_alerted", "stale_denylist_alerted_sha"),
+        ("alerted", "alerted_shas"),
         ("denylist_rendered", "denylist_rendered_sha"),
-        ("ci_alerted", "ci_alerted_sha"),
         ("dirty_alerted", "dirty_alerted_date"),
         ("pending_alerts", "pending_alerts.json"),
     }
@@ -410,3 +404,62 @@ def test_a_torn_k8s_deferred_line_naming_the_service_is_cleared(state):
     state.write("k8s_deferred", f"{SHA} sonarr")
     assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
     assert state.read("k8s_deferred") is None
+
+
+# ── the alert dedupe slots, and the migration into their one file ─────────────────────────
+def test_every_alert_slot_lives_in_the_one_keyed_file(state):
+    """Each slot round-trips, and writing one leaves the others standing (#3047)."""
+    state.record_alerted("broad", SHA)
+    state.record_alerted("ci", "deadbeef" * 5)
+    assert state.alerted_sha("broad") == SHA
+    assert state.alerted_sha("ci") == "deadbeef" * 5
+    assert state.alerted_sha("tasks") is None
+    assert pathlib.Path(state.path("alerted")).read_text() == (
+        f"broad {SHA}\nci {'deadbeef' * 5}"
+    )
+
+
+def test_clearing_a_slot_leaves_the_others_and_removes_an_emptied_file(state):
+    state.record_alerted("broad", SHA)
+    state.record_alerted("ci", SHA)
+    state.clear_alerted("broad")
+    assert state.alerted_sha("broad") is None
+    assert state.alerted_sha("ci") == SHA
+    state.clear_alerted("ci")
+    assert not pathlib.Path(state.path("alerted")).exists()
+
+
+def test_an_unknown_alert_slot_is_a_typo_not_a_new_channel(state):
+    """The check `path()` gave each slot while it was its own marker."""
+    with pytest.raises(KeyError):
+        state.record_alerted("k9s", SHA)
+    with pytest.raises(KeyError):
+        state.alerted_sha("k9s")
+
+
+def test_the_migration_folds_in_every_legacy_file_and_removes_it(state):
+    """A host carrying the pre-#3047 per-channel files reads as already-paged after one call.
+
+    This is the migration's first tick: every slot answers with the SHA its own file held, so
+    nothing re-pages, and no `<channel>_alerted_sha` file is left behind.
+    """
+    legacy = {"broad": SHA, "k8s": "deadbeef" * 5, "ci": "c0ffee99" * 5}
+    for slot, sha in legacy.items():
+        pathlib.Path(state.directory, f"{slot}_alerted_sha").write_text(sha)
+    assert state.migrate_alerted() == ["broad", "ci", "k8s"]
+    assert {slot: state.alerted_sha(slot) for slot in legacy} == legacy
+    assert not list(pathlib.Path(state.directory).glob("*_alerted_sha"))
+    # Idempotent: a second call has nothing to import and changes nothing.
+    assert state.migrate_alerted() == []
+    assert {slot: state.alerted_sha(slot) for slot in legacy} == legacy
+
+
+def test_the_migration_does_not_overwrite_a_slot_the_keyed_file_already_holds(state):
+    """The crash-safe half: the keyed write lands before the removals, so a death between
+    them leaves a legacy file whose slot is already migrated. Re-importing it would walk the
+    dedupe BACKWARDS to an older SHA and re-page."""
+    state.record_alerted("broad", SHA)
+    pathlib.Path(state.directory, "broad_alerted_sha").write_text("0ldc0mm1" * 5)
+    assert state.migrate_alerted() == []
+    assert state.alerted_sha("broad") == SHA
+    assert not pathlib.Path(state.directory, "broad_alerted_sha").exists()

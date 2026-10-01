@@ -8,7 +8,7 @@ same, and `/usr/local/bin/ups-secondary-health.sh` stayed `0755` on both hosts u
 run. The change landed on master and nothing said it was unapplied.
 
 Both mappers derive the setup plane from one shape, `ansible/roles/setup/<role>/`:
-`deploy_changes._SETUP_ROLE` on the deployer side, `land_reach._SETUP_ROLES_DIR` on the
+`deploy_changes.role_of` on the deployer side, `land_reach._SETUP_ROLES_DIR` on the
 landing side. `ansible.cfg`'s `roles_path` resolves a bare `role: <name>` across
 `roles/containers`, `roles/setup` and `roles/`, so Ansible itself runs a role from any of the
 three and neither mapper is told. This guard closes that gap from the playbook's side: each

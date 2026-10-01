@@ -28,6 +28,7 @@
     - deploy_config.py
     - deploy_state.py
     - deploy_state_k8s.py
+    - deploy_state_alerts.py
     - gitops_markers.py
     - deploy_failtext.py
     - deploy_alerts.py
@@ -250,6 +251,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_state.py
       - live: /opt/gitops-deploy/deploy_state_k8s.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_state_k8s.py
+      - live: /opt/gitops-deploy/deploy_state_alerts.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_state_alerts.py
       - live: /opt/gitops-deploy/gitops_markers.py
         src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
       - live: /opt/gitops-deploy/deploy_failtext.py

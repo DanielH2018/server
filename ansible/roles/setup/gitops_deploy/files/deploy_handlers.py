@@ -106,7 +106,7 @@ def alert_red_tip(
     """
     red = target.tip or target.origin
     body = deploy_alert_text.ci_failed_alert(config.hostname, target.local, red)
-    deploy_alerts.alert_once(tools, state, config, "ci_alerted", "ci", red, body)
+    deploy_alerts.alert_once(tools, state, config, "ci", red, body)
 
 
 def log_pi_changes(cs) -> None:

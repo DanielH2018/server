@@ -24,6 +24,7 @@ import deploy_state
 from deploy_changes import ChangeSet
 from deploy_remediation import k8s_remediation
 from deploy_toolbox import DeployTools
+from gitops_markers import parse_alerted
 
 ORIGIN = "a" * 40
 LATER = "b" * 40
@@ -54,6 +55,11 @@ def _marker(state_dir: pathlib.Path, name: str) -> str | None:
     return path.read_text().strip() if path.exists() else None
 
 
+def _alerted(state_dir, slot: str) -> str | None:
+    """The SHA one alert slot has paged on, out of the one keyed marker file (#3047)."""
+    return parse_alerted(_marker(state_dir, "alerted_shas")).get(slot)
+
+
 # ── alert_once(): the per-SHA dedupe ──────────────────────────────────────────────────────────
 def test_alert_once_delivers_and_advances_the_marker(
     gitops_deploy, monkeypatch, state_dir, settings
@@ -63,13 +69,12 @@ def test_alert_once_delivers_and_advances_the_marker(
         tools,
         gitops_deploy.STATE,
         settings,
-        "tasks_alerted",
         "tasks",
         ORIGIN,
         "changed",
     )
     assert seen == [(f"tasks:{ORIGIN}", "changed")]
-    assert _marker(state_dir, "tasks_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "tasks") == ORIGIN
 
 
 def test_alert_once_is_silent_for_a_sha_already_alerted(
@@ -81,17 +86,16 @@ def test_alert_once_is_silent_for_a_sha_already_alerted(
             tools,
             gitops_deploy.STATE,
             settings,
-            "tasks_alerted",
             "tasks",
             ORIGIN,
             "changed",
         )
     assert len(seen) == 1
     deploy_alerts.alert_once(
-        tools, gitops_deploy.STATE, settings, "tasks_alerted", "tasks", LATER, "again"
+        tools, gitops_deploy.STATE, settings, "tasks", LATER, "again"
     )
     assert seen[-1] == (f"tasks:{LATER}", "again")
-    assert _marker(state_dir, "tasks_alerted_sha") == LATER
+    assert _alerted(state_dir, "tasks") == LATER
 
 
 def test_alert_once_marks_detection_not_delivery(gitops_deploy, state_dir, settings):
@@ -99,11 +103,34 @@ def test_alert_once_marks_detection_not_delivery(gitops_deploy, state_dir, setti
     # anyway, and redelivery is the pending queue's job. Real deliver(), refused webhook.
     tools = DeployTools(discord_post=lambda _webhook, _content: False)
     deploy_alerts.alert_once(
-        tools, gitops_deploy.STATE, settings, "meta_alerted", "meta", ORIGIN, "changed"
+        tools, gitops_deploy.STATE, settings, "meta", ORIGIN, "changed"
     )
-    assert _marker(state_dir, "meta_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "meta") == ORIGIN
     queued = json.loads((state_dir / "pending_alerts.json").read_text())
     assert queued == {f"meta:{ORIGIN}": "changed"}
+
+
+def test_a_tick_after_the_marker_collapse_re_alerts_for_nothing(
+    gitops_deploy, state_dir, settings
+):
+    """The migration's end-to-end half (#3047): a host holding the pre-collapse files stays silent.
+
+    `test_deployer_state.py` covers the import itself. This drives `alert_once` on the other
+    side of it, which is what an operator would see page a second time if the migration were
+    missing.
+    """
+    (state_dir / "tasks_alerted_sha").write_text(ORIGIN)
+    gitops_deploy.STATE.migrate_alerted()
+    tools, seen = _posts(state_dir)
+    deploy_alerts.alert_once(
+        tools, gitops_deploy.STATE, settings, "tasks", ORIGIN, "changed"
+    )
+    assert seen == [], "the SHA this host already paged on paged again"
+    # The rejecting half: a SHA it had NOT paged on still pages.
+    deploy_alerts.alert_once(
+        tools, gitops_deploy.STATE, settings, "tasks", LATER, "again"
+    )
+    assert seen == [(f"tasks:{LATER}", "again")]
 
 
 # ── alert_secrets_deferred() ──────────────────────────────────────────────────────────────────
@@ -120,7 +147,7 @@ def test_a_secrets_change_pages_once_naming_the_sha(
     ((key, content),) = seen
     assert key == f"secrets:{ORIGIN}"
     assert ORIGIN[:8] in content and "nothing was redeployed" in content
-    assert _marker(state_dir, "secrets_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "secrets") == ORIGIN
 
 
 def test_no_secrets_change_pages_nothing(
@@ -131,7 +158,7 @@ def test_no_secrets_change_pages_nothing(
         tools, gitops_deploy.STATE, settings, ORIGIN, ChangeSet(services={"sonarr"})
     )
     assert seen == []
-    assert _marker(state_dir, "secrets_alerted_sha") is None
+    assert _alerted(state_dir, "secrets") is None
 
 
 # ── alert_deferred(): tasks, meta and k8s channels ────────────────────────────────────────────
@@ -143,7 +170,10 @@ def test_an_empty_changeset_pages_nothing(
         tools, gitops_deploy.STATE, settings, ORIGIN, set(), ChangeSet()
     )
     assert seen == []
-    assert not any(p.name.endswith("_alerted_sha") for p in state_dir.iterdir())
+    # The keyed marker itself, not a glob for the old per-channel basenames: since #3047 those
+    # files do not exist at all, so `not any(...endswith("_alerted_sha"))` would pass over a
+    # slot this call had written.
+    assert _marker(state_dir, "alerted_shas") is None
 
 
 def test_tasks_and_meta_name_only_what_this_tick_did_not_deploy(
@@ -161,8 +191,8 @@ def test_tasks_and_meta_name_only_what_this_tick_did_not_deploy(
     assert "`svcb`" in by_key[f"tasks:{ORIGIN}"]
     assert "svca" not in by_key[f"tasks:{ORIGIN}"]
     assert "`svcc`" in by_key[f"meta:{ORIGIN}"]
-    assert _marker(state_dir, "tasks_alerted_sha") == ORIGIN
-    assert _marker(state_dir, "meta_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "tasks") == ORIGIN
+    assert _alerted(state_dir, "meta") == ORIGIN
 
 
 def test_a_structural_change_that_rode_its_own_redeploy_is_not_flagged(
@@ -188,7 +218,7 @@ def test_a_k8s_change_pages_with_the_remediation_for_this_host(
     assert key == f"k8s:{ORIGIN}"
     assert "`sonarr`" in content and ORIGIN[:8] in content
     assert content.endswith(k8s_remediation({"sonarr"}, {"sonarr"}, set()))
-    assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert _alerted(state_dir, "k8s") == ORIGIN
 
 
 def test_a_k8s_change_is_flagged_even_when_something_else_deployed(

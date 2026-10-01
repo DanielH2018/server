@@ -177,7 +177,10 @@ def test_a_contended_mixed_range_records_no_pending_role(
     assert not (state_dir / "manual_plane").exists(), (
         "a role was left recorded as merged-and-unapplied for a merge that was undone"
     )
-    assert not (state_dir / "broad_alerted").exists(), (
+    # The one keyed marker, by the name it actually has: this read was `state_dir /
+    # "broad_alerted"` before #3047, which was never a basename the deployer wrote — the file
+    # was `broad_alerted_sha` — so the assertion passed whatever the dedupe held.
+    assert gitops_deploy.STATE.alerted_sha("broad") is None, (
         "the page dedupe survived, so the record this range gets next tick would be silent"
     )
     # One post, and it is `record`'s own — sent before the apply was even attempted, so it

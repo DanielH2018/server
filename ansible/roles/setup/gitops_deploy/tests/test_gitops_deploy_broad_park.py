@@ -347,7 +347,7 @@ def test_a_rolled_back_tick_takes_its_own_line_and_row_with_it(gitops_deploy, ti
     deploy_defer.unrecord(state, ORIGIN, recorded)
     assert state.manual_plane is None
     assert state.manual_plane_tags_pending() == {}
-    assert state.read("broad_alerted") is None, "the page for this SHA goes too"
+    assert state.alerted_sha("broad") is None, "the page for this SHA goes too"
 
 
 def test_a_contended_tick_on_an_already_pending_role_keeps_the_earlier_row(
@@ -395,7 +395,7 @@ def test_a_rolled_back_tick_restores_a_row_its_own_refusal_collapsed(
 def test_a_rolled_back_tick_on_an_already_pending_role_pages_once(gitops_deploy, tick):
     """No line appended means nothing to take back from the dedupe page either.
 
-    The role stays pending through the rollback, so clearing `broad_alerted` there re-paged
+    The role stays pending through the rollback, so clearing the `broad` alert slot there re-paged
     the same SHA on every contended tick. The rejecting half is
     `test_a_rolled_back_tick_takes_its_own_line_and_row_with_it`, where the page does go.
     """
@@ -408,4 +408,4 @@ def test_a_rolled_back_tick_on_an_already_pending_role_pages_once(gitops_deploy,
         assert recorded.roles == [], "the role was already pending"
         deploy_defer.unrecord(state, ORIGIN, recorded)
     assert len(tick.posts) == 1
-    assert state.read("broad_alerted") == ORIGIN
+    assert state.alerted_sha("broad") == ORIGIN

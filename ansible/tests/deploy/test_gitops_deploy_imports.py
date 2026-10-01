@@ -95,6 +95,7 @@ ALLOWED: dict[str, set[str] | None] = {
     "deploy_state": {
         "deploy_config",
         "deploy_git",
+        "deploy_state_alerts",
         "deploy_state_k8s",
         "gitops_markers",
     },
@@ -102,6 +103,9 @@ ALLOWED: dict[str, set[str] | None] = {
     # It reads and writes through the methods that class defines, so it imports only the
     # parsers — never `deploy_state`, which would be a cycle.
     "deploy_state_k8s": {"gitops_markers"},
+    # The alert dedupe slots, as a second such mixin. `deploy_config` for `log`, which the
+    # migration uses to say which slots it folded in; otherwise the same contract.
+    "deploy_state_alerts": {"deploy_config", "gitops_markers"},
     "deploy_io": {
         "deploy_config",
         "deploy_failtext",

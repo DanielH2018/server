@@ -98,7 +98,7 @@ def apply_broad_k8s(
     #
     # INTERSECTED WITH THE DECLARED ENTRIES, which `covered_by_plane` alone does not do. It
     # returns the WHOLE set on a refused narrowing, and that is sound for `k8s_deploy` (a
-    # promoted bump is declared by construction) but not for `cs.k8s`, which `_ACTIVE_K8S`
+    # promoted bump is declared by construction) but not for `cs.k8s`, which `role_of`
     # fills from role directories in the tree. `deploy.yml` applies no role this host does not
     # declare — the same fact `k8s_remediation` prescribes a full deploy for — so subtracting
     # one would page nowhere at all. A shared role a declared role calls IS applied by a full

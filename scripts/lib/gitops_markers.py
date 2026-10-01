@@ -127,28 +127,28 @@ MARKERS: dict[str, str] = {
     # newest green ancestor is behind the tip on nearly every tick, and only one that stops
     # moving ages this. See `parse_behind` and `DeployerState.record_behind`.
     "behind": "behind_since",
-    # Per-SHA dedupe markers, one per alert channel: the operator is paged ONCE per origin SHA
-    # about a deferred broad change, a secrets-only push (a rotated value with no service
-    # template change), a tasks-only push (a role tasks/ change, not auto-deployed), a
-    # meta-only push (a role meta/deps.yml change — the cross-service deploy graph), a
-    # k8s-role push (no mechanism here ever applies one, so there is no "rode a redeploy" case
-    # to dedupe against `deployed`), a stale denylist (the DISARM itself is stateless and
-    # recomputed every tick — only the page is throttled), a master tip that FAILED CI (until
-    # the operator fixes or reverts; there is no marker for `ci_pending`, which resolves
-    # itself within a tick or two and stays silent) — rather than every tick for as long as
-    # the state persists.
-    "broad_alerted": "broad_alerted_sha",
-    "secrets_alerted": "secrets_alerted_sha",
-    "tasks_alerted": "tasks_alerted_sha",
-    "meta_alerted": "meta_alerted_sha",
-    "k8s_alerted": "k8s_alerted_sha",
-    "stale_denylist_alerted": "stale_denylist_alerted_sha",
+    # The per-SHA alert dedupe slots, ONE file holding every channel as `"<slot> <origin_sha>"`
+    # lines (`ALERT_SLOTS`, `parse_alerted`). The operator is paged ONCE per origin SHA about
+    # a deferred broad change, a secrets-only push (a rotated value with no service template
+    # change), a tasks-only push (a role tasks/ change, not auto-deployed), a meta-only push
+    # (a role meta/deps.yml change — the cross-service deploy graph), a k8s-role push (no
+    # mechanism here ever applies one, so there is no "rode a redeploy" case to dedupe against
+    # `deployed`), a stale denylist (the DISARM itself is stateless and recomputed every tick —
+    # only the page is throttled), a master tip that FAILED CI (until the operator fixes or
+    # reverts; there is no marker for `ci_pending`, which resolves itself within a tick or two
+    # and stays silent) — rather than every tick for as long as the state persists.
+    #
+    # ONE KEYED FILE RATHER THAN SEVEN `<channel>_alerted_sha` FILES (#3047), and nothing
+    # outside the deployer reads it. `dirty_alerted` below is keyed by DATE rather than SHA,
+    # and `denylist_rendered` gates a git read rather than a page, so neither is a slot.
+    # `DeployerState.migrate_alerted` folds a host's seven old files in before the tick asks
+    # any channel whether it has already paged.
+    "alerted": "alerted_shas",
     # The checkout SHA the denylist reconcile last ran against — the once-per-SHA guard on
     # `deploy_phases.reconcile_denylist`. It bounds BOTH directions: the git read is skipped
     # entirely while the checkout has not moved, and a mismatch a re-render cannot fix (a
     # config rendered from an unpushed tree) re-renders once per SHA rather than every tick.
     "denylist_rendered": "denylist_rendered_sha",
-    "ci_alerted": "ci_alerted_sha",
     # The last dirty-alert slot (`YYYY-MM-DD:am|pm`) paged for a dirty working tree. The tick
     # runs every 30 min, so without this an open edit session would re-alert all day; one
     # alert per slot — a morning slot at/after DIRTY_ALERT_MORNING_HOUR (08:00 CT) and an
@@ -172,6 +172,25 @@ MARKERS: dict[str, str] = {
     # per-SHA markers above still gate DETECTION (so a delivered alert isn't re-queued on the
     # broad path's every-tick re-eval); this queue owns delivery.
     "pending_alerts": "pending_alerts.json",
+}
+
+# Every alert channel the `alerted` marker dedupes, one slot per channel. The slot IS the
+# channel `deploy_alerts.alert_once` keys the `pending_alerts` queue with, so a caller names
+# one string rather than a marker and a channel that have to agree.
+#
+# A NAMED SET, so a typo raises rather than opening an eighth slot — the check
+# `DeployerState.path` gave each slot while it was its own `MARKERS` entry.
+# `tests/test_alert_once_markers.py` checks every call site's literal against it.
+ALERT_SLOTS: frozenset[str] = frozenset(
+    {"broad", "secrets", "tasks", "meta", "k8s", "stale_denylist", "ci"}
+)
+
+# The file each slot held before #3047 collapsed them. Live hosts carry these, and a tick that
+# read only the collapsed file would re-page every SHA it had already paged on — so
+# `DeployerState.migrate_alerted` folds them in and removes them. Delete this table, and the
+# migration with it, once no host holds one.
+LEGACY_ALERT_MARKERS: dict[str, str] = {
+    slot: f"{slot}_alerted_sha" for slot in sorted(ALERT_SLOTS)
 }
 
 # What the playbook field of a `manual_plane` line holds for a role no playbook applies
@@ -433,6 +452,35 @@ def format_manual_plane_tags(tags: dict[str, frozenset[str]]) -> str | None:
         f"{role} {','.join(sorted(tags[role])) or NARROWED_TO_ROLE}"
         for role in sorted(tags)
     )
+
+
+def parse_alerted(marker: str | None) -> dict[str, str]:
+    """The SHA each alert slot last paged on, by slot, from the `alerted` marker.
+
+    A slot with no line has paged on nothing, which is what `.get(slot)` returns — the answer
+    a missing `<channel>_alerted_sha` file gave before #3047 collapsed the seven.
+
+    A line this cannot parse is SKIPPED: a torn line read as a SHA would suppress the page for
+    a SHA nobody was told about, the one direction a dedupe marker must not fail in.
+    """
+    out: dict[str, str] = {}
+    for line in (marker or "").splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        out[parts[0]] = parts[1]
+    return out
+
+
+def format_alerted(alerted: dict[str, str]) -> str | None:
+    """The `alerted` marker for a slot -> SHA mapping, or None when it is empty.
+
+    The reverse of `parse_alerted`, beside it so the two cannot drift. Sorted by slot, so two
+    ticks writing the same slots write the same bytes.
+    """
+    if not alerted:
+        return None
+    return "\n".join(f"{slot} {alerted[slot]}" for slot in sorted(alerted))
 
 
 def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:

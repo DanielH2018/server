@@ -78,7 +78,7 @@ def state_dir(
     gitops_deploy: ModuleType, monkeypatch, tmp_path: pathlib.Path
 ) -> pathlib.Path:
     """tmp_path, with the deployer's state directory repointed into it, so a test reads what a
-    tick wrote (`last_run`, `pending_alerts.json`, the per-channel `*_alerted_sha` markers)
+    tick wrote (`last_run`, `pending_alerts.json`, the keyed `alerted_shas` marker)
     under the same basenames without touching the host.
 
     One object carries every marker path — `STATE` is what the deployer reads and writes
