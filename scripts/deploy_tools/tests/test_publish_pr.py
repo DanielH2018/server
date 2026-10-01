@@ -5,8 +5,6 @@ properties of the inline block -- a PR is opened, only the run's branch is pushe
 text is kept, and the local master is reset after the push. Each has an executing test here.
 """
 
-import os
-import stat
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -16,6 +14,7 @@ import pytest
 
 import publish_pr
 from lib.git_testing import scrubbed_env
+from lib.proc_testing import fake_bin, path_with
 
 SCRIPT = Path(publish_pr.__file__)
 NOW = datetime(2026, 9, 4, 1, 30, tzinfo=UTC)
@@ -385,9 +384,9 @@ def test_the_clean_path_spends_no_gh_call():
 # real subprocess boundary are all exercised. An argparse-only test once hid a dead path here.
 
 
-def _stub(bin_dir: Path, name: str, log: Path, fail_on: str = "") -> None:
-    script = bin_dir / name
-    script.write_text(
+def _stub_body(name: str, log: Path, fail_on: str = "") -> str:
+    """One recording stub's script text, for `fake_bin` to write."""
+    return (
         "#!/usr/bin/env bash\n"
         f'printf \'%s %s\\n\' "{name}" "$*" >> "{log}"\n'
         + (
@@ -397,21 +396,21 @@ def _stub(bin_dir: Path, name: str, log: Path, fail_on: str = "") -> None:
         )
         + "exit 0\n"
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
 
 def _run_cli(
     tmp_path: Path, *args: str, fail_on: str = ""
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
     log = tmp_path / "calls.log"
-    _stub(bin_dir, "git", log, fail_on)
-    _stub(bin_dir, "gh", log, fail_on)
+    bin_dir = fake_bin(
+        tmp_path / "bin",
+        git=_stub_body("git", log, fail_on),
+        gh=_stub_body("gh", log, fail_on),
+    )
     # The stubs above answer instead of git, but an inherited GIT_DIR from a hook or a parent
     # worktree points at a REAL repository and one of these arguments is `reset --hard`.
     env = scrubbed_env()
-    env["PATH"] = f"{bin_dir}:{os.environ['PATH']}"
+    env["PATH"] = path_with(bin_dir, env=env)
     proc = subprocess.run(
         [sys.executable, str(SCRIPT), "--repo", str(tmp_path), *args],
         env=env,
@@ -468,17 +467,13 @@ def test_cli_unlanded_is_quiet_and_gh_free_when_origin_has_no_head(tmp_path):
 
 def test_cli_unlanded_exit_code_reaches_the_shell(tmp_path):
     """rc 3 is what makes the templates report down rather than skipping quietly."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    for name, body in (
-        ("git", 'printf "9f8e7d6\\trefs/heads/t/2026-09-03-0600\\n"\n'),
-        ("gh", "printf '[]'\n"),
-    ):
-        stub = bin_dir / name
-        stub.write_text(f"#!/usr/bin/env bash\n{body}exit 0\n")
-        stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+    bin_dir = fake_bin(
+        tmp_path / "bin",
+        git='#!/usr/bin/env bash\nprintf "9f8e7d6\\trefs/heads/t/2026-09-03-0600\\n"\n',
+        gh="#!/usr/bin/env bash\nprintf '[]'\n",
+    )
     env = scrubbed_env()
-    env["PATH"] = f"{bin_dir}:{os.environ['PATH']}"
+    env["PATH"] = path_with(bin_dir, env=env)
     proc = subprocess.run(
         [
             sys.executable,

@@ -16,10 +16,10 @@ no service tag and no plane. That is far enough to prove `LAND_PRIMARY` reaches 
 -- `git` runs with the primary checkout as its cwd, and the recorded cwd is asserted.
 """
 
-import os
 import subprocess
 from pathlib import Path
 from lib.git_testing import scrubbed_env
+from lib.proc_testing import fake_bin, path_with
 
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
@@ -49,14 +49,13 @@ printf '%s\\t%s\\n' "$PWD" "$*" >> "{calls}/git-calls"
 
 
 def _stub_bin(tmp_path: Path, state: str) -> Path:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    for name, template in (("gh", _GH_STUB), ("git", _GIT_STUB)):
-        stub = bin_dir / name
-        stub.write_text(template.format(calls=tmp_path, state=state))
-        stub.chmod(0o755)
+    for name in ("gh", "git"):
         (tmp_path / f"{name}-calls").touch()
-    return bin_dir
+    return fake_bin(
+        tmp_path / "bin",
+        gh=_GH_STUB.format(calls=tmp_path, state=state),
+        git=_GIT_STUB.format(calls=tmp_path, state=state),
+    )
 
 
 def _run(tmp_path: Path, state: str) -> subprocess.CompletedProcess[str]:
@@ -68,7 +67,7 @@ def _run(tmp_path: Path, state: str) -> subprocess.CompletedProcess[str]:
     bin_dir = _stub_bin(tmp_path, state)
     env = {
         **scrubbed_env(),
-        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "PATH": path_with(bin_dir),
         "LAND_PRIMARY": str(tmp_path),
     }
     return subprocess.run(

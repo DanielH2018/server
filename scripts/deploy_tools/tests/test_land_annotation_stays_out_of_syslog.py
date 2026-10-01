@@ -14,6 +14,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from lib.proc_testing import fake_bin, path_with
+
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
 # The checkout `land.sh` cds into at line 16, whichever one holds this test. Every stubbed `gh`
 # call runs there, so it is the expected PWD rather than a forbidden one.
@@ -37,30 +39,22 @@ def _stub_bin(tmp_path: Path) -> Path:
     then step 1 reads no merge commit and dies. That is before `fetch_branch`, so a git call
     recorded here would mean the landing went somewhere this test never intended it to.
     """
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(exist_ok=True)
     (tmp_path / "gh-calls").touch()
     (tmp_path / "git-calls").touch()
-
-    gh = bin_dir / "gh"
-    gh.write_text(
-        "#!/bin/sh\n"
-        f'printf "%s\\t%s\\n" "$PWD" "$*" >> "{tmp_path}/gh-calls"\n'
-        'case "$*" in\n'
-        '  *"--json state,title"*)\n'
-        '    printf \'{"state":"MERGED","title":"Already merged"}\\n\' ;;\n'
-        "  *)\n"
-        "    printf '{}\\n' ;;\n"
-        "esac\n"
+    return fake_bin(
+        tmp_path / "bin",
+        gh=(
+            "#!/bin/sh\n"
+            f'printf "%s\\t%s\\n" "$PWD" "$*" >> "{tmp_path}/gh-calls"\n'
+            'case "$*" in\n'
+            '  *"--json state,title"*)\n'
+            '    printf \'{"state":"MERGED","title":"Already merged"}\\n\' ;;\n'
+            "  *)\n"
+            "    printf '{}\\n' ;;\n"
+            "esac\n"
+        ),
+        git=f'#!/bin/sh\nprintf "%s\\t%s\\n" "$PWD" "$*" >> "{tmp_path}/git-calls"\n',
     )
-    gh.chmod(0o755)
-
-    git = bin_dir / "git"
-    git.write_text(
-        f'#!/bin/sh\nprintf "%s\\t%s\\n" "$PWD" "$*" >> "{tmp_path}/git-calls"\n'
-    )
-    git.chmod(0o755)
-    return bin_dir
 
 
 def _run_land(tmp_path: Path) -> subprocess.CompletedProcess[str]:
@@ -68,11 +62,7 @@ def _run_land(tmp_path: Path) -> subprocess.CompletedProcess[str]:
     bin_dir = _stub_bin(tmp_path)
     primary = tmp_path / _SENTINEL_PRIMARY
     primary.mkdir(exist_ok=True)
-    env = {
-        **os.environ,
-        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
-        "LAND_PRIMARY": str(primary),
-    }
+    env = {**os.environ, "PATH": path_with(bin_dir), "LAND_PRIMARY": str(primary)}
     # cwd is the stub tree, not the suite's own: land.sh's gh calls inherit the process cwd,
     # so from a worktree the assertion below held for the wrong reason and from the primary
     # checkout it failed, which broke the docs-refresh cron's commit on 2026-09-04.
