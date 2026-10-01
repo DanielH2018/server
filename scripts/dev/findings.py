@@ -33,10 +33,11 @@ Usage::
         --severity high --kind gap [--domain network] [--file path/to/file.py:12] \\
         [--source review-2026-09-02] [--no-vetted-remediation] \\
         [--verify-by 'Run probe.py health <svc>; it should exit 0.'] \\
-        [--not-before 2026-09-12] [--repo DanielH2018/dotfiles] [--dry-run]
+        [--not-before 2026-09-12] [--manual] [--repo DanielH2018/dotfiles] [--dry-run]
     uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
     uv run python scripts/dev/findings.py defer 688 --until 2026-09-12
     uv run python scripts/dev/findings.py defer 688 --clear
+    uv run python scripts/dev/findings.py manual 688 [--clear]
     uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \\
         [--session id] [--force]
     uv run python scripts/dev/findings.py release 688 --worktree worktree-foo [--reason "..."]
@@ -66,7 +67,7 @@ decision and the comment on it reads "treat as a regression".
 
 RELEASING A STRANDED CLAIM. Every path that ends or restarts an issue's life releases the
 claim on it first, whoever holds it — `close` and `open`'s reopen path alike, both through
-`_release_held_claim`. `claims`, `reap` and `next` read OPEN issues, so a claim left on a
+`plan_release_held`. `claims`, `reap` and `next` read OPEN issues, so a claim left on a
 closed one is invisible to every view at once rather than merely wrong, and a reopen brings
 it back LIVE (#1277). `verify` was a third such path until it stopped closing anything; the
 live-claim refusal it grew in #1302 went with the close, since a command that only prints
@@ -103,12 +104,19 @@ withheld issue reads as a closed one to whoever looks at the backlog. `defer <n>
 lifts it early. This exists because #1288, workable only once seven days of a metric existed,
 was claimed, read and released unchanged six times in four days (#1739).
 
+RESERVING AN ISSUE FOR THE OPERATOR. `manual <n>` (or `open --manual`) adds the `manual`
+label: `next` withholds the issue, `claim` refuses it, and `list` still marks it `[manual]`.
+Unlike a date, it never expires; `manual <n> --clear` removes it. Marking an issue manual also
+releases any claim on it, because `reap` skips `manual` issues and would never clear that
+claim. `open --manual` labels an issue the dedup matched as well as a new one, so the flag is
+never dropped silently.
+
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 2 bad arguments, which includes a `--worktree` name the claim trailer
 could not carry; 3 nothing was written because the issue refuses it — closed, `manual`,
 deferred to a later date, outside the register, held by another worktree, not claimed, or
 lost a race to another claim — or because `claim`'s own `--worktree` would read stale at
-birth.
+birth, or because `manual` found the label already in the state it was asked for.
 """
 
 import argparse
@@ -158,32 +166,14 @@ from dev.findings_lib.plans import (
     plan_close,
     plan_defer,
     plan_ensure_label,
+    plan_manual,
+    plan_release_held,
     plan_open,
-    plan_release,
     plan_sync_labels,
     plan_touch,
 )
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.verify import verification_report
-
-
-def _release_held_claim(issue: dict, reason: str) -> list[list[str]]:
-    """The gh argv releasing whatever claim ``issue`` carries, or ``[]`` when it carries none.
-
-    Releases whoever holds it, not just the caller's own worktree. `claims`, `reap` and
-    `next` all read OPEN issues, so a claim left on a closed one is invisible to every view
-    at once — wrong rather than merely stale, and unreapable.
-
-    Hoisted out of `cmd_close` so `cmd_open`'s reopen path releases the same way (#1277).
-    A `Closes #<n>` merge strands a claim too, and `plan_open` reopening that issue for a
-    later re-observation brought the stale claim back LIVE, blocking `claim` and withholding
-    the issue from `next` for as long as the claiming worktree existed. `verify --close` was
-    the third caller until `verify` stopped closing anything.
-    """
-    held = current_claim(issue)
-    if not held:
-        return []
-    return plan_release(issue, worktree=held, when=now_iso(), reason=reason)
 
 
 def _aimed(plans: list[list[str]], repo: str | None) -> list[list[str]]:
@@ -229,6 +219,8 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         labels.append(f"domain/{args.domain}")
     if args.no_vetted_remediation:
         labels.append("no-vetted-remediation")
+    if args.manual:
+        labels.append("manual")
     # `gh issue create --label` fails on a label the repo does not have, so the first `open`
     # in a fresh repo has to create the label set before it can use it.
     have = _existing_labels(tools)
@@ -278,8 +270,17 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         # as its OWN comment rather than folded into the regression note, so the body never
         # carries two claim trailers at once (see `current_claim`'s DECIDED marker).
         plans += _aimed(
-            _release_held_claim(existing, "reopened after a re-observation"), repo
+            plan_release_held(
+                existing, when=now_iso(), reason="reopened after a re-observation"
+            ),
+            repo,
         )
+    if args.manual and "manual" not in label_names(existing):
+        # A matched issue would otherwise drop the flag silently. A reopened one is open by
+        # the time these run, and its claim was released just above.
+        plans += _aimed(plan_manual({**existing, "state": "OPEN"}, clear=False), repo)
+        if outcome != "reopened":
+            plans += _aimed(_release_for_manual(existing), repo)
     run(plans, args.dry_run, tools)
     print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
     return 0
@@ -330,6 +331,31 @@ def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
+def _release_for_manual(issue: dict) -> list[list[str]]:
+    # Load-bearing: `reap` skips `manual` issues (`another_claim_blocks`), so a claim left on
+    # one would never be cleared.
+    return plan_release_held(issue, when=now_iso(), reason="marked manual")
+
+
+def cmd_manual(args: argparse.Namespace, tools: FindingsTools) -> int:
+    """Handles the ``manual`` subcommand: reserves an issue for the operator, or clears that.
+
+    Returns:
+        3 if the issue is closed, already `manual`, or ``--clear`` finds no label; 0 otherwise.
+    """
+    issue = _load_issue(args.number, tools)
+    try:
+        plans = plan_manual(issue, clear=args.clear)
+    except ClaimRefused as exc:
+        print(f"#{args.number} refused: {exc.reason}")
+        return 3
+    if not args.clear:
+        plans += _release_for_manual(issue)
+    run(plans, args.dry_run, tools)
+    print(f"#{args.number} {'manual cleared' if args.clear else 'marked manual'}")
+    return 0
+
+
 def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``close`` subcommand: closes an issue as fixed, refuted or accepted.
 
@@ -360,7 +386,7 @@ def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
     # own worktree. `claims`, `reap` and `next` all read open issues, so a claim left on a
     # closed issue disappears from every view at once rather than showing up wrong.
     issue = _load_issue(args.number, tools)
-    plans = _release_held_claim(issue, f"closed as {outcome}")
+    plans = plan_release_held(issue, when=now_iso(), reason=f"closed as {outcome}")
     plans += plan_close(args.number, outcome=outcome, pr=args.pr, reason=args.reason)
     run(plans, args.dry_run, tools)
     print(f"#{args.number} closed as {outcome}")
@@ -532,6 +558,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "open": cmd_open,
         "touch": cmd_touch,
         "defer": cmd_defer,
+        "manual": cmd_manual,
         "claim": cmd_claim,
         "release": cmd_release,
         "claims": cmd_claims,

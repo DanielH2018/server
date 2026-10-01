@@ -197,7 +197,7 @@ view at once — invisible rather than wrong, which is harder to notice.
 body's `Closes #<n>`, which GitHub honours — posts no release comment at all and leaves the
 label on; `open` then reopens that issue for a later re-observation and the stale claim comes
 back LIVE, blocking `claim` and withholding the issue from `next` for as long as the claiming
-worktree exists. Both paths now go through one helper, `_release_held_claim`, and release
+worktree exists. Both paths now go through one helper, `plan_release_held`, and release
 whoever holds the claim rather than only the caller.
 
 `verify --close` was a third such path, and grew a live-claim refusal of its own in #1302 so
@@ -248,6 +248,18 @@ the line the operator reads, which `manual`'s refusal never offered.
 
 `open --not-before <date>` files a new finding already deferred, for the case where the agent
 filing it knows the precondition is a date.
+
+### `manual <n>` / `manual <n> --clear`
+
+Reserves an issue for the operator, or hands it back. `manual <n>` adds the label, posts a
+comment, and releases any claim the issue carries. The release is required because `reap`
+skips `manual` issues (`another_claim_blocks`), so a claim left on one would never be
+cleared. `--clear` removes the label and comments. Either form exits 3 on a closed issue or
+when the label is already in the state asked for. `claim`'s refusal on a `manual` issue names
+`manual <n> --clear` as the way out.
+
+`open --manual` files a finding already reserved. When the duplicate check matches an existing issue,
+`open --manual` labels that issue too, rather than dropping the flag on the touch.
 
 ## What a fan-out agent may not do
 
