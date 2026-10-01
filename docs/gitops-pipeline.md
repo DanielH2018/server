@@ -1306,7 +1306,12 @@ an unreadable state directory must not read as "no hold," or a held host reports
 (`DeployerState.clear_broad_hold` / `DeployerState.clear_service_hold` in `deploy_state.py`,
 deciding through `deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run applies the
 whole playbook and covers any tag set held against it, a tagged run covers a held tag set it is
-a superset of, and a tagged run covers an untagged hold not at all.
+a superset of, and a tagged run covers an untagged hold not at all. A narrowed setup apply holds
+each block tag it ran as `<role>:<block>` (`deploy_git.held_tag`, #3138), for example
+`ansible/initial_setup.yml gitops_deploy:gitops-config`. That block's tag or the role's own tag
+covers it, so the whole-role fallback clears it, while an apply narrowed to a different block
+of the same role does not. The Discord alert quotes the tags the apply ran, not the held form,
+because `--tags gitops_deploy:gitops-config` is no command Ansible accepts.
 
 **`hold_plane` holds one entry per failed apply, joined by `; `**
 (`DeployerState.hold_failed_apply`, `deploy_git.hold_plane_with`). A second failure adds its

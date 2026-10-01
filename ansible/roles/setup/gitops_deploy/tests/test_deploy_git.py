@@ -21,6 +21,7 @@ from deploy_git import (
     hold_plane_entries,
     hold_plane_marker,
     hold_plane_with,
+    held_tag,
     is_diverged,
     next_action,
     should_alert_dirty,
@@ -338,6 +339,44 @@ def test_a_superset_of_tags_clears_it():
 def test_a_subset_of_tags_does_not():
     assert not broad_hold_cleared_by(
         "ansible/initial_setup.yml k3s,dns", "ansible/initial_setup.yml", ["k3s"]
+    )
+
+
+# A narrowed setup apply holds `<role>:<block>` (#3138): the block or its whole role covers it.
+NARROWED_HOLD = "ansible/initial_setup.yml gitops_deploy:gitops-config"
+
+
+def test_the_block_it_ran_clears_a_narrowed_hold():
+    assert broad_hold_cleared_by(
+        NARROWED_HOLD, "ansible/initial_setup.yml", ["gitops-config"]
+    )
+
+
+def test_the_whole_role_clears_a_narrowed_hold():
+    assert broad_hold_cleared_by(
+        NARROWED_HOLD, "ansible/initial_setup.yml", ["gitops_deploy"]
+    )
+
+
+def test_another_block_of_the_same_role_does_not_clear_a_narrowed_hold():
+    assert not broad_hold_cleared_by(
+        NARROWED_HOLD, "ansible/initial_setup.yml", ["gitops-timer"]
+    )
+
+
+def test_another_roles_tag_does_not_clear_a_narrowed_hold():
+    assert not broad_hold_cleared_by(
+        NARROWED_HOLD, "ansible/initial_setup.yml", ["renovate_notify"]
+    )
+
+
+def test_a_role_tag_holds_bare_so_a_hold_from_before_the_qualifier_reads_the_same():
+    assert held_tag("gitops_deploy", "gitops_deploy") == "gitops_deploy"
+    assert held_tag("gitops_deploy", "gitops-config") == "gitops_deploy:gitops-config"
+    assert broad_hold_cleared_by(
+        "ansible/initial_setup.yml gitops_deploy",
+        "ansible/initial_setup.yml",
+        ["gitops_deploy"],
     )
 
 

@@ -148,14 +148,14 @@ def test_a_role_this_deployer_cannot_apply_is_not_narrowed(gitops_deploy, tick):
     assert tick.playbooks == []
 
 
-def test_a_failed_narrowed_setup_apply_holds_the_role_tag_it_narrowed_from(
+def test_a_failed_narrowed_setup_apply_holds_the_blocks_it_ran_with_their_role(
     gitops_deploy, tick, state_dir
 ):
-    """The hold names the ROLE, not the block tags the apply ran.
+    """The hold names the block tags the apply ran, each qualified by its role (#3138).
 
-    `broad_hold_cleared_by` compares tag strings, so a hold naming `gitops-config` would
-    survive a later `--tags gitops_deploy` apply that reruns that very block. The paired
-    clear-side test below is the half that makes this one load-bearing.
+    A bare `gitops-config` would survive a later `--tags gitops_deploy` apply that reruns
+    that very block. The role qualifier is what lets the whole-role apply clear it, and the
+    paired clear-side tests below are the half that makes this one load-bearing.
     """
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "gitops-config")}
@@ -167,7 +167,28 @@ def test_a_failed_narrowed_setup_apply_holds_the_role_tag_it_narrowed_from(
     assert (state_dir / "hold_sha").read_text() == ORIGIN
     assert (
         state_dir / "hold_plane"
-    ).read_text() == "ansible/initial_setup.yml gitops_deploy"
+    ).read_text() == "ansible/initial_setup.yml gitops_deploy:gitops-config"
+
+
+def test_a_narrowed_apply_of_another_block_keeps_the_hold(
+    gitops_deploy, tick, state_dir
+):
+    """A held block stays held until something reruns it.
+
+    Before #3138 the hold named the whole role, so an apply narrowed to a DIFFERENT block of
+    that role matched nothing and kept it anyway, while a hold naming only the block it ran
+    could not be cleared by the role's whole-role apply. Now the different block keeps it
+    for the right reason, and the next test clears it.
+    """
+    held = "ansible/initial_setup.yml gitops_deploy:gitops-config"
+    (state_dir / "hold_sha").write_text("1" * 40)
+    (state_dir / "hold_plane").write_text(held)
+    tick.paths = [GITOPS_TEMPLATE]
+    tick.narrow_setup = {"gitops_deploy": (0, "gitops-timer")}
+    assert gitops_deploy.main(tick.tools) == 0
+    assert _playbook_argv(tick)[-1] == "gitops-timer"
+    assert (state_dir / "hold_sha").read_text() == "1" * 40
+    assert (state_dir / "hold_plane").read_text() == held
 
 
 def test_the_whole_role_fallback_clears_a_hold_a_narrowed_apply_left(
@@ -179,7 +200,9 @@ def test_the_whole_role_fallback_clears_a_hold_a_narrowed_apply_left(
     has to be one a later apply of the same role covers.
     """
     (state_dir / "hold_sha").write_text("1" * 40)
-    (state_dir / "hold_plane").write_text("ansible/initial_setup.yml gitops_deploy")
+    (state_dir / "hold_plane").write_text(
+        "ansible/initial_setup.yml gitops_deploy:gitops-config"
+    )
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (1, "")}
     assert gitops_deploy.main(tick.tools) == 0
@@ -217,4 +240,7 @@ def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
         now=lambda: next(clock),
     )
     assert asked == ["gitops_deploy"], "the second role must not be asked"
-    assert tags == ["gitops-config", "renovate_notify"]
+    assert tags == {
+        "gitops_deploy": ["gitops-config"],
+        "renovate_notify": ["renovate_notify"],
+    }
