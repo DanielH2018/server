@@ -16,10 +16,11 @@ runbooks, design documents and generated reference pages are readable in a brows
 - **Host:** pinned to `daniel-box` (`docs_k8s_node`), because it bind-mounts that host's built
   site.
 - **Serves:** `docs_host_site_dir` (`/home/<user>/docs-site`), read-only.
-- **Public as well as LAN** — the ingressroute call passes no `public`, and the macro's default is `public=true`. This said LAN-only
-  (`public=false`), which was true until 2026-08-24; `templates/ingressroute.yaml.j2` carries
-  the reasoning for the flip. Everything under `docs/` is served, so what is excluded from
-  the build is a publishing decision — see `mkdocs.yml`'s `exclude_docs`.
+- **Public as well as LAN** — the `ingressroute()` call passes no `public` argument, and the
+  macro defaults to public. The route was LAN-only until 2026-08-24, and
+  `templates/ingressroute.yaml.j2` carries the reasoning for the flip. Everything under
+  `docs/` is served, so what is excluded from the build is a publishing decision — see
+  `mkdocs.yml`'s `exclude_docs`.
 - **Built by:** `scripts/docs/build_docs.py`, run by the `docs-refresh` cron. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
 

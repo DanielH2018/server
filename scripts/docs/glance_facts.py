@@ -25,6 +25,7 @@ from typing import Any
 
 from lib import yaml_fast
 from lib.render_guard import containers_entries, entry_tags, load_yaml
+from lib.jinja_comments import strip_jinja_comments
 from lib.jinja_defaults import resolve
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, REPO, ROLES
 from reference.crons import schedule_text
@@ -210,7 +211,7 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
     units: list[tuple[str, list[str]]] = []
     for tmpl in sorted((role_dir / "templates").glob("*.timer.j2")):
         keys: list[str] = []
-        for line in tmpl.read_text().splitlines():
+        for line in strip_jinja_comments(tmpl.read_text()).splitlines():
             m = _TIMER_KEY_RE.match(line)
             if m:
                 keys.append(f"{m.group(1)}={resolve(m.group(2), role_dir)}")
@@ -303,7 +304,7 @@ def compose_images(role_dir: Path) -> list[tuple[str, list[str]]]:
         return []
     found: dict[str, list[str]] = {}
     service = "?"
-    for line in tmpl.read_text().splitlines():
+    for line in strip_jinja_comments(tmpl.read_text()).splitlines():
         m = _COMPOSE_SERVICE_RE.match(line)
         if m:
             service = m.group(1)
