@@ -75,6 +75,18 @@ def test_index_itself_is_never_reported_as_an_orphan(tmp_path):
     assert s["store"]["files"] == 1
 
 
+def test_an_absolute_link_to_an_existing_repo_doc_is_clean(tmp_path):
+    doc = tmp_path / "owner.md"
+    doc.write_text("the claim", encoding="utf-8")
+    assert _survey(_mem(tmp_path, f"- [Owned]({doc})\n", {}))["dead_links"] == []
+
+
+def test_an_absolute_link_to_a_missing_repo_doc_is_flagged(tmp_path):
+    gone = tmp_path / "moved.md"
+    s = _survey(_mem(tmp_path, f"- [Moved]({gone})\n", {}))
+    assert s["dead_links"] == [str(gone)]
+
+
 def test_a_link_written_with_a_directory_prefix_still_resolves(tmp_path):
     d = _mem(tmp_path, "- [A](./a.md)\n", {"a.md": "x"})
     s = _survey(d)
