@@ -128,7 +128,7 @@ def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, 
     locks = tmp_path / "locks"
     locks.mkdir(exist_ok=True)
     return git_free_env(
-        PATH=path_with(bin_dir),
+        PATH=path_with(bin_dir, detach_stub_bin(tmp_path)),
         HOMELAB_DEPLOY_SNAPSHOT_ROOT=str(tmp_path / "snapshots"),
         HOMELAB_DEPLOY_LOCK_DIR=str(locks),
         HOMELAB_DEPLOY_TREE_LOCK=str(locks / "server-git-tree.lock"),
@@ -171,6 +171,19 @@ def make_snapshot_repo(path: Path) -> Path:
     return path
 
 
+# What a `--detach` child runs to leave a systemd user unit's cgroup (`lib/detach_fork.py`).
+# Refused, so a run under a fan-out unit or claude-rc.service stays where it is instead of
+# creating a real scope on the host; the child logs the refusal and carries on.
+BUSCTL_REFUSED = (
+    "#!/bin/sh\necho 'busctl stubbed by the deploy test harness' >&2\nexit 1\n"
+)
+
+
+def detach_stub_bin(tmp_path: Path) -> Path:
+    """A directory holding the refusing `busctl` every detached run in these tests finds."""
+    return fake_bin(tmp_path / "detach-bin", busctl=BUSCTL_REFUSED)
+
+
 def stub_bin(tmp_path: Path, stubs: dict[str, str]) -> Path:
     """Write each stub as an executable under `tmp_path/bin` and return that directory.
 
@@ -185,14 +198,16 @@ def stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
     return dict(os.environ, PATH=path_with(stub_bin(tmp_path, stubs)))
 
 
-# What `deploy.sh --detach` prints once it has backgrounded the playbook subshell.
+# What `deploy.sh --detach` prints once it has forked the process that runs the playbook.
 _DETACHED_PID = re.compile(r"running in background \(pid (\d+)\)")
 
 
 def detached_pid(output: str) -> int:
-    """The pid of the subshell a `--detach` run backgrounded, from the wrapper's own output.
+    """The pid of the process a `--detach` run forked, from the wrapper's own output.
 
-    That subshell runs the playbook, the notifier and `remove_snapshot`, then exits — so its
+    That process is a grandchild of the wrapper, not its child (`lib/detach_fork.py`), which
+    `wait_for_exit` handles through a pidfd. It runs the playbook, the notifier and
+    `remove_snapshot`, then exits — so its
     exit is the event a test waits on for anything the detached half does, via
     `_process_waits.wait_for_exit`, rather than polling for its side effects.
     """

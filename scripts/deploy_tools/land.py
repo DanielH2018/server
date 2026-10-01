@@ -164,7 +164,7 @@ def _resolve_since(opts: Options) -> Options:
 def _detached(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
     """Fork the landing into its own logfile; wait for its verdict under `--await-verdict`."""
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)
-    pid = detach.fork(log, lambda: _land(opts, tools, classifier))
+    pid = detach.fork(log, lambda: _land(opts, tools, classifier), f"land{opts.pr}")
     detach.announce(pid, log, opts.await_verdict)
     if not opts.await_verdict:
         return 0

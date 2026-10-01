@@ -342,6 +342,12 @@ def cmd_stop(args, tools: Tools) -> int:
         # The worktree stays locked until `clean` runs it through prune_worktrees' content
         # check — stopping a batch says nothing about whether its PR merged.
         print(f"  run `clean {args.run_id}` once its PR merges")
+        # A landing or detached deploy left the unit's cgroup for its own scope (#3160), so
+        # the stop above did not end it.
+        print(
+            "  a landing or detached deploy it started keeps running in its own scope; "
+            f"on {b.host}: systemctl --user list-units 'land*' 'deploy-*'"
+        )
     return 0
 
 

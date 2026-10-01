@@ -196,6 +196,8 @@ def test_stop_stops_the_unit_and_names_clean_as_the_next_step(tmp_path, capsys):
     assert "1 on daniel-box: stopped" in out
     assert f"clean {manifest.run_id}" in out
     assert "once its PR merges" in out
+    # The stop leaves a landing in its own scope running (#3160), and says where to find it.
+    assert "on daniel-box: systemctl --user list-units 'land*' 'deploy-*'" in out
 
 
 def test_stop_makes_no_call_for_a_batch_clean_already_took(tmp_path, capsys):

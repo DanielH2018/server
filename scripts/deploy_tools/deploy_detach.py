@@ -14,6 +14,13 @@ The child is the process `running in background (pid N)` names. It holds the own
 service locks through descriptors the fork copied, and the parent closes its own copies, so the
 locks follow the child. A flock is released only when every descriptor on its open file
 description is closed.
+
+THE CHILD IS A GRANDCHILD, OUTSIDE THE CALLER'S TREE AND CGROUP (issues #3159, #3160).
+`lib/detach_fork.py` forks it twice, so a harness that kills the caller's descendant tree
+cannot reach it, even in the window before this parent exits. The child then moves itself out
+of a fan-out unit's cgroup into `deploy-<pid>.scope`, so stopping the batch's unit does not
+kill a playbook mid-apply. The intermediate child's copies of the lock descriptors close when
+it exits, which releases nothing: the grandchild still holds the same open file descriptions.
 """
 
 import contextlib
@@ -31,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deploy_tools import deploy_under_locks as locked
 from deploy_tools.deploy_playbook import annotate, run_playbook
+from lib.detach_fork import fork_detached, leave_unit_cgroup
 from lib.exit_codes import (
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_UNAVAILABLE,
@@ -119,7 +127,6 @@ def child(run: locked.Run, log: Path, notifier: str) -> None:
     """The backgrounded half. Never returns: its end is `os._exit`, never deploy_run's frames."""
     code = 1
     try:
-        os.setsid()
         null = os.open(os.devnull, os.O_RDONLY)
         out = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
         os.dup2(null, 0)
@@ -127,6 +134,11 @@ def child(run: locked.Run, log: Path, notifier: str) -> None:
         os.dup2(out, 2)
         os.close(null)
         os.close(out)
+        # Before the playbook starts: a child started while the move is pending stays in the
+        # unit's cgroup.
+        moved = leave_unit_cgroup("deploy")
+        if moved:
+            print(moved, flush=True)
         status = run_playbook(run)
         for fd in run.service_fds:
             os.close(fd)
@@ -186,9 +198,7 @@ def run(
         return refused.code
     sys.stdout.flush()
     sys.stderr.flush()
-    pid = os.fork()
-    if pid == 0:
-        child(state, log, notifier)
+    pid = fork_detached(lambda: child(state, log, notifier))
     # The child owns the snapshot and the locks now. Close this process's copies WITHOUT
     # removing the snapshot: `state.close()` here would delete it from under the playbook.
     for fd in state.service_fds:

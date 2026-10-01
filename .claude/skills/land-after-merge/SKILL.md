@@ -24,7 +24,10 @@ commit, deploys that commit, kicks the tick, gates the health, and prints the la
 `VERDICT:` line. `--detach` names its own logfile and forks into it; `--await-verdict` blocks
 until the landing prints its verdict and exits with the landing's own code. The landing runs
 outside the caller's process tree, so a Bash call killed at its time limit does not kill it:
-read the log for the `VERDICT:` line instead. `--since` is
+read the log for the `VERDICT:` line instead. Started from a systemd user unit, such as a
+fan-out batch, the landing also moves into its own `land<pr>-<pid>.scope`, so stopping the unit
+does not kill it either. The log's first line names that scope, which is the way to stop the
+landing itself. `--since` is
 resolved from `origin/master` before the merge is armed, so you do not pass it.
 
 `land.sh --help` prints the flags, the exit codes and the verdicts.

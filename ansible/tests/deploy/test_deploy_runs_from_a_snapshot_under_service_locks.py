@@ -185,10 +185,15 @@ def test_the_python_locked_half_takes_its_service_locks_before_the_playbook():
 
 
 def test_detach_takes_its_service_locks_before_it_forks_the_playbook():
-    """The same ordering for `--detach`: the child that runs the playbook is forked after."""
+    """The same ordering for `--detach`: the child that runs the playbook is forked after.
+
+    The fork must be `fork_detached`, the double fork in `lib/detach_fork.py`. A bare `os.fork()`
+    leaves the playbook a child of the caller, inside a tree a harness kill reaches (#3159).
+    """
     functions = _functions(_DEPLOY_DETACH.read_text())
-    assert _locks_before_playbook(functions["run"], playbook="fork"), (
-        "deploy_detach.run forks the playbook child before it takes a service lock"
+    assert _locks_before_playbook(functions["run"], playbook="fork_detached"), (
+        "deploy_detach.run must take its service locks, then fork the playbook child through "
+        "lib/detach_fork.fork_detached; it forks first, or forks some other way"
     )
     assert "run_playbook" in _call_order(functions["child"])
 
