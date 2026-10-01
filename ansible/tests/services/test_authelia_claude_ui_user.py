@@ -18,7 +18,8 @@ rendered manifests, with a non-vacuity assertion that the users database was fou
 import pytest
 from lib import yaml_fast
 from _helpers import K8S_ROLES
-from _k8s_render import rendered_docs
+from _k8s_render import host_context, render_role_template, rendered_docs
+from validate.k8s_manifests import role_defaults
 
 OPERATOR_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$operator"
 CLAUDE_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$claudeui"
@@ -100,8 +101,8 @@ def live_users():
 
     The render harness stubs every SOPS value to the literal `STUB`, so this fixture can
     say who is in the database and what groups they carry, but nothing about their password
-    digests — both render as the same stub. The digest rules are checked against the
-    template source instead.
+    digests — both render as the same stub. The digest rules render the template again with
+    a distinct value in each user's hash variable instead.
     """
     found = users_database(list(rendered_docs()))
     assert len(found) >= 2, (
@@ -128,11 +129,38 @@ def test_the_claude_ui_user_carries_groups(live_users):
     assert live_users["claude-ui"].get("groups")
 
 
-def test_the_two_users_take_their_digests_from_different_variables():
-    """What the stubbed render cannot see: whether one hash fills both accounts."""
-    template = (ROLE / "templates" / "config-secret.yaml.j2").read_text()
-    assert "{{ authelia_password_hash }}" in template
-    assert "{{ authelia_claude_password_hash }}" in template
+def test_each_user_renders_the_digest_resolved_for_that_user():
+    """Whether one hash fills both accounts, which the stubbed render cannot show.
+
+    The role resolves each user's digest into its own variable. Rendering with a different
+    placeholder in each says which variable reaches which account: a block reading the
+    operator's variable gives both users one password, and a swap gives each the other's.
+    """
+    operator = "operator"
+    claude = role_defaults("authelia", host_context())["authelia_k8s_claude_user"]
+    secret = yaml_fast.safe_load(
+        render_role_template(
+            "authelia",
+            "config-secret.yaml.j2",
+            {
+                "authelia_user": operator,
+                "authelia_k8s_manage_claude_user": True,
+                "authelia_password_hash": OPERATOR_PLACEHOLDER,
+                "authelia_claude_password_hash": CLAUDE_PLACEHOLDER,
+            },
+        )
+    )
+    users = users_database([("authelia", "config-secret.yaml.j2", secret)])
+    assert sorted(users) == sorted([operator, claude]), (
+        f"expected exactly {operator!r} and {claude!r} in the users database, "
+        f"found {sorted(users)}"
+    )
+    assert digests_are_distinct(users), (
+        "both users render one password digest, so the operator's password opens the "
+        "claude-ui tier"
+    )
+    assert users[operator]["password"] == OPERATOR_PLACEHOLDER, users
+    assert users[claude]["password"] == CLAUDE_PLACEHOLDER, users
 
 
 def test_the_hash_read_back_is_keyed_by_username():
