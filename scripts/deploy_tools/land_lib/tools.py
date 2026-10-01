@@ -51,6 +51,7 @@ from deploy_tools import (
     await_ci,
     land_platform,
     land_reach,
+    land_shared,
     land_tags,
     shared_role_reach,
 )
@@ -544,6 +545,11 @@ class Classifier:
     # Reads the role-caller graph from this checkout's tree, as `plane_note` always has.
     shared_caller_tags: Callable[[list[str], set[str] | None], dict[str, set[str]]] = (
         land_tags.shared_caller_tags
+    )
+    # Which of those roles was narrowed to one smoke caller, so the operator line says so
+    # rather than claiming every caller was deployed.
+    smoke_narrowed_roles: Callable[[list[str], set[str] | None], frozenset[str]] = (
+        land_shared.narrowed_roles
     )
     # Which derived tags the PR's own paths prove are a k3s change. Beside
     # `shared_caller_tags` because `deploy_by_host` routes the union of the two the same way.

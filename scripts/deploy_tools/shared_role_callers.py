@@ -15,6 +15,12 @@ the same reason. It prints one JSON object, role to sorted `caller_tags`, and
 one of those tags carries the change. How a tag proves that, by its release record or
 by a matching render, is the deployer's question; this module only names the tags.
 
+THE THREE READERS DIFFER, and `smoke_caller` is why. The deployer's discharge needs every
+caller, because the question it asks is whether the change is applied everywhere. A
+hand-typed `deploy.sh --tags manifests` deploys every caller too, which the operator ruled on
+in #2717. The landing narrows a deploy-run-only change to ONE caller, and the `# DECIDED:` at
+`smoke_caller` holds that ruling.
+
 Usage: shared_role_callers.py [--repo PATH] ROLE [ROLE ...]
 """
 
@@ -25,8 +31,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
 import json
+from pathlib import Path
 
 from deploy_tools.narrow_broad import context_for
+from deploy_tools.render_targets import render_targets
+from lib.render_guard import HOSTS_LAND_SH_NEVER_DEPLOYS
+from lib.repo_paths import HOST_VARS, K8S_ROLES
 
 
 # DECIDED: transitive. `longhorn-api` and `volume-revert` are called only by shared roles, so a
@@ -59,6 +69,83 @@ def caller_tags(
         else:
             pending |= callers.get(name, set())
     return tags
+
+
+# The shared roles whose whole effect on a caller is the manifests it renders, so one caller
+# can smoke-test a change to how it renders them. `deploy_defer.DIGEST_PROVABLE_ROLES` draws
+# the same line for the same reason and names only `manifests` too — the two are pinned
+# together by `tests/test_shared_role_smoke_caller.py`, so neither can widen alone.
+#
+# Every other shared role acts per caller and needs all of them: `arr-notification` writes
+# each *arr's own database over its API, `volume-claim` stages a PVC in the caller's own
+# directory, `image-builder` ships a build job per caller. Deploying one of those is not the
+# change applied — `land_tags.shared_caller_tags`' own measured case is PR #1393 (#1397).
+SMOKE_TESTABLE_SHARED_ROLES = frozenset({"manifests"})
+
+
+# DECIDED: a landing narrows a deploy-run-only change to a smoke-testable shared role down to
+# ONE caller, the cheapest render target, and lets the rest take effect on their own next
+# deploy. Operator ruling 2026-10-01 (#3124), choosing it over the two alternatives in that
+# issue: reporting `nothing-to-deploy`, and keeping the full fan-out.
+#
+# THE MEASURED CASE. PR #3117 changed `manifests/tasks/` alone — the condition the config
+# rollout-restart reads. `land_tags.shared_caller_tags` fanned it out to 57 tags and about 20
+# minutes, `DEPLOY-VERDICT: deployed` then `VERDICT: settled`, and 0 of 60 release records
+# showed a restart. The root `CLAUDE.md` *When to wait* already says a `tasks/`-only change is
+# skipped deliberately; the expansion was overriding that for a shared role.
+#
+# WHY ONE RATHER THAN NONE. Changed task logic that runs on every caller has no other proof
+# that it runs without erroring, and a render or an apply flag is exactly what a dry run
+# cannot show. One caller buys that proof for one rollout.
+#
+# WHY ONE IS ENOUGH. `manifests` acts through the bytes it renders, so the other 56 callers
+# re-read the new task logic on their own next deploy with nothing left behind — and the
+# deployer's `k8s_unapplied` line for `manifests` discharges on a render-digest match without
+# any deploy at all (`deploy_defer.DIGEST_PROVABLE_ROLES`, #3057). That marker already accepts
+# the one gap this shares: a change to HOW `manifests` applies can leave live state different
+# from what the change would produce while no digest moves.
+#
+# THE ASYMMETRY IS DELIBERATE. `expand_shared_tags` — the hand-typed `deploy.sh --tags
+# manifests` — still deploys every caller, because there the operator asked for the fleet
+# (#2717), and `deploy_defer.discharge_k8s_unapplied` still reads every caller, because its
+# question is whether the change is applied everywhere rather than whether it runs.
+def smoke_caller(
+    tags: set[str], host_vars: Path = HOST_VARS, roles: Path = K8S_ROLES
+) -> str | None:
+    """The one caller to deploy as a smoke test, or None when no caller qualifies.
+
+    CHEAPEST, derived rather than listed. A candidate must be a render target on a host
+    `land.sh` deploys to — declared `platform: k8s` and including `k8s/manifests`, as
+    `render_targets` derives it — so the deploy actually exercises the render-and-apply path
+    the change is in. Among those, the cost key is the number of hosts declaring it, then the
+    number of manifests it renders, then its name: a one-template service on one host is one
+    short rollout, and the name breaks the tie so two runs over one tree pick the same caller.
+
+    None for an empty candidate set, which is the answer that keeps the full fan-out. An empty
+    caller set would read to `land_tags.plane_note` as a role nothing deploys.
+
+    Args:
+        tags: the caller tags, as `caller_tags` derives them.
+        host_vars: the `inventory/host_vars/` directory to read the declarations from.
+        roles: the `roles/k8s/` tree to count rendered templates in.
+    """
+    hosts: dict[str, int] = {}
+    for path in sorted(host_vars.glob("*.yml")):
+        if path.stem.startswith("_") or path.stem in HOSTS_LAND_SH_NEVER_DEPLOYS:
+            continue
+        for name in render_targets(path.stem, host_vars, roles):
+            hosts[name] = hosts.get(name, 0) + 1
+    candidates = sorted(set(tags) & set(hosts))
+    if not candidates:
+        return None
+    return min(
+        candidates,
+        key=lambda tag: (
+            hosts[tag],
+            len(list((roles / tag / "templates").glob("*.j2"))),
+            tag,
+        ),
+    )
 
 
 def expand_shared_tags(
