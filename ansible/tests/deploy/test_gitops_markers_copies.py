@@ -40,11 +40,11 @@ EXPECTED_COPIES = frozenset(
 # covers the deployer's own loop.
 _COPY_TASKS = {
     "ansible/roles/setup/deploy_ui/files/gitops_markers.py": (
-        "ansible/roles/setup/deploy_ui/tasks/main.yml",
+        "ansible/roles/setup/deploy_ui/tasks/code.yml",
         "Install the deploy-ui files",
     ),
     "ansible/roles/setup/renovate_agent/files/gitops_markers.py": (
-        "ansible/roles/setup/renovate_agent/tasks/main.yml",
+        "ansible/roles/setup/renovate_agent/tasks/code.yml",
         "Install agent Python files",
     ),
 }

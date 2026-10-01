@@ -222,7 +222,7 @@ def test_other_setup_roles_stamp_their_own_artifacts():
     """
     expected = {
         "ansible/roles/setup/gitops_deploy/tasks/install.yml",
-        "ansible/roles/setup/renovate_notify/tasks/main.yml",
+        "ansible/roles/setup/renovate_notify/tasks/service.yml",
         "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
         # THIS LIST IS AN ENUMERATION: it cannot see the next new role. Deriving it means
@@ -302,7 +302,7 @@ def test_every_role_that_deploys_code_declares_its_pairs():
     """
     expected = {
         "ansible/roles/setup/gitops_deploy/tasks/install.yml",
-        "ansible/roles/setup/renovate_notify/tasks/main.yml",
+        "ansible/roles/setup/renovate_notify/tasks/code.yml",
         "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
         "ansible/roles/setup/k3s/tasks/health-crons.yml",
@@ -462,7 +462,7 @@ def test_the_tag_scoping_actually_selects_one_stamp_per_family():
 _STAMP_SITES = (
     "ansible/roles/setup/k3s/tasks/health-crons.yml",
     "ansible/roles/setup/gitops_deploy/tasks/install.yml",
-    "ansible/roles/setup/renovate_notify/tasks/main.yml",
+    "ansible/roles/setup/renovate_notify/tasks/service.yml",
     "ansible/roles/setup/fake_remux/tasks/main.yml",
     "ansible/roles/setup/initial_setup/tasks/crons.yml",
 )

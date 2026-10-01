@@ -2,81 +2,34 @@
 # The deploy UI lives on the host that owns the GitOps checkout: it reads the same marker
 # directory the deployer writes and runs land.sh/deploy.sh in the same checkout, as the same
 # user. has_gitops picks the host, the way it does for gitops_deploy.
+#
+# One task file per subject, each under its own tag, so the GitOps deployer can apply a code
+# change (`--tags deploy-ui-code`) or a unit change (`--tags deploy-ui-service`) rather than
+# the whole role (#3135). `narrow_setup` reads a task file's OWN tags, so each task in the
+# imported files carries its tag, and each import below repeats it so an edit to this file
+# narrows too. The firewall rule has a file of its own because `firewall` is also an
+# initial_setup tag: a change reaching it cannot narrow, and keeping it apart stops that
+# refusal from spreading to the code and the unit.
 
 - name: Install the deploy UI
   when: has_gitops
   block:
     - name: Create the deploy-ui directory
+      tags: [deploy-ui-code, deploy-ui-service]
       ansible.builtin.file:
         path: "{{ deploy_ui_dir }}"
         state: directory
         mode: "0755"
       become: true
 
-    - name: Install the deploy-ui files
-      ansible.builtin.copy:
-        src: "{{ item }}"
-        dest: "{{ deploy_ui_dir }}/{{ item }}"
-        mode: "0644"
-      loop:
-        - deploy_ui.py
-        - deploy_ui_reads.py
-        - deploy_ui_writes.py
-        - gitops_markers.py
-        - deploy_ui.html
-      become: true
-      notify: Restart deploy-ui
-
-    - name: Install the deploy-ui unit
-      ansible.builtin.template:
-        src: deploy-ui.service.j2
-        dest: /etc/systemd/system/deploy-ui.service
-        mode: "0644"
-      become: true
-      notify:
-        - Reload systemd
-        - Restart deploy-ui
+    - name: Install the deploy-ui code
+      tags: [deploy-ui-code]
+      ansible.builtin.import_tasks: code.yml
 
     - name: Allow the cluster to reach the deploy UI
       tags: [firewall]
-      community.general.ufw:
-        rule: allow
-        port: "{{ deploy_ui_port }}"
-        proto: tcp
-        from_ip: "{{ item }}"
-        comment: deploy-ui from the k3s cluster
-      loop: "{{ deploy_ui_allowed_sources | flatten }}"
-      become: true
+      ansible.builtin.import_tasks: firewall.yml
 
-    - name: Flush handlers so the unit is live before it is enabled
-      ansible.builtin.meta: flush_handlers
-
-    - name: Enable and start deploy-ui
-      ansible.builtin.systemd:
-        name: deploy-ui.service
-        enabled: true
-        state: started
-      become: true
-
-    - name: Stamp the rendered deploy-ui unit
-      ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
-      vars:
-        stamp_render_name: deploy-ui
-        stamp_render_templates:
-          - ansible/roles/setup/deploy_ui/templates/deploy-ui.service.j2
-
-    - name: Record the deployed deploy-ui code
-      ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
-      vars:
-        stamp_deployed_name: deploy-ui
-        stamp_deployed_pairs:
-          - live: "{{ deploy_ui_dir }}/deploy_ui.py"
-            src: ansible/roles/setup/deploy_ui/files/deploy_ui.py
-          - live: "{{ deploy_ui_dir }}/deploy_ui_reads.py"
-            src: ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py
-          - live: "{{ deploy_ui_dir }}/deploy_ui_writes.py"
-            src: ansible/roles/setup/deploy_ui/files/deploy_ui_writes.py
-          - live: "{{ deploy_ui_dir }}/gitops_markers.py"
-            src: ansible/roles/setup/deploy_ui/files/gitops_markers.py
-          - live: "{{ deploy_ui_dir }}/deploy_ui.html"
-            src: ansible/roles/setup/deploy_ui/files/deploy_ui.html
+    - name: Install and start the deploy-ui unit
+      tags: [deploy-ui-service]
+      ansible.builtin.import_tasks: service.yml

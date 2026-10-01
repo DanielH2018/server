@@ -14,7 +14,7 @@ from lib import yaml_fast
 from _helpers import ANSIBLE
 
 ROLE = ANSIBLE / "roles" / "setup" / "renovate_agent"
-TASKS = ROLE / "tasks" / "main.yml"
+TASKS = ROLE / "tasks" / "code.yml"
 
 
 def listing_problems(shipped: set[str], tasks: list[dict]) -> list[str]:

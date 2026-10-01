@@ -1,0 +1,80 @@
+---
+- name: Write notifier config (secret webhook, host-only)
+  tags: [renovate-notify-service]
+  ansible.builtin.template:
+    src: config.env.j2
+    dest: /etc/renovate-notify/config.env
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  no_log: true
+  notify: Run renovate-notify once
+
+- name: Install systemd units
+  tags: [renovate-notify-service]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - renovate-notify.service
+    - renovate-notify.timer
+  become: true
+  notify:
+    - Reload systemd
+    - Run renovate-notify once
+
+- name: Write the alert webhook where only systemd reads it
+  tags: [renovate-notify-service]
+  ansible.builtin.template:
+    src: alert-webhook.env.j2
+    dest: /etc/renovate-notify/alert-webhook.env
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true
+  notify:
+    - Reload systemd
+    - Run renovate-notify once
+
+# Embedding the webhook in the unit and installing 0600 would not protect it, because
+# `systemctl show <unit> -p ExecStart` serves unit content over the system bus regardless of
+# file mode (the same as gitops-deploy-alert.service). 0644 is the honest mode now that the
+# unit holds no secret.
+- name: Install the alert unit
+  tags: [renovate-notify-service]
+  ansible.builtin.template:
+    src: renovate-notify-alert.service.j2   # OnFailure target — pages Discord if the notifier crashes
+    dest: /etc/systemd/system/renovate-notify-alert.service
+    mode: "0644"
+  become: true
+  notify:
+    - Reload systemd
+    - Run renovate-notify once
+
+- name: Enable and start the timer
+  tags: [renovate-notify-service]
+  ansible.builtin.systemd:
+    name: renovate-notify.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm — see the gitops_deploy role
+# for the reasoning.
+- name: Stamp the rendered renovate-notify units
+  tags: [renovate-notify-service]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: renovate-notify
+    stamp_render_templates:
+      - ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2
+      - ansible/roles/setup/renovate_notify/templates/renovate-notify-alert.service.j2
+      - ansible/roles/setup/renovate_notify/templates/renovate-notify.timer.j2
+      # Same reasoning as the gitops_deploy list: the stamp and the check both hash the repo
+      # source, never the rendered file, so an .env.j2 carries no secret into either.
+      - ansible/roles/setup/renovate_notify/templates/config.env.j2
+      - ansible/roles/setup/renovate_notify/templates/alert-webhook.env.j2
