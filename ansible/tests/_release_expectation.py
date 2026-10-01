@@ -31,7 +31,7 @@ BASE = dict(
     manifests_self_rollouts=[],
     manifests_render={"changed": True},
     manifests_secret_render={"changed": False},
-    manifests_apply={"stdout": "deployment.apps/prowlarr configured"},
+    manifests_apply={"changed": True, "stdout": "deployment.apps/prowlarr configured"},
     k8s_rebuilt_images=[],
     manifests_rolled_by_apply={},
     # Read rather than repeated: this is what an entry with no `restart_on` falls back to, and
