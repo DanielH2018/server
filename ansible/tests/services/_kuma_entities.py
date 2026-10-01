@@ -47,6 +47,10 @@ from validate.k8s_manifests import (
     role_defaults,
 )
 
+# Still exported as a path, for the two guards that assert on the template's BYTES rather than on
+# what it renders: `test_kuma_email_template.py` and `test_kuma_discord_template.py` check that
+# each Liquid body sits inside a Tera `{% raw %}` block. The wrapper's whole job is to survive
+# AutoKuma's own templating pass, so the rendered form cannot show whether it is there.
 TEMPLATE = ANSIBLE / "roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
 BRIDGE_ENV_SECRET = ANSIBLE / "roles/k8s/monitor-bridge/templates/env-secret.yaml.j2"
 _HOST = "daniel-box"

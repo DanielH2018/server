@@ -226,17 +226,18 @@ def test_non_bridge_push_monitors_keep_their_own_interval():
     # just as happily with the non-bridge tiles swept onto it too, which is the mistake it is here
     # to prevent — their feeders are crons on other cadences, not the bridge loop.
     #
-    # Which tiles are WIRED to the variable is answered by MOVING it: the set that renders a
-    # different interval at `_WINDOW_PROBE_S` is exactly the set a future widening would move.
-    # Comparing rendered numbers at one value could not answer it — eight non-bridge monitors
-    # already sit at 1200 for their own reasons, and a coincidence would read as a violation.
+    # Which tiles are WIRED to the variable is answered by MOVING it: the set whose interval
+    # DIFFERS between the inventory render and the probe render is exactly the set a future
+    # widening would move. Comparing rendered numbers at one value could not answer it — eight
+    # non-bridge monitors already sit at 1200 for their own reasons, and a coincidence would read
+    # as a violation. Asking for a difference rather than for `== _WINDOW_PROBE_S` also catches a
+    # tile that derives its window (`kuma_bridge_push_interval * 2`) rather than taking it whole.
     bridge_tokens = bridge_push_tokens()
+    at_inventory = {e["name"]: e.get("interval") for e in _entities().values()}
     moved = {
         e["name"]
-        for name, e in entities_with(
-            {"kuma_bridge_push_interval": _WINDOW_PROBE_S}
-        ).items()
-        if e["type"] == "push" and e["interval"] == _WINDOW_PROBE_S
+        for e in entities_with({"kuma_bridge_push_interval": _WINDOW_PROBE_S}).values()
+        if e["type"] == "push" and e.get("interval") != at_inventory.get(e["name"])
     }
     # Non-vacuity: a template that stopped reading the variable moves nothing, and an empty set
     # satisfies every subset claim below.
