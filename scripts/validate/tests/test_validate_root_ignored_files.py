@@ -1,16 +1,13 @@
 """Each test builds a scratch git repository whose `.gitignore` opens with `/*`, like the real one."""
 
-import os
-import subprocess
-
+from lib.git_testing import init_repo
 from validate import root_ignored_files
 
 GITIGNORE = "/*\n!/kept.md\n!/.gitignore\n.pytest_cache/\n"
 
 
 def _repo(tmp_path, *names: str):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, env=env)
+    init_repo(tmp_path)
     (tmp_path / ".gitignore").write_text(GITIGNORE, encoding="utf-8")
     (tmp_path / "kept.md").write_text("tracked\n", encoding="utf-8")
     for name in names:

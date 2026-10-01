@@ -20,6 +20,7 @@ Run directly or via the ``validate-root-ignored-files`` prek hook. Exits non-zer
 root entry is hidden by `/*` alone.
 """
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -50,7 +51,7 @@ DENY_ALL = "/*"
 
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(
-        ["git", *args], cwd=repo, check=True, capture_output=True, text=True
+        ["git", *args], cwd=repo, check=True, capture_output=True, text=True, timeout=60
     ).stdout
 
 
@@ -73,6 +74,7 @@ def hidden_by_deny_all(repo: Path, names: list[str]) -> list[str]:
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=60,
     )
     hidden = []
     for line in proc.stdout.splitlines():
@@ -88,7 +90,8 @@ def problems(repo: Path) -> list[str]:
     return [name for name in hidden if name not in LOCAL_ONLY]
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    argparse.ArgumentParser(description=__doc__.split("\n\n")[0]).parse_args(argv)
     found = problems(REPO)
     for name in found:
         print(
