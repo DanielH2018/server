@@ -9,7 +9,7 @@
 # renaming it would mean destroying and rebuilding the bridge for cosmetics.
 
 - name: Create the directory for declared libvirt networks
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # Our own path, not /etc/libvirt/qemu/networks — that is libvirt's internal store, written
   # by net-define and not meant to be edited underneath it. This holds the SOURCE we define
   # from, so the rendered XML is diffable and the define is driven by it changing.
@@ -22,7 +22,7 @@
   become: true
 
 - name: Render the staging egress fence
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # Defined here rather than beside a guest because it is host-wide libvirt state like the
   # network is, and it must exist before any domain references it — libvirt refuses to start
   # a domain whose <filterref> names a filter it does not know.
@@ -36,7 +36,7 @@
   become: true
 
 - name: Check whether the staging egress fence is already defined
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   ansible.builtin.command:
     cmd: virsh --connect qemu:///system nwfilter-dumpxml {{ hypervisor_staging_nwfilter_name }}
   register: hypervisor_staging_nwfilter_info
@@ -48,7 +48,7 @@
   become: true
 
 - name: Define the staging egress fence
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # A define is a replace only because the template pins the filter's UUID — see the comment
   # in staging-nwfilter.xml.j2, which is the non-obvious half. libvirt re-applies a redefined
   # filter to every interface already referencing it, so editing a RULE reaches a running
@@ -61,7 +61,7 @@
   become: true
 
 - name: Read the staging network's live UUID, if it is already defined
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   ansible.builtin.command:
     cmd: virsh --connect qemu:///system net-uuid {{ hypervisor_staging_net_name }}
   register: hypervisor_staging_net_live_uuid
@@ -72,7 +72,7 @@
   become: true
 
 - name: Pin the staging network's UUID
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # DECIDED: the rendered XML pins a UUID, the live one where the network exists and a
   # deterministic UUIDv5 over the name on a fresh host. `net-define` replaces an existing
   # network only when the UUIDs match; handed XML with no <uuid> it mints a fresh one and
@@ -89,7 +89,7 @@
          else hypervisor_staging_net_name | to_uuid }}
 
 - name: Render the staging network definition
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   ansible.builtin.template:
     src: staging-network.xml.j2
     dest: "{{ hypervisor_net_source_dir }}/{{ hypervisor_staging_net_name }}.xml"
@@ -100,7 +100,7 @@
   become: true
 
 - name: Check whether the staging network is already defined
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   ansible.builtin.command:
     cmd: virsh --connect qemu:///system net-info {{ hypervisor_staging_net_name }}
   register: hypervisor_staging_net_info
@@ -111,7 +111,7 @@
   become: true
 
 - name: Define the staging network
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # Runs when the rendered XML changed OR when the network is not defined at all. net-define
   # replaces an existing definition because the XML pins its UUID (the set_fact above), so
   # this is safe to repeat; gating it on those two conditions is what keeps the task from
@@ -123,7 +123,7 @@
   become: true
 
 - name: Add any new DHCP reservation to the running network
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # net-define only rewrites the persistent config: a running network's dnsmasq keeps the
   # reservations it started with until the network restarts, and restarting it would take the
   # bridge down under whatever is on it. net-update --live hands the entry to dnsmasq in place.
@@ -155,7 +155,7 @@
   become: true
 
 - name: Re-read the staging network's state
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # The define above can have changed Active/Autostart, so the two tasks below must not read
   # the stale registration from before it.
   ansible.builtin.command:
@@ -170,7 +170,7 @@
   become: true
 
 - name: Start the staging network
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   when: hypervisor_staging_net_state.stdout is search('Active:\s+no')
   ansible.builtin.command:
     cmd: virsh --connect qemu:///system net-start {{ hypervisor_staging_net_name }}
@@ -178,7 +178,7 @@
   become: true
 
 - name: Autostart the staging network
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # The drill's monthly cron must find the bridge up after a host reboot without an operator.
   # This is the one bridge and NAT ruleset this host gains deliberately — unlike libvirt's
   # `default`, which install.yml stops precisely because nothing declared it.
@@ -189,7 +189,7 @@
   become: true
 
 - name: Verify the staging bridge is up and carries its gateway address
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # The exit criterion. net-info reporting Active is libvirt's view; this checks the kernel
   # agrees, because a network can be "active" while its bridge failed to take the address —
   # which is the state that would make the drill guest unreachable.

@@ -2,7 +2,7 @@
 """Every runtime module in gitops_deploy's files/ must be in BOTH of the role's ship lists.
 
 The deployer's Python lives in `roles/setup/gitops_deploy/files/`, and the role names each file
-twice in `tasks/install.yml`: the `loop:` of the copy task that installs it under
+twice in `tasks/code.yml`: the `loop:` of the copy task that installs it under
 `/opt/gitops-deploy/`, and the `stamp_deployed_pairs` that records its render provenance for
 `manifest-prune-check.sh`. Neither list is derived from the directory, and this test
 asserts that each covers `files/*.py`.
@@ -29,7 +29,7 @@ from _helpers import REPO, load_tasks
 
 
 ROLE = REPO / "ansible" / "roles" / "setup" / "gitops_deploy"
-INSTALL = ROLE / "tasks" / "install.yml"
+INSTALL = ROLE / "tasks" / "code.yml"
 FILES = ROLE / "files"
 TESTS = ROLE / "tests"
 ENTRYPOINT = "gitops_deploy.py"

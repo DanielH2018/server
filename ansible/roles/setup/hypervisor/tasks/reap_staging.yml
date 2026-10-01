@@ -8,7 +8,7 @@
 # manages. See the hypervisor_retired_staging_vm_* block in defaults/main.yml.
 
 - name: Check whether the retired staging guest is still defined
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   ansible.builtin.command:
     cmd: virsh --connect qemu:///system dominfo {{ hypervisor_retired_staging_vm_hostname }}
   register: hypervisor_retired_staging_vm_info
@@ -20,7 +20,7 @@
   become: true
 
 - name: Stop the retired staging guest
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   # Destroy before undefine, so the tap device and its egress-fence reference go now rather
   # than at the next host reboot. libvirt refuses to undefine an nwfilter a running domain
   # references, so a guest left running would also pin a filter nothing needs.
@@ -33,7 +33,7 @@
   become: true
 
 - name: Undefine the retired staging guest and reclaim its disk
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   # DECIDED: `--remove-all-storage`, which destroys the 100 GB qcow2 rather than orphaning it
   # (2026-09-29, #2941). The issue's verify-by is "undefined with its disk reclaimed", and an
   # image left in /var/lib/libvirt/images with nothing that knows how to start it is the state
@@ -48,7 +48,7 @@
   become: true
 
 - name: Remove what the retired staging guest left outside libvirt's storage
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   # The cloud-init seed ISO, its source directory and the rendered domain XML are not domain
   # storage, so `--remove-all-storage` does not reach them. Unconditional and idempotent: a
   # host that never had the guest has none of these paths.
@@ -63,14 +63,14 @@
   become: true
 
 - name: Check whether the retired staging-gate checkout exists
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   ansible.builtin.stat:
     path: "{{ hypervisor_retired_staging_gate_repo }}/.git"
   register: hypervisor_reap_gate_repo
   become: true
 
 - name: Read whether the retired staging-gate checkout has uncommitted work # noqa command-instead-of-module
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   # `command`, not ansible.builtin.git: that module clones, checks out and pulls, and has no
   # mode that REPORTS working-tree status. There is nothing to switch to here.
   #
@@ -92,7 +92,7 @@
   become_user: "{{ sys_user }}"
 
 - name: Refuse to remove a retired staging-gate checkout with uncommitted work in it
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   # Same reasoning that leaves /var/lib/libvirt alone in teardown.yml: this tree is
   # reproducible from the remote, so removing a CLEAN one costs a re-clone, while an edit that
   # exists only here is not reproducible from anywhere. Retiring the gate is not a decision to
@@ -109,7 +109,7 @@
       someone's — commit or discard it deliberately, then re-run.
 
 - name: Remove what the retired staging gate left on this host
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   # The dispatcher goes with the rest rather than first: its key's public half lives in
   # files/staging-gate-retired/, so install.yml has already withdrawn the authorization by the
   # time this runs. The window where a key is authorized but its forced command is missing

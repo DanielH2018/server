@@ -1,0 +1,70 @@
+---
+- name: Deploy the GitHub ruleset drift check
+  tags: [cron, gitops-deploy-github-checks]
+  # The ruleset is the merge gate this deployer's CI verdict rests on, and an edit in the
+  # GitHub UI changes it with no commit and no signal. The check pushes its own Kuma monitor
+  # directly, in the cloudflare-ip-drift shape, with no monitor-bridge hop.
+  ansible.builtin.template:
+    src: github-ruleset-drift.sh.j2
+    dest: /usr/local/bin/github-ruleset-drift.sh
+    mode: "0750"
+    owner: root
+    group: root
+  no_log: true  # renders ruleset_drift_push_token
+  become: true
+
+- name: Schedule the GitHub ruleset drift check
+  tags: [cron, gitops-deploy-github-checks]
+  # Daily. Rulesets change on a human cadence, so the cadence is about the monitor's heartbeat,
+  # not about catching drift fast — and GitHub's unauthenticated limit is 60 req/hr per source
+  # IP, shared with renovate_notify on this same host.
+  #
+  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # verdict reruns every 30 min until it clears — two calls an hour at worst, inside the
+  # unauthenticated limit even on the anonymous fallback.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: present
+    kuma_check_name: github-ruleset-drift
+    kuma_check_description: GitHub ruleset drift check (Kuma push)
+    kuma_check_exec: /usr/local/bin/github-ruleset-drift.sh
+    kuma_check_user: root
+    kuma_check_on_calendar: "*-*-* {{ '%02d' | format(gitops_deploy_ruleset_drift_cron_hour | int) }}:{{ '%02d' | format(gitops_deploy_ruleset_drift_cron_minute | int) }}:00"
+    kuma_check_restart_sec: 30min
+    kuma_check_cron_name: "GitHub ruleset drift"
+    kuma_check_cron_file: github-ruleset-drift
+
+- name: Deploy the GitHub interaction-limit re-arm
+  tags: [cron, gitops-deploy-github-checks]
+  # The repo stays public but closed to non-collaborators through GitHub's interaction limit,
+  # which the API only grants for six months at a time and lets lapse with no signal. This
+  # re-applies the declared limit daily and beats its own Kuma monitor, in the ruleset-drift
+  # shape directly above. Unlike that check it reconciles — the script's DECIDED marker says why.
+  ansible.builtin.template:
+    src: github-interaction-limit.sh.j2
+    dest: /usr/local/bin/github-interaction-limit.sh
+    mode: "0750"
+    owner: root
+    group: root
+  no_log: true  # renders interaction_limit_push_token
+  become: true
+
+- name: Schedule the GitHub interaction-limit re-arm
+  tags: [cron, gitops-deploy-github-checks]
+  # Daily, ten minutes after the ruleset check. The setting only moves when it expires, so the
+  # cadence is about how long a lapse can go unnoticed (one day) rather than about load.
+  #
+  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # verdict reruns every 30 min until it clears. The re-arm PUT is idempotent, so a rerun is
+  # the same reconcile again.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: present
+    kuma_check_name: github-interaction-limit
+    kuma_check_description: GitHub interaction-limit re-arm (Kuma push)
+    kuma_check_exec: /usr/local/bin/github-interaction-limit.sh
+    kuma_check_user: root
+    kuma_check_on_calendar: "*-*-* {{ '%02d' | format(gitops_deploy_interaction_limit_cron_hour | int) }}:{{ '%02d' | format(gitops_deploy_interaction_limit_cron_minute | int) }}:00"
+    kuma_check_restart_sec: 30min
+    kuma_check_cron_name: "GitHub interaction limit"
+    kuma_check_cron_file: github-interaction-limit

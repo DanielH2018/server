@@ -1,0 +1,111 @@
+---
+- name: Install deployer Python files
+  tags: [gitops-deploy-code]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/gitops-deploy/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  # ENFORCED by ansible/tests/deploy/test_gitops_deploy_ship_list.py: this loop and the
+  # stamp_deployed_pairs below must both name every runtime module in files/.
+  loop:
+    - gitops_deploy.py
+    - deploy_logic.py
+    - deploy_io.py
+    - deploy_config.py
+    - deploy_state.py
+    - deploy_state_k8s.py
+    - deploy_state_alerts.py
+    - gitops_markers.py
+    - deploy_failtext.py
+    - deploy_alerts.py
+    - deploy_alert_text.py
+    - deploy_changes.py
+    - deploy_defer.py
+    - deploy_release.py
+    - deploy_remediation.py
+    - deploy_git.py
+    - deploy_health.py
+    - deploy_inventory.py
+    - deploy_k8s.py
+    - deploy_locks.py
+    - deploy_broad_k8s.py
+    - deploy_toolbox.py
+    - deploy_tick_types.py
+    - deploy_phases.py
+    - deploy_handlers.py
+    - deploy_narrow.py
+  become: true
+  notify: Run gitops-deploy once
+
+- name: Install the shared host_lib helper beside the deployer
+  tags: [gitops-deploy-code]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/gitops-deploy
+    host_lib_owner: "{{ sys_user }}"
+    host_lib_notify: [Run gitops-deploy once]
+
+# manifest-prune-check.sh's deployed-code arm reads these pairs from the role's declaration,
+# which is what lets the sibling roles declare theirs.
+- name: Record the deployed gitops-deploy code
+  tags: [gitops-deploy-code]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: gitops-deploy
+    stamp_deployed_pairs:
+      - live: /opt/gitops-deploy/gitops_deploy.py
+        src: ansible/roles/setup/gitops_deploy/files/gitops_deploy.py
+      - live: /opt/gitops-deploy/deploy_logic.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_logic.py
+      - live: /opt/gitops-deploy/deploy_io.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_io.py
+      - live: /opt/gitops-deploy/deploy_config.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_config.py
+      - live: /opt/gitops-deploy/deploy_state.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_state.py
+      - live: /opt/gitops-deploy/deploy_state_k8s.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_state_k8s.py
+      - live: /opt/gitops-deploy/deploy_state_alerts.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_state_alerts.py
+      - live: /opt/gitops-deploy/gitops_markers.py
+        src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
+      - live: /opt/gitops-deploy/deploy_failtext.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_failtext.py
+      - live: /opt/gitops-deploy/deploy_alerts.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_alerts.py
+      - live: /opt/gitops-deploy/deploy_alert_text.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_alert_text.py
+      - live: /opt/gitops-deploy/deploy_changes.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_changes.py
+      - live: /opt/gitops-deploy/deploy_remediation.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_remediation.py
+      - live: /opt/gitops-deploy/deploy_git.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_git.py
+      - live: /opt/gitops-deploy/deploy_health.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_health.py
+      - live: /opt/gitops-deploy/deploy_inventory.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_inventory.py
+      - live: /opt/gitops-deploy/deploy_k8s.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_k8s.py
+      - live: /opt/gitops-deploy/deploy_locks.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_locks.py
+      - live: /opt/gitops-deploy/deploy_toolbox.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py
+      - live: /opt/gitops-deploy/deploy_tick_types.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_tick_types.py
+      - live: /opt/gitops-deploy/deploy_phases.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_phases.py
+      - live: /opt/gitops-deploy/deploy_handlers.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_handlers.py
+      - live: /opt/gitops-deploy/deploy_defer.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_defer.py
+      - live: /opt/gitops-deploy/deploy_release.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_release.py
+      - live: /opt/gitops-deploy/deploy_broad_k8s.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_broad_k8s.py
+      - live: /opt/gitops-deploy/deploy_narrow.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py
+      - live: /opt/gitops-deploy/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py

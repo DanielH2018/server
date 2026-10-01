@@ -4,14 +4,14 @@
 # daniel-server.
 
 - name: Check whether libvirt is installed
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   ansible.builtin.stat:
     path: /usr/sbin/libvirtd
   register: hypervisor_libvirtd_binary
   become: true
 
 - name: List any guests still defined
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   when: hypervisor_libvirtd_binary.stat.exists
   ansible.builtin.command:
     cmd: virsh --connect qemu:///system list --all --name
@@ -24,7 +24,7 @@
   become: true
 
 - name: Refuse to remove a hypervisor that still has guests
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   # Purging libvirt out from under a defined domain leaves its disk image orphaned in
   # /var/lib/libvirt/images with nothing that knows how to start it again — a one-way door
   # that reads as a successful teardown. Undefining a guest is a decision, not a side effect
@@ -39,7 +39,7 @@
       --remove-all-storage` destroys their disks — then re-run.
 
 - name: Check whether the staging network is defined
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   when: hypervisor_libvirtd_binary.stat.exists
   ansible.builtin.command:
     cmd: virsh --connect qemu:///system net-info {{ hypervisor_staging_net_name }}
@@ -52,7 +52,7 @@
   become: true
 
 - name: Stop the staging network
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   # Destroy before undefine so the bridge and its NAT rules go now rather than at the next
   # reboot. A package purge alone leaves the bridges and their routes in place until a
   # reboot, and removing a thing should remove what it put on the host.
@@ -66,7 +66,7 @@
   become: true
 
 - name: Undefine the staging network
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   when:
     - hypervisor_libvirtd_binary.stat.exists
     - hypervisor_teardown_net_info.rc == 0
@@ -76,14 +76,14 @@
   become: true
 
 - name: Remove the declared network source directory
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   ansible.builtin.file:
     path: "{{ hypervisor_net_source_dir }}"
     state: absent
   become: true
 
 - name: Stop and disable libvirtd
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   when: hypervisor_libvirtd_binary.stat.exists
   ansible.builtin.systemd_service:
     name: "{{ item }}"
@@ -95,7 +95,7 @@
   become: true
 
 - name: Purge the KVM/libvirt packages
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   # /var/lib/libvirt is deliberately left alone, on the same reasoning as /var/lib/docker:
   # it holds disk images, deleting them is irreversible in a way removing a package is not,
   # and the assert above has already established no guest is using them.
@@ -107,7 +107,7 @@
   become: true
 
 - name: Remove what the retired staging gate left on this host
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   # The gate and its guest are retired, so these are reap targets rather
   # than this role's own state. reap_staging.yml removes the same paths on the has_hypervisor:
   # true path, and refuses first if the checkout holds uncommitted work; here the checkout is
@@ -123,7 +123,7 @@
   become: true
 
 - name: Deauthorize every retired staging-gate key
-  tags: [hypervisor]
+  tags: [hypervisor-teardown]
   # Removes only these keys, by their public halves. The operator's own key is untouched — this
   # teardown must never be able to lock the host out.
   ansible.posix.authorized_key:

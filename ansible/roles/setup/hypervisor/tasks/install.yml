@@ -3,7 +3,7 @@
 # the etcd restore drill's, is transient and created by its own cron.
 
 - name: Read the CPU virtualisation flags
-  tags: [hypervisor]
+  tags: [hypervisor-host]
   # /proc/cpuinfo rather than a fact: ansible.builtin.setup exposes no CPU flag list, so
   # `ansible_processor_flags` -- the obvious-looking name -- is simply undefined, and no lint
   # or test evaluates a conditional to catch that.
@@ -20,7 +20,7 @@
   become: true
 
 - name: Assert the CPU supports hardware virtualisation
-  tags: [hypervisor]
+  tags: [hypervisor-host]
   # Fail here with the reason rather than several tasks later with a qemu error. Software
   # emulation would "work" and be slow enough to make the monthly etcd restore drill useless,
   # which is a worse outcome than refusing.
@@ -32,14 +32,14 @@
       installing libvirt.
 
 - name: Install the KVM/libvirt packages
-  tags: [hypervisor]
+  tags: [hypervisor-host]
   ansible.builtin.apt:
     name: "{{ hypervisor_packages }}"
     state: present
   become: true
 
 - name: Add the deploy user to the libvirt and kvm groups
-  tags: [hypervisor]
+  tags: [hypervisor-host]
   # Group membership is read at login, so an existing session keeps the old set until it
   # reconnects. virsh over a fresh ssh connection picks it up; a long-lived shell will not.
   ansible.builtin.user:
@@ -49,7 +49,7 @@
   become: true
 
 - name: Enable and start libvirtd
-  tags: [hypervisor]
+  tags: [hypervisor-host]
   ansible.builtin.systemd_service:
     name: libvirtd
     state: started
@@ -57,7 +57,7 @@
   become: true
 
 - name: Read the state of libvirt's built-in default network
-  tags: [hypervisor]
+  tags: [hypervisor-host]
   # DECIDED: the packaged `default` NAT network is stopped and un-autostarted rather than
   # left alone. Installing libvirt otherwise brings up virbr0 and a set of NAT/forward rules
   # on a host that already runs k3s's flannel and kube-router chains — an undeclared third
@@ -78,7 +78,7 @@
   become: true
 
 - name: Stop libvirt's built-in default network
-  tags: [hypervisor]
+  tags: [hypervisor-host]
   when:
     - hypervisor_default_net.rc == 0
     - hypervisor_default_net.stdout is search('Active:\s+yes')
@@ -88,7 +88,7 @@
   become: true
 
 - name: Stop libvirt's built-in default network from autostarting
-  tags: [hypervisor]
+  tags: [hypervisor-host]
   when:
     - hypervisor_default_net.rc == 0
     - hypervisor_default_net.stdout is search('Autostart:\s+yes')
@@ -98,7 +98,7 @@
   become: true
 
 - name: Verify virsh reaches the system hypervisor
-  tags: [hypervisor]
+  tags: [hypervisor-host]
   # The role's exit criterion, asserted rather than left to the operator. It proves the
   # property that matters -- a member of the libvirt group can reach
   # /var/run/libvirt/libvirt-sock (root:libvirt 0770) -- rather than that root can, which
@@ -118,19 +118,19 @@
   changed_when: false
 
 - name: Declare the staging network
-  tags: [hypervisor]
+  tags: [hypervisor-network]
   # After the verification above, so a broken libvirt fails on "can virsh reach the
   # hypervisor" rather than several tasks later on a net-define that could not have worked.
-  ansible.builtin.include_tasks: network.yml
+  ansible.builtin.import_tasks: network.yml
 
 - name: Prepare the etcd restore drill guest and its cron
-  tags: [hypervisor]
+  tags: [hypervisor-etcd-drill]
   # After network.yml: the drill guest downloads the base image it is built from, and its DHCP
   # reservation lives in the network that slice declared. Nothing here starts a guest.
-  ansible.builtin.include_tasks: etcd_drill.yml
+  ansible.builtin.import_tasks: etcd_drill.yml
 
 - name: Deauthorize retired staging-gate keys
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   # Every public half this role has ever authorized lives here, including the staging gate's
   # key. `authorized_key` runs `state: present` with `exclusive` left false, so it only ever
   # ADDS, and deleting the key's file alone would leave that key working on this host forever.
@@ -151,8 +151,8 @@
   become: true
 
 - name: Reap what the retired staging cluster left behind
-  tags: [hypervisor]
+  tags: [hypervisor-reap-staging]
   # After the withdrawal above, so the dispatcher this removes is never gone while its key is
   # still authorized. has_hypervisor stays true on this host for the drill, so teardown.yml
   # never runs here and this is the only path that reaps daniel-stage.
-  ansible.builtin.include_tasks: reap_staging.yml
+  ansible.builtin.import_tasks: reap_staging.yml

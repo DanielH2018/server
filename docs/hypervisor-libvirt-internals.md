@@ -15,7 +15,7 @@ consulting it (#2859), so the guest sat allocated for work nothing drove.
 `has_hypervisor` goes false, and that flag stays true on daniel-server for the drill — so the
 domain would have kept running as an orphan Ansible no longer manages. That is the
 `docker_install` failure `tasks/main.yml` documents, and it is why the reap is on the install
-path: `reap_staging.yml`, included last from `install.yml`, destroys the domain, runs
+path: `reap_staging.yml`, imported last from `install.yml`, destroys the domain, runs
 `virsh undefine --remove-all-storage` on it, and removes the seed, the seed directory and
 the rendered XML by path. It is guarded on the domain existing, so it is a permanent no-op once the host has
 converged.

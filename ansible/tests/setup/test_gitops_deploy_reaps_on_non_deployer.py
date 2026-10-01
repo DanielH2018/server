@@ -14,13 +14,13 @@ _UNIT_DIR = "/etc/systemd/system/"
 
 
 def _systemd_units_install_writes() -> set[str]:
-    """Every unit basename `install.yml` writes under `/etc/systemd/system/`.
+    """Every unit basename `service.yml` writes under `/etc/systemd/system/`.
 
     Reads every `template`/`copy` task's `dest:`, expanding a bare `{{ item }}` over that
     task's own `loop:` -- the shape every systemd-unit-installing task in this role uses.
     """
     units: set[str] = set()
-    for task in load_tasks(ROLE / "install.yml"):
+    for task in load_tasks(ROLE / "service.yml"):
         for module_key in ("ansible.builtin.template", "ansible.builtin.copy"):
             module = task.get(module_key)
             if not isinstance(module, dict):
@@ -90,7 +90,7 @@ def test_the_teardown_reaps_both_timers_and_their_legacy_crons():
     # The GitHub checks are kuma-check timers. The install imports them
     # present; the teardown imports the same names absent, and the shared task file's absent
     # arm removes the units AND the cron each replaced, by the same cron_file.
-    installed = _kuma_check_imports("install.yml", "present")
+    installed = _kuma_check_imports("github_checks.yml", "present")
     assert installed == {
         "github-ruleset-drift": "github-ruleset-drift",
         "github-interaction-limit": "github-interaction-limit",

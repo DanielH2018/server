@@ -87,7 +87,7 @@ Each arm is a rule and the function that holds it. The record page has the incid
 - **Pi Docker changes are never auto-deployed**, and an encrypted-vars-only push merges without
   redeploying, alerting once per SHA.
 - **A new module in `files/` goes in the copy `loop:` and `stamp_deployed_pairs` in
-  `tasks/main.yml`**. ENFORCED: `ansible/tests/deploy/test_gitops_deploy_ship_list.py`.
+  `tasks/code.yml`**. ENFORCED: `ansible/tests/deploy/test_gitops_deploy_ship_list.py`.
 
 ## Which apply clears a hold
 

@@ -237,7 +237,7 @@ def setup_file_hosts(
 
     A `tasks/<file>.yml` path reaches the hosts that run a task IN that file: the leaf
     tasks it holds, each under the include chain that pulls the file in. For example
-    `gitops_deploy/tasks/install.yml` is included by `tasks/main.yml` under `when:
+    `gitops_deploy/tasks/install.yml` is imported by `tasks/main.yml` under `when:
     has_gitops`, so it reaches only daniel-box; `tasks/teardown.yml`, the
     `not has_gitops` half of the same dispatcher, reaches the other two the same way. A
     task file holding only includes -- `main.yml` of a dispatcher -- has no leaf of its
