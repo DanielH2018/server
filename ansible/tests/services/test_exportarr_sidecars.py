@@ -53,10 +53,13 @@ def _sidecars() -> dict[str, dict]:
     return found
 
 
-def _census(found: dict[str, dict], what: str) -> None:
+def _census(found: dict) -> None:
+    """Refuse a short census. Every caller reads a field off `_sidecars()`, so a role missing
+    from the dict means that role rendered no `exportarr` container at all — never that the
+    field is absent from one."""
     assert set(found) == set(ARRS), (
-        f"rendered no exportarr {what} for {sorted(set(ARRS) - set(found))} — this guard "
-        "would pass vacuously"
+        f"rendered no exportarr sidecar for {sorted(set(ARRS) - set(found))} — the guard "
+        "below would pass vacuously"
     )
 
 
@@ -126,7 +129,7 @@ def test_the_sidecar_is_restarted_when_it_wedges():
     or an empty render would otherwise pass with zero assertions.
     """
     probed = _sidecars()
-    _census(probed, "sidecar")
+    _census(probed)
     for role, container in sorted(probed.items()):
         assert "livenessProbe" in container, (
             f"{role}'s exportarr should still be restarted when it wedges"
@@ -225,7 +228,7 @@ def test_the_image_pins_stay_in_lockstep():
     # fact: ansible/roles/k8s/radarr/CLAUDE.md#At a glance
     # fact: ansible/roles/k8s/sonarr/CLAUDE.md#Notable
     images = {role: c["image"] for role, c in _sidecars().items()}
-    _census(images, "image")
+    _census(images)
     assert len(set(images.values())) == 1, f"exportarr pins have drifted: {images}"
 
 
