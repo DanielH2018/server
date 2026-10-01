@@ -5,13 +5,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_k3s_etcd_restore_gates.py
 """
 
 import io
-import subprocess
 
 import pytest
 from _gates_fakes import failing_read, fake_tools
 from deploy_tools import k3s_etcd_restore_gates as gates
 
 from lib.repo_paths import REPO as _REPO
+from lib.proc_testing import run
 
 _RUNBOOK = _REPO / "docs" / "k3s-etcd-restore.md"
 
@@ -315,11 +315,11 @@ def test_the_snapshot_name_is_required():
 def test_the_runbook_calls_the_script_and_it_runs():
     script = "scripts/deploy_tools/k3s_etcd_restore_gates.py"
     assert script in _RUNBOOK.read_text()
-    proc = subprocess.run(
+    proc = run(
         ["uv", "run", "python", str(_REPO / script), "--bogus"],
-        capture_output=True,
-        text=True,
         cwd=_REPO,
-        check=False,
+        # A nested `uv run` resolves the dev group before the child starts, which a cold
+        # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.
+        timeout=300,
     )
     assert proc.returncode == 64, proc.stderr

@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 from test_ui_smoke import REPO_ROOT, WRAPPER, McpClient, page_title
+from lib.proc_testing import run
 
 pytestmark = pytest.mark.ui
 
@@ -46,7 +47,7 @@ EMPTY_STATE = {"cookies": [], "origins": []}
 def ui_login(*args) -> subprocess.CompletedProcess:
     """`ui_login.py`, through `uv run` — it imports `core`, whose PEP 758 syntax Ubuntu's
     /usr/bin/python3 cannot parse."""
-    return subprocess.run(
+    return run(
         [
             "uv",
             "run",
@@ -56,8 +57,9 @@ def ui_login(*args) -> subprocess.CompletedProcess:
             "scripts/diagnostics/ui_login.py",
             *args,
         ],
-        capture_output=True,
-        text=True,
+        # A real Authelia round-trip through a headless browser, behind a nested `uv run`.
+        # Measured well under a minute; the budget is for a cold cache.
+        timeout=300,
     )
 
 

@@ -16,10 +16,10 @@ Run: uv run pytest ansible/tests/repo/test_cross_directory_importer_bootstraps_s
 """
 
 import re
-import subprocess
 from pathlib import Path
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 SCRIPTS = REPO / "scripts"
 IMPORT = re.compile(r"^(?:from|import) (\w+)(?:[ .]|$)", re.MULTILINE)
@@ -31,12 +31,8 @@ KNOWN_CROSS_IMPORTERS = frozenset({"docs/build_docs.py", "validate/k8s_manifests
 
 
 def _tracked_script_modules() -> list[Path]:
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "scripts/**/*.py"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
+    listed = run(
+        ["git", "ls-files", "-z", "--", "scripts/**/*.py"], cwd=REPO, check=True
     ).stdout
     return [REPO / rel for rel in listed.split("\0") if rel and "/tests/" not in rel]
 

@@ -33,9 +33,8 @@ attempts at a fixed 30s backoff put the second retry at t=60s, ~2x that window. 
 below is therefore guarded by an accept/reject pair.
 """
 
-import subprocess
-
 from _helpers import ANSIBLE
+from lib.proc_testing import run
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
 
@@ -83,7 +82,7 @@ def _run_push(tmp_path, responses, extra_prelude=""):
     kuma_push up test-msg https://push.example/secret-token kuma.local 10.0.0.1 test-tag
     echo "rc=$? ok=$KUMA_PUSH_OK"
     """
-    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    result = run(["bash", "-c", script])
     calls = len(calls_file.read_text().splitlines())
     sleeps = [int(x) for x in sleeps_file.read_text().split()]
     logs = logs_file.read_text().splitlines()
@@ -140,7 +139,7 @@ def test_the_stub_curl_writes_the_transport_error_to_stderr(tmp_path):
     idx=0
     {_CURL_STUB_STDERR}
     """
-    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    result = run(["bash", "-c", script])
     assert "curl: (7)" in result.stderr
 
 

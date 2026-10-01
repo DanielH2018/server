@@ -23,10 +23,10 @@ Run: uv run pytest ansible/tests/repo/test_no_test_reads_pytests_argv.py
 """
 
 import ast
-import subprocess
 from pathlib import Path, PurePosixPath
 
 from _helpers import REPO, is_test_file
+from lib.proc_testing import run
 
 # Non-vacuity floors. Both censuses find their subjects by pattern, so each must be shown to
 # contain something concrete — a renamed module or a moved directory would otherwise empty a
@@ -43,13 +43,7 @@ def _tracked_python() -> list[str]:
     # `git ls-files`, not `rglob`, for the reason `_helpers.discover_docs` records: a
     # root-anchored walk descends into `.claude/worktrees/<name>/` and judges this commit
     # against other sessions' checkouts.
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "*.py"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = run(["git", "ls-files", "-z", "*.py"], cwd=REPO, check=True).stdout
     return sorted(rel for rel in listed.split("\0") if rel)
 
 

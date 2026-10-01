@@ -35,6 +35,7 @@ import time
 
 import pytest
 from lib.repo_paths import REPO as REPO_ROOT
+from lib.proc_testing import run
 
 pytestmark = pytest.mark.ui
 
@@ -382,7 +383,7 @@ def two_factor_browser(domain):
     # Through `uv run`, not the shebang: ui_login imports core, which uses PEP 758
     # syntax that Ubuntu's 3.12 /usr/bin/python3 cannot parse.
     def ui_login(*args):
-        return subprocess.run(
+        return run(
             [
                 "uv",
                 "run",
@@ -392,8 +393,9 @@ def two_factor_browser(domain):
                 "scripts/diagnostics/ui_login.py",
                 *args,
             ],
-            capture_output=True,
-            text=True,
+            # A real Authelia round-trip through a headless browser, behind a nested `uv run`.
+            # Measured well under a minute; the budget is for a cold cache.
+            timeout=300,
         )
 
     if ui_login("--check", "--two-factor").returncode != 0:

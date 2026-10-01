@@ -25,12 +25,12 @@ a guard that matches everything and a guard that matches nothing are indistingui
 passing side alone.
 """
 
-import subprocess
 import tomllib
 from pathlib import PurePosixPath
 
 import pytest_shard
 from _helpers import REPO
+from lib.proc_testing import run
 
 # pytest's default `python_files`, both forms. Deriving the notion of "a test file" from a
 # hand-kept single glob would reproduce, inside this guard, the enumeration failure it exists
@@ -53,13 +53,7 @@ def _tracked_test_files() -> list[str]:
     older copies of these same files; an rglob would judge this commit against other sessions'
     checkouts and fail on paths that moved legitimately.
     """
-    listed = subprocess.run(
-        ["git", "ls-files", "-z"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
     return sorted(
         rel
         for rel in listed.split("\0")
@@ -140,11 +134,9 @@ def _tracked_suite_files() -> list[str]:
         set(_tracked_test_files())
         | {
             rel
-            for rel in subprocess.run(
+            for rel in run(
                 ["git", "ls-files", "-z", "--", "**/conftest.py", "conftest.py"],
                 cwd=REPO,
-                capture_output=True,
-                text=True,
                 check=True,
             ).stdout.split("\0")
             if rel

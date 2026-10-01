@@ -18,13 +18,13 @@ Run: uv run pytest ansible/tests/services/test_jellyfin_plugin_allowlist.py
 
 import ast
 import re
-import subprocess
 import sys
 import textwrap
 
 import pytest
 
 from _helpers import ANSIBLE
+from lib.proc_testing import run
 
 DEPLOYMENT = ANSIBLE / "roles" / "k8s" / "jellyfin" / "templates" / "deployment.yaml.j2"
 
@@ -108,9 +108,7 @@ def _run(script: str, tmp_path) -> str:
         "fixture drift: the sweep no longer names its directory"
     )
     script = script.replace(PLUGINS_LINE, f"PLUGINS = Path({str(tmp_path)!r})")
-    done = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True, check=True
-    )
+    done = run([sys.executable, "-c", script], check=True)
     return done.stdout
 
 

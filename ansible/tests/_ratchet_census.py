@@ -23,15 +23,14 @@ from _ratchet import (
     first_party_module_names,
     module_fixture_names,
 )
+from lib.proc_testing import run
 
 HERE = REPO / "ansible" / "tests" / "repo"
 
 
 def run_git(*args: str) -> subprocess.CompletedProcess[str]:
     """`git` in the repo root, never raising — the caller reads `returncode`."""
-    return subprocess.run(
-        ["git", *args], cwd=REPO, capture_output=True, text=True, check=False
-    )
+    return run(["git", *args], cwd=REPO, check=False)
 
 
 LENGTHS = Ratchet(

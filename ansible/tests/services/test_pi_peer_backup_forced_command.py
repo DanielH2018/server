@@ -9,11 +9,10 @@ are on what the Pi would execute, not on the wrapper's text.
 """
 
 import os
-import subprocess
 
 import pytest
 from lib import yaml_fast
-from lib.proc_testing import fake_bin, path_with
+from lib.proc_testing import fake_bin, path_with, run
 from _helpers import ROLES, stub_logger_on_path
 
 ROLE = ROLES / "k8s/pi-peer-backup"
@@ -46,9 +45,7 @@ def _run(fake_sudo, original_command: str | None, src: str = SRC):
     env.pop("SSH_ORIGINAL_COMMAND", None)
     if original_command is not None:
         env["SSH_ORIGINAL_COMMAND"] = original_command
-    return subprocess.run(
-        ["bash", str(WRAPPER), src], env=env, capture_output=True, text=True
-    )
+    return run(["bash", str(WRAPPER), src], env=env)
 
 
 def test_the_captured_nightly_request_is_executed_as_sudo_rsync(fake_sudo):

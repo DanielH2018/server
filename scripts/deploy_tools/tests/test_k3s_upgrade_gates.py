@@ -16,6 +16,7 @@ from _gates_fakes import fake_tools
 from deploy_tools import k3s_upgrade_gates as gates
 from lib import kubectl
 from lib.gitops_markers import MARKERS
+from lib.proc_testing import run
 
 from lib.repo_paths import REPO as _REPO
 
@@ -249,11 +250,10 @@ def test_the_runbook_calls_the_script_and_it_runs():
     """
     script = "scripts/deploy_tools/k3s_upgrade_gates.py"
     assert script in _RUNBOOK.read_text()
-    proc = subprocess.run(
+    proc = run(
         ["uv", "run", "python", str(_REPO / script), "--bogus"],
-        capture_output=True,
-        text=True,
         cwd=_REPO,
-        check=False,
+        # A cold `uv` cache resolves the whole dev group before the script runs.
+        timeout=300,
     )
     assert proc.returncode == 64, proc.stderr

@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 _SCRIPT = REPO / "scripts" / "backup" / "etcd_restore_drill.sh"
 _SNAPSHOT = "offbox-daniel-box-1789958702.zip"
@@ -50,7 +51,7 @@ def _finish_list_only(gate_exit: int, stamp_dir) -> subprocess.CompletedProcess:
     finish_list_only
     echo "LIST_ONLY_OK"
     """
-    return subprocess.run(["bash", "-c", script, "_"], capture_output=True, text=True)
+    return run(["bash", "-c", script, "_"])
 
 
 def test_a_passing_gate_lets_the_drill_stamp(tmp_path):
@@ -96,10 +97,8 @@ def test_the_gate_command_names_the_gate_the_drill_can_actually_run():
     checks that its interpreter is executable and the script it names exists. The branch not
     taken is not exercised; `.venv` is gitignored, so which one runs depends on the checkout.
     """
-    out = subprocess.run(
+    out = run(
         ["bash", "-c", f'source "{_SCRIPT}"; printf "%s\\n" "${{GATE_CMD[@]}}"', "_"],
-        capture_output=True,
-        text=True,
         check=True,
     ).stdout.split("\n")
     assert "--gate" in out

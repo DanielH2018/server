@@ -10,9 +10,9 @@ The assertion reads git's index rather than the working tree, because an on-disk
 
 import json
 import re
-import subprocess
 
 from lib.repo_paths import REPO
+from lib.proc_testing import run
 
 SETTINGS = REPO / ".claude" / "settings.json"
 
@@ -37,13 +37,7 @@ def _hook_scripts() -> set[str]:
 
 
 def _index_modes() -> dict[str, str]:
-    out = subprocess.run(
-        ["git", "ls-files", "-s", "--", ".claude"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    out = run(["git", "ls-files", "-s", "--", ".claude"], cwd=REPO, check=True).stdout
     modes = {}
     for line in out.splitlines():
         fields = line.split("\t", 1)

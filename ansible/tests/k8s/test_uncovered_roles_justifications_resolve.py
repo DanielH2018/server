@@ -13,9 +13,9 @@ some k8s role's `templates/`; a test module must be tracked somewhere in the rep
 """
 
 import re
-import subprocess
 
 from _helpers import K8S_ROLES, REPO
+from lib.proc_testing import run
 
 _SOURCE = REPO / "ansible" / "tests" / "k8s" / "test_container_security_context.py"
 _BLOCK = re.compile(r"^_UNCOVERED_ROLES = \{\n(.*?)^\}", re.M | re.S)
@@ -39,9 +39,7 @@ def referenced_files(block: str) -> set[str]:
 
 
 def _tracked_basenames() -> set[str]:
-    listed = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True, check=True
-    ).stdout
+    listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
     return {rel.rsplit("/", 1)[-1] for rel in listed.split("\0") if rel}
 
 

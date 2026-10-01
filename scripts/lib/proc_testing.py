@@ -29,6 +29,12 @@ Import it from any test, at any depth — `pyproject.toml` puts `scripts/` on `p
 `lib.git_testing` is the sibling for a scratch git repository, and the two compose: pass
 `env=scrubbed_env()` to `run` when the child shells out to git.
 
+`scripts/tests/test_tests_share_the_subprocess_helpers.py` holds all three decisions as rules.
+Rule 3 is the deadline: a test-module `subprocess.run` with no `timeout=` is refused, so a
+caller either comes through `run` or states its own budget at the line. `subprocess.Popen` is
+outside that rule, because it takes no `timeout=` — bound its `wait`/`communicate` yourself
+(#3073).
+
 A test whose SUBJECT is one of the three decisions does not use this. `scripts/lib/tests/
 test_proc_testing.py` covers this module's own behaviour, and a test that pins the minimal
 environment its subject runs under — a hook fixture holding `PATH` to `/usr/bin:/bin` — keeps

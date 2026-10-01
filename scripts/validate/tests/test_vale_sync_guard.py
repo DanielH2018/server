@@ -28,7 +28,7 @@ import tomllib
 import pytest
 
 from pathlib import Path
-from lib.proc_testing import fake_bin, path_with, write_exec
+from lib.proc_testing import fake_bin, path_with, run, write_exec
 from lib.repo_paths import REPO
 
 GUARD = REPO / "scripts" / "validate" / "vale.sh"
@@ -94,13 +94,7 @@ def env_for(repo: Path) -> dict[str, str]:
 
 
 def run_guard(repo: Path, *args: str, script: str = "scripts/validate/vale.sh"):
-    return subprocess.run(
-        [str(repo / script), *args],
-        cwd=repo,
-        env=env_for(repo),
-        capture_output=True,
-        text=True,
-    )
+    return run([str(repo / script), *args], cwd=repo, env=env_for(repo))
 
 
 def run_concurrently(repo: Path, count: int, script: str = "scripts/validate/vale.sh"):

@@ -25,6 +25,7 @@ Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from lib.proc_testing import run
 
 
 ROLE = ANSIBLE / "roles" / "setup" / "nut_host"
@@ -233,14 +234,9 @@ def _endpoint_extractor() -> str:
 
 
 def _extract_endpoint(conf_text: str) -> str:
-    import subprocess
 
-    return subprocess.run(
-        ["awk", _endpoint_extractor()],
-        input=conf_text,
-        capture_output=True,
-        text=True,
-        check=True,
+    return run(
+        ["awk", _endpoint_extractor()], input=conf_text, check=True
     ).stdout.strip()
 
 

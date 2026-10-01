@@ -27,6 +27,7 @@ import subprocess
 import sys
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 FILES = REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files"
 ENTRY = "gitops_deploy"
@@ -347,12 +348,7 @@ def test_deploy_logic_imports_without_the_common_files_path():
     env["PYTHONPATH"] = str(FILES)
 
     def _import(module: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            [sys.executable, "-c", f"import {module}"],
-            env=env,
-            capture_output=True,
-            text=True,
-        )
+        return run([sys.executable, "-c", f"import {module}"], env=env)
 
     assert _import("deploy_logic").returncode == 0, _import("deploy_logic").stderr
     # The reject half, through the identical env: `deploy_config` is the module the chain ended

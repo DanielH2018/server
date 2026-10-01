@@ -5,9 +5,8 @@ host cron. The stub curl records the `msg=` it was handed, so the assertion is o
 have gone over the wire, not on a return code.
 """
 
-import subprocess
-
 from _helpers import ANSIBLE
+from lib.proc_testing import run
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
 MSG_MAX = 900
@@ -29,7 +28,7 @@ def _pushed_msg(tmp_path, msg):
     logger() {{ :; }}
     kuma_push down "$1" https://push.example/secret-token kuma.local 10.0.0.1 test-tag
     """
-    subprocess.run(["bash", "-c", script, "_", msg], check=True, capture_output=True)
+    run(["bash", "-c", script, "_", msg], check=True)
     return msg_file.read_text()
 
 

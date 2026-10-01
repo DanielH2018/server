@@ -21,9 +21,9 @@ Run: uv run pytest ansible/tests/repo/test_templates_iterate_dicts_sorted.py
 """
 
 import re
-import subprocess
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 # `.items()` anywhere on a line, unless that line also sorts — `| dictsort` is the form this
 # repo uses, and `.items() | sort` is the same guarantee spelled longer.
@@ -42,13 +42,7 @@ KNOWN_TEMPLATES = frozenset(
 
 
 def _tracked_templates() -> list[str]:
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "*.j2"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = run(["git", "ls-files", "-z", "--", "*.j2"], cwd=REPO, check=True).stdout
     return [rel for rel in listed.split("\0") if rel]
 
 

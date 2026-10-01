@@ -14,7 +14,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from lib.proc_testing import fake_bin, path_with
+from lib.proc_testing import fake_bin, path_with, run
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
 # The checkout `land.sh` cds into at line 16, whichever one holds this test. Every stubbed `gh`
@@ -122,7 +122,5 @@ def test_the_stub_is_what_resolves_for_logger(logger_calls):
     /usr/bin/logger and fails, rather than every other test in the directory going quietly
     back to writing syslog.
     """
-    resolved = subprocess.run(
-        ["sh", "-c", "command -v logger"], capture_output=True, text=True, check=True
-    ).stdout.strip()
+    resolved = run(["sh", "-c", "command -v logger"], check=True).stdout.strip()
     assert "logger-stub" in resolved, f"logger resolved to {resolved}, not the stub"

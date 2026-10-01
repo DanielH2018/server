@@ -9,7 +9,6 @@ Run: uv run pytest scripts/dev/tests/test_claude_worktree_import.py
 """
 
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +16,7 @@ from pathlib import Path
 # deploy fails collection here with the bootstrap's own message.
 import _claude_worktree  # noqa: F401
 import claude_worktree
+from lib.proc_testing import run
 
 SCRIPTS_DEV = Path(__file__).resolve().parents[1]
 REPO = SCRIPTS_DEV.parents[1]
@@ -39,12 +39,10 @@ def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path):
     A subprocess rather than an in-process import: this module has already imported
     `claude_worktree`, and the env var is read once at import.
     """
-    proc = subprocess.run(
+    proc = run(
         [sys.executable, "-c", "import _claude_worktree"],
         cwd=SCRIPTS_DEV,
         env=_without_deploy(tmp_path),
-        capture_output=True,
-        text=True,
         check=False,
     )
     assert proc.returncode != 0
@@ -54,7 +52,7 @@ def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path):
 
 
 def test_bootstrap_imports_the_module_the_env_var_names(tmp_path):
-    proc = subprocess.run(
+    proc = run(
         [
             sys.executable,
             "-c",
@@ -62,8 +60,6 @@ def test_bootstrap_imports_the_module_the_env_var_names(tmp_path):
         ],
         cwd=SCRIPTS_DEV,
         env={**_without_deploy(tmp_path), "CLAUDE_WORKTREE_HOME": str(DEPLOYED.parent)},
-        capture_output=True,
-        text=True,
         check=False,
     )
     assert proc.returncode == 0, proc.stderr
@@ -77,12 +73,10 @@ def test_prune_removes_nothing_when_the_deploy_is_missing(tmp_path):
     call (which prints nothing on a healthy day) cannot read the failure as "nothing to
     remove" — the banner sees the exit and says detection is broken.
     """
-    proc = subprocess.run(
+    proc = run(
         [sys.executable, str(PRUNER), "--prune"],
         cwd=REPO,
         env=_without_deploy(tmp_path),
-        capture_output=True,
-        text=True,
         check=False,
     )
     assert proc.returncode != 0
@@ -97,12 +91,10 @@ def test_gc_fails_loudly_rather_than_repairing_without_the_deploy(tmp_path):
     daniel-box, where the deploy lives beside claude-guard's. Pinned so the coupling is a
     known exit with the fix on stderr, never a repair that quietly did not run.
     """
-    proc = subprocess.run(
+    proc = run(
         [sys.executable, str(PRUNER), "--gc"],
         cwd=REPO,
         env=_without_deploy(tmp_path),
-        capture_output=True,
-        text=True,
         check=False,
     )
     assert proc.returncode != 0
@@ -124,11 +116,5 @@ def test_the_pruner_imports_as_a_library_with_only_scripts_on_the_path(tmp_path)
         f"import sys; sys.path.insert(0, {str(SCRIPTS_DEV.parent)!r}); "
         "import dev.prune_worktrees"
     )
-    run = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    assert run.returncode == 0, run.stderr
+    done = run([sys.executable, "-c", code], cwd=tmp_path, env=env)
+    assert done.returncode == 0, done.stderr

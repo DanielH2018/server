@@ -14,9 +14,9 @@ Run: uv run pytest ansible/tests/repo/test_no_future_annotations_import.py
 """
 
 import re
-import subprocess
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 SELF = "ansible/tests/repo/test_no_future_annotations_import.py"
 
@@ -69,13 +69,7 @@ KNOWN_HOST_SHIPPED_MODULES = frozenset(
 
 
 def _tracked_python_files() -> list[str]:
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "*.py"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = run(["git", "ls-files", "-z", "--", "*.py"], cwd=REPO, check=True).stdout
     return [rel for rel in listed.split("\0") if rel]
 
 

@@ -26,6 +26,7 @@ import subprocess
 from pathlib import Path
 
 from _helpers import ANSIBLE
+from lib.proc_testing import run
 
 SCRIPT_PATH = ANSIBLE / "roles/setup/initial_setup/templates/docs-refresh.sh.j2"
 SCRIPT = SCRIPT_PATH.read_text()
@@ -90,12 +91,8 @@ def _bash(script: str, cwd: Path, stamp_dir: Path) -> subprocess.CompletedProces
         "COMMIT_FAILED_STAMP": str(stamp_dir / "commit-failed"),
         "COMMIT_FAILED_LOG": str(stamp_dir / "last-commit-failure.log"),
     }
-    return subprocess.run(
-        ["bash", "-uo", "pipefail", "-c", f"{PRELUDE}\n{script}"],
-        cwd=cwd,
-        env=env,
-        capture_output=True,
-        text=True,
+    return run(
+        ["bash", "-uo", "pipefail", "-c", f"{PRELUDE}\n{script}"], cwd=cwd, env=env
     )
 
 

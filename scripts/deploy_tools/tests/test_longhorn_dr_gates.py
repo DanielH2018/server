@@ -6,7 +6,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_longhorn_dr_gates.py
 
 import io
 import json
-import subprocess
 
 import pytest
 from _gates_fakes import fake_tools
@@ -14,6 +13,7 @@ from deploy_tools import longhorn_dr_gates as gates
 from lib import kubectl
 
 from lib.repo_paths import REPO as _REPO
+from lib.proc_testing import run
 
 _RUNBOOK = _REPO / "docs" / "longhorn-disaster-recovery.md"
 
@@ -209,11 +209,11 @@ def test_the_exit_codes_are_the_gate_positions():
 def test_the_runbook_calls_the_script_and_it_runs():
     script = "scripts/deploy_tools/longhorn_dr_gates.py"
     assert script in _RUNBOOK.read_text()
-    proc = subprocess.run(
+    proc = run(
         ["uv", "run", "python", str(_REPO / script), "--bogus"],
-        capture_output=True,
-        text=True,
         cwd=_REPO,
-        check=False,
+        # A nested `uv run` resolves the dev group before the child starts, which a cold
+        # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.
+        timeout=300,
     )
     assert proc.returncode == 64, proc.stderr

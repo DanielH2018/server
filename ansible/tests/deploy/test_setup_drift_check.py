@@ -14,11 +14,11 @@ arm from one that fires on nothing.
 """
 
 import re
-import subprocess
 from pathlib import Path
 
 from lib import yaml_fast
 from _helpers import REPO
+from lib.proc_testing import run
 
 _REPO = REPO
 _LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
@@ -61,9 +61,7 @@ def _run_scan(tmp_path, deployed=(), rendered=(), repo_files=None):
         'printf "DRIFTED=%s\\nSTALE=%s\\nDEPLOYED_NOTE=%s\\nMANIFEST_NOTE=%s\\n" '
         '"$DRIFTED" "$STALE" "$DEPLOYED_NOTE" "$MANIFEST_NOTE"\n'
     )
-    out = subprocess.run(
-        ["bash", str(script)], capture_output=True, text=True, check=True
-    ).stdout
+    out = run(["bash", str(script)], check=True).stdout
     return dict(line.split("=", 1) for line in out.strip().splitlines())
 
 
@@ -83,9 +81,7 @@ def _source(path: Path) -> str:
 
 
 def _sha(path: Path) -> str:
-    return subprocess.run(
-        ["sha256sum", str(path)], capture_output=True, text=True, check=True
-    ).stdout.split()[0]
+    return run(["sha256sum", str(path)], check=True).stdout.split()[0]
 
 
 def _old_repo(tmp_path, permissive_system_config=False):
@@ -118,10 +114,10 @@ def _old_repo(tmp_path, permissive_system_config=False):
     }
     if not permissive_system_config:
         env["GIT_CONFIG_NOSYSTEM"] = "1"
-    subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)
+    run(["git", "init", "-q", str(repo)], check=True, env=env)
     (repo / "f").write_text("x")
-    subprocess.run(["git", "-C", str(repo), "add", "f"], check=True, env=env)
-    subprocess.run(
+    run(["git", "-C", str(repo), "add", "f"], check=True, env=env)
+    run(
         ["git", "-C", str(repo), "commit", "-q", "-m", "old", "--no-gpg-sign"],
         check=True,
         env=env,
@@ -241,9 +237,7 @@ def test_the_tree_age_arm_reads_the_checkout(tmp_path):
     script.write_text(
         f"set -uo pipefail\nREPO_DIR={repo}\nsource {_LIB}\nsetup_drift_tree_age_days\n"
     )
-    age = subprocess.run(
-        ["bash", str(script)], capture_output=True, text=True, check=True, env=env
-    ).stdout.strip()
+    age = run(["bash", str(script)], check=True, env=env).stdout.strip()
     assert int(age) > 1800, "a 2020 commit must read as thousands of days old"
 
 
@@ -258,9 +252,7 @@ def test_an_unreadable_checkout_is_a_fault_not_a_pass(tmp_path):
         f"set -uo pipefail\nREPO_DIR={tmp_path}/nope\nsource {_LIB}\n"
         "setup_drift_tree_age_days; echo rc=$?\n"
     )
-    out = subprocess.run(
-        ["bash", str(script)], capture_output=True, text=True, check=True
-    ).stdout
+    out = run(["bash", str(script)], check=True).stdout
     assert "rc=1" in out, "an unreadable checkout must fail, not print a plausible age"
     text = _source(_CHECK)
     assert "cannot read the checkout" in text and "STATUS=down" in text, (
@@ -288,12 +280,7 @@ def test_a_permissive_system_gitconfig_defeats_the_refusal(tmp_path):
     """
     repo, env = _old_repo(tmp_path, permissive_system_config=True)
     env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
-    done = subprocess.run(
-        ["git", "-C", str(repo), "log", "-1", "--format=%ct"],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    done = run(["git", "-C", str(repo), "log", "-1", "--format=%ct"], env=env)
     assert done.returncode == 0, (
         "a permissive system config no longer suppresses the ownership refusal, so the "
         "GIT_CONFIG_NOSYSTEM pin in the fixture is now guarding nothing"
@@ -310,12 +297,7 @@ def test_a_foreign_owned_checkout_refuses_a_bare_git_read(tmp_path):
     """
     repo, env = _old_repo(tmp_path)
     env = {**env, "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
-    done = subprocess.run(
-        ["git", "-C", str(repo), "log", "-1", "--format=%ct"],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    done = run(["git", "-C", str(repo), "log", "-1", "--format=%ct"], env=env)
     assert done.returncode != 0, (
         "GIT_TEST_ASSUME_DIFFERENT_OWNER no longer forces the dubious-ownership refusal, so "
         "the test below is not exercising the failure it claims to cover"
@@ -335,9 +317,7 @@ def test_the_tree_age_arm_reads_a_foreign_owned_checkout(tmp_path):
     script.write_text(
         f"set -uo pipefail\nREPO_DIR={repo}\nsource {_LIB}\nsetup_drift_tree_age_days\n"
     )
-    age = subprocess.run(
-        ["bash", str(script)], capture_output=True, text=True, check=True, env=env
-    ).stdout.strip()
+    age = run(["bash", str(script)], check=True, env=env).stdout.strip()
     assert age, (
         "the arm reported no age at all — the ownership refusal is still fatal to it"
     )

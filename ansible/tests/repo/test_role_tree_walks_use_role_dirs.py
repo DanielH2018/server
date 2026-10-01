@@ -46,9 +46,9 @@ Run: uv run pytest ansible/tests/repo/test_role_tree_walks_use_role_dirs.py
 """
 
 import re
-import subprocess
 
 from _helpers import ANSIBLE, REPO
+from lib.proc_testing import run
 
 # `<anything naming a role tree>.iterdir()` on one line. Anchored on the receiver rather than
 # on `iterdir` alone, so a walk of some other directory is not an offender. Two spellings per
@@ -109,12 +109,8 @@ SELF = "repo/test_role_tree_walks_use_role_dirs.py"
 
 def _tracked_test_modules() -> list[str]:
     """Every tracked `.py` under ansible/tests, relative to it."""
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "*.py"],
-        cwd=ANSIBLE / "tests",
-        capture_output=True,
-        text=True,
-        check=True,
+    listed = run(
+        ["git", "ls-files", "-z", "--", "*.py"], cwd=ANSIBLE / "tests", check=True
     ).stdout
     return [rel for rel in listed.split("\0") if rel]
 

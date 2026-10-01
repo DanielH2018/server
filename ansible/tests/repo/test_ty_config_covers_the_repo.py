@@ -34,11 +34,11 @@ The reverse costs nothing and is allowed: `extra-paths` carries `.claude/hooks` 
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED.
 """
 
-import subprocess
 import tomllib
 from pathlib import PurePosixPath
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 
 def _config() -> dict:
@@ -156,13 +156,7 @@ def _tracked_python() -> list[str]:
     `git ls-files`, not `rglob`, for the reason `_helpers.discover_docs` gives: this repo grows
     a full working tree per live session under `.claude/worktrees/<name>/`.
     """
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "*.py"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = run(["git", "ls-files", "-z", "*.py"], cwd=REPO, check=True).stdout
     return [p for p in listed.split("\0") if p]
 
 

@@ -21,12 +21,11 @@ Run: uv run pytest scripts/dev/tests/test_fanout_clean_chain.py
 
 import shlex
 import shutil
-import subprocess
 
 from fanout_lib.clean import remote_clean_command
 from fanout_lib.manifest import Batch
 from lib.git_testing import git, git_out, init_repo, scrubbed_env
-from lib.proc_testing import fake_bin, path_with
+from lib.proc_testing import fake_bin, path_with, run
 
 BRANCH = "worktree-fanout-x"
 UNIT = "fanout-x"
@@ -111,12 +110,7 @@ def _run_chain(repo, worktree, stub_bin):
     cmd = remote_clean_command(batch, repo=str(repo))
     # The guard that makes running this safe: never let it name the shared checkout.
     assert str(repo) in cmd and "/home/ubuntu/server" not in cmd
-    return subprocess.run(
-        ["bash", "-c", cmd],
-        capture_output=True,
-        text=True,
-        env=_scrubbed_env(extra_path=str(stub_bin)),
-    )
+    return run(["bash", "-c", cmd], env=_scrubbed_env(extra_path=str(stub_bin)))
 
 
 def test_a_branch_whose_merged_pr_head_matches_its_tip_is_deleted(tmp_path):

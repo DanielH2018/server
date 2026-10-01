@@ -24,7 +24,7 @@ the API server refuses the pod if that limit lands below the request. See
 k8s_default_limitrange in group_vars/all.yml for why the ceiling is set where it is.
 """
 
-import subprocess
+from lib.proc_testing import run
 
 from lib import yaml_fast
 from _k8s_render import rendered_docs
@@ -262,7 +262,7 @@ def test_no_resourcequota_is_declared_anywhere() -> None:
     # rendered_docs() and this is the decision, not the mechanism. Matched on the two forms
     # that APPLY one, not on the bare word — the reasoning that rules it out names it
     # repeatedly, and a guard that trips on its own rationale gets deleted rather than read.
-    hits = subprocess.run(
+    hits = run(
         [
             "git",
             "grep",
@@ -276,8 +276,6 @@ def test_no_resourcequota_is_declared_anywhere() -> None:
             ":!ansible/tests/",
         ],
         cwd=_REPO,
-        capture_output=True,
-        text=True,
         check=False,
     ).stdout.split()
     assert hits == [], (

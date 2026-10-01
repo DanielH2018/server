@@ -12,12 +12,10 @@ stale set changes while the tile is DOWN, the cron pushes a not-a-recovery `up` 
 `down`, and records the new set for the next run to compare against.
 """
 
-import subprocess
-
 import jinja2
 
 from lib.ansible_jinja_env import make_ansible_env
-from lib.proc_testing import write_exec
+from lib.proc_testing import run, write_exec
 from _helpers import ANSIBLE
 
 # `reachout_verdict` from the real library, stubbed to its WAN-reachable answer — which is what
@@ -98,7 +96,7 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
         .replace("/home/u/server", str(tmp_path))
         .replace(STATE_DIR, str(state)),
     )
-    subprocess.run(["bash", str(script)], check=True, capture_output=True)
+    run(["bash", str(script)], check=True)
     return [tuple(p.split("\n", 1)) for p in pushed.read_text().split(SEP) if p]
 
 

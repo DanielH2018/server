@@ -24,6 +24,7 @@ import subprocess
 
 from _helpers import ROLES
 from _helpers import load_yaml
+from lib.proc_testing import run
 
 K3S = ROLES / "setup" / "k3s"
 DRILL = K3S / "templates" / "longhorn-restore-drill.sh.j2"
@@ -73,7 +74,7 @@ def _run_floor_guard(
         f'PVC={pvc}\nPROBE="files={files} bytes={byte_count}"\n'
         f"FILES={files}\nBYTES={byte_count}\nACTUAL_SIZE={actual_size}\n" + guard
     )
-    return subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    return run(["bash", "-c", script])
 
 
 def test_a_tiny_but_real_volume_passes_the_floor() -> None:

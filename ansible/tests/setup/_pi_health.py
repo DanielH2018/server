@@ -10,10 +10,10 @@ absolute paths are repointed at temp files -- the Kuma push helper it sources, a
 health log it appends to. Every decision the script makes runs unmodified.
 """
 
-import subprocess
 import jinja2
 from lib.ansible_jinja_env import make_ansible_env
 from lib.proc_testing import fake_bin, path_with, write_exec
+from lib.proc_testing import run as launch
 from _helpers import ANSIBLE, HOST_VARS, load_yaml
 
 
@@ -191,10 +191,9 @@ def run(
     state.write_text("".join(f"{c}\n" for c in running))
     out = tmp_path / "push"
 
-    subprocess.run(
+    launch(
         ["bash", str(script)],
         check=True,
-        capture_output=True,
         env={
             "PATH": path_with(bin_dir, env={"PATH": "/usr/bin:/bin"}),
             "STATE_FILE": str(state),

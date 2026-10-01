@@ -20,11 +20,10 @@ Run: uv run pytest ansible/tests/setup/test_loki_route_witness.py
 """
 
 import os
-import subprocess
 
 import jinja2
 from lib.ansible_jinja_env import make_ansible_env
-from lib.proc_testing import fake_bin, path_with, write_exec
+from lib.proc_testing import fake_bin, path_with, run, write_exec
 from _helpers import ANSIBLE
 from lib import yaml_fast
 
@@ -182,7 +181,7 @@ def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
         .replace("/usr/local/bin/uv", str(uv))
     )
     script = write_exec(tmp_path / "loki-read-route-health.sh", body)
-    result = subprocess.run(
+    result = run(
         [str(script)],
         env={
             **os.environ,
@@ -190,8 +189,6 @@ def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
             "KUMA_PUSH_OUT": str(pushed),
             "STUB_ROUTE_RC": str(route_rc),
         },
-        capture_output=True,
-        text=True,
         check=False,
     )
     return result.returncode, pushed.read_text().strip()

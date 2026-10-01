@@ -22,10 +22,10 @@ Run: uv run pytest ansible/tests/repo/test_docs_relative_links_resolve.py
 """
 
 import re
-import subprocess
 from pathlib import Path
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 
 # `[text](target)`, with the fragment stripped — an anchor is a heading, which this guard does
@@ -60,12 +60,8 @@ def site_pages() -> list[Path]:
     full working tree per live session under `.claude/worktrees/<name>/`, and an rglob would
     judge this commit against other sessions' checkouts.
     """
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "docs/**.md"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
+    listed = run(
+        ["git", "ls-files", "-z", "--", "docs/**.md"], cwd=REPO, check=True
     ).stdout
     return sorted(REPO / rel for rel in listed.split("\0") if rel)
 

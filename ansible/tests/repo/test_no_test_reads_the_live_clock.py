@@ -20,10 +20,10 @@ Run: uv run pytest ansible/tests/repo/test_no_test_reads_the_live_clock.py
 """
 
 import ast
-import subprocess
 from pathlib import Path
 
 from _helpers import REPO, is_test_file
+from lib.proc_testing import run
 
 # A subprocess-driven test whose `now` cannot cross the process boundary. Empty since #2220;
 # an entry here needs a reason the `runpy` shim in `_reap_entrypoint_harness.py` does not
@@ -81,13 +81,7 @@ def _tracked_test_files() -> list[str]:
     # `git ls-files`, not `rglob`, for the reason `_helpers.discover_docs` records: a
     # root-anchored walk descends into `.claude/worktrees/<name>/` and judges this commit
     # against other sessions' checkouts.
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "*.py"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = run(["git", "ls-files", "-z", "*.py"], cwd=REPO, check=True).stdout
     return sorted(rel for rel in listed.split("\0") if rel and is_test_file(Path(rel)))
 
 

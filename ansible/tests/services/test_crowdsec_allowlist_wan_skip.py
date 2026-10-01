@@ -13,10 +13,10 @@ a path that cannot be taken, which reads as coverage.
 """
 
 import re
-import subprocess
 
 from lib import yaml_fast
 from _helpers import ALL_VARS, ROLES
+from lib.proc_testing import run
 
 SCRIPT = ROLES / "k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
 LIB = ROLES / "setup/initial_setup/files/kuma-push-lib.sh"
@@ -99,19 +99,17 @@ push() {{ printf 'push\\t%s\\t%s\\n' "$1" "$2" >> {log}; }}
 logger() {{ printf 'logger\\t%s\\n' "$*" >> {log}; }}
 fail() {{ push down "$1"; logger -t crowdsec-home-allowlist "status=down $1"; exit 1; }}
 """
-    run = subprocess.run(
+    done = run(
         [
             "bash",
             "-uo",
             "pipefail",
             "-c",
             f"{fakes}\n{body}\nfail_reachout 'ipify lookup failed'",
-        ],
-        capture_output=True,
-        text=True,
+        ]
     )
-    assert run.stderr == "", run.stderr
-    return run.returncode, log.read_text().splitlines() if log.exists() else []
+    assert done.stderr == "", done.stderr
+    return done.returncode, log.read_text().splitlines() if log.exists() else []
 
 
 def test_an_unreachable_wan_pushes_only_the_skip(tmp_path):

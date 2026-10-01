@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from lib.proc_testing import run as launch
 
 from jinja2 import Undefined
 from lib import yaml_fast
@@ -125,12 +126,7 @@ def harness(
             "BASH_FUNC_logger%%": "() { :; }",
             **(env or {}),
         }
-        return subprocess.run(
-            ["bash", str(script), *(argv or [])],
-            env=child_env,
-            capture_output=True,
-            text=True,
-        )
+        return launch(["bash", str(script), *(argv or [])], env=child_env)
 
     run.stamp_dir = stamp_dir
     return run

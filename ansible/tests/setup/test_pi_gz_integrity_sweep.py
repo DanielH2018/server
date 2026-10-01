@@ -21,12 +21,12 @@ Run: uv run pytest ansible/tests/setup/test_pi_gz_integrity_sweep.py
 
 import gzip
 import os
-import subprocess
 
 import jinja2
 import pytest
 from lib.ansible_jinja_env import make_ansible_env
 from lib.proc_testing import write_exec
+from lib.proc_testing import run as launch
 from _helpers import ANSIBLE
 from _pi_health import OPTIMIZE_PI_DEFAULTS, run
 
@@ -54,7 +54,7 @@ def sweep(tmp_path, roots, floor=FLOOR):
     state = tmp_path / "state" / "gz-integrity.state"
     script = write_exec(tmp_path / "pi-gz-integrity.sh", _render(roots, state, floor))
 
-    done = subprocess.run(["bash", str(script)], capture_output=True, text=True)
+    done = launch(["bash", str(script)])
     assert done.returncode == 0, f"sweep failed: {done.stderr}"
 
     verdict, detail = state.read_text().splitlines()

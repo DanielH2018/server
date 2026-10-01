@@ -11,7 +11,7 @@ This refuses the next one. It is the sibling of
 scratch git repository, and of `test_tests_share_render_and_path_helpers.py` for the Jinja
 environment and the repo root.
 
-TWO RULES, each with a clean/flagged pair below.
+THREE RULES, each with a clean/flagged pair below.
 
 1. A test module does not write an executable file by hand. The AST shape is a `.chmod(<mode
    carrying an exec bit>)` on a path the same function also wrote, which is a fake binary; a
@@ -22,7 +22,15 @@ TWO RULES, each with a clean/flagged pair below.
    `monkeypatch.setenv`. `lib.proc_testing.path_with` is that string, and
    `run(..., stub_bin=...)` is the call that never spells it.
 
-Both rules read the AST, so a docstring naming the old form is prose rather than a hit.
+3. A test module does not launch a subprocess with no deadline. The shape is a call to
+   `subprocess.run`/`check_output`/`check_call`/`call` that passes no `timeout=`, or a
+   `from subprocess import run` that would let the sanctioned bare `run(` name the unbounded
+   one. `lib.proc_testing.run` supplies `DEFAULT_TIMEOUT`, so a call through it is clean.
+   `subprocess.Popen` is NOT covered: it takes no `timeout=` at all, and its deadline lives on
+   the `wait`/`communicate` that follows, which is a different AST shape and a different set of
+   exemptions (#3073).
+
+Every rule reads the AST, so a docstring naming the old form is prose rather than a hit.
 
 Run: uv run pytest scripts/tests/test_tests_share_the_subprocess_helpers.py
 """
@@ -56,6 +64,22 @@ EXEMPT = {
     "scripts/dev/tests/test_gen_hook_settings.py",
 }
 
+# Rule 3 keeps its own set. `EXEMPT` above names the modules whose subject is the exec bit or
+# the `PATH` prefix, and none of those is a reason to launch unbounded —
+# `test_gen_hook_settings.py` is in both sets for unrelated reasons, and sharing one set would
+# have let its launch out of rule 3 silently.
+EXEMPT_UNBOUNDED = {
+    # This module: rule 3's own red-proof pair spells the raw form as fixture text.
+    "scripts/tests/test_tests_share_the_subprocess_helpers.py",
+    # The helper itself, whose `timeout=` default is the thing under test.
+    "scripts/lib/tests/test_proc_testing.py",
+}
+# No third entry. #3066 predicted a module whose subject IS the timeout
+# (`ansible/tests/deploy/test_gitops_deploy_subprocess.py`); no such file exists, and every
+# other site in the 2026-10-01 census took a deadline without changing what it asserts. A
+# module that genuinely needs an unbounded launch belongs here with the reason, not behind a
+# `timeout=None` the rule cannot see.
+
 # The rules' own census must reach these. Each held one of the two forms before #3056, so an
 # empty or partial scan means the walk stopped matching rather than that the tree is clean.
 KNOWN_MEMBERS = frozenset(
@@ -68,6 +92,26 @@ KNOWN_MEMBERS = frozenset(
         "scripts/validate/tests/test_vale_sync_guard.py",
     }
 )
+
+# Rule 3's census. Each of these launched without a deadline before this guard landed, across
+# all four test roots that hold one, so a scan that stops reaching them reads as a clean tree.
+KNOWN_UNBOUNDED_MEMBERS = frozenset(
+    {
+        ".claude/hooks/tests/test_hook_scripts_executable.py",
+        "ansible/tests/_helpers.py",
+        "ansible/tests/repo/test_testpaths_covers_every_test_file.py",
+        "scripts/deploy_tools/tests/test_land_tools.py",
+        "scripts/lib/tests/test_git.py",
+    }
+)
+
+# The launches that take a `timeout=`. `Popen` is deliberately absent — see rule 3 above.
+_BOUNDABLE_LAUNCHES = frozenset({"run", "check_output", "check_call", "call"})
+
+# The module names a `subprocess` import can be bound to. A hit needs the call to reach the
+# stdlib module rather than any object that happens to own a `run`, and `sp` is the one alias
+# this tree uses.
+_SUBPROCESS_NAMES = frozenset({"subprocess", "sp"})
 
 _EXEC_BITS = 0o111
 
@@ -281,3 +325,86 @@ def test_the_shared_helpers_are_clean():
     )
     assert handwritten_executables(clean) == []
     assert handbuilt_path_prefixes(clean) == []
+
+
+def unbounded_launches(source: str) -> list[str]:
+    """The subprocess launches `source` makes with no deadline, by the text of each.
+
+    A hit is one of two shapes. The first is a call to `subprocess.run` (or `check_output`,
+    `check_call`, `call`) carrying no `timeout=` keyword: the child can wedge, and nothing
+    above it ever gives up, so the symptom is a CI run that never ends rather than a failing
+    test. A `**kwargs` splat counts as bounded, because the keyword can be in it and the AST
+    cannot say.
+
+    The second is `from subprocess import run`, which would bind the unbounded launch to the
+    bare `run` name that `lib.proc_testing.run` is imported under. A test reading
+    `run(["bash", script])` would then have no way to tell which one it got.
+
+    `subprocess.Popen` is not a hit: it accepts no `timeout=`, so there is no bounded spelling
+    of it to demand here.
+    """
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom) and node.module == "subprocess":
+            found += [
+                f"from subprocess import {alias.name}"
+                for alias in node.names
+                if alias.name in _BOUNDABLE_LAUNCHES
+            ]
+            continue
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr in _BOUNDABLE_LAUNCHES):
+            continue
+        if ast.unparse(func.value).split(".")[-1] not in _SUBPROCESS_NAMES:
+            continue
+        # `**kwargs` can carry the timeout, and `arg is None` is how the AST spells it.
+        if any(kw.arg in ("timeout", None) for kw in node.keywords):
+            continue
+        found.append(ast.unparse(node)[:120])
+    return sorted(set(found))
+
+
+def test_the_unbounded_census_reaches_every_migrated_module():
+    found = {_rel(p) for p in _test_modules()}
+    missing = KNOWN_UNBOUNDED_MEMBERS - found
+    assert not missing, f"the scan no longer reaches: {sorted(missing)}"
+
+
+def test_every_unbounded_exemption_still_names_a_file_that_exists():
+    gone = sorted(name for name in EXEMPT_UNBOUNDED if not (REPO / name).exists())
+    assert gone == [], f"exempted modules that no longer exist: {gone}"
+
+
+def test_no_test_module_launches_a_subprocess_without_a_deadline():
+    offenders = {
+        _rel(p): names
+        for p in _test_modules()
+        if _rel(p) not in EXEMPT_UNBOUNDED
+        and (names := unbounded_launches(p.read_text()))
+    }
+    assert offenders == {}, (
+        "these tests launch a child with no deadline, so a wedged one parks the whole CI run "
+        "instead of failing its own test. Call `lib.proc_testing.run(...)`, which supplies "
+        f"`DEFAULT_TIMEOUT`, or pass your own `timeout=` with the reason at the line: "
+        f"{offenders}"
+    )
+
+
+def test_an_unbounded_launch_is_flagged_in_each_spelling():
+    assert unbounded_launches("subprocess.run(['x'], check=True)\n") != []
+    assert unbounded_launches("subprocess.check_output(['x'])\n") != []
+    assert unbounded_launches("sp.call(['x'])\n") != []
+    assert unbounded_launches("import subprocess\nfrom subprocess import run\n") != []
+
+
+def test_a_bounded_launch_is_not_flagged():
+    assert unbounded_launches("subprocess.run(['x'], timeout=5)\n") == []
+    assert unbounded_launches("subprocess.run(['x'], **kw)\n") == []
+    # `Popen` has no `timeout=`, so rule 3 cannot ask for one. #3073 holds the remainder.
+    assert unbounded_launches("subprocess.Popen(['x'])\n") == []
+    # The helper's own spelling, and a `run` that is not the stdlib's.
+    assert unbounded_launches("run(['x'])\nclient.run(['x'])\n") == []
+    # A docstring naming the raw form is prose.
+    assert unbounded_launches('"""subprocess.run([x]) used to be here."""\n') == []

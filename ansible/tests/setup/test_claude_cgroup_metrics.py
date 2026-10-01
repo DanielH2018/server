@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import ANSIBLE
+from lib.proc_testing import run
 
 SCRIPT = (
     ANSIBLE / "roles" / "setup" / "claude_code" / "files" / "claude-cgroup-metrics.sh"
@@ -61,9 +62,7 @@ def _run(cgroot: Path, textfile_dir: Path) -> subprocess.CompletedProcess:
         "TEXTFILE_DIR": str(textfile_dir),
         "PATH": "/usr/bin:/bin",
     }
-    return subprocess.run(
-        ["bash", str(SCRIPT)], env=env, capture_output=True, text=True, check=False
-    )
+    return run(["bash", str(SCRIPT)], env=env, check=False)
 
 
 @pytest.fixture()

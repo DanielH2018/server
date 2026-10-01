@@ -20,6 +20,7 @@ any of that when it is sourced rather than executed. A stub `k3s` function stand
 import subprocess
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 _SCRIPT = REPO / "scripts" / "backup" / "etcd_restore_drill.sh"
 
@@ -56,23 +57,17 @@ def _run_verify(ns: int, deploys: int, pvcs: int) -> subprocess.CompletedProcess
     verify_restored_objects
     echo "VERIFY_OK"
     """
-    return subprocess.run(
-        ["bash", "-c", script, "_"],
-        capture_output=True,
-        text=True,
-    )
+    return run(["bash", "-c", script, "_"])
 
 
 def _ports() -> dict[str, int]:
-    out = subprocess.run(
+    out = run(
         [
             "bash",
             "-c",
             f'source "{_SCRIPT}"; echo "$PORT $SUPERVISOR_PORT $LB_PORT"',
             "_",
         ],
-        capture_output=True,
-        text=True,
         check=True,
     ).stdout.split()
     return dict(zip(("api", "supervisor", "lb"), map(int, out), strict=True))
@@ -148,11 +143,7 @@ def test_zero_pvcs_is_refused():
 def test_sourcing_the_script_runs_no_live_side_effects():
     """The BASH_SOURCE guard must fire on a plain source — proves the test harness above is
     actually safe to run as a non-root, credential-less user, not merely that it happens to."""
-    result = subprocess.run(
-        ["bash", "-c", f'source "{_SCRIPT}"; echo "SOURCED_OK"', "_"],
-        capture_output=True,
-        text=True,
-    )
+    result = run(["bash", "-c", f'source "{_SCRIPT}"; echo "SOURCED_OK"', "_"])
     assert result.returncode == 0, result.stderr
     assert "SOURCED_OK" in result.stdout
     assert "must run as root" not in result.stderr

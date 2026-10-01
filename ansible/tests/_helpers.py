@@ -13,12 +13,11 @@ way.
 
 import ast
 import re
-import subprocess
 from pathlib import Path
 from typing import Iterator
 
 from lib import yaml_fast
-from lib.proc_testing import fake_bin, path_with
+from lib.proc_testing import fake_bin, path_with, run
 from lib.repo_paths import REPO
 from ansible.plugins.filter.core import FilterModule
 from ansible.plugins.filter.mathstuff import FilterModule as _MathFilters
@@ -331,13 +330,7 @@ def discover_docs() -> list[Path]:
     `git ls-files` answers with what this commit actually contains, which is the only thing
     these guards have any business asserting about.
     """
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "*.md"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = run(["git", "ls-files", "-z", "--", "*.md"], cwd=REPO, check=True).stdout
     docs = []
     for rel in listed.split("\0"):
         if not rel:

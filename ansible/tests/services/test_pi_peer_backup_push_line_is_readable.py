@@ -13,11 +13,11 @@ line goes through the reader's own `parse_push_line`, so the oracle is the consu
 
 import re
 import shlex
-import subprocess
 from pathlib import Path
 
 from _helpers import ROLES
 from verdicts.logs import parse_push_line
+from lib.proc_testing import run
 
 SCRIPT_PATH = ROLES / "k8s/pi-peer-backup/files/pull-pi-peers.sh"
 TAG = "pi-peer-backup"
@@ -49,9 +49,7 @@ curl() {{ printf '%s' {shlex.quote(reply)}; exit {curl_rc}; }}
 {_function("push")}
 push {status} "pulled 2 peer file(s) from daniel-pi"
 """
-    result = subprocess.run(
-        ["bash", "-c", script], check=True, capture_output=True, text=True
-    )
+    result = run(["bash", "-c", script], check=True)
     return result.stdout.splitlines(), result.stderr.splitlines()
 
 

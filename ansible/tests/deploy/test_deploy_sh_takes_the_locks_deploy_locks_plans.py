@@ -44,6 +44,7 @@ from lib.exit_codes import (
     DEPLOY_LOCK_PLAN_FAILED,
     DEPLOY_SH_NO_VERDICT,
 )
+from lib.proc_testing import run
 
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
 _DEPLOY_UNDER_LOCKS = REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py"
@@ -55,11 +56,9 @@ _DISAGREEING_PAIR = ("pi-peer-backup", "pihole")
 
 def _declared_tags() -> list[str]:
     """Every deploy tag, from the enumeration `deploy.sh` itself runs for a full run."""
-    result = subprocess.run(
+    result = run(
         [sys.executable, str(REPO / "scripts/deploy_tools/deploy_tags.py"), "list"],
         cwd=REPO,
-        capture_output=True,
-        text=True,
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -68,10 +67,8 @@ def _declared_tags() -> list[str]:
 
 def _cli(*argv: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     """`deploy_locks.py <argv>` the way the wrapper runs it."""
-    return subprocess.run(
+    return run(
         [sys.executable, str(_DEPLOY_LOCKS), *argv],
-        capture_output=True,
-        text=True,
         check=False,
         env={**os.environ, **(env or {})},
     )

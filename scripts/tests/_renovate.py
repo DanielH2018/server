@@ -7,10 +7,10 @@ matches something. The `tracked` fixture in conftest.py is the file list they ru
 
 import json
 import re
-import subprocess
 from typing import NamedTuple
 
 from lib.repo_paths import REPO
+from lib.proc_testing import run
 
 # Re-export for modules that import _REPO from this module
 _REPO = REPO
@@ -23,9 +23,7 @@ _PACKAGE_RULES = _RENOVATE_CONFIG["packageRules"]
 
 
 def _tracked_files() -> list[str]:
-    out = subprocess.run(
-        ["git", "ls-files"], cwd=REPO, text=True, capture_output=True, check=True
-    ).stdout
+    out = run(["git", "ls-files"], cwd=REPO, check=True).stdout
     return out.splitlines()
 
 

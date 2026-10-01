@@ -6,16 +6,15 @@ import subprocess
 import pytest
 
 from git import git, gc_log_path, git_dirty, git_stdout, repair_object_store
+from lib.proc_testing import run
 
 
 def _init_repo(path):
     env = {"GIT_CONFIG_GLOBAL": "/dev/null", "HOME": str(path), "PATH": "/usr/bin:/bin"}
-    subprocess.run(
-        ["git", "init", "-q", "-b", "master", str(path)], check=True, env=env
-    )
+    run(["git", "init", "-q", "-b", "master", str(path)], check=True, env=env)
     (path / "a.txt").write_text("a\n")
-    subprocess.run(["git", "add", "a.txt"], cwd=path, check=True, env=env)
-    subprocess.run(
+    run(["git", "add", "a.txt"], cwd=path, check=True, env=env)
+    run(
         [
             "git",
             "-c",
