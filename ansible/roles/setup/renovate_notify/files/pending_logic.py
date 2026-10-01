@@ -35,6 +35,15 @@ PENDING_MARKERS = ("unpend-branch=", "approvePr-branch=")
 DIGEST_SOAK_DAYS = 3
 VERSION_SOAK_DAYS = 7
 
+# The packages renovate.json soaks for LESS than DIGEST_SOAK_DAYS, as {title token: days}.
+# `nginx:alpine` and `nginxinc/nginx-unprivileged` are re-pushed about every 3.6 days, so a
+# 3-day soak restarted on every re-push left an automerge window the once-daily Renovate run
+# usually missed, and both pins only ever landed by hand (#2886). The rule there soaks them
+# 1 day. Keyed on the image reference as a pending row spells it, because the title is all this
+# module gets. `test_soak_constants_match_renovate_json` asserts this map against renovate.json,
+# so a new exception there with no entry here fails rather than silently measuring 3 days.
+FAST_DIGEST_SOAK_DAYS = {"nginx:alpine": 1, "nginxinc/nginx-unprivileged:": 1}
+
 # Grace added on top of an item's own soak before it counts as stuck. It covers the two
 # legitimate reasons an item outlives its soak by a little: the `before 6am` schedule means
 # Renovate acts once a day, and `prHourlyLimit: 4` can defer a PR across several of those
@@ -110,12 +119,20 @@ def item_soak_days(description: str) -> int:
     # — it cannot be verified from this host (Renovate runs as the Mend hosted app), and it edits
     # the title/branch machinery #2620/#2641/#2646 settled.
 
+    A package in `FAST_DIGEST_SOAK_DAYS` takes its own shorter soak, matched on the image
+    reference in the title. A GROUPED row for one of those packages names no reference, so it
+    falls back to `DIGEST_SOAK_DAYS` and pages two days late — the safe direction, and neither
+    pin is grouped today because both roles are `k8s_autodeploy: true`.
+
     The 1-day `vulnerabilityAlerts` soak is deliberately not modelled: nothing in the item text
     distinguishes a CVE-driven bump, and those are scheduled "at any time" so they should never
     linger here. A CVE bump that does get stuck waits the 7+7 version allowance like any other.
     """
     text = (description or "").lower()
     if "digest to" in text or GROUPED_TITLE_MARKER in text:
+        for token, days in FAST_DIGEST_SOAK_DAYS.items():
+            if token in text:
+                return days
         return DIGEST_SOAK_DAYS
     return VERSION_SOAK_DAYS
 

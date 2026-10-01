@@ -132,6 +132,64 @@ def test_item_soak_is_three_days_for_a_digest_bump():
     assert pl.item_soak_days("Update python:3.14-alpine Docker digest to c6ead21") == 3
 
 
+def test_every_shortened_digest_soak_names_its_package_in_the_map():
+    """A per-package exception in renovate.json must be one this module can match on a title.
+
+    The rule there matches on `matchPackageNames` (`nginx`), while a pending row carries the
+    image REFERENCE (`nginx:alpine`), so the map is keyed on the reference and the link between
+    the two is this assertion rather than a comment.
+    """
+    rules = json.loads((REPO / "renovate.json").read_text())["packageRules"]
+    shortened = [
+        r
+        for r in _digest_soak_rules(rules)
+        if r["minimumReleaseAge"] != _renovate_soak(pl.DIGEST_SOAK_DAYS)
+    ]
+    assert shortened, (
+        "no digest rule soaks less than DIGEST_SOAK_DAYS — if the #2886 nginx exception was "
+        "dropped, drop FAST_DIGEST_SOAK_DAYS with it"
+    )
+    for rule in shortened:
+        for package in rule.get("matchPackageNames") or []:
+            matched = {
+                days
+                for token, days in pl.FAST_DIGEST_SOAK_DAYS.items()
+                if token.startswith(package + ":")
+            }
+            assert matched == {int(rule["minimumReleaseAge"].split()[0])}, (
+                "renovate.json soaks %s for %s, which FAST_DIGEST_SOAK_DAYS does not match "
+                "(it holds %s) — the notifier would measure the wrong soak for its row"
+                % (package, rule["minimumReleaseAge"], sorted(matched))
+            )
+
+
+def test_item_soak_is_one_day_for_an_nginx_alpine_digest():
+    assert pl.item_soak_days("Update nginx:alpine Docker digest to df221db") == 1
+    assert (
+        pl.item_soak_days(
+            "Update nginxinc/nginx-unprivileged:1.31-alpine Docker digest to 6a23acd"
+        )
+        == 1
+    )
+
+
+def test_stale_pending_fires_an_nginx_row_before_an_ordinary_digest_row():
+    """The behavioural half: 9 days is past 1+7 and short of 3+7."""
+    now = 1_000_000.0
+    nginx = {"renovate/k8s-image-nginx": "Update nginx:alpine Docker digest to df221db"}
+    other = {
+        "renovate/k8s-image-python": "Update python:3.14-alpine Docker digest to c6ead21"
+    }
+    seen = {
+        "renovate/k8s-image-nginx": now - 9 * DAY,
+        "renovate/k8s-image-python": now - 9 * DAY,
+    }
+    assert [i[0] for i in pl.stale_pending(seen, nginx, now)] == [
+        "renovate/k8s-image-nginx"
+    ]
+    assert pl.stale_pending(seen, other, now) == []
+
+
 def test_item_soak_is_seven_days_for_a_version_bump():
     assert pl.item_soak_days("Update grafana/grafana Docker tag to v13.2.1") == 7
     # Unrecognised wording takes the LONGER soak: a misread delays, never invents.
@@ -178,19 +236,32 @@ def test_grouped_marker_appears_in_renovate_json():
     assert not unmarked, "group name(s) no longer carry the marker: %s" % unmarked
 
 
+def _renovate_soak(days: int) -> str:
+    """`minimumReleaseAge` as Renovate spells it — `1 day`, `3 days`."""
+    return "%d day%s" % (days, "" if days == 1 else "s")
+
+
+def _digest_soak_rules(rules: list[dict]) -> list[dict]:
+    return [
+        r
+        for r in rules
+        if "minimumReleaseAge" in r and "digest" in (r.get("matchUpdateTypes") or [])
+    ]
+
+
 def test_soak_constants_match_renovate_json():
     """The two soaks are read from renovate.json, not trusted to a comment.
 
     A minimumReleaseAge change there must fail here rather than silently leave notify_logic
-    measuring against a soak that no longer applies.
+    measuring against a soak that no longer applies. The expected set carries the per-package
+    exceptions too (#2886), so a shortened soak with no `FAST_DIGEST_SOAK_DAYS` entry fails.
     """
     rules = json.loads((REPO / "renovate.json").read_text())["packageRules"]
-    digest = {
-        r["minimumReleaseAge"]
-        for r in rules
-        if "minimumReleaseAge" in r and "digest" in (r.get("matchUpdateTypes") or [])
+    digest = {r["minimumReleaseAge"] for r in _digest_soak_rules(rules)}
+    expected = {_renovate_soak(pl.DIGEST_SOAK_DAYS)} | {
+        _renovate_soak(d) for d in pl.FAST_DIGEST_SOAK_DAYS.values()
     }
-    assert digest == {"%d days" % pl.DIGEST_SOAK_DAYS}
+    assert digest == expected
     non_digest = {
         r["minimumReleaseAge"]
         for r in rules

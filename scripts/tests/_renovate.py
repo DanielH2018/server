@@ -256,19 +256,22 @@ def last_pin_per_image(entries: list[PinEntry]) -> dict[str, PinEntry]:
     return {entry.image: entry for entry in entries}
 
 
-def _resolve_group_name(
+def _resolve_setting(
+    field: str,
     dep_name: str,
     rel_path: str,
     update_type: str,
     datasource: str,
     rules: list[dict] = _PACKAGE_RULES,
-) -> str | None:
-    """The `groupName` Renovate would resolve for a dep, walking packageRules in order.
+):
+    """The value of `field` Renovate would resolve for a dep, walking packageRules in order.
 
-    Later rules win a field they set, so the last matching rule with a `groupName` decides —
-    this mirrors `_is_disabled_by_packagerule`'s walk, for `groupName` instead of `enabled`.
+    Later rules win a field they set, so the last matching rule that sets `field` decides —
+    this mirrors `_is_disabled_by_packagerule`'s walk, for an arbitrary field instead of
+    `enabled`. Rule ORDER is what this reads, which is why a guard on a rule that overrides an
+    earlier one asserts through here rather than against the rule's own body.
     """
-    group_name = None
+    value = None
     for rule in rules:
         if "matchManagers" in rule and "custom.regex" not in rule["matchManagers"]:
             continue
@@ -287,6 +290,19 @@ def _resolve_group_name(
             continue
         if "matchUpdateTypes" in rule and update_type not in rule["matchUpdateTypes"]:
             continue
-        if "groupName" in rule:
-            group_name = rule["groupName"]
-    return group_name
+        if field in rule:
+            value = rule[field]
+    return value
+
+
+def _resolve_group_name(
+    dep_name: str,
+    rel_path: str,
+    update_type: str,
+    datasource: str,
+    rules: list[dict] = _PACKAGE_RULES,
+) -> str | None:
+    """The `groupName` Renovate would resolve for a dep. `_resolve_setting` for one field."""
+    return _resolve_setting(
+        "groupName", dep_name, rel_path, update_type, datasource, rules
+    )
