@@ -40,14 +40,25 @@ file has to be statically imported from the role's `tasks/main`.
 `tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, and `k3s-bringup.yml --tags
 storage_smoke` selects only `always` tasks.
 
-WHO CALLS IT. `deploy_defer.record` runs it as a SUBPROCESS through
-`deploy_narrow.narrow_setup_role`, because this module parses YAML and the deployer's unit
-runs under `uv run --no-project`, which cannot import yaml — the boundary
-`narrow_deploy_plane` already established for the deploy plane. The tags it returns are
-stored in the `manual_plane_tags` marker, so the journal line, the Discord alert, the
-SessionStart banner and `land.sh` all quote ONE derivation rather than each repeating it.
+WHO CALLS IT. Two callers, both through `deploy_narrow.narrow_setup_role`, which runs this
+as a SUBPROCESS because this module parses YAML and the deployer's unit runs under
+`uv run --no-project`, which cannot import yaml — the boundary `narrow_deploy_plane` already
+established for the deploy plane.
+
+`deploy_defer.record` asks for a role the deployer CANNOT apply. The tags go in the
+`manual_plane_tags` marker, so the journal line, the Discord alert, the SessionStart banner
+and `land.sh` all quote ONE derivation rather than each repeating it.
 `land_tags.confirmed_narrow_tags` also calls `role_tags` in-process, over one PR's own range,
 but only as a guard: `land.sh` prints the stored row, and only when it contains that answer.
+
+`deploy_narrow.narrowed_setup_tags` asks for a role the deployer DOES apply, and the answer
+is the `--tags` value of the `initial_setup.yml` run (#3120). That makes the refusals above
+load-bearing on production rather than on a suggestion: `--tags initial_setup` selects about
+440 tasks, and a run scoped to the diff's own block tags is both a smaller blast radius and a
+shorter tick. The answer needs no `register:` edge beside the `set_fact` one, because
+`ansible/tests/setup/test_register_producers_carry_consumer_tags.py` holds the invariant that
+makes one unnecessary — a producer carries every consumer's tag, so narrowing to either end
+runs both.
 
 The READING those rules do — the git reads, the YAML parses and `RoleIndex` — is
 `narrow_setup_index.py` beside this. One derivation, split at the 600-line module cap. The

@@ -58,16 +58,15 @@ grep -rho 'tags: \[.*\]' ansible/roles/setup/initial_setup/tasks/ | sort -u
 The record page says what the non-obvious ones cover. No task is reachable only through
 `crons`: each also has a subject tag.
 **Fact-dependency rule:** a task whose `register:` feeds other blocks carries ALL its
-consumers' tags (the home-dir resolver is `[tooling, git-hooks]`) — keep that invariant when
-adding tasks, or a tag-scoped run dies on an undefined variable.
+consumers' tags (the home-dir resolver is `[tooling, git-hooks]`), or a tag-scoped run dies on
+an undefined variable. The GitOps deployer derives those tags and applies them unattended
+since #3120, so the rule is checked rather than stated; the record page names the check.
 
 ## Rules the task files do not state
 `tasks/` is the inventory — one file per subject, and the tag list above says which file a tag
-runs. These four bite from outside the file you are editing; the rest, with every derivation,
-are in the record page.
+runs. These three bite from outside the file you are editing; the rest, with every derivation,
+are in the record page — including the one about `~` being `/root` under this play's `become`.
 
-- **This play becomes root, so `~` is `/root`** — write SSH paths absolute, and take the deploy
-  user's home from the resolver task, never `ansible_facts.env.HOME` (#2413).
 - **A sysctl this role sets that UFW's `/etc/ufw/sysctl.conf` also names must be set there
   too**, or the run ends with UFW's value live (#2977).
 - **The `journald` tag's two files are one change** — the journal cap and the rsyslog info
