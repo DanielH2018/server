@@ -16,25 +16,21 @@ never into the `url:`. A re-added jellyfin widget must set `version: 2` for the 
 Not a jellyfin-shaped guard on purpose: "no jellyfin widget without `version: 2`" iterates an
 empty set today, since the tile is dropped, and would pass forever.
 
+Reads the RENDERED `services.yaml` out of homepage's config Secret (`_homepage_config`) rather
+than scanning `services.yaml.j2` for `url:` lines. The rendered file is ordinary YAML, so every
+`url` at any depth is reachable by walking the parsed document — including the calendar widget's
+`integrations[].url`, which a line scan found only because it happened to spell the key the same
+way. A secret interpolated into a URL renders as a placeholder here, and the check is on the
+PARAMETER NAME rather than its value, so `?api_key={{ jellyfin_api_key }}` is still caught: it
+renders as `?api_key=<placeholder>`. What neither form can see is a credential carried inside a
+secret's own value, because that value is not in the repo.
+
 Run: uv run pytest ansible/tests/services/test_homepage_widget_urls_carry_no_credentials.py
 """
 
 import re
 
-from _helpers import ANSIBLE as _ANSIBLE
-
-SERVICES_TEMPLATE = (
-    _ANSIBLE
-    / "roles"
-    / "k8s"
-    / "homepage"
-    / "templates"
-    / "config"
-    / "services.yaml.j2"
-)
-
-# Every `url:` value in the tile list, widget or calendar alike.
-URL_LINE = re.compile(r"^\s*url:\s*(\S.*?)\s*(?:#.*)?$", re.MULTILINE)
+from _homepage_config import config_urls
 
 # A query parameter whose NAME says it carries a credential. `?query=` (the Headlamp tile's
 # PromQL) is not one of these, and must stay unflagged.
@@ -42,20 +38,15 @@ CREDENTIAL_PARAM = re.compile(
     r"[?&](api_?key|apikey|token|access_token|password|passwd|secret|auth)=", re.I
 )
 
-# Non-vacuity: named URLs the census must keep finding. A reshaped `url:` line would otherwise
-# leave the census empty, and an `all()` over nothing passes.
+# Non-vacuity: named URLs the census must keep finding, at their RENDERED values. A reshaped
+# tile list would otherwise leave the census empty, and an `all()` over nothing passes.
 KNOWN_URLS = frozenset(
     {
-        "https://uptime-kuma.local.{{ domain }}",
-        "http://scrutiny.{{ k8s_namespace }}.svc.cluster.local:8080",
-        "http://sonarr.{{ k8s_namespace }}.svc.cluster.local:8989",
+        "https://uptime-kuma.local.example.com",
+        "http://scrutiny.homelab.svc.cluster.local:8080",
+        "http://sonarr.homelab.svc.cluster.local:8989",
     }
 )
-
-
-def widget_urls(template_text: str) -> set[str]:
-    """Every URL the tile list hands to homepage, with surrounding quotes stripped."""
-    return {m.group(1).strip("\"'") for m in URL_LINE.finditer(template_text)}
 
 
 def urls_carrying_credentials(urls: set[str]) -> set[str]:
@@ -64,27 +55,36 @@ def urls_carrying_credentials(urls: set[str]) -> set[str]:
 
 
 def test_no_widget_url_carries_a_credential_in_its_query_string():
-    """The accepting half, against the real tree."""
-    assert (
-        urls_carrying_credentials(widget_urls(SERVICES_TEMPLATE.read_text())) == set()
-    )
+    """The accepting half, against the real render."""
+    assert urls_carrying_credentials(config_urls()) == set()
 
 
 def test_the_census_still_finds_the_urls_it_is_meant_to_cover():
     """Non-vacuity. The test above passes on an empty census."""
-    assert KNOWN_URLS <= widget_urls(SERVICES_TEMPLATE.read_text())
+    assert KNOWN_URLS <= config_urls()
+
+
+def test_the_census_reaches_a_nested_integration_url():
+    """The calendar widget's URLs sit under `integrations:`, not beside the widget `type:`."""
+    nested = {
+        "widget": {
+            "type": "calendar",
+            "integrations": [{"type": "ical", "url": "http://ical-proxy/one.ics"}],
+        }
+    }
+    assert config_urls(nested) == {"http://ical-proxy/one.ics"}
 
 
 def test_a_url_carrying_an_api_key_is_flagged():
     """The rejecting half. A pattern that matched nothing would pass both tests above."""
-    leaky = "https://jellyfin.local.{{ domain }}/emby/Sessions?api_key={{ jellyfin_api_key }}"
+    leaky = "https://jellyfin.local.example.com/emby/Sessions?api_key=abc123"
     assert urls_carrying_credentials({leaky}) == {leaky}
 
 
 def test_a_promql_query_parameter_is_not_a_credential():
     """The Headlamp tile's `?query=` is the one query string this rule must leave alone."""
     headlamp = (
-        "http://prometheus.{{ k8s_observability_namespace }}.svc.cluster.local:9090"
-        "/api/v1/query?query={{ homepage_k8s_headlamp_cluster_query | urlencode }}"
+        "http://prometheus.observability.svc.cluster.local:9090"
+        "/api/v1/query?query=count%28kube_pod_status_phase%29"
     )
     assert urls_carrying_credentials({headlamp}) == set()
