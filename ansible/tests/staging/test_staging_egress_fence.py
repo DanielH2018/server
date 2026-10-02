@@ -30,7 +30,6 @@ in every listing the host offers.
 """
 
 import ipaddress
-import re
 import xml.etree.ElementTree as ET
 
 from lib import yaml_fast
@@ -40,8 +39,10 @@ from _fence_probe import (
     ORCHESTRATOR,
     fence_targets_block,
     dialled_addresses,
+    rendered_orchestrator,
 )
-from _helpers import ALL_VARS, HOST_VARS, ROLES, jinja_env
+from _helpers import ALL_VARS, HOST_VARS, ROLES
+from _setup_render import rendered_setup_text
 
 HYPERVISOR = ROLES / "setup" / "hypervisor"
 K3S_DEFAULTS = ROLES / "setup" / "k3s" / "defaults" / "main.yml"
@@ -76,10 +77,13 @@ def _filter_name():
 
 
 def _rendered_filter():
-    """Render the nwfilter template and parse it as the XML libvirt will be handed."""
-    context = {**_all_vars(), **_hypervisor_defaults()}
-    # The shared env, not a bare jinja2 one: the template calls `to_uuid`, an Ansible filter.
-    rendered = jinja_env().from_string(NWFILTER_TEMPLATE.read_text()).render(context)
+    """The nwfilter as the setup plane renders it, parsed as the XML libvirt will be handed.
+
+    `_setup_render` rather than a hand-built context: it is the same layering
+    `validate/setup_templates.py` renders this role with, so a value that moves between
+    `group_vars/all.yml` and the role's defaults cannot change what this guard sees.
+    """
+    rendered = rendered_setup_text("hypervisor", "staging-nwfilter.xml.j2")
     try:
         return ET.fromstring(rendered)
     except ET.ParseError as exc:  # pragma: no cover - only on a broken template
@@ -241,7 +245,8 @@ def test_fencing_the_clusters_own_ranges_still_assumes_one_node_on_this_bridge()
 
     The network declaring exactly one DHCP reservation is what says that has not happened.
     """
-    reservations = re.findall(r"<host\b[^>]*>", NETWORK_TEMPLATE.read_text())
+    network = ET.fromstring(rendered_setup_text("hypervisor", "staging-network.xml.j2"))
+    reservations = network.findall("./ip/dhcp/host")
     assert len(reservations) == 1, (
         f"{NETWORK_TEMPLATE} declares {len(reservations)} DHCP reservations, so more than one "
         f"guest shares this bridge. Pod-to-pod traffic between them crosses the tap device the "
@@ -266,15 +271,22 @@ def test_the_fence_does_not_block_the_staging_network_itself():
 
 
 def test_the_guest_interface_references_the_fence():
-    """A defined filter nothing references is the exact shape of an inert fence."""
-    domain = DOMAIN_TEMPLATE.read_text()
-    interfaces = re.findall(r"<interface\b.*?</interface>", domain, re.S)
+    """A defined filter nothing references is the exact shape of an inert fence.
+
+    On the RENDER, so the claim is that the guest's `<filterref>` names the filter libvirt was
+    handed — the same string `_rendered_filter` reads. A guard on the template's text asserts
+    only that the variable NAME appears, which stays true when the variable itself drifts.
+    """
+    domain = ET.fromstring(rendered_setup_text("hypervisor", "etcd-drill-vm.xml.j2"))
+    interfaces = domain.findall("./devices/interface")
     assert interfaces, f"no <interface> found in {DOMAIN_TEMPLATE}."
     for iface in interfaces:
-        assert FILTER_NAME_VAR in iface, (
-            f"an <interface> in {DOMAIN_TEMPLATE} carries no <filterref> naming "
-            f"{{{{ {FILTER_NAME_VAR} }}}}. libvirt applies a filter only to interfaces that "
-            f"reference it, so the guest would boot unfenced with the filter defined."
+        filterref = iface.find("filterref")
+        assert filterref is not None and filterref.get("filter") == _filter_name(), (
+            f"an <interface> in {DOMAIN_TEMPLATE} renders no <filterref> naming "
+            f"{_filter_name()} (from {FILTER_NAME_VAR}). libvirt applies a filter only to "
+            f"interfaces that reference it, so the guest would boot unfenced with the filter "
+            f"defined."
         )
 
 
@@ -372,7 +384,7 @@ def test_the_leg_runs_before_the_guest_is_handed_any_credential():
     the cluster token and the R2 write credentials for the whole backup bucket would already be
     on a guest that can reach production.
     """
-    body = ORCHESTRATOR.read_text()
+    body = rendered_orchestrator()
     main = body.index("main() {")
     leg = body.index("\n  fence_check\n", main)
     for marker, what in (
