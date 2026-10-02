@@ -49,8 +49,9 @@ Four more hid one until #3219, all of them ways the glob and the read sit at dif
 glob returned by a function, a glob inside a comprehension the function returns, a `+` of two
 globs, and a `@pytest.mark.parametrize` whose values are the glob. Seven modules were reading
 source behind them, every one of them listed below — two because a render erases the macro call
-they are about, five because the file set they read is wider than any one render covers (#3223,
-#3224, #3225).
+they are about, four because the file set they read is wider than any one render covers (#3223,
+#3224). The fifth, the checksum-annotation census, now reads its template half out of
+`_k8s_render` and keeps a source fallback for the templates no render covers (#3225).
 
 `ansible/tests/repo/_render_gate.py` holds the detector itself — which spellings of a read it
 resolves, and the one it deliberately does not treat as a read (a glob that only yields
@@ -183,9 +184,11 @@ TEMPLATE_SOURCE_READERS = {
         "volume-bearing members of that fallback (#3224)"
     ),
     "k8s/test_checksum_annotations_documented.py": (
-        "the census reads every file in a role that can carry the annotation through one loop: "
-        "the `*.j2` templates plus the `*.yaml`/`*.yml` task files, which no render covers. "
-        "Splitting the template half onto the render is #3225"
+        "the `*.yaml`/`*.yml` task files, which no render covers, plus the fallback for the "
+        "four kinds of template `_k8s_render` skips — an unrendered role, a `*.sh.j2`, a "
+        "`Dockerfile*` and a nested `templates/config/*.j2`. Every manifest template reads its "
+        "render, and `test_every_source_fallback_is_a_template_no_render_covers` holds that "
+        "nothing else falls back"
     ),
     "deploy/test_no_role_ships_a_markdown_file.py": (
         "the census reads every file a role could ship FROM — `tasks/`, `templates/` and "
