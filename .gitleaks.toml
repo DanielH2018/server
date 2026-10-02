@@ -32,3 +32,13 @@ paths = ['''ansible/vars/secrets\.yml''']
 description = "docs/facts.lock holds content digests keyed by atom name, never a credential"
 targetRules = ["generic-api-key"]
 paths = ['''docs/facts\.lock''']
+
+# The same shape for the vendored Kubernetes schemas' provenance file: one sha256 per upstream
+# file, keyed by the file's name. Upstream names an API group's file `apis__<group>...`, and
+# `generic-api-key` reads the `api` in that key beside a 64-hex value as a credential. The values
+# are digests of public files from the kubernetes/kubernetes repo, written by
+# `scripts/validate/refresh_vendored_schemas.py`. Scoped to the one rule on the one file name.
+[[allowlists]]
+description = "Kubernetes schema SOURCE.json holds sha256 digests of public upstream files"
+targetRules = ["generic-api-key"]
+paths = ['''scripts/validate/schemas/kubernetes\.io/v[0-9.]+/SOURCE\.json''']

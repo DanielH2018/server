@@ -11,9 +11,10 @@ Each role's ``container_item`` comes from daniel-box's real ``containers_list`` 
 stub, so the port and hostname a manifest renders with are the ones a deploy would use.
 
 Every parsed object is then validated against the Kubernetes OpenAPI schema for
-``K8S_SCHEMA_VERSION`` (``strict=True``, so an undefined field is an error). That is the check
-``--dry-run`` makes against the live API server, made offline instead: no cluster, and on a PR.
-CRDs have no upstream schema and are reported as skipped rather than passed.
+``K8S_SCHEMA_VERSION``, vendored from Kubernetes itself and made strict, so an undefined field is
+an error. That is the check ``--dry-run`` makes against the live API server, made offline
+instead: no cluster, and on a PR. A CRD is checked against its vendored catalog schema, and one
+with neither is reported as skipped rather than passed.
 
 Structural check only: secrets are stubbed (StubUndefined), so no SOPS access is needed. Run
 directly or via the ``validate-k8s-manifests`` prek hook. Exits non-zero on any render failure
@@ -411,7 +412,7 @@ def main() -> int:
     # report coverage is to name what was not covered. A CRD count that jumps means a new
     # custom resource arrived with nothing checking its shape. This should read 0 — a CRD kind
     # reaching here means no vendored schema matched it, which
-    # test_every_rendered_crd_kind_has_a_vendored_schema fails on.
+    # test_every_rendered_kind_has_a_vendored_schema fails on.
     if skipped_kinds:
         total = sum(skipped_kinds.values())
         detail = ", ".join(f"{k} x{v}" for k, v in sorted(skipped_kinds.items()))

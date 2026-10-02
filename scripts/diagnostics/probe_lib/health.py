@@ -78,7 +78,7 @@ _RENDER_CONTEXT = None
 def _render_context():
     """(validator module, base var context, containers_list entries), built once per process.
 
-    The import is deferred because it pulls in ansible-core, PyYAML and kubernetes_validate,
+    The import is deferred because it pulls in ansible-core, PyYAML and jsonschema,
     and twelve of probe.py's thirteen subcommands never need any of it. Measured on daniel-box:
     0.41s to import, 0.03s to build the context, 0.02s median to render one role and 0.22s for
     the slowest (home-assistant) — against the 30s `PROBE_TIMEOUT_S` the notifier allows.
@@ -128,7 +128,7 @@ def _role_kind_targets(role, default_namespace, kinds):
     stopped rendering must not degrade to the guess-the-name path, where a miss reads as a skip.
     """
     # Checked before the render context is built, so a block tag (`config`, `deploy`, `cron`)
-    # costs a directory stat rather than 0.44s of ansible + kubernetes_validate imports, and a
+    # costs a directory stat rather than 0.44s of ansible + jsonschema imports, and a
     # broken renderer environment cannot fail a tag that was never a role.
     role_dir = K8S_ROLES / role
     if not role_dir.is_dir():

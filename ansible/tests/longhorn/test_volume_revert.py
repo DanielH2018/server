@@ -120,7 +120,7 @@ def test_the_validator_skips_a_role_with_no_manifests() -> None:
 
     Read as parsed set literals rather than searched for as a substring: a commented-out entry
     satisfies a substring search while the validator no longer skips anything. They are parsed instead of imported
-    because importing the validator pulls in `kubernetes_validate` and its sys.path setup for a
+    because importing the validator pulls in `jsonschema` and its sys.path setup for a
     one-line fact.
 
     The two component sets are read rather than `SKIP_ROLES` itself, which is their union and so is a
