@@ -12,6 +12,11 @@ flags, because Authelia mints a different `iss` per hostname and the flag takes 
 That is why this file checks a rendered YAML document rather than an argument string, and
 why two of the checks below are about the flags NOT being there.
 
+The document comes from `_setup_render`, the harness `validate/setup_templates.py` renders the
+setup plane with, so the layering under it cannot drift from what that gate renders. It used to
+come from a context assembled here — the role's defaults, group_vars, and two keys re-rendered
+by hand because they are themselves templates over `domain` (#3202).
+
 See `roles/setup/k3s/defaults/main.yml` and `templates/authentication-config.yaml.j2` for why
 each value is what it is.
 """
@@ -23,6 +28,7 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ANSIBLE, load_defaults
+from _setup_render import render_setup_text
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 HEADLAMP = ANSIBLE / "roles" / "k8s" / "headlamp"
@@ -66,30 +72,31 @@ def _env() -> jinja2.Environment:
     return make_ansible_env(undefined_cls=jinja2.StrictUndefined)
 
 
-def _context() -> dict:
-    """The role's own variables, with a stand-in domain.
+# `domain` is a SOPS value no test can read, and only the issuer URLs interpolate it. Every
+# assertion here is about a URL's shape rather than the estate's real hostname, so the render
+# gets a stand-in and REQUIRED_ISSUER_HOSTS above names the hosts it produces.
+DOMAIN = "example.test"
 
-    `domain` is a SOPS value no test can read. Only the issuer URLs interpolate it, and every
-    assertion below is about a URL's shape rather than the estate's real hostname.
+
+def _context() -> dict:
+    """The role's own variables, with a stand-in domain, for the server-args render.
+
+    `k3s_server_args` is a defaults VALUE rather than a template file, so it is rendered here
+    rather than through the harness. `_setup_render.role_context` resolves each key the way
+    Ansible does, which is what used to be done by hand for the two `domain`-derived paths.
     """
     defaults = load_defaults(K3S)
     context = {
         "server_ip": "10.0.0.215",
-        "domain": "example.test",
+        "domain": DOMAIN,
         **{k: v for k, v in defaults.items() if k != "k3s_server_args"},
         **_all_vars(),
     }
     env = _env()
-    # Several defaults are themselves templates over `domain`. Render them before they are
-    # consumed, or an assertion reads `{{ domain }}` back as a literal and passes on nonsense.
     for key in ("k3s_audit_log_path", "k3s_audit_log_dir"):
         value = context.get(key)
         if isinstance(value, str) and "{{" in value:
             context[key] = env.from_string(value).render(**context)
-    context["k3s_oidc_issuer_urls"] = [
-        env.from_string(url).render(**context)
-        for url in context["k3s_oidc_issuer_urls"]
-    ]
     return context
 
 
@@ -99,11 +106,11 @@ def _rendered_server_args(context: dict | None = None) -> str:
     return _env().from_string(load_defaults(K3S)["k3s_server_args"]).render(**context)
 
 
-def _rendered_auth_config(context: dict | None = None) -> dict:
+def _rendered_auth_config() -> dict:
     """`authentication-config.yaml.j2` as the apiserver parses it."""
-    context = context or _context()
-    source = (K3S / "templates" / "authentication-config.yaml.j2").read_text()
-    return yaml_fast.safe_load(_env().from_string(source).render(**context))
+    return yaml_fast.safe_load(
+        render_setup_text("k3s", "authentication-config.yaml.j2", {"domain": DOMAIN})
+    )
 
 
 def _apiserver_args(args: str) -> dict[str, str]:
@@ -285,6 +292,6 @@ def test_headlamp_sends_logins_to_an_issuer_the_apiserver_trusts():
     issuer = (
         _env()
         .from_string(headlamp["headlamp_k8s_oidc_issuer_url"])
-        .render(domain="example.test")
+        .render(domain=DOMAIN)
     )
     assert issuer.removeprefix("https://") in _issuer_hosts(_rendered_auth_config())

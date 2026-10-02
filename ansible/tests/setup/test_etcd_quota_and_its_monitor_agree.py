@@ -14,9 +14,9 @@ Run: uv run pytest ansible/tests/setup/test_etcd_quota_and_its_monitor_agree.py
 import re
 
 from _helpers import REPO
+from _k8s_render import rendered_k8s_text
 
 K3S_DEFAULTS = REPO / "ansible/roles/setup/k3s/defaults/main.yml"
-ENV_SECRET = REPO / "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2"
 
 # etcd's own default, and the only value that is correct while k3s overrides nothing.
 # <https://etcd.io/docs/v3.5/dev-guide/limit/#storage-size-limit>
@@ -25,9 +25,16 @@ OVERRIDE_FLAG = "quota-backend-bytes"
 
 
 def deployed_quota() -> int:
-    """`ETCD_DB_QUOTA_BYTES` as the role's env-secret declares it."""
+    """`ETCD_DB_QUOTA_BYTES` as the role's env-secret renders it.
+
+    Read off the render rather than the template's text, so a threshold that moves into a role
+    default is still the number this guard compares. Against the source a moved value leaves
+    the regex matching `{{ ... }}` instead of digits (#3202).
+    """
     match = re.search(
-        r'^\s*ETCD_DB_QUOTA_BYTES:\s*"?(\d+)"?\s*$', ENV_SECRET.read_text(), re.M
+        r'^\s*ETCD_DB_QUOTA_BYTES:\s*"?(\d+)"?\s*$',
+        rendered_k8s_text("monitor-bridge", "env-secret.yaml.j2"),
+        re.M,
     )
     assert match, (
         "monitor-bridge's env-secret no longer declares ETCD_DB_QUOTA_BYTES, so the check falls "
