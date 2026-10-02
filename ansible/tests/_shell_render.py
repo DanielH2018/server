@@ -19,6 +19,7 @@ names them that way.
 
 from pathlib import Path
 
+from lib.k8s_context import resolve_vars
 from lib.repo_paths import ROLES
 from validate.shell_templates import (
     base_context,
@@ -57,6 +58,36 @@ def render_shell_script(
         return render_template(path, ctx)
     except RuntimeError as exc:
         raise AssertionError(f"{plane}/{role}/{template}: {exc}") from exc
+
+
+def render_shell_texts(
+    overrides: dict, templates: list[Path] | None = None
+) -> tuple[tuple[str, str, str, str], ...]:
+    """`rendered_shell_texts()` with `overrides` laid over every render, uncached.
+
+    For a census at a value the inventory does not hold: set a secret to a sentinel, and every
+    script whose render reaches it carries the sentinel, aliases included (#3191).
+
+    The overrides go into the base BEFORE anything resolves, and on top again after.
+    `template_context` resolves a role's defaults against the base alone, so a default aliasing
+    an overridden secret (`x: "{{ some_secret }}"`) would otherwise resolve to the secret's
+    STUB — the trap `_k8s_render._render_texts` names too. The base is resolved here as well,
+    so an all.yml alias arrives expanded rather than as literal braces.
+
+    `templates` defaults to every `*.sh.j2` the gate discovers; a test hands it paths under a
+    `tmp_path` tree laid out `<plane>/<role>/templates/<name>.sh.j2`.
+    """
+    raw = {**base_context(), **overrides}
+    base = resolve_vars(raw, raw)
+    texts = []
+    for path in discover_templates() if templates is None else templates:
+        plane, role = path.parents[2].name, path.parents[1].name
+        try:
+            rendered = render_template(path, template_context(path, base, overrides))
+        except RuntimeError as exc:
+            raise AssertionError(f"{plane}/{role}/{path.name}: {exc}") from exc
+        texts.append((plane, role, path.name, rendered))
+    return tuple(texts)
 
 
 _TEXTS: tuple[tuple[str, str, str, str], ...] | None = None

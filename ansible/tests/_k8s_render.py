@@ -230,14 +230,20 @@ BUILD_ROLES = frozenset(
 _BUILD_TEXTS: tuple[tuple[str, str, str], ...] | None = None
 
 
-def _render_build_files():
-    base = _inventory_base()
+def _render_build_files(overrides: dict | None = None):
+    # Overrides before resolution and on top again after, for the reason `_render_texts` gives.
+    base = _inventory_base(overrides)
     entries = k8s_entries()
     for role_dir in role_dirs():
         role = role_dir.name
         if role in SKIP_ROLES or role not in entries:
             continue
-        ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
+        ctx = {
+            **base,
+            **role_defaults(role, base),
+            "container_item": entries[role],
+            **(overrides or {}),
+        }
         env = _role_env(role_dir, ctx)
         for tpl in sorted(role_dir.glob(f"templates/{BUILD_TEMPLATE_GLOB}")):
             rendered, err = render_or_error(env, tpl.name, ctx)
@@ -260,6 +266,14 @@ def rendered_build_texts() -> tuple[tuple[str, str, str], ...]:
     if _BUILD_TEXTS is None:
         _BUILD_TEXTS = tuple(_render_build_files())
     return _BUILD_TEXTS
+
+
+def render_build_texts(overrides: dict) -> tuple[tuple[str, str, str], ...]:
+    """`rendered_build_texts()` with `overrides` laid over every role's context, uncached.
+
+    The build-file counterpart of `render_texts`, for a census at a sentinel value (#3191).
+    """
+    return tuple(_render_build_files(overrides))
 
 
 def rendered_build_text(role: str, template: str = "Dockerfile.j2") -> str:
