@@ -15,8 +15,7 @@ Run: uv run pytest ansible/tests/services/test_n8n_deprecated_defaults_are_pinne
 
 import json
 
-from _helpers import ROLES
-from _k8s_render import rendered_docs
+from _k8s_render import render_role_template, rendered_docs
 
 BROKER_VARS = frozenset(
     {
@@ -28,7 +27,6 @@ BROKER_VARS = frozenset(
 RUNNER_VARS = frozenset(
     {"N8N_RUNNERS_TASK_TIMEOUT", "N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT"}
 )
-RUNNERS_CONFIG = ROLES / "k8s/n8n/templates/config/n8n-task-runners.json.j2"
 
 
 # --- the rule, as a predicate ---------------------------------------------------------
@@ -91,7 +89,7 @@ def test_the_n8n_deployment_sets_the_broker_side_defaults():
 
 
 def test_every_runner_receives_both_timeouts_from_the_launcher():
-    config = json.loads(RUNNERS_CONFIG.read_text())
+    config = json.loads(render_role_template("n8n", "config/n8n-task-runners.json.j2"))
     assert {r["runner-type"] for r in config["task-runners"]} == {
         "javascript",
         "python",
