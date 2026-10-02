@@ -634,6 +634,9 @@ renovate_agent_host: daniel-box
 # role entry is evaluated before that role's defaults are in scope, the same reason
 # renovate_notify_host is.
 fake_remux_host: daniel-box
+# The Raspberry Pi that gets the SD-card, log2ram and Pi-health tuning in the optimize_pi role.
+# Here rather than in the role's defaults for the reason fake_remux_host gives above.
+optimize_pi_host: daniel-pi
 # The one host that runs the repo-level ops crons `initial_setup/tasks/crons.yml` gates to a
 # single host: the worktree sweep, the infrastructure-map refresh, the generated-docs refresh
 # and the weekly eval sweep. They need the primary checkout, uv, gh
