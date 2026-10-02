@@ -47,8 +47,9 @@ SIZE_RE = re.compile(r"^(\d+)(Ki|Mi|Gi|Ti)$")
 VOLUME_KINDS = frozenset({"PersistentVolumeClaim", "PersistentVolume"})
 
 # Roles the census must name. A render that stops reaching a role, or a `kind:` that moves,
-# leaves this suite checking fewer claims and still passing — these five are the claims whose
-# sizes are not the 1Gi default, so each one is a size somebody chose.
+# leaves this suite checking fewer claims and still passing. Each of these roles sizes at least
+# one volume away from the 1Gi default — 128Mi, 400Gi, 20Gi — so each is a size somebody chose
+# and a claim whose arithmetic is worth holding.
 KNOWN_SIZED_ROLES = frozenset(
     {"media-volume", "observability", "registry", "traefik", "valheim"}
 )
