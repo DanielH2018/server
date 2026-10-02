@@ -18,7 +18,8 @@ Three things a test module does not re-derive for itself:
    what the host runs. Rule 3 catches the three spellings a deliberate reader takes: a path
    expression ending in a `*.sh.j2` name, a `glob("*.sh.j2")` roster, and a loop over a
    template RESOLVER — `iter_cron_targets`, `cron_job_scripts`, `discover_templates` — whose
-   module names no `*.sh.j2` anywhere (#3200). It does NOT catch a census wider than that:
+   module names no `*.sh.j2` anywhere (#3200), including the resolver result a pytest fixture
+   hands its consumers as a parameter (#3206). It does NOT catch a census wider than that:
    `test_healthchecks_pings.py` reaches every template through an `rglob("*")`, so the rule
    cannot see it either way. That module routes its `*.sh.j2` reads
    through `rendered_shell_text` of its own accord (#3190), and its own
@@ -103,9 +104,11 @@ def _rel(path: Path) -> str:
 # `test_every_grandfathered_reader_still_reads_one` drops an entry that no longer reads one, and
 # the rule then refuses it coming back.
 #
-# The list GREW once, in #3200, and that is the one way it may: the detector learned to see a
+# The list GREW in #3200, and that is the one way it may: the detector learned to see a
 # read it had been blind to, so a module that was already reading a source joined the list the
-# moment it was no longer invisible. A conversion never adds an entry.
+# moment it was no longer invisible. A conversion never adds an entry. #3206 widened the
+# detector the same way — a resolver result reached through a fixture parameter — and added no
+# entry, because the one module with such a fixture was already listed.
 SHELL_SOURCE_READERS = {
     "ansible/tests/deploy/test_setup_render_manifest.py": (
         "hashes the template's raw BYTES — a trailing newline and a truncated-read "
@@ -275,6 +278,48 @@ def test_a_resolver_fed_source_read_is_flagged_in_each_spelling():
         "    tpl.read_bytes()\n",
     ):
         assert shell_template_source_reads(source) != [], source
+
+
+def test_a_resolver_fed_fixture_parameter_is_flagged_in_each_spelling():
+    """A fixture hands its resolver result to consumers as a PARAMETER (#3206).
+
+    The name the fixture is declared under is the name each consumer takes it by, so the
+    detector resolves the fixture's return expression once and binds that name.
+    """
+    for source in (
+        "@pytest.fixture(scope='module')\n"
+        "def cron_map():\n"
+        "    return ct.cron_job_scripts()\n"
+        "def test_x(cron_map):\n"
+        "    for tpl in cron_map:\n"
+        "        tpl.read_text()\n",
+        "@pytest.fixture\n"
+        "def cron_map():\n"
+        "    yield ct.cron_job_scripts()\n"
+        "def test_x(cron_map):\n"
+        "    for tpl, _task in cron_map.items():\n"
+        "        tpl.read_bytes()\n",
+    ):
+        assert shell_template_source_reads(source) != [], source
+
+
+def test_a_fixture_returning_something_else_does_not_bind_its_name():
+    """Only a resolver call binds — a fixture over a synthetic tree or a roster does not."""
+    for source in (
+        "@pytest.fixture\n"
+        "def cron_map(tmp_path):\n"
+        "    return ct.cron_job_scripts(tmp_path)\n"
+        "def test_x(cron_map):\n"
+        "    for tpl in cron_map:\n"
+        "        tpl.read_text()\n",
+        "@pytest.fixture\n"
+        "def names():\n"
+        "    return frozenset({'drill.sh.j2'})\n"
+        "def test_x(names):\n"
+        "    for tpl in names:\n"
+        "        tpl.read_text()\n",
+    ):
+        assert shell_template_source_reads(source) == [], source
 
 
 def test_a_resolver_pointed_at_a_synthetic_tree_is_not_flagged():
