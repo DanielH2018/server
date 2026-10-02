@@ -100,7 +100,9 @@ def manifest_texts() -> dict[str, str]:
     """The census: each template's render where `_k8s_render` reaches its role, else its source.
 
     Rendered entries include the shared defaults from `ansible/templates/` that a role picks up
-    for a manifest it ships no template for, since the pod reads those too.
+    for a manifest it ships no template for, since the pod reads those too. A macro-only file
+    such as pihole's `pihole-deployment.yaml.j2` renders empty; its volumes are checked in the
+    `deployment.yaml.j2` and `deployment-2.yaml.j2` renders that call it.
     """
     texts = {f"{role}/{name}": text for role, name, text in rendered_texts()}
     return texts | source_fallback()
@@ -260,6 +262,11 @@ def test_the_source_fallback_is_only_the_templates_the_render_skips() -> None:
 
 
 def test_a_reached_role_is_checked_from_its_render() -> None:
-    """A render-reached role arrives with its Jinja resolved, the point of reading renders."""
-    assert "artifacts/deployment.yaml.j2" in MANIFESTS
-    assert "{{" not in MANIFESTS["artifacts/deployment.yaml.j2"]
+    """A name a role default supplies arrives resolved, the point of reading renders.
+
+    artifacts keys its volume on `artifacts_k8s_node` and on each peer's name, which a source
+    scan reads as `artifacts-{{ ... }}`.
+    """
+    names = volume_names(MANIFESTS["artifacts/deployment.yaml.j2"])["volumes"]
+    assert {"artifacts-daniel-box", "artifacts-daniel-server"} <= names
+    assert not any("{{" in name for name in names)
