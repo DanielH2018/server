@@ -32,6 +32,8 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE
 from _helpers import load_yaml, load_defaults
+from _k8s_render import render_role_template, rendered_k8s_text
+from _setup_render import rendered_setup_text, role_context
 
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
@@ -95,18 +97,13 @@ def _task_index(predicate) -> int:
 
 
 def _audit_policy() -> dict:
-    """The policy template rendered with the values the role passes it."""
-    defaults = load_defaults(K3S)
-    source = (K3S / "templates" / "audit-policy.yaml.j2").read_text()
-    rendered = (
-        _env()
-        .from_string(source)
-        .render(
-            k3s_readonly_sa_name=defaults["k3s_readonly_sa_name"],
-            k3s_readonly_sa_namespace=defaults["k3s_readonly_sa_namespace"],
-        )
-    )
-    return yaml_fast.safe_load(rendered)
+    """The policy template as `_setup_render` renders it.
+
+    Through the shared harness rather than a two-key context assembled here: the harness lays
+    down the whole resolved role context, so a value the policy starts reading cannot arrive as
+    `{{ ... }}` for want of a key this function forgot to pass (#3202).
+    """
+    return yaml_fast.safe_load(rendered_setup_text("k3s", "audit-policy.yaml.j2"))
 
 
 # ── G1: secrets encryption ──────────────────────────────────────────────────────────────
@@ -318,19 +315,30 @@ def test_secret_reads_are_logged_at_metadata():
 
 
 def test_alloy_tails_the_audit_log():
-    """A log nobody can read is not a control — and the tail has two halves."""
-    loki = ANSIBLE / "roles" / "k8s" / "loki-homelab" / "templates"
-    config = (loki / "config" / "config.alloy.j2").read_text()
-    daemonset = (loki / "alloy-daemonset.yaml.j2").read_text()
-    assert "k3s_audit_log_path" in config, (
-        "the Alloy config must declare a file source for k3s_audit_log_path. Otherwise the "
-        "audit log is readable only as root on daniel-box, which means in practice nobody "
-        "reads it."
+    """A log nobody can read is not a control — and the tail has two halves.
+
+    Both halves read the rendered PATH rather than the variable's name in the template. The
+    name appearing anywhere — a comment, a different directive — satisfied the old form, and the
+    rendered path is what Alloy and the kubelet actually get (#3202).
+    """
+    # Resolved, not raw: `k3s_audit_log_path` is itself a template over `k3s_audit_log_dir`,
+    # so group_vars holds `{{ k3s_audit_log_dir }}/audit.log` and only the render context
+    # expands it.
+    resolved = role_context(K3S)
+    path, directory = resolved["k3s_audit_log_path"], resolved["k3s_audit_log_dir"]
+    # The Alloy config sits in a nested `templates/config/` directory, which the whole-tree
+    # render does not glob; `render_role_template` addresses it by its loader-relative name.
+    config = render_role_template("loki-homelab", "config/config.alloy.j2")
+    assert path in config, (
+        f"the Alloy config must declare a file source for {path} (k3s_audit_log_path). "
+        "Otherwise the audit log is readable only as root on daniel-box, which means in "
+        "practice nobody reads it."
     )
-    assert "k3s_audit_log_dir" in daemonset, (
-        "the Alloy DaemonSet must hostPath-mount k3s_audit_log_dir. A file source whose path "
-        "is not mounted into the container tails nothing and reports no error — the job just "
-        "quietly finds no targets."
+    daemonset = rendered_k8s_text("loki-homelab", "alloy-daemonset.yaml.j2")
+    assert directory in daemonset, (
+        f"the Alloy DaemonSet must hostPath-mount {directory} (k3s_audit_log_dir). A file "
+        "source whose path is not mounted into the container tails nothing and reports no "
+        "error — the job just quietly finds no targets."
     )
 
 
@@ -371,17 +379,17 @@ def test_psa_does_not_enforce():
 
 def test_both_namespaces_carry_the_psa_labels():
     """Labels on one namespace and not the other leave the two namespaces enforcing different policy."""
-    obs = (
-        ANSIBLE
-        / "roles"
-        / "k8s"
-        / "observability"
-        / "templates"
-        / "00-namespace.yaml.j2"
-    ).read_text()
-    assert "k8s_psa_labels" in obs, (
-        "The observability Namespace template must render k8s_psa_labels, or the two "
-        "namespaces diverge and only one of them reports violations."
+    obs = rendered_k8s_text("observability", "00-namespace.yaml.j2")
+    # The rendered labels, not the variable's name: a Namespace that mentions k8s_psa_labels in
+    # a comment and labels nothing passed the old form.
+    missing = sorted(
+        f"{key}: {value}"
+        for key, value in _all_vars()["k8s_psa_labels"].items()
+        if f"{key}: {value}" not in obs
+    )
+    assert missing == [], (
+        "The observability Namespace must render every k8s_psa_labels entry, or the two "
+        f"namespaces diverge and only one of them reports violations. Missing: {missing}"
     )
     deploy = (ANSIBLE / "deploy.yml").read_text()
     assert "k8s_psa_labels" in deploy, (

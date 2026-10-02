@@ -300,6 +300,24 @@ def rendered_build_text(role: str, template: str = "Dockerfile.j2") -> str:
     )
 
 
+def rendered_k8s_text(role: str, template: str) -> str:
+    """One entry of `rendered_texts`, by role and template name.
+
+    The k8s counterpart of `_setup_render.rendered_setup_text` and
+    `_shell_render.rendered_shell_text`. Fails naming the template when the render set does not
+    hold it — a role outside `k8s_entries()`, a template in a nested `templates/` subdirectory
+    (which `_render_texts` does not glob), or a renamed file. Each of those would otherwise
+    hand a guard a render of nothing.
+    """
+    texts = [text for r, t, text in rendered_texts() if (r, t) == (role, template)]
+    if not texts:
+        raise AssertionError(
+            f"k8s/{role}/{template} is not among the rendered manifests: "
+            f"{sorted((r, t) for r, t, _ in rendered_texts())}"
+        )
+    return "\n".join(texts)
+
+
 # `k8s/image-builder` is a CALLER_RENDERED_ROLES member, so `rendered_docs()` never reaches its
 # build Job: the image, context and tag arrive on the calling role's `include_role` task. These
 # stand in for that task, so a guard over every pod the cluster runs can still parse this one.

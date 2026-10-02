@@ -8,12 +8,19 @@ the failure mode of a boot guard is silence, so nothing observes it working.
 Measured boot-to-Ready on daniel-box is 5m18s (boot at 07:39:48, last pod Ready at 07:45:06)
 against the 12-second head start of the */10 crons, which ran at 07:40:00. Without the guard,
 `longhorn-backup-health` and `uptime-kuma-alive` both page.
+
+Each script is read as RENDERED text. The grace is a role default, so the source carries
+`boot_grace_active {{ k3s_health_cron_boot_grace_s }}` and a guard matching that string holds
+only while the call is spelled that way — a second variable, a filter, or a literal all leave it
+matching nothing, which passes (#3202). The rendered call carries the number instead, which is
+also the number `GRACE_S` is compared against above.
 """
 
 import re
 
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from _shell_render import rendered_names_for, rendered_shell_text
 from lib.proc_testing import run
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
@@ -86,10 +93,22 @@ def test_grace_covers_the_worst_observed_startup():
     assert GRACE_S > WORST_BOOT_TO_READY_S
 
 
+def test_every_named_script_is_one_the_harness_renders():
+    """Non-vacuity: the three lists are hand-written, so a renamed script must fail by name.
+
+    `rendered_shell_text` already fails on a name it cannot find, but only for a list that still
+    has members. This names the whole census so a list emptied by a move fails here.
+    """
+    named = set(FREQUENT_SCRIPTS + DAILY_SCRIPTS + DAILY_TIMER_SCRIPTS)
+    assert len(named) == 4, "the three script lists overlap or one has been emptied"
+    missing = sorted(named - rendered_names_for("setup", "k3s"))
+    assert missing == [], f"setup/k3s no longer ships: {missing}"
+
+
 def test_the_frequent_crons_call_the_guard():
     for name in FREQUENT_SCRIPTS:
-        text = (ANSIBLE / "roles/setup/k3s/templates" / name).read_text()
-        assert "boot_grace_active {{ k3s_health_cron_boot_grace_s }}" in text, (
+        text = rendered_shell_text("setup", "k3s", name)
+        assert f"boot_grace_active {GRACE_S}" in text, (
             f"{name} feeds a /fail dead-man but does not skip its first post-boot run"
         )
 
@@ -104,8 +123,8 @@ def test_a_guarded_cron_still_beats_its_kuma_tile():
     # call site rather than by rendering the tile, because what breaks this is someone moving the
     # guard back above PUSH_URL for tidiness.
     for name in FREQUENT_SCRIPTS:
-        text = (ANSIBLE / "roles/setup/k3s/templates" / name).read_text()
-        guard = text.index("boot_grace_active {{ k3s_health_cron_boot_grace_s }}")
+        text = rendered_shell_text("setup", "k3s", name)
+        guard = text.index(f"boot_grace_active {GRACE_S}")
         assert text.index('PUSH_URL="') < guard, (
             f"{name}: the boot guard runs before PUSH_URL is set, so it cannot beat"
         )
@@ -119,7 +138,7 @@ def test_a_skipped_run_pings_no_healthchecks_slug():
     # a run that did not happen holds the check green on no evidence — the failure the dead-man
     # exists to catch. Silence is correct here; the grace covers it.
     for name in FREQUENT_SCRIPTS:
-        text = (ANSIBLE / "roles/setup/k3s/templates" / name).read_text()
+        text = rendered_shell_text("setup", "k3s", name)
         guard = text.index("if boot_grace_active")
         skip_block = text[guard : text.index("\nfi\n", guard)]
         assert "hc-ping" not in skip_block and "HC_" not in skip_block, (
@@ -131,7 +150,7 @@ def test_the_daily_crons_do_not():
     # Deliberate, and the reject half of the wiring pair: for a daily cron a skipped slot is a
     # skipped DAY. Their 1-hour graces already tolerate a late run.
     for name in DAILY_SCRIPTS:
-        text = (ANSIBLE / "roles/setup/k3s/templates" / name).read_text()
+        text = rendered_shell_text("setup", "k3s", name)
         assert "boot_grace_active" not in text, (
             f"{name} runs daily — a boot skip costs a whole day of coverage"
         )
@@ -143,8 +162,8 @@ def test_the_daily_timer_checks_exit_without_a_verdict_inside_the_grace():
     # outage runs seconds after boot. Skipping there costs 30 minutes (Restart=on-failure), not
     # a day — so the guard is wired, and its skip path exits 1 with no push and no hc ping.
     for name in DAILY_TIMER_SCRIPTS:
-        text = (ANSIBLE / "roles/setup/k3s/templates" / name).read_text()
-        guard = text.index("if boot_grace_active {{ k3s_health_cron_boot_grace_s }}")
+        text = rendered_shell_text("setup", "k3s", name)
+        guard = text.index(f"if boot_grace_active {GRACE_S}")
         skip_block = text[guard : text.index("\nfi\n", guard)]
         assert "exit 1" in skip_block, (
             f"{name}: the boot skip must exit 1 so the timer reruns"

@@ -18,27 +18,45 @@ The exposure argument is settled elsewhere: UFW's INPUT is default-deny, and
 
 import re
 
-from _helpers import ROLES as _ROLES
+from _helpers import ROLES as _ROLES, load_yaml
+from _setup_render import rendered_setup_text
 
-_COREFILE = _ROLES / "setup/k3s/templates/host-corefile.j2"
+_COREFILE = "host-corefile.j2"
 _PORT_VAR = "k3s_host_dns_metrics_port"
-# The operand runs to the end of the line rather than to the first space: it is a Jinja
-# expression, `0.0.0.0:{{ k3s_host_dns_metrics_port }}`, and a `\S+` capture matches none of it.
+# The operand runs to the end of the line rather than to the first space, because a bracketed
+# IPv6 wildcard (`[::]:9253`) carries no space either.
 _PROMETHEUS = re.compile(r"^[ \t]*prometheus[ \t]+(.+?)[ \t]*$", re.M)
 
 
-def metrics_bind_problem(corefile: str) -> str | None:
-    """The failure message when the metrics listener is not on the wildcard, else None."""
+def expected_port() -> int:
+    """The port the role's defaults publish, which the render must agree with.
+
+    Read from defaults rather than written as a literal: the assertion below is that the
+    template INTERPOLATES the variable, and against a literal expectation a template that
+    hardcoded the same number would pass.
+    """
+    return load_yaml(_ROLES / "setup/k3s/defaults/main.yml")[_PORT_VAR]
+
+
+def metrics_bind_problem(corefile: str, port: int) -> str | None:
+    """The failure message when the metrics listener is not on the wildcard, else None.
+
+    Takes a RENDERED Corefile and the port it should carry. Reading the template's source
+    instead would check that the operand spells `{{ k3s_host_dns_metrics_port }}`, which says
+    nothing about what the host ends up listening on and matches nothing once the expression
+    is spelled any other way (#3202).
+    """
     directives = _PROMETHEUS.findall(corefile)
     if not directives:
         return "no `prometheus` directive: the host forwarder exports no metrics at all"
     if len(directives) > 1:
         return f"{len(directives)} `prometheus` directives; expected exactly one"
-    address, _, port = directives[0].rpartition(":")
-    if _PORT_VAR not in port:
+    address, _, rendered_port = directives[0].rpartition(":")
+    if rendered_port != str(port):
         return (
-            f"the metrics listener is on port {port!r} rather than {{{{ {_PORT_VAR} }}}}; "
-            "the scrape job interpolates that variable and would target a closed port"
+            f"the metrics listener renders port {rendered_port!r} rather than {port}, the "
+            f"value of {_PORT_VAR}; the scrape job interpolates that variable and would "
+            "target a closed port"
         )
     if address not in ("0.0.0.0", "[::]"):
         return (
@@ -50,42 +68,38 @@ def metrics_bind_problem(corefile: str) -> str | None:
 
 
 def test_the_live_corefile_binds_the_wildcard() -> None:
-    problem = metrics_bind_problem(_COREFILE.read_text())
+    problem = metrics_bind_problem(
+        rendered_setup_text("k3s", _COREFILE), expected_port()
+    )
     assert problem is None, problem
 
 
 def test_a_wildcard_bind_is_clean() -> None:
-    assert (
-        metrics_bind_problem("    prometheus 0.0.0.0:{{ k3s_host_dns_metrics_port }}\n")
-        is None
-    )
+    assert metrics_bind_problem("    prometheus 0.0.0.0:9253\n", 9253) is None
 
 
 def test_a_node_address_bind_is_flagged() -> None:
     """The shape that shipped: correct once the address is up, absent when it is not yet."""
-    problem = metrics_bind_problem(
-        "    prometheus {{ server_ip }}:{{ k3s_host_dns_metrics_port }}\n"
-    )
+    problem = metrics_bind_problem("    prometheus 10.0.0.5:9253\n", 9253)
     assert problem is not None
     assert "wildcard" in problem
 
 
 def test_a_loopback_bind_is_flagged() -> None:
     """Binds reliably and is scraped by nobody: Prometheus scrapes from a pod."""
-    problem = metrics_bind_problem(
-        "    prometheus 127.0.0.1:{{ k3s_host_dns_metrics_port }}\n"
-    )
+    problem = metrics_bind_problem("    prometheus 127.0.0.1:9253\n", 9253)
     assert problem is not None
     assert "127.0.0.1" in problem
 
 
-def test_a_literal_port_is_flagged() -> None:
-    problem = metrics_bind_problem("    prometheus 0.0.0.0:9253\n")
+def test_a_port_the_variable_does_not_hold_is_flagged() -> None:
+    """A port hardcoded in the template reads as a working listener and is scraped by nobody."""
+    problem = metrics_bind_problem("    prometheus 0.0.0.0:9253\n", 9254)
     assert problem is not None
     assert "closed port" in problem
 
 
 def test_a_missing_directive_is_flagged() -> None:
-    assert metrics_bind_problem("    cache 30\n") == (
+    assert metrics_bind_problem("    cache 30\n", 9253) == (
         "no `prometheus` directive: the host forwarder exports no metrics at all"
     )

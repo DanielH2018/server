@@ -28,17 +28,17 @@ Run: uv run pytest ansible/tests/setup/test_claude_fleet_slice_cap.py
 
 import re
 
-import jinja2
 import pytest
 from _helpers import ANSIBLE
+from _setup_render import render_setup_text
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
-TEMPLATES = ROLE / "templates"
-DEFAULTS = ROLE / "defaults" / "main.yml"
-TASKS = ROLE / "tasks" / "main.yml"
+ROLE = "claude_code"
+ROLE_DIR = ANSIBLE / "roles" / "setup" / ROLE
+DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
+TASKS = ROLE_DIR / "tasks" / "main.yml"
 
-FLEET_CONF = TEMPLATES / "fleet-slice-caps.conf.j2"
-RC_UNIT = TEMPLATES / "claude-rc.service.j2"
+FLEET_CONF = "fleet-slice-caps.conf.j2"
+RC_UNIT = "claude-rc.service.j2"
 
 # The vars this module reads. Asserted present before anything is compared, so a rename that
 # empties the parse fails here rather than passing an all() over nothing.
@@ -52,23 +52,6 @@ REQUIRED_VARS = frozenset(
         "claude_code_rc_memory_swap_max",
     }
 )
-
-CONTEXT: dict[str, object] = {
-    "sys_user": "ubuntu",
-    "claude_code_login_uid": 1000,
-    "claude_code_rc_spawn_mode": "worktree",
-    "claude_code_rc_workdir": "/home/ubuntu/server",
-    "claude_code_rc_permission_mode": "auto",
-    "claude_code_rc_capacity": 10,
-    "claude_code_rc_pytest_workers": 4,
-    "claude_code_rc_memory_high": "8G",
-    "claude_code_rc_memory_swap_max": "2G",
-    "claude_code_rc_disable_bg_shell_pressure_reap": True,
-    "claude_code_fleet_caps_enabled": True,
-    "claude_code_fleet_slice": "user.slice",
-    "claude_code_fleet_memory_high": "12G",
-    "claude_code_fleet_swap_max": "2G",
-}
 
 # The per-plane cap -> the fleet cap it must sit under.
 SUB_BOUNDS = {
@@ -91,10 +74,14 @@ def to_bytes(value: object) -> int:
     return int(match.group(1)) * _SUFFIXES.get(match.group(2) or "", 1)
 
 
-def render(template_text: str, **overrides: object) -> str:
-    return jinja2.Template(template_text, undefined=jinja2.StrictUndefined).render(
-        {**CONTEXT, **overrides}
-    )
+def render(template: str, **overrides: object) -> str:
+    """One of this role's templates rendered at inventory values, `overrides` on top.
+
+    Through `_setup_render` rather than a synthetic context of this module's own: the context
+    this module carried drifted to a fleet cap of 12G while defaults/main.yml moved to 14G, so
+    every assertion below was checking a number the host never renders (#3202).
+    """
+    return render_setup_text(ROLE, template, overrides)
 
 
 @pytest.fixture(scope="module")
@@ -110,91 +97,96 @@ def defaults() -> dict[str, object]:
     return parsed
 
 
-@pytest.fixture(scope="module")
-def fleet_conf() -> str:
-    assert FLEET_CONF.exists(), (
+def test_the_shared_parent_drop_in_still_exists() -> None:
+    """Named here rather than in a fixture: `render` fails on a missing template with the
+    path, and this failure says what losing the template MEANS."""
+    assert (ROLE_DIR / "templates" / FLEET_CONF).is_file(), (
         f"{FLEET_CONF} is missing — the two planes have no shared parent cap, which is the "
         "16G-instead-of-8G state issue #1264 describes"
     )
-    return FLEET_CONF.read_text()
 
 
-@pytest.fixture(scope="module")
-def rc_unit() -> str:
-    return RC_UNIT.read_text()
+def test_parent_cap_renders_from_the_fleet_variables(
+    defaults: dict[str, object],
+) -> None:
+    """The accepting half plus its rejection: a hardcoded number would pass a presence check.
 
-
-def test_parent_cap_renders_from_the_fleet_variables(fleet_conf: str) -> None:
-    """The accepting half plus its rejection: a hardcoded 12G would pass a presence check.
-
-    The number belongs in defaults where the derivation against the box's headroom sits
-    beside it, not inline in a drop-in.
+    The expected values come from defaults/main.yml rather than from a literal here, because a
+    literal is the defect: this module asserted 12G for the three weeks defaults said 14G.
+    The derivation against the box's headroom sits beside the default, not in a drop-in.
     """
-    rendered = render(fleet_conf)
-    assert "MemoryHigh=12G" in rendered, "MemoryHigh must render from defaults' 12G"
-    assert "MemorySwapMax=2G" in rendered, "MemorySwapMax must render from defaults' 2G"
-
-    raised = render(
-        fleet_conf,
-        claude_code_fleet_memory_high="16G",
-        claude_code_fleet_swap_max="4G",
+    high, swap = (
+        defaults["claude_code_fleet_memory_high"],
+        defaults["claude_code_fleet_swap_max"],
     )
-    assert "MemoryHigh=16G" in raised and "MemoryHigh=12G" not in raised, (
+    rendered = render(FLEET_CONF)
+    assert f"MemoryHigh={high}" in rendered, f"MemoryHigh must render defaults' {high}"
+    assert f"MemorySwapMax={swap}" in rendered, (
+        f"MemorySwapMax must render defaults' {swap}"
+    )
+
+    # Sentinels no default holds, so "followed the variable" cannot be satisfied by the
+    # inventory value already being there.
+    raised = render(
+        FLEET_CONF,
+        claude_code_fleet_memory_high="97G",
+        claude_code_fleet_swap_max="96G",
+    )
+    assert "MemoryHigh=97G" in raised and f"MemoryHigh={high}" not in raised, (
         "MemoryHigh in fleet-slice-caps.conf.j2 is hardcoded — changing "
         "claude_code_fleet_memory_high would do nothing"
     )
-    assert "MemorySwapMax=4G" in raised and "MemorySwapMax=2G" not in raised, (
+    assert "MemorySwapMax=96G" in raised and f"MemorySwapMax={swap}" not in raised, (
         "MemorySwapMax in fleet-slice-caps.conf.j2 is hardcoded — changing "
         "claude_code_fleet_swap_max would do nothing"
     )
 
 
-def test_parent_cap_does_not_render_a_plane_variable(fleet_conf: str) -> None:
+def test_parent_cap_does_not_render_a_plane_variable() -> None:
     """The rejecting half of the pair above, aimed at the actual defect this closes.
 
     Rendering claude_code_rc_memory_high here would repeat the shared-variable defect on an
     extra cgroup:
     a parent whose ceiling equals one plane's, so the pair still throttles at their sum.
     """
-    rendered = render(fleet_conf, claude_code_rc_memory_high="99G")
+    rendered = render(FLEET_CONF, claude_code_rc_memory_high="99G")
     assert "99G" not in rendered, (
         "the parent slice must carry the FLEET bound, not a plane's — a parent equal to one "
         "plane's cap leaves the fleet's real bound at the sum again"
     )
 
 
-def test_parent_cap_sets_no_memory_max(fleet_conf: str) -> None:
+def test_parent_cap_sets_no_memory_max() -> None:
     """MemoryMax on the parent would OOM-kill every login session and the RC host at once,
     including the SSH connection running the deploy. Same decision as both planes."""
-    assert "MemoryMax=" not in render(fleet_conf), (
+    assert "MemoryMax=" not in render(FLEET_CONF), (
         "MemoryMax on the shared parent kills the whole fleet on one runaway session; "
         "MemoryHigh throttles instead"
     )
 
 
-def test_rc_unit_is_placed_in_the_fleet_slice(rc_unit: str) -> None:
+def test_rc_unit_is_placed_in_the_fleet_slice(defaults: dict[str, object]) -> None:
     """Without Slice=, the RC unit stays in system.slice and the parent cap covers one plane.
 
     The parent slice is the only half of the fix that cannot be inferred from the drop-in:
     user-<uid>.slice is already under user.slice by name, and claude-rc.service is not.
     """
-    assert "Slice=user.slice" in render(rc_unit), (
+    slice_name = defaults["claude_code_fleet_slice"]
+    assert f"Slice={slice_name}" in render(RC_UNIT), (
         "claude-rc.service must be placed in the fleet slice, or it stays in system.slice "
         "and shares no parent with the login-session plane"
     )
-    moved = render(rc_unit, claude_code_fleet_slice="claude-fleet.slice")
-    assert "Slice=claude-fleet.slice" in moved and "Slice=user.slice" not in moved, (
+    moved = render(RC_UNIT, claude_code_fleet_slice="claude-fleet.slice")
+    assert "Slice=claude-fleet.slice" in moved and f"Slice={slice_name}" not in moved, (
         "Slice= is hardcoded — changing claude_code_fleet_slice would do nothing"
     )
 
 
-def test_rc_unit_leaves_the_fleet_slice_when_the_shared_parent_is_disabled(
-    rc_unit: str,
-) -> None:
+def test_rc_unit_leaves_the_fleet_slice_when_the_shared_parent_is_disabled() -> None:
     """The way out. claude_code_fleet_caps_enabled: false removes the drop-in, so the unit
     must stop naming the slice as well — otherwise it sits in an uncapped user.slice and the
     rollback silently drops its own plane's parent."""
-    rendered = render(rc_unit, claude_code_fleet_caps_enabled=False)
+    rendered = render(RC_UNIT, claude_code_fleet_caps_enabled=False)
     assert not re.search(r"^Slice=", rendered, re.M), (
         "with claude_code_fleet_caps_enabled false the unit must fall back to the default "
         "system.slice, not stay in a slice whose cap has just been removed"

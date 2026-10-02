@@ -26,84 +26,94 @@ Run: uv run pytest ansible/tests/setup/test_claude_login_slice_caps.py
 
 import re
 
-import jinja2
 import pytest
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, load_yaml
+from _setup_render import render_setup_text
 
-TEMPLATES = ANSIBLE / "roles" / "setup" / "claude_code" / "templates"
-DEFAULTS = ANSIBLE / "roles" / "setup" / "claude_code" / "defaults" / "main.yml"
-TASKS = ANSIBLE / "roles" / "setup" / "claude_code" / "tasks" / "main.yml"
+ROLE = "claude_code"
+ROLE_DIR = ANSIBLE / "roles" / "setup" / ROLE
+TEMPLATES = ROLE_DIR / "templates"
+DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
+TASKS = ROLE_DIR / "tasks" / "main.yml"
 
-SLICE_UNIT = TEMPLATES / "login-slice-caps.conf.j2"
-PYTEST_UNIT = TEMPLATES / "pytest-fanout-cap.conf.j2"
-
-CONTEXT: dict[str, object] = {
-    "sys_user": "ubuntu",
-    "claude_code_login_uid": 1000,
-    "claude_code_rc_memory_high": "8G",
-    "claude_code_rc_memory_swap_max": "2G",
-    "claude_code_rc_pytest_workers": 4,
-    # The slice that parents this one and carries the fleet bound; the drop-in's
-    # header names it. test_claude_fleet_slice_cap.py owns that half.
-    "claude_code_fleet_slice": "user.slice",
-}
+SLICE_UNIT = "login-slice-caps.conf.j2"
+PYTEST_UNIT = "pytest-fanout-cap.conf.j2"
 
 
-def render(path: str, **overrides: object) -> str:
-    text = path if isinstance(path, str) else path.read_text()
-    context = {**CONTEXT, **overrides}
-    return jinja2.Template(text, undefined=jinja2.StrictUndefined).render(context)
+def render(template: str, **overrides: object) -> str:
+    """One of this role's templates rendered at inventory values, `overrides` on top.
+
+    Through `_setup_render` rather than a synthetic context this module keeps of its own: a
+    context written beside the assertions drifts from defaults/main.yml silently, and the
+    assertion then checks a number the host never renders (#3202).
+    """
+    return render_setup_text(ROLE, template, overrides)
 
 
 @pytest.fixture(scope="module")
-def slice_unit() -> str:
-    assert SLICE_UNIT.exists(), (
+def defaults() -> dict[str, object]:
+    """The role defaults the renders above start from, for the expected VALUES.
+
+    Read from defaults rather than written as a literal here: the literal is the drift.
+    """
+    parsed = load_yaml(DEFAULTS)
+    missing = {
+        "claude_code_rc_memory_high",
+        "claude_code_rc_memory_swap_max",
+        "claude_code_rc_pytest_workers",
+    } - set(parsed)
+    assert not missing, (
+        f"defaults/main.yml no longer defines {sorted(missing)} — the login-session caps "
+        "have no owner, and every comparison below would pass over an empty set"
+    )
+    return parsed
+
+
+def test_both_login_cap_templates_still_exist() -> None:
+    """`render` fails on a missing template with its path; this says what losing it MEANS."""
+    assert (TEMPLATES / SLICE_UNIT).is_file(), (
         f"{SLICE_UNIT} is missing — the login-slice drop-in is gone"
     )
-    return SLICE_UNIT.read_text()
-
-
-@pytest.fixture(scope="module")
-def pytest_unit() -> str:
-    assert PYTEST_UNIT.exists(), (
+    assert (TEMPLATES / PYTEST_UNIT).is_file(), (
         f"{PYTEST_UNIT} is missing — the login-session pytest cap is gone"
     )
-    return PYTEST_UNIT.read_text()
 
 
 def test_slice_memory_high_follows_the_same_variable_as_the_unit(
-    slice_unit: str,
+    defaults: dict[str, object],
 ) -> None:
-    """A hardcoded 8G here would pass a presence check while ignoring claude_code_rc_memory_high."""
-    rendered = render(slice_unit)
-    assert "MemoryHigh=8G" in rendered
+    """A hardcoded cap here would pass a presence check while ignoring claude_code_rc_memory_high."""
+    high = defaults["claude_code_rc_memory_high"]
+    rendered = render(SLICE_UNIT)
+    assert f"MemoryHigh={high}" in rendered
 
-    raised = render(slice_unit, claude_code_rc_memory_high="12G")
-    assert "MemoryHigh=12G" in raised and "MemoryHigh=8G" not in raised, (
+    raised = render(SLICE_UNIT, claude_code_rc_memory_high="97G")
+    assert "MemoryHigh=97G" in raised and f"MemoryHigh={high}" not in raised, (
         "MemoryHigh in login-slice-caps.conf.j2 must render from claude_code_rc_memory_high "
         "— the same variable the RC unit uses — or raising one leaves the other stale"
     )
 
 
 def test_slice_memory_swap_max_follows_the_same_variable_as_the_unit(
-    slice_unit: str,
+    defaults: dict[str, object],
 ) -> None:
-    rendered = render(slice_unit)
-    assert "MemorySwapMax=2G" in rendered
+    swap = defaults["claude_code_rc_memory_swap_max"]
+    rendered = render(SLICE_UNIT)
+    assert f"MemorySwapMax={swap}" in rendered
 
-    raised = render(slice_unit, claude_code_rc_memory_swap_max="4G")
-    assert "MemorySwapMax=4G" in raised and "MemorySwapMax=2G" not in raised, (
+    raised = render(SLICE_UNIT, claude_code_rc_memory_swap_max="96G")
+    assert "MemorySwapMax=96G" in raised and f"MemorySwapMax={swap}" not in raised, (
         "MemorySwapMax in login-slice-caps.conf.j2 must render from "
         "claude_code_rc_memory_swap_max, or raising the unit's cap leaves the login "
         "session's cap behind"
     )
 
 
-def test_slice_has_no_memory_max(slice_unit: str) -> None:
+def test_slice_has_no_memory_max() -> None:
     """MemoryMax on a login-session slice would kill every process in every session at once,
     including the SSH connection running the deploy — the same reasoning the RC unit's
     CLAUDE.md gives for never setting it there."""
-    rendered = render(slice_unit)
+    rendered = render(SLICE_UNIT)
     assert not re.search(r"^MemoryMax=", rendered, re.M), (
         "MemoryMax applies to the whole slice: it would OOM-kill every login session for "
         "this user at once, including the one running the deploy"
@@ -120,15 +130,18 @@ def test_slice_drop_in_targets_the_configured_uid() -> None:
     )
 
 
-def test_pytest_cap_follows_the_same_variable_as_the_unit(pytest_unit: str) -> None:
-    """A hardcoded 4 here is the same failure the RC unit's own test guards against."""
-    rendered = render(pytest_unit)
-    assert "PYTEST_XDIST_AUTO_NUM_WORKERS=4" in rendered
+def test_pytest_cap_follows_the_same_variable_as_the_unit(
+    defaults: dict[str, object],
+) -> None:
+    """A hardcoded worker count here is the failure the RC unit's own test guards against."""
+    workers = defaults["claude_code_rc_pytest_workers"]
+    rendered = render(PYTEST_UNIT)
+    assert f"PYTEST_XDIST_AUTO_NUM_WORKERS={workers}" in rendered
 
-    raised = render(pytest_unit, claude_code_rc_pytest_workers=1)
+    raised = render(PYTEST_UNIT, claude_code_rc_pytest_workers=97)
     assert (
-        "PYTEST_XDIST_AUTO_NUM_WORKERS=1" in raised
-        and "PYTEST_XDIST_AUTO_NUM_WORKERS=4" not in raised
+        "PYTEST_XDIST_AUTO_NUM_WORKERS=97" in raised
+        and f"PYTEST_XDIST_AUTO_NUM_WORKERS={workers}" not in raised
     ), (
         "PYTEST_XDIST_AUTO_NUM_WORKERS in pytest-fanout-cap.conf.j2 must render from "
         "claude_code_rc_pytest_workers — the same variable the RC unit's Environment= line "

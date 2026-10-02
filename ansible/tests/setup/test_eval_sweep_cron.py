@@ -17,17 +17,19 @@ What's specific to this cron, and what this file guards:
   disarmed rather than red or silently non-hermetic.
 """
 
-import json
 import re
 
 from _helpers import ANSIBLE
-from _shell_render import rendered_shell_text, shell_template_path
+from _kuma_monitors import entity, tile_is_gated_on
+from _shell_render import render_shell_script, rendered_shell_text
 
 CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 SCRIPT = rendered_shell_text("setup", "initial_setup", "eval-run.sh.j2")
-MONITORS = (
-    ANSIBLE / "roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
-).read_text()
+
+TILE = "homelab-eval-sweep.json"
+TOKEN_VAR = "homelab_eval_push_token"
+# A value no secret holds, so a render that carries it carries THIS variable's value.
+KEY_SENTINEL = "eval-run-render-sentinel"
 
 
 def _cron_job_line(name: str) -> str:
@@ -73,12 +75,20 @@ def _is_gated_on_the_api_key(text: str) -> bool:
 
 
 def test_the_script_is_gated_on_the_api_key():
-    # The first assert's subject is the Jinja reference itself — which var feeds
-    # ANTHROPIC_API_KEY — and a render erases exactly that: an unset secret renders as the same
-    # empty string a wrong var name would too. Read the source for that one line; the gate regex
-    # below has no Jinja in it, so the render serves it fine.
-    source = shell_template_path("setup", "initial_setup", "eval-run.sh.j2").read_text()
-    assert "{{ anthropic_api_key | default('') }}" in source
+    # Which variable feeds ANTHROPIC_API_KEY is asserted by rendering that variable to a
+    # SENTINEL and looking for it. At inventory values an unset secret renders as the same
+    # empty string a wrong variable name would, so only a render at a value this variable alone
+    # holds separates the two (#3202).
+    armed = render_shell_script(
+        "setup",
+        "initial_setup",
+        "eval-run.sh.j2",
+        overrides={"anthropic_api_key": KEY_SENTINEL},
+    )
+    assert KEY_SENTINEL in armed, (
+        "ANTHROPIC_API_KEY does not render from anthropic_api_key, so the sweep would run "
+        "with no key or with somebody else's"
+    )
     assert _is_gated_on_the_api_key(SCRIPT), (
         "the script must skip the sweep when no anthropic_api_key secret exists, or it burns "
         "a Claude Code subscription session non-hermetically every week (evals/README.md "
@@ -92,9 +102,9 @@ def test_the_api_key_gate_scan_rejects_an_ungated_script():
 
 
 def test_the_monitor_is_gated_on_its_token():
-    assert "{% if homelab_eval_push_token | default('') %}" in MONITORS, (
+    assert tile_is_gated_on(TILE, TOKEN_VAR), (
         "an ungated monitor sits red from creation until the secret exists — gate it like "
-        "docs-refresh.json does"
+        f"docs-refresh.json does. The tile renders with {TOKEN_VAR} empty."
     )
 
 
@@ -139,9 +149,6 @@ def test_the_unchanged_arm_scan_rejects_a_laundered_version():
 
 
 def test_push_monitor_does_not_retry():
-    m = re.search(r"^  homelab-eval-sweep\.json: \|\n\s+(\{.*\})$", MONITORS, re.M)
-    assert m, "homelab-eval-sweep.json entity missing from static-monitors.yaml.j2"
-    entity = json.loads(re.sub(r"\{\{[^}]*\}\}", "0", m.group(1)))
-    assert entity["max_retries"] == 0, (
+    assert entity(TILE, TOKEN_VAR)["max_retries"] == 0, (
         "a push monitor's deadline IS its retry; max_retries re-arms it and delays the alert"
     )

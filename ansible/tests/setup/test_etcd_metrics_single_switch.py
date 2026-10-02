@@ -10,24 +10,40 @@ alone is a silent fault rather than a loud one:
   * job without flag  — Prometheus scrapes a loopback-bound port from the pod network, the
     target reads down forever, and Scrape Targets pages for a service that was never armed.
 
-Neither shows up in a render check, because both halves render perfectly well on their own.
-So the guard is that both read the SAME variable name — `k3s_etcd_expose_metrics`, defined
-once in group_vars/all.yml, exactly as `k3s_audit_log_path` is shared by setup/k3s and
-loki-homelab's Alloy shipper for the same two-roles-one-fact reason.
+Neither shows up in a single render, because both halves render perfectly well on their own.
+So the guard is that both halves move with `k3s_etcd_expose_metrics`, defined once in
+group_vars/all.yml, exactly as `k3s_audit_log_path` is shared by setup/k3s and loki-homelab's
+Alloy shipper for the same two-roles-one-fact reason.
+
+The scrape half is read from TWO renders of `prometheus.yaml.j2`, one with the switch armed and
+one with it off, rather than from the template's text. Reading the text meant walking back to
+the nearest `{% if %}` line and matching the variable's name in it — which holds only while the
+gate is spelled that way, and a condition spelled any other way left the guard matching nothing
+(#3202). The two renders say the same thing about the live template and also fail on a gate
+keyed to a different variable.
 
 This deliberately does not assert the variable's VALUE. Off is the shipped default and armed
 is a legitimate operator choice; what must not happen is the two halves diverging.
 """
 
 import re
+
 from _helpers import REPO
+from _k8s_render import render_role_template
 
 _REPO = REPO
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _K3S_DEFAULTS = _REPO / "ansible/roles/setup/k3s/defaults/main.yml"
-_PROM_TEMPLATE = _REPO / "ansible/roles/k8s/observability/templates/prometheus.yaml.j2"
 
 _SWITCH = "k3s_etcd_expose_metrics"
+_JOB = "- job_name: etcd"
+
+
+def _prometheus_config(switch: bool) -> str:
+    """The rendered Prometheus config with the etcd switch set to `switch`."""
+    return render_role_template(
+        "observability", "prometheus.yaml.j2", {_SWITCH: switch}
+    )
 
 
 def test_the_switch_is_defined_once_in_group_vars():
@@ -61,29 +77,20 @@ def test_the_k3s_flag_is_gated_on_the_switch():
 
 
 def test_the_scrape_job_is_gated_on_the_same_switch():
-    """The `etcd` job sits inside an `{% if %}` on the switch, not a different one."""
-    lines = _PROM_TEMPLATE.read_text().splitlines()
+    """The `etcd` job appears when the switch is armed and not when it is off.
 
-    job_line = next(
-        (i for i, ln in enumerate(lines) if ln.strip() == "- job_name: etcd"), None
+    Both directions, because each alone passes on a defect: present-when-armed passes on an
+    unconditional job, and absent-when-off passes on a job that never renders at all.
+    """
+    armed = _prometheus_config(True)
+    assert _JOB in armed, (
+        f"observability declares no `etcd` scrape job even with {_SWITCH} armed, so arming "
+        "the switch opens a control-plane port for nobody"
     )
-    assert job_line is not None, "observability must declare an `etcd` scrape job"
-
-    # Walk back to the nearest enclosing Jinja conditional and require it to be ours.
-    guard = next(
-        (
-            lines[i]
-            for i in range(job_line, -1, -1)
-            if lines[i].lstrip().startswith("{% if ")
-        ),
-        None,
-    )
-    assert guard is not None, (
-        "the `etcd` scrape job must be conditional, not unconditional"
-    )
-    assert _SWITCH in guard, (
-        f"the `etcd` job must be gated on {_SWITCH} so it cannot arm without the "
-        f"port being opened; found: {guard.strip()}"
+    off = _prometheus_config(False)
+    assert _JOB not in off, (
+        f"the `etcd` job renders with {_SWITCH} off, so Prometheus scrapes a loopback-bound "
+        "port from the pod network and Scrape Targets pages for a service never armed"
     )
 
 
@@ -94,8 +101,8 @@ def test_the_scrape_target_is_the_metrics_port_not_the_client_port():
     associated with, it IS listening, and the scrape fails with a TLS error rather than a
     connection refused — which reads as a cert problem to fix rather than a wrong target.
     """
-    lines = _PROM_TEMPLATE.read_text().splitlines()
-    job_line = next(i for i, ln in enumerate(lines) if ln.strip() == "- job_name: etcd")
+    lines = _prometheus_config(True).splitlines()
+    job_line = next(i for i, ln in enumerate(lines) if ln.strip() == _JOB)
     block = "\n".join(lines[job_line : job_line + 8])
 
     assert ":2381'" in block, "the etcd job must scrape the 2381 metrics port"

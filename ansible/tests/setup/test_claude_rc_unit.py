@@ -36,24 +36,30 @@ Run: uv run pytest ansible/tests/setup/test_claude_rc_unit.py
 import re
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, load_yaml
+from _setup_render import render_setup_text
 
-TEMPLATES = ANSIBLE / "roles" / "setup" / "claude_code" / "templates"
-DEFAULTS = ANSIBLE / "roles" / "setup" / "claude_code" / "defaults" / "main.yml"
-UNIT = TEMPLATES / "claude-rc.service.j2"
+ROLE = "claude_code"
+ROLE_DIR = ANSIBLE / "roles" / "setup" / ROLE
+TEMPLATES = ROLE_DIR / "templates"
+DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
+UNIT = "claude-rc.service.j2"
 
 
 @pytest.fixture(scope="module")
 def unit() -> str:
-    assert UNIT.exists(), f"{UNIT} is missing — the Remote Control host unit is gone"
-    return UNIT.read_text()
+    assert (TEMPLATES / UNIT).is_file(), (
+        f"{UNIT} is missing — the Remote Control host unit is gone"
+    )
+    return render(UNIT)
 
 
 def directive(unit_text: str, key: str) -> list[str]:
     """Every value assigned to `key`, with systemd's backslash continuations folded in.
 
-    Read off the template rather than a rendered unit: the point is that the flags survive
-    edits to the template, and the Jinja vars are all plain scalars.
+    Read off the RENDERED unit. The flags below are plain literals either way, but a value
+    that moves into a role default leaves a source-text assertion matching `{{ ... }}`, and a
+    pattern that matches nothing passes (#3202).
     """
     folded = re.sub(r"\\\n\s*", " ", unit_text)
     return [
@@ -100,10 +106,14 @@ def test_home_is_set_to_the_real_user(unit: str) -> None:
     assert homes, (
         "the unit must set Environment=HOME= or Claude Code reads the wrong home"
     )
-    # Last assignment wins, as with PATH above.
-    assert "{{ sys_user }}" in homes[-1], (
-        f"HOME must be the sys_user's home; got {homes[-1]}"
-    )
+    # Last assignment wins, as with PATH above. The expected home follows the account the
+    # render resolves rather than a literal: a hardcoded /home/ubuntu would pass on a host
+    # whose sys_user is someone else.
+    moved = render(UNIT, sys_user="someone-else")
+    assert (
+        "/home/someone-else"
+        in [v for v in directive(moved, "Environment") if v.startswith("HOME=")][-1]
+    ), f"HOME must be the sys_user's home; got {homes[-1]}"
 
 
 def test_no_memory_max(unit: str) -> None:
@@ -127,21 +137,23 @@ def test_pytest_fanout_is_capped(unit: str) -> None:
     assert re.search(
         r"^claude_code_rc_pytest_workers: *\d+", DEFAULTS.read_text(), re.M
     ), "claude_code_rc_pytest_workers is gone from defaults — the fan-out cap is unset"
-    assert "Environment=PYTEST_XDIST_AUTO_NUM_WORKERS=4" in render(unit), (
+    workers = load_yaml(DEFAULTS)["claude_code_rc_pytest_workers"]
+    assert f"Environment=PYTEST_XDIST_AUTO_NUM_WORKERS={workers}" in unit, (
         "the unit must export PYTEST_XDIST_AUTO_NUM_WORKERS; without it a session's "
         "`-n auto` resolves to one worker per core and concurrent runs multiply it"
     )
 
 
-def test_pytest_fanout_cap_follows_the_variable(unit: str) -> None:
-    """The rejecting half: a hardcoded 4 would pass the test above and ignore the default."""
-    rendered = render(unit, claude_code_rc_pytest_workers=1)
-    assert "Environment=PYTEST_XDIST_AUTO_NUM_WORKERS=1" in rendered, (
+def test_pytest_fanout_cap_follows_the_variable() -> None:
+    """The rejecting half: a hardcoded count would pass the test above and ignore the default."""
+    workers = load_yaml(DEFAULTS)["claude_code_rc_pytest_workers"]
+    rendered = render(UNIT, claude_code_rc_pytest_workers=97)
+    assert "Environment=PYTEST_XDIST_AUTO_NUM_WORKERS=97" in rendered, (
         "PYTEST_XDIST_AUTO_NUM_WORKERS must render from claude_code_rc_pytest_workers"
     )
-    assert "PYTEST_XDIST_AUTO_NUM_WORKERS=4" not in rendered, (
-        "PYTEST_XDIST_AUTO_NUM_WORKERS is hardcoded to 4 — changing the default would "
-        "silently do nothing"
+    assert f"PYTEST_XDIST_AUTO_NUM_WORKERS={workers}" not in rendered, (
+        "PYTEST_XDIST_AUTO_NUM_WORKERS is hardcoded — changing the default would silently "
+        "do nothing"
     )
 
 
@@ -156,9 +168,10 @@ def test_memory_high_follows_the_variable(unit: str) -> None:
     assert re.search(
         r"^claude_code_rc_memory_high: *\S+", DEFAULTS.read_text(), re.M
     ), "claude_code_rc_memory_high is gone from defaults — MemoryHigh has no owner"
-    assert "MemoryHigh=8G" in render(unit), "MemoryHigh must render from defaults' 8G"
-    rendered = render(unit, claude_code_rc_memory_high="12G")
-    assert "MemoryHigh=12G" in rendered and "MemoryHigh=8G" not in rendered, (
+    high = load_yaml(DEFAULTS)["claude_code_rc_memory_high"]
+    assert f"MemoryHigh={high}" in unit, f"MemoryHigh must render defaults' {high}"
+    rendered = render(UNIT, claude_code_rc_memory_high="97G")
+    assert "MemoryHigh=97G" in rendered and f"MemoryHigh={high}" not in rendered, (
         "MemoryHigh is hardcoded — changing claude_code_rc_memory_high would do nothing"
     )
 
@@ -176,17 +189,20 @@ def test_memory_swap_max_bounds_the_cgroups_swap(unit: str) -> None:
     ), (
         "claude_code_rc_memory_swap_max is gone from defaults — MemorySwapMax has no owner"
     )
-    assert "MemorySwapMax=2G" in render(unit), (
-        "MemorySwapMax must render from defaults' 2G"
+    swap = load_yaml(DEFAULTS)["claude_code_rc_memory_swap_max"]
+    assert f"MemorySwapMax={swap}" in unit, (
+        f"MemorySwapMax must render defaults' {swap}"
     )
-    rendered = render(unit, claude_code_rc_memory_swap_max="4G")
-    assert "MemorySwapMax=4G" in rendered and "MemorySwapMax=2G" not in rendered, (
+    rendered = render(UNIT, claude_code_rc_memory_swap_max="96G")
+    assert (
+        "MemorySwapMax=96G" in rendered and f"MemorySwapMax={swap}" not in rendered
+    ), (
         "MemorySwapMax is hardcoded — changing claude_code_rc_memory_swap_max would do nothing"
     )
 
 
 def test_alert_unit_is_the_onfailure_target(unit: str) -> None:
-    assert (TEMPLATES / "claude-rc-alert.service.j2").exists(), (
+    assert (TEMPLATES / "claude-rc-alert.service.j2").is_file(), (
         "the alert unit is missing"
     )
     assert "OnFailure=claude-rc-alert.service" in unit, (
@@ -198,33 +214,14 @@ REAP_ENV = "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP"
 REAP_VAR = "claude_code_rc_disable_bg_shell_pressure_reap"
 
 
-def render(unit_text: str, **overrides: object) -> str:
-    """Render the unit template with plausible scalars, so a Jinja guard is really exercised.
+def render(template: str, **overrides: object) -> str:
+    """One of this role's templates rendered at inventory values, `overrides` on top.
 
-    The other tests here read the raw text, which is enough for a line that is always
-    present. It is not enough for a line behind `{% if %}`: raw text cannot tell an armed
-    toggle from a dead one.
+    Every assertion here goes through this rather than the template's text: raw text cannot
+    tell an armed `{% if %}` toggle from a dead one, and it matches `{{ ... }}` for any value
+    that has moved into a role default (#3202).
     """
-    import jinja2
-
-    context: dict[str, object] = {
-        "sys_user": "ubuntu",
-        "claude_code_rc_spawn_mode": "worktree",
-        "claude_code_rc_workdir": "/home/ubuntu/server",
-        "claude_code_rc_permission_mode": "auto",
-        "claude_code_rc_capacity": 10,
-        "claude_code_rc_pytest_workers": 4,
-        "claude_code_rc_memory_high": "8G",
-        "claude_code_rc_memory_swap_max": "2G",
-        # The fleet's shared parent — the unit's Slice= line renders from these.
-        # test_claude_fleet_slice_cap.py owns what they must produce.
-        "claude_code_login_uid": 1000,
-        "claude_code_fleet_caps_enabled": True,
-        "claude_code_fleet_slice": "user.slice",
-        REAP_VAR: True,
-    }
-    context.update(overrides)
-    return jinja2.Template(unit_text, undefined=jinja2.StrictUndefined).render(context)
+    return render_setup_text(ROLE, template, overrides)
 
 
 def test_bg_shell_pressure_reap_is_disabled_by_default(unit: str) -> None:
@@ -238,28 +235,29 @@ def test_bg_shell_pressure_reap_is_disabled_by_default(unit: str) -> None:
         f"{REAP_VAR} must default to true in the role defaults, or an unattended landing "
         "can be killed after its auto-merge is armed and never followed through"
     )
-    assert f"Environment={REAP_ENV}=1" in render(unit), (
+    assert f"Environment={REAP_ENV}=1" in unit, (
         f"the unit must set Environment={REAP_ENV}=1 when {REAP_VAR} is true"
     )
 
 
-def test_the_reap_toggle_gives_the_reaper_back(unit: str) -> None:
+def test_the_reap_toggle_gives_the_reaper_back() -> None:
     """The rejecting half: setting the var false must actually remove the line.
 
     A guard keyed on a variable nothing sets renders the same both ways, which reads exactly
     like a working toggle from the passing side alone.
     """
-    assert REAP_ENV not in render(unit, **{REAP_VAR: False}), (
+    assert REAP_ENV not in render(UNIT, **{REAP_VAR: False}), (
         f"{REAP_VAR}: false must drop the Environment line; the reaper is upstream's "
         "protection against a runaway background shell and has to be recoverable"
     )
 
 
-def test_restart_timer_does_not_start_a_stopped_host(unit: str) -> None:
+def test_restart_timer_does_not_start_a_stopped_host() -> None:
     """try-restart, not restart: the weekly update restart must never start a stopped host."""
-    restart_unit = TEMPLATES / "claude-rc-restart.service.j2"
-    assert restart_unit.exists(), "the weekly restart unit is missing"
-    exec_start = directive(restart_unit.read_text(), "ExecStart")[0]
+    assert (TEMPLATES / "claude-rc-restart.service.j2").is_file(), (
+        "the weekly restart unit is missing"
+    )
+    exec_start = directive(render("claude-rc-restart.service.j2"), "ExecStart")[0]
     assert "try-restart" in exec_start, (
         "the restart unit must use `systemctl try-restart`; plain `restart` would start a "
         f"host that claude_code_rc_enabled deliberately keeps stopped. Got: {exec_start}"

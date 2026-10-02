@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """daniel-server is a Claude session host with its own cap numbers.
 
-The caps are per-host overrides of the claude_code role's defaults/main.yml. The render is the
-same jinja2.Template call the sibling
-test_claude_login_slice_caps.py makes, with the host's vars laid over the defaults.
+The caps are per-host overrides of the claude_code role's defaults/main.yml. The render goes
+through `_setup_render`, the same harness the sibling test_claude_login_slice_caps.py uses,
+with the host's own vars laid over the role's defaults as `overrides`.
 Run: uv run pytest ansible/tests/setup/test_claude_code_on_daniel_server.py
 """
 
-import jinja2
-
 from _helpers import ANSIBLE, HOST_VARS, load_tasks, load_yaml, task_named
+from _setup_render import render_setup_text
 from test_claude_fleet_slice_cap import SUB_BOUNDS, to_bytes
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
@@ -31,9 +30,12 @@ def _violating_planes(merged_vars: dict) -> list[str]:
 
 
 def _render(template: str, host_vars: dict) -> str:
-    ctx = {"sys_user": "ubuntu", **DEFAULTS, **host_vars}
-    text = (ROLE / "templates" / template).read_text()
-    return jinja2.Template(text, undefined=jinja2.StrictUndefined).render(ctx)
+    """One claude_code template rendered with `host_vars` laid over the role's defaults.
+
+    The host's vars arrive as render OVERRIDES rather than as a context assembled here, so the
+    text asserted on below is the text `validate/setup_templates.py` renders (#3202).
+    """
+    return render_setup_text("claude_code", template, host_vars)
 
 
 def test_daniel_server_opts_in_without_the_remote_control_unit():

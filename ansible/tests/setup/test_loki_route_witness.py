@@ -23,6 +23,8 @@ import os
 
 from lib.proc_testing import fake_bin, path_with, run, write_exec
 from _helpers import ANSIBLE
+from _kuma_monitors import entity, tile_is_gated_on
+from _setup_render import render_setup_text
 from _shell_render import render_shell_script, rendered_shell_text
 from lib import yaml_fast
 
@@ -34,17 +36,21 @@ CRONS = (
 ).read_text()
 CRON_TASKS = yaml_fast.safe_load(CRONS)
 WITNESS = ("setup", "initial_setup", "loki-read-route-health.sh.j2")
-PUSH_ENV = (
-    ANSIBLE
-    / "roles"
-    / "setup"
-    / "initial_setup"
-    / "templates"
-    / "loki-route-kuma-push.env.j2"
-).read_text()
-MONITORS = (
-    ANSIBLE / "roles" / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
-).read_text()
+PUSH_ENV = "loki-route-kuma-push.env.j2"
+
+# The two tiles and the variable each is gated on, one per witnessing host.
+TILES = {
+    "daniel-box": ("loki-read-route-daniel-box.json", "loki_route_witness_push_token"),
+    "daniel-server": (
+        "loki-read-route-daniel-server.json",
+        "loki_route_witness_daniel_server_push_token",
+    ),
+}
+# Two values no secret holds, so a render carrying one carries THAT host's value.
+SENTINELS = {
+    "loki_route_witness_push_token": "loki-witness-box-sentinel",
+    "loki_route_witness_daniel_server_push_token": "loki-witness-server-sentinel",
+}
 
 CRON_NAME = "Loki read-route witness"
 # The monitor interval declared for both tiles, and the timer period it has to cover.
@@ -83,22 +89,45 @@ def test_both_cluster_nodes_witness_and_nothing_else_does():
 
 
 def test_each_host_pushes_its_own_token():
-    """A shared token lets one host's `up` cover the other's dead route."""
-    assert "loki_route_witness_daniel_server_push_token" in PUSH_ENV
-    assert "loki_route_witness_push_token" in PUSH_ENV
-    assert "inventory_hostname == 'daniel-server'" in PUSH_ENV, (
-        "the env template must select the token per host, or both nodes push the same monitor"
+    """A shared token lets one host's `up` cover the other's dead route.
+
+    Asserted by rendering the env file once per host with a DIFFERENT sentinel behind each
+    variable: the per-host SELECTION is the claim, and a render at inventory values cannot show
+    it because both resolve to the same empty string (#3202).
+    """
+    rendered = {
+        host: render_setup_text(
+            "initial_setup", PUSH_ENV, {"inventory_hostname": host, **SENTINELS}
+        )
+        for host in TILES
+    }
+    box, server = (SENTINELS[v] for _, v in TILES.values())
+    assert box in rendered["daniel-box"] and server not in rendered["daniel-box"], (
+        "daniel-box must carry its own value; it renders "
+        f"{rendered['daniel-box'].splitlines()[-1]!r}"
+    )
+    assert (
+        server in rendered["daniel-server"] and box not in rendered["daniel-server"]
+    ), (
+        "the env template must select per host, or both nodes push the same monitor; "
+        f"daniel-server renders {rendered['daniel-server'].splitlines()[-1]!r}"
     )
 
 
 def test_both_tiles_are_declared_and_gated_on_their_own_token():
-    """An ungated tile sits red from creation until its secret exists."""
-    assert '"Loki Read Route (daniel-box)"' in MONITORS
-    assert '"Loki Read Route (daniel-server)"' in MONITORS
-    assert "{% if loki_route_witness_push_token | default('') %}" in MONITORS
-    assert (
-        "{% if loki_route_witness_daniel_server_push_token | default('') %}" in MONITORS
-    )
+    """An ungated tile sits red from creation until its secret exists.
+
+    Read off the render: `entity` fails when the tile is absent with its gate armed, and
+    `tile_is_gated_on` fails when the tile is there with the gate open. Together they pin each
+    tile to THAT variable, which a substring match on the `{% if %}` line cannot do.
+    """
+    for host, (tile, gate_var) in TILES.items():
+        assert entity(tile, gate_var)["name"] == f"Loki Read Route ({host})", (
+            f"{tile} must be the tile named for {host}"
+        )
+        assert tile_is_gated_on(tile, gate_var), (
+            f"{tile} renders with {gate_var} empty, so it sits red from creation"
+        )
 
 
 def test_the_push_deadline_exceeds_the_timer_period():
@@ -108,7 +137,11 @@ def test_the_push_deadline_exceeds_the_timer_period():
         "this test reads the timer as hourly; give it a period if that changes"
     )
     assert MONITOR_INTERVAL_S >= 2 * HOURLY_S
-    assert f'"interval": {MONITOR_INTERVAL_S}' in MONITORS
+    for tile, gate_var in TILES.values():
+        assert entity(tile, gate_var)["interval"] == MONITOR_INTERVAL_S, (
+            f"{tile}'s rendered interval is not {MONITOR_INTERVAL_S}s, so the deadline this "
+            "test compares against the timer period is not the one Kuma gets"
+        )
 
 
 def test_a_host_dropped_from_the_list_loses_the_timer_and_the_cron():

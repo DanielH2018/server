@@ -112,3 +112,26 @@ def rendered_setup_text(role: str, template: str) -> str:
         f"setup/{role}/{template} is not among the rendered setup templates: "
         f"{sorted((n, t) for n, t, _ in rendered_setup_texts())}"
     )
+
+
+def render_setup_text(role: str, template: str, overrides: dict | None = None) -> str:
+    """One setup template rendered as text, with `overrides` laid over its role context.
+
+    The setup-plane counterpart of `_shell_render.render_shell_script`, and the form a guard
+    needs to ask "does this template FOLLOW its variable": render once at inventory values,
+    render again with the variable moved, and compare. `rendered_setup_text` answers the
+    inventory-values half from the cache; this one renders a single template rather than the
+    whole plane, so a guard with several overrides does not pay 90-odd renders per override.
+
+    Fails naming the template when the role does not ship it, so a renamed template reads as a
+    failure rather than as a guard over nothing.
+    """
+    role_dir = SETUP / role
+    path = role_dir / "templates" / template
+    assert path.is_file(), f"no such setup template: {path}"
+    rendered, err = render_or_error(
+        template_env(path.parent), path.name, role_context(role_dir, overrides)
+    )
+    if rendered is None:
+        raise AssertionError(f"setup/{role}/{template}: {err}")
+    return rendered

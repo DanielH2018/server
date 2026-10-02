@@ -13,11 +13,19 @@ Two things have to agree and cannot see each other: the template's `{% if %}` an
 task's job list. These tests pin both to the same variable, and the last one pins them to each
 other, because a manifest that stops rendering the Job while the wait still names it turns a
 correct deploy into a NotFound failure.
+
+The renders go through `_k8s_render.render_role_template`, the shared harness, so the context
+under the gate is the role's real one rather than a four-key stand-in written here (#3202). One
+read of the template's SOURCE survives, and `TEMPLATE_SOURCE_READERS` in
+`ansible/tests/repo/test_guard_tests_read_renders_not_templates.py` carries its reason: a render
+always has `k3s_agent_node_ips` defined, so no render can show what happens on a host that does
+not define it.
 """
 
 from lib import yaml_fast
 
-from _helpers import ROLES, jinja_env, task_named
+from _helpers import ROLES, task_named
+from _k8s_render import render_role_template
 
 REGISTRY = ROLES / "k8s" / "registry"
 PULL_TEMPLATE = REGISTRY / "templates" / "selftest-pull-job.yaml.j2"
@@ -26,18 +34,11 @@ REGISTRY_TASKS = REGISTRY / "tasks" / "main.yml"
 AGENT_JOB = "registry-selftest-pull-agent"
 LOCAL_JOB = "registry-selftest-pull"
 AGENT_VAR = "k3s_agent_node_ips"
-
-_BASE_CONTEXT = {
-    "k8s_namespace": "homelab",
-    "k8s_registry_node": "daniel-box",
-    "k8s_registry_pull_host": "registry.local:5000",
-    "registry_k8s_probe_repo": "selftest",
-}
+TEMPLATE = "selftest-pull-job.yaml.j2"
 
 
 def _job_names(agent_node_ips: list[str]) -> set[str]:
-    context = {**_BASE_CONTEXT, AGENT_VAR: agent_node_ips}
-    rendered = jinja_env().from_string(PULL_TEMPLATE.read_text()).render(context)
+    rendered = render_role_template("registry", TEMPLATE, {AGENT_VAR: agent_node_ips})
     docs = [d for d in yaml_fast.safe_load_all(rendered) if d]
     assert docs, (
         f"{PULL_TEMPLATE} rendered no YAML documents with {AGENT_VAR}={agent_node_ips!r}. "
@@ -71,15 +72,26 @@ def test_an_undefined_agent_list_is_treated_as_no_agents():
 
     The registry role is not the k3s role, so it does not inherit that default. Rendering for a
     host that never declares the variable must fail closed to "no agents" rather than raising.
+
+    This is the one claim here a render cannot make: every render context defines the variable,
+    so no render shows the undefined case. The gate's `| default([])` filter is read from the
+    template's source instead, which is why this module is listed in TEMPLATE_SOURCE_READERS.
     """
-    context = dict(_BASE_CONTEXT)
-    rendered = jinja_env().from_string(PULL_TEMPLATE.read_text()).render(context)
-    names = {d["metadata"]["name"] for d in yaml_fast.safe_load_all(rendered) if d}
-    assert names == {LOCAL_JOB}, (
-        f"{PULL_TEMPLATE} rendered {sorted(names)} with {AGENT_VAR} undefined. The gate needs "
-        f"`| default([])`; without it this is an undefined-variable error on every host whose "
-        f"inventory does not name the variable."
+    gates = [
+        line.strip()
+        for line in PULL_TEMPLATE.read_text().splitlines()
+        if AGENT_VAR in line and line.lstrip().startswith("{%")
+    ]
+    assert gates, (
+        f"no Jinja gate in {PULL_TEMPLATE} reads {AGENT_VAR}; the agent Job is unconditional "
+        f"and a single-node cluster waits out its full 180s timeout"
     )
+    for gate in gates:
+        assert "default(" in gate, (
+            f"the gate {gate!r} needs `| default([])`; without it this is an "
+            f"undefined-variable error on every host whose inventory does not name "
+            f"{AGENT_VAR}"
+        )
 
 
 def test_the_wait_task_and_the_template_gate_on_the_same_thing():

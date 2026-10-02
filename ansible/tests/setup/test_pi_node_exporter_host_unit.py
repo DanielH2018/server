@@ -14,8 +14,9 @@ import re
 
 from lib import yaml_fast
 from _helpers import K8S_ROLES, SETUP_ROLES
+from _setup_render import rendered_setup_text
 
-UNIT = SETUP_ROLES / "optimize_pi" / "templates" / "node_exporter.service.j2"
+UNIT = "node_exporter.service.j2"
 DEFAULTS = SETUP_ROLES / "optimize_pi" / "defaults" / "main.yml"
 # The container's collector flags, minus its `--path.*` remaps, as `collector_flags` parsed them
 # from the retired compose template. #2385 deleted that template; read it with
@@ -47,7 +48,10 @@ def collector_flags(text: str, drop: re.Pattern[str]) -> frozenset[str]:
 
 
 def test_the_unit_runs_the_collector_set_the_container_ran() -> None:
-    unit_flags = collector_flags(UNIT.read_text(), UNIT_ONLY)
+    # The RENDERED unit: the listen address interpolates the Pi's LAN IP, so a source read
+    # already had to be told to drop a `--web.listen-address={{ ... }}` rather than an
+    # address, and any collector flag that moves into a role default goes the same way (#3202).
+    unit_flags = collector_flags(rendered_setup_text("optimize_pi", UNIT), UNIT_ONLY)
     assert unit_flags == CONTAINER_FLAGS, (
         f"unit-only: {sorted(unit_flags - CONTAINER_FLAGS)}; "
         f"container-only: {sorted(CONTAINER_FLAGS - unit_flags)}"

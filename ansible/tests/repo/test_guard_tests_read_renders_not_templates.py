@@ -15,8 +15,9 @@ the raw-byte hash the render stamp compares, and the autodeploy derivation's sou
 for synthetic role trees no render reaches. `k8s/` joined with two (#3203): whether a
 template CALLS the shared *arr macro or copies its body, and whether two roles ship
 byte-identical templates — both render differently from what they test. `staging/` joined
-with none (#3205). The one directory still outside it, `setup/`, holds ten or more readers,
-so adding it is a PR of its own rather than a wider glob here. Entries are keyed
+with none (#3205). `setup/` joined with two, each keyed on something no render carries: a
+Jinja FILTER, and the behaviour of a variable no render leaves undefined (#3202). Every
+test directory is now scanned. Entries are keyed
 `<directory>/<module>.py`, because a basename alone would let a module in one directory
 inherit another's exemption.
 
@@ -57,6 +58,7 @@ SCANNED = (
     TESTS / "deploy",
     TESTS / "k8s",
     TESTS / "staging",
+    TESTS / "setup",
 )
 
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
@@ -110,6 +112,16 @@ TEMPLATE_SOURCE_READERS = {
         "each renders with its own `container_item`, so two identical sources render "
         "differently and the duplication is visible only in the bytes"
     ),
+    "setup/test_registry_selftest_single_node.py": (
+        "whether the agent-Job gate carries `| default([])`, which decides what happens on a "
+        "host whose inventory does not define `k3s_agent_node_ips`. Every render context "
+        "defines it, so no render can show the undefined case the filter covers"
+    ),
+    "setup/test_nut_host_secondary.py": (
+        "whether the two push-token expressions carry `| mandatory`, which decides whether an "
+        "undefined token fails the play or renders empty. A render resolves every secret to "
+        "`STUB`, so no render distinguishes `mandatory` from `default('')`"
+    ),
 }
 
 # Modules the census must reach. An empty or partial scan means the walk stopped matching
@@ -147,6 +159,16 @@ KNOWN_MEMBERS = frozenset(
         "staging/test_staging_egress_fence.py",
         "staging/test_staging_network.py",
         "staging/test_staging_tick_arm_retired.py",
+        "setup/_kuma_monitors.py",
+        "setup/test_claude_code_on_daniel_server.py",
+        "setup/test_claude_memory_sync.py",
+        "setup/test_claude_rc_unit.py",
+        "setup/test_coredns_metrics_binds_wildcard.py",
+        "setup/test_etcd_metrics_single_switch.py",
+        "setup/test_k3s_control_plane_hardening.py",
+        "setup/test_loki_route_witness.py",
+        "setup/test_nut_host_secondary.py",
+        "setup/test_registry_selftest_single_node.py",
     }
 )
 
@@ -380,6 +402,31 @@ def test_a_new_module_reading_a_role_template_is_named_as_an_offender():
         }
     )
     assert list(found) == ["services/test_new_guard.py"], found
+
+
+def test_a_new_setup_guard_reading_a_role_template_is_named_as_an_offender():
+    """The directory added in #3202, and the reason the keys carry one.
+
+    `setup/test_nut_host_secondary.py` is exempt, so a basename-keyed exemption would wave
+    through a `services/` module of the same name. Both halves are modules that are not on
+    disk, which is what makes this a proof the gate can fail.
+    """
+    source = (
+        'T = SETUP_ROLES / "claude_code" / "templates" / "claude-rc.service.j2"\n'
+        'assert "Slice=" in T.read_text()\n'
+    )
+    found = offenders(
+        {
+            "setup/test_new_guard.py": source,
+            "services/test_nut_host_secondary.py": source,
+            "setup/test_already_clean.py": "from _setup_render import rendered_setup_text\n"
+            'assert "Slice=" in rendered_setup_text("claude_code", "claude-rc.service.j2")\n',
+        }
+    )
+    assert sorted(found) == [
+        "services/test_nut_host_secondary.py",
+        "setup/test_new_guard.py",
+    ], found
 
 
 def test_a_new_longhorn_guard_reading_a_role_template_is_named_as_an_offender():

@@ -17,6 +17,7 @@ and the monitor cannot say WHY the target is down. This test can.
 
 from lib import yaml_fast
 from _helpers import ROLES as _ROLES
+from _k8s_render import rendered_k8s_text
 
 _GROUP_VARS = _ROLES.parent / "inventory/group_vars/all.yml"
 _K3S_DEFAULTS = _ROLES / "setup/k3s/defaults/main.yml"
@@ -55,9 +56,17 @@ def test_mismatched_ports_are_flagged() -> None:
 
 
 def test_the_scrape_job_reads_the_group_var_rather_than_a_literal() -> None:
-    """A literal port in the template would pass the comparison above while ignoring it."""
-    template = (_ROLES / "k8s/observability/templates/prometheus.yaml.j2").read_text()
-    assert "{{ k8s_node_client_ip }}:{{ k8s_node_dns_metrics_port }}" in template, (
-        "the coredns-host job no longer interpolates both group vars; this guard would "
+    """A literal port in the template would pass the comparison above while ignoring it.
+
+    Asserted on the RENDERED scrape config, so the target the guard compares against is the
+    one Prometheus is handed. A source-text assertion that the template spells
+    `{{ k8s_node_dns_metrics_port }}` matches nothing the moment the expression is spelled any
+    other way, and a pattern that matches nothing passes (#3202).
+    """
+    group_vars = yaml_fast.safe_load(_GROUP_VARS.read_text())
+    target = f"{group_vars['k8s_node_client_ip']}:{group_vars[_SCRAPER_VAR]}"
+    rendered = rendered_k8s_text("observability", "prometheus.yaml.j2")
+    assert target in rendered, (
+        f"the coredns-host job's target does not render as {target}, so this guard would "
         "compare two values the rendered config does not use"
     )

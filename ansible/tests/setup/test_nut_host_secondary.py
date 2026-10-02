@@ -24,13 +24,17 @@ Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 
 from lib import yaml_fast
 from _helpers import ANSIBLE
+import json
+import re
+
+from _kuma_monitors import entity, monitors_text, tile_is_gated_on
+from _setup_render import render_setup_text
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
 
 ROLE = ANSIBLE / "roles" / "setup" / "nut_host"
 TASKS = (ROLE / "tasks" / "main.yml").read_text()
-UPSMON = (ROLE / "templates" / "host-upsmon.conf.j2").read_text()
 GROUP_VARS = (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
 SETUP = (ANSIBLE / "initial_setup.yml").read_text()
 HOST_VARS = ANSIBLE / "inventory" / "host_vars"
@@ -83,10 +87,20 @@ def test_the_usb_half_is_confined_to_the_ups_host():
 
 
 def test_the_endpoint_is_templated_not_hardcoded_to_loopback():
-    """A cross-node secondary cannot use the pod's loopback hostPort."""
-    assert "@{{ nut_host_upsd_host }}" in UPSMON, (
-        "the MONITOR endpoint must come from a variable: 127.0.0.1 is correct only on the "
-        "host whose node runs the nut pod"
+    """A cross-node secondary cannot use the pod's loopback hostPort.
+
+    Asserted by rendering the conf at an address the inventory does not hold. Matching
+    `@{{ nut_host_upsd_host }}` in the source instead holds only while the endpoint is spelled
+    that way, and a spelling the pattern misses leaves the guard matching nothing (#3202).
+    """
+    rendered = render_setup_text(
+        "nut_host", "host-upsmon.conf.j2", {"nut_host_upsd_host": "198.51.100.7"}
+    )
+    monitor = [ln for ln in rendered.splitlines() if ln.startswith("MONITOR ")]
+    assert len(monitor) == 1, f"expected one MONITOR line, got {monitor}"
+    assert "@198.51.100.7 " in monitor[0], (
+        "the MONITOR endpoint must come from nut_host_upsd_host: 127.0.0.1 is correct only on "
+        f"the host whose node runs the nut pod. Rendered: {monitor[0].split()[1]!r}"
     )
 
 
@@ -206,10 +220,21 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
 
 WATCHDOG = rendered_shell_text("setup", "nut_host", "ups-secondary-health.sh.j2")
 WATCHDOG_ENV = (ROLE / "templates" / "kuma-push.env.j2").read_text()
-STATIC_MONITORS = (
-    ANSIBLE / "roles" / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
-).read_text()
 NUT_HOST_DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+
+# The two tiles and the variable each is gated on, one per watching host.
+TILES = {
+    "daniel-box": ("ups-secondary.json", "ups_secondary_push_token"),
+    "daniel-server": (
+        "ups-secondary-daniel-server.json",
+        "ups_secondary_daniel_server_push_token",
+    ),
+}
+# Two values no secret holds, so a render carrying one carries THAT host's value.
+SENTINELS = {
+    "ups_secondary_push_token": "ups-secondary-box-sentinel",
+    "ups_secondary_daniel_server_push_token": "ups-secondary-server-sentinel",
+}
 
 # A MONITOR line in the shape host-upsmon.conf.j2 renders. The fifth field is a fake stand-in
 # for the credential that sits there in the real file; it exists only to be searched for in the
@@ -295,14 +320,31 @@ def test_the_watchdog_renders_its_own_env_file():
 
 
 def test_the_env_file_selects_the_token_by_host():
-    """daniel-box and ups_host (daniel-server) must render DIFFERENT tokens.
+    """daniel-box and ups_host (daniel-server) must render DIFFERENT values.
 
     Two hosts pushing the same token would let either host's `up` satisfy Kuma's push
-    deadline, masking the other's `down` — the literal-token guard above would
-    pass vacuously for this leg without this check.
+    deadline, masking the other's `down`. Read from two renders with a different sentinel
+    behind each variable: the per-host SELECTION is the claim, and at inventory values both
+    resolve to the same STUB, which cannot show it (#3202).
     """
-    assert "{% if inventory_hostname == ups_host %}" in WATCHDOG_ENV
-    assert "ups_secondary_daniel_server_push_token" in WATCHDOG_ENV
+    rendered = {
+        host: render_setup_text(
+            "nut_host",
+            "kuma-push.env.j2",
+            {"inventory_hostname": host, "ups_host": "daniel-server", **SENTINELS},
+        )
+        for host in TILES
+    }
+    box, server = (SENTINELS[v] for _, v in TILES.values())
+    assert box in rendered["daniel-box"] and server not in rendered["daniel-box"], (
+        f"daniel-box renders {rendered['daniel-box'].splitlines()[-1]!r}"
+    )
+    assert (
+        server in rendered["daniel-server"] and box not in rendered["daniel-server"]
+    ), (
+        "the env template must select by host, or both hosts push one monitor; daniel-server "
+        f"renders {rendered['daniel-server'].splitlines()[-1]!r}"
+    )
 
 
 def test_the_env_file_token_selection_is_mandatory():
@@ -317,12 +359,19 @@ def test_the_env_file_token_selection_is_mandatory():
 
 
 def test_the_tile_is_gated_on_its_token():
-    """An ungated tile sits red from creation until the secret exists."""
-    assert "{% if ups_secondary_push_token | default('') %}" in STATIC_MONITORS
-    assert (
-        "{% if ups_secondary_daniel_server_push_token | default('') %}"
-        in STATIC_MONITORS
-    )
+    """An ungated tile sits red from creation until the secret exists.
+
+    `entity` fails when the tile is absent with its gate armed, `tile_is_gated_on` when it is
+    present with the gate open. Together they pin each tile to THAT variable, which a substring
+    match on the `{% if %}` line cannot do.
+    """
+    for host, (tile, gate_var) in TILES.items():
+        assert entity(tile, gate_var)["name"] == f"UPS Secondary ({host})", (
+            f"{tile} must be the tile named for {host}"
+        )
+        assert tile_is_gated_on(tile, gate_var), (
+            f"{tile} renders with {gate_var} empty, so it sits red from creation"
+        )
 
 
 def test_the_tile_deadline_is_derived_from_the_cron_cadence():
@@ -330,7 +379,28 @@ def test_the_tile_deadline_is_derived_from_the_cron_cadence():
 
     A 24h grace against a 23h gap clears the DOWN it was added to make sticky.
     """
-    assert "nut_host_watchdog_interval_minutes" in STATIC_MONITORS
+    # Two renders at a cadence the inventory does not hold: the deadline must follow the
+    # cadence variable, which a substring match on the variable's name cannot show.
+    minutes = 7
+    for tile, gate_var in TILES.values():
+        armed = entity(tile, gate_var)
+        assert (
+            armed["interval"]
+            == NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] * 120
+        )
+        moved = json.loads(
+            re.search(
+                rf"^  {re.escape(tile)}: \|\n\s+(\{{.*\}})$",
+                monitors_text(
+                    {gate_var: "x", "nut_host_watchdog_interval_minutes": minutes}
+                ),
+                re.M,
+            ).group(1)
+        )
+        assert moved["interval"] == minutes * 120, (
+            f"{tile}'s deadline does not follow nut_host_watchdog_interval_minutes — a hardcoded "
+            "interval survives a schedule change and grants the wrong grace"
+        )
     assert "*/{{ nut_host_watchdog_interval_minutes }}" in TASKS
 
 
