@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-02 06:17 UTC
-generated_sha: 7df0bfaaa
+generated_at: 2026-10-02 18:17 UTC
+generated_sha: 0a2d78591
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,26 +16,13 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#3027](https://github.com/DanielH2018/server/issues/3027) | high | gap | security | Rotate the Google Cast refresh token HA leaked, and age out the Loki records that still carry it | 2026-09-30 | 0 | - | ✓ |
 | [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks | 2026-09-28 | 0 | - | ✓ |
 | [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 0 | - | ✓ |
-| [#3210](https://github.com/DanielH2018/server/issues/3210) | medium | gap | cicd | The render gate's census cannot see a template path reached through an import | 2026-10-02 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
-| [#2652](https://github.com/DanielH2018/server/issues/2652) | low | gap | cicd | Re-measure inject-nested-docs subagent coverage after the agent_id key lands | 2026-09-26 | 0 | - | ✓ |
-| [#2660](https://github.com/DanielH2018/server/issues/2660) | low | gap | docs | Measure the head form's coverage for over-budget inject-nested-docs payloads | 2026-09-26 | 0 | - | ✓ |
-| [#2764](https://github.com/DanielH2018/server/issues/2764) | low | gap | network | A Traefik router rejected for a reason other than empty endpoints still pins long-lived clients on 421 | 2026-09-27 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
 | [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
-| [#2972](https://github.com/DanielH2018/server/issues/2972) | low | improvement | - | Replace the host literals in bootstrap.yml and initial_setup.yml with a planned manual run | 2026-09-29 | 0 | - | ✓ |
-| [#2978](https://github.com/DanielH2018/server/issues/2978) | low | improvement | - | Move longhorn_reap out of the k3s setup role with a planned manual k3s apply | 2026-09-29 | 0 | - | ✓ |
-| [#3130](https://github.com/DanielH2018/server/issues/3130) | low | improvement | cicd | Rule on the three test folds #3108 measured as not worth doing | 2026-10-01 | 0 | - | ✓ |
-| [#3202](https://github.com/DanielH2018/server/issues/3202) | low | improvement | cicd | Convert ansible/tests/setup source-text pins to render assertions, then add it to the render gate's SCANNED | 2026-10-02 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
-| [#3205](https://github.com/DanielH2018/server/issues/3205) | low | improvement | cicd | Convert ansible/tests/staging source-text pins to render assertions, then add it to the render gate's SCANNED | 2026-10-02 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
-| [#3206](https://github.com/DanielH2018/server/issues/3206) | low | gap | cicd | Rule 3 cannot see a resolver read that arrives as a fixture parameter | 2026-10-02 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
-| [#3209](https://github.com/DanielH2018/server/issues/3209) | low | gap | cicd | The render gate misses a template read wrapped in sorted() or passed through a helper | 2026-10-02 | 0 | - | ✓ |
-| [#3211](https://github.com/DanielH2018/server/issues/3211) | low | gap | cicd | Render gate's template_source_reads misses a sorted() glob over a bound templates dir | 2026-10-02 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -84,6 +71,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2933](https://github.com/DanielH2018/server/issues/2933) | accepted | Decide whether the 4-shard pytest matrix is worth keeping now that no Actions minutes are billed | Operator ruling 2026-09-30: keep the 4-shard matrix because it cuts wall-clock time. The #2245 spike measured an 80s pole shard against 267s for a single job, about 3.3x, and ADR-0018 leaves no Actions bill for collapsing it to save. |
 | [#2979](https://github.com/DanielH2018/server/issues/2979) | accepted | Finish #2865: single-importer test helpers blocked by the length ratchet, release_bin_groups pinned by a k3s path | Operator decision 2026-09-29: keep the three test helpers split out; #762 and #768 split them to bring their test modules under the 500-line cap, and inlining would recreate three ~700-line modules. The release_bin_groups move is folded into #2978, which needs the same attended k3s apply. The step-2 claim was stale: both modules have production importers. |
 | [#3055](https://github.com/DanielH2018/server/issues/3055) | refuted | Fold 18 single-role render test files into the pod hygiene and security-context tables | A sweep of ansible/tests/ for every table column found 26 files: 11 are the fleet-wide censuses, 4 are rollout gates, and each remaining single-role file asserts what neither table can express (mount paths, probe timeouts, a positive automount, specific capabilities, an upstream-manifest patch). The one real overlap, exportarr's readiness assertion, was folded in PR #3065. Per-file list is in this thread. |
+| [#3130](https://github.com/DanielH2018/server/issues/3130) | accepted | Rule on the three test folds #3108 measured as not worth doing | Each group tests distinct rules, and a fold exceeds TEST_CAP: crowdsec 654 lines over four incidents, built-image 834 over four rules with no shared table, Vale 553 across three suites. The crowdsec function-extractor duplicate is filed separately. |
 
 ### container
 
@@ -99,6 +87,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 |---|---|---|---|
 | [#826](https://github.com/DanielH2018/server/issues/826) | refuted | gen_reference_scripts.py keys its table by bare filename, so two same-named modules merge into one row | Path keys relocate the ambiguity rather than remove it: invocation evidence comes from free text (a cron job: string, an argv literal, a shell line) that often names a bare filename with no directory, so a path-keyed generator still needs a basename-to-path resolution step — undecidable for exactly the colliding names. #838 enforces basename uniqueness instead, and separately fixed the real nesting blocker (discovery and the reference patterns were both capped at one directory level). |
 | [#2164](https://github.com/DanielH2018/server/issues/2164) | accepted | Make gitops_tick.sh's permission deterministic and collapse its duplicated classifier paragraph | Doc half landed in PR #2209; the determinism half is #2207, which the operator chose to live with (auto-mode-bridge retries the ~1-in-7 denial). |
+| [#3244](https://github.com/DanielH2018/server/issues/3244) | accepted | inject-nested-docs head form left facts.md out of 4 of 132 payloads with no later delivery | Operator decision 2026-10-02: 4 facts.md misses in 132 head-form payloads is an acceptable residual; the editing-rule gating works as designed. |
 
 ### network
 
@@ -110,6 +99,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#1930](https://github.com/DanielH2018/server/issues/1930) | accepted | Validate: Authelia network-scoped bypasses and the loki push ClientIP grant may admit masqueraded WireGuard clients | Verified live (wg-easy MASQUERADEs 10.8.0.0/24 out eth0, so WireGuard clients arrive as the Pi's LAN IP). Operator policy 2026-09-17: WireGuard clients are keyed devices and are trusted as LAN devices; the network-scoped bypasses apply to them by design. |
 | [#1933](https://github.com/DanielH2018/server/issues/1933) | refuted | Validate: speedtest monitoring route admits the whole pod CIDR to /api/ for a caller that sends no credential | Upstream routes/api.php at v1.14.7: only /api/healthcheck and the deprecated public /api/speedtest/latest are unauthenticated; every other /api/ route sits behind auth:sanctum, so a caller with no credential cannot create, start or delete a result. |
 | [#2446](https://github.com/DanielH2018/server/issues/2446) | refuted | Traefik access log ClientHost uses the client-sent X-Forwarded-For for Cloudflare requests | Traefik logs ClientHost as the whole X-Forwarded-For chain; the live crowdsecurity/traefik-logs 1.5 parser takes the rightmost entry, which through Cloudflare is the address Cloudflare appends. Live evidence: a scanner's XFF 127.0.0.1 chain was banned by its real address 195.178.110.72. The issue's harness skipped Cloudflare's append. Evidence on the issue; mechanism recorded in the traefik CLAUDE.md by PR #2464. |
+| [#2764](https://github.com/DanielH2018/server/issues/2764) | accepted | A Traefik router rejected for a reason other than empty endpoints still pins long-lived clients on 421 | Every production router rejection since filing (5 Traefik starts, 09-27 to 10-01) landed 4-13s before the pod went Ready, so the startupProbe and Recreate strategy kept clients off it. Stage showed a missing Middleware does not pin 'default' on a held connection (302, never 421). What remains is a Ready Traefik dropping a Host router mid-reload, mainly when a TLSOption it names is removed or renamed. That case is rare (traefik role is denylisted from auto-deploy) and check_traefik_421 (#2757) pages within 15 minutes, so a wedge is caught rather than running for hours. Option 1 (a default TLSOption plus dropping options: from every LAN router) touches every role to close a window production has not opened. Evidence: https://github.com/DanielH2018/server/issues/2764#issuecomment-5957615924 |
 
 ### security
 
