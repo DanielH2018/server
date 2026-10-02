@@ -1,9 +1,9 @@
 # `setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons
 
-The role that turns a host into a k3s node and keeps the cluster's own plumbing declared: the
-server install, the agent join, MetalLB, Longhorn with its backup targets, the read-only
-kubeconfig, CoreDNS, and the host crons that watch and exercise the backup plane. `daniel-box` is
-the server, `daniel-server` an agent since 2026-08-14 (`tasks/agent.yml`), `daniel-stage` the
+The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
+install, the agent join, MetalLB, Longhorn with its backup targets, the read-only kubeconfig,
+CoreDNS, and the host crons that watch and exercise backups. `daniel-box` is
+the server, `daniel-server` an agent (`tasks/agent.yml`), `daniel-stage` the
 staging guest whose `host_vars` turn the backup targets and the health crons off, because both
 would push to prod's Kuma and B2.
 
@@ -13,11 +13,10 @@ the cron-evidence checks, the read-only crons, the control-plane gates and the f
 incidents are in `docs/k3s-node-plane-crons-and-incidents.md`.
 
 **`--tags k3s` is the MAXIMAL apply, not the one to reach for.** It reapplies every task, and
-three gated tasks that touch the control plane become reachable — the installer, a unit restart
-and `k3s secrets-encrypt rotate-keys`. Read each gate on the docs page before you run it. Every
-task file carries its own tag, so most changes want one of those, such as `--tags kubeconfig`
-(`ansible/roles/setup/k3s/tasks/kubeconfig.yml`). The deployer prints this warning beside the
-command it suggests, from
+three gated tasks that touch the control plane become reachable. `docs/k3s-node-plane-crons-and-incidents.md`
+names each gate and what trips it. Every task file carries its own tag, so most changes want one
+of those, such as `--tags kubeconfig` (`ansible/roles/setup/k3s/tasks/kubeconfig.yml`). The
+deployer prints this warning beside the command it suggests, from
 `ansible/roles/setup/gitops_deploy/files/deploy_remediation.py:maximal_tag_warning`.
 
 ## At a glance
@@ -39,10 +38,10 @@ command it suggests, from
 
 ## Layout
 
-`tasks/main.yml` is a list of `import_tasks`, one per topic, split on 2026-08-15 when the single
-file reached 1058 lines. Imports are static, so `--tags` selection sees every task's own tags.
-`defaults/main.yml` is long on purpose: each tunable sits under the paragraph that explains it,
-and several carry `DECIDED` markers. `files/` holds the Python the crons run, tested under
+`tasks/main.yml` is a list of `import_tasks`, one per topic. Imports are static, so `--tags`
+selection sees every task's own tags.
+`defaults/main.yml` is long on purpose: each tunable sits under its own explaining paragraph,
+some carrying a `DECIDED` marker. `files/` holds the Python the crons run, tested under
 `tests/`; `templates/` holds the cron scripts and the manifests this role applies.
 
 Backup tiering, restoring a volume, restoring etcd and the two upgrade runbooks each have a
@@ -80,22 +79,19 @@ authority of those four actuators is written here so a later edit cannot quietly
   longhorn-manager pod is not ready, and the weekly B2 tier is sharded across weekdays so no
   day's deletions reach the B2 transaction cap.
 - **Required evidence:** the trim, the drill and the two B2 accounting crons log every run
-  through `logger`. **A `logger` line is evidence only because checks 9 and 10 of
-  `longhorn-backup-health.sh` read it**, and each match is AS WRITTEN — rewording a log line means
-  changing a regex in `ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py` in the same
-  edit. ENFORCED:
+  through `logger`, which is evidence only because checks 9 and 10 of `longhorn-backup-health.sh`
+  read it, matching each line AS WRITTEN. `docs/k3s-node-plane-crons-and-incidents.md` names the
+  regex and the file to edit together. ENFORCED:
   `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim`,
   `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone`.
-- **Next-run review:** before widening scope, read the B2 ledger and the drill's `/var/log`
-  records for what the last week cost and what failed.
+- **Next-run review:** read the B2 ledger and the drill's `/var/log` records before widening
+  scope.
 
 ## Notable
 
-- **Cron's PATH omits `/usr/local/bin`, where k3s lives.** Every script here sets its own PATH;
-  one that does not dies on `command -v k3s` and, if it pushes its heartbeat before the check,
-  reads permanently green.
-- **The drift checks and the prune check are staggered on purpose** (05:15 and 05:45) so two full
-  kubectl sweeps do not land on the API server at once. Keep a new sweep off those minutes.
-- **k3s's own output goes to `/var/log/k3s.log`, not the journal**, and the apiserver's OIDC
-  authenticator can wedge for the life of the boot with every probe still green (#2749). Both are
-  on the docs page; `ansible/tests/setup/test_k3s_unit_logging.py` holds the log drop-in.
+- **Three traps live here**: the cron PATH omits `/usr/local/bin` where k3s lives, the drift and
+  prune checks are staggered (05:15 and 05:45) so two kubectl sweeps never land at once, and
+  k3s's own output goes to `/var/log/k3s.log` (not the journal) where the apiserver's OIDC
+  authenticator can wedge silently with every probe still green.
+  `docs/k3s-node-plane-crons-and-incidents.md` has the detail and the incident evidence for each;
+  `ansible/tests/setup/test_k3s_unit_logging.py` holds the log drop-in.

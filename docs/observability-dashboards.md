@@ -12,6 +12,10 @@ Nothing tests this page. `ansible/roles/k8s/observability/tasks/dashboards.yml` 
 `ansible/roles/k8s/observability/files/` are the authority on what is provisioned; where a
 paragraph here disagrees with them, the tree is right.
 
+## The role's name
+
+The role and its namespace were called `claude-otel` until 2026-10-01 (#2911).
+
 ## Where the boards came from
 
 Five of the six folders moved into this role on 2026-08-14 from the retired Docker `grafana` role,

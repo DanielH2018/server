@@ -36,17 +36,16 @@ It ships `false`. Arming it is a decision with a spend attached and a blast radi
 merges PRs and lands them through `land.sh`, which deploys — not a sign the role is unfinished.
 
 **The merge itself goes through `land.sh --arm-merge`, not a bare `gh pr merge`.** A bare
-`gh pr merge` sits on the ask list (`Bash(gh pr merge:*)` in `~/.claude/settings.json`), and
-auto mode suspends the allow list — an unattended session has nobody to answer that prompt,
-so it times out as a denial (three attempts, three denials, on 2026-09-03, issue #979).
-`--arm-merge` runs the same `gh pr merge --squash --auto` call inside `land.sh` instead, where the
-session's own invocation text is just the one script call the worktree-containment check already
-accepts. The `renovate-prs` skill's landing step names the flag.
+`gh pr merge` sits on the ask list, and auto mode suspends the allow list, so an unattended
+session times out as a denial. `--arm-merge` runs the same `gh pr merge --squash --auto` call
+inside `land.sh`, where the session's own invocation text is the one script call the
+worktree-containment check already accepts. `docs/renovate-agent-bounds-and-digest.md` names
+the skill step and the denial incident behind this.
 
 **`--check` fails at "Enable and start the timer", and that is not a bug in the role.** Check
 mode writes no unit file, so systemd reports `Could not find the requested service` for a
-`renovate-agent.timer` that does not exist. Every task before it reports correctly, which is what
-a check run of this role is good for. The sibling `renovate_notify` role behaves the same way.
+`renovate-agent.timer` that does not exist. Every task before it reports correctly, which is
+what a check run of this role is good for.
 
 There is deliberately **no run-once handler**, where `renovate_notify` has one. Its run is a
 read-only API query; this one costs money and changes the fleet, so a config edit must not
@@ -85,21 +84,19 @@ the caps or the schedule cannot quietly widen it.
   `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py` asserts the
   marker sits on exactly the per-package rules whose pin a denied role owns. Which rules carry
   it, and the three rounds that got the marker into a title, are on the docs page.
-- **Mode (explicit + reversible):** `renovate_agent_enabled`, which ships `false`. It alone
-  arms the timer, and setting it back stops AND disables the unit (*Arming it*;
-  `test_renovate_agent_unit.py` pins both directions). There is deliberately no run-once
-  handler: a config edit must not kick a paid session as a side effect.
+- **Mode (explicit + reversible):** `renovate_agent_enabled`, which ships `false` (see *Arming
+  it* above; `test_renovate_agent_unit.py` pins both directions).
 - **Authoritative sources:** the open PRs authored by `app/renovate` before and
   after the session, the same census of the session account's own PRs on the run's branches
   (what it handed off), CI's own verdict through `land.sh`, and the health gate `land.sh` runs.
   Never the session's closing paragraph — it reads confident whatever happened.
-- **Abort valves:** `renovate_agent_max_prs` (the bound that stops a normal run),
-  `renovate_agent_run_timeout_s` and the systemd `renovate_agent_unit_timeout` backstop, and
-  `renovate_agent_budget_usd` as a runaway catch that must never be the binding constraint.
-- **Required evidence:** a Discord digest whose headline is the before/after PR delta
-  (`resolved`, `ran and no Renovate PR changed state`, or `FAILED — <reason>`), plus the
-  `Renovate Agent — Alive` push tile, beaten only on exit 0; a crash pushes its own `down`
-  with the exception text. `permission denials:` on a digest line is the signal the design
-  rests on having gone missing.
+- **Abort valves:** `renovate_agent_max_prs`, `renovate_agent_run_timeout_s`, the systemd
+  `renovate_agent_unit_timeout` backstop, and `renovate_agent_budget_usd` as a runaway catch.
+  `docs/renovate-agent-bounds-and-digest.md` has why each is the var it is and why the budget
+  must never be the one that binds.
+- **Required evidence:** a Discord digest whose headline is the before/after PR delta, plus the
+  `Renovate Agent — Alive` push tile, beaten only on exit 0. `docs/renovate-agent-bounds-and-digest.md`
+  has the full delta vocabulary, the crash path, and why a `permission denials:` line is the one
+  to act on.
 - **Next-run review:** before raising a cap or widening the prompt, read the last week's
   digests for what the sessions actually resolved and what they timed out on.

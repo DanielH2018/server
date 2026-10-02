@@ -46,11 +46,14 @@ The role doc names both shapes; these are the measurements behind them.
 
 - **A renamed marker empties the parse.** Renovate renamed the item marker `approvePr-branch=`
   to `unpend-branch=` in September 2026, and the old name alone read 26 live items as zero
-  (#1472).
+  (#1472). `pending_section_unreadable` and `dashboard_headers_unrecognized` are the runtime
+  non-vacuity checks that catch an empty parse before it reads as a cleared backlog.
 - **A lost `pending_seen.json` restarts every clock at zero.** The arm then finds nothing for
   soak plus grace: 14 days for a version bump, 10 for a digest one, with every run reporting
   healthy. A package in `pending_logic.py:FAST_DIGEST_SOAK_DAYS` waits 8 rather than 10: the two
-  nginx alpine pins soak 1 day in `renovate.json` since #2886. The churn arm is blind for its
+  nginx alpine pins soak 1 day in `renovate.json` since #2886 —
+  `tests/test_pending_soak.py::test_soak_constants_match_renovate_json` fails when the two
+  disagree. The churn arm is blind for its
   own, longer window — a loss restarts the branch clocks too, so it can find nothing for
   `PENDING_CHURN_MULTIPLIER` times soak plus grace, 42 days for a version row (#3076).
   `pending_state_lost` tells a wiped state file from a bootstrap using `last_run` as
@@ -74,6 +77,8 @@ The role doc names both shapes; these are the measurements behind them.
   ghcr.io/haveagitgat/tdarr (manual — ...)` where an ungrouped digest row says `Docker digest
   to df221db`. Those rows took the 7-day version soak and alerted four days late — five sat
   10.3 days on 2026-09-28 against their 10-day threshold, unnamed by the digest (#2885).
+  `pending_logic.py:GROUPED_TITLE_MARKER` is the parenthetical `item_soak_days` matches on; the
+  `DECIDED:` comment beside it accepts a grouped VERSION bump paging four days early as the cost.
 
 **A reset posts once, then posts again the next day.** The reset rides the same fingerprint as
 the other three arms; the following run rewrites the state file, so the component drops and the

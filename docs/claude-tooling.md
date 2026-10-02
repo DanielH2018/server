@@ -486,9 +486,13 @@ auto mode instructs — loads neither, and 74 of 113 Bash-only session×role pai
 role doc (measured 2026-09-19, #2125). `.claude/hooks/inject-nested-docs.py` reads the paths a
 command names, returns each ancestor `CLAUDE.md` and matching rule as `additionalContext` once
 per session, and logs the row to `.claude/logs/instructions.log` as `bash_path_match` so the
-same log grades it. A doc over 7,500 chars arrives as its HEAD up to the budget, then the
+same log grades it. A doc the hook cannot fit arrives as its HEAD up to the budget, then the
 headings of the sections the head cut off, then a read pointer: the harness persists a longer
-`additionalContext` to disk and hands the model a preview stub instead.
+`additionalContext` to disk and hands the model a preview stub instead. The payload is 7,500
+chars, and what a doc is weighed against is the 7,272 the preamble leaves, less its own
+`===== <doc> (applies to <trigger>) =====` header. A role doc is held under that effective
+budget by `ansible/tests/_doc_size.py:MAX_CHARS`, which derives it rather than restating the
+7,500 (#3245).
 
 That over-budget form was the heading outline alone until #2650. Sessions read the full doc
 after 61 of 262 outline injections (23%), against 69 of 425 Bash-only pairs (16%) before the

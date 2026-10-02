@@ -55,29 +55,16 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   dry run must not write the node outside `roles/k8s/manifests` (#2611/#2614). The macro keeps
   that gap small — instance 1's dry run exercises the schema instance 2 renders.
 - **`probe.py health pihole` holds a roll expectation for pihole-2 only because `roll_one.yml`
-  writes one.** The release record is stamped inside the shared include, before
-  `tasks/apply_instance_2.yml` runs, so it cannot know whether that apply rolled instance 2 by
-  changing its pod template (stamping no `restartedAt`) or `roll_one.yml` restarted it (stamping
-  one). `rolled_by_role: true` on the `manifests_self_rollouts` entry records `restart: false`
-  and hands the decision over; `roll_one.yml` then raises it through the shared
-  `tasks/rollout_amend.yml`, but only where it actually issued a `rollout restart` (#2902).
-  Deploy time is covered either way and more strictly: `roll_one.yml` blocks on pihole-2's
-  `rollout status`, and `Verify both Pi-hole instances have a ready DNS endpoint` refuses fewer
-  than two ready endpoints.
+  writes one.** `rolled_by_role: true` on the `manifests_self_rollouts` entry records
+  `restart: false` and hands the decision to `roll_one.yml`, which raises it through
+  `tasks/rollout_amend.yml` only where it issued a `rollout restart` (#2902). Deploy time is
+  covered either way: `roll_one.yml` blocks on pihole-2's `rollout status`, and `Verify both
+  Pi-hole instances have a ready DNS endpoint` refuses fewer than two ready endpoints.
 - **Each private restart needs the render AND the matching apply's own `changed` (#3127,
-  mirroring #3115).** `manifests_render is changed` compares rendered bytes, so a YAML-comment
-  edit to a template used to roll the LAN resolvers while `kubectl apply` printed every object
-  `unchanged`. The restart task in `roll_one.yml` now fires on `manifests_render is changed and
-  manifests_apply is changed` for the shared files (both instances mount the ConfigMap), and for
-  `pihole-2` also on `manifests_deferred_render is changed` and its own
-  `pihole_k8s_instance_2_apply` being changed. `tasks/apply_instance_2.yml` pins that apply's
-  `changed_when` false under `k8s_dry_run`, as the shared apply does. The secret and image
-  triggers are unchanged: `verify_secret_keys.yml` can patch a Secret after an apply that printed
-  `unchanged`. The include in `main.yml` still fires `pihole-2` on the deferred bytes alone,
-  because it must run the apply to learn the verdict; only the restart waits for it. The #2884
-  ordering holds: the apply is still reached only after instance 1 is proven serving, so the two
-  pod templates never change in one request. The `pihole-2` record raise (#2902) is unchanged and
-  stays consistent, since it reads whether the restart task ran.
+  mirroring #3115).** `manifests_render is changed` compares rendered bytes alone, so on its own
+  it rolled the LAN resolvers for a YAML-comment edit. `roll_one.yml` now pairs each render
+  check with the apply that carries those bytes. The per-trigger derivation is in
+  `docs/pihole-dns-continuity-record.md`.
 - **`roll_one.yml` refuses a sibling that is terminating.** A pod keeps phase `Running` and
   condition `Ready` for its whole grace period, so `kubectl wait` alone reported a
   half-gone sibling as a serving one. The check reads `deletionTimestamp` and fails the play.

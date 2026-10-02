@@ -13,9 +13,10 @@ true (daniel-box). Invoked from `initial_setup.yml`, **not** `deploy.yml` — th
 uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 ```
 
-`docs/claude-code-rc-caps.md` holds the record behind the rules below — the three memory incidents,
-the argument that put the fleet bound on `user.slice`, the phone check's own procedure, and how to
-verify a caps deploy from cgroupfs.
+`docs/claude-code-rc-caps.md` holds the record behind the rules below — the three memory
+incidents, the fleet-bound argument, the phone check's procedure, why the webhook moved out of
+`ExecStart`, why the weekly restart is `try-restart` and not `RuntimeMaxSec=`, and how to verify
+a caps deploy from cgroupfs.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -37,10 +38,9 @@ it lets the phone create a session, and Claude Code ships no always-on host, so 
 it and its restart timer, which is the rollback. `ansible/tests/setup/test_claude_rc_unit.py` pins
 that both directions stay wired.
 
-One prerequisite Ansible cannot check, confirmed by hand on 2026-08-23: a phone-created session
-reaches a prompt in a fresh worktree with no workspace-trust dialog. **Re-run that check after a
-Claude Code upgrade or a spawn-mode change** — the docs page has the command, the four things to
-confirm and each fallback.
+One prerequisite Ansible cannot check: a phone-created session reaches a prompt in a fresh
+worktree with no workspace-trust dialog. **Re-run that check after a Claude Code upgrade or a
+spawn-mode change.**
 
 **Stop any hand-run host before deploying** — the service and a manual `claude rc` compete for the
 same account and directory.
@@ -50,14 +50,13 @@ same account and directory.
 `OnFailure=claude-rc-alert.service` pages Discord when the host **crashes**, reusing the shared
 `gitops_deploy_discord_webhook` like `gitops-deploy-alert` and `renovate-notify-alert`.
 
-- **That value reaches the alert unit through an `EnvironmentFile=`, never the unit body**, because
-  systemd serves unit content over the system bus to any local user;
-  `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py` holds the whole repo to that
-  shape. `no_log: true` sits on the rendering task only, and it hides an undefined-variable failure
-  too — check `gitops_deploy_discord_webhook` is in scope if that task fails opaquely.
-- **It cannot catch an expired login.** The host keeps running and systemd keeps reporting `active`
-  while every session fails, so no `OnFailure=` fires. Closing it needs a check asserting the host is
-  *registered* rather than up — **not yet built**, because no failure signature has been observed.
+- **That value reaches the alert unit through an `EnvironmentFile=`, never the unit body.**
+  `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py` holds the whole repo to
+  that shape. `no_log: true` sits on the rendering task only and also hides an undefined-variable
+  failure — check `gitops_deploy_discord_webhook` is in scope if that task fails opaquely.
+- **It cannot catch an expired login.** The host keeps reporting `active` while every session
+  fails, so no `OnFailure=` fires. Closing it needs a check that the host is *registered*, not
+  just up — **not yet built**.
 
 ## Traps already paid for
 
@@ -72,8 +71,7 @@ same account and directory.
 - **No `MemoryMax`**, which systemd applies to the whole cgroup: one runaway session would take the
   OOM kill for every other session too.
 - **`claude_code_rc_capacity` bounds session count, not memory**, and `MemoryHigh` throttles rather
-  than caps. `claude_code_rc_memory_swap_max` (2G) is the ceiling, and **0 is wrong** — with no swap
-  outlet the terminal state is the global OOM killer.
+  than caps. `claude_code_rc_memory_swap_max` (2G) is the ceiling, and **0 is wrong**.
 - **`claude_code_rc_pytest_workers` caps one pytest run's fan-out, not how many runs a session
   starts**, via `PYTEST_XDIST_AUTO_NUM_WORKERS` in the unit. **The same variable also sits in
   `~/.claude/settings.json`**, generated from the chezmoi repo — keep the two equal.
@@ -81,27 +79,22 @@ same account and directory.
   directives**: it lands in `user.slice/user-{{ claude_code_login_uid }}.slice/session-<n>.scope`.
   `templates/login-slice-caps.conf.j2` and `templates/pytest-fanout-cap.conf.j2` carry the unit's caps
   there, and `claude_code_login_caps_enabled` (default `true`) removes both.
-- **The background-shell pressure reaper is turned off** (#1096): Node derives `memoryPressure` from
-  the **cgroup**, so `free -m` reads clean while backgrounded Bash tasks die, and the kill arrives as
-  a task notification rather than a logfile error.
-  `claude_code_rc_disable_bg_shell_pressure_reap` drives it both ways.
+- **The background-shell pressure reaper is turned off.**
+  `claude_code_rc_disable_bg_shell_pressure_reap` drives it both ways: Node derives the kill from
+  the **cgroup**, so `free -m` reads clean while it kills backgrounded Bash tasks.
 - **The weekly restart uses `try-restart`**, because plain `restart` would start a host that
-  `claude_code_rc_enabled` deliberately keeps stopped. It exists because Claude Code updates its
-  binary in the background while a long-lived process keeps the version it started with, and
-  `RuntimeMaxSec=` was rejected: systemd records its expiry as a failure.
+  `claude_code_rc_enabled` deliberately keeps stopped. It exists to pick up the binary Claude Code
+  updates in the background, which a long-lived process otherwise never does.
 
 ## The fleet bound, and why it lives on `user.slice`
 
 One number for both Claude cgroups, on the one slice that parents both:
 `claude_code_fleet_memory_high` / `claude_code_fleet_swap_max`, rendered by
 `templates/fleet-slice-caps.conf.j2`. `claude-rc.service` reaches that parent through a `Slice=`
-line, the per-plane caps remain as sub-bounds, and `claude_code_fleet_caps_enabled: false` removes
-both.
+line, and `claude_code_fleet_caps_enabled: false` removes both.
 
 **Re-derive the number in `defaults/main.yml`**, never from a summary. **The `Slice=` line takes
-effect at the next start**, so the deploy that changes it drops the RC host's sessions. The docs
-page has why `user.slice` is the only possible parent, why a shared variable is not a shared cap
-(#1264), and how to verify from cgroupfs.
+effect at the next start**, so the deploy that changes it drops the RC host's sessions.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 

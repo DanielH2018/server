@@ -235,6 +235,7 @@ nav:
       - volume-revert drill and sizing: volume-revert-drill-and-sizing.md
       - renovate_agent bounds and digest: renovate-agent-bounds-and-digest.md
       - k3s node-plane crons and incidents: k3s-node-plane-crons-and-incidents.md
+      - Pi-hole DNS continuity record: pihole-dns-continuity-record.md
       - Authelia sessions and CrowdSec init: authelia-sessions-and-crowdsec-init.md
       - Pi host tuning record: pi-host-tuning-record.md
       - Host baseline record: host-baseline-record.md
