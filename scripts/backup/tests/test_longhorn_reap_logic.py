@@ -6,15 +6,11 @@ input the floor must keep, one it must reap. The FLOOR 1 case additionally cover
 inoperative because kubectl jsonpath cannot iterate a label MAP: nothing else catches it,
 because the dry run's own "0 reapable" output reads as success.
 
-Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_logic.py
+Run: uv run pytest scripts/backup/tests/test_longhorn_reap_logic.py
 """
-
-import pathlib
-import sys
 
 import pytest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import longhorn_reap_logic as logic
 
 

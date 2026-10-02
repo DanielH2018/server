@@ -1,7 +1,7 @@
 """Pure decision core shared by the two Longhorn reap-orphan entry points.
 
-Ported from templates/longhorn-reap-orphan-backups.sh.j2 and
-templates/longhorn-reap-orphan-snapshots.sh.j2, which carried this same logic as bash string
+Ported from the k3s role's longhorn-reap-orphan-backups.sh.j2 and
+longhorn-reap-orphan-snapshots.sh.j2 templates (retired in #2978), which carried this same logic as bash string
 processing over `kubectl -o jsonpath` output, with no test. FLOOR 1 of the backups reaper
 was inoperative from the day it shipped (2026-08-16): ownership was read with
 `-o jsonpath='{range .metadata.labels}...'`, and kubectl jsonpath does not iterate a MAP-valued
@@ -22,16 +22,26 @@ Stdlib only. Imported by longhorn_reap_orphan_backups.py and longhorn_reap_orpha
 which do the kubectl reads/writes and printing.
 """
 
-from __future__ import annotations
-
 import json
+import os
+import sys
+from pathlib import Path as _Path
 from dataclasses import dataclass, field
 
-# Resolves via longhorn_reap_orphan_backups.py / longhorn_reap_orphan_snapshots.py's own
-# sys.path.insert(0, <own dir>), which runs before either imports this module — host_lib.py is
-# copied alongside as a sibling both at release time (/opt/longhorn-reap/, health-crons.yml) and,
-# for the test suite, via the `ansible/roles/setup/common/files` pythonpath entry in
-# pyproject.toml.
+# host_lib.py is the setup roles' shared host module and stays in
+# ansible/roles/setup/common/files/. Each importer carries its own insert rather than relying on
+# the entry point's having run first.
+sys.path.insert(
+    0,
+    str(
+        _Path(__file__).resolve().parents[2]
+        / "ansible"
+        / "roles"
+        / "setup"
+        / "common"
+        / "files"
+    ),
+)
 import host_lib
 
 RECURRING_JOB_GROUP_PREFIX = "recurring-job-group.longhorn.io/"
@@ -64,9 +74,8 @@ def parse_kubectl_json_items(text: str, what: str) -> tuple[list, str]:
 def parse_int_env(name: str, raw: str) -> tuple[int, str]:
     """Parse an environment-sourced integer knob, or a friendly error naming it.
 
-    Both entry points read integer knobs from env vars a `.sh.j2` shim exports from an Ansible
-    default (`k3s_longhorn_snapshot_reap_min_age_days`, an int today but not guaranteed to stay
-    one). A bare `int(os.environ.get(...))` at module scope raises an uncaught `ValueError`
+    Both entry points read integer knobs from env vars an operator may set by hand
+    (`LONGHORN_REAP_MIN_AGE_DAYS`, say). A bare `int(os.environ.get(...))` at module scope raises an uncaught `ValueError`
     before `main()` is ever reached, so the operator sees a traceback rather than which knob was
     bad. A caller parses the raw string lazily, inside `main()`, so this can print `ABORT: ...`
     and exit like every other refusal instead. Returns (value, "") on success, (0, message) on
@@ -115,9 +124,20 @@ def readonly_kubeconfig_refusal(
     return (
         "LONGHORN_REAP_READONLY_KUBECONFIG is not set, and a dry run must not silently "
         "fall through to whatever KUBECONFIG the caller's shell already has -- run as "
-        "root, that would be the admin kubeconfig. Set the shim's env var, or pass "
+        "root, that would be the admin kubeconfig. Set it to your ~/.kube/config, or pass "
         "%s to use the admin kubeconfig explicitly." % apply_flags_hint
     )
+
+
+def sudo_hint(entry_point: str, executable: str | None = None) -> str:
+    """The command that re-runs `entry_point` with --apply under sudo, on this same interpreter.
+
+    The interpreter is the one running now, not `python3` on root's PATH: under `uv run` it is
+    the repo venv's pinned Python, while root's `python3` is the distro one. `-B` keeps a root
+    run from writing root-owned `__pycache__` files into the checkout.
+    """
+    executable = executable or sys.executable
+    return "sudo %s -B %s --apply" % (executable, os.path.abspath(entry_point))
 
 
 class ReapAbort(RuntimeError):
@@ -503,8 +523,7 @@ def classify_snapshots(
     (PREFIX match: the owning job name must start with the truncated label the snapshot
     carries), then the age floor (FLOOR 2).
 
-    `min_age_days` is an int, matching `k3s_longhorn_snapshot_reap_min_age_days`'s type in
-    defaults/main.yml -- bash's arithmetic context (`$(( NOW - MIN_AGE_DAYS * 86400 ))`) only
+    `min_age_days` is an int -- bash's arithmetic context (`$(( NOW - MIN_AGE_DAYS * 86400 ))`) only
     ever held an integer, and "younger than 3d" (not "3.0d") is the message it printed.
 
     A snapshot with no NAME or no `.spec.volume` is skipped before anything else, matching

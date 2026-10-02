@@ -79,83 +79,25 @@
   become: true
   no_log: true  # renders the Healthchecks.io ping key
 
-# Deployed as a VERSIONED RELEASE rather than rendered straight over /usr/local/bin — see
-# roles/setup/common/tasks/release_bin.yml. Each script lands in
-# /opt/homelab/releases/k3s-backup-health/<sha>/ and /usr/local/bin/<name> becomes a symlink
-# through /opt/homelab/current/k3s-backup-health, so a cron's provenance is readable
-# (`probe.py releases` for the k8s plane, `readlink -f` here) and a rollback is one symlink
-# swing rather than a git revert plus a redeploy. The crons below are unchanged: they still
-# invoke /usr/local/bin/<name>, and setup-drift-lib.sh's `cmp` reads through the symlink.
-#
-# The file list comes from k3s_render_stamp_groups, the SAME list stamp_render.yml is given
-# below. That is deliberate: a release and its stamp describing different sets of files is
-# exactly the partial-group false-green the comment above that stamp task warns about, and
-# sharing one list makes the two incapable of disagreeing.
-#
-# The per-script notes live beside that list in
-# roles/setup/k3s/defaults/main.yml, next to the paths they describe.
-# DECIDED: `copy`, not release_bin.yml: these are operator-invoked (deliberately unscheduled —
-# see the templates above), not cron targets, so there is no rollback-unit reason to version
-# them alongside the backup-health release, and a fixed /opt path matches configarr-health's
-# shape (roles/k8s/configarr/tasks/main.yml), which this install mirrors. Consequence an
-# operator should know: the two `.sh.j2` shims above deploy as a VERSIONED release
-# (release_bin_group: k3s-backup-health below) while this Python deploys as a plain copy, so a
-# release rollback of that group reverts the shims and leaves the Python at whatever SHA last
-# deployed here — the two can drift apart. Accepted because both scripts are dry-run-by-default
-# and DELIBERATELY NOT SCHEDULED (defaults/main.yml's k3s_render_stamp_groups comment): an
-# operator invoking either by hand is already reading its dry-run output before ever passing
-# --apply, which is where a version mismatch between shim and classifier would show up.
-- name: Install the Longhorn reap-orphan classifiers
+# The two Longhorn reapers moved to scripts/backup/ (#2978) and run from the repo checkout, so
+# this role no longer installs them. Nothing removes a file the role stops declaring, so these
+# tasks retire the host copies. Each one matters on its own:
+#   - /opt/longhorn-reap/ held the Python and a host_lib.py sibling.
+#   - The k3s-longhorn-reap fragment named those files. Left behind, manifest-prune-check.sh's
+#     deployed-code arm reports every one of them as missing.
+#   - The /usr/local/bin links pointed through current/k3s-backup-health, and release_bin.yml
+#     only ever creates links, so once `current` swings to a release without the shims they dangle.
+- name: Retire the host-installed Longhorn reapers
   tags: [backup-health]
   ansible.builtin.file:
-    path: /opt/longhorn-reap
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
-- name: Install the shared host_lib helper beside the reap-orphan classifiers
-  tags: [backup-health]
-  # Before the entry points below, not after: the sibling copy is what `import host_lib`
-  # resolves at runtime, so on a first install it must never be the file that lands last.
-  # root:root here, unlike every other caller — these classifiers run as root.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
-  vars:
-    host_lib_dir: /opt/longhorn-reap
-
-- name: Install the Longhorn reap-orphan classifier scripts
-  tags: [backup-health]
-  ansible.builtin.copy:
-    src: "{{ item }}"
-    dest: "/opt/longhorn-reap/{{ item | basename }}"
-    owner: root
-    group: root
-    mode: "0755"
+    path: "{{ item }}"
+    state: absent
   loop:
-    - longhorn_reap_logic.py
-    - longhorn_reap_orphan_backups.py
-    - longhorn_reap_orphan_snapshots.py
+    - /opt/longhorn-reap
+    - /var/lib/homelab/setup-deployed-manifest.d/k3s-longhorn-reap
+    - /usr/local/bin/longhorn-reap-orphan-backups.sh
+    - /usr/local/bin/longhorn-reap-orphan-snapshots.sh
   become: true
-
-# `copy:`-deployed like live-drift-check.py and manifest-declares.py above, so the stale-script
-# arm (which only sees RENDERED templates) cannot see these — they belong to the deployed-code
-# arm, which compares live bytes against the repo. Without this, editing the classifier moves no
-# stamp and manifest-prune-check.sh cannot report the drift.
-- name: Record the deployed Longhorn reap-orphan classifiers
-  tags: [backup-health]
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
-  vars:
-    stamp_deployed_name: k3s-longhorn-reap
-    stamp_deployed_pairs:
-      - live: /opt/longhorn-reap/longhorn_reap_logic.py
-        src: ansible/roles/setup/k3s/files/longhorn_reap_logic.py
-      - live: /opt/longhorn-reap/longhorn_reap_orphan_backups.py
-        src: ansible/roles/setup/k3s/files/longhorn_reap_orphan_backups.py
-      - live: /opt/longhorn-reap/longhorn_reap_orphan_snapshots.py
-        src: ansible/roles/setup/k3s/files/longhorn_reap_orphan_snapshots.py
-      - live: /opt/longhorn-reap/host_lib.py
-        src: ansible/roles/setup/common/files/host_lib.py
 
 - name: Install the Longhorn backup health reader
   tags: [backup-health]
@@ -203,6 +145,21 @@
     - longhorn_restore_drill_stamps.py
   become: true
 
+# Deployed as a VERSIONED RELEASE rather than rendered straight over /usr/local/bin — see
+# roles/setup/common/tasks/release_bin.yml. Each script lands in
+# /opt/homelab/releases/k3s-backup-health/<sha>/ and /usr/local/bin/<name> becomes a symlink
+# through /opt/homelab/current/k3s-backup-health, so a cron's provenance is readable
+# (`probe.py releases` for the k8s plane, `readlink -f` here) and a rollback is one symlink
+# swing rather than a git revert plus a redeploy. The crons below are unchanged: they still
+# invoke /usr/local/bin/<name>, and setup-drift-lib.sh's `cmp` reads through the symlink.
+#
+# The file list comes from k3s_render_stamp_groups, the SAME list stamp_render.yml is given
+# below. That is deliberate: a release and its stamp describing different sets of files is
+# exactly the partial-group false-green the comment above that stamp task warns about, and
+# sharing one list makes the two incapable of disagreeing.
+#
+# The per-script notes live beside that list in
+# roles/setup/k3s/defaults/main.yml, next to the paths they describe.
 - name: Deploy the backup-health scripts as a versioned release
   tags: [backup-health]
   # Runs AFTER the reader above lands, not before — see that task's comment.

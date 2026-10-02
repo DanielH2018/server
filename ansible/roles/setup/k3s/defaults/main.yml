@@ -605,7 +605,7 @@ k3s_longhorn_backup_retain: 14
 # Note retention is enforced PER RECURRING JOB, over that job's own backups only, and only while
 # the job still selects the volume — so this number does not govern the daily-era backups left
 # behind when a volume moved into a weekday shard. Nothing prunes those;
-# longhorn-reap-orphan-backups.sh is their only owner.
+# scripts/backup/longhorn_reap_orphan_backups.py is their only owner.
 k3s_longhorn_weekly_backup_minute_hour: "30 4"
 k3s_longhorn_weekly_backup_retain: 2
 # PVC names; the reconcile task swaps the volume's recurring-job group label. A PVC
@@ -735,24 +735,6 @@ k3s_b2_deletion_accounting_cron_hour: "7"
 k3s_b2_deletion_accounting_cron_minute: "10"
 k3s_b2_budget_cron_hour: "7"
 k3s_b2_budget_cron_minute: "20"
-
-# How old a stranded snapshot must be before the reaper (templates/longhorn-reap-orphan-snapshots.sh.j2)
-# will offer it. A tier move leaves a window where the new job has not run yet, so a snapshot from
-# two days ago may still be a volume's most useful local restore point even though the job that
-# made it no longer owns the volume. Three days clears that window; the strays that motivated
-# the script were four to seven days old.
-k3s_longhorn_snapshot_reap_min_age_days: 3
-
-# Deadline on each individual `kubectl delete` in the reaper. `kubectl delete` waits for the
-# finalizer with NO deadline by default, so a wedged delete hangs indefinitely — the process
-# holds no socket to the API server at all, and the target CR never gains a
-# deletionTimestamp. Unbounded, the failure mode is a run
-# that neither finishes nor reports, and since the purge only runs after the delete loop, a hang
-# also means nothing that WAS deleted gets reclaimed until someone notices and kills it.
-#
-# 120s matches the one-shot BackupVolume play's timeout. A healthy delete here returns in well
-# under a second, so this is a wedge detector, not a work budget.
-k3s_longhorn_snapshot_reap_delete_timeout: 120s
 
 # Daily-backup-volume budget. B2 exposes no cap-headroom API, so nothing can measure the
 # remaining allowance directly; what CAN be watched is the input that grows, the count of
@@ -1156,27 +1138,6 @@ k3s_render_stamp_groups:
       # what makes this group eligible for a versioned release at all — see release_bin.yml's
       # header.
       - ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2
-      # Orphaned-backup reaper. Installed but DELIBERATELY NOT SCHEDULED. It deletes backups,
-      # and the set that is safe to delete depends on live state — a volume whose weekly tier
-      # has produced no backup has only its strays as recovery. The script enforces that floor
-      # itself, but an
-      # operator should read its dry run before any cron does.
-      #   dry run: /usr/local/bin/longhorn-reap-orphan-backups.sh
-      #   delete:  sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply
-      # The dry run reads through the sys_user read-only kubeconfig; --apply needs the
-      # root-only admin one and refuses to start without it, rather than issuing deletes that
-      # come back Forbidden while the run reports success.
-      - ansible/roles/setup/k3s/templates/longhorn-reap-orphan-backups.sh.j2
-      # Orphaned-snapshot reaper. Installed but DELIBERATELY NOT SCHEDULED, for the same reason
-      # as its backup sibling above: it deletes recovery points, and which ones are safe to
-      # delete depends on live state. Run the dry run and read it before running --apply.
-      #   dry run: /usr/local/bin/longhorn-reap-orphan-snapshots.sh
-      #   delete:  sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply
-      # Deletes here are LOCAL ONLY — a Longhorn snapshot is not a backup, and the B2 objects
-      # are untouched. What it buys is reclamation: one retained snapshot pins every block
-      # beneath it against filesystem trim, so this is the step that lets
-      # longhorn-trim-volumes.sh do anything.
-      - ansible/roles/setup/k3s/templates/longhorn-reap-orphan-snapshots.sh.j2
       # Longhorn restore drill. Check 7 (manifest-prune-check.sh) reads a stamp only this
       # script writes, so it must ship under the same tag as the backup-plane heartbeat above —
       # deploying one without the other either installs a drill nothing watches or leaves

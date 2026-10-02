@@ -29,7 +29,7 @@
 # ---------------------------------------------------------------------------------------------
 # migrated-chain (prune_backups/tasks/migrated-chain.yml)
 #
-# WHY NOT THE REAPER. longhorn-reap-orphan-backups.sh already deletes stranded backups and has the
+# WHY NOT THE REAPER. scripts/backup/longhorn_reap_orphan_backups.py already deletes stranded backups and has the
 # better safety floor, but it is all-or-nothing: it reaps every orphan it finds. At about 1.28
 # Class C LISTs per stored block, the full backlog from a 20-volume migration is roughly 13,900
 # Class C against a 2,100/day budget. Reaping it in one pass would cause exactly the

@@ -3,21 +3,18 @@
 
 Both deletes go through host_lib.kubectl_runner, like the reads, but with a longer timeout
 bound to the runner: kubectl's own `--timeout` is a SERVER-side wait, so a client-side cap
-under it would kill the process before the templated knob could ever return. Imported directly
+under it would kill the process before the server-side bound could ever return. Imported directly
 here (not run as a subprocess like test_longhorn_reap_entrypoints.py) so `subprocess.run`
 itself can be monkeypatched and its kwargs inspected -- a black-box stub kubectl on PATH only
 ever sees argv, never the Python-side `timeout=` the caller passed in. The patch target is
 `host_lib.subprocess`, the module the runner's closure actually reads.
 
-Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_delete_transport.py
+Run: uv run pytest scripts/backup/tests/test_longhorn_reap_delete_transport.py
 """
 
 import json
-import pathlib
 import subprocess
-import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import host_lib
 import longhorn_reap_orphan_backups as backups_mod
 import longhorn_reap_orphan_snapshots as snapshots_mod

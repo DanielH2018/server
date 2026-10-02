@@ -109,7 +109,7 @@ the per-volume map and each exclusion's rationale:
   > The frozen `daily-backup` objects that the old note called load-bearing are gone — every
   > backup on the B2 target postdates the re-arm. The reaper's refusal to touch a volume whose
   > current tier has produced nothing
-  > (`/usr/local/bin/longhorn-reap-orphan-backups.sh`) no longer has anything to protect here,
+  > (`scripts/backup/longhorn_reap_orphan_backups.py`) no longer has anything to protect here,
   > because every volume's current tier has now produced something.
 - **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
   uptime-kuma (recreate the first-run admin by hand; AutoKuma backfills monitors from the

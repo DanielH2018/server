@@ -9,7 +9,7 @@ decisions themselves are covered against fixtures in `test_longhorn_reap_logic.p
 
 The stub `k3s` and the staging harness are shared in `_reap_entrypoint_harness.py`.
 
-Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_snapshots_cli.py
+Run: uv run pytest scripts/backup/tests/test_longhorn_reap_snapshots_cli.py
 """
 
 import datetime

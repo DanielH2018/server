@@ -35,10 +35,10 @@ from lib.repo_paths import REPO, ROLES
 # wrong". longhorn-trim-volumes.sh.j2 already carries the fix and the comment this trap is
 # copied from.
 #
-# Only a script that's an ACTUAL cron `job:` target is in scope — this must not flag
-# longhorn-reap-orphan-backups.sh.j2, which uses the same bare `k3s kubectl` and is deliberately
-# UNSCHEDULED (health-crons.yml says so explicitly): a template-content scan alone can't tell
-# "runs under cron's PATH" from "would, if anything ever scheduled it".
+# Only a script that's an ACTUAL cron `job:` target is in scope — this must not flag an
+# operator-invoked script that uses the same bare `k3s kubectl` and is deliberately UNSCHEDULED
+# (the Longhorn reapers were one until #2978 moved them to scripts/backup/): a template-content
+# scan alone can't tell "runs under cron's PATH" from "would, if anything ever scheduled it".
 # No leading `\b` before the literal path: PATH= is always followed directly by `/` or a quote,
 # neither a word character, so `\b` never matches there (a boundary needs one word side) — it
 # would silently reject every real `export PATH=/usr/local/bin...` and `export PATH="/usr/local/

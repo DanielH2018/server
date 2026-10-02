@@ -121,8 +121,8 @@ Two consequences that are easy to get backwards:
 - **Backups left by a previous tier are unowned, not queued.** When a volume moved from the
   `default` group to a weekday shard, `daily-backup` stopped selecting it and can never prune
   those backups again. No `retain` value governs them — `retain: 14` on the daily job is
-  irrelevant, because the job never runs against that volume. `longhorn-reap-orphan-backups.sh`
-  is their only owner, and its safety floor means it can only clear them once the volume has
+  irrelevant, because the job never runs against that volume.
+  `scripts/backup/longhorn_reap_orphan_backups.py` is their only owner, and its safety floor means it can only clear them once the volume has
   weekly backups of its own.
 - **A seed made before 2026-09-03 is unowned in a way the reaper cannot see.** Until then
   `seed_volume_backup.yml` made a backup carrying no `RecurringJob` label at all, so no job's

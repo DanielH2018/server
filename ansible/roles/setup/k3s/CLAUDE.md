@@ -70,7 +70,8 @@ authority of those four actuators is written here so a later edit cannot quietly
   `ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiver.py::test_a_filled_declared_volume_fails_and_stamps_nothing`,
   `ansible/tests/longhorn/test_longhorn_restore_drill_retry.py::test_a_retry_already_spent_leaves_the_rotation_alone`.
 - **Never a cron:** the two reapers delete stranded objects, operator-invoked and dry-run by
-  default; scheduling either is out of contract. ENFORCED:
+  default; scheduling either is out of contract. They live in `scripts/backup/` and run from the
+  repo checkout, so this role installs nothing of theirs. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_reap_orphan_never_scheduled.py::test_no_setup_role_schedules_a_reaper`.
 - **Mode / arming:** `k3s_manage_health_crons` (staging: `false`) withholds the whole set,
   `k3s_manage_backup_targets` the R2/B2 targets and the RecurringJobs, and

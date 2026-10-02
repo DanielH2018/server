@@ -2,9 +2,9 @@
 """The reap-orphan entry points' bootstrap, and every way they must fail closed.
 
 Two subjects, both about the entry point rather than about either subcommand's output. The
-bootstrap pair proves `sys.path.insert(0, dirname(__file__)); import host_lib` resolves when the
-script is invoked directly, which is how it runs in production (uv run
-<path>/longhorn_reap_orphan_backups.py). The fail-closed arms prove an unreadable input — a
+bootstrap pair proves the scripts' own sys.path inserts resolve `host_lib` when the script is
+invoked directly, which is how an operator runs it (`uv run python
+scripts/backup/longhorn_reap_orphan_backups.py`). The fail-closed arms prove an unreadable input — a
 `null` JSON body from kubectl, a non-integral env knob — produces a named ABORT rather than a
 traceback, and never a delete.
 
@@ -13,8 +13,10 @@ The per-subcommand CLI behaviour is in `test_longhorn_reap_backups_cli.py` and
 `test_longhorn_reap_logic.py`. All three CLI suites run through
 `_reap_entrypoint_harness.py`.
 
-Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_entrypoints.py
+Run: uv run pytest scripts/backup/tests/test_longhorn_reap_entrypoints.py
 """
+
+import sys
 
 from _reap_entrypoint_harness import (
     BACKUPS_ENTRY,
@@ -36,6 +38,19 @@ def test_backups_entrypoint_resolves_its_sibling_imports_when_run_directly(tmp_p
 def test_snapshots_entrypoint_resolves_its_sibling_imports_when_run_directly(tmp_path):
     proc, _calls = _run(SNAPSHOTS_ENTRY, [], {"volumes": []}, tmp_path)
     assert "ModuleNotFoundError" not in proc.stderr, proc.stderr
+
+
+def test_the_apply_refusal_names_the_dry_runs_own_interpreter(tmp_path):
+    # Root's `python3` is the distro interpreter, not the pinned one this run uses, so the
+    # re-run hint names the interpreter and the script by absolute path rather than leaving
+    # sudo to resolve either.
+    proc, calls = _run(BACKUPS_ENTRY, ["--apply"], {"volumes": []}, tmp_path)
+    assert proc.returncode != 0
+    assert (
+        "sudo %s -B %s --apply" % (sys.executable, BACKUPS_ENTRY)
+        in proc.stderr + proc.stdout
+    )
+    assert calls == []
 
 
 # ── null JSON bodies: ABORT, not a traceback ────────────────────────────────────────────

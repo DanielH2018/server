@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
 """The subprocess harness the reap-orphan entry-point suites share.
 
-Not a test module — a helper the three suites import. It stages the entry points into a tmp
-directory the way health-crons.yml's copy task stages them into /opt/longhorn-reap/, puts a stub
-`k3s` on PATH in place of the real binary, and runs the entry point against fixture JSON while
+Not a test module — a helper the three suites import. It puts a stub `k3s` on PATH in place of
+the real binary and runs an entry point from scripts/backup/ against fixture JSON while
 recording every `kubectl delete` argv the stub receives.
 
-Staging is what makes the sys.path bootstrap real: the two entry points do
-`sys.path.insert(0, dirname(__file__)); import host_lib`, and host_lib.py lives in another role
-in the repo. Only deploying makes them siblings, so a bare subprocess — which does not inherit
-pytest's pythonpath — is the shape production actually runs.
-
-The file set comes from the copy task rather than a list here, so dropping an entry from that
-loop breaks these suites with a ModuleNotFoundError instead of silently shrinking what gets
-deployed. `test_longhorn_reap_ship_list.py` is the loop/stamp-pair/import-census guard this
-pairs with.
+The entry point runs as a bare subprocess, not an import, because that is how an operator runs
+it (`uv run python scripts/backup/longhorn_reap_orphan_backups.py`). A subprocess does not
+inherit pytest's pythonpath, so the entry point's own sys.path bootstrap is the only thing that
+makes `host_lib` (ansible/roles/setup/common/files/) and `longhorn_reap_logic` importable.
 
 Consumers: `test_longhorn_reap_entrypoints.py`, `test_longhorn_reap_backups_cli.py`,
 `test_longhorn_reap_snapshots_cli.py`.
@@ -23,75 +17,29 @@ Consumers: `test_longhorn_reap_entrypoints.py`, `test_longhorn_reap_backups_cli.
 import json
 import os
 import pathlib
-import shutil
 import subprocess
 import sys
 
-from lib import yaml_fast
-from lib.repo_paths import REPO
 from lib.proc_testing import fake_bin, path_with
 
-FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
-ROLE = pathlib.Path(__file__).resolve().parents[1]
-COMMON_FILES = REPO / "ansible" / "roles" / "setup" / "common" / "files"
-COPY_TASK_NAME = "Install the Longhorn reap-orphan classifier scripts"
-BACKUPS_ENTRY = FILES / "longhorn_reap_orphan_backups.py"
-SNAPSHOTS_ENTRY = FILES / "longhorn_reap_orphan_snapshots.py"
+BACKUP_DIR = pathlib.Path(__file__).resolve().parents[1]
+BACKUPS_ENTRY = BACKUP_DIR / "longhorn_reap_orphan_backups.py"
+SNAPSHOTS_ENTRY = BACKUP_DIR / "longhorn_reap_orphan_snapshots.py"
 
 # The epoch a dated fixture is measured from when a test passes `now=` to `_run`. Same value as
 # the reader suites' `_longhorn_reader_stubs.NOW`.
 NOW = 1_800_000_000.0
 
-# Runs the staged entry point with main(argv, now=NOW) instead of `python <entry> <args>`,
-# still as a subprocess from the staged directory: the sys.path bootstrap, the stub `k3s` on
+# Runs the entry point with main(argv, now=NOW) instead of `python <entry> <args>`,
+# still as a subprocess: the sys.path bootstrap, the stub `k3s` on
 # PATH and the env parsing are the real ones. `-P` keeps the cwd off sys.path, so the bootstrap
-# is what makes `host_lib` importable, as it is under the cron; `run_name` is not `__main__`, so
+# is what makes `host_lib` importable, as it is for an operator; `run_name` is not `__main__`, so
 # the file's own entry line does not fire a second, clock-reading run.
 _MAIN_WITH_NOW = (
     "import runpy, sys; "
     "g = runpy.run_path(sys.argv[1], run_name='longhorn_reap_entry'); "
     "sys.exit(g['main'](sys.argv[3:], now=float(sys.argv[2])))"
 )
-
-
-def _copy_loop_srcs() -> list[pathlib.Path]:
-    """The exact file set health-crons.yml's own copy task installs into /opt/longhorn-reap/,
-    resolved to repo paths -- reading it from the task rather than hardcoding it here means
-    dropping a file from that loop (host_lib.py, say) breaks these transport tests with a
-    ModuleNotFoundError instead of silently shrinking what actually gets deployed. See
-    test_longhorn_reap_ship_list.py for the loop/stamp-pair/import-census guard this pairs with.
-    """
-    tasks = yaml_fast.safe_load((ROLE / "tasks" / "health-crons.yml").read_text())
-    matches = [t for t in tasks if t.get("name") == COPY_TASK_NAME]
-    assert len(matches) == 1, (
-        f"expected exactly one task named {COPY_TASK_NAME!r}, found {len(matches)}"
-    )
-    resolved = [FILES / item for item in matches[0]["loop"]]
-    # host_lib.py arrives through roles/setup/common/tasks/install_host_lib.yml, not the copy
-    # loop; include it only when that include is present and aimed at the same directory, so
-    # dropping the include breaks these tests the way dropping a loop entry does.
-    for t in tasks:
-        if (
-            t.get("ansible.builtin.import_tasks", "").endswith(
-                "common/tasks/install_host_lib.yml"
-            )
-            and t.get("vars", {}).get("host_lib_dir") == "/opt/longhorn-reap"
-        ):
-            resolved.append(COMMON_FILES / "host_lib.py")
-    return resolved
-
-
-def _deployed_entry(entry: pathlib.Path, deploy_dir: pathlib.Path) -> pathlib.Path:
-    # host_lib.py is a cross-role shared module (ansible/roles/setup/common/files), staged into
-    # /opt/longhorn-reap/ as a sibling by the Ansible copy task -- it does not live in this
-    # role's own files/ in the repo. Deploying is what makes the two entry points' sibling
-    # directories the same one; this reproduces that shape in a tmp dir so the sys.path
-    # bootstrap (`sys.path.insert(0, dirname(__file__)); import host_lib`) is exercised for real
-    # rather than relying on pytest's own pythonpath, which a bare subprocess does not inherit.
-    deploy_dir.mkdir(exist_ok=True)
-    for src in _copy_loop_srcs():
-        shutil.copy(src, deploy_dir / src.name)
-    return deploy_dir / entry.name
 
 
 _STUB_KUBECTL = """#!/usr/bin/env python3
@@ -169,7 +117,6 @@ def _run(
     extra_env=None,
     now=None,
 ):
-    deployed = _deployed_entry(entry, tmp_path / "opt")
     stub_dir = fake_bin(tmp_path / "bin", k3s=_STUB_KUBECTL)
 
     calls_log = tmp_path / "calls.jsonl"
@@ -198,14 +145,14 @@ def _run(
         env.update(extra_env)
 
     if now is None:
-        argv = [sys.executable, str(deployed), *args]
+        argv = [sys.executable, str(entry), *args]
     else:
         argv = [
             sys.executable,
             "-P",
             "-c",
             _MAIN_WITH_NOW,
-            str(deployed),
+            str(entry),
             repr(now),
             *args,
         ]

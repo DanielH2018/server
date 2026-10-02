@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """The two Longhorn reapers are operator-invoked only; nothing may schedule them.
 
-`longhorn-reap-orphan-backups.sh` and `longhorn-reap-orphan-snapshots.sh` delete stranded
+`scripts/backup/longhorn_reap_orphan_backups.py` and `longhorn_reap_orphan_snapshots.py` delete stranded
 recovery points, and which ones are safe to delete depends on live state — when the
 weekly tier has produced nothing, the strays are the only recovery a volume has. The k3s role's
 autonomous-role contract therefore lists them under **Never a cron**, and this guard fails a
 `cron:` task or a kuma-check timer naming either script.
 
 The census is STRUCTURAL, not textual. The names appear on purpose in `defaults/main.yml`
-comments, in the templates' own headers and in the role docs, so "the name appears nowhere under
+comments, in the scripts' own docstrings and in the role docs, so "the name appears nowhere under
 `roles/setup/`" would fail on prose. What is forbidden is a SCHEDULE: a `cron:` task's fields, a
 `kuma_check_timer.yml` import's vars, and a systemd `.service.j2`/`.timer.j2` template.
 
@@ -18,14 +18,16 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_orphan_never_schedu
 from pathlib import Path
 
 from _helpers import ANSIBLE
+from _helpers import REPO
 from _helpers import load_tasks
 from _helpers import walk_tasks
 from _setup_render import rendered_setup_texts
 import json
 
 SETUP = ANSIBLE / "roles" / "setup"
+BACKUP_SCRIPTS = REPO / "scripts" / "backup"
 REAPERS = frozenset(
-    {"longhorn-reap-orphan-backups.sh", "longhorn-reap-orphan-snapshots.sh"}
+    {"longhorn_reap_orphan_backups.py", "longhorn_reap_orphan_snapshots.py"}
 )
 CRON_MODULES = frozenset({"cron", "ansible.builtin.cron"})
 INCLUDE_MODULES = frozenset(
@@ -130,11 +132,10 @@ def test_the_render_reaches_every_setup_unit_template() -> None:
     )
 
 
-def test_both_reapers_exist_as_templates() -> None:
+def test_both_reapers_exist_in_scripts_backup() -> None:
     """Non-vacuity: a renamed reaper would make the census below pass on nothing."""
-    templates = SETUP / "k3s" / "templates"
-    missing = sorted(r for r in REAPERS if not (templates / f"{r}.j2").exists())
-    assert not missing, f"reaper template(s) gone or renamed: {missing}"
+    missing = sorted(r for r in REAPERS if not (BACKUP_SCRIPTS / r).exists())
+    assert not missing, f"reaper script(s) gone or renamed: {missing}"
 
 
 def test_census_finds_the_scheduled_drill() -> None:
@@ -173,10 +174,10 @@ def test_a_scratch_cron_naming_a_reaper_is_flagged(tmp_path: Path) -> None:
         "- name: Reap stranded backups nightly\n"
         "  ansible.builtin.cron:\n"
         "    name: reap\n"
-        "    job: /usr/local/bin/longhorn-reap-orphan-backups.sh --apply\n"
+        "    job: /srv/server/scripts/backup/longhorn_reap_orphan_backups.py --apply\n"
     )
     assert scheduled_reapers(tmp_path) == [
-        ("scratch/tasks/main.yml#0", "longhorn-reap-orphan-backups.sh")
+        ("scratch/tasks/main.yml#0", "longhorn_reap_orphan_backups.py")
     ]
 
 
@@ -188,10 +189,10 @@ def test_a_scratch_timer_import_naming_a_reaper_is_flagged(tmp_path: Path) -> No
         "- name: Reap stranded snapshots on a timer\n"
         '  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"\n'
         "  vars:\n"
-        "    kuma_check_exec: /usr/local/bin/longhorn-reap-orphan-snapshots.sh\n"
+        "    kuma_check_exec: /srv/server/scripts/backup/longhorn_reap_orphan_snapshots.py\n"
     )
     assert scheduled_reapers(tmp_path) == [
-        ("scratch/tasks/main.yml#0", "longhorn-reap-orphan-snapshots.sh")
+        ("scratch/tasks/main.yml#0", "longhorn_reap_orphan_snapshots.py")
     ]
 
 
@@ -200,10 +201,10 @@ def test_a_scratch_unit_template_naming_a_reaper_is_flagged(tmp_path: Path) -> N
     templates = tmp_path / "scratch" / "templates"
     templates.mkdir(parents=True)
     (templates / "reap.service.j2").write_text(
-        "[Service]\nExecStart=/usr/local/bin/longhorn-reap-orphan-backups.sh --apply\n"
+        "[Service]\nExecStart=/srv/server/scripts/backup/longhorn_reap_orphan_backups.py --apply\n"
     )
     assert scheduled_reapers(tmp_path) == [
-        ("scratch/templates/reap.service.j2", "longhorn-reap-orphan-backups.sh")
+        ("scratch/templates/reap.service.j2", "longhorn_reap_orphan_backups.py")
     ]
 
 
@@ -212,6 +213,6 @@ def test_a_comment_naming_a_reaper_is_clean(tmp_path: Path) -> None:
     templates = tmp_path / "scratch" / "templates"
     templates.mkdir(parents=True)
     (templates / "other.service.j2").write_text(
-        "# never longhorn-reap-orphan-backups.sh here\n[Service]\nExecStart=/bin/true\n"
+        "# never longhorn_reap_orphan_backups.py here\n[Service]\nExecStart=/bin/true\n"
     )
     assert scheduled_reapers(tmp_path) == []
