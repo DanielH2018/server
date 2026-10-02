@@ -10,6 +10,11 @@ expanded (#3225). Only the files no render covers are read as source: the `*.yam
 files, and the four kinds of template `_render_texts` skips (`SOURCE_FALLBACK_MEMBERS` names
 one of each).
 
+A name counts as DEFINED only where it is a real annotation key or a `checksum_annotation()`
+call. Matching the bare string credited a comment discussing the annotation as the annotation
+itself, in a task file and in a rendered manifest both (#3229); `CENSUS_MEMBERS` is the
+non-vacuity half of that narrowing.
+
 Run: uv run pytest ansible/tests/k8s/test_checksum_annotations_documented.py
 """
 
@@ -26,14 +31,30 @@ from _role_census import role_dirs
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 
 # `checksum/foo` in prose, including inside backticks. The trailing char class stops at the
-# closing backtick or punctuation rather than swallowing the rest of the sentence.
+# closing backtick or punctuation rather than swallowing the rest of the sentence. This is the
+# DOCUMENTED side of the census only — what a CLAUDE.md promises is prose by nature.
 CHECKSUM_RE = re.compile(r"checksum/([a-zA-Z0-9._-]+)")
+
+# `checksum/foo:` as a real mapping key, optionally quoted — the DEFINED side of the census.
+# A pod annotation is always a key at a mapping indent, so nothing but whitespace may precede
+# it, and that is what keeps a `#` comment out: a comment line starts with `#` after its
+# indent and never matches.
+#
+# Reading the defined side with CHECKSUM_RE instead credited a prose mention as the annotation
+# (#3229). Three live mentions did it: `observability/tasks/main.yml` and
+# `observability/defaults/main.yml` both discuss `checksum/config`, and the rendered manifests
+# of autofix-bridge and game-stats carry YAML comments naming monitor-bridge's
+# `checksum/check-script` — so the source half and the render half shared the defect. One
+# regex over every YAML-ish text closes both.
+ANNOTATION_KEY_RE = re.compile(
+    r"^[ \t]*['\"]?checksum/([a-zA-Z0-9._-]+)['\"]?[ \t]*:", re.MULTILINE
+)
 
 # `checksum_annotation('foo', ...)` — the shared macro (ansible/templates/checksum-
 # annotation.yml.j2) that monitor-bridge, autofix-bridge, n8n, game-stats and observability
 # call instead of writing `checksum/foo:` literally. Scoped to the SOURCE half of the census:
-# the render expands the macro into the literal `checksum/foo` that CHECKSUM_RE already
-# matches, so a rendered template needs this pattern for nothing. A template the render does
+# the render expands the macro into the literal key that ANNOTATION_KEY_RE already matches, so
+# a rendered template needs this pattern for nothing. A template the render does
 # not reach — a nested `templates/config/*.j2`, a role with no `containers_list` entry — can
 # still call the macro, and there the call is all the census gets to see.
 MACRO_CALL_RE = re.compile(r"checksum_annotation\(\s*['\"]([a-zA-Z0-9._-]+)['\"]")
@@ -84,6 +105,18 @@ SOURCE_FALLBACK_MEMBERS = {
 }
 
 
+# One annotation per role that genuinely defines one, so narrowing the read cannot empty the
+# census and pass over nothing. Every member here arrives through the render: the macro writes
+# the literal key, and these are the only five roles that call it.
+CENSUS_MEMBERS = {
+    "observability": "config",
+    "game-stats": "stats-script",
+    "autofix-bridge": "autofix-script",
+    "monitor-bridge": "check-script",
+    "n8n": "image",
+}
+
+
 def _fallback_category(role: Path, path: Path) -> str | None:
     """Why `path` is read as source, or None when the render should have covered it."""
     rendered = _rendered_by_role().get(role.name, {})
@@ -114,25 +147,43 @@ def _role_dirs():
     return sorted(d for d in role_dirs() if (d / "CLAUDE.md").is_file())
 
 
+def _annotations_in_plain_yaml(role: Path) -> set[str]:
+    """Every `checksum/<name>` `role` defines in a plain `*.yaml`/`*.yml` file.
+
+    These are the role's task files, defaults and `files/*.yaml`, read as source because no
+    render covers them (#3225 left this half on source deliberately). A name counts here only
+    as a real annotation key or a `checksum_annotation()` call — a prose mention in a comment
+    rolls no pod, and crediting one was the false-clear of #3229.
+
+    No role defines an annotation in a plain `*.yaml`/`*.yml` today, so this returns the empty
+    set everywhere and `test_an_annotation_key_line_is_clean_and_a_comment_mentioning_one_is_flagged`
+    is what proves the read works rather than a live member. The branch stays for the shape
+    that would land here: a static `files/*.yaml` manifest, applied rather than rendered,
+    carrying a pod annotation of its own.
+    """
+    found = set()
+    for path in list(role.rglob("*.yaml")) + list(role.rglob("*.yml")):
+        text = path.read_text(errors="replace")
+        found |= set(ANNOTATION_KEY_RE.findall(text))
+        found |= set(MACRO_CALL_RE.findall(text))
+    return found
+
+
 def _annotations_in_templates(role: Path) -> set[str]:
     """Every `checksum/<name>` `role` defines, read from its renders where one exists."""
     found = set()
     for text in _rendered_by_role().get(role.name, {}).values():
-        found |= set(CHECKSUM_RE.findall(text))
-    sources = (
-        [
-            path
-            for path in role.rglob("*.j2")
-            if path.name not in _rendered_by_role().get(role.name, {})
-        ]
-        + list(role.rglob("*.yaml"))
-        + list(role.rglob("*.yml"))
-    )
-    for path in sources:
+        found |= set(ANNOTATION_KEY_RE.findall(text))
+    unrendered = [
+        path
+        for path in role.rglob("*.j2")
+        if path.name not in _rendered_by_role().get(role.name, {})
+    ]
+    for path in unrendered:
         text = path.read_text(errors="replace")
-        found |= set(CHECKSUM_RE.findall(text))
+        found |= set(ANNOTATION_KEY_RE.findall(text))
         found |= set(MACRO_CALL_RE.findall(text))
-    return found
+    return found | _annotations_in_plain_yaml(role)
 
 
 @pytest.mark.parametrize("role", _role_dirs(), ids=lambda p: p.name)
@@ -183,12 +234,14 @@ def test_the_render_carries_the_macro_built_annotation():
         "monitor-bridge's Deployment is not among the rendered manifests, so this guard's "
         f"corpus is empty: {sorted(rendered)}"
     )
-    assert "check-script" not in CHECKSUM_RE.findall(
+    assert "check-script" not in ANNOTATION_KEY_RE.findall(
         (role / "templates" / "deployment.yaml.j2").read_text()
     ), (
         "the source now spells the annotation out, so it no longer proves the render is read"
     )
-    assert "check-script" in set(CHECKSUM_RE.findall(rendered["deployment.yaml.j2"])), (
+    assert "check-script" in set(
+        ANNOTATION_KEY_RE.findall(rendered["deployment.yaml.j2"])
+    ), (
         "the render of monitor-bridge's Deployment no longer carries checksum/check-script; "
         "the macro's output is what this census reads"
     )
@@ -236,3 +289,68 @@ def test_a_manifest_template_dropping_out_of_the_render_reads_as_unexplained():
         _fallback_category(role, role / "templates" / "not-in-the-render.yaml.j2")
         is None
     )
+
+
+@pytest.mark.parametrize("role_name,annotation", sorted(CENSUS_MEMBERS.items()))
+def test_each_role_that_defines_an_annotation_is_still_credited_with_it(
+    role_name: str, annotation: str
+):
+    """Non-vacuity: narrowing the read to real annotation keys kept every live member.
+
+    `ANNOTATION_KEY_RE` is stricter than the prose pattern it replaced, so a form it fails to
+    match reads as "this role defines no annotation" and every claim about it passes over an
+    empty set. These five are the roles that call `checksum_annotation()`.
+    """
+    actual = _annotations_in_templates(K8S_ROLES / role_name)
+    assert annotation in actual, (
+        f"{role_name} no longer reads as defining checksum/{annotation}; the census now sees "
+        f"{sorted(actual) or 'none'} there"
+    )
+
+
+def test_a_prose_mention_in_a_task_file_is_flagged_as_not_an_annotation():
+    """The red half of #3229: observability's prose no longer satisfies its own CLAUDE.md.
+
+    `observability/tasks/main.yml` and `observability/defaults/main.yml` discuss
+    `checksum/config` in comments, and the role's CLAUDE.md promises that annotation. Reading
+    the plain-YAML half with the prose pattern therefore cleared the claim from a comment that
+    rolls no pod. The second assertion is the non-vacuity leg: the mention really is in those
+    files, so an empty result means the narrowing worked rather than that the subject moved.
+    """
+    role = K8S_ROLES / "observability"
+    assert _annotations_in_plain_yaml(role) == set(), (
+        "a plain `*.yaml`/`*.yml` file in observability now reads as defining an annotation; "
+        "the role defines all of its own in templates"
+    )
+    prose = set(
+        CHECKSUM_RE.findall((role / "tasks" / "main.yml").read_text(errors="replace"))
+    )
+    assert "config" in prose, (
+        "observability/tasks/main.yml no longer mentions checksum/config, so this guard has "
+        "lost the prose it exists to refuse — point it at another prose mention or drop it"
+    )
+
+
+def test_an_annotation_key_line_is_clean_and_a_comment_mentioning_one_is_flagged():
+    """The accept/reject pair for `ANNOTATION_KEY_RE`, on the three shapes that matter.
+
+    A bare key and a quoted key are both real annotations. A YAML comment naming one is not,
+    whatever its indent — which is the shape the rendered manifests of autofix-bridge and
+    game-stats carry for monitor-bridge's `checksum/check-script`.
+    """
+    accepted = "\n".join(
+        [
+            "      annotations:",
+            "        checksum/config: abc123",
+            '        "checksum/check-script": def456',
+        ]
+    )
+    assert set(ANNOTATION_KEY_RE.findall(accepted)) == {"config", "check-script"}
+
+    rejected = "\n".join(
+        [
+            "        # mirrors monitor-bridge's checksum/check-script, hashed per module",
+            "# checksum/config: this one is commented out, so no pod carries it",
+        ]
+    )
+    assert ANNOTATION_KEY_RE.findall(rejected) == []
