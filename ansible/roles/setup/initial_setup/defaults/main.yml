@@ -21,7 +21,7 @@
 # without a raw `curl` (#2301).
 initial_setup_uv_version: "0.12.19"
 initial_setup_uv_installer_url: "https://astral.sh/uv/{{ initial_setup_uv_version }}/install.sh"
-initial_setup_uv_installer_sha256: e62a5ea089de9c6a9b1f767166c9f33194e18d350e9f375c6355fac3ba0fb42b
+initial_setup_uv_installer_sha256: 61b349611f1b6e1ba33645f30c36da5287df2609dd7af8605d96a031435eb35b
 
 # When the daily Docker image prune runs, in the host's clock (UTC on every host). A variable
 # rather than a literal in `tasks/crons.yml` so that the healthchecks.io deadman-cadences fragment
