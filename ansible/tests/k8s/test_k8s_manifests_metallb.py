@@ -7,9 +7,9 @@ VIP fails silently, because every manifest stays valid. Service annotations must
 """
 
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _k8s_render import rendered_docs
 
-from _manifest_guards import ALL_VARS, K3S, K3S_DEFAULTS, K8S, _render
+from _manifest_guards import ALL_VARS, K3S, K3S_DEFAULTS, _render
 
 
 def _ip_to_int(addr: str) -> int:
@@ -68,17 +68,37 @@ def test_the_general_pool_narrows_before_the_ingress_pool_is_created():
     assert names.index("homelab-pool") < names.index("ingress-pool")
 
 
-def _metallb_annotation_lines():
-    """(template, lineno, line) for every metallb Service annotation in the k8s roles.
+# Every role whose rendered Service pins an address. A census that stops naming one of these
+# is checking fewer Services and still passing, which is the shape the glob it replaced failed
+# in: it read `service.yaml.j2` only, and jellyfin pins its LAN address in `service-lan.yaml.j2`.
+PINNED_SERVICE_ROLES = frozenset({"jellyfin", "mosquitto", "pihole", "traefik"})
 
-    Globs service*.yaml.j2, not service.yaml.j2 — jellyfin pins its LAN address in
-    service-lan.yaml.j2, which the narrower glob never saw.
+
+def metallb_service_annotations(docs) -> list[tuple[str, str, str]]:
+    """(role, template name, annotation key) for every metallb annotation on a Service.
+
+    Reads the rendered manifests rather than the templates (#3209), so a comment naming the
+    deprecated prefix — traefik's template carries five lines of them — cannot be credited as
+    an annotation, and a Service rendered from a template of any name is covered.
     """
-    for tpl in sorted(K8S.glob("*/templates/service*.yaml.j2")):
-        for i, line in enumerate(tpl.read_text().splitlines(), 1):
-            body = line.split("#", 1)[0]
-            if "metallb" in body:
-                yield tpl, i, line
+    found = []
+    for role, name, doc in docs:
+        if not isinstance(doc, dict) or doc.get("kind") != "Service":
+            continue
+        annotations = (doc.get("metadata") or {}).get("annotations") or {}
+        found.extend(
+            (role, name, key) for key in sorted(annotations) if "metallb" in key
+        )
+    return found
+
+
+def deprecated_annotations(docs) -> list[str]:
+    """`<role>/<template>: <key>` for every Service annotation on the retired prefix."""
+    return [
+        f"{role}/{name}: {key}"
+        for role, name, key in metallb_service_annotations(docs)
+        if key.startswith("metallb.universe.tf/")
+    ]
 
 
 def test_metallb_service_annotations_use_the_metallb_io_namespace():
@@ -93,27 +113,40 @@ def test_metallb_service_annotations_use_the_metallb_io_namespace():
     address is assigned from the auto-assign pool instead of the pinned one, and the deploy
     is green.
     """
-    for tpl, i, line in _metallb_annotation_lines():
-        if "metallb.universe.tf/" in line.split("#", 1)[0]:
-            raise AssertionError(
-                f"{tpl.relative_to(ANSIBLE)}:{i} uses a deprecated metallb.universe.tf/ "
-                f"Service annotation — use metallb.io/. Line: {line.strip()}"
-            )
-
-
-def test_the_metallb_annotation_guard_can_go_red():
-    """The rejecting half.
-
-    A guard that matches nothing is indistinguishable from a passing one.
-    """
-    accepted = "    metallb.io/loadBalancerIPs: 10.0.0.240"
-    rejected = "    metallb.universe.tf/loadBalancerIPs: 10.0.0.240"
-    assert "metallb.universe.tf/" not in accepted.split("#", 1)[0]
-    assert "metallb.universe.tf/" in rejected.split("#", 1)[0]
-    # And the glob still finds the real templates, so the loop above is not scanning nothing.
-    assert list(_metallb_annotation_lines()), (
-        "no metallb Service annotations found — the glob or the templates moved"
+    found = deprecated_annotations(rendered_docs())
+    assert found == [], (
+        "these Services use a deprecated metallb.universe.tf/ annotation — use metallb.io/: "
+        f"{found}"
     )
+
+
+def test_the_annotation_census_names_every_service_that_pins_an_address():
+    """Guard the guard: a census that matched nothing would pass the test above."""
+    roles = {role for role, _, _ in metallb_service_annotations(rendered_docs())}
+    assert PINNED_SERVICE_ROLES <= roles, (
+        f"the census no longer sees {sorted(PINNED_SERVICE_ROLES - roles)} — the render or "
+        "the annotations moved"
+    )
+
+
+def test_a_deprecated_annotation_is_flagged():
+    """The rejecting half, against a document that is not in the tree."""
+    assert deprecated_annotations(
+        [
+            (
+                "widget",
+                "service.yaml.j2",
+                {
+                    "kind": "Service",
+                    "metadata": {
+                        "annotations": {
+                            "metallb.universe.tf/loadBalancerIPs": "10.0.0.249"
+                        }
+                    },
+                },
+            )
+        ]
+    ) == ["widget/service.yaml.j2: metallb.universe.tf/loadBalancerIPs"]
 
 
 def test_metallb_version_still_supports_the_metallb_io_annotations():

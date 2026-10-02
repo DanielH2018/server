@@ -36,18 +36,28 @@ Two things the rule deliberately does not reach:
 #3196 named one blind spot, `test_healthchecks_pings.py`, whose `ANSIBLE.rglob("*")` census
 put no template path at its read site. #3190 converted that census to a render in the same
 wave, and the control read it kept IS visible here — so the module is a listed reader rather
-than a declared gap, and no blind-spot map is needed. #3209 names a second blind spot: a glob
-wrapped in `sorted()`, or a path handed to a helper that reads it, puts no template path at
-the read site either. `k8s/test_vip_pins.py` read its workload templates that way; #3203
-converted those reads with the rest of the module.
+than a declared gap, and no blind-spot map is needed.
+
+Three more spellings hid a read until #3209, #3210 and #3211, and `_render_gate.py` resolves
+all three: a glob wrapped in `sorted()`, a path handed to a helper whose parameter does the
+reading, and a path imported from a sibling module. Eight modules were reading a template's
+source behind them — three are converted, and five joined the list below. That is the one way
+the list GROWS: a detector that learns to see a read adds the entries it was blind to, where a
+conversion never adds one.
+
+`ansible/tests/repo/_render_gate.py` holds the detector itself — which spellings of a read it
+resolves, and the one it deliberately does not treat as a read (a glob that only yields
+FILENAMES).
 
 Run: uv run pytest ansible/tests/repo/test_guard_tests_read_renders_not_templates.py
 """
 
-import ast
+import functools
 from pathlib import Path
 
 from lib.repo_paths import ANSIBLE
+
+from _render_gate import sibling_sources, template_source_reads
 
 TESTS = ANSIBLE / "tests"
 # Every directory the rule covers. Adding one means converting its readers first.
@@ -112,6 +122,34 @@ TEMPLATE_SOURCE_READERS = {
         "each renders with its own `container_item`, so two identical sources render "
         "differently and the duplication is visible only in the bytes"
     ),
+    "deploy/_autodeploy_claims.py": (
+        "an UNRESOLVED claim token — `claimName: {{ inst.claim }}`, a loop variable no "
+        "single-variable resolver reaches — which the caller treats as a violation. A render "
+        "resolves the token or drops it, so neither outcome is distinguishable from a role "
+        "with no claim at all. Reads the same synthetic role trees under `tmp_path` as "
+        "`_autodeploy.py`, whose derivation it feeds"
+    ),
+    "k8s/test_configmap_keys_not_absorbed.py": (
+        "the SOURCE key names written at the `data:` indent, which are one side of the "
+        "comparison: absorption shows up as a key present in the source and absent from the "
+        "PARSED render, so reading only the render erases the defect"
+    ),
+    "k8s/test_container_security_context_uses_the_macro.py": (
+        "whether a container block CALLS `hardened_security_context()` or writes its body out; "
+        "a copy that still matches renders identically to the macro call, so only the source "
+        "tells them apart. The rendered result is checked by "
+        "`test_container_security_context.py`"
+    ),
+    "k8s/test_empty_rollout_still_restarts_on_secret_change.py": (
+        "the census takes the role directory as a parameter so its red proof can hand it a "
+        "synthetic role under `tmp_path`, which no render reaches. Converting the real half to "
+        "a render and keeping the source for the synthetic one is #3218"
+    ),
+    "longhorn/test_longhorn_reap_orphan_never_scheduled.py": (
+        "the census takes the setup root as a parameter so its red proof can hand it a "
+        "synthetic unit template under `tmp_path`, which no render reaches. Converting the "
+        "real half to a render and keeping the source for the synthetic one is #3218"
+    ),
     "setup/test_registry_selftest_single_node.py": (
         "whether the agent-Job gate carries `| default([])`, which decides what happens on a "
         "host whose inventory does not define `k3s_agent_node_ips`. Every render context "
@@ -139,17 +177,24 @@ KNOWN_MEMBERS = frozenset(
         "services/test_strangler_bridge.py",
         "longhorn/_restore_drill.py",
         "longhorn/test_daily_group_membership_is_the_r2_list.py",
+        "longhorn/test_longhorn_reap_orphan_never_scheduled.py",
         "longhorn/test_longhorn_restore_drill_byte_floor.py",
         "longhorn/test_prune_backups.py",
+        "repo/_render_gate.py",
+        "repo/test_render_gate.py",
         "repo/test_guard_tests_read_renders_not_templates.py",
         "repo/test_secret_rendering_host_scripts_have_no_log.py",
         "repo/test_testpaths_covers_every_test_file.py",
         "deploy/_autodeploy.py",
+        "deploy/_autodeploy_claims.py",
         "deploy/test_gitops_manual_trigger.py",
         "deploy/test_k8s_autodeploy_rollout_gates.py",
         "deploy/test_setup_render_manifest.py",
         "k8s/_manifest_guards.py",
         "k8s/test_arr_deployments_share_one_macro.py",
+        "k8s/test_configmap_keys_not_absorbed.py",
+        "k8s/test_container_security_context_uses_the_macro.py",
+        "k8s/test_empty_rollout_still_restarts_on_secret_change.py",
         "k8s/test_k8s_manifests.py",
         "k8s/test_shared_manifest_defaults.py",
         "k8s/test_tls_cert_resolver_optional.py",
@@ -172,115 +217,6 @@ KNOWN_MEMBERS = frozenset(
     }
 )
 
-_READ_METHODS = frozenset({"read_text", "read_bytes", "open"})
-_GLOB_METHODS = frozenset({"glob", "rglob"})
-
-
-def _names_a_template_path(node: ast.expr) -> bool:
-    """Whether `node` builds a path that goes through a `templates/` directory or ends in `.j2`.
-
-    A segment literal (`"templates"`), a slashed fragment (`"roles/k8s/x/templates/y.j2"`) and
-    a bare `.j2` filename at the end of a path expression all count. A glob PATTERN is handled
-    by `_glob_names_templates` instead: `"*.j2"` is a pattern, not a name.
-    """
-    for inner in ast.walk(node):
-        if not (isinstance(inner, ast.Constant) and isinstance(inner.value, str)):
-            continue
-        value = inner.value
-        if "*" in value:
-            continue
-        if (
-            value == "templates"
-            or "templates/" in value
-            or value.endswith("/templates")
-        ):
-            return True
-        if value.endswith(".j2"):
-            return True
-    return False
-
-
-def _glob_names_templates(node: ast.Call) -> bool:
-    """Whether a `glob`/`rglob` call enumerates templates, by its pattern."""
-    return any(
-        isinstance(a, ast.Constant)
-        and isinstance(a.value, str)
-        and (a.value.endswith(".j2") or "templates" in a.value)
-        for a in node.args
-    )
-
-
-def _bindings(tree: ast.Module) -> dict[str, str]:
-    """The names `tree` binds to a template path, by the expression each is bound to.
-
-    Covers the four spellings a reader takes: an assignment to a path expression, a `for` over
-    a template glob, the same `for` inside a comprehension, and a `for` over a TUPLE of names
-    already bound this way — `_kuma_entities.py` reads its two templates that last way, which
-    is why the resolution runs to a fixed point rather than in one pass.
-
-    A path built under `tmp_path` is the module's own fixture rather than a deployed template,
-    so it never binds: `test_nut_fsd_login_confined.py` lays out synthetic role trees.
-    """
-    pairs: list[tuple[list[ast.expr], ast.expr]] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            pairs.append((node.targets, node.value))
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            pairs.append(([node.target], node.value))
-        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
-            pairs.append(([node.target], node.iter))
-
-    bound: dict[str, str] = {}
-    while True:
-        grew = False
-        for targets, value in pairs:
-            text = ast.unparse(value)
-            if "tmp_path" in text:
-                continue
-            hit = (
-                isinstance(value, ast.Call)
-                and isinstance(value.func, ast.Attribute)
-                and value.func.attr in _GLOB_METHODS
-                and _glob_names_templates(value)
-            )
-            if not hit and isinstance(value, (ast.Tuple, ast.List, ast.Set)):
-                names = [e.id for e in value.elts if isinstance(e, ast.Name)]
-                hit = len(names) == len(value.elts) > 0 and all(
-                    name in bound for name in names
-                )
-            if not hit:
-                hit = _names_a_template_path(value)
-            if not hit:
-                continue
-            for target in targets:
-                if isinstance(target, ast.Name) and target.id not in bound:
-                    bound[target.id] = text
-                    grew = True
-        if not grew:
-            return bound
-
-
-def template_source_reads(source: str) -> list[str]:
-    """The expressions in `source` that read a template's SOURCE text, by how they spell it."""
-    tree = ast.parse(source)
-    bound = _bindings(tree)
-    found = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if isinstance(node.func, ast.Name) and node.func.id == "open" and node.args:
-            target = node.args[0]
-        elif isinstance(node.func, ast.Attribute) and node.func.attr in _READ_METHODS:
-            target = node.func.value
-        else:
-            continue
-        text = ast.unparse(target)
-        if "tmp_path" in text:
-            continue
-        if text in bound or _names_a_template_path(target):
-            found.append(ast.unparse(node))
-    return sorted(set(found))
-
 
 def _modules() -> dict[str, Path]:
     """Every scanned module, by its `<directory>/<module>.py` key."""
@@ -290,6 +226,16 @@ def _modules() -> dict[str, Path]:
         for p in sorted(directory.glob("*.py"))
         if p.name != "__init__.py"
     }
+
+
+@functools.cache
+def _importable(directory: str) -> tuple[tuple[str, str], ...]:
+    """Every module a test in `directory` can import, as (module name, text) pairs.
+
+    Cached as a tuple because `functools.cache` needs a hashable return value and the census
+    asks for the same directory once per module in it.
+    """
+    return tuple(sibling_sources(TESTS / directory, TESTS).items())
 
 
 def test_the_census_reaches_every_known_module():
@@ -311,11 +257,20 @@ def offenders(sources: dict[str, str]) -> dict[str, list[str]]:
     module that does not exist on disk: a gate only ever observed passing is a gate with no
     evidence it can fail.
     """
+    by_directory: dict[str, dict[str, str]] = {}
+    for name, text in sources.items():
+        by_directory.setdefault(name.split("/")[0], {})[Path(name).stem] = text
     return {
         name: reads
         for name, text in sorted(sources.items())
         if name not in TEMPLATE_SOURCE_READERS
-        and (reads := template_source_reads(text))
+        and (
+            reads := template_source_reads(
+                text,
+                dict(_importable(directory := name.split("/")[0]))
+                | by_directory[directory],
+            )
+        )
     }
 
 
@@ -336,58 +291,14 @@ def test_every_exempt_module_is_still_flagged():
     unflagged = sorted(
         name
         for name in TEMPLATE_SOURCE_READERS
-        if not template_source_reads(found[name].read_text())
+        if not template_source_reads(
+            found[name].read_text(),
+            dict(_importable(name.split("/")[0])),
+        )
     )
     assert unflagged == [], (
         "these modules no longer read a template's source — drop them from "
         f"TEMPLATE_SOURCE_READERS: {unflagged}"
-    )
-
-
-def test_a_template_source_read_is_flagged_in_each_spelling():
-    for source in (
-        'T = K8S_ROLES / "n8n" / "templates" / "Dockerfile.j2"\nT.read_text()\n',
-        'T = ANSIBLE / "roles/k8s/uptime-kuma/templates/x.yaml.j2"\nT.read_bytes()\n',
-        '(K8S_ROLES / "authelia" / "templates" / "c.yaml.j2").read_text()\n',
-        'for p in ROLES.glob("*/*/templates/**/*.j2"):\n    p.read_text()\n',
-        'TEXT = [p.read_text() for p in ROOT.rglob("*.j2")]\n',
-        'A = ROLES / "k8s/a/templates/x.j2"\nB = ROLES / "k8s/b/templates/y.j2"\n'
-        "for t in (A, B):\n    t.read_text()\n",
-        'open(ROLES / "k8s" / "a" / "templates" / "x.j2")\n',
-    ):
-        assert template_source_reads(source) != [], source
-
-
-def test_a_render_and_a_fixture_are_not_flagged():
-    assert (
-        template_source_reads(
-            "from _k8s_render import rendered_texts\n"
-            'TEXT = rendered_texts("authelia")["config-secret.yaml.j2"]\nTEXT.count("x")\n'
-        )
-        == []
-    )
-    # A role's `files/` copy ships verbatim: there is no render, so the text is the artifact.
-    assert (
-        template_source_reads(
-            'T = ANSIBLE / "roles/k8s/uptime-kuma/files/email-message.liquid"\n'
-            "T.read_text()\n"
-        )
-        == []
-    )
-    # A synthetic template the module wrote itself.
-    assert (
-        template_source_reads(
-            'tpl = tmp_path / "templates" / "x.j2"\ntpl.write_text("")\ntpl.read_text()\n'
-        )
-        == []
-    )
-    # An inventory read is not a template read.
-    assert (
-        template_source_reads(
-            'HOST_VARS = ANSIBLE / "inventory" / "host_vars"\n'
-            'for f in HOST_VARS.glob("*.yml"):\n    f.read_text()\n'
-        )
-        == []
     )
 
 
