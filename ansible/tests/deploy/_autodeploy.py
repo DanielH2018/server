@@ -22,6 +22,7 @@ from pathlib import Path
 from lib import yaml_fast
 from k8s_autodeploy import is_leftover_dir, k8s_autodeploy_denylist
 from _helpers import REPO
+from _k8s_render import rendered_texts
 
 _REPO = REPO
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
@@ -119,6 +120,36 @@ def _kubectl_consumer_paths() -> list[Path]:
     return paths
 
 
+_RENDERED: dict[str, dict[str, str]] | None = None
+
+
+def _rendered_roles() -> dict[str, dict[str, str]]:
+    """Every role `_k8s_render` renders, as {role: {template name: rendered text}}."""
+    global _RENDERED
+    if _RENDERED is None:
+        _RENDERED = {}
+        for name, template, text in rendered_texts():
+            _RENDERED.setdefault(name, {})[template] = text
+    return _RENDERED
+
+
+def _template_texts(role: Path) -> dict[str, str]:
+    """`role`'s templates by name, as the deploy renders them wherever a render reaches the role.
+
+    A role under roles/k8s/ that `_k8s_render` renders reads its render, so a workload's `kind`
+    or name that moves into a role default is still seen (#3178). Two kinds of role read
+    source instead, because no render reaches them: a synthetic `widget_role` tree under
+    `tmp_path`, which has no inventory entry, and the caller-rendered or manifest-less roles
+    `_k8s_render` skips. Every one of the latter is denylisted, and
+    `test_the_render_reaches_every_auto_deployable_role` holds that, so no tree-wide guard
+    judges an auto-deployable role from its source.
+    """
+    rendered = _rendered_roles()
+    if role.parent == _K8S_ROLES and role.name in rendered:
+        return rendered[role.name]
+    return {t.name: t.read_text() for t in sorted((role / "templates").glob("*.j2"))}
+
+
 def _deployment_templates(role: Path) -> list[str]:
     """Templates rendering a `kind: Deployment` or `kind: DaemonSet`, by name.
 
@@ -133,19 +164,15 @@ def _deployment_templates(role: Path) -> list[str]:
     Deployment/DaemonSet at all. A quoted or commented `kind:` line this could not see would
     grant a batch-gate exemption to a role that still has an ungated rollout.
     """
-    out = []
-    for t in (
-        sorted((role / "templates").glob("*.j2"))
-        if (role / "templates").is_dir()
-        else []
-    ):
+    return [
+        name
+        for name, text in sorted(_template_texts(role).items())
         if re.search(
             r"^kind:\s*[\"']?(?:Deployment|DaemonSet)[\"']?\s*(?:#.*)?$",
-            t.read_text(),
+            text,
             re.MULTILINE,
-        ):
-            out.append(t.name)
-    return out
+        )
+    ]
 
 
 def _batch_templates(role: Path) -> list[tuple[str, str]]:
@@ -169,16 +196,14 @@ def _batch_templates(role: Path) -> list[tuple[str, str]]:
     the bare form. No template uses either spelling.
     """
     out: list[tuple[str, str]] = []
-    tdir = role / "templates"
-    for t in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
-        text = t.read_text()
+    for template, text in sorted(_template_texts(role).items()):
         for doc in re.split(r"^---\s*$", text, flags=re.MULTILINE):
             if not re.search(
                 r"^kind:\s*[\"']?(?:Job|CronJob)[\"']?\s*(?:#.*)?$", doc, re.MULTILINE
             ):
                 continue
             name = re.search(r"^\s{2}name:\s*(\S+)\s*$", doc, re.MULTILINE)
-            out.append((t.name, name.group(1) if name else ""))
+            out.append((template, name.group(1) if name else ""))
     return out
 
 
