@@ -65,6 +65,19 @@ spec:
                 secretKeyRef:
                   name: n8n
                   key: N8N_RUNNERS_AUTH_TOKEN
+            # The values the launcher already used while these were unset (until 2026-10-02,
+            # #3255): its own defaults in task-runner-launcher internal/config/config.go. The
+            # launcher passes both to each runner today as legacy behaviour that upstream is
+            # deprecating. n8n-task-runners.json.j2 lists them in every runner's `allowed-env`,
+            # so they keep arriving after that legacy path is removed. `allowed-env` passes only
+            # what is set in the launcher's own environment, which is why they are set here.
+            #
+            # 60 s is the effective Code-node limit, not the 300 s on the n8n Deployment: the
+            # runner aborts a task at its own timeout, whatever the broker allows.
+            - name: N8N_RUNNERS_TASK_TIMEOUT
+              value: "60"
+            - name: N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT
+              value: "15"
           # `pgrep -f task-runner-launcher` — a liveness test with no network component, so an
           # exec probe. There is no HTTP endpoint to probe: this workload listens on nothing.
           livenessProbe:
