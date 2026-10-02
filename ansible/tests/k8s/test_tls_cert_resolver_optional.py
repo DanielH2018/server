@@ -20,9 +20,12 @@ from lib import yaml_fast
 from jinja2 import Undefined
 
 from lib.ansible_jinja_env import make_ansible_env
-from _helpers import ALL_VARS, ANSIBLE
+from lib.repo_paths import SHARED_TPL
+from _helpers import ALL_VARS
 
-MACRO = ANSIBLE / "templates" / "ingressroute.yml.j2"
+# Imported through the loader rather than pasted in as text, so the call renders the macro the
+# way a role's template does — `with context`, from ansible/templates/.
+_IMPORT = "{% from 'ingressroute.yml.j2' import ingressroute, monitoring_route with context %}\n"
 RESOLVER_VAR = "k8s_tls_cert_resolver"
 
 _CONTEXT = {
@@ -39,10 +42,9 @@ _CALLS = {
 
 
 def _routes(macro_call: str, resolver: str) -> list[dict]:
-    source = MACRO.read_text() + "\n" + macro_call
     rendered = (
-        make_ansible_env(undefined_cls=Undefined)
-        .from_string(source)
+        make_ansible_env([SHARED_TPL], undefined_cls=Undefined)
+        .from_string(_IMPORT + macro_call)
         .render({**_CONTEXT, RESOLVER_VAR: resolver})
     )
     docs = [d for d in yaml_fast.safe_load_all(rendered) if d]

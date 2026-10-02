@@ -12,13 +12,13 @@
   nested deeper (a CronJob's `jobTemplate`) stay inline, for the same reason the securityContext
   macro leaves its two: a macro that can emit at two depths can emit at the wrong one.
 
-  NOT FOR image-builder OR volume-claim. Both are in validate.k8s_manifests.SKIP_ROLES and
-  cannot be rendered standalone, so test_namespace_resource_defaults.py's
-  `test_the_roles_outside_the_render_walk_are_accounted_for` checks their pod specs by grepping
-  raw template text for `requests:` and `limits:`. It asserts the two appear together, because
-  a request with no limit takes the namespace default and is REFUSED at admission if the
-  request is higher — surfacing hours later as a failed image build. Behind this macro that
-  check compares False to False and passes on nothing, so the guard asserts its own coverage.
+  image-builder's build Job is outside `_k8s_render.rendered_docs()`, being caller-rendered.
+  test_namespace_resource_defaults.py's
+  `test_the_roles_outside_the_render_walk_are_accounted_for` renders it with a caller's
+  variables instead and reads the parsed `resources`, so this macro hides nothing from that
+  check. It asserts requests and limits appear together, because a request with no limit takes
+  the namespace default and is REFUSED at admission if the request is higher — surfacing hours
+  later as a failed image build.
 
   QUANTITIES ARE EMITTED QUOTED. Every value in this family is a Kubernetes quantity string —
   `250m`, `128Mi`, `1` — so quoting is a no-op to the parsed YAML while making the emitted form

@@ -6,11 +6,10 @@ homepage Kubernetes widget carry their own cluster identities and are held to th
 """
 
 import copy
-import re
 
 from deploy_tools import k3s_etcd_restore_gates
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _k8s_render import rendered_docs
 from _manifest_guards import (
     ALL_VARS,
     K3S,
@@ -289,8 +288,17 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
     a read-only identity lists an empty set forever.
     """
     role = K8S / "homepage"
+    # The file as the pod reads it: config-secret.yaml.j2 embeds config/kubernetes.yaml.j2
+    # through lookup('template'), so the Secret's key is the render, not the source.
+    config_secret = next(
+        doc
+        for r, _tpl, doc in rendered_docs()
+        if r == "homepage"
+        and doc["kind"] == "Secret"
+        and doc["metadata"]["name"] == "homepage-config"
+    )
     kubernetes_config = yaml_fast.safe_load(
-        (role / "templates" / "config" / "kubernetes.yaml.j2").read_text()
+        config_secret["stringData"]["kubernetes.yaml"]
     )
     assert kubernetes_config["mode"] == "cluster"
     assert kubernetes_config["ingress"] is False
@@ -329,16 +337,19 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     list degrades silently: the kubeconfig still works, that one `kubectl get` says
     Forbidden, and the caller falls back to sudo."""
     groups = set(K3S_DEFAULTS["k3s_readonly_crd_api_groups"])
-    route = (ANSIBLE / "templates" / "ingressroute.yml.j2").read_text()
-    # Match the apiVersion line itself, not a bare substring: `traefik.io` appears in
-    # comments and annotation keys too, so a substring check would keep passing after the
-    # macro moved off the group.
-    assert re.search(r"^apiVersion: traefik\.io/", route, re.MULTILINE), (
-        "ingressroute macro no longer uses the traefik.io group"
-    )
+    # The group every rendered IngressRoute and Middleware is actually applied under, read off
+    # the parsed apiVersion rather than off the macro's text, where `traefik.io` also appears
+    # in comments and annotation keys.
+    traefik_groups = {
+        doc["apiVersion"].split("/", 1)[0]
+        for _role, _tpl, doc in rendered_docs()
+        if doc["kind"] in {"IngressRoute", "Middleware"}
+    }
+    assert traefik_groups, "no IngressRoute or Middleware rendered — check the census"
     # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
-    assert any(g == "traefik.io" for g in groups), (
-        "IngressRoute/Middleware unreadable without sudo"
+    unreadable = sorted(g for g in traefik_groups if not any(g == x for x in groups))
+    assert unreadable == [], (
+        f"IngressRoute/Middleware under {unreadable} unreadable without sudo"
     )
     # Both sides, so dropping the group OR dropping the gate that needs it breaks this. The
     # group is derived from the gate script's own resource argument rather than restated

@@ -14,91 +14,30 @@ survives only while the scheduler happens to place it correctly.
 A comment cannot catch the next one. This can: add a `type: LoadBalancer` service with
 ETP Local and no pin, and the suite fails.
 
+Both halves are read off RENDERS — the L2Advertisement through `_setup_render`, the Services and
+workloads through `_k8s_render` — once at inventory values and once with `k8s_primary_node` set
+to a sentinel. The second render is what proves the two halves move as one unit: a pin that
+names the node some other way agrees with the announcement today and stops agreeing the day
+the variable changes, and only a render at a value the inventory does not hold shows that.
+
 Run: uv run pytest ansible/tests/k8s/test_vip_pins.py
 """
 
-import re
+from lib import yaml_fast
 
-import pytest
-from _helpers import ANSIBLE, K8S_ROLES
-from _role_census import role_dirs
+from _k8s_render import render_texts, rendered_docs
+from lib.ansible_jinja_env import template_env
+from lib.render_guard import render_or_error
+from _helpers import ROLES
+from _setup_render import role_context, rendered_setup_text
 
-
-METALLB_POOL = (
-    ANSIBLE / "roles" / "setup" / "k3s" / "templates" / "metallb-pool.yaml.j2"
-)
-ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
-
-# The variable the workload pins read, which makes them cluster-relative. A pin may name the
-# announcing node literally OR through this.
+# The variable the announcement and every workload pin read.
 PRIMARY_NODE_VAR = "k8s_primary_node"
+# A node name no inventory holds, so a pin that reaches it can only have come from the variable.
+SENTINEL_NODE = "sentinel-vip-node"
 
-
-JINJA_VAR = re.compile(r"\{\{\s*(\w+)\s*\}\}")
-
-
-def _announcing_node_expr():
-    """The raw nodeSelector value in the L2Advertisement — a literal or a Jinja variable.
-
-    Matches to end of line rather than `(\\S+)`: the value can be `{{ k8s_primary_node }}`,
-    and a non-greedy `\\S+` captures `{{` and silently compares that.
-    """
-    m = re.search(
-        r"kubernetes\.io/hostname:[ \t]*(\S.*?)[ \t]*$", METALLB_POOL.read_text(), re.M
-    )
-    assert m, f"no nodeSelector hostname found in {METALLB_POOL} — check the matcher"
-    return m.group(1)
-
-
-def _announcing_node():
-    """The node the MetalLB L2Advertisement announces from, resolved as Ansible resolves it.
-
-    Derived rather than hardcoded so this guard checks the real invariant — that
-    announcement and placement name the SAME node — instead of comparing two independent
-    literals that were only ever equal by hand.
-    """
-    var = JINJA_VAR.fullmatch(_announcing_node_expr())
-    return _primary_node() if var else _announcing_node_expr()
-
-
-def _primary_node():
-    """What `k8s_primary_node` resolves to in group_vars."""
-    m = re.search(rf"^{PRIMARY_NODE_VAR}:\s*(\S+)", ALL_VARS.read_text(), re.M)
-    assert m, f"{PRIMARY_NODE_VAR} not defined in {ALL_VARS}"
-    return m.group(1)
-
-
-ANNOUNCING_NODE = _announcing_node()
-
-
-def test_announcement_and_the_primary_node_variable_agree():
-    """The two halves of the pin must name one node.
-
-    Workload pins read `k8s_primary_node`. If they ever disagree with the announcement,
-    every VIP-backed pod is pinned away from the announcer and each one black-holes its own
-    traffic while reporting healthy — the exact failure the per-workload assertions below
-    exist to prevent, arriving through the back door.
-
-    Both shapes are checked, because the manifest has held each. As a Jinja reference the
-    invariant is that it names THAT variable and not another one that merely resolves to
-    the same node today; as a literal it is the original two-literal comparison. Resolving
-    first and comparing after would pass unconditionally on the Jinja shape.
-    """
-    expr = _announcing_node_expr()
-    var = JINJA_VAR.fullmatch(expr)
-    if var:
-        assert var.group(1) == PRIMARY_NODE_VAR, (
-            f"the MetalLB L2Advertisement announces from {{{{ {var.group(1)} }}}} but the "
-            f"VIP-backed workload pins read {PRIMARY_NODE_VAR} ({METALLB_POOL}). Two "
-            f"variables that agree today are two ways to drift tomorrow."
-        )
-    else:
-        assert expr == _primary_node(), (
-            f"{PRIMARY_NODE_VAR} is {_primary_node()!r} but the MetalLB L2Advertisement "
-            f"announces from {expr!r} ({METALLB_POOL}). Announcement and placement "
-            f"move as one unit; change both or neither."
-        )
-
+_HOSTNAME = "kubernetes.io/hostname"
+_WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet"}
 
 # jellyfin is pinned by storage, not by its own nodeSelector: the media-volume `local` PV
 # declares a required nodeAffinity on the node it lives on, which the scheduler enforces
@@ -106,61 +45,157 @@ def test_announcement_and_the_primary_node_variable_agree():
 # media volume off node-local storage forces someone to revisit this line.
 PINNED_BY_VOLUME = {"jellyfin"}
 
+# Roles the census must find, so a matcher that stopped matching names the member it lost
+# instead of passing over an empty list.
+KNOWN_VIP_ROLES = frozenset(
+    {"jellyfin", "mosquitto", "pihole", "terraria", "traefik", "valheim", "wg-easy"}
+)
 
-def _workload_templates(role_dir):
-    for tpl in sorted(role_dir.glob("templates/*.j2")):
-        text = tpl.read_text()
-        if re.search(r"^kind: (Deployment|DaemonSet|StatefulSet)", text, re.M):
-            yield tpl, text
+
+def _announcing_nodes(metallb_pool_text: str) -> set[str]:
+    """Every hostname the rendered L2Advertisements announce from."""
+    nodes = {
+        selector["matchLabels"][_HOSTNAME]
+        for doc in yaml_fast.safe_load_all(metallb_pool_text)
+        if doc and doc.get("kind") == "L2Advertisement"
+        for selector in doc["spec"].get("nodeSelectors", [])
+    }
+    assert nodes, (
+        "no L2Advertisement nodeSelector hostname rendered — check the matcher"
+    )
+    return nodes
 
 
-def _vip_service_roles():
-    """Roles owning a Service that is both type: LoadBalancer and ETP Local."""
-    found = []
-    for role_dir in role_dirs():
-        for tpl in sorted(role_dir.glob("templates/*.j2")):
-            text = tpl.read_text()
-            if "type: LoadBalancer" in text and "externalTrafficPolicy: Local" in text:
-                found.append((role_dir.name, tpl.name))
-                break
-    return found
+def _sentinel_metallb_pool() -> str:
+    """metallb-pool.yaml.j2 alone, in setup/k3s's context with the sentinel laid on top."""
+    k3s = ROLES / "setup" / "k3s"
+    text, err = render_or_error(
+        template_env(k3s / "templates"),
+        "metallb-pool.yaml.j2",
+        role_context(k3s, {PRIMARY_NODE_VAR: SENTINEL_NODE}),
+    )
+    assert text is not None, f"setup/k3s/metallb-pool.yaml.j2 failed to render: {err}"
+    return text
+
+
+ANNOUNCING_NODES = _announcing_nodes(rendered_setup_text("k3s", "metallb-pool.yaml.j2"))
+
+
+def test_announcement_and_the_primary_node_variable_agree():
+    """The announcement names the node `k8s_primary_node` names, and follows it.
+
+    Workload pins read `k8s_primary_node`. If they ever disagree with the announcement,
+    every VIP-backed pod is pinned away from the announcer and each one black-holes its own
+    traffic while reporting healthy — the exact failure the per-workload assertions below
+    exist to prevent, arriving through the back door.
+
+    The inventory render alone cannot tell the variable from a literal or a second variable
+    that resolves to the same node today. The sentinel render can: only a read of
+    `k8s_primary_node` renders the sentinel.
+    """
+    assert len(ANNOUNCING_NODES) == 1, (
+        f"the L2Advertisements announce from {sorted(ANNOUNCING_NODES)}; the workload pins "
+        "name one node, so the announcement must too"
+    )
+    sentinel = _announcing_nodes(_sentinel_metallb_pool())
+    assert sentinel == {SENTINEL_NODE}, (
+        f"the MetalLB L2Advertisement does not follow {PRIMARY_NODE_VAR}: rendered with it "
+        f"set to {SENTINEL_NODE!r}, it still announces from "
+        f"{sorted(sentinel)}. Announcement and placement "
+        "move as one unit; a second spelling that agrees today is a way to drift tomorrow."
+    )
+
+
+def _vip_roles(docs) -> set[str]:
+    """Roles owning a rendered Service that is both type: LoadBalancer and ETP Local."""
+    return {
+        role
+        for role, _tpl, doc in docs
+        if doc["kind"] == "Service"
+        and doc["spec"].get("type") == "LoadBalancer"
+        and doc["spec"].get("externalTrafficPolicy") == "Local"
+    }
+
+
+def _pin_offences(docs, node: str) -> list[str]:
+    """One line per VIP-backed workload in `docs` that is not pinned to `node`."""
+    docs = list(docs)
+    vip_roles = _vip_roles(docs) - PINNED_BY_VOLUME
+    offences = []
+    for role in sorted(vip_roles):
+        workloads = [
+            (tpl, doc)
+            for r, tpl, doc in docs
+            if r == role and doc["kind"] in _WORKLOAD_KINDS
+        ]
+        if not workloads:
+            offences.append(f"{role} owns a VIP Service but no workload to pin")
+        for tpl, doc in workloads:
+            if doc["kind"] == "DaemonSet":
+                continue  # already runs on every node, including the announcer
+            pinned = (doc["spec"]["template"]["spec"].get("nodeSelector") or {}).get(
+                _HOSTNAME
+            )
+            if pinned != node:
+                offences.append(
+                    f"{role}/{tpl} {doc['kind']}/{doc['metadata']['name']} pins "
+                    f"{_HOSTNAME}={pinned!r}, not the announcing node {node!r}"
+                )
+    return offences
+
+
+def _docs_of(texts):
+    for role, tpl, text in texts:
+        for doc in yaml_fast.safe_load_all(text):
+            if isinstance(doc, dict) and doc.get("kind"):
+                yield role, tpl, doc
 
 
 def test_some_vip_services_exist():
     """Guard against the discovery logic silently matching nothing."""
-    assert _vip_service_roles(), (
-        "found no LoadBalancer + ETP Local services — check the matcher"
+    missing = KNOWN_VIP_ROLES - _vip_roles(rendered_docs())
+    assert not missing, (
+        f"no LoadBalancer + ETP Local Service rendered for {sorted(missing)} — check the "
+        "matcher before concluding the role moved off a VIP"
     )
 
 
-@pytest.mark.parametrize("role,svc_template", _vip_service_roles())
-def test_vip_backed_workload_is_pinned_to_the_announcing_node(role, svc_template):
-    role_dir = K8S_ROLES / role
-    if role in PINNED_BY_VOLUME:
-        pytest.skip(
-            f"{role} is pinned by the media-volume local PV's required nodeAffinity"
-        )
+def test_vip_backed_workloads_are_pinned_to_the_announcing_node():
+    (node,) = ANNOUNCING_NODES
+    offences = _pin_offences(rendered_docs(), node)
+    assert offences == [], (
+        f"MetalLB announces only from {node}, so a VIP-backed pod on the other node drops "
+        f"every packet while it still reports healthy: {offences}"
+    )
 
-    workloads = list(_workload_templates(role_dir))
-    assert workloads, f"{role} has {svc_template} but no workload template to pin"
 
-    for tpl, text in workloads:
-        if re.search(r"^kind: DaemonSet", text, re.M):
-            continue  # already runs on every node, including the announcer
-        assert "nodeSelector:" in text, (
-            f"{role}/{tpl.name} backs a LoadBalancer service with externalTrafficPolicy: "
-            f"Local ({svc_template}) but has no nodeSelector. MetalLB announces only from "
-            f"{ANNOUNCING_NODE}, so if this pod lands on the other node its VIP drops every "
-            f"packet while the pod still reports healthy."
-        )
-        # Either spelling is the announcing node: the literal, or the variable that
-        # test_announcement_and_the_primary_node_variable_agree pins to it.
-        assert re.search(
-            rf"kubernetes\.io/hostname:\s*(?:{re.escape(ANNOUNCING_NODE)}"
-            rf"|\{{\{{\s*{PRIMARY_NODE_VAR}\s*\}}\}})",
-            text,
-        ), (
-            f"{role}/{tpl.name} is pinned, but not to {ANNOUNCING_NODE} — the node the "
-            f"MetalLB L2Advertisement announces from. Announcement and placement move as "
-            f"one unit; see roles/setup/k3s/templates/metallb-pool.yaml.j2."
-        )
+def test_vip_backed_workloads_follow_the_primary_node_variable():
+    """The placement half of the sentinel render: every pin moves with the announcement."""
+    docs = _docs_of(render_texts({PRIMARY_NODE_VAR: SENTINEL_NODE}))
+    offences = _pin_offences(docs, SENTINEL_NODE)
+    assert offences == [], (
+        f"with {PRIMARY_NODE_VAR}={SENTINEL_NODE!r} the announcement moves and these pins "
+        f"do not — they name the node some other way: {offences}"
+    )
+
+
+def test_an_unpinned_vip_workload_is_flagged():
+    service = {
+        "kind": "Service",
+        "spec": {"type": "LoadBalancer", "externalTrafficPolicy": "Local"},
+    }
+
+    def deployment(pod_spec: dict) -> dict:
+        return {
+            "kind": "Deployment",
+            "metadata": {"name": "x"},
+            "spec": {"template": {"spec": pod_spec}},
+        }
+
+    unpinned = deployment({})
+    pinned = deployment({"nodeSelector": {_HOSTNAME: "a"}})
+    assert _pin_offences([("x", "s", service), ("x", "d", pinned)], "a") == []
+    assert _pin_offences([("x", "s", service), ("x", "d", unpinned)], "a") == [
+        f"x/d Deployment/x pins {_HOSTNAME}=None, not the announcing node 'a'"
+    ]
+    assert _pin_offences([("x", "s", service), ("x", "d", pinned)], "b") != []
