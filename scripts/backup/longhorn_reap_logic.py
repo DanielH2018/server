@@ -46,6 +46,13 @@ import host_lib
 
 RECURRING_JOB_GROUP_PREFIX = "recurring-job-group.longhorn.io/"
 
+# Groups that name no RecurringJob CR by design, hardcoded because this module reads no file.
+# The sentinel's angle brackets cannot collide with a DNS-1123 RecurringJob name, nor
+# prefix-match a snapshot's truncated `RecurringJob` label. ENFORCED:
+# ansible/tests/longhorn/test_longhorn_reap_opt_out_groups.py::test_every_jobless_storageclass_group_is_a_known_opt_out
+OPT_OUT_GROUPS = frozenset({"no-backup"})
+OWNER_NO_JOB_BY_DESIGN = "<no job by design>"
+
 
 def parse_kubectl_json_items(text: str, what: str) -> tuple[list, str]:
     """Parse a `kubectl get ... -o json` body into its `.items` list, or an error.
@@ -190,7 +197,8 @@ def abort_reason(
        and a `""` owner for every volume in that group, and `classify_snapshots`' current-tier
        test (`owner_job and owner_job.startswith(job)`) is False against `""`, so those
        volumes' current snapshots past the age floor all become candidates. Same disarmed
-       ownership as rule 3, at per-volume granularity.
+       ownership as rule 3, at per-volume granularity. A group with no RecurringJob BY DESIGN
+       gets `OWNER_NO_JOB_BY_DESIGN` instead and never reaches this count.
     """
     if volume_count > 0 and owner_count == 0:
         return (
@@ -434,10 +442,10 @@ def snapshot_owner_map(
     strings differ for every weekly shard, so comparing label-suffix to job name directly would
     report every weekly-tier volume's own current snapshots as stranded.
 
-    A group naming no RecurringJob CR gets the value `""`, which is NOT "this volume has no
-    owner" -- a volume with no group label is absent from this map entirely. `""` means the
-    lookup for a volume that does carry a label failed, and `unresolved_owner_count` below
-    counts exactly those so `classify_snapshots` can refuse.
+    Three owner states, not two. A volume with no group label is ABSENT from this map. A group
+    naming no RecurringJob CR gets `""`, which `unresolved_owner_count` counts so
+    `classify_snapshots` can refuse. A group in `OPT_OUT_GROUPS` gets `OWNER_NO_JOB_BY_DESIGN`,
+    the declared state rather than a renamed job; a real RecurringJob wins over that sentinel.
     """
     owner: dict[str, str] = {}
     for v in volumes:
@@ -447,7 +455,8 @@ def snapshot_owner_map(
         for key in (v.get("metadata") or {}).get("labels") or {}:
             if key.startswith(RECURRING_JOB_GROUP_PREFIX):
                 group = key[len(RECURRING_JOB_GROUP_PREFIX) :]
-                owner[name] = group_job.get(group, "")
+                opt_out = OWNER_NO_JOB_BY_DESIGN if group in OPT_OUT_GROUPS else ""
+                owner[name] = group_job.get(group) or opt_out
     return owner
 
 
@@ -455,7 +464,8 @@ def unresolved_owner_count(owner: dict[str, str]) -> int:
     """How many volumes in a `snapshot_owner_map` resolved to no job.
 
     Feeds `abort_reason`'s rule 4. Derived from the map rather than counted while building it,
-    so it stays a property of the value the classifier actually reads.
+    so it stays a property of the value the classifier reads. An opt-out volume holds the
+    truthy `OWNER_NO_JOB_BY_DESIGN`, so only a renamed job's `""` is counted.
     """
     return sum(1 for job in owner.values() if not job)
 
@@ -575,6 +585,7 @@ def classify_snapshots(
         owner_job = owner.get(vol, "")
         if owner_job and owner_job.startswith(job):
             continue  # made by the job that still owns this volume: current, not stranded
+        # An opt-out volume reaches here for every labelled snapshot: no job, nothing current.
 
         created_epoch = parse_rfc3339_epoch(created)
         if created_epoch is None:

@@ -314,8 +314,10 @@ def main(argv: list[str], now: float | None = None) -> int:
         # A volume whose group label named no RecurringJob resolves to owner "", which the
         # current-tier test reads as "no snapshot belongs to the current tier" -- every snapshot
         # past the age floor then becomes a candidate. classify_snapshots refuses; without this
-        # the refusal reaches the operator as a traceback.
-        print("ABORT: %s" % e, file=sys.stderr)
+        # the refusal reaches the operator as a traceback. `abort_reason` already writes the
+        # `ABORT: ` prefix into the message, so this prints it as it stands rather than doubling
+        # it (#3236).
+        print(str(e), file=sys.stderr)
         return 1
 
     logic.print_bucket("kept by a floor", result.kept)

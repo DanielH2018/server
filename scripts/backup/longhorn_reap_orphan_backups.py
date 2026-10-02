@@ -267,8 +267,9 @@ def main(argv: list[str]) -> int:
     except logic.ReapAbort as e:
         # classify_backups owns the empty-volume-list refusal because it is the first place the
         # backup count is known. Uncaught it would reach the operator as a traceback, which is
-        # not the shape every other refusal in this function prints.
-        print("ABORT: %s" % e, file=sys.stderr)
+        # not the shape every other refusal in this function prints. `abort_reason` already
+        # writes the `ABORT: ` prefix into the message, so this prints it as it stands.
+        print(str(e), file=sys.stderr)
         return 1
 
     logic.print_bucket("kept by a floor", result.kept)
