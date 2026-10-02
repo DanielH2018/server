@@ -13,6 +13,7 @@ import bridge.net
 import checks.logs
 import gates
 import registry
+from _shell_render import rendered_shell_texts
 from verdicts.logs import HC_ROUTED_TAGS, parse_push_line, swallowed_verdicts
 
 
@@ -199,12 +200,13 @@ def test_a_tag_that_pages_its_own_lost_push_through_healthchecks_is_not_counted(
 def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
     # Derived from the tree, not trusted from the constant: a fourth script that starts
     # reading KUMA_PUSH_OK to route `/fail` has to be listed here, and one that stops has to
-    # be dropped, or the tile pages twice / not at all for that cron.
-    roles = Path(__file__).resolve().parents[3]
+    # be dropped, or the tile pages twice / not at all for that cron. Read from the RENDER,
+    # not the source: a value that moves into a role default leaves a source-text match
+    # reading `{{ ... }}`, which passes on nothing (#3178).
     readers = {
-        p.name.removesuffix(".sh.j2")
-        for p in roles.rglob("templates/*.sh.j2")
-        if "KUMA_PUSH_OK" in p.read_text()
+        name.removesuffix(".sh.j2")
+        for _plane, _role, name, text in rendered_shell_texts()
+        if "KUMA_PUSH_OK" in text
     }
     assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
 

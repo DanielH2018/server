@@ -7,9 +7,9 @@ healthy-skip path while still writing `last_run`. docs-refresh.sh carries the sa
 one difference the tests below pin: the staged file here is a week of paid API calls, not
 generator output, so it is copied outside the checkout before the tree is put back.
 
-The functions are executed, not pattern-matched. Each is lifted out of the template by name and
-sourced into a scratch git repository, so what runs is the production code rather than a copy of
-its logic. Every behaviour carries the half that proves the test can go red.
+The functions are executed, not pattern-matched. Each is lifted out of the RENDERED template by
+name and sourced into a scratch git repository, so what runs is the production code rather than
+a copy of its logic. Every behaviour carries the half that proves the test can go red.
 
 `say_failure` is here for the same reason as in docs-refresh.sh: prek keeps going past a
 failure and mkdocs-strict is the last hook, so an unfiltered tail of a rejected commit always
@@ -22,13 +22,11 @@ import subprocess
 from pathlib import Path
 
 from _helpers import ANSIBLE
+from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
-SCRIPT_PATH = ANSIBLE / "roles/setup/initial_setup/templates/eval-run.sh.j2"
-SCRIPT = SCRIPT_PATH.read_text()
-DOCS_REFRESH = (
-    ANSIBLE / "roles/setup/initial_setup/templates/docs-refresh.sh.j2"
-).read_text()
+SCRIPT = rendered_shell_text("setup", "initial_setup", "eval-run.sh.j2")
+DOCS_REFRESH = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
 CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 
 # The functions this module sources. Named rather than globbed: a rename would otherwise leave
@@ -42,7 +40,12 @@ OLD_BODY = "restore_history() { git reset >/dev/null 2>&1; }"
 
 
 def _function(name: str) -> str:
-    """The body of one shell function, from `name() {` to the closing brace in column one."""
+    """The body of one shell function, from `name() {` to the closing brace in column one.
+
+    Reads the RENDER, not the .j2 source (#3178): a value moved into a role default would leave
+    a source-text match looking for `{{ ... }}` matching nothing, and sourcing the render means a
+    stray Jinja expression would arrive substituted rather than literal.
+    """
     # One-liner form first: a `{.*?^}` pattern tried first would run past a one-line function's
     # own closing brace and swallow the next multi-line function whole.
     match = re.search(rf"^{name}\(\) \{{[^\n]*\}}$", SCRIPT, re.M) or re.search(

@@ -12,11 +12,8 @@ stale set changes while the tile is DOWN, the cron pushes a not-a-recovery `up` 
 `down`, and records the new set for the next run to compare against.
 """
 
-import jinja2
-
-from lib.ansible_jinja_env import make_ansible_env
 from lib.proc_testing import run, write_exec
-from _helpers import ANSIBLE
+from _shell_render import render_shell_script, rendered_shell_text
 
 # `reachout_verdict` from the real library, stubbed to its WAN-reachable answer — which is what
 # every case here means: the git fetch failed and the link is fine, so the tile must page. The
@@ -24,7 +21,7 @@ from _helpers import ANSIBLE
 # ansible/tests/setup/test_kuma_push_wan_skip.py.
 REACHOUT_STUB = 'reachout_verdict() { REACHOUT_STATUS=down; REACHOUT_NOTE=""; }\n'
 
-TEMPLATE = ANSIBLE / "roles/setup/k3s/templates/release-staleness-check.sh.j2"
+TEMPLATE = ("setup", "k3s", "release-staleness-check.sh.j2")
 
 GROUPED = (
     "3 services stale — host_vars/daniel-pi.yml [every service: node-exporter was removed "
@@ -38,27 +35,21 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
     """Run the rendered cron once; return every (status, msg) push, in order.
 
     `names` is what probe.py writes to `--names-out`, and `prev` the set a previous DOWN
-    recorded.
+    recorded. The render carries no overrides: `domain`, the ingress VIP, `sys_user`, the
+    grace window and the WAN probe URLs all come from the inventory the accessor renders
+    against, the same one the shellcheck gate lints -- `sys_user` resolves to "ubuntu", which
+    is why the literals below and the REPO_DIR substitution name that path rather than a
+    test-only stand-in.
     """
-    body = (
-        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-        .from_string(TEMPLATE.read_text())
-        .render(
-            domain="example.test",
-            k3s_metallb_ingress_vip="10.0.0.240",
-            sys_user="u",
-            k3s_release_staleness_grace_minutes=60,
-            wan_probe_urls=["https://a.example", "https://b.example"],
-        )
-    )
+    body = render_shell_script(*TEMPLATE)
     for literal in (
         "/usr/local/lib/kuma-push-lib.sh",
         "/etc/rancher/k3s/kuma-push.env",
-        "/home/u/.local/bin/uv",
+        "/home/ubuntu/.local/bin/uv",
         "--grace-minutes 60",
         STATE_DIR,
     ):
-        assert literal in body, f"{TEMPLATE.name} no longer references {literal}"
+        assert literal in body, f"{'/'.join(TEMPLATE)} no longer references {literal}"
 
     state = tmp_path / "state"
     state.mkdir(exist_ok=True)
@@ -92,8 +83,8 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
         tmp_path / "release-staleness-check.sh",
         body.replace("/usr/local/lib/kuma-push-lib.sh", str(lib))
         .replace("/etc/rancher/k3s/kuma-push.env", str(env))
-        .replace("/home/u/.local/bin/uv", str(uv))
-        .replace("/home/u/server", str(tmp_path))
+        .replace("/home/ubuntu/.local/bin/uv", str(uv))
+        .replace("/home/ubuntu/server", str(tmp_path))
         .replace(STATE_DIR, str(state)),
     )
     run(["bash", str(script)], check=True)
@@ -110,7 +101,7 @@ def test_a_stale_fleet_pushes_the_grouped_line_verbatim(tmp_path):
 
 
 def test_the_cron_asks_probe_for_the_kuma_shape():
-    assert "releases --stale-only --kuma" in TEMPLATE.read_text()
+    assert "releases --stale-only --kuma" in rendered_shell_text(*TEMPLATE)
 
 
 def test_a_clean_fleet_pushes_the_probe_line_verbatim(tmp_path):

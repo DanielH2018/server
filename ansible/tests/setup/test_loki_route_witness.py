@@ -21,10 +21,9 @@ Run: uv run pytest ansible/tests/setup/test_loki_route_witness.py
 
 import os
 
-import jinja2
-from lib.ansible_jinja_env import make_ansible_env
 from lib.proc_testing import fake_bin, path_with, run, write_exec
 from _helpers import ANSIBLE
+from _shell_render import render_shell_script, rendered_shell_text
 from lib import yaml_fast
 
 GROUP_VARS = yaml_fast.safe_load(
@@ -34,14 +33,7 @@ CRONS = (
     ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks" / "crons.yml"
 ).read_text()
 CRON_TASKS = yaml_fast.safe_load(CRONS)
-SCRIPT = (
-    ANSIBLE
-    / "roles"
-    / "setup"
-    / "initial_setup"
-    / "templates"
-    / "loki-read-route-health.sh.j2"
-).read_text()
+WITNESS = ("setup", "initial_setup", "loki-read-route-health.sh.j2")
 PUSH_ENV = (
     ANSIBLE
     / "roles"
@@ -137,16 +129,15 @@ def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
     and the two `uv` binaries, whose stub answers the reader invocation with `route_rc` and
     prints a body for anything else. Returns (exit code, pushed status).
     """
-    body = (
-        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-        .from_string(SCRIPT)
-        .render(
-            domain="example.test",
-            k3s_metallb_ingress_vip="10.0.0.240",
-            sys_user="ubuntu",
-            host_python_version="3.12",
-            loki_route_witness_boot_grace_s=0,
-        )
+    body = render_shell_script(
+        *WITNESS,
+        overrides={
+            "domain": "example.test",
+            "k3s_metallb_ingress_vip": "10.0.0.240",
+            "sys_user": "ubuntu",
+            "host_python_version": "3.12",
+            "loki_route_witness_boot_grace_s": 0,
+        },
     )
     for needle in (
         REAL_LIB,
@@ -209,7 +200,7 @@ def test_an_up_verdict_exits_zero_so_the_timer_rests(tmp_path):
 
 def test_the_verdict_reads_the_body_rather_than_the_exit_code():
     """probe.py's curl has no `-f`, so `404 page not found` arrives with exit 0."""
-    assert "loki_route_health.py" in SCRIPT, (
+    assert "loki_route_health.py" in rendered_shell_text(*WITNESS), (
         "the witness must decide on the response body — an exit-code verdict reads UP through "
         "exactly the outage this cron exists to catch"
     )

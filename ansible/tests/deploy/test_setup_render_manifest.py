@@ -24,6 +24,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 from _helpers import REPO
+from _shell_render import rendered_names_for, rendered_shell_text
 
 _REPO = REPO
 _ROLE = _REPO / "ansible/roles/setup/k3s"
@@ -34,10 +35,12 @@ _MANIFEST_DIR = "/var/lib/homelab/setup-render-manifest.d"
 # installed only on k3s server hosts, and daniel-server renders the whole UPS shutdown chain.
 # The guards below assert against the file that literally holds the loops — a guard pointed at a wrapper asserts nothing
 # about the code that runs.
+# _ARMS_LIB is plain .sh, no Jinja. _ARM_CONSUMERS are (plane, role, name) *.sh.j2 triples,
+# read from the render below.
 _ARMS_LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
 _ARM_CONSUMERS = (
-    _REPO / "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
-    _REPO / "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",
+    ("setup", "k3s", "manifest-prune-check.sh.j2"),
+    ("setup", "initial_setup", "setup-drift-check.sh.j2"),
 )
 
 # Shell templates that are NOT rendered onto this host as standalone scripts, each with the
@@ -74,7 +77,7 @@ def _declared_names() -> set[str]:
 
 
 def test_every_rendered_shell_template_is_in_the_manifest():
-    on_disk = {p.name for p in _TEMPLATES.glob("*.sh.j2")} - _NOT_STANDALONE_SCRIPTS
+    on_disk = rendered_names_for("setup", "k3s") - _NOT_STANDALONE_SCRIPTS
     missing = on_disk - _declared_names()
     assert not missing, (
         "these shell templates are rendered onto the host but are not checksummed into "
@@ -175,14 +178,14 @@ def test_both_readers_source_the_shared_arms():
     every assertion in this file now points at that library, so a consumer that quietly re-inlined
     the loops would satisfy none of them and break nothing. This is what fails in that case.
     """
-    for path in _ARM_CONSUMERS:
-        text = path.read_text()
+    for plane, role, name in _ARM_CONSUMERS:
+        text = rendered_shell_text(plane, role, name)
         assert "source /usr/local/lib/setup-drift-lib.sh" in text, (
-            f"{path.name} no longer sources the shared drift arms, so the guards in this file "
+            f"{name} no longer sources the shared drift arms, so the guards in this file "
             f"assert nothing about the code it runs (2026-08-29 review M-10)."
         )
         assert "setup_drift_scan" in text, (
-            f"{path.name} sources the library but never calls setup_drift_scan, so both arms "
+            f"{name} sources the library but never calls setup_drift_scan, so both arms "
             f"are absent behind a script that still pushes a verdict."
         )
 
@@ -195,10 +198,8 @@ def test_the_k3s_readers_note_rewording_still_matches_the_library():
     daniel-box's message reverts to the generic wording with nothing failing — the textual
     coupling this repo escalates to a check rather than leaving as a comment.
     """
-    lib = _ARMS_LIB.read_text()
-    reader = (
-        _REPO / "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2"
-    ).read_text()
+    lib = _ARMS_LIB.read_text()  # plain .sh, no Jinja (see the comment at its import)
+    reader = rendered_shell_text("setup", "k3s", "manifest-prune-check.sh.j2")
     patterns = re.findall(r"\$\{(?:DEPLOYED|MANIFEST)_NOTE/([^/]+)/", reader)
     assert patterns, (
         "manifest-prune-check.sh.j2 no longer re-words the library's notes. If that was "
@@ -363,6 +364,7 @@ def test_the_two_halves_hash_the_same_bytes():
     # future Ansible makes rstrip=False the default and someone drops the flag as redundant.
     import hashlib
 
+    # A genuine byte-level subject, not a render stand-in -- #3178 doesn't apply here.
     sample = _TEMPLATES / "manifest-prune-check.sh.j2"
     raw = sample.read_bytes()
     assert raw.endswith(b"\n"), (
@@ -382,7 +384,7 @@ def test_every_exemption_is_real():
     role's files directory as a plain .sh, outside this glob, and the exemption would read as
     precedent for exempting the next script that came along. Same shape as the stale-exemption guard in the k3s join-port symmetry test.
     """
-    on_disk = {p.name for p in _TEMPLATES.glob("*.sh.j2")}
+    on_disk = rendered_names_for("setup", "k3s")
     stale = _NOT_STANDALONE_SCRIPTS - on_disk
     assert not stale, (
         f"_NOT_STANDALONE_SCRIPTS exempts {sorted(stale)}, which is not in {_TEMPLATES}. Remove "

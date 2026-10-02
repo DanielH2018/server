@@ -22,15 +22,13 @@ Run: uv run pytest ansible/tests/setup/test_pi_gz_integrity_sweep.py
 import gzip
 import os
 
-import jinja2
 import pytest
-from lib.ansible_jinja_env import make_ansible_env
 from lib.proc_testing import write_exec
 from lib.proc_testing import run as launch
-from _helpers import ANSIBLE
 from _pi_health import OPTIMIZE_PI_DEFAULTS, run
+from _shell_render import render_shell_script
 
-SWEEP = ANSIBLE / "roles/setup/optimize_pi/templates/pi-gz-integrity.sh.j2"
+SWEEP = ("setup", "optimize_pi", "pi-gz-integrity.sh.j2")
 
 # The floor the role ships. Read, not restated: a test carrying its own number would keep passing
 # after someone lowered the real one to zero, which is the one edit that makes the check vacuous.
@@ -38,14 +36,19 @@ FLOOR = OPTIMIZE_PI_DEFAULTS["optimize_pi_gz_integrity_min_files"]
 
 
 def _render(roots, state_file, floor=FLOOR):
-    return (
-        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-        .from_string(SWEEP.read_text())
-        .render(
-            optimize_pi_gz_integrity_roots=[str(root) for root in roots],
-            optimize_pi_gz_integrity_state_file=str(state_file),
-            optimize_pi_gz_integrity_min_files=floor,
-        )
+    """The real sweep, rendered through `_shell_render` with its roots and state file overridden.
+
+    `optimize_pi_gz_integrity_roots`/`..._state_file`/`..._min_files` are role defaults the
+    accessor's context would otherwise resolve to the live `/var/log` and `/var/hdd.log` paths —
+    exactly what a test run must not touch.
+    """
+    return render_shell_script(
+        *SWEEP,
+        overrides={
+            "optimize_pi_gz_integrity_roots": [str(root) for root in roots],
+            "optimize_pi_gz_integrity_state_file": str(state_file),
+            "optimize_pi_gz_integrity_min_files": floor,
+        },
     )
 
 

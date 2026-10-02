@@ -26,8 +26,10 @@ import pytest
 import pytest_shard
 
 from _helpers import REPO
+from _shell_render import rendered_shell_text, shell_template_path
 
-TEMPLATE = REPO / "ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2"
+TEMPLATE = shell_template_path("setup", "initial_setup", "docs-refresh.sh.j2")
+SCRIPT = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
 WEIGHTS = pytest_shard.WEIGHTS_PATH.relative_to(REPO).as_posix()
 SHARD_SCRIPT = (REPO / "scripts/dev/pytest_shard.py").relative_to(REPO).as_posix()
 PUBLISH_GATE = "if git diff --cached --quiet; then"
@@ -61,7 +63,7 @@ def _record_before_gate(text: str) -> str | None:
 
 
 def test_the_cron_records_the_weights_it_is_missing():
-    lines = _code_lines(TEMPLATE.read_text())
+    lines = _code_lines(SCRIPT)
     invocations = [
         line for line in lines if SHARD_SCRIPT in line or "--record-missing" in line
     ]
@@ -81,7 +83,7 @@ def test_the_cron_records_the_weights_it_is_missing():
 
 def test_the_record_runs_before_the_publish_gate():
     """CLEAN half: the real template orders the two the only way that publishes."""
-    assert _record_before_gate(TEMPLATE.read_text()) is None
+    assert _record_before_gate(SCRIPT) is None
 
 
 def test_a_record_after_the_publish_gate_is_flagged():
@@ -112,8 +114,7 @@ def test_the_weights_table_is_named_wherever_the_doc_trees_are(marker):
     the per-path restore already covers the table, and this is the check that says the restore
     worked — scoped to the two doc trees it reports `tree restored` over leftover dirt.
     """
-    text = TEMPLATE.read_text()
-    lines = _code_lines(text)
+    lines = _code_lines(SCRIPT)
     hits = [i for i, line in enumerate(lines) if marker in line]
     assert hits, f"{TEMPLATE.name} no longer contains a {marker!r} line"
     # A continued line carries its remaining paths onto the next one.
