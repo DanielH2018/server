@@ -191,6 +191,22 @@ spec:
               value: "true"
             - name: N8N_RUNNERS_TASK_REQUEST_TIMEOUT
               value: "300"
+            # Three defaults n8n 2.41.6 logs as shrinking in a future version, pinned at the
+            # values that were live while they were unset (until 2026-10-02, #3255). Unset, a
+            # Renovate digest bump would cut them silently. Defaults read from
+            # packages/@n8n/config/src/configs/{runners,compression}.config.ts at `n8n@2.41.6`.
+            #
+            # N8N_RUNNERS_TASK_TIMEOUT here is the BROKER's limit (300 s, dropping to 60). It is
+            # not the only one: the runners pod enforces its own, set in
+            # deployment-runners.yaml.j2 at 60 s. The lower of the two is the effective cap.
+            - name: N8N_RUNNERS_TASK_TIMEOUT
+              value: "300"
+            # The Compression node's decompression limits: 2 GiB (dropping to 256 MiB) and 5000
+            # ZIP entries (dropping to 1000).
+            - name: N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES
+              value: "2147483648"
+            - name: N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES
+              value: "5000"
             # Keeps database.sqlite small (it once hit 840M of execution history, and its daily
             # page churn was the biggest single driver of B2 billable growth, 2026-07-03). The
             # Kopia backup only needs workflows and credentials, so successful-run data is not

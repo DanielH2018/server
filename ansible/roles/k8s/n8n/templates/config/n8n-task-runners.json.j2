@@ -10,6 +10,7 @@
 				"/opt/runners/task-runner-javascript/dist/start.js"
 			],
       "health-check-server-port": "1234",
+      "allowed-env": ["N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT", "N8N_RUNNERS_TASK_TIMEOUT"],
       "env-overrides": {
         "NODE_FUNCTION_ALLOW_BUILTIN": "crypto",
         "NODE_FUNCTION_ALLOW_EXTERNAL": "fuzzball"
@@ -21,6 +22,7 @@
       "command": "/opt/runners/task-runner-python/.venv/bin/python",
       "args": ["-I", "-B", "-X", "disable_remote_debug", "-m", "src.main"],
       "health-check-server-port": "1235",
+      "allowed-env": ["N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT", "N8N_RUNNERS_TASK_TIMEOUT"],
       "env-overrides": {
         "PYTHONPATH": "/opt/runners/task-runner-python",
         "N8N_RUNNERS_STDLIB_ALLOW": "*",
