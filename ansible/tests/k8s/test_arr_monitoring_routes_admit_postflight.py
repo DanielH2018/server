@@ -25,7 +25,7 @@ from jinja2.exceptions import UndefinedError
 
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
-from _helpers import ANSIBLE
+from lib.repo_paths import SHARED_TPL
 from _manifest_guards import (
     ALL_VARS,
     K8S,
@@ -196,7 +196,9 @@ def test_the_app_route_itself_is_not_widened(app):
 # Traefik rejects, and one that reads as "no client restriction" to anyone skimming the
 # template. The macro fails at render instead; these are the accept/reject pair for that.
 
-_MACRO_SRC = (ANSIBLE / "templates" / "ingressroute.yml.j2").read_text()
+_MACRO_IMPORT = (
+    "{% from 'ingressroute.yml.j2' import monitoring_route with context %}\n"
+)
 _MACRO_CTX = {
     "domain": "example.com",
     "k8s_namespace": "homelab",
@@ -207,8 +209,8 @@ _MACRO_CTX = {
 
 def _render_monitoring_call(call: str) -> str:
     return (
-        make_ansible_env(undefined_cls=Undefined)
-        .from_string(_MACRO_SRC + "\n" + call)
+        make_ansible_env([SHARED_TPL], undefined_cls=Undefined)
+        .from_string(_MACRO_IMPORT + call)
         .render(_MACRO_CTX)
     )
 
