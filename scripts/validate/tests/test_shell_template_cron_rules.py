@@ -10,7 +10,8 @@ The curl-retry pins read a RENDER (`_shell_render.rendered_shell_text`), because
 that moves into a role default would leave them pinning a brace. The three cron rules read the
 SOURCE on purpose: a rule's second argument IS the template text, so the tree-wide runs below
 hand it exactly what `shell_templates.py` hands it in production. That is why this module keeps
-its entry in `SHELL_SOURCE_READERS` permanently (#3189).
+its entry in `SHELL_SOURCE_READERS` permanently (#3189) — an entry the rule only started
+requiring once it learned to see a resolver-fed read (#3200).
 
 The module-scoped `cron_map` fixture is why these four guards stay in ONE file: pytest runs
 with `--dist loadscope`, so a module-scoped fixture is re-evaluated once per module, and

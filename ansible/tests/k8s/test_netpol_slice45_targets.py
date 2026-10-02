@@ -13,6 +13,7 @@ form exits 0 on both. A failed read reports a Go template dump instead of "terra
 
 from lib import yaml_fast
 from _helpers import ALL_VARS, K8S_ROLES
+from _k8s_render import render_role_template
 
 ROLE = K8S_ROLES / "netpol-baseline"
 TASKS = (ROLE / "tasks" / "main.yml").read_text()
@@ -21,7 +22,7 @@ TASKS = (ROLE / "tasks" / "main.yml").read_text()
 TASK_CODE = "\n".join(
     line for line in TASKS.splitlines() if not line.lstrip().startswith("#")
 )
-PROBE = (ROLE / "templates" / "netpol-probe-slice45-job.yaml.j2").read_text()
+PROBE_TEMPLATE = "netpol-probe-slice45-job.yaml.j2"
 TARGETS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())[
     "netpol_baseline_slice45_targets"
 ]
@@ -90,9 +91,28 @@ def test_terraria_is_absent_while_it_is_scaled_to_zero() -> None:
         )
 
 
+# The command the open-port leg runs, as it renders into the probe script.
+_OPEN_PORT_LEG = "nc -w 5 -z terraria 7777"
+
+
+def _probe(targets: list[str]) -> str:
+    return render_role_template(
+        "netpol-baseline", PROBE_TEMPLATE, {"netpol_baseline_slice45_targets": targets}
+    )
+
+
 def test_the_probe_leg_is_gated_on_the_same_list() -> None:
-    """The open-port leg must not be rendered for a target the gate does not check."""
-    assert "{% if 'terraria' in netpol_baseline_slice45_targets %}" in PROBE, (
-        "terraria's open-port leg is not gated on the target list, so it renders whether or not "
-        "the workload is running"
+    """The open-port leg must not be rendered for a target the gate does not check.
+
+    Rendered both ways round, so a leg that renders unconditionally and a leg that never
+    renders both fail.
+    """
+    others = [t for t in TARGETS if t != "terraria"]
+    assert _OPEN_PORT_LEG not in _probe(others), (
+        "terraria's open-port leg renders with terraria absent from the target list, so it "
+        "runs whether or not the workload is running"
+    )
+    assert _OPEN_PORT_LEG in _probe([*others, "terraria"]), (
+        f"terraria's open-port leg (`{_OPEN_PORT_LEG}`) does not render with terraria in the "
+        "target list — restoring terraria would no longer restore its leg"
     )

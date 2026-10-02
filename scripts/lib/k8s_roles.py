@@ -75,11 +75,11 @@ NO_MANIFEST_ROLES = {
 # Dockerfile, which claim — and this validator reads role defaults and inventory, not task-level
 # `vars:` overrides. Rendering them standalone produces STUB-filled manifests that prove nothing.
 #
-# That exemption is a coverage gap, not a clean bill: three manifests (volume-claim's pvc,
-# image-builder's build-job and context-configmap) are parsed as YAML nowhere. The build job is
-# covered for one securityContext property by test_image_builder_security_context.py; the PVC
-# has no pod spec and nothing covers it. Closing the gap means rendering them against a fixture
-# of the caller vars; until then this names the gap where someone will look for it.
+# That exemption is a coverage gap, not a clean bill. The build job is closed for the test
+# suite: `ansible/tests/_k8s_render.py:rendered_build_job_text` renders it against a fixture of
+# a caller's vars, and the security-context, token-mount and namespace-defaults guards parse
+# that render. Two manifests (volume-claim's pvc, image-builder's context-configmap) are still
+# parsed as YAML nowhere; this names that gap where someone will look for it.
 CALLER_RENDERED_ROLES = {
     "volume-claim",
     "image-builder",

@@ -12,21 +12,28 @@ boolean — the Kubernetes API rejects a non-string env value, so an unquoted `t
 apply rather than the render.
 """
 
-from _k8s_render import rendered_docs
-from lib.repo_paths import ROLES
+from lib import yaml_fast
+
+from _k8s_render import render_role_template, rendered_docs
 
 _TEMPLATE = "deployment-flaresolverr.yaml.j2"
 
 
-def _flaresolverr_env():
-    for role, tpl, doc in rendered_docs():
-        if role != "prowlarr" or tpl != _TEMPLATE:
-            continue
+def _env_of(docs) -> dict:
+    for doc in docs:
         for container in doc["spec"]["template"]["spec"]["containers"]:
             if container["name"] == "flaresolverr":
                 return {e["name"]: e["value"] for e in container["env"]}
     raise AssertionError(
         f"no flaresolverr container rendered from prowlarr/{_TEMPLATE}"
+    )
+
+
+def _flaresolverr_env():
+    return _env_of(
+        doc
+        for role, tpl, doc in rendered_docs()
+        if role == "prowlarr" and tpl == _TEMPLATE
     )
 
 
@@ -43,8 +50,17 @@ def test_disable_media_renders_as_a_quoted_string_from_the_default():
 
 
 def test_the_value_is_not_hardcoded_in_the_manifest():
-    source = ROLES / "k8s" / "prowlarr" / "templates" / _TEMPLATE
-    assert "prowlarr_k8s_fs_disable_media" in source.read_text(), (
-        f"{_TEMPLATE} no longer renders DISABLE_MEDIA from prowlarr_k8s_fs_disable_media — "
-        "reverting an indexer regression now means editing a manifest, not a default"
+    """The revert path itself: flipping the default flips the rendered value.
+
+    Rendered at `false` rather than read off the template, so an alias between the default and
+    the env line still counts as reading it, and a literal `"true"` fails.
+    """
+    rendered = render_role_template(
+        "prowlarr", _TEMPLATE, {"prowlarr_k8s_fs_disable_media": False}
+    )
+    env = _env_of(d for d in yaml_fast.safe_load_all(rendered) if d)
+    assert env.get("DISABLE_MEDIA") == "false", (
+        f"{_TEMPLATE} rendered DISABLE_MEDIA={env.get('DISABLE_MEDIA')!r} with "
+        "prowlarr_k8s_fs_disable_media false — reverting an indexer regression now means "
+        "editing a manifest, not a default"
     )

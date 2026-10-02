@@ -14,16 +14,16 @@ It is worth a test rather than a comment because the field is the kind a reviewe
 looks like explicitness — stating the default so nobody has to look it up — and the cost is
 invisible unless you run the same play twice and read the changed count.
 
-This checks the shape, not the rendering: the template has no Jinja in the affected lines, so
-a textual guard is the whole check rather than an approximation of it.
+It reads the template as `_setup_render` renders it, so a field that moved behind a variable
+or a macro still parses out as the API server would receive it.
 """
 
 import pytest
 from lib import yaml_fast
 
-from _helpers import ROLES
+from _setup_render import rendered_setup_text
 
-TEMPLATE = ROLES / "setup" / "k3s" / "templates" / "priorityclass.yaml.j2"
+TEMPLATE = "setup/k3s/priorityclass.yaml.j2"
 
 # Fields the API server omits from a PriorityClass when they hold their zero value. Each is
 # safe to state and expensive to state. Extend this as others are found — the point is the
@@ -32,7 +32,13 @@ DEFAULTED_AWAY = ("globalDefault",)
 
 
 def _documents():
-    docs = [d for d in yaml_fast.safe_load_all(TEMPLATE.read_text()) if d]
+    docs = [
+        d
+        for d in yaml_fast.safe_load_all(
+            rendered_setup_text("k3s", "priorityclass.yaml.j2")
+        )
+        if d
+    ]
     assert docs, (
         f"{TEMPLATE} parsed to no documents — check the loader, not the manifest."
     )

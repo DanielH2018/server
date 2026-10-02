@@ -18,10 +18,11 @@ import ast
 import re
 
 from _helpers import REPO, load_defaults
+from _k8s_render import rendered_texts
 
 _REPO = REPO
 _ROLE = _REPO / "ansible/roles/k8s/observability"
-_GRAFANA = _ROLE / "templates/grafana.yaml.j2"
+_GRAFANA = "grafana.yaml.j2"
 _DASHBOARDS_TASKS = _ROLE / "tasks/dashboards.yml"
 # deploy.sh's locked halves: the foreground's and --detach's both call `annotate`.
 _DEPLOY_UNDER_LOCKS = _REPO / "scripts/deploy_tools/deploy_under_locks.py"
@@ -86,7 +87,11 @@ def test_the_datasource_uid_matches_the_provisioned_one():
     """
     uid = load_defaults(_ROLE)["observability_loki_homelab_uid"]
 
-    grafana = _GRAFANA.read_text()
+    grafana = next(
+        text
+        for role, name, text in rendered_texts()
+        if (role, name) == ("observability", _GRAFANA)
+    )
     block = grafana.split("- name: loki-homelab", 1)
     assert len(block) == 2, (
         "grafana.yaml.j2 no longer provisions a `loki-homelab` datasource"

@@ -16,11 +16,24 @@ Run: uv run pytest ansible/tests/longhorn/test_daily_group_membership_is_the_r2_
 """
 
 from _helpers import SETUP_ROLES, load_defaults, load_tasks, task_named
+from _setup_render import rendered_setup_text
+from lib import yaml_fast
 from test_every_longhorn_pvc_has_a_tier import _longhorn_class_pvcs
 
 K3S = SETUP_ROLES / "k3s"
-RECURRING_JOB = K3S / "templates" / "longhorn-recurringjob.yaml.j2"
+RECURRING_JOB = "longhorn-recurringjob.yaml.j2"
 LEAVES_DEFAULT = ("k3s_longhorn_nobackup_volumes", "k3s_longhorn_weekly_volumes")
+
+
+def recurring_jobs() -> dict[str, dict]:
+    """Every RecurringJob the k3s role applies, by `metadata.name`, out of the RENDER.
+
+    Read from `_setup_render` rather than from the template's text: the cron and the retain
+    counts are role defaults, and the weekly tier's seven shards only exist after the
+    `{% for %}` runs, so the source carries neither the group names nor the job count.
+    """
+    docs = yaml_fast.safe_load_all(rendered_setup_text("k3s", RECURRING_JOB))
+    return {d["metadata"]["name"]: d for d in docs if d}
 
 
 def daily_members(declared: set[str], defaults: dict) -> set[str]:
@@ -36,12 +49,26 @@ def test_daily_group_membership_equals_the_r2_list():
 
 
 def test_the_daily_job_selects_the_default_group():
-    text = RECURRING_JOB.read_text()
-    head = text.split("---")[1]
-    assert "name: daily-backup" in head
-    assert "groups:\n    - default\n" in head, (
+    jobs = recurring_jobs()
+    assert jobs["daily-backup"]["spec"]["groups"] == ["default"], (
         "the reconcile below assumes the `default` group"
     )
+
+
+def test_no_other_recurring_job_claims_the_default_group():
+    """Non-vacuity, and the other half of the identity: `default` has ONE claimant.
+
+    The seven `weekly-backup-d<N>` shards are the members this must find. A second job on
+    `default` would back every unlisted volume up twice — the daily tier's volumes are the R2
+    tier, so the duplicate would be the one landing on B2's transaction cap.
+    """
+    jobs = recurring_jobs()
+    weekly = sorted(name for name in jobs if name.startswith("weekly-backup-d"))
+    assert weekly == [f"weekly-backup-d{shard}" for shard in range(7)], weekly
+    on_default = sorted(
+        name for name, job in jobs.items() if "default" in job["spec"]["groups"]
+    )
+    assert on_default == ["daily-backup"], on_default
 
 
 def test_the_reconcile_returns_only_the_unlisted_volumes_to_default():

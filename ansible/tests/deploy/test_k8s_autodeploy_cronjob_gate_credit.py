@@ -107,7 +107,7 @@ def test_commented_out_cronjob_gate_include_does_not_credit(tmp_path: Path) -> N
 def test_a_jinja_cronjob_gate_name_is_not_credited(widget_role) -> None:
     """A templated `cronjob_gate_name` can't be resolved here, so it counts as ungated.
 
-    Same fail-closed choice `_deployment_name` makes for a Jinja Deployment name: guessing
+    Same fail-closed choice `_deployment_docs` makes for a Jinja Deployment name: guessing
     which CronJob a `{{ ... }}` resolves to is how a guard credits a workload nothing waits
     on. The role reads as an offender instead, which an operator can then answer.
     """

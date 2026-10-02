@@ -42,15 +42,14 @@ and one it must reject, so each guard carries its own proof that it can go red.
 import pytest
 from lib import yaml_fast
 
-from _helpers import ROLES
 from _k8s_render import rendered_docs
+from _setup_render import rendered_setup_text
 
 _LONG_RUNNING = {"Deployment", "DaemonSet", "StatefulSet"}
 _POD_KINDS = _LONG_RUNNING | {"Job", "CronJob"}
 
-_PRIORITYCLASS_TEMPLATE = (
-    ROLES / "setup" / "k3s" / "templates" / "priorityclass.yaml.j2"
-)
+# The setup-plane template that defines the four tiers, read as it renders.
+_PRIORITYCLASS_TEMPLATE = ("k3s", "priorityclass.yaml.j2")
 
 # Long-running pod templates allowed to name a class OUTSIDE the four homelab tiers, with the
 # reason. A new entry here is the decision the guard exists to force.
@@ -85,11 +84,11 @@ def _homelab_tiers() -> frozenset[str]:
     """The four class names, read from the manifest that defines them rather than restated."""
     names = frozenset(
         d["metadata"]["name"]
-        for d in yaml_fast.safe_load_all(_PRIORITYCLASS_TEMPLATE.read_text())
+        for d in yaml_fast.safe_load_all(rendered_setup_text(*_PRIORITYCLASS_TEMPLATE))
         if d
     )
     assert len(names) == 4, (
-        f"expected 4 PriorityClasses in {_PRIORITYCLASS_TEMPLATE}: {names}"
+        f"expected 4 PriorityClasses in setup/{'/'.join(_PRIORITYCLASS_TEMPLATE)}: {names}"
     )
     return names
 

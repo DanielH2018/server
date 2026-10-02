@@ -27,7 +27,7 @@ k8s_default_limitrange in group_vars/all.yml for why the ceiling is set where it
 from lib.proc_testing import run
 
 from lib import yaml_fast
-from _k8s_render import rendered_docs
+from _k8s_render import rendered_build_job_text, rendered_docs
 from _helpers import REPO as _REPO
 from _helpers import jinja_env, load_yaml
 
@@ -149,42 +149,33 @@ def test_every_rendered_container_sets_requests_and_limits() -> None:
 def test_the_roles_outside_the_render_walk_are_accounted_for() -> None:
     """rendered_docs() cannot see every pod that lands in these namespaces. Name the gap.
 
-    The walk covers roles that are `containers_list` members. Four are not, and two of those
-    ship pod templates — so the guard above says "every rendered container" while meaning
-    "every container in a containers_list role". Their pods land in `homelab` all the same,
-    which is exactly the population the LimitRange exists for.
+    The walk covers roles that are `containers_list` members. The caller-rendered roles are
+    not: `volume-claim` renders only a PVC, but `image-builder`'s build Job is a pod that lands
+    in `homelab` all the same, which is exactly the population the LimitRange exists for. It is
+    rendered here with a caller's variables instead.
 
     The dangerous shape is a container that states a request and no limit: it takes `default`
     as its limit and is refused if the request is higher. A build job asking for 4Gi would
     stop working, and it would surface hours later as a failed image build rather than here.
     """
-    excluded = {}
-    for role in ("image-builder", "volume-claim"):
-        for tpl in sorted(
-            (_REPO / "ansible/roles/k8s" / role / "templates").glob("*.j2")
-        ):
-            text = tpl.read_text()
-            if "containers:" not in text:
-                continue
-            excluded[f"{role}/{tpl.name}"] = (
-                "requests:" in text,
-                "limits:" in text,
-            )
+    job = yaml_fast.safe_load(rendered_build_job_text())
+    pod = job["spec"]["template"]["spec"]
+    excluded = {
+        f"image-builder/build-job.yaml.j2 {c['name']}": (
+            bool((c.get("resources") or {}).get("requests")),
+            bool((c.get("resources") or {}).get("limits")),
+        )
+        for c in pod.get("initContainers", []) + pod["containers"]
+    }
 
-    assert excluded, "neither role ships a pod template any more; drop this guard"
-    # This check reads raw template TEXT, so a pod spec that moved its resources behind
-    # container_resources() would leave it comparing False to False — passing, with its whole
-    # point gone. Both roles are in validate.k8s_manifests.SKIP_ROLES and cannot be rendered
-    # standalone, so grepping is the only option here and the coverage has to be asserted
-    # rather than assumed. ansible/templates/container-resources.yml.j2 records that these two
-    # roles are deliberately not converted.
+    assert excluded, "the build Job renders no container; check the render"
+    # Non-vacuity: if the Job dropped both, the both-or-neither check below holds on nothing.
     assert any(
         has_requests or has_limits for has_requests, has_limits in excluded.values()
     ), (
-        "no excluded pod template states a request or a limit in its raw text any more. If one "
-        "moved to container_resources(), revert it — this guard cannot see through a macro, "
-        "and silently compares False to False. If the pod spec genuinely dropped both, remove "
-        "it from the loop above rather than leaving this passing on nothing."
+        "the build Job no longer renders a request or a limit on any container. If it "
+        "genuinely dropped both, it takes the namespace defaults; drop this guard rather than "
+        "leaving it passing on nothing."
     )
     for where, (has_requests, has_limits) in excluded.items():
         # Either both or neither. Both means the LimitRange never touches it; neither means it

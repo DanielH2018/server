@@ -298,3 +298,21 @@ def rendered_build_text(role: str, template: str = "Dockerfile.j2") -> str:
         f"{role}/{template} is not among the rendered build files: "
         f"{sorted((n, t) for n, t, _ in rendered_build_texts())}"
     )
+
+
+# `k8s/image-builder` is a CALLER_RENDERED_ROLES member, so `rendered_docs()` never reaches its
+# build Job: the image, context and tag arrive on the calling role's `include_role` task. These
+# stand in for that task, so a guard over every pod the cluster runs can still parse this one.
+IMAGE_BUILDER_CALLER_VARS = {
+    "image_builder_name": "example-image",
+    "image_builder_context_dir": "/tmp/example-context",
+    "image_builder_tag": "abc1234",
+    "image_builder_dockerfile": "Dockerfile",
+}
+
+
+def rendered_build_job_text() -> str:
+    """`k8s/image-builder`'s build Job as a caller's include renders it, as TEXT."""
+    return render_role_template(
+        "image-builder", "build-job.yaml.j2", IMAGE_BUILDER_CALLER_VARS
+    )

@@ -22,45 +22,14 @@ a root or privileged one. This file pins the boundaries around that decision, no
 
 from lib import yaml_fast
 
-from validate.k8s_manifests import (
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
-    K8S_ROLES,
-    SHARED_TPL,
-    load_yaml,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-    render_or_error,
-    resolve_vars,
-    role_defaults,
-)
+from _k8s_render import rendered_build_job_text
 
-_ROLE = "image-builder"
 _TEMPLATE = "build-job.yaml.j2"
 
 
 def _build_job() -> dict:
-    """The rendered build Job, via the validator's own machinery rather than a second stub set."""
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
-    base = resolve_vars(base, base)
-    role_dir = K8S_ROLES / _ROLE
-    ctx = {
-        **base,
-        **role_defaults(_ROLE, base),
-        # Supplied by the play at run time, not by defaults.
-        "image_builder_name": "example-image",
-        "image_builder_context_dir": "/tmp/example-context",
-        "image_builder_tag": "abc1234",
-        "image_builder_dockerfile": "Dockerfile",
-    }
-    env = make_env([role_dir / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    text, err = render_or_error(env, _TEMPLATE, ctx)
-    assert err is None, f"{_TEMPLATE} failed to render: {err}"
-    doc = yaml_fast.safe_load(text)
+    """The rendered build Job, parsed."""
+    doc = yaml_fast.safe_load(rendered_build_job_text())
     assert doc and doc.get("kind") == "Job", (
         f"{_TEMPLATE} no longer renders a Job — this guard is measuring nothing"
     )
@@ -149,10 +118,14 @@ def test_build_job_does_not_mount_a_service_account_token():
 
 def test_unconfined_profiles_stay_documented_at_the_line():
     """The Unconfined pair is the one thing the exemption in test_container_security_context.py
-    actually names. Keep its justification where the trade-off is made, not only in that list."""
-    raw = (K8S_ROLES / _ROLE / "templates" / _TEMPLATE).read_text()
-    assert "Unconfined" in raw
-    assert "newuidmap" in raw, (
+    actually names. Keep its justification where the trade-off is made, not only in that list.
+
+    Read off the render: the reason is a YAML comment, so it survives into the manifest the
+    deploy writes, where a `{# #}` comment would not.
+    """
+    rendered = rendered_build_job_text()
+    assert "Unconfined" in rendered
+    assert "newuidmap" in rendered, (
         "the empirical reason the Unconfined profiles and allowPrivilegeEscalation cannot be "
         "tightened must stay written at the line that sets them"
     )
