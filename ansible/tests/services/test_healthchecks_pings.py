@@ -26,6 +26,8 @@ from pathlib import Path
 
 import pytest
 from _helpers import ANSIBLE
+from _shell_render import rendered_shell_text
+from lib.repo_paths import ROLES
 
 
 PING_HOST = "hc-ping.com"
@@ -48,7 +50,43 @@ def _read(path: Path) -> str:
 
 
 def _read_raw(path: Path) -> str:
-    return path.read_text(errors="ignore")
+    """A shell template's RENDERED text; every other file's source.
+
+    A guard on a `*.sh.j2`'s source reads `{{ ... }}` wherever a value moved into a role
+    default, and both failure modes this module exists to catch hide there: a URL assembled
+    from a default carries neither a literal `create=1` nor a literal `/fail`, so
+    `test_no_auto_provisioning` and `test_failure_is_reported` pass on text that says nothing
+    (#3190). `_shell_render.rendered_shell_text` renders through the same gate that shellchecks
+    these scripts, so what is asserted here is what the host runs.
+
+    The routing is per file rather than a swap to `rendered_shell_texts()`: this census also
+    covers the `.yml`, `.yaml`, `.sh` and `.py` that ship a ping, and `*.sh.j2` is the only
+    class the shared renderer covers. Everything else keeps its source read.
+    """
+    rendered = _rendered_shell_template(path)
+    return path.read_text(errors="ignore") if rendered is None else rendered
+
+
+def _rendered_shell_template(path: Path) -> str | None:
+    """`path`'s rendered text when it is a shell template the renderer can address, else None.
+
+    The roster is keyed on a (plane, role, name) triple derived from
+    `roles/<plane>/<role>/templates/<name>.sh.j2`, and `rendered_shell_text` RAISES for a
+    triple it does not hold. So the shape is checked structurally first: a `*.sh.j2` outside
+    that exact depth — one nested a directory deeper under `templates/` — reads as source
+    rather than failing the whole census. `_shell_render` derives the plane and role from the
+    same two parents, so a path that fails this test is one it could not address either.
+    """
+    if not path.name.endswith(".sh.j2"):
+        return None
+    try:
+        rel = path.relative_to(ROLES)
+    except ValueError:
+        return None
+    if len(rel.parts) != 4 or rel.parts[2] != "templates":
+        return None
+    plane, role, name = rel.parts[0], rel.parts[1], rel.parts[3]
+    return rendered_shell_text(plane, role, name)
 
 
 def _ping_files() -> list[Path]:
@@ -167,4 +205,30 @@ def test_ping_is_optional(path: Path) -> None:
     assert guarded, (
         f"{path} sends a ping without first checking the key/URL is non-empty. An "
         f"unconfigured host would curl a malformed URL on every run."
+    )
+
+
+# The template this module's render routing is proved on, as a (plane, role, name) triple. Named
+# rather than discovered: a routing test over a template picked by glob reads green the day the
+# glob returns nothing, which is the failure mode the routing itself exists to remove.
+_RENDERED_SENDER = ("setup", "k3s", "disk-health.sh.j2")
+
+
+def test_a_shell_template_is_read_rendered_not_as_source() -> None:
+    """`_read_raw` hands a `*.sh.j2` the rendered script, so no assertion here reads `{{ ... }}`.
+
+    The source side of the assertion is what makes this able to go red: `disk-health.sh.j2`
+    carries Jinja, so a `_read_raw` that reverted to `path.read_text()` would return text
+    holding `{{` and fail here rather than silently reading templates again (#3190).
+    """
+    plane, role, name = _RENDERED_SENDER
+    path = ROLES / plane / role / "templates" / name
+    assert "{{" in path.read_text(), (
+        f"{name} no longer carries Jinja, so it cannot prove the render routing. Point "
+        f"_RENDERED_SENDER at a ping template that does."
+    )
+    text = _read_raw(path)
+    assert text == rendered_shell_text(plane, role, name)
+    assert "{{" not in text, (
+        f"{name} read through _read_raw still holds Jinja: {text[:200]}"
     )

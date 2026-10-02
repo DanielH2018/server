@@ -17,8 +17,10 @@ Two things a test module does not re-derive for itself:
    the whole roster through the same gate that shellchecks it, so an assertion cannot drift from
    what the host runs. Rule 3 catches the two spellings a deliberate reader takes: a path
    expression ending in a `*.sh.j2` name, and a `glob("*.sh.j2")` roster. It does NOT catch a
-   census wider than that — `test_healthchecks_pings.py` reaches every template through an
-   `rglob("*")`, which is #3190 rather than an entry in the list below.
+   census wider than that: `test_healthchecks_pings.py` reaches every template through an
+   `rglob("*")`, so the rule cannot see it either way. That module routes its `*.sh.j2` reads
+   through `rendered_shell_text` of its own accord (#3190), and its own
+   `test_a_shell_template_is_read_rendered_not_as_source` is what holds it there.
 
 This is the sibling of `test_scratch_repos_go_through_git_testing.py`, which holds the same
 line for scratch git repositories.
