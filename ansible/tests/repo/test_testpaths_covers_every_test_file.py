@@ -13,8 +13,8 @@ The second guard keeps tests out of the directory holding the code they cover. A
 directory. `ansible/tests/` satisfies the rule by name. `scripts/conftest.py` is the
 one deliberate exception, the shared conftest for the whole `scripts` testpath.
 
-The prek hook for pytest runs unconditionally — `always_run = true`, no `files` gate, pinned by
-`test_prek_pytest_always_runs.py` — so what `testpaths` reaches is the gap this module covers.
+CI's `pytest` job runs the whole suite on every PR with no file scope, so what `testpaths`
+reaches is the gap this module covers.
 
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED:
 a guard that matches everything and a guard that matches nothing are indistinguishable from the

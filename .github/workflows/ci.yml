@@ -90,7 +90,7 @@ jobs:
   #     the gate waits on the MAX of its dependencies, not their sum, and its own step is 4s.
   #   - The revert's case was PR wall time, where both halves are changed-files-scoped and a
   #     second job's ~15-20s of fixed setup dwarfs ~7s of scoped lint. The PR wall is now set by
-  #     `pytest`, which runs UNSCOPED by design (prek.toml says why) at ~61s across the shards
+  #     `pytest`, which runs UNSCOPED by design (the `pytest` job says why) at ~61s across the shards
   #     (four when this was measured; six since #2239).
   #     Both scoped hook halves finish well inside that, so on a PR this split is free rather
   #     than cheap.
@@ -318,8 +318,8 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t changed < "$RUNNER_TEMP/changed.txt"
-          # --skip pytest and --skip ansible-lint: each runs in its own job beside this one.
-          prek run --skip ansible-lint --skip pytest --color always --files "${changed[@]}"
+          # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
+          prek run --skip ansible-lint --color always --files "${changed[@]}"
 
       # Every push to master, and any PR the scoping step declined to trust: the full sweep.
       #
@@ -330,8 +330,8 @@ jobs:
       # rather than never: a deliberate trade of post-merge detection for PR latency.
       - name: Run hooks (full sweep)
         if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
-        # --skip pytest and --skip ansible-lint: each runs in its own job beside this one.
-        run: prek run --all-files --skip pytest --skip ansible-lint --color always
+        # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
+        run: prek run --all-files --skip ansible-lint --color always
 
       # `mkdocs build --strict` also runs in the twice-daily docs-refresh cron, but a broken
       # internal link that reaches master is discovered only there — build_site() bails
@@ -501,6 +501,19 @@ jobs:
   #
   # `fail-fast: false` for the reason the `hooks` job states above: one shard's failure must not
   # hide another's.
+  #
+  # UNSCOPED by design: every PR runs the whole suite, never only the tests near its changed
+  # files. Several tests discover their inputs by walking the tree (test_validate_shell_templates'
+  # pinned roster, test_healthchecks_pings' rglob), so a PR adding a new *.sh.j2 that a
+  # changed-files filter did not map to them would skip exactly the tests that should fail on it.
+  # A path list is the wrong fix: one that grows an entry each time something escapes is not a
+  # list needing one more entry. What this cannot reach is a test outside `testpaths`, which
+  # test_testpaths_covers_every_test_file guards.
+  #
+  # This job is the suite's only automated run before a merge. The prek `pytest` hook that
+  # re-ran it at `git push` was removed on 2026-10-02: it took 89s on daniel-box at load 0.9
+  # (2026-10-02) and 235s on daniel-server at load 15, on every push, to repeat what this job
+  # checks in ~61s, and `land.sh` already waits on this job through the `prek` gate.
   pytest:
     name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     runs-on: ubuntu-26.04

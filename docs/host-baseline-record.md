@@ -212,8 +212,8 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   measured. `--record-missing`, never `--record`: it measures only the files the table lacks,
   and writes the same bytes back when there are none, so an ordinary run leaves no diff.
 - **A red suite is not a case degradation saves**: the script runs the suite before its commit
-  and exits 1 on a failure, because the prek `pytest` hook that used to cover this fires at
-  pre-push (#2827). What degradation saves is the suite being fine and the measurement alone
+  and exits 1 on a failure, because no prek hook runs the suite: #2827 moved the `pytest` hook
+  to pre-push, and it was removed on 2026-10-02. What degradation saves is the suite being fine and the measurement alone
   failing — the `timeout` firing, or a durations report that parses to nothing. The `timeout` is
   there because this script holds the git-tree lock for its whole life.
 - **A generator that writes outside the three staged paths is a defect**: the write is unstaged,

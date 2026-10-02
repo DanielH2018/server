@@ -79,8 +79,8 @@ def _run_main(
         for k, v in env.items():
             monkeypatch.setenv(k, v)
     # Passed as call arguments, not monkeypatched: main() reads the PRIMARY checkout's
-    # `git status --porcelain` by default (genuinely dirty under prek's `pytest` hook right
-    # after docs-refresh stages its pages), remote_fanout_lines reads real
+    # `git status --porcelain` by default (genuinely dirty while docs-refresh runs the suite
+    # over the pages it just staged), remote_fanout_lines reads real
     # ~/.claude/fanout content, and missing_hook_script_lines checks the registered hook
     # paths against ~/server, which a CI runner does not have. All three are keyword seams
     # (main()'s docstring) -- the monkeypatch ratchet (ansible/tests/_ratchet.py) caps this

@@ -5,7 +5,7 @@ deployer's fast-forward removes its tracked files. A guard that censuses with a 
 `iterdir()` then reads that shell as a role. A guard that goes on to read `defaults/main.yml`
 or a role's `CLAUDE.md` raises, and the rest census or skip a role that no longer exists in
 git. CI reads a fresh checkout, so neither failure shows up there — it lands only in the
-long-lived primary checkout, which is where the prek pre-push `pytest` hook runs.
+long-lived primary checkout, which is where the docs-refresh and eval-run crons run the suite.
 
 All three trees ghost the same way. The Pi's `roles/containers/` and `roles/setup/` fail
 LOUDER than k8s does: both `test_containers_list_roles_exist.py` and
