@@ -110,6 +110,23 @@ uv run python scripts/diagnostics/probe.py targets
 dig +short @10.0.0.243 <a-known-name>        # Pi-hole answering on its MetalLB VIP
 ```
 
+### Move CoreDNS to the image the new k3s bundles
+
+`k3s_server` does not move the CoreDNS image. The role's `coredns.yaml.skip` marker stops k3s
+applying its bundled CoreDNS add-on, so the Deployment keeps the image it had before the upgrade
+(#3257). The `coredns` tag reads the image from the manifest the new k3s staged at startup, and
+sets the Deployment to it:
+
+```bash
+uv run ansible-playbook ansible/k3s-bringup.yml --tags coredns
+kubectl -n kube-system get deploy coredns -o jsonpath='{.spec.template.spec.containers[0].image}'
+```
+
+The second command prints the image from `manifests/coredns.yaml` at the new `k3s_version`. The
+rest of the bundled add-on stays frozen, so diff that file between the old and new tags too. A
+change outside the `image:` line needs a hand port into `tasks/coredns.yml` or
+`templates/coredns-corefile.j2`.
+
 ## Upgrade the agent node
 
 ```bash
