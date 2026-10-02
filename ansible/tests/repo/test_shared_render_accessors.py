@@ -93,12 +93,16 @@ def test_an_unrendered_dockerfile_is_named_rather_than_missed() -> None:
         rendered_build_text("code-server", "Containerfile.j2")
 
 
-# The shell templates a guard in `ansible/tests/services/` reads today. Named so a renamed or
-# moved template fails as a missing member rather than as a guard over an empty set.
+# The shell templates a guard reads today, across `ansible/tests/services/` (#3178) and
+# `ansible/tests/longhorn/` (#3186). Named so a renamed or moved template fails as a missing
+# member rather than as a guard over an empty set.
 GUARDED_SHELL_TEMPLATES = frozenset(
     {
         ("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2"),
         ("k8s", "artifacts", "sync-artifacts.sh.j2"),
+        ("setup", "k3s", "longhorn-restore-drill.sh.j2"),
+        ("setup", "k3s", "longhorn-backup-health.sh.j2"),
+        ("setup", "k3s", "longhorn-reap-orphan-backups.sh.j2"),
     }
 )
 
@@ -144,6 +148,26 @@ def test_a_shell_render_takes_an_override_the_inventory_does_not_hold() -> None:
         overrides={"artifacts_peer_dir": "/tmp/peer"},
     )
     assert "/tmp/peer/" in script
+
+
+def test_an_override_beats_a_default_the_role_itself_declares() -> None:
+    """The restore-drill harness renders into a `tmp_path`, which is a key the role DOES declare.
+
+    The case above proves an override lands where nothing else defines the name. This one proves
+    precedence: if the role's own default won, `ansible/tests/longhorn/_restore_drill.py` would
+    render the production stamp tree and its tests would write there.
+    """
+    declared = load_defaults(ROLES / "setup" / "k3s")[
+        "k3s_longhorn_restore_drill_stamp_dir"
+    ]
+    script = render_shell_script(
+        "setup",
+        "k3s",
+        "longhorn-restore-drill.sh.j2",
+        overrides={"k3s_longhorn_restore_drill_stamp_dir": "/tmp/drill-stamps"},
+    )
+    assert 'STAMP_DIR="/tmp/drill-stamps"' in script
+    assert declared not in script
 
 
 def test_a_shell_template_that_is_not_in_the_tree_fails_the_caller() -> None:

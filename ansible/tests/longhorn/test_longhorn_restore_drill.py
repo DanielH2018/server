@@ -33,13 +33,13 @@ import re
 import sys
 from pathlib import Path
 
-from lib import yaml_fast
 from _helpers import ANSIBLE
 from _helpers import load_yaml
+from _shell_render import rendered_shell_text
 
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
-DRILL = K3S / "templates" / "longhorn-restore-drill.sh.j2"
+DRILL = ("setup", "k3s", "longhorn-restore-drill.sh.j2")
 CRONS = K3S / "tasks" / "health-crons.yml"
 
 sys.path.insert(0, str(K3S / "files"))
@@ -48,22 +48,23 @@ import longhorn_backup_health_logic as logic  # noqa: E402
 NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
 
 
-def _code(path: Path) -> str:
-    """The script minus its comments — they discuss the rejected idioms on purpose."""
-    return "\n".join(
-        line
-        for line in path.read_text().splitlines()
-        if not line.lstrip().startswith("#")
-    )
+# The drill as the host RUNS it, minus the comments that discuss the rejected idioms on purpose:
+# scanning those would match an explanation as readily as a violation. Rendered rather than read,
+# because a jq filter or a path built from a role default reads as `{{ ... }}` in the template and
+# a pattern that matches nothing passes (#3186).
+CODE = "\n".join(
+    line
+    for line in rendered_shell_text(*DRILL).splitlines()
+    if not line.lstrip().startswith("#")
+)
 
 
 def test_drill_resolves_the_backup_instead_of_pinning_one() -> None:
     """A pinned backup ID dies the day retention deletes it. See the module docstring."""
-    code = _code(DRILL)
-    assert "get backups.longhorn.io" in code and "sort_by" in code, (
+    assert "get backups.longhorn.io" in CODE and "sort_by" in CODE, (
         "the drill must resolve the newest Completed backup at run time"
     )
-    assert not re.search(r"backup-[0-9a-f]{16}", code), (
+    assert not re.search(r"backup-[0-9a-f]{16}", CODE), (
         "a literal backup ID is pinned; retention will delete it and the drill will then "
         "fail forever while reporting a restore failure"
     )
@@ -71,15 +72,14 @@ def test_drill_resolves_the_backup_instead_of_pinning_one() -> None:
 
 def test_drill_resolves_volume_and_size_from_the_cluster() -> None:
     """The one-off hardcoded both. A resized volume would silently restore into the wrong size."""
-    code = _code(DRILL)
-    assert "vol: .metadata.name" in code, "resolve the volume from the live Volume list"
-    assert "size: (.spec.size | tostring)" in code, (
+    assert "vol: .metadata.name" in CODE, "resolve the volume from the live Volume list"
+    assert "size: (.spec.size | tostring)" in CODE, (
         "resolve the size from the live Volume"
     )
-    assert not re.search(r"\bpvc-[0-9a-f]{8}-", code), (
+    assert not re.search(r"\bpvc-[0-9a-f]{8}-", CODE), (
         "a literal Longhorn volume name is pinned"
     )
-    assert "134217728" not in code, "a literal size is pinned"
+    assert "134217728" not in CODE, "a literal size is pinned"
 
 
 def test_drill_rotates_over_the_declared_backup_set() -> None:
@@ -90,18 +90,17 @@ def test_drill_rotates_over_the_declared_backup_set() -> None:
     PVC's storageClassName is immutable and still reads `longhorn` on volumes dropped from the
     backup set on 2026-08-08, so filtering by class would drill volumes nothing backs up.
     """
-    defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
+    defaults = load_yaml(K3S / "defaults" / "main.yml")
     assert defaults["k3s_longhorn_restore_drill_pvc"] == "", (
         "the drill is pinned to one volume — rotation is disabled and 24 volumes go unproven"
     )
-    code = _code(DRILL)
-    assert re.search(r'startswith\("recurring-job-group\.longhorn\.io/"\)', code), (
+    assert re.search(r'startswith\("recurring-job-group\.longhorn\.io/"\)', CODE), (
         "eligibility must be selected by the recurring-job-group label"
     )
-    assert 'select(. != "no-backup")' in code, (
+    assert 'select(. != "no-backup")' in CODE, (
         "the no-backup group is an explicit opt-out and must be excluded"
     )
-    assert "storageClassName" not in code.split("cat >")[0], (
+    assert "storageClassName" not in CODE.split("cat >")[0], (
         "eligibility is filtered by storage class, which is immutable and drifts"
     )
 
@@ -114,16 +113,15 @@ def test_rotation_selects_by_attempt_not_by_success() -> None:
     loss of coverage. Stamping the attempt before the restore is what bounds a failing volume to
     one slot per cycle.
     """
-    code = _code(DRILL)
-    assert 'at=$(stat -c %Y "${ATTEMPT_DIR}/${pvc}"' in code, (
+    assert 'at=$(stat -c %Y "${ATTEMPT_DIR}/${pvc}"' in CODE, (
         "rotation must order candidates by their attempt stamp"
     )
-    attempt_at = code.index('touch "${ATTEMPT_DIR}/${PVC}"')
-    assert attempt_at < code.index("$KUBECTL apply -f"), (
+    attempt_at = CODE.index('touch "${ATTEMPT_DIR}/${PVC}"')
+    assert attempt_at < CODE.index("$KUBECTL apply -f"), (
         "the attempt stamp must be written BEFORE the restore, or a failing volume starves "
         "the rotation"
     )
-    assert code.index('>"${SUCCESS_DIR}/${PVC}"') > code.index(
+    assert CODE.index('>"${SUCCESS_DIR}/${PVC}"') > CODE.index(
         '"$BYTES" -ge "$MIN_BYTES"'
     ), "the per-volume success stamp must be written only after the assertions pass"
 
@@ -135,54 +133,49 @@ def test_drill_carries_the_source_block_size() -> None:
     size that is not a multiple of its block size, so a mismatch strands the restore on exactly
     the volumes rotation added.
     """
-    code = _code(DRILL)
-    assert 'backupBlockSize: "${BLOCKSIZE}"' in code, (
+    assert 'backupBlockSize: "${BLOCKSIZE}"' in CODE, (
         "the restore volume must carry the source volume's block size"
     )
 
 
 def test_drill_publishes_its_candidate_list() -> None:
     """Check 8 has no cluster credential worth the name, and a second definition would drift."""
-    code = _code(DRILL)
-    assert 'cut -f1 >"$CANDIDATES"' in code, (
+    assert 'cut -f1 >"$CANDIDATES"' in CODE, (
         "the drill must publish the eligible set for the heartbeat's coverage check"
     )
-    assert 'chmod 0644 "$CANDIDATES"' in code, (
+    assert 'chmod 0644 "$CANDIDATES"' in CODE, (
         "the heartbeat runs as a different user and must be able to read it"
     )
 
 
 def test_drill_verification_is_not_tied_to_one_volume() -> None:
     """A filename-specific check cannot be repointed, which is how the one-off got stuck."""
-    code = _code(DRILL)
-    assert "acme.json" not in code, (
+    assert "acme.json" not in CODE, (
         "a volume-specific filename is baked in; the drill must work for whichever PVC "
         "k3s_longhorn_restore_drill_pvc names"
     )
-    assert "files=" in code and "bytes=" in code, (
+    assert "files=" in CODE and "bytes=" in CODE, (
         "verification must count files and bytes, so it holds for any volume"
     )
 
 
 def test_drill_tears_down_on_every_exit_path() -> None:
     """A half-restored volume left attached blocks the next run and occupies real disk."""
-    code = _code(DRILL)
-    assert "trap cleanup EXIT" in code, (
+    assert "trap cleanup EXIT" in CODE, (
         "cleanup must run via a trap, not only on the success path — the drill exits early "
         "on every resolution failure"
     )
     for obj in ("delete pod", "delete pvc", "delete pv", "delete volume"):
-        assert obj in code, f"cleanup must remove the drill's {obj.split()[-1]}"
+        assert obj in CODE, f"cleanup must remove the drill's {obj.split()[-1]}"
 
 
 def test_drill_stamps_only_after_the_assertions_pass() -> None:
     """The stamp IS the proof check 7 reads. Stamping early makes a broken drill read healthy."""
-    code = _code(DRILL)
-    assert code.count('date +%s >"$STAMP"') == 1, (
+    assert CODE.count('date +%s >"$STAMP"') == 1, (
         "the stamp must be written in exactly one place"
     )
-    stamp_at = code.index('date +%s >"$STAMP"')
-    last_assert = max(code.index('"$FILES" -gt 0'), code.index('"$BYTES" -ge'))
+    stamp_at = CODE.index('date +%s >"$STAMP"')
+    last_assert = max(CODE.index('"$FILES" -gt 0'), CODE.index('"$BYTES" -ge'))
     assert stamp_at > last_assert, (
         "the stamp is written before the data assertions, so a restored-but-empty volume "
         "would record a successful drill"
@@ -191,18 +184,16 @@ def test_drill_stamps_only_after_the_assertions_pass() -> None:
 
 def test_drill_rejects_an_empty_restore() -> None:
     """An empty filesystem mounts perfectly well and passes any mount-only check."""
-    code = _code(DRILL)
-    assert '"$FILES" -gt 0' in code, "a restore producing no files must fail"
-    assert "MIN_BYTES" in code, (
+    assert '"$FILES" -gt 0' in CODE, "a restore producing no files must fail"
+    assert "MIN_BYTES" in CODE, (
         "a byte floor must guard against a mounted-but-empty volume"
     )
 
 
 def test_drill_never_prints_the_restored_file() -> None:
     """These are service config volumes and several hold credentials — count, never print."""
-    code = _code(DRILL)
-    assert "wc -c" in code, "the probe must measure bytes, not emit them"
-    assert "cat /drill" not in code, "the probe must never print a restored file"
+    assert "wc -c" in CODE, "the probe must measure bytes, not emit them"
+    assert "cat /drill" not in CODE, "the probe must never print a restored file"
 
 
 def test_drill_distinguishes_no_output_from_an_empty_volume() -> None:
@@ -213,22 +204,20 @@ def test_drill_distinguishes_no_output_from_an_empty_volume() -> None:
     capture and an empty volume are the two things this check exists to tell apart, and the
     attach form collapses them. The pod is now created, waited for, and read via logs.
     """
-    code = _code(DRILL)
-    assert "--rm -i" not in code, (
+    assert "--rm -i" not in CODE, (
         "the attach form silently returns an empty capture; create the pod and read its logs"
     )
-    assert "logs" in code and ".status.phase" in code, (
+    assert "logs" in CODE and ".status.phase" in CODE, (
         "the probe must reach a terminal phase and be read from logs, so a failure is legible"
     )
-    assert "produced no output" in code, (
+    assert "produced no output" in CODE, (
         "an empty capture must fail with its own message, never as 'no files'"
     )
 
 
 def test_drill_reports_a_failed_probe_pod_distinctly() -> None:
     """A pod that crashed says nothing about the volume — do not blame the data for it."""
-    code = _code(DRILL)
-    assert 'fail "probe pod ${PHASE}' in code, (
+    assert 'fail "probe pod ${PHASE}' in CODE, (
         "a non-Succeeded probe must report the phase"
     )
 
@@ -242,11 +231,10 @@ def test_stamp_is_readable_by_the_user_that_checks_it() -> None:
     drill would have paged "no restore drill has ever succeeded" — permanently, and precisely
     backwards. Observed 2026-08-19 on the first passing run.
     """
-    code = _code(DRILL)
-    assert 'chmod 0755 "$STAMP_DIR"' in code, (
+    assert 'chmod 0755 "$STAMP_DIR"' in CODE, (
         "the stamp directory mode must be explicit; root's umask makes it unreadable otherwise"
     )
-    assert 'chmod 0644 "$STAMP"' in code, (
+    assert 'chmod 0644 "$STAMP"' in CODE, (
         "the stamp file must be readable by the checker"
     )
 
@@ -430,7 +418,7 @@ def test_drill_is_deployed_wherever_the_heartbeat_is() -> None:
 
 def test_drill_runs_daily() -> None:
     """A monthly drill leaves a broken restore path undetected for weeks."""
-    defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
+    defaults = load_yaml(K3S / "defaults" / "main.yml")
     minute, hour, dom, month, dow = defaults["k3s_longhorn_restore_drill_cron"].split()
     assert (dom, month, dow) == ("*", "*", "*"), (
         "the drill must run every night for the rotation to cover the fleet"
@@ -447,7 +435,7 @@ def test_cadence_and_staleness_window_move_together() -> None:
     Raising the cadence without lowering the window buys zero detection latency, which is the
     trap this pairing exists to prevent.
     """
-    defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
+    defaults = load_yaml(K3S / "defaults" / "main.yml")
     max_age = defaults["k3s_longhorn_restore_drill_max_age_days"]
     assert 2 <= max_age <= 7, (
         f"max_age_days is {max_age}: a nightly drill should tolerate a couple of bad nights, "
@@ -495,8 +483,7 @@ def test_check_eight_graces_each_candidate_from_when_it_joined() -> None:
         "the grace period must be measured per candidate, from when IT joined the rotation — "
         "a rotation-wide start date would page every newly added volume for a full cycle"
     )
-    code = _code(DRILL)
-    assert '! -e "${SEEN_DIR}/${cand}"' in code, (
+    assert '! -e "${SEEN_DIR}/${cand}"' in CODE, (
         "the join marker must be written once and never refreshed, or it decays into a second "
         "attempt stamp and the grace never expires"
     )

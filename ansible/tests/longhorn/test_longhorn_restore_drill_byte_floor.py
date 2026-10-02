@@ -12,8 +12,9 @@ below exist: a volume NOT on that list must still fail on an empty restore, or t
 widened to everything, and a volume on the list that has since filled up must fail too, or the
 list is a permanent exemption rather than a claim about what the volume holds.
 
-The guards are lifted out of the template by pattern rather than restated, so a reworded check is
-exercised as written; the Jinja placeholders are the only substitutions.
+The guards are lifted out of the RENDERED drill by pattern rather than restated, so a reworded
+check is exercised as written and every tunable arrives with the value the host runs (#3186). The
+three hand substitutions this file used to make are what the render replaces.
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py
 """
@@ -23,10 +24,11 @@ import subprocess
 
 from _helpers import ROLES
 from _helpers import load_yaml
+from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
 K3S = ROLES / "setup" / "k3s"
-DRILL = K3S / "templates" / "longhorn-restore-drill.sh.j2"
+DRILL = ("setup", "k3s", "longhorn-restore-drill.sh.j2")
 
 # Starts at EMPTY_OK rather than at the first `[[`, so the waiver's own derivation runs here
 # instead of being restated by this file.
@@ -49,25 +51,22 @@ def _run_floor_guard(
     must be substituted, not left to bash: an unset `ACTUAL_SIZE` is 0 inside `(( ))`, which
     waives everything and would let a rejecting test pass while checking nothing.
     """
-    match = _FLOOR_GUARD.search(DRILL.read_text())
+    match = _FLOOR_GUARD.search(rendered_shell_text(*DRILL))
     assert match, "the drill's files/bytes guard moved — update _FLOOR_GUARD"
+    guard = match.group(0)
+    # Non-vacuity for the lift, and what the three dropped `.replace()` calls used to assert: a
+    # regex that matched a slice missing one of the three tunables would run a guard the host
+    # does not have, and `"{{" not in guard` cannot see that on a rendered script.
     defaults = load_yaml(K3S / "defaults" / "main.yml")
-    guard = (
-        match.group(0)
-        .replace(
-            "{{ k3s_longhorn_restore_drill_min_bytes }}",
-            str(defaults["k3s_longhorn_restore_drill_min_bytes"]),
+    for key in (
+        "k3s_longhorn_restore_drill_min_bytes",
+        "k3s_longhorn_restore_drill_empty_ok_max_actual_bytes",
+    ):
+        assert str(defaults[key]) in guard, f"the lifted slice lost {key}:\n{guard}"
+    for declared in defaults["k3s_longhorn_restore_drill_empty_ok_pvcs"]:
+        assert declared in guard, (
+            f"the lifted slice lost the {declared} waiver:\n{guard}"
         )
-        .replace(
-            "{{ k3s_longhorn_restore_drill_empty_ok_pvcs | join(' ') }}",
-            " ".join(defaults["k3s_longhorn_restore_drill_empty_ok_pvcs"]),
-        )
-        .replace(
-            "{{ k3s_longhorn_restore_drill_empty_ok_max_actual_bytes }}",
-            str(defaults["k3s_longhorn_restore_drill_empty_ok_max_actual_bytes"]),
-        )
-    )
-    assert "{{" not in guard, f"an unsubstituted placeholder reached bash:\n{guard}"
     script = (
         'fail() { echo "FAIL: $*" >&2; exit 1; }\n'
         f'PVC={pvc}\nPROBE="files={files} bytes={byte_count}"\n'

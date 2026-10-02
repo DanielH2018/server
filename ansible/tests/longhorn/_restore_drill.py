@@ -15,14 +15,11 @@ import subprocess
 from pathlib import Path
 from lib.proc_testing import run as launch
 
-from jinja2 import Undefined
-from lib import yaml_fast
-from lib.ansible_jinja_env import make_ansible_env
-
 from _helpers import ANSIBLE
+from _shell_render import render_shell_script
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
-DRILL = K3S / "templates" / "longhorn-restore-drill.sh.j2"
+DRILL_TEMPLATE = ("setup", "k3s", "longhorn-restore-drill.sh.j2")
 
 STUB = r"""
 fixtures="$K3S_STUB_FIXTURES"
@@ -70,13 +67,16 @@ def backup(pvc: str) -> dict:
 
 
 def render(stamp_dir: Path) -> str:
-    defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
-    defaults["k3s_longhorn_restore_drill_stamp_dir"] = str(stamp_dir)
-    defaults["sys_user"] = "ubuntu"
-    return (
-        make_ansible_env(undefined_cls=Undefined)
-        .from_string(DRILL.read_text())
-        .render(**defaults)
+    """The drill as the host runs it, with its stamp directory pointed at `stamp_dir`.
+
+    The render goes through `_shell_render`, so a value this harness executes cannot differ from
+    what the shellcheck gate lints or what Ansible deploys. The override beats the role's own
+    `k3s_longhorn_restore_drill_stamp_dir` — which is the point: left alone it would write the
+    production stamp tree.
+    """
+    return render_shell_script(
+        *DRILL_TEMPLATE,
+        overrides={"k3s_longhorn_restore_drill_stamp_dir": str(stamp_dir)},
     )
 
 

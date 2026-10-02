@@ -25,35 +25,51 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_guard.py
 
 import re
 import sys
-from pathlib import Path
 
 from _helpers import ANSIBLE
+from _shell_render import rendered_shell_text, rendered_shell_texts
 
 sys.path.insert(0, str(ANSIBLE / "roles" / "setup" / "k3s" / "files"))
 import longhorn_reap_logic as logic
 
-K3S_TEMPLATES = ANSIBLE / "roles" / "setup" / "k3s" / "templates"
-REAPER = K3S_TEMPLATES / "longhorn-reap-orphan-backups.sh.j2"
+REAPER = ("setup", "k3s", "longhorn-reap-orphan-backups.sh.j2")
 
 # `{range .metadata.labels}` and friends. Ranging .items[*] is fine and ubiquitous — that IS a
 # list. This matches ranging into a map-valued field, which is the defect.
 MAP_RANGE = re.compile(r"\{range\s+\.(metadata|status)\.(labels|annotations)\}")
 
 
-def _shell_templates() -> list[Path]:
-    return sorted(K3S_TEMPLATES.glob("*.sh.j2"))
+# The templates the jsonpath sweep below must reach. Named rather than counted: the (plane, role)
+# filter reads empty the day a script moves, and an `all(...)` over nothing passes.
+GUARDED_TEMPLATES = frozenset(
+    {"longhorn-reap-orphan-backups.sh.j2", "longhorn-backup-health.sh.j2"}
+)
 
 
-def _code(path: Path) -> str:
-    """The script minus its comments.
+def _k3s_shell_scripts() -> dict[str, str]:
+    """Every `setup/k3s` shell script as the host runs it, by template name.
+
+    Rendered rather than read: a jsonpath expression assembled from a role default would reach
+    bash whole and read as `{{ ... }}` in the source, which is a guard over nothing (#3186).
+    """
+    found = {
+        name: text
+        for plane, role, name, text in rendered_shell_texts()
+        if (plane, role) == ("setup", "k3s")
+    }
+    missing = GUARDED_TEMPLATES - set(found)
+    assert not missing, f"the setup/k3s render no longer holds: {sorted(missing)}"
+    return found
+
+
+def _code(text: str) -> str:
+    """A script minus its comments.
 
     The reaper documents the broken idiom verbatim so the next reader knows why it is not used;
     scanning comments too would make that explanation fail the guard that exists because of it.
     """
     return "\n".join(
-        line
-        for line in path.read_text().splitlines()
-        if not line.lstrip().startswith("#")
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
     )
 
 
@@ -78,7 +94,11 @@ def test_no_shell_template_ranges_a_label_map_in_jsonpath():
     or `-o json` piped through jq/json.loads reading `.metadata.labels | keys[]` — which is what
     longhorn_reap_logic.backup_owner_map / snapshot_owner_map do.
     """
-    offenders = [p.name for p in _shell_templates() if MAP_RANGE.search(_code(p))]
+    offenders = [
+        name
+        for name, text in _k3s_shell_scripts().items()
+        if MAP_RANGE.search(_code(text))
+    ]
     assert not offenders, (
         "kubectl jsonpath cannot iterate a label map — it emits the whole object as one "
         f"token, so a prefix match over it silently matches nothing: {offenders}"
@@ -93,7 +113,7 @@ def test_reaper_shim_no_longer_touches_kubectl_at_all():
     and two env vars, and every kubectl read/decision lives in longhorn_reap_logic.py +
     longhorn_reap_orphan_backups.py, both plain files with the tests below.
     """
-    body = REAPER.read_text()
+    body = rendered_shell_text(*REAPER)
     assert "kubectl" not in body, (
         "the shim should forward to the Python entry point, not call kubectl itself: "
         + body

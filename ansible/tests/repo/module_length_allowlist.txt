@@ -21,7 +21,7 @@ ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 534
 ansible/roles/setup/k3s/tests/test_longhorn_reap_logic.py 699
 ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 555
 ansible/tests/deploy/test_cronjob_gate_decision.py 535
-ansible/tests/longhorn/test_longhorn_restore_drill.py 516
+ansible/tests/longhorn/test_longhorn_restore_drill.py 503
 ansible/tests/repo/test_documented_paths_exist.py 543
 ansible/tests/setup/test_cron_scripts_publish_via_pr.py 675
 scripts/deploy_tools/tests/test_deploy_detach_notify.py 508
