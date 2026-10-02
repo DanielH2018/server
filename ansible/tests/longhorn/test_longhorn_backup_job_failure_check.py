@@ -29,6 +29,7 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_backup_job_failure_check
 import sys
 
 from _helpers import ANSIBLE
+from _shell_render import rendered_shell_text
 
 sys.path.insert(0, str(ANSIBLE / "roles" / "setup" / "k3s" / "files"))
 import longhorn_backup_health_logic as logic
@@ -118,12 +119,11 @@ def test_failed_job_check_names_the_job() -> None:
     assert "daily-backup-29775090" in problem[1]
 
 
-HEALTH = (
-    ANSIBLE / "roles" / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
-)
-
-
 def test_the_shim_still_calls_the_ported_reader() -> None:
-    """The shell no longer holds check 6's logic; it must still invoke the module that does."""
-    text = HEALTH.read_text()
+    """The shell no longer holds check 6's logic; it must still invoke the module that does.
+
+    Read off the RENDER rather than the template: the shim's path to the reader is built from
+    role defaults, so a source-text search would match `{{ ... }}` and pass over nothing (#3186).
+    """
+    text = rendered_shell_text("setup", "k3s", "longhorn-backup-health.sh.j2")
     assert "longhorn_backup_health.py" in text
