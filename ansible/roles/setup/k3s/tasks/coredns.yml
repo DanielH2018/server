@@ -103,9 +103,12 @@
   ansible.builtin.set_fact:
     # The staged copy has `%{SYSTEM_DEFAULT_REGISTRY}%` already substituted, so this is the
     # exact reference k3s itself would have applied.
+    # Single backslashes: a folded scalar passes them through verbatim, and Ansible's templar
+    # does not unescape `\\` in a Jinja string literal, so `\\s` matched a literal backslash and
+    # regex_search crashed on the no-match with a backref.
     k3s_coredns_bundled_image: >-
       {{ k3s_coredns_bundled_manifest.content | b64decode
-         | regex_search('image:\\s*"?([^"\\s]*coredns[^"\\s]*)"?', '\\1') | default([''], true) | first }}
+         | regex_search('image:\s*"?([^"\s]*coredns[^"\s]*)"?', '\1') | default([''], true) | first }}
 
 - name: Refuse a staged manifest that names no CoreDNS image
   tags: [coredns]

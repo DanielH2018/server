@@ -12,11 +12,9 @@ the rollout it waits for. Both render, lint and deploy green.
 
 import base64
 
-import jinja2
-from ansible.plugins.filter.core import b64decode, regex_search
+from ansible.template import Templar, trust_as_template
 
 from _helpers import ROLES, leaf_tasks, load_tasks
-from lib.ansible_jinja_env import make_ansible_env
 
 _TASKS = ROLES / "setup/k3s/tasks/coredns.yml"
 
@@ -39,18 +37,20 @@ def _task(name: str) -> dict:
 
 
 def _extract(manifest: str) -> str:
-    """Renders the role's own extraction expression against a staged manifest."""
+    """Renders the role's own extraction expression through Ansible's templar, as the deploy does.
+
+    Not a bare Jinja environment: plain Jinja unescapes `\\\\` inside a string literal and
+    Ansible's templar does not, so a doubled-backslash regex passed here while every real
+    `k3s-bringup.yml --tags coredns` run failed on it.
+    """
     expr = _task("Extract the bundled CoreDNS image")["ansible.builtin.set_fact"][
         "k3s_coredns_bundled_image"
     ]
-    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-    env.filters.update(b64decode=b64decode, regex_search=regex_search)
     content = base64.b64encode(manifest.encode()).decode()
-    return (
-        env.from_string(expr)
-        .render(k3s_coredns_bundled_manifest={"content": content})
-        .strip()
+    templar = Templar(
+        loader=None, variables={"k3s_coredns_bundled_manifest": {"content": content}}
     )
+    return str(templar.template(trust_as_template(expr))).strip()
 
 
 def test_the_bundled_image_is_read_from_a_staged_manifest():
