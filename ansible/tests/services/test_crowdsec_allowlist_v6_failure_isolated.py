@@ -28,7 +28,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from _shell_render import rendered_shell_text
+from _shell_render import rendered_shell_function, rendered_shell_text
 from lib.proc_testing import run
 
 # The RENDERED script, so a function that gained a Jinja expression arrives expanded and
@@ -38,26 +38,12 @@ SCRIPT = rendered_shell_text("k8s", "crowdsec", "crowdsec-update-home-allowlist.
 SOURCED = ("decide_final_push", "sync_entry")
 
 
-def _function(name: str) -> str:
-    """The body of one shell function, `name() {` through its closing brace in column one."""
-    import re
-
-    match = re.search(rf"^{name}\(\) \{{[^\n]*\}}$", SCRIPT, re.M) or re.search(
-        # `[^\n]*` after the opening brace tolerates this file's own style of trailing
-        # `# arg names` comment on the same line (`push() { # up|down msg`, `sync_entry() { #
-        # stored current state_file label`) — without it the multi-line branch never matches
-        # either of them.
-        rf"^{name}\(\) \{{[^\n]*\n.*?^\}}$",
-        SCRIPT,
-        re.M | re.S,
+PRELUDE = "\n".join(
+    rendered_shell_function(
+        "k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2", name
     )
-    assert match, (
-        f"{name}() is gone from crowdsec-update-home-allowlist.sh.j2 — sourced by name"
-    )
-    return match.group(0)
-
-
-PRELUDE = "\n".join(_function(name) for name in SOURCED)
+    for name in SOURCED
+)
 
 
 def _bash(script: str, cwd: Path, calls_log: Path) -> subprocess.CompletedProcess:
