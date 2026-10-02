@@ -211,6 +211,7 @@ nav:
       # measured traps, board provenance and design records. The role doc keeps the operating
       # rules, within the inject hook's character budget, and a session reads the page only
       # when it edits that code.
+      - k8s manifest cycle record: k8s-manifest-cycle-record.md
       - volume-snapshot drill record: volume-snapshot-drills.md
       - observability dashboard record: observability-dashboards.md
       - cronjob-gate design record: cronjob-gate-design.md

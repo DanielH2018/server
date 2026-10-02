@@ -4,8 +4,8 @@ A `{% for k, v in d.items() %}` in a manifest renders the dict in insertion orde
 reorder of the source — a `defaults/main.yml` edit, a caller listing its `image_builder_context`
 in a different order, a group_vars tidy — changes the rendered bytes with no change in meaning.
 The manifests role restarts every workload a render change could belong to
-(`roles/k8s/manifests/CLAUDE.md`, "The restart is skipped for a workload the apply itself
-rolled"), and image-builder's byte-identical gate rebuilds the image. `| dictsort` renders
+(`docs/k8s-manifest-cycle-record.md`, "Why the restart is skipped for a workload the apply
+itself rolled"), and image-builder's byte-identical gate rebuilds the image. `| dictsort` renders
 the same dict the same way whatever order it was written in; `release_stamp.yml`'s
 `dictsort | to_json | hash('sha256')` is the in-tree pattern.
 

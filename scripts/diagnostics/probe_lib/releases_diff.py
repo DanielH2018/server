@@ -54,8 +54,8 @@ file as the release record's, and it reproduced all 45 services a dry run can re
 `releases_render` lets a match clear path hits for a service with secret manifests only when both
 records also carry a matching keyed `secret_digest`, because `manifests_digest` excludes them. Two
 gaps remain before a narrowing can go. Nothing produces render records on a schedule. 13 stamped
-services cannot be dry-run at all. `ansible/roles/k8s/manifests/CLAUDE.md`, under `## Release
-records`, carries the measurement. Do not delete a narrowing for a digest comparison until both have
+services cannot be dry-run at all. `docs/k8s-manifest-cycle-record.md` carries the
+measurement. Do not delete a narrowing for a digest comparison until both have
 landed.
 """
 
