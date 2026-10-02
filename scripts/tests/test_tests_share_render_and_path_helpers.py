@@ -299,8 +299,14 @@ def test_the_census_reaches_every_migrated_module():
 
 
 def test_every_exemption_still_names_a_file_that_exists():
-    """A stale exemption silently lets a whole module back out of the rule."""
-    gone = sorted(name for name in JINJA_EXEMPT if not (REPO / name).exists())
+    """A stale exemption silently lets a whole module back out of the rule.
+
+    Covers the grandfathered readers too: a deleted module left in that list makes
+    `test_every_grandfathered_reader_still_reads_one` raise `FileNotFoundError` instead of
+    naming the entry to drop.
+    """
+    listed = set(JINJA_EXEMPT) | set(SHELL_SOURCE_READERS)
+    gone = sorted(name for name in listed if not (REPO / name).exists())
     assert gone == [], f"exempted modules that no longer exist: {gone}"
 
 
@@ -389,7 +395,8 @@ def test_every_grandfathered_reader_still_reads_one():
     clean = sorted(
         name
         for name in SHELL_SOURCE_READERS
-        if not shell_template_source_reads((REPO / name).read_text())
+        if (REPO / name).exists()
+        and not shell_template_source_reads((REPO / name).read_text())
     )
     assert clean == [], (
         "these modules no longer read a shell template's source — drop them from "
