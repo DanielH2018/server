@@ -16,6 +16,7 @@ import jinja2
 from ansible.plugins.filter.core import b64decode, regex_search
 
 from _helpers import ROLES, leaf_tasks, load_tasks
+from lib.ansible_jinja_env import make_ansible_env
 
 _TASKS = ROLES / "setup/k3s/tasks/coredns.yml"
 
@@ -42,7 +43,7 @@ def _extract(manifest: str) -> str:
     expr = _task("Extract the bundled CoreDNS image")["ansible.builtin.set_fact"][
         "k3s_coredns_bundled_image"
     ]
-    env = jinja2.Environment()
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     env.filters.update(b64decode=b64decode, regex_search=regex_search)
     content = base64.b64encode(manifest.encode()).decode()
     return (
