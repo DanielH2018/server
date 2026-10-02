@@ -12,6 +12,7 @@ nothing to write.
 
 import ast
 from pathlib import Path
+from typing import NamedTuple
 
 from lib.repo_paths import REPO
 
@@ -243,14 +244,31 @@ def _names_a_shell_template(node: ast.expr) -> bool:
     )
 
 
-def _shell_template_paths(tree: ast.Module) -> dict[str, str]:
-    """The names `tree` binds to a path that ends in a `*.sh.j2` file.
+def _is_shell_template_path(value: ast.expr) -> bool:
+    """Whether `value` is a path EXPRESSION that ends in a deployed `*.sh.j2` file.
 
-    Only a path EXPRESSION counts — `ROLES / "setup" / "k3s" / "templates" / "x.sh.j2"`, or the
-    same walk written as one `Path("...")` argument. A bare filename string is a name, not a
-    path: `_shell_render`'s own (plane, role, name) triples are spelled that way, as is every
-    roster that names the templates it expects to find.
+    `ROLES / "setup" / "k3s" / "templates" / "x.sh.j2"`, or the same walk written as one
+    `Path("...")` argument. A bare filename string is a name, not a path: `_shell_render`'s own
+    (plane, role, name) triples are spelled that way, as is every roster that names the
+    templates it expects to find.
+
+    A template the module wrote under `tmp_path` is its own fixture rather than a deployed
+    script: the validator's tests build synthetic role trees, and reading one back is how they
+    check the renderer.
     """
+    is_path = isinstance(value, ast.BinOp) and isinstance(value.op, ast.Div)
+    is_path = is_path or (
+        isinstance(value, ast.Call) and ast.unparse(value.func).endswith("Path")
+    )
+    return (
+        is_path
+        and _names_a_shell_template(value)
+        and "tmp_path" not in ast.unparse(value)
+    )
+
+
+def _shell_template_paths(tree: ast.Module) -> dict[str, str]:
+    """The names `tree` binds to a path that ends in a `*.sh.j2` file."""
     bound: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
@@ -259,18 +277,7 @@ def _shell_template_paths(tree: ast.Module) -> dict[str, str]:
             targets, value = [node.target], node.value
         else:
             continue
-        is_path = isinstance(value, ast.BinOp) and isinstance(value.op, ast.Div)
-        is_path = is_path or (
-            isinstance(value, ast.Call) and ast.unparse(value.func).endswith("Path")
-        )
-        # A template the module wrote under `tmp_path` is its own fixture rather than a deployed
-        # script: the validator's tests build synthetic role trees, and reading one back is how
-        # they check the renderer.
-        if (
-            is_path
-            and _names_a_shell_template(value)
-            and "tmp_path" not in ast.unparse(value)
-        ):
+        if _is_shell_template_path(value):
             for target in targets:
                 if isinstance(target, ast.Name):
                     bound[target.id] = ast.unparse(value)
@@ -284,24 +291,105 @@ def _shadowed_params(node: ast.AST) -> set[str]:
     return named | {a.arg for a in (args.vararg, args.kwarg) if a is not None}
 
 
-def _source_read_calls(node: ast.AST, bound: dict[str, str]) -> list[str]:
+class _ReadingHelper(NamedTuple):
+    """One locally defined function that reads a parameter as a file.
+
+    Attributes:
+        positions: Every parameter name in declaration order, which resolves a positional
+          argument at a call site to the parameter it lands on.
+        read: The parameter names the body reads as a file.
+    """
+
+    positions: tuple[str, ...]
+    read: frozenset[str]
+
+
+def _reading_helpers(tree: ast.Module) -> dict[str, _ReadingHelper]:
+    """The functions `tree` itself defines that read a parameter as a file, by function name.
+
+    A read inside such a helper is invisible to the clauses above — the parameter shadows the
+    name the caller passed, so `_source_read_calls` drops the binding — and the call site names
+    no `*.sh.j2` of its own. `ansible/tests/deploy/test_setup_drift_check.py` was the live
+    instance: a module-level `_CHECK` path, a local `_source(path)` that stripped comments out
+    of `path.read_text()`, and four tests asserting on the result. It read a source through two
+    directory-wide conversions and the rule never saw it (#3220). So the helper's own read is
+    recorded here, and the CALL to it counts as the read instead.
+
+    Only a function THIS module defines qualifies. An imported one has no body to read, and
+    resolving it would flag every `render_shell_script("setup", "k3s", "drill.sh.j2")` call,
+    whose `name` argument ends in `.sh.j2`.
+
+    Both parameter kinds a caller can reach count — positional and keyword-only — because
+    `_source(path=_CHECK)` is otherwise a one-word way out of the clause.
+    """
+    found: dict[str, _ReadingHelper] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        args = node.args
+        named = tuple(a.arg for a in (*args.posonlyargs, *args.args, *args.kwonlyargs))
+        read = frozenset(
+            name
+            for name in named
+            for inner in ast.walk(node)
+            if isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr in _READ_METHODS
+            and ast.unparse(inner.func.value) == name
+        )
+        if read:
+            found[node.name] = _ReadingHelper(named, read)
+    return found
+
+
+def _helper_argument(call: ast.Call, helper: _ReadingHelper) -> ast.expr | None:
+    """The argument `call` passes for a parameter `helper` reads, or None if it passes none."""
+    for keyword in call.keywords:
+        if keyword.arg in helper.read:
+            return keyword.value
+    for index, arg in enumerate(call.args):
+        if index < len(helper.positions) and helper.positions[index] in helper.read:
+            return arg
+    return None
+
+
+def _source_read_calls(
+    node: ast.AST,
+    bound: dict[str, str],
+    helpers: dict[str, _ReadingHelper] | None = None,
+) -> list[str]:
     """Every read of a bound template name under `node`, descending scope by scope.
 
     A function PARAMETER of the same name is a different object, so it drops the binding for
     that function's body. `_shell_render.rendered_or_source_text(path)` is why: the module
     binds `path` in two `for path in discover_templates()` loops, and that function's own
     `path.read_text()` is the fallback for an extension this module does not render.
+
+    `helpers` maps a locally defined reading helper to the parameters it reads as a file, and a
+    call that hands one of those a bound template name is a read at the call site. A parameter
+    shadows a helper name the same way it shadows a bound name, so both maps narrow together.
     """
+    helpers = {} if helpers is None else helpers
     found = []
     for child in ast.iter_child_nodes(node):
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-            inner = {
-                name: how
-                for name, how in bound.items()
-                if name not in _shadowed_params(child)
+            shadowed = _shadowed_params(child)
+            inner = {name: how for name, how in bound.items() if name not in shadowed}
+            inner_helpers = {
+                name: helper for name, helper in helpers.items() if name not in shadowed
             }
-            found.extend(_source_read_calls(child, inner))
+            found.extend(_source_read_calls(child, inner, inner_helpers))
             continue
+        if (
+            isinstance(child, ast.Call)
+            and isinstance(child.func, ast.Name)
+            and child.func.id in helpers
+        ):
+            arg = _helper_argument(child, helpers[child.func.id])
+            if arg is not None and (
+                ast.unparse(arg) in bound or _is_shell_template_path(arg)
+            ):
+                found.append(ast.unparse(child))
         if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
             receiver = ast.unparse(child.func.value)
             reads_a_bound_name = child.func.attr in _READ_METHODS and (
@@ -315,7 +403,7 @@ def _source_read_calls(node: ast.AST, bound: dict[str, str]) -> list[str]:
             )
             if "tmp_path" not in receiver and (reads_a_bound_name or globs_the_roster):
                 found.append(ast.unparse(child))
-        found.extend(_source_read_calls(child, bound))
+        found.extend(_source_read_calls(child, bound, helpers))
     return found
 
 
@@ -327,4 +415,4 @@ def shell_template_source_reads(source: str) -> list[str]:
     """
     tree = ast.parse(source)
     bound = {**_shell_template_paths(tree), **_resolver_fed_names(tree)}
-    return sorted(set(_source_read_calls(tree, bound)))
+    return sorted(set(_source_read_calls(tree, bound, _reading_helpers(tree))))

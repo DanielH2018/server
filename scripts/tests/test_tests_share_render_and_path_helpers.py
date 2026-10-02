@@ -15,11 +15,12 @@ Three things a test module does not re-derive for itself:
    moment a value it asserts on — a retry count, a URL, a threshold — moves into a role default,
    and a pattern that matches nothing passes (#3178). `ansible/tests/_shell_render.py` renders
    the whole roster through the same gate that shellchecks it, so an assertion cannot drift from
-   what the host runs. Rule 3 catches the three spellings a deliberate reader takes: a path
-   expression ending in a `*.sh.j2` name, a `glob("*.sh.j2")` roster, and a loop over a
+   what the host runs. Rule 3 catches the four spellings a deliberate reader takes: a path
+   expression ending in a `*.sh.j2` name, a `glob("*.sh.j2")` roster, a loop over a
    template RESOLVER — `iter_cron_targets`, `cron_job_scripts`, `discover_templates` — whose
    module names no `*.sh.j2` anywhere (#3200), including the resolver result a pytest fixture
-   hands its consumers as a parameter (#3206). It does NOT catch a census wider than that:
+   hands its consumers as a parameter (#3206), and a read inside a helper the module itself
+   defines, which the call to that helper stands in for (#3220). It does NOT catch a census wider than that:
    `test_healthchecks_pings.py` reaches every template through an `rglob("*")`, so the rule
    cannot see it either way. That module routes its `*.sh.j2` reads
    through `rendered_shell_text` of its own accord (#3190), and its own
@@ -108,7 +109,9 @@ def _rel(path: Path) -> str:
 # read it had been blind to, so a module that was already reading a source joined the list the
 # moment it was no longer invisible. A conversion never adds an entry. #3206 widened the
 # detector the same way — a resolver result reached through a fixture parameter — and added no
-# entry, because the one module with such a fixture was already listed.
+# entry, because the one module with such a fixture was already listed. #3220 widened it to a
+# read inside a local helper and added no entry either: the one module reading that way,
+# `ansible/tests/deploy/test_setup_drift_check.py`, was converted in the same change.
 SHELL_SOURCE_READERS = {
     "ansible/tests/deploy/test_setup_render_manifest.py": (
         "hashes the template's raw BYTES — a trailing newline and a truncated-read "
@@ -311,6 +314,45 @@ def test_a_fixture_returning_something_else_does_not_bind_its_name():
         "def test_x(names):\n"
         "    for tpl in names:\n"
         "        tpl.read_text()\n",
+    ):
+        assert shell_template_source_reads(source) == [], source
+
+
+def test_a_source_read_through_a_local_helper_is_flagged_in_each_spelling():
+    """The helper's parameter shadows the name the caller passed, so the read it performs is
+    invisible and the call site names no template. The CALL is the read instead (#3220)."""
+    helper = (
+        "def _source(path):\n"
+        "    return '\\n'.join(l for l in path.read_text().splitlines())\n"
+    )
+    for call in (
+        'CHECK = ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2"\n_source(CHECK)\n',
+        'CHECK = ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2"\n_source(path=CHECK)\n',
+        '_source(ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2")\n',
+    ):
+        assert shell_template_source_reads(helper + call) != [], call
+
+
+def test_a_helper_that_does_not_read_its_parameter_is_not_flagged():
+    """Four ways a call is not a read: the helper reads nothing, the helper is IMPORTED, a
+    parameter of the calling test shadows the helper's name, and the argument is a `tmp_path`
+    fixture.
+
+    The imported case is why only a locally defined function qualifies — resolving one would
+    flag every `render_shell_script("setup", "k3s", "drill.sh.j2")` call, whose `name` argument
+    ends in `.sh.j2`.
+    """
+    bound = 'CHECK = ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2"\n'
+    for source in (
+        "def _name(path):\n    return path.name\n" + bound + "_name(CHECK)\n",
+        "from _shell_render import render_shell_script\n"
+        'render_shell_script("setup", "k3s", "drill.sh.j2")\n',
+        "def _source(path):\n    return path.read_text()\n"
+        + bound
+        + "def test_x(_source):\n    _source(CHECK)\n",
+        # A template the module wrote itself is its own fixture, however it is read.
+        "def _source(path):\n    return path.read_text()\n"
+        '_source(tmp_path / "good.sh.j2")\n',
     ):
         assert shell_template_source_reads(source) == [], source
 

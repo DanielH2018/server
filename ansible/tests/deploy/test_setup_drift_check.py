@@ -15,14 +15,16 @@ from pathlib import Path
 from lib import yaml_fast
 from _helpers import REPO
 from _k8s_render import render_role_template
+from _shell_render import render_shell_script, rendered_shell_text
 from lib.proc_testing import run
 
 _REPO = REPO
 _LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
-_CHECK = _REPO / "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"
+_CHECK = ("setup", "initial_setup", "setup-drift-check.sh.j2")
 _CRONS = _REPO / "ansible/roles/setup/initial_setup/tasks/crons.yml"
 _GROUP_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _CONSUMERS = _REPO / "scripts/secrets_mgmt/consumers.py"
+_SENTINEL = "inlined-token-sentinel"
 
 
 def _run_scan(tmp_path, deployed=(), rendered=(), repo_files=None):
@@ -60,18 +62,32 @@ def _run_scan(tmp_path, deployed=(), rendered=(), repo_files=None):
     return dict(line.split("=", 1) for line in out.strip().splitlines())
 
 
-def _source(path: Path) -> str:
-    """The script minus its comment lines.
+def _no_comments(text: str) -> str:
+    """`text` minus its comment lines.
 
     These scripts explain themselves at length, and the explanations name the very paths and
     calls the assertions below forbid or order — so a text search over the whole file matches
     the prose and reports a defect that is not there.
     """
     return "\n".join(
-        line
-        for line in path.read_text().splitlines()
-        if not line.lstrip().startswith("#")
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
     )
+
+
+def _check_script(overrides: dict | None = None) -> str:
+    """The drift check as a host runs it: rendered, then stripped of its comments.
+
+    Rendered rather than read off the template, because a value that moves into a role default
+    leaves a source assertion matching `{{ ... }}`, and a pattern that matches nothing passes
+    (#3178). `overrides` renders the one template again with a value the inventory does not
+    hold; without it the whole roster's cached render answers.
+    """
+    text = (
+        rendered_shell_text(*_CHECK)
+        if overrides is None
+        else render_shell_script(*_CHECK, overrides)
+    )
+    return _no_comments(text)
 
 
 def _sha(path: Path) -> str:
@@ -246,7 +262,7 @@ def test_an_unreadable_checkout_is_a_fault_not_a_pass(tmp_path):
     )
     out = run(["bash", str(script)], check=True).stdout
     assert "rc=1" in out, "an unreadable checkout must fail, not print a plausible age"
-    text = _source(_CHECK)
+    text = _check_script()
     assert "cannot read the checkout" in text and "STATUS=down" in text, (
         "the check must turn an unreadable checkout into a DOWN, not a silent green"
     )
@@ -410,7 +426,7 @@ def test_the_reader_does_not_claim_the_orphan_arm():
     """manifest-prune-check's first arm needs /etc/rancher/k3s/manifests and the control plane's
     staged set; an agent node has neither. An arm that structurally cannot fire is worse than no
     arm, because it reads as coverage."""
-    text = _source(_CHECK)
+    text = _check_script()
     assert "/etc/rancher/k3s/manifests" not in text
     assert "kubectl" not in text
 
@@ -419,7 +435,7 @@ def test_the_reader_logs_before_it_pushes():
     """A successfully-pushed DOWN otherwise leaves no durable record, and `probe.py alerts`
     reconstructs host-cron episodes by matching status=down in syslog. NOTICE, not INFO:
     journald here caps MaxLevelStore=notice."""
-    text = _source(_CHECK)
+    text = _check_script()
     logger_at = text.index("logger -p daemon.notice -t setup-drift-check")
     assert logger_at < text.index("kuma_push "), (
         "the durable record must precede the push"
@@ -428,9 +444,29 @@ def test_the_reader_logs_before_it_pushes():
 
 
 def test_the_token_is_sourced_never_inlined():
-    """The script lands 0755, so an inlined token is readable by every local account."""
-    text = _source(_CHECK)
-    assert "{{ setup_drift_push_token }}" not in text, (
+    """The script lands 0755, so an inlined token is readable by every local account.
+
+    The claim is made against a render with the token set to a sentinel, which also fails on an
+    alias of it: a source read could only ask whether this one Jinja name appears, and a render
+    of the deployed inventory shows every token as `STUB` whether it is inlined or not.
+
+    The control comes first, because a renamed variable would otherwise leave the claim vacuous:
+    the override would land on nothing, no render would carry the sentinel, and an inlined token
+    under the new name would pass. The env file is the template that legitimately carries the
+    token, so the sentinel must appear there.
+    """
+    env = render_shell_script(
+        "setup",
+        "initial_setup",
+        "setup-drift-kuma-push.env.j2",
+        {"setup_drift_push_token": _SENTINEL},
+    )
+    assert _SENTINEL in env, (
+        "the override reached no render — setup_drift_push_token has been renamed, and the "
+        "assertion below is now asking nothing"
+    )
+    text = _check_script({"setup_drift_push_token": _SENTINEL})
+    assert _SENTINEL not in text, (
         "the token must come from the 0640 env file, not be rendered into a 0755 script"
     )
     assert "/etc/homelab/kuma-push.env" in text
