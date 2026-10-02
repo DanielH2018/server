@@ -6,7 +6,10 @@ it. Anything that only reads the UPS takes the read-only `nut_ha_password` login
 
 The census renders every role on all three planes with the password set to a sentinel and
 counts the renders that carry it, so a template aliasing the secret through a second variable
-is caught where a scan of template source would miss it (#3183).
+is caught where a scan of template source would miss it (#3183). Beside each plane's manifest
+and config templates it renders every `*.sh.j2` and every k8s `Dockerfile*.j2`, the two
+classes `_k8s_render.render_texts` skips, and the Pi plane resolves aliases and role defaults
+the way the other two do (#3191).
 
 Run: uv run pytest ansible/tests/services/test_nut_fsd_login_confined.py
 """
@@ -17,8 +20,10 @@ from functools import cache
 from _compose_render import host_vars as pi_host_vars
 from _compose_render import render_texts as compose_render_texts
 from _helpers import ANSIBLE
+from _k8s_render import render_build_texts
 from _k8s_render import render_texts as k8s_render_texts
 from _setup_render import render_setup_texts
+from _shell_render import render_shell_texts
 
 ROLES = ANSIBLE / "roles"
 SHUTDOWN_CHAIN = frozenset({"k8s/nut", "setup/nut_host"})
@@ -52,13 +57,20 @@ def _roles_rendering(overrides: dict, marker: str) -> set[str]:
     """`<plane>/<role>` for every role, on all three planes, whose render carries `marker`."""
     planes = (
         ("k8s", k8s_render_texts(overrides)),
+        ("k8s", render_build_texts(overrides)),
         ("setup", render_setup_texts(overrides)),
         ("containers", compose_render_texts({**pi_host_vars(), **overrides})),
     )
-    return {
+    rendered = {
         f"{plane}/{role}"
         for plane, texts in planes
         for role, _, text in texts
+        if marker in text
+    }
+    # Shell rows name their own plane: `*.sh.j2` lives on all three.
+    return rendered | {
+        f"{plane}/{role}"
+        for plane, role, _, text in render_shell_texts(overrides)
         if marker in text
     }
 
@@ -95,6 +107,64 @@ def test_a_role_naming_nothing_renders_no_sentinel(tmp_path):
     )
     texts = render_setup_texts({"nut_monitor_password": SENTINEL}, setup=tmp_path)
     assert SENTINEL not in texts[0][2]
+
+
+def test_an_alias_of_the_login_reaches_a_pi_render(tmp_path):
+    role = tmp_path / "aliasing_role"
+    (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir()
+    (role / "templates" / "upsmon.conf.j2").write_text(
+        "MONITOR ups {{ upsmon_secret }}\n"
+    )
+    (role / "defaults" / "main.yml").write_text(
+        'upsmon_secret: "{{ nut_monitor_password }}"\n'
+    )
+    vars_ = {
+        "containers_list": [{"name": "aliasing_role"}],
+        "nut_monitor_password": SENTINEL,
+    }
+    texts = compose_render_texts(vars_, roles=tmp_path)
+    assert texts == (("aliasing_role", "upsmon.conf.j2", f"MONITOR ups {SENTINEL}\n"),)
+
+
+def test_a_pi_role_naming_nothing_renders_no_sentinel(tmp_path):
+    role = tmp_path / "reader_role"
+    (role / "templates").mkdir(parents=True)
+    (role / "templates" / "upsmon.conf.j2").write_text(
+        "MONITOR ups {{ nut_ha_password }}\n"
+    )
+    vars_ = {
+        "containers_list": [{"name": "reader_role"}],
+        "nut_monitor_password": SENTINEL,
+    }
+    assert SENTINEL not in compose_render_texts(vars_, roles=tmp_path)[0][2]
+
+
+def _shell_role(tmp_path, template: str) -> list:
+    """One k8s role under `tmp_path` whose default aliases the login, and its `.sh.j2`."""
+    role = tmp_path / "k8s" / "aliasing_role"
+    (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir()
+    (role / "defaults" / "main.yml").write_text(
+        'upsmon_secret: "{{ nut_monitor_password }}"\n'
+    )
+    script = role / "templates" / "probe.sh.j2"
+    script.write_text(template)
+    return [script]
+
+
+def test_an_alias_of_the_login_reaches_a_k8s_shell_render(tmp_path):
+    script = _shell_role(tmp_path, "#!/bin/bash\nupsc -p '{{ upsmon_secret }}'\n")
+    texts = render_shell_texts({"nut_monitor_password": SENTINEL}, script)
+    assert texts == (
+        ("k8s", "aliasing_role", "probe.sh.j2", f"#!/bin/bash\nupsc -p '{SENTINEL}'\n"),
+    )
+
+
+def test_a_k8s_shell_script_naming_nothing_renders_no_sentinel(tmp_path):
+    script = _shell_role(tmp_path, "#!/bin/bash\nupsc -p '{{ nut_ha_password }}'\n")
+    texts = render_shell_texts({"nut_monitor_password": SENTINEL}, script)
+    assert SENTINEL not in texts[0][3]
 
 
 def test_only_the_shutdown_chain_renders_the_primary_login():
