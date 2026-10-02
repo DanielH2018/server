@@ -18,18 +18,24 @@ WHY THIS EXISTS. Two separate problems, one scan, because the same scan finds bo
    an unmounted volume, and a `volumes:` block declaring one name twice — are the other two
    ways a half-applied rename lands, and both are equally invisible to a schema check.
 
-The scan is deliberately textual, not a YAML parse: these are Jinja templates, and rendering
-them needs the full inventory. Volume names never contain Jinja except where the name is keyed
-on a node (`artifacts-{{ artifacts_k8s_node }}`), which is descriptive by construction.
+The scan reads each template as the deploy renders it, so a volume name that moves into a role
+default is still checked as the name the pod gets rather than as `{{ ... }}`. It stays textual
+rather than a YAML parse because it judges the `volumes:` and `volumeMounts:` blocks by
+position, which a parse would merge.
+
+`_k8s_render` skips the roles a caller renders and the roles with no `containers_list` entry,
+so their templates fall back to the source. `SOURCE_FALLBACK_WITH_VOLUMES` names the members of
+that fallback that declare a volume, and a test below holds it. A render-only census would drop
+them and still read green (#3224).
 
 Run: uv run pytest ansible/tests/k8s/test_volume_names_descriptive.py
 """
 
 import re
-from pathlib import Path
 
 import pytest
 from _helpers import K8S_ROLES
+from _k8s_render import rendered_texts
 
 
 BLOCK_RE = re.compile(r"^(\s*)(volumes|volumeMounts):\s*$")
@@ -73,11 +79,39 @@ GENERIC = frozenset(
 ALLOWED_UNPREFIXED = frozenset({"media"})
 
 
-def manifest_templates() -> list[Path]:
-    return sorted(K8S_ROLES.glob("*/templates/*.j2"))
+# The templates the render skips that declare a `volumes:` or `volumeMounts:` block. Each is
+# checked from its source. image-builder's context ConfigMap and volume-claim's PVC are
+# skipped too, but declare no volume, so they are not members.
+SOURCE_FALLBACK_WITH_VOLUMES = frozenset({"image-builder/build-job.yaml.j2"})
 
 
-def volume_blocks(path: Path) -> list[tuple[str, int, list[str]]]:
+def source_fallback() -> dict[str, str]:
+    """Every role template the render does not reach, keyed `<role>/<template>`, as source."""
+    rendered = {f"{role}/{name}" for role, name, _ in rendered_texts()}
+    return {
+        key: path.read_text()
+        for path in sorted(K8S_ROLES.glob("*/templates/*.j2"))
+        if (key := str(path.relative_to(K8S_ROLES)).replace("/templates/", "/"))
+        not in rendered
+    }
+
+
+def manifest_texts() -> dict[str, str]:
+    """The census: each template's render where `_k8s_render` reaches its role, else its source.
+
+    Rendered entries include the shared defaults from `ansible/templates/` that a role picks up
+    for a manifest it ships no template for, since the pod reads those too. A macro-only file
+    such as pihole's `pihole-deployment.yaml.j2` renders empty; its volumes are checked in the
+    `deployment.yaml.j2` and `deployment-2.yaml.j2` renders that call it.
+    """
+    texts = {f"{role}/{name}": text for role, name, text in rendered_texts()}
+    return texts | source_fallback()
+
+
+MANIFESTS = manifest_texts()
+
+
+def volume_blocks(text: str) -> list[tuple[str, int, list[str]]]:
     """Every volumes/volumeMounts block as (kind, 1-indexed line, names in order).
 
     Scoped to top-level list items of the block so that nested keys — an env var, a port, a
@@ -87,7 +121,7 @@ def volume_blocks(path: Path) -> list[tuple[str, int, list[str]]]:
     Names are kept per block and in order, not merged into a set, because a duplicate name
     within one block is its own defect and set-merging is exactly what hides it.
     """
-    lines = path.read_text().splitlines()
+    lines = text.splitlines()
     blocks: list[tuple[str, int, list[str]]] = []
     i = 0
     while i < len(lines):
@@ -118,42 +152,36 @@ def volume_blocks(path: Path) -> list[tuple[str, int, list[str]]]:
     return blocks
 
 
-def volume_names(path: Path) -> dict[str, set[str]]:
+def volume_names(text: str) -> dict[str, set[str]]:
     """The distinct names per kind, merged across every block in the file."""
     found: dict[str, set[str]] = {"volumes": set(), "volumeMounts": set()}
-    for kind, _, names in volume_blocks(path):
+    for kind, _, names in volume_blocks(text):
         found[kind].update(names)
     return found
 
 
-@pytest.mark.parametrize(
-    "path", manifest_templates(), ids=lambda p: str(p.relative_to(K8S_ROLES))
-)
-def test_every_mount_resolves_to_a_declared_volume(path: Path) -> None:
-    found = volume_names(path)
+@pytest.mark.parametrize("key", sorted(MANIFESTS))
+def test_every_mount_resolves_to_a_declared_volume(key: str) -> None:
+    found = volume_names(MANIFESTS[key])
     orphans = sorted(found["volumeMounts"] - found["volumes"])
     assert not orphans, (
-        f"{path.relative_to(K8S_ROLES)} mounts volume(s) it never declares: {orphans}. "
+        f"{key} mounts volume(s) it never declares: {orphans}. "
         "The pod is rejected at admission; no schema check sees this."
     )
 
 
-@pytest.mark.parametrize(
-    "path", manifest_templates(), ids=lambda p: str(p.relative_to(K8S_ROLES))
-)
-def test_no_declared_volume_is_unmounted(path: Path) -> None:
-    found = volume_names(path)
+@pytest.mark.parametrize("key", sorted(MANIFESTS))
+def test_no_declared_volume_is_unmounted(key: str) -> None:
+    found = volume_names(MANIFESTS[key])
     unused = sorted(found["volumes"] - found["volumeMounts"])
     assert not unused, (
-        f"{path.relative_to(K8S_ROLES)} declares volume(s) nothing mounts: {unused}. "
+        f"{key} declares volume(s) nothing mounts: {unused}. "
         "Usually the leftover half of a rename."
     )
 
 
-@pytest.mark.parametrize(
-    "path", manifest_templates(), ids=lambda p: str(p.relative_to(K8S_ROLES))
-)
-def test_no_volumes_block_repeats_a_name(path: Path) -> None:
+@pytest.mark.parametrize("key", sorted(MANIFESTS))
+def test_no_volumes_block_repeats_a_name(key: str) -> None:
     """Two `volumes:` entries sharing a name — the way a rename collides two volumes into one.
 
     Nothing else catches it: comparing volumes against volumeMounts as sets passes, and
@@ -164,24 +192,25 @@ def test_no_volumes_block_repeats_a_name(path: Path) -> None:
     jellyfin mounts `media` twice. The illegal duplicate on that side is a repeated
     `mountPath`, which is not a naming question.
     """
-    for kind, line, names in volume_blocks(path):
+    for kind, line, names in volume_blocks(MANIFESTS[key]):
         if kind != "volumes":
             continue
         dupes = sorted({n for n in names if names.count(n) > 1})
         assert not dupes, (
-            f"{path.relative_to(K8S_ROLES)}:{line} declares volume(s) {dupes} more than once. "
+            f"{key}:{line} declares volume(s) {dupes} more than once. "
             "The pod is rejected at admission."
         )
 
 
-@pytest.mark.parametrize(
-    "path", manifest_templates(), ids=lambda p: str(p.relative_to(K8S_ROLES))
-)
-def test_volume_names_name_their_workload(path: Path) -> None:
-    names = volume_names(path)["volumes"] | volume_names(path)["volumeMounts"]
+@pytest.mark.parametrize("key", sorted(MANIFESTS))
+def test_volume_names_name_their_workload(key: str) -> None:
+    names = (
+        volume_names(MANIFESTS[key])["volumes"]
+        | volume_names(MANIFESTS[key])["volumeMounts"]
+    )
     generic = sorted(n for n in names - ALLOWED_UNPREFIXED if n in GENERIC)
     assert not generic, (
-        f"{path.relative_to(K8S_ROLES)} uses generic volume name(s): {generic}. "
+        f"{key} uses generic volume name(s): {generic}. "
         "Name the volume for the workload or component that owns it — "
         "`sonarr-config`, not `config`."
     )
@@ -198,17 +227,17 @@ _CONDITIONAL_VOLUMES = """\
 """
 
 
-def test_the_scanner_reads_past_a_jinja_tag(tmp_path: Path) -> None:
+def test_the_scanner_reads_past_a_jinja_tag() -> None:
     """A conditional volume must not end the block, or every entry after it reads undeclared."""
-    path = tmp_path / "deployment.yaml.j2"
-    path.write_text(_CONDITIONAL_VOLUMES)
-    assert volume_names(path)["volumes"] == {"traefik-acme", "traefik-tmp"}
+    assert volume_names(_CONDITIONAL_VOLUMES)["volumes"] == {
+        "traefik-acme",
+        "traefik-tmp",
+    }
 
 
-def test_the_scanner_still_sees_an_orphan_across_a_jinja_tag(tmp_path: Path) -> None:
+def test_the_scanner_still_sees_an_orphan_across_a_jinja_tag() -> None:
     """The rejecting half: skipping tags must not also skip the defect the guard exists for."""
-    path = tmp_path / "deployment.yaml.j2"
-    path.write_text(
+    found = volume_names(
         _CONDITIONAL_VOLUMES
         + "      volumeMounts:\n"
         + "{% if manage_acme %}\n"
@@ -216,5 +245,28 @@ def test_the_scanner_still_sees_an_orphan_across_a_jinja_tag(tmp_path: Path) -> 
         + "          mountPath: /data\n"
         + "{% endif %}\n"
     )
-    found = volume_names(path)
     assert found["volumeMounts"] - found["volumes"] == {"traefik-nonexistent"}
+
+
+def test_the_source_fallback_is_only_the_templates_the_render_skips() -> None:
+    """The fallback reads source for exactly the volume-bearing templates no render reaches.
+
+    A template that joins the set unannounced is one the render stopped reaching, which may
+    hide a name a role default supplies. A member that leaves it is one the render now
+    reaches, so its fallback entry is dead.
+    """
+    with_volumes = {
+        key for key, text in source_fallback().items() if volume_blocks(text)
+    }
+    assert with_volumes == SOURCE_FALLBACK_WITH_VOLUMES
+
+
+def test_a_reached_role_is_checked_from_its_render() -> None:
+    """A name a role default supplies arrives resolved, the point of reading renders.
+
+    artifacts keys its volume on `artifacts_k8s_node` and on each peer's name, which a source
+    scan reads as `artifacts-{{ ... }}`.
+    """
+    names = volume_names(MANIFESTS["artifacts/deployment.yaml.j2"])["volumes"]
+    assert {"artifacts-daniel-box", "artifacts-daniel-server"} <= names
+    assert not any("{{" in name for name in names)
