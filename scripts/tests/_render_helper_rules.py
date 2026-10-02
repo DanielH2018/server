@@ -151,6 +151,30 @@ def _resolver_call(node: ast.expr) -> str | None:
     return None if "tmp_path" in text else text
 
 
+def _resolver_returning_fixtures(tree: ast.Module) -> dict[str, str]:
+    """The pytest fixtures in `tree` that hand back a template resolver's result, by name.
+
+    A fixture's name is the name its consumers take the value under, so binding the name here
+    puts a consumer's `for tpl in cron_map:` within reach of the loop clause below (#3206).
+    Both fixture shapes count: a `return` and the `yield` a fixture with teardown uses.
+
+    A decorator counts when its text mentions `fixture`, which covers `@pytest.fixture`,
+    `@fixture` and the parametrised `@pytest.fixture(scope="module")` alike.
+    """
+    found: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not any("fixture" in ast.unparse(d) for d in node.decorator_list):
+            continue
+        for inner in ast.walk(node):
+            if not isinstance(inner, (ast.Return, ast.Yield)) or inner.value is None:
+                continue
+            if (call := _resolver_call(inner.value)) is not None:
+                found[node.name] = call
+    return found
+
+
 def _resolver_fed_names(tree: ast.Module) -> dict[str, str]:
     """The names `tree` binds to a template path by looping over a resolver's result.
 
@@ -160,13 +184,14 @@ def _resolver_fed_names(tree: ast.Module) -> dict[str, str]:
     `(template, task_file, cron, env)`, `cron_job_scripts` is keyed by template), and binding
     `task_file` too would read a task-file read as a shell-template read.
 
-    A resolver result that arrives as a FUNCTION PARAMETER is out of reach: the `cron_map`
-    fixture in `scripts/validate/tests/test_shell_template_cron_rules.py` returns
-    `cron_job_scripts()`, and its consumers take it as an argument. Nothing reads a template's
-    text through that fixture today — its loops render instead — and tracking a fixture's
-    return through every consumer's signature is out of proportion to the one shape it buys.
+    A resolver result that arrives as a FUNCTION PARAMETER is reachable too, through the
+    fixture that produced it (#3206). `_resolver_returning_fixtures` resolves each fixture's
+    return expression once per module and binds the fixture's NAME, which is the name every
+    consumer takes the value under, so a loop in a consumer's body reads as a loop over the
+    resolver. The `cron_map` fixture in
+    `scripts/validate/tests/test_shell_template_cron_rules.py` is the worked example.
     """
-    held: dict[str, str] = {}
+    held: dict[str, str] = _resolver_returning_fixtures(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             targets, value = node.targets, node.value
