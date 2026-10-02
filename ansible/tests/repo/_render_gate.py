@@ -214,7 +214,7 @@ def _template_yielding_functions(
 
     The mirror of `_reading_helpers`, which goes the other way: there the read is in the callee
     and the path at the call site, here the glob is in the callee and the read in the caller.
-    `ansible/tests/k8s/test_hardened_macro_is_not_a_dac_bypass.py` is the shape —
+    `ansible/tests/k8s/test_root_security_context_is_written_out_in_full.py` is the shape —
     `def _manifest_files(): return sorted(p for p in K8S_ROLES.rglob("templates/*.j2") ...)`
     read as `for path in _manifest_files(): path.read_text()`, where neither site carries a
     template path (#3219).

@@ -159,7 +159,7 @@ TEMPLATE_SOURCE_READERS = {
         "`.timer.j2` under `tmp_path` the red proofs write. Every real setup unit reads its "
         "render, and `test_the_render_reaches_every_setup_unit_template` holds that"
     ),
-    "k8s/test_hardened_macro_is_not_a_dac_bypass.py": (
+    "k8s/test_root_security_context_is_written_out_in_full.py": (
         "whether a template builds a root securityContext through "
         "`hardened_security_context(run_as_user=0)` rather than writing the block out; the "
         "render expands the macro, so the call and a hand-written copy render identically and "
@@ -249,7 +249,7 @@ KNOWN_MEMBERS = frozenset(
         "k8s/test_container_security_context_uses_the_macro.py",
         "k8s/test_empty_rollout_still_restarts_on_secret_change.py",
         "k8s/test_checksum_annotations_documented.py",
-        "k8s/test_hardened_macro_is_not_a_dac_bypass.py",
+        "k8s/test_root_security_context_is_written_out_in_full.py",
         "k8s/test_k8s_manifests.py",
         "k8s/test_root_needs_dac_capability.py",
         "k8s/test_volume_names_descriptive.py",
