@@ -27,10 +27,10 @@ from _doc_size import (
 from _helpers import REPO, run
 from lib.repo_paths import REPO as _REPO_ROOT
 
-# The one role doc deliberately over the ceiling, tracked separately (#3245 names it out of
-# scope). `ansible/tests/k8s/test_k8s_roles_have_claude_md.py:EXCLUDED_DIRS` also excludes it,
-# for a different reason: it is a shared role with no deploy tag of its own.
-OVER_BUDGET_BY_DESIGN = {"ansible/roles/k8s/manifests/CLAUDE.md"}
+# Empty: every role doc in the tree is expected to arrive whole. It held
+# `ansible/roles/k8s/manifests/CLAUDE.md` while #3245 left that doc out of scope, and #3246
+# split it, so the exception is a named escape hatch with nothing in it rather than a list.
+OVER_BUDGET_BY_DESIGN: set[str] = set()
 
 
 @pytest.fixture(scope="module")

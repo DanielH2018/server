@@ -41,12 +41,12 @@ from _role_census import role_dirs
 
 K8S_ROLES_DIR = REPO / "ansible" / "roles" / "k8s"
 
-# manifests/ is the shared render -> apply -> queue role every other k8s role
-# includes as a dependency (repo CLAUDE.md's "Where to Look" row points there
-# for that contract). It has no standalone containers_list deploy tag of its
-# own -- callers reach it via `include_role`, never `--tags manifests` -- and
-# it is documented from the including roles' side, not as a deployed service.
-EXCLUDED_DIRS = {"manifests"}
+# Nothing is excluded. manifests/ used to be, as the shared render -> apply -> queue role every
+# other k8s role includes rather than a service with a deploy tag of its own -- which left its
+# doc under no size bound at all while it grew to 4x the inject hook's inline budget (#3246).
+# It satisfies `_mentions_deploy_tag` the way the other tagless shared roles do, by saying in
+# its own doc that there is nothing to type, so the exemption bought nothing a doc line does not.
+EXCLUDED_DIRS: set[str] = set()
 
 MIN_NON_BLANK_LINES = 8
 # The band is a fraction of the ceiling rather than a second hand-set number, so moving

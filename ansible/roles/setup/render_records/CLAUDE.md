@@ -5,7 +5,7 @@ an hour, so `probe.py releases --stale-only` can answer staleness by comparing d
 of trusting the path (#2587). Since #3046 that comparison is the reader's primary answer in both
 directions: a match clears a path hit, and a mismatch makes a service stale that no path hit
 reaches. The record format and the reader's rules are in
-`roles/k8s/manifests/CLAUDE.md`, *Release records*. Applied by `initial_setup.yml --tags
+`docs/k8s-manifest-cycle-record.md`, *The release record, field by field*. Applied by `initial_setup.yml --tags
 render_records`, which the GitOps tick runs itself; it is not in `containers_list`.
 
 ## At a glance
