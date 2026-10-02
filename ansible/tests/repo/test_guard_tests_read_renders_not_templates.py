@@ -14,9 +14,9 @@ rule — joined with one, which keys on a variable NAME. `deploy/` joined with t
 the raw-byte hash the render stamp compares, and the autodeploy derivation's source fallback
 for synthetic role trees no render reaches. `k8s/` joined with two (#3203): whether a
 template CALLS the shared *arr macro or copies its body, and whether two roles ship
-byte-identical templates — both render differently from what they test. The directories still
-outside it (`setup/`, `staging/`) each hold ten or more readers, so adding one is a PR of its
-own rather than a wider glob here. Entries are keyed
+byte-identical templates — both render differently from what they test. `staging/` joined
+with none (#3205). The one directory still outside it, `setup/`, holds ten or more readers,
+so adding it is a PR of its own rather than a wider glob here. Entries are keyed
 `<directory>/<module>.py`, because a basename alone would let a module in one directory
 inherit another's exemption.
 
@@ -56,6 +56,7 @@ SCANNED = (
     TESTS / "repo",
     TESTS / "deploy",
     TESTS / "k8s",
+    TESTS / "staging",
 )
 
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
@@ -141,6 +142,11 @@ KNOWN_MEMBERS = frozenset(
         "k8s/test_shared_manifest_defaults.py",
         "k8s/test_tls_cert_resolver_optional.py",
         "k8s/test_vip_pins.py",
+        "staging/_fence_probe.py",
+        "staging/test_etcd_drill_vm.py",
+        "staging/test_staging_egress_fence.py",
+        "staging/test_staging_network.py",
+        "staging/test_staging_tick_arm_retired.py",
     }
 )
 

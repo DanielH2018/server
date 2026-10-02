@@ -18,10 +18,9 @@ Run: uv run pytest ansible/tests/staging/test_staging_tick_arm_retired.py
 import re
 
 from _helpers import REPO, SETUP_ROLES
+from _setup_render import rendered_setup_text
 
 ROLE = SETUP_ROLES / "gitops_deploy"
-CONFIG_TEMPLATE = ROLE / "templates" / "config.env.j2"
-UNIT = ROLE / "templates" / "gitops-deploy.service.j2"
 DEFAULTS = ROLE / "defaults" / "main.yml"
 MARKERS = ROLE / "files" / "gitops_markers.py"
 INSTALL = ROLE / "tasks" / "retired.yml"
@@ -34,6 +33,9 @@ RETIRED_KEYS = (
     "STAGING_GATE_TIMEOUT_S",
     "STAGING_EXPECT_TIMEOUT_S",
 )
+# One key the rendered config must still carry. An absence check cannot tell "the gate is
+# retired" from "the render produced nothing", so every absence below is preceded by this.
+LIVE_KEY = "REQUIRE_CI"
 RETIRED_MARKERS = ("staging_alerted", "staging_ticks", "staging_override")
 # The state file the retired `staging_alerted` marker left on daniel-box, and the two
 # ledgers in the same directory that must survive the sweep. Named by basename rather than
@@ -68,7 +70,16 @@ GONE = (
 
 
 def test_the_rendered_config_carries_no_staging_key():
-    text = CONFIG_TEMPLATE.read_text()
+    """On the render, which is the file `/etc/gitops-deploy/config.env` the tick reads.
+
+    `LIVE_KEY` is the rejecting half: an absence check over a render that failed to produce
+    the config at all would pass on every key, so one key that must be there is asserted first.
+    """
+    text = rendered_setup_text("gitops_deploy", "config.env.j2")
+    assert f"{LIVE_KEY}=" in text, (
+        f"the rendered config carries no {LIVE_KEY}, so this is a render of nothing and every "
+        f"absence below passes for the wrong reason"
+    )
     present = [key for key in RETIRED_KEYS if f"{key}=" in text]
     assert not present, f"the tick would read the gate again through {present}"
 
@@ -108,8 +119,15 @@ def test_the_install_path_reaps_the_retired_alert_marker_and_keeps_the_ledgers()
 
 
 def test_the_unit_budget_no_longer_counts_a_staging_pair():
-    """The removed budgets were additive to the k8s pair inside one activation."""
-    unit = UNIT.read_text()
+    """The removed budgets were additive to the k8s pair inside one activation.
+
+    On the render, with `TimeoutStartSec` as the rejecting half for the same reason
+    `LIVE_KEY` is one above: the unit the deployer runs under is the subject, not its source.
+    """
+    unit = rendered_setup_text("gitops_deploy", "gitops-deploy.service.j2")
+    assert "TimeoutStartSec=" in unit, (
+        "the rendered unit declares no TimeoutStartSec, so this is a render of nothing"
+    )
     assert "STAGING_GATE_TIMEOUT_S (600)" not in unit
     assert "STAGING_EXPECT_TIMEOUT_S (120)" not in unit
 
