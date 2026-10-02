@@ -17,10 +17,10 @@ Two things the rule deliberately does not reach:
 * **A role's `files/` copy.** `uptime-kuma/files/*.liquid` ships verbatim, so there is no
   render to read and the text IS the artifact. `test_kuma_email_template.py` and
   `test_kuma_discord_template.py` read one each, and neither names a `templates/` path.
-* **A census wider than a template glob.** `test_healthchecks_pings.py` walks
-  `ANSIBLE.rglob("*")` and filters by suffix, so no template path appears at its read site at
-  all. `WIDE_CENSUS_BLIND_SPOTS` names it with that reason, and asserts it does NOT flag — a
-  declared gap rather than a silent one.
+#3196 named one blind spot, `test_healthchecks_pings.py`, whose `ANSIBLE.rglob("*")` census
+put no template path at its read site. #3190 converted that census to a render in the same
+wave, and the control read it kept IS visible here — so the module is a listed reader rather
+than a declared gap, and no blind-spot map is needed.
 
 Run: uv run pytest ansible/tests/repo/test_services_tests_read_renders_not_templates.py
 """
@@ -54,14 +54,9 @@ TEMPLATE_SOURCE_READERS = {
         "the ABSENCE of a retired variable name (`bridge_hostname`) across every template, "
         "which a render cannot show — an undefined name renders as nothing"
     ),
-}
-
-# Readers the detector cannot see, each with the reason, asserted below to stay unflagged so a
-# gap that closes is noticed rather than left as a passing exemption.
-WIDE_CENSUS_BLIND_SPOTS = {
     "test_healthchecks_pings.py": (
-        "filters `ANSIBLE.rglob('*')` by a suffix tuple that holds `.j2`, so no template path "
-        "appears at the read site"
+        "the control that keeps its render honest asserts a template CARRIES `{{`, which is "
+        "the one claim a render erases; the census itself renders (#3190)"
     ),
 }
 
@@ -202,8 +197,8 @@ def test_the_census_reaches_every_known_module():
 
 
 def test_every_listed_module_still_exists():
-    """A stale entry lets a whole module back out of the rule, or hides a closed blind spot."""
-    listed = set(TEMPLATE_SOURCE_READERS) | set(WIDE_CENSUS_BLIND_SPOTS)
+    """A stale entry lets a whole module back out of the rule."""
+    listed = set(TEMPLATE_SOURCE_READERS)
     gone = sorted(name for name in listed if not (SERVICES / name).exists())
     assert gone == [], f"listed modules that no longer exist: {gone}"
 
@@ -244,19 +239,6 @@ def test_every_exempt_module_is_still_flagged():
     assert unflagged == [], (
         "these modules no longer read a template's source — drop them from "
         f"TEMPLATE_SOURCE_READERS: {unflagged}"
-    )
-
-
-def test_every_declared_blind_spot_is_still_blind():
-    """A gap that closes becomes a rule, not a permanent note nobody rereads."""
-    now_flagged = sorted(
-        name
-        for name in WIDE_CENSUS_BLIND_SPOTS
-        if template_source_reads((SERVICES / name).read_text())
-    )
-    assert now_flagged == [], (
-        "the detector now reaches these — move them from WIDE_CENSUS_BLIND_SPOTS to "
-        f"TEMPLATE_SOURCE_READERS, or convert them: {now_flagged}"
     )
 
 
