@@ -143,9 +143,11 @@ def test_two_task_files_deriving_facts_from_each_other_terminate(tree):
 
 # ── the census that keeps the module docstring's "widens nothing today" claim true ──────
 
-# `setup/k3s` is the role the whole narrowing exists for, and these are the two facts it
-# derives. A frozenset rather than a count, so a rename or a move fails by name.
-K3S_FACTS = frozenset({"k3s_coredns_corefile", "k3s_longhorn_b2_region"})
+# `setup/k3s` is the role the whole narrowing exists for, and these are the facts it derives.
+# A frozenset rather than a count, so a rename or a move fails by name.
+K3S_FACTS = frozenset(
+    {"k3s_coredns_bundled_image", "k3s_coredns_corefile", "k3s_longhorn_b2_region"}
+)
 
 
 def _facts_of(role_dir) -> dict[str, set[str]]:

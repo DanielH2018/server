@@ -11,9 +11,16 @@
 # pkg/deploy/controller.go. The marker is what this uses, so the Deployment, Service and RBAC
 # stay exactly as k3s left them and only the Corefile becomes ours.
 #
-# The cost, accepted deliberately: a k3s upgrade shipping a revised bundled Corefile is
-# ignored while the marker exists, and nothing reports that. Re-read k3s's coredns.yaml
-# whenever k3s_version moves.
+# The marker also freezes the Deployment's image, which ran 1.14.4 through two k3s bumps that
+# bundled 1.14.6 and 1.14.7 (#3257). So the image is reconciled below from the manifest k3s
+# stages for the binary it is running. k3s rewrites `manifests/coredns.yaml` on every start
+# whether or not the marker exists: deploy.Stage skips only `--disable`d assets, and the
+# `.skip` marker is consulted by the deploy controller alone. That makes the staged file the
+# bundled CoreDNS for the INSTALLED k3s, with no second pin to keep in step with k3s_version.
+#
+# The cost, accepted deliberately: the rest of the bundled addon (a revised Corefile, the
+# Deployment's resources and probes, the RBAC) is ignored while the marker exists, and nothing
+# reports that. Re-read k3s's coredns.yaml whenever k3s_version moves.
 
 - name: Stop k3s reconciling its bundled CoreDNS addon
   tags: [coredns]
@@ -83,6 +90,77 @@
   become: true
   changed_when: false
   failed_when: k3s_coredns_nodehosts.stdout | trim | length == 0
+
+- name: Read the CoreDNS manifest k3s staged for its own version
+  tags: [coredns]
+  ansible.builtin.slurp:
+    path: /var/lib/rancher/k3s/server/manifests/coredns.yaml
+  register: k3s_coredns_bundled_manifest
+  become: true
+
+- name: Extract the bundled CoreDNS image
+  tags: [coredns]
+  ansible.builtin.set_fact:
+    # The staged copy has `%{SYSTEM_DEFAULT_REGISTRY}%` already substituted, so this is the
+    # exact reference k3s itself would have applied.
+    k3s_coredns_bundled_image: >-
+      {{ k3s_coredns_bundled_manifest.content | b64decode
+         | regex_search('image:\\s*"?([^"\\s]*coredns[^"\\s]*)"?', '\\1') | default([''], true) | first }}
+
+- name: Refuse a staged manifest that names no CoreDNS image
+  tags: [coredns]
+  ansible.builtin.assert:
+    that: k3s_coredns_bundled_image | length > 0
+    fail_msg: >-
+      /var/lib/rancher/k3s/server/manifests/coredns.yaml carries no `image:` line naming
+      coredns, so the bundled image cannot be read. k3s changed the manifest's shape; fix the
+      regex in this task rather than skipping it.
+    quiet: true
+
+- name: Read the live CoreDNS image
+  tags: [coredns]
+  # `check_mode: false` for the same reason as the Corefile read above: the patch's `when`
+  # reads this register's `stdout`, which a check-mode skip does not set.
+  # argv, not cmd: the jsonpath filter's quotes would not survive the module's shlex split.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - kube-system
+      - get
+      - deployment
+      - coredns
+      - -o
+      - jsonpath={.spec.template.spec.containers[?(@.name=="coredns")].image}
+  register: k3s_coredns_live_image
+  become: true
+  check_mode: false
+  changed_when: false
+
+# A bump rolls the single replica under k3s's own strategy (maxSurge 25%, maxUnavailable 1),
+# which lets the old pod go before the new one is Ready: expect a cluster-DNS gap of a few
+# seconds. Rewriting the strategy to avoid it would take over more of the add-on than the image.
+- name: Run the CoreDNS image k3s bundles
+  tags: [coredns]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n kube-system set image deployment/coredns
+      coredns={{ k3s_coredns_bundled_image }}
+  become: true
+  changed_when: true
+  when: k3s_coredns_live_image.stdout | trim != k3s_coredns_bundled_image
+
+# The resolver probe's retries are sized for `reload`, not for an image pull plus a rollout,
+# so wait for the rollout before probing. Keyed on the patch's own condition rather than its
+# changed status, which ansible-lint's no-handler rule refuses.
+- name: Wait for the CoreDNS rollout
+  tags: [coredns]
+  ansible.builtin.command:
+    cmd: k3s kubectl -n kube-system rollout status deployment/coredns --timeout=180s
+  become: true
+  changed_when: false
+  when: k3s_coredns_live_image.stdout | trim != k3s_coredns_bundled_image
 
 - name: Check whether dig is available for the resolver probe
   tags: [coredns]
