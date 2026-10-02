@@ -385,7 +385,6 @@
  "ansible/tests/repo/test_no_init_py_in_namespace_dirs.py": 0.0,
  "ansible/tests/repo/test_no_role_ships_a_test_file.py": 0.12,
  "ansible/tests/repo/test_path_anchors_come_from_helpers.py": 0.05,
- "ansible/tests/repo/test_prek_pytest_always_runs.py": 0.0,
  "ansible/tests/repo/test_prek_uv_entries_are_frozen.py": 0.0,
  "ansible/tests/repo/test_process_waits.py": 0.23,
  "ansible/tests/repo/test_pytest_shards_partition_the_suite.py": 1.98,

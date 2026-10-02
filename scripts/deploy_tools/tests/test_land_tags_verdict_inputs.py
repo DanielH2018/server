@@ -103,10 +103,11 @@ def test_this_repo_at_head_agrees_with_its_own_working_tree():
     """Non-vacuity. A reader that found no inventory file at all returns an empty set, which
     satisfies every assertion above about a tag being absent.
 
-    SUBSET, NOT EQUALITY, and the difference is what makes a new service committable. The prek
-    `pytest` hook runs before the commit exists, so `HEAD` is the commit BEFORE the one being
-    made: a commit that adds a role has that role in the working tree and never at HEAD.
-    Equality would therefore fail every new-service commit.
+    SUBSET, NOT EQUALITY, and the difference is what makes a new service committable. The suite
+    often runs before the commit exists (docs-refresh runs it between `git add` and `git commit`,
+    and an author runs `uv run pytest` on uncommitted work), so `HEAD` is the commit BEFORE the
+    one being made: a commit that adds a role has that role in the working tree and never at
+    HEAD. Equality would therefore fail every new-service commit.
 
     The direction still catches what the assertion is for: a working tree that has LOST a tag
     HEAD declares means the reader is dropping entries, and `traefik` plus the floor below

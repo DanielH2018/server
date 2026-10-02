@@ -303,9 +303,9 @@ else
   REGRESSED=0
 fi
 
-# The suite, run explicitly and BEFORE the commit. It used to arrive as the prek `pytest` hook
-# on the commit line; that hook moved to the pre-push stage (#2827), and this cron must not
-# publish a sweep the suite rejects. Run here rather than left to the push because a rejected
+# The suite, run explicitly and BEFORE the commit, because no prek hook runs it (#2827 took it
+# off the commit line, and it left prek entirely on 2026-10-02), and this cron must not publish
+# a sweep the suite rejects. Run here rather than left to the push because a rejected
 # commit is a state this script can undo -- restore_history -- where a rejected push would
 # leave a commit on the local master for the deployer to trip over. `timeout` because this
 # script holds /var/lock/server-git-tree.lock for its whole life.
@@ -348,10 +348,7 @@ fi
 # docs-refresh and secret-rotate. Exit 1 means the commit is still local on master, 2 that the
 # branch is on origin without a PR; either way the message says which.
 PR_BODY="Weekly hermetic homelab-agent eval sweep, rolled into evals/history.json by evals/trend.py. $(tr '\n' ' ' < "$TREND_OUT" | tail -c 800)"
-# SKIP=pytest: the publisher pushes a branch, and prek's `pytest` hook runs at the pre-push
-# stage since #2827. The suite already ran above, where a failure is recoverable; paying it a
-# second time here would move the verdict to a point with no undo.
-PUB_MSG="$(SKIP=pytest "$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
+PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
   --prefix "$PR_BRANCH_PREFIX" --title "evals: record weekly hermetic eval sweep" \
   --body "$PR_BODY" 2>&1)"
 PUB_RC=$?

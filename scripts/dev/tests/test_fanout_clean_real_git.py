@@ -34,9 +34,9 @@ def _scrub_git_env(monkeypatch) -> None:
     """Strip every inherited `GIT_*` var for the rest of this test's process.
 
     `remove()` and `clean_one`'s own `git branch -D` call take no environment argument, so
-    this is the only way to keep their subprocess calls off the real repository: under
-    `prek`'s own `pytest` hook, `GIT_DIR` is set in the environment, and `-C <scratch repo>`
-    does not override an inherited `GIT_DIR`.
+    this is the only way to keep their subprocess calls off the real repository: a suite run
+    from inside a git hook inherits `GIT_DIR`, and `-C <scratch repo>` does not override an
+    inherited `GIT_DIR`.
     """
     scrub_process_git_env(monkeypatch)
 

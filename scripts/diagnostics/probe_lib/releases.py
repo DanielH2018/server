@@ -85,8 +85,8 @@ def _git(*args, cwd, **kwargs):
     """Run git against `cwd` and nothing else, through the shared runner.
 
     `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` in the environment override `cwd`, so a caller
-    running this reader from inside another git operation -- prek's own `pytest` hook runs
-    under `git commit`, with exactly these set to that commit's in-progress index -- would
+    running this reader from inside another git operation -- a git hook runs with exactly
+    these set to that operation's repository and in-progress index -- would
     otherwise point every git call in this module at the WRONG repository, and a real commit in
     `repo_root` reads as "commit unknown to this checkout". `lib.git.git` strips every `GIT_*`
     variable, so this module keeps no copy of that fix to drift.
