@@ -3,8 +3,11 @@
 
 Every lock is real, and all three paths -- the tree lock, the service locks and the snapshot
 root -- are redirected into a tmp_path, so these runs neither queue behind a live gitops tick
-nor make one queue behind them. `ansible-playbook` is a stub that sleeps, which is what gives
-a `--detach` parent something to return in front of.
+nor make one queue behind them. `ansible-playbook` is a stub, and no arm of it sleeps: the
+three `--detach` tests park it on a gate fifo, which is what gives a `--detach` parent
+something to return in front of, and the test opens the gate when it has read what it came
+for. Nothing here asserts on elapsed time, so nothing here loses a race with a sleep that
+ended early (issue #3171, issue #3173).
 
 THE SERIALIZE/OVERLAP PROPERTY IS NOT MEASURED HERE. Timing two real deploys at about 10s a
 run would be the only way to prove "same service waits, different service does not, a full run
@@ -44,26 +47,12 @@ from lib.repo_paths import REPO as _REPO
 
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 
-# The playbook stub's sleep, and the bound the `--detach` case checks its parent returned
-# inside. It only has to outlast a `git worktree add` and a bash startup -- 0.1s measured, and
-# the CI runner is ~4x slower per test.
-_SLEEP_S = 2
-
+# The plain stub: the playbook returns at once. The two reaper tests below plant a snapshot
+# directory themselves and read the verdict a FINISHED run reached on it, so they need a run
+# that ends rather than a window to look through.
 _UV_STUB = """#!/bin/bash
 case "$*" in
-  *ansible-playbook*) sleep "$DEPLOY_TEST_SLEEP"; {recap}; exit 0 ;;
-  *deploy_tags.py*) printf 'alpha\\nbeta\\n'; exit 0 ;;
-{locks}
-  *) exit 0 ;;
-esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
-
-# The same stub, recording where the playbook was run from before it sleeps. `--detach` is the
-# only arm whose cleanup happens after the parent has exited, so where it ran and what it left
-# behind are both readable only from outside the process.
-_UV_DETACH_STUB = """#!/bin/bash
-case "$*" in
-  *ansible-playbook*) pwd >"$DEPLOY_TEST_PWD_FILE"; sleep "$DEPLOY_TEST_SLEEP"; {recap}; exit 0 ;;
+  *ansible-playbook*) {recap}; exit 0 ;;
   *deploy_tags.py*) printf 'alpha\\nbeta\\n'; exit 0 ;;
 {locks}
   *) exit 0 ;;
@@ -76,9 +65,18 @@ esac
 # suite losing that bet once under four xdist workers and winning the immediate retry. The
 # stub's `read` blocks until the test writes to the gate, so the window is as long as the
 # assertions take and the sleep's wall clock leaves the test entirely.
+#
+# ONLY the `alpha` run parks. One gate fifo is consumed by whichever run reaches it first, so
+# a test that runs several playbooks under one stub needs the gate scoped to the run whose
+# window it is reading -- `alpha` for the detached run, with every other service answering
+# immediately (issue #3173). The quotes make `--tags alpha` one case pattern rather than two
+# words, and `deploy_run.py` leaves the flag and its value adjacent in the playbook's argv.
+# Writing the `pwd` in the parking arm alone keeps a pattern miss deterministic: no run writes
+# the fifo, and `_playbook_cwd` fails on its deadline instead of degrading to a race.
 _UV_GATED_STUB = """#!/bin/bash
 case "$*" in
-  *ansible-playbook*) pwd >"$DEPLOY_TEST_PWD_FILE"; read -r _ <"$DEPLOY_TEST_GATE_FILE"; {recap}; exit 0 ;;
+  *ansible-playbook*"--tags alpha"*) pwd >"$DEPLOY_TEST_PWD_FILE"; read -r _ <"$DEPLOY_TEST_GATE_FILE"; {recap}; exit 0 ;;
+  *ansible-playbook*) {recap}; exit 0 ;;
   *deploy_tags.py*) printf 'alpha\\nbeta\\n'; exit 0 ;;
 {locks}
   *) exit 0 ;;
@@ -86,9 +84,7 @@ esac
 """.replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
 
 
-def _harness(
-    tmp_path: Path, uv_stub: str = _UV_STUB, sleep_s: float = _SLEEP_S
-) -> tuple[Path, dict[str, str]]:
+def _harness(tmp_path: Path, uv_stub: str = _UV_STUB) -> tuple[Path, dict[str, str]]:
     bin_dir = stub_bin(
         tmp_path,
         {
@@ -96,7 +92,7 @@ def _harness(
         },
     )
     repo = make_snapshot_repo(tmp_path / "repo")
-    return repo, deploy_sh_env(tmp_path, bin_dir, DEPLOY_TEST_SLEEP=str(sleep_s))
+    return repo, deploy_sh_env(tmp_path, bin_dir)
 
 
 def _deploy(repo: Path, env: dict[str, str], *args: str) -> None:
@@ -121,7 +117,6 @@ def test_a_snapshot_whose_owner_lock_is_held_survives_another_runs_reap(tmp_path
     running deploy at the next invocation of anything, `--check` included.
     """
     repo, env = _harness(tmp_path)
-    env["DEPLOY_TEST_SLEEP"] = "0"
     live = tmp_path / "snapshots" / "beta-20260911-000000-999999"
     live.mkdir(parents=True)
     fd = os.open(live / ".deploy-owner.lock", os.O_WRONLY | os.O_CREAT, 0o666)
@@ -150,7 +145,6 @@ def test_an_unlocked_invocation_reaps_nothing_while_the_tree_lock_is_held(tmp_pa
     concurrent `--check` leaves it alone.
     """
     repo, env = _harness(tmp_path)
-    env["DEPLOY_TEST_SLEEP"] = "0"
     being_made = tmp_path / "snapshots" / "alpha-20260911-000000-424242"
     being_made.mkdir(parents=True)
 
@@ -178,14 +172,16 @@ def test_a_live_detached_snapshot_survives_a_concurrent_check_and_deploy(tmp_pat
     under the tree lock and must leave this snapshot alone, because its owner still holds the
     lock inside it. Under the pid-based reaper either one deleted the worktree the detached
     playbook was rendering from, and the operator was told "retrying alone will not fix either".
+
+    The detached `alpha` playbook parks on the gate and the two `beta` runs answer immediately,
+    so the snapshot is live for exactly as long as those two runs plus these assertions take.
+    Against a sleep this was a bet that both inner runs finished inside it (issue #3173).
     """
-    repo, env = _harness(tmp_path, uv_stub=_UV_DETACH_STUB)
+    repo, env = _harness(tmp_path, uv_stub=_UV_GATED_STUB)
     pwd_fifo, pwd_fd = _pwd_fifo(tmp_path)
+    gate_fifo, gate_fd = _gate_fifo(tmp_path)
     env["DEPLOY_TEST_PWD_FILE"] = str(pwd_fifo)
-    # Long enough for a `--check` and a scoped deploy to run inside it, and no longer: the
-    # assertions below are on state — the directory still exists, then it does not — rather
-    # than on elapsed time, and `--dist loadscope` keeps this whole module on one worker.
-    env["DEPLOY_TEST_SLEEP"] = "3"
+    env["DEPLOY_TEST_GATE_FILE"] = str(gate_fifo)
     output = tmp_path / "detach-output"
     with output.open("w") as sink:
         detached = subprocess.run(
@@ -207,20 +203,21 @@ def test_a_live_detached_snapshot_survives_a_concurrent_check_and_deploy(tmp_pat
     assert detached == 0, output.read_text()
     snapshot = _playbook_cwd(pwd_fd)
 
-    # Both concurrent runs finish immediately: only the detached playbook sleeps.
-    quick = dict(env, DEPLOY_TEST_SLEEP="0")
-    _deploy(repo, quick, "--check", "--tags", "beta")
-    _deploy(repo, quick, "--tags", "beta")
+    # Both concurrent runs finish immediately: only the `alpha` playbook parks on the gate.
+    _deploy(repo, env, "--check", "--tags", "beta")
+    _deploy(repo, env, "--tags", "beta")
     assert snapshot.is_dir(), (
         f"{snapshot} was reaped while the detached playbook was still rendering from it"
     )
 
     # And it is the OWNER that cleans up, once the playbook it is running finishes.
+    _open_gate(gate_fd)
     assert wait_for_exit(detached_pid(output.read_text())), (
         "the detached subshell never finished"
     )
     assert not snapshot.exists(), "the detached run left its snapshot behind"
     os.close(pwd_fd)
+    os.close(gate_fd)
 
 
 def _service_lock_free(path: Path) -> bool:
