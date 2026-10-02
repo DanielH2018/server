@@ -5,14 +5,14 @@
 # k3s is pinned because the install task re-runs the installer whenever k3s_server_args
 # changes, and get.k3s.io installs the latest stable unless told otherwise — an unpinned
 # reconfigure would silently upgrade the control plane as a side effect of editing a flag.
-k3s_version: v1.36.4+k3s1
+k3s_version: v1.37.1+k3s1
 # The installer script at that same tag, and its hash. get.k3s.io serves master's copy, which
 # can differ from the tag's and moves with no signal, and the script runs as root on both
 # nodes. Renovate's k3s manager bumps
 # k3s_version; the sha256 is a MANUAL finish on that PR (same class as sops_setup's binary):
 #   curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/<tag>/install.sh" | sha256sum
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
-k3s_install_script_sha256: 46177d4c99440b4c0311b67233823a8e8a2fc09693f6c89af1a7161e152fbfad
+k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
 k3s_metallb_version: v0.16.0
 k3s_longhorn_version: v1.12.1
 

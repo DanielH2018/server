@@ -1,0 +1,13 @@
+{
+  "tag": "v1.37.1",
+  "upstream": "https://raw.githubusercontent.com/kubernetes/kubernetes/{tag}/api/openapi-spec/v3/{name}",
+  "sha256": {
+    "api__v1_openapi.json": "d09ab224a98fb9c0e7fd128b6f395f66b23d43b6635272109dcaaafc4a3dd9c9",
+    "apis__apps__v1_openapi.json": "e1326db2904fd6356d2f16e6179f8ad8e4800c0112cb74ab3b21da7286df4dbe",
+    "apis__batch__v1_openapi.json": "39e41a47689d58ed0ba29c7e576fd88a47917b5c00dd2efaab71c9cf90a6b5f7",
+    "apis__discovery.k8s.io__v1_openapi.json": "ec495888f7179b410d365dca5491d3d928028330ace1337c507c29e800303155",
+    "apis__networking.k8s.io__v1_openapi.json": "253b343c3cae24b9c42df30842b55f54d0aed3b30d91c35aa25bf0511f6c7848",
+    "apis__rbac.authorization.k8s.io__v1_openapi.json": "58efa60097c0c4bfbde12e27bc14c00bbfd86e927feea109e5e368baee5c6fc0",
+    "apis__storage.k8s.io__v1_openapi.json": "96c4f09112d51adc3d64c73f782927e88956ba6db4fa74b12fff2cf23ea7e5fe"
+  }
+}
