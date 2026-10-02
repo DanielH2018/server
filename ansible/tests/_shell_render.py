@@ -17,6 +17,7 @@ is ambiguous. `ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log
 names them that way.
 """
 
+import re
 from pathlib import Path
 
 from lib.k8s_context import resolve_vars
@@ -131,6 +132,27 @@ def rendered_shell_text(plane: str, role: str, template: str) -> str:
         f"{plane}/{role}/{template} is not among the rendered shell templates: "
         f"{sorted(e[:3] for e in rendered_shell_texts())}"
     )
+
+
+def rendered_shell_function(plane: str, role: str, template: str, name: str) -> str:
+    """One shell function, `name() {` through its closing brace in column one, from the RENDERED
+    script `rendered_shell_text` returns.
+
+    The render is what makes the slice sourceable: a function body that holds a Jinja expression
+    is not shell bash can run until it is expanded (#3178). Fails naming the function when the
+    script does not define it, because a test that sources a function by name is a test of
+    nothing once the function is gone.
+    """
+    script = rendered_shell_text(plane, role, template)
+    match = re.search(rf"^{name}\(\) \{{[^\n]*\}}$", script, re.M) or re.search(
+        # `[^\n]*` after the opening brace tolerates a trailing `# arg names` comment on the
+        # same line (`push() { # up|down msg`); without it the multi-line form never matches.
+        rf"^{name}\(\) \{{[^\n]*\n.*?^\}}$",
+        script,
+        re.M | re.S,
+    )
+    assert match, f"{name}() is gone from {plane}/{role}/{template}"
+    return match.group(0)
 
 
 def rendered_or_source_text(path: Path) -> str:

@@ -32,6 +32,7 @@ from _k8s_render import (
 )
 from _shell_render import (
     render_shell_script,
+    rendered_shell_function,
     rendered_shell_text,
     rendered_shell_texts,
 )
@@ -207,3 +208,13 @@ def test_an_override_beats_a_default_the_role_itself_declares() -> None:
 def test_a_shell_template_that_is_not_in_the_tree_fails_the_caller() -> None:
     with pytest.raises(AssertionError, match="no-such-script.sh.j2"):
         render_shell_script("k8s", "artifacts", "no-such-script.sh.j2")
+
+
+def test_a_shell_function_the_script_does_not_define_is_named() -> None:
+    with pytest.raises(AssertionError, match=r"no_such_function\(\) is gone"):
+        rendered_shell_function(
+            "k8s",
+            "crowdsec",
+            "crowdsec-update-home-allowlist.sh.j2",
+            "no_such_function",
+        )

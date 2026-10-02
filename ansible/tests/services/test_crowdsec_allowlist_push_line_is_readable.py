@@ -11,31 +11,19 @@ test_kuma_push_retry.py exercises the library, and each logged line goes through
 own `parse_push_line` rather than a regex copied here: the oracle is the consumer.
 """
 
-import re
 import shlex
 from pathlib import Path
 
-from _shell_render import rendered_shell_text
+from _shell_render import rendered_shell_function
 from verdicts.logs import parse_push_line
 from lib.proc_testing import run
 
 TAG = "crowdsec-home-allowlist"
-
-
-def _push_function() -> str:
-    """`push()`'s body, sliced out of the RENDERED script.
-
-    The render is what makes the slice sourceable: `PUSH_URL` is a Jinja expression over the
-    domain and the push token, so the template's own text is not shell bash can run (#3178).
-    """
-    script = rendered_shell_text(
-        "k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2"
-    )
-    match = re.search(r"^push\(\) \{[^\n]*\n.*?^\}$", script, re.M | re.S)
-    assert match, (
-        "push() is gone from crowdsec-update-home-allowlist.sh.j2 — sourced by name"
-    )
-    return match.group(0)
+# `push()` sliced out of the RENDERED script: `PUSH_URL` is a Jinja expression over the domain
+# and the push token, so the template's own text is not shell bash can run (#3178).
+PUSH = rendered_shell_function(
+    "k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2", "push"
+)
 
 
 def _run_push(
@@ -53,7 +41,7 @@ def _run_push(
 PUSH_URL=https://push.example/secret-token
 curl() {{ printf '%s' {shlex.quote(reply)}; exit {curl_rc}; }}
 logger() {{ shift 2; echo "$*" >> {shlex.quote(str(logs))}; }}
-{_push_function()}
+{PUSH}
 push {status} "home allowlist: v6 prefix rotated"
 """
     run(["bash", "-c", script], check=True)
