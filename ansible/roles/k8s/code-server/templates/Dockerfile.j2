@@ -6,7 +6,7 @@
 # reproducible from a commit — linuxserver rebuilds a tag in place, so the tag alone named a
 # moving image (#2149). Renovate bumps both together. See Dockerfile.j2 in roles/k8s/n8n
 # for the full reasoning behind pinning a built image's base.
-FROM lscr.io/linuxserver/code-server:4.139.1-ls367@sha256:54bcdbe29ee46428409b9334cc5328c591ba42ae81bfe146f6658084f2cf1809
+FROM lscr.io/linuxserver/code-server:4.140.0-ls368@sha256:c84b35f6238af058e3543e2e9c0532c4d3d3902ef11effea3ed90e4ec293d46d
 
 # 1. Install system dependencies
 #    No TeX Live here. LaTeX moved to the texbrain workload on 2026-08-27, which compiles in
@@ -66,11 +66,11 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 #    dependencies still resolve at build time, which a hashed requirements file would close.
 RUN python3 -m venv $VIRTUAL_ENV \
     && $VIRTUAL_ENV/bin/pip install --no-cache-dir \
-        uv==0.12.17 \
+        uv==0.12.19 \
         pandas==3.0.6 \
         requests==2.34.2 \
-        ruff==0.16.8 \
-        ty==0.0.82 \
+        ruff==0.16.9 \
+        ty==0.0.84 \
         structlog==26.1.0 \
         python-dotenv==1.2.3 \
     && chown -R {{ puid }}:{{ pgid }} $VIRTUAL_ENV
@@ -80,7 +80,7 @@ RUN python3 -m venv $VIRTUAL_ENV \
 #    tracks the pin on npm (regex manager in renovate.json). npm's download cache is ~96 M that
 #    the running container never reads, so it is dropped in the same layer that creates it — a
 #    later `rm` would not shrink this one.
-RUN npm install -g @anthropic-ai/claude-code@2.1.278 \
+RUN npm install -g @anthropic-ai/claude-code@2.1.282 \
     && npm cache clean --force
 
 # 5. VS Code extensions, downloaded at build time from the exact URL each entry in
