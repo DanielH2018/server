@@ -49,6 +49,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 from _helpers import K8S_ROLES
+from _k8s_render import rendered_texts
 
 _MANIFESTS = K8S_ROLES / "manifests/tasks/main.yml"
 
@@ -98,26 +99,52 @@ def _restarts_privately(role_dir: Path) -> bool:
     )
 
 
-def _env_secret_workloads(role_dir: Path) -> list[str]:
-    """Names of the workloads in `templates/` that read a Secret through env.
+def _template_texts(role_dir: Path) -> dict[str, str]:
+    """`role_dir`'s templates by name, as the deploy renders them where a render reaches the role.
 
-    Templates are Jinja, so they are scanned as text per YAML document rather than parsed. A
-    workload whose `metadata.name` is itself templated yields the unresolved text, which no
-    `manifests_extra_rollouts` entry can match — it therefore reads as uncovered, which is the
-    direction that fails loudly instead of silently passing.
+    `_k8s_render.rendered_texts` renders every role with a `containers_list` entry, which is
+    every role this guard's corpus can contain. A synthetic `widget` role under `tmp_path` has
+    no entry and no render, so it falls back to its source (#3218) — that is the only reader of
+    the fallback, and `test_the_render_reaches_every_role_rendering_a_secret` holds it.
+
+    Reading the render is what lets the selector see a `secretKeyRef` that arrives through a
+    variable, and it resolves a templated `metadata.name` into the name an
+    `manifests_extra_rollouts` entry has to match.
     """
+    if role_dir.parent == K8S_ROLES:
+        rendered = {
+            template: text
+            for role, template, text in rendered_texts()
+            if role == role_dir.name
+        }
+        if rendered:
+            return rendered
     templates = role_dir / "templates"
     if not templates.is_dir():
-        return []
+        return {}
+    return {path.name: path.read_text() for path in sorted(templates.glob("*.j2"))}
+
+
+def _env_secret_workloads(role_dir: Path) -> list[str]:
+    """Names of the workloads `role_dir` renders that read a Secret through env.
+
+    Scanned per YAML document as text rather than parsed, because a document can hold Jinja the
+    render leaves in place. A workload whose `metadata.name` still reads as unresolved text
+    matches no `manifests_extra_rollouts` entry and therefore reads as uncovered, which is the
+    direction that fails loudly instead of silently passing.
+    """
     found = []
-    for path in sorted(templates.glob("*.j2")):
-        for document in re.split(r"^---\s*$", path.read_text(), flags=re.M):
+    for name, text in sorted(_template_texts(role_dir).items()):
+        for document in re.split(r"^---\s*$", text, flags=re.M):
             if not _WORKLOAD_KIND.search(document):
                 continue
             if not _ENV_SECRET.search(document):
                 continue
-            name = _METADATA_NAME.search(document)
-            found.append(name.group(1) if name else f"<unnamed in {path.name}>")
+            found.append(
+                match.group(1)
+                if (match := _METADATA_NAME.search(document))
+                else f"<unnamed in {name}>"
+            )
     return found
 
 
@@ -177,6 +204,30 @@ def test_the_known_uncovered_pin_is_not_stale():
         f"_KNOWN_UNCOVERED pins workloads this guard no longer flags: {sorted(stale)}. If the "
         "gap was fixed, delete the entry; leaving it in place would silently absorb a future "
         "regression on the same workload."
+    )
+
+
+def test_the_render_reaches_every_role_rendering_a_secret():
+    """The denylisted half of `_template_texts`: no real role falls back to its source.
+
+    Every role whose `k8s/manifests` include names `manifests_secret_files` is in
+    `_k8s_render.rendered_texts`, so the fallback serves only the synthetic roles the proofs
+    below write under `tmp_path`. A role dropping out of the render would read as source again
+    and stop seeing a `secretKeyRef` that arrives through a variable.
+    """
+    rendered = {role for role, _, _ in rendered_texts()}
+    unrendered = sorted(
+        tasks.parent.parent.name
+        for tasks in sorted(K8S_ROLES.glob("*/tasks/main.yml"))
+        if any(
+            variables.get("manifests_secret_files")
+            for variables in _include_vars(tasks)
+        )
+        and tasks.parent.parent.name not in rendered
+    )
+    assert unrendered == [], (
+        "these roles render a Secret but no render reaches them, so this guard reads their "
+        f"template source and cannot follow a variable: {unrendered}"
     )
 
 

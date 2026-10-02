@@ -1,9 +1,9 @@
 """The render gate's detector, spelling by spelling: what counts as reading a template.
 
-`_render_gate.py` resolves a template path through five spellings, and the gate it feeds —
+`_render_gate.py` resolves a template path through nine spellings, and the gate it feeds —
 `test_guard_tests_read_renders_not_templates.py` — is only as good as that resolution. Each
 assertion below is one spelling a guard in this repo actually used; three of them were invisible
-until #3209, #3210 and #3211.
+until #3209, #3210 and #3211, and four more until #3219.
 
 The two negative tests matter as much: a hand-rolled render and a `tmp_path` fixture both read a
 template and neither is the thing the gate forbids.
@@ -35,11 +35,33 @@ FLAGGED_SPELLINGS = (
     # The helper parameter of #3209: no template path at the read site.
     "def f(p):\n    return p.read_text()\n\n\n"
     'for tpl in K.glob("*/templates/*.j2"):\n    f(tpl)\n',
+    # #3219, first spelling: the glob is in a function, the read in its caller.
+    "def _manifest_files():\n"
+    '    return sorted(K8S_ROLES.glob("*/templates/*.j2"))\n\n\n'
+    "for p in _manifest_files():\n    p.read_text()\n",
+    # The same, with the glob one level further in — inside the comprehension the function
+    # returns, which is how three of the four modules #3219 named spell it.
+    "def _manifest_files():\n"
+    '    return sorted(p for p in ROLES.rglob("templates/*.j2") if "archive" not in p.parts)\n'
+    "\n\n"
+    "for path in _manifest_files():\n    path.read_text()\n",
+    # #3219, second spelling: a `+` of globs, with the template glob on the RIGHT. A detector
+    # that looked only at the left operand would pass this while the mirrored form went unseen.
+    'for p in list(role.rglob("*.yaml")) + list(role.rglob("*.j2")):\n    p.read_text()\n',
+    # A census that yields `(label, path)` pairs, unpacked by the caller's `for`.
+    "def _scanned():\n"
+    '    return [(t.name, t) for t in sorted(K8S_ROLES.glob("*/templates/*.yaml.j2"))]\n\n\n'
+    "for rel, tpl in _scanned():\n    tpl.read_text()\n",
+    # pytest binds the parameter, so neither the decorator nor the body names a template path.
+    "def manifest_templates():\n"
+    '    return sorted(K8S_ROLES.glob("*/templates/*.j2"))\n\n\n'
+    '@pytest.mark.parametrize("path", manifest_templates())\n'
+    "def test_x(path):\n    path.read_text()\n",
 )
 
 
 def test_a_template_source_read_is_flagged_in_each_spelling():
-    assert len(FLAGGED_SPELLINGS) >= 11, "a spelling was dropped from the corpus"
+    assert len(FLAGGED_SPELLINGS) >= 16, "a spelling was dropped from the corpus"
     for source in FLAGGED_SPELLINGS:
         assert template_source_reads(source) != [], source
 
@@ -71,6 +93,37 @@ def test_a_template_path_imported_from_a_sibling_module_is_flagged():
     assert (
         template_source_reads(
             "from _elsewhere import ORCHESTRATOR\nORCHESTRATOR.read_text()\n", {}
+        )
+        == []
+    )
+
+
+def test_the_3219_clauses_do_not_fire_on_a_non_template_census():
+    """The accept half of each #3219 clause: the same shapes over files that are not templates.
+
+    A function returning a glob, a `+` of two globs and a `parametrize` over one are all
+    ordinary ways to enumerate files. Each must stay silent unless the glob itself names
+    templates, or the widening would flag every census in the suite.
+    """
+    assert (
+        template_source_reads(
+            "def _host_vars():\n"
+            '    return sorted(HOST_VARS.glob("*.yml"))\n\n\n'
+            "for p in _host_vars():\n    p.read_text()\n"
+        )
+        == []
+    )
+    assert (
+        template_source_reads(
+            'for p in list(role.rglob("*.yml")) + list(role.rglob("*.yaml")):\n'
+            "    p.read_text()\n"
+        )
+        == []
+    )
+    assert (
+        template_source_reads(
+            '@pytest.mark.parametrize("path", sorted(HOST_VARS.glob("*.yml")))\n'
+            "def test_x(path):\n    path.read_text()\n"
         )
         == []
     )

@@ -45,6 +45,13 @@ source behind them — three are converted, and five joined the list below. That
 the list GROWS: a detector that learns to see a read adds the entries it was blind to, where a
 conversion never adds one.
 
+Four more hid one until #3219, all of them ways the glob and the read sit at different sites: a
+glob returned by a function, a glob inside a comprehension the function returns, a `+` of two
+globs, and a `@pytest.mark.parametrize` whose values are the glob. Seven modules were reading
+source behind them, every one of them listed below — two because a render erases the macro call
+they are about, five because the file set they read is wider than any one render covers (#3223,
+#3224, #3225).
+
 `ansible/tests/repo/_render_gate.py` holds the detector itself — which spellings of a read it
 resolves, and the one it deliberately does not treat as a read (a glob that only yields
 FILENAMES).
@@ -141,14 +148,53 @@ TEMPLATE_SOURCE_READERS = {
         "`test_container_security_context.py`"
     ),
     "k8s/test_empty_rollout_still_restarts_on_secret_change.py": (
-        "the census takes the role directory as a parameter so its red proof can hand it a "
-        "synthetic role under `tmp_path`, which no render reaches. Converting the real half to "
-        "a render and keeping the source for the synthetic one is #3218"
+        "the fallback for a role no render reaches: the synthetic `widget` roles under "
+        "`tmp_path` the red proofs build, which have no `containers_list` entry. Every real "
+        "role reads its render, and `test_the_render_reaches_every_role_rendering_a_secret` "
+        "holds that nothing in the corpus falls back"
     ),
     "longhorn/test_longhorn_reap_orphan_never_scheduled.py": (
-        "the census takes the setup root as a parameter so its red proof can hand it a "
-        "synthetic unit template under `tmp_path`, which no render reaches. Converting the "
-        "real half to a render and keeping the source for the synthetic one is #3218"
+        "the fallback for a unit template no render reaches: the synthetic `.service.j2` and "
+        "`.timer.j2` under `tmp_path` the red proofs write. Every real setup unit reads its "
+        "render, and `test_the_render_reaches_every_setup_unit_template` holds that"
+    ),
+    "k8s/test_hardened_macro_is_not_a_dac_bypass.py": (
+        "whether a template builds a root securityContext through "
+        "`hardened_security_context(run_as_user=0)` rather than writing the block out; the "
+        "render expands the macro, so the call and a hand-written copy render identically and "
+        "only the source tells them apart"
+    ),
+    "k8s/test_workload_shell_uses_the_macros.py": (
+        "whether a workload document CALLS `pod_shell()`/`spec_shell()` or copies the fields "
+        "the macros emit; both render to the same YAML, so the distinction exists only in the "
+        "source"
+    ),
+    "k8s/test_root_needs_dac_capability.py": (
+        "the census spans all three role planes (`roles/*/*/templates/*.j2`) and no one render "
+        "covers that set. The macro-built blocks it cannot see are held by "
+        "`test_hardened_macro_is_not_a_dac_bypass.py`, which pins every root site to a literal "
+        "block. Rendering all three planes is #3223"
+    ),
+    "k8s/test_volume_names_descriptive.py": (
+        "the census is every k8s role template, and `_k8s_render` skips three that declare "
+        "volumes — image-builder's build Job and context ConfigMap, volume-claim's PVC — so a "
+        "render-only census would drop them while reading green. Converting it with a fallback "
+        "for those three is #3224"
+    ),
+    "k8s/test_checksum_annotations_documented.py": (
+        "the census reads every file in a role that can carry the annotation through one loop: "
+        "the `*.j2` templates plus the `*.yaml`/`*.yml` task files, which no render covers. "
+        "Splitting the template half onto the render is #3225"
+    ),
+    "deploy/test_no_role_ships_a_markdown_file.py": (
+        "the census reads every file a role could ship FROM — `tasks/`, `templates/` and "
+        "`handlers/` — for the literal basename a `copy:`/`template:` `src:` names. Two of "
+        "those three directories hold no templates and no render covers them, and the subject "
+        "is the basename as written rather than anything a render produces"
+    ),
+    "repo/test_no_role_ships_a_test_file.py": (
+        "the same ship-list census as `deploy/test_no_role_ships_a_markdown_file.py`, for a "
+        "`.py` basename instead of a `.md` one, over the same three directories"
     ),
     "setup/test_registry_selftest_single_node.py": (
         "whether the agent-Job gate carries `| default([])`, which decides what happens on a "
@@ -181,6 +227,7 @@ KNOWN_MEMBERS = frozenset(
         "longhorn/test_longhorn_restore_drill_byte_floor.py",
         "longhorn/test_prune_backups.py",
         "repo/_render_gate.py",
+        "repo/test_no_role_ships_a_test_file.py",
         "repo/test_render_gate.py",
         "repo/test_guard_tests_read_renders_not_templates.py",
         "repo/test_secret_rendering_host_scripts_have_no_log.py",
@@ -189,13 +236,19 @@ KNOWN_MEMBERS = frozenset(
         "deploy/_autodeploy_claims.py",
         "deploy/test_gitops_manual_trigger.py",
         "deploy/test_k8s_autodeploy_rollout_gates.py",
+        "deploy/test_no_role_ships_a_markdown_file.py",
         "deploy/test_setup_render_manifest.py",
         "k8s/_manifest_guards.py",
         "k8s/test_arr_deployments_share_one_macro.py",
         "k8s/test_configmap_keys_not_absorbed.py",
         "k8s/test_container_security_context_uses_the_macro.py",
         "k8s/test_empty_rollout_still_restarts_on_secret_change.py",
+        "k8s/test_checksum_annotations_documented.py",
+        "k8s/test_hardened_macro_is_not_a_dac_bypass.py",
         "k8s/test_k8s_manifests.py",
+        "k8s/test_root_needs_dac_capability.py",
+        "k8s/test_volume_names_descriptive.py",
+        "k8s/test_workload_shell_uses_the_macros.py",
         "k8s/test_shared_manifest_defaults.py",
         "k8s/test_tls_cert_resolver_optional.py",
         "k8s/test_vip_pins.py",

@@ -4,7 +4,8 @@
 the exempt modules and the tests. This module holds the pure half, so the rule's lists and its
 red proofs stay inside the 500-line test cap while the detector grows.
 
-A read is spelled four ways, and three of them hide the template path from the read site:
+A read is spelled several ways, and all but the first hide the template path from the read
+site:
 
 * **At the read site.** `(ROLES / "x" / "templates" / "y.j2").read_text()` names the path in
   the call itself.
@@ -19,6 +20,13 @@ A read is spelled four ways, and three of them hide the template path from the r
   Only a locally defined function qualifies: `_k8s_render.render_role_template("prowlarr",
   "x.yaml.j2", {})` reads a path it builds from its `name` argument, so resolving imported
   functions would flag every sanctioned render call as a source read.
+* **Through a function's return value.** `for path in _manifest_files():` where the callee
+  returns `K8S_ROLES.rglob("templates/*.j2")` leaves no template path at either site (#3219).
+  `_template_yielding_functions` finds the functions THIS module defines whose return is a
+  template glob, and a call to one binds its loop target.
+* **Through a `+` of globs.** `list(role.rglob("*.j2")) + list(role.rglob("*.yaml"))` is a
+  `BinOp`, so `_unwrap` reaches no `glob` call inside it. `_enumerates_templates` recurses over
+  both operands (#3219).
 * **Through an import.** A template path bound in one module and read in another escaped the
   census entirely (#3210): `from _fence_probe import ORCHESTRATOR` followed by
   `ORCHESTRATOR.read_text()`. `imported_template_names` resolves a `from <module> import
@@ -49,7 +57,11 @@ _RENDER_CALLS = frozenset({"from_string", "Template"})
 
 
 def _unwrap(node: ast.expr) -> ast.expr:
-    """`node` with any wrapping `sorted`/`list`/... calls stripped off its first argument."""
+    """`node` with any wrapping `sorted`/`list`/... calls stripped off its first argument.
+
+    A `+` of two globs is left alone here, because one node cannot stand for both operands;
+    `_enumerates_templates` recurses over the `BinOp` itself instead.
+    """
     while (
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
@@ -119,14 +131,68 @@ def _glob_names_templates(node: ast.Call) -> bool:
     )
 
 
-def _enumerates_templates(node: ast.expr, bound: dict[str, str]) -> bool:
+def _comprehension_names(node: ast.expr) -> frozenset[str]:
+    """Every bare name a comprehension's `for` clauses bind, tuple targets included."""
+    return frozenset(
+        target.id
+        for gen in getattr(node, "generators", ())
+        for target in ast.walk(gen.target)
+        if isinstance(target, ast.Name)
+    )
+
+
+def _mentions_any(node: ast.expr, names: frozenset[str]) -> bool:
+    """Whether `node` reads any of `names`."""
+    return any(
+        isinstance(inner, ast.Name) and inner.id in names for inner in ast.walk(node)
+    )
+
+
+def _enumerates_templates(
+    node: ast.expr, bound: dict[str, str], yielding: frozenset[str] = frozenset()
+) -> bool:
     """Whether `node` yields template paths, by its glob pattern or by the directory it globs.
 
     The pattern alone misses `tdir.glob("*")` over a name bound to a `templates/` directory, so
     the receiver counts too — either because it names a template path or because it is already
     bound as one (#3211).
+
+    Two spellings put the glob somewhere a single `_unwrap` cannot reach (#3219):
+
+    * **A `+` of globs.** `list(role.rglob("*.j2")) + list(role.rglob("*.yaml"))` is a `BinOp`,
+      so BOTH operands are tried — a template glob on either side yields template paths, and
+      checking only the left would miss the mirrored spelling. An operand that is a bare NAME
+      resolves through `bound`, which is how `return roles + shared` reaches the globs its two
+      names were assigned.
+    * **A call to a function that returns the glob.** `yielding` names the functions THIS
+      module defines whose `return` is a template glob, so `for path in _manifest_files():`
+      binds `path` the way the bare glob does.
+    * **A comprehension over a glob.** `sorted(p for p in ROLES.rglob("templates/*.j2") if ...)`
+      is what three of those functions return, and the glob sits in the comprehension's own
+      `for`. The element has to MENTION a name the comprehension binds, so `[(label, t) for t in
+      glob]` counts — it yields the path inside a tuple — while a comprehension that throws the
+      path away and yields something else does not.
     """
     call = _unwrap(node)
+    if isinstance(call, ast.Name):
+        return call.id in bound
+    if isinstance(call, ast.BinOp) and isinstance(call.op, ast.Add):
+        return any(
+            _enumerates_templates(side, bound, yielding)
+            for side in (call.left, call.right)
+        )
+    if isinstance(call, (ast.GeneratorExp, ast.ListComp, ast.SetComp)):
+        return any(
+            _enumerates_templates(gen.iter, bound, yielding)
+            and _mentions_any(call.elt, _comprehension_names(call))
+            for gen in call.generators
+        )
+    if (
+        isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id in yielding
+    ):
+        return True
     if not (
         isinstance(call, ast.Call)
         and isinstance(call.func, ast.Attribute)
@@ -141,6 +207,63 @@ def _enumerates_templates(node: ast.expr, bound: dict[str, str]) -> bool:
     )
 
 
+def _template_yielding_functions(
+    tree: ast.Module, bound: dict[str, str]
+) -> frozenset[str]:
+    """The functions `tree` DEFINES whose `return` expression is a template glob.
+
+    The mirror of `_reading_helpers`, which goes the other way: there the read is in the callee
+    and the path at the call site, here the glob is in the callee and the read in the caller.
+    `ansible/tests/k8s/test_hardened_macro_is_not_a_dac_bypass.py` is the shape —
+    `def _manifest_files(): return sorted(p for p in K8S_ROLES.rglob("templates/*.j2") ...)`
+    read as `for path in _manifest_files(): path.read_text()`, where neither site carries a
+    template path (#3219).
+
+    Resolved against the `bound` the caller has so far, and recomputed on every pass of
+    `_bindings`' fixed point, because a return value can be a name an earlier pass bound:
+    `test_workload_shell_uses_the_macros.py` returns `roles + shared`, two locals each assigned
+    a comprehension over a glob.
+    """
+    return frozenset(
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for child in ast.walk(node)
+        if isinstance(child, ast.Return)
+        and child.value is not None
+        and _enumerates_templates(child.value, bound)
+    )
+
+
+def _parametrized(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[tuple[list[ast.expr], ast.expr]]:
+    """`@pytest.mark.parametrize` on `node`, as the (targets, value) pairs `_bindings` takes.
+
+    A parametrized test never writes the binding itself: pytest reads the argument names out of
+    the decorator's first argument and passes the second argument's items in. Without this the
+    path reaches the test body — and the helper that reads it — with nothing bound (#3219).
+    """
+    pairs: list[tuple[list[ast.expr], ast.expr]] = []
+    for decorator in node.decorator_list:
+        if not (
+            isinstance(decorator, ast.Call)
+            and isinstance(decorator.func, ast.Attribute)
+            and decorator.func.attr == "parametrize"
+            and len(decorator.args) >= 2
+            and isinstance(names := decorator.args[0], ast.Constant)
+            and isinstance(names.value, str)
+        ):
+            continue
+        targets: list[ast.expr] = [
+            ast.Name(id=name.strip(), ctx=ast.Load())
+            for name in names.value.split(",")
+            if name.strip()
+        ]
+        pairs.append((targets, decorator.args[1]))
+    return pairs
+
+
 def _bindings(
     tree: ast.Module, imported: frozenset[str] = frozenset()
 ) -> dict[str, str]:
@@ -148,12 +271,18 @@ def _bindings(
 
     Covers the spellings a reader takes: an assignment to a path expression, a `for` over a
     template glob (wrapped in `sorted()` or not), the same `for` inside a comprehension, a
-    `for` over a TUPLE of names already bound this way — `_kuma_entities.py` reads its two
+    `@pytest.mark.parametrize` whose values enumerate templates, a `for` over a TUPLE of names
+    already bound this way — `_kuma_entities.py` reads its two
     templates that way, which is why the resolution runs to a fixed point rather than in one
     pass — and a name `imported` carries in from a sibling module.
 
     A path built under `tmp_path` is the module's own fixture rather than a deployed template,
     so it never binds: `test_nut_fsd_login_confined.py` lays out synthetic role trees.
+
+    Every bare name inside a target binds, not only a target that IS one, because a census can
+    yield the path inside a tuple: `for rel, template in _scanned_templates()` unpacks a
+    `(label, path)` pair, and binding `rel` alongside `template` can only flag more reads than
+    it should, never fewer.
     """
     pairs: list[tuple[list[ast.expr], ast.expr]] = []
     for node in ast.walk(tree):
@@ -163,15 +292,20 @@ def _bindings(
             pairs.append(([node.target], node.value))
         elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
             pairs.append(([node.target], node.iter))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            pairs.extend(_parametrized(node))
 
     bound: dict[str, str] = {name: name for name in imported}
+    yielding: frozenset[str] = frozenset()
     while True:
         grew = False
+        if (found := _template_yielding_functions(tree, bound)) != yielding:
+            yielding, grew = found, True
         for targets, value in pairs:
             text = ast.unparse(value)
             if "tmp_path" in text:
                 continue
-            hit = _enumerates_templates(value, bound)
+            hit = _enumerates_templates(value, bound, yielding)
             if not hit and isinstance(
                 unwrapped := _unwrap(value), (ast.Tuple, ast.List, ast.Set)
             ):
@@ -186,9 +320,10 @@ def _bindings(
             if not hit:
                 continue
             for target in targets:
-                if isinstance(target, ast.Name) and target.id not in bound:
-                    bound[target.id] = text
-                    grew = True
+                for name in ast.walk(target):
+                    if isinstance(name, ast.Name) and name.id not in bound:
+                        bound[name.id] = text
+                        grew = True
         if not grew:
             return bound
 
