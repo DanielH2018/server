@@ -54,20 +54,29 @@ def _role_env(role_dir, ctx: dict):
     return env
 
 
-def _render_all():
-    """(role, template name, parsed doc) for every manifest the validator would render.
+def _render_texts(overrides: dict | None = None):
+    """(role, template name, rendered TEXT) for every manifest template the validator renders.
 
-    Raises on a render failure rather than skipping it — a template that stopped rendering
-    would otherwise quietly drop out of every guard built on this.
+    `overrides` go on top of each role's context, for a guard that sets a value the inventory
+    does not hold. Raises on a render failure rather than skipping it — a template that
+    stopped rendering would otherwise quietly drop out of every guard built on this.
     """
-    base = _inventory_base()
+    # The overrides go into the base the defaults resolve against, as well as on top: a
+    # default aliasing an overridden secret (`x: "{{ some_secret }}"`) would otherwise
+    # resolve to the secret's STUB before the override is ever laid on.
+    base = {**_inventory_base(), **(overrides or {})}
     entries = k8s_entries()
 
     for role_dir in role_dirs():
         role = role_dir.name
         if role in SKIP_ROLES or role not in entries:
             continue
-        ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
+        ctx = {
+            **base,
+            **role_defaults(role, base),
+            "container_item": entries[role],
+            **(overrides or {}),
+        }
         env = _role_env(role_dir, ctx)
 
         # The shared defaults come with the role's own templates: `k8s/manifests` renders a
@@ -81,10 +90,16 @@ def _render_all():
             rendered, err = render_or_error(env, tpl.name, ctx)
             if rendered is None:
                 raise AssertionError(f"{role}/{tpl.name} failed to render: {err}")
-            _TEXTS.append((role, tpl.name, rendered))
-            for doc in yaml_fast.safe_load_all(rendered):
-                if isinstance(doc, dict) and doc.get("kind"):
-                    yield role, tpl.name, doc
+            yield role, tpl.name, rendered
+
+
+def _render_all():
+    """(role, template name, parsed doc) for every manifest the validator would render."""
+    for role, name, rendered in _render_texts():
+        _TEXTS.append((role, name, rendered))
+        for doc in yaml_fast.safe_load_all(rendered):
+            if isinstance(doc, dict) and doc.get("kind"):
+                yield role, name, doc
 
 
 _CACHE: tuple | None = None
@@ -123,6 +138,16 @@ def rendered_texts():
     """
     rendered_docs()
     return iter(tuple(_TEXTS))
+
+
+def render_texts(overrides: dict) -> tuple[tuple[str, str, str], ...]:
+    """`rendered_texts()` with `overrides` laid over every role's context, uncached.
+
+    For a census across the tree at a value the inventory does not hold — a secret set to a
+    sentinel, so the census sees every role the secret's VALUE reaches, aliases included,
+    where a source scan sees only the roles that spell its name.
+    """
+    return tuple(_render_texts(overrides))
 
 
 def host_context(host: str = "daniel-box") -> dict:

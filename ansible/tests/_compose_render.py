@@ -92,18 +92,24 @@ def rendered_texts(host: str = "daniel-pi") -> tuple[tuple[str, str, str], ...]:
     Cached per host: the render is a pure function of the repo tree, which no test writes to.
     """
     if host not in _TEXTS:
-        vars_ = host_vars(host)
-        texts = []
-        for entry in containers_entries_in(vars_):
-            if entry_platform(entry) == "k8s":
-                continue
-            role = entry["name"]
-            for tpl in sorted((CONTAINER_ROLES / role / "templates").glob("*.j2")):
-                texts.append(
-                    (role, tpl.name, render_role_template(role, tpl.name, vars_))
-                )
-        _TEXTS[host] = tuple(texts)
+        _TEXTS[host] = render_texts(host_vars(host))
     return _TEXTS[host]
+
+
+def render_texts(vars_: dict) -> tuple[tuple[str, str, str], ...]:
+    """`rendered_texts` for a host whose vars are `vars_`, uncached.
+
+    For a census at a value the inventory does not hold: lay a secret's sentinel over
+    `host_vars()` and every template its value reaches carries the sentinel.
+    """
+    texts = []
+    for entry in containers_entries_in(vars_):
+        if entry_platform(entry) == "k8s":
+            continue
+        role = entry["name"]
+        for tpl in sorted((CONTAINER_ROLES / role / "templates").glob("*.j2")):
+            texts.append((role, tpl.name, render_role_template(role, tpl.name, vars_)))
+    return tuple(texts)
 
 
 def rendered_text(role: str, template: str, host: str = "daniel-pi") -> str:
