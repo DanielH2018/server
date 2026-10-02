@@ -176,10 +176,11 @@ TEMPLATE_SOURCE_READERS = {
         "block. Rendering all three planes is #3223"
     ),
     "k8s/test_volume_names_descriptive.py": (
-        "the census is every k8s role template, and `_k8s_render` skips three that declare "
-        "volumes — image-builder's build Job and context ConfigMap, volume-claim's PVC — so a "
-        "render-only census would drop them while reading green. Converting it with a fallback "
-        "for those three is #3224"
+        "the fallback for the templates `_k8s_render` skips: every role it reaches is "
+        "checked from its render, and the skipped ones from source, because image-builder's "
+        "build Job declares volumes no render reaches. "
+        "`test_the_source_fallback_is_only_the_templates_the_render_skips` holds the "
+        "volume-bearing members of that fallback (#3224)"
     ),
     "k8s/test_checksum_annotations_documented.py": (
         "the census reads every file in a role that can carry the annotation through one loop: "
