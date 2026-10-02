@@ -22,6 +22,7 @@ Run: uv run pytest ansible/tests/k8s/test_k8s_manifests.py
 from lib import yaml_fast
 
 from _helpers import ANSIBLE
+from _k8s_render import rendered_build_job_text, rendered_docs
 from _manifest_guards import K8S, _k8s_entries, _render, _role_defaults
 
 
@@ -105,25 +106,75 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
                     )
 
 
+_TOKEN_PATHS = ("/run/secrets", "/var/run/secrets")
+
+
+def _pod_spec(doc: dict) -> dict:
+    spec = doc.get("spec", {})
+    if doc.get("kind") == "CronJob":
+        spec = spec.get("jobTemplate", {}).get("spec", {})
+    return spec.get("template", {}).get("spec", {})
+
+
+def _mounts(doc: dict) -> list[tuple[str, str]]:
+    """(container, mount path) for every container of a rendered pod-bearing doc."""
+    pod = _pod_spec(doc)
+    return [
+        (container["name"], mount["mountPath"].rstrip("/"))
+        for container in pod.get("initContainers", []) + pod.get("containers", [])
+        for mount in container.get("volumeMounts", [])
+    ]
+
+
+def token_shadowing_mounts(doc: dict) -> list[str]:
+    """Every container mount in a rendered doc at or under a ServiceAccount token path."""
+    return [
+        f"{name}: {path}"
+        for name, path in _mounts(doc)
+        if any(path == r or path.startswith(r + "/") for r in _TOKEN_PATHS)
+    ]
+
+
+def _every_pod_doc():
+    """(where, doc) for every rendered manifest, plus the build Job no role renders alone."""
+    for role, tpl, doc in rendered_docs():
+        yield f"{role}/{tpl}", doc
+    yield (
+        "image-builder/build-job.yaml.j2",
+        yaml_fast.safe_load(rendered_build_job_text()),
+    )
+
+
 def test_no_template_names_a_mount_under_run_secrets():
     """The rendered check above only sees deployment.yaml.j2; roles whose workloads live in
     differently-named templates (scrutiny's web.yaml.j2/influxdb.yaml.j2) would slip past it and
-    CrashLoop on the same runc mountpoint error. A textual
-    scan over EVERY k8s template needs no render context and catches the whole class."""
-    offenders = []
-    for tpl in K8S.glob("*/templates/*.j2"):
-        for line in tpl.read_text().splitlines():
-            stripped = line.strip()
-            if stripped.startswith("mountPath:"):
-                path = stripped.split(":", 1)[1].strip().strip("\"'").rstrip("/")
-                if (
-                    path == "/run/secrets"
-                    or path.startswith("/run/secrets/")
-                    or path == "/var/run/secrets"
-                    or path.startswith("/var/run/secrets/")
-                ):
-                    offenders.append(f"{tpl}: {stripped}")
-    assert not offenders, f"ServiceAccount-token-shadowing mounts: {offenders}"
+    CrashLoop on the same runc mountpoint error. This one parses every pod the cluster runs, of
+    every kind and init containers included, as it renders, so a mount path built from a
+    variable is checked at the value it takes."""
+    offenders = {
+        where: bad
+        for where, doc in _every_pod_doc()
+        if (bad := token_shadowing_mounts(doc))
+    }
+    assert offenders == {}, f"ServiceAccount-token-shadowing mounts: {offenders}"
+
+
+def test_the_mount_census_reaches_scrutiny_and_the_build_job():
+    """Non-vacuity: the two members the census exists to reach still render mounts."""
+    mounted = {where.split("/")[0] for where, doc in _every_pod_doc() if _mounts(doc)}
+    assert {"scrutiny", "image-builder"} <= mounted, sorted(mounted)
+
+
+def test_a_mount_under_run_secrets_is_flagged():
+    def cronjob(path: str) -> dict:
+        init = [{"name": "init", "volumeMounts": [{"mountPath": path}]}]
+        pod = {"template": {"spec": {"initContainers": init}}}
+        return {"kind": "CronJob", "spec": {"jobTemplate": {"spec": pod}}}
+
+    assert token_shadowing_mounts(cronjob("/var/run/secrets/x/")) == [
+        "init: /var/run/secrets/x"
+    ]
+    assert token_shadowing_mounts(cronjob("/run/secretsx")) == []
 
 
 # The service-link env var guard is test_pod_template_hygiene.py's

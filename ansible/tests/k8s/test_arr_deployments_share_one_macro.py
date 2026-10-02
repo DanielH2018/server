@@ -6,7 +6,9 @@ difference between the two roles is either a name derived from the app or a valu
 holds in `defaults/main.yml`. Two copies of that body is where a field drifts: the pod that
 gets the next probe tuning is whichever one the author had open.
 
-The guard is textual, and has two halves per caller, because a macro cannot force its own call:
+The caller guard is textual, because a call and a written-out copy render the same manifest,
+so only the source tells them apart. It has two halves per caller, because a macro cannot force
+its own call:
 
   * the call is present — the `{% from %}` import and an `arr_deployment(` invocation.
   * no owned line is written out beside it — a `kind:`, a `containers:` or a `volumes:` in the
@@ -25,9 +27,8 @@ Run: uv run pytest ansible/tests/k8s/test_arr_deployments_share_one_macro.py
 import re
 
 from _helpers import K8S_ROLES
-from lib.repo_paths import SHARED_TPL
+from _k8s_render import rendered_docs
 
-MACRO = SHARED_TPL / "arr-deployment.yml.j2"
 # The roles whose deployment.yaml.j2 must be a call and nothing else. Named rather than
 # discovered: a census that globbed for callers would go empty on a rename and pass on nothing.
 CALLERS = ("radarr", "sonarr")
@@ -54,13 +55,34 @@ def call_offences(text: str) -> list[str]:
     return offences
 
 
-def test_the_macro_exists_and_emits_the_shared_body():
-    text = MACRO.read_text()
-    assert "{% macro arr_deployment(" in text
-    # The two calls the macro makes on its callers' behalf, so a body that lost them fails here
-    # as well as in the workload-shell census.
-    assert "{{ spec_shell('Recreate') }}" in text
-    assert "{{ pod_shell('homelab-standard') }}" in text
+def test_the_macro_emits_the_shared_body():
+    """What the macro's `spec_shell`/`pod_shell` calls put in both callers' Deployments.
+
+    Read off the render, so a body that lost either call fails here as well as in the
+    workload-shell census, and a call whose argument moved into a variable is still checked
+    at the value it takes.
+    """
+    rendered = {
+        role: doc
+        for role, tpl, doc in rendered_docs()
+        if role in CALLERS
+        and tpl == "deployment.yaml.j2"
+        and doc["kind"] == "Deployment"
+    }
+    assert set(rendered) == set(CALLERS), (
+        f"rendered arr Deployments: {sorted(rendered)}"
+    )
+    for role, doc in rendered.items():
+        strategy = doc["spec"]["strategy"]["type"]
+        assert strategy == "Recreate", (
+            f"{role} renders strategy {strategy!r}, not the Recreate the macro's "
+            "spec_shell call sets"
+        )
+        priority = doc["spec"]["template"]["spec"].get("priorityClassName")
+        assert priority == "homelab-standard", (
+            f"{role} renders priorityClassName {priority!r}, not the homelab-standard the "
+            "macro's pod_shell call sets"
+        )
 
 
 def test_both_arr_roles_are_only_a_call_to_the_macro():
