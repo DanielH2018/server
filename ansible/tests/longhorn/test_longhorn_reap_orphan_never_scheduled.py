@@ -20,6 +20,7 @@ from pathlib import Path
 from _helpers import ANSIBLE
 from _helpers import load_tasks
 from _helpers import walk_tasks
+from _setup_render import rendered_setup_texts
 import json
 
 SETUP = ANSIBLE / "roles" / "setup"
@@ -38,14 +39,50 @@ INCLUDE_MODULES = frozenset(
 UNIT_SUFFIXES = (".service.j2", ".timer.j2")
 
 
+def _uncommented(text: str) -> str:
+    """`text` with its comment lines dropped.
+
+    The task walker already drops YAML comments, and a unit template's comments are prose the
+    same way: a comment saying "never schedule X" must not read as scheduling X.
+    """
+    return "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
+def unit_texts(setup_root: Path) -> dict[str, str]:
+    """Every systemd unit template under `setup_root`, keyed `<role>/templates/<name>`.
+
+    Read as the deploy renders it wherever a render reaches the role, and from the SOURCE only
+    where none does — a synthetic unit under `tmp_path`, which has no role defaults and no
+    inventory entry (#3218). An `ExecStart=` whose command arrives through a variable is
+    invisible to a source scan, so the render is what makes the contract below enforceable
+    against a schedule that does not spell the reaper's name.
+    `test_the_render_reaches_every_setup_unit_template` holds the fallback to the synthetic
+    half.
+    """
+    rendered = (
+        {(role, tpl): text for role, tpl, text in rendered_setup_texts()}
+        if setup_root == SETUP
+        else {}
+    )
+    found: dict[str, str] = {}
+    for unit in sorted(setup_root.glob("*/templates/*.j2")):
+        if not unit.name.endswith(UNIT_SUFFIXES):
+            continue
+        text = rendered.get((unit.parent.parent.name, unit.name))
+        found[str(unit.relative_to(setup_root))] = _uncommented(
+            text if text is not None else unit.read_text()
+        )
+    return found
+
+
 def scheduled_texts(setup_root: Path) -> dict[str, str]:
     """Every scheduling surface under `setup_root`, keyed by where it was read.
 
     Three shapes schedule a command here: a `cron:` task (its fields are the schedule), an
     `import_tasks` of `kuma_check_timer.yml` (its `vars` carry `kuma_check_exec`), and a
-    systemd unit template (`ExecStart=`). Comment lines in a unit template are dropped, as the
-    task walker already drops YAML comments — a comment saying "never schedule X" must not
-    read as scheduling X.
+    systemd unit template (`ExecStart=`), which `unit_texts` reads off the render.
     """
     found: dict[str, str] = {}
     for tasks_file in sorted(setup_root.glob("*/tasks/**/*.yml")):
@@ -58,13 +95,7 @@ def scheduled_texts(setup_root: Path) -> dict[str, str]:
                 target = task.get(module)
                 if isinstance(target, str) and target.endswith("kuma_check_timer.yml"):
                     found[key] = json.dumps(task.get("vars") or {})
-    for unit in sorted(setup_root.glob("*/templates/*.j2")):
-        if unit.name.endswith(UNIT_SUFFIXES):
-            found[str(unit.relative_to(setup_root))] = "\n".join(
-                line
-                for line in unit.read_text().splitlines()
-                if not line.lstrip().startswith("#")
-            )
+    found.update(unit_texts(setup_root))
     return found
 
 
@@ -76,6 +107,27 @@ def scheduled_reapers(setup_root: Path) -> list[tuple[str, str]]:
         for reaper in sorted(REAPERS)
         if reaper in text
     ]
+
+
+def test_the_render_reaches_every_setup_unit_template() -> None:
+    """The denylisted half of `unit_texts`: no real unit template falls back to its source.
+
+    Every `*.service.j2`/`*.timer.j2` under `roles/setup/` is in
+    `_setup_render.rendered_setup_texts`, so the source read above serves only the synthetic
+    units the red proofs below write under `tmp_path`. A template the render stopped reaching
+    would read as source again and silently lose its variable-fed `ExecStart=`.
+    """
+    rendered = {(role, tpl) for role, tpl, _ in rendered_setup_texts()}
+    on_disk = {
+        (unit.parent.parent.name, unit.name)
+        for unit in SETUP.glob("*/templates/*.j2")
+        if unit.name.endswith(UNIT_SUFFIXES)
+    }
+    assert on_disk, "the unit-template glob matched nothing — the census reads no units"
+    assert on_disk - rendered == set(), (
+        "these setup unit templates are no longer rendered, so the census reads their source "
+        f"and cannot follow a variable: {sorted(on_disk - rendered)}"
+    )
 
 
 def test_both_reapers_exist_as_templates() -> None:
