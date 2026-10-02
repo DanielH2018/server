@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-10-01 00:11 UTC
-generated_sha: 7f5047711
+generated_at: 2026-10-02 06:17 UTC
+generated_sha: 7df0bfaaa
 ---
 
 !!! warning "Generated file — do not edit"
@@ -31,7 +31,7 @@ generated_sha: 7f5047711
 | configarr | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | crowdsec | k8s | <span class="fqdn" data-host="crowdsec-lapi.local">crowdsec-lapi.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | no backup (listed in k3s_longhorn_nobackup_volumes) | denylisted (platform — LAPI/AppSec/decision engine every bouncer queries; a failed deploy can open or close traffic unpredictably fleet-wide. COUPLING NOTE for a future promotion: crowdsec-db also holds LAPI machine registrations; a revert past an agent registration leaves that agent's stored password valid but the machine unknown) |
 | deploy-ui | k8s | <span class="fqdn" data-host="deploy.local">deploy.local.&lt;domain&gt;</span> (LAN only) | Authelia two_factor | no PVC (stateless) | denylisted (renders no Deployment — route-only (Service + EndpointSlice + IngressRoute) in front of deploy-ui.service on daniel-box; a bad route change exposes a page that starts deploys and clears the deployer's hold) |
-| docs | k8s | <span class="fqdn" data-host="docs.local">docs.local.&lt;domain&gt;</span> (LAN only) | Authelia one_factor | no PVC (stateless) | eligible |
+| docs | k8s | <span class="fqdn" data-host="docs">docs.&lt;domain&gt;</span> · <span class="fqdn" data-host="docs.local">docs.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
 | dri-device-plugin | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (manifests_rollout: '' skips the shared rollout gate; even a /health readinessProbe would only prove the HTTP listener, not that the plugin registered its gRPC socket with the kubelet, and an unregistered plugin makes jellyfin and tdarr unschedulable) |
 | freshrss | k8s | <span class="fqdn" data-host="freshrss">freshrss.&lt;domain&gt;</span> · <span class="fqdn" data-host="freshrss.local">freshrss.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | eligible |
 | game-stats | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | denylisted (games — companions to the hand-operated terraria and valheim servers. ALSO Recreate + RWO PVCs holding irreplaceable stats — two independent reasons) |
