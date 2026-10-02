@@ -23,9 +23,9 @@ The three keys are asserted per LINK, not per file, so adding a second interface
 
 import re
 
-from _helpers import ROLES as _ROLES
+from _setup_render import rendered_setup_text
 
-_TEMPLATE = _ROLES / "setup/k3s/templates/netplan-dns.yaml.j2"
+_TEMPLATE = "netplan-dns.yaml.j2"
 
 # Every override block that can feed a resolver into systemd-resolved. `ra-overrides` is the
 # one an author is most likely to leave out, because the other two are the obvious pair.
@@ -40,6 +40,9 @@ def overrides_missing_use_dns_false(text: str) -> list[str]:
     Reads structurally rather than by substring: an override key mentioned in a COMMENT (this
     template explains all three at length) must not satisfy the requirement, or the guard would
     pass on a file whose prose survived and whose config did not.
+
+    Takes the RENDERED netplan file. The links come out of `k3s_node_dns_dhcp_links`, so a
+    source-text scan sees one loop body rather than the per-link blocks that deploy (#3202).
     """
     lines = [ln for ln in text.splitlines() if not _COMMENT.match(ln)]
     missing = []
@@ -63,9 +66,9 @@ def overrides_missing_use_dns_false(text: str) -> list[str]:
 
 
 def test_the_live_template_suppresses_all_three_resolver_sources() -> None:
-    missing = overrides_missing_use_dns_false(_TEMPLATE.read_text())
+    missing = overrides_missing_use_dns_false(rendered_setup_text("k3s", _TEMPLATE))
     assert not missing, (
-        f"{_TEMPLATE.name} must set `use-dns: false` under every override that can feed a "
+        f"{_TEMPLATE} must set `use-dns: false` under every override that can feed a "
         "resolver, or the node's resolv.conf goes back over the 3-nameserver pod cap and "
         "kubelet warns DNSConfigForming on every sync. Missing: " + ", ".join(missing)
     )
