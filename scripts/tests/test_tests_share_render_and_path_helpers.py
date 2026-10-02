@@ -1,6 +1,6 @@
 """A test renders Jinja and finds the repo root through the shared helpers, never by hand.
 
-Two things a test module does not re-derive for itself:
+Three things a test module does not re-derive for itself:
 
 1. A Jinja environment. A bare `jinja2.Environment()` has none of Ansible's whitespace flags
    and none of its filters, so a template renders under it differently from a deploy: a
