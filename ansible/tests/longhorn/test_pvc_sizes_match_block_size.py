@@ -14,44 +14,44 @@ something recreates it: a node rebuild, a restore, a disaster-recovery bring-up.
 precisely the path the 16 MiB change exists to make survivable, so a silent violation here
 converts a cost optimisation into a recovery failure.
 
-A CLAIM BUILT THROUGH `ansible/templates/pvc.yml.j2` HAS NO `storage:` LINE OF ITS OWN, so a
-scan for `storage:` cannot see one. `PVC_CALL_RE` closes that by reading the macro's third
-argument. The floor assertion below makes a fall in resolution fail loudly instead of the suite
-quietly checking less. Keep the floor above the real count for that reason.
+The census reads the RENDERED manifests (#3209). Reading the templates meant resolving each
+`storage: {{ var }}` against a hand-merged map of role defaults and group_vars, and reading the
+`pvc()` macro's third argument with a regex because a claim built through
+`ansible/templates/pvc.yml.j2` has no `storage:` line of its own. The render resolves both —
+Ansible's own context resolves the variable, and the macro expands — so the var map, the
+macro-call regex and the floor assertion that watched for their resolution falling over are all
+gone with their subject. What replaces them is `KNOWN_SIZED_ROLES`: a census that stops naming a
+role fails there rather than passing on fewer claims.
+
+`k8s/volume-claim` renders only when a caller includes it, so no render reaches it. Its
+`volume_claim_size` default is read from its `defaults/main.yml` instead — a defaults read, not
+a template read. A caller that overrides the size does so in its include vars, which neither
+this census nor the one it replaces ever covered.
 
 Run: uv run pytest ansible/tests/longhorn/test_pvc_sizes_match_block_size.py
 """
 
 import re
-from pathlib import Path
 
 import pytest
-import yaml
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from _k8s_render import rendered_docs
 
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
 K3S_DEFAULTS = ANSIBLE / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
+CLAIM_DEFAULTS = K8S_ROLES / "volume-claim" / "defaults" / "main.yml"
 
 UNITS = {"Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "Ti": 1024**4}
 SIZE_RE = re.compile(r"^(\d+)(Ki|Mi|Gi|Ti)$")
-STORAGE_RE = re.compile(r"^\s*storage:\s*(\S.*?)\s*$", re.M)
-JINJA_RE = re.compile(r"^\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}$")
-# A claim built through ansible/templates/pvc.yml.j2 has no `storage:` line of its own — the
-# macro carries it. Its third argument is the size, so that is what this reads. Without it a
-# converted role drops out of this suite silently, which is how the check would end up passing
-# on almost nothing; `test_the_var_map_resolves_most_templated_sizes` is the floor that catches
-# exactly that.
-#
-# The trailing `(?:,\s*namespace=[^,()]+)?` is for observability's four claims: the macro
-# takes an optional `namespace=` kwarg so they can pass `k8s_observability_namespace` instead
-# of the module default, and a plain 3-arg regex stops matching the moment a 4th argument
-# follows the size — which is exactly how a converted role drops out silently. See the accept
-# case below that pins this shape.
-PVC_CALL_RE = re.compile(
-    r"\bpvc\(\s*[^,()]+,\s*[^,()]+,\s*([^,()]+?)\s*(?:,\s*namespace=[^,()]+)?\s*\)"
+VOLUME_KINDS = frozenset({"PersistentVolumeClaim", "PersistentVolume"})
+
+# Roles the census must name. A render that stops reaching a role, or a `kind:` that moves,
+# leaves this suite checking fewer claims and still passing — these five are the claims whose
+# sizes are not the 1Gi default, so each one is a size somebody chose.
+KNOWN_SIZED_ROLES = frozenset(
+    {"media-volume", "observability", "registry", "traefik", "valheim"}
 )
-IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 def block_size_bytes() -> int:
@@ -61,132 +61,68 @@ def block_size_bytes() -> int:
     return int(mib) * UNITS["Mi"]
 
 
-def _vars() -> dict:
-    """Every plain scalar var Ansible would have in scope, flattened into one map.
-
-    Sizes are set in role defaults and group_vars, never inline, so resolving a `{{ var }}`
-    means merging those. Collisions do not matter here: two roles never disagree about the
-    value of a size var, and if they did, both values get checked across the two files.
-    """
-    merged: dict = {}
-    sources = list(K8S_ROLES.glob("*/defaults/main.yml"))
-    sources += list((ANSIBLE / "inventory").rglob("*.yml"))
-    for path in sources:
-        try:
-            loaded = yaml_fast.safe_load(path.read_text())
-        except yaml.YAMLError:
-            continue
-        if isinstance(loaded, dict):
-            merged.update(
-                {k: v for k, v in loaded.items() if isinstance(v, (str, int))}
-            )
-    return merged
+def _requested_size(doc: dict) -> str | None:
+    """The storage quantity `doc` asks for: a claim's request, or a PV's capacity."""
+    spec = doc.get("spec") or {}
+    requests = (spec.get("resources") or {}).get("requests") or {}
+    capacity = spec.get("capacity") or {}
+    size = requests.get("storage") or capacity.get("storage")
+    return str(size) if size is not None else None
 
 
-def _declared_sizes() -> list[tuple[Path, str, str]]:
-    """(template, raw value, resolved value) for every `storage:` in a k8s manifest template."""
-    variables = _vars()
-    found = []
-    for template in sorted(K8S_ROLES.glob("*/templates/*.j2")):
-        text = template.read_text()
-        for raw in STORAGE_RE.findall(text):
-            resolved = raw
-            match = JINJA_RE.match(raw)
-            if match:
-                resolved = str(variables.get(match.group(1), raw))
-            found.append((template, raw, resolved))
-        # The macro's third argument is already a bare expression, not `{{ ... }}`, so it
-        # resolves against the same var map without the Jinja braces a `storage:` line carries.
-        for raw in PVC_CALL_RE.findall(text):
-            resolved = raw
-            if IDENT_RE.match(raw):
-                resolved = str(variables.get(raw, raw))
-            elif len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
-                resolved = raw[1:-1]
-            found.append((template, raw, resolved))
-    return found
-
-
-def test_the_var_map_resolves_most_templated_sizes() -> None:
-    """Guard the guard: if resolution broke, every size would skip and the check would pass."""
-    sizes = _declared_sizes()
-    resolved = [s for _, _, s in sizes if SIZE_RE.match(s)]
-    assert len(resolved) >= 23, (
-        f"only {len(resolved)} of {len(sizes)} declared sizes resolved to a literal — "
-        "variable resolution is broken, so this suite is checking almost nothing"
+def declared_sizes() -> list[tuple[str, str]]:
+    """(where, size) for every volume the k8s roles declare, plus the shared claim's default."""
+    found = [
+        (f"{role}/{name}", size)
+        for role, name, doc in rendered_docs()
+        if isinstance(doc, dict)
+        and doc.get("kind") in VOLUME_KINDS
+        and (size := _requested_size(doc))
+    ]
+    claim_default = yaml_fast.safe_load(CLAIM_DEFAULTS.read_text())["volume_claim_size"]
+    found.append(
+        ("volume-claim/defaults/main.yml:volume_claim_size", str(claim_default))
     )
+    return sorted(found)
+
+
+def test_the_census_names_every_role_that_sizes_a_volume() -> None:
+    """Guard the guard: a census that reached nothing would pass every assertion below."""
+    sizes = declared_sizes()
+    roles = {where.split("/")[0] for where, _ in sizes}
+    assert KNOWN_SIZED_ROLES <= roles, (
+        f"the render census no longer reaches {sorted(KNOWN_SIZED_ROLES - roles)} — it is "
+        f"checking {len(sizes)} sizes across {sorted(roles)}"
+    )
+    assert len(sizes) >= 18, f"only {len(sizes)} volume sizes found: {sizes}"
 
 
 @pytest.mark.parametrize(
-    ("template", "raw", "resolved"),
-    [
-        pytest.param(t, r, s, id=f"{t.parent.parent.name}/{t.name}:{r}")
-        for t, r, s in _declared_sizes()
-    ],
+    ("where", "size"),
+    [pytest.param(w, s, id=f"{w}:{s}") for w, s in declared_sizes()],
 )
-def test_pvc_size_is_a_multiple_of_the_backup_block_size(
-    template: Path, raw: str, resolved: str
-) -> None:
-    match = SIZE_RE.match(resolved)
-    if not match:
-        pytest.skip(f"{raw} is not a literal quantity (shell placeholder or a path)")
-    size = int(match.group(1)) * UNITS[match.group(2)]
+def test_pvc_size_is_a_multiple_of_the_backup_block_size(where: str, size: str) -> None:
+    match = SIZE_RE.match(size)
+    assert match, (
+        f"{where} requests {size!r}, which is not a literal quantity. Every size is literal "
+        "once rendered, so an expression here means the render left a variable unresolved"
+    )
+    bytes_requested = int(match.group(1)) * UNITS[match.group(2)]
     block = block_size_bytes()
-    assert size % block == 0, (
-        f"{template.relative_to(ANSIBLE)} requests {resolved}, which is not an integer "
+    assert bytes_requested % block == 0, (
+        f"{where} requests {size}, which is not an integer "
         f"multiple of the {block // UNITS['Mi']}Mi backup block size. Longhorn's admission "
         "webhook refuses to create it — the existing volume keeps working, so this only "
         "fails when the volume is recreated, i.e. during a rebuild or a restore."
     )
 
 
-# The macro-call extraction is itself a check, so it ships with a proof it can go red: one
-# shape it must find, one it must not. A rule that matched nothing would leave every converted
-# role unchecked while this file still passed.
-@pytest.mark.parametrize(
-    "text",
-    [
-        "{{ pvc(registry_k8s_claim, registry_k8s_storage_class, registry_k8s_size) }}",
-        "{% call pvc(mosquitto_k8s_claim, mosquitto_k8s_storage_class, mosquitto_k8s_size) %}",
-        "{% call pvc('authelia-config', 'longhorn', authelia_k8s_storage) %}",
-        "{{ pvc('tempo-data', observability_storage_class, observability_tempo_storage,"
-        " namespace=k8s_observability_namespace) }}",
-    ],
-)
-def test_the_macro_call_regex_finds_the_size_argument(text: str) -> None:
-    """Accept case: every call form in the tree yields exactly one size expression."""
-    found = PVC_CALL_RE.findall(text)
-    assert len(found) == 1, f"{text!r} yielded {found}"
-    assert found[0].endswith(("_size", "_storage", "_pvc_size"))
+def test_a_non_multiple_size_fails_the_rule() -> None:
+    """The rejecting half: the arithmetic above must be able to refuse a size.
 
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "  storage: 128Mi",
-        "{{ some_other_helper(a, b, c) }}",
-        "{{ pvc(claim, storage_class) }}",
-    ],
-)
-def test_the_macro_call_regex_ignores_a_non_call(text: str) -> None:
-    """Reject case: a plain storage line, a different helper, and a two-argument call.
-
-    The two-argument form matters because a `pvc()` call that lost its size argument is the
-    one shape that would silently drop a claim from this suite while still rendering.
+    100Mi is a multiple of 2Mi and not of 16Mi — the exact kind of value the webhook refuses.
     """
-    assert PVC_CALL_RE.findall(text) == []
-
-
-def test_a_bad_size_behind_the_macro_is_still_caught() -> None:
-    """The point of the extraction: a non-multiple size must fail even with no `storage:` line.
-
-    100Mi is a multiple of 2Mi and not of 16Mi — the exact kind of value the
-    webhook refuses.
-    """
-    raw = PVC_CALL_RE.findall("{{ pvc(c, sc, widget_size) }}")[0]
-    assert raw == "widget_size"
-    size = 100 * UNITS["Mi"]
-    assert size % block_size_bytes() != 0, (
+    assert (100 * UNITS["Mi"]) % block_size_bytes() != 0, (
         "100Mi is a multiple of the configured block size, so this reject case proves nothing "
         "— pick a size that is not, or the block size changed and this test needs rewriting."
     )
