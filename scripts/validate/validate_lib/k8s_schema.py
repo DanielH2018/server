@@ -44,7 +44,7 @@ __all__ = [
 # scripts/validate/tests/test_k8s_schema.py ties this, and the exact tag the vendored files came
 # from, to k3s_version in roles/setup/k3s/defaults/main.yml, so a cluster upgrade cannot leave
 # it behind silently.
-K8S_SCHEMA_VERSION = "1.36"
+K8S_SCHEMA_VERSION = "1.37"
 
 _OCTAL_LITERAL = re.compile(r"^0o[0-7]+$")
 
