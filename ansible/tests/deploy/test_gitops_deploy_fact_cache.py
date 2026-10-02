@@ -18,9 +18,10 @@ import sys
 from pathlib import Path
 
 from _helpers import ALL_VARS, REPO, load_yaml
+from _setup_render import rendered_setup_text
 from lib.proc_testing import run
 
-_UNIT = REPO / "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2"
+_UNIT = "gitops-deploy.service.j2"
 _ENV_LINE = re.compile(r"^Environment=(ANSIBLE_[A-Z_]+)=(\S+)$", re.MULTILINE)
 _CONNECTION = re.compile(r"^CACHE_PLUGIN_CONNECTION\((.+?)\) = (.+)$", re.MULTILINE)
 
@@ -42,10 +43,10 @@ def _cache_connection(extra_env: dict[str, str]) -> tuple[str, str]:
 
 def test_the_deployer_unit_resolves_a_fact_cache_outside_the_shared_one():
     sys_user = load_yaml(ALL_VARS)["sys_user"]
-    unit = _UNIT.read_text().replace("{{ sys_user }}", sys_user)
+    unit = rendered_setup_text("gitops_deploy", _UNIT)
     unit_env = dict(_ENV_LINE.findall(unit))
     assert "ANSIBLE_CACHE_PLUGIN_CONNECTION" in unit_env, (
-        f"{_UNIT.name} no longer gives the deployer its own fact cache"
+        f"{_UNIT} no longer gives the deployer its own fact cache"
     )
     private = unit_env["ANSIBLE_CACHE_PLUGIN_CONNECTION"]
     assert private.startswith(f"/home/{sys_user}/"), private

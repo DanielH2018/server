@@ -28,7 +28,10 @@ Run: uv run pytest ansible/tests/k8s/test_release_stamp_rollout_expectation.py
 
 import re
 
+from lib import yaml_fast
+
 from _helpers import ANSIBLE, render_expr, task_named, walk_tasks
+from _k8s_render import render_role_template
 from _release_expectation import (
     FACT_EXPR,
     MAIN,
@@ -88,6 +91,12 @@ def test_the_template_fingerprints_bracket_the_apply_and_precede_the_stamp():
 
 _FINGERPRINT_GATE = "manifests_render is changed or manifests_secret_render is changed"
 
+# The roles whose Deployment takes `replicas:` from a variable, by that variable.
+_TEMPLATED_REPLICAS = {
+    "navidrome": "navidrome_k8s_replicas",
+    "terraria": "terraria_k8s_replicas",
+}
+
 
 def test_the_template_fingerprints_read_the_template_not_the_generation():
     """`.metadata.generation` bumps on any spec change — navidrome and terraria template
@@ -110,12 +119,22 @@ def test_the_template_fingerprints_read_the_template_not_the_generation():
         assert task["when"] == _FINGERPRINT_GATE, side
     note = task_named(MAIN, "Note which workloads the apply itself rolled")
     assert note["when"] == _FINGERPRINT_GATE, "consumer must carry the producers' gate"
-    replicas = [
-        p
-        for p in (ANSIBLE / "roles/k8s").glob("*/templates/deployment*.j2")
-        if re.search(r"^\s*replicas: \{\{", p.read_text(), re.MULTILINE)
+    # The trap is a Deployment whose replica count follows a variable, so an inventory edit
+    # moves `.metadata.generation` with no pod-template change. Rendered at a count no
+    # inventory holds: only a template that reads the variable renders it.
+    follows = [
+        role
+        for role, var in _TEMPLATED_REPLICAS.items()
+        if yaml_fast.safe_load(
+            render_role_template(role, "deployment.yaml.j2", {var: 7})
+        )["spec"]["replicas"]
+        == 7
     ]
-    assert replicas, "the generation trap this test names no longer exists in the tree"
+    assert follows, (
+        f"none of {sorted(_TEMPLATED_REPLICAS)} renders its replica count from "
+        f"{sorted(_TEMPLATED_REPLICAS.values())} any more, so the generation trap this test "
+        "names may no longer exist in the tree"
+    )
 
 
 def test_the_expectation_reads_the_same_facts_as_the_restart_task():

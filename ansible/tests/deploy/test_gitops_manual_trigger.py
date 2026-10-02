@@ -23,10 +23,11 @@ Scope is also asserted: the rule covers this one unit and only the `start` verb.
 
 import re
 from _helpers import REPO as _REPO
+from _setup_render import rendered_setup_text
 
 
 _ROLE = _REPO / "ansible/roles/setup/gitops_deploy"
-_RULE = _ROLE / "templates/50-gitops-deploy.rules.j2"
+_RULE = "50-gitops-deploy.rules.j2"
 _TASKS = _ROLE / "tasks/service.yml"
 _WRAPPER = _REPO / "scripts/deploy_tools/gitops_tick.sh"
 
@@ -40,7 +41,7 @@ _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 
 def _rule_code() -> str:
-    text = _RULE.read_text()
+    text = rendered_setup_text("gitops_deploy", _RULE)
     return _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub("", text))
 
 
@@ -98,7 +99,7 @@ def test_wrapper_starts_the_unit_without_blocking():
         )
 
 
-_UNIT_TEMPLATE = _ROLE / "templates/gitops-deploy.service.j2"
+_UNIT_TEMPLATE = "gitops-deploy.service.j2"
 
 
 def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
@@ -107,7 +108,7 @@ def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
     # two, a contention tick takes the failure branch and tells the operator that
     # gitops-deploy-alert.service already posted to Discord. It cannot have — OnFailure never
     # fires on a unit SuccessExitStatus makes succeed. This pins the three together.
-    unit = _UNIT_TEMPLATE.read_text()
+    unit = rendered_setup_text("gitops_deploy", _UNIT_TEMPLATE)
 
     flock_code = re.search(r"^ExecStart=.*?flock\s+.*?-E\s+(\d+)", unit, re.MULTILINE)
     assert flock_code, (
@@ -188,7 +189,7 @@ def test_wrapper_stops_watching_a_joined_run_when_it_ends():
 
 
 def test_unit_pages_on_failure():
-    unit = _UNIT_TEMPLATE.read_text()
+    unit = rendered_setup_text("gitops_deploy", _UNIT_TEMPLATE)
     assert re.search(r"^OnFailure=gitops-deploy-alert\.service$", unit, re.MULTILINE), (
         f"{_UNIT_TEMPLATE} no longer sets OnFailure=gitops-deploy-alert.service — a run that "
         "fails outright (not the SuccessExitStatus=75 contention case above) would page nobody."
@@ -199,7 +200,7 @@ def test_unit_timeout_covers_the_measured_k8s_worst_case():
     # 180s max flock wait + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120) +
     # K8S_DEPLOY_TIMEOUT_S (1440) + K8S_ROLLBACK_TIMEOUT_S (1620) = 3960s, which is why the unit's
     # own arithmetic comment sizes TimeoutStartSec to 70min. The docstring at the top of this file defers to this pin for the value.
-    unit = _UNIT_TEMPLATE.read_text()
+    unit = rendered_setup_text("gitops_deploy", _UNIT_TEMPLATE)
     assert re.search(r"^TimeoutStartSec=70min$", unit, re.MULTILINE), (
         f"{_UNIT_TEMPLATE}'s TimeoutStartSec no longer reads 70min. If this is a deliberate "
         "re-size, re-derive it against the budget arithmetic in the unit's own comment and "

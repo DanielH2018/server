@@ -62,7 +62,7 @@ def _batch_gated_names(role: Path) -> set[str]:
        written for it. The credited name is `cronjob_gate_name` VERBATIM — the CronJob's own
        `metadata.name`, and therefore what `_batch_templates` yields for the caller's template.
        A non-literal value (a Jinja expression) is not credited, the same fail-closed choice
-       `_deployment_name` makes for a non-literal Deployment name — see `_LITERAL_NAME` below,
+       `_deployment_docs` makes for a non-literal Deployment name — see `_LITERAL_NAME` below,
        reused here rather than redefined. The Job the shared role creates is
        `<name>-deploy-gate`; crediting that instead would be a string no rendered manifest can
        ever equal — a marker that gates nothing, with no symptom.

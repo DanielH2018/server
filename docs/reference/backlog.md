@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-01 18:17 UTC
-generated_sha: 3d5b8e000
+generated_at: 2026-10-02 06:17 UTC
+generated_sha: 7df0bfaaa
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,8 +19,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#3027](https://github.com/DanielH2018/server/issues/3027) | high | gap | security | Rotate the Google Cast refresh token HA leaked, and age out the Loki records that still carry it | 2026-09-30 | 0 | - | ✓ |
 | [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks | 2026-09-28 | 0 | - | ✓ |
 | [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 0 | - | ✓ |
-| [#3107](https://github.com/DanielH2018/server/issues/3107) | medium | improvement | cicd | Convert the rest of ansible/tests/services from source-text pins to render assertions, one role per PR | 2026-10-01 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
-| [#3123](https://github.com/DanielH2018/server/issues/3123) | medium | improvement | docs | Keep daniel-server's Claude memory store in sync with daniel-box's | 2026-10-01 | 0 | - | ✓ |
+| [#3210](https://github.com/DanielH2018/server/issues/3210) | medium | gap | cicd | The render gate's census cannot see a template path reached through an import | 2026-10-02 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
 | [#2652](https://github.com/DanielH2018/server/issues/2652) | low | gap | cicd | Re-measure inject-nested-docs subagent coverage after the agent_id key lands | 2026-09-26 | 0 | - | ✓ |
@@ -31,15 +30,12 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
 | [#2972](https://github.com/DanielH2018/server/issues/2972) | low | improvement | - | Replace the host literals in bootstrap.yml and initial_setup.yml with a planned manual run | 2026-09-29 | 0 | - | ✓ |
 | [#2978](https://github.com/DanielH2018/server/issues/2978) | low | improvement | - | Move longhorn_reap out of the k3s setup role with a planned manual k3s apply | 2026-09-29 | 0 | - | ✓ |
-| [#3088](https://github.com/DanielH2018/server/issues/3088) | low | gap | cicd | Remove the daniel-box manifest and release-record leftovers from the #2813 role merge and the #2911 rename | 2026-10-01 | 0 | - | ✓ |
-| [#3089](https://github.com/DanielH2018/server/issues/3089) | low | improvement | docs | review-standing-decisions memory holds code-line-anchored and dangling-path rows | 2026-10-01 | 0 | - | ✓ |
-| [#3120](https://github.com/DanielH2018/server/issues/3120) | low | improvement | cicd | Narrow the deployer's setup-plane apply to the block tags a diff touches | 2026-10-01 | 0 | worktree-issue-fanout-2026-10-01-wave2 | - |
-| [#3124](https://github.com/DanielH2018/server/issues/3124) | low | improvement | cicd | land.sh redeploys every manifests caller for a tasks/-only change to the shared role | 2026-10-01 | 0 | - | ✓ |
-| [#3125](https://github.com/DanielH2018/server/issues/3125) | low | improvement | cicd | An inert manifest edit still queues the workload for the stabilisation-gate soak | 2026-10-01 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
 | [#3130](https://github.com/DanielH2018/server/issues/3130) | low | improvement | cicd | Rule on the three test folds #3108 measured as not worth doing | 2026-10-01 | 0 | - | ✓ |
-| [#3133](https://github.com/DanielH2018/server/issues/3133) | low | improvement | backup-observability | Observability hands six workloads to the stabilisation gate after an inert manifest edit | 2026-10-01 | 0 | - | ✓ |
-| [#3134](https://github.com/DanielH2018/server/issues/3134) | low | improvement | cicd | Give initial_setup crons.yml a subject tag instead of always, so its ranges can narrow | 2026-10-01 | 0 | - | - |
-| [#3135](https://github.com/DanielH2018/server/issues/3135) | low | improvement | cicd | Tag the setup roles whose task files no tag selects, so their changes can narrow | 2026-10-01 | 0 | - | - |
+| [#3202](https://github.com/DanielH2018/server/issues/3202) | low | improvement | cicd | Convert ansible/tests/setup source-text pins to render assertions, then add it to the render gate's SCANNED | 2026-10-02 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
+| [#3205](https://github.com/DanielH2018/server/issues/3205) | low | improvement | cicd | Convert ansible/tests/staging source-text pins to render assertions, then add it to the render gate's SCANNED | 2026-10-02 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
+| [#3206](https://github.com/DanielH2018/server/issues/3206) | low | gap | cicd | Rule 3 cannot see a resolver read that arrives as a fixture parameter | 2026-10-02 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
+| [#3209](https://github.com/DanielH2018/server/issues/3209) | low | gap | cicd | The render gate misses a template read wrapped in sorted() or passed through a helper | 2026-10-02 | 0 | - | ✓ |
+| [#3211](https://github.com/DanielH2018/server/issues/3211) | low | gap | cicd | Render gate's template_source_reads misses a sorted() glob over a bound templates dir | 2026-10-02 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 

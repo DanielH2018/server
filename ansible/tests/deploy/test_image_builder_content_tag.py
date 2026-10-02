@@ -26,12 +26,13 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 from _helpers import ANSIBLE
 from _helpers import load_tasks
+from _k8s_render import render_role_template
 
 
 ROLE = ANSIBLE / "roles" / "k8s" / "image-builder"
 TASKS = ROLE / "tasks" / "main.yml"
 CONTEXT_TPL = ROLE / "templates" / "context-configmap.yaml.j2"
-BUILD_JOB_TPL = ROLE / "templates" / "build-job.yaml.j2"
+BUILD_JOB_TPL = "build-job.yaml.j2"
 
 FACT = "image_builder_content_tag"
 
@@ -179,7 +180,7 @@ def test_rewording_a_comment_in_that_template_does_not_move_the_tag(
     copy = tmp_path / "role"
     shutil.copytree(ROLE, copy)
     before = _tag(dockerfile, role=copy)
-    tpl = copy / "templates" / CONTEXT_TPL.name
+    tpl = tmp_path / "role" / "templates" / CONTEXT_TPL.name
     tpl.write_text(
         "# an added comment, changing nothing the build reads\n" + tpl.read_text()
     )
@@ -228,18 +229,27 @@ def test_the_build_pushes_both_names():
     Pushing only the content tag would break every consumer still referencing `:latest`;
     pushing only `:latest` would leave the content tag absent and the gate rebuilding forever.
     """
+    rendered = render_role_template(
+        "image-builder",
+        BUILD_JOB_TPL,
+        {
+            "image_builder_name": "demo",
+            "image_builder_content_tag": "sha-c0ffee",
+            "image_builder_tag": "mutable",
+        },
+    )
     output = [
         line
-        for line in BUILD_JOB_TPL.read_text().splitlines()
+        for line in rendered.splitlines()
         if line.strip().startswith("- type=image")
     ]
     assert len(output) == 1, f"expected exactly one image exporter, found {output}"
     line = output[0]
-    assert "{{ image_builder_content_tag }}" in line, (
+    assert "/demo:sha-c0ffee" in line, (
         "the build's --output no longer names the content tag, so nothing pushes it and the "
         "registry read that gates the build 404s on every deploy."
     )
-    assert "{{ image_builder_tag }}" in line, (
+    assert "/demo:mutable" in line, (
         "the build's --output no longer names the mutable tag, so every consumer still "
         "referencing `<name>:latest` fails to pull."
     )

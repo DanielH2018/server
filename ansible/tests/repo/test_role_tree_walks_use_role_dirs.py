@@ -69,7 +69,6 @@ EXPECTED_ROLE_DIRS_CALLERS = frozenset(
         "k8s/test_k8s_roles_have_claude_md.py",
         "k8s/test_manifest_roles_include_the_shared_render.py",
         "k8s/test_script_configmaps_apply_server_side.py",
-        "k8s/test_vip_pins.py",
         "longhorn/test_every_longhorn_pvc_has_a_tier.py",
         "deploy/test_containers_list_roles_exist.py",
         "deploy/test_cronjob_gate_decision.py",

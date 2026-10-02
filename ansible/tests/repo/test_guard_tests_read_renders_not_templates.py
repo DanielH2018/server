@@ -10,18 +10,23 @@ in a directory `SCANNED` names reads a path under a `templates/` directory, exce
 are converted (#3107). `services/` joined with six permanent entries; `longhorn/` joined with
 none, its one reader — the daily RecurringJob's group — now read out of `_setup_render`, and
 `repo/` — the directory this module itself sits in, so a new guard written here is held to the
-rule — joined with one, which keys on a variable NAME. `setup/` joined with two, each keyed on
-something no render carries: a Jinja FILTER, and the behaviour of a variable no render leaves
-undefined (#3202). The directories still outside it (`k8s/`, `deploy/`, `staging/`) each hold
-several readers, so adding one is a PR of its own rather than a wider glob here. Entries are
-keyed `<directory>/<module>.py`, because a basename alone would let a module in one directory
+rule — joined with one, which keys on a variable NAME. `deploy/` joined with two (#3204):
+the raw-byte hash the render stamp compares, and the autodeploy derivation's source fallback
+for synthetic role trees no render reaches. `k8s/` joined with two (#3203): whether a
+template CALLS the shared *arr macro or copies its body, and whether two roles ship
+byte-identical templates — both render differently from what they test. `staging/` joined
+with none (#3205). `setup/` joined with two, each keyed on something no render carries: a
+Jinja FILTER, and the behaviour of a variable no render leaves undefined (#3202). Every
+test directory is now scanned. Entries are keyed
+`<directory>/<module>.py`, because a basename alone would let a module in one directory
 inherit another's exemption.
 
 The exposure is the same one `scripts/tests/test_tests_share_render_and_path_helpers.py`'s
 rule 3 covers for `*.sh.j2` repo-wide: a value that moves into a role default leaves the
 assertion matching `{{ ... }}`, and a pattern that matches nothing passes (#3178). The
-sanctioned readers are `_k8s_render` (k8s manifests and `Dockerfile*.j2`), `_compose_render`
-(the Pi's Compose and config templates) and `_shell_render` (`*.sh.j2`).
+sanctioned readers are `_k8s_render` (k8s manifests and `Dockerfile*.j2`), `_setup_render`
+(setup-plane templates), `_compose_render` (the Pi's Compose and config templates) and
+`_shell_render` (`*.sh.j2`).
 
 Two things the rule deliberately does not reach:
 
@@ -31,7 +36,10 @@ Two things the rule deliberately does not reach:
 #3196 named one blind spot, `test_healthchecks_pings.py`, whose `ANSIBLE.rglob("*")` census
 put no template path at its read site. #3190 converted that census to a render in the same
 wave, and the control read it kept IS visible here — so the module is a listed reader rather
-than a declared gap, and no blind-spot map is needed.
+than a declared gap, and no blind-spot map is needed. #3209 names a second blind spot: a glob
+wrapped in `sorted()`, or a path handed to a helper that reads it, puts no template path at
+the read site either. `k8s/test_vip_pins.py` read its workload templates that way; #3203
+converted those reads with the rest of the module.
 
 Run: uv run pytest ansible/tests/repo/test_guard_tests_read_renders_not_templates.py
 """
@@ -43,7 +51,15 @@ from lib.repo_paths import ANSIBLE
 
 TESTS = ANSIBLE / "tests"
 # Every directory the rule covers. Adding one means converting its readers first.
-SCANNED = (TESTS / "services", TESTS / "longhorn", TESTS / "repo", TESTS / "setup")
+SCANNED = (
+    TESTS / "services",
+    TESTS / "longhorn",
+    TESTS / "repo",
+    TESTS / "deploy",
+    TESTS / "k8s",
+    TESTS / "staging",
+    TESTS / "setup",
+)
 
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
 # Every entry is permanent: a render erases the thing it reads.
@@ -75,6 +91,26 @@ TEMPLATE_SOURCE_READERS = {
     "services/test_healthchecks_pings.py": (
         "the control that keeps its render honest asserts a template CARRIES `{{`, which is "
         "the one claim a render erases; the census itself renders (#3190)"
+    ),
+    "deploy/_autodeploy.py": (
+        "the fallback for a role no render reaches: the synthetic `widget_role` trees under "
+        "`tmp_path` the derivation's unit tests build, and the caller-rendered roles "
+        "`_k8s_render` skips, all denylisted. Every role the render reaches reads its render, "
+        "and `test_the_render_reaches_every_auto_deployable_role` holds the denylisted half"
+    ),
+    "deploy/test_setup_render_manifest.py": (
+        "hashes the template's raw BYTES — a trailing newline and a truncated-read "
+        "comparison, neither of which survives a render"
+    ),
+    "k8s/test_arr_deployments_share_one_macro.py": (
+        "whether radarr's and sonarr's templates CALL the shared macro or write its body out "
+        "beside the call; both render the same Deployment, so only the source tells them "
+        "apart. The macro's body itself is checked on the render"
+    ),
+    "k8s/test_shared_manifest_defaults.py": (
+        "whether two roles ship BYTE-IDENTICAL templates the shared default should replace; "
+        "each renders with its own `container_item`, so two identical sources render "
+        "differently and the duplication is visible only in the bytes"
     ),
     "setup/test_registry_selftest_single_node.py": (
         "whether the agent-Job gate carries `| default([])`, which decides what happens on a "
@@ -108,8 +144,21 @@ KNOWN_MEMBERS = frozenset(
         "repo/test_guard_tests_read_renders_not_templates.py",
         "repo/test_secret_rendering_host_scripts_have_no_log.py",
         "repo/test_testpaths_covers_every_test_file.py",
-        # setup/ joined in #3202. Listed are the modules that read a role template at all,
-        # converted or exempt — the set whose disappearance means the glob stopped matching.
+        "deploy/_autodeploy.py",
+        "deploy/test_gitops_manual_trigger.py",
+        "deploy/test_k8s_autodeploy_rollout_gates.py",
+        "deploy/test_setup_render_manifest.py",
+        "k8s/_manifest_guards.py",
+        "k8s/test_arr_deployments_share_one_macro.py",
+        "k8s/test_k8s_manifests.py",
+        "k8s/test_shared_manifest_defaults.py",
+        "k8s/test_tls_cert_resolver_optional.py",
+        "k8s/test_vip_pins.py",
+        "staging/_fence_probe.py",
+        "staging/test_etcd_drill_vm.py",
+        "staging/test_staging_egress_fence.py",
+        "staging/test_staging_network.py",
+        "staging/test_staging_tick_arm_retired.py",
         "setup/_kuma_monitors.py",
         "setup/test_claude_code_on_daniel_server.py",
         "setup/test_claude_fleet_slice_cap.py",
@@ -282,7 +331,7 @@ def offenders(sources: dict[str, str]) -> dict[str, list[str]]:
     }
 
 
-def test_no_scanned_test_reads_a_templates_source():
+def test_no_services_test_reads_a_templates_source():
     found = offenders({key: p.read_text() for key, p in _modules().items()})
     assert found == {}, (
         "these tests assert on a template's SOURCE, so a value moved into a role default "
@@ -412,3 +461,45 @@ def test_a_new_longhorn_guard_reading_a_role_template_is_named_as_an_offender():
         "longhorn/test_new_guard.py",
         "longhorn/test_smtp_wiring.py",
     ], found
+
+
+def test_a_reverted_deploy_guard_is_named_as_an_offender():
+    """The directory added in #3204, against the spelling its manual-trigger guard used to take.
+
+    `test_gitops_manual_trigger.py` read the polkit rule's source until #3204; putting that
+    read back must fail the census rather than pass under a directory it does not scan.
+    """
+    found = offenders(
+        {
+            "deploy/test_gitops_manual_trigger.py": (
+                '_RULE = _ROLE / "templates/50-gitops-deploy.rules.j2"\n'
+                'assert "polkit.Result.YES" in _RULE.read_text()\n'
+            ),
+            "deploy/test_already_clean.py": (
+                "from _setup_render import rendered_setup_text\n"
+                'assert "YES" in rendered_setup_text("gitops_deploy", "50-gitops-deploy.rules.j2")\n'
+            ),
+        }
+    )
+    assert list(found) == ["deploy/test_gitops_manual_trigger.py"], found
+
+
+def test_a_reverted_k8s_guard_is_named_as_an_offender():
+    """The directory added in #3203, against the read its flaresolverr guard took until then.
+
+    `test_flaresolverr_disable_media.py` checked that the template SPELLS the default's name;
+    it renders at a flipped default instead. Putting the read back must fail the census.
+    """
+    found = offenders(
+        {
+            "k8s/test_flaresolverr_disable_media.py": (
+                'source = ROLES / "k8s" / "prowlarr" / "templates" / _TEMPLATE\n'
+                'assert "prowlarr_k8s_fs_disable_media" in source.read_text()\n'
+            ),
+            "k8s/test_already_clean.py": (
+                "from _k8s_render import render_role_template\n"
+                'assert "false" in render_role_template("prowlarr", "x.yaml.j2", {})\n'
+            ),
+        }
+    )
+    assert list(found) == ["k8s/test_flaresolverr_disable_media.py"], found

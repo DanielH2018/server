@@ -15,6 +15,7 @@ from ansible.errors import AnsibleFilterError
 
 from k8s_autodeploy import SHARED_ROLES, is_leftover_dir, k8s_autodeploy_denylist
 from _helpers import REPO as _REPO
+from _setup_render import render_setup_texts
 
 
 _ANSIBLE = _REPO / "ansible"
@@ -329,11 +330,21 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
 
 
 def test_the_template_still_consumes_the_derived_variable() -> None:
-    """The filter is only a safety boundary if the rendered config still reads it."""
-    template = (
-        _ANSIBLE / "roles/setup/gitops_deploy/templates/config.env.j2"
-    ).read_text()
-    assert (
-        "K8S_AUTODEPLOY_DENYLIST={{ gitops_deploy_k8s_autodeploy_denylist | join(',') }}"
-        in template
+    """The filter is only a safety boundary if the rendered config still reads it.
+
+    The derived list goes in as an override: the setup render leaves this default raw, since its
+    filter plugin does not resolve there, and `| join(',')` over that raw string would render
+    its characters comma-joined without an error.
+    """
+    derived = k8s_autodeploy_denylist(str(_ANSIBLE))
+    assert derived, (
+        "the derived denylist is empty, so the check below would prove nothing"
     )
+    rendered = next(
+        text
+        for role, name, text in render_setup_texts(
+            {"gitops_deploy_k8s_autodeploy_denylist": derived}
+        )
+        if (role, name) == ("gitops_deploy", "config.env.j2")
+    )
+    assert f"K8S_AUTODEPLOY_DENYLIST={','.join(derived)}" in rendered.splitlines()
