@@ -58,14 +58,14 @@ grep -rho 'tags: \[.*\]' ansible/roles/setup/initial_setup/tasks/ | sort -u
 The record page says what the non-obvious ones cover. No task is reachable only through
 `crons`: each also has a subject tag.
 **Fact-dependency rule:** a task whose `register:` feeds other blocks carries ALL its
-consumers' tags (the home-dir resolver is `[tooling, git-hooks]`), or a tag-scoped run dies on
-an undefined variable. The GitOps deployer derives those tags and applies them unattended
-since #3120, so the rule is checked rather than stated; the record page names the check.
+consumers' tags, or a tag-scoped run dies on an undefined variable.
+`docs/host-baseline-record.md`'s *Tooling, pins and the root HOME trap* has the home-dir
+resolver example and the ENFORCED test.
 
 ## Rules the task files do not state
 `tasks/` is the inventory — one file per subject, and the tag list above says which file a tag
 runs. These three bite from outside the file you are editing; the rest, with every derivation,
-are in the record page — including the one about `~` being `/root` under this play's `become`.
+are in the record page.
 
 - **A sysctl this role sets that UFW's `/etc/ufw/sysctl.conf` also names must be set there
   too**, or the run ends with UFW's value live (#2977).
@@ -81,35 +81,33 @@ Twice daily (06:17 and 18:17, daniel-box only): `docs-refresh.sh.j2` regenerates
 pages and the infra map, weights any unweighted test module, rebuilds the site, and publishes
 the diff through a PR that auto-merges.
 - **Scope:** three derived paths and nothing else — `docs/reference/`,
-  `docs/assets/generated/` and `scripts/dev/pytest_shard_weights.json`. Each is reproducible by
-  a tested generator, which is what makes a review-free auto-merge acceptable; a write outside
-  the three parks every deploy on the box.
+  `docs/assets/generated/` and `scripts/dev/pytest_shard_weights.json`; a write outside them
+  parks every deploy on the box.
 - **Mode:** degrade, never abort. A failing generator sets `GENERATORS_OK=0`, publishes what
-  succeeded and reports DOWN. A red test suite is not a degradation case — the script runs the
-  suite before its commit and exits 1.
+  succeeded and reports DOWN. A red test suite still exits 1.
 - **Abort valves:** the shared `/var/lock/server-git-tree.lock`, the dirty-tree gate, the
   unlanded-branch guard, and the commit-failure stamp under `/var/lib/homelab/docs-refresh.d`.
 - **Required evidence:** `status=<up|down> <msg>` in the log and a push to "Docs Refresh".
-  `PUSH_STATUS` defaults to `down`, so a later path that forgets to set it reports a failure.
 - **Next-run review:** before adding a fourth staged path, check no prek hook matching it can
-  fail on generator output — one that can wedges this cron. `vale` can, on purpose (#3008).
+  fail on generator output. `docs/host-baseline-record.md`'s *The generated-docs refresh cron,
+  in detail* has why, the `PUSH_STATUS` default and the `vale` exception.
 
 ## Autonomous-role contract — Homelab eval sweep (`evals` tag)
 Weekly (Sunday 02:00, daniel-box only): grades every case under `evals/cases/`, rolls the result
 into `evals/history.json`, then publishes it.
-- **Scope:** run the existing cases and commit the trended result. Never edits a case, never
-  touches an agent or skill definition, never runs the `run-live.mjs` live-smoke path.
-- **Mode:** binary, no dial. Either the API key exists and the sweep runs hermetic, or it is
-  empty and the run is a no-op reporting UP with the reason logged.
+- **Scope:** run the existing cases and commit the trended result; never edits a case, an agent
+  or a skill definition, and never runs the `run-live.mjs` live-smoke path.
+- **Mode:** binary, no dial — hermetic when the API key exists, else a no-op reporting UP.
 - **Authoritative source:** the chezmoi eval engine's own grading, never a cached report.
-- **Abort valves:** the shared git-tree lock, which throws a result away rather than record it
-  against a tree it did not grade; the unlanded-branch guard; the empty-key gate above.
+- **Abort valves:** the shared git-tree lock; the unlanded-branch guard; the empty-key gate
+  above.
 - **Required evidence:** `status=<up|down> <msg>` in the log and, when armed, a push to "Homelab
-  Evals". A REGRESSED case is still committed — the data is real — and still reports DOWN.
+  Evals".
 - **Next-run review:** before widening scope, read the last few `evals-history/*` PRs this cron
-  opened for what regressed or flaked.
+  opened for what regressed or flaked. `docs/host-baseline-record.md`'s *The eval sweep, in
+  detail* has the REGRESSED-case commit rule and why there is no non-hermetic fallback.
 
 ## Notable
 **Two daily host checks live here rather than in monitor-bridge**, both `kuma-check-*` timers
 that rerun on failure: the setup-plane drift reader (`setup_drift`) and the Loki read-route
-witness (`loki_route_witness`). Each pushes a per-host token in `CROSS_HOST_PUSH_TOKENS`.
+witness (`loki_route_witness`).

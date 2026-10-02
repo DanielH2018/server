@@ -25,8 +25,8 @@ incident each step was added after, are in `docs/pi-host-tuning-record.md`.
 - **Granular tags** (one section without the whole role): `gpu-mem`, `zram`, `log2ram`,
   `watchdog`, `debloat`, `earlyoom`, `apt-timers`, `node-exporter-host`, `sd-health`,
   `recovery-health`, `gz-integrity`, `pi-dns`. **A task a scoped run needs carries every
-  consuming tag** — keep that invariant when you add one, or a tag-scoped run installs half a
-  check. The four live cases are in the record.
+  consuming tag**, or a scoped run installs half a check — the four live cases are in
+  `docs/pi-host-tuning-record.md`.
 - **The two health crons source `/usr/local/lib/kuma-push-lib.sh`**, which `initial_setup`
   installs under `tags: [always]`. Both guard the `source` with `|| exit 1`, so a host missing
   the lib drops its heartbeat loudly instead of reading green.
@@ -36,8 +36,8 @@ incident each step was added after, are in `docs/pi-host-tuning-record.md`.
 Fourteen steps, in this order: config-path detection, the `gpu_mem=16` split, zram, Log2Ram,
 the hardware watchdog, debloat, the log RAM budget, earlyoom, the apt timers, node_exporter as
 a host unit, the SD-card health heartbeat, the container-recovery heartbeat, the durable health
-log, and the resolver. `docs/pi-host-tuning-record.md` has each step's numbers, incident and
-DECIDED trade-off — read the step there before you change it. The rules it must keep:
+log, and the resolver. `docs/pi-host-tuning-record.md` has each step's numbers and incident —
+read it before you change a step. Keep these rules:
 
 - **Do not shrink zram's `PERCENT` to reclaim RAM.** The arithmetic runs the other way: zram is
   the cheapest RAM on the box, and what it cannot hold goes to the SD swapfile.
@@ -68,27 +68,27 @@ The other two crons only read and report. This one acts: `pi-recovery-health.sh`
 
 - **Scope / exclusions:** exactly the containers this host deploys — every `containers_list`
   entry in `inventory/host_vars/daniel-pi.yml`, plus the docker-proxy role's sub-proxies. One
-  `docker start` per watched container per cycle and nothing else: never `docker restart`,
-  never a recreate, never a `docker rm`, never a pull, and nothing on the other two hosts. **A
-  container an operator stopped on purpose is not in the set**, because the set is the deploy
-  list rather than `docker ps -a --filter status=exited`.
-- **Why it acts at all:** `restart: unless-stopped` covers a container whose PROCESS exits,
-  not one whose *create* fails at the OCI runtime, which is what this 512 MB board produces.
+  `docker start` per watched container per cycle and nothing else: never a restart, recreate,
+  `docker rm`, or pull, and nothing on the other two hosts.
+  `docs/pi-host-tuning-record.md` has why the watch set is the deploy list rather than
+  `docker ps -a --filter status=exited`.
+- **Why it acts at all:** `restart: unless-stopped` covers a process exit, not a failed
+  *create* at the OCI runtime — what this 512 MB board actually produces.
 - **Mode (explicit + reversible):** `optimize_pi_recovery_restart_enabled` arms the cron and
-  ships `true`; setting it `false` in `inventory/host_vars/daniel-pi.yml` and re-running
-  `--tags recovery-health` REMOVES the cron, leaving the script installed. Disarming also ends
-  the heartbeat, so the "Daniel Pi Recovery" monitor trips its 600s watchdog within ten
-  minutes — the intended signal, not a second fault.
+  ships `true`. Setting it `false` in `inventory/host_vars/daniel-pi.yml` and re-running
+  `--tags recovery-health` removes the cron and leaves the script installed.
+  `docs/pi-host-tuning-record.md` has the disarm walkthrough, including why disarming doubles as
+  the heartbeat's own failure signal.
 - **Authoritative sources:** `docker ps` against the real socket, not docker-proxy, so it
-  still reports docker-proxy's own death; and `docker inspect` read BEFORE the restart, which
+  reports docker-proxy's own death too. `docker inspect` is read BEFORE the restart, which
   erases the exit code, the daemon's `Error` string and `FinishedAt`.
-- **Required evidence, every cycle:** a Kuma push to "Daniel Pi Recovery" and a line in
-  `/var/log/pi-health/health.log` naming what died and whether the `docker start` took.
-- **It pushes `down` on a cycle it fixed**, on purpose: an `up` after a successful restart
-  would make a container crashing every 5 minutes read green forever. The script's
-  `# DECIDED:` marker carries the re-proposal that was declined.
-- **Next-run review:** a repeat `restarted:` for the same container is the thing to fix
-  upstream. Read the week's `status=down` lines before widening the watch set.
+- **Required evidence, every cycle:** a Kuma push to "Daniel Pi Recovery" and a
+  `/var/log/pi-health/health.log` line naming what died and whether the restart took.
+- **It pushes `down` on a cycle it fixed**, on purpose — an `up` after a successful restart
+  would hide a container crashing every 5 minutes. The script's `# DECIDED:` marker has the
+  declined re-proposal.
+- **Next-run review:** a repeat `restarted:` for the same container needs fixing upstream.
+  Read the week's `status=down` lines before widening the watch set.
 
 ENFORCED:
 `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py::test_a_dead_container_is_restarted`,
@@ -96,8 +96,8 @@ which renders the script and runs it against a stub `docker`.
 
 ## Notable
 - **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart Watchdog`,
-  `Restart earlyoom` and `Restart systemd-journald` are defined in `initial_setup.yml`, and
-  the role only `notify:`s them. A new `notify:` here needs a matching handler there.
-- **A zram config change reboots the Pi; the device is never restarted live** — a live restart
-  strands swap on the SD card and leaves the unit `failed`. GPU, watchdog and Log2Ram changes
-  `notify: Reboot Pi` as well, so expect a reboot when any of the four change.
+  `Restart earlyoom` and `Restart systemd-journald` are defined in `initial_setup.yml`; a new
+  `notify:` here needs a matching handler there.
+- **A zram config change reboots the Pi; the device is never restarted live.**
+  `docs/pi-host-tuning-record.md` has why. GPU, watchdog and Log2Ram changes `notify: Reboot
+  Pi` too, so expect a reboot when any of the four change.

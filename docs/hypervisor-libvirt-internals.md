@@ -106,6 +106,13 @@ Two addresses are allocated rather than pinned in the inventory — Longhorn's f
 and a pod IP discovered from `ip neigh show dev cni0` — which is why each carries the host-side
 control leg. Without it a probe against an address production had moved off would pass forever.
 
+## Why the drill guest always starts fenced
+
+A libvirt nwfilter applies to an interface only when that interface is created. It never
+re-applies to one already running, so a `<filterref>` added to a domain template would leave an
+existing guest unfenced. The drill's guest gets a fresh tap device every run, so this guest
+always starts fenced regardless.
+
 ## Two libvirt UUID collisions the templates pin around
 
 - **A redefined nwfilter re-applies to every interface already referencing it**, so editing a
@@ -153,6 +160,13 @@ with `StrictHostKeyChecking=yes` against that one public half.
 look like a k3s server node whose k3s is stopped and the script runs there unmodified. What
 persists after a run is `/var/log/etcd-restore-drill/<run-id>/` — drill stdout, `restore.log`
 and `server.log` — pruned at `hypervisor_etcd_drill_log_retention_days`.
+
+## Why monitor-bridge never reads this drill's local stamp
+
+Nothing in the cluster reads the full drill's local stamp directly. monitor-bridge reads
+daniel-box's list-only stamp instead, and by design never reads a `full` one. The full drill's
+evidence is the two Kuma tiles and `/var/log/etcd-restore-drill/<run-id>/` on daniel-server, not
+a value the cluster polls.
 
 ## Why libvirt's `default` network is stopped
 

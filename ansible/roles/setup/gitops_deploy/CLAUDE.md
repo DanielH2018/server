@@ -36,9 +36,9 @@ non-deployer still writes it: the record page says why.
 Every 10 minutes this role may fast-forward the primary checkout, run `deploy.yml` against the
 cluster, and roll the tree and service back on a failed health gate.
 
-- **Scope / exclusions:** a k8s role ONLY for an image-pin bump to a non-denylisted service, plus
-  every setup-plane change it can apply itself. **Never** a Pi Docker role, the bring-up
-  playbooks, a `tasks/`- or docs-only change, a red or unfinished CI verdict, or a held SHA.
+- **Scope / exclusions:** everything the Safety rules above allow, plus every setup-plane
+  change it can apply itself. **Never** a Pi Docker role, the bring-up playbooks, a `tasks/`- or
+  docs-only change, a red or unfinished CI verdict, or a held SHA.
 - **Mode (explicit + reversible):** `has_gitops` in `host_vars` arms it on one host and tears it
   down elsewhere, so hand-deploy is that flip plus `initial_setup.yml --tags gitops_deploy`.
 - **Authoritative sources:** `origin/master` as fetched this tick, GitHub's check-runs API, and
@@ -60,27 +60,24 @@ Each arm is a rule and the function that holds it. The record page has the incid
   (`deploy_handlers.py:_rollback_k8s`). **That rollback is local-only** — the bad pin is still on
   master, so revert it there.
 - **CI gate — the tip must be green before anything is merged or deployed** (`REQUIRE_CI`,
-  `deploy_logic.ci_verdict`). A non-green tip sends the gate walking `<local>..<origin>` newest
-  first for the first `pass`, bounded by `CI_ANCESTOR_WALK_MAX`; an **unauthenticated host does
-  not walk at all**. `deploy_git._CI_NO_VERDICT_CONCLUSIONS` are **no verdict, not failure**
-  (`docs/landing.md` owns that rule), `CI_CONTEXTS` must match `ci.yml`'s `name:` exactly, and
-  this is the ONLY gate — `master` has no branch protection.
+  `deploy_logic.ci_verdict`); this is the ONLY gate. `deploy_git._CI_NO_VERDICT_CONCLUSIONS` are
+  **no verdict, not failure** (`docs/landing.md` owns that rule), and `CI_CONTEXTS` must match
+  `ci.yml`'s `name:` exactly. `docs/gitops-pipeline.md`'s *The safety arms, in full* has the
+  ancestor-walk fallback and why there is no branch protection on `master`.
 - **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`): a setup-plane change
-  (`roles/setup/<name>/`, `requirements.yml`) applies as `initial_setup.yml`, narrowed per role
-  by `narrowed_setup_tags` to its block tags, else `--tags <name>`; a deploy-plane change
-  (`ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) as `deploy.yml` narrowed by
-  `deploy_narrow.plan`, denylisted roles included, else the FULL play; and a range carrying
-  both applies both, setup first. **A role directory is not the same thing as its tag**:
-  `setup_role_playbook` and `setup_role_tag` own that routing.
+  (`roles/setup/<name>/`, `requirements.yml`) applies as `initial_setup.yml`; a deploy-plane
+  change (`ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) applies as `deploy.yml`;
+  both together apply both, setup first. `setup_role_playbook` / `setup_role_tag` route a role
+  directory to its real tag. `docs/gitops-pipeline.md`'s *Broad changes* has the narrowing and
+  denylist each keeps.
 - **The ff-merge runs BEFORE the apply**, since applying first renders the pre-merge tree, and
   **every broad arm is FORWARD-ONLY**: a failure writes `hold_sha` and a `hold_plane` entry and
   leaves the tree merged, because a reset would claim the old commit over half-new state.
 - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**, while a setup role whose tag cannot be
   derived merges and is recorded in `manual_plane` for a human to apply and clear.
 - **k8s roles auto-deploy ONLY for an image-pin bump to a non-denylisted service; every other
-  k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` is diff-shape first: the
-  only path touched is the role's `defaults/main.yml`, and every changed line assigns an
-  `*_image:` var. One tick promotes at most 3 services, 1 claim-declaring.
+  k8s change defers-and-alerts.** `docs/gitops-pipeline.md`'s *The safety arms, in full* has the
+  diff-shape eligibility test and the per-tick cap.
 - **The denylist derives from each role's own `k8s_autodeploy` declaration**
   (`filter_plugins/k8s_autodeploy.py`, fail-closed), so `k8s_autodeploy: false` is how you stop a
   role; `deploy_phases.reconcile_denylist` re-renders `config.env`.
@@ -91,13 +88,11 @@ Each arm is a rule and the function that holds it. The record page has the incid
 
 ## Which apply clears a hold
 
-**`hold_sha` clears only once every plane `hold_plane` lists is applied** — one entry per failed
-apply, each dropped by an apply covering it (`clear_broad_hold` / `clear_service_hold`): an
-untagged run covers any tag set, a tagged run a held set it is a superset of, never an untagged
-hold. Every consumer gates on `hold_sha` alone, so an early clear turns the tile green over an
-unapplied plane (#878). A hand `ansible-playbook` run clears nothing, and the deploy UI's Clear
-button drops EVERY entry as the operator's override. **A narrowed setup apply holds
-`<role>:<block>`**, which the role's own tag also covers (#3138).
+**`hold_sha` clears only once every plane `hold_plane` lists is applied**, each entry dropped by
+an apply covering it (`clear_broad_hold` / `clear_service_hold`). `docs/gitops-pipeline.md`'s
+*Which apply clears a hold* has the coverage rule for each shape — including a narrowed setup
+apply's `<role>:<block>` form (#3138) — the two manual clears, and the incident that made one of
+them look sufficient when it was not.
 
 ## Traps
 

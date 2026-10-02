@@ -225,7 +225,12 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   from a human's.
 - **Before adding a fourth staged path**, or a prek hook matching one of the three, check the
   hook cannot fail on generator output — a hook that can wedges this cron on every run, and
-  `end-of-file-fixer` and Vale have both already tried.
+  `end-of-file-fixer` and Vale have both already tried. Vale is the one kept exception, on
+  purpose (#3008): it gates `docs/assets/generated/fragments/` so a generator's prose is linted
+  in CI rather than only by a hand `vale docs` run, and a Vale error there aborts the cron's
+  commit and reports DOWN until the generator is fixed.
+- **`PUSH_STATUS` defaults to `down`** (`docs-refresh.sh.j2`), so a code path that forgets to
+  set it reports a failure rather than a false UP.
 
 ## The eval sweep, in detail
 

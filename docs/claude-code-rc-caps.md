@@ -124,6 +124,16 @@ role landed, and this role's header comment cited them as justification for keep
 `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py` now walks every `*.service.j2`
 in the repo rather than naming units, so the next role cannot inherit it.
 
+## Why the weekly restart uses `try-restart`, not `RuntimeMaxSec=`
+
+`claude-rc-restart.timer` exists to pick up the binary Claude Code updates in the background,
+which a long-lived process does not reread on its own. `RuntimeMaxSec=` looked like the natural
+mechanism for that: restart the unit automatically once it has run long enough. systemd records a
+`RuntimeMaxSec=` expiry as a unit failure, though, so that mechanism would page the crash alert
+every week for a planned restart. `try-restart` avoids that failure, and it avoids the other risk
+a plain `restart` carries: starting a host that `claude_code_rc_enabled` deliberately keeps
+stopped.
+
 ## The background-shell pressure reaper, and the three kills behind turning it off
 
 Claude Code registers `process.on("memoryPressure", ...)` and kills every running backgrounded Bash

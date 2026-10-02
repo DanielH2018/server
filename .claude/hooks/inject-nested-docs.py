@@ -40,8 +40,9 @@ Headings alone bought almost nothing over no injection: sessions read the full d
 same budget on text a session can act on without a second read: a role doc opens with its
 generated `## At a glance` block and its operative rules. The head path retires only when the
 `OVER_CEILING` lists in `ansible/tests/k8s/test_k8s_roles_have_claude_md.py` and its setup
-sibling are empty: those name every role doc still over `INLINE_MAX_CHARS`, and each entry is
-a doc to trim.
+sibling are empty: those name every role doc still over `_doc_size.MAX_CHARS`, and each entry
+is a doc to trim. That ceiling is what `_fits_inline` leaves a doc — `INLINE_MAX_CHARS` less
+the preamble and the header — not `INLINE_MAX_CHARS` itself (#3245).
 
 Observability-shaped: never emits a decision, swallows every error and exits 0.
 """

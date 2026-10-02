@@ -361,6 +361,9 @@ OOMKilled
 [Uu]nmaps
 [Ff]ilesystem's
 
+# The hash the Pi's wg-easy admin password is stored as
+bcrypt
+
 # Python layout and tooling terms (docs/python-code-organization.md)
 conftest
 src

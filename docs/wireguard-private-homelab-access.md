@@ -228,3 +228,36 @@ Pi's LAN-only wg-easy is the only Docker copy left, and it isn't on this path.
   private path is habitual it can be removed (a WAF improvement) — coordinate with the
   homelab operator before doing so.
 - This adds a private path; it changes nothing about the public path's security.
+
+## Retired: the server's bcrypt admin auth (history)
+
+The server's wg-easy entry carried `password_hash: "{{ wg_easy_password_hash }}"`, which fed
+the compose `PASSWORD_HASH` env starting 2026-07-04. That closed an admin UI and API that was
+otherwise unauthenticated to every `monitoring`-net neighbour.
+
+The k3s migration retired that mechanism on 2026-08-14. The k8s wg-easy instance runs v15,
+which keeps credentials in its own SQLite DB, so the `wg-easy-env` Secret lost its only
+consumer. The operator removed `wg_easy_password_hash` from `ansible/vars/secrets.yml` and the
+rotation registry on 2026-08-24 (review M-7). Do not reintroduce that var name expecting it to
+exist.
+
+The bcrypt `$`-doubling note still applies to any `password_hash` set on the Pi's entry, which
+is the only live use of that field now.
+
+## The Pi's wg-easy healthcheck: why the block carries no `test:`
+
+The `wg-easy/wg-easy` image ships its own Docker `HEALTHCHECK`
+(`wg show | grep -q interface`). The compose `healthcheck:` block on the Pi sets
+`interval`/`timeout`/`retries` from `container_healthcheck_*` and omits `test:` on purpose, so
+dockerd fills `Test` from the image. Verified on daniel-pi's Docker 29.5.3 (2026-09-17, with a
+throwaway `docker create`): dockerd's `merge()` in `daemon/commit.go` takes the image's `Test`
+when the compose block supplies none.
+
+Two facts decided that (#1921). First, the image's Dockerfile places
+`--interval=1m --timeout=5s --retries=3` inside the `CMD` string, so `Config.Healthcheck`
+carried no timing and the container ran Docker's 30s/30s/3 defaults — a fourth probe fork rate
+that `container_healthcheck_interval` was tuned to remove. Second, the probe's inner
+`timeout 5s` bounds only `wg show` itself, not the runc exec that a deploy-window stall delays:
+an exec measured at 8.2s end-to-end passed on 2026-09-17, so Docker's own `timeout` is the
+limit that decides `unhealthy` under that stall. 60s is what the other Pi probes got from
+#1910, and this healthcheck inherits it.

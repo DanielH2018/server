@@ -24,7 +24,9 @@ answers. This file keeps the rules a session must not break.
 - **Granular tags:** `docker-repo` (APT repo + GPG + the cache refresh), `docker-engine`
   (install + hold + v1-wrapper removal), `docker-group`, `docker-daemon` (daemon.json +
   conditional restart), `docker-networks`, `docker-go-runtime` (both Go runtime drop-ins;
-  `-dockerd` / `-containerd` select one). `docker-engine-upgrade` is `never`-tagged AND gated on `docker_install_engine_upgrade`: it runs only when named and opened with `-e` (below). `never` alone is not enough — the role tag inherits onto the include and overrides it (#1998).
+  `-dockerd` / `-containerd` select one). `docker-engine-upgrade` is `never`-tagged AND gated on
+  `docker_install_engine_upgrade`: it runs only when named and opened with `-e`. `never` alone
+  is not enough — the role tag inherits onto the include and overrides it (#1998).
 
 ## The engine is held; `--tags docker-engine-upgrade` is how it moves
 `docker_engine_packages` (`group_vars/all.yml`) are `apt-mark hold`-equivalent on every
@@ -39,12 +41,12 @@ swapped under running containers.
 ```
 uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e docker_install_engine_upgrade=true -e target=daniel-pi
 ```
-It refuses a host with no `~/server` checkout, unholds, and asks the apt module in check mode
-whether `docker_install_package_specs` would change anything. Nothing pending: re-hold and
+It refuses a host with no `~/server` checkout, unholds, and asks apt in check mode whether
+`docker_install_package_specs` would change anything. Nothing pending: re-hold and
 report. Otherwise it stops every Compose project in `containers_list` (reverse order),
 upgrades, re-holds in `always:` so a failed apt run leaves the hold in place, and brings every
 project back with `recreate: always` — the recreate docker-proxy needs to pick up the new
-socket inode. The Pi's containers are down for the apt run, so run it from a LAN session.
+socket inode. The Pi's containers are down for the apt run; use a LAN session.
 
 **The four versions are pinned in `defaults/main.yml`, and Renovate carries the signal**
 (#2153), rendered into apt's `name=5:29.8.1-*~ubuntu.24.04~noble` form as
@@ -54,12 +56,12 @@ GitHub releases (#2341), and the spec globs the Debian revision rather than nami
 `scripts/tests/test_renovate_docker_engine_pins.py::test_managers_name_the_apt_packages_they_pin`.
 
 **Merging a pin PR moves nothing on the Pi.** `install.yml` installs only where there is no
-docker-ce; on an installed host it reports the gap and leaves it, so a Docker security fix
-waits for an operator to run the command above.
+docker-ce; an installed host just reports the gap, so a Docker security fix waits on an
+operator running the command above.
 
 **Teardown unholds first**, because apt with `-y` refuses to change a held package.
 ENFORCED by `ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py`: the
-hold set is the install set, the hold precedes the dist-upgrade, and the teardown unholds.
+hold set is the install set, and the hold precedes the dist-upgrade.
 
 ## Teardown (`tasks/teardown.yml`, `has_docker: false`)
 Reaps what an imperative Docker uninstall leaves behind: any `docker-compose-*.service` unit
@@ -94,8 +96,7 @@ restarts Docker — see the first bullet under *Notable*.
   earlier in the same play, and apt then reports the repo as unsigned. Guarded by
   `ansible/tests/setup/test_apt_keyring_permissions.py`.
 - **Each daemon runs `GOGC=off` under a `GOMEMLIMIT`** (`tasks/go-runtime.yml`, sized at
-  `docker_install_gomemlimit_<daemon>`). Apply a change by hand, one daemon per day, so the
-  day-after reading is attributable; a child inherits the environment, which is why
-  containerd's `config.toml` carries a shim override under the `docker-go-runtime-containerd`
-  tag. `ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py` refuses a limit with
-  under two minutes of slack.
+  `docker_install_gomemlimit_<daemon>`). Apply a change by hand, one daemon per day.
+  `docs/docker-engine-pins-and-runtime.md` has why a child's inherited environment forces the
+  `docker-go-runtime-containerd` tag's shim override. `ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py`
+  refuses a limit with under two minutes of slack.

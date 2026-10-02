@@ -51,36 +51,20 @@ both blocks and why a lookup failure leaves the other two arms quiet.
 ## The stuck-pending clock, and the two ways it goes inert
 
 A fourth arm reads the dashboard's `## Pending Status Checks` section and pages when an item
-outlives its `minimumReleaseAge` plus `PENDING_GRACE_DAYS` (issue #886). It measures dwell, so it needs state:
-`/var/lib/renovate-notify/pending_seen.json` holds two first-seen epochs per item, and
-`write_pending_seen` writes it every run whatever was posted. That state is the arm's single
-point of failure, failing silently in two shapes:
+outlives its `minimumReleaseAge` plus `PENDING_GRACE_DAYS` (issue #886). It measures dwell, so
+it needs state: `/var/lib/renovate-notify/pending_seen.json` holds two first-seen epochs per
+item, written every run. That state is the arm's single point of failure, failing silently two
+ways: **a renamed marker empties the parse**, and **a lost `pending_seen.json` restarts every
+clock at zero** and reads exactly like the intended bootstrap. `pending_state_lost` tells the
+two apart using `last_run`.
 
-- **A renamed marker empties the parse** (#1472). `pending_section_unreadable` and
-  `dashboard_headers_unrecognized` are the runtime non-vacuity checks for that.
-- **A lost `pending_seen.json` restarts every clock at zero**, which reads exactly like the
-  intended bootstrap: `stale_pending` treats an item with no entry as first seen now.
-  `pending_state_lost` tells the two apart using `last_run` (#1526).
+**Each item carries two clocks**, because a mutable tag's branch outlives any one digest, and
+**a grouped row takes the digest soak**, because it carries no update type of its own.
 
-**Each item carries two clocks** (#3076), because a mutable tag's branch outlives any one
-digest: `files/pending_logic.py:content_key` keys the dwell on the update, so a re-push resets
-it, and `files/pending_logic.py:churning_pending` pages off the branch clock for a tag re-pushed
-faster than its own soak.
-
-**Two packages soak less than the digest default.**
-`files/pending_logic.py:FAST_DIGEST_SOAK_DAYS` is this arm's copy of the 1-day nginx alpine
-exception `renovate.json` carries (#2886) —
-`tests/test_pending_soak.py::test_soak_constants_match_renovate_json` fails when the two
-disagree.
-
-**A grouped row carries no update type, so it takes the digest soak.**
-`ansible/roles/setup/renovate_notify/files/pending_logic.py:GROUPED_TITLE_MARKER` is the
-parenthetical `item_soak_days` matches; the cost, in the `DECIDED:` comment there, is a grouped
-VERSION bump paging four days early.
-
-Every measurement behind this section — both failure shapes, the dwell that over-reported 18.8
-days, the grouped row four days late (#2885), why a reset posts twice — is in
-`docs/renovate-notify-internals.md`.
+`docs/renovate-notify-internals.md` has both failure shapes in full — the runtime checks that
+catch a renamed marker, the two-clock mechanism, the digest-soak exceptions — and every
+measurement behind this section: the dwell that over-reported 18.8 days, the grouped row four
+days late, and why a reset posts twice.
 
 ## Notification is fingerprint-gated, not state-gated
 
