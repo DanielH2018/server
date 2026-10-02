@@ -47,6 +47,7 @@ import urllib.request
 import zlib
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
+from typing import Any
 from pathlib import Path as _Path
 
 # `lib` is a sibling package: a directly-invoked script gets only its own directory on
@@ -187,7 +188,9 @@ def discover_pins(roles: _Path = ROLES) -> tuple[list[Pin], list[str]]:
 Fetcher = Callable[[str], tuple[int, Iterator[bytes]]]
 
 
-def fetch(url: str) -> tuple[int, Iterator[bytes]]:
+def fetch(
+    url: str, open_url: Callable[..., Any] = urllib.request.urlopen
+) -> tuple[int, Iterator[bytes]]:
     """GET `url` following redirects; (status, decoded chunks). A 4xx/5xx is a status, not a raise.
 
     A gzip `Content-Encoding` is decoded before the bytes reach the hasher, because the role
@@ -198,7 +201,7 @@ def fetch(url: str) -> tuple[int, Iterator[bytes]]:
         url, headers={"User-Agent": "homelab-asset-pins", "Accept-Encoding": "gzip"}
     )
     try:
-        response = urllib.request.urlopen(request, timeout=FETCH_TIMEOUT)
+        response = open_url(request, timeout=FETCH_TIMEOUT)
     except urllib.error.HTTPError as exc:
         return exc.code, iter(())
     gzipped = (response.headers.get("Content-Encoding") or "").lower() == "gzip"

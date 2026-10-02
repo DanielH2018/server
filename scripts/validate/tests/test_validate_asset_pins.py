@@ -116,24 +116,22 @@ class _Response(io.BytesIO):
         self.headers = {"Content-Encoding": encoding} if encoding else {}
 
 
-def _fetch_served(monkeypatch, body: bytes, encoding: str | None) -> bytes:
-    monkeypatch.setattr(
-        asset_pins.urllib.request,
-        "urlopen",
-        lambda request, timeout: _Response(body, encoding),
+def _fetch_served(body: bytes, encoding: str | None) -> bytes:
+    status, chunks = asset_pins.fetch(
+        "https://example.invalid/x.vsix",
+        open_url=lambda request, timeout: _Response(body, encoding),
     )
-    status, chunks = asset_pins.fetch("https://example.invalid/x.vsix")
     assert status == 200
     return b"".join(chunks)
 
 
-def test_fetch_decodes_a_gzip_content_encoding(monkeypatch):
+def test_fetch_decodes_a_gzip_content_encoding():
     # The marketplace gzips every vspackage; the role pins the decoded file's hash.
-    assert _fetch_served(monkeypatch, gzip.compress(PAYLOAD), "gzip") == PAYLOAD
+    assert _fetch_served(gzip.compress(PAYLOAD), "gzip") == PAYLOAD
 
 
-def test_fetch_passes_an_unencoded_body_through(monkeypatch):
-    assert _fetch_served(monkeypatch, PAYLOAD, None) == PAYLOAD
+def test_fetch_passes_an_unencoded_body_through():
+    assert _fetch_served(PAYLOAD, None) == PAYLOAD
 
 
 def test_a_fetch_error_is_flagged():
