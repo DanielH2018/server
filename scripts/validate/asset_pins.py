@@ -44,6 +44,7 @@ import hashlib
 import sys
 import urllib.error
 import urllib.request
+import zlib
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path as _Path
@@ -187,17 +188,29 @@ Fetcher = Callable[[str], tuple[int, Iterator[bytes]]]
 
 
 def fetch(url: str) -> tuple[int, Iterator[bytes]]:
-    """GET `url` following redirects; (status, chunks). A 4xx/5xx is a status, not a raise."""
-    request = urllib.request.Request(url, headers={"User-Agent": "homelab-asset-pins"})
+    """GET `url` following redirects; (status, decoded chunks). A 4xx/5xx is a status, not a raise.
+
+    A gzip `Content-Encoding` is decoded before the bytes reach the hasher, because the role
+    downloads with `curl --compressed` and pins the hash of the decoded file. The VS Code
+    Marketplace gzips every `vspackage` response, whether or not the request asked for it.
+    """
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "homelab-asset-pins", "Accept-Encoding": "gzip"}
+    )
     try:
         response = urllib.request.urlopen(request, timeout=FETCH_TIMEOUT)
     except urllib.error.HTTPError as exc:
         return exc.code, iter(())
+    gzipped = (response.headers.get("Content-Encoding") or "").lower() == "gzip"
 
     def chunks() -> Iterator[bytes]:
+        # wbits=16+MAX_WBITS makes zlib expect the gzip header and trailer.
+        decoder = zlib.decompressobj(16 + zlib.MAX_WBITS) if gzipped else None
         with response:
             while block := response.read(CHUNK):
-                yield block
+                yield decoder.decompress(block) if decoder else block
+        if decoder:
+            yield decoder.flush()
 
     return response.status, chunks()
 

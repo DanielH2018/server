@@ -6,6 +6,7 @@ script does when run by hand; the census and the comparison are what this covers
 Run: uv run pytest scripts/validate/tests/test_validate_asset_pins.py
 """
 
+import gzip
 import hashlib
 import io
 
@@ -106,6 +107,33 @@ def test_a_checksum_mismatch_is_flagged():
 def test_a_non_200_status_is_flagged_before_hashing():
     reason = check_pin(_pin(), _fetcher(status=404))
     assert reason == "HTTP 404 (must be 200)"
+
+
+class _Response(io.BytesIO):
+    def __init__(self, body: bytes, encoding: str | None):
+        super().__init__(body)
+        self.status = 200
+        self.headers = {"Content-Encoding": encoding} if encoding else {}
+
+
+def _fetch_served(monkeypatch, body: bytes, encoding: str | None) -> bytes:
+    monkeypatch.setattr(
+        asset_pins.urllib.request,
+        "urlopen",
+        lambda request, timeout: _Response(body, encoding),
+    )
+    status, chunks = asset_pins.fetch("https://example.invalid/x.vsix")
+    assert status == 200
+    return b"".join(chunks)
+
+
+def test_fetch_decodes_a_gzip_content_encoding(monkeypatch):
+    # The marketplace gzips every vspackage; the role pins the decoded file's hash.
+    assert _fetch_served(monkeypatch, gzip.compress(PAYLOAD), "gzip") == PAYLOAD
+
+
+def test_fetch_passes_an_unencoded_body_through(monkeypatch):
+    assert _fetch_served(monkeypatch, PAYLOAD, None) == PAYLOAD
 
 
 def test_a_fetch_error_is_flagged():

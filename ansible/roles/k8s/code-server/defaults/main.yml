@@ -97,7 +97,7 @@ code_server_k8s_extensions:
   - name: Anthropic.claude-code
     version: 2.1.282
     url: https://marketplace.visualstudio.com/_apis/public/gallery/publishers/Anthropic/vsextensions/claude-code/2.1.282/vspackage?targetPlatform=linux-x64
-    sha256: 6845335a9ceec75ca5a7645e20658c167f6b0fbbde167959575a367314cf1b58
+    sha256: 0087212d1b132039979d2c36a06277d197586f621a4a09c3d714df19e2c0fdbc
 
 # Node.js, installed from the official linux-x64 tarball rather than NodeSource's `setup_22.x`
 # script piped to bash, which resolves whatever NodeSource serves on build day. The
