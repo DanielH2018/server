@@ -42,6 +42,7 @@ from validate.validate_lib.cron_checks import (
     cron_uv_interpreter_error,
 )
 from validate.validate_lib.cron_targets import cron_job_scripts
+from lib.k8s_context import resolve_vars
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
@@ -75,6 +76,68 @@ SHELL_STUB_OVERRIDES = {
     "pi_sd_health_push_token": "stub-pi-sd-health-token",
     "hostvars": {"daniel-server": {"server_ip": "10.0.0.1"}},
 }
+
+
+def base_context() -> dict:
+    """The inventory layer every shell render starts from: base stubs, all.yml, shell overrides.
+
+    Exposed so `ansible/tests/_shell_render.py` renders a script with the context this gate
+    lints it in — one render, two consumers, no second stub set to drift (#3178).
+    """
+    return {**BASE_CONTEXT, **load_yaml(ALL_VARS), **SHELL_STUB_OVERRIDES}
+
+
+def template_context(
+    path: Path, base: dict | None = None, overrides: dict | None = None
+) -> dict:
+    """`base` plus the resolved `defaults/main.yml` of the role `path` belongs to.
+
+    A render without a role's own defaults is not the script the host runs. `StubUndefined`
+    iterates empty, so `{% for peer in artifacts_peer_sources %}` dropped the whole body of
+    `sync-artifacts.sh.j2` — ~45 of its 100 lines, including every rsync call — and both
+    linters swept the remainder as if the loop were not there (#3178).
+
+    Role defaults go UNDER the inventory, which is Ansible's own precedence: a group_var or
+    host_var beats a role default, so layering them the other way would lint a value no deploy
+    produces. `resolve_vars` expands `{{ ... }}` inside a default's own VALUE the way Ansible
+    does, so a default that aliases a group_var arrives expanded rather than as literal braces.
+    """
+    base = base_context() if base is None else base
+    role_dir = path.parents[1]  # roles/<plane>/<role>/templates/<name>.sh.j2
+    defaults = _resolved_defaults(load_yaml(role_dir / "defaults" / "main.yml"), base)
+    return {**defaults, **base, **(overrides or {})}
+
+
+def _resolved_defaults(raw: dict, base: dict) -> dict:
+    """`raw` expanded against `base`, dropping any key whose own expansion raises.
+
+    One key in the tree needs the drop: `gitops_deploy_k8s_autodeploy_denylist` derives its
+    value through this repo's `k8s_autodeploy_denylist` filter plugin, which `resolve_vars`'
+    light-tier environment does not register (its `DECIDED:` marker says why it stays light).
+    No `*.sh.j2` reads that key, so taking gitops_deploy's two shell templates out of the
+    gate over it would cost real coverage.
+
+    A dropped key renders as `STUB` through `StubUndefined` rather than as literal braces,
+    which is what a guard asserting on a render needs: braces in the output are the defect
+    the render exists to remove, so they must never arrive from the context.
+
+    Each drop prints the key and the reason, because a key silently missing from the context
+    is how a `{% for %}` over it renders empty and a lint pass sweeps nothing.
+    """
+    try:
+        return resolve_vars(raw, base)
+    except Exception as exc:
+        print(f"  [note] resolving defaults one key at a time: {exc}", file=sys.stderr)
+    resolved: dict = {}
+    for key, value in raw.items():
+        try:
+            resolved |= resolve_vars({key: value}, {**base, **resolved})
+        except Exception as exc:
+            print(
+                f"  [note] default {key} left undefined, renders as STUB: {exc}",
+                file=sys.stderr,
+            )
+    return resolved
 
 
 def discover_templates() -> list[Path]:
@@ -168,8 +231,7 @@ def main(which: Callable[[str], str | None] = shutil.which) -> int:
         print(f"No *.sh.j2 templates found under {ROLES}", file=sys.stderr)
         return 1
 
-    all_vars = load_yaml(ALL_VARS)
-    ctx = {**BASE_CONTEXT, **all_vars, **SHELL_STUB_OVERRIDES}
+    base = base_context()
     cron_map = cron_job_scripts()
 
     failures = 0
@@ -180,7 +242,9 @@ def main(which: Callable[[str], str | None] = shutil.which) -> int:
         rendered_ok: dict[Path, Path] = {}
         for path in templates:
             rel = path.relative_to(REPO)
-            err = check_template(path, ctx, out_dir, None, cron_map)
+            err = check_template(
+                path, template_context(path, base), out_dir, None, cron_map
+            )
             if err:
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)

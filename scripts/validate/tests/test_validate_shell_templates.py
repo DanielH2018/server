@@ -272,3 +272,41 @@ def test_main_fails_closed_when_shellcheck_missing():
     # whole point of failing loud instead of degrading (see module docstring / SHELL_STUB_OVERRIDES
     # design comment).
     assert v.main(which=lambda _name: None) == 1
+
+
+def test_role_defaults_reach_the_render_context():
+    # The gate lints what the host runs only if a role's own defaults are in the context: the
+    # artifacts sync script is almost entirely a `{% for peer in artifacts_peer_sources %}`
+    # body, and StubUndefined iterates empty (#3178).
+    path = v.ROLES / "k8s" / "artifacts" / "templates" / "sync-artifacts.sh.j2"
+    ctx = v.template_context(path)
+    assert ctx["artifacts_peer_sources"], ctx.get("artifacts_peer_sources")
+    assert "{{" not in sl.render_template(path, ctx)
+
+
+def test_an_override_beats_the_role_default():
+    path = v.ROLES / "k8s" / "artifacts" / "templates" / "sync-artifacts.sh.j2"
+    ctx = v.template_context(path, overrides={"artifacts_peer_dir": "/tmp/peer"})
+    assert ctx["artifacts_peer_dir"] == "/tmp/peer"
+
+
+def test_an_inventory_value_beats_a_role_default_of_the_same_name():
+    # Ansible's own precedence: role defaults are the weakest layer, so a gate that let one
+    # win would lint a value no deploy produces.
+    path = v.ROLES / "k8s" / "artifacts" / "templates" / "sync-artifacts.sh.j2"
+    ctx = v.template_context(path, base={"artifacts_sync_alert_after_failures": 99})
+    assert ctx["artifacts_sync_alert_after_failures"] == 99
+
+
+def test_a_default_that_cannot_be_resolved_is_dropped_rather_than_passed_through():
+    # gitops_deploy's denylist default derives its value through a filter plugin resolve_vars'
+    # light-tier environment does not register. The key is dropped, so it renders as STUB;
+    # passing it through would put literal braces in a rendered script.
+    resolved = v._resolved_defaults(
+        {
+            "good": "{{ sys_user }}/artifacts",
+            "bad": "{{ playbook_dir | no_such_filter }}",
+        },
+        {"sys_user": "ubuntu", "playbook_dir": "/tmp"},
+    )
+    assert resolved == {"good": "ubuntu/artifacts"}
