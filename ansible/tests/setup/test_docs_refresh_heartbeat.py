@@ -14,30 +14,29 @@ failure report and the couplings it depends on:
 - **The status defaults to down.** Eleven exit paths, one of which is a bare crash.
 """
 
-import json
 import re
 from itertools import pairwise
 
 from _helpers import ANSIBLE
-from _shell_render import rendered_shell_text, shell_template_path
+from _kuma_monitors import entity, tile_is_gated_on
+from _shell_render import render_shell_script, rendered_shell_text
 
-MONITORS = (
-    ANSIBLE / "roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
-).read_text()
+SENTINEL = "docs-refresh-render-sentinel"
+TILE = "docs-refresh.json"
+TOKEN_VAR = "docs_refresh_push_token"
 SCRIPT = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
 CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 ROTATION = (ANSIBLE / "secret_rotation.yml").read_text()
 
 
 def _monitor_entity() -> dict:
-    """The rendered Docs Refresh entity, read out of the template by filename key.
+    """The rendered Docs Refresh entity, read out of the render by filename key.
 
-    Parsed from the raw template rather than a Jinja render: every field asserted here is a
-    literal.
+    Parsed from a render with the push token armed rather than from the template's source. The
+    source read had to substitute every `{{ ... }}` to `0` before the parse, so an interval
+    moved into a role default read as 0 and the comparisons below compared nothing (#3202).
     """
-    m = re.search(r"^  docs-refresh\.json: \|\n\s+(\{.*\})$", MONITORS, re.M)
-    assert m, "docs-refresh.json entity missing from static-monitors.yaml.j2"
-    return json.loads(re.sub(r"\{\{[^}]*\}\}", "0", m.group(1)))
+    return entity(TILE, TOKEN_VAR)
 
 
 def _cron_period_seconds() -> int:
@@ -92,21 +91,25 @@ def test_push_monitor_does_not_retry():
 
 
 def test_the_monitor_is_gated_on_its_token():
-    assert "{% if docs_refresh_push_token | default('') %}" in MONITORS, (
+    assert tile_is_gated_on(TILE, TOKEN_VAR), (
         "an ungated monitor sits red from creation until the secret exists — gate it like "
-        "manifest-prune-check.json does"
+        f"manifest-prune-check.json does. The tile renders with {TOKEN_VAR} empty."
     )
 
 
 def test_the_script_skips_its_push_until_the_token_exists():
-    # The first assert's subject is the Jinja reference itself — which var feeds
-    # DOCS_REFRESH_PUSH_TOKEN — and a render erases exactly that: an unset secret renders as
-    # the same empty string a wrong var name would too. Read the source for that one line; the
-    # gate line below has no Jinja in it, so the render serves it fine.
-    source = shell_template_path(
-        "setup", "initial_setup", "docs-refresh.sh.j2"
-    ).read_text()
-    assert "{{ docs_refresh_push_token | default('') }}" in source
+    # Which variable feeds DOCS_REFRESH_PUSH_TOKEN is asserted by rendering that variable to a
+    # SENTINEL and looking for it, not by matching the Jinja reference in the source. An unset
+    # secret renders as the same empty string a wrong variable name would, so a render at
+    # inventory values cannot tell them apart — a render at a value only this variable holds
+    # can (#3202).
+    armed = render_shell_script(
+        "setup", "initial_setup", "docs-refresh.sh.j2", overrides={TOKEN_VAR: SENTINEL}
+    )
+    assert SENTINEL in armed, (
+        f"DOCS_REFRESH_PUSH_TOKEN does not render from {TOKEN_VAR}; the script would push "
+        "with an empty token or with somebody else's"
+    )
     assert '[ -n "$DOCS_REFRESH_PUSH_TOKEN" ] || return 0' in SCRIPT, (
         "the script must skip the push when the token is empty, or a host without the secret "
         "logs a push failure every run"
