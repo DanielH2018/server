@@ -15,11 +15,11 @@ from pathlib import Path
 from lib import yaml_fast
 from _helpers import REPO
 from _k8s_render import render_role_template
+from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
 _REPO = REPO
 _LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
-_CHECK = _REPO / "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"
 _CRONS = _REPO / "ansible/roles/setup/initial_setup/tasks/crons.yml"
 _GROUP_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _CONSUMERS = _REPO / "scripts/secrets_mgmt/consumers.py"
@@ -60,17 +60,18 @@ def _run_scan(tmp_path, deployed=(), rendered=(), repo_files=None):
     return dict(line.split("=", 1) for line in out.strip().splitlines())
 
 
-def _source(path: Path) -> str:
-    """The script minus its comment lines.
+def _check_body() -> str:
+    """The RENDERED drift check minus its comment lines.
 
-    These scripts explain themselves at length, and the explanations name the very paths and
-    calls the assertions below forbid or order — so a text search over the whole file matches
-    the prose and reports a defect that is not there.
+    Rendered, because a threshold or a path that moves into a role default leaves an assertion
+    on the source matching `{{ ... }}` (#3209). Comments dropped, because these scripts explain
+    themselves at length and the explanations name the very paths and calls the assertions
+    below forbid or order — so a text search over the whole file matches the prose and reports
+    a defect that is not there.
     """
+    rendered = rendered_shell_text("setup", "initial_setup", "setup-drift-check.sh.j2")
     return "\n".join(
-        line
-        for line in path.read_text().splitlines()
-        if not line.lstrip().startswith("#")
+        line for line in rendered.splitlines() if not line.lstrip().startswith("#")
     )
 
 
@@ -246,7 +247,7 @@ def test_an_unreadable_checkout_is_a_fault_not_a_pass(tmp_path):
     )
     out = run(["bash", str(script)], check=True).stdout
     assert "rc=1" in out, "an unreadable checkout must fail, not print a plausible age"
-    text = _source(_CHECK)
+    text = _check_body()
     assert "cannot read the checkout" in text and "STATUS=down" in text, (
         "the check must turn an unreadable checkout into a DOWN, not a silent green"
     )
@@ -410,7 +411,7 @@ def test_the_reader_does_not_claim_the_orphan_arm():
     """manifest-prune-check's first arm needs /etc/rancher/k3s/manifests and the control plane's
     staged set; an agent node has neither. An arm that structurally cannot fire is worse than no
     arm, because it reads as coverage."""
-    text = _source(_CHECK)
+    text = _check_body()
     assert "/etc/rancher/k3s/manifests" not in text
     assert "kubectl" not in text
 
@@ -419,7 +420,7 @@ def test_the_reader_logs_before_it_pushes():
     """A successfully-pushed DOWN otherwise leaves no durable record, and `probe.py alerts`
     reconstructs host-cron episodes by matching status=down in syslog. NOTICE, not INFO:
     journald here caps MaxLevelStore=notice."""
-    text = _source(_CHECK)
+    text = _check_body()
     logger_at = text.index("logger -p daemon.notice -t setup-drift-check")
     assert logger_at < text.index("kuma_push "), (
         "the durable record must precede the push"
@@ -428,9 +429,15 @@ def test_the_reader_logs_before_it_pushes():
 
 
 def test_the_token_is_sourced_never_inlined():
-    """The script lands 0755, so an inlined token is readable by every local account."""
-    text = _source(_CHECK)
-    assert "{{ setup_drift_push_token }}" not in text, (
+    """The script lands 0755, so an inlined token is readable by every local account.
+
+    Asserted on the render, where every secret resolves to the literal `STUB`
+    (`scripts/lib/render_guard.py`). An inlined token therefore shows up as that word, and the
+    source form of the same claim — that the template does not spell the token's name — would
+    read as satisfied by any renaming of the variable.
+    """
+    text = _check_body()
+    assert "STUB" not in text, (
         "the token must come from the 0640 env file, not be rendered into a 0755 script"
     )
     assert "/etc/homelab/kuma-push.env" in text
