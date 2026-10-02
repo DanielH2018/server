@@ -10,9 +10,11 @@ in a directory `SCANNED` names reads a path under a `templates/` directory, exce
 are converted (#3107). `services/` joined with six permanent entries; `longhorn/` joined with
 none, its one reader — the daily RecurringJob's group — now read out of `_setup_render`, and
 `repo/` — the directory this module itself sits in, so a new guard written here is held to the
-rule — joined with one, which keys on a variable NAME. The
-directories still outside it (`setup/`, `k8s/`, `deploy/`, `staging/`) each hold ten or more
-readers, so adding one is a PR of its own rather than a wider glob here. Entries are keyed
+rule — joined with one, which keys on a variable NAME. `deploy/` joined with two (#3204):
+the raw-byte hash the render stamp compares, and the autodeploy derivation's source fallback
+for synthetic role trees no render reaches. The directories still outside it (`setup/`,
+`k8s/`, `staging/`) each hold ten or more readers, so adding one is a PR of its own rather
+than a wider glob here. Entries are keyed
 `<directory>/<module>.py`, because a basename alone would let a module in one directory
 inherit another's exemption.
 
@@ -42,7 +44,12 @@ from lib.repo_paths import ANSIBLE
 
 TESTS = ANSIBLE / "tests"
 # Every directory the rule covers. Adding one means converting its readers first.
-SCANNED = (TESTS / "services", TESTS / "longhorn", TESTS / "repo")
+SCANNED = (
+    TESTS / "services",
+    TESTS / "longhorn",
+    TESTS / "repo",
+    TESTS / "deploy",
+)
 
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
 # Every entry is permanent: a render erases the thing it reads.
@@ -75,6 +82,16 @@ TEMPLATE_SOURCE_READERS = {
         "the control that keeps its render honest asserts a template CARRIES `{{`, which is "
         "the one claim a render erases; the census itself renders (#3190)"
     ),
+    "deploy/_autodeploy.py": (
+        "the fallback for a role no render reaches: the synthetic `widget_role` trees under "
+        "`tmp_path` the derivation's unit tests build, and the caller-rendered roles "
+        "`_k8s_render` skips, all denylisted. Every role the render reaches reads its render, "
+        "and `test_the_render_reaches_every_auto_deployable_role` holds the denylisted half"
+    ),
+    "deploy/test_setup_render_manifest.py": (
+        "hashes the template's raw BYTES — a trailing newline and a truncated-read "
+        "comparison, neither of which survives a render"
+    ),
 }
 
 # Modules the census must reach. An empty or partial scan means the walk stopped matching
@@ -97,6 +114,10 @@ KNOWN_MEMBERS = frozenset(
         "repo/test_guard_tests_read_renders_not_templates.py",
         "repo/test_secret_rendering_host_scripts_have_no_log.py",
         "repo/test_testpaths_covers_every_test_file.py",
+        "deploy/_autodeploy.py",
+        "deploy/test_gitops_manual_trigger.py",
+        "deploy/test_k8s_autodeploy_rollout_gates.py",
+        "deploy/test_setup_render_manifest.py",
     }
 )
 
@@ -352,3 +373,24 @@ def test_a_new_longhorn_guard_reading_a_role_template_is_named_as_an_offender():
         "longhorn/test_new_guard.py",
         "longhorn/test_smtp_wiring.py",
     ], found
+
+
+def test_a_reverted_deploy_guard_is_named_as_an_offender():
+    """The directory added in #3204, against the spelling its manual-trigger guard used to take.
+
+    `test_gitops_manual_trigger.py` read the polkit rule's source until #3204; putting that
+    read back must fail the census rather than pass under a directory it does not scan.
+    """
+    found = offenders(
+        {
+            "deploy/test_gitops_manual_trigger.py": (
+                '_RULE = _ROLE / "templates/50-gitops-deploy.rules.j2"\n'
+                'assert "polkit.Result.YES" in _RULE.read_text()\n'
+            ),
+            "deploy/test_already_clean.py": (
+                "from _setup_render import rendered_setup_text\n"
+                'assert "YES" in rendered_setup_text("gitops_deploy", "50-gitops-deploy.rules.j2")\n'
+            ),
+        }
+    )
+    assert list(found) == ["deploy/test_gitops_manual_trigger.py"], found
