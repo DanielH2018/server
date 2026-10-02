@@ -1,10 +1,20 @@
-"""A guard under `ansible/tests/services/` asserts on a RENDER, never on a template's text.
+"""A guard under a SCANNED test directory asserts on a RENDER, never on a template's text.
 
 #2809 settled this as prose — "no `ansible/tests/services` test asserts a literal copied from
 a template" — which every session re-derives by scanning the directory, and which a new guard
 written against a template's bytes passes. This module is that sentence as a check: no module
-in `ansible/tests/services/` reads a path under a `templates/` directory, except an entry in
+in a directory `SCANNED` names reads a path under a `templates/` directory, except an entry in
 `TEMPLATE_SOURCE_READERS` carrying the reason the source text is the right thing to read.
+
+`SCANNED` grows one directory at a time, and a directory joins it only once its own readers
+are converted (#3107). `services/` joined with six permanent entries; `longhorn/` joined with
+none, its one reader — the daily RecurringJob's group — now read out of `_setup_render`, and
+`repo/` — the directory this module itself sits in, so a new guard written here is held to the
+rule — joined with one, which keys on a variable NAME. The
+directories still outside it (`setup/`, `k8s/`, `deploy/`, `staging/`) each hold ten or more
+readers, so adding one is a PR of its own rather than a wider glob here. Entries are keyed
+`<directory>/<module>.py`, because a basename alone would let a module in one directory
+inherit another's exemption.
 
 The exposure is the same one `scripts/tests/test_tests_share_render_and_path_helpers.py`'s
 rule 3 covers for `*.sh.j2` repo-wide: a value that moves into a role default leaves the
@@ -22,7 +32,7 @@ put no template path at its read site. #3190 converted that census to a render i
 wave, and the control read it kept IS visible here — so the module is a listed reader rather
 than a declared gap, and no blind-spot map is needed.
 
-Run: uv run pytest ansible/tests/repo/test_services_tests_read_renders_not_templates.py
+Run: uv run pytest ansible/tests/repo/test_guard_tests_read_renders_not_templates.py
 """
 
 import ast
@@ -30,31 +40,38 @@ from pathlib import Path
 
 from lib.repo_paths import ANSIBLE
 
-SERVICES = ANSIBLE / "tests" / "services"
+TESTS = ANSIBLE / "tests"
+# Every directory the rule covers. Adding one means converting its readers first.
+SCANNED = (TESTS / "services", TESTS / "longhorn", TESTS / "repo")
 
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
 # Every entry is permanent: a render erases the thing it reads.
 TEMPLATE_SOURCE_READERS = {
-    "_kuma_entities.py": (
+    "services/_kuma_entities.py": (
         "the `*_push_token` NAMES are a render INPUT — they decide which gated tiles render "
         "at all, so they are read before the render rather than out of it"
     ),
-    "test_n8n_build_is_pinned.py": (
+    "services/test_n8n_build_is_pinned.py": (
         "Renovate's `matchString` runs against `Dockerfile.j2` on disk, braces intact; a "
         "render is not what Renovate sees"
     ),
-    "test_nut_fsd_login_confined.py": (
+    "services/test_nut_fsd_login_confined.py": (
         "which ROLES name `nut_monitor_password` — every render of that secret is the same "
         "`STUB`, so the census has to key on the variable name"
     ),
-    "test_smtp_wiring.py": (
+    "services/test_smtp_wiring.py": (
         "a `# DECIDED:` comment in authelia's config-secret template, which no render carries"
     ),
-    "test_strangler_bridge.py": (
+    "services/test_strangler_bridge.py": (
         "the ABSENCE of a retired variable name (`bridge_hostname`) across every template, "
         "which a render cannot show — an undefined name renders as nothing"
     ),
-    "test_healthchecks_pings.py": (
+    "repo/test_secret_rendering_host_scripts_have_no_log.py": (
+        "which VARIABLE NAMES a `*.sh.j2` references, to decide whether its template task "
+        "needs `no_log`; a render replaces every secret with the same `STUB` and drops the "
+        "name that identified it"
+    ),
+    "services/test_healthchecks_pings.py": (
         "the control that keeps its render honest asserts a template CARRIES `{{`, which is "
         "the one claim a render erases; the census itself renders (#3190)"
     ),
@@ -64,15 +81,22 @@ TEMPLATE_SOURCE_READERS = {
 # rather than that the directory is clean.
 KNOWN_MEMBERS = frozenset(
     {
-        "_homepage_config.py",
-        "_jellyfin_plugins.py",
-        "_kuma_entities.py",
-        "test_authelia_access_tiers.py",
-        "test_healthchecks_pings.py",
-        "test_kuma_static_monitors.py",
-        "test_monitor_bridge_modules.py",
-        "test_smtp_wiring.py",
-        "test_strangler_bridge.py",
+        "services/_homepage_config.py",
+        "services/_jellyfin_plugins.py",
+        "services/_kuma_entities.py",
+        "services/test_authelia_access_tiers.py",
+        "services/test_healthchecks_pings.py",
+        "services/test_kuma_static_monitors.py",
+        "services/test_monitor_bridge_modules.py",
+        "services/test_smtp_wiring.py",
+        "services/test_strangler_bridge.py",
+        "longhorn/_restore_drill.py",
+        "longhorn/test_daily_group_membership_is_the_r2_list.py",
+        "longhorn/test_longhorn_restore_drill_byte_floor.py",
+        "longhorn/test_prune_backups.py",
+        "repo/test_guard_tests_read_renders_not_templates.py",
+        "repo/test_secret_rendering_host_scripts_have_no_log.py",
+        "repo/test_testpaths_covers_every_test_file.py",
     }
 )
 
@@ -186,20 +210,25 @@ def template_source_reads(source: str) -> list[str]:
     return sorted(set(found))
 
 
-def _modules() -> list[Path]:
-    return sorted(p for p in SERVICES.glob("*.py") if p.name != "__init__.py")
+def _modules() -> dict[str, Path]:
+    """Every scanned module, by its `<directory>/<module>.py` key."""
+    return {
+        f"{directory.name}/{p.name}": p
+        for directory in SCANNED
+        for p in sorted(directory.glob("*.py"))
+        if p.name != "__init__.py"
+    }
 
 
 def test_the_census_reaches_every_known_module():
-    found = {p.name for p in _modules()}
-    missing = KNOWN_MEMBERS - found
+    missing = KNOWN_MEMBERS - set(_modules())
     assert not missing, f"the scan no longer reaches: {sorted(missing)}"
 
 
 def test_every_listed_module_still_exists():
     """A stale entry lets a whole module back out of the rule."""
-    listed = set(TEMPLATE_SOURCE_READERS)
-    gone = sorted(name for name in listed if not (SERVICES / name).exists())
+    found = _modules()
+    gone = sorted(name for name in TEMPLATE_SOURCE_READERS if name not in found)
     assert gone == [], f"listed modules that no longer exist: {gone}"
 
 
@@ -219,7 +248,7 @@ def offenders(sources: dict[str, str]) -> dict[str, list[str]]:
 
 
 def test_no_services_test_reads_a_templates_source():
-    found = offenders({p.name: p.read_text() for p in _modules()})
+    found = offenders({key: p.read_text() for key, p in _modules().items()})
     assert found == {}, (
         "these tests assert on a template's SOURCE, so a value moved into a role default "
         "leaves the assertion matching `{{ ... }}`. Render it instead — `_k8s_render` for a "
@@ -231,10 +260,11 @@ def test_no_services_test_reads_a_templates_source():
 
 def test_every_exempt_module_is_still_flagged():
     """Non-vacuity: a renamed exemption must fail here rather than pass by matching nothing."""
+    found = _modules()
     unflagged = sorted(
         name
         for name in TEMPLATE_SOURCE_READERS
-        if not template_source_reads((SERVICES / name).read_text())
+        if not template_source_reads(found[name].read_text())
     )
     assert unflagged == [], (
         "these modules no longer read a template's source — drop them from "
@@ -293,10 +323,32 @@ def test_a_new_module_reading_a_role_template_is_named_as_an_offender():
     """The verify-by of #3196, run against a module that is not on disk."""
     found = offenders(
         {
-            "test_new_guard.py": 'T = K8S_ROLES / "n8n" / "templates" / "Dockerfile.j2"\n'
+            "services/test_new_guard.py": 'T = K8S_ROLES / "n8n" / "templates" / "Dockerfile.j2"\n'
             'assert "npm" in T.read_text()\n',
-            "test_already_clean.py": "from _k8s_render import rendered_texts\n"
+            "services/test_already_clean.py": "from _k8s_render import rendered_texts\n"
             'assert "npm" in rendered_texts("n8n")["Dockerfile.j2"]\n',
         }
     )
-    assert list(found) == ["test_new_guard.py"], found
+    assert list(found) == ["services/test_new_guard.py"], found
+
+
+def test_a_new_longhorn_guard_reading_a_role_template_is_named_as_an_offender():
+    """The directory added in #3107, and the reason the keys carry one.
+
+    `services/test_smtp_wiring.py` is exempt; a `longhorn/` module of the same basename is
+    not, so a basename-keyed exemption would have waved this read through.
+    """
+    source = (
+        'T = SETUP_ROLES / "k3s" / "templates" / "longhorn-recurringjob.yaml.j2"\n'
+        'assert "default" in T.read_text()\n'
+    )
+    found = offenders(
+        {
+            "longhorn/test_new_guard.py": source,
+            "longhorn/test_smtp_wiring.py": source,
+        }
+    )
+    assert sorted(found) == [
+        "longhorn/test_new_guard.py",
+        "longhorn/test_smtp_wiring.py",
+    ], found
