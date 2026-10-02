@@ -10,16 +10,14 @@ The floor here is the heap goal GOGC sets on the measured live heap, plus the ru
 non-heap classes. It is NOT `go_memstats_sys_bytes`: that metric never shrinks and counts
 pages already handed back to the kernel, so it reads above the limit and the cap alike while
 collection runs under one cycle a minute. Lowering the limit under the floor "to save RAM" is a one-line edit
-that renders, lints and deploys green, and reads as thrift. The ceiling is the compose
-memory cap: a limit at or above it is no ceiling at all, and the container is OOM-killed
+that renders, lints and deploys green, and reads as thrift. The ceiling is the
+container's memory limit: a limit at or above it is no ceiling at all, and the container is OOM-killed
 before the runtime collects.
 """
 
 import re
 
-from _helpers import REPO
-
-_COMPOSE = REPO / "ansible/roles/containers/alloy/templates/docker-compose.yml.j2"
+from _compose_render import render_service
 
 # The post-GC floor of `go_memstats_heap_alloc_bytes{job="alloy-pi"}`: 38.3-38.5 MB steady,
 # after a three-day climb from 29 MB. Re-measure with
@@ -73,15 +71,20 @@ def gomemlimit_problem(gomemlimit: str, mem_cap: str, gogc: int | str) -> str | 
 
 
 def _live_values() -> tuple[str, str, int | str]:
-    text = _COMPOSE.read_text()
-    limit = re.search(r"^\s*- GOMEMLIMIT=(\S+)", text, re.MULTILINE)
-    gogc = re.search(r"^\s*- GOGC=(\d+|off)", text, re.MULTILINE)
-    cap = re.search(r"resources\('[\d.]+', '(\w+)'", text)
-    assert limit and gogc and cap, (
-        "the alloy compose lost its GOMEMLIMIT, GOGC or resources() line"
+    """(GOMEMLIMIT, memory cap, GOGC) as the Pi's Alloy container receives them.
+
+    Read off the rendered service rather than the template: the cap reaches the container
+    through the shared `resources()` macro, so the template carries a macro call where the
+    container gets `deploy.resources.limits.memory` (#3175).
+    """
+    service = render_service("alloy")
+    env = dict(item.split("=", 1) for item in service["environment"] if "=" in item)
+    cap = service["deploy"]["resources"]["limits"]["memory"]
+    assert {"GOMEMLIMIT", "GOGC"} <= set(env) and cap, (
+        f"the alloy container lost its GOMEMLIMIT, GOGC or memory limit: {env}, cap {cap!r}"
     )
-    raw = gogc.group(1)
-    return limit.group(1), cap.group(1), raw if raw == "off" else int(raw)
+    raw = env["GOGC"]
+    return env["GOMEMLIMIT"], cap, raw if raw == "off" else int(raw)
 
 
 def test_the_live_limit_has_headroom_and_a_cap_above_it() -> None:

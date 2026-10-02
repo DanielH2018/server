@@ -46,9 +46,10 @@ CONFIG_TEMPLATES = [
     # manifest validator. The list may be empty between config-bearing eras.
     #
     # The Pi's Alloy config is River, not YAML, so this parser cannot check it.
-    # ansible/tests/services/test_alloy_pi_config_labels.py reads that template's text
-    # instead, and the cluster shipper's River config is parsed by the real `alloy validate`
-    # before it ships — the Pi's copy is the same shape.
+    # ansible/tests/services/test_alloy_pi_config_labels.py asserts on it as rendered TEXT
+    # instead, through `ansible/tests/_compose_render.py`'s `rendered_texts`, and the cluster
+    # shipper's River config is parsed by the real `alloy validate` before it ships — the Pi's
+    # copy is the same shape.
 ]
 
 

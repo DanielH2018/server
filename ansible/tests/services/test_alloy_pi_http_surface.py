@@ -16,17 +16,29 @@ send and everything else is open. That failure is silent on the repo side, which
 pinned here rather than left to review.
 
 Every check is a `..._is_clean` / `..._is_flagged` pair over the same reader, so a reader that
-stopped matching anything fails its own test.
+stopped matching anything fails its own test. Both readers run over the RENDERED file rather
+than the template, so a value moved into a variable is still read (#3175).
 
 Run: uv run pytest ansible/tests/services/test_alloy_pi_http_surface.py
 """
 
-from _helpers import ANSIBLE
+import re
 
-ROLE = ANSIBLE / "roles" / "containers" / "alloy"
-COMPOSE = ROLE / "templates" / "docker-compose.yml.j2"
-CONFIG = ROLE / "templates" / "config.alloy.j2"
-TASKS = ROLE / "tasks" / "main.yml"
+from _compose_render import rendered_text
+from _helpers import CONTAINER_ROLES
+
+TASKS = CONTAINER_ROLES / "alloy" / "tasks" / "main.yml"
+
+
+def compose() -> str:
+    """The compose file the Pi's deploy writes, not the template that produces it (#3175)."""
+    return rendered_text("alloy", "docker-compose.yml.j2")
+
+
+def config() -> str:
+    """The Alloy config the container reads, not the template that produces it."""
+    return rendered_text("alloy", "config.alloy.j2")
+
 
 # The flags whose defaults are ON in the pinned build (v1.19.2 internal/alloycli/cmd_run.go:
 # enablePprof true, disableSupportBundle false).
@@ -37,7 +49,7 @@ REQUIRED_FLAGS = (
 
 
 def compose_gaps(text: str) -> list[str]:
-    """Return the hardening properties `text` (a rendered-or-raw compose template) lacks."""
+    """Return the hardening properties `text` (a rendered compose file) lacks."""
     gaps = [flag for flag in REQUIRED_FLAGS if flag not in text]
     if ":12345:12345/tcp" not in text:
         # Not a hardening property but the constraint the hardening exists to live with:
@@ -51,7 +63,9 @@ def config_gaps(text: str) -> list[str]:
     gaps = []
     if "http {" not in text or "auth {" not in text or "basic {" not in text:
         gaps.append("auth block")
-    if "{{ alloy_pi_http_password }}" not in text:
+    # The password is a SOPS value, which renders as `STUB` — so this keys on the field
+    # carrying SOMETHING, never on the value (the `DECIDED:` rule in `lib/render_guard.py`).
+    if not re.search(r'password\s*=\s*"[^"]+"', text):
         gaps.append("password from SOPS")
     if '["/metrics"]' not in text:
         gaps.append("metrics exemption")
@@ -62,30 +76,32 @@ def config_gaps(text: str) -> list[str]:
     return gaps
 
 
-def test_the_real_compose_template_is_clean():
-    assert compose_gaps(COMPOSE.read_text()) == []
+def test_the_real_compose_file_is_clean():
+    assert compose_gaps(compose()) == []
 
 
-def test_a_compose_template_missing_a_flag_is_flagged():
-    stripped = COMPOSE.read_text().replace(REQUIRED_FLAGS[0], "")
+def test_a_compose_file_missing_a_flag_is_flagged():
+    stripped = compose().replace(REQUIRED_FLAGS[0], "")
     assert compose_gaps(stripped) == [REQUIRED_FLAGS[0]]
 
 
-def test_a_compose_template_that_stopped_publishing_is_flagged():
+def test_a_compose_file_that_stopped_publishing_is_flagged():
     # Binding to loopback is the obvious "fix" and it silently blinds the
-    # `alloy-pi` scrape job and monitor-bridge's detached arm.
-    unpublished = COMPOSE.read_text().replace(
-        ":12345:12345/tcp", "127.0.0.1:12345:12345"
+    # `alloy-pi` scrape job and monitor-bridge's detached arm. The whole published token goes,
+    # host IP included: the rendered file names the Pi's LAN address, so replacing the port
+    # halves alone would leave a mapping no operator would ever write.
+    unpublished = re.sub(
+        r'"[\d.]+:12345:12345/tcp"', '"127.0.0.1:12345:12345"', compose()
     )
     assert compose_gaps(unpublished) == ["published port"]
 
 
-def test_the_real_config_template_is_clean():
-    assert config_gaps(CONFIG.read_text()) == []
+def test_the_real_config_is_clean():
+    assert config_gaps(config()) == []
 
 
 def test_a_config_without_the_auth_block_is_flagged():
-    text = CONFIG.read_text()
+    text = config()
     start = text.index("// The HTTP server on 12345")
     end = text.index("loki.write", start)
     assert config_gaps(text[:start] + text[end:]) == [
@@ -97,10 +113,16 @@ def test_a_config_without_the_auth_block_is_flagged():
 
 
 def test_a_config_whose_filter_is_not_inverted_is_flagged():
-    flipped = CONFIG.read_text().replace(
+    flipped = config().replace(
         "authenticate_matching_paths = false", "authenticate_matching_paths = true"
     )
     assert config_gaps(flipped) == ["inverted filter"]
+
+
+def test_a_config_whose_password_is_blank_is_flagged():
+    """An emptied `password = ""` still parses and leaves the control surface open."""
+    blanked = re.sub(r'password\s*=\s*"[^"]+"', 'password = ""', config())
+    assert config_gaps(blanked) == ["password from SOPS"]
 
 
 def test_the_config_file_is_not_world_readable():

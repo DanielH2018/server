@@ -31,22 +31,36 @@ from validate.k8s_manifests import (
 )
 
 
-def _render_all():
-    """(role, template name, parsed doc) for every manifest the validator would render.
+def _inventory_base() -> dict:
+    """The context every render here starts from, resolved once.
 
-    Raises on a render failure rather than skipping it — a template that stopped rendering
-    would otherwise quietly drop out of every guard built on this.
+    daniel-box's host_vars layer over group_vars, as in the validator's main(): a template
+    that reads `containers_list` itself (authelia's access_control rules) would otherwise
+    iterate a StubUndefined as empty and hand every guard a Secret with the rules missing.
     """
-    # daniel-box's host_vars layer over group_vars, as in the validator's main(): a template
-    # that reads `containers_list` itself (authelia's access_control rules) would otherwise
-    # iterate a StubUndefined as empty and hand every guard a Secret with the rules missing.
     base = {
         **BASE_CONTEXT,
         **load_yaml(ALL_VARS),
         **load_yaml(HOST_VARS),
         "playbook_dir": str(ANSIBLE),
     }
-    base = resolve_vars(base, base)
+    return resolve_vars(base, base)
+
+
+def _role_env(role_dir, ctx: dict):
+    env = make_env([role_dir / "templates", SHARED_TPL])
+    env.globals["lookup"] = make_lookup(ctx)
+    register_ansible_filters(env)
+    return env
+
+
+def _render_all():
+    """(role, template name, parsed doc) for every manifest the validator would render.
+
+    Raises on a render failure rather than skipping it — a template that stopped rendering
+    would otherwise quietly drop out of every guard built on this.
+    """
+    base = _inventory_base()
     entries = k8s_entries()
 
     for role_dir in role_dirs():
@@ -54,9 +68,7 @@ def _render_all():
         if role in SKIP_ROLES or role not in entries:
             continue
         ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
-        env = make_env([role_dir / "templates", SHARED_TPL])
-        env.globals["lookup"] = make_lookup(ctx)
-        register_ansible_filters(env)
+        env = _role_env(role_dir, ctx)
 
         # The shared defaults come with the role's own templates: `k8s/manifests` renders a
         # manifest from `ansible/templates/` for a basename the role names and ships no
@@ -164,3 +176,76 @@ def render_role_template(
         f"{role}/{template} failed to render for {host} with {overrides}: {err}"
     )
     return rendered
+
+
+# `_render_all` skips `Dockerfile*` because its output feeds a YAML parse. A build pin is still
+# a rendered value — code-server's Dockerfile names its node URL and every extension URL
+# through a role default — so the build files get their own accessor and their own cache (#3175).
+BUILD_TEMPLATE_GLOB = "Dockerfile*.j2"
+
+# The roles whose build the accessor must reach, so a renamed or moved template fails as a
+# missing member rather than as a guard over an empty set. k8s/image-builder renders each of
+# these through `lookup('template', image_builder_dockerfile)` from the CALLER's role context,
+# which is the context `_render_build_files` lays out.
+BUILD_ROLES = frozenset(
+    {
+        "code-server",
+        "homelab-mcp",
+        "ical-proxy",
+        "karakeep",
+        "n8n",
+        "nut",
+        "pi-peer-backup",
+        "terraria",
+        "valheim",
+    }
+)
+
+_BUILD_TEXTS: tuple[tuple[str, str, str], ...] | None = None
+
+
+def _render_build_files():
+    base = _inventory_base()
+    entries = k8s_entries()
+    for role_dir in role_dirs():
+        role = role_dir.name
+        if role in SKIP_ROLES or role not in entries:
+            continue
+        ctx = {**base, **role_defaults(role, base), "container_item": entries[role]}
+        env = _role_env(role_dir, ctx)
+        for tpl in sorted(role_dir.glob(f"templates/{BUILD_TEMPLATE_GLOB}")):
+            rendered, err = render_or_error(env, tpl.name, ctx)
+            if rendered is None:
+                raise AssertionError(f"{role}/{tpl.name} failed to render: {err}")
+            yield role, tpl.name, rendered
+
+
+def rendered_build_texts() -> tuple[tuple[str, str, str], ...]:
+    """(role, template name, rendered TEXT) for every k8s role's `Dockerfile*.j2`.
+
+    What the BUILD reads, not what produces it: a pin a role default supplies arrives expanded
+    here, where a source scan sees `{{ ... }}` and matches nothing. Raises on a render failure
+    for the reason `_render_all` does — a template that stopped rendering would otherwise drop
+    out of every guard built on this.
+
+    Cached for the process, like `rendered_docs`.
+    """
+    global _BUILD_TEXTS
+    if _BUILD_TEXTS is None:
+        _BUILD_TEXTS = tuple(_render_build_files())
+    return _BUILD_TEXTS
+
+
+def rendered_build_text(role: str, template: str = "Dockerfile.j2") -> str:
+    """One entry of `rendered_build_texts`, by role and template name.
+
+    Fails naming the template when the set does not hold it, so a guard over a renamed
+    Dockerfile reads as a failure rather than as a pass over nothing.
+    """
+    for name, tpl, text in rendered_build_texts():
+        if (name, tpl) == (role, template):
+            return text
+    raise AssertionError(
+        f"{role}/{template} is not among the rendered build files: "
+        f"{sorted((n, t) for n, t, _ in rendered_build_texts())}"
+    )

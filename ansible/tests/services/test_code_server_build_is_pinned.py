@@ -6,7 +6,8 @@ from the network at build time: the base tag without a digest, NodeSource's
 and the CURRENT version of each VS Code extension from Open VSX and the marketplace — which
 for a platform-specific extension is whichever build the API lists first (alpine-arm64 for
 ruff and ty, win32-x64 for Claude Code). Each guard here names one of those inputs, so the
-failure says which one floated rather than that a count moved.
+failure says which one floated rather than that a count moved. Every guard reads the RENDERED
+Dockerfile, through `_k8s_render.rendered_build_text` (#3175).
 
 Run: uv run pytest ansible/tests/services/test_code_server_build_is_pinned.py
 """
@@ -14,14 +15,21 @@ Run: uv run pytest ansible/tests/services/test_code_server_build_is_pinned.py
 import re
 
 import pytest
-from jinja2 import Undefined
 
 from _helpers import K8S_ROLES, load_defaults
-from lib.ansible_jinja_env import make_ansible_env
-from lib.render_guard import BUILT_IMAGE_TAG_STUBS
+from _k8s_render import rendered_build_text
 
 ROLE = K8S_ROLES / "code-server"
-DOCKERFILE = ROLE / "templates" / "Dockerfile.j2"
+
+
+def _rendered_dockerfile() -> str:
+    """The Dockerfile as image-builder's `template` lookup renders it.
+
+    Every pin below is read off this rather than off the template: the node URL and each
+    extension URL come from a role default, so a source scan sees `{{ ... }}`.
+    """
+    return rendered_build_text("code-server")
+
 
 # The extensions the pin table must carry, so a renamed or emptied list fails as a missing
 # member rather than passing over nothing. The second set names the ones published per
@@ -88,35 +96,8 @@ def floating_pip_packages(dockerfile: str) -> list[str]:
     return floating
 
 
-def _rendered_dockerfile() -> str:
-    """The Dockerfile as image-builder's `template` lookup renders it.
-
-    `make_ansible_env` carries Ansible's `trim_blocks=True`, which a bare `Environment()`
-    does not; the block loop's line endings are the one place the two differ. A default that references another
-    (`code_server_k8s_node_url` names the version key) is resolved first, as Ansible's lazy
-    templating does — a one-pass render would leave the inner `{{ }}` in the output.
-    """
-    env = make_ansible_env(undefined_cls=Undefined)
-    # `code_server_k8s_image` reads `k8s_built_image_tags`, a play fact k8s/image-builder
-    # publishes at deploy time. The Dockerfile never touches it, but the loop below resolves
-    # EVERY default, so it has to be defined. `BUILT_IMAGE_TAG_STUBS` is the same map the
-    # manifest guards render against.
-    defaults = {
-        "k8s_built_image_tags": BUILT_IMAGE_TAG_STUBS,
-        **load_defaults(ROLE),
-    }
-    resolved = {
-        key: env.from_string(value).render(**defaults)
-        if isinstance(value, str)
-        else value
-        for key, value in defaults.items()
-    }
-    context = dict(resolved, puid=1000, pgid=1000)
-    return env.from_string(DOCKERFILE.read_text()).render(**context)
-
-
 def test_the_base_image_carries_a_digest() -> None:
-    m = re.search(r"^FROM\s+(\S+)", DOCKERFILE.read_text(), re.MULTILINE)
+    m = re.search(r"^FROM\s+(\S+)", _rendered_dockerfile(), re.MULTILINE)
     assert m, "no FROM line"
     assert re.search(r":\d+\.\d+\.\d+-ls\d+@sha256:[0-9a-f]{64}$", m.group(1)), (
         f"FROM {m.group(1)} must pin the -lsNN release tag AND its digest: linuxserver "
@@ -133,11 +114,11 @@ def test_every_extension_is_pinned_by_version_and_sha256() -> None:
 
 
 def test_every_pip_package_is_pinned_exactly() -> None:
-    assert not floating_pip_packages(DOCKERFILE.read_text())
+    assert not floating_pip_packages(_rendered_dockerfile())
 
 
 def test_the_cli_is_pinned_to_the_extension_release() -> None:
-    m = re.search(r"@anthropic-ai/claude-code@(\S+)", DOCKERFILE.read_text())
+    m = re.search(r"@anthropic-ai/claude-code@(\S+)", _rendered_dockerfile())
     assert m, "npm install of @anthropic-ai/claude-code carries no version"
     cli = m.group(1)
     extension = next(
