@@ -126,6 +126,13 @@
         name: watchdog
         state: restarted
 
+    # Notified by initial_setup's "Stop the hardware watchdog during provisioning (Pi)". After
+    # Restart Watchdog, because handlers fire in definition order and a restart already starts it.
+    - name: Start Watchdog after provisioning
+      ansible.builtin.service:
+        name: watchdog
+        state: started
+
     - name: Restart Docker
       ansible.builtin.service:
         name: docker
