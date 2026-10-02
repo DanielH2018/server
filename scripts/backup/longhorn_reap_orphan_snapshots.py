@@ -25,7 +25,7 @@ HOW A DELETE IS BOUNDED. Reads and deletes both go through host_lib.kubectl_runn
 differs only in the timeout bound to its runner. `--timeout=%s % DELETE_TIMEOUT` (120s by
 default) is the SERVER-side wait kubectl itself honours, so the CLIENT-side subprocess cap has
 to outlive it by DELETE_TIMEOUT_MARGIN_S -- the runner's default 30s cap would kill the process
-long before the templated knob could ever return, making the knob unreachable. Neither bound
+long before the server-side bound could ever return, making that bound unreachable. Neither bound
 cancels anything: kubectl has already issued the DELETE, and exceeding --timeout only gives up
 WAITING for the finalizer while the server carries on.
 
@@ -37,20 +37,38 @@ read as a success: every snapshot it deleted stays marked-removed-but-not-coales
 space comes back until someone purges from the Longhorn UI or re-runs.
 
 See longhorn_reap_logic.py for the floors (newest-per-volume, detached, the truncated-job-name
-prefix match, the age floor) and longhorn-reap-orphan-snapshots.sh.j2 for the wrapper.
+prefix match, the age floor).
 
-Run directly: uv run --no-project --python <pin> longhorn_reap_orphan_snapshots.py [--apply]
+Run from the repo root on a k3s host. The dry run reads through the read-only kubeconfig:
+    LONGHORN_REAP_READONLY_KUBECONFIG=~/.kube/config \
+        uv run python scripts/backup/longhorn_reap_orphan_snapshots.py
+Deleting needs the root-only admin kubeconfig, so run the same interpreter under sudo:
+    sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_snapshots.py --apply
 """
-
-from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path as _Path
 import time
 import urllib.request
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# host_lib.py is the setup roles' shared host module and stays in ansible/roles/setup/common/files/.
+# A directly-invoked script gets only its own directory on sys.path, so both inserts are needed.
+sys.path.insert(
+    0,
+    str(
+        _Path(__file__).resolve().parents[2]
+        / "ansible"
+        / "roles"
+        / "setup"
+        / "common"
+        / "files"
+    ),
+)
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 import host_lib
+from lib.cli_help import answer_help
 import longhorn_reap_logic as logic
 
 NAMESPACE = "longhorn-system"
@@ -59,10 +77,13 @@ KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
 # below: a bad value here must not raise before main() can print a named ABORT.
 _TIMEOUT_RAW = os.environ.get("LONGHORN_REAP_KUBECTL_TIMEOUT_S", "30")
 DELETE_TIMEOUT = os.environ.get("LONGHORN_REAP_DELETE_TIMEOUT", "120s")
-# k3s_longhorn_snapshot_reap_min_age_days is an int in defaults/main.yml; bash's arithmetic
-# context only ever held one too, and printed "younger than 3d", not "3.0d". Left as a raw
-# string here rather than `int(...)`'d at import time: a non-integral value (a host_vars
-# override, a typo'd `3.5`) would raise ValueError before main() is reached, printing a
+# How old a stranded snapshot must be before it is offered. A tier move leaves a window where
+# the new job has not run yet, so a two-day-old snapshot may still be a volume's most useful
+# local restore point even though the job that made it no longer owns the volume. Three days
+# clears that window; the strays that motivated the script were four to seven days old.
+# An integer: bash's arithmetic context only ever held one, and printed "younger than 3d", not
+# "3.0d". Left as a raw string here rather than `int(...)`'d at import time: a non-integral
+# value (a typo'd `3.5`) would raise ValueError before main() is reached, printing a
 # traceback instead of naming the bad knob. Parsed lazily in main() via logic.parse_int_env.
 _MIN_AGE_DAYS_RAW = os.environ.get("LONGHORN_REAP_MIN_AGE_DAYS", "3")
 # Margin the CLIENT-side subprocess timeout carries over kubectl's own --timeout, so the
@@ -75,18 +96,17 @@ DELETE_TIMEOUT_MARGIN_S = 30
 ADMIN_KUBECONFIG = os.environ.get(
     "LONGHORN_REAP_ADMIN_KUBECONFIG", "/etc/rancher/k3s/k3s.yaml"
 )
-# No fallback default: the read-only kubeconfig path is templated per sys_user and is not
-# derivable here. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
+# No fallback default. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
 # the caller's shell happens to have -- which, run as root, is the admin one. See main().
 READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
-SUDO_HINT = "sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply"
+SUDO_HINT = logic.sudo_hint(__file__)
 
 
 def _delete_timeout_seconds(text: str) -> float:
     """Parse a Kubernetes duration string ("120s", "2m") into seconds.
 
-    Matches kubectl's own --timeout flag format; the repo's default (k3s_longhorn_snapshot_
-    reap_delete_timeout = "120s") only ever uses the `s` suffix, but `m`/`h` are cheap to cover.
+    Matches kubectl's own --timeout flag format; the default ("120s") only ever uses the `s`
+    suffix, but `m`/`h` are cheap to cover.
     """
     text = text.strip()
     if text.endswith("s"):
@@ -191,11 +211,12 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
 def main(argv: list[str], now: float | None = None) -> int:
     """Classify, print, and under --apply delete.
 
-    `now` is the epoch the age floor is measured from; the cron leaves it None and reads the
+    `now` is the epoch the age floor is measured from; a real run leaves it None and reads the
     clock. A test hands one in so a fixture dated "one day ago" stays one day old however long
-    the suite has run (#2220) — an argument, not an env var or a flag, so nothing the cron's
+    the suite has run (#2220) — an argument, not an env var or a flag, so nothing the caller's
     environment carries can move it.
     """
+    answer_help(__doc__, argv)
     apply = "--apply" in argv
     unknown = [a for a in argv if a != "--apply"]
     if unknown:

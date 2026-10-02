@@ -14,7 +14,7 @@ RecurringJob label, so a single hand-triggered probe backup counts as proof the 
 tier is producing backups, and FLOOR 1 (which fires only at a count of zero) stands down. On
 wg-easy-config that would have deleted 3 of its 5 backups while its tier had produced none.
 
-The classification logic lives in longhorn_reap_logic.py (ansible/roles/setup/k3s/files/),
+The classification logic lives in scripts/backup/longhorn_reap_logic.py,
 read with `kubectl -o json` rather than jsonpath, which closes the defect class this file
 guards. The tests below exercise that module directly rather than regex-matching shell source:
 a passing regex proves the RIGHT WORDS are present, never that the behaviour they describe
@@ -24,15 +24,10 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_guard.py
 """
 
 import re
-import sys
 
-from _helpers import ANSIBLE
-from _shell_render import rendered_shell_text, rendered_shell_texts
+from _shell_render import rendered_shell_texts
 
-sys.path.insert(0, str(ANSIBLE / "roles" / "setup" / "k3s" / "files"))
 import longhorn_reap_logic as logic
-
-REAPER = ("setup", "k3s", "longhorn-reap-orphan-backups.sh.j2")
 
 # `{range .metadata.labels}` and friends. Ranging .items[*] is fine and ubiquitous — that IS a
 # list. This matches ranging into a map-valued field, which is the defect.
@@ -41,9 +36,7 @@ MAP_RANGE = re.compile(r"\{range\s+\.(metadata|status)\.(labels|annotations)\}")
 
 # The templates the jsonpath sweep below must reach. Named rather than counted: the (plane, role)
 # filter reads empty the day a script moves, and an `all(...)` over nothing passes.
-GUARDED_TEMPLATES = frozenset(
-    {"longhorn-reap-orphan-backups.sh.j2", "longhorn-backup-health.sh.j2"}
-)
+GUARDED_TEMPLATES = frozenset({"longhorn-backup-health.sh.j2"})
 
 
 def _k3s_shell_scripts() -> dict[str, str]:
@@ -105,22 +98,6 @@ def test_no_shell_template_ranges_a_label_map_in_jsonpath():
     )
 
 
-def test_reaper_shim_no_longer_touches_kubectl_at_all():
-    """The thin shell shim carries no kubectl logic to get wrong.
-
-    The whole reason FLOOR 1 could ship broken and unnoticed is that the ownership lookup lived
-    in bash string processing with no test. The port's fix is structural: the shim forwards argv
-    and two env vars, and every kubectl read/decision lives in longhorn_reap_logic.py +
-    longhorn_reap_orphan_backups.py, both plain files with the tests below.
-    """
-    body = rendered_shell_text(*REAPER)
-    assert "kubectl" not in body, (
-        "the shim should forward to the Python entry point, not call kubectl itself: "
-        + body
-    )
-    assert "longhorn_reap_orphan_backups.py" in body
-
-
 def test_reaper_aborts_when_ownership_resolves_empty():
     """An empty ownership map must stop the run, not quietly disarm the floors.
 
@@ -168,7 +145,7 @@ def test_reaper_does_not_delete_under_the_readonly_kubeconfig():
         admin_readable=False,
         admin_path="/etc/rancher/k3s/k3s.yaml",
         readonly_path="/home/ubuntu/.kube/config",
-        sudo_hint="sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply",
+        sudo_hint="sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_backups.py --apply",
     )
     assert path is None
     assert err is not None and "/etc/rancher/k3s/k3s.yaml" in err
@@ -178,7 +155,7 @@ def test_reaper_does_not_delete_under_the_readonly_kubeconfig():
         admin_readable=True,
         admin_path="/etc/rancher/k3s/k3s.yaml",
         readonly_path="/home/ubuntu/.kube/config",
-        sudo_hint="sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply",
+        sudo_hint="sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_backups.py --apply",
     )
     assert path == "/etc/rancher/k3s/k3s.yaml" and err is None
 

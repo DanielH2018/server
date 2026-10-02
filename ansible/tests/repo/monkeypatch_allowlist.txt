@@ -66,8 +66,8 @@ ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_fetch_skip.py 2
 ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py 3
 ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_subprocess.py 1
 ansible/roles/setup/k3s/tests/test_live_drift_check.py 3
-ansible/roles/setup/k3s/tests/test_longhorn_reap_delete_transport.py 5
 ansible/roles/setup/renovate_notify/tests/test_pending_soak_wiring.py 6
+scripts/backup/tests/test_longhorn_reap_delete_transport.py 5
 scripts/deploy_tools/tests/conftest.py 1
 scripts/deploy_tools/tests/test_await_ci.py 4
 scripts/deploy_tools/tests/test_deploy_detach_notify.py 17

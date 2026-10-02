@@ -16,7 +16,7 @@
 # WHAT IT WILL NOT DO. Trim reaches "the volume head and the followed continuous removed or
 # system snapshots only" (longhorn-manager types/setting.go). A single retained snapshot pins
 # every block beneath it, so on a volume carrying stranded snapshots this reclaims only what was
-# freed since the newest one. That is why longhorn-reap-orphan-snapshots.sh exists and why it
+# freed since the newest one. That is why scripts/backup/longhorn_reap_orphan_snapshots.py exists and why it
 # should be run first; this script is the second half of that pair, not a substitute for it.
 #
 # REAP, THEN REMOUNT, THEN TRIM. ext4 flags each block group it has trimmed since mount and skips
@@ -108,8 +108,9 @@ if (( PINNED > 0 )); then
   echo "NOTE: ${PINNED} volume(s) still carry a recurring-job snapshot. Trim reaches only the"
   echo "      volume head and continuous removed/system snapshots, so blocks beneath a retained"
   echo "      snapshot are NOT reclaimed by the run above. To reclaim them:"
-  echo "        /usr/local/bin/longhorn-reap-orphan-snapshots.sh          # dry run, read it"
-  echo "        sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply"
+  echo "        # from the repo checkout:"
+  echo "        LONGHORN_REAP_READONLY_KUBECONFIG=~/.kube/config uv run python scripts/backup/longhorn_reap_orphan_snapshots.py   # dry run, read it"
+  echo "        sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_snapshots.py --apply"
 fi
 # A failure here is worth a non-zero exit, but the exit code is not what anyone reads: cron
 # discards it, and since #2466 the cron entry pipes both streams to `logger -t longhorn-trim-cron`

@@ -136,7 +136,6 @@ GUARDED_SHELL_TEMPLATES = frozenset(
         ("k8s", "artifacts", "sync-artifacts.sh.j2"),
         ("setup", "k3s", "longhorn-restore-drill.sh.j2"),
         ("setup", "k3s", "longhorn-backup-health.sh.j2"),
-        ("setup", "k3s", "longhorn-reap-orphan-backups.sh.j2"),
     }
 )
 

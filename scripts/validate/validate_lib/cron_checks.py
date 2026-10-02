@@ -165,6 +165,6 @@ def cron_uv_interpreter_error(
             "exporting UV_PYTHON_INSTALL_DIR — the pinned interpreter lives under the "
             "connection user's HOME, so root's uv finds none and may not fetch one. Add "
             '`export UV_PYTHON_INSTALL_DIR="/home/{{ sys_user }}/.local/share/uv/python"` '
-            "above the uv run line (see longhorn-reap-orphan-backups.sh.j2)."
+            "above the uv run line (see crowdsec-prune-bouncers.sh.j2)."
         )
     return None

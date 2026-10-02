@@ -10,7 +10,7 @@ cap refuses before deleting anything. The decisions themselves are covered again
 
 The stub `k3s` and the staging harness are shared in `_reap_entrypoint_harness.py`.
 
-Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_backups_cli.py
+Run: uv run pytest scripts/backup/tests/test_longhorn_reap_backups_cli.py
 """
 
 from _reap_entrypoint_harness import (

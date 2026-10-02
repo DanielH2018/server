@@ -4,8 +4,8 @@
 DRY RUN BY DEFAULT. Pass --apply to delete the reapable strays, --apply-deleted-volumes to
 delete backups whose volume no longer exists. There is deliberately no cron for this: it is an
 operator-invoked tool, because the safe-to-delete set depends on live state this script can
-check but cannot guarantee will still hold a week from now. See longhorn-reap-orphan-backups.sh.j2
-for the invocation wrapper and longhorn_reap_logic.py for FLOOR 1 (never delete a volume's last
+check but cannot guarantee will still hold a week from now. See longhorn_reap_logic.py for
+FLOOR 1 (never delete a volume's last
 recovery point) and why it shipped inoperative the first time.
 
 THE PROBLEM. Longhorn enforces a RecurringJob's `retain: N` only as a side effect of that job
@@ -46,24 +46,42 @@ backup read as orphaned and became a candidate under --apply-deleted-volumes. Ab
 explicitly on a failed read is a deliberate improvement, not a port: it refuses instead of
 silently reclassifying every backup as belonging to a deleted volume.
 
-Run directly: uv run --no-project --python <pin> longhorn_reap_orphan_backups.py [--apply]
-[--apply-deleted-volumes] [--max-deletions N]
+Run from the repo root on a k3s host. The dry run reads through the read-only kubeconfig:
+    LONGHORN_REAP_READONLY_KUBECONFIG=~/.kube/config \
+        uv run python scripts/backup/longhorn_reap_orphan_backups.py
+Deleting needs the root-only admin kubeconfig, so run the same interpreter under sudo:
+    sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_backups.py --apply
+        [--apply-deleted-volumes] [--max-deletions N]
 """
-
-from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path as _Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# host_lib.py is the setup roles' shared host module and stays in ansible/roles/setup/common/files/.
+# A directly-invoked script gets only its own directory on sys.path, so both inserts are needed.
+sys.path.insert(
+    0,
+    str(
+        _Path(__file__).resolve().parents[2]
+        / "ansible"
+        / "roles"
+        / "setup"
+        / "common"
+        / "files"
+    ),
+)
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 import host_lib
+from lib.cli_help import answer_help
 import longhorn_reap_logic as logic
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("LONGHORN_REAP_KUBECTL_TIMEOUT_S", "30"))
 # Server-side wait on each `kubectl delete`, in whole seconds. Integer rather than the
-# snapshot reaper's "120s" duration string because nothing templates this one, and an int
+# snapshot reaper's "120s" duration string, and an int
 # needs no duration parser to reach the subprocess cap below.
 DELETE_TIMEOUT_S = int(os.environ.get("LONGHORN_REAP_DELETE_TIMEOUT_S", "120"))
 # Margin the CLIENT-side subprocess cap carries over kubectl's own --timeout, so the subprocess
@@ -74,17 +92,15 @@ DELETE_TIMEOUT_MARGIN_S = 30
 MAX_DELETIONS_DEFAULT = 4
 CLASS_C_PER_DELETION = 520
 
-# The admin kubeconfig is the same absolute path on every k3s host, unlike the read-only one
-# (which is templated per sys_user), so the wrapper never overrides it. Overridable via env
-# purely so a test can point this at a fixture instead of the real root-only file.
+# The admin kubeconfig is the same absolute path on every k3s host. Overridable via env purely
+# so a test can point this at a fixture instead of the real root-only file.
 ADMIN_KUBECONFIG = os.environ.get(
     "LONGHORN_REAP_ADMIN_KUBECONFIG", "/etc/rancher/k3s/k3s.yaml"
 )
-# No fallback default: the read-only kubeconfig path is templated per sys_user and is not
-# derivable here. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
+# No fallback default. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
 # the caller's shell happens to have -- which, run as root, is the admin one. See main().
 READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
-SUDO_HINT = "sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply"
+SUDO_HINT = logic.sudo_hint(__file__)
 
 _MAX_DELETIONS_FLAG = "--max-deletions"
 _USAGE = "expected --apply, --apply-deleted-volumes, %s N" % _MAX_DELETIONS_FLAG
@@ -187,6 +203,7 @@ def _parse_args(argv: list[str]) -> tuple[bool, bool, int, str]:
 
 
 def main(argv: list[str]) -> int:
+    answer_help(__doc__, argv)
     apply, apply_deleted, max_deletions, arg_err = _parse_args(argv)
     if arg_err:
         print(arg_err, file=sys.stderr)

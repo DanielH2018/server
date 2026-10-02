@@ -264,7 +264,7 @@ deploy outright. The token fixes the collision, but a window counted in runs rat
 is the cost of fixing it this way.
 
 **Known cost, not fixed here: renaming a service strands its old snapshots permanently.** The
-prune selects on `autodeploy-<service>-`, and `longhorn-reap-orphan-snapshots.sh.j2` — the
+prune selects on `autodeploy-<service>-`, and `scripts/backup/longhorn_reap_orphan_snapshots.py` — the
 cluster-wide orphan reaper — skips any snapshot carrying no `RecurringJob` label, which every
 `autodeploy-*` snapshot does by construction. Rename a service and its snapshots under the old
 name become invisible to both this role's own prefix filter and the reaper: nothing prunes them,

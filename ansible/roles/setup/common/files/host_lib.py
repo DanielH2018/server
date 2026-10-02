@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Shared I/O-shell helpers for the host-run scripts.
 
-Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py,
-longhorn_backup_health_logic.py, and longhorn_reap_logic.py. Each runs via
-``uv run --no-project --python <pin>`` (host_python_version in
-ansible/inventory/group_vars/all.yml) or directly under cron, and is deployed into its own
-``/opt`` dir, where it does a ``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...``
-resolves the copy sitting alongside. Single source of truth for helpers that had drifted between
+Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py and
+longhorn_backup_health_logic.py. Each runs via ``uv run --no-project --python <pin>``
+(host_python_version in ansible/inventory/group_vars/all.yml) or directly under cron, and is
+deployed into its own ``/opt`` dir, where it does a ``sys.path.insert(0, <own dir>)`` so
+``from host_lib import ...`` resolves the copy sitting alongside. The one exception is
+scripts/backup/longhorn_reap_logic.py: the Longhorn reapers run from the repo checkout and
+insert this directory instead. Single source of truth for helpers that had drifted between
 scripts: the Cloudflare-1010 User-Agent on the Discord POST, the torn-write-safe atomic state
 write, the config.env parser, the kubectl runner, and the RFC3339 parser below. Stdlib only.
 """
