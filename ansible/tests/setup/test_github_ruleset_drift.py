@@ -15,13 +15,12 @@ import json
 import os
 import subprocess
 
-import jinja2
 import pytest
-from lib.ansible_jinja_env import make_ansible_env
 from lib.proc_testing import fake_bin, path_with, write_exec
 from _helpers import ANSIBLE
+from _shell_render import render_shell_script
 
-TEMPLATE = ANSIBLE / "roles/setup/gitops_deploy/templates/github-ruleset-drift.sh.j2"
+TEMPLATE = ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2")
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -90,28 +89,15 @@ def _run(tmp_path, curl_body=None, curl_rc=0, branch_body=None):
 
     `curl_body` answers the merge-gate ruleset fetch; `branch_body` answers the branch-protection
     one, and defaults to a body carrying the Renovate exclusion so the merge-gate cases above
-    keep reading the verdict they are about."""
+    keep reading the verdict they are about. Every value the template reads — the declared
+    contexts, both ruleset ids, the Renovate exclusion, `wan_probe_urls` — comes from the
+    inventory and the role's own defaults, the shared accessor already resolves them, and
+    `test_the_declared_set_matches_the_role_defaults` / `test_the_branch_ruleset_fixture_matches_the_role_defaults`
+    below are what keeps DECLARED/BRANCH_RULESET_ID/RENOVATE_EXCLUDE honest against them (#3178).
+    """
     if branch_body is None:
         branch_body = _branch_ruleset_body()
-    body = (
-        # trim_blocks matches Ansible's own template defaults. Without it the `{% for %}` around
-        # the declared contexts leaves a blank line per iteration, which is NOT how the deployed
-        # script renders — the harness would be testing a file the host never sees.
-        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-        .from_string(TEMPLATE.read_text())
-        .render(
-            domain="example.test",
-            k3s_metallb_ingress_vip="10.0.0.240",
-            sys_user="ubuntu",
-            ruleset_drift_push_token="stubtoken",
-            gitops_deploy_github_repo="Example/repo",
-            gitops_deploy_ruleset_id=20912512,
-            gitops_deploy_expected_ruleset_contexts=DECLARED,
-            gitops_deploy_branch_ruleset_id=BRANCH_RULESET_ID,
-            gitops_deploy_branch_ruleset_renovate_exclude=RENOVATE_EXCLUDE,
-            wan_probe_urls=["https://a.example", "https://b.example"],
-        )
-    )
+    body = render_shell_script(*TEMPLATE)
 
     assert REAL_LIB in body, (
         "the script no longer sources the shared Kuma push helper — this harness repoints that "

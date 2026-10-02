@@ -19,13 +19,12 @@ import re
 from itertools import pairwise
 
 from _helpers import ANSIBLE
+from _shell_render import rendered_shell_text, shell_template_path
 
 MONITORS = (
     ANSIBLE / "roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
 ).read_text()
-SCRIPT = (
-    ANSIBLE / "roles/setup/initial_setup/templates/docs-refresh.sh.j2"
-).read_text()
+SCRIPT = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
 CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 ROTATION = (ANSIBLE / "secret_rotation.yml").read_text()
 
@@ -100,7 +99,14 @@ def test_the_monitor_is_gated_on_its_token():
 
 
 def test_the_script_skips_its_push_until_the_token_exists():
-    assert "{{ docs_refresh_push_token | default('') }}" in SCRIPT
+    # The first assert's subject is the Jinja reference itself — which var feeds
+    # DOCS_REFRESH_PUSH_TOKEN — and a render erases exactly that: an unset secret renders as
+    # the same empty string a wrong var name would too. Read the source for that one line; the
+    # gate line below has no Jinja in it, so the render serves it fine.
+    source = shell_template_path(
+        "setup", "initial_setup", "docs-refresh.sh.j2"
+    ).read_text()
+    assert "{{ docs_refresh_push_token | default('') }}" in source
     assert '[ -n "$DOCS_REFRESH_PUSH_TOKEN" ] || return 0' in SCRIPT, (
         "the script must skip the push when the token is empty, or a host without the secret "
         "logs a push failure every run"

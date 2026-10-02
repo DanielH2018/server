@@ -5,10 +5,10 @@ unstages and nothing more, so the regenerated pages stay MODIFIED in the primary
 deploy_git.py reads any porcelain output as dirty and gitops_deploy.py takes its healthy-skip
 path, still writing `last_run`. Only a human cleaning the tree ends it.
 
-The functions below are executed, not pattern-matched. Each one is lifted out of the template by
-name and sourced into a scratch git repository, so what these tests exercise is the production
-code rather than a copy of its logic. Three behaviours, each with the half that proves the test
-can go red:
+The functions below are executed, not pattern-matched. Each one is lifted out of the RENDERED
+template by name and sourced into a scratch git repository, so what these tests exercise is the
+production code rather than a copy of its logic. Three behaviours, each with the half that proves
+the test can go red:
 
 - **restore_generated_tree leaves the checkout clean**, for a modified page and for a newly
   generated one — an untracked leftover parks the deployer exactly as a modified one does. The
@@ -25,10 +25,10 @@ import subprocess
 from pathlib import Path
 
 from _helpers import ANSIBLE
+from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
-SCRIPT_PATH = ANSIBLE / "roles/setup/initial_setup/templates/docs-refresh.sh.j2"
-SCRIPT = SCRIPT_PATH.read_text()
+SCRIPT = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
 CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 
 # The functions this module sources. Named rather than globbed: a rename would otherwise leave
@@ -49,8 +49,10 @@ STAMP_DIR = "/var/lib/homelab/docs-refresh.d"
 def _function(name: str) -> str:
     """The body of one shell function, from `name() {` to the closing brace in column one.
 
-    Reads the .j2 directly. Every line lifted is Jinja-free by construction — the assertion
-    below is what keeps it that way, because a `{{ ... }}` reaching bash would abort the run.
+    Reads the RENDER, not the .j2 source (#3178) — a value that moved into a role default
+    would leave a source-text match looking for `{{ ... }}` matching nothing, and a Jinja
+    expression inside the body would come through substituted rather than literal, so `bash`
+    never sees it. The assertion below is a sanity check that the render is in fact complete.
     """
     # One-liner form first: a `{.*?^}` pattern tried first would run past a one-line function's
     # own closing brace and swallow the next multi-line function whole.

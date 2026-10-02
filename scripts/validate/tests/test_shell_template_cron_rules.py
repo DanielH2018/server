@@ -6,6 +6,12 @@ actually installs), `validate.validate_lib.cron_checks.cron_path_error` (cron in
 `validate.validate_lib.cron_checks.cron_kubeconfig_error` (cron inherits no KUBECONFIG, and k3s.yaml is
 root-only), plus the crowdsec home-allowlist curl-retry pins.
 
+The curl-retry pins read a RENDER (`_shell_render.rendered_shell_text`), because a retry count
+that moves into a role default would leave them pinning a brace. The three cron rules read the
+SOURCE on purpose: a rule's second argument IS the template text, so the tree-wide runs below
+hand it exactly what `shell_templates.py` hands it in production. That is why this module keeps
+its entry in `SHELL_SOURCE_READERS` permanently (#3189).
+
 The module-scoped `cron_map` fixture is why these four guards stay in ONE file: pytest runs
 with `--dist loadscope`, so a module-scoped fixture is re-evaluated once per module, and
 splitting its consumers would pay the ~0.6s tree walk again per file.
@@ -17,6 +23,7 @@ import re
 from pathlib import Path
 
 import pytest
+from _shell_render import rendered_shell_text
 from validate import shell_templates as v
 from validate.validate_lib import cron_checks as cc
 from validate.validate_lib import cron_targets as ct
@@ -192,9 +199,11 @@ def test_no_cron_job_template_in_the_tree_violates_the_path_rule(cron_map):
     assert offenders == set()
 
 
-HOME_ALLOWLIST = (
-    v.ROLES / "k8s" / "crowdsec" / "templates" / "crowdsec-update-home-allowlist.sh.j2"
-)
+# Rendered, not read: a `--retry` count that moves into a role default leaves the source
+# matching `--retry {{ ... }}`, and `_RETRY_COUNT` then pins a brace rather than a number
+# (#3189). The accessor renders through this very validator, so what is pinned here is what
+# the shellcheck gate lints.
+HOME_ALLOWLIST = ("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2")
 
 # How WIDE the retry has to be is a separate question with its own budget, and it lives in
 # ansible/tests/services/test_crowdsec_allowlist_push_retry.py. This guard only pins that a
@@ -217,7 +226,7 @@ def test_home_allowlist_curls_all_retry():
     # rather than merely allowed.
     lines = [
         ln.strip()
-        for ln in HOME_ALLOWLIST.read_text().splitlines()
+        for ln in rendered_shell_text(*HOME_ALLOWLIST).splitlines()
         if "curl " in ln and not ln.lstrip().startswith("#")
     ]
     assert lines, "no curl invocations found — did the script move or get rewritten?"
@@ -246,7 +255,9 @@ def test_home_allowlist_fail_logs_the_status_down_prefix():
     # (parse_syslog_down_line). A script that logs a bare message leaves zero rows there, and
     # nothing to diagnose from once Kuma's current state clears.
     fail_line = next(
-        ln for ln in HOME_ALLOWLIST.read_text().splitlines() if ln.startswith("fail()")
+        ln
+        for ln in rendered_shell_text(*HOME_ALLOWLIST).splitlines()
+        if ln.startswith("fail()")
     )
     assert 'logger -t crowdsec-home-allowlist "status=down $1"' in fail_line, fail_line
 
@@ -425,6 +436,8 @@ def test_the_real_tree_has_no_kubeconfig_violation():
     for tpl, _task_file, _cron, _env in ct.iter_cron_targets():
         if not tpl.exists():
             continue
+        # Source text, deliberately: it is this rule's own second argument, and the
+        # production caller reads it off disk the same way.
         err = cc.cron_kubeconfig_error(tpl, tpl.read_text())
         if err:
             offenders.append(tpl.name)
@@ -473,6 +486,7 @@ def test_the_real_tree_has_no_uv_interpreter_violation():
             root_crons.add(tpl.name)
         if not tpl.exists():
             continue
+        # Source text, deliberately — the rule's own second argument, as above.
         if cc.cron_uv_interpreter_error(tpl, tpl.read_text()):
             offenders.append(tpl.name)
     assert offenders == [], offenders

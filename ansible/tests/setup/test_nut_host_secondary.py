@@ -24,6 +24,7 @@ Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
 
@@ -203,7 +204,7 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
 # watchdog reading the wrong address, or one leaking the credential that sits on the line it
 # reads, both look exactly like a working one.
 
-WATCHDOG = (ROLE / "templates" / "ups-secondary-health.sh.j2").read_text()
+WATCHDOG = rendered_shell_text("setup", "nut_host", "ups-secondary-health.sh.j2")
 WATCHDOG_ENV = (ROLE / "templates" / "kuma-push.env.j2").read_text()
 STATIC_MONITORS = (
     ANSIBLE / "roles" / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
@@ -218,7 +219,7 @@ _MONITOR_LINE = f"MONITOR apc-ups@10.43.171.124 1 upsmon {_FAKE_CREDENTIAL} seco
 
 
 def _endpoint_extractor() -> str:
-    """The awk program the shipped script uses, taken from the template rather than retyped.
+    """The awk program the shipped script uses, taken from the render rather than retyped.
 
     Retyping it would guard a copy: the script could switch to a bare grep and these tests
     would keep passing against the awk they still held.

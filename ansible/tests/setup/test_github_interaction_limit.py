@@ -11,17 +11,16 @@ import json
 import os
 import subprocess
 
-import jinja2
 import pytest
-from lib.ansible_jinja_env import make_ansible_env
 from lib.proc_testing import fake_bin, path_with, write_exec
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, load_defaults
+from _shell_render import render_shell_script
 
-TEMPLATE = (
-    ANSIBLE / "roles/setup/gitops_deploy/templates/github-interaction-limit.sh.j2"
-)
+ROLE = ANSIBLE / "roles" / "setup" / "gitops_deploy"
+TEMPLATE = ("setup", "gitops_deploy", "github-interaction-limit.sh.j2")
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+GITHUB_REPO = load_defaults(ROLE)["gitops_deploy_github_repo"]
 
 LIB_STUB = """\
 kuma_push() {
@@ -41,18 +40,11 @@ def _run(
     tmp_path, curl_body=None, curl_rc=0, *, limit="collaborators_only", logged_in=True
 ):
     """Render, stub, run. Returns (exit_code, status, message, curl_argv)."""
-    body = (
-        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-        .from_string(TEMPLATE.read_text())
-        .render(
-            domain="example.test",
-            k3s_metallb_ingress_vip="10.0.0.240",
-            sys_user="ubuntu",
-            interaction_limit_push_token="stubtoken",
-            gitops_deploy_github_repo="Example/repo",
-            gitops_deploy_interaction_limit=limit,
-            gitops_deploy_interaction_limit_expiry="six_months",
-        )
+    # `limit` is the one value this harness has to vary across calls; every other var the
+    # template reads comes from the inventory/role defaults the shared accessor already
+    # resolves, so it is not re-declared here (#3178).
+    body = render_shell_script(
+        *TEMPLATE, overrides={"gitops_deploy_interaction_limit": limit}
     )
 
     assert REAL_LIB in body, (
@@ -132,7 +124,7 @@ def test_the_put_carries_the_declared_limit_and_expiry(tmp_path):
     assert "PUT" in argv
     body = argv[argv.index("-d") + 1]
     assert json.loads(body) == {"limit": "collaborators_only", "expiry": "six_months"}
-    assert "https://api.github.com/repos/Example/repo/interaction-limits" in argv
+    assert f"https://api.github.com/repos/{GITHUB_REPO}/interaction-limits" in argv
     # The token reaches curl through -K, never as a header argument.
     assert not any("Bearer" in a for a in argv)
 

@@ -21,9 +21,10 @@ import json
 import re
 
 from _helpers import ANSIBLE
+from _shell_render import rendered_shell_text, shell_template_path
 
 CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
-SCRIPT = (ANSIBLE / "roles/setup/initial_setup/templates/eval-run.sh.j2").read_text()
+SCRIPT = rendered_shell_text("setup", "initial_setup", "eval-run.sh.j2")
 MONITORS = (
     ANSIBLE / "roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
 ).read_text()
@@ -72,7 +73,12 @@ def _is_gated_on_the_api_key(text: str) -> bool:
 
 
 def test_the_script_is_gated_on_the_api_key():
-    assert "{{ anthropic_api_key | default('') }}" in SCRIPT
+    # The first assert's subject is the Jinja reference itself — which var feeds
+    # ANTHROPIC_API_KEY — and a render erases exactly that: an unset secret renders as the same
+    # empty string a wrong var name would too. Read the source for that one line; the gate regex
+    # below has no Jinja in it, so the render serves it fine.
+    source = shell_template_path("setup", "initial_setup", "eval-run.sh.j2").read_text()
+    assert "{{ anthropic_api_key | default('') }}" in source
     assert _is_gated_on_the_api_key(SCRIPT), (
         "the script must skip the sweep when no anthropic_api_key secret exists, or it burns "
         "a Claude Code subscription session non-hermetically every week (evals/README.md "

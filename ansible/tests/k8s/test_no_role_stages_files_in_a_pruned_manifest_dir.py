@@ -32,6 +32,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
+from _shell_render import rendered_shell_text
 
 MANIFEST_ROOT = "/etc/rancher/k3s/manifests"
 MANIFESTS_ROLE = "k8s/manifests"
@@ -440,6 +441,9 @@ def test_no_manifests_service_claims_a_reserved_sibling_name():
 # templates mention paths too, and reading them all would only add noise.
 
 GC_SCRIPT = K8S_ROLES / "registry" / "templates" / "registry-gc.sh.j2"
+# Rendered rather than read: JOB_MANIFEST's path could move into a role default, where a
+# source-text match on it would read `{{ ... }}` and pass on nothing (#3178).
+GC_SCRIPT_TEXT = rendered_shell_text("k8s", "registry", "registry-gc.sh.j2")
 REGISTRY_TASKS = K8S_ROLES / "registry" / "tasks" / "main.yml"
 
 _JOB_MANIFEST_RE = re.compile(r"^JOB_MANIFEST=(\S+)", re.MULTILINE)
@@ -479,13 +483,13 @@ def test_gc_render_moved_without_the_cron_script_is_flagged():
 
 def test_the_gc_reader_finds_both_real_paths():
     """Non-vacuity: two empty strings would make the invariant below pass on nothing."""
-    staged, read = gc_manifest_paths(REGISTRY_TASKS.read_text(), GC_SCRIPT.read_text())
+    staged, read = gc_manifest_paths(REGISTRY_TASKS.read_text(), GC_SCRIPT_TEXT)
     assert staged, f"no gc-job.yaml render found in {REGISTRY_TASKS}"
     assert read, f"no JOB_MANIFEST assignment found in {GC_SCRIPT}"
 
 
 def test_registry_gc_reads_the_manifest_the_deploy_stages():
-    staged, read = gc_manifest_paths(REGISTRY_TASKS.read_text(), GC_SCRIPT.read_text())
+    staged, read = gc_manifest_paths(REGISTRY_TASKS.read_text(), GC_SCRIPT_TEXT)
     assert staged == read, (
         f"{REGISTRY_TASKS} stages the GC job at {staged} while {GC_SCRIPT} reads {read}; the "
         "cron would apply a manifest the deploy never writes (#1669)"

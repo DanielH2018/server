@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from _helpers import REPO
+from _shell_render import rendered_or_source_text, rendered_shell_text
 
 TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
 
@@ -45,7 +46,7 @@ SCRIPTS = [
 
 
 def read(path: Path) -> str:
-    text = path.read_text()
+    text = rendered_shell_text("setup", "initial_setup", path.name)
     assert len(text) > 2000, f"{path.name} is only {len(text)} bytes — has it moved?"
     return text
 
@@ -219,7 +220,7 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
     The daily audit is the sticky signal, and its two existing arms read only local state -- a clean
     tree and an unrotated registry are exactly what the failure looks like.
     """
-    text = ROTATION_AUDIT.read_text()
+    text = read(ROTATION_AUDIT)
     assert "git ls-remote --heads origin" in text, (
         "the daily audit cannot see an unlanded rotation branch, so a failed `gh pr create` "
         "goes unreported until the next Sunday's gate happens to trip"
@@ -370,7 +371,7 @@ def test_a_substring_expansion_of_an_unset_name_is_still_a_read():
 def test_the_cron_env_allowlist_is_still_exported():
     """An entry whose provenance is gone silently widens the guard for everything else."""
     crons = (TEMPLATES.parent / "tasks/crons.yml").read_text()
-    templates = "".join(path.read_text() for path in _READ_CENSUS_MUST_FIND)
+    templates = "".join(read(path) for path in _READ_CENSUS_MUST_FIND)
     stale = [
         name
         for name in _CRON_ENV
@@ -464,13 +465,10 @@ _EXPECTED_IN_CORPUS = {
 _MIN_CORPUS = 23
 
 
-def push_corpus() -> list[Path]:
+def push_corpus() -> dict[Path, str]:
     """Every template that mentions a push URL, whatever its extension."""
-    return sorted(
-        path
-        for path in ROLES.rglob("*.j2")
-        if PUSH_LITERAL in path.read_text() or "PUSH_URL" in path.read_text()
-    )
+    texts = {p: rendered_or_source_text(p) for p in sorted(ROLES.rglob("*.j2"))}
+    return {p: t for p, t in texts.items() if PUSH_LITERAL in t or "PUSH_URL" in t}
 
 
 def _logical_lines(text: str) -> list[str]:
@@ -523,8 +521,8 @@ def test_no_push_token_reaches_curls_argv():
     token.
     """
     offenders = {}
-    for path in push_corpus():
-        leaks = curl_lines_leaking_a_push_url(path.read_text())
+    for path, text in push_corpus().items():
+        leaks = curl_lines_leaking_a_push_url(text)
         if leaks:
             offenders[str(path.relative_to(REPO))] = leaks
     assert not offenders, (
@@ -542,10 +540,10 @@ def test_every_shell_push_script_sources_the_shared_library():
     argv assertion above.
     """
     offenders = []
-    for path in push_corpus():
+    for path, text in push_corpus().items():
         if path.name in _LIBRARY_EXEMPT or not path.name.endswith(".sh.j2"):
             continue
-        if "kuma-push-lib.sh" not in path.read_text():
+        if "kuma-push-lib.sh" not in text:
             offenders.append(str(path.relative_to(REPO)))
     assert not offenders, (
         "these push scripts do not source the shared library, contradicting crons.yml:15-19. "
@@ -586,7 +584,7 @@ def test_the_audit_watches_the_gh_token_both_crons_depend_on():
     """Both publishing crons authenticate with one `gh` OAuth token that is not in
     secrets.yml and not in the rotation registry, so nothing watched it. Revoked, they both
     keep running, both fail at `gh pr create`, and both stop publishing silently."""
-    text = ROTATION_AUDIT.read_text()
+    text = read(ROTATION_AUDIT)
     assert "gh auth status" in text, (
         "nothing checks the credential secret-rotate and docs-refresh publish with"
     )
@@ -611,7 +609,7 @@ def test_the_audit_grace_is_shorter_than_the_gap_to_the_first_audit():
     assert (
         'kuma_check_on_calendar: "*-*-* 08:00:00"' in crons and 'hour: "9"' in crons
     ), "the schedule moved; re-derive the grace period against the new times"
-    text = ROTATION_AUDIT.read_text()
+    text = read(ROTATION_AUDIT)
     seconds = [int(m) for m in re.findall(r"-gt (\d{4,})", text)]
     assert seconds, "no age threshold found in the stray-branch arm"
     assert max(seconds) < 23 * 3600, (
@@ -626,7 +624,7 @@ def test_the_audit_branch_arm_is_additive_not_a_short_circuit():
     that cannot be trusted. A stray branch says nothing about the OTHER secrets, so
     short-circuiting there would silence every overdue secret until a human cleared it.
     """
-    text = ROTATION_AUDIT.read_text()
+    text = read(ROTATION_AUDIT)
     arm = text.split("git ls-remote --heads origin", 1)[1]
     # Up to the auditor invocation: the arm must reach it, not exit ahead of it.
     before_audit = arm.split("secret_rotation.py audit", 1)[0]
@@ -648,7 +646,7 @@ def test_the_two_audit_arms_accumulate_rather_than_suppress_each_other():
     `git ls-remote` authenticates over git's own credential path, not through `gh`, so the
     branch arm still works with a dead token and has no reason to be skipped.
     """
-    text = ROTATION_AUDIT.read_text()
+    text = read(ROTATION_AUDIT)
     lines = [line for line in code_lines(ROTATION_AUDIT) if "EXTRA_DOWN" in line]
 
     # The branch arm's condition must not read EXTRA_DOWN -- that is the short-circuit.

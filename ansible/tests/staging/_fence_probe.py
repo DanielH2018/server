@@ -17,7 +17,8 @@ import subprocess
 from lib import yaml_fast
 from lib.proc_testing import fake_bin
 
-from _helpers import ALL_VARS, HOST_VARS, ROLES, jinja_env
+from _helpers import ALL_VARS, HOST_VARS, ROLES
+from _shell_render import render_shell_script
 
 HYPERVISOR = ROLES / "setup" / "hypervisor"
 ORCHESTRATOR = HYPERVISOR / "templates" / "etcd-restore-drill-vm.sh.j2"
@@ -128,32 +129,28 @@ def host_reaches():
     ]
 
 
-def orchestrator_context():
-    """The render context Ansible gives the orchestrator on daniel-server.
-
-    `hostvars` is supplied for real rather than left undefined: two dialled targets are other
-    hosts' addresses, and an undefined lookup renders an empty string into a curl URL — a dial
-    that can never answer, which reads as a held fence forever.
-    """
-    context = {
-        **_all_vars(),
-        **_hypervisor_defaults(),
-        "hostvars": {
-            host: _load_host_vars(host)
-            for host in ("daniel-box", "daniel-pi", "daniel-server")
-        },
-        "domain": "example.test",
-    }
-    env = jinja_env()
-    for key, value in list(context.items()):
-        if isinstance(value, str) and "{{" in value:
-            context[key] = env.from_string(value).render(context)
-    return context
-
-
 def rendered_orchestrator():
-    return (
-        jinja_env().from_string(ORCHESTRATOR.read_text()).render(orchestrator_context())
+    """The orchestrator as the shared accessor renders it, `hostvars` repointed at three hosts.
+
+    Everything else the template reads — the inventory, the role's own defaults — comes from
+    the accessor's own context, which is what `validate/shell_templates.py` renders and lints
+    (#3178). `hostvars` alone needs an override: the accessor's base stubs only one host
+    (`daniel-server`), and two of the fence's dials are OTHER hosts' addresses
+    (`hostvars['daniel-box'].server_ip`, `hostvars['daniel-pi'].server_ip`). Left at the
+    accessor's default, either lookup renders the literal `STUB`, which no `DIAL_STUB` fixture
+    ever lists as reachable — a dial that can never answer, which reads as a held fence no
+    matter which way the leg under test should go.
+    """
+    return render_shell_script(
+        "setup",
+        "hypervisor",
+        ORCHESTRATOR.name,
+        overrides={
+            "hostvars": {
+                host: _load_host_vars(host)
+                for host in ("daniel-box", "daniel-pi", "daniel-server")
+            }
+        },
     )
 
 

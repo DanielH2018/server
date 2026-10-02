@@ -5,20 +5,19 @@ Shared by test_pi_recovery_restarts_and_reports.py and test_pi_health_log_line_s
 Not a test module itself.
 
 These scripts are exercised for real rather than pattern-matched, because what breaks is
-shell logic and line formatting, neither of which a textual guard can see. Only two
-absolute paths are repointed at temp files -- the Kuma push helper it sources, and the
-health log it appends to. Every decision the script makes runs unmodified.
+shell logic and line formatting, neither of which a textual guard can see. The render goes
+through `_shell_render`, so what runs here cannot differ from what the shellcheck gate lints
+(#3178). Only two absolute paths are repointed at temp files -- the Kuma push helper it
+sources, and the health log it appends to. Every decision the script makes runs unmodified.
 """
 
-import jinja2
-from lib.ansible_jinja_env import make_ansible_env
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
 from _helpers import ANSIBLE, HOST_VARS, load_yaml
+from _shell_render import render_shell_script
 
 
 ROLE = ANSIBLE / "roles" / "setup" / "optimize_pi"
-TEMPLATES = ROLE / "templates"
 OPTIMIZE_PI_DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 REAL_LOG = "/var/log/pi-health/health.log"
@@ -111,31 +110,27 @@ PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
 
 
 def render(name, tmp_path, jinja_vars=None):
-    """The real template, rendered, with only its absolute paths repointed at temp files."""
-    template = TEMPLATES / f"{name}.sh.j2"
-    # The role's own defaults, so a test that does not care about the gz-integrity wiring still
-    # renders (StrictUndefined would otherwise abort on it), and one that does can override any
-    # key by name — hence a dict updated in place rather than keyword arguments, which would
-    # raise on a duplicate.
-    context = {
+    """The real template, rendered through `_shell_render`, with its absolute paths repointed
+    at temp files.
+
+    `containers_list` is the Pi's own (host_vars/daniel-pi.yml) rather than a group default, so
+    the accessor's inventory context does not carry it -- it goes in as an override. Everything
+    else the templates read (domain, the ingress VIP, the push tokens, the gz-integrity
+    defaults) comes from that same context, the one `validate/shell_templates.py` lints
+    against. `jinja_vars` is laid on top, for a caller overriding any key by name -- the
+    gz-integrity state-file path, most often.
+    """
+    overrides = {
         "containers_list": PI_HOST_VARS["containers_list"],
-        "has_code_server": False,
-        "domain": "example.test",
-        "k3s_metallb_ingress_vip": "10.0.0.240",
-        "pi_recovery_push_token": "stubtoken",
-        "pi_sd_health_push_token": "stubtoken",
-        **OPTIMIZE_PI_DEFAULTS,
+        **(jinja_vars or {}),
     }
-    context.update(jinja_vars or {})
-    body = (
-        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-        .from_string(template.read_text())
-        .render(**context)
+    body = render_shell_script(
+        "setup", "optimize_pi", f"{name}.sh.j2", overrides=overrides
     )
 
     for literal, label in ((REAL_LIB, "push helper"), (REAL_LOG, "health log")):
         assert literal in body, (
-            f"{template.name} no longer references {literal} ({label}) -- this harness's "
+            f"{name}.sh.j2 no longer references {literal} ({label}) -- this harness's "
             "substitution hook is gone, so it is not exercising the real script any more"
         )
 

@@ -181,32 +181,23 @@ def local_repo_roots(source: str, module: Path, repo: Path = REPO) -> list[str]:
     return found
 
 
-# Test modules that still read a `*.sh.j2`'s source, each with the reason it is not converted.
-# #3189 is the conversion; every entry carries the exposure rule 3 exists to stop, so this list
-# only ever shrinks — `test_every_grandfathered_reader_still_reads_one` drops an entry that no
-# longer reads one, and the rule then refuses it coming back. A module whose SUBJECT is the
-# source text — a guard on the Jinja reference itself, which a render erases — stays here
-# permanently with that written as its reason.
+# Test modules that still read a `*.sh.j2`'s source, each with the reason a render cannot
+# answer the question it asks. #3189 converted the other sixteen; these three are permanent —
+# the subject of each is something a render erases, so there is nothing left to convert. The
+# list still only ever shrinks: `test_every_grandfathered_reader_still_reads_one` drops an
+# entry that no longer reads one, and the rule then refuses it coming back.
 SHELL_SOURCE_READERS = {
-    "ansible/roles/k8s/monitor-bridge/tests/test_check_swallowed_verdicts.py": "#3189",
-    "ansible/tests/deploy/test_setup_render_manifest.py": "#3189",
-    "ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py": "#3189",
-    "ansible/tests/setup/_pi_health.py": "#3189",
-    "ansible/tests/setup/test_cron_scripts_publish_via_pr.py": "#3189",
-    "ansible/tests/setup/test_docs_refresh_failure_path.py": "#3189",
-    "ansible/tests/setup/test_docs_refresh_heartbeat.py": "#3189",
-    "ansible/tests/setup/test_docs_refresh_records_shard_weights.py": "#3189",
-    "ansible/tests/setup/test_eval_run_failure_path.py": "#3189",
-    "ansible/tests/setup/test_eval_sweep_cron.py": "#3189",
-    "ansible/tests/setup/test_github_interaction_limit.py": "#3189",
-    "ansible/tests/setup/test_github_ruleset_drift.py": "#3189",
-    "ansible/tests/setup/test_loki_route_witness.py": "#3189",
-    "ansible/tests/setup/test_nut_host_secondary.py": "#3189",
-    "ansible/tests/setup/test_pi_gz_integrity_sweep.py": "#3189",
-    "ansible/tests/setup/test_release_staleness_push_grouped.py": "#3189",
-    "ansible/tests/staging/_fence_probe.py": "#3189",
-    "ansible/tests/staging/test_etcd_drill_vm.py": "#3189",
-    "scripts/validate/tests/test_shell_template_cron_rules.py": "#3189",
+    "ansible/tests/deploy/test_setup_render_manifest.py": (
+        "hashes the template's raw BYTES — a trailing newline and a truncated-read "
+        "comparison, neither of which survives a render"
+    ),
+    "ansible/tests/setup/test_docs_refresh_heartbeat.py": (
+        "asserts WHICH variable feeds DOCS_REFRESH_PUSH_TOKEN; an unset secret renders as the "
+        "same empty string a misspelled name would"
+    ),
+    "ansible/tests/setup/test_eval_sweep_cron.py": (
+        "asserts WHICH variable feeds ANTHROPIC_API_KEY, for the same reason"
+    ),
 }
 
 

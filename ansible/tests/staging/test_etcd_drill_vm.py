@@ -23,6 +23,7 @@ from lib import yaml_fast
 from jinja2 import Undefined
 from lib.ansible_jinja_env import make_ansible_env, template_env
 from _helpers import ANSIBLE, load_yaml
+from _shell_render import rendered_shell_text
 
 
 ROLE = ANSIBLE / "roles" / "setup" / "hypervisor"
@@ -145,9 +146,21 @@ def test_the_drill_guest_user_data_pins_the_host_key():
     assert doc["ssh_keys"]["ed25519_public"] == STUB_SSH_KEY
 
 
+def _orchestrator_text() -> str:
+    """The orchestrator as the shared accessor renders it.
+
+    `_fence_probe.rendered_orchestrator` renders the same template a second way, with
+    `hostvars` repointed at three real hosts, for a test whose subject IS a rendered dial
+    target. The three tests below never touch one of those lines (lifecycle verbs, the
+    detach/timeout shape, the host-key pins), so the accessor's plain render is enough —
+    don't collapse the two into one read.
+    """
+    return rendered_shell_text("setup", "hypervisor", "etcd-restore-drill-vm.sh.j2")
+
+
 def test_the_orchestrator_never_defines_the_guest():
     """A defined second domain would silently break teardown.yml's 'no guest defined' refusal."""
-    script = (ROLE / "templates" / "etcd-restore-drill-vm.sh.j2").read_text()
+    script = _orchestrator_text()
     assert " create " in script and '"${VIRSH[@]}" create' in script
     assert "virsh define" not in script and '"${VIRSH[@]}" define' not in script
     assert "autostart" not in script
@@ -159,7 +172,7 @@ def test_the_orchestrator_detaches_the_drill_and_never_hands_timeout_a_function(
     ("failed to run command 'ssh_guest'"); and one ssh session held open for the whole drill hung
     for 20 minutes after the drill had died. The orchestrator starts the guest script --detached
     and polls its exit file over fresh sessions instead."""
-    script = (ROLE / "templates" / "etcd-restore-drill-vm.sh.j2").read_text()
+    script = _orchestrator_text()
     guest = (ROLE / "files" / "etcd-drill-guest-run.sh").read_text()
     assert "etcd-drill-guest-run --detached" in script
     assert '"${1:-}" == "--detached"' in guest and "nohup" in guest
@@ -179,7 +192,7 @@ def test_the_orchestrator_detaches_the_drill_and_never_hands_timeout_a_function(
 
 
 def test_the_orchestrator_pins_the_guest_host_key():
-    script = (ROLE / "templates" / "etcd-restore-drill-vm.sh.j2").read_text()
+    script = _orchestrator_text()
     assert "StrictHostKeyChecking=yes" in script
     assert "StrictHostKeyChecking=no" not in script
     assert "HostKeyAlgorithms=ssh-ed25519" in script

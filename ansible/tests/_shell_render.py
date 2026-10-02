@@ -131,3 +131,25 @@ def rendered_shell_text(plane: str, role: str, template: str) -> str:
         f"{plane}/{role}/{template} is not among the rendered shell templates: "
         f"{sorted(e[:3] for e in rendered_shell_texts())}"
     )
+
+
+def rendered_or_source_text(path: Path) -> str:
+    """A `*.sh.j2` role template's RENDERED text; any other extension's SOURCE text.
+
+    For a census that spans extensions this module does not render — a `.service.j2` unit, a
+    k8s manifest, a `config.env.j2` — alongside the `*.sh.j2` templates it does (#3178).
+    """
+    if not path.name.endswith(".sh.j2"):
+        return path.read_text()
+    return rendered_shell_text(path.parents[2].name, path.parents[1].name, path.name)
+
+
+def rendered_names_for(plane: str, role: str) -> set[str]:
+    """Every `*.sh.j2` name rendered for one (plane, role).
+
+    Asserts the filter still matches something: a roster derived from a (plane, role) pair that
+    stopped matching comes back EMPTY, and a comparison against nothing passes.
+    """
+    names = {n for p, r, n, _ in rendered_shell_texts() if (p, r) == (plane, role)}
+    assert names, f"no rendered shell templates for {plane}/{role}"
+    return names
