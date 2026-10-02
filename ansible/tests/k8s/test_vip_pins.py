@@ -47,7 +47,9 @@ PINNED_BY_VOLUME = {"jellyfin"}
 
 # Roles the census must find, so a matcher that stopped matching names the member it lost
 # instead of passing over an empty list.
-KNOWN_VIP_ROLES = frozenset({"pihole", "traefik", "valheim", "wg-easy"})
+KNOWN_VIP_ROLES = frozenset(
+    {"jellyfin", "mosquitto", "pihole", "terraria", "traefik", "valheim", "wg-easy"}
+)
 
 
 def _announcing_nodes(metallb_pool_text: str) -> set[str]:
