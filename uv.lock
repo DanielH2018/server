@@ -435,23 +435,6 @@ wheels = [
 ]
 
 [[package]]
-name = "kubernetes-validate"
-version = "1.36.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "importlib-resources" },
-    { name = "jsonschema" },
-    { name = "packaging" },
-    { name = "pyyaml" },
-    { name = "referencing" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b7/d2/ed9d3a2b5356a4b1b872639ee81d63e6adcd95727e93db44b3b46a47d3b9/kubernetes_validate-1.36.0.tar.gz", hash = "sha256:edbfd2db9e88b571029aa16ab1116c6502ad2b9628b6738dd39d639323f84715", size = 9850699, upload-time = "2026-05-18T08:08:52.289Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/b7/c799b568a2b701103d6ee351d6f45af6c041b9e497dc0923645d617fb4cc/kubernetes_validate-1.36.0-py3-none-any.whl", hash = "sha256:fcafa2b657949a7cc7232dfb201c4d37e61b15e2f8b4936350b150be01ac5de5", size = 20186224, upload-time = "2026-05-18T08:08:48.76Z" },
-]
-
-[[package]]
 name = "markdown"
 version = "3.11"
 source = { registry = "https://pypi.org/simple" }
@@ -902,7 +885,6 @@ dev = [
     { name = "flask" },
     { name = "jinja2" },
     { name = "jsonschema" },
-    { name = "kubernetes-validate" },
     { name = "mkdocs-material" },
     { name = "pytest" },
     { name = "pytest-xdist" },
@@ -925,7 +907,6 @@ dev = [
     { name = "flask" },
     { name = "jinja2", specifier = ">=3" },
     { name = "jsonschema" },
-    { name = "kubernetes-validate", specifier = "==1.36.0" },
     { name = "mkdocs-material", specifier = ">=9.5" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-xdist" },
@@ -982,15 +963,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9c/f4/ae7dbd118425c850981d23efb850f0d9d7f6b8d2b852bde2767434f668b4/ty-0.0.84-py3-none-win32.whl", hash = "sha256:4bdc85f91cbaae35825f2b17bb4ac5de0563367875cb0f42b2bf07a1bf7ff2ba", size = 13176439, upload-time = "2026-09-24T13:16:15.049Z" },
     { url = "https://files.pythonhosted.org/packages/29/ec/994d87252f065dda5a500bc8afc726d18f6582d81d6f4ff1feb8a267c800/ty-0.0.84-py3-none-win_amd64.whl", hash = "sha256:71cc9aa7a7c89d4e12c6a814e9c0c3310ad5bee44efedbd6f5a42d91e9ac0f0d", size = 13962879, upload-time = "2026-09-24T13:16:18.191Z" },
     { url = "https://files.pythonhosted.org/packages/6d/1c/e6e91852b72566b1ab9aca504712857dfb89324c12092a5bd61d42d34427/ty-0.0.84-py3-none-win_arm64.whl", hash = "sha256:6c9d3718c4a0d318bc9c92af9b2aa85c3294e7dff54cf1d69ad79568f56516da", size = 13656453, upload-time = "2026-09-24T13:16:21.51Z" },
-]
-
-[[package]]
-name = "typing-extensions"
-version = "4.16.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f6/cc/6253133b5bb138fc3306cebfbda2c520f545d36b5be2c7255cc528bb45d6/typing_extensions-4.16.0.tar.gz", hash = "sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5", size = 113555, upload-time = "2026-07-02T08:40:05.92Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl", hash = "sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8", size = 45571, upload-time = "2026-07-02T08:40:04.659Z" },
 ]
 
 [[package]]

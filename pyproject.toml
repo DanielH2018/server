@@ -22,12 +22,9 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "shellcheck-py==0.11.0.1",        # validate.shell_templates; pinned to match prek.toml's shellcheck-py rev
   "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
-  "kubernetes-validate==1.36.0",
-  "jsonschema",                     # validate.k8s_manifests checks CRDs against the vendored
-  # schemas in scripts/validate/schemas/. Declared rather than
-  # left transitive: it arrives today only as a dependency of
-  # kubernetes-validate, so an import that works by accident
-  # would break the moment that pin moves.
+  "jsonschema",                     # validate.k8s_manifests checks every object against the
+  # schemas vendored in scripts/validate/schemas/: Kubernetes'
+  # own OpenAPI files for core kinds, the catalog's for CRDs.
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
   "zizmor>=1.0",
   "ty==0.0.84",                     # first-party Python type gate (prek hook). Pinned exactly, not

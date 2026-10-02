@@ -6,13 +6,15 @@ rule blocks its automerge, which means the daily unattended `/renovate-prs` run 
 This page is what an operator follows instead.
 
 Renovate raises k3s patch releases only. An `allowedVersions` cap on `k3s-io/k3s` holds k3s at
-the minor that `kubernetes-validate` has a schema for, because
-`test_schema_version_matches_the_cluster` fails a k3s pin whose minor differs from
-`K8S_SCHEMA_VERSION` (#2367). Upstream publishes each schema 26 to 51 days after the Kubernetes
-release. The `kubernetes-validate` PR is therefore where a minor upgrade happens: in it, move
-`K8S_SCHEMA_VERSION`, `k3s_version`, `k3s_install_script_sha256` and the cap together, then
-follow this page before merging. `test_renovate_k3s_cap_follows_the_schema` holds the cap one
-minor above the schema.
+the minor whose Kubernetes schemas are vendored under `scripts/validate/schemas/kubernetes.io/`,
+because `test_vendored_core_schemas_match_the_cluster` fails a k3s pin that names a different
+Kubernetes tag from the one the schemas came from (#2367). The schemas are Kubernetes' own
+OpenAPI files, so they exist the day the release does. A minor upgrade is one PR that moves
+`k3s_version`, `k3s_install_script_sha256`, `K8S_SCHEMA_VERSION` and the cap together, then runs
+`uv run python scripts/validate/refresh_vendored_schemas.py` to vendor the new tag's schemas,
+then follows this page before merging. A patch bump needs the refresh too, because the test
+compares the full tag. `test_renovate_k3s_cap_follows_the_schema` holds the cap one minor above
+the schema.
 
 The pin is `k3s_version` in `ansible/roles/setup/k3s/defaults/main.yml`. It covers both nodes:
 `server.yml` installs daniel-box, `agent.yml` installs daniel-server, and both pass it to the same
