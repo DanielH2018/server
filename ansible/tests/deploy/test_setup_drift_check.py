@@ -10,11 +10,11 @@ a shell library is only ever observed passing, and the accept half alone cannot 
 arm from one that fires on nothing.
 """
 
-import re
 from pathlib import Path
 
 from lib import yaml_fast
 from _helpers import REPO
+from _k8s_render import render_role_template
 from lib.proc_testing import run
 
 _REPO = REPO
@@ -22,7 +22,6 @@ _LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
 _CHECK = _REPO / "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"
 _CRONS = _REPO / "ansible/roles/setup/initial_setup/tasks/crons.yml"
 _GROUP_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
-_TILE = _REPO / "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
 _CONSUMERS = _REPO / "scripts/secrets_mgmt/consumers.py"
 
 
@@ -381,14 +380,18 @@ def test_the_tile_is_gated_on_the_token():
     """An ungated tile sits red from creation until /add-secret runs, because the cron skips its
     push while the token is empty — and kuma-drift counts a declared-but-never-beating monitor
     as missing."""
-    tile = _TILE.read_text()
-    assert "setup-drift-check.json" in tile, "the pusher has no Kuma monitor to push to"
-    gate = re.search(
-        r"\{% if setup_drift_push_token \| default\(''\) %\}(.*?)\{% endif %\}",
-        tile,
-        re.DOTALL,
+
+    def tile(token: str) -> str:
+        return render_role_template(
+            "uptime-kuma",
+            "static-monitors.yaml.j2",
+            {"setup_drift_push_token": token},
+        )
+
+    assert "setup-drift-check.json" in tile("drift-token"), (
+        "the pusher has no Kuma monitor to push to"
     )
-    assert gate and "setup-drift-check.json" in gate.group(1), (
+    assert "setup-drift-check.json" not in tile(""), (
         "the tile must sit inside the token gate, like its siblings"
     )
 

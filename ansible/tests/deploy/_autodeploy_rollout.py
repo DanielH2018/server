@@ -10,7 +10,12 @@ Consumed by `test_k8s_autodeploy_rollout_gates.py`.
 import re
 from pathlib import Path
 
-from _autodeploy import _LITERAL_NAME, _batch_templates, _deployment_templates
+from _autodeploy import (
+    _LITERAL_NAME,
+    _batch_templates,
+    _deployment_templates,
+    _template_texts,
+)
 from _autodeploy_batch import _batch_gated_names
 
 
@@ -156,26 +161,25 @@ def _primary_rollout_kind(role: Path) -> str:
     return next(g for g in match.groups() if g is not None)
 
 
-_DEPLOYMENT_NAME = re.compile(
-    r"^kind:\s*(?:Deployment|DaemonSet)\s*$\n\s*metadata:\s*$\n\s*name:\s*(.+?)\s*$",
+_DEPLOYMENT_DOC = re.compile(
+    r"^kind:\s*(Deployment|DaemonSet)\s*$\n\s*metadata:\s*$\n\s*name:\s*(.+?)\s*$",
     re.MULTILINE,
 )
 
 
-def _deployment_name(template: Path) -> str | None:
-    """The rendered Deployment's `metadata.name`, or None if it isn't a static literal.
+def _deployment_docs(text: str) -> list[tuple[str, str | None]]:
+    """Every Deployment or DaemonSet in a rendered template, as (kind, metadata.name).
 
     Every Deployment template puts `name:` two lines under `kind: Deployment` (`metadata:` in
-    between). A non-literal value (a
-    Jinja expression, e.g. pihole's `{{ inst.name }}`) can't be resolved without rendering, so
-    this returns None rather than a guess; the caller treats None as ungated, the fail-closed
-    direction.
+    between). One template can render several `---`-separated workloads, so every match is
+    returned: a guard reading only the first would wave the rest through. A name that is not a
+    static literal comes back as None, which the callers treat as ungated, the fail-closed
+    direction; on a render that is a value the render left unresolved.
     """
-    match = _DEPLOYMENT_NAME.search(template.read_text())
-    if not match:
-        return None
-    name = match.group(1)
-    return name if _LITERAL_NAME.match(name) else None
+    return [
+        (kind, name if _LITERAL_NAME.match(name) else None)
+        for kind, name in _DEPLOYMENT_DOC.findall(text)
+    ]
 
 
 def _gated_names(role: Path) -> set[str]:
@@ -192,11 +196,15 @@ def _ungated_deployments(role: Path) -> list[str]:
     ungated. A count alone would let a mismatched name through as long as the totals lined up.
     """
     gated = _gated_names(role)
-    return [
-        template
-        for template in _deployment_templates(role)
-        if _deployment_name(role / "templates" / template) not in gated
-    ]
+    texts = _template_texts(role)
+    out = []
+    for template in _deployment_templates(role):
+        docs = _deployment_docs(texts[template])
+        # No doc parsed means `_deployment_templates` saw a quoted or commented `kind:` this
+        # strict pattern cannot pair with a name, so nothing proves it gated.
+        if not docs or any(name not in gated for _, name in docs):
+            out.append(template)
+    return out
 
 
 def _ungated_deployment_count(role: Path) -> int:
@@ -213,8 +221,9 @@ def _deployments_missing_readiness_probe(role: Path) -> list[str]:
     let a probe on the primary Deployment satisfy the whole role and a probe-less *extra* pass
     unchecked.
     """
+    texts = _template_texts(role)
     return [
         name
         for name in _deployment_templates(role)
-        if "readinessProbe" not in (role / "templates" / name).read_text()
+        if "readinessProbe" not in texts[name]
     ]

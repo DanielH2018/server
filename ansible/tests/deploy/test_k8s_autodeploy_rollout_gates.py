@@ -10,7 +10,6 @@ readinessProbe passes `rollout status` the moment it reports Running, which prov
 exists and nothing else.
 """
 
-import re
 from lib import yaml_fast
 from pathlib import Path
 
@@ -19,11 +18,13 @@ from _autodeploy import (
     _auto_deployable,
     _declares_autodeploy,
     _deployment_templates,
+    _rendered_roles,
     _roles,
+    _template_texts,
 )
 from _autodeploy_rollout import (
     _MANIFEST_KIND_TO_ROLLOUT_KIND,
-    _deployment_name,
+    _deployment_docs,
     _deployments_missing_readiness_probe,
     _extra_rollouts,
     _gated_names,
@@ -47,6 +48,26 @@ def test_auto_deployable_reads_the_declaration_not_the_denylist() -> None:
             continue
         data = yaml_fast.safe_load((role / "defaults/main.yml").read_text()) or {}
         assert _auto_deployable(role) is bool(data.get("k8s_autodeploy"))
+
+
+def test_the_render_reaches_every_auto_deployable_role() -> None:
+    """The shape guards read renders, and `_k8s_render` skips caller-rendered roles.
+
+    `_template_texts` falls back to template source for a role the render does not reach, so
+    a guard over an auto-deployable role outside the render would judge source text again.
+    pihole is the member that must be reached: it names both Deployments through a macro
+    argument, which only a render resolves.
+    """
+    rendered = _rendered_roles()
+    assert "pihole" in rendered
+    unreached = sorted(
+        role.name
+        for role in _roles()
+        if _auto_deployable(role) and role.name not in rendered
+    )
+    assert unreached == [], (
+        f"auto-deployable roles the render does not reach: {unreached}"
+    )
 
 
 def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
@@ -85,22 +106,18 @@ def test_auto_deployable_roles_gate_the_right_kind() -> None:
         if not primary:
             continue
         declared = _primary_rollout_kind(role)
+        texts = _template_texts(role)
         for name in _deployment_templates(role):
-            template = role / "templates" / name
-            if _deployment_name(template) != primary:
-                continue
-            rendered = re.search(
-                r"^kind:\s*(Deployment|DaemonSet)\s*$",
-                template.read_text(),
-                re.MULTILINE,
-            )
-            expected = _MANIFEST_KIND_TO_ROLLOUT_KIND[rendered.group(1)]
-            if expected != declared:
-                offenders.append(
-                    f"{role.name}: {name} renders a {rendered.group(1)}, so the rollout gate "
-                    f"needs manifests_rollout_kind: {expected}, but the role declares "
-                    f"{declared!r}"
-                )
+            for kind, rendered_name in _deployment_docs(texts[name]):
+                if rendered_name != primary:
+                    continue
+                expected = _MANIFEST_KIND_TO_ROLLOUT_KIND[kind]
+                if expected != declared:
+                    offenders.append(
+                        f"{role.name}: {name} renders a {kind}, so the rollout gate "
+                        f"needs manifests_rollout_kind: {expected}, but the role declares "
+                        f"{declared!r}"
+                    )
     assert not offenders, (
         "Auto-deployable role(s) whose rollout gate names the wrong kind — `rollout status` "
         "would target a workload that does not exist:\n" + "\n".join(offenders)
@@ -174,7 +191,9 @@ def test_the_workload_matcher_sees_daemonsets(widget_role) -> None:
         },
     )
     assert _deployment_templates(role) == ["daemonset.yaml.j2"]
-    assert _deployment_name(role / "templates/daemonset.yaml.j2") == "widget"
+    assert _deployment_docs(_template_texts(role)["daemonset.yaml.j2"]) == [
+        ("DaemonSet", "widget")
+    ]
 
 
 def test_extra_rollouts_are_counted_as_gated() -> None:
@@ -191,10 +210,9 @@ def test_extra_rollouts_are_counted_as_gated() -> None:
     assert len(_deployment_templates(prowlarr)) == 2
     assert _primary_rollout_name(prowlarr) == "prowlarr"
     assert _extra_rollouts(prowlarr) == {"flaresolverr"}
-    assert (
-        _deployment_name(prowlarr / "templates" / "deployment-flaresolverr.yaml.j2")
-        == "flaresolverr"
-    )
+    assert _deployment_docs(
+        _template_texts(prowlarr)["deployment-flaresolverr.yaml.j2"]
+    ) == [("Deployment", "flaresolverr")]
     assert _ungated_deployment_count(prowlarr) == 0
 
 
