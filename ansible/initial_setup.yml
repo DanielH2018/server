@@ -68,7 +68,7 @@
     - role: nut_host
       tags: ["nut_host"]
       when: inventory_hostname == ups_host or nut_host_secondary_armed | bool
-    - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
+    - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == optimize_pi_host }
     # The fake-remux detector + reconciler run on the media stack's host (fake_remux_host).
     # Host-conditional like optimize_pi/renovate_notify.
     - { role: fake_remux, tags: ["fake_remux"], when: inventory_hostname == fake_remux_host }
