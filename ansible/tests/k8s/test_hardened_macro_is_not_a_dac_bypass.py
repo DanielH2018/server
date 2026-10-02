@@ -1,16 +1,19 @@
 """Guard: no template may build a root securityContext through hardened_security_context().
 
-WHY THIS EXISTS. test_root_needs_dac_capability.py scans raw template TEXT for a `runAsUser: 0`
-block that drops ALL capabilities and adds no DAC capability back — root without DAC_OVERRIDE
-cannot read or write another uid's files, which makes it WEAKER than the pod's own uid. That
-guard does not render Jinja, so a root securityContext expressed as
-`{{ hardened_security_context(run_as_user=0, ...) }}` is invisible to it: the guard would find
-nothing and pass, which its own docstring records is indistinguishable from a guard that works.
+WHY THIS EXISTS. ansible/templates/security-context.yml.j2 documents that it is not for
+`runAsUser: 0`, and the fleet's six root sites (code-server, loki-homelab, and the four CrowdSec
+seeding init containers in authelia and traefik) stay written out in full. This file is what
+stops that convention from being a comment nobody reads — it is the executable half.
 
-ansible/templates/security-context.yml.j2 therefore documents that it is not for `runAsUser: 0`,
-and the fleet's six root sites (code-server, loki-homelab, and the four CrowdSec seeding init
-containers in authelia and traefik) stay written out in full. This file
-is what stops that convention from being a comment nobody reads — it is the executable half.
+The convention exists because each root site needs a DAC capability for a reason only that
+container's own comment can state: which uid owns the files, at what mode, and why root is
+reached for at all. A one-line macro call has nowhere to put that, and the capability list is
+written literally at every call site so a grep for `DAC_OVERRIDE` still finds every container
+granted it.
+
+This guard is NOT what makes test_root_needs_dac_capability.py able to see a root block. That
+guard reads each template as the deploy renders it (#3223), so a macro-built securityContext
+arrives expanded and is scanned like any other. Retiring this pin is #3228.
 
 THE REJECT CASE IS THE EVIDENCE. There are zero violations in the tree today, so the real-tree
 assertion passing proves nothing on its own; a rule matching nothing passes identically. The
@@ -50,10 +53,9 @@ def test_no_template_builds_a_root_context_through_the_macro() -> None:
 
     assert not offenders, (
         "these templates build a root securityContext through hardened_security_context(), "
-        "which hides them from test_root_needs_dac_capability.py — that guard reads raw "
-        "template text and cannot see through a macro. Write the securityContext out in full "
-        "at the call site, as code-server and loki-homelab do:\n  "
-        + "\n  ".join(offenders)
+        "which leaves no room for the comment saying which uid owns the files and why root is "
+        "reached for. Write the securityContext out in full at the call site, as code-server "
+        "and loki-homelab do:\n  " + "\n  ".join(offenders)
     )
 
 
@@ -85,16 +87,18 @@ _ROOT_SITES = {
 
 
 def test_every_root_site_is_still_written_out_in_full() -> None:
-    """The fleet's `runAsUser: 0` sites must keep the literal text the DAC guard reads.
+    """The fleet's `runAsUser: 0` sites must keep their literal blocks.
 
-    Without this, converting them to the macro would leave BOTH guards matching nothing — this
-    one because no macro call passes 0, and the DAC one because no literal block remains.
+    A count rather than a presence check, so one container's conversion to the macro fails here
+    instead of hiding behind its siblings. The DAC census counts the same six off the render in
+    `test_every_documented_root_site_still_renders_a_clean_root_block`, which is why retiring
+    this half is #3228 — the two now overlap.
     """
     for rel, expected in _ROOT_SITES.items():
         text = (K8S_ROLES / rel).read_text()
         found = len(re.findall(r"^\s*runAsUser:\s*0\s*$", text, re.MULTILINE))
         assert found == expected, (
             f"{rel} holds {found} literal `runAsUser: 0` block(s), not {expected}. Each is a "
-            "real accept case test_root_needs_dac_capability.py exercises; if a container "
+            "real accept case test_root_needs_dac_capability.py exercises on the render; if a container "
             "genuinely stopped running as root, lower its count in _ROOT_SITES."
         )
