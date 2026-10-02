@@ -9,6 +9,13 @@ both gates no matter how badly it's broken. This is the same render-then-lint pa
 `validate/compose_templates.py` / `validate/config_templates.py`, extended from YAML parsing to
 shell linting: render structure with stubbed vars, then prove the OUTPUT is valid shell.
 
+A render takes the inventory plus the template's own role defaults, laid under it the way
+Ansible's precedence does (`template_context`). The defaults are not optional: StubUndefined
+iterates empty, so a `{% for %}` over a list a role declares renders its whole body away and
+both linters sweep what is left. `ansible/tests/_shell_render.py` renders through this module
+for the same reason in reverse — a guard asserting on a rendered script must assert on the
+script this gate lints (#3178).
+
 Structural check only: SOPS secrets and other runtime vars are stubbed (StubUndefined, plus a
 small override map for values that need to be shell-plausible — see SHELL_STUB_OVERRIDES), so no
 SOPS access is needed. Run directly or via the ``validate-shell-templates`` prek hook. Exits
@@ -111,11 +118,12 @@ def template_context(
 def _resolved_defaults(raw: dict, base: dict) -> dict:
     """`raw` expanded against `base`, dropping any key whose own expansion raises.
 
-    One key in the tree needs the drop: `gitops_deploy_k8s_autodeploy_denylist` derives its
-    value through this repo's `k8s_autodeploy_denylist` filter plugin, which `resolve_vars`'
-    light-tier environment does not register (its `DECIDED:` marker says why it stays light).
-    No `*.sh.j2` reads that key, so taking gitops_deploy's two shell templates out of the
-    gate over it would cost real coverage.
+    Two keys in the tree need the drop, each naming a filter `resolve_vars`' light-tier
+    environment does not register (its `DECIDED:` marker says why it stays light):
+    `gitops_deploy_k8s_autodeploy_denylist` reaches this repo's `k8s_autodeploy_denylist`
+    plugin, and `k3s_host_coredns_tarball` reaches ansible-core's `dirname`. No `*.sh.j2`
+    reads either key, so taking those roles' eleven shell templates out of the gate over them
+    would cost real coverage.
 
     A dropped key renders as `STUB` through `StubUndefined` rather than as literal braces,
     which is what a guard asserting on a render needs: braces in the output are the defect
@@ -129,14 +137,25 @@ def _resolved_defaults(raw: dict, base: dict) -> dict:
     except Exception as exc:
         print(f"  [note] resolving defaults one key at a time: {exc}", file=sys.stderr)
     resolved: dict = {}
-    for key, value in raw.items():
-        try:
-            resolved |= resolve_vars({key: value}, {**base, **resolved})
-        except Exception as exc:
-            print(
-                f"  [note] default {key} left undefined, renders as STUB: {exc}",
-                file=sys.stderr,
-            )
+    dropped: set[str] = set()
+    # Twice over the file, because a key resolved on its own sees only the keys already done:
+    # a default referencing one declared BELOW it would otherwise expand against a missing
+    # name and come back carrying `STUB`. The second round re-resolves every surviving key
+    # from `raw` with the first round's results in context, so declaration order stops
+    # mattering — which is what the whole-dict path's five passes gave for free.
+    for _ in range(2):
+        for key, value in raw.items():
+            if key in dropped:
+                continue
+            try:
+                resolved |= resolve_vars({key: value}, {**base, **resolved})
+            except Exception as exc:
+                dropped.add(key)
+                resolved.pop(key, None)
+                print(
+                    f"  [note] default {key} left undefined, renders as STUB: {exc}",
+                    file=sys.stderr,
+                )
     return resolved
 
 

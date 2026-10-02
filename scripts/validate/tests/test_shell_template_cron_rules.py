@@ -21,7 +21,6 @@ from validate import shell_templates as v
 from validate.validate_lib import cron_checks as cc
 from validate.validate_lib import cron_targets as ct
 from validate.validate_lib import shell_lint as sl
-from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 
 @pytest.fixture(scope="module")
@@ -86,10 +85,9 @@ def test_reap_orphan_shims_export_the_uv_python_install_dir(template_name):
     # (~/.local/share/uv/python), so under sudo's /root HOME uv would find no interpreter and
     # --no-python-downloads forbids fetching one. Exporting UV_PYTHON_INSTALL_DIR before the
     # `uv run` call makes discovery independent of which HOME invoked the shim.
-    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
-    rendered = sl.render_template(
-        v.ROLES / "setup" / "k3s" / "templates" / template_name, ctx
-    )
+    template = v.ROLES / "setup" / "k3s" / "templates" / template_name
+    ctx = v.template_context(template)
+    rendered = sl.render_template(template, ctx)
     sys_user = ctx["sys_user"]
     assert (
         'export UV_PYTHON_INSTALL_DIR="/home/%s/.local/share/uv/python"' % sys_user
@@ -179,7 +177,6 @@ def test_no_cron_job_template_in_the_tree_violates_the_path_rule(cron_map):
     # The rule shipped with two real offenders (telemetry-health, longhorn-backup-health);
     # both were fixed in the same change, so there is no allowlist. Asserting zero against
     # the real tree keeps that true without a list to go stale.
-    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
     assert cron_map, (
         "cron_job_scripts() found no cron-installed templates — resolver broke"
     )
@@ -187,7 +184,9 @@ def test_no_cron_job_template_in_the_tree_violates_the_path_rule(cron_map):
         str(template.relative_to(v.ROLES))
         for template, task_file in cron_map.items()
         if cc.cron_path_error(
-            template, sl.render_template(template, ctx), {template: task_file}
+            template,
+            sl.render_template(template, v.template_context(template)),
+            {template: task_file},
         )
     }
     assert offenders == set()
