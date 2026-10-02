@@ -807,7 +807,10 @@
       "matchPackageNames": [
         "k3s-io/k3s"
       ],
-      "allowedVersions": "<1.37"
+      "allowedVersions": "<1.37",
+      "prBodyNotes": [
+        "A k3s bump is a hand-run control-plane upgrade, never a plain merge. In this PR: set `k3s_install_script_sha256` beside `k3s_version` in `ansible/roles/setup/k3s/defaults/main.yml`, then run `uv run python scripts/validate/refresh_vendored_schemas.py` and commit the schemas it writes — even for a patch release, because `test_vendored_core_schemas_match_the_cluster` compares the full Kubernetes tag. For a new minor, also set `K8S_SCHEMA_VERSION` in `scripts/validate/validate_lib/k8s_schema.py`, raise this cap by one minor, and delete the previous `scripts/validate/schemas/kubernetes.io/v<old minor>/`. Then follow `docs/k3s-upgrade.md` before merging."
+      ]
     },
     {
       "description": "CoreDNS host forwarder (coredns/coredns) \u2014 daniel-box's own resolver, and the process /etc/resolv.conf names instead of an upstream. Its paired k3s_host_coredns_sha256 needs a manual bump from the release's .sha256 sidecar, so NO automerge (same manual-finish class as the SOPS binary). Own group, so it overrides the custom.regex non-major automerge rule above. A bad bump here costs the node all DNS at once, which is loud rather than silent \u2014 but it is still not something CI can prove.",

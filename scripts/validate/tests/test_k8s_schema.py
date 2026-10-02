@@ -193,6 +193,23 @@ def _vendored_tag() -> str:
     return json.loads((CORE_SCHEMA_DIR / "SOURCE.json").read_text())["tag"]
 
 
+def schema_tag_problem(
+    k3s_defaults: str, vendored_tag: str, schema_version: str
+) -> str | None:
+    """Why the vendored core schemas do not describe the cluster k3s_version pins, or None."""
+    tag = kubernetes_tag(k3s_defaults)
+    if vendored_tag != tag:
+        return (
+            f"the vendored core schemas are from {vendored_tag} but k3s_version builds on {tag} — "
+            "run `uv run python scripts/validate/refresh_vendored_schemas.py` and commit the result."
+        )
+    if f"v{schema_version}" != ".".join(tag.split(".")[:2]):
+        return (
+            f"K8S_SCHEMA_VERSION is {schema_version} but k3s_version builds on {tag}."
+        )
+    return None
+
+
 def test_vendored_core_schemas_match_the_cluster():
     # A cluster upgrade that leaves the schemas behind validates every manifest against the
     # wrong API surface: a field added in the new minor reads as invalid, and one removed in it
@@ -202,18 +219,31 @@ def test_vendored_core_schemas_match_the_cluster():
     k3s_defaults = (
         ANSIBLE / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
     ).read_text()
-    tag = kubernetes_tag(k3s_defaults)
-    assert _vendored_tag() == tag, (
-        f"the vendored core schemas are from {_vendored_tag()} but k3s_version builds on {tag} — "
-        "run `uv run python scripts/validate/refresh_vendored_schemas.py` and commit the result."
-    )
-    assert f"v{K8S_SCHEMA_VERSION}" == ".".join(tag.split(".")[:2]), (
-        f"K8S_SCHEMA_VERSION is {K8S_SCHEMA_VERSION} but k3s_version builds on {tag}."
-    )
+    assert schema_tag_problem(k3s_defaults, _vendored_tag(), K8S_SCHEMA_VERSION) is None
 
 
-def test_a_k3s_pin_on_another_release_than_the_schemas_is_flagged():
-    assert kubernetes_tag("k3s_version: v1.37.0+k3s1\n") != _vendored_tag()
+def test_matching_pins_and_schemas_are_clean():
+    assert schema_tag_problem("k3s_version: v1.36.4+k3s1\n", "v1.36.4", "1.36") is None
+
+
+def test_a_patch_bump_without_a_refresh_is_flagged():
+    problem = schema_tag_problem("k3s_version: v1.36.5+k3s1\n", "v1.36.4", "1.36")
+    assert problem is not None and "refresh_vendored_schemas.py" in problem
+
+
+def test_a_minor_bump_without_the_schema_version_is_flagged():
+    problem = schema_tag_problem("k3s_version: v1.37.0+k3s1\n", "v1.37.0", "1.36")
+    assert problem is not None and "K8S_SCHEMA_VERSION" in problem
+
+
+def test_only_the_current_minor_is_vendored():
+    # A minor refresh writes a new v<minor>/ directory and leaves the old one, which nothing
+    # reads any more. Dead schemas would still be reviewed, refreshed and shipped.
+    vendored = sorted(p.name for p in CORE_SCHEMA_DIR.parent.iterdir() if p.is_dir())
+    assert vendored == [f"v{K8S_SCHEMA_VERSION}"], (
+        f"schemas/kubernetes.io holds {vendored}; delete every directory but "
+        f"v{K8S_SCHEMA_VERSION}."
+    )
 
 
 def _renovate_k3s_cap() -> str | None:
