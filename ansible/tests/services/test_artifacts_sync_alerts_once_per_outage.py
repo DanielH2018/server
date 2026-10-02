@@ -22,14 +22,13 @@ import subprocess
 from lib.proc_testing import run as launch
 from pathlib import Path
 
-from jinja2 import Undefined
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ROLES, load_defaults
+from _shell_render import render_shell_script, rendered_shell_text
 
 ARTIFACTS = ROLES / "k8s" / "artifacts"
-SCRIPT = ARTIFACTS / "templates" / "sync-artifacts.sh.j2"
+TEMPLATE = ("k8s", "artifacts", "sync-artifacts.sh.j2")
 
 DEFAULTS = load_defaults(ARTIFACTS)
 THRESHOLD = DEFAULTS["artifacts_sync_alert_after_failures"]
@@ -42,13 +41,14 @@ LOGGER_STUB = 'printf "%s\\n" "$*" >>"$SYNC_ARTIFACTS_JOURNAL"'
 
 def _runner(tmp_path: Path):
     """A rendered sync script plus `run(outcome)` -> CompletedProcess."""
-    defaults = dict(DEFAULTS)
-    defaults["artifacts_peer_dir"] = str(tmp_path / "peer")
     script = tmp_path / "sync-artifacts.sh"
+    # The shared accessor renders what the gate lints, with one override: the peer tree has to
+    # be a tmp_path, because the run is real. Role defaults come from the accessor's own
+    # context rather than being passed in here (#3178).
     script.write_text(
-        make_ansible_env(undefined_cls=Undefined)
-        .from_string(SCRIPT.read_text())
-        .render(**defaults)
+        render_shell_script(
+            *TEMPLATE, overrides={"artifacts_peer_dir": str(tmp_path / "peer")}
+        )
     )
     (tmp_path / "peer" / PEER).mkdir(parents=True)
     stub = tmp_path / "outcome"
@@ -160,11 +160,7 @@ def test_the_ssh_transport_drops_inherited_local_forwards():
     entry applies here too — and a bind collision on that port fails the connection, taking the
     sync with it. The flag has no other effect on an rsync transport.
     """
-    rendered = (
-        make_ansible_env(undefined_cls=Undefined)
-        .from_string(SCRIPT.read_text())
-        .render(**DEFAULTS)
-    )
+    rendered = rendered_shell_text(*TEMPLATE)
     transports = [line for line in rendered.splitlines() if "-e 'ssh" in line]
     assert transports, rendered
     assert all("ClearAllForwardings=yes" in line for line in transports), transports

@@ -15,23 +15,25 @@ import re
 import shlex
 from pathlib import Path
 
-from _helpers import ROLES
+from _shell_render import rendered_shell_text
 from verdicts.logs import parse_push_line
 from lib.proc_testing import run
 
-SCRIPT_PATH = ROLES / "k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
 TAG = "crowdsec-home-allowlist"
 
 
 def _push_function() -> str:
-    match = re.search(
-        r"^push\(\) \{[^\n]*\n.*?^\}$", SCRIPT_PATH.read_text(), re.M | re.S
+    """`push()`'s body, sliced out of the RENDERED script.
+
+    The render is what makes the slice sourceable: `PUSH_URL` is a Jinja expression over the
+    domain and the push token, so the template's own text is not shell bash can run (#3178).
+    """
+    script = rendered_shell_text(
+        "k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2"
     )
+    match = re.search(r"^push\(\) \{[^\n]*\n.*?^\}$", script, re.M | re.S)
     assert match, (
         "push() is gone from crowdsec-update-home-allowlist.sh.j2 — sourced by name"
-    )
-    assert "{{" not in match.group(0), (
-        "push() gained a Jinja expression; it cannot be sourced"
     )
     return match.group(0)
 

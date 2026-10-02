@@ -20,18 +20,20 @@ is no clean way to execute a fast-path `if` in isolation without re-deriving it:
 - `decide_final_push` proves the down-overrides-clean-sync
   decision, run against a stubbed `push`.
 - The fast-path guard and the v6 block's exit-freedom are checked as text, each with a fixture
-  showing the check can go red.
+  showing the check can go red. That text is the RENDERED script (`_shell_render`), not the
+  template, so a value moved into a role default cannot leave a check matching `{{ ... }}`.
 """
 
 import shlex
 import subprocess
 from pathlib import Path
 
-from _helpers import ROLES
+from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
-SCRIPT_PATH = ROLES / "k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
-SCRIPT = SCRIPT_PATH.read_text()
+# The RENDERED script, so a function that gained a Jinja expression arrives expanded and
+# sourceable rather than as text bash cannot parse (#3178).
+SCRIPT = rendered_shell_text("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2")
 
 SOURCED = ("decide_final_push", "sync_entry")
 
@@ -52,11 +54,7 @@ def _function(name: str) -> str:
     assert match, (
         f"{name}() is gone from crowdsec-update-home-allowlist.sh.j2 — sourced by name"
     )
-    body = match.group(0)
-    assert "{{" not in body, (
-        f"{name}() gained a Jinja expression; it can no longer be sourced"
-    )
-    return body
+    return match.group(0)
 
 
 PRELUDE = "\n".join(_function(name) for name in SOURCED)

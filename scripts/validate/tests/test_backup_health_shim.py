@@ -16,7 +16,6 @@ import pytest
 from validate import shell_templates as v
 from validate.validate_lib import shell_lint as sl
 from lib.proc_testing import fake_bin, run, write_exec
-from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
 BACKUP_HEALTH_READER = (
@@ -55,13 +54,13 @@ def test_backup_health_renders_clean_for_every_arm_state(
     shellcheck_bin = shutil.which("shellcheck")
     assert shellcheck_bin, "shellcheck must be on PATH (dev dependency shellcheck-py)"
 
-    ctx = {
-        **BASE_CONTEXT,
-        **load_yaml(ALL_VARS),
-        **v.SHELL_STUB_OVERRIDES,
-        "k3s_longhorn_backup_armed": b2_armed,
-        "k3s_longhorn_r2_armed": r2_armed,
-    }
+    ctx = v.template_context(
+        BACKUP_HEALTH,
+        overrides={
+            "k3s_longhorn_backup_armed": b2_armed,
+            "k3s_longhorn_r2_armed": r2_armed,
+        },
+    )
     rendered = sl.render_template(BACKUP_HEALTH, ctx)
 
     out = tmp_path / "longhorn-backup-health.sh"
@@ -77,13 +76,13 @@ def test_backup_health_arm_gates_treat_the_string_false_as_disarmed():
     # Ansible's `-e k3s_longhorn_backup_armed=false` passes the STRING "false", which is truthy in
     # Jinja. Without `| bool` an extra-vars disarm would render LONGHORN_BACKUP_ARMED="true" and
     # silently restore the permanently-red monitor this gate exists to prevent.
-    ctx = {
-        **BASE_CONTEXT,
-        **load_yaml(ALL_VARS),
-        **v.SHELL_STUB_OVERRIDES,
-        "k3s_longhorn_backup_armed": "false",
-        "k3s_longhorn_r2_armed": "false",
-    }
+    ctx = v.template_context(
+        BACKUP_HEALTH,
+        overrides={
+            "k3s_longhorn_backup_armed": "false",
+            "k3s_longhorn_r2_armed": "false",
+        },
+    )
     rendered = sl.render_template(BACKUP_HEALTH, ctx)
     assert 'export LONGHORN_BACKUP_ARMED="False"' in rendered
     assert 'export LONGHORN_R2_ARMED="False"' in rendered
@@ -96,7 +95,7 @@ def test_backup_health_logs_unconditionally_even_when_the_reader_itself_breaks()
     local journalctl trail matters most (the Python reader crashing, or `uv` itself missing) is
     the one case that leaves no record at all.
     """
-    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
+    ctx = v.template_context(BACKUP_HEALTH)
     rendered = sl.render_template(BACKUP_HEALTH, ctx)
     reader_failed_branch = rendered.split("if [[ $RC -ne 0", 1)[1].split("else", 1)[0]
     assert "logger -t longhorn-backup-health" in reader_failed_branch
@@ -121,7 +120,7 @@ def test_backup_health_shim_exports_every_env_var_the_reader_requires():
         "did _require_env's call shape change?"
     )
 
-    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
+    ctx = v.template_context(BACKUP_HEALTH)
     rendered = sl.render_template(BACKUP_HEALTH, ctx)
     exported = set(
         re.findall(r"^export (LONGHORN_[A-Z0-9_]+)=", rendered, re.MULTILINE)
@@ -163,7 +162,7 @@ def _run_rendered_shim(
     under tmp_path rather than onto the wire. The assertions on `curl_calls` never print a
     URL for that reason.
     """
-    ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
+    ctx = v.template_context(BACKUP_HEALTH)
     rendered = sl.render_template(BACKUP_HEALTH, ctx)
 
     fake_reader = write_exec(

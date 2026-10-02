@@ -23,8 +23,11 @@ import re
 import pytest
 from lib import yaml_fast
 from _helpers import ROLES
+from _shell_render import rendered_shell_text
 
-SCRIPT = ROLES / "k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
+# The RENDERED script, not the template: a `--retry` count or a `--max-time` moved into a role
+# default would leave a source scan counting `{{ ... }}` as no flag at all (#3178).
+SCRIPT = rendered_shell_text("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2")
 TASKS = ROLES / "k8s/crowdsec/tasks/main.yml"
 
 # The measured endpoint-less window — see the DECIDED block in the script.
@@ -83,7 +86,7 @@ def _worst_case_s(cmd: str) -> int:
 
 
 def _push_curl() -> str:
-    invocations = _curl_invocations(SCRIPT.read_text())
+    invocations = _curl_invocations(SCRIPT)
     # Non-vacuity: the script pushes once and resolves both IP families, so a census that finds
     # fewer than three curls has stopped matching the file rather than found a smaller file.
     assert len(invocations) >= 3, f"expected >=3 curl invocations, found {invocations}"
@@ -126,8 +129,7 @@ def test_the_pre_999_retry_window_is_flagged_as_too_narrow():
 
 
 def test_a_whole_run_still_fits_the_cron_period():
-    text = SCRIPT.read_text()
-    budget = sum(_worst_case_s(cmd) for cmd in _curl_invocations(text))
+    budget = sum(_worst_case_s(cmd) for cmd in _curl_invocations(SCRIPT))
     assert budget < _cron_period_s(), (
         f"worst-case run is {budget}s against a {_cron_period_s()}s cron period — a down Kuma "
         "would let a run overlap its successor"
