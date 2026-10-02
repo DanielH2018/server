@@ -72,8 +72,9 @@ spec:
             # so they keep arriving after that legacy path is removed. `allowed-env` passes only
             # what is set in the launcher's own environment, which is why they are set here.
             #
-            # 60 s is the effective Code-node limit, not the 300 s on the n8n Deployment: the
-            # runner aborts a task at its own timeout, whatever the broker allows.
+            # 60 s is the Code-node limit, and the n8n Deployment sets the broker's
+            # N8N_RUNNERS_TASK_TIMEOUT to the same value (#3258). The runner aborts a task at its
+            # own timeout whatever the broker allows, so raising one alone changes nothing.
             - name: N8N_RUNNERS_TASK_TIMEOUT
               value: "60"
             - name: N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT

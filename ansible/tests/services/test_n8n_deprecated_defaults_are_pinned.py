@@ -9,6 +9,10 @@ changes, and an unset variable would take that change silently through a Renovat
   both.** The launcher warns for any runner whose `allowed-env` lacks one. `env-overrides`
   does not silence it, whatever the warning text says. `allowed-env` passes only what the
   launcher's own environment holds, so an entry with no value behind it pins nothing.
+- **Both pods hold one `N8N_RUNNERS_TASK_TIMEOUT`** (#3258). The runner aborts at its own
+  timeout, so a broker value that differs only misstates the cap.
+- **The two warnings 2.41.6 adds are cleared** (#3260): `N8N_RUNNERS_ENABLED` is not set, and
+  `N8N_MIGRATE_FS_STORAGE_PATH=true` moves `binaryData` to `storage`.
 
 Run: uv run pytest ansible/tests/services/test_n8n_deprecated_defaults_are_pinned.py
 """
@@ -72,7 +76,7 @@ def test_an_allowed_variable_the_launcher_does_not_hold_is_flagged():
 # --- applied to the real templates -----------------------------------------------------
 
 
-def _env_names(name: str) -> set[str]:
+def _env(name: str) -> dict[str, str]:
     for role, _tpl, doc in rendered_docs():
         if (
             role == "n8n"
@@ -80,8 +84,14 @@ def _env_names(name: str) -> set[str]:
             and doc["metadata"]["name"] == name
         ):
             container = doc["spec"]["template"]["spec"]["containers"][0]
-            return {e["name"] for e in container.get("env", []) if "value" in e}
+            return {
+                e["name"]: e["value"] for e in container.get("env", []) if "value" in e
+            }
     raise AssertionError(f"n8n renders no Deployment named {name}")
+
+
+def _env_names(name: str) -> set[str]:
+    return set(_env(name))
 
 
 def test_the_n8n_deployment_sets_the_broker_side_defaults():
@@ -95,3 +105,15 @@ def test_every_runner_receives_both_timeouts_from_the_launcher():
         "python",
     }
     assert unpinned_runner_vars(config, _env_names("n8n-runners")) == set()
+
+
+def test_broker_and_runners_hold_one_task_timeout():
+    broker = _env("n8n")["N8N_RUNNERS_TASK_TIMEOUT"]
+    runners = _env("n8n-runners")["N8N_RUNNERS_TASK_TIMEOUT"]
+    assert broker == runners == "60"
+
+
+def test_the_two_2_41_6_deprecations_are_cleared():
+    env = _env("n8n")
+    assert "N8N_RUNNERS_ENABLED" not in env
+    assert env["N8N_MIGRATE_FS_STORAGE_PATH"] == "true"
