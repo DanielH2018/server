@@ -4,9 +4,14 @@
 # `upgrade: dist` OOM-kill mid-dpkg without disk-backed swap, corrupting the
 # package DB (the classic "dpkg was interrupted" deploy hang). The thrash can
 # also trip the optimize_pi watchdog (max-load-1=24) into rebooting mid-apt,
-# so we stop the watchdog for the run — optimize_pi re-enables it at the end.
-# This lives here, not in optimize_pi, because optimize_pi runs LAST in
-# initial_setup.yml — too late to protect these apt tasks.
+# so we stop the watchdog for the run. This lives here, not in optimize_pi, because optimize_pi
+# runs LAST in initial_setup.yml — too late to protect these apt tasks.
+#
+# The stop notifies a handler that starts the daemon again, because handlers run at the end of
+# the play whichever tags were selected. Relying on optimize_pi's own `state: started` task left
+# the watchdog daemon dead after any run that reached `pi-swap` without the `watchdog` tag:
+# the 2026-09-27 23:28 run stopped it, wd_keepalive took over the device, and the daemon's load
+# test stayed off for four days (#3241).
 - name: Gather service facts
   tags: [pi-swap]
   ansible.builtin.service_facts:
@@ -18,6 +23,7 @@
     name: watchdog
     state: stopped
   become: true
+  notify: Start Watchdog after provisioning
   when:
     - has_low_memory_board
     - "'watchdog.service' in (ansible_facts.services | default({}))"
