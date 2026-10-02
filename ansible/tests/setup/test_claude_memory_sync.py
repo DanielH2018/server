@@ -16,31 +16,31 @@ Run: uv run pytest ansible/tests/setup/test_claude_memory_sync.py
 
 import re
 
-import jinja2
 from _helpers import ANSIBLE, load_yaml
-from lib.ansible_jinja_env import make_ansible_env
+from _setup_render import render_setup_text, role_context
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
-SERVICE = ROLE / "templates" / "claude-memory-sync.service.j2"
+SERVICE = "claude-memory-sync.service.j2"
 
 
-def _render(text: str, **overrides: object) -> str:
-    context: dict[str, object] = {
-        "sys_user": "ubuntu",
-        "inventory_hostname": "daniel-box",
-        "claude_code_rc_workdir": "/home/ubuntu/server",
-    }
-    context.update(overrides)
-    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-    # Defaults are themselves Jinja; render them in order so the store path resolves.
-    for key in (
-        "claude_code_memory_sync_target",
-        "claude_code_memory_sync_dir",
-        "claude_code_memory_sync_interval",
-    ):
-        context.setdefault(key, env.from_string(str(DEFAULTS[key])).render(context))
-    return env.from_string(text).render(context)
+def _render(**overrides: object) -> str:
+    """The sync unit rendered at inventory values, `overrides` on top.
+
+    Through `_setup_render` rather than a context this module assembles: the defaults here are
+    themselves Jinja (`claude_code_memory_sync_dir` derives from the checkout path), and the
+    harness resolves them the way Ansible does (#3202).
+    """
+    return render_setup_text("claude_code", SERVICE, overrides)
+
+
+def _var(name: str, **overrides: object) -> str:
+    """One of the role's variables as the render resolves it, `overrides` on top.
+
+    The store path is a derived DEFAULT rather than anything the unit prints on its own line,
+    so the derivation is read out of the same resolved context the unit renders with.
+    """
+    return role_context(ROLE, overrides)[name]
 
 
 def _exec_start(rendered: str) -> str:
@@ -53,10 +53,8 @@ def _exec_start(rendered: str) -> str:
 def test_store_path_derives_from_the_checkout():
     """Claude Code keys a store by the working directory with `/` turned into `-`."""
     store = "/home/ubuntu/.claude/projects/-home-ubuntu-server/memory"
-    assert _render("{{ claude_code_memory_sync_dir }}") == store
-    moved = _render(
-        "{{ claude_code_memory_sync_dir }}", claude_code_rc_workdir="/srv/x"
-    )
+    assert _var("claude_code_memory_sync_dir") == store
+    moved = _var("claude_code_memory_sync_dir", claude_code_rc_workdir="/srv/x")
     assert moved == "/home/ubuntu/.claude/projects/-srv-x/memory", (
         "the store path must follow claude_code_rc_workdir, not hardcode the checkout"
     )
@@ -64,7 +62,7 @@ def test_store_path_derives_from_the_checkout():
 
 def test_copy_runs_from_this_host_to_the_target_with_delete():
     store = "/home/ubuntu/.claude/projects/-home-ubuntu-server/memory"
-    cmd = _exec_start(_render(SERVICE.read_text()))
+    cmd = _exec_start(_render())
     assert cmd.endswith(f" {store}/ daniel-server:{store}/"), (
         f"the copy must push the local store to the target, trailing slashes on both; got {cmd}"
     )
@@ -75,14 +73,12 @@ def test_copy_runs_from_this_host_to_the_target_with_delete():
 
 
 def test_copy_target_follows_the_variable():
-    cmd = _exec_start(
-        _render(SERVICE.read_text(), claude_code_memory_sync_target="other")
-    )
+    cmd = _exec_start(_render(claude_code_memory_sync_target="other"))
     assert " other:/home/ubuntu/" in cmd and "daniel-server" not in cmd
 
 
 def test_an_empty_source_never_reaches_delete():
-    rendered = _render(SERVICE.read_text())
+    rendered = _render()
     store = "/home/ubuntu/.claude/projects/-home-ubuntu-server/memory"
     assert f"ExecCondition=/usr/bin/test -s {store}/MEMORY.md" in rendered, (
         "--delete from an empty or missing store would wipe the far one; the unit must "
