@@ -171,10 +171,11 @@ TEMPLATE_SOURCE_READERS = {
         "source"
     ),
     "k8s/test_root_needs_dac_capability.py": (
-        "the census spans all three role planes (`roles/*/*/templates/*.j2`) and no one render "
-        "covers that set. The macro-built blocks it cannot see are held by "
-        "`test_hardened_macro_is_not_a_dac_bypass.py`, which pins every root site to a literal "
-        "block. Rendering all three planes is #3223"
+        "the fallback for the three templates no render reaches: `k8s/image-builder`'s build "
+        "Job and context ConfigMap and `k8s/volume-claim`'s PVC, all three `include_role` "
+        "helpers whose variables arrive on the caller's include task. The census itself spans "
+        "all three planes off five renders, and "
+        "`test_the_render_reaches_every_role_template` holds that nothing else falls back"
     ),
     "k8s/test_volume_names_descriptive.py": (
         "the fallback for the templates `_k8s_render` skips: every role it reaches is "

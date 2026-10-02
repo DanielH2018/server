@@ -9,8 +9,8 @@ still happens to match.
 
 Two exemptions, both the macro's own docstring's, both structural rather than named:
 
-- a block carrying `runAsUser: 0`. The macro refuses uid 0 so that
-  `test_root_needs_dac_capability.py`, which scans raw text, still sees a root block.
+- a block carrying `runAsUser: 0`. The macro refuses uid 0 so each root site keeps the comment
+  saying which uid owns the files and why root is needed, which a macro call has nowhere to put.
 - a block nested deeper than 10 spaces. A CronJob's `jobTemplate` puts its containers one
   level further in, and the macro emits at one fixed depth by design.
 

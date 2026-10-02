@@ -16,16 +16,18 @@
   converted rather than given an indent argument, because a macro that can emit at two depths
   is one that can emit at the wrong one.
 
-  NOT FOR `runAsUser: 0`. ansible/tests/k8s/test_root_needs_dac_capability.py is a tree-wide guard
-  that scans raw template TEXT for a `runAsUser: 0` block that drops ALL and adds no DAC
-  capability — root that cannot read another uid's files is weaker than the pod's own uid, not
-  stronger. It does not render Jinja, so a root securityContext built through this macro is
-  invisible to it. The guard has zero violations today and its own docstring records that a rule
-  matching nothing passes identically to a rule that works, so silently removing its six real
-  accept cases would be indistinguishable from breaking it. code-server's deployment.yaml.j2,
-  loki-homelab's alloy-daemonset.yaml.j2 and the CrowdSec seeding init containers in authelia's
-  and traefik's deployment.yaml.j2 are the `runAsUser: 0` sites in this family and stay written
-  out in full. See "Textual guard checks break on an indirection" in project memory.
+  NOT FOR `runAsUser: 0`. A root container that drops ALL and adds no DAC capability is weaker
+  than the pod's own uid, because it can no longer read another uid's files — so every root site
+  here carries a comment naming which uid owns the files, at what mode, and why root is reached
+  for at all. A one-line macro call has nowhere to put that, and the capabilities stay written
+  literally so a grep for `DAC_OVERRIDE` finds every container granted it. code-server's
+  deployment.yaml.j2, loki-homelab's alloy-daemonset.yaml.j2 and the CrowdSec seeding init
+  containers in authelia's and traefik's deployment.yaml.j2 are the `runAsUser: 0` sites in this
+  family and stay written out in full, which
+  ansible/tests/k8s/test_hardened_macro_is_not_a_dac_bypass.py enforces.
+  ansible/tests/k8s/test_root_needs_dac_capability.py reads the RENDER of every role template
+  (#3223), so a root block built through this macro is scanned like any other and the ban above
+  is a readability convention rather than a way around a blind spot.
 
   Arguments:
     read_only      emit `readOnlyRootFilesystem: true`.
