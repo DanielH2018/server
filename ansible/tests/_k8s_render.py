@@ -31,8 +31,8 @@ from validate.k8s_manifests import (
 )
 
 
-def _inventory_base() -> dict:
-    """The context every render here starts from, resolved once.
+def _inventory_base(overrides: dict | None = None) -> dict:
+    """The context every render here starts from, resolved once, `overrides` laid on top.
 
     daniel-box's host_vars layer over group_vars, as in the validator's main(): a template
     that reads `containers_list` itself (authelia's access_control rules) would otherwise
@@ -43,6 +43,7 @@ def _inventory_base() -> dict:
         **load_yaml(ALL_VARS),
         **load_yaml(HOST_VARS),
         "playbook_dir": str(ANSIBLE),
+        **(overrides or {}),
     }
     return resolve_vars(base, base)
 
@@ -61,10 +62,10 @@ def _render_texts(overrides: dict | None = None):
     does not hold. Raises on a render failure rather than skipping it — a template that
     stopped rendering would otherwise quietly drop out of every guard built on this.
     """
-    # The overrides go into the base the defaults resolve against, as well as on top: a
-    # default aliasing an overridden secret (`x: "{{ some_secret }}"`) would otherwise
+    # The overrides go in BEFORE anything resolves, and on top again after: an inventory value
+    # or role default aliasing an overridden secret (`x: "{{ some_secret }}"`) would otherwise
     # resolve to the secret's STUB before the override is ever laid on.
-    base = {**_inventory_base(), **(overrides or {})}
+    base = _inventory_base(overrides)
     entries = k8s_entries()
 
     for role_dir in role_dirs():

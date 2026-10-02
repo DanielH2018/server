@@ -11,6 +11,9 @@ is caught where a scan of template source would miss it (#3183).
 Run: uv run pytest ansible/tests/services/test_nut_fsd_login_confined.py
 """
 
+from collections.abc import Set
+from functools import cache
+
 from _compose_render import host_vars as pi_host_vars
 from _compose_render import render_texts as compose_render_texts
 from _helpers import ANSIBLE
@@ -23,9 +26,9 @@ SHUTDOWN_CHAIN = frozenset({"k8s/nut", "setup/nut_host"})
 SENTINEL = "nut-monitor-password-sentinel-3183"
 
 
-def roles_outside_the_chain(holders: set[str]) -> set[str]:
+def roles_outside_the_chain(holders: Set[str]) -> set[str]:
     """The roles in `holders` that are not part of the shutdown chain."""
-    return holders - SHUTDOWN_CHAIN
+    return set(holders) - SHUTDOWN_CHAIN
 
 
 def test_a_dashboard_holding_the_login_is_flagged():
@@ -60,13 +63,14 @@ def _roles_rendering(overrides: dict, marker: str) -> set[str]:
     }
 
 
-def _roles_rendering_the_login() -> set[str]:
+@cache
+def _roles_rendering_the_login() -> frozenset[str]:
     """Every role whose render carries the primary login's VALUE, not just its name.
 
     The password is set to a sentinel, so a template that reaches it through an alias is
     counted, where a source scan for the name sees nothing.
     """
-    return _roles_rendering({"nut_monitor_password": SENTINEL}, SENTINEL)
+    return frozenset(_roles_rendering({"nut_monitor_password": SENTINEL}, SENTINEL))
 
 
 def test_an_alias_of_the_login_reaches_a_setup_render(tmp_path):

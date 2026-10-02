@@ -100,7 +100,9 @@ def render_texts(vars_: dict) -> tuple[tuple[str, str, str], ...]:
     """`rendered_texts` for a host whose vars are `vars_`, uncached.
 
     For a census at a value the inventory does not hold: lay a secret's sentinel over
-    `host_vars()` and every template its value reaches carries the sentinel.
+    `host_vars()` and every template that names the secret directly carries the sentinel.
+    Not one that aliases it — `host_context` resolves no `{{ ... }}` inside a variable's
+    value, so an alias renders as literal braces.
     """
     texts = []
     for entry in containers_entries_in(vars_):
