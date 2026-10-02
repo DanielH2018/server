@@ -153,6 +153,10 @@ def render_role_template(
     on what changes. `rendered_docs()` is the whole tree at inventory values; this is one
     template at values the inventory does not hold, so it is not cached and each call renders.
 
+    `role` need not be a `containers_list` entry: an included helper role such as
+    `k8s/volume-claim` renders here too, with the variables its caller hands over passed as
+    `overrides`.
+
     # DECIDED: role defaults go under the inventory here, which is Ansible's own precedence
     # and the reverse of `_render_all`'s. `_render_all` copies the validator, which puts the
     # defaults on top and holds that harmless with `colliding_default_keys` — but that guard
@@ -161,11 +165,16 @@ def render_role_template(
     # never uses. For daniel-box the guard makes the two orders render the same text.
     """
     base = host_context(host)
-    entry = next(c for c in base["containers_list"] if c["name"] == role)
+    # A default rather than a raise: `k8s/volume-claim` is included by 16 caller roles and is not
+    # a `containers_list` entry at all, so the lookup finds nothing for it and the bare `next()`
+    # raised `StopIteration` before the render ever started. The key is LEFT OUT in that case
+    # rather than set to None, so a template reading `container_item.name` renders `STUB` the way
+    # every other undefined does here instead of raising an AttributeError.
+    entry = next((c for c in base["containers_list"] if c["name"] == role), None)
     ctx = {
         **role_defaults(role, base),
         **base,
-        "container_item": entry,
+        **({"container_item": entry} if entry is not None else {}),
         **(overrides or {}),
     }
     env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])

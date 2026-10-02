@@ -7,6 +7,10 @@ role's `*.sh.j2`. A guard built on any of them reads a set it does not enumerate
 accessor that quietly came back short would turn each of those guards into a pass over nothing
 (#3175, #3178).
 
+`_k8s_render.render_role_template` is covered here too, for the same reason rather than because
+it skips anything: a guard reaches for a template's BYTES when the accessor cannot render it,
+and an included helper role with no `containers_list` entry was one such case (#3107).
+
 Run: uv run pytest ansible/tests/repo/test_shared_render_accessors.py
 """
 
@@ -19,12 +23,19 @@ from _compose_render import (
     render_role_template,
 )
 from _helpers import ROLES, load_defaults
-from _k8s_render import BUILD_ROLES, rendered_build_text, rendered_build_texts
+from _k8s_render import (
+    BUILD_ROLES,
+    rendered_build_text,
+    rendered_build_texts,
+    # Aliased: `_compose_render` exports a `render_role_template` of its own, for the Pi.
+    render_role_template as render_k8s_template,
+)
 from _shell_render import (
     render_shell_script,
     rendered_shell_text,
     rendered_shell_texts,
 )
+from lib import yaml_fast
 from lib.render_guard import containers_entries_in, entry_platform
 from validate.shell_templates import discover_templates
 
@@ -70,6 +81,28 @@ def test_a_pi_template_that_will_not_render_fails_the_caller() -> None:
         render_role_template("alloy", "no-such-template.j2")
 
 
+def test_an_included_role_with_no_census_entry_renders() -> None:
+    """`k8s/volume-claim` is included by 16 caller roles and is in no `containers_list`.
+
+    The accessor looked its entry up with a bare `next()`, so asking it for this role raised
+    `StopIteration` before the render started — and the freshrss guard had to read the
+    template's bytes instead, which is the exposure #2809's series removes. The caller's own
+    `vars:` arrive as overrides, so the claim renders under the name its caller hands over.
+    """
+    pvc = yaml_fast.safe_load(
+        render_k8s_template(
+            "volume-claim", "pvc.yaml.j2", {"volume_claim_name": "freshrss-config"}
+        )
+    )
+    assert pvc["kind"] == "PersistentVolumeClaim"
+    assert pvc["metadata"]["name"] == "freshrss-config"
+    # The role's own defaults still reach the render; only the census entry is absent.
+    assert (
+        pvc["spec"]["storageClassName"]
+        == VOLUME_CLAIM_DEFAULTS["volume_claim_storage_class"]
+    )
+
+
 def test_every_build_role_dockerfile_is_rendered() -> None:
     rendered = {role for role, _, _ in rendered_build_texts()}
     assert BUILD_ROLES <= rendered, f"accessor lost {sorted(BUILD_ROLES - rendered)}"
@@ -103,6 +136,7 @@ GUARDED_SHELL_TEMPLATES = frozenset(
 )
 
 ARTIFACTS_DEFAULTS = load_defaults(ROLES / "k8s" / "artifacts")
+VOLUME_CLAIM_DEFAULTS = load_defaults(ROLES / "k8s" / "volume-claim")
 
 
 def test_every_shell_template_in_the_tree_is_rendered() -> None:
