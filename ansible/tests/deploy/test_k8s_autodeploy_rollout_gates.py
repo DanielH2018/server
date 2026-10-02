@@ -60,14 +60,8 @@ def test_the_render_reaches_every_auto_deployable_role() -> None:
     """
     rendered = _rendered_roles()
     assert "pihole" in rendered
-    unreached = sorted(
-        role.name
-        for role in _roles()
-        if _auto_deployable(role) and role.name not in rendered
-    )
-    assert unreached == [], (
-        f"auto-deployable roles the render does not reach: {unreached}"
-    )
+    auto = {role.name for role in _roles() if _auto_deployable(role)}
+    assert sorted(auto - set(rendered)) == [], "auto-deployable roles the render skips"
 
 
 def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
