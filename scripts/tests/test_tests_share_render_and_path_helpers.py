@@ -111,13 +111,6 @@ SHELL_SOURCE_READERS = {
         "hashes the template's raw BYTES — a trailing newline and a truncated-read "
         "comparison, neither of which survives a render"
     ),
-    "ansible/tests/setup/test_docs_refresh_heartbeat.py": (
-        "asserts WHICH variable feeds DOCS_REFRESH_PUSH_TOKEN; an unset secret renders as the "
-        "same empty string a misspelled name would"
-    ),
-    "ansible/tests/setup/test_eval_sweep_cron.py": (
-        "asserts WHICH variable feeds ANTHROPIC_API_KEY, for the same reason"
-    ),
     "scripts/validate/tests/test_shell_template_cron_rules.py": (
         "hands a cron rule its own second argument — the rule under test takes the template "
         "TEXT, and `shell_templates.py` reads it off disk the same way in production, so a "

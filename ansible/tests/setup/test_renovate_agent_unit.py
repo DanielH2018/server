@@ -13,12 +13,9 @@ the template as applied either way:
 4. The prompt's caps must be the unit's caps. A prompt naming a different PR cap or timeout
    from `defaults/main.yml` is how a session starts a landing it has no budget to finish.
 
-Every template here is asserted on its RENDER. Several of these claims used to be substring
-matches on the Jinja itself — the `{% if %}` that gates the Kuma beat, the `{{ ... }}` that
-builds its URL, the variable names the prompt is supposed to interpolate — and each of those
-holds only while the expression is spelled the way the pattern spells it (#3202). Rendering the
-variable to a value no secret holds asserts the same couplings and also catches an expression
-that reads the wrong variable.
+Every template here is asserted on its RENDER, at a SENTINEL value no secret holds: a substring
+match on the Jinja holds only while the expression is spelled that way, and a render at inventory
+values cannot tell an unset secret from a misspelled name (#3202).
 
 Run: uv run pytest ansible/tests/setup/test_renovate_agent_unit.py
 """
@@ -63,7 +60,6 @@ def directive(unit_text: str, key: str) -> list[str]:
 @pytest.fixture(scope="module")
 def unit() -> str:
     """The unit rendered with the push token armed, so the gated beat line is present."""
-    assert (TEMPLATES / UNIT).is_file(), f"{UNIT} is missing — the agent unit is gone"
     return render(UNIT, {TOKEN: SENTINEL})
 
 
@@ -160,22 +156,15 @@ def test_the_prompt_quotes_the_caps_it_is_given(defaults: dict) -> None:
     """The prompt's numbers must FOLLOW the defaults, not merely mention their names.
 
     Each cap is rendered twice — at its default and at a value no default holds — so a number
-    typed into the prompt fails here. The old form matched the variable's name in the source,
-    which a mention in a comment satisfies just as well.
+    typed into the prompt fails here, where a name matched in the source does not.
     """
-    sentinels = {
-        "renovate_agent_max_prs": 97,
-        "renovate_agent_run_timeout_s": 9731,
-        "renovate_agent_budget_usd": 97.31,
-    }
     at_defaults = render(PROMPT)
-    for var, moved_to in sentinels.items():
+    caps = (("max_prs", 97), ("run_timeout_s", 9731), ("budget_usd", 97.31))
+    for suffix, moved_to in caps:
+        var = f"renovate_agent_{suffix}"
         assert var in defaults, f"{var} is referenced by the prompt but has no default"
-        assert str(defaults[var]) in at_defaults, (
-            f"the prompt does not quote {var}'s default {defaults[var]!r}"
-        )
-        moved = render(PROMPT, {var: moved_to})
-        assert str(moved_to) in moved, (
+        assert str(defaults[var]) in at_defaults, f"the prompt omits {var}'s default"
+        assert str(moved_to) in render(PROMPT, {var: moved_to}), (
             f"the prompt hardcodes what should come from {var}: moving it to {moved_to} "
             "changes nothing in the rendered prompt"
         )
@@ -201,8 +190,7 @@ DAY = 86400
 def _alive_tile() -> dict:
     """The Renovate Agent tile as it renders with its push token armed.
 
-    `entity` fails naming the tile when the render does not carry it, where the source read it
-    replaces had to substitute every `{{ ... }}` to `0` before the parse — so an interval moved
+    The source read this replaces substituted `{{ ... }}` to `0` first, so an interval moved
     into a role default read as 0 and the band below compared nothing.
     """
     return entity(TILE, TOKEN)
@@ -220,8 +208,7 @@ def test_the_unit_beats_kuma_only_after_a_clean_run(unit: str) -> None:
     assert any("/etc/renovate-agent/config.env" in p for p in posts), (
         "the beat must read its URL from the 0600 config.env at run time"
     )
-    # The gate, read off two renders rather than off the `{% if %}` line: the push must be
-    # there with the token set and gone without it.
+    # The gate, off two renders rather than the `{% if %}` line.
     disarmed = directive(render(UNIT, {TOKEN: ""}), "ExecStartPost")
     assert not any("$KUMA_PUSH_URL" in p for p in disarmed), (
         "the beat must be gated on the token, or a checkout without the secret renders a "
@@ -234,9 +221,8 @@ def test_the_unit_holds_no_push_token(unit: str) -> None:
     system bus to any local user, so a token interpolated into an Exec line is readable
     without sudo — the same reasoning that keeps the alert webhook out of the unit above.
     """
-    # The `unit` fixture renders with the token set to SENTINEL, so the VALUE is what to look
-    # for: an interpolation anywhere in the unit puts the sentinel into a published line. The
-    # source form of this check matched one spelling of the interpolation and nothing else.
+    # The `unit` fixture renders the token as SENTINEL, so an interpolation anywhere in the unit
+    # puts that value into a line systemd publishes.
     assert SENTINEL not in unit, (
         f"{TOKEN} is interpolated into the unit — move it to config.env and reference "
         "$KUMA_PUSH_URL, as renovate-notify.service.j2 does"
@@ -248,21 +234,14 @@ def test_config_env_carries_the_gated_push_url() -> None:
     """The other half of the move: the URL has to land somewhere 0600, still gated on the
     token so a checkout without the secret renders an empty value rather than a broken URL."""
     armed = render(CONFIG_ENV, {TOKEN: SENTINEL})
-    assert "KUMA_PUSH_URL=" in armed, (
-        "config.env must carry the push URL the unit reads"
-    )
-    assert f"/api/push/{SENTINEL}" in armed, (
-        f"config.env must build the URL from {TOKEN}; it renders "
+    assert "KUMA_PUSH_URL=https://" in armed and f"/api/push/{SENTINEL}" in armed, (
+        f"config.env must carry the push URL the unit reads, built from {TOKEN}; it renders "
         f"{[ln for ln in armed.splitlines() if 'KUMA_PUSH_URL' in ln]}"
     )
-    # The line is unconditional and its VALUE is what the gate decides, so the disarmed render
-    # must carry an EMPTY assignment rather than no assignment: the unit's own `curl -f` is
-    # skipped on an empty variable, where a URL ending in an empty token 404s every run.
-    disarmed = [
-        ln
-        for ln in render(CONFIG_ENV, {TOKEN: ""}).splitlines()
-        if "KUMA_PUSH_URL" in ln
-    ]
+    # The line is unconditional and the gate decides its VALUE, so the disarmed render carries
+    # an EMPTY assignment: a URL ending in an empty token would 404 every run.
+    text = render(CONFIG_ENV, {TOKEN: ""})
+    disarmed = [ln for ln in text.splitlines() if "KUMA_PUSH_URL" in ln]
     assert disarmed == ["KUMA_PUSH_URL="], (
         "KUMA_PUSH_URL must be gated on the token, or an unset secret renders a URL ending "
         f"in an empty token and every push 404s. Rendered: {disarmed}"
@@ -277,16 +256,13 @@ def test_config_env_carries_the_gated_push_url() -> None:
 
 
 def test_the_tile_and_the_unit_share_one_token() -> None:
-    # Rendered at a sentinel this variable alone holds: the tile must carry THAT value, which
-    # is a stronger claim than the tile's source naming the variable somewhere.
-    tile = json.loads(
-        re.search(
-            rf"^  {re.escape(TILE)}: \|\n\s+(\{{.*\}})$",
-            monitors_text({TOKEN: SENTINEL}),
-            re.M,
-        ).group(1)
+    # The tile must carry the sentinel this variable alone holds.
+    body = re.search(
+        rf"^  {re.escape(TILE)}: \|\n\s+(\{{.*\}})$",
+        monitors_text({TOKEN: SENTINEL}),
+        re.M,
     )
-    assert tile["push_token"] == SENTINEL, (
+    assert json.loads(body.group(1))["push_token"] == SENTINEL, (
         "the tile must embed the same SOPS var the unit pushes with, or the beat lands on a "
         "monitor that does not exist and the tile sits red"
     )
