@@ -28,7 +28,7 @@ read it when you change one.
 Optional and empty by default: `manifests_extra_rollouts` (`{name, image}` per extra Deployment
 this role should roll), `manifests_self_rollouts` (`{name, kind, image?, namespace?,
 rolled_by_role?}`, for a role restarting its own workloads afterwards),
-`manifests_rollout_timeout` (default `600s`), `k8s_autodeploy_snapshot_pvcs` (declared in the
+`manifests_rollout_timeout` (default `manifests_rollout_timeout_default`, `600s`), `k8s_autodeploy_snapshot_pvcs` (declared in the
 caller's own `defaults/main.yml`, snapshotted before the apply), and the deferred pair below.
 
 - **Templates stay in the caller's role**, at `roles/k8s/<service>/templates/<name>.j2`, and the
@@ -37,7 +37,7 @@ caller's own `defaults/main.yml`, snapshotted before the apply), and the deferre
 - **A basename with no template in the caller's role renders from a SHARED default.**
   `manifests_shared_defaults` covers `service.yaml` and `ingressroute.yaml`, read off the role's
   `containers_list` entry; the basename still goes in `manifests_files`, the role's own template
-  wins, and dropping `hostname` costs a routed entry the traefik ordering edge too.
+  wins, and dropping `hostname` costs a routed entry its traefik ordering edge.
 - **A caller may defer the APPLY of some manifests and keep the render.**
   `manifests_deferred_files` plus `manifests_deferred_dir_name` render, prune and digest them
   into a reserved sibling directory the caller applies itself, gating on
@@ -52,8 +52,8 @@ caller's own `defaults/main.yml`, snapshotted before the apply), and the deferre
   `k8s_pending_rollouts`, and `tasks/drain.yml` — included once per batch from
   `ansible/tasks/k8s_batch.yml` — waits on all of them concurrently. A role that returns is one
   whose manifests were *accepted*, not one whose pods are up. Every task in `drain.yml` is
-  `tags: [always]`: a gitops-deploy run filters `[deploy]` out, which left the drain waiting on
-  nothing behind a `failed=0` recap.
+  `tags: [always]`: a gitops-deploy run filters `[deploy]` out, which left the drain waiting
+  on nothing behind a `failed=0` recap.
 - **Dropping a name from `manifests_files` is only half a retirement.** The staged file goes,
   the **live object keeps serving**, and it needs one hand `kubectl delete` the
   `manifest-prune-check.sh` host cron flags. `manifests_prune: true` plus `manifests_prune_kinds`
