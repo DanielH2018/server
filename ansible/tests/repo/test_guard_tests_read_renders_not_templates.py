@@ -10,10 +10,11 @@ in a directory `SCANNED` names reads a path under a `templates/` directory, exce
 are converted (#3107). `services/` joined with six permanent entries; `longhorn/` joined with
 none, its one reader — the daily RecurringJob's group — now read out of `_setup_render`, and
 `repo/` — the directory this module itself sits in, so a new guard written here is held to the
-rule — joined with one, which keys on a variable NAME. The
-directories still outside it (`setup/`, `k8s/`, `deploy/`, `staging/`) each hold ten or more
-readers, so adding one is a PR of its own rather than a wider glob here. Entries are keyed
-`<directory>/<module>.py`, because a basename alone would let a module in one directory
+rule — joined with one, which keys on a variable NAME. `setup/` joined with two, each keyed on
+something no render carries: a Jinja FILTER, and the behaviour of a variable no render leaves
+undefined (#3202). The directories still outside it (`k8s/`, `deploy/`, `staging/`) each hold
+several readers, so adding one is a PR of its own rather than a wider glob here. Entries are
+keyed `<directory>/<module>.py`, because a basename alone would let a module in one directory
 inherit another's exemption.
 
 The exposure is the same one `scripts/tests/test_tests_share_render_and_path_helpers.py`'s
@@ -42,7 +43,7 @@ from lib.repo_paths import ANSIBLE
 
 TESTS = ANSIBLE / "tests"
 # Every directory the rule covers. Adding one means converting its readers first.
-SCANNED = (TESTS / "services", TESTS / "longhorn", TESTS / "repo")
+SCANNED = (TESTS / "services", TESTS / "longhorn", TESTS / "repo", TESTS / "setup")
 
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
 # Every entry is permanent: a render erases the thing it reads.
@@ -75,6 +76,16 @@ TEMPLATE_SOURCE_READERS = {
         "the control that keeps its render honest asserts a template CARRIES `{{`, which is "
         "the one claim a render erases; the census itself renders (#3190)"
     ),
+    "setup/test_registry_selftest_single_node.py": (
+        "whether the agent-Job gate carries `| default([])`, which decides what happens on a "
+        "host whose inventory does not define `k3s_agent_node_ips`. Every render context "
+        "defines it, so no render can show the undefined case the filter covers"
+    ),
+    "setup/test_nut_host_secondary.py": (
+        "whether the two push-token expressions carry `| mandatory`, which decides whether an "
+        "undefined token fails the play or renders empty. A render resolves every secret to "
+        "`STUB`, so no render distinguishes `mandatory` from `default('')`"
+    ),
 }
 
 # Modules the census must reach. An empty or partial scan means the walk stopped matching
@@ -97,6 +108,30 @@ KNOWN_MEMBERS = frozenset(
         "repo/test_guard_tests_read_renders_not_templates.py",
         "repo/test_secret_rendering_host_scripts_have_no_log.py",
         "repo/test_testpaths_covers_every_test_file.py",
+        # setup/ joined in #3202. Listed are the modules that read a role template at all,
+        # converted or exempt — the set whose disappearance means the glob stopped matching.
+        "setup/_kuma_monitors.py",
+        "setup/test_claude_code_on_daniel_server.py",
+        "setup/test_claude_fleet_slice_cap.py",
+        "setup/test_claude_login_slice_caps.py",
+        "setup/test_claude_memory_sync.py",
+        "setup/test_claude_rc_unit.py",
+        "setup/test_coredns_metrics_binds_wildcard.py",
+        "setup/test_coredns_metrics_port_agrees.py",
+        "setup/test_docs_refresh_heartbeat.py",
+        "setup/test_etcd_metrics_single_switch.py",
+        "setup/test_etcd_quota_and_its_monitor_agree.py",
+        "setup/test_eval_sweep_cron.py",
+        "setup/test_health_cron_boot_grace.py",
+        "setup/test_k3s_control_plane_hardening.py",
+        "setup/test_k3s_oidc_trusts_authelia.py",
+        "setup/test_loki_route_witness.py",
+        "setup/test_netplan_dns_overrides.py",
+        "setup/test_node_resolv_order.py",
+        "setup/test_nut_host_secondary.py",
+        "setup/test_pi_node_exporter_host_unit.py",
+        "setup/test_registry_selftest_single_node.py",
+        "setup/test_renovate_agent_unit.py",
     }
 )
 
@@ -247,7 +282,7 @@ def offenders(sources: dict[str, str]) -> dict[str, list[str]]:
     }
 
 
-def test_no_services_test_reads_a_templates_source():
+def test_no_scanned_test_reads_a_templates_source():
     found = offenders({key: p.read_text() for key, p in _modules().items()})
     assert found == {}, (
         "these tests assert on a template's SOURCE, so a value moved into a role default "
@@ -330,6 +365,31 @@ def test_a_new_module_reading_a_role_template_is_named_as_an_offender():
         }
     )
     assert list(found) == ["services/test_new_guard.py"], found
+
+
+def test_a_new_setup_guard_reading_a_role_template_is_named_as_an_offender():
+    """The directory added in #3202, and the reason the keys carry one.
+
+    `setup/test_nut_host_secondary.py` is exempt, so a basename-keyed exemption would wave
+    through a `services/` module of the same name. Both halves are modules that are not on
+    disk, which is what makes this a proof the gate can fail.
+    """
+    source = (
+        'T = SETUP_ROLES / "claude_code" / "templates" / "claude-rc.service.j2"\n'
+        'assert "Slice=" in T.read_text()\n'
+    )
+    found = offenders(
+        {
+            "setup/test_new_guard.py": source,
+            "services/test_nut_host_secondary.py": source,
+            "setup/test_already_clean.py": "from _setup_render import rendered_setup_text\n"
+            'assert "Slice=" in rendered_setup_text("claude_code", "claude-rc.service.j2")\n',
+        }
+    )
+    assert sorted(found) == [
+        "services/test_nut_host_secondary.py",
+        "setup/test_new_guard.py",
+    ], found
 
 
 def test_a_new_longhorn_guard_reading_a_role_template_is_named_as_an_offender():

@@ -13,21 +13,41 @@ the template as applied either way:
 4. The prompt's caps must be the unit's caps. A prompt naming a different PR cap or timeout
    from `defaults/main.yml` is how a session starts a landing it has no budget to finish.
 
+Every template here is asserted on its RENDER. Several of these claims used to be substring
+matches on the Jinja itself — the `{% if %}` that gates the Kuma beat, the `{{ ... }}` that
+builds its URL, the variable names the prompt is supposed to interpolate — and each of those
+holds only while the expression is spelled the way the pattern spells it (#3202). Rendering the
+variable to a value no secret holds asserts the same couplings and also catches an expression
+that reads the wrong variable.
+
 Run: uv run pytest ansible/tests/setup/test_renovate_agent_unit.py
 """
 
+import json
 import re
 
 import pytest
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from _kuma_monitors import entity, monitors_text
+from _setup_render import render_setup_text
 
-ROLE = ANSIBLE / "roles" / "setup" / "renovate_agent"
-UNIT = ROLE / "templates" / "renovate-agent.service.j2"
-TIMER = ROLE / "templates" / "renovate-agent.timer.j2"
-PROMPT = ROLE / "templates" / "prompt.txt.j2"
+ROLE_NAME = "renovate_agent"
+ROLE = ANSIBLE / "roles" / "setup" / ROLE_NAME
+TEMPLATES = ROLE / "templates"
+UNIT = "renovate-agent.service.j2"
+TIMER = "renovate-agent.timer.j2"
+PROMPT = "prompt.txt.j2"
 TASKS = ROLE / "tasks" / "service.yml"
 DEFAULTS = ROLE / "defaults" / "main.yml"
+
+# A value no secret holds, so a render carrying it carries THIS variable's value.
+SENTINEL = "renovate-agent-render-sentinel"
+
+
+def render(template: str, overrides: dict | None = None) -> str:
+    """One of this role's templates rendered at inventory values, `overrides` on top."""
+    return render_setup_text(ROLE_NAME, template, overrides)
 
 
 def directive(unit_text: str, key: str) -> list[str]:
@@ -42,8 +62,9 @@ def directive(unit_text: str, key: str) -> list[str]:
 
 @pytest.fixture(scope="module")
 def unit() -> str:
-    assert UNIT.exists(), f"{UNIT} is missing — the agent unit is gone"
-    return UNIT.read_text()
+    """The unit rendered with the push token armed, so the gated beat line is present."""
+    assert (TEMPLATES / UNIT).is_file(), f"{UNIT} is missing — the agent unit is gone"
+    return render(UNIT, {TOKEN: SENTINEL})
 
 
 @pytest.fixture(scope="module")
@@ -136,46 +157,58 @@ def test_the_role_kicks_no_run_on_config_change() -> None:
 
 
 def test_the_prompt_quotes_the_caps_it_is_given(defaults: dict) -> None:
-    """The prompt's numbers are Jinja references, so they cannot drift from defaults."""
-    prompt = PROMPT.read_text()
-    for var in (
-        "renovate_agent_max_prs",
-        "renovate_agent_run_timeout_s",
-        "renovate_agent_budget_usd",
-    ):
-        assert var in prompt, f"the prompt hardcodes what should come from {var}"
+    """The prompt's numbers must FOLLOW the defaults, not merely mention their names.
+
+    Each cap is rendered twice — at its default and at a value no default holds — so a number
+    typed into the prompt fails here. The old form matched the variable's name in the source,
+    which a mention in a comment satisfies just as well.
+    """
+    sentinels = {
+        "renovate_agent_max_prs": 97,
+        "renovate_agent_run_timeout_s": 9731,
+        "renovate_agent_budget_usd": 97.31,
+    }
+    at_defaults = render(PROMPT)
+    for var, moved_to in sentinels.items():
         assert var in defaults, f"{var} is referenced by the prompt but has no default"
+        assert str(defaults[var]) in at_defaults, (
+            f"the prompt does not quote {var}'s default {defaults[var]!r}"
+        )
+        moved = render(PROMPT, {var: moved_to})
+        assert str(moved_to) in moved, (
+            f"the prompt hardcodes what should come from {var}: moving it to {moved_to} "
+            "changes nothing in the rendered prompt"
+        )
 
 
 def test_the_prompt_invokes_the_skill() -> None:
-    assert PROMPT.read_text().lstrip().startswith("/renovate-prs")
+    assert render(PROMPT).lstrip().startswith("/renovate-prs")
 
 
 def test_the_timer_is_persistent() -> None:
     """A host down at the scheduled minute must still run the tick — the backlog only grows."""
-    assert "Persistent=true" in TIMER.read_text()
+    assert "Persistent=true" in render(TIMER)
 
 
 # ── the alive beat: the tile, the unit's push, and the deadline that ties them ───────────
 
-MONITORS = (
-    ANSIBLE / "roles" / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
-)
 ROTATION = ANSIBLE / "secret_rotation.yml"
 TOKEN = "renovate_agent_kuma_push_token"
+TILE = "renovate-agent-alive.json"
 DAY = 86400
 
 
 def _alive_tile() -> dict:
-    """The rendered Renovate Agent tile, read out of the template by filename key."""
-    m = re.search(
-        r"^  renovate-agent-alive\.json: \|\n\s+(\{.*\})$", MONITORS.read_text(), re.M
-    )
-    assert m, "renovate-agent-alive.json is missing from static-monitors.yaml.j2"
-    return __import__("json").loads(re.sub(r"\{\{[^}]*\}\}", "0", m.group(1)))
+    """The Renovate Agent tile as it renders with its push token armed.
+
+    `entity` fails naming the tile when the render does not carry it, where the source read it
+    replaces had to substitute every `{{ ... }}` to `0` before the parse — so an interval moved
+    into a role default read as 0 and the band below compared nothing.
+    """
+    return entity(TILE, TOKEN)
 
 
-CONFIG_ENV = ROLE / "templates" / "config.env.j2"
+CONFIG_ENV = "config.env.j2"
 
 
 def test_the_unit_beats_kuma_only_after_a_clean_run(unit: str) -> None:
@@ -187,7 +220,10 @@ def test_the_unit_beats_kuma_only_after_a_clean_run(unit: str) -> None:
     assert any("/etc/renovate-agent/config.env" in p for p in posts), (
         "the beat must read its URL from the 0600 config.env at run time"
     )
-    assert f"{{% if {TOKEN} | default('') %}}" in unit, (
+    # The gate, read off two renders rather than off the `{% if %}` line: the push must be
+    # there with the token set and gone without it.
+    disarmed = directive(render(UNIT, {TOKEN: ""}), "ExecStartPost")
+    assert not any("$KUMA_PUSH_URL" in p for p in disarmed), (
         "the beat must be gated on the token, or a checkout without the secret renders a "
         "URL with an empty token and curl -f fails every otherwise-clean run"
     )
@@ -198,9 +234,10 @@ def test_the_unit_holds_no_push_token(unit: str) -> None:
     system bus to any local user, so a token interpolated into an Exec line is readable
     without sudo — the same reasoning that keeps the alert webhook out of the unit above.
     """
-    # The `{% if %}` gate naming the token is fine and is asserted above — what must not
-    # appear is the interpolation that renders its VALUE into a line systemd publishes.
-    assert f"{{{{ {TOKEN} }}}}" not in unit, (
+    # The `unit` fixture renders with the token set to SENTINEL, so the VALUE is what to look
+    # for: an interpolation anywhere in the unit puts the sentinel into a published line. The
+    # source form of this check matched one spelling of the interpolation and nothing else.
+    assert SENTINEL not in unit, (
         f"{TOKEN} is interpolated into the unit — move it to config.env and reference "
         "$KUMA_PUSH_URL, as renovate-notify.service.j2 does"
     )
@@ -210,14 +247,25 @@ def test_the_unit_holds_no_push_token(unit: str) -> None:
 def test_config_env_carries_the_gated_push_url() -> None:
     """The other half of the move: the URL has to land somewhere 0600, still gated on the
     token so a checkout without the secret renders an empty value rather than a broken URL."""
-    text = CONFIG_ENV.read_text()
-    assert "KUMA_PUSH_URL=" in text, "config.env must carry the push URL the unit reads"
-    assert f"/api/push/{{{{ {TOKEN} }}}}" in text, (
-        "config.env must build the URL from renovate_agent_kuma_push_token"
+    armed = render(CONFIG_ENV, {TOKEN: SENTINEL})
+    assert "KUMA_PUSH_URL=" in armed, (
+        "config.env must carry the push URL the unit reads"
     )
-    assert f"{{% if {TOKEN} | default('') %}}" in text, (
+    assert f"/api/push/{SENTINEL}" in armed, (
+        f"config.env must build the URL from {TOKEN}; it renders "
+        f"{[ln for ln in armed.splitlines() if 'KUMA_PUSH_URL' in ln]}"
+    )
+    # The line is unconditional and its VALUE is what the gate decides, so the disarmed render
+    # must carry an EMPTY assignment rather than no assignment: the unit's own `curl -f` is
+    # skipped on an empty variable, where a URL ending in an empty token 404s every run.
+    disarmed = [
+        ln
+        for ln in render(CONFIG_ENV, {TOKEN: ""}).splitlines()
+        if "KUMA_PUSH_URL" in ln
+    ]
+    assert disarmed == ["KUMA_PUSH_URL="], (
         "KUMA_PUSH_URL must be gated on the token, or an unset secret renders a URL ending "
-        "in an empty token and every push 404s"
+        f"in an empty token and every push 404s. Rendered: {disarmed}"
     )
     tasks = TASKS.read_text()
     assert re.search(
@@ -228,12 +276,17 @@ def test_config_env_carries_the_gated_push_url() -> None:
     )
 
 
-def test_the_tile_and_the_unit_share_one_token(unit: str) -> None:
-    tile = re.search(
-        r"^  renovate-agent-alive\.json: \|\n\s+(\{.*\})$", MONITORS.read_text(), re.M
+def test_the_tile_and_the_unit_share_one_token() -> None:
+    # Rendered at a sentinel this variable alone holds: the tile must carry THAT value, which
+    # is a stronger claim than the tile's source naming the variable somewhere.
+    tile = json.loads(
+        re.search(
+            rf"^  {re.escape(TILE)}: \|\n\s+(\{{.*\}})$",
+            monitors_text({TOKEN: SENTINEL}),
+            re.M,
+        ).group(1)
     )
-    assert tile, "renovate-agent-alive.json is missing from static-monitors.yaml.j2"
-    assert f'"push_token": "{{{{ {TOKEN} }}}}"' in tile.group(1), (
+    assert tile["push_token"] == SENTINEL, (
         "the tile must embed the same SOPS var the unit pushes with, or the beat lands on a "
         "monitor that does not exist and the tile sits red"
     )
@@ -329,7 +382,7 @@ def prompt_exclusion_problems(prompt: str, marker: str) -> list[str]:
 
 def test_the_prompt_leaves_a_denylisted_pr_to_a_person() -> None:
     rules = __import__("json").loads(RENOVATE.read_text())["packageRules"]
-    problems = prompt_exclusion_problems(PROMPT.read_text(), denylist_marker(rules))
+    problems = prompt_exclusion_problems(render(PROMPT), denylist_marker(rules))
     assert not problems, "\n".join(problems)
 
 
@@ -393,14 +446,16 @@ def prompt_handoff_problems(prompt: str) -> list[str]:
 
 def test_the_prompt_hands_off_its_own_superseding_pr() -> None:
     # fact: ansible/roles/setup/renovate_agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
-    problems = prompt_handoff_problems(PROMPT.read_text())
+    problems = prompt_handoff_problems(render(PROMPT))
     assert not problems, "\n".join(problems)
 
 
 _FORBID = "never pass `--any-author`"
 _HANDOFF = "file a hand-off finding"
 # The prefix agent_logic.handed_off matches: the run branch (config.env's BRANCH) plus `-`.
-_BRANCH = "`{{ renovate_agent_branch }}-<"
+# Read from defaults rather than written as the Jinja reference: the prompt is asserted on its
+# RENDER, where the reference has become the branch name itself.
+_BRANCH = f"`{yaml_fast.safe_load(DEFAULTS.read_text())['renovate_agent_branch']}-<"
 
 
 def test_a_prompt_forbidding_the_override_and_asking_for_a_handoff_is_clean() -> None:
