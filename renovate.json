@@ -511,6 +511,24 @@
       "groupName": "k8s image {{depName}}"
     },
     {
+      "description": "Version bumps on the k8s plane that have no release timestamp (issue #3370). Renovate's docker datasource returns release timestamps only for Docker Hub, so a version bump on GHCR, lscr.io (which serves from GHCR) or gcr.io has none. Under the default `minimumReleaseAgeBehaviour: timestamp-required`, Renovate holds such an update in Pending Status Checks indefinitely: bazarr v1.6.2-ls366, released 2026-09-26T08:02Z, was still listed there at the dashboard's 2026-10-03T16:18Z update, past its 7-day soak. `timestamp-optional` raises such an update with no age check. A Docker Hub version bump has a timestamp, so it keeps the 7-day soak the catch-all rule above gives it. The 7-day soak was not enforced for this class anyway. Each of the four GHCR or lscr.io version-bump PRs sampled on 2026-10-03 (#2336, #2337 and #2339 on 2026-09-24, #3337 on 2026-10-03) opened with `renovate/stability-days: pending`, which only a dashboard tick does to a held update, and merged still reading pending, because that status is not a required check. So this rule replaces a dashboard tick with no soak by a first-run merge with no soak. The cost: an autodeploy-eligible role's GHCR or lscr.io release automerges on its first Renovate run, and the deployer's health gate and rollback are its only check. A denylisted role's bump still opens as a `manual —` PR, because the denylist rule below overrides automerge; before this rule it never opened at all. matchDatasources keeps the behaviour to container images: a github-releases or pypi pin in a k8s role has a timestamp, and nothing here decides its soak may lapse without one. matchFileNames keeps it to the k8s plane, the only plane where the denylist and the deployer's health gate stand behind an unsoaked update. Majors carry no minimumReleaseAge, so they need no entry. Rejected alternative: looking linuxserver images up on Docker Hub with overridePackageName to get `tag_last_pushed`. It covers only linuxserver, and it writes a Docker Hub digest into an lscr.io pin, which is correct only if both registries serve the same manifest-list digest. ENFORCED: scripts/tests/test_renovate_digest_soak_without_timestamp.py.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/**",
+        "ansible/inventory/group_vars/all.yml"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
+    },
+    {
       "description": "CI toolchain + docs-lint pins under .github/workflows/** and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. The Ansible task file that installs Vale on the hosts is named here too, for the same reason: it carries the same depName as ci.yml's pin, so both copies belong in one PR, and without the path it would fall into the k8s-image group above instead. {{depName}} still groups python's ci.yml + image-smoke.yml pins together (same depName, two files) — only the shared catch-all name is removed, not that lockstep. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
       "matchManagers": [
         "custom.regex"
