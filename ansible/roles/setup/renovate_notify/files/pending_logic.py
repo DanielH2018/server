@@ -40,8 +40,7 @@ VERSION_SOAK_DAYS = 7
 # `nginx:alpine` and `nginxinc/nginx-unprivileged` are re-pushed about every 3.6 days, so a
 # 3-day soak restarted on every re-push left an automerge window the once-daily Renovate run
 # usually missed, and both pins only ever landed by hand (#2886). The rule there soaks them
-# 1 day. That held for nginx-unprivileged only: `nginx:alpine` names no version, so it never
-# had a release timestamp to age, and since #3368 it raises with no soak at all. Keyed on the image reference as a pending row spells it, because the title is all this
+# 1 day. Keyed on the image reference as a pending row spells it, because the title is all this
 # module gets. `test_soak_constants_match_renovate_json` asserts this map against renovate.json,
 # so a new exception there with no entry here fails rather than silently measuring 3 days.
 FAST_DIGEST_SOAK_DAYS = {"nginx:alpine": 1, "nginxinc/nginx-unprivileged:": 1}
