@@ -139,6 +139,20 @@ def test_the_ask_reason_names_every_guard_that_did_not_run(tmp_path):
         assert guard in reason, guard
 
 
+def test_a_hook_name_carrying_a_quote_never_reaches_the_ask(tmp_path):
+    """The other half of the constraint: the NAME is interpolated into the reason too.
+
+    Unparsable JSON from a DENY guard reads to the harness as no decision, which is the
+    silent allow `--ask-on-cd` exists to prevent — so a name that could break the string
+    stops the runner before it emits one.
+    """
+    runner = _variant_runner(tmp_path, str(tmp_path / "does-not-exist"))
+    proc = _run(runner, 'a" injected "b', "--project", "--ask-on-cd")
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == ""
+    assert "is not a hook name" in proc.stderr
+
+
 def test_a_reason_argument_that_is_not_a_hook_name_falls_back(tmp_path):
     """The argument reaches a JSON string, so it is constrained rather than escaped. The
     near miss: a value carrying a quote must not produce unparsable output."""
@@ -156,6 +170,8 @@ def test_a_reason_argument_that_is_not_a_hook_name_falls_back(tmp_path):
         ([], "no hook name"),
         (["--no-such-flag"], "unknown flag"),
         (["one", "two"], "more than one hook name"),
+        (['a"b'], "is not a hook name"),
+        (["../elsewhere/x"], "is not a hook name"),
     ],
 )
 def test_reject_an_unusable_command_line_says_so_and_exits_zero(args, expected):

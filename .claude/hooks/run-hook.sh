@@ -83,10 +83,21 @@ if [[ -z "$name" ]]; then
     exit 0
 fi
 
+# Both arguments reach the `ask` reason, which is a JSON string, so each is constrained to what
+# a hook name can hold rather than escaped. A reason is prose for an operator; it is not worth
+# a JSON escaper, and unparsable output from a DENY guard reads to the harness as no decision —
+# a silent allow, which is what #2171's `ask` exists to prevent.
+#
+# The name bails rather than falling back, because there is nothing to fall back TO: a name
+# carrying a quote or a slash is no `.py` basename this directory could hold, so running on is
+# a guess about which hook the operator meant.
+if [[ ! "$name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    echo "run-hook.sh: '$name' is not a hook name — nothing ran" >&2
+    exit 0
+fi
+
 [[ "$ask_guards" == pending ]] && ask_guards=$name
-# An argument reaches the reason string, so it is constrained to what a hook name can hold
-# rather than escaped. Anything else falls back to the hook's own name, which is already known
-# good. A reason is prose for an operator; it is not worth a JSON escaper.
+# The guard list does fall back, to the name this point has already validated.
 if [[ -n "$ask_guards" && ! "$ask_guards" =~ ^[A-Za-z0-9_,.-]+$ ]]; then
     ask_guards=$name
 fi
