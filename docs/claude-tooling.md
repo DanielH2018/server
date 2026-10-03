@@ -477,7 +477,10 @@ matches `Edit|Write` only, and auto mode instructs file changes through `sed`, h
 short scripts, so `sed -i … ansible/vars/secrets.yml` reached a bare permission prompt with
 nothing saying the file was encrypted. A write here becomes an **ask** carrying `classify()`'s
 reason — never a deny, because the path extraction is a heuristic over command text and a wrong
-extraction must not block work.
+extraction must not block work. Each written path is classified against the checkout that owns
+it, as `block-protected-edits` does, not against the session's cwd. Until 2026-10-03 a write by
+absolute path into another worktree's generated pages, or by `../` from a subdirectory, was
+checked against the wrong tree and passed without a prompt.
 
 It also **denies** a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a
 deployed host script that renders a credential inline;

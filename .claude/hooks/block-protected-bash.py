@@ -40,13 +40,13 @@ import sys
 from _hook_common import emit_pretooluse_decision
 
 
-def _load_classify():
-    """`classify()` from block-protected-edits.py, loaded by path.
+def _load_edits_hook():
+    """block-protected-edits.py, loaded by path.
 
     The filename is hyphenated, so it is not importable by name — and renaming it would change
-    the path settings.json invokes. One classifier serves both tool surfaces: a divergence
-    between what the Edit hook denies and what this one flags is the failure this shares it to
-    avoid.
+    the path settings.json invokes. Its `classify()` and `find_repo_root()` serve both tool
+    surfaces: a divergence between what the Edit hook denies and what this one flags is the
+    failure sharing them avoids.
     """
     here = os.path.dirname(os.path.abspath(__file__))
     spec = importlib.util.spec_from_file_location(
@@ -55,10 +55,12 @@ def _load_classify():
     assert spec and spec.loader, "spec_from_file_location found no loader"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.classify
+    return module
 
 
-classify = _load_classify()
+_edits_hook = _load_edits_hook()
+classify = _edits_hook.classify
+find_repo_root = _edits_hook.find_repo_root
 
 
 # ── arm 1: writes ────────────────────────────────────────────────────────────────────
@@ -191,7 +193,11 @@ def decide(command, repo_root):
         return "deny", reason
     for path in written_paths(command):
         target = path if os.path.isabs(path) else os.path.join(repo_root, path)
-        write_reason = classify(target, repo_root)
+        # Classify against the checkout that owns the target, as the Edit hook does. The
+        # generated-docs trees are anchored at the root `classify` is given, so a write that
+        # leaves the cwd's checkout (an absolute path into another worktree, or `../docs/…`
+        # from a subdirectory) was checked against trees it is not in.
+        write_reason = classify(target, find_repo_root(target, repo_root))
         if write_reason:
             return (
                 "ask",
@@ -213,9 +219,10 @@ def decision(payload):
         return None
     # DECIDED: the process cwd, not `claude_guard.hook.read_cwd`'s `""`, when the payload
     # carries no `cwd`. Every arm joins `repo_root` as a path prefix — `os.path.join` for
-    # a relative write target and for `scripts/secrets_mgmt`, `relpath` inside `classify`
-    # — and an empty prefix resolves against the process cwd implicitly, the same silent
-    # probe `read_cwd`'s docstring refuses for `git -C ""`. Naming the directory says which
+    # a relative write target and for `scripts/secrets_mgmt`, and as `find_repo_root`'s
+    # fallback for a target in no checkout — and an empty prefix resolves against the
+    # process cwd implicitly, the same silent probe `read_cwd`'s docstring refuses for
+    # `git -C ""`. Naming the directory says which
     # checkout those paths resolve in. The shim's `cd /home/ubuntu/server` makes it the
     # primary checkout, a real repo root, so both arms keep a tree to read. Issue #2135.
     repo_root = payload.get("cwd") or os.getcwd()
