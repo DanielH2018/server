@@ -104,6 +104,24 @@ SuccessExitStatus=75
 # refusing to start — removing the machine that would ship the correction — so this one keeps uv's
 # self-healing download. The asymmetry is intentional and is pinned by
 # ansible/tests/setup/test_host_python_invocations.py; do not "fix" it for consistency.
+#
+# DECIDED: the deployer runs `--no-project` and stdlib-only, never from a venv, for the same
+# reason as the paragraph above. The process that fetches, gates on CI, writes hold_sha, alerts
+# and stamps last_run imports nothing a dependency set can break. A broken or half-synced env
+# then fails only the `uv run --frozen ansible-playbook` child (deploy_io.PLAYBOOK_ARGV), and the
+# tick still holds, alerts, and ff-merges the commit that fixes it. Two venv shapes were rejected
+# (#3393):
+#   - Running `uv run` without the flag syncs the repo project from WorkingDirectory. That ties
+#     the deployer's startup to the checkout's `.venv`, while the tick holds the tree lock and
+#     sessions sync the same `.venv`. docs/archive/host-python-314-plan.md, Task 6, has the
+#     2026-08-16 measurements.
+#   - A venv that this role builds from uv.lock goes stale with no signal.
+#     deploy_changes._BROAD_DEPLOY_PREFIXES deliberately leaves pyproject.toml and uv.lock out, so a
+#     lock bump ff-merges with no setup apply and the venv never rebuilds. Rebuilding it on every
+#     lock bump would turn the daily lockFileMaintenance into a self-applied setup-plane change.
+# The price is the subprocess-plus-JSON derivations in deploy_narrow.py and the stdlib YAML
+# readers listed in docs/gitops-pipeline.md. A venv would remove them, but it puts a dependency
+# set in the way of the one process that ships the fix for that dependency set.
 ExecStart=/usr/bin/flock -w 180 -E 75 {{ server_git_tree_lock }} /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
