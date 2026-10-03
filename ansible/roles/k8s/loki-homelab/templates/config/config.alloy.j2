@@ -5,7 +5,8 @@
 // and valheim-stats' `{container="…"}` queries and the `{job="syslog"}` deploy annotation on
 // every Grafana dashboard were written against `job`, `container`, `pod`, `namespace`,
 // `machine` and `stream` — and against the ABSENCE of `app`, which is how the HA ban check
-// went blind on 2026-08-23. ansible/tests/k8s/test_alloy_config_labels.py guards the set.
+// went blind on 2026-08-23. The `alloy-emits-the-loki-labels-consumers-select-on` row of
+// ansible/tests/k8s/_config_property_rows.py guards the set.
 //
 // Replaced Promtail on 2026-09-02, six months after Promtail's 2026-03-02 end of life. Three
 // things Promtail did implicitly are explicit here: node scoping is a field selector (Alloy

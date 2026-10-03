@@ -34,8 +34,8 @@ spec:
         # readiness: a Service has no endpoints until its probe passes.
         - name: wait-for-deps
           # The time-tagger's in-cluster-built image, reused because it is the only image this
-          # role has with a python3 and no s6 init. `Always` because it is built here — see
-          # ansible/tests/k8s/test_built_images_pull_always.py.
+          # role has with a python3 and no s6 init. `Always` because it is built here — see the
+          # `built-images-pull-always` row of ansible/tests/k8s/_workload_property_rows.py.
           image: {{ karakeep_k8s_tagger_image }}
           imagePullPolicy: Always
           command:
