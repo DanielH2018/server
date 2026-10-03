@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-02 18:17 UTC
-generated_sha: 0a2d78591
+generated_at: 2026-10-03 06:17 UTC
+generated_sha: 8d0a33d9a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,13 +16,21 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks | 2026-09-28 | 0 | - | ✓ |
+| [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks | 2026-09-28 | 1 | - | ✓ |
 | [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
-| [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
 | [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
+| [#3270](https://github.com/DanielH2018/server/issues/3270) | low | improvement | cicd | Move the two one-file test directories next to the code they test | 2026-10-02 | 0 | - | ✓ |
+| [#3277](https://github.com/DanielH2018/server/issues/3277) | low | improvement | container | Pin the probe alpine and exportarr images once in group_vars | 2026-10-02 | 0 | - | ✓ |
+| [#3281](https://github.com/DanielH2018/server/issues/3281) | low | improvement | cicd | Digest-pin the third-party images still pinned only by tag | 2026-10-02 | 0 | - | ✓ |
+| [#3284](https://github.com/DanielH2018/server/issues/3284) | low | improvement | cicd | Narrow the static bootstrap guard to what the runtime --help test cannot reach | 2026-10-02 | 0 | - | ✓ |
+| [#3285](https://github.com/DanielH2018/server/issues/3285) | low | improvement | cicd | Open every playbook through one shared fact-gathering step | 2026-10-02 | 0 | - | ✓ |
+| [#3288](https://github.com/DanielH2018/server/issues/3288) | low | improvement | cicd | Move initial_setup.yml's handlers into the roles that notify them | 2026-10-02 | 0 | - | ✓ |
+| [#3304](https://github.com/DanielH2018/server/issues/3304) | low | improvement | cicd | Delete the six per-hook shims once no worktree predates the run-hook.sh switch | 2026-10-03 | 0 | - | ✓ |
+| [#3315](https://github.com/DanielH2018/server/issues/3315) | low | gap | cicd | Apply PR 3313's k3s role change by hand and clear the manual-plane marker | 2026-10-03 | 0 | - | ✓ |
+| [#3322](https://github.com/DanielH2018/server/issues/3322) | low | improvement | cicd | Narrow a setup role's apply through the common task file that renders a changed kuma-check template | 2026-10-03 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
