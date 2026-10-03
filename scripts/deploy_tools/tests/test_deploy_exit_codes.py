@@ -44,7 +44,7 @@ _WRAPPER_REFUSALS = (2, 3, 4, 75, 76, 77, _NO_HOSTS_MATCHED, 79)
 
 _UV_STUB = """#!/bin/bash
 # Only the playbook run carries the exit code under test; the wrapper's own helper calls
-# (fact_cache_guard, deploy_tags) must succeed or the script never reaches it.
+# (deploy_tags) must succeed or the script never reaches it.
 case "$*" in
   *ansible-playbook*) {recap}; exit {ansible_exit} ;;
 {locks}

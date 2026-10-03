@@ -415,10 +415,8 @@ def test_the_tag_scoping_actually_selects_one_stamp_per_family():
 
         pytest.skip("ansible-playbook not on PATH")
 
-    # See test_playbook_spawns_pin_interpreter.py: ansible.cfg's fact cache is keyed on
-    # `localhost` across every worktree, so an unpinned spawn adopts — and republishes — another
-    # tree's .venv path. --list-tasks discovers no interpreter, but that guard is blanket and
-    # pinning costs nothing.
+    # --list-tasks discovers no interpreter, so the pin only keeps this spawn in step with the
+    # longhorn tests' real plays.
     env = dict(os.environ)
     env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
     playbook = _REPO / "ansible/k3s-bringup.yml"

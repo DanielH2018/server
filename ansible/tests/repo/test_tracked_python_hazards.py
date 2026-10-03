@@ -40,9 +40,9 @@ separate red-proof pairs: merging the walk must not merge the evidence that each
    `shell_templates.main(which=...)` takes an injected callable. So a call is flagged only when
    the resolved callee's `main` routes argv into `parse_args` — `parse_args()` bare,
    `parse_args(argv)` for a parameter of `main`, or `parse_args(sys.argv[...])` — and the test
-   module neither passes argv nor patches `sys.argv`. Both remedies the tree already uses are
-   accepted: `main([])` (postflight) and `monkeypatch.setattr(sys, "argv", [...])`
-   (`fact_cache_guard`).
+   module neither passes argv nor patches `sys.argv`. Both remedies are accepted: `main([])`
+   (postflight) and `monkeypatch.setattr(sys, "argv", [...])`. No tracked test uses the second
+   since `fact_cache_guard` was deleted (#3274), so only a fixture below covers it.
 
 Run: uv run pytest ansible/tests/repo/test_tracked_python_hazards.py
 """
@@ -233,15 +233,10 @@ def test_a_fixed_epoch_is_clean():
 
 # ---- rule 3: no bare main() over an argparse entry point
 
-# Non-vacuity floors. Both censuses find their subjects by pattern, so each must be shown to
-# contain something concrete — a renamed module or a moved directory would otherwise empty a
-# census and let the guard pass over nothing.
-KNOWN_ARGV_READERS = frozenset({"postflight", "fact_cache_guard"})
-KNOWN_PATCHED_CALLERS = frozenset(
-    {
-        "scripts/deploy_tools/tests/test_fact_cache_guard.py",
-    }
-)
+# Non-vacuity floor. The census finds its subjects by pattern, so it must be shown to contain
+# something concrete — a renamed module or a moved directory would otherwise empty it and let
+# the guard pass over nothing.
+KNOWN_ARGV_READERS = frozenset({"postflight", "deploy_tags"})
 
 
 def _mentions_sys_argv(node: ast.AST) -> bool:
@@ -397,23 +392,17 @@ def test_no_test_calls_an_argparse_main_with_pytests_argv():
     )
 
     failures = []
-    patched_callers = set()
     for rel in files:
         if not Path(rel).name.startswith("test_"):
             continue
         source = _source(rel)
         if not source.count("main()"):
             continue
-        calls = [c for c in bare_main_calls(source) if c[1] in readers]
-        if calls and _patches_sys_argv(ast.parse(source)):
-            patched_callers.add(rel)
         failures += [
             f"{rel}:{ln} calls {mod}.main() with no argv"
             for ln, mod in offenders(source, readers)
         ]
 
-    lost = KNOWN_PATCHED_CALLERS - patched_callers
-    assert not lost, f"caller census lost {sorted(lost)}; it may now be vacuous"
     assert not failures, (
         "A bare main() over an argparse entry point reads PYTEST's argv and exits 2 under any "
         "flag it does not define (invisible under `-n auto`, fatal under `pytest_shard.py "

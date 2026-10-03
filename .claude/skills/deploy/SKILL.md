@@ -175,11 +175,6 @@ what stops two deploys of the same service racing. A `-e target=daniel-pi` deplo
 
 Because the snapshot is of `HEAD`, **an uncommitted edit is not deployed** — commit first.
 
-Before it takes the lock it clears an Ansible fact cache pinning another worktree's interpreter
-(`scripts/deploy_tools/fact_cache_guard.py`). That cache is keyed by host, not by checkout, so a
-pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
-error naming a module rather than the cache, after the ~9-minute wait on the lock.
-
 **`deploy.sh` prints what its exit code means, on every non-zero exit.** Two lines, last:
 `deploy.sh: <NAME> (<code>): <meaning> <what to do>`, then
 `DEPLOY-VERDICT: <verdict> (<the arguments>)`. Read those rather than looking the number up --
