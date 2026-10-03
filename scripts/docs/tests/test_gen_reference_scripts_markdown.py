@@ -25,12 +25,16 @@ def test_markdown_opens_with_the_provenance_banner(tmp_path):
     assert "generated_from: scripts/docs/reference/scripts.py" in out
 
 
-def test_markdown_counts_the_untested_scripts(tmp_path):
+def test_the_tests_column_credits_only_a_test_named_after_the_script(tmp_path):
+    """A suite elsewhere that imports the script is not its test (#3283)."""
     _write(tmp_path / "probe.py", '"""Summary."""\n')
     _write(tmp_path / "tested.py", '"""Summary."""\n')
-    _write(tmp_path / "test_tested.py", '"""x"""\n')
+    _write(tmp_path / "tests" / "test_tested.py", "import probe\nimport tested\n")
     out = g.render_markdown(g.build_rows(tmp_path))
-    assert "1 of all 2" in out
+    assert re.search(r"^\| `[^`]*/probe\.py` .*\| — \| — \|$", out, re.MULTILINE)
+    assert re.search(
+        r"^\| `[^`]*/tested\.py` .*\| `test_tested\.py` \|", out, re.MULTILINE
+    )
 
 
 def test_markdown_escapes_a_pipe_in_a_summary(tmp_path):

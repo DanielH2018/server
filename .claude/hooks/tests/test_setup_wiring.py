@@ -11,7 +11,7 @@ Paths are checked RELATIVE TO THE REPO ROOT (derived from this file), not the ab
 paths baked into settings.json, so the suite is correct regardless of where the repo is
 checked out (local `/home/ubuntu/server` vs CI `/home/runner/work/...`).
 
-Run: uv run pytest .claude/tests
+Run: uv run pytest .claude/hooks/tests/test_setup_wiring.py
 """
 
 import json
@@ -19,7 +19,8 @@ import os
 import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(os.path.dirname(HERE))  # .claude/tests -> .claude -> repo root
+# .claude/hooks/tests -> .claude/hooks -> .claude -> repo root
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 CLAUDE = os.path.join(REPO, ".claude")
 
 # Matches a repo-relative .claude/... script path inside a hook command string,

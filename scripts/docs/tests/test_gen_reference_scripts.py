@@ -1,15 +1,14 @@
-"""Tests for scripts/docs/reference/scripts.py and the two leaves it assembles.
+"""Tests for scripts/docs/reference/scripts.py and the classifier it assembles.
 
 Fixture-driven: a synthetic scripts/ directory under tmp_path.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_scripts.py
 """
 
-import re
 import textwrap
 from pathlib import Path
 
 from docs.reference import scripts as g
-from lib import script_classify as sc, script_coverage as cov
+from lib import script_classify as sc
 
 
 def _write(path, body):
@@ -105,9 +104,9 @@ def test_rows_are_sorted_by_name(tmp_path):
     assert names == sorted(names)
 
 
-def test_the_real_scripts_directory_yields_the_known_shape(live_script_rows):
+def test_the_real_scripts_directory_yields_the_known_shape():
     """Guards the exclusion rules against the live tree, not just fixtures."""
-    rows = live_script_rows
+    rows = g.build_rows()
     names = {r["name"] for r in rows}
     assert "probe.py" in names
     assert "deploy.sh" in names
@@ -298,112 +297,6 @@ def test_every_reference_generator_is_reached_from_the_docs_cron(live_verdicts):
     assert all(verdicts[name][0] == "scheduled" for name in generators)
 
 
-def test_a_test_that_names_the_path_counts_as_indirect_coverage(tmp_path):
-    """gitops_tick.sh's five tests live in ansible/tests/deploy/test_gitops_manual_trigger.py."""
-    repo, scripts = _repo(tmp_path)
-    _write(scripts / "run.sh", "#!/bin/sh\n# Summary.\n")
-    _write(repo / "ansible/tests/test_elsewhere.py", 'WRAPPER = "scripts/run.sh"\n')
-    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
-    assert rows["run.sh"]["tests"] == ""
-    assert rows["run.sh"]["indirect_tests"] == "test_elsewhere.py"
-
-
-def test_a_test_that_merely_says_the_word_is_not_coverage(tmp_path):
-    """Matching the bare stem credited `deploy.sh` to a test that says "deploy"."""
-    repo, scripts = _repo(tmp_path)
-    _write(scripts / "deploy.sh", "#!/bin/sh\n# Summary.\n")
-    _write(scripts / "test_other.py", 'MSG = "deploy the thing"\n')
-    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
-    assert rows["deploy.sh"]["indirect_tests"] == ""
-    files = cov.candidate_test_files(repo, scripts)
-    assert cov.indirect_test("deploy.sh", files, scripts) == ("", "")
-
-
-def test_no_script_is_credited_to_another_scripts_own_test(live_script_rows):
-    """A path inside `test_<other>.py` is that test talking about this script, not testing it.
-
-    Caught twice: this generator's own test names every script in the tree, and
-    `test_deploy_detach_notify.py`'s first line names `scripts/deploy.sh`, which credited
-    15 KB of shell that runs on every deploy to a test of the notifier. Asserted as a class
-    rather than by name, so the next instance fails here instead of being noticed.
-    """
-    rows = live_script_rows
-    stems = {Path(r["name"]).stem for r in rows}
-    laundered = {
-        r["name"]: r["indirect_tests"]
-        for r in rows
-        if r["indirect_via"] == "path"
-        and Path(r["indirect_tests"][len("test_") :]).stem in stems
-    }
-    assert laundered == {}
-
-
-def test_an_import_counts_even_from_another_scripts_test(live_script_rows):
-    """The reject above is about path mentions; an import is real exercise.
-
-    Asserted on the MECHANISM and on the credited file really importing the module, not on
-    which filename wins. Several tests import `core`, so pinning one name would fail
-    whenever a different importer sorts first -- a rename in the suite is not a regression
-    in the classifier.
-    """
-    rows = {r["name"]: r for r in live_script_rows}
-    credited = rows["core.py"]["indirect_tests"]
-    assert rows["core.py"]["indirect_via"] == "import"
-    assert credited.startswith("test_")
-    hit = next(p for p in (g.SCRIPTS / "diagnostics").rglob(credited))
-    assert re.search(
-        r"^\s*from diagnostics\.probe_lib import .*\bcore\b",
-        hit.read_text(),
-        re.MULTILINE,
-    )
-
-
-def test_deploy_sh_is_credited_to_a_test_that_runs_it(live_script_rows):
-    """Membership, not equality: sort order decides WHICH runner is credited.
-
-    Pinning one name makes the next runner named earlier in the alphabet read as a generator
-    bug. `_DEPLOY_SH = ... "deploy.sh"` separates a runner from the notifier's test.
-    """
-    d = Path(__file__).resolve().parents[2] / "deploy_tools" / "tests"
-    runs = {p.name for p in d.glob("test_*.py") if '"deploy.sh"' in p.read_text()}
-    got = {r["name"]: r for r in live_script_rows}["deploy.sh"]["indirect_tests"]
-    assert got in runs and len(runs) >= 5 and "test_deploy_detach_notify.py" not in runs
-
-
-_IMPORTED = {"diagram", "groups", "html_views", "live", "render", "style"}
-# DECIDED: 2026-09-05 nothing imports these three by name; `test_gen_infra_map.py`
-# reaches them through re-exports, so they carry `importer` rather than `import`.
-_FACADE_ONLY = {"constants", "inventory", "model"}
-_MEMBERS = {p.stem for p in (g.SCRIPTS / "infra_map").glob("*.py")} - {"gen_infra_map"}
-
-
-def test_every_package_member_import_counts_as_coverage(live_script_rows):
-    """`from infra_map import live` is an import, not a mention.
-
-    The census is derived; a hand-written list would freeze it and leave later members
-    unchecked. `_IMPORTED` is the non-vacuity floor.
-    """
-    assert _IMPORTED | _FACADE_ONLY <= _MEMBERS, sorted(_MEMBERS)
-    rows = {r["name"]: r for r in live_script_rows}
-    for stem in sorted(_MEMBERS - _FACADE_ONLY):
-        assert rows[f"{stem}.py"]["indirect_via"] == "import", stem
-
-
-def test_a_facade_only_member_gets_no_by_name_import_credit(live_script_rows):
-    """RED half: an `import` credit needs a by-name import, not package membership."""
-    assert _FACADE_ONLY <= _MEMBERS, sorted(_MEMBERS)
-    rows = {r["name"]: r for r in live_script_rows}
-    for stem in sorted(_FACADE_ONLY):
-        assert rows[f"{stem}.py"]["indirect_via"] != "import", stem
-
-
-def test_a_bare_mention_of_a_package_member_is_not_coverage(tmp_path):
-    """The second RED half, asserted through the generator rather than a copy of it."""
-    mention = tmp_path / "tests" / "test_prose.py"
-    _write(mention, "# A note about live, naming no import.\n")
-    assert cov.indirect_test("live.py", [mention], tmp_path)[1] != "import"
-
-
 def test_markdown_splits_the_scripts_by_how_they_run(tmp_path):
     repo, scripts = _repo(tmp_path)
     out = g.render_markdown(g.build_rows(scripts, repo))
@@ -411,7 +304,7 @@ def test_markdown_splits_the_scripts_by_how_they_run(tmp_path):
         assert heading in out
 
 
-def test_a_nested_script_is_listed_and_credited_to_its_caller(tmp_path):
+def test_a_nested_script_is_listed_and_classified_by_its_caller(tmp_path):
     """Depth is not capped: a module two directories down is found and classified.
 
     Discovery globbed `scripts/*` and `scripts/*/*`, and both script-reference patterns
@@ -456,7 +349,7 @@ def _basename_clashes(paths):
 
 
 def test_no_two_scripts_share_a_basename():
-    """The page keys verdicts, importers and test credits on a script's bare filename.
+    """The page keys verdicts and importers on a script's bare filename.
 
     Two files with the same basename in different `scripts/` subdirectories therefore
     merge into one row, and the merged row states things that are false: a rename of
@@ -479,44 +372,6 @@ def test_no_two_scripts_share_a_basename():
         "two scripts share a basename, so they merge into one row on the reference page: "
         + "; ".join(clashes)
     )
-
-
-def test_a_test_beside_the_module_beats_one_that_merely_imports_it(tmp_path):
-    """Proximity decides when several tests import the same module.
-
-    `_indirect_test` returned whichever test sorted first. After the validators took the
-    package form, `test_probe_health.py` -- a caller's suite that imports
-    `validate.k8s_manifests` -- sorted ahead of the module's own tests and was credited as
-    its coverage, on a page whose whole job is to say where a script's coverage lives.
-    """
-    repo, scripts = _repo(tmp_path)
-    _write(scripts / "pkg" / "subject.py", '"""Summary."""\n')
-    _write(
-        scripts / "pkg" / "tests" / "test_subject_behaviour.py",
-        "from pkg import subject\n",
-    )
-    _write(
-        scripts / "other" / "tests" / "test_aaa_caller.py",
-        "from pkg import subject\n",
-    )
-    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
-    assert rows["subject.py"]["indirect_tests"] == "test_subject_behaviour.py"
-
-
-def test_a_distant_test_still_counts_when_nothing_sits_beside_the_module(tmp_path):
-    """The RED half: proximity is a preference, not a requirement.
-
-    Making it a requirement would report every module whose only coverage is its caller's
-    suite as untested -- the same understatement the preference exists to fix.
-    """
-    repo, scripts = _repo(tmp_path)
-    _write(scripts / "pkg" / "orphan.py", '"""Summary."""\n')
-    _write(
-        scripts / "other" / "tests" / "test_far_away.py",
-        "from pkg import orphan\n",
-    )
-    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
-    assert rows["orphan.py"]["indirect_tests"] == "test_far_away.py"
 
 
 def test_the_basename_guard_flags_a_real_clash():

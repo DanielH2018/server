@@ -37,6 +37,13 @@ function call other than `Path`/`str`, an f-string, string concatenation, an `if
 Those fall through to `None` and are reported as `unresolvable`, not silently passed -- see
 `test_no_import_bootstrap_is_unresolvable` below, which currently expects zero.
 
+Why `lib/tests/test_entry_points_answer_help.py` does not replace this guard: that test runs
+every entry point with `scripts/` on `PYTHONPATH`, so every import that resolves under
+`scripts/` succeeds whether or not the module carries its bootstrap. Deleting the insert
+from `docs/reference/scripts.py` on 2026-10-03 (#3284) left the `--help` test green and
+failed only this guard, while `uv run python scripts/docs/reference/scripts.py --help`
+raised `ModuleNotFoundError: No module named 'lib'`.
+
 Scope: every `scripts/**/*.py` that something other than pytest can run. A module pytest alone
 invokes -- `test_*.py`, `conftest.py`, and any module under a `tests/` directory, fixture modules
 included -- is Guard 3's (`test_test_module_bootstraps_present.py`), which REFUSES an insert

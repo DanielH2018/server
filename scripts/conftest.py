@@ -88,27 +88,7 @@ def fake_k8s_endpoint():
     return _fake_k8s_endpoint
 
 
-# The `scripts/` census, built once per worker rather than once per test.
-#
-# `docs/reference/scripts.py:build_rows()` walks all of `scripts/` and cross-references the
-# crons, prek hooks and workflows that invoke each file. Eleven non-vacuity tests across
-# `docs/tests/test_gen_reference_scripts.py` and `lib/tests/test_script_coverage.py` assert
-# rules against that live result rather than only against synthetic fixtures — CLAUDE.md's
-# "a check that finds its own subject by pattern ships with a named member it must find".
-# Without the shared build each test would pay for its own walk, for eleven copies of one
-# answer. The tree does not change under a test run.
-#
-# Session scope, so the two modules share one build when xdist puts them on the same worker
-# (`--dist loadscope` keeps a module together but does not co-locate modules). Rows are
-# read-only for every consumer; nothing mutates one.
-@pytest.fixture(scope="session")
-def live_script_rows():
-    from docs.reference import scripts as g
-
-    return tuple(g.build_rows())
-
-
-# The `scripts/` classification, built once per worker for the same reason as the rows above.
+# The `scripts/` classification, built once per worker rather than once per test.
 #
 # `lib.script_classify.classify()` re-reads every cron template, prek hook and workflow to
 # decide how each script is run. Two live-tree tests in `docs/tests/test_gen_reference_scripts.py`

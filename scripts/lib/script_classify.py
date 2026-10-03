@@ -10,11 +10,11 @@ stale the first time someone adds a cron. The tree already says how every script
 workflows name the CI ones, and the import graph names the modules that are libraries rather
 than entry points. ``classify`` reads those, so the page cannot drift from the tree.
 
-The census helpers (``candidates``, ``by_name``, ``SUFFIXES``) live here rather than in the
-generator because ``classify`` is their heaviest caller, and because ``lib.script_coverage``
-needs the same "which files are scripts" answer — a leaf never imports the facade it was split
-out of. ``is_candidate`` is the predicate behind ``candidates``: nothing outside this module
-calls it, so it stays out of ``__all__``.
+The census helpers (``candidates``, ``by_name``) live here rather than in the generator
+because ``classify`` is their heaviest caller, and because the ``--help`` test needs the same
+"which files are scripts" answer without importing the generator. ``is_candidate`` is the
+predicate behind ``candidates``: nothing outside this module calls it, so it stays out of
+``__all__``.
 """
 
 import sys as _sys
@@ -41,7 +41,6 @@ from lib.script_imports import (
 __all__ = [
     "ARGV_RE",
     "RUNS",
-    "SUFFIXES",
     "by_name",
     "candidates",
     "classify",

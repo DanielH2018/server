@@ -43,7 +43,6 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/tests",                   # ansible/collections/** third-party tests
   "ansible/roles/*/*/tests",         # every role's own logic tests, k8s and setup alike
   ".claude/hooks",
-  ".claude/tests",                 # audit-permissions report/suggester logic tests
   "scripts",                         # closes the smoke_extract CI gap
   "evals",                                         # homelab eval-case schema validation
 ]
