@@ -30,8 +30,10 @@ A digest with no release timestamp skips the soak entirely (#3368). Only Docker 
 timestamp, and only for a tag that names a version. So a GHCR or lscr.io digest, or a digest on
 `latest`, `alpine` or `jvm-stable`, has none. The k8s digest rule sets
 `minimumReleaseAgeBehaviour: timestamp-optional`, so Renovate raises those at once. Without it
-they sat in Pending Status Checks indefinitely. A version bump on GHCR or lscr.io has no
-timestamp either, and that rule does not cover it.
+they sat in Pending Status Checks indefinitely. A version bump on GHCR, lscr.io or gcr.io has
+no timestamp either, so the k8s version rule sets the same behaviour for `docker` minor and
+patch bumps (#3370). Such a bump raises on its first run with no soak; a Docker Hub version
+bump keeps its 7 days.
 Measured 2026-09-02, seven had not: grafana/promtail sat there for 111 days against a 7-day
 soak, so the homelab ran promtail 3.3.0 that whole time (issue #886).
 
