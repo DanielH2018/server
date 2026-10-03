@@ -8,7 +8,7 @@ WORKDIR /app
 # and httpx/uvicorn had no bound at all (#2150) — all three are exact now. Renovate tracks each
 # on PyPI (regex manager in renovate.json); the packageRule there caps mcp at `<2` so the 1.x
 # line is what it offers.
-RUN pip install --no-cache-dir mcp==1.30.0 httpx==0.28.1 uvicorn==0.53.0
+RUN pip install --no-cache-dir mcp==1.30.0 httpx==0.28.1 uvicorn==0.54.0
 # COPY . (not `COPY app.py safe_reads.py`): the context is a ConfigMap mount, whose
 # files are symlinks into ..data/, and buildkit's followPaths optimization for a
 # multi-file COPY drops all but the first symlinked file from the transfer ("not
