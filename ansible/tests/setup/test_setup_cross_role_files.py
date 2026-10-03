@@ -11,11 +11,11 @@ The scan reads every `roles/setup/<owner>/files/<f>` and `{{ role_path }}/../<ow
 reference in a setup role's `tasks/`, which catches a copy task's `src:` and a
 `stamp_deployed_pairs` entry alike.
 
-`common` is excluded as an owner. Its `host_lib.py` and task files are shared by most setup
-roles and by two k8s roles, and a change under `roles/setup/common/` routes to the
-`manual_plane` marker, because no playbook applies `common` on its own
-(`deploy_changes._SETUP_ROLES_OUTSIDE_INITIAL_SETUP`). Folding its consumers in would change
-what the deployer applies for every `host_lib.py` edit, which is a decision of its own.
+`common` is an owner like any other (#3312). Its `host_lib.py` reaches a host only through
+the roles that copy it, so a change re-applies those roles, and `setup_roles_for` drops
+`common` itself from the result because no playbook applies it on its own. The scan sees a
+consumer through its `stamp_deployed_pairs` entry, which `test_host_lib_sibling_copies.py`
+requires beside every `install_host_lib.yml` import.
 
 Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 """
@@ -30,11 +30,16 @@ from deploy_changes import SETUP_FILES_SHIPPED_BY_OTHER_ROLES
 _REFERENCE = re.compile(
     r"(?:roles/setup/|\{\{ role_path \}\}/\.\./)([a-z0-9_]+)/files/([\w./-]+)"
 )
-_EXCLUDED_OWNERS = frozenset({"common"})
-
 # Named members, so a scan that stops matching fails by name rather than agreeing with an
 # empty table.
 KNOWN_EDGES = {
+    "ansible/roles/setup/common/files/host_lib.py": {
+        "fake_remux",
+        "gitops_deploy",
+        "k3s",
+        "renovate_agent",
+        "renovate_notify",
+    },
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": {
         "deploy_ui",
         "renovate_agent",
@@ -47,7 +52,7 @@ def cross_role_files(task_texts: dict[str, str]) -> dict[str, frozenset[str]]:
     edges: dict[str, set[str]] = {}
     for role, text in task_texts.items():
         for owner, rel in _REFERENCE.findall(text):
-            if owner == role or owner in _EXCLUDED_OWNERS:
+            if owner == role:
                 continue
             edges.setdefault(f"ansible/roles/setup/{owner}/files/{rel}", set()).add(
                 role
@@ -82,7 +87,13 @@ def test_a_role_shipping_another_roles_file_is_flagged():
     }
 
 
-def test_a_role_naming_its_own_or_commons_files_is_clean():
+def test_a_role_naming_its_own_files_is_clean():
     own = "src: ansible/roles/setup/owner/files/shared.py\n"
+    assert cross_role_files({"owner": own}) == {}
+
+
+def test_a_role_naming_commons_file_is_flagged():
     common = "src: ansible/roles/setup/common/files/host_lib.py\n"
-    assert cross_role_files({"owner": own + common}) == {}
+    assert cross_role_files({"owner": common}) == {
+        "ansible/roles/setup/common/files/host_lib.py": frozenset({"owner"})
+    }

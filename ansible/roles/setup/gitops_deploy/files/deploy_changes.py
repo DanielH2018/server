@@ -514,7 +514,14 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
 # A file one setup role installs from another's `files/`, mapped to the installing roles, so a
 # change to it re-applies them beside the owner (#3306). Keyed by file, so no other module of the
 # owner reaches them. `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
+#
+# `common`'s `host_lib.py` is here too (#3312). Every consumer copies it beside its own scripts
+# through `common/tasks/install_host_lib.yml`, so an edit is applied only by re-applying them:
+# the four initial_setup roles run on the tick, and `k3s` is recorded in `manual_plane`.
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
+    "ansible/roles/setup/common/files/host_lib.py": frozenset(
+        {"fake_remux", "gitops_deploy", "k3s", "renovate_agent", "renovate_notify"}
+    ),
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
         {"deploy_ui", "renovate_agent"}
     ),
@@ -526,7 +533,16 @@ def setup_roles_for(path: str) -> set[str]:
     at = role_of(path)
     if at is None or at.plane != "setup":
         return set()
-    return {at.role} | SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(path, frozenset())
+    shippers = SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(path, frozenset())
+    # DECIDED: an owner no playbook applies is dropped once its file has shippers (#3312).
+    # `common` reaches a host only through its consumers, so their applies ARE the apply.
+    # Naming `common` as well recorded a second `manual_plane` line whose remediation is the
+    # resolv.conf text (k3s-bringup `<tag>` plus `optimize_pi` on the Pi), which is wrong for
+    # `host_lib.py` and still has to be cleared by hand after the consumers are applied.
+    # A `common` path with no shippers keeps naming `common`: nothing else would record it.
+    if shippers and setup_role_playbook(at.role) is None:
+        return set(shippers)
+    return {at.role} | shippers
 
 
 # Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.
