@@ -57,6 +57,8 @@ import os
 import sys
 import traceback
 
+from _hook_common import read_payload
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # The arms, in the order their separate registrations ran. That order decides which reason is
@@ -198,9 +200,8 @@ def main(load=load_arm):
     `load` is `collect`'s loader, threaded through so the tests can drive a stub arm from
     the real entry point rather than from a re-implementation of it.
     """
-    try:
-        payload = json.load(sys.stdin)
-    except Exception:  # An unreadable payload is one no arm could have judged.
+    payload = read_payload()
+    if payload is None:  # An unreadable payload is one no arm could have judged.
         return 0
     verdicts, context, command = collect(payload, load=load)
     decision, reason = merge(verdicts)

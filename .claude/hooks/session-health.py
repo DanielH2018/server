@@ -33,7 +33,6 @@ Stdout is injected as session context by Claude Code (same mechanism the remembe
 # DECIDED: return [] on any error, so a broken health read never blocks a session start;
 # SESSION_HEALTH_VERBOSE=1 forces output.
 
-import json
 import os
 import subprocess
 import sys
@@ -48,6 +47,15 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # An uncaught SyntaxError at import would take the WHOLE banner out silently: nothing at
 # module scope may be able to stop the banner.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hook_common import read_payload
+except ImportError, SyntaxError:
+    # Without the payload the banner cannot tell a compaction from an open, so it prints on
+    # both. One repeat banner is the cost; a hook that printed none would hide this failure.
+    def read_payload():
+        return None
+
+
 try:
     from hooklib import service_lines
     from hooklib.hook_registration_lines import missing_hook_script_lines
@@ -507,11 +515,7 @@ def main(
         missing_hook_script_lines: override for the same reason (reads this session's
             `.claude/settings.json` and the primary checkout's files).
     """
-    raw = sys.stdin.read()
-    try:
-        payload = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError:
-        payload = {}
+    payload = read_payload() or {}
     # Don't re-banner on mid-session compaction — only on a genuine open/resume/clear.
     if payload.get("source") == "compact":
         return 0

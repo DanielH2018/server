@@ -302,6 +302,7 @@ def test_a_gh_issue_create_aimed_at_another_repo_names_findings_open_repo():
         "gh issue create -R DanielH2018/dotfiles --title x",
         "gh issue create --repo DanielH2018/dotfiles --title x",
         "gh issue create --repo=DanielH2018/dotfiles --title x",
+        "gh issue create -RDanielH2018/dotfiles --title x",
     ):
         assert "findings.py open --repo DanielH2018/dotfiles" in _mod.problem(command)
 

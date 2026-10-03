@@ -17,17 +17,16 @@ this log you can edit, say, a compose template and check that `docker.md` shows 
 `load_reason=path_glob_match` and the right trigger.
 
 Observability only — InstructionsLoaded cannot block, and this swallows all errors and always exits
-0 so it can never disrupt session startup. Pure stdlib (no third-party deps), so the wrapper runs
-system python3 directly — no uv overhead on the startup path.
+0 so it can never disrupt session startup. Pure stdlib (no third-party deps), like every hook here.
 
 Log: .claude/logs/instructions.log (gitignored), bounded by single-backup rotation. Inspect: tail -n
 40 .claude/logs/instructions.log
 """
 
-import json
 import os
-import sys
 from datetime import datetime, timezone
+
+from _hook_common import read_payload
 
 LOG = os.path.normpath(
     os.path.join(
@@ -53,8 +52,8 @@ def main():
     Ignores any other hook event. The caller wraps this in a broad except so a failure here
     never blocks session startup.
     """
-    d = json.loads(sys.stdin.read())
-    if d.get("hook_event_name") != "InstructionsLoaded":
+    d = read_payload()
+    if d is None or d.get("hook_event_name") != "InstructionsLoaded":
         return
     cwd = d.get("cwd") or ""
     fp = rel(d.get("file_path") or "?", cwd)

@@ -16,14 +16,22 @@ stages a rule can see, and a quoted `;` that must NOT split. Run:
     uv run pytest .claude/hooks/tests/test_hook_common.py
 """
 
+import io
 import os
 import sys
+import tempfile
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from _hook_common import Unsplittable, split_stages
+from _hook_common import (
+    Unsplittable,
+    gh_repo,
+    read_payload,
+    session_state_path,
+    split_stages,
+)
 
 
 def test_the_deployed_segmenter_is_present():
@@ -160,3 +168,43 @@ def test_a_missing_segmenter_is_refused_as_missing():
         split_stages("git stash pop", parse=None)
     assert caught.value.missing
     assert caught.value.status == "segmenter-missing"
+
+
+# --- the helpers the hook entry points share ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        ["gh", "issue", "create", "-R", "o/r"],
+        ["gh", "issue", "create", "-Ro/r"],
+        ["gh", "issue", "create", "--repo", "o/r"],
+        ["gh", "issue", "create", "--repo=o/r"],
+    ],
+)
+def test_gh_repo_reads_every_spelling_of_the_flag(words):
+    assert gh_repo(words) == "o/r"
+
+
+def test_gh_repo_ignores_a_github_url_in_the_body():
+    """A URL is text to `gh issue create`; reading it would aim the suggestion elsewhere."""
+    words = ["gh", "issue", "create", "--body", "see https://github.com/o/r/issues/1"]
+    assert gh_repo(words) is None
+
+
+def test_a_session_id_with_path_characters_stays_inside_the_temp_dir(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+    path = session_state_path("ci-poll", "../../etc/passwd")
+    assert os.path.dirname(path) == str(tmp_path)
+    assert os.path.basename(path) == "claude-ci-poll-etcpasswd"
+
+
+@pytest.mark.parametrize("text", ["", "{nope", "[1, 2]", '"a string"'])
+def test_a_payload_that_is_not_a_json_object_reads_as_none(text):
+    assert read_payload(io.StringIO(text)) is None
+
+
+def test_a_json_object_payload_is_returned():
+    assert read_payload(io.StringIO('{"session_id": "s"}')) == {"session_id": "s"}

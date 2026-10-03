@@ -7,7 +7,7 @@ Two events, two contracts:
   2. PostToolUseFailure — decode deploy.sh's resume-point exit codes, which all mean nothing was
      deployed and each of which has a different next step.
 
-The retry ledger writes under `.claude/logs/`, so every test that can grant a retry points
+The retry ledger writes a per-session file in the system temp dir, so every test that can grant a retry points
 `ledger_path` at a tmp_path instead — otherwise the suite's own runs would spend the cap and the
 later cases would pass for the wrong reason.
 
@@ -15,8 +15,10 @@ Run: uv run pytest .claude/hooks
 """
 
 import importlib.util
+import io
 import json
 import os
+import sys
 
 import pytest
 
@@ -170,8 +172,8 @@ def test_the_deploy_note_survives_a_compound_invocation():
     assert note is not None
 
 
-def test_main_emits_the_documented_shape(capsys, ledger):
-    _mod.main.__globals__["sys"].stdin = _StringIO(json.dumps(denial()))
+def test_main_emits_the_documented_shape(capsys, ledger, monkeypatch):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(denial())))
     _mod.main()
     out = json.loads(capsys.readouterr().out)
     assert out == {
@@ -179,9 +181,9 @@ def test_main_emits_the_documented_shape(capsys, ledger):
     }
 
 
-def test_main_says_nothing_on_an_unrelated_event(capsys):
-    _mod.main.__globals__["sys"].stdin = _StringIO(
-        json.dumps({"hook_event_name": "Stop"})
+def test_main_says_nothing_on_an_unrelated_event(capsys, monkeypatch):
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "Stop"}))
     )
     _mod.main()
     assert capsys.readouterr().out == ""
@@ -234,13 +236,3 @@ def _deploy_failure(rc: int) -> dict:
         "tool_input": {"command": "./scripts/deploy.sh --tags sonarr"},
         "error": f"Exit code {rc}\nsomething the harness printed",
     }
-
-
-class _StringIO:
-    """Minimal stdin stand-in: json.load only needs read()."""
-
-    def __init__(self, text):
-        self._text = text
-
-    def read(self, *_args):
-        return self._text
