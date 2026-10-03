@@ -252,7 +252,7 @@
 
   tasks:
     # Batched rather than one flat loop: roles/k8s/manifests does not wait on its own rollout
-    # (see tasks/k8s_rollout_drain.yml), so the batch boundary is what bounds how many workloads
+    # (see roles/k8s/manifests/tasks/drain.yml), so the batch boundary is what bounds how many workloads
     # roll at once. The toposorted order from the pre_tasks above still holds within and across
     # batches, which is what traefik's CRDs and authelia's middleware depend on.
     - name: Deploy k8s workloads in batches

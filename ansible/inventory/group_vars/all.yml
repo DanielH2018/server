@@ -231,7 +231,6 @@ terraria_k8s_replicas: 0
 # defaults are invisible across roles.
 crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.1
 crowdsec_k8s_agent_username: k8s-traefik-agent
-crowdsec_k8s_server_agent_machine: daniel-server-agent
 # The authelia pod's agent sidecar. Here, not in the authelia role's defaults, because the
 # k8s/crowdsec role registers the machine and only group_vars crosses that boundary.
 crowdsec_k8s_authelia_agent_machine: k8s-authelia-agent
