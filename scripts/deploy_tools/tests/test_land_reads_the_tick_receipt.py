@@ -97,12 +97,15 @@ def _receipt(manual: dict[str, list[str]]) -> str:
     )
 
 
-def _landing(land_run, receipts: str, is_ancestor_rc: int = 0, plane_note=None):
+def _landing(
+    land_run, receipts: str, is_ancestor_rc: int = 0, plane_note=None, ancestry=None
+):
     f = Fakes(
         gh_views={"files,changedFiles": _RBAC_PR},
         derived=([], "pr"),
         state={"receipts": receipts},
         is_ancestor_rc=is_ancestor_rc,
+        is_ancestor_of=ancestry or {"e" * 40: 1},
     )
     classifier = dataclasses.replace(
         build_classifier(f), plane_note=plane_note or land_tags.plane_note
@@ -132,6 +135,17 @@ def test_without_a_receipt_covering_this_pr_the_verdict_keeps_the_role_tag(
     """The last case is the stale row the sidecar needed a re-derivation to catch: a receipt
     for a range whose origin does not contain this merge commit is somebody else's."""
     _rc, out, _err, _calls, _ = _landing(land_run, receipts, is_ancestor_rc)
+    assert "ansible/k3s-bringup.yml --tags k3s`" in out
+    assert "--tags kubeconfig" not in out
+
+
+def test_a_later_ranges_receipt_is_not_quoted_for_this_pr(land_run):
+    """The crossing tick wrote no receipt — another session's ff-merge crossed this PR — and
+    the next broad tick's receipt has an origin containing it too. Its base contains it as
+    well, so that range started past this PR and its tags are somebody else's."""
+    _rc, out, _err, _calls, _ = _landing(
+        land_run, _receipt({"k3s": ["kubeconfig"]}), ancestry={"e" * 40: 0}
+    )
     assert "ansible/k3s-bringup.yml --tags k3s`" in out
     assert "--tags kubeconfig" not in out
 

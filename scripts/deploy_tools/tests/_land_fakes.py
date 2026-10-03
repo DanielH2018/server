@@ -105,6 +105,9 @@ class Fakes:
     # `git merge-base --is-ancestor <merge_sha> <recorded apply>`: 0 means the recorded broad
     # apply included this PR, non-zero means it ran at a commit that did not contain it.
     is_ancestor_rc: int = 0
+    # Per-ref overrides of `is_ancestor_rc`, keyed by the ref the query asks about (the last
+    # argument), for a test that needs one SHA's ancestry to differ from another's.
+    is_ancestor_of: dict[str, int] = field(default_factory=dict)
     # The same query against HEAD — `Landing.merge_applied`, which asks whether the primary
     # checkout already carries this PR. Non-zero by default so `behind_since` alone still
     # answers BEHIND unless a test says the tick crossed the merge commit.
@@ -219,7 +222,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         if args[0] == "diff":
             return _cp(f.diff_rc, "\n".join(f.diff_paths) + "\n")
         if args[0] == "merge-base" and "--is-ancestor" in args:
-            return _cp(f.merge_applied_rc if args[-1] == "HEAD" else f.is_ancestor_rc)
+            if args[-1] == "HEAD":
+                return _cp(f.merge_applied_rc)
+            return _cp(f.is_ancestor_of.get(args[-1], f.is_ancestor_rc))
         if args[0] == "merge-base":
             return _cp(0, "prbase\n")
         if args == ("rev-parse", f"origin/{landing_mod.BRANCH}"):
