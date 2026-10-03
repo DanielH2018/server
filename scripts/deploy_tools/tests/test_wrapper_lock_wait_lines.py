@@ -257,6 +257,8 @@ def test_a_lock_timeout_is_still_reported_as_contention(tmp_path):
     assert result.returncode == 75, result.stderr
     assert "nothing was deployed" in result.stderr
     assert "A deploy is already running" in result.stderr
+    assert "docs-refresh cron" in result.stderr
+    assert "eval-run cron" in result.stderr
 
 
 def _unopenable_tree_lock(tmp_path: Path) -> str:
@@ -327,6 +329,8 @@ def test_detach_still_reports_a_held_lock_as_contention(tmp_path):
         result = _run_detach(tmp_path)
     assert result.returncode == ec.DEPLOY_LOCK_BUSY, result.stderr
     assert "A deploy is already running" in result.stderr
+    assert "docs-refresh cron" in result.stderr
+    assert "eval-run cron" in result.stderr
     assert "running in background" not in result.stdout
 
 

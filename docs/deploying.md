@@ -14,8 +14,8 @@ Not a bare `ansible-playbook`. The wrapper does four things the bare form does n
 
 - Takes `/var/lock/server-git-tree.lock` to snapshot `HEAD`, then one
   `/var/lock/server-deploy-<tag>.lock` per service for the playbook, so the deploy cannot
-  interleave with the GitOps timer or the secret-rotation cron on the tree, nor with another
-  deploy of the same service on the cluster
+  interleave with any [tree-lock holder](#who-holds-the-tree-lock) on the tree, nor with
+  another deploy of the same service on the cluster
   ([ADR-0011](adr/0011-one-lock-serialises-every-deploy-path.md),
   [ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)). Two sessions
   deploying different services run at the same time.
@@ -36,6 +36,23 @@ Not a bare `ansible-playbook`. The wrapper does four things the bare form does n
 
 The bare forms still work and are what the wrapper runs. Use them only when you deliberately
 want none of the above.
+
+### Who holds the tree lock
+
+This is the one list of the jobs that take `/var/lock/server-git-tree.lock`. Other docs link
+here rather than naming the holders themselves.
+
+- `gitops-deploy.service`, every 10 minutes, for its whole fetch, fast-forward and apply.
+- The weekly secret-rotate cron (`secret-rotate.sh.j2`).
+- The twice-daily docs-refresh cron (`docs-refresh.sh.j2`).
+- The weekly eval-run cron (`eval-run.sh.j2`).
+- Another `deploy.sh`, through `scripts/deploy_tools/deploy_under_locks.py`, for the seconds
+  it takes to snapshot `HEAD`.
+
+The four waiters are pinned by the census in
+`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py`, which a new
+waiter has to join. `deploy_under_locks.py:TREE_LOCK_HOLDERS` prints this list to a deploy
+that could not take the lock.
 
 ## Exit codes are resume points
 

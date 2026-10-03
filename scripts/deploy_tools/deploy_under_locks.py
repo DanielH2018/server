@@ -4,8 +4,8 @@
 which takes the same locks through the functions here and forks before the playbook.
 
 TWO LOCKS, GUARDING TWO DIFFERENT THINGS (ADR-0017). The git-tree lock guards
-the git tree and nothing else: gitops-deploy.service, the weekly secret-rotate cron and the
-docs refresh all rewrite the tree every deploy renders from. This module holds it only long
+the git tree and nothing else: gitops-deploy.service, the weekly secret-rotate cron, the
+docs refresh and the eval sweep all rewrite the tree every deploy renders from. This module holds it only long
 enough to copy the commit into a detached worktree under /tmp/homelab-deploy-snapshots --
 seconds -- and runs the playbook against that snapshot. `/var/lock/server-deploy-<tag>.lock`
 guards the CLUSTER, one lock per deploy tag, held across the whole playbook: two deploys of
@@ -74,6 +74,15 @@ TAG_LIST_TIMEOUT_DEFAULT = 120
 # `git worktree remove` is ~0.3s each, so a root with hundreds of dead directories would
 # otherwise turn the hold into minutes. The rest wait for the next locked run.
 REAP_MAX_PER_RUN_DEFAULT = 20
+# Every job that can hold the git-tree lock, printed when this run could not take it. The
+# waiter census in test_gitops_deploy_timeout_budgets.py is the list a new holder joins, and
+# docs/deploying.md is the prose copy.
+TREE_LOCK_HOLDERS = (
+    "  A deploy is already running. Likely holders: gitops-deploy.service",
+    "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron, the",
+    "  docs-refresh cron, the weekly eval-run cron, or another deploy.sh from a Claude",
+    "  session (uv run python scripts/dev/prune_worktrees.py).",
+)
 
 
 def say(*lines: str) -> None:
@@ -408,9 +417,7 @@ def tree_lock() -> Iterator[None]:
             except _LockTimeout:
                 say(
                     f"deploy: could not take {path} after {lock_wait()}s -- nothing was deployed.",
-                    "  A deploy is already running. Likely holders: gitops-deploy.service",
-                    "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron,",
-                    "  or another Claude session (uv run python scripts/dev/prune_worktrees.py).",
+                    *TREE_LOCK_HOLDERS,
                 )
                 raise Refused(DEPLOY_LOCK_BUSY) from None
             waited = int(time.monotonic() - started)

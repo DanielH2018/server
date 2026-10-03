@@ -39,15 +39,14 @@ Stop conditions, which are outcomes and not failures:
   failed deploy the health gate cannot see (authelia's middleware answers before the backend,
   traefik's outage leaves the host probes green), so the review its denial asks for is a
   person, and your gated land is not that person. Do not merge it, do not land it. Name it in the summary with the command an interactive session
-  runs: `./scripts/deploy_tools/land.sh --pr <n> --since <sha> --arm-merge --await-merge`,
-  where `<sha>` is `origin/master` at the moment that session merges — leave it as the
-  placeholder, since any SHA you write now is stale by then.
+  runs: `./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach --await-verdict`,
+  the `land-after-merge` skill's invocation.
 
 A `manual — ` work order you finish ends as a superseding PR you opened, which is not
 Renovate's, so `land.sh --arm-merge` refuses it under `LAND_REQUIRE_AUTHOR`. That is the
 operator's decision (#2746), not an obstacle to work around: never pass `--any-author`. Leave
 that PR open and file a hand-off finding for it as the skill's §4 describes: what you
-verified, its `land.sh --pr <n>` command with `<sha>` as the placeholder, the check that
+verified, its PR number with a pointer to the `land-after-merge` skill's invocation, the check that
 proves the new version took effect, and that it must land before the next Renovate PR for
 the same pin. Push that PR from a branch named `{{ renovate_agent_branch }}-<renovate pr number>`,
 cut in this worktree with `git switch -c` before your first commit. The wrapper finds the PRs

@@ -391,7 +391,7 @@ def test_render_pending_names_the_item_the_dwell_and_the_remedy():
     assert "Update grafana/promtail to 3.6.11" in msg
     assert "111 days" in msg
     assert "renovate/k8s-image-grafanapromtail" in msg
-    assert "Tick its box" in msg
+    assert "Do not tick its box" in msg
 
 
 def test_render_pending_stays_under_discords_cap_with_the_whole_section_stuck():

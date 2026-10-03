@@ -84,9 +84,9 @@ Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + 
 `community.docker` deps `requests`/`docker` — see **Python & Tests**). Bare `ansible-playbook`
 (the uv-tool shim) lacks those module deps and deploys will fail.
 **Deploy through `./scripts/deploy.sh --tags "<service>"`**, not the playbook directly. A
-deploy cannot interleave with the GitOps deployer or the weekly secret-rotate cron on the tree,
-nor with another deploy of the SAME service on the cluster, while deploys of different services
-run at once. The `deploy` skill has the lock and snapshot mechanics.
+deploy cannot interleave with any holder of the git-tree lock on the tree, nor with another
+deploy of the SAME service on the cluster, while deploys of different services run at once.
+`docs/deploying.md` lists the holders. The `deploy` skill has the lock and snapshot mechanics.
 
 **It deploys `HEAD`, not your working tree.** An uncommitted edit is not deployed, and nothing
 on the run says so. Commit first. `--check` and `--dry-run` still read the working tree, which
@@ -124,10 +124,9 @@ refuses outright — and then say which command and why.
 
 ### The procedure
 
-Arm the merge, then hand the follow-through to `land.sh` as ONE backgrounded command with
-output redirected to a file. The exact commands, the `VERDICT:` values and what `land.sh` does
-with the tick are in the **`land-after-merge` skill**. **Do not hand-poll CI and do not
-hand-merge.**
+Hand the merge and the follow-through to `land.sh`. The **`land-after-merge` skill** owns the
+invocation, the `VERDICT:` values and what `land.sh` does with the tick, so take the command
+from there. **Do not hand-poll CI and do not hand-merge.**
 
 A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
 `docs/landing.md` owns the rule, and

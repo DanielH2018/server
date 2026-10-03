@@ -1,7 +1,7 @@
 """A role CLAUDE.md gives its deploy command as `./scripts/deploy.sh`, never the bare playbook.
 
 The root CLAUDE.md routes every deploy through `scripts/deploy.sh`, which takes the tree lock
-the GitOps deployer and the secret-rotate cron share, snapshots HEAD, and checks the tag and
+every holder in docs/deploying.md's *Who holds the tree lock* shares, snapshots HEAD, and checks the tag and
 staleness before it runs the playbook. A bare `uv run ansible-playbook ansible/deploy.yml` does
 none of that. The bare form spreads by copying a sibling doc rather than by any scaffold, so a
 guard is what stops the next copy.

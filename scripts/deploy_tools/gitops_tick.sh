@@ -322,7 +322,7 @@ if ended_in_contention; then
   echo "unit's full flock wait. Nothing was deployed and last_run is untouched."
   echo "No alert fires for this — OnFailure cannot fire on a unit systemd considers"
   echo "successful, and GitOps-Alive only pages once last_run passes GITOPS_MAX_AGE_S"
-  echo "(90 min). Re-run once the other deploy or secret-rotate cron finishes."
+  echo "(90 min). Re-run once that holder finishes; docs/deploying.md lists them."
   tick_verdict 3 contention "the unit's full flock wait elapsed, nothing deployed"
 fi
 
