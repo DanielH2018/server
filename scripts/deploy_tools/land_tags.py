@@ -42,12 +42,9 @@ from lib.render_guard import (  # noqa: F401
     service_records_at_or_none,
     service_tags_at,
 )
-from lib.deployer_park import read_manual_plane_tags_marker
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-
-from gitops_markers import parse_manual_plane_tags
 
 from deploy_logic import (
     broad_remediation,
@@ -148,33 +145,13 @@ def derived_tags(files, declared: set[str] | None = None) -> set[str]:
     return {t for p in files if (t := tag_for(p, declared))}
 
 
-def confirmed_narrow_tags(
-    files, pr_range: str, repo, sidecar: str | None
-) -> dict[str, frozenset[str]]:
-    """The deployer's narrowing for each setup role this PR touches, where it covers this PR.
-
-    What prints is the deployer's `manual_plane_tags` row: it spans every range that
-    made the role pending, and the note ends in the command clearing all of them. A row is
-    quoted only when it CONTAINS this PR's own `narrow_setup.role_tags` over `pr_range`,
-    because nothing else ties it to this PR. Read before the tick records this range, it is
-    absent or an earlier range's, and a stale `coredns` row printed for an RBAC PR leaves the
-    RBAC change unapplied behind a cleared marker. Every other case drops the role, so
-    `_setup_commands` prints the whole-role tag. `docs/gitops-pipeline.md` has the long form.
-    `pr_range` is `<old>..<new>` for this PR, or '' when unknown; `sidecar` is the
-    `manual_plane_tags` marker text, or None when it cannot be read.
-    """
-    rows = parse_manual_plane_tags(sidecar)
-    own = own_narrow_tags(files, pr_range, repo, set(rows))
-    return {t: rows[t] for t, tags in own.items() if rows[t] and tags <= rows[t]}
-
-
-def own_narrow_tags(files, pr_range: str, repo, only=None) -> dict[str, frozenset[str]]:
+def own_narrow_tags(files, pr_range: str, repo) -> dict[str, frozenset[str]]:
     """`narrow_setup.role_tags` over this PR's own range, per setup role it touches.
 
-    A landing that never awaits the tick prints this directly: no row exists for its range
-    yet, and the narrowed clear drops only these tags, so a wider row recorded later keeps
-    the rest. A role whose derivation refuses or raises is left out and keeps its role tag.
-    `only`, when given, limits the roles to those tags.
+    A landing that never awaits the tick prints this directly: no receipt exists for its
+    range yet, and the narrowed clear drops only these tags, so a wider row recorded later
+    keeps the rest. A role whose derivation refuses or raises is left out and keeps its role
+    tag.
     """
     if ".." not in pr_range:
         return {}
@@ -182,7 +159,7 @@ def own_narrow_tags(files, pr_range: str, repo, only=None) -> dict[str, frozense
     out: dict[str, frozenset[str]] = {}
     for role in services_from_changed_paths(list(files)).setup_roles:
         tag, playbook = setup_role_tag(role), setup_role_playbook(role)
-        if playbook is None or (only is not None and tag not in only):
+        if playbook is None:
             continue
         # DECIDED: `except Exception`, because any failure here must print the role tag. The
         # derivation shells out to git and decodes the output. An escape would kill a landing
@@ -432,16 +409,13 @@ def quiet_paths(paths: list[str], range_: str) -> set[str]:
         return docs
 
 
-def main(
-    argv: list[str] | None = None,
-    sidecar=read_manual_plane_tags_marker,
-    repo: Path = REPO,
-) -> int:
+def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     """Print one fact about a PR's file list -- tags, plane note, self-applied flag, or remaining-setup-hosts note.
 
     Which one prints depends on `--plane`/`--self-applied`/`--remaining-setup-hosts`; with
-    none of them, prints the derived `--tags` value. Always exits 0. `sidecar` and `repo` are
-    where `--plane` reads the deployer's narrowing and the range, a seam for the tests.
+    none of them, prints the derived `--tags` value. Always exits 0. `repo` is where `--plane`
+    derives this PR's own narrowing over `--range`, a seam for the tests. The CLI has no merge
+    commit to find a receipt by, so it narrows the way a fast-path landing does.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -477,7 +451,7 @@ def main(
     paths = [f["path"] for f in payload.get("files", [])]
     quiet = quiet_paths(paths, ns.range_)
     if ns.plane:
-        narrow = confirmed_narrow_tags(paths, ns.range_, repo, sidecar())
+        narrow = own_narrow_tags(paths, ns.range_, repo)
         print(plane_note(paths, quiet=quiet, narrow_tags=narrow))
         return 0
     if ns.self_applied:

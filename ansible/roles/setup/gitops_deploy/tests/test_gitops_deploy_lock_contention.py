@@ -226,6 +226,9 @@ def test_a_contended_second_plan_takes_back_the_first_plans_broad_applied(
     assert not (state_dir / "broad_applied").exists(), (
         "the first plan's apply is still recorded against a SHA the reset took away"
     )
+    assert not (state_dir / "receipts.jsonl").exists(), (
+        "the receipt is the same claim, and the next tick re-crosses the range to write it"
+    )
     _deferred(tick, state_dir)
 
 

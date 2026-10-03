@@ -15,12 +15,14 @@ so a state directory with the wrong mode propagates an `OSError` and the tick pa
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deployer_state.py
 """
 
+import json
 import os
 import pathlib
 
 import pytest
 
 import deploy_io
+from gitops_ledger import RECEIPT_KEEP, parse_receipts
 
 SHA = "c0ffee12" * 5
 
@@ -43,7 +45,9 @@ EXPECTED_MARKERS = frozenset(
         ("manual_plane_tags", "manual_plane_tags"),
         ("contention", "contention_since"),
         ("k8s_deferred", "k8s_deferred"),
-        ("k8s_unapplied", "k8s_unapplied"),
+        ("owed", "owed.jsonl"),
+        ("k8s_unapplied_legacy", "k8s_unapplied"),
+        ("receipts", "receipts.jsonl"),
         ("last_run", "last_run"),
         ("diverged", "diverged_sha"),
         ("behind", "behind_since"),
@@ -431,3 +435,38 @@ def test_an_unknown_alert_slot_is_a_typo_not_a_new_channel(state):
         state.record_alerted("k9s", SHA)
     with pytest.raises(KeyError):
         state.alerted_sha("k9s")
+
+
+# ── the per-SHA tick receipt (#3391) ─────────────────────────────────────────────────────
+
+
+def test_a_receipt_merges_every_plan_of_one_origin_into_one_line(state):
+    """A setup-then-deploy range applies twice and records a pending role once: one line."""
+    state.record_receipt(
+        "o" * 40, "b" * 40, applied={"ansible/initial_setup.yml": ["x"]}
+    )
+    state.record_receipt("o" * 40, "b" * 40, manual={"k3s": frozenset({"kubeconfig"})})
+    state.record_receipt("o" * 40, "b" * 40, applied={"ansible/deploy.yml": []})
+    (receipt,) = parse_receipts(state.read("receipts"))
+    assert receipt.applied == {
+        "ansible/initial_setup.yml": ("x",),
+        "ansible/deploy.yml": (),
+    }
+    assert receipt.manual == {"k3s": frozenset({"kubeconfig"})}
+
+
+def test_a_receipt_keeps_a_key_this_writer_does_not_know(state):
+    state.write("receipts", json.dumps({"origin": "o" * 40, "base": "", "hold": "yes"}))
+    state.record_receipt("o" * 40, "b" * 40, manual={"k3s": None})
+    assert json.loads(state.read("receipts"))["hold"] == "yes"
+    assert parse_receipts(state.read("receipts"))[0].manual == {"k3s": frozenset()}
+
+
+def test_the_receipts_are_bounded_and_drop_takes_out_one_origin(state):
+    for n in range(RECEIPT_KEEP + 5):
+        state.record_receipt(f"{n:040d}", "", applied={"ansible/deploy.yml": []})
+    origins = [r.origin for r in parse_receipts(state.read("receipts"))]
+    assert origins == [f"{n:040d}" for n in range(5, RECEIPT_KEEP + 5)]
+    state.drop_receipt(f"{7:040d}")
+    assert f"{7:040d}" not in [r.origin for r in parse_receipts(state.read("receipts"))]
+    assert len(parse_receipts(state.read("receipts"))) == RECEIPT_KEEP - 1

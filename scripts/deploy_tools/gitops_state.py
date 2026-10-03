@@ -24,9 +24,9 @@ the service; this command is for the `./scripts/deploy.sh` an operator ran, whic
 cannot see. The apply comes first here too, and the clear writes the same journal line under
 `event=clear-k8s-deferred`.
 
-`clear-k8s-unapplied <service>` rewrites `k8s_unapplied`, which carries the same line format
-for the k8s changes this deployer never applies — a hand-edited role, or one of the forty
-denylisted ones. NOTHING PAGES ON THAT MARKER, and every tick discharges a line whose
+`clear-k8s-unapplied <service>` drops the `k8s_unapplied` entry from the `owed` ledger
+(#3392), the class for the k8s changes this deployer never applies — a hand-edited role, or one
+of the forty denylisted ones. NOTHING PAGES ON THAT CLASS, and every tick discharges an entry whose
 service has since been deployed, so this command is needed for two cases only: a change that
 was reverted rather than applied, and a shared role one of whose callers nothing can prove
 applied — no tag runs it, or a caller writes no release record
@@ -346,10 +346,9 @@ def clear_k8s_deferred(
       lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
       journal: what records the clear, called with the service, the line it dropped and an
         empty remaining set. None means the default for `marker`.
-      marker: which of the two same-shaped k8s markers to rewrite — `k8s_deferred`, the one
-        monitor-bridge pages on, or `k8s_unapplied`, the one nothing pages on. The
-        two carry identical line formats and identical clear semantics, so they share this
-        function rather than a copy of it.
+      marker: which file to rewrite — `k8s_deferred`, the one monitor-bridge pages on, or
+        `owed`, the ledger whose `k8s_unapplied` class nothing pages on. The two carry
+        identical clear semantics, so they share this function rather than a copy of it.
     """
     pending = (
         state.k8s_deferred_pending
@@ -520,7 +519,7 @@ def main(
             lock_path,
             lock_wait_s,
             journal,
-            marker="k8s_unapplied",
+            marker="owed",
         )
     if args.command != "clear-manual-plane":
         # argparse refuses any other value, so this catches a subcommand added to the parser

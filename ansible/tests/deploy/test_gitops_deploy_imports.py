@@ -48,6 +48,9 @@ ALLOWED: dict[str, set[str] | None] = {
     # a copy of it ships into every other tree that reads the markers (its header says how),
     # so an import here would have to be satisfiable in a monitor-bridge pod.
     "gitops_markers": set(),
+    # The JSON-lines markers (the owed-work ledger and the tick receipt). Reads
+    # `gitops_markers` for the legacy `k8s_unapplied` line format and nothing else.
+    "gitops_ledger": {"gitops_markers"},
     # The k8s release records, read to discharge a `k8s_unapplied` line. Stdlib only, for the
     # reason `gitops_markers` is: `deploy_toolbox` imports it for the `release_commit`
     # default, so an import back would be a cycle.
@@ -97,12 +100,13 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_git",
         "deploy_state_alerts",
         "deploy_state_k8s",
+        "gitops_ledger",
         "gitops_markers",
     },
     # The `k8s_deferred` and `k8s_unapplied` families, as a mixin `DeployerState` inherits.
     # It reads and writes through the methods that class defines, so it imports only the
     # parsers — never `deploy_state`, which would be a cycle.
-    "deploy_state_k8s": {"gitops_markers"},
+    "deploy_state_k8s": {"gitops_ledger", "gitops_markers"},
     # The alert dedupe slots, as a second such mixin. `deploy_config` for `log`, which the
     # migration uses to say which slots it folded in; otherwise the same contract.
     "deploy_state_alerts": {"deploy_config", "gitops_markers"},

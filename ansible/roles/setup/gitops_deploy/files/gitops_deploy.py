@@ -248,6 +248,9 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     # deployer merged and will never apply. Discharged FIRST, so the journal line below never
     # names a change somebody's own `deploy.sh` has since applied — that deploy is invisible to
     # every other part of this tick.
+    # The one-shot move of the pre-#3392 `k8s_unapplied` file into the `owed` ledger, ahead of
+    # its first reader this tick. A no-op once the file is gone.
+    STATE.fold_legacy_k8s_unapplied(time.time())
     deploy_defer.discharge_k8s_unapplied(tools, STATE, config)
     deploy_defer.log_k8s_unapplied(STATE)
 

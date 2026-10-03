@@ -238,11 +238,10 @@ def record(
 
     The narrow tags go in a sidecar marker for EVERY role in `roles`, not only the ones this
     tick added: a second range touching an already-pending role adds work the first line
-    cannot describe, and `record_manual_plane_tags` unions the two.
+    cannot describe, and `record_manual_plane_tags` unions the two. They go in this origin's
+    receipt as well, scoped to this range alone, which is what `land.sh` quotes (#3391).
 
-    The journal line here names only what this tick ADDED. `main()` already logs the whole
-    pending set on every tick, including this one, so logging the set again here printed it
-    twice whenever a role was already listed.
+    The journal line names only what this tick ADDED: `main()` logs the whole pending set.
 
     Returns:
         A `Recorded` carrying each half of what this tick did, because they need different
@@ -266,12 +265,12 @@ def record(
             origin, setup_role_playbook(role) or NO_PLAYBOOK, setup_role_tag(role), now
         )
     ]
+    narrowed = {}
     for role in roles:
-        state.record_manual_plane_tags(
-            setup_role_tag(role),
-            narrow_tags_for(tools, config, target, role),
-            line_predates=role not in recorded,
-        )
+        tag = setup_role_tag(role)
+        narrowed[tag] = narrow_tags_for(tools, config, target, role)
+        state.record_manual_plane_tags(tag, narrowed[tag], role not in recorded)
+    state.record_receipt(origin, target.local, manual=narrowed)
     narrow = state.manual_plane_tags_pending()
     if recorded:
         log(
@@ -320,6 +319,7 @@ def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
         recorded: what `record` returned for this tick.
     """
     state.restore_broad_applied(recorded.broad_applied_before)
+    state.drop_receipt(origin)
     cleared = {setup_role_tag(role) for role in recorded.roles}
     for tag in cleared:
         state.clear_manual_plane(tag)

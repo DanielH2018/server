@@ -86,7 +86,7 @@ def test_a_range_with_no_k8s_role_records_nothing(gitops_deploy, state_dir, sett
         ChangeSet(tasks={"svca"}),
     )
     assert gitops_deploy.STATE.k8s_unapplied_pending() == []
-    assert not (state_dir / "k8s_unapplied").exists()
+    assert not (state_dir / "owed.jsonl").exists()
 
 
 def test_a_second_deferral_of_the_same_role_moves_the_origin_and_keeps_the_stamp(
@@ -132,22 +132,42 @@ def test_a_first_deferral_of_a_role_appends_its_line(
     ]
 
 
+def _line(service: str, origin: str = ORIGIN, **fields) -> str:
+    """One `owed` ledger line for a `k8s_unapplied` change, with `fields` merged over it."""
+    return json.dumps(
+        {"class": "k8s_unapplied", "subject": service, "origin": origin, "at": 1000}
+        | fields,
+        sort_keys=True,
+    )
+
+
 def test_a_torn_line_survives_an_origin_advance(gitops_deploy, state_dir, settings):
-    """A line no parser can read is carried through untouched, the way `_clear_k8s_lines`
-    carries one: the rewrite walks the RAW lines, which the parsed entries are not aligned
-    with once one of them is skipped."""
+    """A line no parser can read is carried through untouched: the rewrite walks the RAW
+    lines, which the parsed entries are not aligned with once one of them is skipped."""
     state = gitops_deploy.STATE
-    state.write("k8s_unapplied", f"garbled\n{ORIGIN} authelia 1000")
+    state.write("owed", f"garbled\n{_line('authelia')}")
     state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
-    assert state.read("k8s_unapplied").splitlines() == [
-        "garbled",
-        f"{LATER} authelia 1000",
-    ]
+    assert state.read("owed").splitlines() == ["garbled", _line("authelia", LATER)]
+
+
+def test_a_key_this_writer_does_not_know_survives_an_origin_advance(
+    gitops_deploy, state_dir, settings
+):
+    """The ledger's whole point (#3392): a key a NEWER writer added is neither a reason to
+    skip the line nor something an older writer strips on its way through."""
+    state = gitops_deploy.STATE
+    state.write("owed", _line("authelia", future=["kept"]))
+    assert [e.service for e in state.k8s_unapplied_pending()] == ["authelia"]
+    state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
+    assert json.loads(state.read("owed"))["future"] == ["kept"]
 
 
 @pytest.mark.parametrize(
     "torn",
-    [f"{ORIGIN} authelia", f"{ORIGIN} authelia not-a-stamp"],
+    [
+        json.dumps({"class": "k8s_unapplied", "subject": "authelia", "origin": ORIGIN}),
+        _line("authelia", at="not-a-stamp"),
+    ],
     ids=["no-stamp-at-all", "a-stamp-no-parser-reads"],
 )
 def test_a_torn_line_naming_a_service_is_repaired_rather_than_duplicated(
@@ -155,13 +175,12 @@ def test_a_torn_line_naming_a_service_is_repaired_rather_than_duplicated(
 ):
     """A torn line the record CAN attribute is rewritten in place.
 
-    The service is absent from `parse_k8s_deferred`'s entries, so a writer reading only those
-    appends a second line beside the torn one — and `_clear_k8s_lines` and the discharge, both
-    matching on the same three fields, then carry the torn one forever. One line, readable, is
-    the only end state that clears.
+    The service is absent from `parse_owed`'s entries, so a writer reading only those appends
+    a second line beside the torn one — and the clear and the discharge would then carry the
+    torn one forever. One line, readable, is the only end state that clears.
     """
     state = gitops_deploy.STATE
-    state.write("k8s_unapplied", torn)
+    state.write("owed", torn)
     assert state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0) == [], (
         "a line predating the tick must stay out of what `unrecord` clears"
     )
@@ -169,7 +188,7 @@ def test_a_torn_line_naming_a_service_is_repaired_rather_than_duplicated(
         (LATER, "authelia")
     ]
     assert state.clear_k8s_unapplied({"authelia"}) == ["authelia"]
-    assert state.read("k8s_unapplied") is None
+    assert state.read("owed") is None
 
 
 def test_a_repaired_line_keeps_a_stamp_that_reads_as_one(
@@ -177,7 +196,8 @@ def test_a_repaired_line_keeps_a_stamp_that_reads_as_one(
 ):
     """A torn line's stamp is the age a reader dates the change from, so the repair keeps it."""
     state = gitops_deploy.STATE
-    state.write("k8s_unapplied", f"{ORIGIN} authelia 1000 extra-field")
+    torn = {"class": "k8s_unapplied", "subject": "authelia", "origin": 7, "at": 1000}
+    state.write("owed", json.dumps(torn))
     state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
     assert [e.at for e in state.k8s_unapplied_pending()] == [1000.0]
 
@@ -187,14 +207,42 @@ def test_a_torn_line_beside_a_readable_one_is_dropped(
 ):
     """Repairing here would duplicate what the readable line already says."""
     state = gitops_deploy.STATE
-    state.write("k8s_unapplied", f"{ORIGIN} authelia\n{ORIGIN} authelia 1000")
+    state.write("owed", f"{_line('authelia', at=None)}\n{_line('authelia')}")
     state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
-    assert state.read("k8s_unapplied").splitlines() == [f"{LATER} authelia 1000"]
+    assert state.read("owed").splitlines() == [_line("authelia", LATER)]
+
+
+def test_the_legacy_file_is_folded_into_the_ledger_once(
+    gitops_deploy, state_dir, settings
+):
+    """The one-shot move of a host's pre-#3392 `k8s_unapplied` file. A service the ledger
+    already names keeps its ledger entry, and the file is gone afterwards."""
+    state = gitops_deploy.STATE
+    state.write("owed", _line("authelia", at=500))
+    state.write(
+        "k8s_unapplied_legacy", f"{ORIGIN} authelia 900\n{ORIGIN} sonarr not-a-stamp"
+    )
+    assert state.fold_legacy_k8s_unapplied(3000.0) == ["sonarr"]
+    assert sorted((e.service, e.at) for e in state.k8s_unapplied_pending()) == [
+        ("authelia", 500.0),
+        ("sonarr", 3000.0),
+    ]
+    assert state.read("k8s_unapplied_legacy") is None
+    assert state.fold_legacy_k8s_unapplied(4000.0) == []
+
+
+def test_a_clear_reaches_an_unfolded_legacy_line(gitops_deploy, state_dir, settings):
+    """`gitops_state.py clear-k8s-unapplied` runs from the checkout, which can be ahead of the
+    deployer that has not folded the file yet; the clear must not be a silent no-op there."""
+    state = gitops_deploy.STATE
+    state.write("k8s_unapplied_legacy", f"{ORIGIN} authelia 900")
+    assert state.clear_k8s_unapplied({"authelia"}) == ["authelia"]
+    assert state.k8s_unapplied_pending() == []
 
 
 def test_the_two_k8s_markers_are_separate_files(gitops_deploy, state_dir, settings):
     """A class tag on a `k8s_deferred` line would read as NO pending bump in an un-redeployed
-    monitor-bridge, which is why this is a second basename rather than a fourth field."""
+    monitor-bridge, which is why `k8s_unapplied` lives in the `owed` ledger instead."""
     state = gitops_deploy.STATE
     state.record_k8s_deferred(ORIGIN, {"sonarr"}, 1000.0)
     state.record_k8s_unapplied(ORIGIN, {"authelia"}, 1000.0)

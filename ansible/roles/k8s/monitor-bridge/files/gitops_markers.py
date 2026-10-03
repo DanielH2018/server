@@ -75,32 +75,19 @@ MARKERS: dict[str, str] = {
     # denylisted, so recording those would hold GitOps Deploy — Status red as normal operation.
     # A budget deferral has no such person: nothing chose it, and nothing reports it again.
     "k8s_deferred": "k8s_deferred",
-    # One line per HAND-EDITED or DENYLISTED k8s role change a tick fast-forwarded and will
-    # never apply, in the same `"<origin_sha> <service> <unix_ts>"` format as `k8s_deferred`.
-    # See `parse_k8s_deferred`, which reads both.
-    #
-    # A SEPARATE FILE RATHER THAN A FOURTH FIELD ON THE LINE ABOVE, and rather than a fourth
-    # arm in `gitops_status` (#2570). `parse_k8s_deferred` accepts exactly three fields and
-    # skips anything else, so a class tag appended to a `k8s_deferred` line would read as NO
-    # pending bump in an un-redeployed monitor-bridge and silence the page that marker exists
-    # to raise — the failure `manual_plane_tags` was made a sidecar to avoid. A reader that
-    # has never heard of this basename ignores it, which is exactly the posture this class
-    # wants: NOTHING PAGES ON THIS MARKER. `gitops_status` does not read it, by construction
-    # and not by omission. Forty of the fifty-four k8s roles are denylisted
-    # (`docs/reference/decisions.md`), so a page on their ordinary changes would hold GitOps
-    # Deploy — Status red as normal operation. The durable readers are the SessionStart banner
-    # and the deployer's own journal, both of which a person reads when they are already
-    # looking.
-    #
-    # THE LINE DISCHARGES ITSELF. A denylisted role is by definition one this deployer never
-    # applies, so a marker with only a deployer-side clear would accumulate one line per
-    # routine landing and rebuild the always-red tile on the banner. Every tick therefore
-    # asks, per pending line, whether the service's release record
-    # (`roles/k8s/manifests/tasks/release_stamp.yml`) now names a commit that CONTAINS the
-    # recorded SHA — one `git merge-base --is-ancestor`, which is a different question from
-    # `probe.py releases --stale-only`'s path comparison and cannot drift against it. That
-    # discharges an operator's own `deploy.sh`, which the deployer cannot otherwise see.
-    "k8s_unapplied": "k8s_unapplied",
+    # The owed-work ledger (#3392): one JSON object per line, each naming work a tick left for
+    # somebody else under a `class`. JSON lines because the line formats here skip a line
+    # with one field too many, so a field a new writer appended read as NO pending work in a
+    # reader copy that had not redeployed. `gitops_ledger.parse_owed` has the format.
+    "owed": "owed.jsonl",
+    # The `k8s_unapplied` marker file as it stood before #3392 moved the class into `owed`.
+    # Read only to fold it in (`DeployerState.fold_legacy_k8s_unapplied`) and by the readers
+    # that union it until then. Delete this entry once daniel-box has ticked past the fold.
+    "k8s_unapplied_legacy": "k8s_unapplied",
+    # One JSON line per origin SHA a tick crossed with a broad change (#3391): the planes it
+    # applied and the setup roles it left to a hand. `land.sh` reads it instead of
+    # re-deriving. `gitops_ledger.parse_receipts` has the format.
+    "receipts": "receipts.jsonl",
     # The unix time the last tick completed; monitor-bridge's GitOps Alive reads its age.
     "last_run": "last_run",
     # Origin SHA recorded while local and origin have DIVERGED (`deploy_logic.is_diverged`):
@@ -474,10 +461,10 @@ def format_alerted(alerted: dict[str, str]) -> str | None:
 
 
 def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
-    """Every pending line of `k8s_deferred` OR `k8s_unapplied`, in the order they stand.
+    """Every pending line of `k8s_deferred`, in the order they stand.
 
-    The two markers share this format and this parser, and differ only in who reads them:
-    `gitops_status` pages on the first and never opens the second (#2570).
+    The pre-#3392 `k8s_unapplied` file shares this format, so `k8s_unapplied_entries` reads it
+    with this parser until the deployer has folded it into the `owed` ledger.
 
     A line this cannot parse is SKIPPED, never guessed at, for the reason
     `parse_manual_plane` skips one: a page raised off a torn line names no service and cannot
@@ -497,7 +484,7 @@ def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
 
 
 def k8s_line_service(line: str) -> str | None:
-    """The service a RAW `k8s_deferred` / `k8s_unapplied` line names, or None for none at all.
+    """The service a RAW `k8s_deferred` line names, or None for none at all.
 
     A torn line is still ATTRIBUTABLE where its second field is there: `"<sha> authelia"` and
     `"<sha> authelia not-a-stamp"` both name authelia, and the writer repairs one rather than
@@ -518,15 +505,13 @@ def k8s_line_stamp(line: str, now: float) -> str:
         return f"{now:.0f}"
 
 
-def rewrite_k8s_lines(
-    marker: str | None, services, origin: str, now: float, advance: bool = False
-) -> str:
-    """`marker`'s text with every line naming one of `services` brought up to date.
+def rewrite_k8s_lines(marker: str | None, services, now: float) -> str:
+    """`marker`'s text with every TORN line naming one of `services` made readable.
 
-    Two rewrites, and both keep the line's first-seen stamp, which is the age a reader dates
-    the change from. A TORN LINE IS MADE READABLE (#2657), taking its own stamp where that
-    field reads as one and `now` where it does not. Under `advance`, a READABLE line moves to
-    `origin` (#2644), which `k8s_unapplied` wants and `k8s_deferred` does not.
+    The repair keeps the line's first-seen stamp, which is the age a reader dates the change
+    from: its own where that field reads as one, `now` where it does not (#2657). A readable
+    line is carried as it stands — `k8s_deferred` keeps its recorded origin. The ledger's
+    `rewrite_owed` is the same rewrite with an `advance`, which `k8s_unapplied` wants.
 
     The repair is what stops a writer duplicating a torn line. `parse_k8s_deferred` skips one,
     so a writer reading only its entries sees no line for the service, appends a second, and
@@ -539,9 +524,7 @@ def rewrite_k8s_lines(
         services: the services the caller is writing about. A line naming anything else is
             carried untouched, as is a line naming nobody — dropping that one loses the only
             record that something was deferred, and nothing can say what.
-        origin: the SHA the caller is recording.
         now: the stamp a repaired line takes when its own field reads as nothing.
-        advance: move a readable line's SHA to `origin`.
 
     Returns:
         The text, rewritten. Compare it with the original to see whether anything changed.
@@ -560,11 +543,10 @@ def rewrite_k8s_lines(
         if service is None or service not in wanted:
             kept.append(line)
         elif parse_k8s_deferred(line):
-            kept.append(f"{origin} {service} {line.split()[2]}" if advance else line)
+            kept.append(line)
         elif service not in readable:
             readable.add(service)
-            first = origin if advance else line.split()[0]
-            kept.append(f"{first} {service} {k8s_line_stamp(line, now)}")
+            kept.append(f"{line.split()[0]} {service} {k8s_line_stamp(line, now)}")
     return "\n".join(kept)
 
 

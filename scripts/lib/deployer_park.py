@@ -33,7 +33,8 @@ daniel-box — the reader who can clear it with one deploy — is told.
 ``k8s_unapplied`` is that same shape again for the k8s changes this deployer never applies at
 all: a hand-edited role, or one of the forty denylisted ones. Nothing pages on it, by
 construction — that is what lets the class have a durable record at all — so this
-banner and the deployer's journal are its only readers.
+banner and the deployer's journal are its only readers. It is a class of the ``owed``
+JSON-lines ledger rather than a line-format marker (#3392).
 
 The directory, the basenames and the line parsers come from ``gitops_markers``, the deployer's
 own module in ``ansible/roles/setup/gitops_deploy/files/``, so this module and monitor-bridge
@@ -75,6 +76,12 @@ from gitops_markers import (
     parse_k8s_deferred,
     parse_manual_plane,
     parse_manual_plane_tags,
+)
+from gitops_ledger import (
+    OWED_K8S_UNAPPLIED,
+    k8s_unapplied_entries,
+    owed_line,
+    parse_owed,
 )
 
 # The deployer's marker directory on the host that runs the tick (daniel-box). Mode 0750 owned
@@ -305,22 +312,32 @@ def k8s_unapplied_lines(marker, now):
     # record, so the set stays the changes nobody has deployed.
     """
     lines = []
-    for entry in sorted(parse_k8s_deferred(marker), key=lambda e: e.at):
+    for entry in sorted(parse_owed(marker, OWED_K8S_UNAPPLIED), key=lambda e: e.at):
         lines.append(
-            f"  ✗ the GitOps deployer merged a k8s change for `{entry.service}` "
+            f"  ✗ the GitOps deployer merged a k8s change for `{entry.subject}` "
             f"{_age_phrase(now - entry.at)} ago and never applies this role — "
-            f"`{k8s_deferred_deploy_cmd([entry.service])}`, or "
-            f"`{k8s_unapplied_clear_cmd(entry.service)}` if it was reverted"
+            f"`{k8s_deferred_deploy_cmd([entry.subject])}`, or "
+            f"`{k8s_unapplied_clear_cmd(entry.subject)}` if it was reverted"
         )
     return lines
 
 
 def read_k8s_unapplied_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The host's `k8s_unapplied` marker text, or None when it cannot be read.
+    """The host's pending `k8s_unapplied` changes as `owed` ledger lines, or None when unread.
 
-    Absent and unreadable collapse to the same answer, for the reason the readers above give.
+    The class lives in the `owed` ledger (#3392). A host whose deployer has not yet folded the
+    pre-#3392 `k8s_unapplied` file into it still holds lines there, so those are converted to
+    ledger lines and returned with the rest. Absent and unreadable collapse to the same answer,
+    for the reason the readers above give.
     """
-    return _read(state_dir, MARKERS["k8s_unapplied"])
+    owed = _read(state_dir, MARKERS["owed"])
+    legacy = _read(state_dir, MARKERS["k8s_unapplied_legacy"])
+    if owed is None and legacy is None:
+        return None
+    return "\n".join(
+        owed_line(OWED_K8S_UNAPPLIED, e.service, e.origin, e.at)
+        for e in k8s_unapplied_entries(owed, legacy)
+    )
 
 
 def read_k8s_deferred_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:

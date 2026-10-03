@@ -232,32 +232,35 @@ def classify(ln: Landing) -> None:
 def narrow_plane(ln: Landing, awaited: bool = True) -> None:
     """Re-render `plane` with the narrow tags this PR's setup-role change needs.
 
-    `plane` is classified in step 1, before the tick has recorded this PR's range, so it
-    names the whole-role tag. The deployer then records the narrowest tags in its
-    `manual_plane_tags` sidecar. After an `awaited` tick this reads that sidecar, and
-    `land_tags.confirmed_narrow_tags` quotes a row only where it contains this PR's own
-    derivation, so a stale row from an earlier range cannot be printed.
+    `plane` is classified in step 1, before the tick has crossed this PR's range, so it names
+    the whole-role tag. After an `awaited` tick this reads the deployer's receipt for the
+    tick that crossed the merge commit (#3391), whose `manual` half holds the narrowest tags
+    each role needs over that tick's range alone. The range contains this PR, so the row is
+    quoted as it stands: before the receipt, `land.sh` read the `manual_plane_tags` sidecar,
+    whose row spans every range that made the role pending, and had to re-derive this PR's
+    own narrowing to prove the row covered it.
 
     A landing that deploys its own merge commit never awaits the tick (`awaited=False`), so
-    no row exists for its range. It prints the PR's own derivation instead, so the note names
-    the narrow tags the change needs rather than the whole-role tag.
+    no receipt exists for its range. It prints the PR's own derivation instead, so the note
+    names the narrow tags the change needs rather than the whole-role tag.
 
-    Every failure keeps the note as step 1 wrote it, with the whole-role tag: an unreadable
-    or absent sidecar, no PR range, a derivation that refuses or raises. The re-render is
-    INSIDE the try because a raise here, though unlikely (step 1 already called `plane_note`
-    on these inputs), would end `land.py` in a traceback instead of a verdict, which is a
-    worse answer than the role tag.
+    Every failure keeps the note as step 1 wrote it, with the whole-role tag: no receipt (a
+    deployer that has not shipped the writer, or a tick that recorded nothing), a role the
+    receipt could not narrow, no PR range on the fast path, a derivation that refuses or
+    raises. The re-render is INSIDE the try because a raise here, though unlikely (step 1
+    already called `plane_note` on these inputs), would end `land.py` in a traceback instead
+    of a verdict, which is a worse answer than the role tag.
     """
-    if not ln.plane or not ln.pr_range:
-        return
-    sidecar = None if not awaited else ln.state("manual_plane_tags")
-    if awaited and not sidecar:
+    if not ln.plane or (not awaited and not ln.pr_range):
         return
     try:
         if awaited:
-            narrow = ln.tools.confirm_narrowing(
-                ln.pr_paths, ln.pr_range, ln.opts.primary, sidecar
-            )
+            receipt = ln.receipt_for(ln.merge_sha)
+            narrow = {
+                t: tags
+                for t, tags in (receipt.manual if receipt else {}).items()
+                if tags
+            }
         else:
             narrow = ln.tools.own_narrowing(ln.pr_paths, ln.pr_range, ln.opts.primary)
         if narrow:

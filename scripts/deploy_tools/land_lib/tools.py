@@ -506,13 +506,9 @@ class Tools:
         land_tags.landing_hosts_at
     )
     read_state: Callable[[Path, str], str | None] = read_state
-    # Runs git over the PR's range, which is why it is a boundary here rather than a
+    # The PR's own narrowing, for a landing that never awaits the tick and so has no receipt
+    # to read. Runs git over the PR's range, which is why it is a boundary here rather than a
     # `Classifier`. `classify.narrow_plane` is its one caller.
-    confirm_narrowing: Callable[
-        [list[str], str, Path, str | None], dict[str, frozenset[str]]
-    ] = land_tags.confirmed_narrow_tags
-    # The PR's own narrowing with no row to hold it against, for a landing that never awaits
-    # the tick. Git over the PR's range too; `classify.narrow_plane` is its caller.
     own_narrowing: Callable[[list[str], str, Path], dict[str, frozenset[str]]] = (
         land_tags.own_narrow_tags
     )
