@@ -6,11 +6,11 @@ every caller, where it would drift. See repo-root `CLAUDE.md` for shared convent
 
 **No standalone deploy tag.** Callers reach it via `include_role: name: k8s/image-builder`,
 not `--tags image-builder` — it is not a `containers_list` entry either, so a promoted bump
-to `image_builder_image` (the BuildKit tool itself) would match no play and deploy nothing
+to `image_builder_k8s_image` (the BuildKit tool itself) would match no play and deploy nothing
 while reporting success.
 
 ## At a glance
-- **Builder image:** `moby/buildkit:v0.33.0-rootless` (`image_builder_image`) — rootless
+- **Builder image:** `moby/buildkit:v0.33.0-rootless` (`image_builder_k8s_image`) — rootless
   BuildKit, not kaniko (archived upstream) or the daemonful BuildKit variant (wants a
   privileged pod). Runs as uid 1000 with no added capabilities.
 - **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n`, `code-server`,

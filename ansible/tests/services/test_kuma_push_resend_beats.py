@@ -11,13 +11,13 @@ from _kuma_entities import ROLE_DEFAULTS, _entities, bridge_env
 
 
 def test_bridge_fed_push_monitors_resend_within_a_working_day():
-    beats = ROLE_DEFAULTS["kuma_push_resend_down_beats"]
+    beats = ROLE_DEFAULTS["uptime_kuma_k8s_push_resend_down_beats"]
     push_period = int(bridge_env()["INTERVAL"])
-    window = ROLE_DEFAULTS["kuma_bridge_push_interval"]
+    window = ROLE_DEFAULTS["uptime_kuma_k8s_bridge_push_interval"]
     beats_per_hour = 3600 / push_period + 3600 / window
     spacing_h = beats / beats_per_hour
     assert 4 <= spacing_h <= 12, (
-        f"kuma_push_resend_down_beats={beats} resends a bridge-fed tile every {spacing_h:.1f}h "
+        f"uptime_kuma_k8s_push_resend_down_beats={beats} resends a bridge-fed tile every {spacing_h:.1f}h "
         f"({beats_per_hour:g} DOWN beats/h at INTERVAL={push_period}s, window={window}s); "
         "the intent is ~6h — see the defaults comment"
     )
@@ -31,7 +31,7 @@ def test_no_push_monitor_can_resend_faster_than_four_hours():
     # is bounded by 3600/INTERVAL pushes plus 3600/window watchdog beats. At the narrowest
     # window that bound must still leave four hours between resends, or the count that is six
     # hours on the bridge tiles is a much shorter one on a fast cron's.
-    beats = ROLE_DEFAULTS["kuma_push_resend_down_beats"]
+    beats = ROLE_DEFAULTS["uptime_kuma_k8s_push_resend_down_beats"]
     push_period = int(bridge_env()["INTERVAL"])
     windows = {
         entity["name"]: int(entity["interval"])
@@ -45,14 +45,14 @@ def test_no_push_monitor_can_resend_faster_than_four_hours():
     floor_h = beats / fastest_beats_per_hour
     assert floor_h >= 4, (
         f"{name} ({narrowest}s window) could resend every {floor_h:.1f}h at "
-        f"kuma_push_resend_down_beats={beats}"
+        f"uptime_kuma_k8s_push_resend_down_beats={beats}"
     )
 
 
 def test_every_push_monitor_carries_the_shared_beat_count_or_a_deliberate_hold():
     # The uniform value is what lets the spacing above be a statement about every tile. A hold
     # at 0 is the one other legitimate value, and test_kuma_static_monitors.py names which.
-    beats = ROLE_DEFAULTS["kuma_push_resend_down_beats"]
+    beats = ROLE_DEFAULTS["uptime_kuma_k8s_push_resend_down_beats"]
     for name, entity in _entities().items():
         if entity["type"] != "push":
             continue

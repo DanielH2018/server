@@ -24,7 +24,7 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   rules.json: |
-    {{ kuma_status_page_groups | tojson }}
+    {{ uptime_kuma_k8s_status_page_groups | tojson }}
   index.json: |
     {
 {% for autokuma_id, declaration in kuma_declarations | default({}) | dictsort if declaration.type not in ('notification', 'tag') %}

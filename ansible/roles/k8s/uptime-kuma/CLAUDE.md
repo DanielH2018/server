@@ -8,8 +8,8 @@ reading behind each rule below.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "uptime-kuma"`
 - **Images:** `louislam/uptime-kuma` (`uptime_kuma_k8s_image`), `ghcr.io/bigboot/autokuma`
-  (`autokuma_k8s_image`), `ghcr.io/bigboot/kuma` (`kuma_cli_k8s_image`), `python`
-  (`kuma_status_page_sync_image`)
+  (`uptime_kuma_k8s_autokuma_image`), `ghcr.io/bigboot/kuma` (`uptime_kuma_k8s_cli_image`),
+  `python` (`uptime_kuma_k8s_status_page_sync_image`)
 - **Route:** `uptime-kuma.<domain>` · `uptime-kuma.local.<domain>`, Authelia one_factor
 - **Claims:** `uptime-kuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes)),
   `autokuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes))
@@ -29,7 +29,7 @@ reading behind each rule below.
   serde model drops an unknown field silently — that is how 2.0.0 discarded `resendInterval` on
   all 50 push tiles behind a correct template. ENFORCED:
   `ansible/tests/services/test_kuma_static_monitors.py::test_autokuma_pin_carries_resend_interval_on_push_monitors`.
-- **`resendInterval` counts DOWN beats, not minutes** — `kuma_push_resend_down_beats`, 90, six
+- **`resendInterval` counts DOWN beats, not minutes** — `uptime_kuma_k8s_push_resend_down_beats`, 90, six
   hours for a bridge-fed tile and something else at any other cadence.
 - **Every notification declaration carries `applyExisting`**, the key Kuma forces into the stored
   config: one key short of what AutoKuma compares means a rewrite on every sync pass. Never chase
@@ -86,7 +86,7 @@ The operator accepted the cost on 2026-09-28: an outage in the window is silent.
 - **Derived from the reboot cron, never written twice** — the four `weekly_reboot_*` values in
   `group_vars/all.yml` drive both the cron and this window: `25 7 * * 0`, 50 minutes.
 - **The timezone cannot be spelled `UTC`.** The clock is the host's, and kuma-client's own list
-  carries neither `UTC` nor `Etc/UTC`, so `kuma_maintenance_window_timezone` is
+  carries neither `UTC` nor `Etc/UTC`, so `uptime_kuma_k8s_maintenance_window_timezone` is
   `Atlantic/Reykjavik`. In `tz` the window opens five hours late.
 - **The sync must not run inside the window it declares**, because an `edit` restarts the
   window's own cron job and can lift the suppression mid-window. ENFORCED:

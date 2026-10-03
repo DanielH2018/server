@@ -231,7 +231,8 @@ def test_every_interval_in_the_real_template_resolves_through_the_real_variables
     # templated tile at None and the fixture tests green.
     declared = monitors.parse_declared_monitors(REAL_STATIC_MONITORS_TEXT)
     assert declared["etcd Restore Drill (full)"]["interval"] == 3024000
-    assert declared["Root Disk"]["interval"] == 1200  # kuma_bridge_push_interval
+    # uptime_kuma_k8s_bridge_push_interval
+    assert declared["Root Disk"]["interval"] == 1200
     assert declared["UPS Secondary (daniel-box)"]["interval"] == 1200
     unresolved = sorted(n for n, s in declared.items() if s["interval"] is None)
     assert unresolved == [], f"intervals this check cannot read: {unresolved}"

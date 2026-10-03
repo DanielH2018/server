@@ -27,7 +27,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: buildkit
-          image: {{ image_builder_image }}
+          image: {{ image_builder_k8s_image }}
           env:
             # Upstream's own kubernetes/job.rootless.yaml sets exactly this. It drops the
             # per-build-step nested user namespace, so a RUN step is not sandboxed from the

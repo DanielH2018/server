@@ -60,7 +60,7 @@ and every threshold, window and streak is an env var in `templates/env-secret.ya
 the template rather than the constant.
 
 Two push-side rules bind as widely. **Every push monitor has `max_retries=0`**, so widen
-`kuma_bridge_push_interval` to fix post-boot flapping and never add retries
+`uptime_kuma_k8s_bridge_push_interval` to fix post-boot flapping and never add retries
 (`test_push_monitors_never_retry`). **A new arm folds into an existing monitor by default**;
 prove its selector against a live source first (checks page's *Traps*). The push tokens, the
 liveness probe, the credentials and the prerequisites are on the internals page.

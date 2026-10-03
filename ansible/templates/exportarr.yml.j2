@@ -12,13 +12,17 @@
    `netpol-baseline: enforced` on ANY port (no `ports:` key on that rule).
 
    `image` is a PARAMETER, not a literal. `test_no_literal_image_lines_in_k8s_templates` fails a
-   hardcoded image in a k8s template, and `test_every_k8s_role_image_is_renovate_tracked` needs
-   the pin to sit in a role's own `defaults/main.yml` as an `_image:` key — a shared var in
-   group_vars is one directory short of the manager's file pattern and ages silently.
+   hardcoded image in a k8s template. Each *arr pins its own copy in its `defaults/main.yml`
+   rather than sharing one var in `group_vars/all.yml`. Renovate does read group_vars, but its
+   no-automerge `k8s_autodeploy: false` rule names that file, and the deployer applies an
+   inventory change as a forward-only broad deploy. All three *arr roles are auto-deployable, so
+   a shared pin would turn an automerged bump with a rollback into a hand-merged one without
+   (#3277). Renovate's per-depName grouping already bumps the three copies in one PR, and
+   `test_the_image_pins_stay_in_lockstep` fails if they drift apart.
 
    Invoke at the container-list indent, e.g.:
 
-       {{ exportarr('sonarr', sonarr_exportarr_image, container_item.port,
+       {{ exportarr('sonarr', sonarr_k8s_exportarr_image, container_item.port,
                     additional_metrics=true) }}
 #}
 {% macro exportarr(app, image, app_port, metrics_port=9707, additional_metrics=false) -%}

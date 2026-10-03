@@ -32,7 +32,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: generic-device-plugin
-          image: {{ dri_device_plugin_image }}
+          image: {{ dri_device_plugin_k8s_image }}
           args:
             - --device
             - |

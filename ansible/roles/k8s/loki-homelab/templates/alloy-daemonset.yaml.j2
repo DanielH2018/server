@@ -55,7 +55,7 @@ spec:
 {{ pod_shell('homelab-best-effort', service_account='alloy') }}
       containers:
         - name: alloy
-          image: {{ loki_homelab_alloy_image }}
+          image: {{ loki_homelab_k8s_alloy_image }}
           args:
             - run
             - /etc/alloy/config.alloy

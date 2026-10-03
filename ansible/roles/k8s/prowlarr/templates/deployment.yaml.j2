@@ -74,7 +74,7 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 30
 {{ container_resources(cpu_limit=prowlarr_k8s_cpu_limit, mem_limit=prowlarr_k8s_mem_limit, cpu_request=prowlarr_k8s_cpu_request, mem_request=prowlarr_k8s_mem_request) }}
-        {{ exportarr('prowlarr', prowlarr_exportarr_image, container_item.port) }}
+        {{ exportarr('prowlarr', prowlarr_k8s_exportarr_image, container_item.port) }}
       volumes:
         - name: prowlarr-config
           persistentVolumeClaim:

@@ -13,7 +13,7 @@ rendered declarations.
 AutoKuma **v2.0.0** declared `resendInterval` on three monitor variants only — `MonitorHttp`,
 `MonitorJsonQuery`, `MonitorKeyword`. `MonitorPush` had no such field, so serde dropped it as
 unknown and the value never reached Kuma. The fleet-wide `kuma_push_resend_interval_minutes: 360`
-set on 2026-08-16 (renamed `kuma_push_resend_down_beats` on 2026-09-17) applied to the 25 `http`
+set on 2026-08-16 (renamed `uptime_kuma_k8s_push_resend_down_beats` on 2026-09-17) applied to the 25 `http`
 tiles and to none of the 50 push tiles, which notified once per outage and then stayed silent.
 
 Fixed on **2026-08-21** by taking `ghcr.io/bigboot/autokuma:2.1.0-rc.2` (PR #308). Upstream moved
@@ -47,9 +47,9 @@ and pages the **Kuma Notification Delivery** tile, which notifies email as well 
 faster resend raises the POST volume a long multi-tile outage sends Discord, so the drop it makes
 likelier is reported rather than lost.
 
-The variable is `kuma_push_resend_down_beats` now, 90, which is six hours for a bridge-fed tile.
+The variable is `uptime_kuma_k8s_push_resend_down_beats` now, 90, which is six hours for a bridge-fed tile.
 `test_kuma_push_resend_beats.py` derives the spacing from the bridge's `INTERVAL` and
-`kuma_bridge_push_interval` and fails outside 4-12h, so a value that reads as hours again cannot
+`uptime_kuma_k8s_bridge_push_interval` and fails outside 4-12h, so a value that reads as hours again cannot
 land. The count cannot mean six hours for every tile — a cron-fed one on a slower cadence resends
 less often, and a dead bridge leaves only the window's own beats — which is why the unit is beats
 and not a time.
@@ -269,7 +269,7 @@ shapes:
   carries the real verdict.
 - **A check that reads no host state lives in monitor-bridge**, which caches a success for the probe
   interval and re-probes a failure every 300 s cycle (`checks/r2.py`, `checks/cloudflare_ips.py`).
-  Its tile runs at `kuma_bridge_push_interval` like the rest of the bridge's.
+  Its tile runs at `uptime_kuma_k8s_bridge_push_interval` like the rest of the bridge's.
 
 The deadline still does the one job it has: it bounds silence. A producer that stops running, or
 whose push is lost, is reported by the deadline as before, and the Swallowed Push Verdicts tile
@@ -285,7 +285,7 @@ one of the group rules matches the new id.
 ## The status page sync, in detail
 
 `kuma-status-page-sync` (`templates/status-page-sync-cronjob.yaml.j2`, every 15 min) owns the group
-list of the status page at `/status/{{ kuma_status_page_slug }}` — the page Homepage's `uptimekuma`
+list of the status page at `/status/{{ uptime_kuma_k8s_status_page_slug }}` — the page Homepage's `uptimekuma`
 widget reads. The page OBJECT is hand-created and stays that way; only its `publicGroupList` is
 derived.
 
@@ -297,7 +297,7 @@ only — a status page falls through to `_ => {}`, at the pinned `2.1.0-rc.2` an
 drifted page logs `Updating status_page` on every pass and writes nothing. And with
 `AUTOKUMA__ON_DELETE=delete`, a declaration that ever went away would delete the live page.
 
-**Why the join goes through display names.** The rules in `kuma_status_page_groups` are written
+**Why the join goes through display names.** The rules in `uptime_kuma_k8s_status_page_groups` are written
 against the AutoKuma id (the declaration's filename), which is stable and readable. That id is
 invisible over Kuma's API: `monitor list` returns display names and numeric ids, and the
 id-to-name map lives in AutoKuma's own SQLite on an RWO PVC that nothing else may mount. So
@@ -314,7 +314,7 @@ notification-rewrite loop above. It also starts from the LIVE page and replaces 
 `published` and `domainNameList`.
 
 **An `Init:Error` sync pod is retained history, not a live loop.** A failed Job's pods stay in
-`kubectl get pods` until `ttlSecondsAfterFinished` (`kuma_status_page_sync_job_ttl_seconds`, two
+`kubectl get pods` until `ttlSecondsAfterFinished` (`uptime_kuma_k8s_status_page_sync_job_ttl_seconds`, two
 hours) reaps them. Read the pod's age before the error: both times this reached the operator (#1344,
 #2120) every run since the failure had completed, and the push monitor had re-beaten. The `render`
 stage's message names the stage to look at — `monitor list is empty` means Kuma answered with no
@@ -348,7 +348,7 @@ until it closes. AutoKuma cannot declare it — `entity.rs` at the pinned `2.1.0
 host's local time, which is `Etc/UTC` on all three hosts; `tz` is America/Chicago, the containers'
 display timezone, and a window declared in it would open five hours late and page through the whole
 reboot. kuma-client parses the identifier against its own 424-entry `timezones.json`, which carries
-neither `UTC` nor `Etc/UTC`, so `kuma_maintenance_window_timezone` is `Atlantic/Reykjavik` — in that
+neither `UTC` nor `Etc/UTC`, so `uptime_kuma_k8s_maintenance_window_timezone` is `Atlantic/Reykjavik` — in that
 list, and +00:00 all year.
 
 **Suppression covers the push tiles, and the window's close is one message.**

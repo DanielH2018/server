@@ -3,7 +3,7 @@
 uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.5
 # Pinned: the k8s-defaults Renovate manager only tracks
 # versioned pins. 2.1.0-rc.2 is a deliberate prerelease: it is the only release where
-# `resendInterval` reaches a push monitor — see the caveat under kuma_push_resend_down_beats.
+# `resendInterval` reaches a push monitor — see the caveat under uptime_kuma_k8s_push_resend_down_beats.
 #
 # This deployment depends on two rc-2 mechanisms, read from the tagged source rather than
 # the changelog: `@/path` in an env value reads the file and strips one trailing newline
@@ -11,7 +11,7 @@ uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.5
 # 8090 unless AUTOKUMA__HEALTHCHECK_PORT is emptied (autokuma/src/config.rs). The published
 # image builds the DEFAULT feature set, which is Kuma v2 — `uptime-kuma-v1` is opt-in and the
 # Dockerfile's ARG FEATURES is empty.
-autokuma_k8s_image: ghcr.io/bigboot/autokuma:2.1.0-rc.2
+uptime_kuma_k8s_autokuma_image: ghcr.io/bigboot/autokuma:2.1.0-rc.2
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: this IS the alerting spine every push/HTTP monitor and the Discord chain depend
@@ -41,17 +41,17 @@ uptime_kuma_k8s_mem_request: 64Mi
 # Seconds between AutoKuma reconcile passes — see the env comment in deployment.yaml.j2 for why
 # the upstream default of 5 was costing ~34k SQLite writes a day. A deploy's new monitors appear
 # within this many seconds; postflight's `count(monitor_status)` check does not race it.
-autokuma_k8s_sync_interval: 60
+uptime_kuma_k8s_autokuma_sync_interval: 60
 
 # What AutoKuma does with a live entity that has no declaration file. `delete` is the committed
 # stance (the deployment template carries the reasoning). Override to `keep` on the command line
 # for one deploy when the sidecar image itself is changing, then redeploy at the default.
-autokuma_k8s_on_delete: delete
+uptime_kuma_k8s_autokuma_on_delete: delete
 
-autokuma_k8s_cpu_limit: "250m"
-autokuma_k8s_mem_limit: 128Mi
-autokuma_k8s_cpu_request: "20m"
-autokuma_k8s_mem_request: 32Mi
+uptime_kuma_k8s_autokuma_cpu_limit: "250m"
+uptime_kuma_k8s_autokuma_mem_limit: 128Mi
+uptime_kuma_k8s_autokuma_cpu_request: "20m"
+uptime_kuma_k8s_autokuma_mem_request: 32Mi
 
 # Consecutive DOWN heartbeats before Kuma re-notifies about a monitor that is STILL down. Kuma's
 # own default is 0, which means "notify once on the down transition and then never again" — so
@@ -62,7 +62,7 @@ autokuma_k8s_mem_request: 32Mi
 # beat (server/model/monitor.js and the push route in server/routers/api-router.js) and the UI
 # labels the field "Resend Notification if Down X times consecutively". A bridge-fed tile
 # accumulates one DOWN beat per bridge push (every 300s) plus one per heartbeat window
-# (kuma_bridge_push_interval, 1200s) — 15 an hour — so a count of 360 would resend once a DAY,
+# (uptime_kuma_k8s_bridge_push_interval, 1200s) — 15 an hour — so a count of 360 would resend once a DAY,
 # not every six hours.
 #
 # 90 is six hours at that cadence. Six hours rather than hourly: these monitors watch things
@@ -75,7 +75,7 @@ autokuma_k8s_mem_request: 32Mi
 # watchdog beats: at the narrowest window (360s) that is 22 an hour and 90 beats is ~4h, the
 # floor `test_kuma_push_resend_beats.py` holds. Applied uniformly and asserted by a test,
 # rather than set per-tile, so a new monitor cannot be added without one.
-kuma_push_resend_down_beats: 90
+uptime_kuma_k8s_push_resend_down_beats: 90
 
 # Heartbeat window for the 34 push monitors monitor-bridge feeds. The bridge pushes each of them
 # once per loop (INTERVAL=300s), so this is how many consecutive pushes may go missing before Kuma
@@ -100,7 +100,7 @@ kuma_push_resend_down_beats: 90
 # feeders run on their own cadences: CrowdSec Home Allowlist, Daniel Pi SD Health, Daniel Pi
 # Recovery, Arr Auto-Block. `test_bridge_push_monitors_share_one_interval` is what keeps the split
 # honest, deriving bridge membership from the bridge's own env-secret rather than from a list here.
-kuma_bridge_push_interval: 1200
+uptime_kuma_k8s_bridge_push_interval: 1200
 
 # AutoKuma v2.0.0 declares `resendInterval` on MonitorHttp, MonitorJsonQuery and MonitorKeyword
 # only. MonitorPush has no such field there, so serde drops it and every push tile notifies once
@@ -119,17 +119,17 @@ kuma_bridge_push_interval: 1200
 # `status_page` entity: AutoKuma at the pinned tag CREATES a status page and never edits one
 # (sync.rs's `match (merge, current)` has no StatusPage arm, on the pin and on master), and
 # with on_delete=delete a declaration that ever disappeared would delete the live page.
-kuma_status_page_slug: containers
-# Same build matrix and tag as autokuma_k8s_image above (.github/workflows/docker-build-push.yml
+uptime_kuma_k8s_status_page_slug: containers
+# Same build matrix and tag as uptime_kuma_k8s_autokuma_image above (.github/workflows/docker-build-push.yml
 # builds ghcr.io/bigboot/kuma from Dockerfile.cli) — the CLI and the sidecar speak to the same
 # Kuma through the same kuma-client, so they move together.
-kuma_cli_k8s_image: ghcr.io/bigboot/kuma:2.1.0-rc.2
+uptime_kuma_k8s_cli_image: ghcr.io/bigboot/kuma:2.1.0-rc.2
 # Quarter-hourly. Membership only changes on a deploy, and a run that finds nothing to do costs
 # one pod and writes nothing at all.
 # The render and heartbeat stages are stdlib Python; per-role pin like every other
 # python:3.14-alpine consumer here, so Renovate tracks them one by one.
-kuma_status_page_sync_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
-kuma_status_page_sync_schedule: "*/15 * * * *"
+uptime_kuma_k8s_status_page_sync_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
+uptime_kuma_k8s_status_page_sync_schedule: "*/15 * * * *"
 # The job WAITS OUT a Kuma restart rather than failing through it. Kuma is unreachable on two
 # routine events:
 #   - a deploy rollout. `strategy: Recreate` plus autokuma's startupProbe (the pod is NotReady,
@@ -141,17 +141,17 @@ kuma_status_page_sync_schedule: "*/15 * * * *"
 #     race.
 # 800s stays inside the 900s cron period, so `concurrencyPolicy: Forbid` skips at most the one
 # following tick. Move this and the schedule together.
-kuma_status_page_sync_deadline_seconds: 800
+uptime_kuma_k8s_status_page_sync_deadline_seconds: 800
 # How long the `dump` stage keeps retrying, per pod. `backoffLimit: 1` runs two pods inside the
 # ONE job deadline above, so this is budgeted at under half of it, leaving room for pod startup
 # and for the render/apply/beat stages that follow.
-kuma_status_page_sync_dump_budget_seconds: 350
+uptime_kuma_k8s_status_page_sync_dump_budget_seconds: 350
 # Measured worst case for one dump attempt: kuma-client gives up on the connect after ~9s
 # (42s / 3 attempts on a failed run, minus the 5s sleep), plus that sleep,
 # plus slack. The template divides the budget above by this to get the attempt count, so the
 # loop exits with its own `kuma read failed` diagnostic rather than being killed mid-attempt
 # by the deadline — a deadline kill reports DeadlineExceeded and says nothing about Kuma.
-kuma_status_page_sync_dump_attempt_seconds: 15
+uptime_kuma_k8s_status_page_sync_dump_attempt_seconds: 15
 # How long a finished Job — and so its pods and logs — stays visible. Without a TTL a failed
 # Job sits in `get pods` as Init:Error until two LATER failures displace it, so a stale
 # failure reads as a live fault. The Status Page
@@ -160,7 +160,7 @@ kuma_status_page_sync_dump_attempt_seconds: 15
 # does, and the render stage's output is in Loki (`{namespace="homelab", container="render"}`)
 # past that; a day keeps a red row in Headlamp far longer than anyone needs it.
 # `failedJobsHistoryLimit: 2` still caps how many sit inside the window.
-kuma_status_page_sync_job_ttl_seconds: 7200
+uptime_kuma_k8s_status_page_sync_job_ttl_seconds: 7200
 
 # Ordered. Each declared monitor lands in the FIRST group one of whose patterns matches its
 # AutoKuma id (the filename in static-monitors.yaml.j2, not the display name), and group order
@@ -170,7 +170,7 @@ kuma_status_page_sync_job_ttl_seconds: 7200
 # still reaches the page instead of vanishing. test_status_page_groups.py asserts it stays
 # EMPTY for the committed declarations, so adding a monitor without placing it fails CI rather
 # than quietly appending it to a junk drawer.
-kuma_status_page_groups:
+uptime_kuma_k8s_status_page_groups:
   - name: Services
     match:
       - "-k8s$"
@@ -248,10 +248,10 @@ kuma_status_page_groups:
     match:
       - ".*"
 
-kuma_status_page_sync_cpu_limit: "200m"
-kuma_status_page_sync_mem_limit: 128Mi
-kuma_status_page_sync_cpu_request: "10m"
-kuma_status_page_sync_mem_request: 32Mi
+uptime_kuma_k8s_status_page_sync_cpu_limit: "200m"
+uptime_kuma_k8s_status_page_sync_mem_limit: 128Mi
+uptime_kuma_k8s_status_page_sync_cpu_request: "10m"
+uptime_kuma_k8s_status_page_sync_mem_request: 32Mi
 
 # ── weekly-reboot maintenance window ───────────────────────────────────────────────────────
 # Kuma suppresses a monitor's notifications while a maintenance window covering it is open.
@@ -264,8 +264,8 @@ kuma_status_page_sync_mem_request: 32Mi
 # DockerHost, Notification, Monitor, Tag and StatusPage and no Maintenance variant, so the
 # window is reconciled over the API by the CronJob below — the same shape, and the same
 # kuma-cli image, as the status-page sync above.
-kuma_maintenance_window_title: Weekly system restart
-kuma_maintenance_window_description: >-
+uptime_kuma_k8s_maintenance_window_title: Weekly system restart
+uptime_kuma_k8s_maintenance_window_description: >-
   Declared from Ansible by the kuma-maintenance-sync CronJob (roles/k8s/uptime-kuma), derived
   from the weekly_reboot_* schedule in group_vars/all.yml. It covers every monitor, so a real
   outage that starts inside it is silent until it closes.
@@ -273,7 +273,7 @@ kuma_maintenance_window_description: >-
 # `shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}`, so this is not the time to the
 # outage — it is slack for a monitor that flips in the seconds around the cron, and for a
 # heartbeat window that was already half-spent when the shutdown landed.
-kuma_maintenance_window_lead_minutes: 5
+uptime_kuma_k8s_maintenance_window_lead_minutes: 5
 # The window's timezone, which must be the reboot cron's clock — `weekly_reboot_timezone`, UTC.
 # It cannot be spelled `UTC`. kuma-client parses the identifier against its own 424-entry
 # timezones.json (kuma-client/build.rs generates the enum from it) and that list carries neither
@@ -282,7 +282,7 @@ kuma_maintenance_window_lead_minutes: 5
 # is +00:00 all year with no DST, so it IS the hosts' clock; Europe/London and Europe/Dublin are
 # +00:00 in winter only and would drift an hour every summer.
 # `test_the_window_is_declared_on_the_reboot_cron_s_clock` holds the offset.
-kuma_maintenance_window_timezone: Atlantic/Reykjavik
+uptime_kuma_k8s_maintenance_window_timezone: Atlantic/Reykjavik
 # How long after the reboot itself the window stays open. Measured: daniel-server
 # was down 07:35 to 07:48:25 and Kuma was Ready again at ~07:51, and the status-page sync
 # records ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
@@ -290,28 +290,28 @@ kuma_maintenance_window_timezone: Atlantic/Reykjavik
 # whose 1200s window means a tile can flip DOWN up to 20 minutes after the last missed push.
 # With the 5-minute lead and the 5-minute shutdown delay this is a 50-minute window: 07:25 to
 # 08:15 at the committed schedule. render_maintenance.py does that sum; nothing here repeats it.
-kuma_maintenance_recovery_allowance_minutes: 40
+uptime_kuma_k8s_maintenance_recovery_allowance_minutes: 40
 # Hourly, so a deploy that adds a monitor is covered within the hour rather than at the next
 # reboot. The MINUTE is not free: an `edit` lands `bean.run(true)` in Kuma
 # (server/socket-handlers/maintenance-socket-handler.js), which restarts the window's own cron
 # job, so a run inside the open window could lift the suppression it exists to provide.
 # `test_maintenance_window.py::test_the_sync_never_runs_inside_the_window_it_declares` holds
 # the separation against a move of either schedule.
-kuma_maintenance_sync_schedule: "20 * * * *"
+uptime_kuma_k8s_maintenance_sync_schedule: "20 * * * *"
 # Same three-part retry budget as the status-page sync, and for the same reason: Kuma's Service
 # has no endpoint for ~100s of a deploy rollout, so a dump that gives up early turns a routine
 # rollout into a failed Job. This job does not straddle the Sunday reboot the way that one does
 # — both of its neighbouring runs fall outside the window — so the budget only has to cover a
 # rollout, and it is carried at the same value rather than tuned down to the minimum that fits.
-kuma_maintenance_sync_deadline_seconds: 800
-kuma_maintenance_sync_dump_budget_seconds: 350
-kuma_maintenance_sync_dump_attempt_seconds: 15
+uptime_kuma_k8s_maintenance_sync_deadline_seconds: 800
+uptime_kuma_k8s_maintenance_sync_dump_budget_seconds: 350
+uptime_kuma_k8s_maintenance_sync_dump_attempt_seconds: 15
 # Long enough that a failed Job's logs outlive the hour to the next run, short enough that a
 # red row does not sit in Headlamp for days — the reasoning under
-# kuma_status_page_sync_job_ttl_seconds, at this job's slower cadence.
-kuma_maintenance_sync_job_ttl_seconds: 7200
+# uptime_kuma_k8s_status_page_sync_job_ttl_seconds, at this job's slower cadence.
+uptime_kuma_k8s_maintenance_sync_job_ttl_seconds: 7200
 
-kuma_maintenance_sync_cpu_limit: "200m"
-kuma_maintenance_sync_mem_limit: 128Mi
-kuma_maintenance_sync_cpu_request: "10m"
-kuma_maintenance_sync_mem_request: 32Mi
+uptime_kuma_k8s_maintenance_sync_cpu_limit: "200m"
+uptime_kuma_k8s_maintenance_sync_mem_limit: 128Mi
+uptime_kuma_k8s_maintenance_sync_cpu_request: "10m"
+uptime_kuma_k8s_maintenance_sync_mem_request: 32Mi

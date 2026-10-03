@@ -7,8 +7,8 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "loki-homelab"`
-- **Images:** `grafana/loki` (`loki_homelab_image`), `grafana/alloy`
-  (`loki_homelab_alloy_image`)
+- **Images:** `grafana/loki` (`loki_homelab_k8s_image`), `grafana/alloy`
+  (`loki_homelab_k8s_alloy_image`)
 - **Route:** `loki-homelab.local.<domain>` (LAN only), no Authelia
 - **Claim:** `loki-homelab-data` (no backup (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — log store other

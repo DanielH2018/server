@@ -42,7 +42,7 @@ def render():
         "k8s_namespace": "homelab",
         "playbook_dir": str(REPO / "ansible"),
         "kuma_declarations": DECLARATIONS,
-        "kuma_status_page_groups": [{"name": "Other", "match": [".*"]}],
+        "uptime_kuma_k8s_status_page_groups": [{"name": "Other", "match": [".*"]}],
     }
     env = make_env([ROLE / "templates", SHARED_TEMPLATES])
     env.globals["lookup"] = make_lookup(context)

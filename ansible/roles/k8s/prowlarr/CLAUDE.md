@@ -8,14 +8,14 @@ rendering attacker-supplied pages in a headless browser.
 - **Deploy tag:** `--tags "prowlarr"`
 - **Images:** `lscr.io/linuxserver/prowlarr` (`prowlarr_k8s_image`),
   `ghcr.io/flaresolverr/flaresolverr` (`prowlarr_k8s_flaresolverr_image`), `alpine`
-  (`prowlarr_k8s_probe_image`), `ghcr.io/onedr0p/exportarr` (`prowlarr_exportarr_image`)
+  (`prowlarr_k8s_probe_image`), `ghcr.io/onedr0p/exportarr` (`prowlarr_k8s_exportarr_image`)
 - **Route:** `prowlarr.<domain>` · `prowlarr.local.<domain>`, Authelia one_factor
 - **Claim:** `prowlarr-config` (weekly -> B2 (default target))
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
 - **The `-lsNN` linuxserver tag scheme** means a breaking bump can hide as a routine patch
-  bump. `prowlarr_k8s_flaresolverr_image` and `prowlarr_exportarr_image` are sidecars.
+  bump. `prowlarr_k8s_flaresolverr_image` and `prowlarr_k8s_exportarr_image` are sidecars.
 - **Port:** 9696
 - **Persists:** `prowlarr-config` PVC (`longhorn`, ~84Mi) — indexer definitions and their API
   keys — plus a separate `prowlarr-flaresolverr-config` for the disposable browser profile.

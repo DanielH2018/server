@@ -99,7 +99,7 @@ spec:
 {{ pod_shell('homelab-best-effort', run_as_user=10001, run_as_group=10001, fs_group=10001) }}
       containers:
         - name: loki
-          image: {{ observability_loki_image }}
+          image: {{ observability_k8s_loki_image }}
           args: ["-config.file=/etc/loki/loki.yaml"]
 {{ hardened_security_context(non_root=true) }}
           ports:

@@ -127,7 +127,7 @@ def test_the_sync_never_runs_inside_the_window_it_declares():
     run landing inside the open window could lift the suppression it exists to provide."""
     cron, duration = window()
     open_minutes = week_minutes(cron, duration)
-    runs = week_minutes(DEFAULTS["kuma_maintenance_sync_schedule"])
+    runs = week_minutes(DEFAULTS["uptime_kuma_k8s_maintenance_sync_schedule"])
     assert not (runs & open_minutes), sorted(runs & open_minutes)
 
 
@@ -142,7 +142,7 @@ def test_the_configmap_ships_the_script_beside_the_window():
     compile(data["render_maintenance.py"], "render_maintenance.py", "exec")
     assert (
         json.loads(data["window.json"])["title"]
-        == (DEFAULTS["kuma_maintenance_window_title"])
+        == (DEFAULTS["uptime_kuma_k8s_maintenance_window_title"])
     )
 
 

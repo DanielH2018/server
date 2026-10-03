@@ -1345,7 +1345,7 @@ no successor.
   alert names *which* container / target / route / certificate is failing; the others use
   `prom_scalar()`.
 - Explicit `down` = fast, descriptive alert; the push monitor's heartbeat interval
-  (`kuma_bridge_push_interval`, 1200 s = 4× the loop) is the backstop for "the bridge itself
+  (`uptime_kuma_k8s_bridge_push_interval`, 1200 s = 4× the loop) is the backstop for "the bridge itself
   died". Same dead-man's-switch idea as `cloudflare-ddns` — see [[its CLAUDE.md]] and the
   `kuma(..., monitor_type='push')` macro.
   **It was 600 s until 2026-08-30**, tolerating a single missed push — which a host restart

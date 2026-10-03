@@ -52,7 +52,7 @@ netpol_baseline_node_cidrs: "{{ k3s_cni0_gateways }}"
 netpol_baseline_traefik_https_sources: "{{ cloudflare_ips + [lan_subnet, wg_client_subnet, k3s_pod_cidr] }}"
 
 # Matches headlamp_k8s_netpol_probe_image and registry_k8s_netpol_probe_image.
-netpol_baseline_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+netpol_baseline_k8s_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
