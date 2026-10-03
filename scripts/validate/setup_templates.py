@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render every setup-plane Jinja template and fail on a variable nothing defines.
 
-The other render guards stop short of `ansible/roles/setup/`: `config_templates.py` reads
+The other render guards stop short of `ansible/roles/setup/`: `compose_templates.py` reads
 `roles/containers`, `k8s_manifests.py` reads `roles/k8s`, `shell_templates.py` covers `*.sh.j2`
 anywhere and `unit_templates.py` covers `*.service.j2` / `*.timer.j2`. Nothing rendered a
 setup-plane `*.yaml.j2`, `*.env.j2`, `*.conf.j2` or Corefile, and `ansible-lint` lints the task

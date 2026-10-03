@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shared helpers for the render-guard scripts and other Ansible-inventory readers.
 
-Used by ``validate/compose_templates.py``, ``validate/config_templates.py``, and
+Used by ``validate/compose_templates.py``, ``validate/k8s_manifests.py``, and
 ``validate/shell_templates.py``, plus the other scripts that read the same Ansible
 inventory.
 

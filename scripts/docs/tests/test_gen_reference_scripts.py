@@ -259,7 +259,6 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "shell_templates.py": "gate",
         "unit_templates.py": "gate",
         "validate_ha_config.py": "gate",
-        "config_templates.py": "gate",
         "grafana_dashboards.py": "gate",
         "deploy_tags.py": "gate",
         "deploy_staleness.py": "gate",

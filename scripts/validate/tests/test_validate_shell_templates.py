@@ -144,8 +144,7 @@ def test_shellcheck_batch_blames_every_file_when_it_cannot_attribute(tmp_path):
 def test_all_real_shell_templates_render_and_lint_clean():
     # The regression guard: every *.sh.j2 under ansible/roles/ must render with stubbed vars to
     # a script that passes both `bash -n` and shellcheck. Mirrors the sibling validators'
-    # real-render tests (validate.compose_templates.test_real_templates_render_clean,
-    # validate.config_templates.test_all_real_config_templates_render_to_valid_yaml).
+    # real-render test (validate.compose_templates.test_real_templates_render_clean).
     assert v.main() == 0
 
 
