@@ -424,11 +424,9 @@ registration goes through (#3278): one interpreter pin, three postures selected 
 hook's `.py` carries its own `# gen-hooks: register` block, and `args:` there holds the flags.
 `scripts/dev/gen_hook_settings.py` renders that block as `run-hook.sh <stem> <args>`.
 
-The six per-hook `.sh` shims the runner replaced stay on disk, unregistered.
-`.claude/settings.json` names each hook by an absolute path into the PRIMARY checkout, and a
-worktree cut before the switch still registers the shims by name. Deleting them would make
-`/bin/sh` exit 127 in those sessions, and the matching tool calls would run with the guard
-skipped. The deletion waits until no such worktree is left (#3304).
+The six per-hook `.sh` shims the runner replaced were deleted in #3304. A worktree cut before
+the #3278 switch still registers them by an absolute path into the primary checkout, so in such
+a session `/bin/sh` exits 127 and those tool calls run unguarded until it merges master.
 
 ### `bash-pretool` (PreToolUse, Bash)
 
@@ -607,11 +605,12 @@ It also resolves the **`.py` sibling each registered command runs**, from the ho
 `run-hook.sh` beside a missing `.py` runs, finds no script, and reports it only on stderr, so
 the hook succeeds and guards nothing. It gets its own
 banner line, because handing the operator the 127 diagnosis for a shim that ran is a false one.
-`sibling_py_paths` matches the one idiom five shims share —
-`"$(dirname "$(readlink -f "$0")")/<name>.py"` — as text, and abstains on anything else rather
-than parsing shell, such as a path composed from a variable. Abstention is held honest by
-`test_the_repos_own_shims_name_the_siblings_this_parse_must_find`, which names the five
-siblings the parse must resolve and the one shim that resolves none.
+`sibling_py_paths` reads the name from the registered command for `run-hook.sh`, and abstains
+on anything it cannot resolve rather than parsing shell, such as a path composed from a
+variable. It still matches the literal `"$(dirname "$(readlink -f "$0")")/<name>.py"` idiom the
+deleted per-hook shims used, which no file in the repo spells any more.
+`test_the_repos_own_shims_name_the_siblings_this_parse_must_find` holds the census: `run-hook.sh`
+is the only shell entry point, and it names no sibling from its text alone.
 
 ### `fanout-stop` (Stop)
 

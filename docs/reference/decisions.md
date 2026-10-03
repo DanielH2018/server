@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-03 06:17 UTC
-generated_sha: 8d0a33d9a
+generated_at: 2026-10-03 12:16 UTC
+generated_sha: 2c7204b8e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,13 +12,17 @@ generated_sha: 8d0a33d9a
 
 # Decisions
 
-554 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+550 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
 
     * `.claude/hooks/_claude_guard.py:19` and `scripts/dev/_claude_worktree.py:10`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:143` and `.claude/hooks/tests/test_run_hook.py:107`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/post-merge-automation.md:268`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:526`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `.claude/rules/facts.md:30` and `scripts/lib/tests/test_facts_citations.py:78`
     * `.claude/skills/worktree-cleanup/SKILL.md:50` and `ansible/roles/k8s/wg-easy/CLAUDE.md:73`
     * `.claude/skills/worktree-cleanup/SKILL.md:50` and `ansible/roles/setup/common/CLAUDE.md:23`
@@ -605,16 +609,12 @@ generated_sha: 8d0a33d9a
 |---|---|---|
 | no fallback to a stale local copy when the deploy is missing. slice-3 ledger's #484 half-deploy (~/.claude/artifacts/claude-guard-slice3/sdd-ledger/ progress.md) is why: a machine mid-deploy can have the new hook code without yet having the dotfiles package behind it, and a private fallback copy would keep serving a permission decision that looks current but was pinned at whatever the fallback last held — nobody sees that it fell behind. This module raises; `_hook_common.py` catches it and reports the segmenter as missing, and each guard turns that into its own posture on an unreadable command. | `.claude/hooks/_claude_guard.py:19` | 2026-09-17 |
 | every arm runs under its own `try/except`, and an arm that raises loses its verdict | `.claude/hooks/bash-pretool.py:44` | 2026-09-24 |
-| the `cd` arm asks; every other failure stays fail-open. three failure paths fail-open so that a broken guard does not brick every tool call, and gave the `cd` arm the stderr line the other two already had. An `ask` is a prompt, not a brick: the operator reads why a DENY guard could not run and decides once, where a bare `exit 0` disarmed it in silence (#2171). `uv` missing or the .py missing still exit non-zero with their own stderr line — a failed `exec` ends a non-interactive shell, so no `ask` can follow it. #2394 made one shim carry a posture that used to be split: three of the five arms asked on a failed `cd` and two stayed silent, and a single process can only do one thing, so it asks and the reason names all three guards that did not run. The two silent arms cost a missed approval and a missed doc injection, which is a prompt and a re-read, not a bypass. | `.claude/hooks/bash-pretool.sh:16` | 2026-09-24 |
 | the process cwd, not `claude_guard.hook.read_cwd`'s `""`, when the payload carries no `cwd`. Every arm joins `repo_root` as a path prefix — `os.path.join` for a relative write target and for `scripts/secrets_mgmt`, `relpath` inside `classify` — and an empty prefix resolves against the process cwd implicitly, the same silent probe `read_cwd`'s docstring refuses for `git -C ""`. Naming the directory says which checkout those paths resolve in. The shim's `cd /home/ubuntu/server` makes it the primary checkout, a real repo root, so both arms keep a tree to read. Issue #2135. | `.claude/hooks/block-protected-bash.py:214` | 2026-09-21 |
-| the `cd` arm asks; the other two arms stay fail-open. fail-open so that a broken guard does not brick every tool call, and gave the `cd` arm the stderr line the other two already had. An `ask` is a prompt, not a brick: the operator reads why a DENY guard could not run and decides once, where a bare `exit 0` disarmed it in silence (#2171). `uv` missing or the .py missing still exit non-zero with their own stderr line — a failed `exec` ends a non-interactive shell, so no `ask` can follow it. | `.claude/hooks/block-protected-edits.sh:9` | 2026-09-21 |
 | the check reads the final text and never asks GitHub whether the branch has a PR. | `.claude/hooks/fanout-stop.py:27` | 2026-09-28 |
 | the `cd` arm and a missing `.py` both ask under `--ask-on-cd`; every other failure stays fail-open. Issue #1014 made all three failure paths fail-open so that a broken guard does not brick every tool call, and gave the `cd` arm the stderr line the other two already had. An `ask` is a prompt, not a brick: the operator reads why a DENY guard could not run and decides once, where a bare `exit 0` disarmed it in silence (#2171). #2394 made one shim carry a posture that used to be split: three of the five PreToolUse:Bash arms asked on a failed `cd` and two stayed silent, and a single process can only do one thing, so it asks and the reason names all three guards that did not run. The two silent arms cost a missed approval and a missed doc injection, which is a prompt and a re-read, not a bypass. | `.claude/hooks/run-hook.sh:30` | 2026-10-03 |
 | return [] on any error, so a broken health read never blocks a session start; SESSION_HEALTH_VERBOSE=1 forces output. | `.claude/hooks/session-health.py:33` | 2026-09-30 |
-| ` marker recording the trade-off is present (so a future session does | `.claude/hooks/tests/test_hook_shim_fail_open.py:14` | 2026-09-21 |
-| ` block, which records the trade-off once for the whole class. Three of the four became arms of `bash-pretool.sh` in #2394, so that one shim now answers for all three — and its `ask` reason names each of them, because an operator reading one line needs to know which guards did not run. | `.claude/hooks/tests/test_hook_shim_fail_open.py:48` | 2026-09-24 |
-| " in text | `.claude/hooks/tests/test_hook_shim_fail_open.py:143` | 2026-09-03 |
-| " in text | `.claude/hooks/tests/test_run_hook.py:107` | 2026-10-03 |
+| ` marker. | `.claude/hooks/tests/test_hook_shim_fail_open.py:14` | 2026-10-03 |
+| " in text | `.claude/hooks/tests/test_run_hook.py:104` | 2026-10-03 |
 | marker, cited by text prefix | `.claude/rules/facts.md:29` | 2026-09-21 |
 | a fixed slice while | `.claude/rules/facts.md:30` | 2026-09-21 |
 | `ha-review` stays its own skill, not a `/homelab-review` domain** (#2428, | `.claude/skills/ha-review/SKILL.md:72` | 2026-09-24 |
