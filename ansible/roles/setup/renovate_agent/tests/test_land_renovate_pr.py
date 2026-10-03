@@ -42,6 +42,8 @@ def test_anything_but_a_plain_pr_number_is_refused(arg):
 
 def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
     assert lander.refusals(GOOD, DENIED) == []
+    passed = [{"context": "renovate/stability-days", "state": "SUCCESS"}]
+    assert lander.refusals({**GOOD, "statusCheckRollup": passed}, DENIED) == []
 
 
 @pytest.mark.parametrize(
@@ -63,6 +65,15 @@ def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
             "authelia",
         ),
         ({"files": []}, "cap"),
+        ({"files": [{"path": "ansible/inventory/group_vars/all.yml"}]}, "inventory"),
+        (
+            {
+                "statusCheckRollup": [
+                    {"context": "renovate/stability-days", "state": "PENDING"}
+                ]
+            },
+            "stability-days",
+        ),
         ({"files": [{"path": f"f{i}"} for i in range(lander.FILE_CAP)]}, "cap"),
     ],
 )

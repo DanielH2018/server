@@ -15,6 +15,11 @@ A PR is landed only when all of these hold:
 - It is open.
 - Its branch carries no `k8s_autodeploy-false` slug, and no changed path sits under a k8s role
   the deployer's denylist names. The title is never read, because the session can edit it.
+- It changes nothing under `ansible/inventory/`. A pin there, such as `crowdsec_k8s_image` in
+  `group_vars/all.yml`, reaches every role that reads it, denylisted ones included, and no path
+  check can see which those are. An interactive session lands that class.
+- Its `renovate/stability-days` status, when it carries one, reads success. GitHub's auto-merge
+  waits only on the required checks, so without this a PR forced open mid-soak would land.
 
 Then `land.sh` runs as an interactive session would run it, and only its `VERDICT:` line is
 written where the session can read it. Stdlib only, like the rest of the agent.
@@ -43,7 +48,11 @@ FILE_CAP = 100
 # The unit's TimeoutStartSec sits above this, so the script reports a timeout before systemd
 # kills it mid-deploy.
 LAND_TIMEOUT_S = 3300
-PR_FIELDS = "author,isCrossRepository,baseRefName,state,headRefName,files"
+PR_FIELDS = (
+    "author,isCrossRepository,baseRefName,state,headRefName,files,statusCheckRollup"
+)
+SOAK_CONTEXT = "renovate/stability-days"
+INVENTORY = "ansible/inventory/"
 _PR_NUMBER = re.compile(r"[1-9][0-9]{0,6}")
 _K8S_ROLE = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _VERDICT = re.compile(r"^VERDICT: .*$", re.MULTILINE)
@@ -80,7 +89,16 @@ def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
         reasons.append(f"its head branch is not {BRANCH_PREFIX}...")
     if DENIED_SLUG in branch:
         reasons.append(f"its head branch carries {DENIED_SLUG}")
+    soak = [
+        check.get("state")
+        for check in pr.get("statusCheckRollup") or []
+        if check.get("context") == SOAK_CONTEXT
+    ]
+    if any(state != "SUCCESS" for state in soak):
+        reasons.append(f"its {SOAK_CONTEXT} status has not passed")
     paths = sorted({f.get("path", "") for f in pr.get("files") or []})
+    if any(path.startswith(INVENTORY) for path in paths):
+        reasons.append(f"it changes {INVENTORY}, which can reach a denylisted role")
     if not paths or len(paths) >= FILE_CAP:
         reasons.append(f"its changed-file list is empty or at gh's {FILE_CAP}-file cap")
     for path in paths:
