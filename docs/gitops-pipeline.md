@@ -130,7 +130,20 @@ is in the table too (#3317): an `import_tasks` is static, so its tasks run under
 importer's tags, and `narrow_setup` resolves the basename through the importing task the way
 it resolves a copied file. For a file with consumers, `setup_roles_for` drops `common` itself
 (#3312), so the importers apply rather than the resolv.conf remediation `common` would print.
-A `common/templates/` change still routes to `manual_plane`, as described above.
+A `common/templates/` file a common task file renders inherits that task file's importers
+(#3319): the kuma-check pair routes to the roles importing `kuma_check_timer.yml`. `narrow_setup`
+finds no reader of the template in `gitops_deploy`, `render_records` or `k3s`, so those apply
+or are recorded under their whole-role tag. `resolv.conf.j2` is the exception
+(`SETUP_FILES_ROUTED_TO_OWNER`). `optimize_pi` renders it on daniel-pi only, so a tick on
+daniel-box would record an apply that changed nothing there. It still routes `common` to
+`manual_plane`, as described above.
+
+A k8s role can import a `common` file too. `janitorr` and `configarr` copy `host_lib.py` through
+`install_host_lib.yml` and stamp it through `stamp_deployed.yml`.
+`K8S_ROLES_IMPORTING_SETUP_FILES` puts both in `ChangeSet.k8s` when one of those three files
+changes (#3320). The deployer applies a k8s role only for an image-pin bump, so each one
+defer-and-alerts and records a `k8s_unapplied` line. The same test holds that table to the k8s
+roles' tasks.
 
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's
 own role, `roles/setup/gitops_deploy/`, sat there until 2026-09-01 on the claim that applying
@@ -1783,7 +1796,7 @@ is decided by what it touches.
 
 | layer | modules | holds |
 |---|---|---|
-| decisions (pure) | `deploy_changes`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation` | every branch the tick takes, as functions over plain values |
+| decisions (pure) | `deploy_changes`, `deploy_cross_role`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation` | every branch the tick takes, as functions over plain values |
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, when an alert is sent, and the alert queue's own I/O |
 | the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS (#2600) |

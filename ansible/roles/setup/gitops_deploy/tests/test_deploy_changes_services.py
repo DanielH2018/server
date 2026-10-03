@@ -318,3 +318,27 @@ def test_a_common_task_file_change_reaches_the_roles_importing_it():
     consumers = {"fake_remux", "gitops_deploy", "renovate_agent", "renovate_notify"}
     assert setup_roles_for(path) == consumers | {"k3s"}
     assert setup_tags_for([path]) == consumers
+
+
+def test_a_kuma_check_template_change_reaches_the_roles_importing_its_task_file():
+    """`kuma_check_timer.yml` renders the kuma-check pair, so a template edit reaches a host
+    only through that task file's importers (#3319). `common` is not recorded, so the alert
+    does not print the resolv.conf remediation for it."""
+    path = "ansible/roles/setup/common/templates/kuma-check.timer.j2"
+    consumers = {"gitops_deploy", "initial_setup", "render_records"}
+    assert setup_roles_for(path) == consumers | {"k3s"}
+    assert setup_tags_for([path]) == consumers
+
+
+def test_a_host_lib_change_defers_the_k8s_roles_importing_it():
+    """janitorr and configarr copy `host_lib.py` through `install_host_lib.yml` (#3320). The
+    deployer applies no k8s role for this change, so each lands in `cs.k8s` and defer-alerts.
+    A `common` file no k8s role imports names none."""
+    for path in (
+        "ansible/roles/setup/common/files/host_lib.py",
+        "ansible/roles/setup/common/tasks/install_host_lib.yml",
+        "ansible/roles/setup/common/tasks/stamp_deployed.yml",
+    ):
+        assert services_from_changed_paths([path]).k8s == {"configarr", "janitorr"}
+    timer = ["ansible/roles/setup/common/tasks/kuma_check_timer.yml"]
+    assert services_from_changed_paths(timer).k8s == set()

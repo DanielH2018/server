@@ -12,12 +12,16 @@ imported task runs under the consumer's own tag. No tag of `common`'s own exists
 
 How the deployer routes a change depends on the file. A `files/host_lib.py` or `tasks/*.yml`
 edit re-applies the setup roles that copy or import it
-(`deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, #3312, #3317): the initial_setup
+(`deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, #3312, #3317): the initial_setup
 consumers apply on the tick, and `k3s` is recorded in `manual_plane` under its own name.
 `common` itself is not recorded for those files. Its line would print the resolv.conf
 remediation, which names the wrong roles, and leave one more marker to clear after the
-consumers are applied. Any other change here, such as a `templates/` edit, records `common`.
-For that, `land.sh` names each consumer's playbook and tag, then the
+consumers are applied. The kuma-check templates route to the importers of
+`kuma_check_timer.yml`, the task file that renders them (#3319). The k8s roles `janitorr` and
+`configarr` import `install_host_lib.yml` and `stamp_deployed.yml` too, so a change to those or
+to `host_lib.py` also defer-and-alerts both (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`,
+#3320). `resolv.conf.j2` still records `common`, for the reason its `DECIDED:` marker in
+`deploy_cross_role` gives. For that, `land.sh` names each consumer's playbook and tag, then the
 `gitops_state.py clear-manual-plane common` that clears the deployer's marker.
 
 | File | What it gives a caller |

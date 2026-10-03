@@ -15,6 +15,13 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
+# Re-exported: `narrow_setup` and the cross-role scan read the tables through this module.
+from deploy_cross_role import (  # noqa: F401
+    K8S_ROLES_IMPORTING_SETUP_FILES,
+    SETUP_FILES_ROUTED_TO_OWNER,
+    SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
+)
+
 # Which role directory a changed path sits in, as ONE question asked once (#3048). Six regexes
 # answered it before — `_ACTIVE_CONFIG`, `_ACTIVE_TASKS`, `_ACTIVE_META`, `_ACTIVE_ROLE`,
 # `_ACTIVE_K8S` and `_SETUP_ROLE` — plus a copy in `narrow_broad.py` and a pair in
@@ -471,6 +478,10 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.broad = True
             cs.broad_setup = True
             cs.setup_roles |= setup_roles_for(p)
+            # A k8s role importing this setup file defer-and-alerts like its own change would.
+            # Here rather than in `plan_tick`, because `k8s_change_commits` reads `.k8s` from
+            # this function alone to name the commit each `k8s_unapplied` line records (#3111).
+            cs.k8s |= K8S_ROLES_IMPORTING_SETUP_FILES.get(p, frozenset())
             continue
         if p.startswith(_PI_SHARED_PREFIX):
             cs.pi_shared = True
@@ -508,29 +519,6 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             # *.md never reaches here: the docs test at the top of the loop keeps it silent.
             cs.tasks.add(at.role)
     return cs
-
-
-# A file one setup role installs from another's `files/`, or imports from another's `tasks/`,
-# mapped to those roles, so a change to it re-applies them beside the owner (#3306, #3317).
-# `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
-_COMMON = "ansible/roles/setup/common"
-_HOST_LIB = frozenset(
-    {"fake_remux", "gitops_deploy", "k3s", "renovate_agent", "renovate_notify"}
-)
-_STAMPED = _HOST_LIB | {"claude_code", "deploy_ui", "initial_setup"}
-SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
-    f"{_COMMON}/files/host_lib.py": _HOST_LIB,
-    f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
-    f"{_COMMON}/tasks/kuma_check_timer.yml": frozenset(
-        {"gitops_deploy", "initial_setup", "k3s", "render_records"}
-    ),
-    f"{_COMMON}/tasks/release_bin.yml": frozenset({"k3s"}),
-    f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
-    f"{_COMMON}/tasks/stamp_render.yml": _STAMPED | {"nut_host"},
-    "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
-        {"deploy_ui", "renovate_agent"}
-    ),
-}
 
 
 def setup_roles_for(path: str) -> set[str]:
