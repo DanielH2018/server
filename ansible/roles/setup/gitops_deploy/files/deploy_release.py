@@ -39,12 +39,7 @@ def release_commit(service: str, release_dir: str = K8S_RELEASE_DIR) -> str | No
     """
     try:
         record = json.loads(pathlib.Path(release_dir, f"{service}.json").read_text())
-    # Split clauses, not `except (A, B)`: ruff's 3.14 target rewrites a parenthesized tuple
-    # into the 3.14-only `except A, B:`, which this unit's host Python 3.12 cannot parse. The
-    # same workaround as `deploy_alerts.read_pending`, and it goes when the host moves.
-    except OSError:
-        return None
-    except ValueError:
+    except OSError, ValueError:
         return None
     commit = record.get("commit") if isinstance(record, dict) else None
     return commit or None

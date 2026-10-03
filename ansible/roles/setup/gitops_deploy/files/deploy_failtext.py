@@ -11,7 +11,8 @@ defined here, so a caller may from-import one — unlike `deploy_io`, where a fr
 take its own reference and never see the one `monkeypatch` the suite still uses. `deploy_io`
 also re-exports these names for the suite, which reads them through the module it always has.
 
-Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
+Stdlib only: the unit runs under `uv run --no-project`, never from a venv. The `# DECIDED:`
+marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
 """
 
 import re

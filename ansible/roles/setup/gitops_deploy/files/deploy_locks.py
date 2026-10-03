@@ -137,6 +137,39 @@ def plan(services: Iterable[str], exclusive_all: bool = False) -> list[PlannedLo
     return planned
 
 
+def take(fd: int, mode: int, deadline: float, poll_s: float, flock=fcntl.flock) -> bool:
+    """Poll a non-blocking flock on `fd` until it is granted or `deadline` passes.
+
+    The one polling loop for every lock a Python caller waits on with a budget: the service
+    locks below, and `scripts/deploy_tools/gitops_state.py`'s tree lock. The caller opens and
+    closes `fd`, so an open failure stays the caller's to name. `deploy_under_locks._flock_timed`
+    blocks under SIGALRM instead and does not come here, because a blocked waiter shows in
+    `/proc/locks` and a polling one does not.
+
+    Args:
+        fd: an open descriptor on the lock file.
+        mode: fcntl.LOCK_EX or fcntl.LOCK_SH.
+        deadline: the `time.monotonic()` value to give up at.
+        poll_s: seconds to sleep between attempts.
+        flock: `fcntl.flock`, a parameter so a test can make it fail as the kernel would.
+
+    Returns:
+        True once the lock is held; False if another holder kept it past `deadline`.
+
+    Raises:
+        OSError: flock failed for any reason but another holder (ENOLCK, EBADF). Raised at
+            once, never waited out: only `BlockingIOError` means the lock is held (#3354).
+    """
+    while True:
+        try:
+            flock(fd, mode | fcntl.LOCK_NB)
+            return True
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(poll_s)
+
+
 def _take(
     name: str, path: str, mode: int, deadline: float, flock=fcntl.flock
 ) -> tuple[str, int]:
@@ -147,31 +180,24 @@ def _take(
         path: the lock file, as `plan` named it.
         mode: fcntl.LOCK_EX or fcntl.LOCK_SH.
         deadline: the `time.monotonic()` value to give up at.
-        flock: `fcntl.flock`, a parameter so a test can make it fail as the kernel would.
+        flock: passed to `take`.
 
     Raises:
         ServiceLockBusy: the lock stayed busy past `deadline`.
-        OSError: the lock is unavailable -- the file could not be opened, or flock failed for
-            any reason but another holder (ENOLCK, EBADF). Raised at once, never waited out:
-            only `BlockingIOError` means another deploy holds the lock (#3354).
+        OSError: the lock is unavailable -- the file could not be opened, or `take` raised.
     """
     fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
     started = time.monotonic()
-    while True:
-        try:
-            flock(fd, mode | fcntl.LOCK_NB)
-            return name, fd
-        except BlockingIOError:
-            if time.monotonic() >= deadline:
-                os.close(fd)
-                waited = round(time.monotonic() - started)
-                raise ServiceLockBusy(
-                    f"service lock {name} busy for {waited}s", lock=name
-                ) from None
-            time.sleep(SERVICE_LOCK_POLL_S)
-        except OSError:
-            os.close(fd)
-            raise
+    try:
+        held = take(fd, mode, deadline, SERVICE_LOCK_POLL_S, flock=flock)
+    except OSError:
+        os.close(fd)
+        raise
+    if not held:
+        os.close(fd)
+        waited = round(time.monotonic() - started)
+        raise ServiceLockBusy(f"service lock {name} busy for {waited}s", lock=name)
+    return name, fd
 
 
 @contextlib.contextmanager
