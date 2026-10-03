@@ -391,6 +391,27 @@
     cron_file: release-staleness-check
   become: true
 
+- name: Create the live-object drift check's host_lib directory
+  tags: [live-drift]
+  ansible.builtin.file:
+    path: /opt/live-drift-check
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Install the shared host_lib helper for the live-object drift check
+  tags: [live-drift]
+  # A fixed directory the script puts on sys.path itself, not the release directory. The check
+  # runs through the /usr/local/bin symlink, so Python puts the resolved per-SHA release
+  # directory first on sys.path, and a release_bin file would also get a /usr/local/bin/host_lib.py
+  # symlink nothing calls. Installed before the script, so no run sees the import without the file.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/live-drift-check
+    host_lib_owner: "{{ sys_user }}"
+
 - name: Deploy the live-object drift check
   tags: [live-drift]
   # Root-owned but NOT root-run, unlike manifest-prune-check.sh beside it. That one needs root
@@ -570,6 +591,8 @@
     stamp_deployed_pairs:
       - live: /usr/local/bin/live-drift-check.py
         src: ansible/roles/setup/k3s/files/live_drift_check.py
+      - live: /opt/live-drift-check/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py
 
 - name: Stamp the disk-health script this host has rendered
   tags: [disk-health]

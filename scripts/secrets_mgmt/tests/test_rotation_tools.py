@@ -7,8 +7,12 @@ table it holds — so they moved with the code rather than staying beside the ca
 Run: uv run pytest scripts/secrets_mgmt/tests/test_rotation_tools.py
 """
 
+import io
 import subprocess
+import urllib.parse
+from unittest import mock
 
+from secrets_mgmt import rotation_tools
 from secrets_mgmt import secret_rotation as sr
 from _rotation_fakes import Fakes, build_tools, process_calls
 from secrets_mgmt.rotation_tools import RotationTools, load_registry, save_registry
@@ -114,3 +118,23 @@ def test_both_sops_boundaries_bound_their_subprocess_with_a_timeout():
     assert timeouts == [("set", 30), ("--decrypt", 30)], (
         "every sops call must carry a timeout: %s" % timeouts
     )
+
+
+def test_kuma_push_sends_host_libs_push_to_the_host_and_token_the_url_names():
+    # The audit wrapper exports one URL; host_lib takes a host and a token, so the split is
+    # what decides which monitor the verdict reaches.
+    sent = []
+
+    def fake_urlopen(url, timeout=None):
+        sent.append(url)
+        return io.BytesIO(b"{}")
+
+    with mock.patch("urllib.request.urlopen", fake_urlopen):
+        rotation_tools.kuma_push(
+            "https://kuma.example/api/push/abc123", False, "2 overdue"
+        )
+    (url,) = sent
+    parts = urllib.parse.urlsplit(url)
+    assert (parts.netloc, parts.path) == ("kuma.example", "/api/push/abc123")
+    query = urllib.parse.parse_qs(parts.query)
+    assert query["status"] == ["down"] and query["msg"] == ["2 overdue"]
