@@ -10,7 +10,12 @@ Each Docker role has separate channels (the compose or a config template deploys
 
 import pytest
 
-from deploy_changes import role_of, services_from_changed_paths, setup_tags_for
+from deploy_changes import (
+    role_of,
+    services_from_changed_paths,
+    setup_roles_for,
+    setup_tags_for,
+)
 
 
 def test_single_service_template():
@@ -303,3 +308,13 @@ def test_a_host_lib_change_reaches_its_consumers_and_not_common():
     assert setup_tags_for(host_lib) == consumers
     resolv = ["ansible/roles/setup/common/templates/resolv.conf.j2"]
     assert services_from_changed_paths(resolv).setup_roles == {"common"}
+
+
+def test_a_common_task_file_change_reaches_the_roles_importing_it():
+    """An `import_tasks` of a `common/tasks/` file is static, so the imported tasks run under
+    each importer's tags and only re-applying the importers applies the change (#3317). The
+    same four initial_setup roles apply on the tick, and `k3s` is the one left to record."""
+    path = "ansible/roles/setup/common/tasks/install_host_lib.yml"
+    consumers = {"fake_remux", "gitops_deploy", "renovate_agent", "renovate_notify"}
+    assert setup_roles_for(path) == consumers | {"k3s"}
+    assert setup_tags_for([path]) == consumers

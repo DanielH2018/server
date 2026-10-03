@@ -154,6 +154,20 @@ def test_the_real_consumers_of_gitops_markers_narrow_to_their_code_tag(role, tag
     assert index.readers_of("gitops_markers.py") == frozenset({tag})
 
 
+@pytest.mark.parametrize(
+    ("role", "tags"),
+    [
+        ("gitops_deploy", {"gitops-deploy-code"}),
+        ("renovate_notify", {"renovate-notify-code"}),
+    ],
+)
+def test_a_common_task_file_narrows_to_the_tags_importing_it(role, tags):
+    """A `common/tasks/` file resolves through its importing task, as a `files/` basename
+    resolves through its copy task (#3317), read from the real tree."""
+    index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
+    assert index.readers_of("install_host_lib.yml") == frozenset(tags)
+
+
 def test_a_shipped_file_no_task_of_the_role_names_is_flagged(ships):
     ships.write(SHIPPED, "VALUE = 2\n")
     with pytest.raises(narrow_setup.CannotNarrow, match="names shared.py"):

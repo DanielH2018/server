@@ -1,21 +1,24 @@
 """The deployer's table of cross-role setup files matches what the setup roles' tasks ship.
 
 `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` maps a file under one setup role's `files/`
-to the other setup roles that install it by path (#3306). The GitOps deployer reads the table to
-re-apply those roles when the file changes, and it cannot read the tree to find them itself:
-every caller of `setup_tags_for` passes paths alone. So the table is static, and this test is
-what keeps it equal to the tree. A role that starts shipping another role's file without a
-table entry would keep the old file on its host behind a green apply.
+or `tasks/` to the other setup roles that install or import it by path (#3306, #3317). The
+GitOps deployer reads the table to re-apply those roles when the file changes, and it cannot
+read the tree to find them itself: every caller of `setup_tags_for` passes paths alone. So the
+table is static, and this test is what keeps it equal to the tree. A role that starts shipping
+another role's file without a table entry would keep the old file on its host behind a green
+apply.
 
-The scan reads every `roles/setup/<owner>/files/<f>` and `{{ role_path }}/../<owner>/files/<f>`
-reference in a setup role's `tasks/`, which catches a copy task's `src:` and a
-`stamp_deployed_pairs` entry alike.
+The scan reads every `roles/setup/<owner>/<files|tasks>/<f>` and
+`{{ role_path }}/../<owner>/<files|tasks>/<f>` reference in a setup role's `tasks/`, which
+catches a copy task's `src:`, a `stamp_deployed_pairs` entry and an `import_tasks:` alike. A
+task file needs its importers re-applied for the same reason a shipped file does: the import
+is static, so the imported tasks run under each importer's own tags and nowhere else.
 
-`common` is an owner like any other (#3312). Its `host_lib.py` reaches a host only through
-the roles that copy it, so a change re-applies those roles, and `setup_roles_for` drops
-`common` itself from the result because no playbook applies it on its own. The scan sees a
-consumer through its `stamp_deployed_pairs` entry, which `test_host_lib_sibling_copies.py`
-requires beside every `install_host_lib.yml` import.
+`common` is an owner like any other (#3312). Its `host_lib.py` and task files reach a host
+only through the roles that copy or import them, so a change re-applies those roles, and
+`setup_roles_for` drops `common` itself from the result because no playbook applies it on its
+own. The scan sees a `host_lib.py` consumer through its `stamp_deployed_pairs` entry, which
+`test_host_lib_sibling_copies.py` requires beside every `install_host_lib.yml` import.
 
 Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 """
@@ -28,11 +31,18 @@ from _role_census import role_dirs
 from deploy_changes import SETUP_FILES_SHIPPED_BY_OTHER_ROLES
 
 _REFERENCE = re.compile(
-    r"(?:roles/setup/|\{\{ role_path \}\}/\.\./)([a-z0-9_]+)/files/([\w./-]+)"
+    r"(?:roles/setup/|\{\{ role_path \}\}/\.\./)([a-z0-9_]+)/(files|tasks)/([\w./-]*\w)"
 )
 # Named members, so a scan that stops matching fails by name rather than agreeing with an
 # empty table.
 KNOWN_EDGES = {
+    "ansible/roles/setup/common/tasks/install_host_lib.yml": {
+        "fake_remux",
+        "gitops_deploy",
+        "k3s",
+        "renovate_agent",
+        "renovate_notify",
+    },
     "ansible/roles/setup/common/files/host_lib.py": {
         "fake_remux",
         "gitops_deploy",
@@ -51,10 +61,10 @@ def cross_role_files(task_texts: dict[str, str]) -> dict[str, frozenset[str]]:
     """Each `files/` path a role's task text names under ANOTHER role, mapped to those roles."""
     edges: dict[str, set[str]] = {}
     for role, text in task_texts.items():
-        for owner, rel in _REFERENCE.findall(text):
+        for owner, kind, rel in _REFERENCE.findall(text):
             if owner == role:
                 continue
-            edges.setdefault(f"ansible/roles/setup/{owner}/files/{rel}", set()).add(
+            edges.setdefault(f"ansible/roles/setup/{owner}/{kind}/{rel}", set()).add(
                 role
             )
     return {path: frozenset(roles) for path, roles in edges.items()}
@@ -96,4 +106,14 @@ def test_a_role_naming_commons_file_is_flagged():
     common = "src: ansible/roles/setup/common/files/host_lib.py\n"
     assert cross_role_files({"owner": common}) == {
         "ansible/roles/setup/common/files/host_lib.py": frozenset({"owner"})
+    }
+
+
+def test_a_role_importing_commons_task_file_is_flagged():
+    task = 'import_tasks: "{{ role_path }}/../common/tasks/shared.yml"\n'
+    # A reference ending a sentence in a comment does not carry the full stop into the path.
+    comment = "# see roles/setup/common/tasks/other.yml. Each script lands\n"
+    assert cross_role_files({"owner": task + comment}) == {
+        "ansible/roles/setup/common/tasks/shared.yml": frozenset({"owner"}),
+        "ansible/roles/setup/common/tasks/other.yml": frozenset({"owner"}),
     }
