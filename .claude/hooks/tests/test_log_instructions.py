@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Tests for where `log-instructions.py` puts `instructions.log`.
 
-The fixture repo is built under tmp_path with a linked worktree. Git identity goes in through
-`GIT_AUTHOR_*`/`GIT_COMMITTER_*` and signing is disabled on the command line, so no fixture
-writes a git config, and every `GIT_*` var the caller carries is stripped first.
+The fixture repo is built under tmp_path with a linked worktree, through `lib.git_testing`,
+so the caller's `GIT_*` variables and git config never reach it.
 
 Run: uv run pytest .claude/hooks/tests/test_log_instructions.py
 """
 
 import importlib.util
 import os
-import subprocess
 import sys
+
+from lib.git_testing import git, init_repo
 
 _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _HERE)  # log-instructions.py imports _hook_common
@@ -23,32 +23,11 @@ assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-_GIT_ENV = {
-    **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
-    "GIT_AUTHOR_NAME": "t",
-    "GIT_AUTHOR_EMAIL": "t@example.invalid",
-    "GIT_COMMITTER_NAME": "t",
-    "GIT_COMMITTER_EMAIL": "t@example.invalid",
-}
-
-
-def _git(*args, cwd):
-    subprocess.run(
-        ["git", "-c", "commit.gpgsign=false", *args],
-        cwd=cwd,
-        env=_GIT_ENV,
-        check=True,
-        capture_output=True,
-    )
-
 
 def test_a_worktree_session_logs_to_the_primary_checkout_is_flagged(tmp_path):
-    primary = tmp_path / "primary"
-    primary.mkdir()
-    _git("init", "-q", cwd=primary)
-    _git("commit", "-q", "--allow-empty", "-m", "init", cwd=primary)
+    primary = init_repo(tmp_path / "primary", initial_commit="init")
     worktree = tmp_path / "wt"
-    _git("worktree", "add", "-q", "-b", "wt", str(worktree), cwd=primary)
+    git(primary, "worktree", "add", "-q", "-b", "wt", str(worktree))
 
     expected = os.path.join(
         os.path.realpath(primary), ".claude", "logs", "instructions.log"
