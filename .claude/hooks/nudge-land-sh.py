@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
+#   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
 """PreToolUse(Bash) guard: stop hand-polling CI when land.sh already waits for it.
 
 THE PROBLEM. `scripts/deploy_tools/land.sh` exists so that merging a PR is followed through to

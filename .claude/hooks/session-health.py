@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-# gen-hooks: library
-#   reason: run by session-health.sh through `uv run python`
+# gen-hooks: register
+#   event: SessionStart
+#   timeout: 15
+#   order: 10
 """SessionStart health banner: surfaces what's already broken before work starts.
 
 When a Claude Code session opens in this repo, this prints anything already broken so
@@ -42,7 +44,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # `hooklib`-not-`lib`): the worktree, scrape-target and stale-release lines. Wrapped like
 # `lib.deployer_park` below, in its own try so a failure names the package that broke rather
 # than deployer_park's unrelated line. `SyntaxError` is caught alongside `ImportError` because
-# these modules use PEP 758 syntax and `session-health.sh` sends stderr to /dev/null, exits 0.
+# these modules use PEP 758 syntax and `run-hook.sh` sends this hook's stderr to /dev/null, exits 0.
 # An uncaught SyntaxError at import would take the WHOLE banner out silently: nothing at
 # module scope may be able to stop the banner.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -76,7 +78,7 @@ except (ImportError, SyntaxError) as exc:
 # copied there. `GITOPS_STATE_DIR` is mode 0750 owned by `ubuntu`: any other host reads silence.
 #
 # Wrapped, because NOTHING at module scope may be able to stop the banner. This
-# file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0, so an
+# file is run by `run-hook.sh`, which sends its stderr to /dev/null and exits 0, so an
 # ImportError here would take out the scrape-target, live-session and stale-worktree
 # sections as well — silently, and for a reason no session could see. The failure is reported
 # in `parked_deployer_problems` instead, the same way its deferred `lib.git` import already is.
@@ -458,7 +460,7 @@ def other_live_sessions(cwd):
     return lines
 
 
-# Well inside the 15s budget settings.json kills this hook at (session-health.sh's gen-hooks
+# Well inside the 15s budget settings.json kills this hook at (this file's gen-hooks
 # header). prune_worktrees.py --brief takes 1.3s warm.
 WORKTREE_TIMEOUT_S = 5
 

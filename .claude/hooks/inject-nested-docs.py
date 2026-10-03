@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
+#   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
 """PreToolUse(Bash): load the nested CLAUDE.md and `.claude/rules` a Bash read would skip.
 
 WHY. Claude Code loads a role's `CLAUDE.md` (`nested_traversal`) and a `.claude/rules/*.md`

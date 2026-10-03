@@ -73,8 +73,8 @@ from fanout_lib.transport import (
 
 BATCH_RE = re.compile(r"^\d+(,\d+)*$")
 # The SessionStart hook reads `payload["source"]` from stdin, so it needs a JSON payload
-# rather than `</dev/null`; --no-python-downloads/--python match the version session-health.sh
-# itself pins so this reading is taken by the same interpreter a real session would use.
+# rather than `</dev/null`; --no-python-downloads/--python match the version run-hook.sh
+# pins for session-health so this reading is taken by the same interpreter a real session would use.
 HEALTH_CMD = (
     f'cd {REPO} && printf \'{{"source":"startup"}}\' | '
     "uv run --no-project --no-python-downloads --python 3.14.6 .claude/hooks/session-health.py"

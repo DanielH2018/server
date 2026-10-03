@@ -409,15 +409,15 @@ _SHIM_UV = "/home/ubuntu/.local/bin/uv"
     not os.path.exists(_SHIM_UV), reason=f"{_SHIM_UV} is not installed here"
 )
 def test_the_shim_injects_on_the_real_hook_path():
-    """Run `bash-pretool.sh` with a real payload, the way Claude Code does.
+    """Run `run-hook.sh bash-pretool` with a real payload, the way Claude Code does.
 
     The in-process tests above cannot see the failure this hook is most exposed to: any
     byte on stdout before the JSON — a uv reconcile line, an import-time print — makes the
-    harness read the whole output as plain text and inject nothing. The shim's own
+    harness read the whole output as plain text and inject nothing. The runner's own
     `readlink -f "$0"` keeps it on this checkout's `.py`, so the row it appends lands in
     this checkout's gitignored `.claude/logs/instructions.log`.
 
-    The shim is the dispatcher's, so the object also carries whatever the decision arms
+    The hook is the dispatcher, so the object also carries whatever the decision arms
     said about the same command. `sed -n` on a file is a read, which none of the arms
     decides, so the object carries the context alone.
     """
@@ -429,7 +429,11 @@ def test_the_shim_injects_on_the_real_hook_path():
         "tool_input": {"command": f"sed -n 1,5p {KNOWN_ROLE}/files/registry.py"},
     }
     run = subprocess.run(
-        [os.path.join(_HERE, "bash-pretool.sh")],
+        [
+            os.path.join(_HERE, "run-hook.sh"),
+            "bash-pretool",
+            "--ask-on-cd=block-protected-bash,nudge-land-sh,block-footguns",
+        ],
         input=json.dumps(payload),
         capture_output=True,
         text=True,

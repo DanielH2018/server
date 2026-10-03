@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
+#   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
 """PreToolUse(Bash) guard: the two file rules that only ever watched the Edit tool.
 
 WHY A SECOND SURFACE. `block-protected-edits.py` denies edits to generated docs pages and to

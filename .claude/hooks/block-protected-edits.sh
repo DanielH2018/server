@@ -1,9 +1,6 @@
 #!/bin/bash
-# gen-hooks: register
-#   event: PreToolUse
-#   matcher: Edit|Write|MultiEdit|NotebookEdit
-#   timeout: 10
-#   order: 60
+# gen-hooks: library
+#   reason: kept for a session whose settings.json predates the switch to `run-hook.sh block-protected-edits` (#3278); registered from block-protected-edits.py
 # PreToolUse(Edit|Write|...) hook — deny direct edits to generated containers/ files
 # and to SOPS-encrypted files. Routed through uv so the project-pinned interpreter
 # runs (not the system python3); --no-sync skips the env reconcile to stay fast on

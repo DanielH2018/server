@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
+#   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
 """PreToolUse(Bash) guard: six commands that fail silently on this machine.
 
 Each has a deterministic signature, a recorded cost, and a one-line fix — which is what makes

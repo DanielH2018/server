@@ -22,24 +22,24 @@ import pytest
 import gen_hook_settings as g
 from lib.proc_testing import run
 
-# Named members of the live census. A `.sh` here is registered; a `.py` is a library (run
-# by its `.sh` shim through `uv run python`, or imported by a sibling, never registered).
+# Named members of the live census. A registered `.py` runs through `run-hook.sh`; a library
+# is imported by a sibling or run by one, and is never registered itself.
 KNOWN_REGISTERED = frozenset(
     {
-        "bash-pretool.sh",
-        "block-protected-edits.sh",
-        "auto-mode-bridge.sh",
-        "log-instructions.sh",
-        "session-health.sh",
+        "auto-mode-bridge.py",
+        "bash-pretool.py",
+        "block-protected-edits.py",
+        "fanout-stop.py",
+        "log-instructions.py",
+        "session-health.py",
     }
 )
 KNOWN_LIBRARIES = frozenset(
     {
         "_claude_guard.py",
         "_hook_common.py",
-        "bash-pretool.py",
+        "block-footguns.py",
         "run-hook.sh",
-        "session-health.py",
         "uv-python.py",
     }
 )
@@ -87,6 +87,23 @@ def test_a_file_may_carry_several_register_blocks():
     )
     events = [r.event for r in g.parse_hook_file("two.sh", text).registrations]
     assert events == ["Stop", "SessionStart"]
+
+
+def test_a_py_registration_renders_through_the_runner_with_its_args_as_flags():
+    """A `.py` is never exec'd, so its command is `run-hook.sh <stem>`, never the `.py` itself.
+
+    The `.sh` near miss is the first test above: a shell hook still renders as itself.
+    """
+    text = (
+        "#!/usr/bin/env python3\n# gen-hooks: register\n#   event: PreToolUse\n"
+        "#   timeout: 5\n#   order: 10\n#   args: --ask-on-cd=a,b\n"
+    )
+    [r] = g.parse_hook_file("guard.py", text).registrations
+    assert r.command == "~/server/.claude/hooks/run-hook.sh guard --ask-on-cd=a,b"
+    [bare] = g.parse_hook_file(
+        "quiet.py", text.replace("#   args: --ask-on-cd=a,b\n", "")
+    ).registrations
+    assert bare.command == "~/server/.claude/hooks/run-hook.sh quiet"
 
 
 def test_library_block_is_accepted_with_a_reason():
@@ -314,6 +331,10 @@ def test_live_census_names_the_known_members():
     assert KNOWN_REGISTERED <= registered, sorted(KNOWN_REGISTERED - registered)
     assert KNOWN_LIBRARIES <= set(libraries), sorted(KNOWN_LIBRARIES - set(libraries))
     assert registered.isdisjoint(libraries)
+    # Every live hook goes through the one runner, so the interpreter pin and the failure
+    # posture are written once (#3278).
+    commands = {r.command.split()[0] for r in registrations}
+    assert commands == {f"{g.COMMAND_PREFIX}{g.RUNNER}"}, commands
 
 
 def test_committed_settings_json_is_what_the_generator_renders_now():

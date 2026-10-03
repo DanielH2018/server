@@ -1,8 +1,6 @@
 #!/bin/bash
-# gen-hooks: register
-#   event: Stop
-#   timeout: 10
-#   order: 10
+# gen-hooks: library
+#   reason: kept for a session whose settings.json predates the switch to `run-hook.sh fanout-stop` (#3278); registered from fanout-stop.py
 # Stop hook — in a headless fan-out worktree (one holding .fanout/brief.md), block a
 # stop whose final message names neither a PR nor a blocker, at most three times per
 # batch. Silent everywhere else. See fanout-stop.py for the full contract.

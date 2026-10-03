@@ -1,9 +1,6 @@
 #!/bin/bash
-# gen-hooks: register
-#   event: PreToolUse
-#   matcher: Bash
-#   timeout: 15
-#   order: 10
+# gen-hooks: library
+#   reason: kept for a session whose settings.json predates the switch to `run-hook.sh bash-pretool` (#3278); registered from bash-pretool.py
 # PreToolUse(Bash) hook — the one process that runs all four Bash arms: the
 # protected-file guard, the land.sh nudge, the footgun guard and the nested-docs
 # injector. They share one `uv run` start because all import the same two modules.

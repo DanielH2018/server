@@ -419,13 +419,16 @@ The two_factor session also gets its own state file and is never a fallback for 
 Each hook's module docstring under `.claude/hooks/` is the full record of its rules. This
 section is the summary a reader needs before opening one.
 
-`run-hook.sh <name> [--project] [--ask-on-cd[=<guards>]]` is the shell entry point the six
-per-hook shims collapse into (#3278): one interpreter pin, three postures selected by flags.
-It is unreferenced until the second half of that rollout. `.claude/settings.json` names each
-hook by an absolute path into the PRIMARY checkout, so switching settings in the same commit
-that adds the runner would register a script a behind primary checkout does not have — and a
-hook script that does not exist means `/bin/sh` exits 127 and the matching tool calls run with
-the guard skipped.
+`run-hook.sh <name> [--project] [--ask-on-cd[=<guards>]]` is the shell entry point every
+registration goes through (#3278): one interpreter pin, three postures selected by flags. A
+hook's `.py` carries its own `# gen-hooks: register` block, and `args:` there holds the flags.
+`scripts/dev/gen_hook_settings.py` renders that block as `run-hook.sh <stem> <args>`.
+
+The six per-hook `.sh` shims the runner replaced stay on disk, unregistered.
+`.claude/settings.json` names each hook by an absolute path into the PRIMARY checkout, and a
+worktree cut before the switch still registers the shims by name. Deleting them would make
+`/bin/sh` exit 127 in those sessions, and the matching tool calls would run with the guard
+skipped. The deletion waits until no such worktree is left (#3304).
 
 ### `bash-pretool` (PreToolUse, Bash)
 
@@ -596,13 +599,13 @@ which nothing fast-forwards.
 The arm reads the SESSION's `settings.json` (`$CLAUDE_PROJECT_DIR`, or the first parent of the
 cwd holding one) against the files on disk. Reading the primary checkout's own `settings.json`
 would compare a file against the `.claude/hooks/` directory it was committed beside and never
-disagree. One gap stays open by construction: the arm cannot report `session-health.sh`'s own
-absence, because a SessionStart hook that does not exist prints nothing.
+disagree. One gap stays open by construction: the arm cannot report the absence of `run-hook.sh` or
+`session-health.py`, because a SessionStart hook that does not run prints nothing.
 
-It also reads each present shim for the **`.py` sibling the shim runs**, which `settings.json`
-never names (issue #2709). That failure is the quieter of the two: `session-health.sh` holds a
-present `.sh` beside a missing `.py`, so the shim runs, `uv run` cannot find the script, and
-`2>/dev/null; exit 0` turns it into a hook that succeeds and guards nothing. It gets its own
+It also resolves the **`.py` sibling each registered command runs**, from the hook name
+`run-hook.sh` is passed (issue #2709). That failure is the quieter of the two: a present
+`run-hook.sh` beside a missing `.py` runs, finds no script, and reports it only on stderr, so
+the hook succeeds and guards nothing. It gets its own
 banner line, because handing the operator the 127 diagnosis for a shim that ran is a false one.
 `sibling_py_paths` matches the one idiom five shims share —
 `"$(dirname "$(readlink -f "$0")")/<name>.py"` — as text, and abstains on anything else rather

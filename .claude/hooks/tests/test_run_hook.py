@@ -11,11 +11,9 @@ registration passes it. So every check here is a REJECT/ACCEPT pair over one INV
 REJECT is a run that cannot reach the `.py` (a missing `cd` target, a missing sibling), ACCEPT
 is one that can.
 
-The runner is unreferenced on purpose while this lands. `.claude/settings.json` names each hook
-by an absolute path into the PRIMARY checkout, so a settings file that switched to `run-hook.sh`
-in the same commit would register a script a behind primary checkout does not have — `/bin/sh`
-exits 127 and the matching tool calls run with the guard skipped, which is the incident
-`hooklib/hook_registration_lines.py` exists for. The switch is the second half of #3278.
+Every registration in `.claude/settings.json` runs through this file since the second half of
+#3278. `test_hook_shim_fail_open.py` runs each registered command as written; the tests here
+cover the flags one at a time.
 
 Run: uv run pytest .claude/hooks/tests/test_run_hook.py
 """
@@ -91,9 +89,8 @@ def _run(runner: Path, *args: str) -> subprocess.CompletedProcess:
 def test_the_runner_is_executable_in_git():
     """A hook committed 100644 is silently dead once settings.json names it.
 
-    `test_hook_scripts_executable.py` cannot see this one: it anchors on the scripts
-    settings.json REGISTERS, and the runner is deliberately unregistered until the second half
-    of #3278. `uv-python.sh` shipped 100644 in #361 the same way.
+    Every hook runs through this one file, so a mode slip disarms all of them at once.
+    `uv-python.sh` shipped 100644 in #361 the same way.
     """
     out = run(
         ["git", "ls-files", "-s", "--", ".claude/hooks/run-hook.sh"],
@@ -160,7 +157,7 @@ def test_reject_a_missing_py_sibling_also_asks(tmp_path):
 
 def test_the_ask_reason_names_every_guard_that_did_not_run(tmp_path):
     """One runner stands in for several guards, so the operator can only act on the prompt if
-    the reason says which ones. `bash-pretool.sh` already answered for three."""
+    the reason says which ones. `bash-pretool` answers for three."""
     guards = ("block-protected-bash", "nudge-land-sh", "block-footguns")
     runner = _variant_runner(tmp_path, str(tmp_path / "does-not-exist"))
     proc = _run(runner, "bash-pretool", f"--ask-on-cd={','.join(guards)}")

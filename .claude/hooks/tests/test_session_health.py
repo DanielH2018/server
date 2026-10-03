@@ -258,9 +258,9 @@ def test_the_worktree_read_is_bounded_well_inside_the_hook_budget():
         hook["timeout"]
         for group in settings["hooks"]["SessionStart"]
         for hook in group["hooks"]
-        if hook["command"].endswith("session-health.sh")
+        if hook["command"].endswith("run-hook.sh session-health")
     ]
-    assert budgets, "settings.json registers no session-health.sh SessionStart hook"
+    assert budgets, "settings.json registers no session-health SessionStart hook"
     assert _mod.WORKTREE_TIMEOUT_S <= min(budgets) / 2
 
 
@@ -416,8 +416,8 @@ def test_a_hooklib_that_will_not_compile_is_named_rather_than_killing_the_banner
     """A SyntaxError is not an ImportError, so an `except ImportError` alone would let one
     through.
 
-    These modules use PEP 758 syntax, and `session-health.sh` sends stderr to /dev/null and
-    exits 0. An uncaught SyntaxError at import would take the whole banner out with nothing
+    These modules use PEP 758 syntax, and `run-hook.sh` sends this hook's stderr to /dev/null
+    and exits 0. An uncaught SyntaxError at import would take the whole banner out with nothing
     a session could see, and nothing at module scope may do that.
     """
     proc = subprocess.run(

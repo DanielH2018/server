@@ -1,6 +1,6 @@
 #!/bin/bash
 # gen-hooks: library
-#   reason: the one shell entry point for every hook here; settings.json switches to it in the second half of #3278, once the primary checkout holds this file
+#   reason: the one shell entry point for every hook here; a `.py` register block renders as `run-hook.sh <stem> <args>` (#3278)
 #
 # Usage: run-hook.sh <name> [--project] [--ask-on-cd[=<guards>]]
 #
@@ -16,7 +16,7 @@
 #       cd into the repo, then `exec` so the hook's stdin JSON survives. No output means the
 #       event passes through unchanged. A failed `cd` is silent on stdout.
 #
-#   run-hook.sh bash-pretool --project --ask-on-cd=block-protected-bash,nudge-land-sh
+#   run-hook.sh bash-pretool --ask-on-cd=block-protected-bash,nudge-land-sh,block-footguns
 #       the same, plus an `ask` decision when the hook could not run at all. `<guards>` names
 #       what did not run; it defaults to <name>.
 #

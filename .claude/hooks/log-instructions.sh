@@ -1,8 +1,6 @@
 #!/bin/bash
-# gen-hooks: register
-#   event: InstructionsLoaded
-#   timeout: 10
-#   order: 10
+# gen-hooks: library
+#   reason: kept for a session whose settings.json predates the switch to `run-hook.sh log-instructions` (#3278); registered from log-instructions.py
 # InstructionsLoaded hook — observability only. Appends one line per CLAUDE.md /
 # .claude/rules file as it loads (which file, and why: session_start vs
 # path_glob_match vs nested_traversal, plus the trigger file) to
