@@ -553,6 +553,7 @@ gethomepage's
 Emby's
 [Dd]eadman
 [Uu]nlanded
+[Uu]narchived
 [Ss]lugified
 
 # Terms from the k3s, authelia and volume-snapshot pages.
