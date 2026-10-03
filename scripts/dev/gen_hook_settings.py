@@ -25,6 +25,8 @@ file a sibling invokes and no event registers carries `library` with the reason 
     #   args: --flag                    optional, appended to the command
     #   async: true                     optional
     #   statusMessage: Formatting...    optional
+    #   if: Bash(git *)                 optional, tool events only; one permission rule the
+    #                                   harness tests before it spawns the hook at all
 
     # gen-hooks: library
     #   reason: an arm of bash-pretool.py, imported rather than run
@@ -82,8 +84,12 @@ OPENER_RE = re.compile(r"^# gen-hooks: (\S+)\s*$")
 FIELD_RE = re.compile(r"^#   ([a-zA-Z]+): (.*)$")
 
 REGISTER_KEYS = frozenset(
-    {"event", "matcher", "timeout", "order", "args", "async", "statusMessage"}
+    {"event", "matcher", "timeout", "order", "args", "async", "statusMessage", "if"}
 )
+# The events the harness evaluates a handler's `if` on. On any other event a handler that
+# carries `if` never runs, which is the registered-but-fires-nowhere gap this script exists
+# to close, so it is an error here, as it is in `bin/gen-hooks-lib.js`.
+IF_EVENTS = ("PreToolUse", "PostToolUse", "PermissionRequest")
 LIBRARY_KEYS = frozenset({"reason"})
 
 # The order events are written in: the order the hand-written object had, so the first
@@ -122,6 +128,7 @@ class Registration:
     args: str | None = None
     async_: bool = False
     status_message: str | None = None
+    if_rule: str | None = None
 
     @property
     def command(self) -> str:
@@ -137,6 +144,8 @@ class Registration:
             "command": self.command,
             "timeout": self.timeout,
         }
+        if self.if_rule:
+            out["if"] = self.if_rule
         if self.status_message:
             out["statusMessage"] = self.status_message
         if self.async_:
@@ -220,6 +229,11 @@ def parse_hook_file(file: str, text: str) -> Parsed:
             raise HookDeclarationError(
                 f"gen-hooks: {file}: async: takes only 'true' (omit the line otherwise)."
             )
+        if fields.get("if") and fields["event"] not in IF_EVENTS:
+            raise HookDeclarationError(
+                f"gen-hooks: {file}: if: is evaluated only on {', '.join(IF_EVENTS)}; "
+                f"on {fields['event']} the hook would never run."
+            )
         parsed.registrations.append(
             Registration(
                 file=file,
@@ -230,6 +244,7 @@ def parse_hook_file(file: str, text: str) -> Parsed:
                 args=fields.get("args") or None,
                 async_="async" in fields,
                 status_message=fields.get("statusMessage") or None,
+                if_rule=fields.get("if") or None,
             )
         )
     if parsed.library_reason is not None and parsed.registrations:

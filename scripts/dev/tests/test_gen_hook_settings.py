@@ -106,6 +106,22 @@ def test_a_py_registration_renders_through_the_runner_with_its_args_as_flags():
     assert bare.command == "~/server/.claude/hooks/run-hook.sh quiet"
 
 
+def test_an_if_rule_on_a_tool_event_renders_after_the_timeout():
+    """The key order is the one `bin/gen-hooks-lib.js` writes, so both renderers agree."""
+    text = register(
+        "#   event: PreToolUse\n#   matcher: Bash\n#   timeout: 5\n#   order: 10\n"
+        "#   if: Bash(git *)\n#   statusMessage: Checking..."
+    )
+    [r] = g.parse_hook_file("gate.sh", text).registrations
+    assert list(r.entry().items()) == [
+        ("type", "command"),
+        ("command", "~/server/.claude/hooks/gate.sh"),
+        ("timeout", 5),
+        ("if", "Bash(git *)"),
+        ("statusMessage", "Checking..."),
+    ]
+
+
 def test_library_block_is_accepted_with_a_reason():
     parsed = g.parse_hook_file("lib.py", LIBRARY)
     assert parsed.registrations == []
@@ -149,6 +165,13 @@ def test_library_block_is_accepted_with_a_reason():
             "async not true",
             register("#   event: Stop\n#   timeout: 5\n#   order: 1\n#   async: yes"),
             "async: takes only 'true'",
+        ),
+        (
+            "if on an event the harness never evaluates it on",
+            register(
+                "#   event: Stop\n#   timeout: 5\n#   order: 1\n#   if: Bash(git *)"
+            ),
+            "if: is evaluated only on PreToolUse, PostToolUse, PermissionRequest; on Stop",
         ),
         (
             "library without reason",
@@ -227,6 +250,8 @@ def _normalized(reg: g.Registration) -> dict:
         out["async"] = True
     if reg.status_message:
         out["statusMessage"] = reg.status_message
+    if reg.if_rule:
+        out["if"] = reg.if_rule
     return out
 
 
