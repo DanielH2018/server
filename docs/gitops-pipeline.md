@@ -310,8 +310,8 @@ one k3s cron template, and its note asked for `--tags k3s` and the control-plane
 arms.
 
 **A sidecar file, not a fifth field on the `manual_plane` line.** `parse_manual_plane` accepts
-exactly four fields and skips anything else, and the copies of `gitops_markers.py` reach their
-hosts one role deploy at a time. A widened line would read as *no pending role* in an
+exactly four fields and skips anything else, and `gitops_markers.py` reaches each of its
+readers one role deploy at a time. A widened line would read as *no pending role* in an
 un-redeployed monitor-bridge, and its six-hour page would stop firing. A reader that has never
 heard of the sidecar prints the role tag instead, which is what every surface printed before.
 
@@ -777,7 +777,7 @@ stay).
     `needs-manual-apply` note, the journal line and the Discord alert all quote.
     Printing the NARROWEST tag instead is #2307 and is a bigger change: `manual_plane`
     records a role and no paths, so every reader of the marker would need the paths carried
-    in it, which means a format change across the five copies of `gitops_markers.py`.
+    in it, which means a format change every reader of `gitops_markers.py` must ship.
     Parking was the signal only because nothing else was, and it charged every other
     session: ten park episodes over the seven days to 2026-09-11 spanned 30 ticks, the longest
     about forty minutes, and every landing behind one exits 4 from `deploy.sh` until a hand
@@ -848,7 +848,7 @@ stay).
     them and urgency does. The pod reads
     it off the same `:ro` state mount as `behind_since`, and parses it with
     `gitops_markers.parse_manual_plane` — its own copy of the deployer's module, since it
-    cannot import this tree (*One marker module, copied* below).
+    cannot import this tree (*One marker module, shipped from one source* below).
     The SessionStart banner reads the marker too, through `lib.deployer_park`, and names a
     pending role from the moment it is recorded rather than after six hours (issue #1774): the
     monitor pages, where the banner only tells the sessions that did not land the change.
@@ -1723,7 +1723,8 @@ crash is not evidence the lock was released. monitor-bridge pages once `first_se
 than `GITOPS_CONTENTION_MAX_MIN` (30, the deployer's own longest apply budget), the
 SessionStart banner names the lock past the same threshold (`lib.deployer_park`), and
 `scripts/deploy_tools/gitops_state.py clear-contention` drops the marker by hand. Three readers
-parse it, all through `gitops_markers.parse_contention` (*One marker module, copied*).
+parse it, all through `gitops_markers.parse_contention` (*One marker module, shipped from
+one source*).
 
 **A broad apply takes `all` EXCLUSIVELY, whatever its tags.** `deploy_io.deploy_broad` passes
 `exclusive_all=True`: `initial_setup.yml --tags <role>` names a tag, but what it reconfigures
@@ -1803,9 +1804,9 @@ is decided by what it touches.
   a malformed value into `Config.errors`; `CONFIG.validate()` at the top of `main()` turns it into
   one line naming the key plus a Discord post.
 - **One marker module.** `files/gitops_markers.py` is the source. The `deploy_ui` and
-  `renovate_agent` roles ship it by path, and `scripts/dev/gen_gitops_markers.py` writes monitor-bridge's copy;
-  `ansible/tests/deploy/test_gitops_markers_copies.py` fails on a stale copy. Edit the source,
-  run the generator, and commit the copy in the same PR.
+  `renovate_agent` roles ship it by path, and `scripts/dev/gen_gitops_markers.py` writes
+  monitor-bridge's copy; `ansible/tests/deploy/test_gitops_markers_copies.py` fails on a stale
+  copy. Edit the source, run the generator, and commit the copy in the same PR.
 - **State is one object.** `deploy_state.DeployerState` wraps the marker files and the hold
   writes; a caller names a marker (`state.path("hold")`), never a path. `read()` returns None for
   a missing AND an empty marker, and PROPAGATES any other `OSError` — an unreadable state

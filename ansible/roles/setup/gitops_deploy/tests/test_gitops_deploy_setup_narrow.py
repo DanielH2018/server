@@ -244,3 +244,29 @@ def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
         "gitops_deploy": ["gitops-config"],
         "renovate_notify": ["renovate_notify"],
     }
+
+
+def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
+    gitops_deploy, tick, state_dir
+):
+    """deploy_ui and renovate_agent install the deployer's markers by path (#3306).
+
+    A range touching only that file applies all three roles' blocks, and a failed apply holds
+    each block under its own role, so no apply of the owner alone can clear the hold.
+    """
+    tick.paths = ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"]
+    tick.narrow_setup = {
+        "gitops_deploy": (0, "gitops-deploy-code"),
+        "deploy_ui": (0, "deploy-ui-code"),
+        "renovate_agent": (0, "renovate-agent-code"),
+    }
+    tick.playbook_outcomes = [RuntimeError("boom")]
+    assert gitops_deploy.main(tick.tools) == 0
+    assert _playbook_argv(tick)[-1] == (
+        "deploy-ui-code,gitops-deploy-code,renovate-agent-code"
+    )
+    assert (state_dir / "hold_plane").read_text() == (
+        "ansible/initial_setup.yml deploy_ui:deploy-ui-code,"
+        "gitops_deploy:gitops-deploy-code,renovate_agent:renovate-agent-code"
+    )
+    assert gitops_deploy.STATE.manual_plane is None
