@@ -33,7 +33,7 @@ rule.
 agent's contract says "never a PR by another author", and this is the check; an
 interactive session leaves the variable unset and is unaffected. The refusal names the hand-off
 rather than the `--any-author` override: only the unattended session ever reads it, and the
-operator chose that the superseding PR it opens for a `manual —` bump goes to a person.
+operator chose that a `manual —` bump goes to a person.
 """
 
 import re

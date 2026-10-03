@@ -31,7 +31,6 @@ class OpenPR:
     number: int
     title: str
     url: str = ""
-    branch: str = ""
     # GitHub's `updatedAt` for the PR, as the census read it. Comparing the before-census
     # value with the after-census one is the only signal a comment-only triage leaves on a PR
     # that stays open (#3032). "" when the census could not read it.
@@ -72,8 +71,6 @@ class Delta:
     closing the Renovate PR in favour of a superseding PR that stays open for a person (#2746),
     so a departed PR is split by the state GitHub reports for it: `resolved` merged, `closed`
     was closed without merging, and `unread` is one whose state lookup failed (#2755).
-    `handed_off` is the superseding PRs the run opened, from `handed_off()`; None means that
-    census failed, which must not read as "none opened" (#2769).
 
     `touched` is the subset of `remaining` whose `updatedAt` moved during the run — the only
     census-visible trace of a session that commented on or labelled a PR and left it open
@@ -86,7 +83,6 @@ class Delta:
     opened: tuple[int, ...]
     closed: tuple[int, ...] = ()
     unread: tuple[int, ...] = ()
-    handed_off: tuple[int, ...] | None = ()
     touched: tuple[int, ...] = ()
 
 
@@ -168,7 +164,6 @@ def delta(
     before: list[OpenPR],
     after: list[OpenPR],
     states: Mapping[int, str],
-    handed: tuple[int, ...] | None = (),
 ) -> Delta:
     """What actually moved. This, not the session's summary, is what the digest reports.
 
@@ -185,7 +180,6 @@ def delta(
         opened=tuple(sorted(a - b)),
         closed=tuple(n for n in gone if states.get(n) == "CLOSED"),
         unread=tuple(n for n in gone if states.get(n) not in ("MERGED", "CLOSED")),
-        handed_off=handed,
         touched=_touched(before, after),
     )
 
@@ -211,30 +205,6 @@ def _touched(before: list[OpenPR], after: list[OpenPR]) -> tuple[int, ...]:
     )
 
 
-def handed_off(
-    before: list[OpenPR] | None, after: list[OpenPR] | None, branch: str
-) -> tuple[int, ...] | None:
-    """The superseding PRs this run opened and left for a person, from the own-account census.
-
-    The session's account is also every interactive session's account, and those name their
-    branches `worktree-renovate-<slug>` too, so author alone would list their PRs. The prompt
-    pins a hand-off to `<branch>-<renovate pr>`, and only that name or the run branch itself
-    counts. A PR already open before the run is an earlier hand-off, not this run's. Either
-    census missing returns None, never an empty tuple.
-    """
-    if before is None or after is None:
-        return None
-    known = {p.number for p in before}
-    return tuple(
-        sorted(
-            p.number
-            for p in after
-            if p.number not in known
-            and (p.branch == branch or p.branch.startswith(branch + "-"))
-        )
-    )
-
-
 def run_record(
     ts: int,
     result: str,
@@ -245,20 +215,18 @@ def run_record(
     """One JSON line for `runs.jsonl`, the per-tick record the usage count reads (#2864).
 
     Written on every exit path, skips included, so "how many ticks spent a session" and
-    "how many PRs each one merged, closed, handed off or left open" are both a count over
+    "how many PRs each one merged, closed or left open" are both a count over
     one file. `result` is `skipped`, `blocked`, `ran`, `failed` or `crashed`. The PR fields
     come from the measured delta, never the session's summary. A triage that only comments on
     or labels a PR moves nothing out of the open set, so `touched` — the left-open PRs whose
     `updatedAt` moved during the run — is the only field that records it, and a Renovate
-    rebase mid-session moves `updatedAt` as well. `handed_off` stays null when its census
-    failed.
+    rebase mid-session moves `updatedAt` as well.
     """
     rec: dict = {"ts": ts, "result": result, "reason": reason}
     if moved is not None:
         rec |= {
             "merged": list(moved.resolved),
             "closed": list(moved.closed),
-            "handed_off": None if moved.handed_off is None else list(moved.handed_off),
             "unread": list(moved.unread),
             "left_open": list(moved.remaining),
             "touched": list(moved.touched),
@@ -292,8 +260,7 @@ def render_digest(outcome: Outcome, moved: Delta, host: str, log_path: str) -> s
     elif moved.resolved:
         head = f"✅ renovate-agent resolved {_nums(moved.resolved)} on {host}"
     elif moved.closed or moved.unread:
-        # Nothing merged, so nothing landed. A superseding PR the session opened is listed
-        # below as handed off, from the own-account census rather than the session's summary.
+        # Nothing merged, so nothing landed.
         head = f"⚠️ renovate-agent ran on {host} and merged no Renovate PR"
     else:
         head = f"⚠️ renovate-agent ran on {host} and no Renovate PR changed state"
@@ -305,15 +272,6 @@ def render_digest(outcome: Outcome, moved: Delta, host: str, log_path: str) -> s
         )
     if moved.unread:
         lines.append(f"left the open set, state unreadable: {_nums(moved.unread)}")
-    if moved.handed_off is None:
-        lines.append(
-            "hand-off census unreadable: a superseding PR this run opened may be open "
-            "and unlisted"
-        )
-    elif moved.handed_off:
-        lines.append(
-            "handed off, open for a person to land: " + _nums(moved.handed_off)
-        )
     if moved.remaining:
         lines.append("still open: " + _nums(moved.remaining))
     if moved.touched:

@@ -129,40 +129,6 @@ class TestDelta:
         assert moved.remaining == (1,)
 
 
-def _own_pr() -> al.OpenPR:
-    """The one PR in `_LISTING` authored by the account the agent runs as."""
-    return al.OpenPR(
-        number=50, title="t", branch="b-1", updated_at="2026-09-30T06:10:00Z"
-    )
-
-
-def _own(number: int, branch: str) -> al.OpenPR:
-    return al.OpenPR(number=number, title="Finish bump", branch=branch)
-
-
-class TestHandedOff:
-    """The superseding PR is the session account's, so app/renovate's census misses it."""
-
-    RUN = "worktree-renovate-auto"
-
-    def test_a_pr_opened_on_a_run_branch_is_listed(self) -> None:
-        after = [_own(50, f"{self.RUN}-2744"), _own(51, self.RUN)]
-        assert al.handed_off([], after, self.RUN) == (50, 51)
-
-    def test_a_pr_open_before_the_run_is_not_listed(self) -> None:
-        earlier = [_own(50, f"{self.RUN}-2744")]
-        assert al.handed_off(earlier, earlier, self.RUN) == ()
-
-    def test_an_interactive_sessions_pr_is_not_listed(self) -> None:
-        """Interactive sessions share the account and the `worktree-renovate-` prefix."""
-        after = [_own(60, "worktree-renovate-n8n-2-40-7"), _own(61, f"{self.RUN}x")]
-        assert al.handed_off([], after, self.RUN) == ()
-
-    def test_a_failed_census_is_flagged_not_empty(self) -> None:
-        assert al.handed_off(None, [], self.RUN) is None
-        assert al.handed_off([], None, self.RUN) is None
-
-
 class TestRenderDigest:
     def test_a_run_that_moved_nothing_is_flagged(self) -> None:
         """`is_error: false` means the process ended, not that any PR moved."""
@@ -197,25 +163,6 @@ class TestRenderDigest:
         assert "resolved" not in head
         assert head.startswith("⚠️")
         assert "closed without merging (superseded or dropped): #1" in text
-
-    def test_a_handed_off_pr_is_named_from_the_census(self) -> None:
-        text = al.render_digest(
-            al.parse_run(_result(result="done"), 0, False),
-            al.delta([_pr(1)], [], {1: "CLOSED"}, (50,)),
-            "daniel-box",
-            "/log",
-        )
-        assert "handed off, open for a person to land: #50" in text
-
-    def test_an_unreadable_handoff_census_is_flagged(self) -> None:
-        text = al.render_digest(
-            al.parse_run(_result(), 0, False),
-            al.delta([_pr(1)], [], {1: "CLOSED"}, None),
-            "daniel-box",
-            "/log",
-        )
-        assert "hand-off census unreadable" in text
-        assert "handed off, open" not in text
 
     def test_an_unread_state_is_flagged_not_resolved(self) -> None:
         text = al.render_digest(
@@ -362,33 +309,28 @@ _LISTING = json.dumps(
         {
             "number": 60,
             "title": "r",
-            "headRefName": "renovate/x",
             "updatedAt": "2026-09-30T06:00:00Z",
             "author": {"login": "app/renovate"},
         },
         {
             "number": 50,
             "title": "t",
-            "headRefName": "b-1",
             "updatedAt": "2026-09-30T06:10:00Z",
             "author": {"login": "me"},
         },
         {
             "number": 40,
             "title": "o",
-            "headRefName": "b-2",
             "author": {"login": "someone"},
         },
     ]
 )
 
 
-def _listing_tools(login=(0, "me\n")) -> renovate_agent.AgentTools:
+def _listing_tools() -> renovate_agent.AgentTools:
     """A gh that answers the repository listing, and refuses the search form."""
 
     def run(argv, cwd=None, timeout=120):
-        if argv[:3] == ["gh", "api", "user"]:
-            return login
         assert argv[:3] == ["gh", "pr", "list"]
         assert "--author" not in argv, "--author makes gh read the lagging search index"
         return 0, _LISTING
@@ -405,7 +347,6 @@ class TestOpenPrs:
             al.OpenPR(
                 number=60,
                 title="r",
-                branch="renovate/x",
                 updated_at="2026-09-30T06:00:00Z",
             )
         ]
@@ -414,23 +355,6 @@ class TestOpenPrs:
         tools = renovate_agent.AgentTools(run=lambda argv, **kw: (1, "HTTP 502"))
         with pytest.raises(RuntimeError):
             renovate_agent.open_prs("o/r", tools)
-
-
-class TestOwnPrs:
-    """The hand-off census: the session account's open PRs with their head branches."""
-
-    def test_the_census_reads_this_accounts_branches(self) -> None:
-        prs = renovate_agent.own_prs("o/r", _listing_tools())
-        assert prs == [_own_pr()]
-
-    def test_an_unreadable_login_is_flagged_as_none(self) -> None:
-        tools = _listing_tools(login=(1, "HTTP 401"))
-        assert renovate_agent.own_prs("o/r", tools) is None
-
-    @pytest.mark.parametrize("answer", [(1, "HTTP 502"), (0, "not json")])
-    def test_a_failed_census_is_flagged_as_none(self, answer) -> None:
-        tools = renovate_agent.AgentTools(run=lambda argv, **kw: answer)
-        assert renovate_agent.own_prs("o/r", tools) is None
 
 
 def _records(tmp_path) -> list[dict]:
@@ -447,22 +371,13 @@ class TestRunRecord:
             [_pr(1), _pr(2), _pr(3)],
             [_pr(3)],
             {1: "MERGED", 2: "CLOSED"},
-            handed=(9,),
         )
         outcome = al.parse_run(_result(), 0, False)
         rec = json.loads(al.run_record(100, "ran", "", moved, outcome))
         assert rec["merged"] == [1] and rec["closed"] == [2]
-        assert rec["handed_off"] == [9] and rec["left_open"] == [3]
+        assert rec["left_open"] == [3]
         assert rec["touched"] == []
         assert rec["turns"] == outcome.turns
-
-    def test_a_failed_handoff_census_records_null_not_none_opened_is_flagged(
-        self,
-    ) -> None:
-        moved = al.delta([_pr(1)], [_pr(1)], {}, handed=None)
-        rec = json.loads(al.run_record(100, "ran", "", moved))
-        assert rec["handed_off"] is None
-        assert "cost_usd" not in rec
 
 
 class TestSkipExitCodes:
