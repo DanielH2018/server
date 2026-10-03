@@ -73,7 +73,7 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 _sys.path.insert(0, str(HOST_LIB_FILES))
 
 from deploy_changes import setup_role_tag
-from deploy_locks import TREE_LOCK
+from deploy_locks import TREE_LOCK, take
 from deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
 from gitops_markers import manual_plane_clear_cmd, maximal_apply_warning
 
@@ -83,6 +83,8 @@ from gitops_markers import manual_plane_clear_cmd, maximal_apply_warning
 # most of an hour, so waiting it out would read as a hang. Refusing is the better answer: the
 # clear changes one line, is idempotent, and costs nothing to re-run.
 LOCK_WAIT_S = 5.0
+# Seconds between attempts. A wait this short polls finer than the service locks' 0.5s.
+LOCK_POLL_S = 0.1
 
 
 class LockBusy(Exception):
@@ -125,14 +127,8 @@ def tree_lock(path: str, wait_s: float | None = None):
         raise LockUnavailable(path, exc) from exc
     try:
         deadline = time.monotonic() + (LOCK_WAIT_S if wait_s is None else wait_s)
-        while True:
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError as exc:
-                if time.monotonic() >= deadline:
-                    raise LockBusy(path) from exc
-                time.sleep(0.1)
+        if not take(fd, fcntl.LOCK_EX, deadline, LOCK_POLL_S):
+            raise LockBusy(path)
         try:
             yield
         finally:

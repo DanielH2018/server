@@ -13,7 +13,8 @@ who decides to write one is the caller's business. Callers reach these names qua
 `deploy_state.DeployerState(...)`. `deploy_io` re-exports them for the suite, which reads them
 through the module it has always read.
 
-Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
+Stdlib only: the unit runs under `uv run --no-project`, never from a venv. The `# DECIDED:`
+marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
 """
 
 import json

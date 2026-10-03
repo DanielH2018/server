@@ -21,7 +21,8 @@ Two rules hold this module's shape:
   replaces the field, not this module. `deploy`, `deploy_k8s` and `deploy_broad` are the exception:
   they call `run` qualified and the suite patches `deploy_io.run` to read the argv they build.**
 
-Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
+Stdlib only: the unit runs under `uv run --no-project`, never from a venv. The `# DECIDED:`
+marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
 """
 
 import os
