@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-03 20:40 UTC
-generated_sha: 905220882
+generated_at: 2026-10-03 20:47 UTC
+generated_sha: 74f743cce
 ---
 
 !!! warning "Generated file — do not edit"
@@ -77,11 +77,11 @@ generated_sha: 905220882
     * `ansible/roles/setup/common/CLAUDE.md:23` and `docs/monitor-bridge-checks.md:485`
     * `ansible/roles/setup/common/CLAUDE.md:23` and `prek.toml:368`
     * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `ansible/roles/setup/optimize_pi/CLAUDE.md:88`
-    * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `docs/monitor-bridge-checks.md:1215`
+    * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `docs/monitor-bridge-checks.md:1216`
     * `ansible/roles/setup/gitops_deploy/files/deploy_broad_k8s.py:165` and `scripts/validate/tests/test_validate_shell_templates.py:87`
     * `ansible/roles/setup/initial_setup/tasks/crons.yml:676` and `ansible/roles/setup/initial_setup/tasks/crons.yml:754`
     * `ansible/roles/setup/initial_setup/tasks/network.yml:201` and `ansible/roles/setup/initial_setup/tasks/system-tuning.yml:197`
-    * `ansible/roles/setup/optimize_pi/CLAUDE.md:88` and `docs/monitor-bridge-checks.md:1215`
+    * `ansible/roles/setup/optimize_pi/CLAUDE.md:88` and `docs/monitor-bridge-checks.md:1216`
     * `ansible/tests/_ratchet.py:82` and `ansible/tests/_ratchet.py:393`
     * `ansible/tests/_shell_render.py:11` and `ansible/tests/services/test_alloy_pi_http_surface.py:67`
     * `ansible/tests/repo/test_adr_links.py:1` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:170`
@@ -596,9 +596,9 @@ generated_sha: 905220882
 | ` marker in | `docs/monitor-bridge-checks.md:485` | 2026-09-21 |
 | 12 cycles` marker | `docs/monitor-bridge-checks.md:512` | 2026-09-21 |
 | ` at the fetch in | `docs/monitor-bridge-checks.md:795` | 2026-10-01 |
-| ` marker at that switch in `group_vars/all.yml` records why it stays off — arming it | `docs/monitor-bridge-checks.md:1088` | 2026-09-25 |
-| ` marker in `bridge/config_io.py`) over the window; the message names which reason fired when the | `docs/monitor-bridge-checks.md:1157` | 2026-09-21 |
-| ` marker at the | `docs/monitor-bridge-checks.md:1215` | 2026-10-01 |
+| ` marker at that switch in `group_vars/all.yml` records why it stays off — arming it | `docs/monitor-bridge-checks.md:1089` | 2026-09-25 |
+| ` marker in `bridge/config_io.py`) over the window; the message names which reason fired when the | `docs/monitor-bridge-checks.md:1158` | 2026-09-21 |
+| ` marker at the | `docs/monitor-bridge-checks.md:1216` | 2026-10-01 |
 | ` marker with the byte | `docs/pi-host-tuning-record.md:63` | 2026-09-30 |
 | ` marker carries the | `docs/pi-host-tuning-record.md:237` | 2026-09-30 |
 | ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
