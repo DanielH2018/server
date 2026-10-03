@@ -382,14 +382,16 @@ def cmd_clean_one(
     unlocker=None,
     locker=None,
     brancher=None,
+    clean=None,
 ) -> int:
     """Hidden: runs ON the host holding the worktree. `clean` calls it over Tools.run.
 
-    `list_worktrees`, `ask`, `dirty`, `remover`, `unlocker`, `locker` and `brancher` are
-    seams — parameters rather than patched module attributes, so a test can drive this
-    without pinning a first-party module name. Every default reaches the real thing, and all
-    six of `clean_one`'s own seams are forwarded so a REMOVABLE-with-lock case run through this
-    entry point stays hermetic too.
+    `list_worktrees`, `ask`, `dirty`, `remover`, `unlocker`, `locker`, `brancher` and
+    `clean` are seams — parameters rather than patched module attributes, so a test can
+    drive this without pinning a first-party module name. Every default reaches the real
+    thing, and all six of `clean_one`'s own seams are forwarded so a REMOVABLE-with-lock case
+    run through this entry point stays hermetic too. `clean` replaces `clean_one` itself, so
+    a test can read the default `ask` this function builds.
 
     An absent worktree reads `removed`, not `kept` — it is the goal state, not a failure. This
     is not how `clean` handles a gone tree: the copy of this script that a remote leg runs
@@ -399,7 +401,7 @@ def cmd_clean_one(
     """
     import functools
 
-    from fanout_lib.clean import clean_one
+    from fanout_lib.clean import clean_one as default_clean
     from fanout_lib.clean import delete_branch as default_brancher
     from fanout_lib.clean import lock as default_locker
     from fanout_lib.clean import unlock as default_unlocker
@@ -427,7 +429,7 @@ def cmd_clean_one(
     if tree is None:
         print(f"removed: {args.worktree} (already gone)")
         return 0
-    state, why = clean_one(
+    state, why = (clean if clean is not None else default_clean)(
         checkout,
         tree,
         ask=ask if ask is not None else functools.partial(is_merged, base=target.base),

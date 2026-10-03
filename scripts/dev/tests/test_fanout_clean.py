@@ -207,12 +207,11 @@ def test_cmd_clean_one_reaches_clean_one_for_a_registered_tree(capsys):
     assert "kept:" in out and "not merged" in out
 
 
-def test_cmd_clean_one_default_ask_merges_into_the_targets_base(monkeypatch, capsys):
+def test_cmd_clean_one_default_ask_merges_into_the_targets_base():
     """Every other test here injects `ask`, so none built the default one. A worktree path
     once rebound the name holding the Target, and every real `clean` died on
     `'PosixPath' object has no attribute 'base'` with this file green.
     """
-    import fanout_lib.clean
     from fanout_lib.target import resolve
 
     seen = {}
@@ -221,9 +220,13 @@ def test_cmd_clean_one_default_ask_merges_into_the_targets_base(monkeypatch, cap
         seen["base"] = ask.keywords["base"]
         return "kept", "(fake)"
 
-    monkeypatch.setattr(fanout_lib.clean, "clean_one", fake_clean_one)
     args = SimpleNamespace(worktree=B.worktree, repo="DanielH2018/server")
-    code = cmd_clean_one(args, Tools(), list_worktrees=lambda: _porcelain(B.worktree))
+    code = cmd_clean_one(
+        args,
+        Tools(),
+        list_worktrees=lambda: _porcelain(B.worktree),
+        clean=fake_clean_one,
+    )
     assert code == 0
     assert seen["base"] == resolve("DanielH2018/server").base
 
