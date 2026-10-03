@@ -481,3 +481,11 @@ def test_setup_file_hosts_reads_a_role_markdown_as_shipped_nowhere(
         if re.search(r"\.md\"", json.dumps(yaml_fast.safe_load(t.read_text())))
     ]
     assert shipping_md == [], "a setup task now names a .md file; drop the docs rule"
+
+
+def test_the_host_sets_read_from_hosts_ini_name_the_real_hosts():
+    """Non-vacuity: both sets are filtered out of hosts.ini, and every other test compares
+    against `_HOSTS` itself, so a renamed `[homeservers]` group would empty them silently."""
+    assert {"daniel-box", "daniel-server", "daniel-pi"} <= set(land_reach._HOSTS)
+    assert {"daniel-box", "daniel-server"} <= land_reach._LOCAL_CONNECTION_HOSTS
+    assert "daniel-pi" not in land_reach._LOCAL_CONNECTION_HOSTS
