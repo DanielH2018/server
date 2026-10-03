@@ -85,15 +85,29 @@ def _volume(name, group, state="attached"):
     }
 
 
-def _backup(name, vol, created, job, state="Completed"):
+def _backup(name, vol, created, job, state="Completed", pvc=None):
+    labels = {"RecurringJob": job} if job else {}
+    if pvc:
+        # Longhorn writes the PVC into this label as compact JSON, not as a struct.
+        labels["KubernetesStatus"] = json.dumps(
+            {"pvcName": pvc, "namespace": "homelab"}, separators=(",", ":")
+        )
     return {
         "metadata": {"name": name},
         "status": {
             "volumeName": vol,
             "snapshotCreatedAt": created,
-            "labels": {"RecurringJob": job} if job else {},
+            "labels": labels,
             "state": state,
         },
+    }
+
+
+def _pvc(name, volume):
+    """A PVC as the migrated-chain mode reads it: `get persistentvolumeclaims -o json`."""
+    return {
+        "metadata": {"name": name, "namespace": "homelab"},
+        "spec": {"volumeName": volume},
     }
 
 

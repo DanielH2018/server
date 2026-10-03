@@ -1,32 +1,27 @@
 #!/usr/bin/env python3
-"""Guards on prune_backups.yml, the playbook that deletes backups nothing else will prune.
+"""Guards on prune_backups.yml, the playbook that deletes stranded B2 objects.
 
-Every mode deletes something irreversible, and each has its own safety floor. The floors are the
-reason the playbook exists, and each is a one-line edit away from being lost, so each has a test
-here that renders the mode's own Jinja against fixture backups and watches it refuse.
+It deletes something irreversible, so its floor gets a test here that renders the play's own
+Jinja and watches it refuse.
 
-  DRY RUN BY DEFAULT, EVERY MODE. Each delete is gated on `prune_apply`, which defaults to false.
-
-  migrated-chain: THE REPLACEMENT MUST ALREADY HAVE A BACKUP. A migrated volume starts with none:
-  its old chain belongs to a Longhorn volume that no longer exists. Deleting the chain before the
-  replacement has been backed up leaves the service with no recovery point at all. The selection
-  takes only orphans, and only this claim's: Longhorn records the PVC inside the KubernetesStatus
-  label, a JSON string, and a bare substring match would let `n8n-data` also select
-  `n8n-data-something`.
-
-  seeds: THE ROTATION FLOOR. A seed goes only when its volume already holds `prune_seed_floor`
-  Completed backups carrying a RecurringJob label, the state retain keeps. The selection needs
-  both the `seed-` name and the absent RecurringJob label; either alone matches something that
-  is not a seed.
+  DRY RUN BY DEFAULT. The delete is gated on `prune_apply`, which defaults to false.
 
   b2-drain: THE LIVE-VOLUME LIST. scripts/backup/b2_drain.py refuses a live volume and refuses
   everything on an empty list (its own tests cover that). The play's part is to always hand the
   script that list, and to refuse before staging an empty one.
 
+  WHAT IS NO LONGER HERE. The migrated-chain and seeds modes deleted Longhorn Backup CRs by
+  selecting in kubectl and Jinja; #3279 made them selectors in
+  scripts/backup/longhorn_reap_orphan_backups.py, where each floor is provable against a
+  fixture. Their tests moved with them, to `scripts/backup/tests/test_longhorn_reap_logic.py`
+  and `scripts/backup/tests/test_longhorn_reap_backups_cli.py`. Two things stay here: the
+  redirect, because an operator typing the old command must get the new command rather than a
+  missing task file, and the census below that keeps Backup-CR deletion out of this playbook.
+
 Run: uv run pytest ansible/tests/longhorn/test_prune_backups.py
 """
 
-import json
+import re
 
 from _helpers import ANSIBLE
 from _helpers import load_yaml
@@ -34,7 +29,14 @@ from _helpers import render_expr
 
 
 PLAY = ANSIBLE / "prune_backups.yml"
-MODES = frozenset({"migrated-chain", "seeds", "b2-drain"})
+MODES = frozenset({"b2-drain"})
+RETIRED_MODES = ("migrated-chain", "seeds")
+REAPER = "longhorn_reap_orphan_backups.py"
+# The Backup CR as kubectl takes it, anchored on the separator that follows the resource name —
+# a `/` before the object name, or the `,` or whitespace that ends an argv element. A bare `in`
+# over the dotted name reads to CodeQL as an unanchored hostname check
+# (ansible/tests/repo/test_no_host_shaped_membership_literal.py).
+BACKUP_CR = re.compile(r"backups\.longhorn\.io[/,\s\"']")
 
 
 def _play() -> dict:
@@ -62,21 +64,6 @@ def _test(expression: str, **context):
     return render_expr("{{ " + expression + " }}", **context)
 
 
-def _backup(name, volume, *, state="Completed", job=None, pvc=None) -> dict:
-    labels = {}
-    if job:
-        labels["RecurringJob"] = job
-    if pvc:
-        # Longhorn writes this label as compact JSON, with no space after the colon.
-        labels["KubernetesStatus"] = json.dumps(
-            {"pvcName": pvc, "namespace": "homelab"}, separators=(",", ":")
-        )
-    return {
-        "metadata": {"name": name},
-        "status": {"volumeName": volume, "state": state, "labels": labels},
-    }
-
-
 # --- shared -----------------------------------------------------------------------------------
 
 
@@ -90,11 +77,53 @@ def test_the_mode_assert_names_every_mode_and_each_has_a_task_file() -> None:
     guard = next(t for t in play["pre_tasks"] if "ansible.builtin.assert" in t)
     that = guard["ansible.builtin.assert"]["that"]
     modes = play["vars"]["prune_modes"]
-    assert _test(that, prune_mode="seeds", prune_modes=modes) is True
+    assert _test(that, prune_mode="b2-drain", prune_modes=modes) is True
     assert _test(that, prune_mode="drop-everything", prune_modes=modes) is False
     assert _test(that, prune_modes=modes) is False
     for mode in MODES:
         assert mode in guard["ansible.builtin.assert"]["fail_msg"]
+
+
+def test_a_retired_mode_is_redirected_to_the_reaper_not_left_to_fail() -> None:
+    """`-e prune_mode=seeds` is in an operator's shell history; the refusal owes them the move.
+
+    The two modes became `--mode` selectors on the reaper in #3279. Without the names and the
+    script in this message, the old command fails on a missing task file and says nothing about
+    where the mode went.
+    """
+    guard = next(t for t in _play()["pre_tasks"] if "ansible.builtin.assert" in t)
+    fail_msg = guard["ansible.builtin.assert"]["fail_msg"]
+    for mode in RETIRED_MODES:
+        assert mode in fail_msg, f"the refusal does not say where {mode} went"
+    assert REAPER in fail_msg
+    for mode in RETIRED_MODES:
+        assert not _mode_file(mode).exists(), (
+            f"{mode}.yml is back; its selection belongs in longhorn_reap_logic.py"
+        )
+
+
+def test_this_playbook_deletes_no_longhorn_backup_crs() -> None:
+    """Every Backup CR deletion selects in longhorn_reap_logic.py, where the floors are tested.
+
+    The retired modes deleted `backups.longhorn.io/<name>` from a Jinja-built list. A new mode
+    reintroducing that here would reintroduce the untested selection with it, which is the whole
+    point of #3279.
+    """
+    texts = {
+        path.name: path.read_text()
+        for path in sorted((ANSIBLE / "prune_backups" / "tasks").glob("*.yml"))
+    }
+    assert set(texts) == {f"{mode}.yml" for mode in MODES}, (
+        "the task-file census no longer matches prune_modes, so it reads the wrong files"
+    )
+    # Control: the retired modes' own delete argv must match, or this census passes on nothing.
+    assert BACKUP_CR.search(
+        'argv: [k3s, kubectl, -n, longhorn-system, delete, "backups.longhorn.io/{{ item }}"]'
+    )
+    offenders = [name for name, text in texts.items() if BACKUP_CR.search(text)]
+    assert offenders == [], (
+        f"{offenders} delete or select Backup CRs; that path is {REAPER} --mode"
+    )
 
 
 def test_every_delete_is_gated_on_apply_and_apply_defaults_off() -> None:
@@ -110,172 +139,17 @@ def test_every_delete_is_gated_on_apply_and_apply_defaults_off() -> None:
 
 
 def test_the_cost_of_deleting_through_longhorn_is_written_down() -> None:
-    """The list reads as cheap because it is short; the cost is per block, not per object."""
+    """Why this playbook exists beside the reaper: the B2 API path is the cheap one.
+
+    A Longhorn deletion's cost is per stored block, so a short list of backups is not a cheap
+    one, and that is the whole reason an operator reaches for a B2-API drain instead. It has to
+    survive someone reading only the header.
+    """
     text = PLAY.read_text()
     assert "Class C" in text and "1.28" in text, (
-        "the per-block deletion cost is the reason the migrated-chain mode exists instead of the "
-        "reaper, and it has to survive someone reading only the header"
+        "the per-block deletion cost is the reason this B2-API path exists beside the reaper, "
+        "and it has to survive someone reading only the header"
     )
-
-
-# --- migrated-chain ---------------------------------------------------------------------------
-
-_CURRENT = "pvc-new"
-_LIVE = [_CURRENT, "pvc-other"]
-
-
-def _chain_facts(backups: list[dict], claim: str = "sonarr-config") -> dict:
-    fact = _task("migrated-chain", "Keep only the ones belonging to this claim")[
-        "ansible.builtin.set_fact"
-    ]
-    orphans_expr = _task(
-        "migrated-chain", "Narrow to Completed backups whose volume no longer exists"
-    )["ansible.builtin.set_fact"]["prune_chain_orphans"]
-    # custom-columns pads names to the column width; the fixture does too.
-    context = {
-        "prune_claim": claim,
-        "prune_chain_backups": {"stdout": json.dumps({"items": backups})},
-        "prune_chain_live_volumes": {"stdout_lines": [f"{v}   " for v in _LIVE]},
-        "prune_chain_current_pv": {"stdout": _CURRENT},
-    }
-    context["prune_chain_orphans"] = render_expr(orphans_expr, **context)
-    return {
-        "context": context,
-        "stranded": render_expr(fact["prune_chain_stranded"], **context),
-        "current": render_expr(fact["prune_chain_current_backups"], **context),
-    }
-
-
-def _chain_floor_passes(current_backups: list[str]) -> bool:
-    that = _task(
-        "migrated-chain",
-        "Refuse to drop the old chain until the replacement has one of its own",
-    )["ansible.builtin.assert"]["that"]
-    return _test(that, prune_chain_current_backups=current_backups)
-
-
-def test_migrated_chain_floor_refuses_a_replacement_with_no_completed_backup() -> None:
-    old_chain = [
-        _backup(f"old-{i}", "pvc-gone", job="weekly-backup-d6", pvc="sonarr-config")
-        for i in range(2)
-    ]
-    facts = _chain_facts(
-        [*old_chain, _backup("new-err", _CURRENT, state="Error", pvc="sonarr-config")]
-    )
-    assert facts["stranded"] == ["old-0", "old-1"]
-    assert _chain_floor_passes(facts["current"]) is False
-
-
-def test_migrated_chain_floor_allows_a_replacement_with_a_completed_backup() -> None:
-    old_chain = [_backup("old-0", "pvc-gone", pvc="sonarr-config")]
-    facts = _chain_facts([*old_chain, _backup("new-ok", _CURRENT, pvc="sonarr-config")])
-    assert facts["current"] == ["new-ok"]
-    assert _chain_floor_passes(facts["current"]) is True
-
-
-def test_migrated_chain_floor_is_checked_before_the_delete() -> None:
-    names = _names("migrated-chain")
-    assert names.index(
-        "Refuse to drop the old chain until the replacement has one of its own"
-    ) < names.index("Delete the stranded backups")
-
-
-def test_migrated_chain_takes_only_this_claims_completed_orphans() -> None:
-    facts = _chain_facts(
-        [
-            _backup("mine", "pvc-gone", pvc="n8n-data"),
-            _backup("longer-name", "pvc-gone-2", pvc="n8n-data-something"),
-            _backup("live-chain", "pvc-other", pvc="n8n-data"),
-            _backup("errored", "pvc-gone", state="Error", pvc="n8n-data"),
-        ],
-        claim="n8n-data",
-    )
-    assert facts["stranded"] == ["mine"]
-
-
-def test_migrated_chain_refuses_a_volume_list_without_the_claims_own_volume() -> None:
-    """An empty or malformed list makes every backup an orphan; the guard must catch it first."""
-    task = _task(
-        "migrated-chain", "Refuse to classify orphans against an unusable volume list"
-    )
-    that = task["ansible.builtin.assert"]["that"]
-    pv = {"stdout": _CURRENT}
-    assert (
-        _test(
-            that,
-            prune_chain_current_pv=pv,
-            prune_chain_live_volumes={"stdout_lines": []},
-        )
-        is False
-    )
-    assert (
-        _test(
-            that,
-            prune_chain_current_pv=pv,
-            prune_chain_live_volumes={"stdout_lines": [f"{_CURRENT}  "]},
-        )
-        is True
-    )
-    names = _names("migrated-chain")
-    assert names.index(task["name"]) < names.index(
-        "Narrow to Completed backups whose volume no longer exists"
-    )
-
-
-# --- seeds ------------------------------------------------------------------------------------
-
-
-def _seed_is_superseded(completed: list[dict], seed: dict, floor=2) -> bool:
-    when = _task("seeds", "Split the seeds into superseded and still-covering")["when"]
-    return _test(
-        when, prune_seed_completed=completed, item=seed, prune_seed_floor=floor
-    )
-
-
-def test_seeds_floor_refuses_a_volume_below_the_rotation_floor() -> None:
-    seed = _backup("seed-pvc-a", "pvc-a", pvc="valheim-config")
-    one_rotation = [seed, _backup("backup-1", "pvc-a", job="weekly-backup-d2")]
-    assert _seed_is_superseded(one_rotation, seed) is False
-
-
-def test_seeds_floor_allows_a_volume_at_the_rotation_floor() -> None:
-    seed = _backup("seed-pvc-a", "pvc-a", pvc="valheim-config")
-    rotation = [
-        _backup(f"backup-{i}", "pvc-a", job="weekly-backup-d2") for i in range(2)
-    ]
-    assert _seed_is_superseded([seed, *rotation], seed) is True
-    # An `-e prune_seed_floor=3` arrives as a string; the comparison must still be numeric.
-    assert _seed_is_superseded([seed, *rotation], seed, floor="3") is False
-
-
-def test_seeds_floor_defaults_to_the_shard_retain_and_precedes_the_delete() -> None:
-    assert _play()["vars"]["prune_seed_floor"] == 2
-    names = _names("seeds")
-    assert names.index(
-        "Split the seeds into superseded and still-covering"
-    ) < names.index("Delete the superseded seeds")
-    assert (
-        "prune_seed_superseded" in _task("seeds", "Delete the superseded seeds")["loop"]
-    )
-
-
-def test_seeds_selection_requires_both_seed_markers_and_a_live_volume() -> None:
-    fact = _task("seeds", "Narrow to seeds on volumes that still exist")[
-        "ansible.builtin.set_fact"
-    ]["prune_seed_candidates"]
-    completed = [
-        _backup("seed-pvc-a", "pvc-a"),
-        _backup("seed-labelled", "pvc-a", job="weekly-backup-d2"),
-        # The live store's wg-easy backup-7e481e73 has this shape: no job label, not a seed.
-        _backup("backup-unlabelled", "pvc-a"),
-        _backup("seed-pvc-gone", "pvc-gone"),
-    ]
-    got = render_expr(
-        fact,
-        prune_seed_completed=completed,
-        prune_seed_live_volumes={"stdout_lines": ["pvc-a   "]},
-    )
-    assert [b["metadata"]["name"] for b in got] == ["seed-pvc-a"]
 
 
 # --- b2-drain ---------------------------------------------------------------------------------
