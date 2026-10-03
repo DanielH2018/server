@@ -367,7 +367,7 @@ def test_classify_backups_is_clean_when_an_empty_volume_list_has_no_backups_to_l
 
 
 def test_a_stray_with_an_empty_snapshotcreatedat_is_kept_not_reaped():
-    # `_newest_first` sorts `created` as a raw string; "" sorts as the OLDEST value in a
+    # `newest_first` sorts `created` as a raw string; "" sorts as the OLDEST value in a
     # descending sort, so a stray with an empty timestamp would lose the FLOOR 2 newest-stray
     # slot to a real-timestamped sibling and fall through to `.candidates` on the strength of an
     # unknown age. Parity with bash's `sort -k3,3r`. classify_backups keeps it outright.

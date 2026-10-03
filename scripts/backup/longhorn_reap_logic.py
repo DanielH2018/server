@@ -275,7 +275,7 @@ def parse_rfc3339_epoch(stamp: str) -> float | None:
     return None if epoch == 0 else epoch
 
 
-def _newest_first(
+def newest_first(
     records: list[dict], vol_key: str, created_key: str, name_key: str = "name"
 ) -> list[dict]:
     """Sort by volume ascending, then creation time descending, then name ascending.
@@ -329,7 +329,7 @@ class BackupClassification:
     orphaned: list[tuple[str, str, str, str]] = field(default_factory=list)
 
 
-def _backup_fields(b: dict) -> tuple[str, str, str, str, str]:
+def backup_fields(b: dict) -> tuple[str, str, str, str, str]:
     name = (b.get("metadata") or {}).get("name", "")
     status = b.get("status") or {}
     vol = status.get("volumeName", "")
@@ -360,7 +360,7 @@ def classify_backups(
         rule 2, checked here rather than in the entry point because the entry point reads the
         backup list only after its own `abort_reason` call.
     """
-    valid = [f for f in (_backup_fields(b) for b in backups) if f[0] and f[1]]
+    valid = [f for f in (backup_fields(b) for b in backups) if f[0] and f[1]]
     completed = [f for f in valid if f[4] == "Completed"]
     labelled = [f for f in completed if f[3]]
 
@@ -382,7 +382,7 @@ def classify_backups(
         {"name": n, "vol": v, "created": c, "job": j, "state": s}
         for n, v, c, j, s in labelled
     ]
-    for b in _newest_first(records, "vol", "created"):
+    for b in newest_first(records, "vol", "created"):
         name, vol, created, job = b["name"], b["vol"], b["created"], b["job"]
 
         if vol not in existing_volumes:
@@ -397,7 +397,7 @@ def classify_backups(
             continue
 
         if not created:
-            # `_newest_first` sorts `created` as a raw string, and "" sorts as the OLDEST value
+            # `newest_first` sorts `created` as a raw string, and "" sorts as the OLDEST value
             # in a descending sort -- an empty `status.snapshotCreatedAt` therefore sorts LAST
             # within its volume's group and can never win the FLOOR 2 newest-stray slot above,
             # leaving it to fall through to `.candidates` and be deleted on the strength of an
@@ -555,7 +555,7 @@ def classify_snapshots(
         for n, v, c, j, r in (_snapshot_fields(s) for s in snapshots)
         if n and v
     ]
-    records = _newest_first(raw_records, "vol", "created")
+    records = newest_first(raw_records, "vol", "created")
 
     result = SnapshotClassification()
     newest_seen: set[str] = set()
