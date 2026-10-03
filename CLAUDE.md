@@ -50,7 +50,7 @@ review — routes through the skill listing rather than this table.
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. Every setup role whose cron or timer changes state carries one, and every setup role has a `CLAUDE.md` (`ansible/tests/repo/test_role_claude_md.py`) — `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` derives the cron-installing set from `tasks/` and names the heartbeat-only exemptions |
-| Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `docs/reference/scripts.md`) — files a GitHub Issue labelled `claude`, deduped by title/file. `--repo OWNER/NAME` files into another repo's register, such as the dotfiles repo. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
+| Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `findings.py open --help`) — files a GitHub Issue labelled `claude`, deduped by title/file. `--repo OWNER/NAME` files into another repo's register, such as the dotfiles repo. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
 
 ## Adding a New Service
 
@@ -211,7 +211,7 @@ The rules for promoting a review learning into memory live in the `memory-consol
   the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
   evidence at a cited `file:line` and name the marker you are contradicting.
 - **A finding you will not fix this session is filed, not remembered.** Run `findings.py open`
-  before the session ends (flags: `docs/reference/scripts.md`; the `homelab-review` skill covers
+  before the session ends (flags: `findings.py <cmd> --help`; the `homelab-review` skill covers
   the review-specific ones) — for a review finding, a remediation the fix-skeptic refused, or an
   improvement you noticed while doing something else. List the issue numbers in the end-of-job
   report. A memory file, `PLANS.md`, or a "3 pending" line in the session notes has no status

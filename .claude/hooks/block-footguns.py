@@ -180,7 +180,7 @@ def issue_create_by_hand_problem(stage: list[str]) -> str | None:
         "trailer and the title/file dedup the register keys on, so `findings.py list`/`next` "
         "never see it and a later session files the same finding again. File it with "
         f"`uv run python scripts/dev/findings.py open{repo_arg} --title '<title>' ...` "
-        "instead (flags: docs/reference/scripts.md)."
+        "instead (flags: `findings.py open --help`)."
     )
 
 
