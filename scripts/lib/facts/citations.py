@@ -83,6 +83,25 @@ def parse_citations(text: str) -> tuple[list[Citation], list[Rejected]]:
     return cites, rejects
 
 
+# A test node id in prose, the one citation shape the operator docs and ``CLAUDE.md`` share.
+# Looser than the ``test`` form above on purpose, because it serves a different reader: a
+# runtime module cites its sibling test from a docstring or a comment, with no backticks and
+# by bare filename, and the caller resolves that filename relative to the citing file. The
+# path half must end in ``.py``, which keeps ``host:port`` and ``key::value`` prose out. The
+# test half must start with ``test_``, so a fixture cited by node id (``conftest.py::seq``)
+# is not a claim that a test exists.
+_PROSE_NODE = re.compile(r"([\w.][\w./-]*\.py)::(test_\w+)")
+
+
+def node_citations(text: str) -> list[tuple[str, str]]:
+    """Every ``(path, test_name)`` node id cited in ``text``, fenced or not, in order.
+
+    Unlike ``parse_citations`` this reads inside fences: a fenced example of the ``test``
+    form still names a real test, and renaming that test should fail the doc guard.
+    """
+    return _PROSE_NODE.findall(text)
+
+
 @dataclass(frozen=True)
 class Section:
     """A logical unit of documentation: a heading and the text up to the next heading."""
