@@ -38,11 +38,10 @@ Those fall through to `None` and are reported as `unresolvable`, not silently pa
 `test_no_import_bootstrap_is_unresolvable` below, which currently expects zero.
 
 Why `lib/tests/test_entry_points_answer_help.py` does not replace this guard: that test runs
-every entry point with `scripts/` on `PYTHONPATH`, so every import that resolves under
-`scripts/` succeeds whether or not the module carries its bootstrap. Deleting the insert
-from `docs/reference/scripts.py` on 2026-10-03 (#3284) left the `--help` test green and
-failed only this guard, while `uv run python scripts/docs/reference/scripts.py --help`
-raised `ModuleNotFoundError: No module named 'lib'`.
+every entry point with `scripts/` off `PYTHONPATH` (#3296), so it fails on a missing bootstrap
+for any import that executes before `--help` answers. It cannot see an import that runs only
+after that point, such as one deferred inside a function, or one in a module no entry point
+imports on its way to `--help`. This guard reads those statically.
 
 Scope: every `scripts/**/*.py` that something other than pytest can run. A module pytest alone
 invokes -- `test_*.py`, `conftest.py`, and any module under a `tests/` directory, fixture modules
