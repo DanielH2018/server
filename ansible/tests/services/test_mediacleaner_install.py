@@ -440,10 +440,13 @@ def test_the_bump_is_never_automerged():
         f"the {DEP} packageRule no longer sets automerge: false"
     )
 
+    # Only a later rule that sets automerge or groupName can override this rule's. A k8s-path rule
+    # setting neither (the pinDigests rule, #3281, which must sit last) is no threat to it.
     k8s_plane = [
         i
         for i, r in enumerate(rules)
-        if any(p.startswith("ansible/roles/k8s/") for p in r.get("matchFileNames", []))
+        if ("automerge" in r or "groupName" in r)
+        and any(p.startswith("ansible/roles/k8s/") for p in r.get("matchFileNames", []))
     ]
     assert k8s_plane, (
         "no packageRule scopes ansible/roles/k8s/** any more — this guard's premise moved, "

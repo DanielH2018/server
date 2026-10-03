@@ -463,6 +463,10 @@ def test_every_k8s_image_file_gets_pin_digests_from_a_package_rule(
     )
     rule = _pin_digest_rule_for(files[0])
     assert rule is not None
+    assert rule is _PACKAGE_RULES[-1], (
+        "the pinDigests rule must be the LAST packageRule: placed earlier, a 2026-10-03 dry run "
+        "put every k8s image update back on one `k8s-image-depname` branch"
+    )
     assert rule["groupSlug"] == "{{{groupName}}}", (
         "the pinDigests rule must slug each pin by its own group name, or Renovate's built-in "
         "pinDigest config puts every service's pin on one branch"
