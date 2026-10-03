@@ -293,6 +293,26 @@ def test_neither_cron_tails_the_whole_log_unfiltered():
         )
 
 
+def test_secret_rotate_keeps_its_plain_tail_only_while_it_skips_hooks():
+    """secret-rotate's `say_failure` tails the whole log, and that is correct only conditionally.
+
+    Its one caller reports a `git commit --no-verify`, so no pre-commit hook runs and the
+    filter above would never match (#3358). The plain tail is right while that flag stays.
+    Without it, a hook rejection would end `...Passed` here exactly as it did in the other two.
+    """
+    text = rendered_shell_text("setup", "initial_setup", "secret-rotate.sh.j2")
+    assert re.search(r"^say_failure\(\) \{ alert \"\$1: \$\(tr", text, re.M), (
+        "secret-rotate.sh.j2's say_failure changed shape; if it now filters for prek tokens, "
+        "retire this test and add the script to the loop above"
+    )
+    # `-m` anchors this to the command: the DECIDED comment above say_failure names the bare
+    # flag too, and would keep a looser match green after the flag left the command.
+    assert "commit --no-verify -m" in text, (
+        "secret-rotate.sh.j2 commits through the pre-commit hooks now; its say_failure must take "
+        "eval-run.sh.j2's filtered body, or a hook rejection alerts with a tail of `Passed` lines"
+    )
+
+
 def test_neither_cron_reads_the_exit_code_through_a_negation():
     """`if ! git commit` makes `$?` the status of the negation, which is always 0.
 
