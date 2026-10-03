@@ -43,6 +43,16 @@ for any import that executes before `--help` answers. It cannot see an import th
 after that point, such as one deferred inside a function, or one in a module no entry point
 imports on its way to `--help`. This guard reads those statically.
 
+Why this guard stays whole rather than narrowing to what the `--help` test cannot reach (#3310,
+measured 2026-10-03). The tree holds 559 cross-directory imports in 174 modules. 216 are
+module-level imports in an entry point, which the `--help` test also exercises; 46 are deferred
+inside a function; 297 are module-level imports in a library module. Narrowing would skip only
+the first group, and it removes no code. The evaluator (`eval_path_expr`, `_resolve_name`,
+`_insert_target`) judges the insert, not whether the import is eager. Guard 3 imports it too.
+A narrowed scope would instead add a reachability pass to decide which library modules an entry
+point loads before `--help`. That pass needs submodule resolution (`from land_lib import ci`),
+shell-shim entry points and the classifier, all to save a guard that runs in about 2.4s.
+
 Scope: every `scripts/**/*.py` that something other than pytest can run. A module pytest alone
 invokes -- `test_*.py`, `conftest.py`, and any module under a `tests/` directory, fixture modules
 included -- is Guard 3's (`test_test_module_bootstraps_present.py`), which REFUSES an insert
