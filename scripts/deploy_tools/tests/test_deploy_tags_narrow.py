@@ -343,7 +343,8 @@ def test_a_doc_under_a_play_prefix_templates_dir_is_prose_too(tree: Tree):
     """A `.md` under `templates/` reads as prose as well.
 
     A task CAN render a `.md` onto a host, but none does — the
-    invariant is `ansible/tests/deploy/test_no_role_ships_a_markdown_file.py`, which goes red
+    invariant is the `no-role-ships-a-markdown-file` row of
+    `ansible/tests/repo/test_census_rows_roles.py`, which goes red
     the day a task starts shipping one, and whoever trips it restores a carve-out rather than
     discovering the skip from a service that stayed stale.
     """

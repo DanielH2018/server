@@ -49,7 +49,7 @@ ALLOWED: dict[str, set[str] | None] = {
     # so an import here would have to be satisfiable in a monitor-bridge pod.
     "gitops_markers": set(),
     # The JSON-lines markers (the owed-work ledger and the tick receipt). Reads
-    # `gitops_markers` for the legacy `k8s_unapplied` line format and nothing else.
+    # `gitops_markers` for the `K8sDeferredEntry` tuple and nothing else.
     "gitops_ledger": {"gitops_markers"},
     # The k8s release records, read to discharge a `k8s_unapplied` line. Stdlib only, for the
     # reason `gitops_markers` is: `deploy_toolbox` imports it for the `release_commit`

@@ -2,9 +2,11 @@
 
 These rows replaced `test_glob_census_non_vacuity.py` and
 `test_role_tree_walks_use_role_dirs.py` (#3407). #3384 proposed retiring both once every census
-they police is a row. That precondition does not hold: most of the 45 glob users in scope and
-the 22 `role_dirs` callers are still files of their own (#3430). So the checks stayed and only
-their files went.
+they police is a row. That precondition does not hold, and #3430 measured why it will not.
+After #3430 folded the textual censuses it named, except three whose docstrings say why, the
+non-vacuity row still finds 40 glob-using test files, and only two of them are row files. 23 of
+the 40 mention a `tmp_path` fixture, which no `git ls-files` selector can stand in for. The 22 `role_dirs` callers are
+mostly render-based guards, which are not textual censuses. So the checks stay as rows.
 
 Run: uv run pytest ansible/tests/repo/test_census_rows_suite.py
 """

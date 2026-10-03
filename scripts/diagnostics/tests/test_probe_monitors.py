@@ -37,9 +37,11 @@ def test_parse_declared_monitors_reads_names_types_and_gating():
     }
     assert declared["k3s Grafana"]["type"] == "http"
     assert declared["Off-box etcd Snapshot"]["gated"] is True
-    # The variable is captured, not just the fact of being gated — that name is what lets the
+    # The condition is captured, not just the fact of being gated — that is what lets the
     # caller resolve the secret instead of assuming it is unset.
-    assert declared["Off-box etcd Snapshot"]["gate"] == "etcd_snapshot_push_token"
+    assert declared["Off-box etcd Snapshot"]["gate"] == (
+        "etcd_snapshot_push_token | default('')",
+    )
 
 
 def _series(name, status="1"):
@@ -189,11 +191,14 @@ def test_kuma_drift_skips_a_monitor_whose_gate_is_genuinely_unset():
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
     text, code = monitors.format_kuma_drift(
-        declared, live, 86400, gate_states={"etcd_snapshot_push_token": False}
+        declared,
+        live,
+        86400,
+        gate_states={"etcd_snapshot_push_token | default('')": False},
     )
     assert code == 0
     assert "Off-box etcd Snapshot" in text
-    assert "genuinely unset" in text
+    assert "gated off" in text
 
 
 def test_kuma_drift_reports_drift_when_the_gate_is_set_but_the_monitor_is_absent():
@@ -208,11 +213,14 @@ def test_kuma_drift_reports_drift_when_the_gate_is_set_but_the_monitor_is_absent
     # Past the monitor's own 90000s interval, so `pending` cannot absorb it — a gate-set
     # monitor inside its interval is still legitimately pending, not drift.
     text, code = monitors.format_kuma_drift(
-        declared, live, 86400 * 3, gate_states={"etcd_snapshot_push_token": True}
+        declared,
+        live,
+        86400 * 3,
+        gate_states={"etcd_snapshot_push_token | default('')": True},
     )
     assert code == 1
     assert "Off-box etcd Snapshot: declared, not live" in text
-    assert "genuinely unset" not in text
+    assert "gated off" not in text
 
 
 #
@@ -278,11 +286,14 @@ def test_kuma_drift_says_so_when_a_gate_cannot_be_read():
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
     text, code = monitors.format_kuma_drift(
-        declared, live, 86400, gate_states={"etcd_snapshot_push_token": None}
+        declared,
+        live,
+        86400,
+        gate_states={"etcd_snapshot_push_token | default('')": None},
     )
     assert code == 0
     assert "could not be read" in text
-    assert "genuinely unset" not in text
+    assert "gated off" not in text
 
 
 def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, capsys):
@@ -330,20 +341,26 @@ def test_resolve_gate_states_covers_only_the_gates_whose_monitor_is_absent():
     key and no patch: the narrowing IS which gates appear. `no_secrets` then pins the other
     half — a deliberate non-read maps to None ("could not be read", rendered as unverified),
     never to False, which would excuse the monitor. That conflation is the miss this guards
-    against.
+    against. Both gates name secrets the real store declares, so `no_secrets` is what keeps
+    them unread rather than the names being unknown.
     """
     declared = {
-        "Live Gated": {"type": "push", "interval": 60, "gated": True, "gate": "tok_a"},
+        "Live Gated": {
+            "type": "push",
+            "interval": 60,
+            "gated": True,
+            "gate": ("docs_refresh_push_token | default('')",),
+        },
         "Absent Gated": {
             "type": "push",
             "interval": 60,
             "gated": True,
-            "gate": "tok_b",
+            "gate": ("etcd_snapshot_push_token | default('')",),
         },
         "Ungated": {"type": "http", "interval": 60, "gated": False, "gate": None},
     }
     assert monitors.resolve_gate_states(declared, {"Live Gated"}, no_secrets=True) == {
-        "tok_b": None
+        "etcd_snapshot_push_token | default('')": None
     }
 
 

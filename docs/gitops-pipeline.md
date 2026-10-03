@@ -596,7 +596,8 @@ stay).
   playbook and an ff-merge (2026-09-01). A test-only push now produces an empty `ChangeSet` and
   takes the `if not cs.services` ff-merge branch, exactly like a docs-only push. The invariant it
   rests on — no role ships a test file to a host — is enforced tree-wide by
-  `ansible/tests/repo/test_no_role_ships_a_test_file.py`, because a role that started shipping one
+  the `no-role-ships-a-test-file` row of `ansible/tests/repo/test_census_rows_roles.py`,
+  because a role that started shipping one
   would turn this skip into a change to deployed code that never deploys.
 - **A new module in `files/` goes in two lists in `tasks/main.yml`** — the copy task's `loop:`
   that installs it under `/opt/gitops-deploy/`, and `stamp_deployed_pairs`, which records its
@@ -1180,9 +1181,7 @@ an exact field count and skips anything else, and the monitor-bridge, `deploy_ui
 therefore read as no pending work in a reader that had not redeployed, which is why
 `manual_plane_tags` is a sidecar. `gitops_markers.parse_owed` ignores keys it does not know,
 and every writer carries them through a rewrite. `k8s_unapplied` moved first because nothing
-pages on it. The deployer folds a host's pre-#3392 `k8s_unapplied` file into the ledger at the
-top of each tick (`DeployerState.fold_legacy_k8s_unapplied`), and the checkout-side readers
-union that file until the fold has run.
+pages on it.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no

@@ -72,8 +72,8 @@ order:
    `docs/reference/backlog.md`** — the design facts the reviewer agents used to carry inline,
    one section per domain, and the register `findings.py close --accepted`/`--refuted` writes,
    rendered by the docs-refresh cron. Each reviewer agent reads its own domain from both
-   before it flags; `ansible/tests/repo/test_reviewer_agents_carry_no_hand_reflag_list.py`
-   keeps the inline copies from coming back.
+   before it flags. The `agents-carry-no-inline-reflag-list` row of
+   `ansible/tests/repo/test_census_rows_text.py` keeps the inline copies from coming back.
 
 **Item 1's file missing from the store stops the run.** Name the missing slug to the operator and
 wait. A missing file is not an error the harness reports, so a run that skips it proceeds unprimed

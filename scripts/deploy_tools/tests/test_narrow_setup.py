@@ -386,7 +386,8 @@ def test_a_markdown_file_under_templates_is_prose_and_reaches_no_tag(tree):
 
     This used to narrow to `alpha`, because the planted task renders the file onto a host. No
     role in the repo ships a `.md`, and
-    `ansible/tests/deploy/test_no_role_ships_a_markdown_file.py` is what holds that — so the
+    the `no-role-ships-a-markdown-file` row of `ansible/tests/repo/test_census_rows_roles.py`
+    is what holds that — so the
     carve-out only cost the deploy-plane tick a full play for a README nobody deploys. A range
     of nothing but prose reaches no host, which is the refusal below rather than a tag; the
     tick never gets here for one, because `deploy_logic.is_doc` drops it before the plane

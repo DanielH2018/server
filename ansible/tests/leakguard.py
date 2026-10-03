@@ -66,8 +66,9 @@ drives.
 
 A test that BUILDS a scratch repository needs two things this plugin cannot supply: a commit
 identity, and `GIT_CONFIG_GLOBAL` pointed at the null device so this host's global SSH commit
-signing stays out. `lib.git_testing` is that helper, and
-`scripts/tests/test_scratch_repos_go_through_git_testing.py` refuses a hand-rolled one.
+signing stays out. `lib.git_testing` is that helper, and the
+`tests-take-the-git-scrub-from-git-testing` row of
+`scripts/tests/test_census_rows_test_modules.py` refuses a hand-rolled one.
 
 `ansible-playbook` — six tests in `ansible/tests/longhorn/` deliberately run a real play
 against `localhost`, and a stub returning a fixed exit code fails all six. The shared fact

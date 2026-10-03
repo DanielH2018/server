@@ -325,18 +325,15 @@ def k8s_unapplied_lines(marker, now):
 def read_k8s_unapplied_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     """The host's pending `k8s_unapplied` changes as `owed` ledger lines, or None when unread.
 
-    The class lives in the `owed` ledger (#3392). A host whose deployer has not yet folded the
-    pre-#3392 `k8s_unapplied` file into it still holds lines there, so those are converted to
-    ledger lines and returned with the rest. Absent and unreadable collapse to the same answer,
-    for the reason the readers above give.
+    The class lives in the `owed` ledger (#3392). Absent and unreadable collapse to the same
+    answer, for the reason the readers above give.
     """
     owed = _read(state_dir, MARKERS["owed"])
-    legacy = _read(state_dir, MARKERS["k8s_unapplied_legacy"])
-    if owed is None and legacy is None:
+    if owed is None:
         return None
     return "\n".join(
         owed_line(OWED_K8S_UNAPPLIED, e.service, e.origin, e.at)
-        for e in k8s_unapplied_entries(owed, legacy)
+        for e in k8s_unapplied_entries(owed)
     )
 
 

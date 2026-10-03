@@ -257,7 +257,8 @@ def _is_real_change(path, deploy_time_roles=frozenset()):
 
     Three classes. Docs, because no playbook applies prose. A role's own `tests/`, which holds
     pytest guards over its `files/*.py` and never something `k8s/manifests` stages
-    (`ansible/tests/repo/test_no_role_ships_a_test_file.py` enforces that tree-wide). And a
+    (the `no-role-ships-a-test-file` row of `ansible/tests/repo/test_census_rows_roles.py`
+    enforces that tree-wide). And a
     SHARED role's `tasks/`, which is the role-granularity narrowing applied one level down.
 
     That third class is the one that matters: the five shared roles holding only `tasks/` and

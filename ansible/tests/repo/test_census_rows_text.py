@@ -89,6 +89,12 @@ PRIMED_SURFACES = frozenset(
 )
 
 
+# The inline form: the heading phrase followed by a colon and the list itself. The pointer
+# form ends the phrase with a full stop, so this matches the drifting copy and not its
+# replacement.
+INLINE_REFLAG_LIST = re.compile(r"Honor accepted designs \(don't re-flag\):")
+
+
 def _namespace_dir_files() -> list[str]:
     # A role ships its Python from `files/`; only its `tests/` is a namespace directory.
     return tracked("scripts/*", "ansible/tests/*", "ansible/roles/*/*/tests/*")
@@ -252,6 +258,31 @@ ROWS = (
         ),
         green=(Subject("a.md", f"prime from `{STANDING_SLUG}` first"),),
         must_find=PRIMED_SURFACES,
+    ),
+    Census(
+        name="agents-carry-no-inline-reflag-list",
+        reason=(
+            "The accepted designs live once, in "
+            "`.claude/skills/homelab-review/accepted-designs.md`, one section per reviewer "
+            "domain, and the settled-findings register in `docs/reference/backlog.md`. An "
+            'inline "Honor accepted designs (don\'t re-flag): ..." list in an agent drifts '
+            "from both. Point at the domain's section instead "
+            "(`test_reviewer_agents_carry_no_hand_reflag_list.py` holds the pointers)."
+        ),
+        files=lambda: tracked(".claude/agents/*.md"),
+        offence=lines_matching(INLINE_REFLAG_LIST),
+        red=(Subject("a.md", "Honor accepted designs (don't re-flag): the arr stack"),),
+        green=(
+            Subject("a.md", "Honor accepted designs (don't re-flag). See `## cicd`."),
+        ),
+        must_find=frozenset(
+            f".claude/agents/{name}.md"
+            for name in (
+                "homelab-container-reviewer",
+                "homelab-cicd-reviewer",
+                "homelab-backup-observability-reviewer",
+            )
+        ),
     ),
     Census(
         name="review-surfaces-name-the-standing-slug",

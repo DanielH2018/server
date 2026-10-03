@@ -8,42 +8,19 @@ passes `-H`. The task chowns /root/.ssh to ubuntu recursively on every run and n
 it writes, which is why the bug survives every reading of it: the answer is in the play's
 `become:` and in sudo's default flags.
 
-The first two tests pin the fix at the two tasks. The last pair is the class guard — a
-home-relative path in a role task is never right here, because every playbook in this repo
-becomes root and none of them means /root. It is a ratchet: there are no hits today.
+The two tests here pin the fix at the two tasks. The class guard — no role task writes a
+home-relative path, because every playbook in this repo becomes root and none of them means
+/root — is the `role-tasks-write-no-home-relative-path` row of
+`ansible/tests/repo/test_census_rows_roles.py` (#3430).
 
 Run: uv run pytest ansible/tests/setup/test_ssh_dir_paths_are_absolute.py
 """
 
-from pathlib import Path
-
 from _helpers import ROLES
 from _helpers import load_tasks
 from _helpers import task_named
-from _helpers import walk_tasks
 
 ACCESS = ROLES / "setup" / "initial_setup" / "tasks" / "access.yml"
-
-# The keys that name a path on the target host. `src:` is deliberately absent: for `copy:` and
-# `template:` it names a file in the CONTROL node's role, where `~` never reaches sudo.
-_PATH_KEYS = ("path", "dest")
-
-
-def _home_relative_paths(task: dict) -> list[str]:
-    """Every `~`-relative target this task writes, across whichever module it uses.
-
-    Takes the task dict rather than a file, so the rejecting test below can hand it a synthetic
-    task — the repo scan alone would pass just as well if this stopped matching anything.
-    """
-    found = []
-    for key, value in task.items():
-        if not isinstance(value, dict):
-            continue
-        for path_key in _PATH_KEYS:
-            target = value.get(path_key)
-            if isinstance(target, str) and target.startswith("~"):
-                found.append(f"{key}.{path_key}={target}")
-    return found
 
 
 def test_the_sys_user_ssh_directory_is_named_absolutely() -> None:
@@ -75,41 +52,3 @@ def test_roots_ssh_directory_is_given_back_and_never_created() -> None:
     assert stat["ansible.builtin.stat"]["path"] == "/root/.ssh"
     registered = stat["register"]
     assert restore["when"] == f"{registered}.stat.isdir | default(false)"
-
-
-def test_a_home_relative_path_is_flagged() -> None:
-    """FLAGGED half: the exact shape of the bug above, so the scan below cannot go inert."""
-    assert _home_relative_paths(
-        {
-            "name": "Set SSH directory permissions",
-            "ansible.builtin.file": {"path": "~/.ssh"},
-        }
-    ) == ["ansible.builtin.file.path=~/.ssh"]
-    assert (
-        _home_relative_paths(
-            {
-                "name": "Harden",
-                "ansible.builtin.file": {"path": "/home/{{ sys_user }}/.ssh"},
-            }
-        )
-        == []
-    )
-
-
-def test_no_role_task_writes_a_home_relative_path() -> None:
-    """CLEAN half: `~` in a role task resolves to whoever the play became, not to who you meant."""
-    task_files = sorted(ROLES.glob("*/*/tasks/*.yml"))
-    # Non-vacuity: a glob that stops matching returns an empty set, and `not offenders` over
-    # nothing passes. 100 is well under the count today and well over anything a reorganisation
-    # would plausibly leave behind.
-    assert len(task_files) >= 100, f"the task-file glob found only {len(task_files)}"
-    offenders: list[str] = []
-    for path in task_files:
-        for task in walk_tasks(load_tasks(path)):
-            for hit in _home_relative_paths(task):
-                offenders.append(
-                    f"{Path(path).relative_to(ROLES)}: {task.get('name')}: {hit}"
-                )
-    assert not offenders, "home-relative target(s) in a role task:\n" + "\n".join(
-        offenders
-    )

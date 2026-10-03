@@ -79,7 +79,8 @@ def is_role_test_path(path: str) -> bool:
     meaningful for a path `role_for` has already named a role for. `shared_roles` and `tag_for`
     are the callers, and both drop such a path: a role's `tests/` is work no deploy applies, the same class as the
     `.md` rule in `role_for`. Pytest guards over the role's `files/*.py` are staged by
-    nothing — `ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide — so
+    nothing — the `no-role-ships-a-test-file` row of
+    `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide — so
     they reach no cluster and no deploy can apply them. `_is_real_change` in
     `scripts/diagnostics/probe_lib/releases.py` drops a role's `tests/` for that reason.
 
