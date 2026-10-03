@@ -31,7 +31,7 @@ from diagnostics.probe_lib.health_kubectl import k8s_pods_args
 from diagnostics.probe_lib.health_rollout import seconds_since
 
 import yaml
-from jinja2 import TemplateError
+from jinja2 import StrictUndefined, TemplateError
 
 from lib import yaml_fast
 from lib.k8s_context import resolve_vars, role_defaults
@@ -122,10 +122,19 @@ _ENTITY_INTERVAL_RE = re.compile(r'"interval":\s*(\d+|\{\{[^{}]*\}\})')
 _INTERVAL_EXPR_RE = re.compile(r"^\{\{\s*(.+?)\s*\}\}$")
 _JINJA_IF_RE = re.compile(r"{%-?\s*if\b")
 _JINJA_ENDIF_RE = re.compile(r"{%-?\s*endif\b")
-# The condition itself, so a gated monitor can be checked against the variable rather than
-# excused on the strength of the `{% if %}` existing. First identifier wins: every gate in
-# this template is `{% if <secret_name> | default('') %}`.
-_JINJA_IF_COND_RE = re.compile(r"{%-?\s*if\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+# The condition itself, so a gated monitor can be checked against its variables rather than
+# excused on the strength of the `{% if %}` existing. The whole condition, not its first
+# identifier: a gate may be a secret (`{% if <secret_name> | default('') %}`), an inventory
+# flag (`traefik_k8s_manage_crowdsec | default(true)`), or an `and` of both (the Renovate
+# agent's tile, #3414). Reading only the leading token judged that last one on its token alone,
+# so a disarmed agent's withdrawn tile read as missing.
+_JINJA_IF_COND_RE = re.compile(r"{%-?\s*if\s+(.+?)\s*-?%}")
+_GATE_AND_RE = re.compile(r"\s+and\s+")
+# One conjunct this check can resolve: an identifier, optionally piped through filters. An `or`
+# or a `not` makes the gate something other than "every conjunct must hold", so a conjunct
+# carrying either is left unresolvable and reads as "could not be read" rather than guessed at.
+_GATE_CONJUNCT_RE = re.compile(r"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|.*)?")
+_GATE_OR_NOT_RE = re.compile(r"\b(?:or|not)\b")
 
 
 @functools.cache
@@ -167,9 +176,10 @@ def interval_seconds(raw, variables):
 def parse_declared_monitors(text, variables=None):
     """Monitor declarations from the static-monitors template.
 
-    Returns {name: {"type": str, "interval": int|None, "gated": bool, "gate": str|None}}.
-    `gated` marks an entity inside a `{% if <token> %}` block and `gate` names the variable it
-    is gated on, innermost first.
+    Returns {name: {"type": str, "interval": int|None, "gated": bool, "gate": tuple|None}}.
+    `gated` marks an entity inside a `{% if %}` block and `gate` holds every conjunct of every
+    enclosing condition, outermost first: `{% if a | default('') and b %}` gives
+    `("a | default('')", "b")`. The tile renders only when all of them hold.
 
     `variables` is the render context a `{{ ... }}` interval is evaluated against; it defaults
     to the template's real one (`monitor_vars`), read lazily on the first templated interval
@@ -187,9 +197,9 @@ def parse_declared_monitors(text, variables=None):
     declared, gates = {}, []
     for line in text.splitlines():
         for cond in _JINJA_IF_COND_RE.findall(line):
-            gates.append(cond)
-        # A bare `{% if %}` with no leading identifier still opens a scope; keep the stack
-        # aligned with the nesting rather than with the conditions we could parse.
+            gates.append(tuple(_GATE_AND_RE.split(cond)))
+        # An `{% if %}` whose condition did not parse (split across lines) still opens a
+        # scope; keep the stack aligned with the nesting rather than with what we could parse.
         gates.extend(
             [None]
             * (len(_JINJA_IF_RE.findall(line)) - len(_JINJA_IF_COND_RE.findall(line)))
@@ -209,14 +219,14 @@ def parse_declared_monitors(text, variables=None):
         interval = _ENTITY_INTERVAL_RE.search(line)
         if interval and variables is None and not interval.group(1).isdigit():
             variables = monitor_vars()
-        innermost = next((g for g in reversed(gates) if g), None)
+        conjuncts = tuple(c for g in gates if g for c in g)
         declared[name.group(1)] = {
             "type": kind.group(1),
             "interval": interval_seconds(interval.group(1), variables)
             if interval
             else None,
             "gated": bool(gates),
-            "gate": innermost,
+            "gate": conjuncts or None,
         }
     return declared
 
@@ -272,6 +282,53 @@ def judge_gate_read(var, extracted, declared):
     return None
 
 
+def gate_var(conjunct):
+    """The variable one gate conjunct reads, or None when it is not a shape this check resolves."""
+    match = _GATE_CONJUNCT_RE.fullmatch(conjunct)
+    if not match or _GATE_OR_NOT_RE.search(conjunct):
+        return None
+    return match.group(1)
+
+
+def eval_gate_conjunct(conjunct, variables):
+    """True / False for a conjunct evaluated as the template would, None if it will not evaluate.
+
+    StrictUndefined rather than the render guards' stub: `| default(...)` still applies to an
+    undefined name, but a bare undefined one raises instead of reading as a truthy `STUB`.
+    """
+    try:
+        env = make_env([], undefined_cls=StrictUndefined)
+        return bool(env.compile_expression(conjunct)(**variables))
+    except TemplateError:
+        return None
+
+
+def gate_conjunct_state(conjunct, no_secrets=False):
+    """True / False / None for one gate conjunct, read from wherever its variable lives.
+
+    An inventory variable (host_vars, group_vars, the uptime-kuma role's defaults — the
+    template's own render context) is evaluated against that context: `renovate_agent_enabled`
+    is a host_var, not a secret, and asking SOPS for it got "undeclared", which reads False.
+    A secret goes through `gate_var_state` as before. A name that is neither is evaluated with
+    nothing bound, so the template's own `| default(...)` decides, exactly as it does at render:
+    `traefik_k8s_manage_crowdsec | default(true)` is True, `tok | default('')` False.
+
+    Inventory is consulted first and the secrets file's plaintext key list second, so only a
+    name the store declares costs a decrypt, and `no_secrets` withholds only that decrypt.
+    A key list that will not parse proves nothing, so the name is then treated as a secret.
+    """
+    var = gate_var(conjunct)
+    if var is None:
+        return None
+    variables = monitor_vars()
+    if var in variables:
+        return eval_gate_conjunct(conjunct, variables)
+    names = declared_secret_names()
+    if names is not None and var not in names:
+        return eval_gate_conjunct(conjunct, variables)
+    return None if no_secrets else gate_var_state(var)
+
+
 def gate_var_state(var):
     """True / False / None for whether a gating secret has a non-empty value.
 
@@ -289,7 +346,7 @@ def gate_var_state(var):
 
 
 def resolve_gate_states(declared, live, no_secrets=False):
-    """{gate_var: True/False/None} for the gates format_kuma_drift has to judge.
+    """{conjunct: True/False/None} for the gates format_kuma_drift has to judge.
 
     Resolved only for gates whose monitor is actually absent — a sops call per gate is the
     cost, and a monitor that is live needs no explanation for why it might not be.
@@ -304,16 +361,33 @@ def resolve_gate_states(declared, live, no_secrets=False):
     reverse. `probe.py kuma-drift` is allow-listed and so runs unprompted, which is a fair
     reason to want no SOPS read on the path; but assuming a gate was unset is exactly the miss
     16cf5721 fixed on 2026-08-22, and defaulting to no_secrets would reinstate it. The read is
-    narrow: `var` comes from _JINJA_IF_COND_RE, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is
+    narrow: `var` comes from `gate_var`, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is
     passed as an argv element rather than through a shell, so no value and no injection point
     escapes gate_var_state — only bool(stdout) does. Reach for no_secrets when the age key
     should not be touched at all; accept "unverified" as the cost.
     """
-    return {
-        spec["gate"]: None if no_secrets else gate_var_state(spec["gate"])
+    conjuncts = {
+        conjunct
         for name, spec in declared.items()
         if spec["gate"] and name not in live
+        for conjunct in spec["gate"]
     }
+    return {c: gate_conjunct_state(c, no_secrets=no_secrets) for c in sorted(conjuncts)}
+
+
+def judge_gate(gate, gate_states):
+    """A whole gate from its conjuncts' states: False if any is False, else None if any is None.
+
+    False wins over None because the tile renders only when every conjunct holds, so one that
+    is known false withdraws it whatever the unreadable ones say. A disarmed Renovate agent's
+    tile is gated off even on a host that cannot decrypt its push token.
+    """
+    states = [gate_states.get(c) for c in gate]
+    if False in states:
+        return False
+    if None in states:
+        return None
+    return True
 
 
 def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
@@ -341,10 +415,12 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
     for name, spec in sorted(declared.items()):
         if name in live:
             continue
-        state = gate_states.get(spec.get("gate")) if spec["gated"] else False
+        state = judge_gate(spec["gate"] or (), gate_states) if spec["gated"] else False
         if spec["gated"] and state is None:
+            unread = [c for c in spec["gate"] or () if gate_states.get(c) is None]
             unverified.append(
-                f"  {name}: gated on {spec['gate']}, which could not be read"
+                f"  {name}: gated on {' and '.join(unread) or 'an unparsed condition'}, "
+                "which could not be read"
             )
         elif spec["gated"] and state is False:
             gated.append(name)
@@ -366,7 +442,7 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
     lines.extend(missing + orphans + pending + unverified)
     if gated:
         lines.append(
-            f"  {len(gated)} gated on a secret that is genuinely unset, skipped: "
+            f"  {len(gated)} gated off (a secret genuinely unset or a flag false), skipped: "
             f"{', '.join(gated)}"
         )
     if missing or orphans:
@@ -449,7 +525,7 @@ def run_kuma_drift(ns):
         gate_states=gate_states,
     )
     print(text)
-    if ns.no_secrets and gate_states:
+    if ns.no_secrets and None in gate_states.values():
         # Without this the gates read "could not be read", which is the wording for a genuine
         # failure — no age key, sops missing. Deliberately not reading and failing to read must
         # not look alike; that conflation is the recurring shape this estate keeps paying for.
