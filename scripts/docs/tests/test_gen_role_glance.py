@@ -205,7 +205,6 @@ def test_config_change_wiring_finds_the_include_role_var_or_none(tmp_path):
 def test_pi_glance_lines_carry_the_target_and_the_entry_facts(tmp_path):
     role = tmp_path / "widget"
     _write(role / "templates" / "docker-compose.yml.j2", COMPOSE)
-    _write(role / "meta" / "deps.yml", "role_deps:\n  - docker-proxy\n")
     entry = {
         "name": "widget",
         "port": 8080,
@@ -218,8 +217,7 @@ def test_pi_glance_lines_carry_the_target_and_the_entry_facts(tmp_path):
         lines[2]
         == "- **Entry:** `host_vars/daniel-pi.yml` → port `8080`, networks `proxy`, no Authelia"
     )
-    assert lines[3] == "- **Depends on:** `docker-proxy` (`meta/deps.yml`)"
-    assert lines[4].startswith("- **Config-change wiring:** none")
+    assert lines[3].startswith("- **Config-change wiring:** none")
 
 
 # --- the in-place writer -----------------------------------------------------------------

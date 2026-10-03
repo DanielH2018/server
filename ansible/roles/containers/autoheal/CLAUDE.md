@@ -4,16 +4,18 @@ Watches Docker healthchecks and restarts any container reporting `unhealthy`.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks, meta/deps.yml or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks or containers_list entry. -->
 - **Deploy tag:** `--tags "autoheal" -e target=daniel-pi`
 - **Image:** `willfarrell/autoheal` (`autoheal`)
 - **Entry:** `host_vars/daniel-pi.yml` → networks `lifecycle`, no Authelia
-- **Depends on:** `docker-proxy` (`meta/deps.yml`)
 - **Config-change wiring:** none — the compose file is the only config, and a compose change
   recreates on its own
 <!-- /generated_from -->
 
 - **No web UI.** Nothing to route, nothing for Authelia to gate.
+- **Deploys after `docker-proxy`.** It reaches the Docker API through `docker-proxy-lifecycle`,
+  which docker-proxy's compose project runs. The Docker play deploys in `containers_list`
+  order, and `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins that order.
 - **Why `lifecycle` is its only network:** it reaches the write-capable
   `docker-proxy-lifecycle` there, and never joins the broad networks.
 

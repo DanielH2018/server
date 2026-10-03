@@ -4,12 +4,11 @@ Gives other containers safe, scoped access to the Docker API instead of mounting
 raw socket. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks, meta/deps.yml or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks or containers_list entry. -->
 - **Deploy tag:** `--tags "docker-proxy" -e target=daniel-pi`
 - **Image:** `lscr.io/linuxserver/socket-proxy` (`docker-proxy`, `docker-proxy-lifecycle`,
   `docker-proxy-codeserver`)
 - **Entry:** `host_vars/daniel-pi.yml` → networks `proxy`, no Authelia
-- **Depends on:** nothing (no `meta/deps.yml`)
 - **Config-change wiring:** none — the compose file is the only config, and a compose change
   recreates on its own
 <!-- /generated_from -->

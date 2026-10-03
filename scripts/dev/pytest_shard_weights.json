@@ -223,7 +223,6 @@
  "ansible/tests/deploy/test_k8s_toposort.py": 0.0,
  "ansible/tests/deploy/test_land_help_names_every_verdict.py": 0.0,
  "ansible/tests/deploy/test_landing_annotations.py": 0.0,
- "ansible/tests/deploy/test_load_secrets_by_host.py": 0.0,
  "ansible/tests/deploy/test_local_connection_target.py": 0.0,
  "ansible/tests/deploy/test_manifests_apply_guarded.py": 0.05,
  "ansible/tests/deploy/test_manifests_prune.py": 0.03,

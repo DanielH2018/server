@@ -4,11 +4,10 @@ Grafana Alloy on daniel-pi, shipping this host's container logs and its two heal
 verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks, meta/deps.yml or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks or containers_list entry. -->
 - **Deploy tag:** `--tags "alloy" -e target=daniel-pi`
 - **Image:** `grafana/alloy` (`alloy`)
 - **Entry:** `host_vars/daniel-pi.yml` → port `12345`, networks `proxy`, no Authelia
-- **Depends on:** nothing (no `meta/deps.yml`)
 - **Config-change wiring:** `common_config_changed: {{ alloy_config is changed }}` — a config
   edit recreates the container
 <!-- /generated_from -->

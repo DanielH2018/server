@@ -231,7 +231,6 @@ terraria_k8s_replicas: 0
 # defaults are invisible across roles.
 crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.1
 crowdsec_k8s_agent_username: k8s-traefik-agent
-crowdsec_k8s_server_agent_machine: daniel-server-agent
 # The authelia pod's agent sidecar. Here, not in the authelia role's defaults, because the
 # k8s/crowdsec role registers the machine and only group_vars crosses that boundary.
 crowdsec_k8s_authelia_agent_machine: k8s-authelia-agent
@@ -346,15 +345,6 @@ dev_tooling_hosts:
 # the stale template it came from, which agree. So the arm reads green exactly when the host is
 # furthest behind, which is the laundering this threshold exists to prevent.
 setup_drift_tree_max_days: 14
-
-# Which SOPS file `pre_tasks/load_secrets.yml` decrypts, chosen per host. Production is the
-# default so a host nobody thought about gets the production file and fails closed on a
-# missing key, rather than silently running with no secrets at all. No host overrides it; the
-# per-host mechanism makes adding such a host a var rather than a code change.
-#
-# Resolved relative to ansible/vars/. ENFORCED by ansible/tests/deploy/test_load_secrets_by_host.py,
-# which also checks every file named by any host actually exists.
-secrets_file: secrets.yml
 
 # Pod Security Admission labels, applied to homelab and observability.
 #

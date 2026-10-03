@@ -87,6 +87,8 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
+  # MUST follow docker-proxy: it restarts containers through docker-proxy-lifecycle, which
+  # docker-proxy's compose project creates. The Docker play deploys in this list's order.
   - name: autoheal
     use_authelia: false
     networks:

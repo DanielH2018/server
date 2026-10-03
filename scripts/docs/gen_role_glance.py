@@ -39,7 +39,7 @@ roles:
 - a Pi compose role (`roles/containers/<name>/`, every entry of the Pi's `containers_list`):
   the deploy tag with the `-e target=daniel-pi` the Pi needs, the image repositories the
   compose template pins and the services that carry each, the entry's port, networks and
-  Authelia stance, the `meta/deps.yml` ordering, and whether the role passes
+  Authelia stance, and whether the role passes
   `common_config_changed` into `docker_deploy` (the wiring a bind-mounted config file needs
   to recreate the container — `roles/containers/common/CLAUDE.md`).
 
@@ -130,9 +130,7 @@ BEGIN = begin_marker(
 BEGIN_SETUP = begin_marker(
     "tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml"
 )
-BEGIN_PI = begin_marker(
-    "compose template, tasks, meta/deps.yml or containers_list entry"
-)
+BEGIN_PI = begin_marker("compose template, tasks or containers_list entry")
 END = "<!-- /generated_from -->"
 WIDTH = 95
 # The one host that declares k8s services (lib.k8s_roles.HOST_VARS says the same).

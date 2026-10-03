@@ -11,12 +11,11 @@ server-side claim below is history, kept because the two instances still share o
 the port split only makes sense read together.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks, meta/deps.yml or containers_list entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's compose template, tasks or containers_list entry. -->
 - **Deploy tag:** `--tags "wg-easy" -e target=daniel-pi`
 - **Image:** `ghcr.io/wg-easy/wg-easy` (`wg-easy`)
 - **Entry:** `host_vars/daniel-pi.yml` → port `51821`, UDP port `51822`, networks `proxy`, no
   Authelia
-- **Depends on:** nothing (no `meta/deps.yml`)
 - **Config-change wiring:** none — the compose file is the only config, and a compose change
   recreates on its own
 <!-- /generated_from -->

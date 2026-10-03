@@ -15,7 +15,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   # equal, so this is the one place the deploy-side ansible version is chosen.
   "pyyaml",                         # validate.compose_templates
   "jinja2>=3",                      # validate.compose_templates
-  "requests",                       # community.docker modules (docker_container_info dependency check)
+  "requests",                       # community.docker modules
   "docker",                         # community.docker SDK-backed modules
   "flask",                          # ical-proxy ical_proxy.py imports flask at module top (test_app.py)
   "ruff>=0.10",                     # first-party Python lint gate (prek hook); pinned via uv.lock
