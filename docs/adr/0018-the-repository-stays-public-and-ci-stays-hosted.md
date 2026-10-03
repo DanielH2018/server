@@ -58,8 +58,8 @@ one more reason the visibility change is a larger decision than the runner it en
 ## Decision
 
 The repository stays public, and every CI job stays on GitHub-hosted runners. No
-`github_runner` role is built, and `ansible/tests/repo/test_workflow_runners_are_pinned.py`
-keeps rejecting the `self-hosted` label. Secrets stay out of the tree in the SOPS and age form
+`github_runner` role is built, and the `workflow-runners-are-pinned` row of
+`ansible/tests/repo/test_census_rows_text.py` keeps rejecting the `self-hosted` label. Secrets stay out of the tree in the SOPS and age form
 ADR-0003 records, which is what makes a world-readable tree safe to publish.
 
 ## Consequences
@@ -98,6 +98,7 @@ actively unsafe.
 
 No line in the tree enforces this. A repository's visibility is a GitHub setting, in the same
 way ADR-0016's code-scanning choice is, so `governs:` is empty. The nearest thing to
-enforcement is `ansible/tests/repo/test_workflow_runners_are_pinned.py`, which rejects the
+enforcement is the `workflow-runners-are-pinned` row of
+`ansible/tests/repo/test_census_rows_text.py`, which rejects the
 `self-hosted` label — it fails by accident of its regexes rather than by referencing this
 decision, so it carries no marker.

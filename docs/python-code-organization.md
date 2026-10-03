@@ -204,7 +204,8 @@ non-obvious. Shape is gated by ruff `D205/D415/D212/D209/D210`; content follows
 
 **`from __future__ import annotations` is dead on 3.14.** PEP 649 defers annotation
 evaluation by default ([What's new in 3.14][py314]). Do not add it to a new module, and
-`ansible/tests/repo/test_no_future_annotations_import.py` enforces that the tree agrees —
+the `no-future-annotations` row of `ansible/tests/repo/test_census_rows_python.py` enforces
+that the tree agrees —
 the rule governed new modules only until 2026-09-05, so half of `scripts/infra_map/` carried
 the line and half did not.
 

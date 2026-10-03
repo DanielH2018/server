@@ -4,8 +4,8 @@ Covers all three trees: `roles/k8s/`, `roles/setup/` and the Pi's `roles/contain
 retired role ghosts the same way in each, so they read through one predicate.
 
 Lives in its own module rather than in `_helpers.py`, which is at its 500-line cap.
-`ansible/tests/repo/test_role_tree_walks_use_role_dirs.py` is the guard that keeps the next
-walk from being written bare.
+The `role-tree-walks-use-role-dirs` row of `ansible/tests/repo/test_census_rows_suite.py` is
+the guard that keeps the next walk from being written bare.
 """
 
 from pathlib import Path

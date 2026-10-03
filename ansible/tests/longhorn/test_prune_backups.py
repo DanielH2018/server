@@ -35,7 +35,8 @@ REAPER = "longhorn_reap_orphan_backups.py"
 # The Backup CR as kubectl takes it, anchored on the separator that follows the resource name —
 # a `/` before the object name, or the `,` or whitespace that ends an argv element. A bare `in`
 # over the dotted name reads to CodeQL as an unanchored hostname check
-# (ansible/tests/repo/test_no_host_shaped_membership_literal.py).
+# (the `no-host-shaped-membership-literal` row of
+# ansible/tests/repo/test_census_rows_python.py).
 BACKUP_CR = re.compile(r"backups\.longhorn\.io[/,\s\"']")
 
 

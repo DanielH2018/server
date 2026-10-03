@@ -98,7 +98,7 @@ def test_backups_abort_on_unresolvable_ownership_makes_no_delete_call(tmp_path):
     assert "ABORT" in proc.stderr
     assert not any("delete" in c for c in calls)
     # abort before reading backups
-    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    # Exact match, not `in`: see ansible/tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     assert not any(tok == "backups.longhorn.io" for c in calls for tok in c)
 
 

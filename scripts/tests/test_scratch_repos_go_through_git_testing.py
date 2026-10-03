@@ -6,7 +6,7 @@ workstation and writes the primary repository under `prek`'s pytest hook, where 
 exports `GIT_DIR` and `GIT_INDEX_FILE` and git resolves both before `cwd`.
 
 This refuses the next one. It is the test-side counterpart of
-`scripts/tests/test_git_and_gh_go_through_lib.py`, which holds production modules under
+the `git-and-gh-go-through-lib` row of `ansible/tests/repo/test_census_rows_python.py`, which holds production modules under
 `scripts/deploy_tools` and `scripts/dev` to `lib.git`.
 
 TWO RULES, each a clean/flagged pair below.

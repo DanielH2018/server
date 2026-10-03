@@ -1,8 +1,8 @@
 """Every `file:line` citation in the operator docs must point at a file that exists.
 
 Prose asserts facts that nothing re-derives, so a rename leaves the docs pointing somewhere
-that used to be right. `test_documented_macros_exist.py` covers that for shared macro names;
-this covers it for the paths themselves, which that guard's `*.yml.j2` pattern cannot see.
+that used to be right. The `documented-macros-exist` row of `test_census_rows_text.py` covers that for shared macro
+names; this covers it for the paths themselves, which that guard's `*.yml.j2` pattern cannot see.
 
 A doc is what an agent reads before it edits. A stale citation still reads as an
 instruction: the reader opens it, finds nothing, and either guesses or gives up.
