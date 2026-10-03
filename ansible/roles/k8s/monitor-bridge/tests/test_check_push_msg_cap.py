@@ -9,7 +9,7 @@ wire path rather than beside it.
 import urllib.parse
 
 import bridge.net
-from bridge.net import PUSH_MSG_MAX, cap_push_msg
+from bridge.common import PUSH_MSG_MAX, cap_push_msg
 
 
 def test_a_msg_under_the_cap_passes_verbatim():
