@@ -3,7 +3,7 @@
 #
 # THE LOCK IS THE POINT. This mutates the primary git tree, which gitops-deploy.service
 # rewrites with `git pull` on a 30-minute timer and which every deploy renders its
-# templates from. /var/lock/server-git-tree.lock is what makes those mutually exclusive.
+# templates from. {{ server_git_tree_lock }} is what makes those mutually exclusive.
 # Without it a `git pull` mid-run would leave this committing a tree it never read.
 #
 # IT DOES NOT PULL. gitops-deploy already fast-forwards this checkout, and it CI-gates the
@@ -285,7 +285,7 @@ cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
 # OnFailure= for ordinary contention AND skips the run.
 # ENFORCED by gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py, which now derives every
 # waiter's floor from the same four deploy budgets rather than pinning two of the four by hand.
-exec 9>/var/lock/server-git-tree.lock
+exec 9>{{ server_git_tree_lock }}
 flock -w 3840 9 || { alert "docs-refresh: git-tree lock held >64m; skipped"; exit 1; }
 
 # A dirty tree is usually a human or another job mid-edit. Committing on top of that would mix
@@ -379,7 +379,7 @@ fi
 # is not — the `timeout` firing, or a durations report that parses to nothing. There the pages are
 # still worth publishing, and the run still reports DOWN with the reason named.
 #
-# `timeout` bounds it because this script holds /var/lock/server-git-tree.lock for its whole life,
+# `timeout` bounds it because this script holds {{ server_git_tree_lock }} for its whole life,
 # so a wedged sub-run would hold gitops-deploy off the tree until flock's own wait expires.
 #
 WEIGHTS_MSG="$(timeout 900 "$UV" run --frozen python scripts/dev/pytest_shard.py \
@@ -453,7 +453,7 @@ STAGED_STATUS="$(git diff --cached --name-status --no-renames)"
 # AFTER `git add`, because pytest_shard's census reads `git ls-files` and several guards read
 # the regenerated pages off disk. AFTER STAGED_STATUS for the same reason the commit is: the
 # restore needs to know which paths were newly added. `timeout` for the reason the weights
-# measurement has one -- this script holds /var/lock/server-git-tree.lock for its whole life,
+# measurement has one -- this script holds {{ server_git_tree_lock }} for its whole life,
 # so a wedged run would hold gitops-deploy off the tree until flock's own wait expires.
 timeout 900 "$UV" run --frozen python -m pytest >"$LOG" 2>&1
 SUITE_RC=$?

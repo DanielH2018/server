@@ -21,11 +21,12 @@ import os
 import re
 import shutil
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from lib.proc_testing import fake_bin, path_with
 from lib.git_testing import git, init_repo, scrub_process_git_env
 
+from deploy_locks import TREE_LOCK
 from lib.repo_paths import REPO as _REPO
 
 # The module `deploy.sh` reads its service locks from, at the path the wrapper runs it by.
@@ -131,7 +132,7 @@ def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, 
         PATH=path_with(bin_dir, detach_stub_bin(tmp_path)),
         HOMELAB_DEPLOY_SNAPSHOT_ROOT=str(tmp_path / "snapshots"),
         HOMELAB_DEPLOY_LOCK_DIR=str(locks),
-        HOMELAB_DEPLOY_TREE_LOCK=str(locks / "server-git-tree.lock"),
+        HOMELAB_DEPLOY_TREE_LOCK=str(locks / PurePath(TREE_LOCK).name),
         DEPLOY_TEST_PYTHON=sys.executable,
         **overrides,
     )

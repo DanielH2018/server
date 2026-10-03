@@ -45,7 +45,7 @@ Type=oneshot
 # than spawning another one. The practical effect is a delayed/absorbed tick, not a stacked
 # deploy — see that CLAUDE.md section for what is and is not verified about the cadence.
 #
-# The lock this unit's ExecStart holds (`/var/lock/server-git-tree.lock`, below) is now held for
+# The lock this unit's ExecStart holds (`{{ server_git_tree_lock }}`, below) is now held for
 # up to this same pathological duration, which EXCEEDS the 30-min timer interval — a concurrent
 # `./scripts/deploy.sh` waits its own `deploy_under_locks.LOCK_WAIT` (not this `-w 180`, which
 # governs only this unit), then returns exit 75 (nothing deployed) if the lock stays busy past
@@ -104,7 +104,7 @@ SuccessExitStatus=75
 # refusing to start — removing the machine that would ship the correction — so this one keeps uv's
 # self-healing download. The asymmetry is intentional and is pinned by
 # ansible/tests/setup/test_host_python_invocations.py; do not "fix" it for consistency.
-ExecStart=/usr/bin/flock -w 180 -E 75 /var/lock/server-git-tree.lock /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
+ExecStart=/usr/bin/flock -w 180 -E 75 {{ server_git_tree_lock }} /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
 
@@ -126,4 +126,4 @@ ExecStart=/usr/bin/flock -w 180 -E 75 /var/lock/server-git-tree.lock /usr/local/
 # unreadable from `systemctl show`, and this line is the only durable record of it.
 # scripts/deploy_tools/gitops_tick.sh greps for the parenthesised phrase; ansible/tests/
 # test_gitops_manual_trigger.py pins the two together. Do not reword it in isolation.
-ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "gitops-deploy: tick skipped (lock contention) — /var/lock/server-git-tree.lock was held for the full flock wait; nothing deployed, last_run untouched" || true'
+ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "gitops-deploy: tick skipped (lock contention) — {{ server_git_tree_lock }} was held for the full flock wait; nothing deployed, last_run untouched" || true'

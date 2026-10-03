@@ -30,6 +30,12 @@ cloudflare_ips:
 # .python-version — ansible/tests/setup/test_host_python_pin.py enforces both halves.
 host_python_version: "3.14.6"
 
+# The git-tree lock (ADR-0011, ADR-0017): every job that mutates or snapshots the primary
+# checkout takes it. Host templates read this var, and Python reads `deploy_locks.TREE_LOCK`
+# in the gitops_deploy role's files/. Those are the only two definitions of the path, and
+# ansible/tests/deploy/test_tree_lock_single_definition.py holds them equal (#3276).
+server_git_tree_lock: /var/lock/server-git-tree.lock
+
 # Linux Vars
 sys_user: ubuntu
 tz: America/Chicago

@@ -7,7 +7,7 @@ and exit 0 instead -- deploy.sh inside `flock -w LOCK_WAIT`, gitops_tick.sh watc
 busy. These are the lines that close that gap, asserted together with the parser that reads them: a wording change on
 either side that the other does not follow is exactly the drift this file catches.
 
-No test here touches /var/lock/server-git-tree.lock, the real systemd units, or the host's
+No test here touches the real git-tree lock, the real systemd units, or the host's
 syslog. A foreground deploy takes real flock(2) locks on tmp_path files, contended by a
 real flock(2) holder in this process, in both the foreground and `--detach`. `fuser`,
 `ps`, `uv`, `logger`, `systemctl` and `journalctl` are stubbed on PATH. The only live reads are
@@ -22,7 +22,7 @@ import os
 import subprocess
 import threading
 import time
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from _deploy_sh_fakes import (
     FAKE_RECAP,
@@ -34,7 +34,10 @@ from _deploy_sh_fakes import (
 from lib import exit_codes as ec
 from deploy_tools.land_lib import tools
 
+from deploy_locks import TREE_LOCK
 from lib.repo_paths import REPO as _REPO
+
+_TREE_LOCK_NAME = PurePath(TREE_LOCK).name
 
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 _TICK_SH = _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh"
@@ -58,9 +61,9 @@ def _deploy_repo_env(tmp_path: Path, bin_dir: Path) -> tuple[Path, dict[str, str
 # {fd}>&-` does not help, because the parent shell still holds it.
 _FUSER = """#!/bin/bash
 ls -l "/proc/$PPID/fd" 2>/dev/null |
-  awk '/server-git-tree.lock/ { n++ } END { print n + 0 }' >"$FUSER_STUB_SELF_FDS"
+  awk '/{tree_lock}/ { n++ } END { print n + 0 }' >"$FUSER_STUB_SELF_FDS"
 echo "  4242"
-"""
+""".replace("{tree_lock}", _TREE_LOCK_NAME)
 
 _PS = """#!/bin/bash
 echo "   99 uv run ansible-playbook ansible/deploy.yml --tags sonarr"
@@ -180,7 +183,7 @@ def _held(path: Path, release_after_contention: float | None = None):
 def test_a_contended_acquire_is_reported_with_its_seconds_and_its_holder(tmp_path):
     """FLAGGED half: the wait deploy.sh rides out on the tree lock must reach the log."""
     with _held(
-        tmp_path / "locks" / "server-git-tree.lock", release_after_contention=1.5
+        tmp_path / "locks" / _TREE_LOCK_NAME, release_after_contention=1.5
     ) as saw_waiter:
         result = _run_deploy(tmp_path)
     assert saw_waiter.is_set(), "the deploy never showed up in /proc/locks as a waiter"
@@ -249,7 +252,7 @@ def test_the_service_lock_refusal_is_not_booked_as_a_wait():
 
 def test_a_lock_timeout_is_still_reported_as_contention(tmp_path):
     """CLEAN half for exit 75: the wait really did elapse, so nothing was deployed."""
-    with _held(tmp_path / "locks" / "server-git-tree.lock"):
+    with _held(tmp_path / "locks" / _TREE_LOCK_NAME):
         result = _run_deploy(tmp_path, HOMELAB_DEPLOY_LOCK_WAIT="1")
     assert result.returncode == 75, result.stderr
     assert "nothing was deployed" in result.stderr
@@ -258,7 +261,7 @@ def test_a_lock_timeout_is_still_reported_as_contention(tmp_path):
 
 def _unopenable_tree_lock(tmp_path: Path) -> str:
     """A tree-lock path that is a directory: open(2) refuses it, and nothing holds it."""
-    path = tmp_path / "locks" / "server-git-tree.lock"
+    path = tmp_path / "locks" / _TREE_LOCK_NAME
     path.mkdir(parents=True)
     return str(path)
 
@@ -320,7 +323,7 @@ def _run_detach(tmp_path: Path, **env_extra: str) -> subprocess.CompletedProcess
 
 def test_detach_still_reports_a_held_lock_as_contention(tmp_path):
     """CLEAN half: --detach fails fast on a real holder, and 75 says retry shortly."""
-    with _held(tmp_path / "locks" / "server-git-tree.lock"):
+    with _held(tmp_path / "locks" / _TREE_LOCK_NAME):
         result = _run_detach(tmp_path)
     assert result.returncode == ec.DEPLOY_LOCK_BUSY, result.stderr
     assert "A deploy is already running" in result.stderr

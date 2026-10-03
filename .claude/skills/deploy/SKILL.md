@@ -61,7 +61,7 @@ Steps:
    (add `-e target=daniel-pi` for a Pi service)
 
    Deploy through `scripts/deploy.sh`, not `ansible-playbook` directly — it takes
-   `/var/lock/server-git-tree.lock`, the same lock gitops-deploy.service and the
+   the git-tree lock, the same lock gitops-deploy.service and the
    secret-rotate cron use, long enough to copy `HEAD` into a snapshot worktree, then runs
    the playbook from that snapshot under `/var/lock/server-deploy-<tag>.lock`, one per
    service. So deploys of the same service serialize and deploys of different services do
@@ -166,7 +166,7 @@ uv run ansible-playbook ansible/initial_setup.yml
 ## Why `deploy.sh` rather than the playbook
 
 It takes two kinds of lock ([ADR-0017](../../../docs/adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)).
-`/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (10-min timer) and
+the git-tree lock — the same lock `gitops-deploy.service` (10-min timer) and
 the weekly secret-rotate cron hold — guards the local git tree every deploy renders from,
 which gitops-deploy rewrites with a `git pull` mid-run; `deploy.sh` holds it only to copy
 `HEAD` into a detached worktree under `/tmp/homelab-deploy-snapshots/`. It then releases that

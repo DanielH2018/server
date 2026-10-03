@@ -3,7 +3,7 @@
 `deploy_run.py` calls `run` once every gate has passed. `--detach` is `deploy_detach.py`,
 which takes the same locks through the functions here and forks before the playbook.
 
-TWO LOCKS, GUARDING TWO DIFFERENT THINGS (ADR-0017). `/var/lock/server-git-tree.lock` guards
+TWO LOCKS, GUARDING TWO DIFFERENT THINGS (ADR-0017). The git-tree lock guards
 the git tree and nothing else: gitops-deploy.service, the weekly secret-rotate cron and the
 docs refresh all rewrite the tree every deploy renders from. This module holds it only long
 enough to copy the commit into a detached worktree under /tmp/homelab-deploy-snapshots --

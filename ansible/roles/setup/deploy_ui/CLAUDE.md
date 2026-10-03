@@ -41,7 +41,7 @@ Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Auth
 ## In flight
 
 The panel reads the per-service locks, not the tree lock alone. `deploy.sh` holds
-`/var/lock/server-git-tree.lock` for the snapshot only (ADR-0017), so a page that read that
+the git-tree lock for the snapshot only (ADR-0017), so a page that read that
 one lock said `free` for nearly all of a deploy, and its own deploy button queued on
 `server-deploy-<tag>.lock` with nothing on the page saying so (#1844).
 
@@ -69,8 +69,9 @@ read; every deployer here runs as `{{ sys_user }}`, the daemon's own user.
 Only a `land` row is cancellable. SIGTERM to a deploy mid-play leaves whatever applied
 before it live (`deploy.sh` exit 20), which is not a cancel.
 
-`test_lock_names_agree_with_deploy_locks_is_clean` pins the lock names to `deploy_locks.py`,
-because the daemon runs outside the venv and cannot import them.
+The daemon runs outside the venv and cannot import `deploy_locks.py`. The unit passes the tree
+lock's path in as `DEPLOY_UI_TREE_LOCK`, rendered from `server_git_tree_lock`, and
+`test_lock_names_agree_with_deploy_locks_is_clean` pins the service-lock names.
 
 ## Writes
 

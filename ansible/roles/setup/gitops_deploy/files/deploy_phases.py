@@ -99,7 +99,7 @@ def assess(tools: DeployTools, state: DeployerState, config: Config) -> TickTarg
     # hold marker and the behind-origin watchdog both reading green.
     #
     # The window is real, not theoretical: `deploy_run.staleness_gate` runs deploy_staleness (which
-    # fetches) BEFORE it takes /var/lock/server-git-tree.lock, and --dry-run returns before the
+    # fetches) BEFORE it takes the git-tree lock, and --dry-run returns before the
     # lock entirely — so a dry run in another session moves this repo's remote-tracking ref
     # mid-tick. The ref lives in the shared .git dir every worktree points at.
     origin = tools.run(["git", "rev-parse", f"origin/{config.branch}"], cwd=config.repo)

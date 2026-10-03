@@ -9,7 +9,7 @@
 # question genuinely open rather than merely unrecorded: a worktree far behind master reverts
 # a service, and nothing on the node says which tree the live manifests came from.
 #
-# Two guards already compensate for this — the /var/lock/server-git-tree.lock and deploy.sh's
+# Two guards already compensate for this — the git-tree lock and deploy.sh's
 # exit-4 staleness refusal. Each is sound. Both exist because the artifact has no name. This
 # gives it one.
 #

@@ -115,7 +115,7 @@ def _fetch_tip() -> str:
     # This runs from the primary checkout (land.sh cd's there) and takes no git-tree lock,
     # so it can run while the 30-min timer is mid-tick. Safe: a fetch appends objects and
     # moves a remote-tracking ref under git's own per-ref lock. It touches neither HEAD nor
-    # the working tree, which is what /var/lock/server-git-tree.lock exists to guard.
+    # the working tree, which is what the git-tree lock exists to guard.
     git_stdout("fetch", "-q", "origin", "master")
     return git_stdout("rev-parse", "origin/master")
 

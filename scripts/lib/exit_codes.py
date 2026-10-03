@@ -227,7 +227,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             DEPLOY_LOCK_BUSY,
             "DEPLOY_LOCK_BUSY",
             "a deploy lock stayed busy, so NOTHING was deployed — either "
-            "/var/lock/server-git-tree.lock or one of this run's own "
+            "the git-tree lock (deploy_locks.TREE_LOCK) or one of this run's own "
             "/var/lock/server-deploy-<tag>.lock files.",
             "The GitOps timer or another session holds it. This is a resume point, not a "
             "playbook failure — re-run the same command shortly.",
@@ -238,7 +238,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "DEPLOY_LOCK_UNAVAILABLE",
             "flock failed on the lock file ITSELF, so NOTHING was deployed. This is not "
             "contention — no deploy holds the lock.",
-            "Check that /var/lock/server-git-tree.lock exists and is writable by this user; "
+            "Check that the git-tree lock file (deploy_locks.TREE_LOCK) exists and is writable "
+            "by this user; "
             "retrying alone changes nothing.",
             verdict="lock-unavailable",
         ),

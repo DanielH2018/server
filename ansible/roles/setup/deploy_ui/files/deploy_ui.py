@@ -33,7 +33,8 @@ from gitops_markers import STATE_DIR
 # The locks the in-flight panel reads. The tree lock is held for the snapshot only (ADR-0017),
 # so for nearly all of a deploy the running thing is a `server-deploy-<tag>.lock` holder --
 # or `server-deploy-all.lock`, taken shared by every tagged run and exclusive by a full one.
-TREE_LOCK = "server-git-tree.lock"
+# The tree lock's path is not named here: the unit passes `server_git_tree_lock` in as
+# DEPLOY_UI_TREE_LOCK, so the one definition stays in group_vars (#3276).
 SERVICE_LOCK_GLOB = "server-deploy-*.lock"
 PAGE = Path(__file__).with_name("deploy_ui.html")
 STALE_CACHE_S = 60
@@ -46,6 +47,7 @@ class Config:
     log_dir: Path
     bind: str
     port: int
+    tree_lock: Path
     lock_dir: Path = Path("/var/lock")
     proc_locks: Path = Path("/proc/locks")
     pr_cache_s: int = 60
@@ -61,6 +63,9 @@ class Config:
             ),
             bind=e("DEPLOY_UI_BIND", "127.0.0.1"),
             port=int(e("DEPLOY_UI_PORT", "8790")),
+            # No default: a guessed path would leave the panel reading `free` over a file
+            # nobody locks.
+            tree_lock=Path(os.environ["DEPLOY_UI_TREE_LOCK"]),
             lock_dir=Path(e("DEPLOY_UI_LOCKS", "/var/lock")),
         )
 
@@ -118,10 +123,9 @@ class App:
     # ---- reads ----
     def _lock_paths(self) -> list[str]:
         """The tree lock plus every service lock file that exists, absolute, sorted."""
-        d = self.cfg.lock_dir
-        paths = sorted(d.glob(SERVICE_LOCK_GLOB))
-        if (d / TREE_LOCK).exists():
-            paths.insert(0, d / TREE_LOCK)
+        paths = sorted(self.cfg.lock_dir.glob(SERVICE_LOCK_GLOB))
+        if self.cfg.tree_lock.exists():
+            paths.insert(0, self.cfg.tree_lock)
         return [str(p) for p in paths]
 
     def inflight(self) -> dict:

@@ -137,7 +137,7 @@ PRIMARY_DIRTY_LIMIT = 8
 # it reads. Without the flag a SessionStart hook running in a worktree would write the shared
 # checkout's index — the one thing the isolation guard exists to prevent — and could collide on
 # `index.lock` with the deployer's own `merge --ff-only`, which holds
-# /var/lock/server-git-tree.lock and knows nothing about this hook. The flag is global to git, so
+# the git-tree lock and knows nothing about this hook. The flag is global to git, so
 # it comes before the subcommand. A constant rather than an inline argv so a test can assert the
 # shape without patching `lib.git.git`.
 PRIMARY_STATUS_ARGV = ("--no-optional-locks", "status", "--porcelain")

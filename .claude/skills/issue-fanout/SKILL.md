@@ -354,7 +354,7 @@ verdict that leaves a host apply owed.
 ## 4. Land
 
 Each agent goes through to a verified deploy, per `land-after-merge`. Every agent's `land.sh`
-queues on the same `/var/lock/server-git-tree.lock`, so `deploy.sh` exit 75 is expected under
+queues on the same git-tree lock, so `deploy.sh` exit 75 is expected under
 width and is a retry, never a report.
 
 Done when: every agent has either landed (a `VERDICT:` line) or is still queued on the lock, and

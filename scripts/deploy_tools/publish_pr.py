@@ -87,7 +87,7 @@ FAILURE_TAIL = 400
 # second branch on the strength of an answer GitHub never gave.
 OPEN_PR_UNKNOWN = "unknown"
 
-# `lib.git.git` has no default timeout, and the callers hold /var/lock/server-git-tree.lock
+# `lib.git.git` has no default timeout, and the callers hold the git-tree lock
 # while this runs -- the GitOps deployer waits only `flock -w 180` for that lock. git sets no
 # connect timeout of its own, so a blackholed origin would park the deployer rather than skip a
 # run. 30s is well under both that wait and the 60s bound `lib.gh.gh` puts on the PR lookup

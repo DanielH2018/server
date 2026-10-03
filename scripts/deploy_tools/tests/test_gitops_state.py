@@ -22,7 +22,7 @@ COMMON = "def456abc7890123 none common 2000.0"
 
 @pytest.fixture
 def tree_lock(tmp_path: Path) -> Path:
-    """The lock `run` injects, in place of `/var/lock/server-git-tree.lock`.
+    """The lock `run` injects, in place of the git-tree lock.
 
     A deploy or a gitops tick on this very host may hold the real one: a suite that took it
     would block that deploy, and one that ran while a tick held it would sit through the whole

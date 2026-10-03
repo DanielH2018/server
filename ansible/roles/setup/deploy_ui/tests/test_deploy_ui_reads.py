@@ -1,8 +1,10 @@
 """Readers behind the four panels. Each parser gets an accept and a reject case."""
 
 import os
+from pathlib import PurePath
 
 import deploy_ui_reads as reads
+from deploy_locks import TREE_LOCK
 
 PS = """\
   412     1  9001 /usr/bin/bash
@@ -23,13 +25,13 @@ PS = """\
 # fuser: who has each lock file OPEN. The queued deploy (5100) has homepage.lock open
 # exactly like the holder, and its blocked `flock` child (5101) is in /proc/locks.
 OPENED = {
-    "/var/lock/server-git-tree.lock": {6000, 6001},
+    TREE_LOCK: {6000, 6001},
     "/var/lock/server-deploy-all.lock": {5000, 5001, 5002, 4322},
     "/var/lock/server-deploy-homepage.lock": {5000, 5001, 5002, 5100, 5101},
     "/var/lock/server-deploy-n8n.lock": {4322},
 }
 LOCKS = {
-    "/var/lock/server-git-tree.lock": reads.FileLock(True, frozenset()),
+    TREE_LOCK: reads.FileLock(True, frozenset()),
     "/var/lock/server-deploy-all.lock": reads.FileLock(True, frozenset()),
     "/var/lock/server-deploy-homepage.lock": reads.FileLock(True, frozenset({5101})),
     "/var/lock/server-deploy-n8n.lock": reads.FileLock(True, frozenset()),
@@ -81,7 +83,7 @@ def test_runs_open_but_ungranted_file_is_not_held_is_flagged():
 def test_runs_bare_lock_holder_is_a_row_is_clean():
     """The GitOps tick matches no run pattern; its tree-lock hold still shows."""
     r = _rows()[6000]
-    assert r.kind == "lock" and r.locks == ("server-git-tree.lock",)
+    assert r.kind == "lock" and r.locks == (PurePath(TREE_LOCK).name,)
 
 
 def test_runs_ignore_grep_shells_and_list_services_is_flagged():

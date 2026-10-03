@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-03 01:25 UTC
-generated_sha: fe7e12b08
+generated_at: 2026-10-03 01:36 UTC
+generated_sha: da0a09a4e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -291,8 +291,8 @@ The sections below split them by **how each one is run**, which is derived from 
 | 4 | `DEPLOY_STALE` | the tree is behind origin/master, so NOTHING was deployed. | A stale tree renders stale templates and reverts live config while every repo-side check still reads green. Pull first; never --skip-staleness-check. |
 | 20 | `DEPLOY_PLAYBOOK_FAILED` | the playbook RAN and a task failed, so this is the one deploy exit where changes ARE live — everything applied before the failing task took effect. | Read the PLAY RECAP and the failing TASK. Do not treat it as a tag, staleness or lock refusal, and do not assume a re-run is safe. |
 | 64 | `DEPLOY_BAD_FLAGS` | the command line is wrong, so NOTHING was deployed and a retry changes nothing. | Read the usage above; fix the flags rather than re-running. |
-| 75 | `DEPLOY_LOCK_BUSY` | a deploy lock stayed busy, so NOTHING was deployed — either /var/lock/server-git-tree.lock or one of this run's own /var/lock/server-deploy-<tag>.lock files. | The GitOps timer or another session holds it. This is a resume point, not a playbook failure — re-run the same command shortly. |
-| 76 | `DEPLOY_LOCK_UNAVAILABLE` | flock failed on the lock file ITSELF, so NOTHING was deployed. This is not contention — no deploy holds the lock. | Check that /var/lock/server-git-tree.lock exists and is writable by this user; retrying alone changes nothing. |
+| 75 | `DEPLOY_LOCK_BUSY` | a deploy lock stayed busy, so NOTHING was deployed — either the git-tree lock (deploy_locks.TREE_LOCK) or one of this run's own /var/lock/server-deploy-<tag>.lock files. | The GitOps timer or another session holds it. This is a resume point, not a playbook failure — re-run the same command shortly. |
+| 76 | `DEPLOY_LOCK_UNAVAILABLE` | flock failed on the lock file ITSELF, so NOTHING was deployed. This is not contention — no deploy holds the lock. | Check that the git-tree lock file (deploy_locks.TREE_LOCK) exists and is writable by this user; retrying alone changes nothing. |
 | 77 | `DEPLOY_SNAPSHOT_FAILED` | the snapshot worktree could not be created, so NOTHING was deployed. | The playbook renders from a detached worktree of HEAD under /tmp/homelab-deploy-snapshots; the message above carries the failing command's own stderr (the `fatal:` line), so fix what it names — retrying changes nothing. |
 | 78 | `DEPLOY_NO_HOSTS` | the playbook matched NO host, so NOTHING was deployed. | ansible exits 0 for a run where no play matched, so the wrapper reads the PLAY RECAP itself. Read the [WARNING] lines above — an inventory that failed to parse, or a host pattern that matched nothing — fix that, then re-run. |
 | 79 | `DEPLOY_LOCK_PLAN_FAILED` | `deploy_locks.py plan` did not print this run's service locks, so the wrapper had nothing to take and NOTHING was deployed. | It never falls back to a lock order of its own. Run `uv run python ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand to see why, fix that, then re-run; nothing was held while it ran. |

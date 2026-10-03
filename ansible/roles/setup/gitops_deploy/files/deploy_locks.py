@@ -50,8 +50,8 @@ from typing import NamedTuple
 
 # The tree lock (ADR-0011): what the deployer unit's `flock` ExecStart, `deploy.sh` and the
 # `gitops_state.py` rewrite all take. Named here so the Python readers share one literal;
-# `deploy_under_locks.py` imports it, and the deploy UI, which cannot, is pinned to it by
-# `test_lock_names_agree_with_deploy_locks_is_clean`.
+# host templates read `server_git_tree_lock` from group_vars instead, and
+# `ansible/tests/deploy/test_tree_lock_single_definition.py` holds the two equal (#3276).
 TREE_LOCK = "/var/lock/server-git-tree.lock"
 # The lock a run with no tags takes exclusively, and every scoped run takes shared.
 SERVICE_LOCK_ALL = "all"

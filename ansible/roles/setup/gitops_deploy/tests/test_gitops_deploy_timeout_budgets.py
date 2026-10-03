@@ -134,7 +134,7 @@ _INITIAL_SETUP_TEMPLATES = (
 )
 _SECRET_ROTATE = _INITIAL_SETUP_TEMPLATES / "secret-rotate.sh.j2"
 
-# Every job that waits for /var/lock/server-git-tree.lock, with the regex that reads its wait.
+# Every job that waits for the git-tree lock, with the regex that reads its wait.
 #
 # WHY A CENSUS AND NOT ONE TEST EACH. A per-consumer test only covers the consumers somebody
 # remembered to write one for. This table is the thing a new waiter has to be added to, and the
@@ -175,7 +175,7 @@ def test_the_lock_waiter_census_is_non_vacuous():
 
 @pytest.mark.parametrize("name", sorted(_LOCK_WAITERS))
 def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
-    # gitops-deploy.service wraps its whole ExecStart in /var/lock/server-git-tree.lock, and one
+    # gitops-deploy.service wraps its whole ExecStart in the git-tree lock, and one
     # activation runs the forward deploy budget and then, in the failure path, the rollback
     # budget — sequentially, inside that one hold. A
     # waiter that gives up early does not fail safe: it fires its unit's OnFailure= alert for
