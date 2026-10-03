@@ -48,15 +48,13 @@ Observability-shaped: never emits a decision, swallows every error and exits 0.
 """
 
 import importlib.util
-import json
 import os
 import re
 import sys
-import tempfile
 import time
 from pathlib import PurePosixPath
 
-from _hook_common import emit_pretooluse_context
+from _hook_common import emit_pretooluse_context, read_payload, session_state_path
 
 # Under both harness caps with headroom for the wrapper text: local persist at 10,000 chars,
 # remote truncation at 8,000 chars / 200 lines. Pinned by `test_inject_nested_docs.py`.
@@ -290,8 +288,7 @@ def context_key(session_id, agent_id=None):
 
 
 def _state_path(session_id):
-    safe = re.sub(r"[^A-Za-z0-9_-]", "", session_id) or "unknown"
-    return os.path.join(tempfile.gettempdir(), f"claude-nested-docs-{safe}")
+    return session_state_path("nested-docs", session_id)
 
 
 def injected_this_session(session_id, now=None):
@@ -571,9 +568,8 @@ def context(payload):
 
 def main():
     """Read the hook payload from stdin and inject the docs `context` chooses."""
-    try:
-        data = json.load(sys.stdin)
-    except Exception:
+    data = read_payload()
+    if data is None:
         return 0
     text = context(data)
     if text:

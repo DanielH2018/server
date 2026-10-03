@@ -29,14 +29,20 @@ Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision naming the land
 use instead; otherwise no output -> normal permission flow.
 """
 
-import json
 import re
 import sys
-import tempfile
 import time
 from pathlib import Path
 
-from _hook_common import Unsplittable, emit_pretooluse_decision, invokes, split_stages
+from _hook_common import (
+    Unsplittable,
+    emit_pretooluse_decision,
+    gh_repo,
+    invokes,
+    read_payload,
+    session_state_path,
+    split_stages,
+)
 
 # Reads that answer "what is CI doing right now". `gh pr view` and `gh api` are absent on
 # purpose: both are general-purpose and used for far more than CI status.
@@ -95,16 +101,12 @@ def names_another_repo(stage: list[str]) -> bool:
     (`gh pr checks` and `gh run view` both take a URL). A stage naming no repo is this
     repo's: gh resolves it from the working directory, which is here.
     """
-    named: list[str] = []
-    for i, word in enumerate(stage):
-        if word in ("--repo", "-R") and i + 1 < len(stage):
-            named.append(stage[i + 1])
-        elif word.startswith("--repo="):
-            named.append(word.split("=", 1)[1])
-        elif word.startswith("-R") and len(word) > 2 and not word.startswith("--"):
-            named.append(word[2:])
-        elif word.startswith(("https://github.com/", "http://github.com/")):
-            named.append(word)
+    named = [
+        w for w in stage if w.startswith(("https://github.com/", "http://github.com/"))
+    ]
+    flag = gh_repo(stage)
+    if flag is not None:
+        named.append(flag)
     repos = {r for r in map(_repo_of, named) if r is not None}
     return any(r != _THIS_REPO for r in repos)
 
@@ -141,8 +143,7 @@ def classify(command: str, split=split_stages) -> str | None:
 
 
 def _counter_path(session_id: str) -> Path:
-    safe = re.sub(r"[^A-Za-z0-9_-]", "", session_id) or "unknown"
-    return Path(tempfile.gettempdir()) / f"claude-ci-poll-{safe}"
+    return Path(session_state_path("ci-poll", session_id))
 
 
 def bump(session_id: str, now: float | None = None) -> int:
@@ -213,9 +214,8 @@ def main() -> int:
 
     Always returns 0; a deny is expressed through emitted JSON, not the exit code.
     """
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
+    payload = read_payload()
+    if payload is None:
         return 0
     verdict = decision(payload)
     if verdict:

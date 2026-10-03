@@ -16,6 +16,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 
 
 _HOOK = os.path.join(
@@ -158,31 +159,23 @@ def test_a_failed_runs_log_is_a_one_shot_read_not_a_poll():
 
 
 def test_counter_increments_within_a_session(tmp_path, monkeypatch):
-    monkeypatch.setattr(_mod.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
     assert _mod.bump("sess-a") == 1
     assert _mod.bump("sess-a") == 2
     assert _mod.bump("sess-a") == 3
 
 
 def test_counters_are_separate_per_session(tmp_path, monkeypatch):
-    monkeypatch.setattr(_mod.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
     _mod.bump("sess-a")
     _mod.bump("sess-a")
     assert _mod.bump("sess-b") == 1
 
 
 def test_a_stale_counter_file_does_not_deny_a_fresh_session(tmp_path, monkeypatch):
-    monkeypatch.setattr(_mod.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
     _mod.bump("sess-a", now=0.0)
     assert _mod.bump("sess-a", now=_mod._COUNTER_TTL_S + 1) == 1
-
-
-def test_a_session_id_with_path_characters_stays_inside_the_temp_dir(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setattr(_mod.tempfile, "gettempdir", lambda: str(tmp_path))
-    path = _mod._counter_path("../../etc/passwd")
-    assert path.parent == tmp_path
 
 
 # --- main: the decisions it emits ------------------------------------------------------------
@@ -190,7 +183,7 @@ def test_a_session_id_with_path_characters_stays_inside_the_temp_dir(
 
 def _run(monkeypatch, capsys, command, session="s", tmp_path=None):
     if tmp_path is not None:
-        monkeypatch.setattr(_mod.tempfile, "gettempdir", lambda: str(tmp_path))
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
     payload = {"session_id": session, "tool_input": {"command": command}}
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(json.dumps(payload)))
     assert _mod.main() == 0

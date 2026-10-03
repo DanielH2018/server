@@ -19,6 +19,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import uuid
 
 import pytest
@@ -59,7 +60,7 @@ def repo(tmp_path, monkeypatch):
     (root / "ansible" / "plain.txt").write_text("x\n")
     (root / ".claude" / "rules").mkdir(parents=True)
     (root / ".claude" / "rules" / "ansible.md").write_text(RULE)
-    monkeypatch.setattr(_mod.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(_mod._logger, "LOG", str(tmp_path / "instructions.log"))
     return root
 

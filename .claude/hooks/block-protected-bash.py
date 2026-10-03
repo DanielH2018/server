@@ -32,12 +32,11 @@ Reads the hook JSON on stdin. Emits a decision or stays silent -> normal permiss
 """
 
 import importlib.util
-import json
 import os
 import re
 import sys
 
-from _hook_common import emit_pretooluse_decision
+from _hook_common import emit_pretooluse_decision, read_payload
 
 
 def _load_edits_hook():
@@ -236,9 +235,8 @@ def main():
     Emits the PreToolUse deny or ask decision it returns; ignores non-Bash tool calls and
     commands `decide` has no opinion on. Always returns 0.
     """
-    try:
-        data = json.load(sys.stdin)
-    except Exception:
+    data = read_payload()
+    if data is None:
         return 0
     verdict = decision(data)
     if verdict:

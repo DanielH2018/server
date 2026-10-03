@@ -51,7 +51,6 @@ Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fi
 output -> normal permission flow. The hook can only ever DENY.
 """
 
-import json
 import re
 import sys
 from urllib.parse import urlsplit
@@ -59,7 +58,9 @@ from urllib.parse import urlsplit
 from _hook_common import (
     Unsplittable,
     emit_pretooluse_decision,
+    gh_repo,
     invokes,
+    read_payload,
     split_stages,
     strip_shell_keywords,
 )
@@ -156,16 +157,6 @@ def burst_public_hostname_problem(stage: list[str]) -> str | None:
     )
 
 
-def _repo_flag(words: list[str]) -> str | None:
-    """The value of a `-R`/`--repo` flag in `words`, in any of its three spellings, or None."""
-    for i, word in enumerate(words):
-        if word.startswith("--repo="):
-            return word.partition("=")[2]
-        if word in ("-R", "--repo") and i + 1 < len(words):
-            return words[i + 1]
-    return None
-
-
 def issue_create_by_hand_problem(stage: list[str]) -> str | None:
     """`gh issue create` typed directly, bypassing `findings.py open`.
 
@@ -182,7 +173,7 @@ def issue_create_by_hand_problem(stage: list[str]) -> str | None:
     words = strip_shell_keywords(stage)
     if not invokes(words, ("gh", "issue", "create")):
         return None
-    repo = _repo_flag(words)
+    repo = gh_repo(words)
     repo_arg = f" --repo {repo}" if repo else ""
     return (
         "A hand-filed `gh issue create` lands without the `claude` label, the fingerprint "
@@ -395,9 +386,8 @@ def main() -> int:
     Otherwise emits nothing. Always returns 0 (a decision is expressed through emitted JSON,
     not the exit code).
     """
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
+    payload = read_payload()
+    if payload is None:
         return 0
     verdict = decision(payload)
     if verdict:

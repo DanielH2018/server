@@ -26,12 +26,11 @@ one of the above; otherwise no output -> normal permission flow. The hook can on
 ever BLOCK; it never approves.
 """
 
-import json
 import os
 import re
 import sys
 
-from _hook_common import emit_pretooluse_decision
+from _hook_common import emit_pretooluse_decision, read_payload
 
 
 _SOPS_MAC_RE = re.compile(r'(?m)^\s*"?mac"?:\s*"?ENC\[AES256_GCM,')
@@ -155,9 +154,8 @@ def main():
     worktree, not the primary checkout), then emits the PreToolUse deny decision `classify`
     returns. Always returns 0.
     """
-    try:
-        data = json.load(sys.stdin)
-    except Exception:
+    data = read_payload()
+    if data is None:
         return 0
     file_path = ((data.get("tool_input") or {}).get("file_path")) or ""
     # Guard the checkout that owns the edited file. settings.json always invokes the

@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: imported by bash-pretool.py, block-footguns.py, block-protected-bash.py, block-protected-edits.py, inject-nested-docs.py and nudge-land-sh.py
-"""Shared helpers for the PreToolUse hooks (the bash-pretool.py arms, block-protected-edits.py).
+#   reason: imported by every hook entry point here (bash-pretool.py and its arms, auto-mode-bridge.py, block-protected-edits.py, fanout-stop.py, log-instructions.py, session-health.py)
+"""Shared helpers for the hooks in this directory.
 
-Both hooks run standalone under the repo's uv python with the hooks dir as ``sys.path[0]`` (the
+Every hook runs standalone under the repo's uv python with the hooks dir as ``sys.path[0]`` (the
 ``exec uv run ... python .../X.py`` shim), and the test suite loads each hook by path from this same
 dir, so a plain ``from _hook_common import ...`` resolves in both. Stdlib-only — the hooks must stay
 dependency-free.
 """
 
 import json
+import os
+import re
 import shlex
+import sys
+import tempfile
 from collections.abc import Callable
 from typing import Any
 
@@ -223,3 +227,48 @@ def emit_pretooluse_context(context: str) -> None:
             }
         )
     )
+
+
+def read_payload(stream=None) -> dict | None:
+    """The hook's JSON payload from `stream` (stdin by default), or None when there is none to judge.
+
+    None covers empty input, text that is not JSON, a read error, and JSON that is not an
+    object. Every caller treats those the same way: it decides nothing and exits 0. `stream`
+    resolves `sys.stdin` at call time, because the tests swap it after this module is imported.
+    """
+    stream = sys.stdin if stream is None else stream
+    try:
+        payload = json.loads(stream.read() or "null")
+    except ValueError, OSError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def session_state_path(name: str, session_id: str) -> str:
+    """The per-session scratch file for state `name`, under the system temp dir.
+
+    The session id comes from the payload, so it is sanitised before it reaches a path: a
+    `../` in it cannot leave the temp dir. The temp dir is shared between parallel sessions,
+    which is why the file is keyed by session at all.
+    """
+    safe = re.sub(r"[^A-Za-z0-9_-]", "", session_id) or "unknown"
+    return os.path.join(tempfile.gettempdir(), f"claude-{name}-{safe}")
+
+
+def gh_repo(words: list[str]) -> str | None:
+    """The value of gh's `-R`/`--repo` flag in `words`, as typed, or None when there is none.
+
+    Reads all four spellings: `--repo X`, `--repo=X`, `-R X` and the attached `-RX`. gh takes
+    the last one when the flag repeats, so this does too. A GitHub URL elsewhere in the argv
+    is not read: in `gh issue create --body 'see https://github.com/o/r/issues/1'` it is text,
+    and only a caller that knows its subcommand takes a URL argument should look for one.
+    """
+    repo = None
+    for i, word in enumerate(words):
+        if word in ("-R", "--repo") and i + 1 < len(words):
+            repo = words[i + 1]
+        elif word.startswith("--repo="):
+            repo = word.partition("=")[2]
+        elif word.startswith("-R") and len(word) > 2:
+            repo = word[2:]
+    return repo

@@ -38,7 +38,8 @@ suite loads it by path.
 import json
 import os
 import re
-import sys
+
+from _hook_common import read_payload, session_state_path
 
 # A tick invocation and nothing else. A compound command that merely CONTAINS the tick is not
 # covered: the classifier judged the whole line, and the part it objected to may be the other
@@ -71,13 +72,8 @@ _EXIT_CODE = re.compile(r"^Exit code (\d+)", re.MULTILINE)
 
 
 def ledger_path(session_id: str) -> str:
-    """Where this session's retry count lives.
-
-    `.claude/logs/` is gitignored and already the hooks' scratch dir, so the ledger doesn't have to
-    invent a location outside the repo.
-    """
-    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    return os.path.join(repo, ".claude", "logs", f"auto-mode-retries-{session_id}.json")
+    """Where this session's retry count lives: the per-session scratch file every hook shares."""
+    return session_state_path("auto-mode-retries", session_id)
 
 
 def retries_used(path: str) -> int:
@@ -170,11 +166,8 @@ def main() -> None:
     `deploy.sh` non-zero exit into an explanatory `additionalContext` note. Prints the
     corresponding hookSpecificOutput JSON and returns; any other payload is ignored.
     """
-    try:
-        payload = json.load(sys.stdin)
-    except ValueError, OSError:
-        return
-    if not isinstance(payload, dict):
+    payload = read_payload()
+    if payload is None:
         return
 
     event = payload.get("hook_event_name")

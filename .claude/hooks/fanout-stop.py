@@ -53,6 +53,8 @@ import re
 import sys
 from pathlib import Path
 
+from _hook_common import read_payload
+
 MARKER = Path(".fanout") / "brief.md"
 COUNTER = Path(".fanout") / "stop-blocks"
 MAX_BLOCKS = 3
@@ -172,11 +174,8 @@ def decide(payload: dict) -> str | None:
 
 
 def main(stdin=sys.stdin, stdout=sys.stdout) -> int:
-    try:
-        payload = json.load(stdin)
-    except ValueError:
-        return 0
-    if not isinstance(payload, dict):
+    payload = read_payload(stdin)
+    if payload is None:
         return 0
     reason = decide(payload)
     if reason:
