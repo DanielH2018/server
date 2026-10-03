@@ -256,6 +256,29 @@ def test_the_hooks_run_in_the_worktree_the_wrapper_builds() -> None:
     )
 
 
+def test_the_agent_gets_claude_guard_where_the_hook_looks_for_it() -> None:
+    """Without the package block-footguns asks on every `gh` command, which is the session's
+    whole job, and an unattended `ask` is a denial."""
+    lookup = re.search(
+        r'^_CLAUDE_GUARD_DIR = Path\("~(/[^"]+)"\)',
+        (HOOKS / "_claude_guard.py").read_text(),
+        re.M,
+    )
+    assert lookup, "the hook no longer names its claude_guard directory"
+    tasks = yaml_fast.safe_load((ROLE / "tasks" / "identity.yml").read_text())
+    copies = [
+        t["ansible.builtin.copy"]
+        for t in tasks
+        if t.get("name", "").startswith(
+            "Give the agent user the operator's claude_guard"
+        )
+    ]
+    assert len(copies) == 1, "expected one claude_guard copy task"
+    rel = lookup.group(1)
+    assert copies[0]["dest"].rstrip("/") == "{{ renovate_agent_home }}" + rel
+    assert copies[0]["src"] == "/home/{{ sys_user }}" + rel + "/claude_guard"
+
+
 def guard_decision(command: str) -> str | None:
     """The decision the repo's PreToolUse:Bash dispatcher reaches for `command`, or None."""
     sys.path.insert(0, str(HOOKS))  # the arms import _hook_common
