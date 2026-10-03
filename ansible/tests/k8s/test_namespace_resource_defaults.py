@@ -27,12 +27,11 @@ k8s_default_limitrange in group_vars/all.yml for why the ceiling is set where it
 from lib.proc_testing import run
 
 from lib import yaml_fast
-from _k8s_render import rendered_build_job_text, rendered_docs
+from _k8s_render import deploy_play, pod_spec, rendered_build_job_text, rendered_docs
 from _helpers import REPO as _REPO
 from _helpers import jinja_env, load_yaml
 
 
-_DEPLOY = _REPO / "ansible/deploy.yml"
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 
 _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "Job", "CronJob"}
@@ -48,10 +47,7 @@ def _pod_specs():
     for role, name, doc in rendered_docs():
         if not isinstance(doc, dict) or doc.get("kind") not in _POD_KINDS:
             continue
-        spec = doc["spec"]
-        if doc["kind"] == "CronJob":
-            spec = spec["jobTemplate"]["spec"]
-        pod = spec["template"]["spec"]
+        pod = pod_spec(doc)
         # initContainers included deliberately: an init container with no limit can consume
         # the node just as thoroughly as the app container, and it runs before anything is
         # watching the workload.
@@ -76,18 +72,11 @@ def _eval(node, ctx, env):
     return node
 
 
-def _k8s_play() -> dict:
-    for play in yaml_fast.safe_load(_DEPLOY.read_text()) or []:
-        if "k8s" in str(play.get("name", "")).lower():
-            return play
-    raise AssertionError("deploy.yml no longer has a k8s play")
-
-
 def _homelab_ns_items() -> list[dict]:
     """The objects deploy.yml applies alongside the homelab namespace, fully expanded."""
     task = next(
         t
-        for t in _k8s_play().get("pre_tasks", [])
+        for t in deploy_play().get("pre_tasks", [])
         if "Build the workload namespace manifest" in str(t.get("name", ""))
     )
     # `jinja_env` carries the real `combine`, not a shim: it decides whether
@@ -232,7 +221,7 @@ def test_the_namespace_is_applied_before_its_limitrange() -> None:
 def test_the_namespace_apply_reports_changed_per_line() -> None:
     task = next(
         t
-        for t in _k8s_play().get("pre_tasks", [])
+        for t in deploy_play().get("pre_tasks", [])
         if "Apply the workload namespace" in str(t.get("name", ""))
     )
     changed_when = str(task["changed_when"])

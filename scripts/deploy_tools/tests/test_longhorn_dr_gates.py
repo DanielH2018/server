@@ -10,7 +10,6 @@ import json
 import pytest
 from _gates_fakes import fake_tools
 from deploy_tools import longhorn_dr_gates as gates
-from lib import kubectl
 
 from lib.repo_paths import REPO as _REPO
 from lib.proc_testing import run
@@ -62,13 +61,6 @@ SYNCED = {
     ]
 }
 NO_VOLUMES = {"items": []}
-
-
-@pytest.fixture(autouse=True)
-def _fresh_identity():
-    kubectl.forget_served_cluster()
-    yield
-    kubectl.forget_served_cluster()
 
 
 def _run(targets=BOTH_ARMED, backup_volumes=SYNCED, volumes=NO_VOLUMES):

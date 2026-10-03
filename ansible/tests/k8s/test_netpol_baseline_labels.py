@@ -12,7 +12,7 @@ on exactly that broken shape, and a NetworkPolicy does not look at a Deployment'
 Run: uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py
 """
 
-from _k8s_render import rendered_docs
+from _k8s_render import pod_template, rendered_docs
 from _helpers import K8S_ROLES
 
 # Slice 1 of the rollout: the six traefik-only leaf apps (docs/networkpolicy-default-deny.md).
@@ -207,16 +207,8 @@ UNFENCED_BY_DESIGN_WORKLOADS = {
 
 
 def _pod_template_labels(doc: dict) -> dict:
-    """The labels a Deployment or CronJob actually stamps onto its pods.
-
-    A Deployment's pod template is spec.template. A CronJob's is one level deeper, at
-    spec.jobTemplate.spec.template — its own spec.template does not exist, so reading that
-    path the Deployment way would silently return {} for every CronJob.
-    """
-    spec = doc.get("spec") or {}
-    if doc.get("kind") == "CronJob":
-        spec = ((spec.get("jobTemplate") or {}).get("spec")) or {}
-    return (spec.get("template") or {}).get("metadata", {}).get("labels", {})
+    """The labels a Deployment or CronJob actually stamps onto its pods."""
+    return (pod_template(doc).get("metadata") or {}).get("labels", {})
 
 
 def _labelled_roles() -> set[str]:

@@ -23,7 +23,7 @@ import tomllib
 
 from lib import yaml_fast
 from _helpers import REPO as REPO_ROOT
-from lib.proc_testing import run
+from _ratchet_census import tracked_files
 
 
 def _ansible_lint_hook() -> dict:
@@ -42,8 +42,7 @@ def _exclude_paths() -> list[str]:
 
 def _tracked_files() -> list[str]:
     """The candidate set is what prek can pass, and prek only ever passes TRACKED files."""
-    out = run(["git", "ls-files"], cwd=REPO_ROOT, check=True)
-    return out.stdout.splitlines()
+    return tracked_files()
 
 
 def _is_excluded(path: str, entries: list[str]) -> bool:

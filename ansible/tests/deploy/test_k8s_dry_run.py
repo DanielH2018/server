@@ -40,10 +40,10 @@ from _k8s_guards import (
     _role_with_tasks,
     _task_chunks,
 )
+from _k8s_render import deploy_play
 
 _REPO = REPO
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
-_DEPLOY = _REPO / "ansible/deploy.yml"
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
 
@@ -192,15 +192,8 @@ def test_the_render_directory_fact_survives_every_tag_selection() -> None:
         )
 
 
-def _k8s_play() -> dict:
-    for play in yaml_fast.safe_load(_DEPLOY.read_text()) or []:
-        if "k8s" in str(play.get("name", "")).lower():
-            return play
-    raise AssertionError("deploy.yml no longer has a k8s play")
-
-
 def test_namespace_apply_is_guarded() -> None:
-    task = _named(_k8s_play()["pre_tasks"], "Apply the workload namespace")
+    task = _named(deploy_play()["pre_tasks"], "Apply the workload namespace")
     assert _GUARD in _when(task), (
         "the namespace apply writes to the cluster on a dry run"
     )

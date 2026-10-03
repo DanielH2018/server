@@ -9,7 +9,7 @@ import io
 import pytest
 from _gates_fakes import fake_tools, failing_read
 from deploy_tools import longhorn_upgrade_gates as gates
-from lib import kubectl, yaml_fast
+from lib import yaml_fast
 
 from lib.repo_paths import REPO as _REPO
 from lib.proc_testing import run
@@ -51,13 +51,6 @@ ARMED = {
 }
 SETTLED_VOLUMES = {"items": [_volume("pvc-a"), _volume("pvc-b", "detached", "unknown")]}
 ONE_ENGINE = {"items": [_engine("longhornio/longhorn-engine:v1.12.1", refs=176)]}
-
-
-@pytest.fixture(autouse=True)
-def _fresh_identity():
-    kubectl.forget_served_cluster()
-    yield
-    kubectl.forget_served_cluster()
 
 
 @pytest.fixture

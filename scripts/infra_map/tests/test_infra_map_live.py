@@ -107,9 +107,7 @@ class _FakeCluster:
 def fake_cluster(tmp_path):
     cfg = tmp_path / "kube.yaml"
     cfg.write_text("cfg")
-    kubectl_lib.forget_served_cluster()
-    yield _FakeCluster(cfg)
-    kubectl_lib.forget_served_cluster()
+    return _FakeCluster(cfg)
 
 
 def test_collect_k8s_asks_for_every_long_running_kind(fake_cluster):

@@ -30,12 +30,12 @@ import pytest
 
 from lib import yaml_fast
 from _helpers import ANSIBLE, load_defaults
+from _jellyfin_plugins import padded, version_tuple
 
 JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
 DEFAULTS = JELLYFIN / "defaults" / "main.yml"
 
 TARGET_ABI_VAR = re.compile(r"^jellyfin_k8s_(?P<plugin>[a-z0-9]+)_target_abi$")
-LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 
 # The members the census MUST contain. A rename breaks this loudly rather than emptying the set.
 # ani-sync is absent on purpose: it declares no `_target_abi` var — its ABI leads the release
@@ -44,17 +44,6 @@ LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 REQUIRED_PLUGINS = frozenset(
     {"introskipper", "webhook", "mergeversions", "mediacleaner"}
 )
-
-
-def _version_tuple(text: str, what: str) -> tuple[int, ...]:
-    match = LEADING_VERSION.match(text)
-    assert match, f"{what} does not start with a dotted version: {text!r}"
-    return tuple(int(part) for part in match.group(1).split("."))
-
-
-def _padded(left: tuple[int, ...], right: tuple[int, ...]) -> tuple[tuple, tuple]:
-    width = max(len(left), len(right))
-    return left + (0,) * (width - len(left)), right + (0,) * (width - len(right))
 
 
 def _declared_abis(defaults: dict) -> dict[str, tuple[int, ...]]:
@@ -67,10 +56,10 @@ def _declared_abis(defaults: dict) -> dict[str, tuple[int, ...]]:
     for name, value in defaults.items():
         match = TARGET_ABI_VAR.match(name)
         if match:
-            found[match.group("plugin")] = _version_tuple(str(value), name)
+            found[match.group("plugin")] = version_tuple(str(value), name)
 
     asset = defaults["jellyfin_k8s_anisync_url"].rsplit("/", 1)[-1]
-    found["anisync"] = _version_tuple(asset, "the ani-sync release asset filename")
+    found["anisync"] = version_tuple(asset, "the ani-sync release asset filename")
 
     # NORMALISED TO ONE WIDTH before returning, and this is load-bearing for `max`. The vars are
     # four-part (`10.11.11.0`) while ani-sync's ABI comes off an asset filename and parses to
@@ -114,11 +103,11 @@ def test_the_image_satisfies_every_plugin_target_abi():
     defaults = load_defaults(JELLYFIN)
     abis = _declared_abis(defaults)
     image = defaults["jellyfin_k8s_image"]
-    server = _version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
 
     too_new = {}
     for plugin, abi in abis.items():
-        left, right = _padded(abi, server)
+        left, right = padded(abi, server)
         if left > right:
             too_new[plugin] = ".".join(map(str, abi))
 
@@ -140,11 +129,11 @@ def test_the_binding_floor_is_the_slowest_plugin():
     abis = _declared_abis(defaults)
     floor = max(abis.values())
     holders = sorted(p for p, abi in abis.items() if abi == floor)
-    server = _version_tuple(
+    server = version_tuple(
         defaults["jellyfin_k8s_image"].rsplit(":", 1)[-1], "the jellyfin image tag"
     )
 
-    left, right = _padded(floor, server)
+    left, right = padded(floor, server)
     assert left <= right, (
         f"the binding targetAbi floor is {'.'.join(map(str, floor))} (held by {holders}), which "
         f"jellyfin_k8s_image {defaults['jellyfin_k8s_image']} does not satisfy"
@@ -194,10 +183,10 @@ def test_the_guard_rejects_a_mismatched_defaults_file(what, before, after):
     defaults = yaml_fast.safe_load(text.replace(before, after, 1))
 
     abis = _declared_abis(defaults)
-    server = _version_tuple(
+    server = version_tuple(
         defaults["jellyfin_k8s_image"].rsplit(":", 1)[-1], "the jellyfin image tag"
     )
-    left, right = _padded(max(abis.values()), server)
+    left, right = padded(max(abis.values()), server)
     assert left > right, (
         f"{what} left every targetAbi still satisfied by the image, so the real guard would pass "
         f"on it — the mutation does not exercise what it claims to"

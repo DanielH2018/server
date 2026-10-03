@@ -24,26 +24,15 @@ from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks
 from _helpers import command_of as _cmd
 from _helpers import render_expr as _render
+from _k8s_render import deploy_play
 
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 _DRAIN = _REPO / "ansible/roles/k8s/manifests/tasks/drain.yml"
 _CONFIGARR = _REPO / "ansible/roles/k8s/configarr/tasks/main.yml"
 _GATE = _REPO / "ansible/post_tasks/k8s_stabilise_gate.yml"
-_DEPLOY = _REPO / "ansible/deploy.yml"
 _BATCH = _REPO / "ansible/tasks/k8s_batch.yml"
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
-
-
-def _plays() -> list[dict]:
-    return yaml_fast.safe_load(_DEPLOY.read_text()) or []
-
-
-def _k8s_play() -> dict:
-    for play in _plays():
-        if play.get("name") == "Deploy k8s workloads":
-            return play
-    raise AssertionError("deploy.yml no longer has a 'Deploy k8s workloads' play")
 
 
 def test_manifests_queues_the_rollout_instead_of_waiting() -> None:
@@ -187,7 +176,7 @@ def test_drain_does_not_use_kubectl_wait_for_available() -> None:
 
 
 def test_deploy_runs_the_stabilisation_gate_in_post_tasks() -> None:
-    play = _k8s_play()
+    play = deploy_play()
     included = [
         t.get("ansible.builtin.include_tasks", "") for t in play.get("post_tasks", [])
     ]
@@ -199,7 +188,7 @@ def test_deploy_runs_the_stabilisation_gate_in_post_tasks() -> None:
 
 
 def test_deploy_batches_the_k8s_roles() -> None:
-    play = _k8s_play()
+    play = deploy_play()
     batched = [
         t
         for t in play.get("tasks", [])

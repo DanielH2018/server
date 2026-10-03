@@ -9,8 +9,8 @@ import json
 import re
 from typing import NamedTuple
 
+from _ratchet_census import tracked_files
 from lib.repo_paths import REPO
-from lib.proc_testing import run
 
 # Re-export for modules that import _REPO from this module
 _REPO = REPO
@@ -23,8 +23,7 @@ _PACKAGE_RULES = _RENOVATE_CONFIG["packageRules"]
 
 
 def _tracked_files() -> list[str]:
-    out = run(["git", "ls-files"], cwd=REPO, check=True).stdout
-    return out.splitlines()
+    return tracked_files()
 
 
 def _to_python_regex(pattern: str) -> str:

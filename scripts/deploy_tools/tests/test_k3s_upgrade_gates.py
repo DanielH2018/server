@@ -63,15 +63,6 @@ def _tools(
     )
 
 
-@pytest.fixture(autouse=True)
-def _fresh_identity():
-    # The served-cluster answer is cached per Tools; every test builds its own, but a
-    # cleared cache keeps one test's fake from ever answering another's.
-    kubectl.forget_served_cluster()
-    yield
-    kubectl.forget_served_cluster()
-
-
 @pytest.fixture
 def state_dir(tmp_path):
     d = tmp_path / "gitops-deploy"

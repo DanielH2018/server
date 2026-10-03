@@ -23,7 +23,7 @@ Run: uv run pytest ansible/tests/k8s/test_built_images_name_the_content_tag.py
 import re
 
 from _helpers import ANSIBLE
-from _k8s_render import rendered_docs
+from _k8s_render import pod_spec, rendered_docs
 from lib.render_guard import BASE_CONTEXT, BUILT_IMAGE_TAG_STUBS
 
 _POD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
@@ -65,13 +65,6 @@ def built_image_names() -> set[str]:
     return found
 
 
-def _pod_spec(doc: dict) -> dict:
-    spec = doc.get("spec", {})
-    if doc.get("kind") == "CronJob":
-        spec = spec.get("jobTemplate", {}).get("spec", {})
-    return spec.get("template", {}).get("spec", {})
-
-
 def built_image_refs(docs) -> list[tuple[str, str, str]]:
     """`(role, template, image ref)` for every container running an image-builder image."""
     names = built_image_names()
@@ -79,7 +72,7 @@ def built_image_refs(docs) -> list[tuple[str, str, str]]:
     for role, tpl, doc in docs:
         if doc.get("kind") not in _POD_KINDS:
             continue
-        pod = _pod_spec(doc)
+        pod = pod_spec(doc)
         for key in ("initContainers", "containers"):
             for container in pod.get(key) or []:
                 image = str(container.get("image", ""))

@@ -22,7 +22,13 @@ Run: uv run pytest ansible/tests/k8s/test_k8s_manifests.py
 from lib import yaml_fast
 
 from _helpers import ANSIBLE
-from _k8s_render import rendered_build_job_text, rendered_docs
+from _k8s_render import (
+    K8S_PLAY_NAME,
+    deploy_play,
+    pod_spec,
+    rendered_build_job_text,
+    rendered_docs,
+)
 from _manifest_guards import K8S, _k8s_entries, _render, _role_defaults
 
 
@@ -36,14 +42,14 @@ def test_the_k8s_play_does_not_filter_an_already_filtered_list():
     `ok=10 changed=0 failed=0` having deployed nothing at all.
     """
     plays = yaml_fast.safe_load((ANSIBLE / "deploy.yml").read_text())
-    k8s_play = next(p for p in plays if "k8s" in p["name"].lower())
+    k8s_play = deploy_play()
     task = next(t for t in k8s_play["pre_tasks"] if "k8s-platform" in t.get("name", ""))
     expr = task["ansible.builtin.set_fact"]["containers_list"]
     assert "containers_list_unfiltered" in expr, (
         "the k8s play re-filters the Docker play's output and silently deploys nothing"
     )
 
-    docker_play = next(p for p in plays if p is not k8s_play)
+    docker_play = next(p for p in plays if p.get("name") != K8S_PLAY_NAME)
     names = [t.get("name", "") for t in docker_play["pre_tasks"]]
     assert names.index(
         "Preserve the unfiltered container list for the k8s play"
@@ -109,16 +115,9 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
 _TOKEN_PATHS = ("/run/secrets", "/var/run/secrets")
 
 
-def _pod_spec(doc: dict) -> dict:
-    spec = doc.get("spec", {})
-    if doc.get("kind") == "CronJob":
-        spec = spec.get("jobTemplate", {}).get("spec", {})
-    return spec.get("template", {}).get("spec", {})
-
-
 def _mounts(doc: dict) -> list[tuple[str, str]]:
     """(container, mount path) for every container of a rendered pod-bearing doc."""
-    pod = _pod_spec(doc)
+    pod = pod_spec(doc)
     return [
         (container["name"], mount["mountPath"].rstrip("/"))
         for container in pod.get("initContainers", []) + pod.get("containers", [])

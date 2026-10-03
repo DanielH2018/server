@@ -334,3 +334,37 @@ def rendered_build_job_text() -> str:
     return render_role_template(
         "image-builder", "build-job.yaml.j2", IMAGE_BUILDER_CALLER_VARS
     )
+
+
+K8S_PLAY_NAME = "Deploy k8s workloads"
+
+
+def deploy_play() -> dict:
+    """deploy.yml's k8s play, selected by its exact name.
+
+    deploy.yml opens with the Docker play for the Pi, so the k8s play is not the first. An
+    exact name rather than a substring, so a second play with `k8s` in its name cannot be
+    picked up in its place.
+    """
+    for play in yaml_fast.safe_load((ANSIBLE / "deploy.yml").read_text()) or []:
+        if play.get("name") == K8S_PLAY_NAME:
+            return play
+    raise AssertionError(f"deploy.yml no longer has a play named {K8S_PLAY_NAME!r}")
+
+
+def pod_template(doc: dict) -> dict:
+    """The pod template a rendered workload stamps its pods from, or {} if it has none.
+
+    A Deployment's pod template is `spec.template`. A CronJob's is one level deeper, at
+    `spec.jobTemplate.spec.template`; reading a CronJob the Deployment way silently returns
+    {}, so a guard over it passes having checked nothing. Explicit nulls read as absent.
+    """
+    spec = doc.get("spec") or {}
+    if doc.get("kind") == "CronJob":
+        spec = (spec.get("jobTemplate") or {}).get("spec") or {}
+    return spec.get("template") or {}
+
+
+def pod_spec(doc: dict) -> dict:
+    """The pod spec of a rendered workload, CronJobs included, or {} if it has none."""
+    return pod_template(doc).get("spec") or {}

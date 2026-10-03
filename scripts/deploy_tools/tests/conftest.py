@@ -13,20 +13,12 @@ from pathlib import Path
 
 import pytest
 
+from _helpers import stub_logger_on_path
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
 from deploy_tools.land_lib import options, tools
-from lib.proc_testing import fake_bin, path_with
-
-# The stub records one line per call so a test can assert it intercepted something. Without
-# that record the fixture would be indistinguishable from one that silently stopped being on
-# PATH, which is the failure mode `test_land_annotation_is_intercepted` exists to catch.
-_LOGGER_STUB = """#!/bin/sh
-printf '%s\\n' "$*" >> "$LAND_TEST_LOGGER_CALLS"
-"""
-
 
 # Read off the modules that consume them rather than retyped, so a knob added there is cleared
-# here without anyone remembering to. `LAND_TEST_LOGGER_CALLS` is not one: the fixtures set it.
+# here without anyone remembering to.
 LAND_ENV_KNOBS = (*options.ENV_KNOBS, tools.GATE_TMP_ROOT_ENV)
 
 
@@ -70,14 +62,9 @@ def _no_syslog(tmp_path_factory, monkeypatch):
     Those modules build their subprocess env from `os.environ` with their own stub dir
     prepended, so mutating PATH here is inherited by all of them: their `gh` stub still wins
     for `gh`, and this wins for `logger` over `/usr/bin/logger`.
+    `test_land_annotation_is_intercepted` is the proof the stub is on PATH.
     """
-    stub_dir = fake_bin(tmp_path_factory.mktemp("logger-stub"), logger=_LOGGER_STUB)
-
-    calls = stub_dir / "logger-calls"
-    calls.touch()
-    monkeypatch.setenv("LAND_TEST_LOGGER_CALLS", str(calls))
-    monkeypatch.setenv("PATH", path_with(stub_dir))
-    return calls
+    return stub_logger_on_path(tmp_path_factory, monkeypatch)
 
 
 @pytest.fixture
