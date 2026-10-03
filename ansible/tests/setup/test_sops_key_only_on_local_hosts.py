@@ -11,9 +11,8 @@ both fail.
 Run: uv run pytest ansible/tests/setup/test_sops_key_only_on_local_hosts.py
 """
 
-import yaml
-
 from _helpers import ANSIBLE
+from lib import yaml_fast
 from lib.ansible_inventory import inventory_hosts
 from lib.ansible_jinja_env import make_ansible_env
 
@@ -31,7 +30,7 @@ KEY_TASKS = frozenset(
 
 
 def _key_task_gates() -> dict[str, str | None]:
-    tasks = yaml.safe_load(TASKS.read_text())
+    tasks = yaml_fast.safe_load(TASKS.read_text())
     return {t["name"]: t.get("when") for t in tasks if t.get("name") in KEY_TASKS}
 
 

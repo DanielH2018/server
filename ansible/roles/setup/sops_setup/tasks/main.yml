@@ -123,5 +123,6 @@
   # ansible/.sops.yaml is tracked and the controller always has one — correct by accident. The
   # gate says what is actually meant.
   when:
+    - (ansible_connection | default('ssh')) == 'local'
     - has_repo_checkout
     - not (lookup('file', playbook_dir + '/.sops.yaml', errors='ignore'))
