@@ -80,7 +80,7 @@ RUN python3 -m venv $VIRTUAL_ENV \
 #    tracks the pin on npm (regex manager in renovate.json). npm's download cache is ~96 M that
 #    the running container never reads, so it is dropped in the same layer that creates it — a
 #    later `rm` would not shrink this one.
-RUN npm install -g @anthropic-ai/claude-code@2.1.282 \
+RUN npm install -g @anthropic-ai/claude-code@2.1.283 \
     && npm cache clean --force
 
 # 5. VS Code extensions, downloaded at build time from the exact URL each entry in

@@ -95,9 +95,9 @@ code_server_k8s_extensions:
   # Platform-specific; `?targetPlatform=linux-x64` selects the Linux build. Kept at the same
   # version as the `@anthropic-ai/claude-code` CLI the Dockerfile installs.
   - name: Anthropic.claude-code
-    version: 2.1.282
-    url: https://marketplace.visualstudio.com/_apis/public/gallery/publishers/Anthropic/vsextensions/claude-code/2.1.282/vspackage?targetPlatform=linux-x64
-    sha256: 0087212d1b132039979d2c36a06277d197586f621a4a09c3d714df19e2c0fdbc
+    version: 2.1.283
+    url: https://marketplace.visualstudio.com/_apis/public/gallery/publishers/Anthropic/vsextensions/claude-code/2.1.283/vspackage?targetPlatform=linux-x64
+    sha256: c94ac58496bf0e40105c7ff4119dcdd1ac65a0236dacfbda15f989e7f6e7a918
 
 # Node.js, installed from the official linux-x64 tarball rather than NodeSource's `setup_22.x`
 # script piped to bash, which resolves whatever NodeSource serves on build day. The
