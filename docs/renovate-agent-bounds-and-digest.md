@@ -6,7 +6,7 @@ autonomous-role contract; this page keeps the modules `files/` ships, the four b
 each is the var it is, the worktree rules, what the Discord digest measures, and the alive
 tile's exit-code and token plumbing. `docs/renovate-notify-internals.md` is the sibling page for the reporting half.
 
-## The four modules `files/` ships
+## The modules `files/` ships
 
 - `agent_logic.py` — the pure half: the run gate, the before/after delta, the digest text.
 - `agent_toolbox.py` — `AgentTools`, the four process boundaries a test replaces. It names
@@ -14,6 +14,8 @@ tile's exit-code and token plumbing. `docs/renovate-notify-internals.md` is the 
 - `run_worktree.py` — the run worktree's lifecycle, and the only code here that talks to git.
 - `renovate_agent.py` — the entry module: config, the `gh` census, the session, the digest,
   the crash report.
+- `land_renovate_pr.py` — the lander, run by `renovate-agent-land@<n>.service` rather than by
+  the session. *The lander* below says why it is separate.
 
 `run_worktree.py` and `agent_toolbox.py` came out of `renovate_agent.py` on 2026-09-30, which
 had reached the 600-line cap `ansible/tests/repo/test_module_length_ratchet.py` enforces
@@ -27,6 +29,21 @@ The role names each module twice — once in the "Install agent Python files" co
 from the directory, so a module in `files/` and in neither list is one the host never receives.
 ENFORCED:
 `ansible/tests/setup/test_renovate_agent_modules_are_shipped.py::test_every_shipped_module_is_installed_and_stamped`.
+
+## The lander
+
+`renovate-agent-land@<n>.service` lands one Renovate PR for the agent. It runs
+`files/land_renovate_pr.py` as the operator's user, because `land.sh` deploys. The agent's own
+user, `renovate_agent_user`, may start it through `templates/50-renovate-agent-land.rules.j2`
+and do nothing else with privilege. The session then reads
+`/var/lib/renovate-agent-land/<n>.verdict`.
+
+The lander re-reads the PR from GitHub with the operator's token and lands it only when every
+check in its module docstring passes. The denied roles come from the deployer's rendered
+`K8S_AUTODEPLOY_DENYLIST`, so the lander adds no parser of its own. It never reads the PR title,
+because the session can edit a title. ENFORCED:
+`ansible/roles/setup/renovate_agent/tests/test_land_renovate_pr.py`, which also holds the polkit
+rule's unit-name pattern to the PR numbers the script accepts.
 
 ## Why the merge goes through `land.sh --arm-merge`
 

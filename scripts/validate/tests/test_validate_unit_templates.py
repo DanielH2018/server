@@ -144,11 +144,12 @@ def test_discover_templates_finds_the_known_set():
         "gitops-deploy.service.j2",
         "gitops-deploy.timer.j2",
         "renovate-agent.timer.j2",
+        "renovate-agent-land@.service.j2",
         "node_exporter.service.j2",
         "kuma-check.service.j2",
         "kuma-check.timer.j2",
     } <= names
-    assert len(names) == 23
+    assert len(names) == 24
 
 
 def test_owning_role_defaults_resolves_the_role_directory():

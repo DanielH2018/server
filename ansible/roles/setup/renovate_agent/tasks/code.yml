@@ -12,6 +12,7 @@
     - agent_toolbox.py
     - run_worktree.py
     - agent_logic.py
+    - land_renovate_pr.py
     # The deployer's own module, shipped from its `files/` rather than a copy here.
     # `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to it to
     # this role as well (#3306).
@@ -39,6 +40,8 @@
         src: ansible/roles/setup/renovate_agent/files/run_worktree.py
       - live: /opt/renovate-agent/agent_logic.py
         src: ansible/roles/setup/renovate_agent/files/agent_logic.py
+      - live: /opt/renovate-agent/land_renovate_pr.py
+        src: ansible/roles/setup/renovate_agent/files/land_renovate_pr.py
       - live: /opt/renovate-agent/gitops_markers.py
         src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
       - live: /opt/renovate-agent/host_lib.py

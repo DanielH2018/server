@@ -15,7 +15,7 @@ uv run ansible-playbook ansible/initial_setup.yml --tags renovate_agent
 
 The four bounds on a run and the worktree rules, what the Discord digest measures, the alive
 tile's exit-code and token plumbing, how to exercise the wrapper without arming anything, the
-four modules `files/` ships, and the denylist marker's own history are in
+modules `files/` ships, the lander, and the denylist marker's own history are in
 `docs/renovate-agent-bounds-and-digest.md`.
 
 ## At a glance
