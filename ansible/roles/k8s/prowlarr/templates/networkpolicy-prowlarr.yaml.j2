@@ -1,6 +1,8 @@
+{% from 'networkpolicy.yml.j2' import arr_networkpolicy with context %}
 ---
-# Slice 2 of the ingress default-deny. NOTE: this role's OTHER policy file, networkpolicy.yaml.j2,
-# fences flaresolverr and is unrelated to this one. Both are applied.
+# Slice 2 of the ingress default-deny. NOTE: this role's OTHER policy file,
+# networkpolicy-flaresolverr.yaml.j2, fences flaresolverr and is unrelated to this one. Both are
+# applied.
 #
 # This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
 # admits none of monitor-bridge, sonarr, radarr or flaresolverr-netpol-probe, so they reach prowlarr
@@ -30,31 +32,9 @@
 # roles/k8s/registry/templates/networkpolicy.yaml.j2 admitting its own
 # registry-selftest-push/registry-selftest-pull Jobs: a deploy-time test pod that must reach the
 # workload it is fencing. Do not "clean this up" as an unused caller.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: prowlarr
-  namespace: {{ k8s_namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      app: prowlarr
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: traefik
-        - podSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
+{% call arr_networkpolicy('prowlarr', container_item.port) %}
                   - monitor-bridge
                   - sonarr
                   - radarr
                   - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
-      ports:
-        - protocol: TCP
-          port: {{ container_item.port }}
+{% endcall %}
