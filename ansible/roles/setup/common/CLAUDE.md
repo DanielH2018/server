@@ -13,7 +13,9 @@ imported task runs under the consumer's own tag. No tag of `common`'s own exists
 How the deployer routes a change depends on the file. A `files/host_lib.py` edit re-applies
 the roles that copy it (`deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, #3312): the
 initial_setup consumers apply on the tick, and `k3s` is recorded in `manual_plane` under its
-own name. `common` itself is not recorded for that file. Any other change here records
+own name. `common` itself is not recorded for that file: its line would print the
+resolv.conf remediation, which names the wrong roles for `host_lib.py`, and leave one more
+marker to clear after the consumers are applied. Any other change here records
 `common`, and `land.sh` names each consumer's playbook and tag, then the
 `gitops_state.py clear-manual-plane common` that clears the deployer's marker.
 
