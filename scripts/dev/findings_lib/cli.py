@@ -38,6 +38,22 @@ def _add_dry_run(parser: argparse.ArgumentParser, *, suppress: bool) -> None:
     )
 
 
+def _add_repo(parser: argparse.ArgumentParser) -> None:
+    """Add ``--repo`` to ``parser``: which repo's `claude` register the subcommand reads and writes.
+
+    On every subparser rather than the root, for the reason `_add_dry_run` gives, with
+    ``SUPPRESS`` so an absent flag leaves the root's None in place.
+    """
+    parser.add_argument(
+        "--repo",
+        metavar="OWNER/NAME",
+        default=argparse.SUPPRESS,
+        help="aim every read and write at another repo's `claude` register (the dotfiles "
+        "repo, say); claim, claims, reap and next also judge claims against that repo's "
+        "local checkout",
+    )
+
+
 def _parser(description: str) -> argparse.ArgumentParser:
     """Build the CLI parser.
 
@@ -47,12 +63,14 @@ def _parser(description: str) -> argparse.ArgumentParser:
     """
     p = argparse.ArgumentParser(description=description)
     _add_dry_run(p, suppress=False)
+    p.add_argument("--repo", metavar="OWNER/NAME", help="see any subcommand's --help")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     o = sub.add_parser(
         "open", help="file a finding, or touch/reopen the existing issue"
     )
     _add_dry_run(o, suppress=True)
+    _add_repo(o)
     o.add_argument("--title", required=True)
     o.add_argument("--body-file", required=True, type=Path)
     o.add_argument("--severity", required=True, choices=SEVERITIES)
@@ -82,18 +100,13 @@ def _parser(description: str) -> argparse.ArgumentParser:
         help="reserve for the operator: `next` withholds it and `claim` refuses it. On an "
         "issue the dedup matches, adds the label there too",
     )
-    o.add_argument(
-        "--repo",
-        metavar="OWNER/NAME",
-        help="file into another repo's `claude` register (the dotfiles repo, say); the "
-        "dedup reads that repo too. Other subcommands read this repo only",
-    )
 
     df = sub.add_parser(
         "defer",
         help="withhold an issue from `next` and `claim` until a date, or clear that",
     )
     _add_dry_run(df, suppress=True)
+    _add_repo(df)
     df.add_argument("number", type=int)
     when = df.add_mutually_exclusive_group(required=True)
     when.add_argument(
@@ -111,6 +124,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
         help="reserve an issue for the operator, releasing any claim on it, or clear that",
     )
     _add_dry_run(mn, suppress=True)
+    _add_repo(mn)
     mn.add_argument("number", type=int)
     mn.add_argument(
         "--clear", action="store_true", help="remove `manual`; `next` offers it again"
@@ -120,11 +134,13 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "touch", help="record a re-observation; the third adds escalated"
     )
     _add_dry_run(t, suppress=True)
+    _add_repo(t)
     t.add_argument("number", type=int)
     t.add_argument("--source", default="session")
 
     cl = sub.add_parser("claim", help="claim issues for a worktree")
     _add_dry_run(cl, suppress=True)
+    _add_repo(cl)
     cl.add_argument("numbers", nargs="+", type=int)
     cl.add_argument("--worktree", required=True, help="the branch doing the work")
     cl.add_argument("--session", help="the Claude session id, for the thread to read")
@@ -137,19 +153,23 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
     rl = sub.add_parser("release", help="release this worktree's claim")
     _add_dry_run(rl, suppress=True)
+    _add_repo(rl)
     rl.add_argument("numbers", nargs="+", type=int)
     rl.add_argument("--worktree", required=True)
     rl.add_argument("--reason", help="why, for the release comment")
 
     cs = sub.add_parser("claims", help="every open claim, live or stale")
     _add_dry_run(cs, suppress=True)
+    _add_repo(cs)
     cs.add_argument("--json", action="store_true")
 
     rp = sub.add_parser("reap", help="release every stale claim")
     _add_dry_run(rp, suppress=True)
+    _add_repo(rp)
 
     c = sub.add_parser("close", help="close as fixed, refuted or accepted")
     _add_dry_run(c, suppress=True)
+    _add_repo(c)
     c.add_argument("number", type=int)
     how = c.add_mutually_exclusive_group(required=True)
     how.add_argument("--fixed", action="store_true", help="a change fixed it")
@@ -174,22 +194,26 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "and claimed issues rather than hiding any",
     )
     _add_dry_run(ls, suppress=True)
+    _add_repo(ls)
     ls.add_argument("--state", default="open", choices=("open", "closed", "all"))
     ls.add_argument("--json", action="store_true")
 
     sl = sub.add_parser("sync-labels", help="create any missing label")
     _add_dry_run(sl, suppress=True)
+    _add_repo(sl)
 
     v = sub.add_parser(
         "verify",
         help="print each finding's stored instructions for how to verify it; runs nothing",
     )
     _add_dry_run(v, suppress=True)
+    _add_repo(v)
     v.add_argument("numbers", nargs="*", type=int, help="issue numbers to report on")
     v.add_argument("--all", action="store_true", help="report on every open finding")
 
     nx = sub.add_parser("next", help="issues a session may pick up, best first")
     _add_dry_run(nx, suppress=True)
+    _add_repo(nx)
     # No default bound. A default of 10 would truncate silently: an orchestrator reading
     # `next --json` would take 10 rows for the whole free set while more sat invisible. A
     # view blind to real state that does not announce it is a silent failure.

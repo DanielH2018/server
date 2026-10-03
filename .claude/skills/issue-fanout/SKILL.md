@@ -382,3 +382,50 @@ the owed applies in one place instead of per-agent prose.
 Done when: the table accounts for every issue in every batch, nothing is left claimed
 without an explicit reason in the report, and every agent's `MANUAL APPLY PENDING` heading is
 carried into it.
+
+## Fanning out on the dotfiles register
+
+Sections 1, 2 and 5 work on the dotfiles register (`DanielH2018/dotfiles`) once every
+`findings.py` call carries `--repo DanielH2018/dotfiles`. The flag sends each gh read and write
+there. It also makes `claim`, `claims`, `reap` and `next` judge claims against the chezmoi
+checkout and its `origin/main` (`REGISTER_CHECKOUTS` in `scripts/dev/findings_lib/boundaries.py`).
+Sections 3 and 4 do not carry over. `fanout_place.py launch` creates worktrees under this repo only
+(`REPO` in `scripts/dev/fanout_lib/transport.py`), and `Agent(isolation: "worktree")` isolates
+the session's own repo. So the spawn and the landing are the hand route below, which the
+2026-10-03 dotfiles fan-out used for 10 issues in 7 batches (#3345).
+
+a. **Triage** with `reap --repo DanielH2018/dotfiles`, then `next --json --repo DanielH2018/dotfiles`.
+   The grouping rules are section 1's. The dotfiles repo has no Ansible roles, so group by cited
+   file alone.
+b. **Create and lock one tree per batch** in the chezmoi checkout, before claiming:
+
+   ```bash
+   git -C ~/.local/share/chezmoi worktree add -b worktree-fanout-<batch> .claude/worktrees/fanout-<batch> origin/main
+   git -C ~/.local/share/chezmoi worktree lock --reason "fan-out <batch>" .claude/worktrees/fanout-<batch>
+   ```
+
+   The lock is what keeps the claim live. A fresh tree sits at `origin/main` with no edits, so
+   unlocked it reads as merged and clean, and `claim` refuses it as stale at birth.
+c. **Claim under the batch's own branch**, not the orchestrator's:
+   `findings.py claim <n> … --worktree worktree-fanout-<batch> --repo DanielH2018/dotfiles`.
+   Section 2's rule names the orchestrator because a subagent cannot own a worktree the
+   orchestrator names. That reason does not apply here, since the orchestrator creates every
+   tree itself. The orchestrator's own branch also lives in this repo, so the chezmoi checkout
+   never lists it, and a claim under it would be refused as stale at birth.
+d. **Spawn one Opus agent per batch without `isolation`**, with `model: "opus"`, and brief it to
+   edit by absolute path inside its tree. Its brief carries everything section 3's fallback list
+   names, with two substitutions. Its first act is `gh issue comment <n> --repo DanielH2018/dotfiles`.
+   It stops at an open PR rather than landing, because the dotfiles repo lands through `bin/land`
+   under a repo-wide lock, one branch at a time. It does not close the issue, because the
+   work has not landed yet.
+e. **Land each PR serially** from the chezmoi checkout with `bin/land <branch>`, which merges
+   and syncs the primary checkout's `main`. Landing is not deploying there. Read
+   `chezmoi diff` and then run `chezmoi apply`, as the `chezmoi-repo-ops` skill describes.
+   There is no `VERDICT:` line. The report's verdict column is what `chezmoi diff` showed before
+   the apply. Once a PR has landed, close its issues with
+   `findings.py close <n> --fixed --pr <n> --repo DanielH2018/dotfiles`. Run it even when the
+   PR's `Closes #<n>` already closed the issue: GitHub's close leaves the claim standing, and
+   `close` releases it.
+f. **Release and clean up.** Run `release --repo DanielH2018/dotfiles` for anything unfinished.
+   Then unlock and remove each landed tree with `git -C ~/.local/share/chezmoi worktree unlock`
+   followed by `worktree remove`.

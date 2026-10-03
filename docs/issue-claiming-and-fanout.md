@@ -116,6 +116,13 @@ Reusing `prune_worktrees` is what makes this self-healing without either. The st
 question — is this worktree done with — is a question that module already answers, and
 `session-health.py` already demonstrates importing it from outside its own directory.
 
+A claim on another repo's register is judged against that repo's worktrees. With
+`--repo DanielH2018/dotfiles`, `findings.py` reads `git worktree list` in the chezmoi checkout
+and merges against its `origin/main`, through the checkout table `REGISTER_CHECKOUTS` in
+`scripts/dev/findings_lib/boundaries.py`. A repo missing from that table makes `claim`,
+`claims`, `reap` and `next` exit 2. Against this repo's worktrees, every claim on it would
+name a branch nothing here has checked out, so each would read as stale.
+
 ## Commands
 
 Five new subcommands, plus a change to `list` and one to `close`. All of them match

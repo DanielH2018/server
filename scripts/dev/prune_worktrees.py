@@ -37,6 +37,7 @@ A prune also repairs the shared object store the removed worktrees leave litter 
 """
 
 import argparse
+import functools
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -61,6 +62,7 @@ import _claude_worktree  # noqa: F401
 from claude_worktree import (
     Worktree,
     cherry_says_landed,
+    default_ref,
     forge_says_merged,
     merge_tree_says_contained,
     parse_worktree_list,
@@ -106,8 +108,13 @@ def classify(tree: Worktree, merged: bool, dirty: bool) -> tuple[str, str]:
     return REMOVABLE, f"{tree.branch} merged, clean, unlocked"
 
 
-def is_merged(repo: str, head: str, branch: str = "") -> bool:
-    """True when `head`'s work is already on origin/master, by ancestry or by patch.
+def is_merged(
+    repo: str, head: str, branch: str = "", base: str = "origin/master"
+) -> bool:
+    """True when `head`'s work is already on `base`, by ancestry or by patch.
+
+    `base` is origin/master for this repo. `findings.py --repo` passes another repo's default
+    branch (the dotfiles repo's is origin/main), which is the only caller that changes it.
 
     Ancestry alone misses how PRs actually land here. `gh pr merge --rebase` replays the
     commits onto master as new objects, so the branch tip is never an ancestor of
@@ -130,7 +137,7 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
     All four failures are closed: an unknown reads as NOT merged, because this decides what
     to DELETE.
     """
-    if locally_landed(repo, head):
+    if locally_landed(repo, head, base=base):
         return True
     # Fourth and last: squash-merged AND master has since drifted into a conflict on a file the
     # branch also touched. `git merge-tree` then exits non-zero, which is the right local answer
@@ -142,7 +149,9 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
     return forge_says_merged(repo, branch, head)
 
 
-def locally_landed(repo: str, head: str, ancestry_known: bool = False) -> bool:
+def locally_landed(
+    repo: str, head: str, ancestry_known: bool = False, base: str = "origin/master"
+) -> bool:
     """The first three layers of is_merged — the ones that cost no network round-trip.
 
     Split out for the branch sweep, which asks this question of every orphan `worktree-*`
@@ -155,26 +164,22 @@ def locally_landed(repo: str, head: str, ancestry_known: bool = False) -> bool:
     `ancestry_landed_branches`, so this skips the per-branch `merge-base` call.
     """
     if not ancestry_known:
-        ancestor = git(
-            "merge-base", "--is-ancestor", head, "origin/master", cwd=repo, check=False
-        )
+        ancestor = git("merge-base", "--is-ancestor", head, base, cwd=repo, check=False)
         if ancestor.returncode == 0:
             return True
-    cherry = git("cherry", "origin/master", head, cwd=repo, check=False)
+    cherry = git("cherry", base, head, cwd=repo, check=False)
     # A failed `git cherry` prints nothing, and empty output otherwise means "merged" — so
     # the return code has to gate this, or an unknown ref would read as safe to delete.
     if cherry.returncode != 0:
         return False
     if cherry_says_landed(cherry.stdout, empty_means=True):
         return True
-    master_tree = git("rev-parse", "origin/master^{tree}", cwd=repo, check=False)
+    master_tree = git("rev-parse", f"{base}^{{tree}}", cwd=repo, check=False)
     if master_tree.returncode != 0:
         return False
     # Exit is non-zero on a conflict, and on a git too old for --write-tree (added in 2.38).
     # Both mean "no verdict", which must read as not merged.
-    merged_tree = git(
-        "merge-tree", "--write-tree", "origin/master", head, cwd=repo, check=False
-    )
+    merged_tree = git("merge-tree", "--write-tree", base, head, cwd=repo, check=False)
     return merged_tree.returncode == 0 and merge_tree_says_contained(
         merged_tree.stdout, master_tree.stdout
     )
@@ -345,9 +350,9 @@ def _memoised_merged(
     return merged
 
 
-def _worktree_facts() -> tuple[
-    list[Worktree], Callable[[str], bool], Callable[[Worktree], bool], bool
-]:
+def _worktree_facts(
+    checkout: str | None = None,
+) -> tuple[list[Worktree], Callable[[str], bool], Callable[[Worktree], bool], bool]:
     """(worktrees, dirty, merged, ok): the staleness inputs, plus whether the read worked.
 
     `ok` is False only when the git call itself failed, never merely because it found no
@@ -358,13 +363,25 @@ def _worktree_facts() -> tuple[
 
     Separated so a caller replaces one attribute rather than patching three modules, and so
     `findings.py`'s `claims` and `reap` handlers share exactly one definition of the facts.
+
+    `checkout` reads another repo's worktrees instead of this one's, merged against that
+    repo's own default branch: `findings.py --repo DanielH2018/dotfiles` judges a dotfiles
+    claim against the chezmoi source tree, whose default is origin/main. A checkout with no
+    default branch to read is a failed read, because without a merge target every tree would
+    read as unmerged and nothing could be judged stale.
     """
-    repo = primary_checkout() or str(REPO)
+    if checkout is None:
+        repo, base = primary_checkout() or str(REPO), "origin/master"
+    else:
+        repo, base = checkout, default_ref(checkout)
+    merged = _memoised_merged(repo, functools.partial(is_merged, base=base or ""))
+    if base is None:
+        return [], is_dirty, merged, False
     result = git("worktree", "list", "--porcelain", cwd=repo, check=False)
     if result.returncode != 0:
-        return [], is_dirty, _memoised_merged(repo), False
+        return [], is_dirty, merged, False
     trees = parse_worktree_list(result.stdout)
-    return trees, is_dirty, _memoised_merged(repo), True
+    return trees, is_dirty, merged, True
 
 
 def survey(repo: str) -> list[tuple[str, Worktree, str]]:

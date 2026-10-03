@@ -220,8 +220,18 @@ def _load_issue(number: int, tools: FindingsTools) -> dict:
     return issue
 
 
+def _aimed_argv(argv: list[str], tools: FindingsTools) -> list[str]:
+    """``argv`` with ``--repo`` appended when ``tools`` is aimed at another register.
+
+    Appended after the subcommand pair: gh defines `--repo` on each subcommand, not on the
+    root.
+    """
+    return argv if tools.repo is None else [*argv, "--repo", tools.repo]
+
+
 def run(plans: list[list[str]], dry_run: bool, tools: FindingsTools) -> None:
     for argv in plans:
+        argv = _aimed_argv(argv, tools)
         if dry_run:
             print("gh " + " ".join(argv))
         else:
@@ -234,6 +244,7 @@ def _create_with_optional_project(argv: list[str], tools: FindingsTools) -> str:
     Returns the created issue's URL. The board is a view; losing it must not lose the
     finding, so a Project failure warns and the issue is created anyway.
     """
+    argv = _aimed_argv(argv, tools)
     try:
         return tools.gh(*argv).stdout.strip()
     except subprocess.CalledProcessError as exc:
