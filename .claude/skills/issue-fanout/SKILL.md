@@ -414,6 +414,13 @@ c. **Land each PR serially** from its batch's tree with `bin/land <branch>`, whi
    with `findings.py close <n> --fixed --pr <n> --repo DanielH2018/dotfiles`. Run it even when the
    PR's `Closes #<n>` already closed the issue: GitHub's close leaves the claim standing, and
    `close` releases it. Then `clean <run-id>` removes the landed trees, as in section 3.
+d. **Release and abandon under the batch's branch.** Section 5's `release` names the
+   orchestrator's branch, which holds no dotfiles claim, so it is refused here. Release an
+   unfinished batch with
+   `findings.py release <n> --worktree worktree-fanout-<batch> --repo DanielH2018/dotfiles --reason "..."`.
+   To abandon a batch whose branch never merged, run section 3's three commands from
+   `~/.local/share/chezmoi` instead of `/home/ubuntu/server`, after
+   `systemctl --user stop fanout-dotfiles-<batch>`, then `clean <run-id>` again.
 
 The dotfiles agents run without the `fanout-stop` Stop hook, which only this repo's
 `.claude/settings.json` registers. An agent that ends its turn on a progress report is not sent

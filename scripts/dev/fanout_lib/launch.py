@@ -345,13 +345,28 @@ def _claim(tools: Tools, batch: str, issues: list[int], target: Target) -> str |
     else:
         detail = (claimed.stderr or claimed.stdout).strip()
         reason = f"claim refused ({claimed.returncode}): {detail}"
+    return reason + _release(tools, batch, issues, target)
+
+
+def _release(tools: Tools, batch: str, issues: list[int], target: Target) -> str:
+    """Release the batch's claims; return a message suffix when the release itself failed."""
+    argv = [
+        "release",
+        *(str(n) for n in issues),
+        "--worktree",
+        branch_name(batch),
+        "--repo",
+        target.repo,
+        "--reason",
+        "fan-out launch refused",
+    ]
     try:
-        tools.findings(
-            ["release", *numbers, *common, "--reason", "fan-out launch refused"]
-        )
+        released = tools.findings(argv)
     except subprocess.TimeoutExpired:
-        reason += "; release timed out"
-    return reason
+        return "; release timed out"
+    if released.returncode != 0:
+        return f"; release failed ({released.returncode})"
+    return ""
 
 
 def _launch_elsewhere(
@@ -384,9 +399,21 @@ def _launch_elsewhere(
     if refused:
         cleanup = _cleanup_worktree(tools, host, batch, target) or ""
         raise LaunchError(f"claim: {refused}{cleanup}")
-    proc = _run(tools, host, systemd_run_command(batch, target), None, "systemd-run")
+    # From here the claim is held, and a failure must give it back. The tree stays locked for
+    # inspection, which keeps a claim under it live for good, and a first batch that fails
+    # leaves no manifest naming either.
+    try:
+        proc = _run(
+            tools, host, systemd_run_command(batch, target), None, "systemd-run"
+        )
+    except LaunchError as exc:
+        raise LaunchError(str(exc) + _release(tools, batch, issues, target)) from None
     if proc.returncode != 0:
-        _raise_failure(host, batch, target, proc, tools)
+        released = _release(tools, batch, issues, target)
+        try:
+            _raise_failure(host, batch, target, proc, tools)
+        except LaunchError as exc:
+            raise LaunchError(str(exc) + released) from None
 
 
 def _raise_failure(

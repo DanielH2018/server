@@ -6,6 +6,7 @@ claim each differ from this repo's, and the claim has to fall between the tree a
 Run: uv run pytest scripts/dev/tests/test_fanout_target.py
 """
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -107,6 +108,24 @@ def test_a_dotfiles_launch_claims_between_the_tree_and_the_agent():
     )
     assert start.startswith("systemd-run --user --unit fanout-dotfiles-763 ")
     assert batch.repo == "DanielH2018/dotfiles" and batch.worktree == DOT_WT
+
+
+def test_a_failed_systemd_run_after_the_claim_gives_the_claim_back():
+    """The flagged half of `test_a_dotfiles_launch_claims_between_the_tree_and_the_agent`."""
+    failed = subprocess.CompletedProcess(
+        [], 1, stdout="", stderr="Failed to start\nfanout-step: systemd-run\n"
+    )
+    tools, run = fake_tools({"daniel-box": ok("")})
+    run.answers_by_call = [ok(""), ok(""), failed]
+    with pytest.raises(LaunchError, match="systemd-run failed"):
+        launch(tools, "daniel-box", "763", "BRIEF", [763], DOTFILES)
+    assert [host for host, _, _ in run.calls] == [
+        "daniel-box",
+        "findings",
+        "daniel-box",
+        "findings",
+    ]
+    assert run.calls[3][1].startswith("release 763 --worktree worktree-fanout-763 ")
 
 
 def test_a_refused_dotfiles_claim_releases_removes_the_tree_and_starts_nothing():
