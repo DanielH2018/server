@@ -291,3 +291,15 @@ def test_a_file_other_roles_ship_reaches_every_role_shipping_it():
     other = ["ansible/roles/setup/gitops_deploy/files/deploy_logic.py"]
     assert services_from_changed_paths(other).setup_roles == {"gitops_deploy"}
     assert setup_tags_for(other) == {"gitops_deploy"}
+
+
+def test_a_host_lib_change_reaches_its_consumers_and_not_common():
+    """`common` reaches a host only through the roles copying `host_lib.py` (#3312). The four
+    initial_setup consumers apply on the tick, `k3s` is the one role left to record, and
+    `common` is named nowhere. A `common` file no role ships still names `common`."""
+    host_lib = ["ansible/roles/setup/common/files/host_lib.py"]
+    consumers = {"fake_remux", "gitops_deploy", "renovate_agent", "renovate_notify"}
+    assert services_from_changed_paths(host_lib).setup_roles == consumers | {"k3s"}
+    assert setup_tags_for(host_lib) == consumers
+    resolv = ["ansible/roles/setup/common/templates/resolv.conf.j2"]
+    assert services_from_changed_paths(resolv).setup_roles == {"common"}

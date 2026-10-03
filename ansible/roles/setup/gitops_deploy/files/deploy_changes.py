@@ -501,8 +501,7 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.services.add(at.role)
         else:
             # tasks/, and the catch-all for any other file under a container role —
-            # `defaults/`, `vars/`, `handlers/`, `meta/`, a file at the role's root, or a
-            # future dir.
+            # `defaults/`, `vars/`, `handlers/`, `meta/`, a file at the role's root, or a future dir.
             # None is auto-deployed, and each changes what a deploy of that service does, so
             # it defer-and-alerts on the tasks channel instead of taking the silent docs-only
             # ff-merge — the same asymmetry the secrets / requirements.yml paths close. A
@@ -515,6 +514,9 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
 # change to it re-applies them beside the owner (#3306). Keyed by file, so no other module of the
 # owner reaches them. `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
+    "ansible/roles/setup/common/files/host_lib.py": frozenset(
+        {"fake_remux", "gitops_deploy", "k3s", "renovate_agent", "renovate_notify"}
+    ),
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
         {"deploy_ui", "renovate_agent"}
     ),
@@ -526,7 +528,10 @@ def setup_roles_for(path: str) -> set[str]:
     at = role_of(path)
     if at is None or at.plane != "setup":
         return set()
-    return {at.role} | SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(path, frozenset())
+    shippers = SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(path, frozenset())
+    # DECIDED: `common` is not named beside its file's shippers (#3312); see its CLAUDE.md.
+    owner = set() if shippers and setup_role_playbook(at.role) is None else {at.role}
+    return owner | shippers
 
 
 # Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.
@@ -571,10 +576,6 @@ def setup_role_tag(role: str) -> str:
 
 def setup_tags_for(paths) -> set[str]:
     """The `initial_setup.yml --tags` values a set of setup-plane paths needs.
-
-    broad_remediation emits a literal `<role>` placeholder, which is fine for a human
-    reading an alert and useless for a machine about to run the playbook. This derives the
-    real tags, and the alert text uses it too so the two can never disagree.
 
     Returns an EMPTY set for anything it cannot resolve — a bring-up playbook, or any path
     in _BROAD_MANUAL_PREFIXES. Empty means "cannot be applied automatically", which the
