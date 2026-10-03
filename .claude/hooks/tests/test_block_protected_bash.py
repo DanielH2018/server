@@ -75,6 +75,39 @@ def test_an_ordinary_bash_write_is_clean(command):
     assert decision is None, f"should not act on: {command}"
 
 
+def test_a_write_into_another_checkouts_generated_tree_is_flagged(tmp_path):
+    """The checkout that owns the target decides, not the cwd, as in the Edit hook.
+
+    The generated-docs trees are anchored at the root `classify` is given. A worktree session
+    writing by absolute path into the primary checkout, or the reverse, was checked against the
+    cwd's trees, which the target is not in, and passed silently.
+    """
+    (tmp_path / ".git").mkdir()
+    decision, reason = _mod.decide(
+        f"tee {_REPO}/docs/reference/services.md", str(tmp_path)
+    )
+    assert decision == "ask"
+    assert "docs/reference/services.md" in reason
+
+
+def test_a_relative_write_from_a_subdirectory_into_a_generated_tree_is_flagged():
+    """The same root rule, reached from inside the owning checkout rather than another one."""
+    decision, reason = _mod.decide(
+        "tee ../docs/reference/services.md", os.path.join(_REPO, "ansible")
+    )
+    assert decision == "ask"
+    assert "docs/reference/services.md" in reason
+
+
+def test_a_write_into_another_checkouts_hand_written_page_is_clean(tmp_path):
+    """The near miss: the owning checkout's banner check still exempts topology.md."""
+    (tmp_path / ".git").mkdir()
+    decision, _ = _mod.decide(
+        f"echo x >> {_REPO}/docs/reference/topology.md", str(tmp_path)
+    )
+    assert decision is None
+
+
 def test_a_write_asks_rather_than_denies():
     """The extraction is a heuristic over command text, so it must never be able to hard-block.
 
