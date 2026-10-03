@@ -26,6 +26,12 @@ one exception is the nginx alpine digests (`nginx`, `nginxinc/nginx-unprivileged
 1 day: upstream re-pushes those tags about every 3.6 days, and a 3-day soak restarted on each
 re-push left an automerge window the daily Renovate run usually missed (#2886). `renovate-notify`
 measures those two rows against the 1-day soak, so their stuck threshold is 8 days, not 10.
+A digest with no release timestamp skips the soak entirely (#3368). Only Docker Hub returns a
+timestamp, and only for a tag that names a version. So a GHCR or lscr.io digest, or a digest on
+`latest`, `alpine` or `jvm-stable`, has none. The k8s digest rule sets
+`minimumReleaseAgeBehaviour: timestamp-optional`, so Renovate raises those at once. Without it
+they sat in Pending Status Checks indefinitely. A version bump on GHCR or lscr.io has no
+timestamp either, and that rule does not cover it.
 Measured 2026-09-02, seven had not: grafana/promtail sat there for 111 days against a 7-day
 soak, so the homelab ran promtail 3.3.0 that whole time (issue #886).
 
