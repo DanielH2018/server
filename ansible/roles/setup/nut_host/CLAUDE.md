@@ -58,7 +58,7 @@ only what runs on the host. Repo-root `CLAUDE.md` has the conventions.
 `ups-secondary-health.sh` reads `upsmon.conf`, `systemctl is-active nut-monitor` and
 `upsc ups.status`, logs a verdict, and pushes `up`/`down` to the Kuma tile
 `UPS Secondary (<host>)`. It restarts, writes and deletes nothing, which is why
-`test_setup_roles_have_claude_md.py` lists this role in `EXEMPT` rather than asking it for
+`test_setup_cron_roles_have_a_contract.py` lists this role in `EXEMPT` rather than asking it for
 an `## Autonomous-role contract`. The actor that does change state is `upsmon` itself, a
 systemd service and not a cron, and `k8s/nut/CLAUDE.md` documents what it does on FSD.
 

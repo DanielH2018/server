@@ -44,7 +44,7 @@ roles:
   to recreate the container — `roles/containers/common/CLAUDE.md`).
 
 A doc with no `## At a glance` heading is refused on the k8s plane (all of them carry it,
-and `test_k8s_roles_have_claude_md.py` requires it) and given one on the other two: the
+and `test_service_role_claude_md_has_at_a_glance.py` requires it) and given one on the other two: the
 setup docs never had the heading, so the generator inserts it before the doc's first
 level-2 heading, or at the end of a doc that has none.
 

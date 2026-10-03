@@ -100,7 +100,7 @@ filterwarnings = [
   # has to REPORT a doc approaching the character ceiling while the author
   # still has room to write the bullet, and a blanket `error` would turn that report into
   # the failure the band exists to arrive before. `always` shows every occurrence in pytest's warnings summary.
-  # Raised only by ansible/tests/k8s/test_k8s_roles_have_claude_md.py.
+  # Raised only by ansible/tests/repo/test_role_claude_md.py.
   "always::_doc_size.RoleDocNearCeiling",
 ]
 # `ui` is registered here so it stays a marker rather than becoming a typo nobody notices,

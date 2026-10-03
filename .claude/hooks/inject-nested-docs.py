@@ -6,8 +6,8 @@
 WHY. Claude Code loads a role's `CLAUDE.md` (`nested_traversal`) and a `.claude/rules/*.md`
 whose `paths:` glob matches (`path_glob_match`) only when the Read, Edit or Write tool touches
 a matching path. Auto mode instructs the model to read files with `cat` / `sed -n` / `head`
-through Bash instead, which fires neither. `test_k8s_roles_have_claude_md.py` guarantees every
-role has a doc; nothing guaranteed a session loads it.
+through Bash instead, which fires neither. `ansible/tests/repo/test_role_claude_md.py` guarantees
+every role has a doc; nothing guaranteed a session loads it.
 
 WHAT. Every token in the command that names a path on disk inside a git checkout selects
 the docs the harness would have loaded for it: a `CLAUDE.md` in any ancestor directory below
@@ -39,8 +39,8 @@ Headings alone bought almost nothing over no injection: sessions read the full d
 23% of outline injections, against 16% of Bash-only pairs with no hook. The head spends the
 same budget on text a session can act on without a second read: a role doc opens with its
 generated `## At a glance` block and its operative rules. The head path retires only when the
-`OVER_CEILING` lists in `ansible/tests/k8s/test_k8s_roles_have_claude_md.py` and its setup
-sibling are empty: those name every role doc still over `_doc_size.MAX_CHARS`, and each entry
+`over_ceiling` lists of the `PLANES` rows in `ansible/tests/repo/test_role_claude_md.py` are
+empty: those name every role doc still over `_doc_size.MAX_CHARS`, and each entry
 is a doc to trim. That ceiling is what `_fits_inline` leaves a doc — `INLINE_MAX_CHARS` less
 the preamble and the header — not `INLINE_MAX_CHARS` itself (#3245).
 
