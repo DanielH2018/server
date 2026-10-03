@@ -22,10 +22,10 @@ PUSH_URL = "https://kuma.example/api/push/abc123"
 
 
 class _Recorder:
-    """The curl argv list and the Discord bodies, as one injectable pair."""
+    """Each curl's argv and stdin, and the Discord bodies, as one injectable pair."""
 
     def __init__(self) -> None:
-        self.curls: list[list[str]] = []
+        self.curls: list[tuple[list[str], str | None]] = []
         self.posts: list[str] = []
 
     def tools(self) -> renovate_agent.AgentTools:
@@ -33,8 +33,8 @@ class _Recorder:
             run=self._run, discord_post=self._post, rmtree=lambda *a, **k: None
         )
 
-    def _run(self, argv, cwd=None, timeout=120):
-        self.curls.append(argv)
+    def _run(self, argv, cwd=None, timeout=120, stdin_text=None):
+        self.curls.append((argv, stdin_text))
         return 0, ""
 
     def _post(self, webhook, body, user_agent, log=None):
@@ -60,10 +60,13 @@ def test_a_crash_pushes_a_down_carrying_the_exception_text(tmp_path):
         _config(tmp_path, push_url=PUSH_URL),
     )
 
-    (argv,) = rec.curls
+    ((argv, stdin_text),) = rec.curls
     assert argv[0] == "curl"
-    assert any(arg.startswith(PUSH_URL) and "status=down" in arg for arg in argv)
     assert any("git worktree add failed" in arg for arg in argv)
+    # The URL carries the push token, and a running curl's argv is readable by any local user.
+    assert not any(PUSH_URL in arg for arg in argv)
+    assert stdin_text == f'url = "{PUSH_URL}?status=down"\n'
+    assert argv[argv.index("-K") + 1] == "-"
     assert rec.posts and "CRASHED" in rec.posts[0] and "already exists" in rec.posts[0]
     (line,) = (tmp_path / renovate_agent.RUNS_FILE).read_text().splitlines()
     assert '"result": "crashed"' in line and "already exists" in line
