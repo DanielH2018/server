@@ -1180,9 +1180,7 @@ an exact field count and skips anything else, and the monitor-bridge, `deploy_ui
 therefore read as no pending work in a reader that had not redeployed, which is why
 `manual_plane_tags` is a sidecar. `gitops_markers.parse_owed` ignores keys it does not know,
 and every writer carries them through a rewrite. `k8s_unapplied` moved first because nothing
-pages on it. The deployer folds a host's pre-#3392 `k8s_unapplied` file into the ledger at the
-top of each tick (`DeployerState.fold_legacy_k8s_unapplied`), and the checkout-side readers
-union that file until the fold has run.
+pages on it.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no

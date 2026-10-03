@@ -46,7 +46,6 @@ EXPECTED_MARKERS = frozenset(
         ("contention", "contention_since"),
         ("k8s_deferred", "k8s_deferred"),
         ("owed", "owed.jsonl"),
-        ("k8s_unapplied_legacy", "k8s_unapplied"),
         ("receipts", "receipts.jsonl"),
         ("last_run", "last_run"),
         ("diverged", "diverged_sha"),
