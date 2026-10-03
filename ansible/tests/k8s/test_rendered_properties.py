@@ -7,7 +7,8 @@ One that needs a second render context, a cross-document join or a long exemptio
 file (`test_container_security_context.py` is the example).
 
 Rows that would push this file past the test-module length cap live in
-`_config_property_rows.py` and `_workload_property_rows.py`, and run here with the rest.
+`_config_property_rows.py`, `_workload_property_rows.py` and `_scrape_property_rows.py`, and run
+here with the rest.
 
 A row's `reason` is the long form a reader needs before changing the property. Keep it as
 specific as the file docstring it replaced.
@@ -23,6 +24,7 @@ from _config_property_rows import CONFIG_PROPERTIES
 from _helpers import REPO, manifests_rollout_timeout_s
 from _k8s_render import pod_spec
 from _property_table import Property, check
+from _scrape_property_rows import SCRAPE_PROPERTIES
 from _workload_property_rows import OBSERVABILITY, POD_KINDS, WORKLOAD_PROPERTIES
 
 _K8S_ROLES = REPO / "ansible/roles/k8s"
@@ -215,6 +217,7 @@ PROPERTIES = (
     )
     + CONFIG_PROPERTIES
     + WORKLOAD_PROPERTIES
+    + SCRAPE_PROPERTIES
 )
 
 _IDS = [p.name for p in PROPERTIES]
@@ -227,13 +230,23 @@ def test_property_holds_on_the_render(prop: Property):
 
 
 @pytest.mark.parametrize("prop", PROPERTIES, ids=_IDS)
-def test_property_red_fixture_is_flagged(prop: Property):
-    assert prop.offence(*prop.red) is not None
+def test_property_red_fixtures_are_flagged(prop: Property):
+    passed = [
+        i
+        for i, red in enumerate((prop.red, *prop.more_red))
+        if prop.offence(*red) is None
+    ]
+    assert not passed, f"red fixture(s) {passed} pass the predicate (0 is `red`)"
 
 
 @pytest.mark.parametrize("prop", PROPERTIES, ids=_IDS)
-def test_property_green_fixture_is_clean(prop: Property):
-    assert prop.offence(*prop.green) is None
+def test_property_green_fixtures_are_clean(prop: Property):
+    flagged = {
+        i: reason
+        for i, green in enumerate((prop.green, *prop.more_green))
+        if (reason := prop.offence(*green)) is not None
+    }
+    assert not flagged, f"green fixture(s) flagged (0 is `green`): {flagged}"
 
 
 def test_property_names_are_unique():

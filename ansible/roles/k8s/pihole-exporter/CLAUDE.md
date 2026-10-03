@@ -60,7 +60,7 @@ authenticating, but nothing rolls the pod for you. Redeploy the role:
 ## Two things that bite
 
 **The probes are `tcpSocket`, not `httpGet` on `/metrics`.** A kubelet probe against a metrics
-route is the shape `ansible/tests/k8s/test_probes_do_not_flood_metrics.py` refuses below a 300s
+route is the shape `ansible/tests/k8s/_scrape_property_rows.py` refuses below a 300s
 period, after node-exporter's probes produced 97% of this namespace's Loki ingest. Whether
 Pi-hole is reachable is Prometheus's `up{job="pihole"}` to report, not a reason to restart this
 pod.

@@ -14,7 +14,9 @@ What a row buys over a file:
 - **The floor and the named members are data.** `min_matches` catches a census that shrank;
   `must_find` names the members a row exists for, so the failure says which one went.
 - **The red proof is mandatory.** A row cannot be built without `red` (a subject the predicate
-  must flag) and `green` (one it must pass), and the table test runs both for every row.
+  must flag) and `green` (one it must pass), and the table test runs both for every row. A
+  predicate with several ways to fail lists the rest in `more_red`, one fixture per way, and
+  the shapes it must still accept in `more_green`.
 - **An exemption carries its reason, and a stale one fails.** `allow` maps a key to why it is
   exempt; a key that no longer matches, or no longer offends, is reported for removal.
 
@@ -45,6 +47,8 @@ class Property:
     # Fixtures as (role, subject). `red` must be flagged and `green` must pass.
     red: tuple[str, dict]
     green: tuple[str, dict]
+    more_red: tuple[tuple[str, dict], ...] = ()
+    more_green: tuple[tuple[str, dict], ...] = ()
     min_matches: int = 1
     must_find: frozenset[str] = frozenset()
     allow: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))

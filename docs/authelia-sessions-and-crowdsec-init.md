@@ -30,9 +30,10 @@ not recognise, this pod rolls under `Recreate` in front of most public routes, a
 `validate/k8s_manifests.py` only asks whether the YAML parses. The pinned version's own
 `config.template.yml` is the source —
 `https://raw.githubusercontent.com/authelia/authelia/v<tag>/config.template.yml` — and
-`ansible/tests/services/test_authelia_webauthn.py` holds the rendered block to the keys someone
+the `authelia-webauthn-is-a-checked-second-factor` row in
+`ansible/tests/k8s/_config_property_rows.py` holds the rendered block to the keys someone
 checked against that source — deliberately narrower than what 4.39.21 accepts, so adding a key
-means editing the frozenset as well, which is where the check belongs.
+means editing `WRITTEN_WEBAUTHN_KEYS` there as well, which is where the check belongs.
 
 Enrolment is a browser action at the portal's security settings and needs a physical
 authenticator, so it stays an operator task; the headless UI tier is unaffected, because
