@@ -35,7 +35,9 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
    path `ansible.cfg` loads from, matching the prek lint hook) — run as the repo owner
    (`become: false`) so `community.sops` etc. land for the user who runs deploys.
 3. **Generate the age key** at `~/.config/sops/age/keys.txt` (`creates:`-guarded → idempotent,
-   won't regenerate) and print its public key.
+   won't regenerate) and print its public key. Only a host Ansible drives locally
+   (`ansible_connection=local`) gets one: secrets decrypt on the controller, so daniel-pi,
+   driven over ssh, holds no key and is not a recipient.
 4. **Seed `ansible/.sops.yaml`** with that pubkey — **first-host bootstrap only**
    (skipped when the tracked `.sops.yaml` already exists; see Notable).
 This role does **not** write `SOPS_AGE_KEY_FILE` into `~/.bashrc`. Until #2319 it appended
@@ -49,8 +51,10 @@ dotfiles repo's `home/dot_bashrc` on the chezmoi hosts, and [[config_files]]' tr
   outside a Longhorn volume is backed up at all since Kopia retired 2026-08-13, and Kopia only
   covered `containers/` before that); they're backed up out-of-band (2026-06-06). Since
   **2026-06-11** `.sops.yaml` also lists an **off-box recovery recipient** (private half
-  only in the operator's password manager), so the secrets survive losing both hosts.
+  only in the operator's password manager), so the secrets survive losing every host key.
   Gotcha: `sops updatekeys` resolves `.sops.yaml` from the CWD — run it from `ansible/`.
+  Removing a recipient takes `sops rotate --rm-age`, not `updatekeys`; `.sops.yaml`'s header
+  says why.
 - **Onboarding an Nth host is NOT this role** — `.sops.yaml` is tracked, so every checkout
   already has it and step 4 self-skips. Adding a host = run `ansible/bootstrap.yml` on it,
   add its pubkey to `.sops.yaml`, `sops updatekeys`, commit/pull. See `bootstrap.yml` header

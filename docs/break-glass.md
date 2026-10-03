@@ -17,11 +17,12 @@ know which one you are relying on before you start.
 Use these in this order. Each lives in the password manager unless the citation says
 otherwise; none of the values below are secrets themselves, only names and locations.
 
-1. **The off-box recovery age key.** A password-manager-held age keypair, added as a fourth
-   SOPS recipient on 2026-06-11 specifically so `ansible/vars/secrets.yml` survives losing
-   both `daniel-server` and `daniel-pi`'s own host keys. It decrypts the SOPS-encrypted
-   secrets file; nothing else in this list works without it if every cluster host's own key
-   is also gone.
+1. **The off-box recovery age key.** A password-manager-held age keypair, added as a SOPS
+   recipient on 2026-06-11 so `ansible/vars/secrets.yml` survives losing every host's own key.
+   The host recipients are `daniel-server` and `daniel-box`; `daniel-pi`'s key was removed on
+   2026-10-03, because the Pi is driven over ssh and never decrypts. The recovery key decrypts
+   the SOPS-encrypted secrets file; nothing else in this list works without it if every
+   cluster host's own key is also gone.
    Source: `ansible/.sops.yaml` (recipient comments above the `age:` line) and
    `ansible/roles/setup/sops_setup/CLAUDE.md` ("Notable" section).
 
@@ -174,7 +175,7 @@ what each source records — not what "should" have happened.
 | Longhorn volume restore | **Yes, and ongoing.** First attempt 2026-08-15 failed on a B2 cap (not the data); retry 2026-08-16 passed (`traefik-acme`, ~21s, verified real data). Scheduled nightly since 2026-08-19, rotating one volume per night over the full backup set since 2026-08-20. | `docs/longhorn-disaster-recovery.md`: "Assurance gap (known, narrowing)" |
 | Kopia disaster recovery | **N/A — tool retired 2026-08-14.** Doc kept as history only; do not follow it for a live recovery. | `docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md` |
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
-| GitOps bootstrap (`bootstrap.yml` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/roles/setup/sops_setup/CLAUDE.md`, `ansible/bootstrap.yml` header |
+| GitOps bootstrap (`bootstrap.yml` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/roles/setup/sops_setup/CLAUDE.md`, `ansible/bootstrap.yml` header |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
 ## Annual drill (recommended — do not run this now)
