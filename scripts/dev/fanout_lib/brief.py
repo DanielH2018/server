@@ -8,6 +8,15 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+# Reach the sibling package: a directly-invoked script gets only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from fanout_lib.target import SERVER, SERVER_CHECKOUT, SERVER_TARGET, Target
+
 LANDS = "daniel-box"
 # The label `findings.py` puts on every issue it files. The launch gate refuses anything
 # else: this repo is public, so an unlabelled issue is text an arbitrary GitHub account
@@ -34,11 +43,22 @@ class Issue:
     labels: tuple[str, ...] = ()
 
 
-def _worktree_path(batch: str) -> str:
+def _worktree_path(batch: str, target: Target = SERVER_TARGET) -> str:
     # Mirrors launch.worktree_path. Duplicated rather than imported: transport already
     # imports brief, and launch imports transport, so brief importing launch would cycle.
     # A contract test in test_fanout_cli.py asserts the two stay equal.
-    return f"/home/ubuntu/server/.claude/worktrees/fanout-{batch}"
+    return f"{target.checkout}/.claude/worktrees/fanout-{batch}"
+
+
+def lands(host: str, repo: str = SERVER) -> bool:
+    """Whether a batch in `repo` on `host` lands its own PR with `land.sh`.
+
+    Only this repo's batches on the deploy host do. `land.sh` and the GitOps deployer serve
+    this repo alone, and another repo lands through its own tooling, run by the orchestrator.
+    `status` and `.claude/hooks/fanout-stop.py` read the same answer: the first from this
+    function, the second from whether the brief carries the `land.sh` command.
+    """
+    return repo == SERVER and host == LANDS
 
 
 def _fence(text: str) -> str:
@@ -58,7 +78,14 @@ def _issue_block(issue: Issue) -> str:
     return f"### Issue #{issue.number}\n{fence}\ntitle: {issue.title}\n\n{issue.body}\n{fence}"
 
 
-def _landing(host: str, batch: str) -> str:
+def _landing(host: str, batch: str, target: Target = SERVER_TARGET) -> str:
+    if not target.is_server:
+        return f"""## Landing
+This repo is {target.repo}, which lands through its own tooling, one PR at a time. Open the
+PR with `gh pr create` and STOP there: **do not merge**, and do not run the repo's landing
+script. Do not close the issues either: the orchestrator lands each PR in turn and closes its
+issues once it has landed. Print the PR URL as the last line of your final message.
+"""
     if host == LANDS:
         # `--log-dir` rather than $CLAUDE_JOB_DIR, which may be unset for a headless
         # `claude -p` under systemd-run and would silently fall back to /tmp. The worktree's
@@ -105,10 +132,10 @@ of your final message. A daniel-box session lands it and closes the issue.
 """
 
 
-def _finishing(host: str) -> str:
+def _finishing(host: str, target: Target = SERVER_TARGET) -> str:
     # The same completion condition `.claude/hooks/fanout-stop.py` and `status.py` check.
     # Only the landing host can owe a host apply, so only its brief names the heading.
-    if host == LANDS:
+    if lands(host, target.repo):
         # The landing host owes a verdict as well as a PR: `gh pr create` returning says
         # nothing about whether the PR merged and deployed. The hook and
         # `status` both check for the VERDICT line, so the brief has to ask for it.
@@ -134,6 +161,7 @@ def render_brief(
     batch: str,
     orchestrator_branch: str,
     health: Sequence[str],
+    target: Target = SERVER_TARGET,
 ) -> str:
     """Render the stdin brief a headless fan-out agent reads on launch.
 
@@ -147,6 +175,9 @@ def render_brief(
         batch: the batch id (issue numbers joined by `-`), used to derive the worktree branch.
         orchestrator_branch: the branch the issues are already claimed under.
         health: SessionStart-banner-style health lines to carry through, or empty.
+        target: the repo the batch works. Another repo's batch is claimed under its own
+            branch, names that repo on every `gh` and `findings.py` call, and stops at
+            the PR.
 
     Returns:
         The full brief text.
@@ -157,16 +188,28 @@ def render_brief(
     health_block = "\n".join(health) if health else "(both hosts reported clean)"
     # Single quotes: inside double quotes the shell reads the backticks as a command
     # substitution, runs the branch name as a command and posts "Worked by ".
+    repo_flag = "" if target.is_server else f" --repo {target.repo}"
     first_act = "\n".join(
-        f"gh issue comment {i.number} --body 'Worked by `{branch}`'" for i in issues
+        f"gh issue comment {i.number}{repo_flag} --body 'Worked by `{branch}`'"
+        for i in issues
     )
+    holder = orchestrator_branch if target.is_server else branch
+    if target.is_server:
+        findings = "`findings.py open`"
+    else:
+        # The agent's cwd is the other repo, which has no `findings.py`; `--directory` runs
+        # this repo's copy without the agent leaving its own worktree.
+        findings = (
+            f"`uv run --directory {SERVER_CHECKOUT} python scripts/dev/findings.py open "
+            f"--repo {target.repo}`"
+        )
     return f"""# Fan-out batch {batch} on {host}
 
-You are a headless Opus agent in the worktree `{branch}` of /home/ubuntu/server, checked out
-fresh from origin/master. Read CLAUDE.md first. Work the issues below to a PR.
+You are a headless Opus agent in the worktree `{branch}` of {target.checkout}, checked out
+fresh from {target.base}. Read CLAUDE.md first. Work the issues below to a PR.
 
 ## Claim
-Issues {numbers} are already claimed under `{orchestrator_branch}`. Do not claim them again.
+Issues {numbers} are already claimed under `{holder}`. Do not claim them again.
 Your first act is to record which agent took the work:
 ```bash
 {first_act}
@@ -175,10 +218,10 @@ Your first act is to record which agent took the work:
 ## Host state at launch (what the SessionStart banner would have shown)
 {health_block}
 
-{_landing(host, batch)}
-{_finishing(host)}
+{_landing(host, batch, target)}
+{_finishing(host, target)}
 ## Anything you do not fix
-File it with `findings.py open` (flags: docs/reference/scripts.md). Never leave it unmentioned.
+File it with {findings} (flags: docs/reference/scripts.md). Never leave it unmentioned.
 Name it in the PR body as `Filed for later: #N`. A closing keyword before the number — close,
 fixes, resolved and the rest, with or without a colon — closes that issue when the PR merges,
 whatever the sentence around it says: "Filed and not fixed: #2509" closed #2509 (issue #2513).

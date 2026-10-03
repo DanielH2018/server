@@ -25,6 +25,7 @@ class FakeRun:
             `answers`. An entry that is a `BaseException` instance is raised instead of
             returned, so a test can script a `subprocess.TimeoutExpired` on a given call.
         calls: every call made, in order.
+        issue_fetches: every `(number, repo)` issue fetch `fake_tools` answered.
     """
 
     answers: dict[str, subprocess.CompletedProcess] = field(default_factory=dict)
@@ -32,6 +33,7 @@ class FakeRun:
         default_factory=list
     )
     calls: list[tuple[str, str, str | None]] = field(default_factory=list)
+    issue_fetches: list[tuple[int, str]] = field(default_factory=list)
 
     def __call__(self, host, command, timeout, stdin=None):
         self.calls.append((host, command, stdin))
@@ -55,6 +57,7 @@ def fake_tools(
     signing_keys=None,
     signing_error=None,
     merged_prs=None,
+    findings_exit=0,
 ) -> tuple[Tools, FakeRun]:
     """Build a Tools whose boundaries answer from tables, plus the FakeRun behind it.
 
@@ -69,6 +72,8 @@ def fake_tools(
         merged_prs: branch -> merged PR url, the forge answer `merged_pr` gives. A branch
             absent from it reads as "no merged PR", which is also what a failed `gh` call
             reads as in the real thing.
+        findings_exit: the exit status every `findings.py` call returns. Each call is recorded
+            in the FakeRun's `calls` under the pseudo-host `findings`.
 
     Returns:
         The Tools and the FakeRun it holds, so a test can script and read the calls.
@@ -77,7 +82,8 @@ def fake_tools(
     table = {i.number: i for i in (issues or [])}
     errors = issue_errors or {}
 
-    def gh_issue(number: int):
+    def gh_issue(number: int, repo: str = "DanielH2018/server"):
+        run.issue_fetches.append((number, repo))
         if number in errors:
             raise errors[number]
         return table[number]
@@ -89,11 +95,25 @@ def fake_tools(
 
     prs = merged_prs or {}
 
-    def merged_pr(branch: str) -> str:
+    def merged_pr(branch: str, repo: str = "DanielH2018/server") -> str:
         return prs.get(branch, "")
 
+    def findings(argv: list[str]) -> subprocess.CompletedProcess:
+        # Recorded among the host calls, under the pseudo-host `findings`, so a test reads
+        # where the claim fell relative to the tree and the agent from one list.
+        run.calls.append(("findings", " ".join(argv), None))
+        return subprocess.CompletedProcess(argv, findings_exit, stdout="", stderr="")
+
+    def default_ref(checkout: str) -> str:
+        return "origin/main"
+
     return Tools(
-        run=run, gh_issue=gh_issue, signing_keys=keys, merged_pr=merged_pr
+        run=run,
+        gh_issue=gh_issue,
+        signing_keys=keys,
+        merged_pr=merged_pr,
+        findings=findings,
+        default_ref=default_ref,
     ), run
 
 

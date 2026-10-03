@@ -21,6 +21,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.manifest import Batch
+from fanout_lib.target import SERVER_TARGET, Target
 from fanout_lib.transport import REPO
 from lib.git import git
 from prune_worktrees import REMOVABLE, Worktree, classify, is_dirty, is_merged, remove
@@ -208,7 +209,9 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     return "failed", f"clean failed (exit {proc.returncode}): {detail}"
 
 
-def remote_clean_command(b: Batch, repo: str = REPO) -> str:
+def remote_clean_command(
+    b: Batch, repo: str | None = None, target: Target = SERVER_TARGET
+) -> str:
     """The command `clean` runs on `b.host` to clean up one batch.
 
     Refuses while `b.unit` is still active, before anything else runs. A `clean` run to clear
@@ -299,21 +302,38 @@ def remote_clean_command(b: Batch, repo: str = REPO) -> str:
     deregister and must not stop the chain. The `worktree unlock` ahead of it releases this
     batch's own launch lock, which `remove` otherwise refuses on.
 
+    A batch in another repo differs in three places. The chain acts on that repo's checkout,
+    fetches its own default branch, and runs THIS repo's primary copy of the script with
+    `--repo`, since the batch's worktree carries no copy at all. That primary copy is current
+    enough: `launch` pins such a batch to the host it runs on, which is the deploy host,
+    whose checkout the GitOps tick keeps at `origin/master`.
+
     Args:
         b: the batch to clean, as recorded in the run manifest.
-        repo: the checkout the chain acts on. A seam, and a load-bearing one: it is what
-            lets a test EXECUTE this chain against a scratch repo instead of the shared
-            primary checkout, where `branch -D` and `worktree remove` would hit whatever
-            every other live session is doing.
+        repo: the checkout the chain acts on, defaulting to `target`'s. A seam, and a
+            load-bearing one: it is what lets a test EXECUTE this chain against a scratch
+            repo instead of the shared primary checkout, where `branch -D` and `worktree
+            remove` would hit whatever every other live session is doing.
+        target: the repo the batch works, which names its default branch.
     """
     wt, branch = b.worktree, b.branch
+    repo = repo or target.checkout
+    if target.is_server:
+        clean_one_leg = (
+            f"python {wt}/scripts/dev/fanout_place.py clean-one {wt} {branch}"
+        )
+    else:
+        clean_one_leg = (
+            f"python {REPO}/scripts/dev/fanout_place.py clean-one {wt} {branch} "
+            f"--repo {target.repo}"
+        )
     gone_branch = f'echo "removed: {wt} (already gone)"'
     return (
         f"if systemctl --user is-active --quiet {b.unit}; then "
         f'echo "kept: {wt} — unit {b.unit} still active; stop it first"; '
         f"else "
         f"systemctl --user reset-failed {b.unit} 2>/dev/null; "
-        f"git -C {repo} fetch --quiet origin master && "
+        f"git -C {repo} fetch --quiet origin {target.base_branch} && "
         f"if [ ! -e {wt}/.git ]; then "
         f"rm -rf {wt}; "
         f"git -C {repo} worktree unlock {wt} 2>/dev/null; "
@@ -332,7 +352,7 @@ def remote_clean_command(b: Batch, repo: str = REPO) -> str:
         f"fi; "
         f"fi; "
         f"else cd {repo} && uv run --no-project --no-python-downloads --python 3.14.6 "
-        f"python {wt}/scripts/dev/fanout_place.py clean-one {wt} {branch}; "
+        f"{clean_one_leg}; "
         f"fi; "
         f"fi"
     )

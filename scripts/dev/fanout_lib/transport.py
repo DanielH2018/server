@@ -24,10 +24,15 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from fanout_lib import signing
 from fanout_lib.brief import Issue
 from fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
+from fanout_lib.target import SERVER, SERVER_CHECKOUT
 from lib.gh import gh
 
 HOSTS = ("daniel-box", "daniel-server")
-REPO = "/home/ubuntu/server"
+REPO = SERVER_CHECKOUT
+# This checkout's own `findings.py`, which `launch` runs to claim a batch in another repo's
+# register. Resolved from this file rather than from REPO: the orchestrator runs the dispatcher
+# from its own worktree, and that worktree's copy is the one whose `--repo` it just used.
+FINDINGS = str(_Path(__file__).resolve().parents[1] / "findings.py")
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
 READ_TIMEOUT_S = 20.0
 GH_TIMEOUT_S = 30.0
@@ -150,8 +155,11 @@ def issue_from_view(data: dict) -> Issue:
     )
 
 
-def gh_issue(number: int) -> Issue:
+def gh_issue(number: int, repo: str = SERVER) -> Issue:
     """Fetch one GitHub issue by number via `gh issue view`.
+
+    `--repo` is always passed. Issue numbers collide across repos, so a fetch that fell back
+    to the cwd's repo would put another repo's issue body into the brief.
 
     Raises:
         subprocess.CalledProcessError: `gh` exited non-zero.
@@ -159,13 +167,20 @@ def gh_issue(number: int) -> Issue:
             hung fetch mid-loop would strand every batch already launched.
     """
     out = gh(
-        "issue", "view", str(number), "--json", ISSUE_FIELDS, timeout=GH_TIMEOUT_S
+        "issue",
+        "view",
+        str(number),
+        "--repo",
+        repo,
+        "--json",
+        ISSUE_FIELDS,
+        timeout=GH_TIMEOUT_S,
     ).stdout
     return issue_from_view(json.loads(out))
 
 
-def merged_pr_url(branch: str) -> str:
-    """The URL of a merged PR opened from `branch`, or "" when GitHub knows of none.
+def merged_pr_url(branch: str, repo: str = SERVER) -> str:
+    """The URL of a merged PR opened from `branch` in `repo`, or "" when GitHub knows of none.
 
     The forge is the only oracle that can settle a batch whose worktree is gone. The tree,
     its report and its unit all go with it, but the PR it opened does not. This runs
@@ -182,6 +197,8 @@ def merged_pr_url(branch: str) -> str:
             "list",
             "--state",
             "merged",
+            "--repo",
+            repo,
             "--head",
             branch,
             "--json",
@@ -202,21 +219,44 @@ def merged_pr_url(branch: str) -> str:
     return str(data[0]["url"]) if data else ""
 
 
+def run_findings(argv: list[str]) -> subprocess.CompletedProcess:
+    """Run this checkout's `findings.py` with `argv`, never raising on a non-zero exit."""
+    return subprocess.run(
+        ["uv", "run", "python", FINDINGS, *argv],
+        capture_output=True,
+        text=True,
+        timeout=GH_TIMEOUT_S * 4,
+        check=False,
+        cwd=_Path(FINDINGS).parents[2],
+    )
+
+
+def default_ref(checkout: str) -> str | None:
+    """`checkout`'s remote default branch, such as `origin/main`, or None when it has none."""
+    from prune_worktrees import default_ref as read
+
+    return read(checkout)
+
+
 @dataclass(frozen=True)
 class Tools:
     """Every process boundary the dispatcher crosses.
 
     Attributes:
         run: run a command on a host.
-        gh_issue: fetch one issue by number.
+        gh_issue: fetch one issue by number from a repo.
         signing_keys: the signing keys GitHub verifies for the account.
-        merged_pr: the URL of a merged PR for a branch, or "".
+        merged_pr: the URL of a merged PR for a branch in a repo, or "".
+        findings: run `findings.py` with an argv, for the claim `launch` takes itself.
+        default_ref: read a checkout's remote default branch, for `target.resolve`.
     """
 
     run: Callable[..., subprocess.CompletedProcess] = run_command
-    gh_issue: Callable[[int], Issue] = gh_issue
+    gh_issue: Callable[[int, str], Issue] = gh_issue
     signing_keys: Callable[[], frozenset[str]] = signing.registered_signing_keys
-    merged_pr: Callable[[str], str] = merged_pr_url
+    merged_pr: Callable[[str, str], str] = merged_pr_url
+    findings: Callable[[list[str]], subprocess.CompletedProcess] = run_findings
+    default_ref: Callable[[str], str | None] = default_ref
 
 
 def read_host(tools: Tools, host: str) -> HostReading | str:

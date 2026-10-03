@@ -92,7 +92,7 @@ def over_live_batch_cap(placed: list[tuple[str, str]], root: Path) -> bool:
     return over
 
 
-def live_elsewhere(batches: dict[str, list[int]], root: Path) -> bool:
+def live_elsewhere(batches: dict[str, list[int]], root: Path, repo: str) -> bool:
     """Print and return True when a new batch shares an issue with one still live.
 
     `exists_check_command` guards the host a batch is placed on, which is not the same
@@ -105,14 +105,18 @@ def live_elsewhere(batches: dict[str, list[int]], root: Path) -> bool:
     putting a second agent on issues it holds. What must not happen twice is an issue, so
     that is what is compared.
 
+    Only batches in the same repo are compared: issue numbers collide across repos, so a
+    live dotfiles batch on #763 says nothing about server #763.
+
     Args:
         batches: `_parse_batches`' mapping of batch id to the issue numbers it would take.
         root: the manifest directory to read every run under.
+        repo: the repo this launch works, as `OWNER/NAME`.
     """
-    live = live_batches(root)
+    live = [entry for entry in live_batches(root).values() if entry[1].repo == repo]
     refused = False
     for spec, issues in batches.items():
-        for run_id, b in live.values():
+        for run_id, b in live:
             overlap = sorted(set(issues) & set(b.issues))
             if not overlap:
                 continue

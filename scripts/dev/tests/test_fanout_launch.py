@@ -473,3 +473,27 @@ def test_a_save_that_fails_mid_write_leaves_the_previous_manifest_intact(tmp_pat
     assert load(first.run_id, root=tmp_path) == first
     # The failed attempt cleans up after itself rather than leaving a stray .tmp.
     assert [p.name for p in tmp_path.iterdir()] == [manifest_file.name]
+
+
+def test_a_manifest_written_before_repo_existed_loads_as_this_repo(tmp_path):
+    batch = {
+        "batch": "b",
+        "host": "daniel-box",
+        "worktree": "/w",
+        "branch": "worktree-fanout-b",
+        "unit": "fanout-b",
+        "issues": [1],
+        "launched_at": "t",
+    }
+    (tmp_path / "20260101T000000Z.json").write_text(
+        json.dumps(
+            {
+                "run_id": "20260101T000000Z",
+                "orchestrator_branch": "o",
+                "batches": [batch],
+            }
+        )
+    )
+    assert (
+        load("20260101T000000Z", root=tmp_path).batches[0].repo == "DanielH2018/server"
+    )

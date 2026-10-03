@@ -12,6 +12,7 @@ from fanout_lib import brief as brief_mod
 from fanout_lib import launch as launch_mod
 from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
+from fanout_lib.target import Target
 from fanout_lib.transport import ISSUE_FIELDS, issue_from_view
 from fanout_place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
@@ -420,8 +421,12 @@ def test_a_within_spec_duplicate_issue_gets_its_own_message(tmp_path, capsys):
 def test_the_briefs_worktree_path_matches_the_one_launch_creates():
     # brief duplicates the path rather than importing launch, which would cycle; this is
     # the check that keeps the duplicate honest.
+    dotfiles = Target("DanielH2018/dotfiles", "/c", "origin/main")
     for batch in ("1345-1386", "b"):
         assert brief_mod._worktree_path(batch) == launch_mod.worktree_path(batch)
+        assert brief_mod._worktree_path(batch, dotfiles) == launch_mod.worktree_path(
+            batch, dotfiles
+        )
 
 
 def test_a_batch_still_live_in_a_manifest_is_refused_before_any_host_is_read(

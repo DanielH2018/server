@@ -3,6 +3,9 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_launch_gates.py
 """
 
+import json
+import socket
+
 from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_place import main
@@ -57,3 +60,43 @@ def test_a_cleaned_batch_does_not_count_against_the_cap(tmp_path):
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1,2") == 0
     assert len(run.calls) == 3  # headroom read, health read, one launch
+
+
+def _another_host() -> str:
+    return next(h for h in ("daniel-box", "daniel-server") if h != socket.gethostname())
+
+
+def test_a_dotfiles_launch_runs_here_and_reads_the_dotfiles_register(tmp_path):
+    here = socket.gethostname()
+    issue = Issue(763, "dotfiles finding", "body", ("claude",))
+    tools, run = fake_tools(answers={here: ok(HEADROOM)}, issues=[issue])
+    assert (
+        _launch(tools, tmp_path, "--repo", "DanielH2018/dotfiles", "--batch", "763")
+        == 0
+    )
+    assert run.issue_fetches == [(763, "DanielH2018/dotfiles")]
+    assert {host for host, _, _ in run.calls} == {here, "findings"}
+    (manifest,) = tmp_path.glob("*.json")
+    (batch,) = json.loads(manifest.read_text())["batches"]
+    assert batch["repo"] == "DanielH2018/dotfiles" and batch["host"] == here
+    assert batch["unit"] == "fanout-dotfiles-763"
+
+
+def test_a_dotfiles_launch_pinned_to_another_host_is_refused(tmp_path, capsys):
+    issue = Issue(763, "dotfiles finding", "body", ("claude",))
+    tools, run = fake_tools(issues=[issue])
+    other = _another_host()
+    argv = ["--repo", "DanielH2018/dotfiles", "--host", other, "--batch", "763"]
+    assert _launch(tools, tmp_path, *argv) == 1
+    assert not run.calls and not run.issue_fetches
+    assert "runs on this host" in capsys.readouterr().err
+
+
+def test_a_live_batch_in_another_repo_does_not_hold_the_same_issue_number(tmp_path):
+    """The clean half of `test_a_batch_still_live_in_a_manifest_is_refused_...`."""
+    live = Batch(
+        "1-2", "daniel-server", "/w", "b", "u", [1, 2], "t", repo="DanielH2018/dotfiles"
+    )
+    save(Manifest("20260101T000010Z", "o", [live]), root=tmp_path)
+    tools, _ = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1,2") == 0
