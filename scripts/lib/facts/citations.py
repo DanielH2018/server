@@ -102,6 +102,62 @@ def node_citations(text: str) -> list[tuple[str, str]]:
     return _PROSE_NODE.findall(text)
 
 
+# The scanners below serve the operator-docs guards under ``ansible/tests/repo/``, not the
+# facts store. None of them feeds ``parse_citations``. A ``file:line`` span is support there
+# and rejected here, because a line number in a long-lived runbook is still a claim that the
+# file exists, while a ``CLAUDE.md`` section's support has to hash stably.
+#
+# DECIDED: no repo-root prefix is required. Requiring one ("ansible/...", "scripts/...")
+# matched 4 citations in the whole tree, because the docs overwhelmingly cite from context --
+# `roles/k8s/manifests/tasks/main.yml:112`, `deploy_logic.py:458`. A guard that checks four
+# things is a guard that passes vacuously, which is why the guard asserts a citation count.
+# The extension must begin with a letter, which is what keeps `127.0.0.1:3100` and
+# `10.0.0.240:51820` from parsing as a file called `127.0.0.` with extension `1`. Four role
+# docs and two networking docs cite host:port pairs exactly that way.
+_LINE_NUMBERED = re.compile(r"`([\w.][\w./-]*\.([a-z][a-z0-9]*)):\d+(?:-\d+)?`")
+
+
+def line_numbered_citations(
+    text: str, extensions: frozenset[str] | set[str]
+) -> list[str]:
+    """Every backticked ``path:line`` in ``text`` whose extension is in ``extensions``.
+
+    The caller passes the extensions its tree holds, so a citation of another repository's
+    file (upstream Longhorn's ``deltablock.go:117``) is not read as a claim about this one.
+    """
+    return [path for path, ext in _LINE_NUMBERED.findall(text) if ext in extensions]
+
+
+# A bare `ansible/tests/<file>.py` citation is the ONE exception to the line-number rule. Every
+# such path is a claim about this tree: nothing else has a directory by that name, and a
+# `pytest <path>` line or an `ENFORCED by <path>` note is an instruction someone runs. The
+# move of the guards into subdirectories rewrites these citations, and the line-number rule
+# would watch none of them go stale. A trailing `:line` or `::node_id` is allowed and dropped.
+_GUARD_PATH = re.compile(
+    r"`(ansible/tests/[\w./-]+\.py)(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?`"
+)
+
+
+def guard_path_citations(text: str) -> list[str]:
+    """Every backticked ``ansible/tests/...py`` in ``text``, with or without a line number."""
+    return _GUARD_PATH.findall(text)
+
+
+# A `<name>.yml.j2`, whether bare (a `{% from %}` line or an inline bullet mention) or with
+# one directory level in front of it -- role-local app config shares the extension
+# (`templates/config/config.yml.j2` in configarr, `templates/config/application.yml.j2` in
+# janitorr). The directory is kept so the caller can tell those apart from a shared-macro
+# reference, which this repo's docs always give bare or as `templates/<macro>.yml.j2`.
+# Unlike every other scanner here it needs no backticks: the skeleton it guards is a
+# `{% from '<macro>.yml.j2' import ... %}` line inside a fence.
+_MACRO = re.compile(r"\b((?:[a-z0-9_-]+/)?[a-z0-9_-]+\.yml\.j2)\b")
+
+
+def macro_citations(text: str) -> list[str]:
+    """Every ``[dir/]<name>.yml.j2`` named in ``text``, fenced or not, in order."""
+    return _MACRO.findall(text)
+
+
 @dataclass(frozen=True)
 class Section:
     """A logical unit of documentation: a heading and the text up to the next heading."""

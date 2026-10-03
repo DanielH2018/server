@@ -13,6 +13,7 @@ from functools import cache
 
 import pytest
 from _helpers import REPO, discover_docs
+from lib.facts.citations import macro_citations
 from _row_table import (
     Census,
     Subject,
@@ -28,11 +29,6 @@ from _row_table import (
 # `docs/reference/backlog.md` renders the findings register, so its rows are issue titles. An
 # issue proposing to delete a macro names it there, and nothing is copyable from a register row.
 GENERATED_REGISTER = "docs/reference/backlog.md"
-
-# A `<name>.yml.j2`, bare or with one directory in front. The directory tells role-local app
-# config (`templates/config/config.yml.j2` in configarr) from a shared macro, which the docs
-# always give bare or as `templates/<macro>.yml.j2`.
-NAMED_MACRO = re.compile(r"\b((?:[a-z0-9_-]+/)?[a-z0-9_-]+\.yml\.j2)\b")
 
 
 @cache
@@ -50,19 +46,22 @@ def _macro_docs() -> list[str]:
 
 def _missing_macro_offence(subject: Subject) -> list[str]:
     lines = subject.text.splitlines()
+    # `macro_citations` keeps one directory level, so role-local app config
+    # (`templates/config/config.yml.j2` in configarr) is told apart from a shared macro,
+    # which the docs always give bare or as `templates/<macro>.yml.j2`.
     # A name a `config/`-qualified mention ties to a role's own app config is that file
     # wherever else the doc names it bare.
     local = {
         bare
         for line in lines
-        for raw in NAMED_MACRO.findall(line)
+        for raw in macro_citations(line)
         for prefix, _, bare in [raw.rpartition("/")]
         if prefix == "config"
     }
     return [
         f"line {n} names {bare}"
         for n, line in enumerate(lines, 1)
-        for raw in NAMED_MACRO.findall(line)
+        for raw in macro_citations(line)
         for bare in [raw.rpartition("/")[2]]
         if bare not in local
         and bare != "docker-compose.yml.j2"

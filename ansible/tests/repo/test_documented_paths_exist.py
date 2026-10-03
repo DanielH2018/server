@@ -22,22 +22,27 @@ That is why there is no allowlist here. Every exclusion a bare-path version need
 narrowing someone would later have to defend, and an allowlist is where a real finding goes
 to hide. The pattern earns the zero-entry list.
 
-Two more citation shapes are checked here, each with its own extractor and paired tests. A
-bare `ansible/tests/...py` path -- that directory exists nowhere but this tree, so a bare
-citation of it is still a claim about this tree now (`_CITED_TEST`). And a `file.py::test_name`
-node id, in docs AND in runtime modules, which names the check that holds an invariant closed.
-That one is not parsed here: `scripts/lib/facts/citations.py:node_citations` owns the grammar,
-shared with the `facts.lock` citation forms, and its paired tests sit beside it. One corpus walk
-and one tracked-file set serve all three.
+Two more citation shapes are checked here. A bare `ansible/tests/...py` path -- that
+directory exists nowhere but this tree, so a bare citation of it is still a claim about this
+tree now. And a `file.py::test_name` node id, in docs AND in runtime modules, which names the
+check that holds an invariant closed. `scripts/lib/facts/citations.py` owns all three
+grammars (`line_numbered_citations`, `guard_path_citations`, `node_citations`), beside the
+`facts.lock` citation forms, and their paired tests sit beside it. This module keeps what
+depends on the tree: resolution, the extension filter, and the corpus. One corpus walk and one
+tracked-file set serve all three.
 """
 
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
 from _helpers import REPO, discover_docs
-from lib.facts.citations import node_citations
+from lib.facts.citations import (
+    guard_path_citations,
+    line_numbered_citations,
+    node_citations,
+    tracked_files,
+)
 
 
 # A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
@@ -46,45 +51,19 @@ from lib.facts.citations import node_citations
 # deletions, close enough that a broken walk cannot pass.
 _MIN_DOCS = 100
 
-# A backticked filename carrying an explicit line reference. The `:NNN` is the load-bearing
-# part -- see the module docstring.
-#
-# DECIDED: no repo-root prefix is required. Requiring one ("ansible/...", "scripts/...")
-# matched 4 citations in the whole tree, because the docs overwhelmingly cite from context --
-# `roles/k8s/manifests/tasks/main.yml:112`, `deploy_logic.py:458`. A guard that checks four
-# things is a guard that passes vacuously, which is why the count assertion below exists.
-# The extension must begin with a letter, which is what keeps `127.0.0.1:3100` and
-# `10.0.0.240:51820` from parsing as a file called `127.0.0.` with extension `1`. Four role
-# docs and two networking docs cite host:port pairs exactly that way.
-_CITED = re.compile(r"`([\w.][\w./-]*\.[a-z][a-z0-9]*):(\d+)(?:-\d+)?`")
-
-
 DOCS = discover_docs()
 
 
-def _repo_files() -> set[str]:
-    """Every TRACKED file path in the repo, repo-relative, as forward-slash strings.
-
-    DECIDED: `git ls-files`, not an `rglob` plus a skip list. An rglob sees whatever happens
-    to be on disk, and this repo grows untracked trees during ordinary work: `.venv`,
-    `ansible/collections/` (vendored per worktree), `__pycache__`, and `styles/`, which
-    `vale sync` creates and which carries `.txt` and `.json` files the repo itself does not
-    have. That last one moves `_REPO_EXTENSIONS` below, so the same citation would be checked
-    on a synced checkout and skipped on a fresh one. A guard whose verdict depends on whether
-    someone has run `vale sync` has the defect this module rejected `.claude/worktrees/` for.
-    """
-    listed = subprocess.run(
-        ["git", "ls-files", "-z"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=60,
-    )
-    return {p for p in listed.stdout.split("\0") if p}
-
-
-REPO_FILES = _repo_files()
+# Every TRACKED file path in the repo, repo-relative, as forward-slash strings.
+#
+# DECIDED: `git ls-files`, not an `rglob` plus a skip list. An rglob sees whatever happens
+# to be on disk, and this repo grows untracked trees during ordinary work: `.venv`,
+# `ansible/collections/` (vendored per worktree), `__pycache__`, and `styles/`, which
+# `vale sync` creates and which carries `.txt` and `.json` files the repo itself does not
+# have. That last one moves `_REPO_EXTENSIONS` below, so the same citation would be checked
+# on a synced checkout and skipped on a fresh one. A guard whose verdict depends on whether
+# someone has run `vale sync` has the defect this module rejected `.claude/worktrees/` for.
+REPO_FILES = tracked_files(REPO)
 
 # Extensions this repo contains, so a language adopted later is covered without an edit here.
 # A citation in another extension is another repository's file. DECIDED: minus `go` -- the only
@@ -118,80 +97,35 @@ def cited_paths(line: str) -> list[str]:
     inputs it must reject. A guard that matches everything and one that matches nothing are
     indistinguishable from the passing side alone.
     """
-    return [
-        path
-        for path, _line_no in _CITED.findall(line)
-        if Path(path).suffix.lstrip(".") in _REPO_EXTENSIONS
-    ]
+    return line_numbered_citations(line, _REPO_EXTENSIONS)
 
-
-# A bare `ansible/tests/<file>.py` citation is the ONE exception to the line-number rule. Every
-# such path is a claim about this tree: nothing else has a directory by that name, and a
-# `pytest <path>` line or an `ENFORCED by <path>` note is an instruction someone runs. The
-# move of the guards into subdirectories rewrites these citations, and the line-number rule
-# would watch none of them go stale. A trailing `::node_id` is allowed and dropped.
-_CITED_TEST = re.compile(
-    r"`(ansible/tests/[\w./-]+\.py)(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?`"
-)
 
 # Archived plans describe the tree at the moment they were executed, so a test they name may
 # since have been retired with the work it guarded. Live docs are read as instructions.
 _ARCHIVE = "docs/archive/"
 
 
-def cited_test_paths(line: str) -> list[str]:
-    """Every `ansible/tests/...py` cited in one line of prose, with or without a line number."""
-    return _CITED_TEST.findall(line)
+# --- the tree-dependent half's own paired tests ---------------------------------------
+#
+# The pattern's accept/reject pairs live beside it in scripts/lib/tests/test_facts_citations.py.
+# What stays here is the extension filter, which only this tree can answer.
 
 
-# --- the extractor's own paired tests -------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "line,expected",
-    [
-        (
-            "at `ansible/roles/k8s/sonarr/tasks/main.yml:12`",
-            ["ansible/roles/k8s/sonarr/tasks/main.yml"],
-        ),
-        (
-            "spans `scripts/dev/prune_worktrees.py:10-40`.",
-            ["scripts/dev/prune_worktrees.py"],
-        ),
-        (
-            "both `scripts/a.py:1` and `.claude/hooks/b.sh:22`",
-            ["scripts/a.py", ".claude/hooks/b.sh"],
-        ),
-        ("see `docs/index.md:3` please", ["docs/index.md"]),
-    ],
-)
-def test_a_line_numbered_citation_is_extracted(line, expected):
-    assert cited_paths(line) == expected
+def test_a_citation_in_a_repo_extension_is_extracted():
+    assert cited_paths("at `ansible/roles/k8s/sonarr/tasks/main.yml:12`") == [
+        "ansible/roles/k8s/sonarr/tasks/main.yml"
+    ]
 
 
 @pytest.mark.parametrize(
     "line",
     [
-        # The whole point of the design: a bare path is not a claim about this tree now.
-        "see `scripts/deploy.sh` for the wrapper",
-        "the `docs/adr/` series",
-        "a new role, `ansible/roles/k8s/anilist-tags`, runs a CronJob",
-        # A pytest node id is not a line reference.
-        "pinned by `ansible/tests/test_x.py::test_the_thing`",
-        # A placeholder segment is a shape, not a path.
-        "edit `containers/<svc>/docker-compose.yml:4` instead",
-        "run `kubectl get pods` first",
-        "plain prose with no code span at all",
-        # host:port, not file:line -- the numeric extension trap.
-        "the collector listens on `127.0.0.1:4317`",
-        "bound to `10.0.0.240:51820` on the LAN",
-        "never `0.0.0.0:8080`",
         # Upstream Longhorn source, in another repository entirely.
         "upstream does it in `deltablock.go:117`",
         "and `s3.go:88` for the store half",
     ],
 )
-def test_a_non_citation_is_not_extracted(line):
+def test_a_citation_of_upstream_go_is_not_extracted(line):
     assert cited_paths(line) == []
 
 
@@ -260,37 +194,6 @@ def test_every_line_numbered_path_cited_in_the_docs_exists():
     )
 
 
-@pytest.mark.parametrize(
-    "line,expected",
-    [
-        (
-            "run `ansible/tests/repo/test_helpers.py` first",
-            ["ansible/tests/repo/test_helpers.py"],
-        ),
-        (
-            "pinned by `ansible/tests/k8s/test_x.py::test_the_thing`",
-            ["ansible/tests/k8s/test_x.py"],
-        ),
-        ("ENFORCED: `ansible/tests/_helpers.py:27`", ["ansible/tests/_helpers.py"]),
-    ],
-)
-def test_a_bare_test_citation_is_extracted(line, expected):
-    assert cited_test_paths(line) == expected
-
-
-@pytest.mark.parametrize(
-    "line",
-    [
-        "the guards live under `ansible/tests/`",
-        "see `scripts/deploy.sh` for the wrapper",
-        "a role's own `tests/test_macros.py`",
-        "ansible/tests/repo/test_helpers.py with no code span",
-    ],
-)
-def test_a_non_test_citation_is_not_extracted(line):
-    assert cited_test_paths(line) == []
-
-
 def test_every_test_path_cited_in_the_live_docs_exists():
     missing = []
     for doc in DOCS:
@@ -298,7 +201,7 @@ def test_every_test_path_cited_in_the_live_docs_exists():
         if not doc.is_file() or str(rel).startswith(_ARCHIVE):
             continue
         for line_no, line in enumerate(doc.read_text().splitlines(), 1):
-            for cited in cited_test_paths(line):
+            for cited in guard_path_citations(line):
                 if cited in REPO_FILES:
                     continue
                 missing.append(f"{rel}:{line_no} cites {cited}")
@@ -312,7 +215,7 @@ def test_every_test_path_cited_in_the_live_docs_exists():
 def test_the_test_citation_walk_finds_citations_to_check():
     """A shrunken citation walk is a bug."""
     found = sum(
-        len(cited_test_paths(line))
+        len(guard_path_citations(line))
         for doc in DOCS
         if doc.is_file() and not str(doc.relative_to(REPO)).startswith(_ARCHIVE)
         for line in doc.read_text().splitlines()
