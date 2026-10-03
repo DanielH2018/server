@@ -6,41 +6,56 @@ OnFailure=renovate-agent-alert.service
 
 [Service]
 Type=oneshot
-User={{ sys_user }}
-WorkingDirectory={{ renovate_agent_repo_dir }}
+# Its own user, not {{ sys_user }}: the session reads third-party release notes and PR text, so
+# it holds nothing that can reach master. No sudo, no read on /home/{{ sys_user }}, and a GitHub
+# token that cannot push or merge. Landing is renovate-agent-land@<n>.service, which polkit
+# lets this user start and which runs land.sh as {{ sys_user }} on a PR it re-checks itself.
+User={{ renovate_agent_user }}
+WorkingDirectory={{ renovate_agent_clone_dir }}
 # The wrapper's own RUN_TIMEOUT_S ({{ renovate_agent_run_timeout_s }}s) should always trip
 # first: it kills the session and still posts a digest naming the timeout, where this ceiling
-# kills the whole cgroup and posts only the OnFailure alert. Killing the cgroup is the reason
-# for the gap — a landing in flight means `land.sh` is inside an Ansible run, and a partial run
-# is the policies-first hazard. Keep this strictly above RUN_TIMEOUT_S plus the two `gh pr list`
-# censuses either side of it.
+# kills the whole cgroup and posts only the OnFailure alert. Keep this strictly above
+# RUN_TIMEOUT_S plus the two `gh pr list` censuses either side of it. A landing in flight runs
+# in the lander's own unit, so this kill no longer reaches an Ansible run.
 TimeoutStartSec={{ renovate_agent_unit_timeout }}
-# Need ~/.local/bin for `claude` and `uv`, and /usr/local/bin for `gh`; systemd supplies a
-# minimal PATH exactly as cron does.
-Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
-Environment=HOME=/home/{{ sys_user }}
+# The user's own ~/.local/bin for `claude` and `uv`; systemd supplies a minimal PATH exactly as
+# cron does. `gh` and `git` are in /usr/bin.
+Environment=PATH={{ renovate_agent_home }}/.local/bin:/usr/bin:/bin
+Environment=HOME={{ renovate_agent_home }}
 Environment=PYTHONDONTWRITEBYTECODE=1
-# The contract's "never a PR by another author", held by land.sh rather than by the prompt:
-# the session inherits this from the wrapper, and `land.sh --arm-merge` refuses a PR whose
-# author is anyone else before it issues a merge call (issue #2170). The value is the login
-# the wrapper's `gh pr list --author` census keys on.
-Environment=LAND_REQUIRE_AUTHOR=app/renovate
+# The repo's hook shim defaults to the operator's checkout and uv, which this user cannot read;
+# a guard that cannot start turns each Bash call into an `ask`, and nobody answers one here.
+# run_worktree.prepare_worktree syncs this tree's `.venv` before the session starts.
+Environment=RUN_HOOK_PROJECT_DIR={{ renovate_agent_clone_dir }}/.claude/worktrees/{{ renovate_agent_worktree }}
+Environment=RUN_HOOK_UV={{ renovate_agent_home }}/.local/bin/uv
+# A landing blocks in `systemctl start` for up to the lander's 60-minute TimeoutStartSec, and
+# Claude Code caps a Bash call at 10 minutes unless this raises it. A call killed early leaves
+# the landing running, but the session would then read a verdict file the lander has not yet
+# rewritten (it writes PENDING only once it holds its lock).
+Environment=BASH_MAX_TIMEOUT_MS={{ renovate_agent_bash_timeout_ms }}
+# The GitHub token and the Claude credential. Read by systemd as root, so the file is root 0600
+# and neither value appears in a unit line `systemctl show` publishes.
+EnvironmentFile=/etc/renovate-agent/session.env
 # journald stores only notice+ on these hosts, and a unit's stdout logs at info by default —
 # so without this every wrapper line is discarded at the source and a post-mortem has nothing
 # to read. Same reasoning as gitops-deploy.service.
 SyslogLevel=notice
-# Deliberately NOT sandboxed, unlike the sibling renovate-notify unit. This session reads and
-# writes the repo, drives git, gh, uv, ansible and kubectl, and needs ~/.claude for its own
-# credentials and session state — so ProtectHome/ProtectSystem/ReadWritePaths would all have to
-# be widened to the point of meaning nothing. The blast radius is bounded by what the session
-# can do, not by the unit's confinement: a PR cap, a spend ceiling, a wall clock, and a
-# worktree it cannot leave without the deployer noticing.
+# The user boundary does the containment; these close what a same-host user can still read.
+# ProtectHome hides every /home, ProtectProc hides other users' processes and their argv, and
+# NoNewPrivileges rules out a setuid binary. None of them stops a `systemctl start` of the
+# lander, which goes to systemd over D-Bus and is decided by polkit.
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectProc=invisible
+PrivateTmp=yes
 #
 # `-n`: never queue. Two of these overlapping would fight over the same worktree, and the timer
 # is daily, so a run still going when the next one fires means something is wrong and the second
-# should say so rather than wait.
-ExecStart=/usr/bin/flock -n /var/lock/renovate-agent.lock \
-  /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+# should say so rather than wait. The lock sits in the user's own home: fs.protected_regular=2
+# refuses an O_CREAT open of another user's file in sticky /run/lock, and the old lock there
+# belongs to {{ sys_user }}.
+ExecStart=/usr/bin/flock -n {{ renovate_agent_home }}/run.lock \
+  {{ renovate_agent_home }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /opt/renovate-agent/renovate_agent.py
 {% if renovate_agent_kuma_push_token | default('') %}
 # The alive beat, sent only when ExecStart succeeded. The URL embeds the push token, so it is

@@ -32,15 +32,15 @@ The role installs the scripts, config, prompt and units on every run.
 it back to `false` stops **and** disables the timer. That is the rollback, and
 `ansible/tests/setup/test_renovate_agent_unit.py` pins that both directions stay wired.
 
-It ships `false`. Arming it is a decision with a spend attached and a blast radius — the session
-merges PRs and lands them through `land.sh`, which deploys — not a sign the role is unfinished.
+It ships `false`. Arming it is a decision with a spend attached and a blast radius — the
+lander deploys what the session picks — not a sign the role is unfinished. The role refuses to
+arm without the session's own GitHub token and Claude credential;
+`docs/renovate-agent-bounds-and-digest.md` has the checklist.
 
-**The merge itself goes through `land.sh --arm-merge`, not a bare `gh pr merge`.** A bare
-`gh pr merge` sits on the ask list, and auto mode suspends the allow list, so an unattended
-session times out as a denial. `--arm-merge` runs the same `gh pr merge --squash --auto` call
-inside `land.sh`, where the session's own invocation text is the one script call the
-worktree-containment check already accepts. `docs/renovate-agent-bounds-and-digest.md` names
-the skill step and the denial incident behind this.
+**The session can neither push nor merge.** It runs as `renovate_agent_user`, with a token that
+has no contents write, in its own clone. It lands a PR only by starting
+`renovate-agent-land@<n>.service`, which polkit lets it start and which runs `land.sh` as
+`sys_user` on a PR the lander re-checks itself.
 
 **`--check` fails at "Enable and start the timer", and that is not a bug in the role.** Check
 mode writes no unit file, so systemd reports `Could not find the requested service` for a
@@ -61,17 +61,15 @@ The acting half of the Renovate pair. Its authority is written down so an edit t
 the caps or the schedule cannot quietly widen it.
 
 - **Scope / exclusions:** the repo's open PRs authored by `app/renovate`, worked through the
-  `renovate-prs` skill: finish the manual half of a grouped bump, merge through
-  `land.sh --arm-merge`, land and verify. **Never** a PR by another author (ENFORCED: the
-  unit sets `LAND_REQUIRE_AUTHOR=app/renovate`, and `land.sh --arm-merge` refuses any other
-  author before its first merge call — `scripts/deploy_tools/land_lib/merge.py:_require_author`;
-  `ansible/tests/setup/test_renovate_agent_unit.py::test_the_unit_pins_land_sh_to_renovates_prs`
-  pins the value to the wrapper's census). That includes the superseding PR the session opens
-  itself for a finished `manual —` bump: the operator chose to hand it off rather than let the
-  timer land it (#2746). The session leaves it open, never passes `--any-author`, and files a
-  hand-off finding carrying its `land.sh` command, as the `renovate-prs` skill's §4 says;
-  `ansible/tests/setup/test_renovate_agent_unit.py::test_the_prompt_hands_off_its_own_superseding_pr`
-  pins the prompt to it. **Never** a bare `gh pr merge`, **never** a session in the primary
+  `renovate-prs` skill and landed through the lander. **Never** a PR by another author
+  (ENFORCED twice: the lander's own author check, and its unit's
+  `LAND_REQUIRE_AUTHOR=app/renovate`, which `land.sh --arm-merge` reads —
+  `scripts/deploy_tools/land_lib/merge.py:_require_author`;
+  `ansible/tests/setup/test_renovate_agent_unit.py::test_the_lander_pins_land_sh_to_renovates_prs`
+  pins both to the wrapper's census). **Never** a push or merge by the session: its token has no
+  contents write, so a `manual —` work order ends as a hand-off in the digest
+  (`ansible/tests/setup/test_renovate_agent_identity.py` pins the user and the token's route).
+  **Never** a session in the primary
   checkout, **never** a worktree that still holds unlanded work (the tick skips, posts the path
   and exits non-zero), and **never a PR whose title OR BRANCH carries `k8s_autodeploy: false`**
   (#1939). That phrase is renovate.json's denylist marker, not a work order: the roles behind it
@@ -87,8 +85,8 @@ the caps or the schedule cannot quietly widen it.
 - **Mode (explicit + reversible):** `renovate_agent_enabled`, which ships `false` (see *Arming
   it* above; `test_renovate_agent_unit.py` pins both directions).
 - **Authoritative sources:** the open PRs authored by `app/renovate` before and
-  after the session, the same census of the session account's own PRs on the run's branches
-  (what it handed off), CI's own verdict through `land.sh`, and the health gate `land.sh` runs.
+  after the session, the lander's verdict files, CI's own verdict through `land.sh`, and the
+  health gate `land.sh` runs.
   Never the session's closing paragraph — it reads confident whatever happened.
 - **Abort valves:** `renovate_agent_max_prs`, `renovate_agent_run_timeout_s`, the systemd
   `renovate_agent_unit_timeout` backstop, and `renovate_agent_budget_usd` as a runaway catch.

@@ -17,6 +17,7 @@ Run: uv run pytest .claude/hooks/tests/test_run_hook.py
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -56,7 +57,13 @@ def _variant_runner(tmp_path: Path, cd_target: str) -> Path:
     so the runner's `HOOKS_DIR` resolves there and only a `.py` the test writes can run.
     """
     text = RUNNER.read_text(encoding="utf-8")
-    for host_fact in (f"cd {_PROJECT_DIR} ||", f"exec {_UV} run", f"\n{_UV} run"):
+    for host_fact in (
+        f"RUN_HOOK_PROJECT_DIR:-{_PROJECT_DIR}}}",
+        f"RUN_HOOK_UV:-{_UV}}}",
+        'cd "$project_dir" ||',
+        'exec "$uv" run',
+        '\n"$uv" run',
+    ):
         assert host_fact in text, f"run-hook.sh no longer holds {host_fact!r}"
     # Checked before the swap, because the runner-side values can live under /home/ubuntu too.
     unswapped = text.replace(_PROJECT_DIR, "").replace(_UV, "")
@@ -73,13 +80,22 @@ def _variant_runner(tmp_path: Path, cd_target: str) -> Path:
     return path
 
 
-def _run(runner: Path, *args: str) -> subprocess.CompletedProcess:
+def _run(
+    runner: Path, *args: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
+    """Run `runner` with the overrides in `env` and none inherited.
+
+    The unattended Renovate agent's unit sets the two `RUN_HOOK_*` overrides, so a suite run
+    inside its session would otherwise send every copy to the agent's worktree.
+    """
+    base = {k: v for k, v in os.environ.items() if not k.startswith("RUN_HOOK_")}
     return subprocess.run(
         ["bash", str(runner), *args],
         input="",
         capture_output=True,
         text=True,
         timeout=60,
+        env={**base, **(env or {})},
     )
 
 
@@ -240,6 +256,36 @@ def test_accept_a_valid_cd_target_emits_no_ask(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout == ""
     assert "did not run" not in proc.stderr
+
+
+def test_accept_the_project_dir_override_moves_the_cd(tmp_path):
+    """The unattended Renovate agent's user cannot reach the default checkout, so its unit
+    names its own run worktree. The copy's default target does not exist, so only the
+    override can make the `cd` succeed."""
+    (tmp_path / "probe.py").write_text(
+        "import os\nprint(os.getcwd())\n", encoding="utf-8"
+    )
+    runner = _variant_runner(tmp_path, str(tmp_path / "does-not-exist"))
+    target = tmp_path / "agent-worktree"
+    target.mkdir()
+    proc = _run(runner, "probe", "--project", env={"RUN_HOOK_PROJECT_DIR": str(target)})
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(target)
+
+
+def test_reject_an_override_outside_the_path_charset_is_ignored(tmp_path):
+    """The directory reaches the JSON `ask` reason, so a value that could break the string
+    falls back to the default rather than being interpolated."""
+    runner = _variant_runner(tmp_path, str(tmp_path / "does-not-exist"))
+    proc = _run(
+        runner,
+        "bash-pretool",
+        "--ask-on-cd",
+        env={"RUN_HOOK_PROJECT_DIR": '/tmp/a" injected "b'},
+    )
+    reason = json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "injected" not in reason
+    assert "does-not-exist" in reason
 
 
 def test_the_runner_runs_the_py_beside_itself_not_beside_the_cwd(tmp_path):

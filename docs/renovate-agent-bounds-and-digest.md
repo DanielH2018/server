@@ -2,9 +2,10 @@
 
 Working-out moved off `ansible/roles/setup/renovate_agent/CLAUDE.md` (#2995), which a session
 reads on every touch of the unattended agent. The role doc keeps the arming procedure and the
-autonomous-role contract; this page keeps the modules `files/` ships, the four bounds and why
-each is the var it is, the worktree rules, what the Discord digest measures, and the alive
-tile's exit-code and token plumbing. `docs/renovate-notify-internals.md` is the sibling page for the reporting half.
+autonomous-role contract; this page keeps the modules `files/` ships, the lander, the session's
+own identity and the arming checklist, the four bounds and why each is the var it is, the
+worktree rules, what the Discord digest measures, and the alive tile's exit-code and token
+plumbing. `docs/renovate-notify-internals.md` is the sibling page for the reporting half.
 
 ## The modules `files/` ships
 
@@ -45,14 +46,64 @@ because the session can edit a title. ENFORCED:
 `ansible/roles/setup/renovate_agent/tests/test_land_renovate_pr.py`, which also holds the polkit
 rule's unit-name pattern to the PR numbers the script accepts.
 
-## Why the merge goes through `land.sh --arm-merge`
+The session starts the lander with a plain `systemctl start`, which blocks until the landing
+ends. The unit raises Claude Code's 10-minute Bash cap to `renovate_agent_bash_timeout_ms`
+through `BASH_MAX_TIMEOUT_MS`, so the call outlasts the 60-minute `TimeoutStartSec` of the lander unit. A
+call cut short leaves the landing running, and the verdict file still holds the last run's line
+until the lander takes its lock and writes `PENDING`. The prompt therefore waits on the unit's
+`ActiveState` before it reads the file.
 
-A bare `gh pr merge` sits on the ask list (`Bash(gh pr merge:*)` in `~/.claude/settings.json`).
-Auto mode suspends the allow list, so an unattended session has nobody to answer that prompt,
-and the call times out as a denial — three attempts, three denials, on 2026-09-03 (#979).
-`--arm-merge` runs the same `gh pr merge --squash --auto` call inside `land.sh` instead, where
-the session's own invocation text is just the one script call the worktree-containment check
-already accepts. The `renovate-prs` skill's landing step names the flag.
+## The session's own identity
+
+The session reads third-party text: release notes, changelogs and PR bodies. It runs as
+`renovate_agent_user` so that text steering it reaches nothing able to change `master`.
+
+- **Home, state and clone.** `renovate_agent_home` (`/var/lib/renovate-agent`) holds the run
+  record, the session's `~/.claude` and its own clone at `renovate_agent_clone_dir`. The
+  directory carries the set-group-ID bit and group `sys_user`, so the docs cron still reads the run record.
+- **Toolchain.** `/usr/local/bin/uv` is a symlink into the operator's home, which the agent
+  cannot read. The role copies the operator's pinned uv into the agent's `~/.local/bin` and runs
+  `uv python install` as the agent. Every project hook runs through `uv run`, and in an
+  unattended session a hook that cannot start makes each Bash call an `ask`, which is a denial.
+- **Project hooks.** `.claude/hooks/run-hook.sh` defaults to the operator's checkout and uv. The
+  unit sets `RUN_HOOK_PROJECT_DIR` to the run worktree and `RUN_HOOK_UV` to the agent's uv, and
+  `prepare_worktree` runs `uv sync --frozen` in that tree before the session starts. A guard
+  that cannot import its dependencies raises, and the dispatcher drops its verdict without a
+  word.
+- **GitHub token.** `renovate_agent_gh_token` is a fine-grained token for this repo alone:
+  pull requests and actions read-write, contents, checks and metadata read. With no contents
+  write it cannot push or merge, and with no issues write it cannot file a finding, so the
+  digest is the session's only hand-off. The lander merges with the operator's token.
+- **Claude credential.** `renovate_agent_claude_oauth_token`, from `claude setup-token`. Both
+  reach the session as environment variables through `/etc/renovate-agent/session.env` (root
+  0600), which systemd reads as root.
+- **Confinement.** `ProtectHome=yes`, `ProtectProc=invisible`, `NoNewPrivileges=yes` and
+  `PrivateTmp=yes`. A same-uid sandbox was ruled out first: systemd 255 has no `PrivatePIDs=`,
+  so a session running as the operator could read the operator's other processes and user bus.
+- **Its own config is read-only to it.** `/etc/renovate-agent/config.env` is root-owned and
+  group-readable by the agent. A steered session could otherwise raise its budget or point
+  `PROMPT_FILE` at a prompt of its own for the next run.
+- **The run lock moved into the agent's home.** `fs.protected_regular=2` refuses an `O_CREAT`
+  open of another user's file in sticky `/run/lock`, and the old lock there belongs to the
+  operator.
+- **Deployer holds.** An ACL gives the agent read on `/var/lib/gitops-deploy`, where the wrapper
+  reads the hold markers. `agent_toolbox.read_file` returns `""` on any read error, so a lost ACL
+  reads as no hold at all. `land.sh`, run by the lander as the operator, still refuses on a hold.
+
+ENFORCED: `ansible/tests/setup/test_renovate_agent_identity.py`, which also runs the prompt's
+`systemctl` commands through the repo's own PreToolUse:Bash dispatcher.
+
+## Arming it
+
+The role refuses to arm without both credentials. To arm the agent:
+
+1. Create a fine-grained token for the repo with exactly the permissions above.
+2. Run `claude setup-token`.
+3. Add both as `renovate_agent_gh_token` and `renovate_agent_claude_oauth_token` with the
+   `add-secret` skill, then run `secret_rotation.py sync`.
+4. Set `renovate_agent_enabled: true` in `inventory/host_vars/daniel-box.yml` and apply the role.
+5. Start one run by hand and watch it. Auto mode's classifier decides whether the session may
+   run `systemctl start` on a system unit, and nothing short of a real run tests that.
 
 ## Exercising the wrapper without arming anything
 
@@ -71,10 +122,8 @@ code ever ran.
 
 ## What bounds the run
 
-The unit is deliberately **not** sandboxed, unlike the sibling `renovate-notify.service`. This
-session drives git, gh, uv, ansible and kubectl and needs `~/.claude` for its own credentials, so
-`ProtectHome`/`ProtectSystem` would have to be widened until they meant nothing. Four other things
-bound it instead, and each is a var in `defaults/main.yml`:
+The user boundary above bounds what a run can reach. Four vars in `defaults/main.yml` bound what
+it costs:
 
 | Bound | Var | Why that one |
 |---|---|---|
@@ -83,15 +132,15 @@ bound it instead, and each is a var in `defaults/main.yml`:
 | Wall clock, backstop | `renovate_agent_unit_timeout` (100min) | systemd's. It kills the whole cgroup and posts only the `OnFailure` alert, so it must never trip first. |
 | Spend | `renovate_agent_budget_usd` (25) | A runaway backstop, not a planned stop — see below. |
 
-**The budget must not be the binding constraint.** Stopping a session mid-landing leaves a
-merged-but-undeployed change, which is exactly what the root `CLAUDE.md`'s post-merge section
-forbids. The PR cap is what bounds a normal run; the budget only catches a loop.
+**The budget must not be the binding constraint.** The PR cap is what bounds a normal run; the
+budget only catches a loop. A landing in flight runs in the lander unit, so a session
+killed at either limit leaves that landing to finish, but the digest then cannot report it.
 
 **The session never runs in the primary checkout.** One untracked file in `/home/<user>/server`
 parks the GitOps deployer silently, and a session that edits, renders and tests is guaranteed to
-leave some. Each tick recreates `.claude/worktrees/renovate-auto` at `origin/master` and runs
-there. `land.sh` changes to the primary checkout itself, so the landing steps still deploy the
-right tree.
+leave some. Each tick recreates `.claude/worktrees/renovate-auto` at `origin/master` inside the
+agent's own clone and runs there. The lander runs `land.sh` in the primary checkout as the
+operator.
 
 Every rule in the rest of this section lives in `files/run_worktree.py`.
 

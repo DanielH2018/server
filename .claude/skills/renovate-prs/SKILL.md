@@ -227,18 +227,11 @@ A half-done bump is a normal code change: worktree, fix, test, PR. Three rules s
 - **A coupled pin moves with it.** `raise jellyfin with it` means the image bump is part of
   the same PR, because the repo guards the pair (`test_anisync_pin_matches_server.py`). Run
   the guard the rule points at; it is the completion criterion.
-- **The unattended run hands the superseding PR off; it never lands it.** The PR is yours,
-  not `app/renovate`'s, and `renovate-agent.service` sets `LAND_REQUIRE_AUTHOR=app/renovate`,
-  so `land.sh --arm-merge` refuses it. That refusal is the operator's decision, not an
-  obstacle (#2746): never pass `--any-author` from that run. File one hand-off finding
-  instead, modelled on #2744. Its body carries four things. The first is what you verified,
-  with the commands. The second is the PR number and a pointer to the
-  [`land-after-merge` invocation](../land-after-merge/SKILL.md#the-invocation), which the
-  landing session runs as written there.
-  The third is the §7 check that proves the new version took effect. The fourth is the merge
-  ordering: land it before the next Renovate PR for the same pin, which Renovate cuts from a
-  master still carrying the old pin and which conflicts with it. An interactive session lands
-  its own superseding PR as usual.
+- **The unattended run cannot finish a work order.** It runs as its own user with a token
+  that cannot push, merge or file an issue, so it opens no superseding PR. Its prompt has it
+  put the work order in the digest instead. An interactive session finishes the work order and
+  lands its own superseding PR as usual. Land it before the next Renovate PR for the same pin:
+  Renovate cuts that PR from a master still carrying the old pin, and it conflicts.
 
 ## 5. A stale merge base needs a rebase before landing
 
@@ -288,8 +281,9 @@ soak. If the second edit fails, the box is left unticked; a plain run ticks it.
 
 Land each PR with the [`land-after-merge` invocation](../land-after-merge/SKILL.md#the-invocation),
 run as written there. Its `--arm-merge` runs `gh pr merge --squash --auto` inside the script
-itself, which matters here: the unattended daily run has nobody to answer the permission prompt
-a bare `gh pr merge` raises (issue #979).
+itself, so no session answers the permission prompt a bare `gh pr merge` raises (issue #979).
+The unattended daily run lands through `renovate-agent-land@<n>.service` instead, as its
+prompt says, because its own token cannot merge.
 
 **Serialize.** Two landings running at once race each other for the tree, and a landing that
 loses that race deploys nothing; the skill's verdict table says what to do with the line it

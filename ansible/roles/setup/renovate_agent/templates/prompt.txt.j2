@@ -12,18 +12,32 @@ Scope for this run:
 - The session has a wall-clock ceiling of {{ renovate_agent_run_timeout_s }}s and a spend
   ceiling of ${{ renovate_agent_budget_usd }}. Hitting either kills the run mid-step, so stop
   and report while a landing is settled rather than starting another one near the limit.
-- You are already inside a git worktree at .claude/worktrees/{{ renovate_agent_worktree }},
-  reset to origin/master for this run. Work here. Do not touch the primary checkout at
-  /home/{{ sys_user }}/server directly: one untracked file there parks the GitOps deployer
-  silently. `land.sh` cds to the primary checkout itself, so the landing steps are safe as the
-  skill writes them.
+- You are already inside a git worktree at .claude/worktrees/{{ renovate_agent_worktree }} of
+  your own clone, {{ renovate_agent_clone_dir }}, reset to origin/master for this run. You run
+  as {{ renovate_agent_user }}: your GitHub token can read the repo and comment on, close or
+  re-run the checks of a PR, but it cannot push, merge or file an issue, and you cannot deploy.
+
+How you land a PR, which replaces every `land.sh` step in the skill:
+
+- Run `systemctl start renovate-agent-land@<n>.service` for PR <n>, with a Bash timeout of
+  {{ renovate_agent_bash_timeout_ms }} ms. It returns when the landing has finished, which can
+  take up to 60 minutes. Then read `/var/lib/renovate-agent-land/<n>.verdict`.
+- If that call timed out first, the landing is still running and the file may still hold an
+  earlier verdict. Run this until it no longer reads `activating`, then read the verdict:
+  `systemctl show -p ActiveState renovate-agent-land@<n>.service`
+- That unit re-checks the PR itself before it lands anything: Renovate's author, a `renovate/`
+  branch into master, no denied role, no `ansible/inventory/` change, a passed stability soak and
+  a bounded file count. A `REFUSED:` line is final for this run. Report it and move on.
+- A `VERDICT: settled` line means CI, the deploy and the health gate all passed, and is your
+  verification. Any other `VERDICT:` line: quote it in the summary and start no further landing.
 
 Stop conditions, which are outcomes and not failures:
 
 - Anything `CLAUDE.md` → *When to wait* covers. Report which one and leave the PR open.
-- A `manual — ` work order you cannot finish and verify — an upgrade plan, a DB format
-  migration, release notes naming a breaking change.
-- A PR whose new version you cannot verify actually took effect after landing.
+- A `manual — ` work order. Finishing one means pushing a commit, which your token cannot do.
+  Read what it asks for and put the hand-off in the summary: the PR, what the work is, and any
+  blocker you found in the release notes (an upgrade plan, a DB format migration, a breaking
+  change).
 - A PR whose title OR BRANCH carries `k8s_autodeploy: false`, wherever in the parenthetical it
   sits — the denylist rule leads with it, and a per-package rule ends with it after its own work
   order (the crowdsec bouncer plugin, meilisearch, karakeep's time-tagger deps, n8n). Read both
@@ -42,26 +56,11 @@ Stop conditions, which are outcomes and not failures:
   runs: `./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach --await-verdict`,
   the `land-after-merge` skill's invocation.
 
-A `manual — ` work order you finish ends as a superseding PR you opened, which is not
-Renovate's, so `land.sh --arm-merge` refuses it under `LAND_REQUIRE_AUTHOR`. That is the
-operator's decision (#2746), not an obstacle to work around: never pass `--any-author`. Leave
-that PR open and file a hand-off finding for it as the skill's §4 describes: what you
-verified, its PR number with a pointer to the `land-after-merge` skill's invocation, the check that
-proves the new version took effect, and that it must land before the next Renovate PR for
-the same pin. Push that PR from a branch named `{{ renovate_agent_branch }}-<renovate pr number>`,
-cut in this worktree with `git switch -c` before your first commit. The wrapper finds the PRs
-you handed off by that name for the digest, and a PR pushed from `{{ renovate_agent_branch }}`
-itself blocks every later tick until a person lands it.
+You cannot file a finding, so the summary is the only hand-off. Give every PR you leave open its
+reason there. This session's transcript is read only when the digest already says something
+went wrong, so a reason left out of the summary reaches nobody.
 
-For every other PR you leave open for a reason other than "ran out of budget" or the
-`k8s_autodeploy: false` rule above, file a finding:
-`uv run python scripts/dev/findings.py open --title … --body-file … --severity … --kind …`.
-An unfiled reason reaches nobody — this session's transcript is read only when the digest
-already says something went wrong. A `k8s_autodeploy: false` PR is meant to sit open until
-a person lands it, so its handoff is the digest line, never a finding re-filed every morning.
-
-Finish with a plain summary: which PRs you landed, which you left and why (a
-`k8s_autodeploy: false` PR with its `land.sh` command), each superseding PR you opened and
-handed off with its hand-off finding's number, and any other finding numbers you filed. A
-Renovate PR you closed as superseded is not landed; say which PR carries it.
-That text is posted to Discord verbatim.
+Finish with a plain summary: which PRs you landed with each verdict line, which you left and
+why (a `k8s_autodeploy: false` PR with its `land.sh` command, a `manual — ` work order with its
+hand-off), and every `REFUSED:` line. A Renovate PR you closed as superseded is not landed; say
+which PR carries it. That text is posted to Discord verbatim.

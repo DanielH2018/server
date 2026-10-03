@@ -116,9 +116,19 @@ did_not_run() {
     printf '%s\n' "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"run-hook.sh $name: $what ($why), so this call was checked by none of: $ask_guards. Review it yourself.\"}}"
 }
 
+# The checkout whose `.venv` `uv run --no-sync` uses, and the uv that runs it. Both default to
+# the operator's. The unattended Renovate agent runs as its own user, which cannot read the
+# operator's home, so its unit points both at its own run worktree and its own uv. An override
+# outside the path charset is ignored rather than trusted, because the directory reaches the
+# `ask` reason, which is a JSON string.
+project_dir=${RUN_HOOK_PROJECT_DIR:-/home/ubuntu/server}
+uv=${RUN_HOOK_UV:-/home/ubuntu/.local/bin/uv}
+[[ "$project_dir" =~ ^/[A-Za-z0-9_./-]+$ ]] || project_dir=/home/ubuntu/server
+[[ "$uv" =~ ^/[A-Za-z0-9_./-]+$ ]] || uv=/home/ubuntu/.local/bin/uv
+
 if [[ -n "$project" ]]; then
-    cd /home/ubuntu/server || {
-        did_not_run "guards did not run" "cd to /home/ubuntu/server failed"
+    cd "$project_dir" || {
+        did_not_run "guards did not run" "cd to $project_dir failed"
         exit 0
     }
 fi
@@ -129,9 +139,9 @@ if [[ ! -f "$script" ]]; then
 fi
 
 if [[ -n "$project" ]]; then
-    exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python "$script"
+    exec "$uv" run --no-sync --quiet python "$script"
 fi
 
-/home/ubuntu/.local/bin/uv run --no-project --no-python-downloads --python 3.14.6 \
+"$uv" run --no-project --no-python-downloads --python 3.14.6 \
     "$script" 2>/dev/null
 exit 0

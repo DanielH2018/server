@@ -13,6 +13,11 @@ renovate_agent_repo: DanielH2018/server
 # The agent session's own Unix user. It may start renovate-agent-land@<n>.service and nothing
 # else with privilege; the lander runs as sys_user and alone holds a token able to merge.
 renovate_agent_user: renovate-agent
+# Its home, its state and its own clone. The session never sees the primary checkout:
+# ProtectHome= hides /home from the unit, and /home/{{ sys_user }} is 0750 besides.
+renovate_agent_home: /var/lib/renovate-agent
+renovate_agent_clone_dir: "{{ renovate_agent_home }}/server"
+# The primary checkout, where the lander runs land.sh as sys_user.
 renovate_agent_repo_dir: "/home/{{ sys_user }}/server"
 
 # The session's worktree, recreated at origin/master on every tick. Named so
@@ -43,6 +48,11 @@ renovate_agent_budget_usd: 25
 # the OnFailure alert, so this one should always trip first.
 renovate_agent_run_timeout_s: 5400
 renovate_agent_unit_timeout: 100min
+
+# The longest Bash call the session may make, in ms. A landing blocks in `systemctl start` for up
+# to the lander's 60-minute TimeoutStartSec, and Claude Code's own cap is 10 minutes. The unit
+# sets it as BASH_MAX_TIMEOUT_MS and the prompt quotes it.
+renovate_agent_bash_timeout_ms: 3900000
 
 # 06:00 America/Chicago — after Renovate's own "before 6am" cycle (UTC, so it closes at
 # midnight/1am CT depending on DST) has opened the day's PRs. This runs BEFORE the 13:00

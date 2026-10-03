@@ -229,3 +229,9 @@ def prepare_worktree(
     )
     if rc != 0:
         raise RuntimeError(f"git worktree lock failed: {out.strip()[:300]}")
+    # The repo's hooks run through `uv run --no-sync` in this tree, which the unit names as
+    # RUN_HOOK_PROJECT_DIR, and a fresh worktree has no `.venv`. A guard that cannot import its
+    # dependencies raises, and the hook dispatcher drops a raising guard's verdict in silence.
+    rc, out = tools.run(["uv", "sync", "--frozen", "--quiet"], cwd=path, timeout=300)
+    if rc != 0:
+        raise RuntimeError(f"uv sync failed: {out.strip()[:300]}")
