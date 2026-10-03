@@ -8,30 +8,8 @@
     PYTHONDONTWRITEBYTECODE: "1"
   gather_facts: true
   pre_tasks:
-    # `-e target=<other host>` looks like it drives that host remotely. For daniel-server and
-    # daniel-box it does not: both are `ansible_connection=local` in hosts.ini, so the target
-    # only selects whose *variables* to use — every task still executes HERE. Ansible reports
-    # the run against the named host either way, so nothing in the output says otherwise.
-    #
-    # Left unguarded that silently writes the other host's containers/ tree, secrets included,
-    # onto the local disk before dying on a missing docker CLI: `-e target=daniel-server` from
-    # daniel-box would write daniel-server's compose files and secrets onto daniel-box. Fail
-    # before any task can write instead.
-    #
-    # daniel-pi is `ansible_connection=ssh` and genuinely remote, so it stays allowed — the
-    # documented `-e target=daniel-pi` workflow is unaffected.
-    - name: Refuse a local-connection deploy aimed at a different host
-      ansible.builtin.assert:
-        that: ansible_connection | default('smart') != 'local' or inventory_hostname == _local_hostname
-        fail_msg: >-
-          Refusing to deploy: target '{{ inventory_hostname }}' is ansible_connection=local, so
-          its tasks would run on '{{ _local_hostname }}' and write that host's files here.
-          Run the deploy on {{ inventory_hostname }} itself.
-        quiet: true
-      vars:
-        _local_hostname: "{{ lookup('pipe', 'hostname') }}"
-      tags: always
-
+    # The preamble refuses a local-connection deploy aimed at a different host before any task
+    # can write. Its comment and tests/deploy/test_local_connection_target.py carry the why.
     - name: Load encrypted secrets and set the become password (shared preamble)
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
       tags: always
