@@ -18,7 +18,7 @@ The gates, in the order the runbook gives them:
 
 Every cluster read goes through `lib.kubectl` with the cluster named `prod`, so the same
 identity check that guards `probe.py health` refuses a staging kubectl here. The
-hold marker is read from the deployer's own state directory (`lib.gitops_markers`), which
+hold marker is read from the deployer's own state directory (`gitops_markers`), which
 exists only on the host that runs the tick — so gate 3 fails on any other host rather than
 reading an absent directory as "no hold". Set `GITOPS_STATE_DIR` to point it elsewhere.
 
@@ -52,8 +52,12 @@ from deploy_tools.runbook_gates import (
     name_of as _name,
     unsafe_volumes,
 )
-from lib.gitops_markers import MARKERS, STATE_DIR
 from lib.kubectl import CLUSTER_NODES, DEFAULT_TOOLS, Tools
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+# The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
+sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from gitops_markers import MARKERS, STATE_DIR
 
 CLUSTER = "prod"
 RUNBOOK = "docs/k3s-upgrade.md"

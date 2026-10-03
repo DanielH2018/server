@@ -72,8 +72,8 @@ except (ImportError, SyntaxError) as exc:
 
 # The park decision lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4 asks
 # the same question of the same marker and a second derivation would drift; the
-# marker parsers and clear commands come from `lib.gitops_markers`, the deployer's own module
-# copied there. `GITOPS_STATE_DIR` is mode 0750 owned by `ubuntu`: any other host reads silence.
+# marker parsers and clear commands come from `gitops_markers`, the deployer's own module,
+# which `deployer_park` imports from the gitops_deploy role's files/. `GITOPS_STATE_DIR` is mode 0750 owned by `ubuntu`: any other host reads silence.
 #
 # Wrapped, because NOTHING at module scope may be able to stop the banner. This
 # file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0, so an

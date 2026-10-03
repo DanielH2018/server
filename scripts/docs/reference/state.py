@@ -59,8 +59,11 @@ from lib import yaml_fast
 
 from docs.reference import crons as crons_mod
 from lib.git import git
-from lib.gitops_markers import MARKERS, STATE_DIR
-from lib.repo_paths import REPO, ROLES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO, ROLES
+
+# The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from gitops_markers import MARKERS, STATE_DIR
 
 LATE_MULTIPLIER = 2
 

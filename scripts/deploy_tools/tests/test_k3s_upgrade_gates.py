@@ -15,7 +15,7 @@ import pytest
 from _gates_fakes import fake_tools
 from deploy_tools import k3s_upgrade_gates as gates
 from lib import kubectl
-from lib.gitops_markers import MARKERS
+from gitops_markers import MARKERS
 from lib.proc_testing import run
 
 from lib.repo_paths import REPO as _REPO

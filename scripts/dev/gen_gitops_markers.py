@@ -5,13 +5,20 @@ Run: uv run python scripts/dev/gen_gitops_markers.py [--check]
 
 WHY A COPY. `ansible/roles/setup/gitops_deploy/files/gitops_markers.py` holds the state
 directory, the marker basenames and the parsers for the `behind_since`, `manual_plane` and
-`contention_since` line formats. Four other trees read those files and none of them can
-import the deployer's `files/`: monitor-bridge ships its own `files/` into a pod, deploy-ui
-and renovate-agent run from their own `/opt` directories under `uv run --no-project`, and
-`scripts/lib/deployer_park.py` is imported by the SessionStart hook with only `scripts/` on
-`sys.path`. Each restated the directory and its basenames, and three parsed the same lines
-independently (issue #2063). A shared import is structurally impossible, so a committed copy
-with a freshness test is the next best single source — the arrangement
+`contention_since` line formats. Each reader once restated the directory and its basenames,
+and three parsed the same lines independently (issue #2063).
+
+Code that runs from the checkout imports the source directly, through a named `sys.path`
+insert of `GITOPS_DEPLOY_FILES` (`scripts/lib/deployer_park.py`, `gitops_state.py`); a
+`scripts/lib/` copy did that job until #3275. The three roles below SHIP the module, and for
+them a copy is not a stylistic choice. monitor-bridge ships its own `files/` into a pod
+through a ConfigMap. deploy-ui and renovate-agent install theirs into `/opt` from their own
+role, and pointing that `src:` at the deployer's `files/` would break the GitOps routing: a
+change under `roles/setup/gitops_deploy/` re-applies only the `gitops_deploy` tag
+(`deploy_changes.setup_tags_for`), and `narrow_setup.role_tags` reads one role's prefix, so
+the other roles' hosts would keep the old module behind a green apply. A copy under each
+consumer's own directory makes that consumer's apply follow the change. So a committed copy
+with a freshness test stays the single source for those three — the arrangement
 `scripts/docs/gen_doc_fragments.py` already uses for the docs fragments.
 
 Every copy is the source verbatim under a `generated_from:` header. That literal is what
@@ -34,11 +41,9 @@ from lib.repo_paths import REPO
 SELF = "scripts/dev/gen_gitops_markers.py"
 SOURCE = "ansible/roles/setup/gitops_deploy/files/gitops_markers.py"
 
-# Every tree that reads the deployer's markers, by the path its copy lands at. The consumer
-# reaches it as a sibling module (`import gitops_markers`) or, under `scripts/`, as
-# `lib.gitops_markers`.
+# Every role that ships the deployer's markers, by the path its copy lands at. Each consumer
+# reaches it as a sibling module (`import gitops_markers`).
 COPIES = (
-    "scripts/lib/gitops_markers.py",
     "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
     "ansible/roles/setup/deploy_ui/files/gitops_markers.py",
     "ansible/roles/setup/renovate_agent/files/gitops_markers.py",

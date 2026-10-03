@@ -24,7 +24,7 @@ from deploy_staleness import (
 )
 from lib.deployer_park import BEHIND_PARK_SECONDS
 from lib.git_testing import commit, git_out, init_repo
-from lib.gitops_markers import MARKERS
+from gitops_markers import MARKERS
 
 
 def _commit(repo: Path, name: str) -> None:
