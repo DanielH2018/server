@@ -62,42 +62,6 @@ hypervisor_base_image_url: https://cloud-images.ubuntu.com/noble/current/noble-s
 hypervisor_base_image_sha256: d0fe84bb5f80853425fa6be28e2c106f30104c3cfe8611933f2e65c9b63f0e30
 hypervisor_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.img
 
-# ── Reaping the retired daniel-stage guest ───────────────────────────────────────────────
-#
-# The staging guest is retired: nothing drives it, so its 8 GiB of RAM and 100 GB qcow2 are
-# reclaimed. The hypervisor role stays for the monthly etcd restore drill.
-#
-# DECIDED: reap the domain from install.yml rather than leave it to teardown.yml. teardown.yml
-# runs only when has_hypervisor goes false, and that flag stays TRUE on daniel-server for the
-# drill — so deleting guest.yml alone would leave daniel-stage running as an orphan Ansible no
-# longer manages, which is the docker_install failure tasks/main.yml documents. The reap is
-# guarded on the domain existing, so it is a permanent no-op once the host has converged; it
-# stays for the same reason files/staging-gate-retired/ stays, so a host that has not run this
-# role yet still converges.
-hypervisor_retired_staging_vm_hostname: daniel-stage
-# Its qcow2 and cloud-init seed, named here so the reap can reclaim them. `virsh undefine
-# --remove-all-storage` destroys the disk libvirt knows about; the seed ISO and its directory
-# are not domain storage and are removed by path.
-hypervisor_retired_staging_vm_disk: /var/lib/libvirt/images/{{ hypervisor_retired_staging_vm_hostname }}.qcow2
-hypervisor_retired_staging_vm_seed: /var/lib/libvirt/images/{{ hypervisor_retired_staging_vm_hostname }}-seed.iso
-hypervisor_retired_staging_vm_seed_dir: /var/lib/libvirt/seed/{{ hypervisor_retired_staging_vm_hostname }}
-hypervisor_retired_staging_vm_xml: "{{ hypervisor_net_source_dir }}/{{ hypervisor_retired_staging_vm_hostname }}.xml"
-
-# What the retired staging GATE left on this host: the checkout it deployed from, the lock
-# that serialised it, the forced command behind its restricted ssh key, and the verdict-bearing
-# runner that command exec'd. The gate itself (`scripts/deploy_tools/staging_gate.py`) went with
-# the guest — nothing consults staging any more — so these are reap targets, named here because
-# both reap_staging.yml and teardown.yml remove them by path.
-#
-# The key's public half lives in files/staging-gate-retired/, so the withdrawal task in
-# install.yml deauthorizes it on apply. Swapping the live file alone would leave the key
-# authorized forever: `authorized_key` here runs `state: present` with `exclusive` false, so
-# it only ever ADDS.
-hypervisor_retired_staging_gate_repo: /home/ubuntu/server-staging
-hypervisor_retired_staging_gate_lock: /var/lock/staging-gate.lock
-hypervisor_retired_staging_gate_dispatch_path: /usr/local/bin/staging-gate-dispatch
-hypervisor_retired_staging_gate_runner_path: /usr/local/bin/staging-gate-run
-
 # ── The etcd restore drill guest ─────────────────────────────────────────────────────────
 #
 # A THROWAWAY guest that exists only while a FULL etcd restore drill runs in it.

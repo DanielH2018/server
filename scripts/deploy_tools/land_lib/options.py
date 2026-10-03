@@ -13,7 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-from lib.gitops_markers import STATE_DIR
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+# The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from gitops_markers import STATE_DIR
 
 PRIMARY_CHECKOUT = Path("/home/ubuntu/server")
 MERGE_POLL_S = 30

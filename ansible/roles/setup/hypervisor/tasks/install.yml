@@ -149,10 +149,3 @@
   with_fileglob:
     - "{{ role_path }}/files/staging-gate-retired/*.pub"
   become: true
-
-- name: Reap what the retired staging cluster left behind
-  tags: [hypervisor-reap-staging]
-  # After the withdrawal above, so the dispatcher this removes is never gone while its key is
-  # still authorized. has_hypervisor stays true on this host for the drill, so teardown.yml
-  # never runs here and this is the only path that reaps daniel-stage.
-  ansible.builtin.import_tasks: reap_staging.yml

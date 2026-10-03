@@ -14,25 +14,24 @@ consulting it (#2859), so the guest sat allocated for work nothing drove.
 **Deleting `guest.yml` would not have removed the guest.** `teardown.yml` runs only when
 `has_hypervisor` goes false, and that flag stays true on daniel-server for the drill — so the
 domain would have kept running as an orphan Ansible no longer manages. That is the
-`docker_install` failure `tasks/main.yml` documents, and it is why the reap is on the install
-path: `reap_staging.yml`, imported last from `install.yml`, destroys the domain, runs
-`virsh undefine --remove-all-storage` on it, and removes the seed, the seed directory and
-the rendered XML by path. It is guarded on the domain existing, so it is a permanent no-op once the host has
-converged.
+`docker_install` failure `tasks/main.yml` documents. A reap on the install path,
+`reap_staging.yml`, therefore destroyed the domain, ran `virsh undefine --remove-all-storage`
+on it, and removed the seed, the seed directory and the rendered XML by path. The same file
+removed what the staging gate left: `/home/ubuntu/server-staging`, its lock,
+`/usr/local/bin/staging-gate-dispatch` and `/usr/local/bin/staging-gate-run`.
+`gitops_deploy`'s `retired.yml` did the same on daniel-box for the staging-backfill units and
+the gate's private key.
 
-The same file reaps what the staging gate left: `/home/ubuntu/server-staging`, its lock,
-`/usr/local/bin/staging-gate-dispatch` and `/usr/local/bin/staging-gate-run`. It **refuses
-while that checkout is dirty**, on the same reasoning that leaves `/var/lib/libvirt` alone. A
-tree is reproducible from the remote; an edit that exists only there is not.
+Both reapers were deleted once the hosts had converged (#3272). On 2026-10-02 daniel-server had
+no libvirt domains and no `/var/lock/staging-gate.lock`, and daniel-box had no
+`staging-backfill` unit files. `git log --diff-filter=D -- '*reap_staging.yml'` finds the
+reaper if a host ever needs it again.
 
-The gate's public key moved to `files/staging-gate-retired/`, so the withdrawal task in
-`install.yml` takes it out of `authorized_keys`. Deleting `files/staging-gate.pub` on its own would have left the
-key working here forever: `authorized_key` runs `state: present` with `exclusive` false, so it
-only ever adds. The private half (`staging_gate_ssh_key`) is out of SOPS and out of the
-rotation registry, and `ansible/roles/setup/gitops_deploy` deletes it from daniel-box.
-
-`ansible/tests/staging/test_staging_tick_arm_retired.py` holds a census of what is gone against
-a census of what the drill still needs. Each without the other is the wrong retirement.
+The gate's public key stays in `files/staging-gate-retired/`, and the withdrawal task in
+`install.yml` keeps taking it out of `authorized_keys`. Deleting the key file alone would leave
+the key working on any host that had not converged: `authorized_key` runs `state: present` with
+`exclusive` false, so it only ever adds. The private half (`staging_gate_ssh_key`) is out of
+SOPS and out of the rotation registry.
 
 ## Why the staging subnet is `192.168.140.0/24`
 

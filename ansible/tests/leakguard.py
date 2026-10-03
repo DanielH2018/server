@@ -70,9 +70,8 @@ signing stays out. `lib.git_testing` is that helper, and
 `scripts/tests/test_scratch_repos_go_through_git_testing.py` refuses a hand-rolled one.
 
 `ansible-playbook` — six tests in `ansible/tests/longhorn/` deliberately run a real play
-against `localhost`, and a stub returning a fixed exit code fails all six. Their remaining
-side effect, the shared fact cache, is fenced at the source by `ANSIBLE_CACHE_PLUGIN=memory`
-in the env those harnesses build.
+against `localhost`, and a stub returning a fixed exit code fails all six. The shared fact
+cache those harnesses once fenced off is gone: ansible.cfg keeps none since #3274.
 """
 
 import os

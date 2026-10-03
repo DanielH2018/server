@@ -72,7 +72,7 @@ def test_the_gate_fails_open_when_ansible_cannot_be_imported(monkeypatch):
 
 
 def test_a_refused_argument_exits_64_having_reached_no_gate(tmp_path, monkeypatch):
-    """The wrapper's half: 64, and nothing before it -- no fact cache, no snapshot, no lock.
+    """The wrapper's half: 64, and nothing before it -- no staleness gate, no snapshot, no lock.
 
     `run_front_half` replaces each helper with a recorder, so an empty call list IS the claim
     that a usage error costs no subprocess and no lock wait.

@@ -307,11 +307,6 @@ def main() -> int:
     env = {
         **os.environ,
         "ANSIBLE_LOG_PATH": str(log_path),
-        # A private fact cache. The shared one is keyed by host and pins the interpreter of
-        # whichever checkout gathered facts first, and fact_cache_guard.py clears only
-        # interpreters under `.claude/worktrees/`. This worktree is outside it, so an entry it
-        # pinned would outlive a removal of the worktree and break every other deploy.
-        "ANSIBLE_CACHE_PLUGIN_CONNECTION": str(state / "facts"),
     }
     rc = subprocess.run(
         [

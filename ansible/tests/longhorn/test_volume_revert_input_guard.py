@@ -95,12 +95,8 @@ def _run_revert_guard(
         env["PATH"] = path_with(bin_dir, env=env)
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"
-        # The fact cache is shared across worktrees and with deploy.sh, so a test must never
-        # write to it. This play sets gather_facts: false, so nothing is written either way;
-        # this keeps that true if it ever gathers facts.
-        env["ANSIBLE_CACHE_PLUGIN"] = "memory"
-        # Pin the interpreter rather than discovering it: the fact cache is keyed on `localhost`
-        # and shared by every worktree, so a pruned tree's .venv fails this play with rc 127.
+        # Pin the interpreter to the suite's own, so the play's modules import from the venv
+        # the test runs in rather than whatever discovery finds first on PATH.
         env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
 
         return subprocess.run(

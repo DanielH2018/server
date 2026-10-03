@@ -74,8 +74,8 @@ except (ImportError, SyntaxError) as exc:
 
 # The park decision lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4 asks
 # the same question of the same marker and a second derivation would drift; the
-# marker parsers and clear commands come from `lib.gitops_markers`, the deployer's own module
-# copied there. `GITOPS_STATE_DIR` is mode 0750 owned by `ubuntu`: any other host reads silence.
+# marker parsers and clear commands come from `gitops_markers`, the deployer's own module,
+# which `deployer_park` imports from the gitops_deploy role's files/. `GITOPS_STATE_DIR` is mode 0750 owned by `ubuntu`: any other host reads silence.
 #
 # Wrapped, because NOTHING at module scope may be able to stop the banner. This
 # file is run by `run-hook.sh`, which sends its stderr to /dev/null and exits 0, so an
@@ -139,7 +139,7 @@ PRIMARY_DIRTY_LIMIT = 8
 # it reads. Without the flag a SessionStart hook running in a worktree would write the shared
 # checkout's index — the one thing the isolation guard exists to prevent — and could collide on
 # `index.lock` with the deployer's own `merge --ff-only`, which holds
-# /var/lock/server-git-tree.lock and knows nothing about this hook. The flag is global to git, so
+# the git-tree lock and knows nothing about this hook. The flag is global to git, so
 # it comes before the subcommand. A constant rather than an inline argv so a test can assert the
 # shape without patching `lib.git.git`.
 PRIMARY_STATUS_ARGV = ("--no-optional-locks", "status", "--porcelain")

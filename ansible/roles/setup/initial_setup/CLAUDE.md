@@ -85,7 +85,7 @@ the diff through a PR that auto-merges.
   parks every deploy on the box.
 - **Mode:** degrade, never abort. A failing generator sets `GENERATORS_OK=0`, publishes what
   succeeded and reports DOWN. A red test suite still exits 1.
-- **Abort valves:** the shared `/var/lock/server-git-tree.lock`, the dirty-tree gate, the
+- **Abort valves:** the shared git-tree lock, the dirty-tree gate, the
   unlanded-branch guard, and the commit-failure stamp under `/var/lib/homelab/docs-refresh.d`.
 - **Required evidence:** `status=<up|down> <msg>` in the log and a push to "Docs Refresh".
 - **Next-run review:** before adding a fourth staged path, check no prek hook matching it can

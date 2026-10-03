@@ -98,9 +98,8 @@ the number up.** `deploy.sh: <NAME> (<code>): <meaning> <what to do>`, then
 member of `DEPLOY_SH_NO_VERDICT` means **nothing was deployed** — a resume point rather than a
 playbook failure. `DEPLOY_BAD_FLAGS` also ran nothing, but the fix is the command line rather
 than a retry. `DEPLOY_PLAYBOOK_FAILED` is the inverse: the playbook ran, a task failed, and
-changes before it are live — not a safe re-run. The fact-cache guard, the Pi's `-e target=`,
-config-only runs and initial setup are in the **`deploy` skill**; the per-code table is
-`docs/reference/scripts.md`.
+changes before it are live — not a safe re-run. The Pi's `-e target=`, config-only runs and
+initial setup are in the **`deploy` skill**; the per-code table is `docs/reference/scripts.md`.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and

@@ -226,7 +226,7 @@ gitops_deploy_k8s_timeout_s: 1440
 # This value has its OWN budget rather than sharing gitops_deploy_k8s_timeout_s (1440) at runtime
 # because the two runs are sequential within one systemd unit activation — see
 # gitops-deploy.service.j2's TimeoutStartSec and that template's own arithmetic comment.
-# Consequence: the lock this unit holds (/var/lock/server-git-tree.lock, the same one
+# Consequence: the lock this unit holds (the git-tree lock, the same one
 # ./scripts/deploy.sh and the weekly secret-rotate cron take) can be held past the timer
 # interval in the pathological case both k8s timeouts are spent in full — see CLAUDE.md for what that does to a concurrent
 # ./scripts/deploy.sh (exit 75, nothing deployed) or the secret-rotate cron (waits on the lock).
@@ -243,12 +243,6 @@ gitops_deploy_k8s_rollback_timeout_s: 1620
 # re-run on top, and the arm stays forward-only — the DECIDED marker in deploy_remediation.py
 # carries why.
 gitops_deploy_broad_timeout_s: 1800
-
-# The retired staging gate's dedicated ssh identity, a reap target rather than a deployed file.
-#
-# install.yml deletes this path; the name stays only so both halves of the role name the same
-# file. Drop it once every has_gitops host has applied the role at least once.
-gitops_deploy_retired_staging_gate_key_path: /etc/gitops-deploy/staging_gate_ed25519
 
 # ── self-render kick ──────────────────────────────────────────────────────────────────────────
 # Whether applying this role kicks an immediate `systemctl start gitops-deploy.service`. True for

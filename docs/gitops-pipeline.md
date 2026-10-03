@@ -1391,24 +1391,6 @@ that escaped the process group. `last_task` puts the running task first, since a
 has no `fatal:` line, and `alert_excerpt` heads that body, so the task reaches the Discord
 post too (`tests/test_gitops_deploy_failure_output.py`).
 
-### The deployer reads a fact cache of its own
-
-`gitops-deploy.service` sets `ANSIBLE_CACHE_PLUGIN_CONNECTION` to
-`~/.cache/gitops-deploy/ansible-facts`. The directory is not under `/var/lib/gitops-deploy`,
-because monitor-bridge mounts that one over a hostPath and a pod has no use for gathered
-facts. `ansible.cfg`'s cache is one file per host in
-`~/.cache/ansible/facts`, shared by every checkout on the machine, and it stores
-`discovered_interpreter_python`: under `uv run`, the `.venv` of whichever checkout gathered
-facts last. The deployer never pins a doomed interpreter, because it runs from the primary
-checkout. It did read one. The 2026-09-03 12:36 broad apply of `initial_setup.yml --tags
-renovate_agent` died at fact gathering on
-`.claude/worktrees/arm-renovate-agent/.venv/bin/python3.14`, pinned by a session in that
-worktree and left behind when the worktree was pruned. `deploy.sh` clears such an entry in its
-preflight (`scripts/deploy_tools/fact_cache_guard.py`); the deployer never runs that preflight,
-so it reads a cache no worktree writes instead (#2862).
-`ansible/tests/deploy/test_gitops_deploy_fact_cache.py` asks `ansible-config` which directory
-the unit's environment resolves, so a misspelled variable fails there rather than silently.
-
 ### Trap: deploying this role under the shared tree lock self-deadlocks
 
 Do not wrap `initial_setup.yml --tags gitops_deploy` in

@@ -35,17 +35,18 @@ all: a hand-edited role, or one of the forty denylisted ones. Nothing pages on i
 construction — that is what lets the class have a durable record at all — so this
 banner and the deployer's journal are its only readers.
 
-The directory, the basenames and the line parsers come from ``lib.gitops_markers``, a
-generated copy of the deployer's own module (its header says how it is kept fresh), so this
-module and monitor-bridge read exactly the lines the deployer wrote. What stays here is the
+The directory, the basenames and the line parsers come from ``gitops_markers``, the deployer's
+own module in ``ansible/roles/setup/gitops_deploy/files/``, so this module and monitor-bridge
+read exactly the lines the deployer wrote. What stays here is the
 banner's own judgement: the thresholds, the readers that collapse an unreadable marker to
 "no park", and the functions that render a marker as banner lines. Those renderers sit here
 rather than in the hook because the hook is at its module-length cap and they belong beside
 the readers and thresholds they consume; ``behind_park_lines`` is the exception, still in the
 hook, and moving it is somebody else's change.
 
-Stdlib plus that one generated sibling, and nothing else from this repo: the SessionStart
-hook imports it with only ``scripts/`` on ``sys.path``.
+Stdlib plus that one module and ``lib.repo_paths``, and nothing else from this repo: the
+SessionStart hook imports it with only ``scripts/`` on ``sys.path``, so this module puts the
+deployer's ``files/`` there itself.
 """
 
 import os
@@ -53,11 +54,14 @@ import sys as _sys
 import time
 from pathlib import Path as _Path
 
-# The generated sibling is reached as `lib.gitops_markers`, which needs `scripts/` on the path.
-# The SessionStart hook and every other caller already put it there; this is for a direct
-# `import lib.deployer_park` from anywhere else (the repo-root CLAUDE.md rule).
+# `scripts/` for `lib.repo_paths`: the SessionStart hook and every other caller already put it
+# there, and this is for a direct `import lib.deployer_park` from anywhere else. Then the
+# deployer's `files/`, where `gitops_markers` lives (#3275).
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-from lib.gitops_markers import (
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
     MARKERS,

@@ -13,7 +13,7 @@
 //   - Starting is safe to expose because it is idempotent in the way that matters:
 //     systemd coalesces a start request for a unit already `activating` into the run
 //     in flight rather than spawning a second one (see gitops-deploy.service.j2), and
-//     the run itself sits behind `flock /var/lock/server-git-tree.lock`.
+//     the run itself sits behind `flock {{ server_git_tree_lock }}`.
 //   - The deployer is read-only against the remote (never pushes), CI-gated, and
 //     health-gated with rollback, so the worst case of an unwanted tick is the same
 //     worst case as the 30-minute timer firing.

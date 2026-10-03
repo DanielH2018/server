@@ -45,7 +45,7 @@ Type=oneshot
 # than spawning another one. The practical effect is a delayed/absorbed tick, not a stacked
 # deploy — see that CLAUDE.md section for what is and is not verified about the cadence.
 #
-# The lock this unit's ExecStart holds (`/var/lock/server-git-tree.lock`, below) is now held for
+# The lock this unit's ExecStart holds (`{{ server_git_tree_lock }}`, below) is now held for
 # up to this same pathological duration, which EXCEEDS the 30-min timer interval — a concurrent
 # `./scripts/deploy.sh` waits its own `deploy_under_locks.LOCK_WAIT` (not this `-w 180`, which
 # governs only this unit), then returns exit 75 (nothing deployed) if the lock stays busy past
@@ -68,17 +68,6 @@ WorkingDirectory=/home/{{ sys_user }}/server
 # Need ~/.local/bin on PATH for `uv` (the deployer runs `uv run ansible-playbook`,
 # the same repo-pinned env the operator uses); systemd's default PATH omits it.
 Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
-# The deployer keeps its own Ansible fact cache (#2862). ansible.cfg's cache is one file per
-# HOST, shared by every checkout on this machine, and it stores `discovered_interpreter_python`
-# — under `uv run`, the calling checkout's `.venv`. A session in a worktree therefore pins its
-# own interpreter for every playbook this unit runs, for the cache's 7200 s TTL, and once that
-# worktree is pruned the next apply dies at fact gathering: the 2026-09-03 12:36 broad apply of
-# `initial_setup.yml --tags renovate_agent` failed on `.claude/worktrees/arm-renovate-agent/`'s
-# python3.14. `deploy.sh` clears such an entry (`scripts/deploy_tools/fact_cache_guard.py`);
-# this unit never runs that preflight, so it reads a cache no worktree writes instead. The
-# jsonfile plugin creates the directory. It is NOT under /var/lib/gitops-deploy: monitor-bridge
-# mounts that directory over a hostPath, and gathered facts are no pod's business.
-Environment=ANSIBLE_CACHE_PLUGIN_CONNECTION=/home/{{ sys_user }}/.cache/gitops-deploy/ansible-facts
 # journald stores only notice+ on these hosts (initial_setup caps MaxLevelStore=notice), and a
 # unit's stdout logs at info by default — so every log() line the deployer printed was discarded
 # at the source, leaving nothing to read after the 2026-08-08 false-rollback hold. The output is
@@ -115,7 +104,7 @@ SuccessExitStatus=75
 # refusing to start — removing the machine that would ship the correction — so this one keeps uv's
 # self-healing download. The asymmetry is intentional and is pinned by
 # ansible/tests/setup/test_host_python_invocations.py; do not "fix" it for consistency.
-ExecStart=/usr/bin/flock -w 180 -E 75 /var/lock/server-git-tree.lock /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
+ExecStart=/usr/bin/flock -w 180 -E 75 {{ server_git_tree_lock }} /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
 
@@ -137,4 +126,4 @@ ExecStart=/usr/bin/flock -w 180 -E 75 /var/lock/server-git-tree.lock /usr/local/
 # unreadable from `systemctl show`, and this line is the only durable record of it.
 # scripts/deploy_tools/gitops_tick.sh greps for the parenthesised phrase; ansible/tests/
 # test_gitops_manual_trigger.py pins the two together. Do not reword it in isolation.
-ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "gitops-deploy: tick skipped (lock contention) — /var/lock/server-git-tree.lock was held for the full flock wait; nothing deployed, last_run untouched" || true'
+ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "gitops-deploy: tick skipped (lock contention) — {{ server_git_tree_lock }} was held for the full flock wait; nothing deployed, last_run untouched" || true'

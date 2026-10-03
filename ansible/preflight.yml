@@ -73,8 +73,7 @@
 
     - name: Read unallocated volume-group space
       # Read directly rather than from ansible_facts.lvm: that fact is "N/A" unless the
-      # gather ran escalated, and the shared fact cache is written by whichever play
-      # gathered last — so it's "N/A" on a host that does have LVM.
+      # gather ran escalated, so it's "N/A" on a host that does have LVM.
       ansible.builtin.command: vgs --noheadings --nosuffix --units g -o vg_name,vg_free
       register: preflight_vg_free
       changed_when: false

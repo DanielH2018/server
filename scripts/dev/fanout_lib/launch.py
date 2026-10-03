@@ -103,7 +103,7 @@ def fast_forward_primary_command(host: str) -> str:
     opened by a commit adding a hook script and closed when that checkout next pulled.
 
     DECIDED: nothing on `TICK_HOST`, where the GitOps tick pulls every 10 minutes. The window
-    there is bounded by the tick, and the tick takes `/var/lock/server-git-tree.lock` for its
+    there is bounded by the tick, and the tick takes the git-tree lock for its
     own `--ff-only` merge (`deploy_locks.TREE_LOCK`) because moving HEAD under an in-flight
     deploy ships a different SHA than the one the health gate cleared. A launch cannot hold
     that lock: a deploy holds it for up to 20 minutes, well past `LAUNCH_TIMEOUT_S`, so taking

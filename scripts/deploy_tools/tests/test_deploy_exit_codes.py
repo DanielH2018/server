@@ -44,7 +44,7 @@ _WRAPPER_REFUSALS = (2, 3, 4, 75, 76, 77, _NO_HOSTS_MATCHED, 79)
 
 _UV_STUB = """#!/bin/bash
 # Only the playbook run carries the exit code under test; the wrapper's own helper calls
-# (fact_cache_guard, deploy_tags) must succeed or the script never reaches it.
+# (deploy_tags) must succeed or the script never reaches it.
 case "$*" in
   *ansible-playbook*) {recap}; exit {ansible_exit} ;;
 {locks}
@@ -65,7 +65,7 @@ def _run_with_stubs(
     """Run deploy.sh for real, with `uv` and `flock` stubbed on PATH.
 
     The stubs are the smallest possible: `flock` drops its own options and execs the command it
-    was given (so no real /var/lock/server-git-tree.lock is taken and no live deploy can
+    was given (so the real git-tree lock is not taken and no live deploy can
     interleave), and `uv` prints `recap` then exits `ansible_exit` for the playbook run while
     succeeding for the wrapper's helper calls. Everything between -- the argument parsing, the
     annotation, the exit mapping -- is the real script.

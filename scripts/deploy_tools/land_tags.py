@@ -43,10 +43,11 @@ from lib.render_guard import (  # noqa: F401
     service_tags_at,
 )
 from lib.deployer_park import read_manual_plane_tags_marker
-from lib.gitops_markers import parse_manual_plane_tags
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+
+from gitops_markers import parse_manual_plane_tags
 
 from deploy_logic import (
     broad_remediation,

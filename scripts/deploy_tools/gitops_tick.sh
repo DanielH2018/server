@@ -318,7 +318,7 @@ echo
 # marker distinguishes them. A genuinely failed unit is different — it stays in `failed`, which
 # is why the branch below can still trust $status.
 if ended_in_contention; then
-  echo "Tick did not run: another holder had /var/lock/server-git-tree.lock for the"
+  echo "Tick did not run: another holder had the git-tree lock for the"
   echo "unit's full flock wait. Nothing was deployed and last_run is untouched."
   echo "No alert fires for this — OnFailure cannot fire on a unit systemd considers"
   echo "successful, and GitOps-Alive only pages once last_run passes GITOPS_MAX_AGE_S"

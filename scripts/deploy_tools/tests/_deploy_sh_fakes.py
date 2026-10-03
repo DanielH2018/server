@@ -21,11 +21,12 @@ import os
 import re
 import shutil
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from lib.proc_testing import fake_bin, path_with
 from lib.git_testing import git, init_repo, scrub_process_git_env
 
+from deploy_locks import TREE_LOCK
 from lib.repo_paths import REPO as _REPO
 
 # The module `deploy.sh` reads its service locks from, at the path the wrapper runs it by.
@@ -131,7 +132,7 @@ def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, 
         PATH=path_with(bin_dir, detach_stub_bin(tmp_path)),
         HOMELAB_DEPLOY_SNAPSHOT_ROOT=str(tmp_path / "snapshots"),
         HOMELAB_DEPLOY_LOCK_DIR=str(locks),
-        HOMELAB_DEPLOY_TREE_LOCK=str(locks / "server-git-tree.lock"),
+        HOMELAB_DEPLOY_TREE_LOCK=str(locks / PurePath(TREE_LOCK).name),
         DEPLOY_TEST_PYTHON=sys.executable,
         **overrides,
     )
@@ -145,10 +146,8 @@ def make_snapshot_repo(path: Path) -> Path:
     the real `deploy_locks.py` too, because the wrapper reads its lock list from that module
     at a checkout-relative path and the stubbed `uv` (UV_WRAPPER_ARMS) runs it for real.
 
-    Two files exist for the helpers `deploy_run.py` calls in process against this checkout:
-    a host_vars declaring TEST_SERVICE_TAGS, for the tag validation, and an `ansible.cfg`
-    pointing the fact cache at a sibling directory, so the fact-cache preflight clears
-    nothing in the real `~/.cache/ansible/facts`.
+    A host_vars declaring TEST_SERVICE_TAGS exists for the tag validation, which
+    `deploy_run.py` calls in process against this checkout.
     """
     # `lib.git_testing.init_repo` carries the identity and the signing-off config in the
     # environment, so none of it has to be written into the scratch repository's own config.
@@ -160,9 +159,6 @@ def make_snapshot_repo(path: Path) -> Path:
     (host_vars / "daniel-box.yml").write_text(
         "containers_list:\n"
         + "".join(f"  - {{ name: {tag} }}\n" for tag in TEST_SERVICE_TAGS)
-    )
-    (path / "ansible.cfg").write_text(
-        f"[defaults]\nfact_caching_connection = {path.parent / 'fact-cache'}\n"
     )
     (path / DEPLOY_LOCKS_REL).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(_REPO / DEPLOY_LOCKS_REL, path / DEPLOY_LOCKS_REL)
@@ -241,7 +237,7 @@ def run_front_half(
 
     Returns the refusal code (None when the run reached its exec) and the calls in order:
     `("staleness", tags, at_sha)`, `("validate", tags, at_sha)`, `("changed", ref)`,
-    `("fact_cache",)` and, once the run reaches its deploy, `("deploy", what)`: the
+    and, once the run reaches its deploy, `("deploy", what)`: the
     argv an exec'd mode became, or `["in-process", tags_csv]` for the locked half.
     """
     import deploy_run
@@ -276,7 +272,6 @@ def run_front_half(
         staleness=staleness,
         validate=validate_tags,
         changed=derive,
-        clear_fact_cache=lambda plan: calls.append(("fact_cache",)),
         exec_argv=fake_exec,
         locked_run=fake_locked,
     )

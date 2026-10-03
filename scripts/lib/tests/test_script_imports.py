@@ -1,7 +1,7 @@
 """An import credits a script only when the directory it resolves from lies under `scripts/`.
 
-Matching on the basename alone credited `scripts/lib/gitops_markers.py` with
-`gitops_state.py`'s import of the gitops_deploy role's `files/gitops_markers.py`, and
+Matching on the basename alone credited `scripts/lib/gitops_markers.py` (deleted in #3275)
+with `gitops_state.py`'s import of the gitops_deploy role's `files/gitops_markers.py`, and
 `scripts/docs/reference/secrets.py` with the stdlib `secrets`. The synthetic pairs are
 the red proof; `test_the_real_tree_*` is the Verify-by from that issue.
 
@@ -52,7 +52,6 @@ def test_an_alias_of_a_package_under_scripts_is_credited(tmp_path):
 def test_the_real_tree_credits_the_insert_edge_and_not_the_basename_ones():
     imported = import_graph(SCRIPTS, lambda path: not path.name.startswith("test_"))
     assert "networking.py" in imported["route_facts"]
-    assert "gitops_state.py" not in imported["gitops_markers"]
     assert "secret_rotation.py" not in imported.get("secrets", set()), (
         "`import secrets as pysecrets` is the stdlib, not scripts/docs/reference/secrets.py"
     )

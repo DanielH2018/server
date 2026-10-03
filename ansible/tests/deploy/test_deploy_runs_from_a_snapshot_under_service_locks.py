@@ -311,7 +311,7 @@ def test_every_deployer_playbook_call_site_holds_its_service_locks():
 def test_a_budgeted_deploy_shares_one_deadline_between_its_wait_and_its_run():
     """CLEAN half: the tree-lock hold a phase's timeout is allowed to buy, held to once.
 
-    `gitops-deploy.service` holds `/var/lock/server-git-tree.lock` across its whole run, so a
+    `gitops-deploy.service` holds the git-tree lock across its whole run, so a
     phase that waits for a service lock is holding the tree lock while it waits.
     `_worst_lock_hold()` in tests/test_gitops_deploy_timeout_budgets.py sums the phase timeouts
     as that hold, and the four jobs waiting on the tree lock size their own waits from that sum.

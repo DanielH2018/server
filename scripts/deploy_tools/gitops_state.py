@@ -40,7 +40,7 @@ WHERE IT RUNS. `/var/lib/gitops-deploy` is 0750 and owned by `sys_user` (`ubuntu
 daniel-box), so the deploy user's own shell writes it directly and any other user needs
 `sudo -u ubuntu`. A directory this uid cannot write is reported as that, not as a traceback.
 
-The rewrite takes `/var/lock/server-git-tree.lock`, the lock a tick already holds, so the two
+The rewrite takes the git-tree lock, the lock a tick already holds, so the two
 cannot interleave over the same file. It waits seconds rather than minutes and then refuses:
 re-run it once the deploy or tick finishes.
 

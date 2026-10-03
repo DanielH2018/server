@@ -9,6 +9,9 @@ import pytest
 
 import deploy_ui
 import deploy_ui_reads as reads
+from deploy_locks import TREE_LOCK
+
+TREE_LOCK_NAME = pathlib.PurePath(TREE_LOCK).name
 
 
 class FakeRun:
@@ -81,7 +84,7 @@ def lock_dir(tmp_path):
     d = tmp_path / "lock"
     d.mkdir()
     for name in (
-        "server-git-tree.lock",
+        TREE_LOCK_NAME,
         "server-deploy-all.lock",
         "server-deploy-n8n.lock",
     ):
@@ -100,6 +103,18 @@ def _table(lock_dir):
     return t
 
 
+def _bare_config(tmp_path, state_dir):
+    """A Config with no lock files and the default /proc/locks."""
+    return deploy_ui.Config(
+        repo=tmp_path,
+        state_dir=state_dir,
+        log_dir=tmp_path,
+        bind="",
+        port=0,
+        tree_lock=tmp_path / TREE_LOCK_NAME,
+    )
+
+
 @pytest.fixture
 def app(tmp_path, state_dir, lock_dir):
     cfg = deploy_ui.Config(
@@ -108,6 +123,7 @@ def app(tmp_path, state_dir, lock_dir):
         log_dir=tmp_path / "logs",
         bind="127.0.0.1",
         port=0,
+        tree_lock=lock_dir / TREE_LOCK_NAME,
         lock_dir=lock_dir,
         proc_locks=tmp_path / "proc_locks",
     )
@@ -136,7 +152,7 @@ def test_inflight_lists_landing_deploy_and_queued_deploy_is_clean(app):
     assert rows[5100]["locks"] == []
     assert rows[5100]["waiting_on"] == ["server-deploy-n8n.lock"]
     assert b["locks_watched"] == [
-        "server-git-tree.lock",
+        TREE_LOCK_NAME,
         "server-deploy-all.lock",
         "server-deploy-n8n.lock",
     ]
@@ -150,7 +166,7 @@ def test_inflight_asks_fuser_about_every_lock_file_is_clean(app, lock_dir):
         *(
             str(lock_dir / n)
             for n in (
-                "server-git-tree.lock",
+                TREE_LOCK_NAME,
                 "server-deploy-all.lock",
                 "server-deploy-n8n.lock",
             )
@@ -169,6 +185,7 @@ def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path, state_dir):
         log_dir=tmp_path,
         bind="",
         port=0,
+        tree_lock=empty / TREE_LOCK_NAME,
         lock_dir=empty,
         proc_locks=tmp_path / "proc_locks",
     )
@@ -188,6 +205,7 @@ def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(
         log_dir=tmp_path,
         bind="",
         port=0,
+        tree_lock=lock_dir / TREE_LOCK_NAME,
         lock_dir=lock_dir,
         proc_locks=tmp_path / "missing",
     )
@@ -198,9 +216,7 @@ def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(
 def test_inflight_degrades_when_ps_fails_is_flagged(tmp_path, state_dir):
     t = dict(TABLE)
     t[("ps", "-eo", "pid=,ppid=,etimes=,args=")] = ("", "raise")
-    cfg = deploy_ui.Config(
-        repo=tmp_path, state_dir=state_dir, log_dir=tmp_path, bind="", port=0
-    )
+    cfg = _bare_config(tmp_path, state_dir)
     b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/inflight"))
     assert b["unavailable"].startswith("ps")
 
@@ -244,13 +260,7 @@ def test_prs_are_cached_is_clean(app):
 
 def test_prs_first_call_after_boot_runs_gh_is_clean(tmp_path, state_dir, monkeypatch):
     """A fresh App's cache sentinel must not read as fresher than an early-boot clock."""
-    cfg = deploy_ui.Config(
-        repo=tmp_path,
-        state_dir=state_dir,
-        log_dir=tmp_path / "logs",
-        bind="127.0.0.1",
-        port=0,
-    )
+    cfg = _bare_config(tmp_path, state_dir)
     app = deploy_ui.App(cfg, run=FakeRun(dict(TABLE)))
     monkeypatch.setattr(deploy_ui.time, "monotonic", lambda: 5.0)
     body(app.get("/api/prs"))
@@ -414,9 +424,7 @@ def test_stale_rc1_with_no_rows_is_unavailable_is_flagged(tmp_path, state_dir):
             "--stale-only",
         )
     ] = ("", 1)
-    cfg = deploy_ui.Config(
-        repo=tmp_path, state_dir=state_dir, log_dir=tmp_path, bind="", port=0
-    )
+    cfg = _bare_config(tmp_path, state_dir)
     b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/stale"))
     assert "stale" not in b
     assert b["unavailable"].startswith("probe.py releases exited 1")
@@ -428,9 +436,7 @@ def test_read_raising_an_unexpected_error_is_unavailable_is_flagged(
     """A gh payload missing a field must reach the page as red text, not a traceback."""
     t = dict(TABLE)
     t[("gh", "pr", "list")] = ('[{"title":"no number here"}]', 0)
-    cfg = deploy_ui.Config(
-        repo=tmp_path, state_dir=state_dir, log_dir=tmp_path, bind="", port=0
-    )
+    cfg = _bare_config(tmp_path, state_dir)
     b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/prs"))
     assert "prs" not in b
     assert b["unavailable"].startswith("KeyError")
@@ -466,13 +472,13 @@ def test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged():
 
 def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
     """The daemon runs outside the venv and cannot import the lock names, so this is
-    the literal-agreement guard: the tree lock path and the service-lock shape the page
-    watches are the ones `deploy_locks.py` names -- the one module that names them, for
-    the deployer and for deploy.sh, which imports it (issues #2054, #2412)."""
+    the literal-agreement guard: the service-lock shape the page watches is the one
+    `deploy_locks.py` names -- the one module that names them, for the deployer and for
+    deploy.sh, which imports it (issues #2054, #2412). The tree lock's path reaches the
+    daemon from its unit instead (#3276)."""
     import deploy_locks
 
     monkeypatch.delenv("HOMELAB_DEPLOY_LOCK_DIR", raising=False)
-    assert deploy_locks.TREE_LOCK == f"/var/lock/{deploy_ui.TREE_LOCK}"
     lock_dir = deploy_ui.Config.__dataclass_fields__["lock_dir"].default
     assert str(lock_dir) == deploy_locks.lock_dir() == "/var/lock"
     for name in (deploy_locks.SERVICE_LOCK_ALL, "sonarr", "pi-peer-backup"):

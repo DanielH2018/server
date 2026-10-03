@@ -14,7 +14,7 @@ from lib.deployer_park import (
     read_behind_marker,
     read_manual_plane_marker,
 )
-from lib.gitops_markers import MARKERS
+from gitops_markers import MARKERS
 
 # The shape the deployer writes: the origin SHA it is behind, then when it first saw it.
 _MARKER = "abc1230000000000000000000000000000000000 1000"

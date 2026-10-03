@@ -67,8 +67,8 @@ def usage_error(args: list[str]) -> bool:
     Ansible's parser prints its own usage and the offending argument to stderr as it refuses,
     which names the fault better than this wrapper could, so nothing is printed here.
     """
-    # DECIDED: this gate fails OPEN on anything but a usage error, as `clear_fact_cache` and
-    # `expand_shared_roles` do. Ansible's CLI classes are not a published API, so a moved
+    # DECIDED: this gate fails OPEN on anything but a usage error, as `expand_shared_roles`
+    # does. Ansible's CLI classes are not a published API, so a moved
     # import or a changed exit code leaves the deploy running exactly as it did before this
     # gate existed. Refusing every deploy over a renamed ansible module would be a worse
     # failure than the one being fixed.

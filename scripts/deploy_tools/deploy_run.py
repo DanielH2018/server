@@ -161,22 +161,6 @@ def run_changed(plan: Plan) -> tuple[int, str]:
     return status, out.getvalue().strip()
 
 
-def clear_fact_cache(plan: Plan) -> None:
-    """`fact_cache_guard --clear` for the caller's checkout. Never raises."""
-    # DECIDED: this preflight fails OPEN. It is a remediation, not a verdict -- if it cannot
-    # clear the cache, the deploy proceeds and dies at Gathering Facts exactly as it does
-    # today, except now with this script's stderr naming the cache directly above the
-    # misleading module error. Blocking every deploy on a bug in a cache-cleaner would be a
-    # worse failure than the one it prevents.
-    try:
-        from deploy_tools import fact_cache_guard
-
-        fact_cache_guard.main(["--clear", "--repo-root", str(plan.repo_root)])
-    # Broad on purpose, SystemExit included: the preflight fails open, per the DECIDED note.
-    except Exception, SystemExit:
-        traceback.print_exc()
-
-
 def expand_shared_roles(plan: Plan) -> None:
     """Replace each shared k8s role in `--tags` with the tags of every role that runs it.
 
@@ -186,8 +170,9 @@ def expand_shared_roles(plan: Plan) -> None:
 
     Runs before the staleness gate, so the gate, the tag validation and the per-service locks
     all see the services that actually deploy. A name no declared role runs is left as typed,
-    and the validation refuses it by name. Fails open for the reason `clear_fact_cache` does:
-    a crash here leaves the typed tags, which the validation then refuses.
+    and the validation refuses it by name. Fails open: a crash here leaves the typed tags,
+    which the validation then refuses, so a bug in the expansion never blocks a deploy the
+    validation would have let through.
     """
     if not plan.tags:
         return
@@ -259,7 +244,6 @@ class Tools:
     staleness: Callable[[Plan], int] = run_staleness
     validate: Callable[[Plan], int] = run_validate
     changed: Callable[[Plan], tuple[int, str]] = run_changed
-    clear_fact_cache: Callable[[Plan], None] = clear_fact_cache
     exec_argv: Callable[[list[str]], None] = exec_argv
     locked_run: Callable[[Plan], int] = run_locked
 
@@ -520,18 +504,11 @@ def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
                 ["uv", "run", "python", "scripts/deploy_tools/deploy_tags.py", "list"]
             )
         check_mode_conflicts(plan)
-        # An argument ansible-playbook's parser refuses, asked before the fact cache, the
-        # staleness gate and the tag validation: no play can run, so it must not cost a
+        # An argument ansible-playbook's parser refuses, asked before the staleness gate and the tag validation: no play can run, so it must not cost a
         # subprocess, a lock wait or a snapshot, and it must read as a bad command line on
         # every path out of here rather than as a playbook that failed mid-deploy.
         check_passthrough(plan.args)
         expand_shared_roles(plan)
-        # The fact cache is shared by host across every worktree on this machine and pins
-        # the interpreter of whichever session gathered facts first. A cache naming a gone
-        # worktree fails EVERY deploy at Gathering Facts for the full TTL, AFTER the lock
-        # wait. Runs before --check and --dry-run too: a dry run gathers facts like any
-        # other, which is how the cache gets re-poisoned in the first place.
-        tools.clear_fact_cache(plan)
         # A tree behind origin/master renders stale templates and reverts live config while
         # every repo-side check reads green. Before --check and --dry-run too: a green dry run
         # against a stale tree is the misleading signal itself.

@@ -9,9 +9,9 @@
 # question genuinely open rather than merely unrecorded: a worktree far behind master reverts
 # a service, and nothing on the node says which tree the live manifests came from.
 #
-# Three guards already compensate for this — the /var/lock/server-git-tree.lock, deploy.sh's
-# exit-4 staleness refusal, and the fact cache pinning a deleted worktree's venv. Each is
-# sound. All three exist because the artifact has no name. This gives it one.
+# Two guards already compensate for this — the git-tree lock and deploy.sh's
+# exit-4 staleness refusal. Each is sound. Both exist because the artifact has no name. This
+# gives it one.
 #
 # WHAT THIS IS NOT. It is not a deploy gate and it refuses nothing. It is a record written after
 # a successful apply, so a later reader can tell a release apart from the tree it came from.
