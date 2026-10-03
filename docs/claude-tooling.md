@@ -419,11 +419,19 @@ The two_factor session also gets its own state file and is never a fallback for 
 Each hook's module docstring under `.claude/hooks/` is the full record of its rules. This
 section is the summary a reader needs before opening one.
 
+`run-hook.sh <name> [--project] [--ask-on-cd[=<guards>]]` is the shell entry point the six
+per-hook shims collapse into (#3278): one interpreter pin, three postures selected by flags.
+It is unreferenced until the second half of that rollout. `.claude/settings.json` names each
+hook by an absolute path into the PRIMARY checkout, so switching settings in the same commit
+that adds the runner would register a script a behind primary checkout does not have — and a
+hook script that does not exist means `/bin/sh` exits 127 and the matching tool calls run with
+the guard skipped.
+
 ### `bash-pretool` (PreToolUse, Bash)
 
-It *decides nothing itself*. It is the one process that runs the four Bash arms —
-`block-protected-bash`, `nudge-land-sh`, `block-footguns` and `inject-nested-docs` — each of
-which used to be its own hook with its own `uv run` start. A fifth arm,
+It *decides nothing itself*. It is the one process that runs the five Bash arms —
+`block-protected-bash`, `nudge-land-sh`, `block-footguns`, `inject-nested-docs` and
+`uv-python` — each of which used to be its own hook with its own `uv run` start. A fifth arm,
 `auto-approve-readonly`, moved into the dotfiles `claude_guard` package as `readonly.py`
 (dotfiles #628). When #2394 merged them, all five imported `_hook_common` and
 `claude_guard.segment`, so four of those five interpreter starts bought nothing: measured on daniel-server, five sequential shims took a median 233 ms against
@@ -436,9 +444,18 @@ one `hookSpecificOutput` carrying both that decision and `inject-nested-docs`'s
 `additionalContext`. An arm that raises loses its own verdict, keeps the others, and says so
 on stderr naming itself.
 
-`uv-python.sh` stays a separate hook: it rewrites the command rather than judging it, so it has
-no verdict to merge. `bash-pretool.sh` runs ahead of it, so every arm reads the command the
-session typed.
+`uv-python` is the fifth arm since #3286, and the only one that rewrites rather than judges.
+It runs LAST, so every decision arm still reads the command the session typed — which is what
+the two separate hooks did, `bash-pretool.sh` at order 10 and `uv-python.sh` at order 20. It
+was 269 lines of shell, justified by "the interpreter start is the whole cost"; #2394
+already pays that start on every Bash call, so a second process bought nothing.
+
+The rewrite rides in the same `hookSpecificOutput` as the verdict. Read from the 2.1.267
+bundle: a `deny` drops the `updatedInput` and the call keeps the text as typed, an `ask`
+carries it so the prompt is about the rewritten command, and a rewrite with no verdict takes
+the plain rewrite path. The harness flattens every PreToolUse hook's output into one
+`{deny, ask, allow, updatedInput, additionalContext}` before deciding, so one hook emitting
+both keys is indistinguishable from two hooks emitting one each.
 
 A failed `cd` into the repo makes the shim **ask**, naming `block-protected-bash`,
 `nudge-land-sh` and `block-footguns` as the guards that did not run. Three of the five

@@ -27,7 +27,6 @@ from lib.proc_testing import run
 KNOWN_REGISTERED = frozenset(
     {
         "bash-pretool.sh",
-        "uv-python.sh",
         "block-protected-edits.sh",
         "auto-mode-bridge.sh",
         "log-instructions.sh",
@@ -39,7 +38,9 @@ KNOWN_LIBRARIES = frozenset(
         "_claude_guard.py",
         "_hook_common.py",
         "bash-pretool.py",
+        "run-hook.sh",
         "session-health.py",
+        "uv-python.py",
     }
 )
 

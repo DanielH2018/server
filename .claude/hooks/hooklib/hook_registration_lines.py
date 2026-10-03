@@ -17,13 +17,13 @@ Two limits, stated rather than implied:
     primary checkout may lack, and a SessionStart hook that does not exist prints nothing. The
     window this arm closes is "the primary checkout is missing SOME hook scripts"; the window
     where it is missing THIS one stays open, and only a fast-forward closes it.
-  * **It rules on the `.py` sibling only where the shim names it by the shared idiom.** Five
-    shims run their sibling as `"$(dirname "$(readlink -f "$0")")/<name>.py"`, and that form is
-    matched literally rather than parsed as shell. A shim naming its `.py` some
-    other way, or composing the path from a variable, gets
-    no verdict — abstaining is the posture `script_path` already takes for a path it cannot
-    resolve, and `test_the_repos_own_shims_name_the_siblings_this_parse_must_find` is what
-    keeps abstention from quietly becoming the whole answer.
+  * **It rules on the `.py` sibling only in the two forms this repo's shims use.** A per-hook
+    shim runs its sibling as `"$(dirname "$(readlink -f "$0")")/<name>.py"`, and `run-hook.sh`
+    composes the same path from its first argument. Both are matched as text rather than parsed
+    as shell. A shim naming its `.py` some other way gets no verdict — abstaining is the posture
+    `script_path` already takes for a path it cannot resolve, and
+    `test_the_repos_own_shims_name_the_siblings_this_parse_must_find` is what keeps abstention
+    from quietly becoming the whole answer.
 
 Split out of session-health.py, which sits at its own 600-line cap (`ansible/tests/_ratchet.py`)
 with no headroom left. Package name is `hooklib`, not `lib`, for the reason session-health.py's
@@ -145,9 +145,44 @@ _SIBLING_PY = re.compile(
     r"""\$\(\s*dirname\s+"?\$\(\s*readlink\s+-f\s+"\$0"\s*\)"?\s*\)/([A-Za-z0-9_.-]+\.py)"""
 )
 
+# The same directory, with the hook's name coming from a variable instead of the text:
+#
+#     HOOKS_DIR="$(dirname "$(readlink -f "$0")")"
+#     script="$HOOKS_DIR/$name.py"
+#
+# which is how `run-hook.sh` runs the hook named by its first argument (#3278). The name is not
+# in the shim at all, so it comes from the registered COMMAND. Matching the composing line
+# rather than the runner's filename keeps the two halves of this rule in one place: a runner
+# that stops composing its sibling that way resolves nothing and fails
+# `test_the_repos_own_shims_name_the_siblings_this_parse_must_find` by name.
+_RUNNER_SIBLING_PY = re.compile(r"""\$\{?(?:\w+)\}?/\$\{?\w+\}?\.py""")
 
-def sibling_py_paths(shim_path, read_text=None):
+
+def _runner_hook_name(command):
+    """The hook name a `run-hook.sh <name> [--flags]` command passes, or None.
+
+    The first word is the script itself; the first argument after it that is not a flag is the
+    name. Anything `shlex` cannot read, or a command passing no name, gets None — the same
+    abstention `script_path` takes for a path it cannot resolve.
+    """
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return None
+    for token in tokens[1:]:
+        if not token.startswith("-"):
+            return token
+    return None
+
+
+def sibling_py_paths(shim_path, command=None, read_text=None):
     """The `.py` files the shim at `shim_path` runs out of its own directory, in file order.
+
+    Args:
+        shim_path: the resolved `.sh` the registration names.
+        command: the registered command, for a runner that takes the hook name as an argument.
+            Optional, because the literal form needs only the shim's own text.
+        read_text: returns the shim's text. Defaults to reading the file.
 
     `$(dirname "$(readlink -f "$0")")` is the directory of the RESOLVED shim — the primary
     checkout's `.claude/hooks/`, since `settings.json` names the shim by an absolute path there.
@@ -173,6 +208,10 @@ def sibling_py_paths(shim_path, read_text=None):
     for name in _SIBLING_PY.findall(text):
         if name not in names:
             names.append(name)
+    if not names and command is not None and _RUNNER_SIBLING_PY.search(text):
+        hook_name = _runner_hook_name(command)
+        if hook_name:
+            names.append(f"{hook_name}.py")
     return [os.path.join(directory, name) for name in names]
 
 
@@ -266,7 +305,7 @@ def missing_hook_script_lines(
             if path not in missing_shims:
                 missing_shims.append(path)
             continue
-        for sibling in sibling_py_paths(path, read_text=read_text):
+        for sibling in sibling_py_paths(path, command=command, read_text=read_text):
             if not exists(sibling) and sibling not in missing_siblings:
                 missing_siblings.append(sibling)
     lines = []
