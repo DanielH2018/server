@@ -3,7 +3,7 @@
 This module's subject IS the three decisions `proc_testing` centralises: the launch
 flags, the `PATH` prefix and the exec bit. It therefore writes executables and `PATH` strings
 by hand, and is exempt from the guard in
-`scripts/tests/test_tests_share_the_subprocess_helpers.py` for that reason.
+`scripts/tests/test_census_rows_test_modules.py` for that reason.
 
 Run: uv run pytest scripts/lib/tests/test_proc_testing.py
 """

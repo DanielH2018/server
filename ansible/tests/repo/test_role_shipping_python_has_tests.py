@@ -3,7 +3,7 @@
 Root CLAUDE.md (Python & Tests): "A role that ships a `files/*.py` with logic adds its `tests/`
 directory to `testpaths`." The two sibling guards start from TEST files —
 `test_testpaths_covers_every_test_file.py` asks whether each test lies under a testpath, and
-`test_no_role_ships_a_test_file.py` asks whether a test sits beside shipped code — so a role
+the `no-role-ships-a-test-file` census row asks whether a test sits beside shipped code — so a role
 with code and no tests at all is invisible to both.
 
 This starts from the CODE: every tracked `ansible/roles/<plane>/<role>/files/**/*.py` names a

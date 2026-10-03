@@ -22,6 +22,11 @@ LIMIT: a script rendering a name the registry does not carry is invisible here.
 exists in SOPS yet, so its task carries `no_log` by hand and joins KNOWN_SECRET_SCRIPTS only
 when the token is minted and registered.
 
+WHY THIS IS NOT A CENSUS ROW (#3430). A row judges one subject from its own text, but this
+predicate reads a second file: the template a task's `src` names. A red fixture would have to be
+a real template on disk, and the unit tests below pin where a Jinja delimiter starts and ends,
+which a row's red/green pair would not carry.
+
 Run: uv run pytest ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py
 """
 

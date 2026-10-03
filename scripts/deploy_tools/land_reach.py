@@ -269,7 +269,8 @@ def setup_file_hosts(
     parts = Path(path).parts
     if parts[4:5] == ("tests",):
         # A role's own pytest guards ship nowhere either: nothing stages a `tests/` file
-        # (`ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide), so
+        # (the `no-role-ships-a-test-file` row of
+        # `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide), so
         # no host runs the old copy. `land_tags.is_role_test_path` is the same predicate,
         # inlined because land_tags imports this module. Without it a `tests/` path falls
         # through to the ROLE-level reach, and the union over a PR's files widens a

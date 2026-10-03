@@ -4,7 +4,8 @@
 WHAT THIS DROPS. A role's pytest guards under a tag-less role must not make `shared_roles` name
 the role, which would end the landing `needs-manual-apply` with a full `ansible/deploy.yml` as
 the remedy. A role's `tests/` covers its `files/*.py` and is staged by nothing
-(`ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide), so no deploy can
+(the `no-role-ships-a-test-file` row of `ansible/tests/repo/test_census_rows_roles.py` holds
+that tree-wide), so no deploy can
 apply it. Same class as the `.md` rule.
 
 WHAT THIS KEEPS, and why the reject halves below are `tasks/` cases. Dropping a shared role's

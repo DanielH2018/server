@@ -596,7 +596,8 @@ stay).
   playbook and an ff-merge (2026-09-01). A test-only push now produces an empty `ChangeSet` and
   takes the `if not cs.services` ff-merge branch, exactly like a docs-only push. The invariant it
   rests on — no role ships a test file to a host — is enforced tree-wide by
-  `ansible/tests/repo/test_no_role_ships_a_test_file.py`, because a role that started shipping one
+  the `no-role-ships-a-test-file` row of `ansible/tests/repo/test_census_rows_roles.py`,
+  because a role that started shipping one
   would turn this skip into a change to deployed code that never deploys.
 - **A new module in `files/` goes in two lists in `tasks/main.yml`** — the copy task's `loop:`
   that installs it under `/opt/gitops-deploy/`, and `stamp_deployed_pairs`, which records its

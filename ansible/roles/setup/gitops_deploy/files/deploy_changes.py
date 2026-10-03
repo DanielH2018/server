@@ -272,7 +272,8 @@ def _is_test_only_path(path: str) -> bool:
     `scripts/conftest.py`, and a test a session adds beside code before that guard catches it.
 
     The invariant this rests on: nothing under `ansible/` copies a test file to a host.
-    `ansible/tests/repo/test_no_role_ships_a_test_file.py` is the tree-wide guard, so a role that
+    the `no-role-ships-a-test-file` row of `ansible/tests/repo/test_census_rows_roles.py` is
+    the tree-wide guard, so a role that
     starts shipping one fails there rather than silently widening this predicate into a hole.
     """
     if path.startswith("ansible/tests/"):
@@ -416,7 +417,8 @@ def _import_re(module_id: str) -> re.Pattern:
 # `home-assistant/files/`) are named by no task, no template and no file list, because the roles
 # that own them ship a NAMED list rather than a directory (issue #1715). So the carve-out cost a
 # whole `ansible/deploy.yml` for a README nobody deploys, and bought nothing.
-# `ansible/tests/deploy/test_no_role_ships_a_markdown_file.py` is what makes it safe to assert
+# the `no-role-ships-a-markdown-file` row of `ansible/tests/repo/test_census_rows_roles.py` is
+# what makes it safe to assert
 # rather than derive: a task that starts shipping a `.md` fails that guard instead of silently
 # landing a file the deployer skipped. `narrow_paths.is_prose` now calls this, so there is one
 # definition; the reach across the role boundary is the one `narrow_broad` already makes.

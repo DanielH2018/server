@@ -122,7 +122,7 @@ def test_a_copied_script_with_no_pair_is_flagged(tmp_path):
     """The rejecting half, on a synthetic role: the scan must be able to find an omission.
 
     Built in tmp_path rather than in the tree — a real role directory would be picked up by
-    ansible-lint and by test_no_role_ships_a_test_file.py.
+    ansible-lint and by the no-role-ships-a-test-file census row.
     """
     tasks = tmp_path / "k8s" / "synthetic" / "tasks"
     tasks.mkdir(parents=True)

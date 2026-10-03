@@ -363,7 +363,8 @@ def test_no_two_scripts_share_a_basename():
     path-keyed generator still needs a basename-to-path resolution step, and that step is
     undecidable for exactly the colliding names this test forbids. So uniqueness is the
     invariant, and this is where it is enforced. Sibling, different invariant, keep apart:
-    `ansible/tests/repo/test_pythonpath_module_basenames.py` forbids one NAME at two
+    the `no-two-import-roots-share-a-module-basename` row of
+    `ansible/tests/repo/test_census_rows_python.py` forbids one NAME at two
     `pythonpath` roots — sys.path shadowing, so every root but top level only.
     """
     clashes = _basename_clashes(sc.candidates(g.SCRIPTS))

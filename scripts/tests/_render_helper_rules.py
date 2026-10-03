@@ -1,7 +1,7 @@
 """The AST detectors behind the three render-and-path rules, apart from the census.
 
-`test_tests_share_render_and_path_helpers.py` states the rules, holds the exemption maps and
-runs them over the tree; this module is the pure half each rule needs — a function from source
+`test_census_rows_test_renders.py` states the rules, holds the exemptions and runs each as a
+`Census` row over the tree; this module is the pure half each rule needs — a function from source
 text to the offending spellings it found. Split out when the detector for a shell template's
 source grew the resolver-fed shape (#3200) and pushed the one file past its 500-line cap.
 
