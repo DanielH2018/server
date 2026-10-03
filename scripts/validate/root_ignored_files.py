@@ -21,7 +21,6 @@ root entry is hidden by `/*` alone.
 """
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
@@ -30,6 +29,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib.git import git
 from lib.repo_paths import REPO
 
 # Root entries that are local by design. Each is a tool's cache or output, or a per-machine
@@ -51,17 +51,17 @@ LOCAL_ONLY = frozenset(
 DENY_ALL = "/*"
 
 
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=repo, check=True, capture_output=True, text=True, timeout=60
-    ).stdout
-
-
 def ignored_root_entries(repo: Path) -> list[str]:
     """Untracked root-level entries git ignores, without a trailing slash."""
-    out = _git(
-        repo, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory"
-    )
+    out = git(
+        "ls-files",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "--directory",
+        cwd=repo,
+        timeout=60,
+    ).stdout
     return sorted(
         {line.rstrip("/") for line in out.splitlines() if "/" not in line.rstrip("/")}
     )
@@ -71,11 +71,15 @@ def hidden_by_deny_all(repo: Path, names: list[str]) -> list[str]:
     """The subset of `names` whose deciding `.gitignore` rule is the `/*` line."""
     if not names:
         return []
-    proc = subprocess.run(
-        ["git", "check-ignore", "-v", "--no-index", "--", *names],
+    # check-ignore exits 1 when no name is ignored, which is an answer, not a failure.
+    proc = git(
+        "check-ignore",
+        "-v",
+        "--no-index",
+        "--",
+        *names,
         cwd=repo,
-        capture_output=True,
-        text=True,
+        check=False,
         timeout=60,
     )
     hidden = []

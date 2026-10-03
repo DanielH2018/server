@@ -106,10 +106,6 @@ def classify(tree: Worktree, merged: bool, dirty: bool) -> tuple[str, str]:
     return REMOVABLE, f"{tree.branch} merged, clean, unlocked"
 
 
-def _git(args: list[str], cwd: str | None = None) -> str:
-    return git_stdout(*args, cwd=cwd, check=False)
-
-
 def is_merged(repo: str, head: str, branch: str = "") -> bool:
     """True when `head`'s work is already on origin/master, by ancestry or by patch.
 
@@ -197,14 +193,17 @@ def orphan_branches(repo: str) -> list[str]:
     never touches it. A branch a worktree still holds is excluded too, which is also what
     makes the current branch safe — the primary checkout is a worktree in this list.
     """
-    refs = _git(
-        ["for-each-ref", "--format=%(refname:short)", f"refs/heads/{BRANCH_PREFIX}*"],
+    refs = git_stdout(
+        "for-each-ref",
+        "--format=%(refname:short)",
+        f"refs/heads/{BRANCH_PREFIX}*",
         cwd=repo,
+        check=False,
     ).split()
     held = {
         tree.branch
         for tree in parse_worktree_list(
-            _git(["worktree", "list", "--porcelain"], cwd=repo)
+            git_stdout("worktree", "list", "--porcelain", cwd=repo, check=False)
         )
         if tree.branch
     }
@@ -309,7 +308,9 @@ def primary_checkout() -> str | None:
     --show-toplevel run from inside a worktree returns the worktree itself, which made the
     orphan scan look in a directory that doesn't exist.
     """
-    common_dir = _git(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    common_dir = git_stdout(
+        "rev-parse", "--path-format=absolute", "--git-common-dir", check=False
+    )
     return str(Path(common_dir).parent) if common_dir else None
 
 
@@ -368,7 +369,9 @@ def _worktree_facts() -> tuple[
 
 def survey(repo: str) -> list[tuple[str, Worktree, str]]:
     """(verdict, worktree, reason) for every session worktree, primary excluded."""
-    trees = parse_worktree_list(_git(["worktree", "list", "--porcelain"], cwd=repo))
+    trees = parse_worktree_list(
+        git_stdout("worktree", "list", "--porcelain", cwd=repo, check=False)
+    )
     out = []
     for tree in trees[1:]:
         verdict, reason = classify(
@@ -508,7 +511,7 @@ def main(argv: list[str] | None = None) -> int:
     tracked = {
         t.path
         for t in parse_worktree_list(
-            _git(["worktree", "list", "--porcelain"], cwd=repo)
+            git_stdout("worktree", "list", "--porcelain", cwd=repo, check=False)
         )
     }
     for path in find_orphan_dirs(str(Path(repo) / ".claude" / "worktrees"), tracked):

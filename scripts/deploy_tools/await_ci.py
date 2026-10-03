@@ -111,21 +111,17 @@ def verdict_for(sha: str, fetch=fetch_check_runs, required=None) -> str:
     return ci_verdict(runs, required)
 
 
-def _git(*args: str) -> str:
-    return git_stdout(*args)
-
-
 def _fetch_tip() -> str:
     # This runs from the primary checkout (land.sh cd's there) and takes no git-tree lock,
     # so it can run while the 30-min timer is mid-tick. Safe: a fetch appends objects and
     # moves a remote-tracking ref under git's own per-ref lock. It touches neither HEAD nor
     # the working tree, which is what /var/lock/server-git-tree.lock exists to guard.
-    _git("fetch", "-q", "origin", "master")
-    return _git("rev-parse", "origin/master")
+    git_stdout("fetch", "-q", "origin", "master")
+    return git_stdout("rev-parse", "origin/master")
 
 
 def _is_ancestor(a: str, b: str) -> bool:
-    """Whether `a` is an ancestor of `b`, through the same wrapper `_git` uses.
+    """Whether `a` is an ancestor of `b`, through the same wrapper `_fetch_tip` uses.
 
     `lib.git.git` strips every `GIT_*` variable, so an inherited `GIT_DIR` cannot redirect
     this at another repository -- the hazard `lib/git.py`'s docstring records. A raw

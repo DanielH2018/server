@@ -88,10 +88,6 @@ def fingerprint(normalized_key: str) -> str:
     return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
 
 
-def _gh(args: list[str]) -> str:
-    return gh(*args, timeout=GH_TIMEOUT_S).stdout
-
-
 def registered_signing_keys() -> frozenset[str]:
     """The normalized signing keys GitHub verifies commits against for this account.
 
@@ -106,10 +102,12 @@ def registered_signing_keys() -> frozenset[str]:
         ValueError: the reply was not the expected JSON shape. `json.JSONDecodeError` is a
             ValueError, so one except clause covers both.
     """
-    login = _gh(["api", "/user", "--jq", ".login"]).strip()
+    login = gh("api", "/user", "--jq", ".login", timeout=GH_TIMEOUT_S).stdout.strip()
     if not login:
         raise ValueError("gh api /user returned no login")
-    keys = json.loads(_gh(["api", f"/users/{login}/ssh_signing_keys"]))
+    keys = json.loads(
+        gh("api", f"/users/{login}/ssh_signing_keys", timeout=GH_TIMEOUT_S).stdout
+    )
     normalized = {normalize_key(entry.get("key")) for entry in keys}
     return frozenset(key for key in normalized if key)
 

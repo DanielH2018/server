@@ -261,7 +261,7 @@ def _main_recording_git(monkeypatch, tmp_path, argv, removable=2):
     )
     monkeypatch.setattr("prune_worktrees.find_orphan_dirs", lambda *a, **k: [])
     monkeypatch.setattr("prune_worktrees.parse_worktree_list", lambda porcelain: [])
-    monkeypatch.setattr("prune_worktrees._git", lambda *a, **k: "")
+    monkeypatch.setattr("prune_worktrees.git_stdout", lambda *a, **k: "")
     monkeypatch.setattr("prune_worktrees.git", fake_git)
     return main(argv), calls, trees
 
