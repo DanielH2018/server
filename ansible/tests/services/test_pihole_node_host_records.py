@@ -171,7 +171,7 @@ def test_each_hosts_records_follow_that_hosts_own_inventory_entry():
 def test_the_census_reads_real_directives():
     # Non-vacuity on a record nothing else here touches, so a parser that quietly stopped
     # matching the directive cannot read as a clean tree.
-    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    # Exact match, not `in`: see ansible/tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     records = records_at_inventory_addresses()
     assert any(name == "daniel-pi.lan" for name in records), (
         "the parser stopped reading host-record lines it used to read"

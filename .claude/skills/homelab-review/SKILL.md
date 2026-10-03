@@ -51,10 +51,11 @@ order:
    lives in a `# DECIDED:` marker there (step 7). Collapsing the file into markers and issues
    was re-examined on 2026-09-28 (#2808) and rejected, because operator rulings and
    cross-cutting stances would have nowhere to go. This step and `.claude/agents/skeptic.md`
-   both name that slug (ENFORCED:
-   `ansible/tests/repo/test_review_skills_name_one_standing_list_slug.py::test_each_primed_surface_names_the_live_slug`),
-   and no skill, agent or eval case carries a retired spelling of it (ENFORCED:
-   `ansible/tests/repo/test_review_skills_name_one_standing_list_slug.py::test_no_searched_file_carries_a_retired_slug`).
+   both name that slug, and no skill, agent or eval case carries a retired spelling of it
+   (ENFORCED by two rows of
+   `ansible/tests/repo/test_census_rows_text.py::test_census_row_holds_on_the_tree`:
+   `review-surfaces-name-the-standing-slug` and
+   `review-surfaces-carry-no-retired-standing-slug`).
    A slug the store does not hold primes nothing, and the harness reports no error for it.
 2. **The newest two dated `review-*-state` ledgers the store actually holds** — for recency only:
    what shipped since the standing list was last distilled, and this week's refutations with their

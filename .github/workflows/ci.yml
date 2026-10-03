@@ -134,7 +134,7 @@ jobs:
     # `python-version:` and `node-version:` below — a two-part pin resolves to whatever patch
     # the toolcache holds that day, while a three-part one moves only through Renovate.
     # Every `runs-on` in .github/workflows is a versioned label, ENFORCED by
-    # ansible/tests/repo/test_workflow_runners_are_pinned.py.
+    # the `workflow-runners-are-pinned` row of ansible/tests/repo/test_census_rows_text.py.
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
     steps:

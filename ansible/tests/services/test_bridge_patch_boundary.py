@@ -167,8 +167,8 @@ def test_there_are_patched_names_to_check():
     # in `main()` and passed down, so nothing patches that module. Repoint the pair rather
     # than deleting it when another module gets its seam.
     # A subset comparison rather than two `in` tests: `"bridge.net" in patched` reads as a
-    # hostname-shaped substring check to CodeQL, which
-    # ansible/tests/repo/test_no_host_shaped_membership_literal.py enforces repo-wide.
+    # hostname-shaped substring check to CodeQL, which the `no-host-shaped-membership-literal`
+    # row of ansible/tests/repo/test_census_rows_python.py enforces repo-wide.
     patched = _patched_names_by_module()
     assert {"bridge.common", "bridge.net"} <= patched.keys(), sorted(patched)
 

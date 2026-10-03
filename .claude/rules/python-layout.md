@@ -73,6 +73,11 @@ cross-document join or a long exemption list keeps its own file. The test file r
 row; once it nears the 500-line test-module cap, a row goes in `_config_property_rows.py` or
 `_workload_property_rows.py` beside it.
 
+A textual census of the tracked tree follows the same rule. It is one `git ls-files` selector
+and one per-file predicate, and it goes in as a `Census` row of
+`ansible/tests/repo/test_census_rows_python.py` or `test_census_rows_text.py`.
+`ansible/tests/_row_table.py` is the harness both tables share.
+
 ## No tests under `ansible/filter_plugins/`
 
 Ansible's plugin loader imports every `.py` there at deploy time and would choke on the

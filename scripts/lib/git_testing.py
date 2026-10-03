@@ -15,8 +15,9 @@ the null device so this host's global SSH commit signing does not reach a scratc
 
 `lib.git.git` is the production runner and takes no `env` argument on purpose; its own
 docstring sends a caller that commits to `subprocess` directly. That is what this module does,
-and it is why `scripts/tests/test_git_and_gh_go_through_lib.py` scopes its rule to production
-modules under `scripts/`, outside `lib/` and every `tests/` directory.
+and it is why the `git-and-gh-go-through-lib` row of
+`ansible/tests/repo/test_census_rows_python.py` scopes its rule to production modules under
+`scripts/`, outside `lib/` and every `tests/` directory.
 
 Import it from any test, at any depth — `pyproject.toml` puts `scripts/` on `pythonpath`::
 
