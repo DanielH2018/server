@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-03 06:17 UTC
-generated_sha: 8d0a33d9a
+generated_at: 2026-10-03 18:17 UTC
+generated_sha: 1eb3891b5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,21 +16,33 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks | 2026-09-28 | 1 | - | ✓ |
-| [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 0 | - | ✓ |
+| [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks — **escalated** | 2026-09-28 | 2 | - | ✓ |
+| [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 1 | - | ✓ |
+| [#3325](https://github.com/DanielH2018/server/issues/3325) | medium | gap | - | Renovate run held: manual_plane k3s from 167901a6f unapplied | 2026-10-03 | 0 | - | - |
+| [#3382](https://github.com/DanielH2018/server/issues/3382) | medium | gap | backup-observability | Decide Longhorn's node-down pod deletion policy and write the daniel-server-loss runbook — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3383](https://github.com/DanielH2018/server/issues/3383) | medium | improvement | cicd | Fold the policy-shaped rendered-manifest tests into one property table — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3384](https://github.com/DanielH2018/server/issues/3384) | medium | improvement | cicd | Fold the textual tree-census tests into one convention table — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3386](https://github.com/DanielH2018/server/issues/3386) | medium | improvement | network | Declare NetworkPolicy callers as data on the containers_list entry — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3389](https://github.com/DanielH2018/server/issues/3389) | medium | improvement | backup-observability | Declare one service tier and derive priority, backup tier and alert severity from it — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3391](https://github.com/DanielH2018/server/issues/3391) | medium | improvement | cicd | Have the GitOps tick write one receipt per origin SHA for land.sh to read — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3392](https://github.com/DanielH2018/server/issues/3392) | medium | improvement | cicd | Replace the owed-work marker families with one append-only ledger — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3394](https://github.com/DanielH2018/server/issues/3394) | medium | improvement | cicd | Register Claude hooks from the session's own checkout — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3399](https://github.com/DanielH2018/server/issues/3399) | medium | gap | cicd | Apply the k3s plane PR #3397 left in manual_plane on daniel-box | 2026-10-03 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
 | [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
-| [#3270](https://github.com/DanielH2018/server/issues/3270) | low | improvement | cicd | Move the two one-file test directories next to the code they test | 2026-10-02 | 0 | - | ✓ |
-| [#3277](https://github.com/DanielH2018/server/issues/3277) | low | improvement | container | Pin the probe alpine and exportarr images once in group_vars | 2026-10-02 | 0 | - | ✓ |
 | [#3281](https://github.com/DanielH2018/server/issues/3281) | low | improvement | cicd | Digest-pin the third-party images still pinned only by tag | 2026-10-02 | 0 | - | ✓ |
-| [#3284](https://github.com/DanielH2018/server/issues/3284) | low | improvement | cicd | Narrow the static bootstrap guard to what the runtime --help test cannot reach | 2026-10-02 | 0 | - | ✓ |
-| [#3285](https://github.com/DanielH2018/server/issues/3285) | low | improvement | cicd | Open every playbook through one shared fact-gathering step | 2026-10-02 | 0 | - | ✓ |
-| [#3288](https://github.com/DanielH2018/server/issues/3288) | low | improvement | cicd | Move initial_setup.yml's handlers into the roles that notify them | 2026-10-02 | 0 | - | ✓ |
-| [#3304](https://github.com/DanielH2018/server/issues/3304) | low | improvement | cicd | Delete the six per-hook shims once no worktree predates the run-hook.sh switch | 2026-10-03 | 0 | - | ✓ |
-| [#3315](https://github.com/DanielH2018/server/issues/3315) | low | gap | cicd | Apply PR 3313's k3s role change by hand and clear the manual-plane marker | 2026-10-03 | 0 | - | ✓ |
-| [#3322](https://github.com/DanielH2018/server/issues/3322) | low | improvement | cicd | Narrow a setup role's apply through the common task file that renders a changed kuma-check template | 2026-10-03 | 0 | - | ✓ |
+| [#3354](https://github.com/DanielH2018/server/issues/3354) | low | gap | cicd | Report a failed service-lock flock as unavailable, not busy | 2026-10-03 | 0 | - | ✓ |
+| [#3358](https://github.com/DanielH2018/server/issues/3358) | low | improvement | cicd | Bring secret-rotate's say_failure back in line with the other two repo-committing crons | 2026-10-03 | 0 | - | ✓ |
+| [#3373](https://github.com/DanielH2018/server/issues/3373) | low | improvement | docs | Two comments still list only two git-tree lock holders | 2026-10-03 | 0 | - | ✓ |
+| [#3385](https://github.com/DanielH2018/server/issues/3385) | low | improvement | docs | Resolve every doc citation through scripts/lib/facts/citations.py — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3387](https://github.com/DanielH2018/server/issues/3387) | low | improvement | container | Create every PVC through one path — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3388](https://github.com/DanielH2018/server/issues/3388) | low | improvement | container | Prune every role's removed objects by injecting the role label at render time — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3390](https://github.com/DanielH2018/server/issues/3390) | low | improvement | network | Run the second DNS resolver on daniel-pi and retire pihole-2 — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3393](https://github.com/DanielH2018/server/issues/3393) | low | improvement | cicd | Find out why the deployer unit runs uv --no-project, then decide on a pinned venv — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3395](https://github.com/DanielH2018/server/issues/3395) | low | improvement | cicd | Delete the nudge-land-sh hook — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3396](https://github.com/DanielH2018/server/issues/3396) | low | improvement | docs | Point findings.py's command reference at --help instead of restating it — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -80,6 +92,9 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2979](https://github.com/DanielH2018/server/issues/2979) | accepted | Finish #2865: single-importer test helpers blocked by the length ratchet, release_bin_groups pinned by a k3s path | Operator decision 2026-09-29: keep the three test helpers split out; #762 and #768 split them to bring their test modules under the 500-line cap, and inlining would recreate three ~700-line modules. The release_bin_groups move is folded into #2978, which needs the same attended k3s apply. The step-2 claim was stale: both modules have production importers. |
 | [#3055](https://github.com/DanielH2018/server/issues/3055) | refuted | Fold 18 single-role render test files into the pod hygiene and security-context tables | A sweep of ansible/tests/ for every table column found 26 files: 11 are the fleet-wide censuses, 4 are rollout gates, and each remaining single-role file asserts what neither table can express (mount paths, probe timeouts, a positive automount, specific capabilities, an upstream-manifest patch). The one real overlap, exportarr's readiness assertion, was folded in PR #3065. Per-file list is in this thread. |
 | [#3130](https://github.com/DanielH2018/server/issues/3130) | accepted | Rule on the three test folds #3108 measured as not worth doing | Each group tests distinct rules, and a fold exceeds TEST_CAP: crowdsec 654 lines over four incidents, built-image 834 over four rules with no shared table, Vale 553 across three suites. The crowdsec function-extractor duplicate is filed separately. |
+| [#3270](https://github.com/DanielH2018/server/issues/3270) | refuted | Move the two one-file test directories next to the code they test | Operator decision 2026-10-03. The .claude/tests half was fixed in PR #3297. The scripts/z2m half rested on a wrong premise: the directory holds set_device_option.sh, which the z2m-device-setting skill and the home-assistant-engineer agent call by that path, and its test already sits in a tests/ sibling. |
+| [#3284](https://github.com/DanielH2018/server/issues/3284) | refuted | Narrow the static bootstrap guard to what the runtime --help test cannot reach | Operator decision 2026-10-03. The issue's required mutation run disproved it: test_entry_points_answer_help ran with PYTHONPATH=scripts/ and passed with a bootstrap deleted, while the static guard failed. Follow-ups #3296 (PR #3311) and #3310 (PR #3316) landed. |
+| [#3322](https://github.com/DanielH2018/server/issues/3322) | accepted | Narrow a setup role's apply through the common task file that renders a changed kuma-check template | Operator accepted the trade-off on 2026-10-03. The refusal applies more than the change needs, never less: gitops_deploy and render_records get a whole-role reapply, and k3s a whole k3s-bringup.yml --tags k3s hand-run note. The trigger is rare (the kuma-check templates changed twice, both 2026-09-19). The four routing fixes after the narrowing landed on 2026-10-01 (ff8dc1a99, 080567a6f, e05add716, 8d0a33d9a) each found the next layer of indirection, and resolving a template through the task file that renders it would be one more. PR #3342 records this as a DECIDED marker at the shipped-file branch of narrow_setup.role_tags. Reopen if the trigger recurs or the fallback grows costlier than a longer apply. |
 
 ### container
 
@@ -88,6 +103,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#804](https://github.com/DanielH2018/server/issues/804) | refuted | Replace FlareSolverr with Byparr | Tried live on 2026-09-02 and rejected on the operator's decision to stay on FlareSolverr. The premise that Byparr is a drop-in replacement holds for the API and fails for the runtime: it accepts POST /v1 and then hangs inside InvisiblePlaywright's browser launch, spawning nothing. Prowlarr's indexer-proxy Test returned 400 after a 63s timeout twice, and during an outstanding request the pod sat at 5m CPU / 91Mi RSS with only tini and python main.py under the container -- no Firefox, no Xvfb, restartCount=0, and no log line after the request it received. Two hypotheses tested and dead: the /tmp emptyDir (removed, identical hang) and LOG_LEVEL (set to debug, output byte-for-byte unchanged, because main.py calls uvicorn.run(app, host, port) with no log_level and FastAPI(log_level=...) is not a parameter). The securityContext is exonerated rather than untested -- FlareSolverr runs a headless browser under the identical cap_drop ALL / runAsUser 1000 block with a quarter the shm. Shipped as PR #830, reverted by PR #841; live and origin/master both back on ghcr.io/flaresolverr/flaresolverr. Two measurements for anyone who revisits this despite the decision: the image is 0.87 GiB compressed and its cold pull took ~25 minutes, which blows both the role's 300s rollout timeout and the default progressDeadlineSeconds of 600, so a healthy pull reads as a failed deploy. |
 | [#2807](https://github.com/DanielH2018/server/issues/2807) | accepted | The Pi's four Docker services carry 5,374 lines of Docker platform; consider native systemd units | Operator decision 2026-09-28: keep Docker on the Pi. The independent Compose-twin comment cleanup moved to #2819. |
 | [#2863](https://github.com/DanielH2018/server/issues/2863) | refuted | fake_remux: fold the 20-minute reconcile into the daily scan; keep the mkv repair at */15 | On an empty ledger, reconcile_once (fake_remux_replace.py) makes one Sonarr queue call and plans no searches, so the 20-minute cron costs almost nothing when idle. When a grab is in flight, that cadence is what confirms it before the fake is deleted, and the shared lock and Kuma max-ages are sized from it. Folding it into the daily scan saves one cron entry and turns each replacement into a multi-day wait. |
+| [#3277](https://github.com/DanielH2018/server/issues/3277) | accepted | Pin the probe alpine and exportarr images once in group_vars | Operator decision 2026-10-03, declined with evidence in PR #3309: a group_vars pin goes through Renovate's manual rule and the deployer's forward-only broad plane, so its auto-deployed consumers would lose per-service rollback. The duplicate pins stay per role. |
 
 ### docs
 
