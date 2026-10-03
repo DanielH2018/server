@@ -510,13 +510,23 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     return cs
 
 
-# A file one setup role installs from another's `files/`, mapped to the installing roles, so a
-# change to it re-applies them beside the owner (#3306). Keyed by file, so no other module of the
-# owner reaches them. `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
+# A file one setup role installs from another's `files/`, or imports from another's `tasks/`,
+# mapped to those roles, so a change to it re-applies them beside the owner (#3306, #3317).
+# `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
+_COMMON = "ansible/roles/setup/common"
+_HOST_LIB = frozenset(
+    {"fake_remux", "gitops_deploy", "k3s", "renovate_agent", "renovate_notify"}
+)
+_STAMPED = _HOST_LIB | {"claude_code", "deploy_ui", "initial_setup"}
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
-    "ansible/roles/setup/common/files/host_lib.py": frozenset(
-        {"fake_remux", "gitops_deploy", "k3s", "renovate_agent", "renovate_notify"}
+    f"{_COMMON}/files/host_lib.py": _HOST_LIB,
+    f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
+    f"{_COMMON}/tasks/kuma_check_timer.yml": frozenset(
+        {"gitops_deploy", "initial_setup", "k3s", "render_records"}
     ),
+    f"{_COMMON}/tasks/release_bin.yml": frozenset({"k3s"}),
+    f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
+    f"{_COMMON}/tasks/stamp_render.yml": _STAMPED | {"nut_host"},
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
         {"deploy_ui", "renovate_agent"}
     ),
@@ -537,22 +547,12 @@ def setup_roles_for(path: str) -> set[str]:
 # Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.
 # `None` means no playbook includes the role at all.
 #
-# THE BUG THIS EXISTS TO KILL. Both functions below used to assume every directory under
-# `roles/setup/` was a tag in initial_setup.yml. It is not, and the failure is silent in the
-# worst way: `--tags` matching nothing makes Ansible exit 0, so the deployer ff-merges, runs a
-# playbook that does nothing, and records a successful apply. `setup_tags_for`'s own docstring
-# names that outcome as the reason it returns an empty set rather than a guess — it was
-# guessing anyway.
+# THE BUG THIS EXISTS TO KILL: `--tags` matching no task makes Ansible exit 0, so a guessed tag
+# records an apply of nothing (PR #702; `docs/gitops-pipeline.md`, *Broad changes*).
 #
-# Occurred 2026-09-01 with PR #702, a `roles/setup/k3s/` change installing a host DNS
-# forwarder. The role appears only in `k3s-bringup.yml`, so the tick's `initial_setup.yml
-# --tags k3s` matched no task; the forwarder had to be installed by hand afterwards, and
-# nothing in the pipeline said it had not been.
-#
-# `common` is the sharper shape: no playbook includes it, and it is not dead code — two roles
-# read its templates by absolute path, on two different hosts. A change to its shared
-# resolv.conf.j2 has to be applied twice, via k3s-bringup.yml on daniel-box and via
-# initial_setup.yml on daniel-pi, and neither is what the old code named.
+# `common` is the sharper shape: no playbook includes it, yet roles on two hosts read its files
+# by path. Its resolv.conf.j2 applies twice, via k3s-bringup.yml on daniel-box and via
+# initial_setup.yml on daniel-pi.
 _SETUP_ROLES_OUTSIDE_INITIAL_SETUP: dict[str, str | None] = {
     "k3s": "ansible/k3s-bringup.yml",
     "common": None,

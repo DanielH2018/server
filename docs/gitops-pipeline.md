@@ -125,8 +125,12 @@ both read it, so the `manual_plane` marker, the narrowed apply, the `hold_plane`
 beside the consumer role's own directory, so the consumer narrows to the block that installs
 the file. The table is static because every caller passes paths alone, and
 `ansible/tests/setup/test_setup_cross_role_files.py` fails when it differs from the
-cross-role `src:` references in the setup roles' tasks. `common` is left out of that table:
-its files route to `manual_plane`, as described above.
+cross-role `files/` and `tasks/` references in the setup roles' tasks. A `common/tasks/` file
+is in the table too (#3317): an `import_tasks` is static, so its tasks run under each
+importer's tags, and `narrow_setup` resolves the basename through the importing task the way
+it resolves a copied file. For a file with consumers, `setup_roles_for` drops `common` itself
+(#3312), so the importers apply rather than the resolv.conf remediation `common` would print.
+A `common/templates/` change still routes to `manual_plane`, as described above.
 
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's
 own role, `roles/setup/gitops_deploy/`, sat there until 2026-09-01 on the claim that applying
