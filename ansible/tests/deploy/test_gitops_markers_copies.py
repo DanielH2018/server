@@ -130,9 +130,12 @@ def test_the_monitor_bridge_module_list_carries_the_copy():
 
 def test_the_source_is_import_free():
     """The module runs in a pod, a hook and three /opt directories; only the stdlib is common."""
-    for line in (REPO / SOURCE).read_text().splitlines():
-        if line.startswith(("import ", "from ")):
-            assert line == "from typing import NamedTuple", line
+    imports = [
+        line
+        for line in (REPO / SOURCE).read_text().splitlines()
+        if line.startswith(("import ", "from "))
+    ]
+    assert imports == ["import json", "from typing import NamedTuple"], imports
 
 
 def test_every_non_python_literal_names_the_same_directory():

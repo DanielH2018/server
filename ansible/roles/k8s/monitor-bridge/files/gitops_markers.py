@@ -25,6 +25,7 @@ every one of these files and reads them back through the same functions, so a re
 sees exactly the shape the writer produced.
 """
 
+import json
 from typing import NamedTuple
 
 STATE_DIR = "/var/lib/gitops-deploy"
@@ -75,32 +76,37 @@ MARKERS: dict[str, str] = {
     # denylisted, so recording those would hold GitOps Deploy — Status red as normal operation.
     # A budget deferral has no such person: nothing chose it, and nothing reports it again.
     "k8s_deferred": "k8s_deferred",
-    # One line per HAND-EDITED or DENYLISTED k8s role change a tick fast-forwarded and will
-    # never apply, in the same `"<origin_sha> <service> <unix_ts>"` format as `k8s_deferred`.
-    # See `parse_k8s_deferred`, which reads both.
+    # THE OWED-WORK LEDGER (#3392): one JSON object per line, each naming the work a tick left
+    # for somebody else under a `class`. See `parse_owed`, and `OWED_CLASSES` for what each
+    # class means and who reads it.
     #
-    # A SEPARATE FILE RATHER THAN A FOURTH FIELD ON THE LINE ABOVE, and rather than a fourth
-    # arm in `gitops_status` (#2570). `parse_k8s_deferred` accepts exactly three fields and
-    # skips anything else, so a class tag appended to a `k8s_deferred` line would read as NO
-    # pending bump in an un-redeployed monitor-bridge and silence the page that marker exists
-    # to raise — the failure `manual_plane_tags` was made a sidecar to avoid. A reader that
-    # has never heard of this basename ignores it, which is exactly the posture this class
-    # wants: NOTHING PAGES ON THIS MARKER. `gitops_status` does not read it, by construction
-    # and not by omission. Forty of the fifty-four k8s roles are denylisted
-    # (`docs/reference/decisions.md`), so a page on their ordinary changes would hold GitOps
-    # Deploy — Status red as normal operation. The durable readers are the SessionStart banner
-    # and the deployer's own journal, both of which a person reads when they are already
-    # looking.
+    # JSON LINES, BECAUSE THE MARKERS BESIDE IT BROKE ON EVERY NEW FIELD. Each line-format
+    # parser above accepts an exact field count and skips anything else, and the reader copies
+    # redeploy on their own schedules — so a field a new deployer appended read as NO pending
+    # work in an un-redeployed reader. That constraint is why `manual_plane_tags` is a sidecar
+    # and why `k8s_unapplied` was a separate file rather than a class tag. `parse_owed` ignores
+    # every key it does not know, so a new key is invisible to an old reader instead of
+    # erasing the line, and every writer here carries unknown keys through a rewrite.
     #
-    # THE LINE DISCHARGES ITSELF. A denylisted role is by definition one this deployer never
-    # applies, so a marker with only a deployer-side clear would accumulate one line per
-    # routine landing and rebuild the always-red tile on the banner. Every tick therefore
-    # asks, per pending line, whether the service's release record
-    # (`roles/k8s/manifests/tasks/release_stamp.yml`) now names a commit that CONTAINS the
-    # recorded SHA — one `git merge-base --is-ancestor`, which is a different question from
-    # `probe.py releases --stale-only`'s path comparison and cannot drift against it. That
-    # discharges an operator's own `deploy.sh`, which the deployer cannot otherwise see.
-    "k8s_unapplied": "k8s_unapplied",
+    # `k8s_unapplied` is the first class to move, because nothing pages on it. The other owed
+    # families (`hold_plane`, `manual_plane` and its sidecar, `k8s_deferred`) follow once
+    # every reader copy has shipped this parser.
+    "owed": "owed.jsonl",
+    # The `k8s_unapplied` marker file as it stood before #3392 moved the class into `owed`.
+    # Read ONLY by `DeployerState.fold_legacy_k8s_unapplied`, which folds it into the ledger
+    # and removes it. Delete this entry and that method once daniel-box has ticked past the
+    # fold, as #3075 did for the alert slots.
+    "k8s_unapplied_legacy": "k8s_unapplied",
+    # One JSON object per line, one line per origin SHA a tick crossed with a broad change
+    # (#3391): which planes it applied, with their tags, and which setup roles it left owed to
+    # a hand, with the narrowest tags each needs. See `parse_receipts`.
+    #
+    # `land.sh` READS THIS INSTEAD OF RE-DERIVING. Before it, `narrow_plane` read the
+    # `manual_plane_tags` sidecar — whose row spans every range that made a role pending — and
+    # re-ran the narrowing over the PR's own range to prove the row covered it. A receipt is
+    # scoped to ONE tick's range, so a landing whose merge commit falls inside that range can
+    # quote it as it stands. Bounded to `RECEIPT_KEEP` lines, newest last.
+    "receipts": "receipts.jsonl",
     # The unix time the last tick completed; monitor-bridge's GitOps Alive reads its age.
     "last_run": "last_run",
     # Origin SHA recorded while local and origin have DIVERGED (`deploy_logic.is_diverged`):
@@ -474,10 +480,10 @@ def format_alerted(alerted: dict[str, str]) -> str | None:
 
 
 def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
-    """Every pending line of `k8s_deferred` OR `k8s_unapplied`, in the order they stand.
+    """Every pending line of `k8s_deferred`, in the order they stand.
 
-    The two markers share this format and this parser, and differ only in who reads them:
-    `gitops_status` pages on the first and never opens the second (#2570).
+    The pre-#3392 `k8s_unapplied` file shares this format, so `k8s_unapplied_entries` reads it
+    with this parser until the deployer has folded it into the `owed` ledger.
 
     A line this cannot parse is SKIPPED, never guessed at, for the reason
     `parse_manual_plane` skips one: a page raised off a torn line names no service and cannot
@@ -497,7 +503,7 @@ def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
 
 
 def k8s_line_service(line: str) -> str | None:
-    """The service a RAW `k8s_deferred` / `k8s_unapplied` line names, or None for none at all.
+    """The service a RAW `k8s_deferred` line names, or None for none at all.
 
     A torn line is still ATTRIBUTABLE where its second field is there: `"<sha> authelia"` and
     `"<sha> authelia not-a-stamp"` both name authelia, and the writer repairs one rather than
@@ -518,15 +524,13 @@ def k8s_line_stamp(line: str, now: float) -> str:
         return f"{now:.0f}"
 
 
-def rewrite_k8s_lines(
-    marker: str | None, services, origin: str, now: float, advance: bool = False
-) -> str:
-    """`marker`'s text with every line naming one of `services` brought up to date.
+def rewrite_k8s_lines(marker: str | None, services, now: float) -> str:
+    """`marker`'s text with every TORN line naming one of `services` made readable.
 
-    Two rewrites, and both keep the line's first-seen stamp, which is the age a reader dates
-    the change from. A TORN LINE IS MADE READABLE (#2657), taking its own stamp where that
-    field reads as one and `now` where it does not. Under `advance`, a READABLE line moves to
-    `origin` (#2644), which `k8s_unapplied` wants and `k8s_deferred` does not.
+    The repair keeps the line's first-seen stamp, which is the age a reader dates the change
+    from: its own where that field reads as one, `now` where it does not (#2657). A readable
+    line is carried as it stands — `k8s_deferred` keeps its recorded origin. The ledger's
+    `rewrite_owed` is the same rewrite with an `advance`, which `k8s_unapplied` wants.
 
     The repair is what stops a writer duplicating a torn line. `parse_k8s_deferred` skips one,
     so a writer reading only its entries sees no line for the service, appends a second, and
@@ -539,9 +543,7 @@ def rewrite_k8s_lines(
         services: the services the caller is writing about. A line naming anything else is
             carried untouched, as is a line naming nobody — dropping that one loses the only
             record that something was deferred, and nothing can say what.
-        origin: the SHA the caller is recording.
         now: the stamp a repaired line takes when its own field reads as nothing.
-        advance: move a readable line's SHA to `origin`.
 
     Returns:
         The text, rewritten. Compare it with the original to see whether anything changed.
@@ -560,11 +562,10 @@ def rewrite_k8s_lines(
         if service is None or service not in wanted:
             kept.append(line)
         elif parse_k8s_deferred(line):
-            kept.append(f"{origin} {service} {line.split()[2]}" if advance else line)
+            kept.append(line)
         elif service not in readable:
             readable.add(service)
-            first = origin if advance else line.split()[0]
-            kept.append(f"{first} {service} {k8s_line_stamp(line, now)}")
+            kept.append(f"{line.split()[0]} {service} {k8s_line_stamp(line, now)}")
     return "\n".join(kept)
 
 
@@ -579,3 +580,280 @@ def parse_contention(marker: str | None) -> ContentionEntry | None:
         )
     except ValueError:
         return None
+
+
+# ── the owed-work ledger (#3392) ─────────────────────────────────────────────────────────
+
+# A k8s role change — hand-edited or denylisted — that a tick fast-forwarded and will never
+# apply. The subject is the service, under the `--tags` value that selects it.
+#
+# NOTHING PAGES ON THIS CLASS, by construction rather than by omission (#2570): forty of the
+# fifty-four k8s roles are denylisted (`docs/reference/decisions.md`), so a page on their
+# ordinary changes would hold GitOps Deploy — Status red as normal operation. Its readers are
+# the SessionStart banner and the deployer's own journal, both read by a person who is
+# already looking.
+#
+# THE ENTRY DISCHARGES ITSELF. A denylisted role is one this deployer never applies, so an
+# entry with only a deployer-side clear would accumulate one per routine landing. Every tick
+# asks, per entry, whether the service's release record
+# (`roles/k8s/manifests/tasks/release_stamp.yml`) names a commit that CONTAINS the recorded
+# SHA (`deploy_defer.discharge_k8s_unapplied`), which discharges an operator's own
+# `deploy.sh` too.
+OWED_K8S_UNAPPLIED = "k8s_unapplied"
+
+# Every class a ledger line may carry. A reader asks for its classes by name and never sees
+# the rest, which is what lets a new class ship before every reader knows it.
+OWED_CLASSES: frozenset[str] = frozenset({OWED_K8S_UNAPPLIED})
+
+
+class OwedEntry(NamedTuple):
+    """One readable line of the `owed` ledger.
+
+    Attributes:
+        cls: the class, one of `OWED_CLASSES` from a writer this tree knows.
+        subject: what is owed, under the `--tags` value that selects it.
+        origin: the origin SHA the work was recorded at.
+        at: when it was first recorded, in `time.time()` terms. The age every reader dates
+            the work from, so a rewrite never refreshes it.
+    """
+
+    cls: str
+    subject: str
+    origin: str
+    at: float
+
+
+def _json_object(line: str) -> dict | None:
+    """`line` as a JSON object, or None for anything else — blank, torn, or not an object."""
+    try:
+        obj = json.loads(line)
+    except ValueError:
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
+def _owed_entry(obj: dict | None) -> OwedEntry | None:
+    """The entry one decoded ledger line carries, or None where a required key is missing.
+
+    Every key beyond the four is IGNORED rather than refused. That is the property the ledger
+    exists for: the line formats above skip a line with one field too many, so a writer that
+    added a field silenced every reader that had not redeployed yet.
+    """
+    if obj is None:
+        return None
+    cls, subject, origin, at = (
+        obj.get(k) for k in ("class", "subject", "origin", "at")
+    )
+    if not (
+        isinstance(cls, str) and isinstance(subject, str) and isinstance(origin, str)
+    ):
+        return None
+    if not (cls and subject and origin):
+        return None
+    if isinstance(at, bool) or not isinstance(at, (int, float)):
+        return None
+    return OwedEntry(cls, subject, origin, float(at))
+
+
+def parse_owed(text: str | None, cls: str | None = None) -> list[OwedEntry]:
+    """Every readable line of the `owed` ledger, in the order they stand.
+
+    Args:
+        text: the ledger's contents, or None for an absent ledger.
+        cls: keep only this class. None keeps every class, including ones this tree has never
+            heard of.
+
+    A line that is not a JSON object, or lacks one of `class`, `subject`, `origin` and `at`, is
+    SKIPPED, for the reason every parser here skips one: a page raised off a torn line names
+    nothing and cannot be cleared. The writers carry such a line through untouched.
+    """
+    entries = []
+    for line in (text or "").splitlines():
+        entry = _owed_entry(_json_object(line))
+        if entry is not None and (cls is None or entry.cls == cls):
+            entries.append(entry)
+    return entries
+
+
+def owed_line(cls: str, subject: str, origin: str, at: float, **extra) -> str:
+    """One ledger line. Keys sorted, so two writers recording the same entry write one string."""
+    return json.dumps(
+        {**extra, "class": cls, "subject": subject, "origin": origin, "at": int(at)},
+        sort_keys=True,
+    )
+
+
+def owed_line_key(line: str) -> tuple[str, str] | None:
+    """The `(class, subject)` a RAW ledger line names, or None where it names nothing.
+
+    A line missing its `origin` or `at` is still ATTRIBUTABLE, and a writer repairs it rather
+    than appending a second line beside it (#2657). A line naming no class and subject is
+    carried untouched by every writer: dropping it loses the only record that something was
+    owed, and nothing can say what.
+    """
+    obj = _json_object(line)
+    if obj is None:
+        return None
+    cls, subject = obj.get("class"), obj.get("subject")
+    if isinstance(cls, str) and cls and isinstance(subject, str) and subject:
+        return cls, subject
+    return None
+
+
+def rewrite_owed(
+    text: str | None, cls: str, subjects, origin: str, now: float, advance: bool
+) -> str:
+    """`text` with every `cls` line naming one of `subjects` brought up to date.
+
+    The ledger's form of `rewrite_k8s_lines`, with one difference: every key a line carries
+    beyond the four survives the rewrite, because a newer writer may have put it there.
+
+    Two rewrites, and both keep the line's first-seen stamp. A TORN LINE IS MADE READABLE
+    (#2657), taking its own `at` where that reads as a number and `now` where it does not.
+    Under `advance`, a readable line moves to `origin` (#2644). A torn line BESIDE a readable
+    one for the same subject is dropped, since repairing it would duplicate that line.
+
+    Returns:
+        The text, rewritten. Compare it with the original to see whether anything changed.
+    """
+    wanted = set(subjects)
+    readable = {e.subject for e in parse_owed(text, cls)}
+    kept = []
+    for line in (text or "").splitlines():
+        key = owed_line_key(line)
+        if key is None or key[0] != cls or key[1] not in wanted:
+            kept.append(line)
+            continue
+        obj = _json_object(line) or {}
+        entry = _owed_entry(obj)
+        if entry is not None:
+            if advance and entry.origin != origin:
+                obj["origin"] = origin
+                kept.append(json.dumps(obj, sort_keys=True))
+            else:
+                kept.append(line)
+        elif key[1] not in readable:
+            readable.add(key[1])
+            at = obj.get("at")
+            stamp = (
+                at if isinstance(at, (int, float)) and not isinstance(at, bool) else now
+            )
+            first = obj.get("origin")
+            if advance or not (isinstance(first, str) and first):
+                first = origin
+            extra = {
+                k: v
+                for k, v in obj.items()
+                if k not in ("class", "subject", "origin", "at")
+            }
+            kept.append(owed_line(cls, key[1], first, stamp, **extra))
+    return "\n".join(kept)
+
+
+def drop_owed(text: str | None, cls: str, subjects) -> tuple[str, list[str]]:
+    """`text` without its `cls` lines naming any of `subjects`, and the subjects dropped.
+
+    A TORN line naming one of `subjects` goes too (#2657); a line naming nobody stays, for the
+    reason `owed_line_key` gives.
+    """
+    wanted = set(subjects)
+    kept, dropped = [], set()
+    for line in (text or "").splitlines():
+        key = owed_line_key(line)
+        if key is not None and key[0] == cls and key[1] in wanted:
+            dropped.add(key[1])
+            continue
+        kept.append(line)
+    return "\n".join(kept), sorted(dropped)
+
+
+def k8s_unapplied_entries(
+    owed: str | None, legacy: str | None = None
+) -> list[K8sDeferredEntry]:
+    """Every pending `k8s_unapplied` change, from the ledger and the pre-#3392 file.
+
+    `legacy` is the `k8s_unapplied_legacy` marker. A host whose deployer has not yet folded it
+    into the ledger still holds its lines there, so a reader unions the two; a service the
+    ledger already names is read from the ledger. Returned as `K8sDeferredEntry` because every
+    caller reads `.service`, `.origin` and `.at` off it.
+    """
+    entries = [
+        K8sDeferredEntry(e.origin, e.subject, e.at)
+        for e in parse_owed(owed, OWED_K8S_UNAPPLIED)
+    ]
+    named = {e.service for e in entries}
+    entries += [e for e in parse_k8s_deferred(legacy) if e.service not in named]
+    return entries
+
+
+# ── the per-SHA tick receipt (#3391) ─────────────────────────────────────────────────────
+
+# How many receipts the `receipts` marker keeps. A landing reads the receipt for its own
+# merge commit within one or two ticks, and a broad range is a few a day at most, so this is
+# days of history in a file of a few kilobytes.
+RECEIPT_KEEP = 50
+
+
+class Receipt(NamedTuple):
+    """What one tick did with one origin SHA's broad change.
+
+    Attributes:
+        origin: the origin SHA the tick crossed to.
+        base: the commit the checkout stood on before it. The range is `base..origin`.
+        applied: playbook -> the `--tags` it applied with, for each plane the tick APPLIED.
+            An empty tuple is a whole-playbook apply.
+        manual: setup role tag -> the narrowest tags its change in this range needs, for
+            each role the tick left owed to a hand. An empty frozenset means no derivation
+            could narrow it, so the reader prints the whole-role tag.
+    """
+
+    origin: str
+    base: str
+    applied: dict[str, tuple[str, ...]]
+    manual: dict[str, frozenset[str]]
+
+
+def _receipt(obj: dict | None) -> Receipt | None:
+    """The receipt one decoded line carries, or None where its shape is not a receipt.
+
+    Unknown keys are ignored, as `parse_owed` ignores them, and for the same reason.
+    """
+    if obj is None:
+        return None
+    origin, base = obj.get("origin"), obj.get("base")
+    applied, manual = obj.get("applied", {}), obj.get("manual", {})
+    if not (isinstance(origin, str) and origin and isinstance(base, str)):
+        return None
+    if not (isinstance(applied, dict) and isinstance(manual, dict)):
+        return None
+    if not all(isinstance(v, list) for v in [*applied.values(), *manual.values()]):
+        return None
+    return Receipt(
+        origin,
+        base,
+        {k: tuple(str(t) for t in v) for k, v in applied.items()},
+        {k: frozenset(str(t) for t in v) for k, v in manual.items()},
+    )
+
+
+def parse_receipts(text: str | None) -> list[Receipt]:
+    """Every readable receipt in the `receipts` marker, oldest first. Torn lines are skipped."""
+    out = []
+    for line in (text or "").splitlines():
+        receipt = _receipt(_json_object(line))
+        if receipt is not None:
+            out.append(receipt)
+    return out
+
+
+def receipt_line(receipt: Receipt) -> str:
+    """One `receipts` line, the reverse of `parse_receipts` for a single receipt."""
+    return json.dumps(
+        {
+            "origin": receipt.origin,
+            "base": receipt.base,
+            "applied": {k: list(v) for k, v in sorted(receipt.applied.items())},
+            "manual": {k: sorted(v) for k, v in sorted(receipt.manual.items())},
+        },
+        sort_keys=True,
+    )

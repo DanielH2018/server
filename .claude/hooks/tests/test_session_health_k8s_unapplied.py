@@ -15,6 +15,7 @@ Run: uv run pytest .claude/hooks/tests/test_session_health_k8s_unapplied.py
 """
 
 import importlib.util
+import json
 import os
 
 _HOOK = os.path.join(
@@ -31,7 +32,9 @@ branch refs/heads/master
 """
 
 _SHA = "abc1230000000000000000000000000000000000"
-_AUTHELIA = f"{_SHA} authelia 1000.0"
+_AUTHELIA = json.dumps(
+    {"class": "k8s_unapplied", "subject": "authelia", "origin": _SHA, "at": 1000}
+)
 
 
 def _problems(k8s_unapplied=None, k8s_deferred=None, now=1000.0):
@@ -61,7 +64,16 @@ def test_an_absent_or_garbled_marker_is_clean():
     """CLEAN half: a line this cannot parse names no service, and a deploy command naming no
     service is worse than silence."""
     assert _problems(None, now=1e9) == []
-    assert _problems(f"{_SHA} authelia not-a-stamp", now=1e9) == []
+    torn = _AUTHELIA.replace("1000", '"not-a-stamp"')
+    assert _problems(torn, now=1e9) == []
+
+
+def test_a_ledger_line_with_a_key_this_reader_never_heard_of_is_still_read():
+    """The property the `owed` ledger exists for (#3392): the line formats it replaces skip a
+    line with one field too many, so a newer writer's extra field silenced this banner."""
+    newer = json.dumps({**json.loads(_AUTHELIA), "added_by_a_newer_writer": [1, 2]})
+    (line,) = _problems(newer, now=1000 + 600)
+    assert "`authelia`" in line
 
 
 def test_both_k8s_markers_report_side_by_side():

@@ -1,17 +1,22 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_state_k8s.py
-"""The two k8s marker families, as a mixin `deploy_state.DeployerState` inherits.
+"""The two k8s owed-work families, as a mixin `deploy_state.DeployerState` inherits.
 
 `k8s_deferred` holds the image bumps a broad tick merged and could not deploy; `k8s_unapplied`
-holds the k8s role changes a tick merged and will never apply. Both are one line per service,
-both parse with `gitops_markers.parse_k8s_deferred`, and the only difference between recording
-one and the other is whether an already-listed service's line advances to the new origin. That
-shared shape is the seam this module is split along (#2663): `deploy_state.py` stood at the
-600-line module cap, so the next change to a marker family had nowhere to land.
+holds the k8s role changes a tick merged and will never apply. Both are one entry per service,
+and the only difference between recording one and the other is whether an already-listed
+service's entry advances to the new origin. That shared shape is the seam this module is split
+along (#2663): `deploy_state.py` stood at the 600-line module cap, so the next change to a
+marker family had nowhere to land.
 
-It is a MIXIN rather than a second object because every caller reaches these six methods as
+They no longer share a FILE FORMAT. `k8s_deferred` is still the three-field line
+monitor-bridge pages on. `k8s_unapplied` is the first class of the `owed` JSON-lines ledger
+(#3392), which nothing pages on, so it could move before every reader copy had the tolerant
+parser.
+
+It is a MIXIN rather than a second object because every caller reaches these methods as
 `state.<method>` — `deploy_defer`, `deploy_broad_k8s` and `scripts/deploy_tools/gitops_state.py`
 all hold a `DeployerState` and call it directly. Inheritance keeps that surface byte-identical;
-a helper object would rename every call site. The three private methods read and write through
+a helper object would rename every call site. The private methods read and write through
 `DeployerState.read`/`write`, which the mixin does not define and must not: the marker files,
 their atomic writes and the `MARKERS` table stay in one place.
 
@@ -19,15 +24,22 @@ Stdlib only, plus `gitops_markers` — the same leaf contract `deploy_state` car
 """
 
 from gitops_markers import (
+    OWED_K8S_UNAPPLIED,
     K8sDeferredEntry,
+    drop_owed,
     k8s_line_service,
+    k8s_line_stamp,
+    k8s_unapplied_entries,
+    owed_line,
     parse_k8s_deferred,
+    parse_owed,
     rewrite_k8s_lines,
+    rewrite_owed,
 )
 
 
 class K8sLineMarkers:
-    """`k8s_deferred` and `k8s_unapplied`: read, record and clear, one line per service.
+    """`k8s_deferred` and `k8s_unapplied`: read, record and clear, one entry per service.
 
     Mixed into `deploy_state.DeployerState`, which supplies `read` and `write`.
     """
@@ -37,20 +49,16 @@ class K8sLineMarkers:
         return parse_k8s_deferred(self.read(marker))
 
     def _record_k8s_line(
-        self, marker: str, origin: str, services, now: float, advance: bool = False
+        self, marker: str, origin: str, services, now: float
     ) -> list[str]:
         """Append a line per service `marker` does not list yet. Returns the ones added.
 
-        `advance` also moves an ALREADY-LISTED service's line to `origin`, keeping its
-        first-seen stamp (#2644). It stays OUT of the return value, which
-        `deploy_defer.unrecord` clears: a line predating the tick survives the reset.
-
-        `rewrite_k8s_lines` owns both the advance and the repair of a TORN line naming one of
-        `services` (#2657): a repaired service reads as listed, so this updates its line rather
-        than appending a second one beside it.
+        `rewrite_k8s_lines` owns the repair of a TORN line naming one of `services` (#2657):
+        a repaired service reads as listed, so this updates its line rather than appending a
+        second one beside it.
         """
         wanted = set(services)
-        text = rewrite_k8s_lines(self.read(marker), wanted, origin, now, advance)
+        text = rewrite_k8s_lines(self.read(marker), wanted, now)
         added = sorted(wanted - {e.service for e in parse_k8s_deferred(text)})
         lines = text.splitlines() + [f"{origin} {s} {now:.0f}" for s in added]
         if added or text != (self.read(marker) or ""):
@@ -93,25 +101,87 @@ class K8sLineMarkers:
         """Drop the `k8s_deferred` lines naming any of `services`. Returns the names cleared."""
         return self._clear_k8s_lines("k8s_deferred", services)
 
-    # ── the k8s changes a tick merged and will never apply (#2570) ────────────────────────
+    # ── the k8s changes a tick merged and will never apply (#2570), in the ledger (#3392) ──
     # The non-paging half: the SessionStart banner and the journal read it, nothing else.
 
+    def fold_legacy_k8s_unapplied(self, now: float) -> list[str]:
+        """Move the pre-#3392 `k8s_unapplied` file's lines into the `owed` ledger. Returns them.
+
+        One-shot per host: the file is removed once its lines are in the ledger, and every
+        later call finds nothing. A service the ledger already names keeps its ledger entry.
+        A torn line still naming a service is repaired on the way in, keeping a stamp that
+        reads as one; a line naming nobody has nothing to attribute and is dropped with the
+        file, which is the one record the old format could not carry over.
+        """
+        legacy = self.read("k8s_unapplied_legacy")
+        if legacy is None:
+            return []
+        owed = self.read("owed")
+        named = {e.subject for e in parse_owed(owed, OWED_K8S_UNAPPLIED)}
+        lines: list[str] = (owed or "").splitlines()
+        moved = []
+        for line in legacy.splitlines():
+            service = k8s_line_service(line)
+            if service is None or service in named:
+                continue
+            named.add(service)
+            moved.append(service)
+            lines.append(
+                owed_line(
+                    OWED_K8S_UNAPPLIED,
+                    service,
+                    line.split()[0],
+                    float(k8s_line_stamp(line, now)),
+                )
+            )
+        if moved:
+            self.write("owed", "\n".join(lines))
+        self.write("k8s_unapplied_legacy", None)
+        return moved
+
     def k8s_unapplied_pending(self) -> list[K8sDeferredEntry]:
-        """Every k8s role change the `k8s_unapplied` marker still holds, oldest line first."""
-        return self._k8s_line_pending("k8s_unapplied")
+        """Every k8s role change still owed, oldest entry first.
+
+        Reads the pre-#3392 file as well, so a checkout-side caller sees a host whose deployer
+        has not folded it yet.
+        """
+        return k8s_unapplied_entries(
+            self.read("owed"), self.read("k8s_unapplied_legacy")
+        )
 
     def record_k8s_unapplied(self, origin: str, services, now: float) -> list[str]:
         """Record the k8s role changes this tick merged and will never apply. Returns the added.
 
-        A SERVICE ALREADY LISTED HAS ITS LINE MOVED TO `origin` (#2644):
-        `deploy_defer.discharge_k8s_unapplied` drops a line once a release record descends
+        A SERVICE ALREADY LISTED HAS ITS ENTRY MOVED TO `origin` (#2644):
+        `deploy_defer.discharge_k8s_unapplied` drops an entry once a release record descends
         from the SHA it names, so one left at the OLDEST origin discharges over every later
         change to the same service. The first-seen stamp stays: it dates the oldest change.
+        That moved entry stays OUT of the return value, which `deploy_defer.unrecord` clears:
+        an entry predating the tick survives the reset.
         """
-        return self._record_k8s_line(
-            "k8s_unapplied", origin, services, now, advance=True
+        self.fold_legacy_k8s_unapplied(now)
+        before = self.read("owed")
+        wanted = set(services)
+        text = rewrite_owed(
+            before, OWED_K8S_UNAPPLIED, wanted, origin, now, advance=True
         )
+        listed = {e.subject for e in parse_owed(text, OWED_K8S_UNAPPLIED)}
+        added = sorted(wanted - listed)
+        lines = text.splitlines() + [
+            owed_line(OWED_K8S_UNAPPLIED, s, origin, now) for s in added
+        ]
+        if added or text != (before or ""):
+            self.write("owed", "\n".join(lines))
+        return added
 
     def clear_k8s_unapplied(self, services) -> list[str]:
-        """Drop the `k8s_unapplied` lines naming any of `services`. Returns the names cleared."""
-        return self._clear_k8s_lines("k8s_unapplied", services)
+        """Drop the `k8s_unapplied` entries naming any of `services`. Returns the names cleared.
+
+        Clears the pre-#3392 file too, so a hand clear run against an unfolded host is not a
+        silent no-op. A torn ledger line naming one of `services` goes as well (#2657).
+        """
+        text, cleared = drop_owed(self.read("owed"), OWED_K8S_UNAPPLIED, services)
+        if cleared:
+            self.write("owed", text or None)
+        legacy_cleared = self._clear_k8s_lines("k8s_unapplied_legacy", services)
+        return sorted(set(cleared) | set(legacy_cleared))

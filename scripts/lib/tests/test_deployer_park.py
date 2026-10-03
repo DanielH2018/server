@@ -12,9 +12,10 @@ from lib.deployer_park import (
     park_age,
     park_note,
     read_behind_marker,
+    read_k8s_unapplied_marker,
     read_manual_plane_marker,
 )
-from gitops_markers import MARKERS
+from gitops_markers import MARKERS, OWED_K8S_UNAPPLIED, owed_line, parse_owed
 
 # The shape the deployer writes: the origin SHA it is behind, then when it first saw it.
 _MARKER = "abc1230000000000000000000000000000000000 1000"
@@ -80,3 +81,24 @@ def test_the_manual_plane_marker_is_read_from_the_state_dir(tmp_path):
 
 def test_an_absent_manual_plane_marker_reads_as_nothing_pending(tmp_path):
     assert read_manual_plane_marker(str(tmp_path / "nope")) is None
+
+
+def test_k8s_unapplied_reads_the_ledger_and_an_unfolded_legacy_file(tmp_path):
+    """Until the deployer's first tick folds the pre-#3392 file into the `owed` ledger, a
+    session opening on the host still has to see what that file names."""
+    sha = "a" * 40
+    (tmp_path / MARKERS["owed"]).write_text(
+        owed_line(OWED_K8S_UNAPPLIED, "authelia", sha, 1000) + "\n"
+    )
+    (tmp_path / MARKERS["k8s_unapplied_legacy"]).write_text(
+        f"{sha} sonarr 2000\n{sha} authelia 3000\n"
+    )
+    entries = parse_owed(read_k8s_unapplied_marker(str(tmp_path)), OWED_K8S_UNAPPLIED)
+    assert sorted((e.subject, e.at) for e in entries) == [
+        ("authelia", 1000.0),
+        ("sonarr", 2000.0),
+    ], "a service the ledger names is read from the ledger, not the legacy file"
+
+
+def test_k8s_unapplied_with_neither_file_reads_as_nothing_pending(tmp_path):
+    assert read_k8s_unapplied_marker(str(tmp_path)) is None
