@@ -45,7 +45,7 @@ second UPS cannot silently blank the job.
 **The probes are `tcpSocket` for two separate reasons.** Probing `/ups_metrics` would crash-loop
 this pod whenever upsd is unreachable, turning a metrics gap into a second outage — Prometheus
 already reports that as `up == 0`. Probing `/metrics` would trip
-`ansible/tests/k8s/test_probes_do_not_flood_metrics.py`, which refuses a kubelet httpGet on a
+`ansible/tests/k8s/_scrape_property_rows.py`, which refuses a kubelet httpGet on a
 metrics route below a 300s period after node-exporter's probes produced 97% of the namespace's
 Loki ingest.
 

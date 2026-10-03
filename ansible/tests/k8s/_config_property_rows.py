@@ -170,6 +170,94 @@ def _mount_exclusion_offence(role: str, subject: dict) -> str | None:
     return None
 
 
+def _authelia_webauthn(role: str, tpl: str, doc: dict):
+    if role != "authelia" or doc.get("kind") != "Secret":
+        return
+    if doc.get("metadata", {}).get("name") != "authelia-config":
+        return
+    raw = doc.get("stringData", {}).get("configuration.yml")
+    webauthn = (yaml_fast.safe_load(raw or "") or {}).get("webauthn")
+    if webauthn:
+        yield "webauthn", webauthn
+
+
+# The keys this role deliberately writes. Deliberately NARROWER than the surface Authelia 4.39.21
+# accepts: the docs site describes a wider schema than any one release validates, and admitting
+# `metadata` or `filtering` would admit the copy-paste this row exists to reject. Adding a key is
+# the deliberate act: check it against the tag `authelia_k8s_image` names, in that tag's own
+# `config.template.yml` and `internal/configuration/validator/webauthn.go`, then add it here.
+WRITTEN_WEBAUTHN_KEYS = frozenset(
+    {
+        "disable",
+        "enable_passkey_login",
+        "display_name",
+        "attestation_conveyance_preference",
+        "timeout",
+        "selection_criteria",
+    }
+)
+WRITTEN_SELECTION_CRITERIA_KEYS = frozenset({"attachment", "user_verification"})
+
+
+def _webauthn_offence(role: str, webauthn: dict) -> str | None:
+    if webauthn.get("disable") is not False:
+        return f"webauthn is not enabled (disable={webauthn.get('disable')!r})"
+    if webauthn.get("enable_passkey_login"):
+        return "enable_passkey_login makes WebAuthn a first factor"
+    unchecked = sorted(set(webauthn) - WRITTEN_WEBAUTHN_KEYS) + sorted(
+        set(webauthn.get("selection_criteria") or {}) - WRITTEN_SELECTION_CRITERIA_KEYS
+    )
+    if unchecked:
+        return (
+            f"carries {unchecked}, never checked against the pinned Authelia version: it "
+            "renders, it parses, and the pod refuses to start on it"
+        )
+    return None
+
+
+_GOOD_WEBAUTHN = {
+    "disable": False,
+    "enable_passkey_login": False,
+    "display_name": "Authelia example.com",
+    "attestation_conveyance_preference": "indirect",
+    "timeout": "60 seconds",
+    "selection_criteria": {"attachment": "", "user_verification": "preferred"},
+}
+
+
+def _pihole_dns_config(role: str, tpl: str, doc: dict):
+    if role == "pihole" and doc.get("kind") == "ConfigMap":
+        if doc["metadata"]["name"] == "pihole-dns-config":
+            yield "pihole-dns-config", doc.get("data", {})
+
+
+def _local_wildcard_offence(role: str, data: dict) -> str | None:
+    lines = [
+        line.strip()
+        for conf in data.values()
+        for line in conf.splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    if not any(re.fullmatch(r"local=/local\.[^/]+/", line) for line in lines):
+        return "no `local=/local.<domain>/`: an AAAA for a .local. name is forwarded upstream"
+    null = [line for line in lines if re.fullmatch(r"address=/[^/]+/(::|#)", line)]
+    if null:
+        return (
+            f"{null} answer the NULL address; a client preferring IPv6 dials `::` first"
+        )
+    # Without the A wildcard, the two checks above pass on a template that dropped the whole
+    # block, with `local=` surviving alone as an NXDOMAIN for every .local. name.
+    if not any(
+        re.fullmatch(r"address=/local\.[^/]+/\d+\.\d+\.\d+\.\d+", line)
+        for line in lines
+    ):
+        return "the .local. A wildcard is gone, so every .local. name resolves nowhere"
+    return None
+
+
+_PIHOLE_WILDCARD = "address=/local.example.com/10.0.0.2\nlocal=/local.example.com/\n"
+
+
 CONFIG_PROPERTIES = (
     Property(
         name="speedtest-scraped-at-its-native-endpoint",
@@ -254,5 +342,67 @@ CONFIG_PROPERTIES = (
             {"pattern": r"^/(sys|proc|dev|host|etc|var/lib/kubelet/pods)($|/)"},
         ),
         must_find=frozenset({"node-exporter"}),
+    ),
+    Property(
+        name="authelia-webauthn-is-a-checked-second-factor",
+        reason=(
+            "`enable_passkey_login` is the first-factor passwordless flow, not a second factor. "
+            "Turning it on changes what `one_factor` means for every rule in `access_control`: "
+            "a route guarded at one factor becomes reachable with a credential the operator "
+            "enrolled as a second one. And Authelia refuses to start on a key it does not "
+            "recognise; the pinned version's schema is narrower than the docs site, so "
+            "`metadata`, `filtering.prohibit_backup_eligibility` and the experimental passkey "
+            "toggles are what a copy-paste brings in. This pod rolls under `Recreate` in front "
+            "of most public routes, so that failure lands with the old pod already gone, and "
+            "validate/k8s_manifests.py only asks whether the YAML parses."
+        ),
+        select=_authelia_webauthn,
+        offence=_webauthn_offence,
+        red=("authelia", {**_GOOD_WEBAUTHN, "enable_passkey_login": True}),
+        green=("authelia", _GOOD_WEBAUTHN),
+        more_red=(
+            ("authelia", {**_GOOD_WEBAUTHN, "disable": True}),
+            # Real in the docs, unchecked here: the copy-paste case.
+            ("authelia", {**_GOOD_WEBAUTHN, "metadata": {"enabled": True}}),
+            (
+                "authelia",
+                {
+                    **_GOOD_WEBAUTHN,
+                    "selection_criteria": {
+                        "user_verification": "preferred",
+                        "discoverability": "preferred",
+                    },
+                },
+            ),
+        ),
+        must_find=frozenset({"webauthn"}),
+    ),
+    Property(
+        name="pihole-local-wildcard-answers-aaaa-nodata",
+        reason=(
+            "Since dnsmasq 2.86 an `address=` line carrying only an IPv4 sends every other record "
+            "type upstream, so the `.local.` wildcard needs a second directive to keep AAAA "
+            "lookups local. `address=/local.<domain>/::` answers `::`, the IPv6 NULL address: "
+            "a client preferring IPv6 tries it first, Happy Eyeballs falls back after a stall, "
+            "and grpc-go retries `[::]:443` forever. `local=/local.<domain>/` keeps the query "
+            "local and answers NODATA, the form dnsmasq's manual names for restoring the "
+            "pre-2.86 behaviour. The property is a pair: `local=` present AND the `::` line "
+            "gone, since either alone reads as fixed while the other still answers."
+        ),
+        select=_pihole_dns_config,
+        offence=_local_wildcard_offence,
+        red=("pihole", {"02-wildcard.conf": "address=/local.example.com/10.0.0.2\n"}),
+        green=("pihole", {"02-wildcard.conf": _PIHOLE_WILDCARD}),
+        more_red=(
+            (
+                "pihole",
+                {
+                    "02-wildcard.conf": _PIHOLE_WILDCARD
+                    + "address=/local.example.com/::\n"
+                },
+            ),
+            ("pihole", {"02-wildcard.conf": "local=/local.example.com/\n"}),
+        ),
+        must_find=frozenset({"pihole-dns-config"}),
     ),
 )

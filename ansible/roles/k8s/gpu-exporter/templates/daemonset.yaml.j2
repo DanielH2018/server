@@ -63,7 +63,7 @@ spec:
             - name: metrics
               containerPort: {{ gpu_exporter_k8s_port }}
           # tcpSocket, not httpGet on /metrics: a kubelet probe against a metrics route is the
-          # shape ansible/tests/k8s/test_probes_do_not_flood_metrics.py refuses below a 300s
+          # shape ansible/tests/k8s/_scrape_property_rows.py refuses below a 300s
           # period, after node-exporter's probes produced 97% of this namespace's Loki ingest.
           # Whether a GPU is present is `homelab_gpu_info`'s job to report, not a restart cause.
           livenessProbe:
