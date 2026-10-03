@@ -1796,7 +1796,7 @@ is decided by what it touches.
 
 | layer | modules | holds |
 |---|---|---|
-| decisions (pure) | `deploy_changes`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation` | every branch the tick takes, as functions over plain values |
+| decisions (pure) | `deploy_changes`, `deploy_cross_role`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation` | every branch the tick takes, as functions over plain values |
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, when an alert is sent, and the alert queue's own I/O |
 | the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS (#2600) |

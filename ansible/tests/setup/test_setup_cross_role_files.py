@@ -1,6 +1,6 @@
 """The deployer's table of cross-role setup files matches what the setup roles' tasks ship.
 
-`deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` maps a file under one setup role's `files/`
+`deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` maps a file under one setup role's `files/`
 or `tasks/` to the other setup roles that install or import it by path (#3306, #3317). The
 GitOps deployer reads the table to re-apply those roles when the file changes, and it cannot
 read the tree to find them itself: every caller of `setup_tags_for` passes paths alone. So the
@@ -23,7 +23,7 @@ own. The scan sees a `host_lib.py` consumer through its `stamp_deployed_pairs` e
 A `templates/` file a shared task file renders inherits that task file's importers (#3319): the
 kuma-check pair reaches a host only through `kuma_check_timer.yml`, which names it under its own
 role, so the direct scan alone finds no consumer. `SETUP_FILES_ROUTED_TO_OWNER` is the one
-exclusion, and its `DECIDED:` marker in `deploy_changes` says why `resolv.conf.j2` records
+exclusion, and its `DECIDED:` marker in `deploy_cross_role` says why `resolv.conf.j2` records
 `common` instead.
 
 The k8s roles importing a setup file are a second table, `K8S_ROLES_IMPORTING_SETUP_FILES`
@@ -39,7 +39,7 @@ import re
 from _helpers import ROLES
 from _role_census import role_dirs
 
-from deploy_changes import (
+from deploy_cross_role import (
     K8S_ROLES_IMPORTING_SETUP_FILES,
     SETUP_FILES_ROUTED_TO_OWNER,
     SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
