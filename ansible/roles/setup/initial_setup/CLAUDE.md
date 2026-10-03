@@ -72,11 +72,8 @@ are in the record page.
 - **The `journald` tag's two files are one change** — the journal cap and the rsyslog info
   filter, gated `when: has_rsyslog` (false on the Pi). ENFORCED:
   `ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter`.
-- **Handlers live in this role's `handlers/main.yml`**, and they fire in definition order.
-  `Restart rsyslog` sits ABOVE `Restart systemd-journald`, and `Restart Watchdog` above
-  `Start Watchdog after provisioning`. optimize_pi notifies journald and `Restart Watchdog`
-  across the role boundary, so both stay here: a role's handlers inherit its `when:`, and
-  optimize_pi's is gated to one host. ENFORCED:
+- **Handlers live in `handlers/main.yml`**, including two optimize_pi notifies; its header
+  says why, and why the order there matters. ENFORCED:
   `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler`.
 
 ## Autonomous-role contract — Generated docs refresh (`crons` tag)
