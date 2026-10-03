@@ -274,8 +274,8 @@ PENDING_HEADER_MSG = (
 
 
 PENDING_REMEDY = (
-    "   Tick its box on the Dependency Dashboard to force the PR: the update is "
-    "detected but Renovate is not raising it."
+    "   Do not tick its box to clear it: the forced PR still reads stability-days "
+    "pending and cannot land. Report it; #3368 tracks the cause."
 )
 
 

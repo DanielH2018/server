@@ -70,9 +70,7 @@ def take_tree_lock_now() -> int:
         os.close(fd)
         locked.say(
             f"deploy --detach: could not take {path} right now -- nothing was deployed.",
-            "  A deploy is already running. Likely holders: gitops-deploy.service",
-            "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron,",
-            "  or another Claude session (uv run python scripts/dev/prune_worktrees.py).",
+            *locked.TREE_LOCK_HOLDERS,
             f"  --detach fails fast on contention rather than queuing for {locked.LOCK_WAIT}s --",
             "  retry shortly, or drop --detach to queue normally.",
         )

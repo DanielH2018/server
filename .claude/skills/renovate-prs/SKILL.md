@@ -29,19 +29,35 @@ measures those two rows against the 1-day soak, so their stuck threshold is 8 da
 Measured 2026-09-02, seven had not: grafana/promtail sat there for 111 days against a 7-day
 soak, so the homelab ran promtail 3.3.0 that whole time (issue #886).
 
-`renovate-notify` now measures each item's continuous dwell in that section and posts a Discord
-digest naming any that passes its soak plus a 7-day grace. **The remedy is to tick the item's
-checkbox on issue #3** — that forces the branch and the PR within a couple of minutes, after
-which the update becomes an ordinary PR and the triage below applies. To see the section
-without waiting for the digest:
+`renovate-notify` measures each item's continuous dwell in that section and posts a Discord
+digest naming any that passes its soak plus a 7-day grace. To see the section without waiting
+for the digest:
 
 ```bash
 gh issue view 3 --json body -q .body | sed -n '/## Pending Status Checks/,/^## /p'
 ```
 
-The underlying reason Renovate holds these is undetermined — it runs here as the Mend hosted
-app, whose run log lives on developer.mend.io and is not readable from a session. The check
-surfaces the symptom; it does not fix the cause.
+**Do not tick a stuck item's checkbox on issue #3 to clear it.** The tick forces the branch and
+the PR, but it does not end the soak. Whatever holds the item in Pending Status Checks also
+holds the forced PR at `renovate/stability-days: pending`, so the PR cannot land. On 2026-10-03
+the 12 items the digest listed were ticked. Renovate opened #3330 through #3340 and refreshed
+#2335, every one of them still pending, and all 11 new PRs were closed unmerged the same day
+(#3365).
+
+**Report a stuck item instead.** Name its branch, its dwell and its soak in your summary. The
+cause is tracked by #3368. Cite the cause that issue identifies once it is determined, and cite
+the issue until then. What is known: tdarr is re-pushed faster than its 3-day soak, but four
+other images target digests 4 to 13 days old that Renovate still reads as pending, so re-push
+churn is not the general cause. Renovate runs here as the Mend hosted app, whose run log lives
+on developer.mend.io and is not readable from a session.
+
+**Tick a box only to make a held update visible as a PR on purpose.** Treat that PR as one that
+waits for its soak: do not land it, and do not tick its rebase box (§5) while
+`renovate/stability-days` reads pending.
+
+**Recovery for a PR forced open mid-soak: close it unmerged.** A grouped
+`k8s image {{depName}} (manual — …)` PR is recreated if closed unmerged, so Renovate raises it
+again once the update passes its soak.
 
 ## 1. Triage
 
@@ -208,8 +224,9 @@ A half-done bump is a normal code change: worktree, fix, test, PR. Three rules s
   so `land.sh --arm-merge` refuses it. That refusal is the operator's decision, not an
   obstacle (#2746): never pass `--any-author` from that run. File one hand-off finding
   instead, modelled on #2744. Its body carries four things. The first is what you verified,
-  with the commands. The second is the landing command with `<sha>` left as the
-  placeholder: `./scripts/deploy_tools/land.sh --pr <n> --since <sha> --arm-merge --await-merge`.
+  with the commands. The second is the PR number and a pointer to the
+  [`land-after-merge` invocation](../land-after-merge/SKILL.md#the-invocation), which the
+  landing session runs as written there.
   The third is the §7 check that proves the new version took effect. The fourth is the merge
   ordering: land it before the next Renovate PR for the same pin, which Renovate cuts from a
   master still carrying the old pin and which conflicts with it. An interactive session lands
@@ -239,8 +256,8 @@ the soak ends. A rebase request is not consent to bypass the soak. Renovate answ
 with a "Rebase not applied" comment on the PR and leaves the box ticked. The comment says
 Renovate rebases the branch once its update has met those checks. #2335 sat CONFLICTING for 38 hours this way (issue #2368),
 and an agent read the stall as a broken rebase. Wait for the soak rather than ticking again.
-Only the branch's `unpend-branch` checkbox on issue #3 forces it earlier, and that bypasses
-the soak.
+The branch's `unpend-branch` checkbox on issue #3 does not shorten the soak either: it forces a
+PR, and that PR still reads `renovate/stability-days: pending` (§0).
 
 `renovate_rebase.py` now enforces that paragraph rather than relying on you to remember it: it
 reads the PR's status rollup, and on a pending `renovate/stability-days` it names the soak and
@@ -261,16 +278,15 @@ soak. If the second edit fails, the box is left unticked; a plain run ticks it.
 
 ## 6. Land them one at a time
 
-Follow the `land-after-merge` skill per PR — one backgrounded
-`land.sh --pr <n> --since <sha> --arm-merge --await-merge` with its output redirected to a
-file. `--arm-merge` runs `gh pr merge --squash --auto` inside the script itself, which
-matters here: the unattended daily run has nobody to answer the permission prompt a bare
-`gh pr merge` raises (issue #979).
+Land each PR with the [`land-after-merge` invocation](../land-after-merge/SKILL.md#the-invocation),
+run as written there. Its `--arm-merge` runs `gh pr merge --squash --auto` inside the script
+itself, which matters here: the unattended daily run has nobody to answer the permission prompt
+a bare `gh pr merge` raises (issue #979).
 
-**Serialize.** `land.sh` retries a stale tree three times and then gives up with
-`deploy-failed (exit 4)`; running two landings while other sessions are also merging burns those
-retries on each other. When several PRs touch nothing in common, one `land.sh` with an explicit
-`--tags a,b,c` covering all of them costs one lock acquisition instead of three.
+**Serialize.** Two landings running at once race each other for the tree, and a landing that
+loses that race deploys nothing; the skill's verdict table says what to do with the line it
+prints. When several PRs touch nothing in common, one `land.sh` with an explicit `--tags a,b,c`
+covering all of them costs one lock acquisition instead of three.
 
 ## 7. Verify the bump, not the rollout
 

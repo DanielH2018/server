@@ -321,8 +321,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             TICK_LOCK_CONTENTION,
             "TICK_LOCK_CONTENTION",
             "the tick was skipped for lock contention, so nothing deployed and nothing alerted.",
-            "Re-run once the other deploy or the secret-rotate cron finishes; `last_run` is "
-            "untouched, and no alert fires for this.",
+            "Re-run once the tree-lock holder finishes (docs/deploying.md lists them); "
+            "`last_run` is untouched, and no alert fires for this.",
             verdict="contention",
         ),
         _c(
