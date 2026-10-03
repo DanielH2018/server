@@ -1,56 +1,27 @@
-"""Every ansible/roles/setup/ role has a CLAUDE.md, and every one whose cron or timer changes
-state carries an `## Autonomous-role contract` section.
+"""Every ansible/roles/setup/ role whose cron or timer changes state carries an
+`## Autonomous-role contract` section in its CLAUDE.md.
 
 Root CLAUDE.md's "Where to Look" table routes "adding / changing a cron that changes state"
 to "that role's CLAUDE.md *Autonomous-role contract*", so every role whose cron changes
-state needs that heading. `test_k8s_roles_have_claude_md.py` covers `roles/k8s/` only.
+state needs that heading. That every setup role HAS a CLAUDE.md is the setup row of
+`ansible/tests/repo/test_role_claude_md.py`.
 
-Two guards, one subject:
-
-1. Existence, for every setup role. The k8s test's `_check_role_doc` is NOT reused: its
-   deploy-tag arm assumes the `containers_list` convention where the tag is the role's
-   directory name, and setup roles are applied through `initial_setup.yml` with tags that do
-   not follow it (`common` is include-only and has no tag at all). Existence plus a minimum
-   length is what transfers.
-
-2. The contract heading, for the roles that install a cron or timer. The subject is DERIVED
-   from `tasks/` (an `ansible.builtin.cron` task not `state: absent`, or a `templates/*.timer.j2`
-   unit) rather than listed, so a new cron-installing role joins the check the day it lands.
-   `EXEMPT` names the roles whose crons change no state, each with the reason — a heartbeat
-   that only pushes Kuma is not an autonomous actor, and demanding a contract of it would
-   teach readers the heading means nothing.
+The subject is DERIVED from `tasks/` (an `ansible.builtin.cron` task not `state: absent`, or a
+`templates/*.timer.j2` unit) rather than listed, so a new cron-installing role joins the check
+the day it lands. `EXEMPT` names the roles whose crons change no state, each with the reason —
+a heartbeat that only pushes Kuma is not an autonomous actor, and demanding a contract of it
+would teach readers the heading means nothing.
 
 Red-proof pairs use fixture roles under `tmp_path`; non-vacuity pins named members the live
 census must contain, so a renamed `tasks/` layout fails loudly rather than checking nothing.
-
-3. A size ceiling. A role doc is loaded whole on every touch of the role, so a long one costs
-   tokens on every edit. A doc over `MAX_CHARS` fails unless
-   `OVER_CEILING` names the role with the reason, and an entry there for a doc that has since
-   shrunk fails too. Same shape as the k8s test's ceiling.
-
-   The unit is characters: `MAX_CHARS` is the payload budget of the hook that injects a role
-   doc into a Bash session (`_doc_size.MAX_CHARS`), so a doc over it is one a session reads
-   truncated to its head, which a line count cannot measure.
-
-   Each reason opens with the character count it was written against, and a doc that grows past
-   that count fails, because a listed role would otherwise pass at any length.
 """
 
 from pathlib import Path
 
-from _doc_size import MAX_CHARS, char_count, recorded_count_problems
 from _helpers import SETUP_ROLES, load_tasks, walk_tasks
 from _role_census import role_dirs
 
 CONTRACT_HEADING = "## Autonomous-role contract"
-MIN_NON_BLANK_LINES = 8
-
-# Roles whose CLAUDE.md is allowed over MAX_CHARS, each with the reason. An entry is a
-# justification, not a waiver: it names the operating rule that cannot move to a docs/ page,
-# and the section to move out next. A doc that grows past its recorded count fails, so the
-# list shrinks rather than settling. Both role-doc ceilings hold every doc in the tree, so an
-# entry here is a new justification rather than a survivor.
-OVER_CEILING: dict[str, str] = {}
 
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
 # Each reason is the thing to re-check before keeping the role here.
@@ -96,35 +67,6 @@ def _installs_a_cron_or_timer(role_dir: Path) -> bool:
     return any((role_dir / "templates").glob("*.timer.j2"))
 
 
-def _non_blank_lines(text: str) -> list[str]:
-    return [line for line in text.splitlines() if line.strip()]
-
-
-def _doc_problems(
-    role_dir: Path, over_ceiling: dict[str, str] = OVER_CEILING
-) -> list[str]:
-    doc = role_dir / "CLAUDE.md"
-    if not doc.is_file():
-        return [f"{role_dir.name}: no CLAUDE.md"]
-    text = doc.read_text()
-    if len(_non_blank_lines(text)) < MIN_NON_BLANK_LINES:
-        return [
-            f"{role_dir.name}: CLAUDE.md has fewer than {MIN_NON_BLANK_LINES} non-blank lines"
-        ]
-    chars = char_count(text)
-    if chars > MAX_CHARS and role_dir.name not in over_ceiling:
-        return [
-            f"{role_dir.name}: CLAUDE.md is {chars} chars, over the {MAX_CHARS}-char ceiling "
-            f"(the inject hook's payload budget) — move history and measurements to a docs/ "
-            f"page, or add the role to OVER_CEILING with the reason (issues #2126, #2826)"
-        ]
-    if role_dir.name in over_ceiling:
-        return recorded_count_problems(
-            role_dir.name, chars, over_ceiling[role_dir.name]
-        )
-    return []
-
-
 def _has_contract_heading(role_dir: Path) -> bool:
     doc = role_dir / "CLAUDE.md"
     if not doc.is_file():
@@ -149,13 +91,6 @@ def _contract_problems(role_dir: Path, exempt: dict[str, str] = EXEMPT) -> list[
     ]
 
 
-def test_every_setup_role_has_an_adequate_claude_md():
-    problems = []
-    for role_dir in _role_dirs():
-        problems.extend(_doc_problems(role_dir))
-    assert not problems, "\n".join(problems)
-
-
 def test_every_setup_role_with_a_state_changing_cron_has_the_contract():
     problems = []
     for role_dir in _role_dirs():
@@ -178,11 +113,6 @@ def test_census_finds_the_roles_known_to_install_crons():
     found = {d.name for d in _role_dirs() if _installs_a_cron_or_timer(d)}
     expected = {"gitops_deploy", "renovate_agent", "k3s", "fake_remux", "initial_setup"}
     assert expected <= found, f"missing from the cron/timer census: {expected - found}"
-
-
-def test_census_sees_at_least_twelve_setup_roles():
-    n = len(_role_dirs())
-    assert n >= 12, f"only found {n} setup role directories under {SETUP_ROLES}"
 
 
 def test_optimize_pi_is_not_exempt():
@@ -223,21 +153,6 @@ def _fixture_role(tmp_path, name: str, *, cron: bool, doc: str | None) -> Path:
 _LONG_ENOUGH = "# widget\n\n" + "\n".join(f"- line {i}" for i in range(8)) + "\n"
 
 
-def test_fixture_role_with_no_doc_is_flagged(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=None)
-    assert _doc_problems(role) == ["widget: no CLAUDE.md"]
-
-
-def test_fixture_role_with_a_short_doc_is_flagged(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc="# widget\n")
-    assert _doc_problems(role) == ["widget: CLAUDE.md has fewer than 8 non-blank lines"]
-
-
-def test_fixture_role_with_an_adequate_doc_passes(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_LONG_ENOUGH)
-    assert _doc_problems(role) == []
-
-
 def test_fixture_cron_role_without_the_heading_is_flagged(tmp_path):
     role = _fixture_role(tmp_path, "widget", cron=True, doc=_LONG_ENOUGH)
     problems = _contract_problems(role, exempt={})
@@ -263,64 +178,6 @@ def test_fixture_role_without_a_cron_owes_no_contract(tmp_path):
 def test_fixture_exempt_cron_role_passes_without_the_heading(tmp_path):
     role = _fixture_role(tmp_path, "widget", cron=True, doc=_LONG_ENOUGH)
     assert _contract_problems(role, exempt={"widget": "pushes a heartbeat only"}) == []
-
-
-def _sized_doc(chars: int) -> str:
-    """A widget doc of exactly `chars` characters."""
-    padded = "# widget\n\n" + "".join(f"- line {i}\n" for i in range(chars))
-    return padded[:chars]
-
-
-def test_fixture_role_over_the_ceiling_is_flagged(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS + 1))
-    problems = _doc_problems(role, over_ceiling={})
-    assert len(problems) == 1 and problems[0].startswith(
-        f"widget: CLAUDE.md is {MAX_CHARS + 1} chars, over the {MAX_CHARS}-char ceiling"
-    ), problems
-
-
-def test_fixture_role_at_the_ceiling_passes(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS))
-    assert _doc_problems(role, over_ceiling={}) == []
-
-
-def test_fixture_role_over_the_ceiling_passes_when_justified(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS + 1))
-    reason = f"{MAX_CHARS + 1} chars on 2026-09-26, a reason"
-    assert _doc_problems(role, over_ceiling={"widget": reason}) == []
-
-
-def test_fixture_role_grown_past_its_recorded_count_is_flagged(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS + 2))
-    reason = f"{MAX_CHARS + 1} chars on 2026-09-26, a reason"
-    problems = _doc_problems(role, over_ceiling={"widget": reason})
-    assert (
-        len(problems) == 1
-        and f"past the {MAX_CHARS + 1} its OVER_CEILING reason records" in problems[0]
-    )
-
-
-def test_fixture_reason_without_a_recorded_count_is_flagged(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS + 1))
-    problems = _doc_problems(role, over_ceiling={"widget": "a reason"})
-    assert problems == [
-        "widget: OVER_CEILING reason must open with '<N> chars on <date>'"
-    ]
-
-
-def test_over_ceiling_entries_are_still_over_the_ceiling():
-    """A justification for a doc that has since shrunk is dead text, and would wave a regrowth
-    through; an entry for a role that no longer exists is the same rot.
-    """
-    stale = [
-        name
-        for name in OVER_CEILING
-        if not (SETUP_ROLES / name / "CLAUDE.md").is_file()
-        or char_count((SETUP_ROLES / name / "CLAUDE.md").read_text()) <= MAX_CHARS
-    ]
-    assert not stale, (
-        f"OVER_CEILING names docs no longer over {MAX_CHARS} chars: {stale}"
-    )
 
 
 def test_fixture_absent_cron_does_not_count_as_installing(tmp_path):

@@ -37,7 +37,7 @@ def missing_glance(names, roles_dir=K8S_ROLES) -> list[str]:
 
 def _opens_with_generated_block(role_dir) -> bool:
     doc = role_dir / "CLAUDE.md"
-    # A missing doc is test_k8s_roles_have_claude_md.py's finding; here it reads as "no heading".
+    # A missing doc is test_role_claude_md.py's finding; here it reads as "no heading".
     text = doc.read_text() if doc.is_file() else ""
     lines = text.split("\n")
     at = next((i for i, line in enumerate(lines) if line.rstrip() == HEADING), None)

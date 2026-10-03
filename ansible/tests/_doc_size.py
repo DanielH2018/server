@@ -1,4 +1,4 @@
-"""What the k8s and setup role-doc size guards share: the unit, the ceiling and the warning
+"""What the role-doc size guard and the hook arithmetic share: the unit, the ceiling and the warning
 category.
 
 The unit is CHARACTERS, and the ceiling is what the hook that injects a role doc into a Bash
@@ -12,7 +12,7 @@ against the whole payload. `_fits_inline` weighs the doc plus its
 Pinning the ceiling to 7,500 passed twelve role docs the hook had already started truncating
 (#3245): each sat in the 228 characters the preamble costs plus the header's own length.
 `effective_ceiling` subtracts both, and
-`ansible/tests/repo/test_role_doc_ceiling_matches_the_hook.py` holds the arithmetic against the
+`ansible/tests/repo/test_role_claude_md.py` holds the arithmetic against the
 hook's own `_fits_inline`.
 
 The LINE half of `_fits_inline` has no ceiling here. Every role doc measured 54 to 95 lines
@@ -20,11 +20,10 @@ under `INLINE_MAX_LINES - _PREAMBLE.count("\n")` on 2026-10-02, so the character
 one that binds, and a second ceiling would be a number nothing fails.
 
 `recorded_count_problems` holds an `OVER_CEILING` entry to the character count its reason
-records. Both `ansible/tests/k8s/test_k8s_roles_have_claude_md.py` and
-`ansible/tests/setup/test_setup_roles_have_claude_md.py` call it, so the two ceilings agree on
-what a justified entry must say.
+records. `ansible/tests/repo/test_role_claude_md.py` calls it for every plane, so the three
+planes agree on what a justified entry must say.
 
-`ansible/tests/k8s/test_k8s_roles_have_claude_md.py` raises `RoleDocNearCeiling` for a role
+`ansible/tests/repo/test_role_claude_md.py` raises `RoleDocNearCeiling` for a role
 CLAUDE.md that has entered the warning band below its ceiling, and `pyproject.toml`'s
 `filterwarnings` carries an `always::_doc_size.RoleDocNearCeiling` entry beside its blanket
 `error` so the notice is SHOWN rather than turned into the failure the band exists to arrive
@@ -58,7 +57,7 @@ INJECT_HOOK = HOOKS_DIR / "inject-nested-docs.py"
 # 2026-10-02 (`ansible/roles/k8s/observability/CLAUDE.md` with its deepest dashboard JSON as
 # the trigger); 200 leaves room for a deeper path without moving every role's ceiling the day
 # someone adds one.
-# ENFORCED: ansible/tests/repo/test_role_doc_ceiling_matches_the_hook.py
+# ENFORCED: ansible/tests/repo/test_role_claude_md.py
 # ::test_the_header_allowance_covers_every_role_docs_longest_trigger
 HEADER_ALLOWANCE = 200
 
