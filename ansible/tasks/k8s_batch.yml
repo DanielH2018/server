@@ -12,7 +12,7 @@
 
 - name: Run k8s roles
   ansible.builtin.include_role:
-    # Path-qualified: a bare `traefik` would resolve to roles/containers/traefik, which is first in
+    # Path-qualified: a bare `wg-easy` would resolve to roles/containers/wg-easy, which is first in
     # roles_path. See the roles_path comment in ansible.cfg.
     name: "k8s/{{ container_item.name }}"
     apply:
