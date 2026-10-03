@@ -9,7 +9,10 @@ from lib.facts.citations import (
     Citation,
     Rejected,
     Section,
+    guard_path_citations,
     in_tree,
+    line_numbered_citations,
+    macro_citations,
     node_citations,
     parse_citations,
     repo_docs,
@@ -170,6 +173,116 @@ def test_a_prose_node_citation_is_clean(line, expected):
 )
 def test_a_non_node_span_is_flagged_as_no_citation(line):
     assert node_citations(line) == []
+
+
+_EXTENSIONS = frozenset({"md", "py", "sh", "yml"})
+
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        (
+            "at `ansible/roles/k8s/sonarr/tasks/main.yml:12`",
+            ["ansible/roles/k8s/sonarr/tasks/main.yml"],
+        ),
+        (
+            "spans `scripts/dev/prune_worktrees.py:10-40`.",
+            ["scripts/dev/prune_worktrees.py"],
+        ),
+        (
+            "both `scripts/a.py:1` and `.claude/hooks/b.sh:22`",
+            ["scripts/a.py", ".claude/hooks/b.sh"],
+        ),
+        ("see `docs/index.md:3` please", ["docs/index.md"]),
+    ],
+)
+def test_a_line_numbered_citation_is_clean(line, expected):
+    assert line_numbered_citations(line, _EXTENSIONS) == expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        # A bare path is not a claim about this tree now.
+        "see `scripts/deploy.sh` for the wrapper",
+        "the `docs/adr/` series",
+        "a new role, `ansible/roles/k8s/anilist-tags`, runs a CronJob",
+        # A pytest node id is not a line reference.
+        "pinned by `ansible/tests/test_x.py::test_the_thing`",
+        # A placeholder segment is a shape, not a path.
+        "edit `containers/<svc>/docker-compose.yml:4` instead",
+        "run `kubectl get pods` first",
+        "plain prose with no code span at all",
+        # host:port, not file:line -- the numeric extension trap.
+        "the collector listens on `127.0.0.1:4317`",
+        "bound to `10.0.0.240:51820` on the LAN",
+        "never `0.0.0.0:8080`",
+        # An extension the caller's tree does not hold is another repository's file.
+        "upstream does it in `deltablock.go:117`",
+    ],
+)
+def test_a_non_line_numbered_span_is_flagged_as_no_citation(line):
+    assert line_numbered_citations(line, _EXTENSIONS) == []
+
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        (
+            "run `ansible/tests/repo/test_helpers.py` first",
+            ["ansible/tests/repo/test_helpers.py"],
+        ),
+        (
+            "pinned by `ansible/tests/k8s/test_x.py::test_the_thing`",
+            ["ansible/tests/k8s/test_x.py"],
+        ),
+        ("ENFORCED: `ansible/tests/_helpers.py:27`", ["ansible/tests/_helpers.py"]),
+    ],
+)
+def test_a_guard_path_citation_is_clean(line, expected):
+    assert guard_path_citations(line) == expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "the guards live under `ansible/tests/`",
+        "see `scripts/deploy.sh` for the wrapper",
+        "a role's own `tests/test_macros.py`",
+        "ansible/tests/repo/test_helpers.py with no code span",
+    ],
+)
+def test_a_non_guard_path_span_is_flagged_as_no_citation(line):
+    assert guard_path_citations(line) == []
+
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        (
+            "{% from 'k8s_probes.yml.j2' import http_probe %}",
+            ["k8s_probes.yml.j2"],
+        ),
+        (
+            "renders `templates/config/config.yml.j2` and `traefik_labels.yml.j2`",
+            ["config/config.yml.j2", "traefik_labels.yml.j2"],
+        ),
+    ],
+)
+def test_a_macro_citation_is_clean(line, expected):
+    assert macro_citations(line) == expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "the role's `values.yml` and `deployment.yaml.j2`",
+        "a plain `docker-compose.yml` file",
+        "prose with no template name",
+    ],
+)
+def test_a_non_macro_span_is_flagged_as_no_citation(line):
+    assert macro_citations(line) == []
 
 
 @pytest.mark.parametrize("raw", ["scripts/lib/kubectl.py:run", "probe.py kuma-drift"])

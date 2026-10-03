@@ -18,23 +18,14 @@ Run: uv run pytest ansible/tests/repo/test_failure_class_detectors.py
 import re
 
 from _helpers import REPO
-from lib.proc_testing import run
+from lib.facts.citations import node_citations, tracked_files
 
 PAGE = REPO / "docs" / "failure-classes.md"
 
 # One markdown table row: starts with `| <digit>` and is not the header/separator line.
 ROW = re.compile(r"^\|\s*\d+\s*\|.*\|\s*$", re.M)
 
-# A citation inside a row's Detector cell, e.g. `path/to/test_x.py::test_the_thing`.
-CITATION = re.compile(r"([\w.][\w./-]*\.py)::(test_\w+)")
-
-
-def _tracked_files() -> set[str]:
-    listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
-    return {rel for rel in listed.split("\0") if rel}
-
-
-TRACKED = _tracked_files()
+TRACKED = tracked_files(REPO)
 
 
 def rows(text: str) -> list[str]:
@@ -42,7 +33,8 @@ def rows(text: str) -> list[str]:
 
 
 def citations(row: str) -> list[tuple[str, str]]:
-    return CITATION.findall(row)
+    """Every `path.py::test_name` in a row's cells, parsed by the shared node-id grammar."""
+    return node_citations(row)
 
 
 def citation_resolves(path: str, name: str) -> bool:
