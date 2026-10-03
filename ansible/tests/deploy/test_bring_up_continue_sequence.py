@@ -6,8 +6,8 @@ THE CLUSTER STEP. `ansible/README.md` §8 lists `k3s-bringup.yml` between `initi
 and the deploy for a cluster node. A `--continue` that skips it
 reaches the deploy on a rebuilt control-plane node with no cluster to apply manifests to.
 
-THE DEPLOY STEP. A bare `ansible-playbook deploy.yml` takes none of the locks the GitOps
-deployer and the weekly secret-rotate cron take on this tree, so a bring-up that overlaps
+THE DEPLOY STEP. A bare `ansible-playbook deploy.yml` takes none of the locks every
+holder in docs/deploying.md's *Who holds the tree lock* takes on this tree, so a bring-up that overlaps
 either interleaves two writers. `scripts/deploy.sh` is the entry point that holds them.
 
 Run: uv run pytest ansible/tests/deploy/test_bring_up_continue_sequence.py

@@ -1662,8 +1662,8 @@ re-measure the two playbook budgets it is made of.
 **Consequence for the lock: this unit's own hold exceeds the 30-minute timer interval, where
 at a 900s rollback budget it landed exactly at the edge (900 + 900 = 1800s = 30min flat) without
 crossing it.** `ExecStart` wraps the whole run in `flock -w 180
-/var/lock/server-git-tree.lock` — the same lock `./scripts/deploy.sh` and the weekly
-secret-rotate cron take. In the pathological case (a stalled forward deploy followed by a
+/var/lock/server-git-tree.lock` — the same lock every
+[tree-lock holder](deploying.md#who-holds-the-tree-lock) takes. In the pathological case (a stalled forward deploy followed by a
 stalled rollback), this unit can hold that lock for up to 3060s (1440 + 1620, excluding its
 own flock wait) — past the 30-minute (1800s)
 timer interval. A concurrent `./scripts/deploy.sh`
