@@ -4,7 +4,7 @@
 # The implementation is land.py and the land_lib package beside it; `land.sh --help` prints
 # the contract: why one invocation, why the redirect, the exit
 # codes, the verdicts. This exec exists so `./scripts/deploy_tools/land.sh …` keeps working
-# unchanged and nudge-land-sh.py's escape (`"land.sh" in command`) still matches.
+# unchanged.
 #
 # The cd is load-bearing: `uv run` resolves the project from its CALLER's working directory,
 # so invoked from outside a checkout it builds an environment without the repo's dependencies

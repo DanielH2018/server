@@ -4,15 +4,16 @@
 #   matcher: Bash
 #   timeout: 15
 #   order: 10
-#   args: --ask-on-cd=block-protected-bash,nudge-land-sh,block-footguns
-"""One PreToolUse:Bash hook that runs the four Bash arms in a single process.
+#   args: --ask-on-cd=block-protected-bash,block-footguns
+"""One PreToolUse:Bash hook that runs the Bash arms in a single process.
 
 WHY. Each Bash tool call used to start five `uv run --no-sync --quiet python <arm>.py`
 processes — `auto-approve-readonly`, `block-protected-bash`, `nudge-land-sh`,
 `block-footguns` and `inject-nested-docs`. Loki counted 18,421 PreToolUse:Bash calls in the
 7 days to 2026-09-24 at a mean of about 92 ms per call, and four of those five interpreter
 starts buy nothing: all five arms import `_hook_common` and `claude_guard.segment`, so one
-process loads that once and calls each arm's own function. Issue #2394.
+process loads that once and calls each arm's own function. Issue #2394. `nudge-land-sh` was
+deleted in #3395.
 
 The fifth arm, `auto-approve-readonly`, moved into the dotfiles `claude_guard` package
 (`claude_guard/readonly.py`, dotfiles #628), whose user-level PreToolUse hook allows a
@@ -28,8 +29,7 @@ THE MERGE is the one Claude Code performs across separate hooks, read from the 2
 bundle: `deny` is sticky, `defer` outranks `ask`, `ask` outranks `allow`, and `allow` only
 stands when nothing else was returned. The surfaced reason belongs to the FIRST hook whose
 decision equals the winner, so the arms run here in the order their registrations used to
-give them (block-protected-bash 30, nudge-land-sh 40, block-footguns 50,
-inject-nested-docs 70) and the first arm at the winning level keeps the reason. No arm
+give them (block-protected-bash 30, block-footguns 50, inject-nested-docs 70) and the first arm at the winning level keeps the reason. No arm
 returns `defer` or `allow`, so in practice this carries `deny > ask`.
 
 `permissionDecision`, `additionalContext` and `updatedInput` ride in ONE `hookSpecificOutput`
@@ -46,7 +46,7 @@ while the others keep theirs. That matches what separate processes did — an
 unhandled raise in one `.py` exited non-zero with no stdout, which the harness reads as "no
 decision" for that hook alone. What it must never become is silent: the traceback goes to
 stderr named by arm, because an arm that has stopped judging while the dispatcher still
-reports four clean verdicts is the failure this file is most able to hide (#2394).
+reports clean verdicts is the failure this file is most able to hide (#2394).
 
 Run standalone: `uv run --no-sync python .claude/hooks/bash-pretool.py < payload.json`.
 """
@@ -66,7 +66,6 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 # of import order.
 _DECISION_ARMS = (
     ("block-protected-bash", "block_protected_bash"),
-    ("nudge-land-sh", "nudge_land_sh"),
     ("block-footguns", "block_footguns"),
 )
 _CONTEXT_ARM = ("inject-nested-docs", "inject_nested_docs")

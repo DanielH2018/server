@@ -433,7 +433,7 @@ def test_the_shim_injects_on_the_real_hook_path():
         [
             os.path.join(_HERE, "run-hook.sh"),
             "bash-pretool",
-            "--ask-on-cd=block-protected-bash,nudge-land-sh,block-footguns",
+            "--ask-on-cd=block-protected-bash,block-footguns",
         ],
         input=json.dumps(payload),
         capture_output=True,

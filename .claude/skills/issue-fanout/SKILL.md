@@ -292,8 +292,8 @@ Each agent starts with none of this conversation's context, so its brief must ca
   gh issue comment <n> --body "Worked by \`<its own branch>\`"
   ```
 
-- That `land.sh` (the `land-after-merge` skill) is the landing path, and a hook denies
-  hand-polling CI.
+- That `land.sh` (the `land-after-merge` skill) is the landing path, and that hand-polling CI
+  is not.
 - **The landing is ONE command, and it waits for itself.** `land.sh --detach --await-verdict`
   names its own logfile, forks into it, and returns with the landing's exit code once the
   `VERDICT:` line is printed — so the agent stays in-turn without a `tail -f | grep` beside it,

@@ -155,7 +155,7 @@ def test_reject_a_missing_py_sibling_also_asks(tmp_path):
 def test_the_ask_reason_names_every_guard_that_did_not_run(tmp_path):
     """One runner stands in for several guards, so the operator can only act on the prompt if
     the reason says which ones. `bash-pretool` answers for three."""
-    guards = ("block-protected-bash", "nudge-land-sh", "block-footguns")
+    guards = ("block-protected-bash", "block-footguns")
     runner = _variant_runner(tmp_path, str(tmp_path / "does-not-exist"))
     proc = _run(runner, "bash-pretool", f"--ask-on-cd={','.join(guards)}")
     reason = json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
