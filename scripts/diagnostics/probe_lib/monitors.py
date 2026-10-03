@@ -303,7 +303,7 @@ def eval_gate_conjunct(conjunct, variables):
         return None
 
 
-def gate_conjunct_state(conjunct, no_secrets=False):
+def gate_conjunct_state(conjunct, no_secrets=False, read_secret=None):
     """True / False / None for one gate conjunct, read from wherever its variable lives.
 
     An inventory variable (host_vars, group_vars, the uptime-kuma role's defaults — the
@@ -316,6 +316,7 @@ def gate_conjunct_state(conjunct, no_secrets=False):
     Inventory is consulted first and the secrets file's plaintext key list second, so only a
     name the store declares costs a decrypt, and `no_secrets` withholds only that decrypt.
     A key list that will not parse proves nothing, so the name is then treated as a secret.
+    `read_secret` replaces `gate_var_state` for that one call, so a test can prove no decrypt.
     """
     var = gate_var(conjunct)
     if var is None:
@@ -326,7 +327,7 @@ def gate_conjunct_state(conjunct, no_secrets=False):
     names = declared_secret_names()
     if names is not None and var not in names:
         return eval_gate_conjunct(conjunct, variables)
-    return None if no_secrets else gate_var_state(var)
+    return None if no_secrets else (read_secret or gate_var_state)(var)
 
 
 def gate_var_state(var):
