@@ -193,7 +193,12 @@ def _alive_tile() -> dict:
     The source read this replaces substituted `{{ ... }}` to `0` first, so an interval moved
     into a role default read as 0 and the band below compared nothing.
     """
-    return entity(TILE, TOKEN)
+    return entity(TILE, TOKEN, {"renovate_agent_enabled": True})
+
+
+def test_a_disarmed_agent_renders_no_alive_tile() -> None:
+    disarmed = monitors_text({"renovate_agent_enabled": False, TOKEN: SENTINEL})
+    assert f"  {TILE}: |" not in disarmed, "a disarmed agent must render no tile"
 
 
 CONFIG_ENV = "config.env.j2"
@@ -259,7 +264,7 @@ def test_the_tile_and_the_unit_share_one_token() -> None:
     # The tile must carry the sentinel this variable alone holds.
     body = re.search(
         rf"^  {re.escape(TILE)}: \|\n\s+(\{{.*\}})$",
-        monitors_text({TOKEN: SENTINEL}),
+        monitors_text({TOKEN: SENTINEL, "renovate_agent_enabled": True}),
         re.M,
     )
     assert json.loads(body.group(1))["push_token"] == SENTINEL, (

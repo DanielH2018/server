@@ -633,4 +633,7 @@ nut_host_secondary_armed: true
 # and landing up to renovate_agent_max_prs of them. Setting this back to false stops and
 # disables the timer; that is the rollback. There is no alive monitor yet, so a timer that
 # stops firing shows up only as a growing backlog in the renovate-notify digest.
-renovate_agent_enabled: true
+#
+# Disarmed on 2026-10-03, pending a repo-scoped GitHub token for the unattended session and a
+# separate lander unit that alone holds the token able to merge. Re-arm only with both in place.
+renovate_agent_enabled: false

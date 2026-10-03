@@ -37,13 +37,15 @@ def monitors_text(overrides: dict | None = None) -> str:
     return render_role_template(ROLE, TEMPLATE, overrides or {})
 
 
-def entity(filename: str, token_var: str) -> dict:
+def entity(filename: str, token_var: str, overrides: dict | None = None) -> dict:
     """The tile declared under `filename`, parsed from a render with `token_var` armed.
+
+    `overrides` sets any other gate the tile carries, such as an arming switch.
 
     Fails naming the tile when the render does not carry it, so a renamed tile or a gate keyed
     to another variable reads as a failure rather than as a guard over an empty dict.
     """
-    text = monitors_text({token_var: SENTINEL})
+    text = monitors_text({**(overrides or {}), token_var: SENTINEL})
     match = re.search(rf"^  {re.escape(filename)}: \|\n\s+(\{{.*\}})$", text, re.M)
     assert match, (
         f"{filename} is not in the rendered {TEMPLATE} with {token_var} set — the tile is "
