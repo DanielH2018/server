@@ -27,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
+from lib.ansible_inventory import inventory_hosts
 from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -44,11 +45,12 @@ from setup_role_chains import (
     var_consumer_chains,
 )
 
-# The hosts land.sh's setup-role remediation ever names. daniel-stage is excluded on
-# purpose -- it is not land.sh's business (HOSTS_LAND_SH_NEVER_DEPLOYS in scripts/lib/render_guard.py is
-# the same exclusion for a deploy tag), and initial_setup.yml is never run against it from
-# here.
-_HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
+# The hosts land.sh's setup-role remediation ever names: hosts.ini's `[homeservers]`, the
+# group initial_setup.yml is run against. A staging host is excluded on purpose -- it is not
+# land.sh's business (HOSTS_LAND_SH_NEVER_DEPLOYS in scripts/lib/render_guard.py is the same
+# exclusion for a deploy tag), and it would sit in its own group rather than this one.
+_HOMESERVERS = [h for h in inventory_hosts() if "homeservers" in h.groups]
+_HOSTS = tuple(h.name for h in _HOMESERVERS)
 
 # `ansible_connection=local` in hosts.ini -- selecting one of these with `-e target=` from
 # elsewhere only picks its VARIABLES; the play still runs on whichever host you typed the
@@ -56,7 +58,9 @@ _HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
 # ansible/tests/deploy/test_local_connection_target.py). So a remaining host in this set
 # must be reached by sshing to it first. daniel-pi is the one host actually driven remotely
 # with `-e target=daniel-pi`, from wherever the play runs.
-_LOCAL_CONNECTION_HOSTS = frozenset({"daniel-box", "daniel-server"})
+_LOCAL_CONNECTION_HOSTS = frozenset(
+    h.name for h in _HOMESERVERS if h.connection == "local"
+)
 
 _INITIAL_SETUP_YML = ANSIBLE / "initial_setup.yml"
 

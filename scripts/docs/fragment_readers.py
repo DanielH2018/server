@@ -22,6 +22,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
+from lib.ansible_inventory import containers_entries_in, inventory_hosts
 
 from lib.repo_paths import REPO
 
@@ -50,13 +51,7 @@ def host_has_docker(
     host list is what `initial_setup.yml` targets, so it is the set of hosts that install the
     crons this role pings from.
     """
-    hosts, in_group = [], False
-    for raw in hosts_ini.read_text().splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if line.startswith("["):
-            in_group = line == "[homeservers]"
-        elif line and in_group:
-            hosts.append(line.split()[0])
+    hosts = [h.name for h in inventory_hosts(hosts_ini) if "homeservers" in h.groups]
     default = bool(group_vars.get("has_docker", False))
     out = {}
     for host in hosts:
@@ -100,7 +95,7 @@ def parse_jails(conf: str) -> list[dict[str, str]]:
 
 
 def container_udp_port(host_vars: dict, name: str) -> str:
-    entries = [c for c in host_vars["containers_list"] if c.get("name") == name]
+    entries = [c for c in containers_entries_in(host_vars) if c["name"] == name]
     assert len(entries) == 1, (
         f"expected one {name!r} in containers_list, found {len(entries)}"
     )

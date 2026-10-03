@@ -12,6 +12,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import re
 from collections.abc import Callable, Iterable
 
+from lib.ansible_inventory import containers_entries_in
 from lib.render_guard import entry_tags
 
 _MENTION = re.compile(r"(?<!\w)containers_list(?!\w)")
@@ -21,8 +22,7 @@ _JINJA_COMMENT = re.compile(r"\{#.*?#\}", re.DOTALL)
 
 def entries(doc: dict) -> dict[str, dict]:
     """`containers_list` keyed by service name."""
-    found = doc.get("containers_list") or []
-    return {e["name"]: e for e in found if isinstance(e, dict) and "name" in e}
+    return {e["name"]: e for e in containers_entries_in(doc)}
 
 
 def entry_change_tags(

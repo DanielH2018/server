@@ -31,6 +31,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
+from lib.ansible_inventory import containers_entries_in
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
@@ -318,7 +319,7 @@ def main() -> int:
     checked = 0
     for host_file in host_files:
         host_vars = load_yaml(host_file)
-        containers = host_vars.get("containers_list") or []
+        containers = containers_entries_in(host_vars)
         # host scalars (domain, server_ip, kuma_docker_host, ...) override the base.
         host_ctx = {**BASE_CONTEXT, **all_vars, **host_vars}
         host_ctx.pop("containers_list", None)
@@ -331,7 +332,7 @@ def main() -> int:
         for ci in docker:
             err = check_container(host_ctx, ci)
             checked += 1
-            name = ci.get("name", "<unnamed>")
+            name = ci["name"]
             if err:
                 failures += 1
                 print(f"  [FAIL] {name}: {err}", file=sys.stderr)

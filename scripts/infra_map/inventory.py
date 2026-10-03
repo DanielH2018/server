@@ -17,6 +17,7 @@ from typing import Any
 # and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
+from lib.ansible_inventory import containers_entries_in
 
 from infra_map.constants import (
     _CONTAINER_NAME,
@@ -152,10 +153,8 @@ def declared_services(host: str, host_vars: dict, global_vars: dict) -> list[dic
     """Flatten a host's ``containers_list`` into normalized service records."""
     variables = {**global_vars, **host_vars}
     services = []
-    for entry in host_vars.get("containers_list") or []:
-        name = entry.get("name")
-        if not name:
-            continue
+    for entry in containers_entries_in(host_vars):
+        name = entry["name"]
         platform = entry.get("platform", "docker")
         hostname = resolve_vars(entry.get("hostname", name), variables)
         namespace = None

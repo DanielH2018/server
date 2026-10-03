@@ -24,6 +24,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 
+from lib.ansible_inventory import containers_entries_in
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
 from lib.repo_paths import HOST_VARS
 
@@ -201,10 +202,8 @@ def declared_on_pi(container, host_vars=None):
 
     path = host_vars or PI_HOST_VARS
     try:
-        entries = (yaml.safe_load(path.read_text()) or {}).get("containers_list") or []
+        data = yaml.safe_load(path.read_text())
     except OSError, yaml.YAMLError:
         # Fail closed: an unreadable inventory must not turn a missing container into a skip.
         return True
-    return container in {
-        entry.get("name") for entry in entries if isinstance(entry, dict)
-    }
+    return container in {entry["name"] for entry in containers_entries_in(data)}

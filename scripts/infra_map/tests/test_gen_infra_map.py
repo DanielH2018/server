@@ -477,3 +477,13 @@ def test_group_services_covers_every_service_exactly_once():
 
 
 # ── standalone SVG (docs/assets/generated/infra-map.svg) ───────────────────────────────
+
+
+def test_every_inventory_host_has_a_plane_and_a_role():
+    """`HOSTS` is read from hosts.ini; a host added there must be described here too, or
+    the live collector's `HOST_PLANE[host]` raises on it."""
+    from infra_map.constants import HOST_PLANE, HOST_ROLE
+
+    assert "daniel-box" in g.HOSTS
+    assert set(g.HOSTS) <= set(HOST_PLANE)
+    assert set(g.HOSTS) <= set(HOST_ROLE)
