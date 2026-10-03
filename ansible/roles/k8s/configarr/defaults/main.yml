@@ -2,7 +2,7 @@
 # configarr is not a service: it is a nightly reconcile that reads the *arrs and exits. So it
 # is a CronJob, not a Deployment, and its health is reported by a host cron on this node that READS the last Job and pushes Kuma —
 # the same shape as longhorn-backup-health.sh and telemetry-health.sh, and for the same reason
-# (monitor-bridge runs on daniel-server and cannot see this cluster).
+# (monitor-bridge has no ServiceAccount and never calls the Kubernetes API).
 configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.30.2
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).

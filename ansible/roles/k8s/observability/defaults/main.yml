@@ -147,7 +147,8 @@ observability_tempo_storage: 5Gi
 observability_tempo_retention: 720h
 
 # Self-monitoring (templates/telemetry-health.sh.j2). Pushes to a static Kuma monitor rather
-# than being polled, because monitor-bridge runs on daniel-server and cannot see this cluster.
+# than being polled, because monitor-bridge has no ServiceAccount and never calls the
+# Kubernetes API this reads.
 #
 # */10, matching the Longhorn backup heartbeat: this queries the k8s API and Prometheus rather
 # than reading a local file, and the fastest thing it watches (a 15m export-failure window)

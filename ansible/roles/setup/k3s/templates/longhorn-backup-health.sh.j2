@@ -10,14 +10,26 @@
 # monitor-bridge's check.py returned 0. On 2026-08-02 the Longhorn backup target went unavailable
 # at 10:02 and nothing anywhere noticed — the outage surfaced only because Kopia, sharing the same
 # B2 account, tripped its own freshness check nine minutes later. Had the cap been hit by Longhorn
-# alone, nothing would have alerted. The eight checks that now exist to prevent a repeat of that,
+# alone, nothing would have alerted. The ten checks that now exist to prevent a repeat of that,
 # and every incident that shaped one of their thresholds, are documented in
 # longhorn_backup_health_logic.py rather than here.
 #
-# monitor-bridge runs on the SERVER and cannot see this cluster, so this pushes rather than being
-# polled — the same shape as the Pi's health crons (optimize_pi role), for the same reason. The
-# push itself comes from /usr/local/lib/kuma-push-lib.sh, which the initial_setup role installs on
-# every host.
+# DECIDED: a host cron, not a monitor-bridge check (#3287). The bridge is an in-cluster pod on
+# daniel-box, and checks 9-10 have an in-cluster path: Alloy ships daniel-box's /var/log/syslog
+# to loki-homelab, where the `logger` lines check 9 matches are queryable (measured 2026-10-03),
+# and /etc/cron.d is reachable over a hostPath. What a fold would cost:
+#   - Checks 1-8 read Longhorn CRs through kubectl. The bridge has no ServiceAccount or RBAC and
+#     never calls the Kubernetes API, so a fold adds a cluster-read grant to the alerting pod and
+#     a stdlib API client.
+#   - Check 9 on LogQL adds Alloy and Loki to the evidence path, and the bridge's Loki gate would
+#     suppress it during a Loki outage.
+#   - This script's hc-ping is the backup plane's off-site channel, independent of the bridge. A
+#     bridge outage would blind backup monitoring too.
+# The shim is 258 lines, and the reader and logic module would move and be rewritten rather than
+# shrink. Revisit if the bridge gains Kubernetes API access for another check.
+#
+# The push itself comes from /usr/local/lib/kuma-push-lib.sh, which the initial_setup role
+# installs on every host.
 #
 # Reads the cluster through the read-only ServiceAccount kubeconfig (k3s role), so the cron needs
 # no sudo and cannot mutate anything.
