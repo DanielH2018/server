@@ -38,8 +38,18 @@ def read_file(path: str) -> str:
         return ""
 
 
-def run(argv: list[str], cwd: str | None = None, timeout: int = 120) -> tuple[int, str]:
-    """Run `argv`, returning (returncode, stdout+stderr). Never raises on a non-zero exit."""
+def run(
+    argv: list[str],
+    cwd: str | None = None,
+    timeout: int = 120,
+    stdin_text: str | None = None,
+) -> tuple[int, str]:
+    """Run `argv`, returning (returncode, stdout+stderr). Never raises on a non-zero exit.
+
+    `stdin_text`, when given, is the child's stdin; otherwise stdin is /dev/null. A secret goes
+    there and never in `argv`: /proc on these hosts has no `hidepid`, so any local user can read
+    a running child's command line.
+    """
     try:
         p = subprocess.run(
             argv,
@@ -47,7 +57,8 @@ def run(argv: list[str], cwd: str | None = None, timeout: int = 120) -> tuple[in
             capture_output=True,
             text=True,
             timeout=timeout,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL if stdin_text is None else None,
+            input=stdin_text,
         )
     except subprocess.TimeoutExpired:
         return 124, f"timed out after {timeout}s: {' '.join(argv)}"

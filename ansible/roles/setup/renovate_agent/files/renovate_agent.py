@@ -305,6 +305,9 @@ def report_crash(
     push_url = cfg.get("KUMA_PUSH_URL", "")
     if push_url:
         sep = "&" if "?" in push_url else "?"
+        # The URL reaches curl as a config file on stdin (`-K -`), the form the unit's
+        # ExecStartPost uses, because a curl argv is readable by any local user while it runs.
+        url = f"{push_url}{sep}status=down".replace("\\", "\\\\").replace('"', '\\"')
         tools.run(
             [
                 "curl",
@@ -313,12 +316,14 @@ def report_crash(
                 "15",
                 "-o",
                 "/dev/null",
+                "-K",
+                "-",
                 "--get",
                 "--data-urlencode",
                 f"msg=crashed: {text[:200]}",
-                f"{push_url}{sep}status=down",
             ],
             timeout=30,
+            stdin_text=f'url = "{url}"\n',
         )
     tools.discord_post(
         cfg.get("DISCORD_WEBHOOK", ""),

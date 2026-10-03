@@ -216,7 +216,10 @@ and `/proc` here has no `hidepid`. The unit inlined the whole URL until 2026-09-
 rotation-tracked token in clear text behind a command the harness guard recommended as the SAFE
 alternative to `systemctl cat` (issue #1489). `ExecStartPost` now sources `config.env` and passes
 `$KUMA_PUSH_URL` to `curl` on stdin (`-K -`), the form `renovate-notify.service.j2` already used.
-ENFORCED: `ansible/tests/setup/test_renovate_agent_unit.py`.
+ENFORCED: `ansible/tests/setup/test_renovate_agent_unit.py`. `report_crash` sends its `down` the
+same way. Until 2026-10-03 it passed the URL as curl's last argument, which put the token in
+`/proc/<pid>/cmdline` for the length of the push. ENFORCED:
+`ansible/roles/setup/renovate_agent/tests/test_crash_report.py::test_a_crash_pushes_a_down_carrying_the_exception_text`.
 
 The tile's deadline is 28h, not the 25h the other daily tiles use, because the beat lands at the
 end of the run: a fast run followed by one that draws the full jitter and runs to the 100-minute
