@@ -137,7 +137,9 @@ def plan(services: Iterable[str], exclusive_all: bool = False) -> list[PlannedLo
     return planned
 
 
-def _take(name: str, path: str, mode: int, deadline: float) -> tuple[str, int]:
+def _take(
+    name: str, path: str, mode: int, deadline: float, flock=fcntl.flock
+) -> tuple[str, int]:
     """Flock one service lock and return its name and open descriptor.
 
     Args:
@@ -145,18 +147,21 @@ def _take(name: str, path: str, mode: int, deadline: float) -> tuple[str, int]:
         path: the lock file, as `plan` named it.
         mode: fcntl.LOCK_EX or fcntl.LOCK_SH.
         deadline: the `time.monotonic()` value to give up at.
+        flock: `fcntl.flock`, a parameter so a test can make it fail as the kernel would.
 
     Raises:
         ServiceLockBusy: the lock stayed busy past `deadline`.
-        OSError: the lock file could not be opened.
+        OSError: the lock is unavailable -- the file could not be opened, or flock failed for
+            any reason but another holder (ENOLCK, EBADF). Raised at once, never waited out:
+            only `BlockingIOError` means another deploy holds the lock (#3354).
     """
     fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
     started = time.monotonic()
     while True:
         try:
-            fcntl.flock(fd, mode | fcntl.LOCK_NB)
+            flock(fd, mode | fcntl.LOCK_NB)
             return name, fd
-        except OSError:
+        except BlockingIOError:
             if time.monotonic() >= deadline:
                 os.close(fd)
                 waited = round(time.monotonic() - started)
@@ -164,6 +169,9 @@ def _take(name: str, path: str, mode: int, deadline: float) -> tuple[str, int]:
                     f"service lock {name} busy for {waited}s", lock=name
                 ) from None
             time.sleep(SERVICE_LOCK_POLL_S)
+        except OSError:
+            os.close(fd)
+            raise
 
 
 @contextlib.contextmanager

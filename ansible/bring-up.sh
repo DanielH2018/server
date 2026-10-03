@@ -155,8 +155,8 @@ if [[ "$CONTINUE" == true ]]; then
     echo "       uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=$HOST"
   fi
   # deploy.sh, not `ansible-playbook deploy.yml`: the playbook alone takes none of the locks
-  # the GitOps deployer and the weekly secret-rotate cron take on this tree, so a bring-up
-  # that overlaps either interleaves two writers. No --tags — an empty tag set is a full run.
+  # the other tree-lock holders take (docs/deploying.md#who-holds-the-tree-lock), so a bring-up
+  # that overlaps one interleaves two writers. No --tags — an empty tag set is a full run.
   #
   # It refuses a tree behind origin/master (exit 4, nothing deployed). That gate is kept: a
   # bring-up host deploying an old master is the same hazard anywhere else, and `git pull`

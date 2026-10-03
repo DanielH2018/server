@@ -13,6 +13,7 @@ the deployer's three playbook call sites to it is
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deploy_service_locks.py
 """
 
+import errno
 import fcntl
 import os
 import threading
@@ -107,6 +108,27 @@ def test_two_scoped_runs_share_the_all_lock(service_lock_dir):
             assert taken == ["all", "radarr"]
     finally:
         os.close(held)
+
+
+def test_an_unavailable_lock_raises_at_once_rather_than_reading_as_busy(
+    service_lock_dir,
+):
+    """FLAGGED half for the busy test above: only `BlockingIOError` means another holder.
+
+    ENOLCK says the kernel cannot lock at all. Waiting out the deadline cannot change that, and
+    reporting it as `ServiceLockBusy` would defer the tick as ordinary contention (#3354).
+    """
+
+    def flock(fd, op):
+        raise OSError(errno.ENOLCK, "No locks available")
+
+    path = deploy_locks.lock_path("sonarr")
+    started = time.monotonic()
+    with pytest.raises(OSError) as raised:
+        deploy_locks._take("sonarr", path, fcntl.LOCK_EX, started + 5, flock=flock)
+    assert not isinstance(raised.value, deploy_locks.ServiceLockBusy)
+    assert raised.value.errno == errno.ENOLCK
+    assert time.monotonic() - started < 1, "an unavailable lock waited out the deadline"
 
 
 def test_the_locks_are_released_when_the_body_raises(service_lock_dir):
