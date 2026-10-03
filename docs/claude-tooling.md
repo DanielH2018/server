@@ -607,10 +607,10 @@ the hook succeeds and guards nothing. It gets its own
 banner line, because handing the operator the 127 diagnosis for a shim that ran is a false one.
 `sibling_py_paths` reads the name from the registered command for `run-hook.sh`, and abstains
 on anything it cannot resolve rather than parsing shell, such as a path composed from a
-variable. It still matches the literal `"$(dirname "$(readlink -f "$0")")/<name>.py"` idiom the
-deleted per-hook shims used, which no file in the repo spells any more.
-`test_the_repos_own_shims_name_the_siblings_this_parse_must_find` holds the census: `run-hook.sh`
-is the only shell entry point, and it names no sibling from its text alone.
+variable.
+`.claude/hooks/tests/test_session_health_hook_registration.py::test_every_registered_command_resolves_the_sibling_it_runs`
+holds the census: every command `settings.json` registers must resolve to one `.py` that exists,
+so a registration this parse cannot read fails by name instead of abstaining in silence.
 
 ### `fanout-stop` (Stop)
 

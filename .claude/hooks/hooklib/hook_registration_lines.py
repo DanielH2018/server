@@ -17,13 +17,12 @@ Two limits, stated rather than implied:
     behind primary checkout may lack, and a SessionStart hook that does not exist prints nothing. The
     window this arm closes is "the primary checkout is missing SOME hook scripts"; the window
     where it is missing THIS one stays open, and only a fast-forward closes it.
-  * **It rules on the `.py` sibling only in the two forms this repo's shims use.** A per-hook
-    shim runs its sibling as `"$(dirname "$(readlink -f "$0")")/<name>.py"`, and `run-hook.sh`
-    composes the same path from its first argument. Both are matched as text rather than parsed
-    as shell. A shim naming its `.py` some other way gets no verdict — abstaining is the posture
-    `script_path` already takes for a path it cannot resolve, and
-    `test_the_repos_own_shims_name_the_siblings_this_parse_must_find` is what keeps abstention
-    from quietly becoming the whole answer.
+  * **It rules on the `.py` sibling only in the form `run-hook.sh` uses.** The runner composes
+    `$HOOKS_DIR/$name.py` from the hook name its registered command passes. That line is
+    matched as text rather than parsed as shell. A shim naming its `.py` some other way gets no
+    verdict — abstaining is the posture `script_path` already takes for a path it cannot
+    resolve, and `test_every_registered_command_resolves_the_sibling_it_runs` is what keeps
+    abstention from quietly becoming the whole answer.
 
 Split out of session-health.py, which sits at its own 600-line cap (`ansible/tests/_ratchet.py`)
 with no headroom left. Package name is `hooklib`, not `lib`, for the reason session-health.py's
@@ -131,21 +130,7 @@ def script_path(command, checkout):
     return os.path.normpath(path)
 
 
-# The `.py` sibling a shim runs from its own location:
-#
-#     exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python \
-#       "$(dirname "$(readlink -f "$0")")/bash-pretool.py"
-#
-# One literal idiom, matched as text. Reading a shim in general means parsing shell; the
-# per-hook shims that spelled this form were deleted in #3304, so no file in the repo matches it
-# now and `run-hook.sh` resolves through `_RUNNER_SIBLING_PY` below. Anything else abstains, because a banner line that cries wolf over
-# a working hook is worse than one that stays quiet about an odd one — `script_path`'s own
-# docstring makes the same trade.
-_SIBLING_PY = re.compile(
-    r"""\$\(\s*dirname\s+"?\$\(\s*readlink\s+-f\s+"\$0"\s*\)"?\s*\)/([A-Za-z0-9_.-]+\.py)"""
-)
-
-# The same directory, with the hook's name coming from a variable instead of the text:
+# The `.py` sibling a shim runs from its own directory, with the hook's name in a variable:
 #
 #     HOOKS_DIR="$(dirname "$(readlink -f "$0")")"
 #     script="$HOOKS_DIR/$name.py"
@@ -154,7 +139,9 @@ _SIBLING_PY = re.compile(
 # in the shim at all, so it comes from the registered COMMAND. Matching the composing line
 # rather than the runner's filename keeps the two halves of this rule in one place: a runner
 # that stops composing its sibling that way resolves nothing and fails
-# `test_the_repos_own_shims_name_the_siblings_this_parse_must_find` by name.
+# `test_every_registered_command_resolves_the_sibling_it_runs` by name. Reading a shim in
+# general means parsing shell, so anything else abstains: a banner line that cries wolf over a
+# working hook is worse than one that stays quiet about an odd one.
 _RUNNER_SIBLING_PY = re.compile(r"""\$\{?(?:\w+)\}?/\$\{?\w+\}?\.py""")
 
 
@@ -176,12 +163,12 @@ def _runner_hook_name(command):
 
 
 def sibling_py_paths(shim_path, command=None, read_text=None):
-    """The `.py` files the shim at `shim_path` runs out of its own directory, in file order.
+    """The `.py` file the shim at `shim_path` runs out of its own directory, as a 0- or 1-list.
 
     Args:
         shim_path: the resolved `.sh` the registration names.
-        command: the registered command, for a runner that takes the hook name as an argument.
-            Optional, because the literal form needs only the shim's own text.
+        command: the registered command, which carries the hook name the runner is passed.
+            Without one, nothing names a sibling and the result is [].
         read_text: returns the shim's text. Defaults to reading the file.
 
     `$(dirname "$(readlink -f "$0")")` is the directory of the RESOLVED shim — the primary
@@ -191,7 +178,7 @@ def sibling_py_paths(shim_path, command=None, read_text=None):
 
     An unreadable shim yields [], the same best-effort posture as an unparsable settings file.
     """
-    if not shim_path.endswith(".sh"):
+    if not shim_path.endswith(".sh") or command is None:
         return []
     if read_text is None:
 
@@ -203,16 +190,12 @@ def sibling_py_paths(shim_path, command=None, read_text=None):
         text = read_text(shim_path)
     except OSError:
         return []
-    directory = os.path.dirname(shim_path)
-    names = []
-    for name in _SIBLING_PY.findall(text):
-        if name not in names:
-            names.append(name)
-    if not names and command is not None and _RUNNER_SIBLING_PY.search(text):
-        hook_name = _runner_hook_name(command)
-        if hook_name:
-            names.append(f"{hook_name}.py")
-    return [os.path.join(directory, name) for name in names]
+    if not _RUNNER_SIBLING_PY.search(text):
+        return []
+    hook_name = _runner_hook_name(command)
+    if not hook_name:
+        return []
+    return [os.path.join(os.path.dirname(shim_path), f"{hook_name}.py")]
 
 
 def _fix_command(path):
