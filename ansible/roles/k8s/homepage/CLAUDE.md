@@ -86,6 +86,6 @@ that bite from a config edit alone.
   it.** `next build` bakes the page, nothing expires it, and the pod serves it at 1/1 with
   `probe.py health homepage` exiting 0. The `lifecycle.postStart` hook in
   `templates/deployment.yaml.j2` calls `/api/revalidate` once at startup, which regenerates `/`
-  from the config the pod can read. ENFORCED by
-  `ansible/tests/services/test_homepage_revalidates_on_start.py`; a browser tab reading
+  from the config the pod can read. ENFORCED by the `homepage-revalidates-on-start` row of
+  `ansible/tests/k8s/_workload_property_rows.py`; a browser tab reading
   `Homepage` is the symptom, and the measurements are on the docs page.

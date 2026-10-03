@@ -299,7 +299,8 @@ covering all of them costs one lock acquisition instead of three.
 - **A built image** (`Dockerfile*.j2`): confirm the pod resolved the digest the registry serves.
   A failure here reads `<svc> is stale: the registry serves sha256:… but at least one running
   pod resolved something else` — the drift gate in `ansible/post_tasks/k8s_image_drift_gate.yml`.
-  `ansible/tests/k8s/test_built_images_pull_always.py` guards the usual cause.
+  The `built-images-pull-always` row of `ansible/tests/k8s/_workload_property_rows.py` guards
+  the usual cause.
 - **A plugin or extension:** confirm the host loaded it, not just that the file is on disk.
 
 ## 8. Census the branches no PR and no dashboard entry speaks for

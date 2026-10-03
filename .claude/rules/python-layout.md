@@ -69,7 +69,9 @@ A property of the rendered k8s manifests that is one selector and one predicate 
 row of `ansible/tests/k8s/test_rendered_properties.py`, not as a new file. The row carries its
 floor, its named members and its red/green fixtures, and a row whose selector stops matching
 fails with `subject gone: delete this row`. A property needing a second render context, a
-cross-document join or a long exemption list keeps its own file.
+cross-document join or a long exemption list keeps its own file. The test file runs every
+row; once it nears the 500-line test-module cap, a row goes in `_config_property_rows.py` or
+`_workload_property_rows.py` beside it.
 
 ## No tests under `ansible/filter_plugins/`
 
