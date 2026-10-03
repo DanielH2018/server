@@ -1,7 +1,7 @@
 ---
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-healthchecks_k8s_image: lscr.io/linuxserver/healthchecks:latest@sha256:f8a148973d8b90587549674db70836f154eda474c0b87382b86064f2442c2f43
+healthchecks_k8s_image: lscr.io/linuxserver/healthchecks:latest@sha256:08a37bd6dcf2d1878984416d4fdf2de06b4b2397b4dd3656fb1a2bf512ac4ead
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the dead-man's-switch check-in monitor crons ping — a broken deploy stops
