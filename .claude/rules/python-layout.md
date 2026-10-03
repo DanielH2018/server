@@ -52,8 +52,9 @@ reaches its module through a `sys.path` bootstrap pointing at the sibling `files
 `pythonpath` where the module is shared across roles. Every such bootstrap lands in the one
 session a full run shares, so a top-level `files/*.py` needs a basename no other role's
 `files/` or `pythonpath` root uses. Two roles' `app.py` failed six tests only in a full run
-(#2608). `ansible/tests/repo/test_pythonpath_module_basenames.py` enforces it. A role that ships a `files/*.py` with
-logic gets a `tests/` directory, which the `ansible/roles/*/*/tests` glob in `testpaths` collects.
+(#2608). The `no-two-import-roots-share-a-module-basename` row of
+`ansible/tests/repo/test_census_rows_python.py` enforces it. A role that ships a `files/*.py`
+with logic gets a `tests/` directory, which the `ansible/roles/*/*/tests` glob in `testpaths` collects.
 
 `ansible/tests/` is grouped by what a guard reads: `deploy/` (the deploy play, gitops_deploy
 and the rollout gates), `k8s/` (manifest render and workload hygiene across roles),
@@ -75,8 +76,11 @@ row; once it nears the 500-line test-module cap, a row goes in `_config_property
 
 A textual census of the tracked tree follows the same rule. It is one `git ls-files` selector
 and one per-file predicate, and it goes in as a `Census` row of
-`ansible/tests/repo/test_census_rows_python.py` or `test_census_rows_text.py`, or of
-`test_census_rows_suite.py` when it polices the suite's own guards.
+`ansible/tests/repo/test_census_rows_python.py` or `test_census_rows_text.py`, of
+`test_census_rows_roles.py` when it reads a role's tasks or templates, or of
+`test_census_rows_suite.py` when it polices the suite's own guards. A rule over the test
+modules themselves goes in `scripts/tests/test_census_rows_test_modules.py` or
+`test_census_rows_test_renders.py`. A row whose subject is a match inside a file sets `count`.
 `ansible/tests/_row_table.py` is the harness both tables share.
 
 ## No tests under `ansible/filter_plugins/`

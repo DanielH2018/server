@@ -21,12 +21,12 @@ test directory is now scanned. Entries are keyed
 `<directory>/<module>.py`, because a basename alone would let a module in one directory
 inherit another's exemption.
 
-The exposure is the same one `scripts/tests/test_tests_share_render_and_path_helpers.py`'s
-rule 3 covers for `*.sh.j2` repo-wide: a value that moves into a role default leaves the
-assertion matching `{{ ... }}`, and a pattern that matches nothing passes (#3178). The
-sanctioned readers are `_k8s_render` (k8s manifests and `Dockerfile*.j2`), `_setup_render`
-(setup-plane templates), `_compose_render` (the Pi's Compose and config templates) and
-`_shell_render` (`*.sh.j2`).
+The exposure is the same one the `tests-read-shell-templates-rendered` row of
+`scripts/tests/test_census_rows_test_renders.py` covers for `*.sh.j2` repo-wide: a value that
+moves into a role default leaves the assertion matching `{{ ... }}`, and a pattern that
+matches nothing passes (#3178). The sanctioned readers are `_k8s_render` (k8s manifests and
+`Dockerfile*.j2`), `_setup_render` (setup-plane templates), `_compose_render` (the Pi's Compose
+and config templates) and `_shell_render` (`*.sh.j2`).
 
 Two things the rule deliberately does not reach:
 
@@ -191,16 +191,6 @@ TEMPLATE_SOURCE_READERS = {
         "render, and `test_every_source_fallback_is_a_template_no_render_covers` holds that "
         "nothing else falls back"
     ),
-    "deploy/test_no_role_ships_a_markdown_file.py": (
-        "the census reads every file a role could ship FROM — `tasks/`, `templates/` and "
-        "`handlers/` — for the literal basename a `copy:`/`template:` `src:` names. Two of "
-        "those three directories hold no templates and no render covers them, and the subject "
-        "is the basename as written rather than anything a render produces"
-    ),
-    "repo/test_no_role_ships_a_test_file.py": (
-        "the same ship-list census as `deploy/test_no_role_ships_a_markdown_file.py`, for a "
-        "`.py` basename instead of a `.md` one, over the same three directories"
-    ),
     "setup/test_registry_selftest_single_node.py": (
         "whether the agent-Job gate carries `| default([])`, which decides what happens on a "
         "host whose inventory does not define `k3s_agent_node_ips`. Every render context "
@@ -237,7 +227,7 @@ KNOWN_MEMBERS = frozenset(
         "longhorn/test_longhorn_restore_drill_byte_floor.py",
         "longhorn/test_prune_backups.py",
         "repo/_render_gate.py",
-        "repo/test_no_role_ships_a_test_file.py",
+        "repo/test_census_rows_roles.py",
         "repo/test_render_gate.py",
         "repo/test_guard_tests_read_renders_not_templates.py",
         "repo/test_secret_rendering_host_scripts_have_no_log.py",
@@ -246,7 +236,6 @@ KNOWN_MEMBERS = frozenset(
         "deploy/_autodeploy_claims.py",
         "deploy/test_gitops_manual_trigger.py",
         "deploy/test_k8s_autodeploy_rollout_gates.py",
-        "deploy/test_no_role_ships_a_markdown_file.py",
         "deploy/test_setup_render_manifest.py",
         "k8s/_manifest_guards.py",
         "k8s/test_arr_deployments_share_one_macro.py",

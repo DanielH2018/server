@@ -1,9 +1,9 @@
 """Censuses of the role tree's tasks, templates and defaults, one `_row_table.Census` row each.
 
 Each row was a test file of its own until #3430. A row's `reason` keeps what that file's
-docstring said a reader needs before changing the rule. These rows read files under a role's
-`templates/` directory for their literal text, so they sit apart from the other row files:
-`test_guard_tests_read_renders_not_templates.py` exempts this module by name, with the reason.
+docstring said a reader needs before changing the rule. The ship rows read a role's
+`templates/` as literal text on purpose: their subject is the basename a task or template
+names, which a render does not change.
 
 Run: uv run pytest ansible/tests/repo/test_census_rows_roles.py
 """

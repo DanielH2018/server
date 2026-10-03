@@ -30,6 +30,10 @@ a sibling. Guard 2 mandates the bootstrap for a directly-invoked script; this gu
 redundancy, not absence: an insert of `scripts/diagnostics` in `test_ui_login.py` still resolves
 a directory `pythonpath` deliberately omits, and passes on that merit rather than by exclusion.
 
+This stays a file rather than a census row for the reason Guard 2 gives (#3430): it judges
+each import through Guard 2's evaluator against an index of the tree, and its accept/reject
+pairs build synthetic trees under `tmp_path`, which a row's text-only subjects cannot.
+
 A `tests/_*.py` fixture module is a pytest-only module too: nothing but a `test_*.py` imports
 it. `collect_test_modules` takes every tracked module `is_pytest_only` accepts under a
 `testpaths` entry, and the fixture modules answer to both rules above.
