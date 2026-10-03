@@ -51,7 +51,9 @@
   environment:
     HOME: "{{ renovate_agent_home }}"
   register: renovate_agent_python
-  changed_when: "'Installed' in renovate_agent_python.stderr + renovate_agent_python.stdout"
+  changed_when: >-
+    'Installed' in (renovate_agent_python.stderr | default(''))
+    + (renovate_agent_python.stdout | default(''))
   become: true
   become_user: "{{ renovate_agent_user }}"
 

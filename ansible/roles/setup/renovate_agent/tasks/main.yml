@@ -39,6 +39,10 @@
 - name: Install the agent user's Claude Code, clone and read access
   tags: [renovate-agent-code, renovate-agent-service]
   ansible.builtin.import_tasks: identity.yml
+  # The controller's interpreter is the repo venv under /home/{{ sys_user }}, which the agent's
+  # user cannot execute, so a `become_user` task there dies with "Permission denied".
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
 
 - name: Install the renovate-agent code
   tags: [renovate-agent-code]
