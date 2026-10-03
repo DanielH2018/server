@@ -13,9 +13,8 @@ trees whose docs describe code that no longer runs, and excluding the generated 
 register (see `GENERATED_REGISTER` below).
 """
 
-import re
-
 from _helpers import REPO, discover_docs
+from lib.facts.citations import macro_citations
 
 MACROS = REPO / "ansible" / "templates"
 
@@ -33,14 +32,6 @@ DOCS = [d for d in discover_docs() if not d.as_posix().endswith(GENERATED_REGIST
 # floors it at 100. A second floor here could only fire in a run where the stronger one already
 # had, and two floors on one corpus invite them to drift apart. One corpus, one floor.
 
-# A `<name>.yml.j2`, whether bare (a `{% from %}` line or an inline bullet mention) or with
-# one directory level in front of it -- role-local app config shares the extension
-# (`templates/config/config.yml.j2` in configarr, `templates/config/application.yml.j2` in
-# janitorr). Capturing the directory
-# lets the loop below tell those apart from a shared-macro reference, which this repo's docs
-# always give bare or as `templates/<macro>.yml.j2` -- never `templates/config/...`.
-NAMED = re.compile(r"\b((?:[a-z0-9_-]+/)?[a-z0-9_-]+\.yml\.j2)\b")
-
 
 def test_every_macro_named_in_the_docs_exists():
     available = {p.name for p in MACROS.glob("*.yml.j2")}
@@ -52,19 +43,21 @@ def test_every_macro_named_in_the_docs_exists():
             continue
         lines = doc.read_text().splitlines()
 
+        # `macro_citations` keeps one directory level, so role-local app config
+        # (`templates/config/config.yml.j2`) is told apart from a shared macro here.
         # First pass: names a `config/`-qualified mention already ties to a role's own
         # rendered app config (configarr's, janitorr's) -- a later bare mention of the
         # same name in the same doc is that same file, not a fresh shared-macro claim.
         local_names = {
             bare
             for line in lines
-            for raw in NAMED.findall(line)
+            for raw in macro_citations(line)
             for prefix, _, bare in [raw.rpartition("/")]
             if prefix == "config"
         }
 
         for line_no, line in enumerate(lines, 1):
-            for raw in NAMED.findall(line):
+            for raw in macro_citations(line):
                 _, _, bare = raw.rpartition("/")
                 if bare in local_names:
                     continue
