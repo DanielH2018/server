@@ -19,20 +19,57 @@ this log you can edit, say, a compose template and check that `docker.md` shows 
 Observability only — InstructionsLoaded cannot block, and this swallows all errors and always exits
 0 so it can never disrupt session startup. Pure stdlib (no third-party deps), like every hook here.
 
-Log: .claude/logs/instructions.log (gitignored), bounded by single-backup rotation. Inspect: tail -n
-40 .claude/logs/instructions.log
+Log: the PRIMARY checkout's .claude/logs/instructions.log (gitignored), even when the hook runs
+from a worktree, bounded by single-backup rotation. Inspect: tail -n 40
+/home/ubuntu/server/.claude/logs/instructions.log
 """
 
 import os
+import subprocess
 from datetime import datetime, timezone
 
 from _hook_common import read_payload
 
-LOG = os.path.normpath(
-    os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "logs", "instructions.log"
-    )
-)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def log_path(start: str = _HERE) -> str:
+    """The instructions log in the primary checkout of the repo holding `start`.
+
+    Each session runs the hooks its own checkout carries (#3394), so a log beside this file
+    would put a worktree session's rows in the worktree, and pruning the worktree deletes
+    them. The rows grade behaviour across sessions, so every checkout writes the one log in
+    the primary checkout: the parent of `git rev-parse --git-common-dir`. Outside a git
+    checkout, or when git fails, the log falls back to this checkout's `.claude/logs/`.
+    """
+    fallback = os.path.normpath(os.path.join(_HERE, "..", "logs", "instructions.log"))
+    # A hook-run git honours GIT_DIR over -C, so the caller's git env must not leak in.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    try:
+        common = subprocess.run(
+            [
+                "git",
+                "-C",
+                start,
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-common-dir",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=env,
+            check=True,
+        ).stdout.strip()
+    except OSError, subprocess.SubprocessError:
+        return fallback
+    # A bare repo or a separated git dir has no checkout beside it to hold the log.
+    if os.path.basename(common) != ".git":
+        return fallback
+    return os.path.join(os.path.dirname(common), ".claude", "logs", "instructions.log")
+
+
+LOG = log_path()
 MAX_BYTES = 256 * 1024
 
 

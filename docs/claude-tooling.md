@@ -516,7 +516,10 @@ auto mode instructs — loads neither, and 74 of 113 Bash-only session×role pai
 role doc (measured 2026-09-19, #2125). `.claude/hooks/inject-nested-docs.py` reads the paths a
 command names, returns each ancestor `CLAUDE.md` and matching rule as `additionalContext` once
 per session, and logs the row to `.claude/logs/instructions.log` as `bash_path_match` so the
-same log grades it. A doc the hook cannot fit arrives as its HEAD up to the budget, then the
+same log grades it. Every checkout writes that log in the primary checkout, which `log_path`
+in `.claude/hooks/log-instructions.py` finds through `git rev-parse --git-common-dir`. Each
+session runs its own checkout's hooks (#3394), and a log in a worktree is deleted with the
+worktree. A doc the hook cannot fit arrives as its HEAD up to the budget, then the
 headings of the sections the head cut off, then a read pointer: the harness persists a longer
 `additionalContext` to disk and hands the model a preview stub instead. The payload is 7,500
 chars, and what a doc is weighed against is the 7,272 the preamble leaves, less its own
