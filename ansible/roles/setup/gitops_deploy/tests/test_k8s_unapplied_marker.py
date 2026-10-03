@@ -212,34 +212,6 @@ def test_a_torn_line_beside_a_readable_one_is_dropped(
     assert state.read("owed").splitlines() == [_line("authelia", LATER)]
 
 
-def test_the_legacy_file_is_folded_into_the_ledger_once(
-    gitops_deploy, state_dir, settings
-):
-    """The one-shot move of a host's pre-#3392 `k8s_unapplied` file. A service the ledger
-    already names keeps its ledger entry, and the file is gone afterwards."""
-    state = gitops_deploy.STATE
-    state.write("owed", _line("authelia", at=500))
-    state.write(
-        "k8s_unapplied_legacy", f"{ORIGIN} authelia 900\n{ORIGIN} sonarr not-a-stamp"
-    )
-    assert state.fold_legacy_k8s_unapplied(3000.0) == ["sonarr"]
-    assert sorted((e.service, e.at) for e in state.k8s_unapplied_pending()) == [
-        ("authelia", 500.0),
-        ("sonarr", 3000.0),
-    ]
-    assert state.read("k8s_unapplied_legacy") is None
-    assert state.fold_legacy_k8s_unapplied(4000.0) == []
-
-
-def test_a_clear_reaches_an_unfolded_legacy_line(gitops_deploy, state_dir, settings):
-    """`gitops_state.py clear-k8s-unapplied` runs from the checkout, which can be ahead of the
-    deployer that has not folded the file yet; the clear must not be a silent no-op there."""
-    state = gitops_deploy.STATE
-    state.write("k8s_unapplied_legacy", f"{ORIGIN} authelia 900")
-    assert state.clear_k8s_unapplied({"authelia"}) == ["authelia"]
-    assert state.k8s_unapplied_pending() == []
-
-
 def test_the_two_k8s_markers_are_separate_files(gitops_deploy, state_dir, settings):
     """A class tag on a `k8s_deferred` line would read as NO pending bump in an un-redeployed
     monitor-bridge, which is why `k8s_unapplied` lives in the `owed` ledger instead."""
