@@ -4,7 +4,7 @@
 # Pinned tag@sha256 rather than a bare digest: the k8s-images Renovate manager keys on
 # `_image:` in this file and needs the tag to read a version stream, and a bare repo@sha256
 # would freeze the pin with no update signal (same reasoning as texbrain_k8s_image).
-navidrome_k8s_image: ghcr.io/navidrome/navidrome:0.63.2@sha256:9012939114fbb1bb641b81cf96dec5ded15f0aafefe8d47a511d7cb919658e40
+navidrome_k8s_image: ghcr.io/navidrome/navidrome:0.64.2@sha256:38dc2727bfcfd5ede290f8ada114fc90368146f265ae4701ddddbcbe2a44ee52
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Off: this workload is parked at zero replicas (below), so an auto-applied image bump would
