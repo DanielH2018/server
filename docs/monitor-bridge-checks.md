@@ -1071,8 +1071,9 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   and pinning would hide the identical fault on daniel-box behind a green tile. An absent
   series reads as healthy (no CSI global mount is read-only) rather than as blind — unlike
   Longhorn Volume Redundancy/PVC Fullness, node-exporter being entirely down is
-  check_targets_down's/check_disk's job, not this one's. `ansible/tests/k8s/
-  test_node_exporter_filesystem_exclusion.py` guards the exclusion regex directly: this
+  check_targets_down's/check_disk's job, not this one's. The
+  `node-exporter-scrapes-csi-global-mounts` row of
+  `ansible/tests/k8s/_config_property_rows.py` guards the exclusion regex directly: this
   check's own empty-is-healthy logic cannot tell a real all-clear from a re-widened
   exclusion silently hiding the same fault again. **In `PROM_DEPENDENT`**: `prom_vector`
   raises on an unreachable Prometheus, which `_evaluate` turns into a `down` — without the

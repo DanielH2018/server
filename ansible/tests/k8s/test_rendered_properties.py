@@ -6,6 +6,9 @@ A property with one selector and one predicate goes here as a row rather than in
 One that needs a second render context, a cross-document join or a long exemption list keeps a
 file (`test_container_security_context.py` is the example).
 
+Rows that would push this file past the test-module length cap live in
+`_config_property_rows.py` and `_workload_property_rows.py`, and run here with the rest.
+
 A row's `reason` is the long form a reader needs before changing the property. Keep it as
 specific as the file docstring it replaced.
 
@@ -16,13 +19,13 @@ from dataclasses import replace
 
 import pytest
 
+from _config_property_rows import CONFIG_PROPERTIES
 from _helpers import REPO, manifests_rollout_timeout_s
 from _k8s_render import pod_spec
 from _property_table import Property, check
+from _workload_property_rows import OBSERVABILITY, POD_KINDS, WORKLOAD_PROPERTIES
 
 _K8S_ROLES = REPO / "ansible/roles/k8s"
-
-_POD_KINDS = frozenset({"Deployment", "DaemonSet", "StatefulSet", "CronJob", "Job"})
 
 
 def _deployments(role: str, tpl: str, doc: dict):
@@ -56,12 +59,9 @@ def _deadline_offence(role: str, spec: dict) -> str | None:
     )
 
 
-OBSERVABILITY = "observability"
-
-
 def _observability_workloads(role: str, tpl: str, doc: dict):
     if (
-        doc.get("kind") in _POD_KINDS
+        doc.get("kind") in POD_KINDS
         and doc.get("metadata", {}).get("namespace") == OBSERVABILITY
     ):
         yield f"{doc['kind']}/{doc['metadata']['name']}", doc
@@ -114,103 +114,107 @@ def _ephemeral_offence(role: str, volume: dict) -> str | None:
 
 
 PROPERTIES = (
-    Property(
-        name="deployment-revision-history-limit",
-        reason=(
-            "Kubernetes defaults revisionHistoryLimit to 10, so an unpinned Deployment keeps ten "
-            "scaled-to-zero ReplicaSets and `kubectl get rs -A` stops being readable. Rollbacks "
-            "go through `git revert` + a redeploy, so depth is not a reason to raise it. "
-            "`spec_shell` in ansible/templates/workload-shell.yml.j2 emits the pin and "
-            "test_workload_shell_uses_the_macros.py refuses a hand-written one; this row reads "
-            "the RENDERED spec, which tells a template that never calls the macro from one that "
-            "does. A DaemonSet owns no ReplicaSets and is out of scope."
+    (
+        Property(
+            name="deployment-revision-history-limit",
+            reason=(
+                "Kubernetes defaults revisionHistoryLimit to 10, so an unpinned Deployment keeps ten "
+                "scaled-to-zero ReplicaSets and `kubectl get rs -A` stops being readable. Rollbacks "
+                "go through `git revert` + a redeploy, so depth is not a reason to raise it. "
+                "`spec_shell` in ansible/templates/workload-shell.yml.j2 emits the pin and "
+                "test_workload_shell_uses_the_macros.py refuses a hand-written one; this row reads "
+                "the RENDERED spec, which tells a template that never calls the macro from one that "
+                "does. A DaemonSet owns no ReplicaSets and is out of scope."
+            ),
+            select=_deployments,
+            offence=_revision_history_offence,
+            red=("nut", {"revisionHistoryLimit": 10}),
+            green=("nut", {"revisionHistoryLimit": REVISION_HISTORY_LIMIT}),
+            # 62 Deployments render. Close enough to notice a contraction.
+            min_matches=55,
         ),
-        select=_deployments,
-        offence=_revision_history_offence,
-        red=("nut", {"revisionHistoryLimit": 10}),
-        green=("nut", {"revisionHistoryLimit": REVISION_HISTORY_LIMIT}),
-        # 62 Deployments render. Close enough to notice a contraction.
-        min_matches=55,
-    ),
-    Property(
-        name="progress-deadline-covers-rollout-budget",
-        reason=(
-            "k8s/manifests/tasks/drain.yml runs `kubectl rollout status --timeout=<budget>` "
-            "with the role's manifests_rollout_timeout, and `rollout status` also exits as soon "
-            "as the Deployment is marked ProgressDeadlineExceeded (progressDeadlineSeconds, "
-            "default 600). A pod stuck Pulling makes no progress, so a budget above the deadline "
-            "is unreachable: prowlarr's 780s budget for a flaresolverr cold pull holds only "
-            "because its templates raise the deadline to match."
+        Property(
+            name="progress-deadline-covers-rollout-budget",
+            reason=(
+                "k8s/manifests/tasks/drain.yml runs `kubectl rollout status --timeout=<budget>` "
+                "with the role's manifests_rollout_timeout, and `rollout status` also exits as soon "
+                "as the Deployment is marked ProgressDeadlineExceeded (progressDeadlineSeconds, "
+                "default 600). A pod stuck Pulling makes no progress, so a budget above the deadline "
+                "is unreachable: prowlarr's 780s budget for a flaresolverr cold pull holds only "
+                "because its templates raise the deadline to match."
+            ),
+            select=_deployments,
+            offence=_deadline_offence,
+            # prowlarr's budget is 780s, so the 600s default deadline cannot cover it.
+            red=("prowlarr", {}),
+            green=("prowlarr", {"progressDeadlineSeconds": 780}),
+            min_matches=55,
+            # The Deployments whose budget exceeds the default deadline: they carry the whole
+            # census, since every role at the default budget passes on the default deadline.
+            # Re-derive the set if `_DEFAULT_DEADLINE_S` or a role's budget moves.
+            must_find=frozenset(
+                {"prowlarr", "flaresolverr", "valheim", "sonarr", "radarr"}
+            ),
         ),
-        select=_deployments,
-        offence=_deadline_offence,
-        # prowlarr's budget is 780s, so the 600s default deadline cannot cover it.
-        red=("prowlarr", {}),
-        green=("prowlarr", {"progressDeadlineSeconds": 780}),
-        min_matches=55,
-        # The Deployments whose budget exceeds the default deadline: they carry the whole
-        # census, since every role at the default budget passes on the default deadline.
-        # Re-derive the set if `_DEFAULT_DEADLINE_S` or a role's budget moves.
-        must_find=frozenset(
-            {"prowlarr", "flaresolverr", "valheim", "sonarr", "radarr"}
+        Property(
+            name="observability-namespace-is-sole-tenant",
+            reason=(
+                "networkpolicy-observability.yaml.j2 admits a bare `podSelector: {}` as the "
+                "intra-namespace ingress peer, which is sound only while observability is the one "
+                "role rendering workloads into that namespace. A second role landing a pod there "
+                "gets unrestricted ingress to every fenced pod in it with no policy change of its "
+                "own. Give the new workload its own namespace, or replace the bare selector with an "
+                "explicit per-workload peer list. docs/networkpolicy-default-deny.md, 'Slice 3 "
+                "specifics', has the long form."
+            ),
+            select=_observability_workloads,
+            offence=_tenancy_offence,
+            red=("nut", {}),
+            green=(OBSERVABILITY, {}),
+            must_find=frozenset({"Deployment/prometheus", "Deployment/grafana"}),
         ),
-    ),
-    Property(
-        name="observability-namespace-is-sole-tenant",
-        reason=(
-            "networkpolicy-observability.yaml.j2 admits a bare `podSelector: {}` as the "
-            "intra-namespace ingress peer, which is sound only while observability is the one "
-            "role rendering workloads into that namespace. A second role landing a pod there "
-            "gets unrestricted ingress to every fenced pod in it with no policy change of its "
-            "own. Give the new workload its own namespace, or replace the bare selector with an "
-            "explicit per-workload peer list. docs/networkpolicy-default-deny.md, 'Slice 3 "
-            "specifics', has the long form."
+        Property(
+            name="jellyfin-probes-set-a-timeout",
+            reason=(
+                "Kubernetes defaults timeoutSeconds to 1, so a /health slower than a second is a "
+                "probe failure. On jellyfin the readiness probe then empties the endpoints and "
+                "Traefik answers 404 for the hostname, and the liveness probe kills the container "
+                "with exit 137. Scoped to jellyfin on purpose: most roles set no timeout and have "
+                "had no incident, which is a different change with a different argument."
+            ),
+            select=_jellyfin_probes,
+            offence=_probe_timeout_offence,
+            red=("jellyfin", {"httpGet": {"path": "/health", "port": 8096}}),
+            green=(
+                "jellyfin",
+                {"httpGet": {"path": "/health", "port": 8096}, "timeoutSeconds": 5},
+            ),
+            must_find=frozenset({"jellyfin.readinessProbe", "jellyfin.livenessProbe"}),
         ),
-        select=_observability_workloads,
-        offence=_tenancy_offence,
-        red=("nut", {}),
-        green=(OBSERVABILITY, {}),
-        must_find=frozenset({"Deployment/prometheus", "Deployment/grafana"}),
-    ),
-    Property(
-        name="jellyfin-probes-set-a-timeout",
-        reason=(
-            "Kubernetes defaults timeoutSeconds to 1, so a /health slower than a second is a "
-            "probe failure. On jellyfin the readiness probe then empties the endpoints and "
-            "Traefik answers 404 for the hostname, and the liveness probe kills the container "
-            "with exit 137. Scoped to jellyfin on purpose: most roles set no timeout and have "
-            "had no incident, which is a different change with a different argument."
+        Property(
+            name="configarr-repos-cache-is-ephemeral",
+            reason=(
+                "configarr's TRaSH/recyclarr clone cache is two public repos re-cloned in seconds. "
+                "On a PVC it outlives the pod, and a clone that stopped updating (a moved default "
+                "branch, a rebased history the fetch refuses) keeps serving old guides while the "
+                "sync reports green. An emptyDir makes every nightly run start from upstream. "
+                "test_cronjob_only_roles_include_the_gate.py covers the job's gate."
+            ),
+            select=_configarr_cache,
+            offence=_ephemeral_offence,
+            red=(
+                "configarr",
+                {
+                    "name": CONFIGARR_CACHE_VOLUME,
+                    "persistentVolumeClaim": {"claimName": "x"},
+                },
+            ),
+            green=("configarr", {"name": CONFIGARR_CACHE_VOLUME, "emptyDir": {}}),
+            must_find=frozenset({CONFIGARR_CACHE_VOLUME}),
         ),
-        select=_jellyfin_probes,
-        offence=_probe_timeout_offence,
-        red=("jellyfin", {"httpGet": {"path": "/health", "port": 8096}}),
-        green=(
-            "jellyfin",
-            {"httpGet": {"path": "/health", "port": 8096}, "timeoutSeconds": 5},
-        ),
-        must_find=frozenset({"jellyfin.readinessProbe", "jellyfin.livenessProbe"}),
-    ),
-    Property(
-        name="configarr-repos-cache-is-ephemeral",
-        reason=(
-            "configarr's TRaSH/recyclarr clone cache is two public repos re-cloned in seconds. "
-            "On a PVC it outlives the pod, and a clone that stopped updating (a moved default "
-            "branch, a rebased history the fetch refuses) keeps serving old guides while the "
-            "sync reports green. An emptyDir makes every nightly run start from upstream. "
-            "test_cronjob_only_roles_include_the_gate.py covers the job's gate."
-        ),
-        select=_configarr_cache,
-        offence=_ephemeral_offence,
-        red=(
-            "configarr",
-            {
-                "name": CONFIGARR_CACHE_VOLUME,
-                "persistentVolumeClaim": {"claimName": "x"},
-            },
-        ),
-        green=("configarr", {"name": CONFIGARR_CACHE_VOLUME, "emptyDir": {}}),
-        must_find=frozenset({CONFIGARR_CACHE_VOLUME}),
-    ),
+    )
+    + CONFIG_PROPERTIES
+    + WORKLOAD_PROPERTIES
 )
 
 _IDS = [p.name for p in PROPERTIES]

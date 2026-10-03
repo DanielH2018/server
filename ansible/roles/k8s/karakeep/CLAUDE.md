@@ -78,5 +78,6 @@ loop to auto-tag bookmarks.
   own emptyDir: `/tmp` (profile, crash dumps, the shm files `--disable-dev-shm-usage` moves out
   of `/dev/shm`) and `/var/cache/fontconfig`. The fontconfig one fails quietly — chromium still
   starts, logs `Fontconfig error: No writable cache directories`, and rescans the font tree on
-  every process start. `ansible/tests/services/test_karakeep_chrome_writable_paths.py` is the
-  guard; add a path there when a chromium flag makes it write somewhere new.
+  every process start. The `karakeep-chrome-write-paths-are-emptydirs` row of
+  `ansible/tests/k8s/_workload_property_rows.py` is the guard; add a path to its
+  `CHROME_WRITABLE_PATHS` when a chromium flag makes it write somewhere new.

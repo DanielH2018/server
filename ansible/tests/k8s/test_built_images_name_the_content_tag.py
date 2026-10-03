@@ -28,7 +28,8 @@ from lib.render_guard import BASE_CONTEXT, BUILT_IMAGE_TAG_STUBS
 
 _POD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
 
-# k8s_registry_pull_host is `localhost:<port>` — see test_built_images_pull_always.py.
+# k8s_registry_pull_host is `localhost:<port>` — see the built-images-pull-always row of
+# _workload_property_rows.py.
 _BUILT_PREFIX = "localhost:"
 
 # `sha-` + 12 hex, the shape image-builder's content tag fact produces
