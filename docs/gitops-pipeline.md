@@ -306,18 +306,21 @@ control plane, MetalLB, Longhorn, CoreDNS and the node config untouched.
 `scripts/deploy_tools/narrow_setup.py` which of the role's own tags the changed paths reach,
 and writes the answer to `/var/lib/gitops-deploy/manual_plane_tags`, one line per role as
 `"<role> <tag,tag>"` or `"<role> -"` for a range it could not narrow. The journal line, the
-Discord alert, the SessionStart banner and `land.sh`'s `needs-manual-apply` note all read that
-marker. Only the tick has the changed paths in reach — the banner runs from an isolated
-worktree and cannot ask git about the primary checkout — so quoting one stored answer is what
-keeps the four from disagreeing about the same deferral.
+Discord alert and the SessionStart banner read that marker. Only the tick has the changed
+paths in reach — the banner runs from an isolated worktree and cannot ask git about the
+primary checkout — so quoting one stored answer is what keeps them from disagreeing about the
+same deferral.
 
-`land.sh` reads the row only after the tick it awaited, in `classify.narrow_plane`, and quotes
-it only where the row contains the tags derived for that PR alone
-(`land_tags.confirmed_narrow_tags`).
-Nothing else ties the row to that PR. Read before the tick, the row is absent or belongs to an
-earlier range, and a stale `coredns` row printed for an RBAC PR would apply `coredns`, clear the
-marker, and leave the RBAC change unapplied with no marker recording it. A landing whose row
-does not cover its own tags prints the role tag.
+`land.sh` reads the tick's RECEIPT instead (#3391). `deploy_defer.record` writes the same
+derivation into `/var/lib/gitops-deploy/receipts.jsonl`, one JSON line per origin SHA, beside
+each plane the tick applied (`deploy_handlers.handle_broad`). After the tick it awaited,
+`classify.narrow_plane` takes the oldest receipt whose origin contains the PR's merge commit,
+which is the tick that crossed it, and quotes that receipt's narrowing as it stands. The
+sidecar row could not be quoted that way: it spans every range that made the role pending,
+so `land.sh` had to re-derive the PR's own tags to prove a stale `coredns` row was not being
+printed for an RBAC PR. No covering receipt, or a role the receipt could not narrow, prints
+the role tag. A contended tick that resets its ff-merge drops its receipt with the rest of
+what it recorded.
 
 A landing that deploys its own merge commit skips the tick, so no row exists for its range
 yet. It prints the tags derived for that PR alone (`land_tags.own_narrow_tags`, #3126), with
@@ -663,7 +666,7 @@ stay).
       hold GitOps Deploy — Status red as normal operation. It was not enough on its own
       (#2570), and the resolution keeps that argument intact: what it rules out is a signal
       that PAGES, not a durable record. So the hand-edited and denylisted classes are written
-      to **`k8s_unapplied`**, a second marker in the same line format that `gitops_status`
+      to **`k8s_unapplied`**, a class of the `owed` ledger (#3392) that `gitops_status`
       never opens. The SessionStart banner and the deployer's journal read it, and every tick
       DISCHARGES a line whose service has since been deployed — asked of the service's release
       record and one `git merge-base --is-ancestor`, which is what makes an operator's own
@@ -1165,9 +1168,21 @@ stay).
 
 ### The `k8s_deferred` and `k8s_unapplied` markers, in full
 
-Moved from the role file's *Safety* section on 2026-09-26 (#2679). Both markers hold one line
-per service, `"<origin_sha> <service> <unix_ts>"`, for a k8s change a broad tick merged and
-did not deploy.
+Moved from the role file's *Safety* section on 2026-09-26 (#2679). Both hold one entry per
+service for a k8s change a broad tick merged and did not deploy. `k8s_deferred` is a line
+marker, `"<origin_sha> <service> <unix_ts>"`. `k8s_unapplied` is a class of the `owed` ledger,
+`/var/lib/gitops-deploy/owed.jsonl` (#3392): one JSON object per line carrying `class`,
+`subject`, `origin` and `at`.
+
+**The ledger exists because the line markers break on a new field.** Each line parser accepts
+an exact field count and skips anything else, and the monitor-bridge, `deploy_ui` and
+`renovate_agent` roles each redeploy their copy on their own schedule. A field a new deployer appended
+therefore read as no pending work in a reader that had not redeployed, which is why
+`manual_plane_tags` is a sidecar. `gitops_markers.parse_owed` ignores keys it does not know,
+and every writer carries them through a rewrite. `k8s_unapplied` moved first because nothing
+pages on it. The deployer folds a host's pre-#3392 `k8s_unapplied` file into the ledger at the
+top of each tick (`DeployerState.fold_legacy_k8s_unapplied`), and the checkout-side readers
+union that file until the fold has run.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
@@ -1188,7 +1203,7 @@ from the FIRST change, with the second still unapplied. `k8s_deferred` keeps its
 instead, because a tick clears that marker by deploying the service, and `unrecord` can reset
 the tree under it.
 
-**A torn line naming a service is repaired in place, on both markers** (#2657). The parser
+**A torn line naming a service is repaired in place, on both** (#2657). The parser
 skips a line it cannot read, so a writer trusting only the parsed entries would append a
 second line beside the torn one, and every clear and every discharge would leave that one
 standing forever. The repair happens at the next record or clear naming that service, so a
@@ -1867,10 +1882,11 @@ under-sized.
   the `manual_plane_tags` sidecar `deploy_defer.record` writes. A row is logged on every later
   tick, paged once per SHA, and cleared by the tick applying the role's real playbook or by
   `gitops_state.py clear-manual-plane <role>`, with `--applied <tags>` after a narrowed apply.
-- **The `k8s_deferred` and `k8s_unapplied` markers** each hold one
-  `"<origin_sha> <service> <unix_ts>"` line per service: the first for a budget deferral, which
-  `gitops_status` pages on at six hours, the second for the hand-edited and denylisted classes,
-  which never pages and which the SessionStart banner reads. The hand clears are
+- **The `k8s_deferred` marker and the `k8s_unapplied` ledger class** each hold one entry per
+  service: the first, a `"<origin_sha> <service> <unix_ts>"` line, for a budget deferral, which
+  `gitops_status` pages on at six hours; the second, a JSON line in `owed.jsonl`, for the
+  hand-edited and denylisted classes, which never pages and which the SessionStart banner
+  reads. The hand clears are
   `gitops_state.py clear-k8s-deferred <svc>` and `clear-k8s-unapplied <svc>`.
 - **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True)`):
   `last_run` is still written, so GitOps-Alive stays green, and the page is throttled to twice per

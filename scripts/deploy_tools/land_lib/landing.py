@@ -29,6 +29,10 @@ from deploy_tools.land_lib.outcome import (
     unrecorded_apply_note,
 )
 from deploy_tools.land_lib.tools import Classifier, Tools
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from gitops_markers import Receipt, parse_receipts
 
 BRANCH = "master"
 
@@ -265,6 +269,21 @@ class Landing:
             return False
         applied = marker.split()[0]
         return self.git("merge-base", "--is-ancestor", sha, applied).returncode == 0
+
+    def receipt_for(self, sha: str) -> Receipt | None:
+        """The deployer's receipt for the tick that crossed `sha`, or None when there is none.
+
+        The tick writes one receipt per origin SHA it crossed with a broad change (#3391), so
+        the receipt for this landing is the OLDEST one whose origin contains `sha`: any later
+        receipt containing it too belongs to a tick whose range started past it. None for an
+        absent or unreadable marker, and for a receipt this checkout cannot resolve, so the
+        caller keeps the whole-role tag — the answer that is blunt but never wrong.
+        """
+        for receipt in parse_receipts(self.state("receipts")):
+            ancestry = self.git("merge-base", "--is-ancestor", sha, receipt.origin)
+            if ancestry.returncode == 0:
+                return receipt
+        return None
 
     def tick_half_unrecorded(self) -> bool:
         """Is this PR's self-applied half converged-but-unapplied?

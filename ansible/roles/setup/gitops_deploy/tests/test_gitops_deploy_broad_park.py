@@ -19,6 +19,7 @@ import pytest
 import deploy_defer
 import deploy_locks
 from deploy_tick_types import TickTarget
+from gitops_markers import parse_receipts
 
 # The two SHAs the `tick` fixture bounds a range with; see test_gitops_deploy_main_branches.py
 # for why `from conftest import` is avoided.
@@ -273,6 +274,18 @@ def test_a_mixed_range_applies_the_deploy_plane_and_still_records_the_role(
     assert gitops_deploy.STATE.broad_applied == f"{ORIGIN} ansible/deploy.yml sonarr", (
         "the half that WAS applied still records it"
     )
+
+
+def test_a_mixed_range_writes_one_receipt_naming_both_halves(gitops_deploy, tick):
+    """The receipt `land.sh` reads instead of re-deriving (#3391): the plane the tick applied,
+    with its tags, and the role it left to a hand, under the one origin SHA it crossed to."""
+    tick.paths = [GROUP_VARS, K3S_SETUP]
+    tick.narrow = (0, "sonarr")
+    assert gitops_deploy.main(tick.tools) == 0
+    (receipt,) = parse_receipts(gitops_deploy.STATE.read("receipts"))
+    assert receipt.origin == ORIGIN
+    assert receipt.applied == {"ansible/deploy.yml": ("sonarr",)}
+    assert list(receipt.manual) == ["k3s"]
 
 
 def test_a_setup_role_the_deployer_can_apply_logs_no_park(gitops_deploy, tick, capsys):

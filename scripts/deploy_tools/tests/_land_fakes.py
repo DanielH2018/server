@@ -110,8 +110,6 @@ class Fakes:
     # answers BEHIND unless a test says the tick crossed the merge commit.
     merge_applied_rc: int = 1
     state: dict[str, str] = field(default_factory=dict)
-    # What `tools.confirm_narrowing` answers: role tag -> the deployer's row it confirmed.
-    narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
     # What `tools.own_narrowing` answers on the fast path: role tag -> this PR's derivation.
     own_narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
     # The paths `tools.paths_a_hand_must_apply` drops: a shared role's change that moves no
@@ -271,11 +269,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     def await_ci(sha, timeout):
         return CiVerdict(*await_ci_seq(sha, timeout))
 
-    def confirm_narrowing(paths, pr_range, primary, sidecar):
-        # The sidecar is recorded: a phase must pass what the deployer's marker holds.
-        calls.append(("confirm_narrowing", (pr_range, sidecar), {}))
-        return f.narrowing
-
     def own_narrowing(paths, pr_range, primary):
         calls.append(("own_narrowing", (pr_range,), {}))
         return f.own_narrowing
@@ -299,7 +292,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         declared_at=lambda ref, primary: f.declared_at,
         landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
-        confirm_narrowing=confirm_narrowing,
         own_narrowing=own_narrowing,
         paths_a_hand_must_apply=lambda paths, pr_range, primary, declared: [
             p for p in paths if p not in f.plane_paths_dropped

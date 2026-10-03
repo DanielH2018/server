@@ -24,7 +24,7 @@ through every phase, so this table is the contract no signature states:
 | `ci.preflight` | `opts.primary` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `tick.run_tick` | `opts.lock_retries`, `opts.lock_backoff` | `ledger.lock_waited`, `ledger.lock_holder`, `ledger.t_tick`, `tick_watch_abandoned` |
-| `classify.narrow_plane` (after an awaited tick only) | `plane`, `plane_paths`, `pr_paths`, `pr_range`, `declared`, `quiet`, `opts.primary` | `plane` |
+| `classify.narrow_plane` (after an awaited tick only) | `plane`, `plane_paths`, `merge_sha`, the `receipts` marker, `declared`, `quiet` | `plane` |
 | `deploy.deploy_phase` | `resolved_tags`, `k8s_only`, `needs_diff`, `declared`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `k8s_only`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
 | `health_verdict.health` | `resolved_tags`, `deployed_at`, `plane`, `self_applied`, `remaining_setup`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
 
@@ -93,13 +93,13 @@ def _step_tick(ln: Landing) -> None:
             "kicks it after the deploy to converge the primary checkout"
         )
         ln.ledger.t_tick = ln.ledger.t_ci
-        # No row for this range exists yet, so the PR's own derivation narrows the note.
+        # No receipt for this range exists yet, so the PR's own derivation narrows the note.
         classify.narrow_plane(ln, awaited=False)
         return
     tick.run_tick(ln)
     ln.ledger.t_tick = ln.tools.clock()
-    # Only here, after an awaited tick: before it, the deployer's narrowing holds no row for
-    # this PR's range. The fast path above keeps the whole-role tag.
+    # Only here, after an awaited tick: before it, no receipt covers this PR's merge commit.
+    # The fast path above narrows from the PR's own derivation instead.
     classify.narrow_plane(ln)
 
 
