@@ -125,7 +125,7 @@ def test_the_owning_job_is_read_from_the_recurringjob_crs():
     lookup = _named("Read which recurring job owns")[0]["ansible.builtin.command"][
         "argv"
     ]
-    # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
+    # Exact match, not `in`: see ansible/tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     assert any(a == "recurringjobs.longhorn.io" for a in lookup)
     assert any("spec.groups" in a and "{{ seed_group }}" in a for a in lookup)
     refusal = _named("Refuse a group no recurring job selects")

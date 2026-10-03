@@ -221,7 +221,7 @@ Your first act is to record which agent took the work:
 {_landing(host, batch, target)}
 {_finishing(host, target)}
 ## Anything you do not fix
-File it with {findings} (flags: docs/reference/scripts.md). Never leave it unmentioned.
+File it with {findings} (flags: `findings.py open --help`). Never leave it unmentioned.
 Name it in the PR body as `Filed for later: #N`. A closing keyword before the number — close,
 fixes, resolved and the rest, with or without a colon — closes that issue when the PR merges,
 whatever the sentence around it says: "Filed and not fixed: #2509" closed #2509 (issue #2513).
