@@ -415,8 +415,9 @@ def test_the_shim_injects_on_the_real_hook_path():
     The in-process tests above cannot see the failure this hook is most exposed to: any
     byte on stdout before the JSON — a uv reconcile line, an import-time print — makes the
     harness read the whole output as plain text and inject nothing. The runner's own
-    `readlink -f "$0"` keeps it on this checkout's `.py`, so the row it appends lands in
-    this checkout's gitignored `.claude/logs/instructions.log`.
+    `readlink -f "$0"` keeps it on this checkout's `.py`, and the row it appends lands in
+    the primary checkout's gitignored `.claude/logs/instructions.log`, the path the
+    logger module resolves.
 
     The hook is the dispatcher, so the object also carries whatever the decision arms
     said about the same command. `sed -n` on a file is a read, which none of the arms
@@ -446,8 +447,7 @@ def test_the_shim_injects_on_the_real_hook_path():
     assert out["hookEventName"] == "PreToolUse"
     assert "permissionDecision" not in out
     assert f"{KNOWN_ROLE}/CLAUDE.md" in out["additionalContext"]
-    log = os.path.join(_HERE, "..", "logs", "instructions.log")
-    with open(log, encoding="utf-8") as fh:
+    with open(_mod._logger.LOG, encoding="utf-8") as fh:
         rows = fh.read().splitlines()
     assert any(f"[{session[:8]}]" in r and "bash_path_match" in r for r in rows), rows[
         -3:
