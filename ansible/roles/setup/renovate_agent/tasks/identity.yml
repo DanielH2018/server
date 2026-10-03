@@ -1,27 +1,20 @@
 ---
-# What the agent's own user needs that the operator's user used to supply: a Claude Code
-# install, a clone to work in, and read access to the deployer's hold markers. Each task runs
-# as that user or grants it read-only access.
-
-- name: Hand the agent's earlier state to its own user
-  tags: [renovate-agent-code, renovate-agent-service]
-  # The run record and transcripts were written by sys_user before the move. Recursing over
-  # the clone on each run costs a few seconds of stat calls and keeps ownership true.
-  ansible.builtin.file:
-    path: "{{ renovate_agent_home }}"
-    state: directory
-    recurse: true
-    owner: "{{ renovate_agent_user }}"
-    group: "{{ sys_user }}"
-  become: true
+# What the agent's own user needs that the operator's user used to supply: uv and the pinned
+# Python, a Claude Code install, a clone to work in, and read access to the deployer's hold
+# markers.
+#
+# Every task runs as root with HOME pointed at the agent's home, and the last one hands the
+# home to the agent. Not `become_user`: a module run as the agent needs an interpreter it can
+# execute, and the controller's is the repo venv under the 0750 /home/{{ sys_user }}, while the
+# system python3 is below the repo's syntax floor
+# (ansible/tests/setup/test_host_python_invocations.py). Root runs nothing here that
+# sys_user does not already run in the claude_code and initial_setup roles.
 
 - name: Create the agent user's bin directory
   tags: [renovate-agent-code, renovate-agent-service]
   ansible.builtin.file:
     path: "{{ renovate_agent_home }}/.local/bin"
     state: directory
-    owner: "{{ renovate_agent_user }}"
-    group: "{{ sys_user }}"
     mode: "0755"
   become: true
 
@@ -34,8 +27,7 @@
     src: /home/{{ sys_user }}/.local/bin/uv
     dest: "{{ renovate_agent_home }}/.local/bin/uv"
     remote_src: true
-    # The agent's own ownership, as the recursive chown above sets it; root would flip back and
-    # forth with that task on every apply. Only this user runs this copy.
+    # The ownership the closing chown sets, so the two tasks do not flip it on every apply.
     owner: "{{ renovate_agent_user }}"
     group: "{{ sys_user }}"
     mode: "0755"
@@ -55,7 +47,6 @@
     'Installed' in (renovate_agent_python.stderr | default(''))
     + (renovate_agent_python.stdout | default(''))
   become: true
-  become_user: "{{ renovate_agent_user }}"
 
 - name: Download the Claude Code installer for the agent's user
   tags: [renovate-agent-code, renovate-agent-service]
@@ -64,7 +55,6 @@
     dest: "{{ renovate_agent_home }}/claude-install.sh"
     mode: "0755"
   become: true
-  become_user: "{{ renovate_agent_user }}"
 
 - name: Install Claude Code for the agent's user
   tags: [renovate-agent-code, renovate-agent-service]
@@ -76,19 +66,34 @@
   environment:
     HOME: "{{ renovate_agent_home }}"
   become: true
-  become_user: "{{ renovate_agent_user }}"
 
 - name: Clone the repo for the agent's user
   tags: [renovate-agent-code, renovate-agent-service]
   # Its own clone, so the session never writes the primary checkout's .git, which the deployer
-  # fetches and fast-forwards. update: false, because run_worktree.py fetches on each run.
-  ansible.builtin.git:
-    repo: "https://github.com/{{ renovate_agent_repo }}.git"
-    dest: "{{ renovate_agent_clone_dir }}"
-    version: master
-    update: false
+  # fetches and fast-forwards. Run-once rather than the git module: root's git refuses a
+  # repository another user owns, and run_worktree.py fetches on every run anyway.
+  ansible.builtin.command:
+    argv:
+      - git
+      - clone
+      - --quiet
+      - "https://github.com/{{ renovate_agent_repo }}.git"
+      - "{{ renovate_agent_clone_dir }}"
+  args:
+    creates: "{{ renovate_agent_clone_dir }}/.git"
   become: true
-  become_user: "{{ renovate_agent_user }}"
+
+- name: Hand the agent's home to its own user
+  tags: [renovate-agent-code, renovate-agent-service]
+  # Everything above ran as root, and the run record predates the move, written by sys_user.
+  # The group stays sys_user so the docs cron reads the run record.
+  ansible.builtin.file:
+    path: "{{ renovate_agent_home }}"
+    state: directory
+    recurse: true
+    owner: "{{ renovate_agent_user }}"
+    group: "{{ sys_user }}"
+  become: true
 
 - name: Let the agent's user read the deployer's hold markers
   tags: [renovate-agent-code, renovate-agent-service]

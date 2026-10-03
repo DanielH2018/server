@@ -23,6 +23,11 @@ TimeoutStartSec={{ renovate_agent_unit_timeout }}
 Environment=PATH={{ renovate_agent_home }}/.local/bin:/usr/bin:/bin
 Environment=HOME={{ renovate_agent_home }}
 Environment=PYTHONDONTWRITEBYTECODE=1
+# The repo's hook shim defaults to the operator's checkout and uv, which this user cannot read;
+# a guard that cannot start turns each Bash call into an `ask`, and nobody answers one here.
+# run_worktree.prepare_worktree syncs this tree's `.venv` before the session starts.
+Environment=RUN_HOOK_PROJECT_DIR={{ renovate_agent_clone_dir }}/.claude/worktrees/{{ renovate_agent_worktree }}
+Environment=RUN_HOOK_UV={{ renovate_agent_home }}/.local/bin/uv
 # A landing blocks in `systemctl start` for up to the lander's 60-minute TimeoutStartSec, and
 # Claude Code caps a Bash call at 10 minutes unless this raises it. A call killed early leaves
 # the landing running, but the session would then read a verdict file the lander has not yet

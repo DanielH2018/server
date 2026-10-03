@@ -237,6 +237,25 @@ def test_the_prompt_lands_through_the_lander_the_polkit_rule_admits() -> None:
     )
 
 
+def test_the_hooks_run_in_the_worktree_the_wrapper_builds() -> None:
+    """The shim's defaults are the operator's checkout and uv, which this user cannot read, and
+    a guard that cannot start asks — an unattended denial on every Bash call."""
+    envs = dict(e.split("=", 1) for e in directive(render(UNIT, MOVED), "Environment"))
+    config = dict(
+        line.split("=", 1)
+        for line in render(CONFIG_ENV, MOVED).splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+    # renovate_agent.main builds the run worktree's path the same way.
+    built = f"{config['REPO_DIR']}/.claude/worktrees/{config['WORKTREE']}"
+    assert envs.get("RUN_HOOK_PROJECT_DIR") == built
+    assert envs.get("RUN_HOOK_UV") == f"{HOME}/.local/bin/uv"
+    shim = (HOOKS / "run-hook.sh").read_text()
+    assert "${RUN_HOOK_PROJECT_DIR:-" in shim and "${RUN_HOOK_UV:-" in shim, (
+        "the hook shim no longer reads the overrides this unit sets"
+    )
+
+
 def guard_decision(command: str) -> str | None:
     """The decision the repo's PreToolUse:Bash dispatcher reaches for `command`, or None."""
     sys.path.insert(0, str(HOOKS))  # the arms import _hook_common

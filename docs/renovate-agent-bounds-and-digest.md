@@ -65,6 +65,11 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
   cannot read. The role copies the operator's pinned uv into the agent's `~/.local/bin` and runs
   `uv python install` as the agent. Every project hook runs through `uv run`, and in an
   unattended session a hook that cannot start makes each Bash call an `ask`, which is a denial.
+- **Project hooks.** `.claude/hooks/run-hook.sh` defaults to the operator's checkout and uv. The
+  unit sets `RUN_HOOK_PROJECT_DIR` to the run worktree and `RUN_HOOK_UV` to the agent's uv, and
+  `prepare_worktree` runs `uv sync --frozen` in that tree before the session starts. A guard
+  that cannot import its dependencies raises, and the dispatcher drops its verdict without a
+  word.
 - **GitHub token.** `renovate_agent_gh_token` is a fine-grained token for this repo alone:
   pull requests and actions read-write, contents, checks and metadata read. With no contents
   write it cannot push or merge, and with no issues write it cannot file a finding, so the

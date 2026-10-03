@@ -72,7 +72,7 @@ class TestLocksTheNewTree:
         )
 
         assert recorder.subcommands() == ["prune", "add", "lock"]
-        lock_call = recorder.calls[-1]
+        lock_call = next(c for c in reversed(recorder.calls) if "lock" in c)
         assert lock_call[:5] == ["git", "-C", str(tmp_path), "worktree", "lock"]
         reason = lock_call[lock_call.index("--reason") + 1]
         match = LOCK_OWNER.search(reason)
@@ -110,6 +110,37 @@ class TestUnlocksBeforeRemovingItsOwnTree:
         # override a lock (git requires it twice) — the unlock must precede the remove.
         assert subs.index("unlock") < subs.index("remove")
         assert path.is_dir(), "a registered tree is git's to remove, not ours to rmtree"
+
+
+class TestSyncsTheTreeTheHooksRunIn:
+    """The hooks run `uv run --no-sync` in the run worktree, which starts with no `.venv`."""
+
+    def test_the_locked_tree_is_synced_before_the_session(self, tmp_path) -> None:
+        calls: list[tuple[list[str], str | None]] = []
+
+        def run(argv, cwd=None, timeout=120):
+            calls.append((argv, cwd))
+            return 0, ""
+
+        path = str(tmp_path / "renovate-auto")
+        run_worktree.prepare_worktree(
+            str(tmp_path), path, "worktree-renovate-auto", _tools(run)
+        )
+
+        assert calls[-1] == (["uv", "sync", "--frozen", "--quiet"], path)
+        assert "lock" in calls[-2][0]
+
+    def test_a_failed_sync_raises_naming_the_uv_error(self, tmp_path) -> None:
+        def run(argv, cwd=None, timeout=120):
+            return (1, "error: lockfile needs updating") if argv[0] == "uv" else (0, "")
+
+        with pytest.raises(RuntimeError, match="uv sync failed: error: lockfile"):
+            run_worktree.prepare_worktree(
+                str(tmp_path),
+                str(tmp_path / "renovate-auto"),
+                "worktree-renovate-auto",
+                _tools(run),
+            )
 
 
 class TestReclaimsAnUnregisteredDirectory:
