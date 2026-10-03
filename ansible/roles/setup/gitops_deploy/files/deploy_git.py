@@ -1,16 +1,12 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_git.py
 """What a tick should do given the two HEADs, the hold, and the CI verdict.
 
-`next_action` is the decision; `ci_verdict` and `github_token` feed it the gate;
-`is_diverged` and `behind_marker` are the two watchdog signals a parked host raises; the
+`next_action` is the decision; `ci_verdict` feeds it the gate, reducing the check-runs that
+deploy_toolbox reads through host_lib.github_get; `is_diverged` and `behind_marker` are the two watchdog signals a parked host raises; the
 `dirty_*` helpers throttle the dirty-tree page.
 """
 
 from __future__ import annotations
-
-import json
-import urllib.request
-from collections.abc import Callable, Mapping
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 # A GitHub check-run conclusion that counts as "this commit is good". `skipped` and `neutral` are
@@ -24,85 +20,6 @@ _CI_PASS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 _CI_NO_VERDICT_CONCLUSIONS = frozenset(
     {"cancelled", "stale", "skipped_by_concurrency", None}
 )
-
-
-def github_token(environ: Mapping[str, str], run: Callable) -> str | None:
-    """A GitHub token for the check-runs gate, or None to query anonymously.
-
-    `GH_TOKEN` / `GITHUB_TOKEN` in the environment win, then `gh auth token` — the gh CLI on
-    daniel-box is logged in as the repo owner, and the deployer runs as that same user. The
-    lookup is best-effort: a missing gh, an expired login, or a slow keyring all return None,
-    and the caller queries anonymously exactly as it did before this existed.
-
-    Why authenticate a read of a public repo. The anonymous limit is 60 requests/hour PER
-    SOURCE IP, and every GitHub call from this host shares it: the tick's gate, `await_ci.py`
-    polling every 20s for up to 900s during a landing (45 requests per run), renovate_notify,
-    the ruleset-drift cron. Two `land.sh` runs in an hour exhaust it, after which the tick's
-    gate reads `HTTP Error 403: rate limit exceeded` and defers as `CI not finished` — which
-    is correct fail-closed behaviour and also a deploy outage nobody asked for. Measured
-    2026-09-01: two landings and a manual tick, three 403 deferrals. Authenticated, the
-    limit is 5000/hour per token.
-    """
-    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
-        value = environ.get(name, "").strip()
-        if value:
-            return value
-    try:
-        proc = run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
-    except Exception:
-        return None
-    if proc.returncode != 0:
-        return None
-    token = (proc.stdout or "").strip()
-    return token or None
-
-
-def github_auth_headers(token: str | None) -> dict[str, str]:
-    """The `Authorization` header for `token`, or nothing for an anonymous request."""
-    if not token:
-        return {}
-    return {"Authorization": f"Bearer {token}"}
-
-
-def github_get(
-    repo: str,
-    path: str,
-    *,
-    user_agent: str,
-    environ: Mapping[str, str],
-    run: Callable,
-    timeout: float = 15,
-) -> dict:
-    """GET `https://api.github.com/repos/<repo>/<path>` and return the parsed JSON body.
-
-    The one request shape the deployer's CI gate and `await_ci.py` share, so the two cannot
-    drift on the headers or the token lookup (issue #2136). What a failure MEANS stays with
-    the caller: the gate maps every error to `pending`, a landing lets it raise.
-
-    Args:
-        repo: the `owner/name` slug.
-        path: the part after `/repos/<repo>/`, query string included.
-        user_agent: names the caller in GitHub's logs.
-        environ: where `github_token` looks for `GH_TOKEN` / `GITHUB_TOKEN`.
-        run: the `subprocess.run` `github_token` falls back to for `gh auth token`.
-        timeout: seconds for the whole request.
-
-    Raises:
-        urllib.error.URLError: the API could not be reached, or answered non-2xx
-            (`HTTPError` is a subclass).
-        TimeoutError, OSError: the socket failed.
-        ValueError: the body was not JSON.
-    """
-    req = urllib.request.Request(
-        f"https://api.github.com/repos/{repo}/{path}",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": user_agent,
-            **github_auth_headers(github_token(environ, run)),
-        },
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.load(resp)
 
 
 def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> str:

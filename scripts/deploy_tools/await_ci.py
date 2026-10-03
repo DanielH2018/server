@@ -29,11 +29,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.git import git, git_stdout
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
+# The deployer's verdict logic, and host_lib for the GitHub request it shares with the tick's
+# gate. deploy_logic itself stays host_lib-free, so this tool names both directories.
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+sys.path.insert(0, str(HOST_LIB_FILES))
 
-from deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict, github_get
+from deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
+from host_lib import github_get, github_token
 
 CI_REPO = "DanielH2018/server"
 
@@ -74,7 +78,7 @@ def fetch_check_runs(sha: str) -> list[dict]:
     The anonymous limit is 60/hour per source IP and this poll shares it with the deployer's
     own gate on the same host: at one request per 20s for up to 900s, one landing costs 45 of
     those 60, so the second landing in an hour starved the tick's gate into deferring on a
-    403. deploy_logic.github_token carries the numbers.
+    403. host_lib.github_token carries the numbers.
     """
     return _github_get(f"commits/{sha}/check-runs?per_page=100").get("check_runs", [])
 
@@ -93,7 +97,9 @@ def fetch_check_suites(sha: str) -> list[dict]:
 
 def _github_get(path: str) -> dict:
     return github_get(
-        CI_REPO, path, user_agent="await-ci", environ=os.environ, run=subprocess.run
+        f"repos/{CI_REPO}/{path}",
+        github_token(os.environ, subprocess.run),
+        user_agent="await-ci",
     )
 
 

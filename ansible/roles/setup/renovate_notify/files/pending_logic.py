@@ -287,8 +287,8 @@ def render_pending(items: list[tuple[str, str, int]], limit: int = 1500) -> str:
     rejected, `discord()` returns False, the fingerprint never advances, and the run re-posts
     the same oversized message daily — failing to deliver in the state it exists to report.
 
-    `limit` is lower than render_digest's 1900 because both can be joined into one message.
-    `stale_pending` sorts worst-offender-first, so the worst item survives the trim.
+    `limit` is lower than render_digest's `DISCORD_MAX` because both can be joined into one
+    message. `stale_pending` sorts worst-offender-first, so the worst item survives the trim.
     """
     out = [PENDING_HEADER_MSG]
     shown = 0

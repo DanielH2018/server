@@ -1,3 +1,4 @@
+import json
 import pathlib
 import sys
 import urllib.request
@@ -53,42 +54,21 @@ def test_discord_returns_false_on_error(monkeypatch):
     assert rn.discord("https://discord.com/api/webhooks/1/abc", "hi") is False
 
 
-class _Proc:
-    def __init__(self, returncode, stdout):
-        self.returncode = returncode
-        self.stdout = stdout
+def test_an_over_long_digest_reaches_the_webhook_ending_in_the_truncation_marker(
+    monkeypatch,
+):
+    # Two caps used to apply in sequence, and the second sliced off the first's marker, so a
+    # cut digest read as a complete one (#3351).
+    captured = {}
 
+    def fake_urlopen(req, timeout=None):
+        captured["content"] = json.loads(req.data)["content"]
+        return _FakeResp(204)
 
-def test_configured_token_wins_without_running_gh():
-    def never(*_a, **_k):
-        raise AssertionError("gh must not run when config.env carries a token")
-
-    assert rn.github_token({"GITHUB_TOKEN": "ghp_cfg"}, never) == "ghp_cfg"
-
-
-def test_gh_auth_token_fills_an_empty_config():
-    calls = []
-
-    def run(cmd, **_k):
-        calls.append(cmd)
-        return _Proc(0, "gho_cli\n")
-
-    assert rn.github_token({}, run) == "gho_cli"
-    assert calls == [["gh", "auth", "token"]]
-
-
-def test_no_token_anywhere_stays_anonymous():
-    """The reject half: no token anywhere must stay anonymous.
-
-    A logged-out gh or a missing binary must degrade to the anonymous request this notifier always
-    made, never crash the daily run into a false OnFailure page.
-    """
-    assert rn.github_token({}, lambda *_a, **_k: _Proc(1, "")) == ""
-
-    def boom(*_a, **_k):
-        raise FileNotFoundError("gh")
-
-    assert rn.github_token({"GITHUB_TOKEN": "  "}, boom) == ""
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    rn.discord("https://discord.com/api/webhooks/1/abc", "x" * 5000)
+    assert len(captured["content"]) <= 2000
+    assert captured["content"].endswith("…(truncated)")
 
 
 def test_discord_returns_false_without_webhook():

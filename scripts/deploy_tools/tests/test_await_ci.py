@@ -10,10 +10,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_await_ci.py
 
 import await_ci
 
-# Resolvable only after `await_ci` has put the deployer's files/ on sys.path; the four
-# token tests below read the helpers from the module that owns them.
-import deploy_git
-
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
 
 
@@ -97,61 +93,6 @@ def test_a_real_failure_is_not_read_as_no_verdict():
     """
     runs = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
     assert not await_ci._has_only_no_verdict_conclusions(runs, REQUIRED)
-
-
-# --- the token the poll authenticates with -------------------------------------------------
-#
-# The anonymous limit is 60/hour PER SOURCE IP and shared with the deployer's own gate on the
-# same host. At one poll per 20s for up to 900s, one landing costs 45 of those 60, so the second
-# landing in an hour starved the tick into `HTTP Error 403: rate limit exceeded`.
-# Each rule is an accept/reject pair: a resolver that always returned a token and one that
-# never did are indistinguishable from the passing side alone.
-
-
-class _Proc:
-    def __init__(self, returncode, stdout):
-        self.returncode = returncode
-        self.stdout = stdout
-
-
-def test_env_token_wins_without_running_gh():
-    def never(*_a, **_k):
-        raise AssertionError("gh must not run when the environment carries a token")
-
-    assert deploy_git.github_token({"GH_TOKEN": "ghp_env"}, never) == "ghp_env"
-
-
-def test_gh_auth_token_is_used_when_the_environment_has_none():
-    calls = []
-
-    def run(cmd, **_k):
-        calls.append(cmd)
-        return _Proc(0, "gho_cli\n")
-
-    assert deploy_git.github_token({}, run) == "gho_cli"
-    assert calls == [["gh", "auth", "token"]]
-
-
-def test_no_token_falls_back_to_anonymous():
-    """The reject half: no token must fall back to anonymous, never to a crash.
-
-    A logged-out gh, a missing binary, a hung keyring -- every one of them must degrade to the
-    anonymous request this poll made before.
-    """
-    assert deploy_git.github_token({}, lambda *_a, **_k: _Proc(1, "")) is None
-    assert deploy_git.github_token({}, lambda *_a, **_k: _Proc(0, "  \n")) is None
-
-    def boom(*_a, **_k):
-        raise FileNotFoundError("gh")
-
-    assert deploy_git.github_token({}, boom) is None
-    assert deploy_git.github_token({"GH_TOKEN": "   "}, boom) is None
-
-
-def test_auth_header_is_bearer_or_absent():
-    assert deploy_git.github_auth_headers("tok") == {"Authorization": "Bearer tok"}
-    assert deploy_git.github_auth_headers(None) == {}
-    assert deploy_git.github_auth_headers("") == {}
 
 
 def _suite(status, conclusion, runs):

@@ -12,7 +12,7 @@ test"). This file closes it, so that sentence goes with it.
 NEITHER STUB PATCHES A FIRST-PARTY MODULE, which is what the monkeypatch ratchet asks for.
 `urlopen` is replaced on `urllib.request` itself — stdlib, and the name production resolves at
 call time. The token is supplied as `GH_TOKEN` in the environment rather than by replacing
-`deploy_toolbox.github_token`: `deploy_git.github_token` reads that variable first and returns
+`deploy_toolbox.github_token`: `host_lib.github_token` reads that variable first and returns
 before it would shell out to the GitHub CLI, so the asserted header does not depend on whether
 the runner happens to be logged in.
 

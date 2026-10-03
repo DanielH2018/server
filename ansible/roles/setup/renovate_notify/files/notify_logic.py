@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from host_lib import DISCORD_MAX
 from pending_logic import PENDING_HEADER
 
 # Renovate rewrites its Dependency Dashboard issue on every run (~daily on this repo's
@@ -357,7 +358,7 @@ def _pr_note(pr: PR) -> str:
     return "✅ green"
 
 
-def render_digest(items: list[tuple[PR, str]], limit: int = 1900) -> str:
+def render_digest(items: list[tuple[PR, str]], limit: int = DISCORD_MAX) -> str:
     """Render the actionable (pr, bucket) list into a Discord digest message.
 
     Groups by bucket in `_BUCKET_ORDER`, then truncates the tail (adding a "…and N more"
