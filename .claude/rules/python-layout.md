@@ -75,7 +75,8 @@ row; once it nears the 500-line test-module cap, a row goes in `_config_property
 
 A textual census of the tracked tree follows the same rule. It is one `git ls-files` selector
 and one per-file predicate, and it goes in as a `Census` row of
-`ansible/tests/repo/test_census_rows_python.py` or `test_census_rows_text.py`.
+`ansible/tests/repo/test_census_rows_python.py` or `test_census_rows_text.py`, or of
+`test_census_rows_suite.py` when it polices the suite's own guards.
 `ansible/tests/_row_table.py` is the harness both tables share.
 
 ## No tests under `ansible/filter_plugins/`
