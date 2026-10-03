@@ -5,8 +5,6 @@ galaxy_info:
   license: MIT
   min_ansible_version: "2.15"
 
-# Logical ordering: no upstream role deps
-# Actual sequencing is computed by the toposort filter in deploy.yml reading meta/deps.yml,
-# not by Ansible meta dependencies (which conflict with the include_role loop
-# variable architecture used in deploy.yml).
+# No Ansible meta dependencies: they conflict with the include_role loop in deploy.yml,
+# whose Docker play runs roles in the host's containers_list order.
 dependencies: []

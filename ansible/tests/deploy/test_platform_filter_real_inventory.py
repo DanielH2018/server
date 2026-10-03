@@ -64,3 +64,31 @@ def test_daniel_server_is_fully_drained():
     assert len(containers) == 0
     assert len(filter_by_platform(containers, "docker")) == 0
     assert filter_by_platform(containers, "k8s") == []
+
+
+# The Docker play deploys in containers_list order, with no dependency resolution, so the Pi's
+# list order IS its deploy order. Each pair is (upstream, downstream): autoheal restarts
+# containers through docker-proxy-lifecycle, and alloy discovers logs through docker-proxy.
+PI_ORDERING = [("docker-proxy", "autoheal"), ("docker-proxy", "alloy")]
+
+
+def _order_violations(names, edges):
+    return [
+        (up, down)
+        for up, down in edges
+        if up not in names or down not in names or names.index(up) > names.index(down)
+    ]
+
+
+def test_daniel_pi_lists_every_upstream_before_its_downstream():
+    names = [
+        c["name"] for c in filter_by_platform(_containers(HOST_VARS / "daniel-pi.yml"))
+    ]
+
+    assert _order_violations(names, PI_ORDERING) == []
+
+
+def test_an_upstream_listed_after_its_downstream_is_a_violation():
+    names = ["autoheal", "docker-proxy", "alloy"]
+
+    assert _order_violations(names, PI_ORDERING) == [("docker-proxy", "autoheal")]

@@ -99,22 +99,15 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
 `deploy.yml` runs two plays over the host's `containers_list`, split by each entry's
 `platform:` key:
 
-- **Docker play** (`platform: docker`, effectively just the Pi) — doesn't deploy roles in
-  list order; it resolves a **dependency graph** first (custom filters in
-  `ansible/filter_plugins/toposort.py`):
-  1. Each role declares upstreams in `meta/deps.yml` (`role_deps:`).
-  2. `build_dep_map` loads those (only the relevant closure for a tagged run).
-  3. `toposort_containers` orders services so dependencies come up first.
-  4. For a tagged run (`--tags sonarr`), `dep_closure` + `expand_with_deps` pull up any
-     **down** dependencies while skipping ones already running.
-
-  These filters are unit-tested (`ansible/tests/deploy/test_toposort.py`) — run via the `pytest`
-  pre-commit hook.
+- **Docker play** (`platform: docker`, only daniel-pi) — deploys roles in `containers_list`
+  order. The Pi's one ordering constraint, docker-proxy before autoheal, is that list's order,
+  and `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it. A tagged run
+  (`--tags autoheal`) deploys only the tagged role and does not pull up its dependency.
 
 - **k8s play** (`platform: k8s`) — toposorts `roles/k8s/<name>` with `build_k8s_dep_map` /
-  `toposort_containers` (the same `toposort_containers` the Docker play uses, from a
-  differently-built map). A role rendering a Traefik CRD gets an edge onto `traefik`, which
-  installs the CRDs every later `IngressRoute` depends on; `use_authelia: true` gets one onto
+  `toposort_containers` (`ansible/filter_plugins/toposort.py`, unit-tested in
+  `ansible/tests/deploy/test_toposort.py`). A role rendering a Traefik CRD gets an edge onto
+  `traefik`, which installs the CRDs every later `IngressRoute` depends on; `use_authelia: true` gets one onto
   `authelia`, which creates the middleware other routes reference. Both are derived from the
   role's own templates/entry, not hand-listed; an edge no template carries (crowdsec before
   traefik, for the LAPI machine credential) is declared as `depends_on:` on the entry instead.

@@ -23,70 +23,12 @@
         containers_list_unfiltered: "{{ containers_list }}"
       tags: always
 
-    # Must precede build_dep_map: a k8s-platform entry should never reach
-    # dependency resolution, the dep closure, or the docker_container_info
-    # state check below.
+    # Runs in list order, with no dependency resolution: daniel-pi is the only Docker host, and
+    # its one ordering constraint (docker-proxy before autoheal) is its containers_list order.
+    # ansible/tests/deploy/test_platform_filter_real_inventory.py pins that order.
     - name: Restrict this play to Docker-platform containers
       ansible.builtin.set_fact:
         containers_list: "{{ containers_list | filter_by_platform('docker') }}"
-      tags: always
-
-    - name: Build role dependency map
-      ansible.builtin.set_fact:
-        _container_deps_map: "{{ containers_list | build_dep_map(playbook_dir, ansible_run_tags) }}"
-      tags: always
-
-    - name: Sort containers by dependency order
-      ansible.builtin.set_fact:
-        containers_list: "{{ containers_list | toposort_containers(_container_deps_map) }}"
-      tags: always
-
-    - name: Compute dependency closure for tagged containers
-      ansible.builtin.set_fact:
-        _deps_to_check: "{{ containers_list | dep_closure(_container_deps_map, ansible_run_tags) }}"
-      when: "'all' not in ansible_run_tags"
-      tags: always
-
-    - name: Check running state of dependencies
-      community.docker.docker_container_info:
-        name: "{{ item.name }}"
-      register: _container_state_results
-      loop: "{{ _deps_to_check }}"
-      ignore_errors: true
-      when: "'all' not in ansible_run_tags"
-      tags: always
-
-    - name: Expand tagged deployment to include unmet dependencies
-      # `selectattr('container', 'defined')` before the none-check is load-bearing, not
-      # belt-and-braces: the state task above is `ignore_errors`, and a FAILED result has no
-      # `container` key at all, so `rejectattr('container', 'none')` raises
-      # "object of type 'dict' has no attribute 'container'" and takes the whole play down.
-      #
-      # It fails that way whenever community.docker cannot import its `docker`/`requests` deps
-      # on the target. Running on the host itself that never happens — uv's venv supplies them
-      # (repo CLAUDE.md) — but driving the play from another host over SSH selects the target's
-      # SYSTEM python, which has neither. So a cross-host `-e target=` deploy dies here while
-      # the identical local run is fine.
-      #
-      # A container whose state could not be read is treated as not-running, which expands its
-      # dependencies. That errs toward deploying more, and deploying an already-running
-      # dependency is idempotent — the safe direction to be wrong in.
-      ansible.builtin.set_fact:
-        containers_list: >-
-          {{
-            containers_list | expand_with_deps(
-              _container_deps_map,
-              ansible_run_tags,
-              _container_state_results.results
-                | default([])
-                | selectattr('container', 'defined')
-                | rejectattr('container', 'none')
-                | selectattr('container.State.Running', 'equalto', true)
-                | map(attribute='item.name')
-                | list
-            )
-          }}
-      when: "'all' not in ansible_run_tags"
       tags: always
 
   tasks:
@@ -94,18 +36,16 @@
       ansible.builtin.include_role:
         name: "{{ container_item.name }}"
         apply:
-          # Effective tags default to the role name (mirrors _tags() in
-          # filter_plugins/toposort.py); entries may still override with `tags:`.
+          # Effective tags default to the role name; entries may still override with `tags:`.
           tags: "{{ container_item.tags | default([container_item.name]) }}"
       loop: "{{ containers_list }}"
       loop_control:
         loop_var: container_item
       tags: always
 
-# Second play, not a branch inside the first: the Docker play's pre_tasks run
-# docker_container_info against every dependency, which has nothing to say about a k8s
-# workload and fails outright on a host with no Docker. Keeping them separate also means a
-# broken k8s manifest cannot stop a Docker deploy, and vice versa.
+# Second play, not a branch inside the first: the k8s play has its own ordering pre_tasks and
+# batched rollout, and keeping the plays separate means a broken k8s manifest cannot stop a
+# Docker deploy, and vice versa.
 #
 # Self-guarding on hosts that run no k8s workloads: filter_by_platform returns [] there and
 # the loop does nothing, so this needs no `when: inventory_hostname == ...` to skip
@@ -130,8 +70,7 @@
         containers_list: "{{ containers_list_unfiltered | filter_by_platform('k8s') }}"
       tags: always
 
-    # Toposorted rather than list order, mirroring the Docker play above (build_dep_map /
-    # toposort_containers) but through build_k8s_dep_map, the k8s counterpart in the same
+    # Toposorted rather than list order, through build_k8s_dep_map and toposort_containers in
     # filter_plugins/toposort.py: the traefik-CRD and authelia-middleware edges are derived
     # from the role's own templates and its `use_authelia` flag, not hand-listed, and the one
     # edge no template carries (crowdsec before traefik, for the LAPI machine credential) is
@@ -139,7 +78,7 @@
     # so on the live inventory — where every entry already sits in a valid topological order —
     # this is a no-op (see ansible/tests/deploy/test_k8s_toposort.py).
     #
-    # Built from the FULL list, unlike the Docker play's tag-narrowed map: this play applies
+    # Built from the FULL list, never a tag-narrowed one: this play applies
     # `--tags` per-role inside the batch loop below rather than narrowing containers_list
     # first, so a closure-only map would leave every role outside a tagged run's closure with
     # no traefik/authelia edge at all.

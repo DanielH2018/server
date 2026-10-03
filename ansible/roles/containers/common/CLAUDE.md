@@ -36,7 +36,7 @@ Utility role (not a container). Every container role calls into it via
 ## Notable
 - `container_item` (name/port/networks/hostname/use_authelia) is the per-service dict from
   `containers_list`; the deploy loop in `deploy.yml` sets it for each role.
-- No `meta/deps.yml` deps — it's a pure utility, ordered first implicitly.
+- Not a `containers_list` entry — a pure utility the service roles include, never deployed on its own.
 - **Task block tags (fleet-wide convention, 2026-06-11):** every container-role task
   carries `config` (dirs/templates/files/host config), `deploy` (the docker_deploy
   include + post-deploy container ops), or `cron` (scheduled jobs), placed right under

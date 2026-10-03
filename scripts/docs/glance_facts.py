@@ -3,7 +3,7 @@
 `gen_role_glance.py` owns the k8s readers, the in-place writer and the CLI; its docstring says which
 facts each role shape prints and why. This module holds the readers for the setup and Pi planes — a
 setup role's applying playbook, crons and timers; a Pi compose role's image pins, `containers_list`
-facts, `meta/deps.yml` ordering and `common_config_changed` wiring — and `image_repository`, which
+facts and `common_config_changed` wiring — and `image_repository`, which
 every plane's image line goes through.
 
 STATIC PARSING ONLY: tasks and playbooks through `yaml.safe_load`, templates by line with
@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from lib import yaml_fast
-from lib.render_guard import containers_entries, entry_tags, load_yaml
+from lib.render_guard import containers_entries, entry_tags
 from lib.jinja_comments import strip_jinja_comments
 from lib.jinja_defaults import resolve
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, REPO, ROLES
@@ -315,17 +315,6 @@ def compose_images(role_dir: Path) -> list[tuple[str, list[str]]]:
     return list(found.items())
 
 
-def role_deps(role_dir: Path) -> list[str]:
-    """The `role_deps` a `meta/deps.yml` declares, or none."""
-    data = (
-        load_yaml(role_dir / "meta" / "deps.yml")
-        if (role_dir / "meta" / "deps.yml").is_file()
-        else None
-    )
-    deps = (data or {}).get("role_deps") if isinstance(data, dict) else None
-    return [str(d) for d in deps or []]
-
-
 def config_change_wiring(role_dir: Path) -> str | None:
     """The `common_config_changed` expression the role hands `docker_deploy`, or None.
 
@@ -370,16 +359,6 @@ def pi_glance_lines(entry: dict[str, Any], role_dir: Path) -> list[str]:
     )
     facts.append("Authelia" if entry.get("use_authelia") else "no Authelia")
     lines.append(f"- **Entry:** `host_vars/{PI_HOST}.yml` → " + ", ".join(facts))
-
-    deps = role_deps(role_dir)
-    if deps:
-        lines.append(
-            "- **Depends on:** "
-            + ", ".join(f"`{d}`" for d in deps)
-            + " (`meta/deps.yml`)"
-        )
-    else:
-        lines.append("- **Depends on:** nothing (no `meta/deps.yml`)")
 
     wiring = config_change_wiring(role_dir)
     if wiring:
