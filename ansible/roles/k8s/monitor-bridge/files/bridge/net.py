@@ -19,7 +19,6 @@ read `cfg.PROM_ORIGIN`, and the gates test renders them to prove where the origi
 
 from collections.abc import Callable
 import json
-import re
 import time
 from typing import Any
 import urllib.error
@@ -27,7 +26,10 @@ import urllib.parse
 import urllib.request
 
 import bridge.common
-from bridge.common import HTTP_TIMEOUT
+
+# `cap_push_msg` and `PUSH_MSG_MAX` live in bridge.common so autofix-bridge's push shares them;
+# they are re-exported here for the callers and tests that reach them as `net.*`.
+from bridge.common import HTTP_TIMEOUT, PUSH_MSG_MAX, cap_push_msg  # noqa: F401
 from bridge.config import Config
 from bridge.parsing import FETCH_BODY_MAX, describe_fetch_failure, endpoint_label
 
@@ -315,39 +317,6 @@ def loki_reachable(cfg: Config) -> bool:
     if data.get("status") != "success":
         raise RuntimeError("loki labels status=%s" % data.get("status"))
     return True
-
-
-# Kuma puts a push monitor's `msg` into the Discord DOWN embed as a field value, whose cap is
-# 1024 chars, and never truncates: an oversized msg makes Discord reject the WHOLE alert with
-# HTTP 400 (`{"embeds":["0"]}`), and Kuma does not retry, so the transition reaches nobody.
-# release-staleness-check's fleet-wide list did exactly that on 2026-09-17 and 2026-09-18
-# (#2013). 900 leaves room for what Kuma adds inside the field. The same cap lives in
-# `kuma-push-lib.sh` for the cron pushers; this one is the boundary for every bridge check.
-PUSH_MSG_MAX = 900
-_CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
-
-
-def cap_push_msg(msg: str, limit: int = PUSH_MSG_MAX) -> str:
-    """`msg` verbatim when it fits `limit`, else cut with a ` …(+N chars)` marker. Pure.
-
-    A trailing ` (N cycles)` — what `streaks.down_streak` appends to a paging message —
-    survives the cut at the end, because `probe_lib/alerts.py` strips that suffix with an
-    end-anchored regex when it reads the message back out of the log.
-    """
-    if len(msg) <= limit:
-        return msg
-    suffix = ""
-    m = _CYCLES_SUFFIX_RE.search(msg)
-    if m:
-        suffix = m.group(0).rstrip()
-        msg = msg[: m.start()]
-    # The marker's own width depends on the count it carries, so settle it in two passes.
-    dropped = len(msg)
-    for _ in range(2):
-        marker = " …(+%d chars)" % dropped
-        keep = max(0, limit - len(marker) - len(suffix))
-        dropped = len(msg) - keep
-    return msg[:keep] + " …(+%d chars)" % dropped + suffix
 
 
 def push(

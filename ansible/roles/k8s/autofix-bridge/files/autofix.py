@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 
 import bridge.common
-from bridge.common import HTTP_TIMEOUT, _env, sanitize
+from bridge.common import HTTP_TIMEOUT, _env, cap_push_msg, clamp_discord, sanitize
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
@@ -211,7 +211,10 @@ def post_discord(msg):
         bridge.common.log("WARN: no Discord webhook set; skipping report:", msg)
         return
     try:
-        _request(DISCORD_WEBHOOK_URL, method="POST", data={"content": msg})
+        # Discord rejects a message over 2000 characters, which would lose the whole report.
+        _request(
+            DISCORD_WEBHOOK_URL, method="POST", data={"content": clamp_discord(msg)}
+        )
     except Exception as e:  # best-effort report; never crash the loop
         bridge.common.log("discord post failed (%s):" % msg, e)
 
@@ -220,7 +223,9 @@ def push(ok, msg):
     """Pushes an up/down heartbeat plus message to the Kuma push monitor.
 
     A no-op, logged, when KUMA_PUSH is unset. Best-effort: an unreachable Kuma is logged
-    and swallowed rather than raised, so it never crashes the poll loop.
+    and swallowed rather than raised, so it never crashes the poll loop. `msg` is capped by
+    `cap_push_msg` first, the same boundary monitor-bridge's push applies, so a long report
+    cannot get the DOWN alert rejected by Discord.
 
     Args:
         ok: Whether the cycle succeeded (pushed as status "up") or not ("down").
@@ -229,6 +234,7 @@ def push(ok, msg):
     if not KUMA_PUSH:
         bridge.common.log("WARN: no push token set; skipping push:", msg)
         return
+    msg = cap_push_msg(msg)
     qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
     try:
         _request("%s/api/push/%s?%s" % (KUMA_URL, KUMA_PUSH, qs))

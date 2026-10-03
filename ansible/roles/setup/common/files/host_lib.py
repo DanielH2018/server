@@ -2,13 +2,15 @@
 """Shared I/O-shell helpers for the host-run scripts.
 
 Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py,
-longhorn_backup_health_logic.py, and longhorn_reap_logic.py. Each runs via
+longhorn_backup_health_logic.py, longhorn_reap_logic.py, render_records.py, live_drift_check.py
+and secret rotation's rotation_tools.py. Each runs via
 ``uv run --no-project --python <pin>`` (host_python_version in
 ansible/inventory/group_vars/all.yml) or directly under cron, and is deployed into its own
 ``/opt`` dir, where it does a ``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...``
 resolves the copy sitting alongside. Single source of truth for helpers that had drifted between
-scripts: the Cloudflare-1010 User-Agent on the Discord POST, the torn-write-safe atomic state
-write, the config.env parser, the kubectl runner, and the RFC3339 parser below. Stdlib only.
+scripts: the Cloudflare-1010 User-Agent on the Discord POST and its length cap, the
+torn-write-safe atomic state write, the config.env parser, the kubectl runner, the RFC3339
+parser, the Uptime Kuma push, and the GitHub token lookup and REST read below. Stdlib only.
 """
 
 from __future__ import annotations
@@ -18,7 +20,11 @@ import json
 import os
 import re
 import subprocess
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
+from collections.abc import Callable, Mapping
 
 # Cron inherits neither a useful PATH nor KUBECONFIG. `k3s` and `kubectl` both live in
 # /usr/local/bin, which the cron default omits, so a caller that does not fix this gets an
@@ -29,6 +35,24 @@ LOCAL_BIN = "/usr/local/bin"
 # from "we never reached the cluster".
 KUBECTL_TIMEOUT_RC = 124
 KUBECTL_UNRUNNABLE_RC = 125
+
+# Discord rejects a message over 2000 characters with HTTP 400. This is the one cap every host
+# poster shares (#3351). monitor-bridge's bridge/common.py carries the pod-side twin of this cap
+# and `clamp_discord`, because the two programs ship by different mechanisms and cannot share a
+# module, so edit both together.
+DISCORD_MAX = 1900
+DISCORD_TRUNCATED = "\n…(truncated)"
+
+# kuma-push-lib.sh's contract for the shell crons. That file's header has the measurements
+# behind each number (#1010, #2013). 900 keeps the msg inside Discord's 1024-character embed
+# field once Kuma adds its own text.
+KUMA_PUSH_MSG_MAX = 900
+KUMA_PUSH_ATTEMPTS = 3
+KUMA_PUSH_RETRY_DELAY_S = 30
+KUMA_PUSH_TIMEOUT_S = 10
+
+GITHUB_API = "https://api.github.com"
+GITHUB_TIMEOUT_S = 15
 
 _RFC3339_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _FRACTIONAL_SECONDS_RE = re.compile(r"\.\d+")
@@ -103,6 +127,18 @@ def atomic_write(path: str, text: str) -> None:
     os.replace(tmp, path)
 
 
+def clamp_discord(content: str, limit: int = DISCORD_MAX) -> str:
+    """``content`` verbatim when it fits ``limit``, else cut so it ENDS in the truncation marker.
+
+    The marker is the reader's only way to tell a cut message from a complete one. Two caps
+    used to apply in sequence: renovate_notify clamped to 1950 with this marker, then
+    discord_post cut to 1900 and sliced the marker off every clamped digest (#3351).
+    """
+    if len(content) <= limit:
+        return content
+    return content[: limit - len(DISCORD_TRUNCATED)].rstrip() + DISCORD_TRUNCATED
+
+
 def discord_post(
     webhook: str, content: str, user_agent: str, log=None, marker: str = ""
 ) -> bool:
@@ -119,6 +155,9 @@ def discord_post(
     self-identifying in a shared channel — the ``user_agent`` is a header-only marker Discord never
     renders. Every automation's Discord message should carry a stable ``<automation>:`` identifier,
     either via this arg or baked into ``content`` (as gitops_deploy / renovate_notify already do).
+
+    The posted message, ``marker`` included, goes through ``clamp_discord``, so an over-long
+    message arrives cut to ``DISCORD_MAX`` and ending in the truncation marker.
     """
     # The Cloudflare-1010 rationale above is duplicated in monitor-bridge's
     # bridge/net.py `_get_json`, which sets the same header for its Discord webhook GETs. The two
@@ -128,7 +167,7 @@ def discord_post(
             log("no Discord webhook set; skipping post")
         return False
     message = f"{marker} {content}" if marker else content
-    data = json.dumps({"content": message[:1900]}).encode()
+    data = json.dumps({"content": clamp_discord(message)}).encode()
     req = urllib.request.Request(
         webhook,
         data=data,
@@ -141,6 +180,183 @@ def discord_post(
         if log:
             log("discord post failed: %s" % e)
         return False
+
+
+def cap_kuma_msg(msg: str, limit: int = KUMA_PUSH_MSG_MAX) -> str:
+    """``msg`` verbatim when it fits ``limit``, else cut with a `` …(+N chars)`` marker.
+
+    The same cut as kuma-push-lib.sh's ``msg_max`` arm and monitor-bridge's ``cap_push_msg``.
+    Kuma copies the msg into a Discord embed field and never truncates it, so an oversized msg
+    gets the whole DOWN alert rejected (#2013).
+    """
+    if len(msg) <= limit:
+        return msg
+    # The marker's own width depends on the count it carries, so settle it in two passes.
+    dropped = len(msg)
+    for _ in range(2):
+        keep = max(0, limit - len(" …(+%d chars)" % dropped))
+        dropped = len(msg) - keep
+    return msg[:keep] + " …(+%d chars)" % dropped
+
+
+def kuma_push(
+    status: str,
+    msg: str,
+    host: str,
+    token: str,
+    *,
+    log: Callable[[str], None] | None = None,
+    opener: Callable | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
+    """Push ``status`` (``up`` or ``down``) and ``msg`` to the Kuma push monitor for ``token``.
+
+    The Python twin of kuma-push-lib.sh's ``kuma_push``, with the same retry rule: three
+    attempts 30s apart, stopping early only on a 401 or 403, which a retry cannot fix. Every
+    other failure retries, a 404 above all, because Traefik drops the push route while
+    uptime-kuma rolls out and answers 404 for the whole window (#1010). ``msg`` is capped by
+    ``cap_kuma_msg`` first.
+
+    DECIDED: this resolves ``host`` through DNS, where the shell library pins Traefik's VIP with
+    ``curl --resolve``. urllib cannot express that pin (scripts/diagnostics/probe_lib/obs_api.py
+    records the same limit). Shelling out to curl would make every importer depend on a binary
+    for a failure mode the retry already covers, since a resolver outage that outlasts 90s of
+    retries also takes down the other signals the tile's reader has. The token stays out of
+    argv either way, because urllib starts no process.
+
+    Args:
+        status: Kuma's own vocabulary, ``up`` or ``down``.
+        msg: the message Kuma shows on the tile and in its alert.
+        host: the Kuma hostname. Empty skips the push.
+        token: the push monitor's token. Empty skips the push.
+        log: called with one line per failed attempt. It never receives the URL, which
+            carries the token.
+        opener: the ``urlopen`` that carries the push, ``urllib.request.urlopen`` when None,
+            resolved per call so a stub of the stdlib name reaches it too.
+        sleep: the wait between attempts; a test injects a no-op.
+
+    Returns:
+        True only when Kuma answered 2xx. Never raises: a lost push leaves the tile to expire
+        at its interval, and must not turn the caller's verdict into a crash.
+    """
+    if not host or not token:
+        if log:
+            log("no Kuma host/token set; not pushing (status=%s: %s)" % (status, msg))
+        return False
+    msg = cap_kuma_msg(msg)
+    query = urllib.parse.urlencode({"status": status, "msg": msg, "ping": ""})
+    url = "https://%s/api/push/%s?%s" % (host, token, query)
+    reason = ""
+    for attempt in range(1, KUMA_PUSH_ATTEMPTS + 1):
+        try:
+            with (opener or urllib.request.urlopen)(
+                url, timeout=KUMA_PUSH_TIMEOUT_S
+            ) as resp:
+                resp.read()
+            return True
+        except urllib.error.HTTPError as e:
+            # A JSON body means Kuma answered: the edge routed the push and the token has no
+            # live monitor. Traefik's no-router 404 is text/plain. The shell twin logs the same
+            # `by=kuma` field (#1803).
+            ctype = e.headers.get_content_type() if e.headers else ""
+            by = " by=kuma" if ctype == "application/json" else ""
+            reason = "http=%s%s" % (e.code, by)
+            e.close()
+            if e.code in (401, 403):
+                break
+        except (
+            Exception
+        ) as e:  # any transport failure; a push must never crash the caller
+            reason = "error=%s" % type(e).__name__
+        if attempt < KUMA_PUSH_ATTEMPTS:
+            if log:
+                log(
+                    "push failed transiently (%s) (status=%s: %s), retrying in %ss"
+                    % (reason, status, msg, KUMA_PUSH_RETRY_DELAY_S)
+                )
+            sleep(KUMA_PUSH_RETRY_DELAY_S)
+    if log:
+        log("push failed (%s) (status=%s: %s)" % (reason, status, msg))
+    return False
+
+
+def github_token(source: Mapping[str, str], run: Callable) -> str | None:
+    """A GitHub token for REST reads, or None to query anonymously.
+
+    ``GH_TOKEN`` then ``GITHUB_TOKEN`` in ``source`` win, then ``gh auth token``. ``source`` is
+    wherever the caller keeps its settings: the deployer passes ``os.environ``, renovate_notify
+    its ``config.env``. The gh CLI on daniel-box is logged in as the repo owner, and both callers
+    run as that user. The lookup is best-effort: a missing gh, an expired login, or a slow
+    keyring all return None, and the caller queries anonymously.
+
+    Why authenticate a read of a public repo. The anonymous limit is 60 requests/hour PER
+    SOURCE IP, and every GitHub call from this host shares it: the tick's gate, ``await_ci.py``
+    polling every 20s for up to 900s during a landing (45 requests per run), renovate_notify,
+    the ruleset-drift cron. Two ``land.sh`` runs in an hour exhaust it, after which the tick's
+    gate reads ``HTTP Error 403: rate limit exceeded`` and defers as ``CI not finished``. That
+    is correct fail-closed behaviour, and also a deploy outage nobody asked for. Measured
+    2026-09-01: two landings and a manual tick, three 403 deferrals. Authenticated, the limit
+    is 5000/hour per token. This was two copies, in deploy_git and renovate_notify, that
+    disagreed on which variables they read (#3362).
+    """
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        value = (source.get(name) or "").strip()
+        if value:
+            return value
+    try:
+        proc = run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
+    except Exception:
+        return None
+    if proc.returncode != 0:
+        return None
+    return (proc.stdout or "").strip() or None
+
+
+def github_auth_headers(token: str | None) -> dict[str, str]:
+    """The ``Authorization`` header for ``token``, or nothing for an anonymous request."""
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
+
+
+def github_get(
+    path: str,
+    token: str | None,
+    *,
+    user_agent: str,
+    timeout: float = GITHUB_TIMEOUT_S,
+    opener: Callable | None = None,
+):
+    """GET ``https://api.github.com/<path>`` and return the parsed JSON body.
+
+    The one request shape every host GitHub reader shares, so the readers cannot drift on the
+    headers, the auth or the timeout (#2136, #3362). What a failure MEANS stays with the caller:
+    the deployer's gate maps every error to ``pending``, a landing lets it raise.
+
+    Args:
+        path: the part after the API root, query string included, e.g. ``repos/o/n/pulls``.
+        token: from ``github_token``, looked up once by the caller; None reads anonymously.
+        user_agent: names the caller in GitHub's logs. GitHub refuses a request without one.
+        timeout: seconds for the whole request.
+        opener: the ``urlopen`` that carries the request, ``urllib.request.urlopen`` when None,
+            resolved per call so a stub of the stdlib name reaches it too.
+
+    Raises:
+        urllib.error.URLError: the API could not be reached, or answered non-2xx
+            (``HTTPError`` is a subclass).
+        TimeoutError, OSError: the socket failed.
+        ValueError: the body was not JSON.
+    """
+    req = urllib.request.Request(
+        "%s/%s" % (GITHUB_API, path.lstrip("/")),
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": user_agent,
+            **github_auth_headers(token),
+        },
+    )
+    with (opener or urllib.request.urlopen)(req, timeout=timeout) as resp:
+        return json.load(resp)
 
 
 def kubectl_runner(binary: str, namespace: str, timeout: int):

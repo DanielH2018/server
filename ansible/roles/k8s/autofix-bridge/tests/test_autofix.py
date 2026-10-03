@@ -1,5 +1,8 @@
 import importlib.util
+import json
 import pathlib
+import urllib.parse
+import urllib.request
 
 # Load the bind-mounted script directly (not a package), mirroring monitor-bridge/test_check.py.
 _SPEC = importlib.util.spec_from_file_location(
@@ -360,3 +363,53 @@ def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
     ok, msg = autofix.run_once({})
 
     assert (ok, msg) == (True, "arr auto-block disabled (no API keys)")
+
+
+# --- the two outbound messages are capped on the wire path ------------------------------------
+# Both caps live in monitor-bridge's bridge/common.py. These drive the real `post_discord` and
+# `push` through a stub of the stdlib `urlopen`, on a copy of the module loaded with the webhook
+# and push settings in its environment, so no first-party name is patched.
+
+
+class _NoBody:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return b""
+
+
+def _wired_autofix(monkeypatch):
+    """A fresh autofix module whose Discord webhook and Kuma push are set, plus what it sends."""
+    monkeypatch.setenv("ARR_DISCORD_WEBHOOK_URL", "https://discord.example/webhook")
+    monkeypatch.setenv("KUMA_PUSH_ARR_AUTOBLOCK", "tok")
+    assert _SPEC and _SPEC.loader
+    module = importlib.util.module_from_spec(_SPEC)
+    _SPEC.loader.exec_module(module)
+    sent = []
+
+    def fake_urlopen(req, timeout=None):
+        sent.append(req)
+        return _NoBody()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    return module, sent
+
+
+def test_post_discord_caps_an_over_long_report(monkeypatch):
+    module, sent = _wired_autofix(monkeypatch)
+    module.post_discord("r" * 5000)
+    content = json.loads(sent[0].data)["content"]
+    assert len(content) <= 2000
+    assert content.endswith("…(truncated)")
+
+
+def test_push_caps_an_over_long_msg(monkeypatch):
+    module, sent = _wired_autofix(monkeypatch)
+    module.push(False, "m" * 3000)
+    msg = urllib.parse.parse_qs(urllib.parse.urlsplit(sent[0].full_url).query)["msg"][0]
+    assert len(msg) == 900
+    assert " …(+" in msg

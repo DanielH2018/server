@@ -53,6 +53,13 @@ EXPECTED_CONSUMERS = frozenset(
     }
 )
 
+# Consumers that import host_lib from ANOTHER role's install directory rather than a copy of their
+# own, mapped to the role that installs it. render_records puts /opt/gitops-deploy first on
+# sys.path to import the deployer's CI walk (`deploy_toolbox`, which imports host_lib itself), so
+# a sibling copy of its own would be shadowed and never read. Named here so the exemption is
+# visible, and checked below so the lender still installs a copy.
+BORROWING_CONSUMERS = {"render_records": "gitops_deploy"}
+
 # roles/setup/common OWNS host_lib.py; it does not import it as a sibling. Excluded by name
 # rather than by a path heuristic so the exemption is visible.
 OWNER_ROLE = "common"
@@ -196,7 +203,15 @@ def _role(name: str) -> Path:
 
 
 def test_the_census_finds_exactly_the_known_consumers():
-    assert consumers(ROLES) == set(EXPECTED_CONSUMERS)
+    assert consumers(ROLES) == set(EXPECTED_CONSUMERS) | set(BORROWING_CONSUMERS)
+
+
+def test_every_borrowing_consumer_reads_a_role_that_installs_host_lib():
+    for borrower, lender in BORROWING_CONSUMERS.items():
+        assert lender in EXPECTED_CONSUMERS and includes_of(_role(lender)), (
+            f"{borrower} imports host_lib from {lender}'s directory, but {lender} no longer "
+            f"installs it through {SHARED_TASK}"
+        )
 
 
 def test_the_shared_task_file_exists_where_every_caller_names_it():

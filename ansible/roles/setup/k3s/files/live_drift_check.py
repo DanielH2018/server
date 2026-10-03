@@ -55,8 +55,15 @@ import re
 import subprocess
 import sys
 import syslog
-import urllib.parse
-import urllib.request
+
+# The k3s role installs host_lib here (tasks/health-crons.yml). The script runs through a
+# /usr/local/bin symlink into a per-SHA release directory, which is all Python puts on sys.path
+# by itself, so the directory is named rather than assumed to be a sibling.
+HOST_LIB_DIR = os.environ.get("HOST_LIB_DIR", "/opt/live-drift-check")
+if HOST_LIB_DIR not in sys.path:
+    sys.path.insert(0, HOST_LIB_DIR)
+
+from host_lib import kuma_push  # noqa: E402
 
 # Deliberately absent below: the read-only SA cannot read this kind (see the module
 # docstring). Named so the run can say so rather than leaving the gap unstated.
@@ -309,6 +316,9 @@ def verdict(
 def push(status: str, message: str) -> None:
     """Push the result to Uptime Kuma, if a token is configured, and record it in syslog.
 
+    The push goes through host_lib.kuma_push, which retries a rollout's 404s the way
+    kuma-push-lib.sh does and logs a skip when no token is configured.
+
     The syslog line is not a duplicate of the push. Kuma keeps CURRENT state only, so a DOWN
     that has since recovered leaves no trace there — `probe.py alerts` and the Alert History
     board reconstruct episodes for host-cron pushers by matching `status=down` in syslog, and
@@ -335,16 +345,13 @@ def push(status: str, message: str) -> None:
     finally:
         syslog.closelog()
 
-    token = os.environ.get("PUSH_TOKEN", "")
-    host = os.environ.get("KUMA_HOST", "")
-    if not token or not host:
-        return
-    query = urllib.parse.urlencode({"status": status, "msg": message[:900], "ping": ""})
-    url = f"https://{host}/api/push/{token}?{query}"
-    try:
-        urllib.request.urlopen(url, timeout=10).read()
-    except Exception as exc:
-        print(f"kuma push failed: {exc}", file=sys.stderr)
+    kuma_push(
+        status,
+        message,
+        os.environ.get("KUMA_HOST", ""),
+        os.environ.get("PUSH_TOKEN", ""),
+        log=lambda line: print(f"live-drift-check: {line}", file=sys.stderr),
+    )
 
 
 def boot_grace_active(uptime_s: float | None, grace_s: int) -> bool:

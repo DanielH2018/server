@@ -41,8 +41,6 @@ import subprocess
 import sys
 import syslog
 import time
-import urllib.parse
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -55,6 +53,7 @@ if DEPLOYER_DIR not in sys.path:
 from deploy_config import load_config, read_config_file  # noqa: E402
 from deploy_git import ci_walk_candidates  # noqa: E402
 from deploy_toolbox import fetch_ci_verdict, github_authenticated  # noqa: E402
+from host_lib import kuma_push  # noqa: E402
 
 TIMESTAMP = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -205,19 +204,18 @@ def log(status: str, message: str) -> None:
 
 
 def push(status: str, message: str) -> None:
-    """Push to Kuma. A dropped push is printed and ignored; the monitor's interval catches it."""
-    token = os.environ.get("PUSH_TOKEN", "")
-    kuma_host = os.environ.get("KUMA_HOST", "")
-    if not token or not kuma_host:
-        print("render-records: no PUSH_TOKEN/KUMA_HOST, not pushing", file=sys.stderr)
-        return
-    query = urllib.parse.urlencode({"status": status, "msg": message[:900], "ping": ""})
-    try:
-        urllib.request.urlopen(
-            f"https://{kuma_host}/api/push/{token}?{query}", timeout=10
-        ).read()
-    except Exception as exc:
-        print(f"kuma push failed: {exc}", file=sys.stderr)
+    """Push to Kuma through host_lib, which retries a rollout's 404s and caps the message.
+
+    A push still lost after the retries is printed and ignored; the monitor's interval
+    catches it.
+    """
+    kuma_push(
+        status,
+        message,
+        os.environ.get("KUMA_HOST", ""),
+        os.environ.get("PUSH_TOKEN", ""),
+        log=lambda line: print(f"render-records: {line}", file=sys.stderr),
+    )
 
 
 def host_uptime_s() -> float | None:

@@ -66,7 +66,7 @@ def _wire(monkeypatch, tmp_path, posts, now, dashboard=DASHBOARD):
             "STATE_DIR": str(tmp_path),
         },
     )
-    monkeypatch.setattr(rn, "github_token", lambda *_a, **_k: "")
+    monkeypatch.setattr(rn, "github_token", lambda *_a, **_k: None)
     monkeypatch.setattr(rn, "get", lambda url: [dashboard] if "/issues" in url else [])
     monkeypatch.setattr(
         rn, "discord", lambda hook, content: posts.append(content) or True
@@ -149,17 +149,6 @@ def test_read_pending_seen_round_trips_what_write_wrote(tmp_path):
     path = str(tmp_path / "pending_seen.json")
     rn.write_pending_seen(path, {"renovate/x": 12.5})
     assert rn.read_pending_seen(path) == {"renovate/x": 12.5}
-
-
-def test_clamp_leaves_a_short_message_alone():
-    assert rn.clamp_for_discord("hello") == "hello"
-
-
-def test_clamp_trims_a_message_past_discords_cap():
-    """The renderers each bound their own part; four parts joined can still overflow."""
-    clamped = rn.clamp_for_discord("x" * 5000)
-    assert len(clamped) <= rn.DISCORD_LIMIT
-    assert clamped.endswith("…(truncated)")
 
 
 # --- Dwell-state loss ---------------------------------------------------------

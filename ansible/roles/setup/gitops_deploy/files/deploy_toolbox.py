@@ -39,8 +39,8 @@ import deploy_io
 import deploy_narrow
 import deploy_release
 from deploy_config import Config, log
-from deploy_git import ci_verdict, github_get, github_token
-from host_lib import discord_post
+from deploy_git import ci_verdict
+from host_lib import discord_post, github_get, github_token
 
 
 def post(webhook: str, content: str, log_fn=log) -> bool:
@@ -70,7 +70,7 @@ def fetch_ci_verdict(
         repo: the `owner/name` slug the check-runs are read from.
         contexts: the check-run NAMES that must be green.
 
-    Authenticated through `gh auth token` when the CLI is logged in (deploy_git.github_token
+    Authenticated through `gh auth token` when the CLI is logged in (host_lib.github_token
     says why: the anonymous 60/hour limit is per source IP and shared with every landing's
     `await_ci.py` poll, and two landings exhaust it), anonymous otherwise.
 
@@ -84,11 +84,9 @@ def fetch_ci_verdict(
         return "pass"
     try:
         payload = github_get(
-            repo,
-            f"commits/{sha}/check-runs?per_page=100",
+            f"repos/{repo}/commits/{sha}/check-runs?per_page=100",
+            github_token(os.environ, subprocess.run),
             user_agent="gitops-deploy",
-            environ=os.environ,
-            run=subprocess.run,
         )
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
         log(f"CI status unavailable for {sha[:8]} ({e}) — deferring this tick")

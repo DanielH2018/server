@@ -42,7 +42,24 @@ copy under autofix-bridge/files/.
 """
 
 import os
+import re
 import time
+
+# Kuma puts a push monitor's `msg` into the Discord DOWN embed as a field value, whose cap is
+# 1024 chars, and never truncates: an oversized msg makes Discord reject the WHOLE alert with
+# HTTP 400 (`{"embeds":["0"]}`), and Kuma does not retry, so the transition reaches nobody.
+# release-staleness-check's fleet-wide list did exactly that on 2026-09-17 and 2026-09-18
+# (#2013). 900 leaves room for what Kuma adds inside the field. The same cap lives in
+# `kuma-push-lib.sh` and host_lib's `cap_kuma_msg` for the host pushers; this one is the
+# boundary for every push from both bridges.
+PUSH_MSG_MAX = 900
+_CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
+
+# Discord rejects a message over 2000 characters with HTTP 400. The pod-side twin of host_lib's
+# `DISCORD_MAX` and `clamp_discord`: the two programs ship by different mechanisms and cannot
+# share a module (host_lib's `discord_post` says so too), so edit both together (#3351).
+DISCORD_MAX = 1900
+DISCORD_TRUNCATED = "\n…(truncated)"
 
 
 def _env(name: str, default: str) -> str:
@@ -165,6 +182,40 @@ def touch_heartbeat(path: str) -> None:
             fh.write("%s\n" % time.time())
     except OSError as e:  # best-effort like push(); never crash the loop
         log("WARN: heartbeat write failed:", e)
+
+
+def cap_push_msg(msg: str, limit: int = PUSH_MSG_MAX) -> str:
+    """`msg` verbatim when it fits `limit`, else cut with a ` …(+N chars)` marker. Pure.
+
+    A trailing ` (N cycles)` — what `streaks.down_streak` appends to a paging message —
+    survives the cut at the end, because `probe_lib/alerts.py` strips that suffix with an
+    end-anchored regex when it reads the message back out of the log.
+    """
+    if len(msg) <= limit:
+        return msg
+    suffix = ""
+    m = _CYCLES_SUFFIX_RE.search(msg)
+    if m:
+        suffix = m.group(0).rstrip()
+        msg = msg[: m.start()]
+    # The marker's own width depends on the count it carries, so settle it in two passes.
+    dropped = len(msg)
+    for _ in range(2):
+        marker = " …(+%d chars)" % dropped
+        keep = max(0, limit - len(marker) - len(suffix))
+        dropped = len(msg) - keep
+    return msg[:keep] + " …(+%d chars)" % dropped + suffix
+
+
+def clamp_discord(content: str, limit: int = DISCORD_MAX) -> str:
+    """`content` verbatim when it fits `limit`, else cut so it ENDS in the truncation marker.
+
+    A message over Discord's cap is rejected outright, so an uncapped report is lost rather
+    than shortened. The marker tells a reader the message was cut.
+    """
+    if len(content) <= limit:
+        return content
+    return content[: limit - len(DISCORD_TRUNCATED)].rstrip() + DISCORD_TRUNCATED
 
 
 def sanitize(s: object, maxlen: int = 120) -> str:

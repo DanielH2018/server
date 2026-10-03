@@ -502,7 +502,7 @@ stay).
   `deploy_logic.ci_verdict`). Before this the deployer applied whatever landed on master: nothing
   in the pull path consulted a workflow result, so a red commit reached the homelab on the next
   tick. It queries GitHub's check-runs API for `origin/master`, **authenticated through `gh auth
-  token`** when the CLI is logged in (`deploy_logic.github_token`; `GH_TOKEN`/`GITHUB_TOKEN` in
+  token`** when the CLI is logged in (`host_lib.github_token`; `GH_TOKEN`/`GITHUB_TOKEN` in
   the environment win, and a logged-out gh degrades to anonymous), and only on a tick that would
   otherwise deploy. Anonymous, the limit is 60/hour per source IP, shared with every landing's
   `await_ci.py` poll on the same host (45 requests per 900s wait) — two landings exhausted it on
@@ -1395,8 +1395,8 @@ forward from, and the only route to the diagnosis was re-running a 20-minute `de
 
 Both halves are capped at `RUN_ERROR_STDOUT_CHARS` / `RUN_ERROR_STDERR_TAIL` (4000 each), and
 the three Discord failure posts trim further through `_alert_excerpt` (`ALERT_EXCERPT_CHARS`,
-700). That second cap is not belt-and-braces: `host_lib.discord_post` cuts a post at
-`message[:1900]` keeping the **head**, so an unbounded error string does not truncate itself —
+700). That second cap is not belt-and-braces: `host_lib.discord_post` cuts a post to
+`DISCORD_MAX` (1900) keeping the **head**, so an unbounded error string does not truncate itself —
 it evicts the remediation prose that follows it. `broad_failure_alert()` is a function rather
 than an inline f-string so `tests/test_gitops_deploy_failure_output.py` can assert the
 assembled post stays under 1900 characters with its `**Action:**` line intact.

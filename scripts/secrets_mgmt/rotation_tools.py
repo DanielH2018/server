@@ -21,7 +21,6 @@ import datetime as dt
 import os
 import subprocess
 import urllib.parse
-import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -39,7 +38,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from lib import yaml_fast
 from lib.git import git
+from lib.repo_paths import HOST_LIB_FILES
 from lib.repo_paths import REPO as _REPO_PATH
+
+# host_lib is the setup roles' shared host module, for the Kuma push below.
+_sys.path.insert(0, str(HOST_LIB_FILES))
+import host_lib
 
 # `str`, because every consumer below builds paths with os.path.join. lib.repo_paths.REPO is a
 # Path; this module is the last of the twenty call sites that module's docstring describes,
@@ -158,13 +162,21 @@ def decrypted_values(
 
 
 def kuma_push(url: str, ok: bool, msg: str) -> None:
-    """Post one up/down beat to an Uptime Kuma push monitor."""
-    full = "%s?status=%s&msg=%s" % (
-        url,
+    """Post one up/down beat to the Uptime Kuma push monitor `url` names.
+
+    `url` is `https://<host>/api/push/<token>`, as the audit wrapper exports it. host_lib does
+    the push, so this one retries a rollout's 404s and caps the message like every other host
+    pusher. A push still lost after the retries is printed, never raised: the audit's exit code
+    already carries its verdict to the timer.
+    """
+    parts = urllib.parse.urlsplit(url)
+    host_lib.kuma_push(
         "up" if ok else "down",
-        urllib.parse.quote(msg),
+        msg,
+        parts.netloc,
+        parts.path.rsplit("/", 1)[-1],
+        log=lambda line: print(f"secret-rotation: {line}", file=_sys.stderr),
     )
-    urllib.request.urlopen(full, timeout=10).read()
 
 
 def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
