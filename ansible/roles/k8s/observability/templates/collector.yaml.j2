@@ -1,6 +1,7 @@
 {% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'service.yml.j2' import service with context %}
 {% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
 apiVersion: v1
@@ -155,21 +156,7 @@ spec:
           configMap:
             name: otel-collector-config
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: otel-collector
-  namespace: {{ k8s_observability_namespace }}
-spec:
-  selector:
-    app: otel-collector
-  ports:
-    - name: prom-export
-      port: 8889
-      targetPort: 8889
-    - name: self-metrics
-      port: 8888
-      targetPort: 8888
-    # (The D7 forwarder seam — an otlp-grpc Service port for the ingest IngressRoute —
-    # dissolved 2026-08-13 with the DaemonSet conversion: every node has its own
-    # loopback hostPort now, so nothing enters over the LAN.)
+{{ service('otel-collector', 8889, port_name='prom-export', extra_ports=[{'name': 'self-metrics', 'port': 8888}], namespace=k8s_observability_namespace) -}}
+# (The D7 forwarder seam — an otlp-grpc Service port for the ingest IngressRoute —
+# dissolved 2026-08-13 with the DaemonSet conversion: every node has its own
+# loopback hostPort now, so nothing enters over the LAN.)
