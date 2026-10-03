@@ -21,7 +21,10 @@ Run: uv run pytest .claude/hooks/tests/test_run_hook.py
 """
 
 import json
+import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -40,14 +43,38 @@ VARIANTS = {
     "ask": ["--project", "--ask-on-cd"],
 }
 
+# The host facts run-hook.sh hard-codes. A GitHub runner has none of them: no primary checkout,
+# no uv at this install path, and setup-python's patch release rather than the hosts' pin, which
+# `--no-python-downloads` will not fetch. The quiet variant sends uv's stderr to /dev/null, so a
+# missing one reads as a hook that printed nothing rather than as an error.
+_PROJECT_DIR = "/home/ubuntu/server"
+_UV = "/home/ubuntu/.local/bin/uv"
+_PIN = re.compile(r"--python [0-9][0-9.]*")
+
 
 def _variant_runner(tmp_path: Path, cd_target: str) -> Path:
-    """A throwaway copy of the runner with its `cd` target swapped for `cd_target`."""
+    """A throwaway copy of the runner that depends on nothing of the host's.
+
+    Its `cd` target becomes `cd_target`, its uv the one on PATH, and its interpreter pin the
+    interpreter running this test: the swap `test_hook_shim_fail_open.py` made for the shims'
+    `cd` target, extended to the runner's other two host facts. The copy sits in `tmp_path`,
+    so the runner's `HOOKS_DIR` resolves there and only a `.py` the test writes can run.
+    """
     text = RUNNER.read_text(encoding="utf-8")
-    original = "cd /home/ubuntu/server "
-    assert original in text, "expected cd-guard line not found in run-hook.sh"
+    for host_fact in (f"cd {_PROJECT_DIR} ||", f"exec {_UV} run", f"\n{_UV} run"):
+        assert host_fact in text, f"run-hook.sh no longer holds {host_fact!r}"
+    # Checked before the swap, because the runner-side values can live under /home/ubuntu too.
+    unswapped = text.replace(_PROJECT_DIR, "").replace(_UV, "")
+    assert "/home/ubuntu" not in unswapped, (
+        "run-hook.sh has a host path this copy keeps"
+    )
+    uv = shutil.which("uv")
+    assert uv, "uv is not on PATH"
+    text = text.replace(_PROJECT_DIR, cd_target).replace(_UV, uv)
+    text, pins = _PIN.subn(f"--python {sys.executable}", text)
+    assert pins == 1, f"expected one interpreter pin in run-hook.sh, found {pins}"
     path = tmp_path / "run-hook.sh"
-    path.write_text(text.replace(original, f"cd {cd_target} ", 1), encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
     return path
 
 
@@ -92,11 +119,13 @@ def test_the_decided_marker_records_the_trade_off():
 @pytest.mark.parametrize("flags", sorted(VARIANTS), ids=sorted(VARIANTS))
 def test_reject_a_missing_py_sibling_reports_on_stderr(tmp_path, flags):
     """The failure that is invisible from the session side: the shim RUNS, nothing exits 127,
-    and the guard is skipped behind a hook that reports no error."""
-    proc = _run(RUNNER, "no-such-hook", *VARIANTS[flags])
+    and the guard is skipped behind a hook that reports no error. The copy's `cd` succeeds, so
+    the flagged variants reach the file check rather than stopping at the `cd` arm."""
+    runner = _variant_runner(tmp_path, str(tmp_path))
+    proc = _run(runner, "no-such-hook", *VARIANTS[flags])
     assert proc.returncode == 0, proc.stderr
     assert "did not run" in proc.stderr
-    assert "no-such-hook" in proc.stderr
+    assert "no-such-hook.py" in proc.stderr
 
 
 def test_reject_a_missing_cd_target_reports_on_stderr(tmp_path):
@@ -121,7 +150,8 @@ def test_reject_a_deny_guard_that_cannot_run_asks(tmp_path):
 def test_reject_a_missing_py_sibling_also_asks(tmp_path):
     """New in #3278. It used to exit non-zero through a failed `exec`, where no `ask` could
     follow; the runner tests for the file first, so the decision is still available."""
-    proc = _run(RUNNER, "no-such-hook", "--project", "--ask-on-cd")
+    runner = _variant_runner(tmp_path, str(tmp_path))
+    proc = _run(runner, "no-such-hook", "--project", "--ask-on-cd")
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout)["hookSpecificOutput"]
     assert out["permissionDecision"] == "ask"
