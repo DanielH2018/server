@@ -5,11 +5,9 @@ Six per-hook shims came in three variants that differed only in flags: a quiet
 same with an `ask` on failure for the deny guards. `run-hook.sh <name> [--project]
 [--ask-on-cd[=<guards>]]` is the one file, and the interpreter pin is written once.
 
-`test_hook_shim_fail_open.py` owns the per-shim census and skips this file deliberately: a
-shim's posture is a property of the file, where the runner's is a property of the flags a
-registration passes it. So every check here is a REJECT/ACCEPT pair over one INVOCATION —
-REJECT is a run that cannot reach the `.py` (a missing `cd` target, a missing sibling), ACCEPT
-is one that can.
+The runner's posture is a property of the flags a registration passes it, so every check here
+is a REJECT/ACCEPT pair over one INVOCATION — REJECT is a run that cannot reach the `.py` (a
+missing `cd` target, a missing sibling), ACCEPT is one that can.
 
 Every registration in `.claude/settings.json` runs through this file since the second half of
 #3278. `test_hook_shim_fail_open.py` runs each registered command as written; the tests here
@@ -54,8 +52,7 @@ def _variant_runner(tmp_path: Path, cd_target: str) -> Path:
     """A throwaway copy of the runner that depends on nothing of the host's.
 
     Its `cd` target becomes `cd_target`, its uv the one on PATH, and its interpreter pin the
-    interpreter running this test: the swap `test_hook_shim_fail_open.py` made for the shims'
-    `cd` target, extended to the runner's other two host facts. The copy sits in `tmp_path`,
+    interpreter running this test, so it runs the same on a CI runner as on a host. The copy sits in `tmp_path`,
     so the runner's `HOOKS_DIR` resolves there and only a `.py` the test writes can run.
     """
     text = RUNNER.read_text(encoding="utf-8")

@@ -136,9 +136,9 @@ def script_path(command, checkout):
 #     exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python \
 #       "$(dirname "$(readlink -f "$0")")/bash-pretool.py"
 #
-# One literal idiom, matched as text. Reading a shim in general means parsing shell; five of
-# this repo's eight shims share this one form, so matching the form covers every sibling that
-# exists without a parser. Anything else abstains, because a banner line that cries wolf over
+# One literal idiom, matched as text. Reading a shim in general means parsing shell; the
+# per-hook shims that spelled this form were deleted in #3304, so no file in the repo matches it
+# now and `run-hook.sh` resolves through `_RUNNER_SIBLING_PY` below. Anything else abstains, because a banner line that cries wolf over
 # a working hook is worse than one that stays quiet about an odd one — `script_path`'s own
 # docstring makes the same trade.
 _SIBLING_PY = re.compile(

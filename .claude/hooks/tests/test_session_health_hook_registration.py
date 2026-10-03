@@ -340,34 +340,20 @@ def test_a_shim_this_cannot_read_says_nothing():
 
 
 def test_the_repos_own_shims_name_the_siblings_this_parse_must_find():
-    """Non-vacuity: the parse finds its subjects by matching one idiom in shell text.
+    """Non-vacuity: the census of shell entry points this parse reads.
 
-    A shim that stops spelling that idiom — a reformat splitting the line differently, a move
-    to `$CLAUDE_PROJECT_DIR` — resolves to nothing, and every `..._is_clean` half above stays
-    green while the arm covers no sibling at all. So the real shims are the anchor, named
-    rather than counted so the failure says which one went missing.
+    The six per-hook shims that spelled the literal `$(dirname …)/<name>.py` idiom were deleted
+    in #3304, so `run-hook.sh` is the only `.sh` left, and it names no sibling FROM ITS TEXT
+    ALONE: it takes the hook name as an argument, and
+    `test_the_runner_resolves_the_sibling_its_argument_names` is that half. A NEW shim fails
+    here by name instead of abstaining in silence.
     """
     hooks = Path(__file__).resolve().parents[1]
     found = {
         shim.name: {Path(p).name for p in arm.sibling_py_paths(str(shim))}
         for shim in sorted(hooks.glob("*.sh"))
     }
-    expected = {
-        "auto-mode-bridge.sh": {"auto-mode-bridge.py"},
-        "bash-pretool.sh": {"bash-pretool.py"},
-        "block-protected-edits.sh": {"block-protected-edits.py"},
-        "log-instructions.sh": {"log-instructions.py"},
-        "session-health.sh": {"session-health.py"},
-    }
-    for name, siblings in expected.items():
-        assert found.get(name) == siblings, found
-    # The one that names no resolvable sibling FROM ITS TEXT ALONE, listed so a NEW shim with
-    # an unrecognised idiom fails here instead of abstaining in silence. `run-hook.sh` takes
-    # the hook name as an argument, so its sibling comes from the registered command —
-    # `test_the_runner_resolves_the_sibling_its_argument_names` is that half.
-    assert {name for name, siblings in found.items() if not siblings} == {
-        "run-hook.sh",
-    }, found
+    assert found == {"run-hook.sh": set()}, found
 
 
 def test_the_runner_resolves_the_sibling_its_argument_names():
