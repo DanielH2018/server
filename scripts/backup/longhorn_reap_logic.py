@@ -31,17 +31,10 @@ from dataclasses import dataclass, field
 # host_lib.py is the setup roles' shared host module and stays in
 # ansible/roles/setup/common/files/. Each importer carries its own insert rather than relying on
 # the entry point's having run first.
-sys.path.insert(
-    0,
-    str(
-        _Path(__file__).resolve().parents[2]
-        / "ansible"
-        / "roles"
-        / "setup"
-        / "common"
-        / "files"
-    ),
-)
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+from lib.repo_paths import HOST_LIB_FILES
+
+sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
 
 RECURRING_JOB_GROUP_PREFIX = "recurring-job-group.longhorn.io/"

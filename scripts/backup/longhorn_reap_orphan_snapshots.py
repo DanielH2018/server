@@ -54,19 +54,11 @@ import urllib.request
 
 # host_lib.py is the setup roles' shared host module and stays in ansible/roles/setup/common/files/.
 # A directly-invoked script gets only its own directory on sys.path, so both inserts are needed.
-sys.path.insert(
-    0,
-    str(
-        _Path(__file__).resolve().parents[2]
-        / "ansible"
-        / "roles"
-        / "setup"
-        / "common"
-        / "files"
-    ),
-)
 sys.path.insert(0, str(_Path(__file__).resolve().parent))
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+from lib.repo_paths import HOST_LIB_FILES
+
+sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
 from lib.cli_help import answer_help
 import longhorn_reap_logic as logic

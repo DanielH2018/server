@@ -45,6 +45,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deploy_tools.deploy_flags import Refused, check_passthrough
+from deploy_tools.deploy_under_locks import say
 from lib.cli_help import answer_help
 from lib.exit_codes import (
     DEPLOY_BAD_FLAGS,
@@ -96,12 +97,6 @@ class Plan:
     @property
     def check(self) -> bool:
         return "--check" in self.args
-
-
-def say(*lines: str) -> None:
-    """Print a refusal or notice to stderr, one line per argument."""
-    for line in lines:
-        print(line, file=sys.stderr)
 
 
 # -- the helpers, called in-process ------------------------------------------------------

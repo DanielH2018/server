@@ -66,8 +66,8 @@ from pathlib import Path, PurePosixPath
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.git import git
+from lib.repo_paths import REPO
 
-REPO = Path(__file__).resolve().parents[2]
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
 # pytest's default `python_files`, both forms — the same pair
 # `ansible/tests/repo/test_testpaths_covers_every_test_file.py` derives its census from, and for
