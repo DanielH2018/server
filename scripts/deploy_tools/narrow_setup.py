@@ -225,6 +225,16 @@ def role_tags(
         else:
             # A shipped file is named by this role's tasks the way its own `files/` are, and
             # `readers_of` refuses one that none of them names.
+            #
+            # DECIDED: a shipped file this role renders only through another role's task file
+            # refuses here; it is not resolved through that task file's readers (#3322). The
+            # kuma-check templates reach gitops_deploy, render_records and k3s only through
+            # `common/tasks/kuma_check_timer.yml`, so a change to them falls back to the
+            # whole-role tag. That costs a longer apply and never misses one. Those templates
+            # changed twice in the repo's history, and each routing layer added from
+            # 2026-10-01 on found the next indirection, so one more layer was not worth its
+            # code. Reopen it if the trigger recurs or the fallback grows costlier than a
+            # longer apply; #3322's close reason is the long form.
             rel = path
             got = index.readers_of(path.rsplit("/", 1)[-1])
             if not got:
