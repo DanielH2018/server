@@ -11,8 +11,9 @@ a rename therefore still fails CI, though the finding it raises is ``atom-no-lon
 rather than ``missing`` — a citation stops being support the moment it stops naming a tracked
 file, so the atom leaves the section's citations before it can fail to hash. The finer claim —
 a value, a key, a decision, a test's body — has a form of its own, and those content-hash.
-Hashing a cited file's bytes instead would make every edit anywhere in it a finding about a
-sentence that only said where the file lives, and such an edit corrects no documented claim.
+Hashing a cited file's bytes instead made every edit anywhere in it a finding about a
+sentence that only said where the file lives: 687 of the 1,253 commits in the 30 days to
+2026-09-28 raised one, and none corrected a documented claim in the lock's first 9 days.
 
 A Python node is hashed through ``ast.unparse``, never ``ast.dump``. A dump names every AST
 field, so a CPython release that adds one (``type_params`` in 3.12) moves every recorded
@@ -146,7 +147,7 @@ def hash_atom(c: Citation, repo: Path) -> str | None:
         return None
     if c.form == "path":
         # DECIDED: a path atom hashes EXISTENCE, not content. See this module's docstring
-        # for the rule and `.claude/rules/facts.md` for the measurement behind it.
+        # for the rule and the measurement behind it.
         if c.path.endswith("/"):
             return _sha(c.path.encode()) if target.is_dir() else None
         return _sha(c.path.encode()) if target.is_file() else None

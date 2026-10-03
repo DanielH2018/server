@@ -14,17 +14,21 @@ in the tests.
 
 WHAT IT REPORTS RATHER THAN HIDES. A script that does not parse, and a script with no
 docstring, both get a row saying so. Dropping them would make the page quietly incomplete,
-which is worse than a visible gap. The same goes for the test column: a script with no
-`test_<name>.py` shows an empty cell, because an untested script is a fact worth surfacing.
+which is worse than a visible gap.
 
 HOW EACH SCRIPT IS RUN IS DERIVED, NOT DECLARED. A hand-kept list of "these ones are
 automated" is stale the first time someone adds a cron. The tree already says how every
 script is reached: `prek.toml` names the commit gates, `ansible.builtin.cron` names the
 scheduled ones, the workflows name the CI ones, and the import graph names the modules that
 are libraries rather than entry points. `lib.script_classify.classify()` reads those, so
-the page cannot drift from the tree. The classifier and the test-coverage lookup are
-`lib/script_classify.py` and `lib/script_coverage.py`; this file assembles their answers
-into the page.
+the page cannot drift from the tree. The classifier is `lib/script_classify.py`; this file
+assembles its answers into the page.
+
+THE TESTS COLUMN NAMES ONLY A DIRECT TEST. A `test_<name>.py` in the script's `tests/` sibling
+or beside it counts; nothing else does. An earlier version also credited any test that
+imported the script or named its path, and keeping that judgement honest took a module and a
+suite of its own for a column nobody acted on (#3283). An empty cell therefore means "no test
+named after it", not "nothing exercises it".
 
 WHAT IT CANNOT DECIDE. Whether a script is safe to run. The summary is whatever its author
 wrote, and nothing here judges blast radius — `docs/reference/crons.md` does that for the
@@ -51,8 +55,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from lib.docs_provenance import md_cell as _md_cell
 from lib.exit_codes import CONTRACTS as _EXIT_CONTRACTS, contract as _exit_contract
 from lib.repo_paths import REPO, SCRIPTS
-from lib.script_classify import RUNS, candidates, classify, importers
-from lib.script_coverage import candidate_test_files, indirect_test
+from lib.script_classify import RUNS, candidates, classify
 
 # The reStructuredText usage marker the repo's scripts already use, and the indented block
 # that follows it.
@@ -120,10 +123,6 @@ def _exit_codes_cell(rel_path: str) -> str:
 def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str]]:
     """One row per first-party script, sorted by name."""
     verdicts = classify(repo, scripts)
-    test_files = candidate_test_files(repo, scripts)
-    # Built once: the coverage lookup runs per script and parsing the tree per call
-    # made the page quadratic in the number of scripts.
-    imports = importers(scripts)
     rows = []
     for path in candidates(scripts):
         if path.suffix == ".py":
@@ -148,11 +147,7 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
         direct = path.parent / "tests" / f"test_{path.stem}.py"
         if not direct.is_file():
             direct = path.parent / f"test_{path.stem}.py"
-        if direct.is_file():
-            test, indirect, via = direct.name, "", ""
-        else:
-            test = ""
-            indirect, via = indirect_test(path.name, test_files, scripts, imports)
+        test = direct.name if direct.is_file() else ""
         run, evidence = verdicts.get(
             path.name, ("adhoc", "no automated caller in the tree")
         )
@@ -167,8 +162,6 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
                 "summary": summary,
                 "usage": usage,
                 "tests": test,
-                "indirect_tests": indirect,
-                "indirect_via": via,
                 "run": run,
                 "evidence": evidence,
                 "exit_codes": _exit_codes_cell(str(path.relative_to(scripts.parent))),
@@ -180,9 +173,8 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
 def render_markdown(rows: list[dict[str, str]]) -> str:
     """Render `rows` as the "Scripts" reference page, grouped by how each script is run.
 
-    Splits the rows into scheduled / gate / library / adhoc sections, calls out scripts that
-    run unattended with no test coverage, and appends a usage block for each script that
-    documents its own invocation.
+    Splits the rows into scheduled / gate / library / adhoc sections and appends a usage block
+    for each script that documents its own invocation.
 
     Args:
         rows: Script rows as returned by `build_rows`.
@@ -193,12 +185,6 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     from lib.docs_provenance import generated_banner
 
     by_run = {kind: [r for r in rows if r["run"] == kind] for kind in RUNS}
-    unattended = by_run["scheduled"] + by_run["gate"]
-
-    def uncovered(row: dict[str, str]) -> bool:
-        return not row["tests"] and not row["indirect_tests"]
-
-    gaps = [r for r in unattended if uncovered(r)]
 
     parts = [generated_banner("scripts/docs/reference/scripts.py")]
     parts.append("# Scripts\n")
@@ -220,26 +206,14 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         "nothing here judges blast radius. For the ones that run unattended, and which of "
         "those change state, see [Scheduled jobs](crons.md).\n"
     )
-    untested = [r for r in rows if uncovered(r)]
-    parts.append(
-        f"\n**{len(gaps)} of the {len(unattended)} scripts that run unattended have no test; "
-        f"{len(untested)} of all {len(rows)} do not.** The first number is the one that "
-        "matters. An untested script a person runs fails in front of that person; an untested "
-        "one a cron or a commit gate runs fails unattended, or blocks everybody.\n"
-    )
     parts.append(
         '!!! note "Where the Tests column looks"\n'
-        "    First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or "
-        "`ansible/tests/` that names the script — `gitops_tick.sh` has five, in "
-        "`test_gitops_manual_trigger.py`, and the naming convention alone called it untested. "
-        "Those show as *(indirect)*, which means a test exercises it, not that the test is "
-        "about it.\n"
+        "    Only for a `test_<name>.py` in the script's `tests/` sibling or beside it. A script "
+        "with an empty cell may still be exercised elsewhere: `gitops_tick.sh` has five tests "
+        "in `test_gitops_manual_trigger.py`, and a module split out of a facade is run by the "
+        "facade's suite. The column says where a script's own suite lives, not whether "
+        "anything reaches it.\n"
     )
-    if gaps:
-        parts.append(
-            "".join(f"\n- `{row['path']}` — {row['evidence']}" for row in gaps) + "\n"
-        )
-
     for kind, heading in (
         ("scheduled", "Run automatically, on a schedule"),
         ("gate", "Run automatically, on a commit, CI run, deploy or session"),
@@ -260,12 +234,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         )
         parts.append("|---|---|---|---|---|---|")
         for row in section:
-            if row["tests"]:
-                test = f"`{row['tests']}`"
-            elif row["indirect_tests"]:
-                test = f"`{row['indirect_tests']}` *(indirect)*"
-            else:
-                test = "—"
+            test = f"`{row['tests']}`" if row["tests"] else "—"
             parts.append(
                 f"| `{row['path']}` | {row['directory']} | {_md_cell(row['summary'])} | "
                 f"{_md_cell(row['evidence'])} | {test} | {row['exit_codes'] or '—'} |"

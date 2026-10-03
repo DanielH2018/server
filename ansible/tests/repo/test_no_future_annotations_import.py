@@ -39,14 +39,8 @@ VENDORED = "ansible/collections/"
 # execution context that reaches the repo's uv 3.14 interpreter: an Ansible filter plugin
 # (deploys run through `uv run ansible-playbook`), a Claude hook (its `.sh` wrapper execs
 # `uv run --no-sync python`), an eval script, and the suite's own shared helper.
-#
-# DECIDED: no path literal under the scripts tree belongs in this set, which is why the
-# largest of those contexts is held by the floor below rather than by a named member.
-# `lib/script_coverage.py` reads such a mention inside a test as a COVERAGE credit, and a
-# census names modules without exercising them. A literal here therefore credits someone
-# else's module to this guard: it took the infra_map facade's `model` off its importer's
-# suite and failed `test_the_infra_map_facade_members_inherit_the_facades_suite`. The
-# 200-module floor already carries that context, since it is most of the 200.
+# The scripts tree, the largest of those contexts, is held by the 200-module floor below
+# rather than by a named member, since it is most of the 200.
 KNOWN_UV_RUN_MODULES = frozenset(
     {
         "ansible/filter_plugins/toposort.py",

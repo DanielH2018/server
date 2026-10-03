@@ -49,11 +49,9 @@ FACADE_EDGES = frozenset(
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.rotation_tools"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.secret_registry"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.sops_io"),
-        # scripts/docs/reference/scripts.py renders the page; the census and the coverage
-        # judgement were split into lib/ so `lib.script_coverage` could reach them too.
+        # scripts/docs/reference/scripts.py renders the page; the census was split into lib/
+        # so the `--help` test could reach it without importing the generator.
         ("docs.reference.scripts", "lib.script_classify"),
-        ("docs.reference.scripts", "lib.script_coverage"),
-        ("lib.script_coverage", "lib.script_classify"),
         # scripts/validate/k8s_manifests.py re-exports every name in lib/k8s_pvc.py.
         ("validate.k8s_manifests", "lib.k8s_pvc"),
         # The rule modules only one validator imports sit in validate/validate_lib/.

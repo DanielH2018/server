@@ -43,65 +43,25 @@ and renaming that test fails the guard here.
 A `file:line` citation is rejected: a line number moves under every edit above it. Cite the
 symbol or the marker instead.
 
-## What each form's hash is over
+A path atom hashes existence, so it breaks only when the file goes away; cite a symbol, a YAML
+key, a decision marker or a test node to pin content. A citation is support only when it
+names a tracked file or a directory holding one, so an untracked path is prose. The reasons
+are in the module docstrings under `scripts/lib/facts/`.
 
-A path atom hashes **existence**, not content. A bare path says where something lives, so the
-claim it supports breaks when the file or directory goes away, and not when someone edits the
-file. A delete or a rename reads `atom-no-longer-cited` rather than `missing`: support has to
-name a tracked file, so the atom leaves the section's citations before it can fail to hash.
-The finer claim has a form of its own: cite
-the symbol, the YAML key, the `DECIDED:` marker or the test node, and those four content-hash.
-This is why a Renovate pin bump under a cited role directory no longer arrives red. Hashing a
-cited file's bytes instead made an edit anywhere in it a finding about a sentence that only
-said where the file lives, on 687 of the 1,253 commits in the 30 days to 2026-09-28, and
-corrected no documented claim in the lock's first 9 days.
-
-A citation is support only when it names a **tracked** file, or a directory holding a
-tracked file — so an untracked or gitignored path is prose, not broken support, the same as
-a doc-relative `defaults/main.yml` or a slashed token that names nothing here at all. A
-verdict must not depend on which checkout runs it, and a citation resolving only on the
-machine that happens to have the file on disk (a gitignored spec, an uncommitted draft) is
-exactly the failure this rules out. The tracked set is read from `git ls-files`, not listed.
-A rejected form stays rejected whatever its prefix: a line number is a claim about this tree
-however it is spelled.
+## Commands
 
 `docs/facts.lock` records the hashes each verified section was checked against. The tool
-writes it; a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.
-`fact_status.py status` prints every section's status. `verify '<doc>#<heading>'` is the
-only path from OUT back to IN, and `forget '<doc>#<heading>'` drops a row whose heading is
-gone — a rename makes a new unit, and the old row cannot be hand-deleted without tripping
-the lock's checksum. The `facts-lint-changed` prek hook is the ratchet for everything not
-yet in the lock: it runs `lint --changed-since` over the sections a commit edits.
+writes it, and a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.
 
-`verify --unverified` records every section that has no lock row yet. It never touches a row
-the lock already holds, so it cannot launder a section whose atom moved — that stays the
-named `verify`.
+- `fact_status.py status` prints every section's status.
+- `fact_status.py verify '<doc>#<heading>'` is the only path from OUT back to IN.
+- `fact_status.py verify --unverified` records every section with no lock row yet. It never
+  touches an existing row. Run it when you add a section, because nothing fails on an
+  UNVERIFIED one.
+- `fact_status.py forget '<doc>#<heading>'` drops the row of a renamed or deleted heading.
 
-A section that cites atoms but has no lock row is UNVERIFIED and never fails anything. A
-section that cites nothing is a convention and is never graded. A `probe.py` citation reads
-UNKNOWN rather than IN: nothing in this slice runs a probe, so its shape hash waits on the
-reconcile timer. The memory store, the reconcile timer and the re-verifier are the design's
-later slices; PR #2138 carries the design.
-
-## A prose edit re-hashes itself; content drift does not
-
-The `facts-reverify-changed` prek hook runs `reverify --changed-since origin/master` after
-the lint. It re-hashes a section under exactly one condition: the commit edits the section's
-text **and** no recorded atom of that section moved. `scripts/lib/facts/lock.py:BENIGN_KINDS`
-is the pair that qualifies — `unrecorded-atom` and `atom-no-longer-cited`, both of them the
-author adding or dropping a citation in the diff they are already looking at.
-
-One `atom-no-longer-cited` is refused anyway, because it has a second cause. Untracking a
-cited file drops the atom exactly as deleting the sentence would, so
-`scripts/lib/facts/lock.py:_spans_still_in_the_prose` asks which happened: a span the section
-still writes means the tree lost the file while the claim stands, and that is a claim to
-re-read.
-
-A `moved` or `missing` atom is refused and left red, whatever else the commit did. That is the
-contract: a documented claim whose support drifted is re-read by a person, and the hook exists
-to remove the second commit, not the reading. It fails like a formatter — it writes the lock
-and exits non-zero, so `git add docs/facts.lock` and commit again.
-
-**Nothing ratchets the IN count.** A section added tomorrow arrives UNVERIFIED and fails
-nothing, so run `verify --unverified` when you add one, the way you would run the role-glance
-generator.
+Two prek hooks run on a commit. `facts-lint-changed` lints the sections the commit edits.
+`facts-reverify-changed` re-hashes a section whose prose you edited, when only a citation was
+added or dropped. It writes the lock and exits non-zero like a formatter, so
+`git add docs/facts.lock` and commit again. A `moved` or `missing` atom stays red until a
+person re-reads the section and runs `verify`.
