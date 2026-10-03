@@ -125,148 +125,25 @@ name a branch nothing here has checked out, so each would read as stale.
 
 ## Commands
 
-Five new subcommands, plus a change to `list` and one to `close`. All of them match
-`findings.py`'s plan-then-run split: the argv goes in `findings_lib/plans.py`, the parsing in
-`findings_lib/issue_model.py`, the `gh` calls in `findings_lib/gh_calls.py`.
+`findings.py --help` lists the subcommands, and `findings.py <cmd> --help` owns each one's
+flags. This page does not restate them, because a third copy drifts whenever a flag changes.
+`docs/reference/scripts.md` maps the modules behind the CLI. The argv goes in
+`findings_lib/plans.py`, the parsing in `findings_lib/issue_model.py`, and the `gh` calls in
+`findings_lib/gh_calls.py`. Every write command has a dry-run mode that plans and writes nothing.
 
-### `claim <n>… --worktree <name> [--session <id>] [--force]`
+Three design rules hold across the subcommands, and no docstring states them:
 
-Claims one or more issues for a worktree. Refuses an issue labelled `manual`. Refuses an issue
-already held by a different live claim. Refuses an issue that lacks the `claude` label —
-`load_issues` filters on it, so a claim on an issue outside the register is invisible to
-`claims`, `reap` and `next` alike and only a hand-typed `release` could ever clear it. Prints
-what it took and what it refused.
-
-Exit 3 on refusal, matching the existing contract in the CLI that 3 means *nothing was written
-because the issue refuses it*.
-
-**It checks its own `--worktree` first.** A claim that reads STALE the moment it lands is worse
-than no claim, because it reads as protection: `next` re-offers the issue and `reap` releases
-it while the session is still working it. Two shapes reach that state, and one guard covers
-both. The name may match no branch at all — the attribution table below puts worktree
-`issue-1132` beside branch `worktree-issue-1132`, and the liveness rule matches on the branch.
-Or it may match a real branch whose state is REMOVABLE: `master` and every other primary
-checkout, which git never locks, and a crashed-and-resumed orchestrator, whose lock named a pid
-and a process start time that a restart does not bring back. Either way the guard exits 3 and
-names the reason. `--force` claims anyway, for the resumed orchestrator that legitimately still
-holds its work.
-
-A git read that FAILS does not refuse. This guard is advisory and only declines to warn, which
-is the opposite of `reap` — `reap` writes on a bad read, so it refuses outright.
-
-### `release <n>… --worktree <name> [--reason <text>]`
-
-The reverse state. Posts the release comment and removes the `claimed` label.
-
-`--worktree` is **required**, not optional. A release names who is releasing, and
-`plan_release` refuses any claim but that worktree's own — without the name, one session
-could release the claim another session holds. It also creates the `claimed` label first if
-the repo lacks it. `gh issue edit --remove-label` fails on a label that does not exist, and
-the release comment is already posted by then. `reap` does the same, for the same reason.
-
-**The name must be one the trailer can carry.** `claim` and `release` both refuse a
-`--worktree` holding a backtick, a line break, or surrounding whitespace, and exit 2. Such a
-name used to write the comment and the label and then fail to parse its own trailer on
-read-back, which `claim` reported as a race lost to nobody.
-
-The reason is collapsed to one line before it is written. `current_claim` reads a `Claim:`
-line anywhere in a comment body, and the reason sits above the trailer, so a multi-line
-reason naming a worktree turned a release into a claim by that worktree. `reap` builds its
-own reason out of a worktree's lock reason, which is free text nobody here writes.
-
-### The `claimed` label is repaired, in both directions
-
-The comment is the claim; the label is decorative, and every read path uses `current_claim`.
-The two can still disagree, because `claim` posts the comment first and a failed
-`--add-label` — a rate limit, a transient 502 — leaves the claim held with the label off. So
-a reclaim that finds its own claim already posted plans the missing label edit rather than
-nothing, and a `release` that finds no claim but a stuck label plans the label removal rather
-than refusing. Without those, a label that went wrong once stayed wrong permanently and
-silently: a wrong answer for anyone filtering GitHub by `label:claimed`.
-
-### `claims [--json]`
-
-Every open claim: issue number, worktree, age, and whether the holder is live or stale. This is
-the way to see the state — a claim protocol with no way to list claims is a one-way door.
-
-### `reap [--dry-run]`
-
-Releases every stale claim, printing why each was judged stale. `--dry-run` plans and writes
-nothing, like every other command here.
-
-### Every path that closes or reopens releases the claim it finds
-
-Closing a claimed issue posts its release and drops the `claimed` label first. `claims`,
-`reap` and `next` all read open issues, so a claim stranded on a closed issue leaves every
-view at once — invisible rather than wrong, which is harder to notice.
-
-`close` is not the only such path. The closing mechanism this document itself names — the PR
-body's `Closes #<n>`, which GitHub honours — posts no release comment at all and leaves the
-label on; `open` then reopens that issue for a later re-observation and the stale claim comes
-back LIVE, blocking `claim` and withholding the issue from `next` for as long as the claiming
-worktree exists. Both paths now go through one helper, `plan_release_held`, and release
-whoever holds the claim rather than only the caller.
-
-`verify --close` was a third such path, and grew a live-claim refusal of its own in #1302 so
-that an unrelated verify run could not close an issue out from under the session working it.
-Both are gone: `verify` no longer closes anything (#1313). A command that only prints cannot
-take an issue from anyone, so there is nothing left for the refusal to guard.
-
-The reopen posts its release as its own comment rather than folding the trailer into the
-regression note, so no comment body ever carries a `Claim:` and a `Released:` line at once.
-
-### `next [--limit N]`
-
-The picking command. Returns open issues that are: `claude`-labelled, not `manual`, not
-deferred to a date after today, not live-claimed, and not already referenced by an open PR,
-ordered by the existing `issue_model.sort_key`.
-
-A deferred issue is still named, under a `deferred: #<n> until <date>  <title>` line after the
-free rows. Under `--json` that line goes to stderr, because the array is the free set an
-orchestrator claims and a deferred row inside it would re-create the dispatch the date exists
-to prevent. Silently withholding it is the failure `manual` has: the operator reading the
-backlog cannot tell a withheld issue from a closed one.
-
-**There is no default bound.** `--limit` defaulted to 10, and an orchestrator read
-`next --json`, took the ten rows for the whole free set, and never saw the twelve behind them.
-A view that truncates without saying so is blind to real state in the same way the stranded
-claims above are. `--limit N` is still there for anyone who wants a bounded list.
-
-An ad-hoc session runs this instead of eyeballing `list` and guessing. The open-PR check is
-what stops a session picking up work another session has already finished but not landed.
-
-### `list`
-
-`list` gains no flag. It **marks** a manual row `[manual]`, a deferred one
-`[deferred until <date>]` while the date is still ahead, and a claimed one
-`[claimed:<worktree>]`, and hides none of them. Hiding a manual row is how an issue like #1132
-stops being visible to anyone, including the operator who reserved it — and a flag defaulting
-to "show" that nothing can turn off is a flag that documents the opposite of what it does.
-
-### `defer <n> --until <YYYY-MM-DD>` / `defer <n> --clear`
-
-Sets, moves or clears the not-before date. `--until` creates the dated label if the repo lacks
-it, adds it, removes any other `not-before:` label the issue carries so it holds one date at
-most, and posts a `Deferred until <date>.` comment for the thread to read. `--clear` removes
-every `not-before:` label and comments; on an issue that carries none it exits 3, the same
-"nothing was written because the issue refuses it" code `claim` uses. `claim` on a deferred
-issue exits 3 too, and its refusal names `defer <n> --clear` as the way out — the escape is in
-the line the operator reads, which `manual`'s refusal never offered.
-
-`open --not-before <date>` files a new finding already deferred, for the case where the agent
-filing it knows the precondition is a date.
-
-### `manual <n>` / `manual <n> --clear`
-
-Reserves an issue for the operator, or hands it back. `manual <n>` adds the label, posts a
-comment, and releases any claim the issue carries. The release is required because `reap`
-skips `manual` issues (`another_claim_blocks`), so a claim left on one would never be
-cleared. `--clear` removes the label and comments. Either form exits 3 on a closed issue or
-when the label is already in the state asked for. `claim`'s refusal on a `manual` issue names
-`manual <n> --clear` as the way out.
-
-`open --manual` files a finding already reserved. When the duplicate check matches an existing issue,
-`open --manual` labels that issue too, rather than dropping the flag on the touch.
+- **A claim that reads stale the moment it lands is worse than no claim.** It reads as
+  protection while `next` re-offers the issue and `reap` releases it. So `claim` checks the
+  worktree it is given before it writes. A name that matches no branch fails that check, and
+  so does a branch git never locks, such as `master`.
+- **No view hides a row.** `list` marks manual, deferred and claimed issues instead of dropping
+  them, and `next` names each deferred issue after the free rows. A hidden row is how an issue
+  like #1132 stops being visible to anyone, including the operator who reserved it.
+- **Every path that closes or reopens an issue releases its claim.** `claims`, `reap` and
+  `next` read only open issues, so a claim stranded on a closed issue leaves every view at once.
+  A PR body's `Closes #<n>` posts no release, and the next re-observation that reopens the issue
+  would otherwise bring the claim back live.
 
 ## What a fan-out agent may not do
 
