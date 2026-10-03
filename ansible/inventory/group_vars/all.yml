@@ -346,15 +346,6 @@ dev_tooling_hosts:
 # furthest behind, which is the laundering this threshold exists to prevent.
 setup_drift_tree_max_days: 14
 
-# Which SOPS file `pre_tasks/load_secrets.yml` decrypts, chosen per host. Production is the
-# default so a host nobody thought about gets the production file and fails closed on a
-# missing key, rather than silently running with no secrets at all. No host overrides it; the
-# per-host mechanism makes adding such a host a var rather than a code change.
-#
-# Resolved relative to ansible/vars/. ENFORCED by ansible/tests/deploy/test_load_secrets_by_host.py,
-# which also checks every file named by any host actually exists.
-secrets_file: secrets.yml
-
 # Pod Security Admission labels, applied to homelab and observability.
 #
 # WARN AND AUDIT ONLY — deliberately no `enforce`. PSA is a namespace-level control and this
