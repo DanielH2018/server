@@ -610,8 +610,10 @@ stringData:
   # full 10-min jitter and runs to the 100-min unit timeout tomorrow spaces two beats 25h50m
   # apart; 25h fires DOWN on that. 28h leaves 2h of margin and stays under two periods, so a
   # missed run still reports. test_renovate_agent_unit.py pins both bounds. Gated on the
-  # token so a checkout without the secret renders no tile rather than one that sits red.
-{% if renovate_agent_kuma_push_token | default('') %}
+  # token so a checkout without the secret renders no tile rather than one that sits red, and
+  # on renovate_agent_enabled so a disarmed agent's tile is withdrawn rather than paging every
+  # six hours about a timer that is off on purpose.
+{% if renovate_agent_kuma_push_token | default('') and renovate_agent_enabled | default(false) %}
   renovate-agent-alive.json: |
     {"type": "push", "name": "Renovate Agent — Alive", "description": "renovate-agent.service on daniel-box beats this tile from ExecStartPost after each daily 06:00 run exits 0; a crash pushes down with the exception text. DOWN means no clean run in 28 h, including a worktree-blocked skip, or a crash. Run systemctl status renovate-agent.timer and journalctl -u renovate-agent.", "interval": 100800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ renovate_agent_kuma_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
