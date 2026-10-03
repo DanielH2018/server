@@ -158,11 +158,11 @@ def main():
     if data is None:
         return 0
     file_path = ((data.get("tool_input") or {}).get("file_path")) or ""
-    # Guard the checkout that owns the edited file. settings.json always invokes the
-    # primary checkout's copy of this hook, so deriving repo_root from __file__ aimed the
-    # path-prefix guard at /home/ubuntu/server even for an edit inside a worktree, and that
-    # path never matched the guard prefix.
-    primary_root = os.path.dirname(
+    # Guard the checkout that owns the edited file, not the one this hook runs from. Up to
+    # #3394 settings.json invoked the primary checkout's copy of this hook, so a root derived
+    # from __file__ aimed the path-prefix guard at /home/ubuntu/server even for an edit inside
+    # a worktree. A session still edits files outside its own checkout by absolute path.
+    hook_root = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
     if file_path:
@@ -171,9 +171,9 @@ def main():
             if os.path.isabs(file_path)
             else os.path.join(os.getcwd(), file_path)
         )
-        repo_root = find_repo_root(target, primary_root)
+        repo_root = find_repo_root(target, hook_root)
     else:
-        repo_root = primary_root
+        repo_root = hook_root
     reason = classify(file_path, repo_root)
     if reason:
         emit_pretooluse_decision("deny", reason)

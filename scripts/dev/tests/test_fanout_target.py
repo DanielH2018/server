@@ -49,18 +49,16 @@ def test_a_repo_with_no_register_or_no_default_branch_is_refused():
 
 
 def test_a_dotfiles_tree_comes_from_its_own_checkout_and_ignores_fanout():
-    """The flagged half is the dotfiles tree; this repo's command keeps neither change."""
-    cmd = create_worktree_command("763", "daniel-server", DOTFILES)
+    """The flagged half is the dotfiles tree; this repo's command keeps the exclude out."""
+    cmd = create_worktree_command("763", DOTFILES)
     assert (
         "git -C /home/ubuntu/.local/share/chezmoi worktree add -b worktree-fanout-763 "
         f"{DOT_WT} origin/main" in cmd
     )
     assert "/home/ubuntu/server" not in cmd
-    # No primary fast-forward even on a host with no tick: `bin/land-sync` owns that `main`.
-    assert "merge --ff-only" not in cmd
     assert cmd.index("fanout-step: exclude") < cmd.index("worktree add")
-    server = create_worktree_command("763", "daniel-server")
-    assert "info/exclude" not in server and "merge --ff-only origin/master" in server
+    server = create_worktree_command("763")
+    assert "info/exclude" not in server
 
 
 def test_the_exclude_step_hides_fanout_in_a_linked_worktree_and_appends_once(

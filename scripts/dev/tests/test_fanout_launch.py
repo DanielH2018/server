@@ -18,7 +18,6 @@ from fanout_lib.launch import (
     SYSTEM_PROMPT_FILE,
     LaunchError,
     create_worktree_command,
-    fast_forward_primary_command,
     launch,
     launch_command,
     remove_worktree_command,
@@ -106,7 +105,7 @@ def test_worktree_and_unit_names_derive_from_the_batch():
 
 def test_the_existence_check_is_the_first_step_of_the_launch_command():
     """Before `fetch`, so a relaunch never reaches the `worktree add` whose cleanup deletes."""
-    cmd = launch_command("b", "daniel-server")
+    cmd = launch_command("b")
     assert cmd.index("fanout-step: exists") < cmd.index(
         "git -C /home/ubuntu/server fetch origin"
     )
@@ -134,7 +133,7 @@ def test_an_existing_worktree_or_branch_is_refused_without_removing_anything():
 
 
 def test_the_worktree_command_fetches_before_adding_from_origin_master():
-    cmd = create_worktree_command("b", "daniel-server")
+    cmd = create_worktree_command("b")
     assert cmd.index("git -C /home/ubuntu/server fetch origin") < cmd.index(
         "worktree add"
     )
@@ -145,59 +144,6 @@ def test_the_worktree_command_fetches_before_adding_from_origin_master():
     # Each step is sentinel-wrapped so a failure can be attributed to it (launch.py's
     # `_step`); the lock step, being last, ends the whole command.
     assert cmd.rstrip().endswith('fanout-step: worktree lock" >&2; exit 1; }')
-
-
-def test_the_primary_checkout_is_fast_forwarded_between_the_fetch_and_the_add():
-    """Hooks are named by an absolute path into the primary checkout.
-
-    A worktree cut from a fresher `origin/master` than the primary checkout registers hook
-    scripts that checkout lacks, and every skipped guard is a non-blocking hook error Claude
-    Code allows the call past.
-    """
-    cmd = create_worktree_command("b", "daniel-server")
-    assert cmd.index("fanout-step: fetch") < cmd.index("merge --ff-only origin/master")
-    assert cmd.index("merge --ff-only origin/master") < cmd.index("worktree add")
-    assert "fanout-step: primary ff" in cmd
-
-
-def test_the_fast_forward_refuses_a_primary_checkout_that_is_not_on_master():
-    """`merge --ff-only origin/master` on another branch takes master's commits onto it."""
-    cmd = fast_forward_primary_command("daniel-server")
-    gate = (
-        "git -C /home/ubuntu/server symbolic-ref --quiet --short HEAD | grep -qx master"
-    )
-    assert cmd.index(gate) < cmd.index("merge --ff-only origin/master")
-
-
-def test_the_deploy_host_is_not_fast_forwarded_by_a_launch():
-    """The CLEAN half. daniel-box's tick pulls every 10 minutes and holds the tree lock to do
-    it; a launch cannot hold that lock inside LAUNCH_TIMEOUT_S, so it moves no HEAD there."""
-    assert fast_forward_primary_command("daniel-box") == ""
-    cmd = create_worktree_command("b", "daniel-box")
-    assert "merge --ff-only" not in cmd and "primary ff" not in cmd
-    # Still one chain, with no empty element a `&&` would refuse.
-    assert " &&  && " not in cmd
-
-
-def test_a_failed_fast_forward_raises_with_no_cleanup():
-    """The tree was never created, so cleanup would fail its own `worktree remove`. The
-    refusal is the point: a primary checkout that cannot fast-forward has unknown hook state,
-    and a batch placed there runs its guards from whatever is on disk."""
-    tools, run = fake_tools(
-        {
-            "daniel-server": subprocess.CompletedProcess(
-                [],
-                1,
-                stdout="",
-                stderr="fatal: Not possible to fast-forward\nfanout-step: primary ff\n",
-            )
-        }
-    )
-    with pytest.raises(LaunchError, match="primary ff") as excinfo:
-        launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
-    assert "Not possible to fast-forward" in str(excinfo.value)
-    assert len(run.calls) == 1
-    assert not any("worktree remove" in c[1] for c in run.calls)
 
 
 def test_the_systemd_run_command_is_a_transient_user_service_reading_the_brief():
@@ -235,10 +181,10 @@ def test_the_appended_system_prompt_file_exists_where_the_unit_resolves_it():
 
 
 def test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run():
-    cmd = launch_command("b", "daniel-server")
-    assert cmd == create_worktree_command(
-        "b", "daniel-server"
-    ) + " && " + write_brief_command("b") + " && " + systemd_run_command("b")
+    cmd = launch_command("b")
+    assert cmd == create_worktree_command("b") + " && " + write_brief_command(
+        "b"
+    ) + " && " + systemd_run_command("b")
     assert (
         cmd.index("worktree add")
         < cmd.index("worktree lock")

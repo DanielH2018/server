@@ -71,10 +71,10 @@ def test_register_block_derives_the_command_and_stops_at_the_first_prose_line():
         5,
         20,
     )
-    assert r.command == "~/server/.claude/hooks/warp.sh --banner"
+    assert r.command == '"$CLAUDE_PROJECT_DIR"/.claude/hooks/warp.sh --banner'
     assert r.entry() == {
         "type": "command",
-        "command": "~/server/.claude/hooks/warp.sh --banner",
+        "command": '"$CLAUDE_PROJECT_DIR"/.claude/hooks/warp.sh --banner',
         "timeout": 5,
         "statusMessage": "Checking...",
         "async": True,
@@ -99,11 +99,14 @@ def test_a_py_registration_renders_through_the_runner_with_its_args_as_flags():
         "#   timeout: 5\n#   order: 10\n#   args: --ask-on-cd=a,b\n"
     )
     [r] = g.parse_hook_file("guard.py", text).registrations
-    assert r.command == "~/server/.claude/hooks/run-hook.sh guard --ask-on-cd=a,b"
+    assert (
+        r.command
+        == '"$CLAUDE_PROJECT_DIR"/.claude/hooks/run-hook.sh guard --ask-on-cd=a,b'
+    )
     [bare] = g.parse_hook_file(
         "quiet.py", text.replace("#   args: --ask-on-cd=a,b\n", "")
     ).registrations
-    assert bare.command == "~/server/.claude/hooks/run-hook.sh quiet"
+    assert bare.command == '"$CLAUDE_PROJECT_DIR"/.claude/hooks/run-hook.sh quiet'
 
 
 def test_an_if_rule_on_a_tool_event_renders_after_the_timeout():
@@ -115,7 +118,7 @@ def test_an_if_rule_on_a_tool_event_renders_after_the_timeout():
     [r] = g.parse_hook_file("gate.sh", text).registrations
     assert list(r.entry().items()) == [
         ("type", "command"),
-        ("command", "~/server/.claude/hooks/gate.sh"),
+        ("command", '"$CLAUDE_PROJECT_DIR"/.claude/hooks/gate.sh'),
         ("timeout", 5),
         ("if", "Bash(git *)"),
         ("statusMessage", "Checking..."),

@@ -99,9 +99,9 @@ def test_hook_wrappers_reference_existing_python():
 
     A reference carrying a `$` names no file this can check: `run-hook.sh` composes
     `$HOOKS_DIR/$name.py` from the hook name its registration passes, so the name is not in the
-    wrapper at all (#3278). Abstaining here is the same posture
-    `hooklib/hook_registration_lines.py` takes, and that arm DOES rule on the composed form —
-    it reads the registered command, which this test does not have.
+    wrapper at all (#3278). The composed form is covered elsewhere: `gen_hook_settings.py`
+    derives each `run-hook.sh <stem>` registration from a `.py` it found on disk, and its
+    `--check` refuses a `settings.json` that names a stem the census no longer has.
     """
     py_names = _repo_python_basenames()
     hooks_dir = os.path.join(CLAUDE, "hooks")

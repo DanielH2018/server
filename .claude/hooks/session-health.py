@@ -58,7 +58,6 @@ except ImportError, SyntaxError:
 
 try:
     from hooklib import service_lines
-    from hooklib.hook_registration_lines import missing_hook_script_lines
     from hooklib.worktree_lines import _stale_worktree_lines, remote_fanout_lines
 
     HOOKLIB_IMPORT_ERROR = ""
@@ -70,13 +69,6 @@ except (ImportError, SyntaxError) as exc:
         return [f"  ⚠ hooklib is broken: {HOOKLIB_IMPORT_ERROR}"]
 
     def _stale_worktree_lines(*_args, **_kwargs):
-        return []
-
-    # A stub, not a raising placeholder: `remote_fanout_lines` above already carries the one
-    # `hooklib is broken` line the banner needs, and a second copy of it would say nothing new.
-    # Silence here is what the no-silent-failure rule forbids only when nothing else reports
-    # the failure.
-    def missing_hook_script_lines(*_args, **_kwargs):
         return []
 
 
@@ -495,7 +487,6 @@ def main(
     *,
     parked_deployer_problems=parked_deployer_problems,
     remote_fanout_lines=remote_fanout_lines,
-    missing_hook_script_lines=missing_hook_script_lines,
 ):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
@@ -512,8 +503,6 @@ def main(
             its current allowlist entry — the same reason `parked_deployer_problems` itself
             takes its four reads as parameters rather than patched globals.
         remote_fanout_lines: override for the same reason (live `.claude/fanout` state).
-        missing_hook_script_lines: override for the same reason (reads this session's
-            `.claude/settings.json` and the primary checkout's files).
     """
     payload = read_payload() or {}
     # Don't re-banner on mid-session compaction — only on a genuine open/resume/clear.
@@ -522,19 +511,9 @@ def main(
 
     targets = target_problems()
     master_moved = master_moved_problems()
-    # First of everything, ahead of the unhealthy workloads: "the guards this session registers
-    # are not running" changes how the whole session should be read, where a down scrape target
-    # only changes what to look at next. The payload's `cwd` is passed because this
-    # process's own cwd is whatever Claude Code launched the hook with, and the SESSION's
-    # directory is what decides which checkout's `settings.json` to read. Wrapped, because this
-    # reads a file outside the repo and the banner must survive anything it finds there.
-    try:
-        hooks_missing = missing_hook_script_lines(cwd=payload.get("cwd") or None)
-    except Exception:
-        hooks_missing = []
     # master_moved last deliberately: "this branch is behind origin/master" is the SYMPTOM of a
     # parked deployer, so the cause reads first.
-    problems = hooks_missing + targets + parked_deployer_problems() + master_moved
+    problems = targets + parked_deployer_problems() + master_moved
 
     banner = format_banner(problems)
     if banner:

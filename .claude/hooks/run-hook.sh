@@ -16,7 +16,7 @@
 #       cd into the repo, then `exec` so the hook's stdin JSON survives. No output means the
 #       event passes through unchanged. A failed `cd` is silent on stdout.
 #
-#   run-hook.sh bash-pretool --ask-on-cd=block-protected-bash,nudge-land-sh,block-footguns
+#   run-hook.sh bash-pretool --ask-on-cd=block-protected-bash,block-footguns
 #       the same, plus an `ask` decision when the hook could not run at all. `<guards>` names
 #       what did not run; it defaults to <name>.
 #
@@ -34,14 +34,18 @@
 # decides once, where a bare `exit 0` disarmed it in silence (#2171). #2394 made one shim carry
 # a posture that used to be split: three of the five PreToolUse:Bash arms asked on a failed
 # `cd` and two stayed silent, and a single process can only do one thing, so it asks and the
-# reason names all three guards that did not run. The two silent arms cost a missed approval
+# reason names every guard that did not run. The two silent arms cost a missed approval
 # and a missed doc injection, which is a prompt and a re-read, not a bypass.
 #
 # What #3278 changed: a missing `.py` sibling now asks too, where it used to exit non-zero
 # through a failed `exec`. The old note said no `ask` could follow a failed `exec` — true, and
 # the fix is to not exec. The file is tested for first, so the decision is still available.
-# `.claude/hooks/hooklib/hook_registration_lines.py` exists because that exact failure is
-# invisible from the session side: the shim runs, nothing exits 127, and the guard is skipped.
+#
+# Each session registers this file from its own checkout, as `$CLAUDE_PROJECT_DIR/.claude/
+# hooks/run-hook.sh` (#3394), so `$HOOKS_DIR` is that checkout's hooks directory and the `.py`
+# beside it is the one the session's `settings.json` was rendered from. The `cd` below still
+# names the primary checkout: it supplies the `.venv` `uv run` uses, which a fresh worktree has
+# not built yet.
 # `uv` itself missing still exits non-zero with its own stderr line.
 
 set -u

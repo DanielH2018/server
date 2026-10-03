@@ -91,7 +91,7 @@ _INLINE_INTERPRETER = re.compile(
 AGENT_FIELD = "agent="
 
 # A session's set of injected docs is worthless once the session ends, and /tmp is shared
-# between parallel sessions, so the file is keyed by session id (the nudge-land-sh shape).
+# between parallel sessions, so the file is keyed by session id.
 _STATE_TTL_S = 24 * 3600
 
 # Where a command's path tokens end. Quotes and backticks are stripped from the token after

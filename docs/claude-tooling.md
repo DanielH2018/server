@@ -422,17 +422,26 @@ section is the summary a reader needs before opening one.
 `run-hook.sh <name> [--project] [--ask-on-cd[=<guards>]]` is the shell entry point every
 registration goes through (#3278): one interpreter pin, three postures selected by flags. A
 hook's `.py` carries its own `# gen-hooks: register` block, and `args:` there holds the flags.
-`scripts/dev/gen_hook_settings.py` renders that block as `run-hook.sh <stem> <args>`.
+`scripts/dev/gen_hook_settings.py` renders that block as
+`"$CLAUDE_PROJECT_DIR"/.claude/hooks/run-hook.sh <stem> <args>`.
 
-The six per-hook `.sh` shims the runner replaced were deleted in #3304. A worktree cut before
-the #3278 switch still registers them by an absolute path into the primary checkout, so in such
-a session `/bin/sh` exits 127 and those tool calls run unguarded until it merges master.
+Each session runs the hooks its own checkout carries (#3394). Claude Code sets
+`$CLAUDE_PROJECT_DIR` to the directory the session started in, which is the worktree root for
+a worktree session. The registrations used to name an absolute path into the primary checkout.
+A worktree cut from a fresher `origin/master` then registered a hook script the primary
+checkout did not have yet, `/bin/sh` exited 127, and the tool call ran with the guard skipped:
+about 2,100 Bash calls did on daniel-server in September 2026 (#2675). The `--project`
+posture still runs the hook from the primary checkout's directory, so a fresh worktree needs
+no `.venv` of its own.
+
+A worktree cut before #3394 still registers the absolute path. Its hooks run from the primary
+checkout until it merges master, and a worktree cut before the #3278 switch still exits 127 on
+the six per-hook `.sh` shims #3304 deleted.
 
 ### `bash-pretool` (PreToolUse, Bash)
 
-It *decides nothing itself*. It is the one process that runs the five Bash arms —
-`block-protected-bash`, `nudge-land-sh`, `block-footguns`, `inject-nested-docs` and
-`uv-python` — each of which used to be its own hook with its own `uv run` start. A fifth arm,
+It *decides nothing itself*. It is the one process that runs the four Bash arms —
+`block-protected-bash`, `block-footguns`, `inject-nested-docs` and `uv-python` — each of which used to be its own hook with its own `uv run` start. A fifth arm,
 `auto-approve-readonly`, moved into the dotfiles `claude_guard` package as `readonly.py`
 (dotfiles #628). When #2394 merged them, all five imported `_hook_common` and
 `claude_guard.segment`, so four of those five interpreter starts bought nothing: measured on daniel-server, five sequential shims took a median 233 ms against
@@ -458,8 +467,8 @@ the plain rewrite path. The harness flattens every PreToolUse hook's output into
 `{deny, ask, allow, updatedInput, additionalContext}` before deciding, so one hook emitting
 both keys is indistinguishable from two hooks emitting one each.
 
-A failed `cd` into the repo makes the shim **ask**, naming `block-protected-bash`,
-`nudge-land-sh` and `block-footguns` as the guards that did not run. Three of the five
+A failed `cd` into the repo makes the shim **ask**, naming `block-protected-bash` and
+`block-footguns` as the guards that did not run. Three of the five
 separate hooks asked in that case before the merge and two stayed silent; one process can only do one thing,
 and a missed approval or doc injection is a prompt and a re-read, where a missed deny is a
 bypass.
@@ -492,10 +501,10 @@ A Bash write that leaves an isolated session's worktree is **denied** by the dot
 escaped into the primary checkout and parked the GitOps deployer on 2026-09-06 (#1419). The
 check reads nothing this repo owns, so it runs from `guard-pre-tool-use.sh` in every repo.
 
-`block-footguns` and `nudge-land-sh` split with the same segment parser through `_hook_common.split_stages` (#2134), so a
-newline separates stages for them too, and a here-document body is never one. On text it cannot split,
+`block-footguns` splits with the same segment parser through `_hook_common.split_stages` (#2134), so a
+newline separates stages for it too, and a here-document body is never one. On text it cannot split,
 `block-footguns` asks when the command names a binary one of its rules keys on and stays silent
-otherwise; `nudge-land-sh` stays silent, since a missed nudge costs one hand-written poll. The
+otherwise. The
 allow-side classifier keeps its own splitter: the package splits `cmd &>/dev/null` at the `&`,
 which would turn a redirect the classifier allows into a background job it refuses.
 
@@ -554,17 +563,6 @@ read-after rate on the outline form is what #2650 replaced. A path named only in
 text or a here-document accounted for 30 of 374 role-doc injections. Some of those were real reads
 (`bash -c '…'`, `ssh host '…'`), so the hook does not filter quoted text.
 
-### `nudge-land-sh` (a `bash-pretool` arm)
-
-It *denies* a command that blocks on CI (`gh run watch`, `gh pr checks --watch`) and the third or
-later CI-status read in one session, naming the `land.sh --pr <n> --since <sha>` form instead.
-The first two reads are an ordinary glance and pass. A read that names another repository through
-`--repo`/`-R` or a GitHub URL passes and does not count, because land.sh lands only this repo's
-PRs (#2901). `gh run view --log` and `--log-failed` also pass, since they read a finished run's
-log rather than poll a running one. Measured over the 7 days to 2026-08-29: 173
-`gh pr checks` + 75 `gh run list` + 61 `gh run watch` against 29 `land.sh` runs, which is why the
-CLAUDE.md paragraph became a hook.
-
 ### `block-footguns` (a `bash-pretool` arm)
 
 It *denies* a growing set of commands that return a plausible wrong answer rather than an error,
@@ -587,33 +585,6 @@ deploy in the fleet, and a worktree session cannot look at either for itself: th
 guard refuses a git command targeting the shared checkout, and the failure it does see
 (`deploy.sh` exit 4) names its own tree instead. The banner is the only place that cause
 reaches the session that pays for it.
-
-It also names **a hook script this session registers that the primary checkout does not have**
-(`.claude/hooks/hooklib/hook_registration_lines.py`). `.claude/settings.json` names every hook by
-an absolute path into the primary checkout, so a worktree cut from a fresher `origin/master`
-registers a file that is not there, `/bin/sh` exits 127, Claude Code logs a non-blocking hook
-error, and the tool call runs with the guard skipped — about 2,100 Bash calls did on
-daniel-server in September 2026 (issue #2675). `fanout_lib/launch.py` fast-forwards the primary
-checkout before a fan-out worktree is created; this arm is what reaches a hand-made worktree,
-which nothing fast-forwards.
-
-The arm reads the SESSION's `settings.json` (`$CLAUDE_PROJECT_DIR`, or the first parent of the
-cwd holding one) against the files on disk. Reading the primary checkout's own `settings.json`
-would compare a file against the `.claude/hooks/` directory it was committed beside and never
-disagree. One gap stays open by construction: the arm cannot report the absence of `run-hook.sh` or
-`session-health.py`, because a SessionStart hook that does not run prints nothing.
-
-It also resolves the **`.py` sibling each registered command runs**, from the hook name
-`run-hook.sh` is passed (issue #2709). That failure is the quieter of the two: a present
-`run-hook.sh` beside a missing `.py` runs, finds no script, and reports it only on stderr, so
-the hook succeeds and guards nothing. It gets its own
-banner line, because handing the operator the 127 diagnosis for a shim that ran is a false one.
-`sibling_py_paths` reads the name from the registered command for `run-hook.sh`, and abstains
-on anything it cannot resolve rather than parsing shell, such as a path composed from a
-variable.
-`.claude/hooks/tests/test_session_health_hook_registration.py::test_every_registered_command_resolves_the_sibling_it_runs`
-holds the census: every command `settings.json` registers must resolve to one `.py` that exists,
-so a registration this parse cannot read fails by name instead of abstaining in silence.
 
 ### `fanout-stop` (Stop)
 

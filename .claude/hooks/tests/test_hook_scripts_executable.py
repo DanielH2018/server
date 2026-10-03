@@ -20,7 +20,9 @@ SETTINGS = REPO / ".claude" / "settings.json"
 # appearing later is an argument to an interpreter (`uv run python .claude/hooks/foo.py`)
 # and is read, not executed. Anchoring here keeps the test from demanding a bit that
 # shape does not need, and from reaching outside the repo for a `~/.claude/...` hook.
-_SCRIPT_RE = re.compile(r"^(?:~/server/|\./)(\.claude/[^\s\"']+\.(?:sh|py))(?:\s|$)")
+_SCRIPT_RE = re.compile(
+    r"^(?:\"\$CLAUDE_PROJECT_DIR\"/|\./)(\.claude/[^\s\"']+\.(?:sh|py))(?:\s|$)"
+)
 
 
 def _hook_scripts() -> set[str]:
