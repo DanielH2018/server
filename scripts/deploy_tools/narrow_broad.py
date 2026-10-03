@@ -436,7 +436,7 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
     side. Refusing here would only turn the dropped deploy half of a mixed range into a full
     run nobody ran. A bring-up playbook still refuses: the tick parks on those before any
     plan exists, and a hand `deploy_tags.py narrow` over such a range must not read as
-    applyable. `cs.tasks`/`cs.meta`/`cs.secrets` refuse for the opposite reason: `changed`
+    applyable. `cs.tasks`/`cs.secrets` refuse for the opposite reason: `changed`
     reports them as work a human deploys by hand, and the full run this replaces DOES apply
     them. A rotated secret reaches a service only when that service renders again, so
     narrowing a range that carries one would leave every service outside the tag list on the
@@ -451,9 +451,9 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
         raise CannotNarrow(
             "the range rotates a secret, which reaches a service only on its next render"
         )
-    if cs.tasks or cs.meta:
+    if cs.tasks:
         raise CannotNarrow(
-            f"structural change in {sorted(cs.tasks | cs.meta)}, which no tag captures"
+            f"structural change in {sorted(cs.tasks)}, which no tag captures"
         )
     roles = cs.k8s | cs.services
     # A range that RETIRES a role still lists every path it owned as changed, and a retired

@@ -111,12 +111,12 @@ def test_pr_1901_from_another_host_still_names_the_gitops_host():
 
 # A PR's setup-plane paths, verbatim (`git show --name-only` of its merge commit), minus the
 # paths outside `ansible/roles/setup/` -- those derive tags or nothing and never reach this
-# note. The two `tasks/` entries are the ones that widened it.
+# note -- and the two `gitops_markers.py` copies #3275 deleted. The two `tasks/` entries are
+# the ones that widened it.
 _PR_2071_SETUP_PATHS = [
     "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
     "ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py",
     "ansible/roles/setup/deploy_ui/files/deploy_ui_writes.py",
-    "ansible/roles/setup/deploy_ui/files/gitops_markers.py",
     "ansible/roles/setup/deploy_ui/tasks/main.yml",
     "ansible/roles/setup/gitops_deploy/CLAUDE.md",
     "ansible/roles/setup/gitops_deploy/files/deploy_remediation.py",
@@ -132,7 +132,6 @@ _PR_2071_SETUP_PATHS = [
     "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py",
     "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_not_the_deployer.py",
     "ansible/roles/setup/gitops_deploy/tests/test_gitops_markers.py",
-    "ansible/roles/setup/renovate_agent/files/gitops_markers.py",
     "ansible/roles/setup/renovate_agent/files/renovate_agent.py",
     "ansible/roles/setup/renovate_agent/tasks/main.yml",
 ]

@@ -28,7 +28,7 @@ definitions, and holds every module's sibling imports to its declared set.
 # above is the only place the deployer's decisions are listed by the question each one answers,
 # and a reader who starts at `gitops_deploy.py` reaches it through the single import that module
 # makes. About 120 places name `deploy_logic.<symbol>` — docs prose, this role's CLAUDE.md, the
-# test suites, and four other roles' copies of `gitops_markers.py` — so dissolving the index
+# test suites, and monitor-bridge's copy of `gitops_markers.py` — so dissolving the index
 # rewrites every one of them to name whichever leaf a symbol lives in today, which is exactly
 # the churn the index absorbs when a symbol moves between leaves. The monkeypatch trap in the
 # docstring is the third: a test that patches `deploy_logic.<name>` rebinds a re-export no
@@ -47,7 +47,7 @@ from deploy_changes import (  # noqa: F401
     _SETUP_ROLES_OUTSIDE_INITIAL_SETUP,
     ChangeSet,
     _is_test_only_path,
-    _note_setup_role,
+    setup_roles_for,
     comment_only_broad_changes,
     is_doc,
     role_of,

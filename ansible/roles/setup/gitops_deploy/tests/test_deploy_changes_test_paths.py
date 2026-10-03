@@ -98,4 +98,4 @@ def test_a_path_merely_containing_test_is_not_exempt():
         "ansible/roles/setup/gitops_deploy/files/pytest_helper.py",
     ):
         cs = services_from_changed_paths([path])
-        assert cs.broad or cs.services or cs.k8s or cs.tasks or cs.meta, path
+        assert cs.broad or cs.services or cs.k8s or cs.tasks, path

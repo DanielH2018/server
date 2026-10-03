@@ -21,7 +21,7 @@ and contract unchanged.
   cannot take the remediation loop down with it
 - **Reaches:** `sonarr:8989` and `radarr:7878` (queue read, blocklist and search writes),
   `uptime-kuma:3001` (push), and the *arr Discord webhook
-- **Depends on:** sonarr, radarr, uptime-kuma (`meta/deps.yml`)
+- **Depends on:** sonarr, radarr and uptime-kuma, at runtime
 
 ## Autonomous-role contract (it changes state with no human in the loop)
 This is a **change-producing autonomous role**, so its authority is written down and a change

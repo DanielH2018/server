@@ -56,7 +56,7 @@ OPEN_PR_LIMIT = 200
 RUNS_FILE = "runs.jsonl"
 
 # Written by gitops_deploy.py. Read, never written, here; the directory and basenames come
-# from `gitops_markers`, the deployer's own table copied beside this file.
+# from `gitops_markers`, the deployer's own module installed beside this file.
 HOLD_FILE = os.path.join(STATE_DIR, MARKERS["hold"])
 HOLD_PLANE_FILE = os.path.join(STATE_DIR, MARKERS["hold_plane"])
 

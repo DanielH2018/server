@@ -2,7 +2,7 @@
 
 The daemon runs under `uv run --no-project` on the host interpreter, outside the repo venv,
 so nothing here imports from `scripts/` or `/opt/gitops-deploy` — `gitops_markers`, the
-deployer's own marker table, is a generated copy beside this file. `land.py`, `probe.py` and
+deployer's own marker table, is installed beside this file from the deployer's `files/`. `land.py`, `probe.py` and
 `gh` are reached as subprocesses by `deploy_ui.App`; this module turns their text into rows.
 """
 

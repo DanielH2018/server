@@ -205,11 +205,11 @@ def alert_deferred(
     cs: ChangeSet,
     declared_k8s: set[str] | None = None,
 ) -> None:
-    """Fire the tasks/, meta/deps.yml, and k8s-role defer-and-alert for changes not redeployed.
+    """Fire the tasks/ and k8s-role defer-and-alert for changes not redeployed.
 
     Runs on BOTH the no-services branch (deployed=set()) and after a SUCCESSFUL deploy
-    (deployed=cs.services): a combined push (svcA template + svcB meta/deps.yml) deploys svcA but
-    leaves svcB's deploy-graph change ff-merged and unapplied. The pending remainder is the pure
+    (deployed=cs.services): a combined push (svcA template + svcB tasks/) deploys svcA but
+    leaves svcB's structural change ff-merged and unapplied. The pending remainder is the pure
     `deferred_service_alerts`; this is its I/O shell (per-SHA dedupe marker + deliver). Each channel
     alerts at most once per origin SHA; its marker advances on DETECTION (deliver() and the pending
     queue own delivery + retry), so a transient webhook blip is redelivered, not silently dropped.
@@ -222,7 +222,7 @@ def alert_deferred(
     `--tags` line for a role with no entry exits 0 having applied nothing.
     """
     declared_k8s = declared_k8s or set()
-    pending_tasks, pending_meta = deferred_service_alerts(cs, deployed)
+    pending_tasks = deferred_service_alerts(cs, deployed)
     if pending_tasks:
         alert_once(
             tools,
@@ -232,17 +232,8 @@ def alert_deferred(
             origin,
             deploy_alert_text.tasks_deferred_alert(origin, pending_tasks),
         )
-    if pending_meta:
-        alert_once(
-            tools,
-            state,
-            config,
-            "meta",
-            origin,
-            deploy_alert_text.meta_deferred_alert(origin, pending_meta),
-        )
     if cs.k8s:
-        # No `- deployed` subtraction (unlike tasks/meta): a bump this tick deployed sits in
+        # No `- deployed` subtraction (unlike tasks): a bump this tick deployed sits in
         # `cs.k8s_deploy`. The one exception is a broad tick's narrowed deploy plane, and
         # `deploy_broad_k8s` subtracts what that applied from `cs` before calling this (#2453).
         #

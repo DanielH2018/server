@@ -38,10 +38,10 @@ import tomllib
 from _helpers import REPO
 
 # pytest imports a conftest under its own key, so several never shadow one another.
-# `gitops_markers.py` is ONE module at five roots by construction: the deployer's `files/`
-# copy is the source and `scripts/dev/gen_gitops_markers.py` writes the other four verbatim,
-# because the trees that read the deployer's markers cannot import its `files/`.
-# `ansible/tests/deploy/test_gitops_markers_copies.py` fails the moment a copy differs, so
+# `gitops_markers.py` is ONE module at two roots by construction: the deployer's `files/` copy
+# is the source and `scripts/dev/gen_gitops_markers.py` writes monitor-bridge's verbatim,
+# because that role ships its own `files/` into a pod.
+# `ansible/tests/deploy/test_gitops_markers_copies.py` fails the moment the copy differs, so
 # which root `sys.path` reaches first cannot change what an import gets.
 EXEMPT = frozenset({"conftest.py", "gitops_markers.py"})
 

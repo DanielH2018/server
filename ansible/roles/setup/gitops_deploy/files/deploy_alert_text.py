@@ -150,17 +150,6 @@ def tasks_deferred_alert(origin: str, services: set[str]) -> str:
     )
 
 
-def meta_deferred_alert(origin: str, services: set[str]) -> str:
-    """The post for a `meta/deps.yml` change to services this tick did not redeploy."""
-    return (
-        f"⚠️ gitops-deploy: `meta/deps.yml` changed for "
-        f"`{', '.join(sorted(services))}` in `{origin[:8]}` with no redeploy of those "
-        f"service(s) — fast-forwarded but **not applied** (meta/ isn't auto-deployed; it "
-        f"changes deploy ordering + dep closure). Redeploy the affected service(s) by hand: "
-        f"`ansible-playbook ansible/deploy.yml --tags <svc>`."
-    )
-
-
 def k8s_deferred_alert(
     origin: str, k8s: set[str], declared_k8s: set[str], consumers: set[str] | None
 ) -> str:

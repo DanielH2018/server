@@ -94,7 +94,6 @@ def test_ansible_cfg_is_broad_but_lockfiles_are_not():
         assert cs.services == set(), p
         assert cs.secrets is False, p
         assert cs.tasks == set(), p
-        assert cs.meta == set(), p
 
 
 # A broad change is sub-classified by which manual playbook applies it, so

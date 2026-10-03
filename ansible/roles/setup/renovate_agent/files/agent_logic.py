@@ -105,8 +105,8 @@ def decide(open_prs: list[OpenPR], hold_sha: str, hold_plane: str) -> Gate:
     # Nothing downstream of `decide` is per-service either: `render_digest` reports the
     # measured PR delta. So the signal has no decision surface, and the surfaces that do read
     # it — the SessionStart banner, monitor-bridge's GitOps Status, the deploy UI's state
-    # panel — already name it to the operator who can act. `gitops_markers` is a verbatim copy
-    # of the deployer's table, so this file carries the parser whether it reads it or not.
+    # panel — already name it to the operator who can act. `gitops_markers` is the deployer's own
+    # module installed beside this file, so it carries the parser whether this reads it or not.
     if hold_sha.strip():
         held = hold_sha.strip()[:8]
         plane = f" (broad apply: {hold_plane.strip()})" if hold_plane.strip() else ""

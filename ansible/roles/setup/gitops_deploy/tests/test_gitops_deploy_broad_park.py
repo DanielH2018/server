@@ -60,7 +60,7 @@ def test_a_bring_up_playbook_parks_and_names_its_reason_on_every_tick(
 def test_a_setup_path_belonging_to_no_role_still_parks(gitops_deploy, tick, capsys):
     """A setup-plane path with no role to name has no hand command to record, so it parks.
 
-    `_note_setup_role` matches `roles/setup/<name>/`, so a file sitting directly under
+    `setup_roles_for` matches `roles/setup/<name>/`, so a file sitting directly under
     `roles/setup/` is broad, unroutable and nameless at once. Fast-forwarding it would apply
     nothing, record nothing and say nothing — the silent-swallow shape this arm exists to
     prevent.

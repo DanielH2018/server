@@ -3,7 +3,7 @@
   tags: [renovate-agent-code]
   ansible.builtin.copy:
     src: "{{ item }}"
-    dest: "/opt/renovate-agent/{{ item }}"
+    dest: "/opt/renovate-agent/{{ item | basename }}"
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0755"
@@ -12,7 +12,10 @@
     - agent_toolbox.py
     - run_worktree.py
     - agent_logic.py
-    - gitops_markers.py
+    # The deployer's own module, shipped from its `files/` rather than a copy here.
+    # `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to it to
+    # this role as well (#3306).
+    - "{{ role_path }}/../gitops_deploy/files/gitops_markers.py"
   become: true
 
 - name: Install the shared host_lib helper beside the agent
@@ -37,6 +40,6 @@
       - live: /opt/renovate-agent/agent_logic.py
         src: ansible/roles/setup/renovate_agent/files/agent_logic.py
       - live: /opt/renovate-agent/gitops_markers.py
-        src: ansible/roles/setup/renovate_agent/files/gitops_markers.py
+        src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
       - live: /opt/renovate-agent/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
