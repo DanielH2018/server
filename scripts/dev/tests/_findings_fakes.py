@@ -106,6 +106,8 @@ class Calls:
 
     gh: list[list[str]] = field(default_factory=list)
     gh_json: list[list[str]] = field(default_factory=list)
+    # The checkout each worktree read was aimed at; None is this repo's own.
+    checkouts: list[str | None] = field(default_factory=list)
 
     def none(self) -> bool:
         """Whether neither boundary was reached at all."""
@@ -249,7 +251,8 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
                 issue.setdefault("comments", []).append(operator_comment(body))
         return subprocess.CompletedProcess(list(argv), 0, f"{f.url}\n", "")
 
-    def worktree_facts():
+    def worktree_facts(checkout=None):
+        calls.checkouts.append(checkout)
         if f.worktree_facts is None:
             raise AssertionError(
                 "this command reads the worktrees; pass Fakes(worktree_facts=facts(...))"

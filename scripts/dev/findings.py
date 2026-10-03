@@ -20,7 +20,7 @@ This file is the CLI: the `cmd_*` handlers and the exit contract. Argument parsi
 `findings_lib/plans.py`, the gh calls are `findings_lib/gh_calls.py`, claim staleness is `findings_lib/claim.py`,
 the four claim subcommands are `findings_lib/claim_cli.py`, and verify-by is `findings_lib/verify.py`.
 
-Usage::
+Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
 
     uv run python scripts/dev/findings.py sync-labels
     uv run python scripts/dev/findings.py open --title "..." --body-file f.md \\
@@ -45,12 +45,16 @@ Usage::
     uv run python scripts/dev/findings.py verify 688 701
     uv run python scripts/dev/findings.py next [--limit N] [--json]
 
-FILING TO ANOTHER REPO. `open --repo OWNER/NAME` files the finding in that repo's own `claude`
-register, with the same labels, trailer and fingerprint dedup it gets here: every gh call on
-the `open` path, reads included, carries the flag. A dedup read against this repo while the
-create went elsewhere would re-file the finding on every run. Only `open` takes it. The other
-subcommands read this repo's register alone, and a finding filed elsewhere closes through
-that repo's own PR.
+WORKING ANOTHER REPO'S REGISTER. Every subcommand takes `--repo OWNER/NAME` and then works
+that repo's own `claude` register, with the same labels, trailer, fingerprint dedup and claim
+protocol it has here. Every gh call carries the flag, reads included: a dedup read against
+this repo while the create went elsewhere would re-file the finding on every run, and issue
+numbers collide across repos, so `next` reading this repo's PRs would withhold dotfiles #750
+for a server PR that closes #750. `claim`, `claims`, `reap` and `next` also judge each claim
+against that repo's local checkout and its default branch (`REGISTER_CHECKOUTS` in
+`findings_lib/boundaries.py`), because a claim names a branch in the repo that owns the issue.
+They refuse a repo that table does not list, with exit 2. `issue-fanout` has the dotfiles
+route end to end.
 
 CLOSING A FINDING. `--fixed` closes as completed. The other two close as not planned and are
 terminal, so `open` refuses to re-file the same fingerprint afterwards: `--refuted` records
@@ -108,7 +112,6 @@ birth, or because `manual` found the label already in the state it was asked for
 """
 
 import argparse
-import dataclasses
 import json
 import subprocess
 import sys
@@ -160,18 +163,8 @@ from dev.findings_lib.plans import (
     plan_sync_labels,
     plan_touch,
 )
-from dev.findings_lib.boundaries import FindingsTools
+from dev.findings_lib.boundaries import REGISTER_CHECKOUTS, FindingsTools, aimed
 from dev.findings_lib.verify import verification_report
-
-
-def _aimed(plans: list[list[str]], repo: str | None) -> list[list[str]]:
-    """``plans`` with ``--repo`` appended to each argv, or unchanged when ``repo`` is None.
-
-    Appended to the plan rather than added inside `tools.gh`, so a `--dry-run` prints the
-    repo it would write to. Appended after the subcommand pair: gh defines `--repo` on each
-    subcommand, not on the root.
-    """
-    return plans if repo is None else [argv + ["--repo", repo] for argv in plans]
 
 
 def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
@@ -193,14 +186,6 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         sys.stderr.write(f"open: body file not found: {args.body_file}\n")
         return 2
     body = args.body_file.read_text()
-    repo = args.repo
-    if repo is not None:
-        # The reads go through `gh_json`, so the dedup and the label read see the same repo
-        # the writes land in. The writes carry the flag in their plans, via `_aimed`.
-        read = tools.gh_json
-        tools = dataclasses.replace(
-            tools, gh_json=lambda *argv, **kw: read(*argv, "--repo", repo, **kw)
-        )
     fp = fingerprint(args.title, args.file)
     labels = ["claude", f"severity/{args.severity}", f"kind/{args.kind}"]
     if args.domain:
@@ -212,11 +197,11 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     # `gh issue create --label` fails on a label the repo does not have, so the first `open`
     # in a fresh repo has to create the label set before it can use it.
     have = _existing_labels(tools)
-    run(_aimed(plan_sync_labels(have), repo), args.dry_run, tools)
+    run(plan_sync_labels(have), args.dry_run, tools)
     if args.not_before:
         # Dated, so not in LABELS and not synced above; created the first time it is used.
         run(
-            _aimed(plan_ensure_label(not_before_label(args.not_before), have), repo),
+            plan_ensure_label(not_before_label(args.not_before), have),
             args.dry_run,
             tools,
         )
@@ -231,7 +216,6 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         verify_by=args.verify_by,
         defer_until=args.not_before,
     )
-    plans = _aimed(plans, repo)
     if outcome == "created":
         if args.dry_run:
             run(plans, True, tools)
@@ -257,18 +241,15 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         # claiming worktree exists — an orchestrator's can be a long time. Released
         # as its OWN comment rather than folded into the regression note, so the body never
         # carries two claim trailers at once (see `current_claim`'s DECIDED marker).
-        plans += _aimed(
-            plan_release_held(
-                existing, when=now_iso(), reason="reopened after a re-observation"
-            ),
-            repo,
+        plans += plan_release_held(
+            existing, when=now_iso(), reason="reopened after a re-observation"
         )
     if args.manual and "manual" not in label_names(existing):
         # A matched issue would otherwise drop the flag silently. A reopened one is open by
         # the time these run, and its claim was released just above.
-        plans += _aimed(plan_manual({**existing, "state": "OPEN"}, clear=False), repo)
+        plans += plan_manual({**existing, "state": "OPEN"}, clear=False)
         if outcome != "reopened":
-            plans += _aimed(_release_for_manual(existing), repo)
+            plans += _release_for_manual(existing)
     run(plans, args.dry_run, tools)
     print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
     return 0
@@ -518,6 +499,10 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
+# The subcommands whose verdict depends on which worktrees exist, so `--repo` needs a checkout.
+_READS_WORKTREES = frozenset({"claim", "claims", "reap", "next"})
+
+
 def main(argv: list[str] | None, tools: FindingsTools) -> int:
     """Entry point: parses argv and dispatches to the matching subcommand handler.
 
@@ -539,6 +524,21 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     # drift.
     summary = next(line for line in __doc__.splitlines() if line.strip())
     args = _parser(summary).parse_args(argv)
+    if (
+        args.repo is not None
+        and args.cmd in _READS_WORKTREES
+        and args.repo not in REGISTER_CHECKOUTS
+    ):
+        # Judged against this repo's worktrees, every claim on another repo's issue names a
+        # branch nothing here has checked out: `reap` would release them all and `claim`
+        # would refuse every one as stale at birth.
+        sys.stderr.write(
+            f"{args.cmd}: --repo {args.repo} has no local checkout to judge claims against; "
+            f"known: {', '.join(sorted(REGISTER_CHECKOUTS))} "
+            "(findings_lib/boundaries.py REGISTER_CHECKOUTS)\n"
+        )
+        return 2
+    tools = aimed(tools, args.repo)
     handler = {
         "sync-labels": cmd_sync_labels,
         "list": cmd_list,
