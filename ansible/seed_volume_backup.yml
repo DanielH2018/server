@@ -43,17 +43,14 @@
   vars:
     seed_namespace: homelab
     seed_timeout_s: 900
+    # Nothing here reads a fact.
+    load_secrets_gather_facts: false
   pre_tasks:
-    - name: Load secrets for become
-      community.sops.load_vars:
-        file: "{{ playbook_dir }}/vars/secrets.yml"
-      delegate_to: localhost
-      no_log: true
-
-    - name: Set become password
-      ansible.builtin.set_fact:
-        ansible_become_password: "{{ become_password }}"
-      no_log: true
+    # The preamble's first task refuses this local-connection play when it runs anywhere but
+    # daniel-box.
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
 
     - name: Require a claim
       ansible.builtin.assert:
