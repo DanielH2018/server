@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/run-hook.sh bash-pretool --ask-on-cd=block-protected-bash,nudge-land-sh,block-footguns",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh bash-pretool --ask-on-cd=block-protected-bash,block-footguns",
             "timeout": 15
           }
         ]
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/run-hook.sh block-protected-edits --ask-on-cd",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh block-protected-edits --ask-on-cd",
             "timeout": 10
           }
         ]
@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/run-hook.sh auto-mode-bridge --project",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh auto-mode-bridge --project",
             "timeout": 10
           }
         ]
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/run-hook.sh auto-mode-bridge --project",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh auto-mode-bridge --project",
             "timeout": 10
           }
         ]
@@ -72,7 +72,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/run-hook.sh log-instructions",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh log-instructions",
             "timeout": 10
           }
         ]
@@ -83,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/run-hook.sh session-health",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh session-health",
             "timeout": 15
           }
         ]
@@ -94,7 +94,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/run-hook.sh fanout-stop",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh fanout-stop",
             "timeout": 10
           }
         ]

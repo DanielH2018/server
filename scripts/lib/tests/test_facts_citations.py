@@ -10,6 +10,7 @@ from lib.facts.citations import (
     Rejected,
     Section,
     in_tree,
+    node_citations,
     parse_citations,
     repo_docs,
     sections,
@@ -124,6 +125,51 @@ def test_fenced_code_is_skipped():
 def test_form_census():
     assert FORMS == frozenset({"path", "symbol", "yaml", "test", "marker", "probe"})
     assert REJECT_REASONS == frozenset({"file:line"})
+
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        (
+            "pinned by `ansible/tests/k8s/test_x.py::test_the_thing`",
+            [("ansible/tests/k8s/test_x.py", "test_the_thing")],
+        ),
+        (
+            "    test_deploy_k8s_declarations.py::test_declares_snapshot_claims_agrees,",
+            [
+                (
+                    "test_deploy_k8s_declarations.py",
+                    "test_declares_snapshot_claims_agrees",
+                )
+            ],
+        ),
+        (
+            "both a.py::test_a and `b/c.py::test_b` here",
+            [("a.py", "test_a"), ("b/c.py", "test_b")],
+        ),
+        (
+            "```\n`scripts/lib/tests/test_kubectl.py::test_run`\n```",
+            [("scripts/lib/tests/test_kubectl.py", "test_run")],
+        ),
+    ],
+)
+def test_a_prose_node_citation_is_clean(line, expected):
+    assert node_citations(line) == expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "see `scripts/example.sh` for the wrapper",
+        "at `ansible/roles/k8s/sonarr/tasks/main.yml:12`",
+        "the collector listens on `127.0.0.1:4317`",
+        "a fixture, `conftest.py::seq`, not a test",
+        "a C++ scope `ns::test_helper` is not a file",
+        "plain prose with no citation at all",
+    ],
+)
+def test_a_non_node_span_is_flagged_as_no_citation(line):
+    assert node_citations(line) == []
 
 
 @pytest.mark.parametrize("raw", ["scripts/lib/kubectl.py:run", "probe.py kuma-drift"])

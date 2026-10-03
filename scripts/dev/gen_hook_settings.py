@@ -72,8 +72,20 @@ HOOKS_DIR = REPO / ".claude" / "hooks"
 SETTINGS = REPO / ".claude" / "settings.json"
 
 # What a registration's `command` starts with. `test_hook_scripts_executable.py` anchors its
-# own census on `^(?:~/server/|\./)`, so any other prefix empties that test's census.
-COMMAND_PREFIX = "~/server/.claude/hooks/"
+# own census on this prefix, so a change here must change that test's regex too.
+#
+# DECIDED: `$CLAUDE_PROJECT_DIR`, so each session runs the hooks its own checkout carries
+# (#3394). Claude Code sets it to the directory the session started in, which is the worktree
+# root for a worktree session. The absolute `~/server/` path it replaced ran the PRIMARY
+# checkout's copy, so a worktree cut from a fresher master registered a script the primary
+# lacked, `/bin/sh` exited 127, and the guard was skipped (#2675).
+#
+# The cost: a session's edit to a hook in its own worktree now takes effect in that same
+# session, so a half-finished edit can disable its own guard. A `SyntaxError` in
+# `bash-pretool.py` makes `uv run` exit non-zero, and the harness skips a hook that does. That
+# is accepted because these hooks stop footguns; they are not a boundary against the session
+# itself, which already loads the `settings.json` its own checkout carries.
+COMMAND_PREFIX = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 
 # What a `.py` registration runs through: `run-hook.sh <stem> <args>`, where `args:` carries the
 # runner's posture flags (`--project`, `--ask-on-cd[=<guards>]`). One interpreter pin and one

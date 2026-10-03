@@ -5,7 +5,7 @@ flow), which is defensible for a permission hook — a broken guard must not bri
 call — but the `cd` arm disarmed the guard with nothing to notice. Issue #2171: for the DENY/ASK
 guards a silent exit 0 is still an allow, so their `cd` arm emits an `ask` decision naming the
 hook. Issue #2394 merged five PreToolUse:Bash guards into `bash-pretool`, so its `ask` reason
-names all three deny guards it stands in front of.
+names every deny guard it stands in front of.
 
 Since #3278 every registration runs `run-hook.sh <name> <flags>`, and the posture a session
 gets is the flags `settings.json` passes the runner. This file runs each registered command as
@@ -29,7 +29,7 @@ HOOKS = Path(__file__).resolve().parent.parent
 
 # The guards `bash-pretool` stands in front of. Named rather than counted: it can only ask once
 # for all of them, so the one thing its reason string has to keep true is which ones.
-MERGED_DENY_GUARDS = ("block-protected-bash", "nudge-land-sh", "block-footguns")
+MERGED_DENY_GUARDS = ("block-protected-bash", "block-footguns")
 
 
 def _registered() -> dict[str, list[str]]:

@@ -25,8 +25,10 @@ to hide. The pattern earns the zero-entry list.
 Two more citation shapes are checked here, each with its own extractor and paired tests. A
 bare `ansible/tests/...py` path -- that directory exists nowhere but this tree, so a bare
 citation of it is still a claim about this tree now (`_CITED_TEST`). And a `file.py::test_name`
-node id, in docs AND in runtime modules, which names the check that holds an invariant closed
-(`_CITED_NODE`). One corpus walk and one tracked-file set serve all three.
+node id, in docs AND in runtime modules, which names the check that holds an invariant closed.
+That one is not parsed here: `scripts/lib/facts/citations.py:node_citations` owns the grammar,
+shared with the `facts.lock` citation forms, and its paired tests sit beside it. One corpus walk
+and one tracked-file set serve all three.
 """
 
 import re
@@ -35,6 +37,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import REPO, discover_docs
+from lib.facts.citations import node_citations
 
 
 # A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
@@ -325,12 +328,7 @@ def test_the_test_citation_walk_finds_citations_to_check():
 # from context (`test_check_streaks.py::...` inside the same directory) rather than from the
 # repo root. This corpus is wider than DOCS because the citation
 # lives in two places: docs cite from prose with backticks, runtime modules from a docstring
-# or a comment with none.
-#
-# The path half must end in `.py`, which keeps `host:port` and `key::value` prose out; the
-# test half must start with `test_`, so a fixture cited by node id (`conftest.py::seq`) is
-# not a claim this checks.
-_CITED_NODE = re.compile(r"([\w.][\w./-]*\.py)::(test_\w+)")
+# or a comment with none. `node_citations` reads both shapes; its docstring has the grammar.
 
 
 def _runtime_modules() -> list[Path]:
@@ -369,11 +367,6 @@ NODE_CORPUS = sorted(
 )
 
 
-def cited_tests(line: str) -> list[tuple[str, str]]:
-    """Every (path, test_name) pair cited in one line."""
-    return _CITED_NODE.findall(line)
-
-
 def candidates(cited: str, source: Path) -> list[Path]:
     """The tracked files a cited path could mean, resolved the way `resolves` above does.
 
@@ -394,47 +387,6 @@ def defines_test(path: Path, name: str) -> bool:
 
 def node_resolves(cited: str, name: str, source: Path) -> bool:
     return any(defines_test(p, name) for p in candidates(cited, source))
-
-
-@pytest.mark.parametrize(
-    "line,expected",
-    [
-        (
-            "pinned by `ansible/tests/k8s/test_x.py::test_the_thing`",
-            [("ansible/tests/k8s/test_x.py", "test_the_thing")],
-        ),
-        (
-            "    test_deploy_k8s_declarations.py::test_declares_snapshot_claims_agrees,",
-            [
-                (
-                    "test_deploy_k8s_declarations.py",
-                    "test_declares_snapshot_claims_agrees",
-                )
-            ],
-        ),
-        (
-            "both a.py::test_a and `b/c.py::test_b` here",
-            [("a.py", "test_a"), ("b/c.py", "test_b")],
-        ),
-    ],
-)
-def test_a_node_citation_is_extracted(line, expected):
-    assert cited_tests(line) == expected
-
-
-@pytest.mark.parametrize(
-    "line",
-    [
-        "see `scripts/example.sh` for the wrapper",
-        "at `ansible/roles/k8s/sonarr/tasks/main.yml:12`",
-        "the collector listens on `127.0.0.1:4317`",
-        "a fixture, `conftest.py::seq`, not a test",
-        "a C++ scope `ns::test_helper` is not a file",
-        "plain prose with no citation at all",
-    ],
-)
-def test_a_non_node_citation_is_not_extracted(line):
-    assert cited_tests(line) == []
 
 
 def test_node_resolution_accepts_a_context_relative_citation():
@@ -483,7 +435,7 @@ def test_node_corpus_still_includes_an_ordinary_doc():
 def test_the_node_walk_finds_citations_to_check():
     """A pattern that silently stopped matching would pass the guard below vacuously."""
     hits = sum(
-        len(cited_tests(line))
+        len(node_citations(line))
         for path in NODE_CORPUS
         for line in path.read_text(errors="replace").splitlines()
     )
@@ -495,21 +447,47 @@ def test_the_node_walk_finds_citations_to_check():
     )
 
 
-def test_every_cited_test_exists():
+def missing_tests(corpus: list[Path]) -> list[str]:
+    """Every node citation in ``corpus`` that names a test no candidate file defines."""
     missing = []
-    for path in NODE_CORPUS:
+    for path in corpus:
         if not path.is_file():
             continue
         for line_no, line in enumerate(
             path.read_text(errors="replace").splitlines(), 1
         ):
-            for cited, name in cited_tests(line):
+            for cited, name in node_citations(line):
                 if node_resolves(cited, name, path):
                     continue
-                missing.append(
-                    f"{path.relative_to(REPO)}:{line_no} cites {cited}::{name}"
-                )
+                missing.append(f"{path.as_posix()}:{line_no} cites {cited}::{name}")
+    return missing
 
+
+def test_a_doc_citing_a_renamed_test_is_flagged(tmp_path):
+    """The walk end to end, through the shared parser: a doc naming a test nothing defines."""
+    doc = tmp_path / "runbook.md"
+    doc.write_text(
+        "Pinned by `ansible/tests/repo/test_documented_paths_exist.py::test_no_such_test`.\n"
+    )
+    assert missing_tests([doc]) == [
+        f"{doc.as_posix()}:1 cites "
+        "ansible/tests/repo/test_documented_paths_exist.py::test_no_such_test"
+    ]
+
+
+def test_a_doc_citing_a_real_test_is_clean(tmp_path):
+    doc = tmp_path / "runbook.md"
+    doc.write_text(
+        "Pinned by `ansible/tests/repo/test_documented_paths_exist.py::"
+        "test_every_cited_test_exists`.\n"
+    )
+    assert missing_tests([doc]) == []
+
+
+def test_every_cited_test_exists():
+    missing = [
+        m.removeprefix(f"{REPO.as_posix()}/") for m in missing_tests(NODE_CORPUS)
+    ]
     assert not missing, (
         "a doc or module cites a test that no file defines, so the invariant it says is "
         "pinned may be pinned by nothing:\n  " + "\n  ".join(missing)

@@ -407,8 +407,8 @@ def test_a_verified_arm_says_armed_and_merges_nothing_directly(landing, capsys):
 
 
 def test_the_merge_wait_never_hand_polls_ci():
-    """The nudge-land-sh hook denies `gh pr checks --watch` and `gh run watch`, and merge.py
-    is where someone would "improve" the wait by adding one. await_ci owns the CI verdict:
+    """merge.py is where someone would "improve" the wait by adding a `gh pr checks --watch`
+    or a `gh run watch`. await_ci owns the CI verdict:
     it is one shot per poll, derived from the required checks, and its `pending` IS the
     grace period. A textual guard because the failure is a command that never appears in
     any test's call log until it is already in production."""

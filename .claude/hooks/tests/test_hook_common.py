@@ -3,8 +3,7 @@
 
 `shlex.split` never returns a bare `;` token: it leaves the separator glued to the word
 before it (`"hi;"`), so a rule keyed on a stage's first word never sees anything after a
-`;`. Without a `;` split, every `block-footguns.py` and `nudge-land-sh.py` rule is
-reachable by writing `;` instead of `&&`.
+`;`. Without a `;` split, every `block-footguns.py` rule is reachable by writing `;` instead of `&&`.
 
 The splitter is the dotfiles package's segmenter, so the `;` cases below pin what that
 package must keep doing for this repo, and the newline and heredoc cases pin what a

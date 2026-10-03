@@ -46,7 +46,6 @@ _mod = _load("bash-pretool")
 # against four arms while the fifth judged nothing (`.claude/rules/python-layout.md`).
 EXPECTED_ARMS = (
     "block-protected-bash",
-    "nudge-land-sh",
     "block-footguns",
     "inject-nested-docs",
 )
@@ -57,9 +56,9 @@ def sandbox(tmp_path, monkeypatch):
     """A loader that returns the real arms with their per-session state under tmp_path.
 
     Each arm is loaded fresh inside `collect`, so there is no module object to monkeypatch
-    from here. Patching the freshly loaded one is the same fix one level in: `nudge-land-sh`
-    counts CI reads in a file under the temp dir, and `inject-nested-docs` keys its
-    once-per-session state the same way and appends a row to the instructions log.
+    from here. Patching the freshly loaded one is the same fix one level in: `inject-nested-docs`
+    keys its once-per-session state in a file under the temp dir and appends a row to the
+    instructions log.
 
     Every arm reads the same stdlib `tempfile`, so one patch on the singleton redirects all of
     them — and it goes through `monkeypatch` because a plain assignment would leave every later
@@ -115,22 +114,7 @@ def test_reject_a_write_to_an_ordinary_file_is_not_asked(sandbox, monkeypatch, c
     assert out is None
 
 
-# ── arm 3: nudge-land-sh ─────────────────────────────────────────────────────────────
-
-
-def test_accept_a_blocking_ci_wait_is_denied(sandbox, monkeypatch, capsys):
-    out = dispatch("gh run watch 12345", sandbox, monkeypatch, capsys)
-    assert out["permissionDecision"] == "deny"
-    assert out["permissionDecisionReason"].startswith("[nudge-land-sh] ")
-    assert "land.sh" in out["permissionDecisionReason"]
-
-
-def test_reject_a_first_ci_status_read_is_not_denied(sandbox, monkeypatch, capsys):
-    out = dispatch("gh pr checks 620", sandbox, monkeypatch, capsys)
-    assert out is None
-
-
-# ── arm 4: block-footguns ────────────────────────────────────────────────────────────
+# ── arm 3: block-footguns ────────────────────────────────────────────────────────────
 
 
 def test_accept_a_rollout_restart_is_denied(sandbox, monkeypatch, capsys):
@@ -145,7 +129,7 @@ def test_reject_a_rollout_status_is_not_denied(sandbox, monkeypatch, capsys):
     assert out is None or out["permissionDecision"] != "deny"
 
 
-# ── arm 5: inject-nested-docs ────────────────────────────────────────────────────────
+# ── arm 4: inject-nested-docs ────────────────────────────────────────────────────────
 
 
 def test_accept_a_command_naming_a_role_file_injects_its_docs(

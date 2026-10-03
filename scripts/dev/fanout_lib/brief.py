@@ -93,7 +93,7 @@ issues once it has landed. Print the PR URL as the last line of your final messa
         # verdict.
         log_dir = f"{_worktree_path(batch)}/.fanout"
         return f"""## Landing
-Land with ONE `land.sh` command (the `land-after-merge` skill); a hook denies hand-polling CI.
+Land with ONE `land.sh` command (the `land-after-merge` skill); do not hand-poll CI.
 It names its own logfile, forks into it, and blocks until the landing prints its verdict:
 
 ```bash

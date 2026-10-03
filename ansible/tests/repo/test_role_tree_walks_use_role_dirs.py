@@ -66,7 +66,6 @@ EXPECTED_ROLE_DIRS_CALLERS = frozenset(
         "_k8s_render.py",
         "k8s/test_checksum_annotations_documented.py",
         "k8s/test_configmap_keys_not_absorbed.py",
-        "k8s/test_k8s_roles_have_claude_md.py",
         "k8s/test_manifest_roles_include_the_shared_render.py",
         "k8s/test_script_configmaps_apply_server_side.py",
         "longhorn/test_every_longhorn_pvc_has_a_tier.py",
@@ -81,11 +80,11 @@ EXPECTED_ROLE_DIRS_CALLERS = frozenset(
         "deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
         "deploy/test_restart_on_narrows_the_restart_signals.py",
         "deploy/test_setup_role_playbooks_agree.py",
+        "repo/test_role_claude_md.py",
         "services/test_bridge_patch_boundary.py",
-        "services/test_container_roles_have_claude_md.py",
         "setup/test_has_flag_roles_have_both_directions.py",
         "setup/test_host_lib_sibling_copies.py",
-        "setup/test_setup_roles_have_claude_md.py",
+        "setup/test_setup_cron_roles_have_a_contract.py",
     }
 )
 
