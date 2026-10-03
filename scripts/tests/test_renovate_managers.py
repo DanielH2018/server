@@ -18,6 +18,7 @@ Run: uv run pytest scripts/tests/test_renovate_managers.py
 """
 
 import re
+from pathlib import PurePosixPath
 
 import pytest
 
@@ -415,4 +416,58 @@ def test_ci_toolchain_group_resolution_catches_the_catch_all() -> None:
             "prek", ".github/workflows/ci.yml", "minor", "pypi", fake_rules
         )
         == "container images (non-major)"
+    )
+
+
+def _pin_digest_rule_for(path: str) -> dict | None:
+    """The packageRule that turns pinDigests on for a docker pin in `path`, if any."""
+    for rule in _PACKAGE_RULES:
+        if (
+            rule.get("pinDigests") is True
+            and "custom.regex" in rule.get("matchManagers", [])
+            and "docker" in rule.get("matchDatasources", [])
+            and any(
+                PurePosixPath(path).full_match(g)
+                for g in rule.get("matchFileNames", [])
+            )
+        ):
+            return rule
+    return None
+
+
+def test_every_k8s_image_file_gets_pin_digests_from_a_package_rule(
+    tracked: list[str],
+) -> None:
+    """The top-level `pinDigests: true` does not reach a regex-managed pin (#3281).
+
+    Renovate's regex custom manager ships `defaultConfig = { pinDigests: false }`, and a
+    manager default is merged over the repository's top-level options, so only a packageRule
+    turns digest pinning back on. Without one, a tag-only pin gets no pinDigest update and a
+    version bump carries no newDigest, so the manager's template never writes a digest.
+
+    The rule must also re-slug the group: Renovate's built-in `pinDigest` config groups every
+    pin into one branch, which would restart every pinned service from a single PR.
+    """
+    patterns = [
+        _file_pattern_to_regex(p) for p in _k8s_image_manager()["managerFilePatterns"]
+    ]
+    files = [f for f in tracked if any(p.search(f) for p in patterns)]
+    assert "ansible/roles/k8s/loki-homelab/defaults/main.yml" in files, (
+        "the k8s-images manager no longer scans a known role's defaults; this census is empty"
+    )
+    uncovered = [f for f in files if _pin_digest_rule_for(f) is None]
+    assert not uncovered, (
+        f"no packageRule sets pinDigests for the k8s-images manager's pins in {len(uncovered)} "
+        f"files (first: {uncovered[:3]}); "
+        "the regex manager's own default leaves them tag-only"
+    )
+    rule = _pin_digest_rule_for(files[0])
+    assert rule is not None
+    assert rule["groupSlug"] == "{{{groupName}}}", (
+        "the pinDigests rule must slug each pin by its own group name, or Renovate's built-in "
+        "pinDigest config puts every service's pin on one branch"
+    )
+    assert rule["group"]["commitMessageTopic"] == "{{{groupName}}}", (
+        "the pinDigests rule must keep the group name in the PR title, or a denied role's pin PR "
+        "loses the k8s_autodeploy: false marker the renovate_agent reads"
     )
