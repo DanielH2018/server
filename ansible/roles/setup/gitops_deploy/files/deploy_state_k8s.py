@@ -20,21 +20,24 @@ a helper object would rename every call site. The private methods read and write
 `DeployerState.read`/`write`, which the mixin does not define and must not: the marker files,
 their atomic writes and the `MARKERS` table stay in one place.
 
-Stdlib only, plus `gitops_markers` — the same leaf contract `deploy_state` carries.
+Stdlib only, plus `gitops_markers` and `gitops_ledger` — the leaf contract `deploy_state`
+carries.
 """
 
-from gitops_markers import (
+from gitops_ledger import (
     OWED_K8S_UNAPPLIED,
-    K8sDeferredEntry,
     drop_owed,
-    k8s_line_service,
-    k8s_line_stamp,
     k8s_unapplied_entries,
     owed_line,
-    parse_k8s_deferred,
     parse_owed,
-    rewrite_k8s_lines,
     rewrite_owed,
+)
+from gitops_markers import (
+    K8sDeferredEntry,
+    k8s_line_service,
+    k8s_line_stamp,
+    parse_k8s_deferred,
+    rewrite_k8s_lines,
 )
 
 

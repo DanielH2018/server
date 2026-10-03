@@ -32,7 +32,7 @@ from deploy_tools.land_lib.tools import Classifier, Tools
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_markers import Receipt, parse_receipts
+from gitops_ledger import Receipt, parse_receipts
 
 BRANCH = "master"
 

@@ -15,7 +15,8 @@ from lib.deployer_park import (
     read_k8s_unapplied_marker,
     read_manual_plane_marker,
 )
-from gitops_markers import MARKERS, OWED_K8S_UNAPPLIED, owed_line, parse_owed
+from gitops_ledger import OWED_K8S_UNAPPLIED, owed_line, parse_owed
+from gitops_markers import MARKERS
 
 # The shape the deployer writes: the origin SHA it is behind, then when it first saw it.
 _MARKER = "abc1230000000000000000000000000000000000 1000"

@@ -66,18 +66,20 @@ from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
     MARKERS,
-    OWED_K8S_UNAPPLIED,
     STATE_DIR,
     k8s_deferred_clear_cmd,
     k8s_deferred_deploy_cmd,
     k8s_unapplied_clear_cmd,
-    k8s_unapplied_entries,
     parse_contention,
     manual_plane_clear_cmd,
     maximal_apply_warning,
     parse_k8s_deferred,
     parse_manual_plane,
     parse_manual_plane_tags,
+)
+from gitops_ledger import (
+    OWED_K8S_UNAPPLIED,
+    k8s_unapplied_entries,
     owed_line,
     parse_owed,
 )

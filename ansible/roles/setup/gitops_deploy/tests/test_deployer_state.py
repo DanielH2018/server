@@ -22,7 +22,7 @@ import pathlib
 import pytest
 
 import deploy_io
-from gitops_markers import RECEIPT_KEEP, parse_receipts
+from gitops_ledger import RECEIPT_KEEP, parse_receipts
 
 SHA = "c0ffee12" * 5
 

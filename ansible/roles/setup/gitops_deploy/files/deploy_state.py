@@ -36,7 +36,6 @@ from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are r
     MARKERS,
     NARROWED_TO_ROLE,
     NO_PLAYBOOK,
-    RECEIPT_KEEP,
     STATE_DIR,
     ContentionEntry,
     ManualPlaneEntry,
@@ -44,9 +43,8 @@ from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are r
     parse_contention,
     parse_manual_plane,
     parse_manual_plane_tags,
-    parse_receipts,
-    receipt_line,
 )
+from gitops_ledger import RECEIPT_KEEP, parse_receipts, receipt_line
 from host_lib import atomic_write
 
 

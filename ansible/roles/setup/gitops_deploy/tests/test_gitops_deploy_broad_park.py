@@ -19,7 +19,7 @@ import pytest
 import deploy_defer
 import deploy_locks
 from deploy_tick_types import TickTarget
-from gitops_markers import parse_receipts
+from gitops_ledger import parse_receipts
 
 # The two SHAs the `tick` fixture bounds a range with; see test_gitops_deploy_main_branches.py
 # for why `from conftest import` is avoided.
