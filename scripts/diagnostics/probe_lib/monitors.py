@@ -115,7 +115,7 @@ KUMA_EXPORT_SLACK = 120
 _ENTITY_NAME_RE = re.compile(r'"name":\s*"([^"]+)"')
 _ENTITY_TYPE_RE = re.compile(r'"type":\s*"([a-z]+)"')
 # A literal, or the whole `{{ ... }}` an interval is templated from. Most push tiles carry
-# `{{ kuma_bridge_push_interval }}`, two carry an arithmetic expression, and the monthly etcd
+# `{{ uptime_kuma_k8s_bridge_push_interval }}`, two carry an arithmetic expression, and the monthly etcd
 # drill carries a group_var — a digits-only match read every one of those as None, which the
 # `pending` branch of format_kuma_drift cannot absorb.
 _ENTITY_INTERVAL_RE = re.compile(r'"interval":\s*(\d+|\{\{[^{}]*\}\})')
@@ -134,7 +134,7 @@ def monitor_vars():
 
     Built the way `validate/k8s_manifests.py` builds a role's render context — inventory
     under the uptime-kuma role's own defaults — because that is where the intervals live:
-    `kuma_bridge_push_interval` is a role default, `etcd_drill_full_kuma_interval_s` a
+    `uptime_kuma_k8s_bridge_push_interval` is a role default, `etcd_drill_full_kuma_interval_s` a
     group_var, and the UPS tiles read a nut_host default through `| default(10)`. A
     group_vars-only lookup would resolve one tile in fifty.
     """

@@ -78,4 +78,4 @@ sonarr_k8s_log_rotate: "10"
 # radarr and prowlarr carry the same pin for the same reason, and
 # ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep
 # fails if the three drift apart.
-sonarr_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0
+sonarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0

@@ -1,8 +1,8 @@
 ---
 # Pinned like the observability Loki (Renovate-tracked).
-loki_homelab_image: grafana/loki:3.7.8
+loki_homelab_k8s_image: grafana/loki:3.7.8
 # The cluster log shipper.
-loki_homelab_alloy_image: grafana/alloy:v1.19.2
+loki_homelab_k8s_alloy_image: grafana/alloy:v1.19.2
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the log store the Alert History reconstruction and every LogQL-backed

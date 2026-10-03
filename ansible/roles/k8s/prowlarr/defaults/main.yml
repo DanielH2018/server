@@ -131,4 +131,4 @@ prowlarr_k8s_log_rotate: "10"
 # `roles/k8s/*/defaults` and `_image:` keys only. sonarr and radarr carry the same pin, and
 # ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep
 # fails if the three drift apart.
-prowlarr_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0
+prowlarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0

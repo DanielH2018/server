@@ -11,7 +11,7 @@
 # k8s-defaults manager matches the line and can offer digest bumps — a digest-only pin slips
 # its regex and would age forever with no update signal, which the repo's own guard test
 # (test_every_k8s_role_image_is_renovate_tracked) refuses.
-dri_device_plugin_image: ghcr.io/squat/generic-device-plugin:latest@sha256:dc192e164c69b03f156765793a1be62ca437709ae477b27ca7d8f3dcf5021576
+dri_device_plugin_k8s_image: ghcr.io/squat/generic-device-plugin:latest@sha256:dc192e164c69b03f156765793a1be62ca437709ae477b27ca7d8f3dcf5021576
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # tasks/main.yml sets manifests_rollout: '', so the shared rollout gate is skipped and the wait

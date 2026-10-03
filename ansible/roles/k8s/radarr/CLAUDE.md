@@ -8,7 +8,7 @@ when both paths share one mount.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "radarr"`
 - **Images:** `lscr.io/linuxserver/radarr` (`radarr_k8s_image`), `ghcr.io/onedr0p/exportarr`
-  (`radarr_exportarr_image`)
+  (`radarr_k8s_exportarr_image`)
 - **Route:** `radarr.<domain>` · `radarr.local.<domain>`, Authelia one_factor
 - **Claims:** `radarr-config` (weekly -> B2 (default target)), `media-data` (not Longhorn
   (media-local))
@@ -16,7 +16,7 @@ when both paths share one mount.
 <!-- /generated_from -->
 
 - **The `-lsNN` linuxserver tag scheme** means a breaking bump can hide as a routine patch
-  bump. The `exportarr` metrics sidecar (`radarr_exportarr_image`) is pinned in lockstep with
+  bump. The `exportarr` metrics sidecar (`radarr_k8s_exportarr_image`) is pinned in lockstep with
   sonarr and prowlarr — `ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep`
   enforces it.
 - **Port:** 7878

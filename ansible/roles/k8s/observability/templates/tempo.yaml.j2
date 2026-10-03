@@ -99,7 +99,7 @@ spec:
 {{ pod_shell('homelab-best-effort', run_as_user=10001, run_as_group=10001, fs_group=10001) }}
       containers:
         - name: tempo
-          image: {{ observability_tempo_image }}
+          image: {{ observability_k8s_tempo_image }}
           args: ["-config.file=/etc/tempo/config.yaml"]
 {{ hardened_security_context(non_root=true) }}
           ports:

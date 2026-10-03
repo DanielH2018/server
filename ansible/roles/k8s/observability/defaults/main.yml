@@ -8,9 +8,9 @@
 # host keeps its own data."
 
 # Pinned, Renovate-tracked.
-observability_collector_image: otel/opentelemetry-collector-contrib:0.161.0
-observability_loki_image: grafana/loki:3.7.8
-observability_prometheus_image: prom/prometheus:v3.14.0
+observability_k8s_collector_image: otel/opentelemetry-collector-contrib:0.161.0
+observability_k8s_loki_image: grafana/loki:3.7.8
+observability_k8s_prometheus_image: prom/prometheus:v3.14.0
 # Grafana 12 removed Angular, so every `graph` panel must be converted to `timeseries` and
 # deployed before a major bump, not alongside it.
 #
@@ -18,11 +18,11 @@ observability_prometheus_image: prom/prometheus:v3.14.0
 # dashboards and datasources are provisioned from git.
 # Grafana's schema migrations are one-way, which is tolerable because of that: the DB holds
 # only preferences, version history and annotations. Recovery is deleting the PVC.
-observability_grafana_image: grafana/grafana:13.2.2
+observability_k8s_grafana_image: grafana/grafana:13.2.2
 # Distinct from the metrics-server k3s already bundles: that serves the
 # resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
 # kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
-observability_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
+observability_k8s_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the Claude Code telemetry stack (collector/Loki/Prometheus/Grafana/Tempo/
@@ -139,7 +139,7 @@ observability_prometheus_retention_size: 7GB
 # backend_scheduler/backend_worker; tempo.yaml.j2 carries both changes and says why. 3.0 refuses
 # vParquet3 and earlier blocks, so the instance must already write vParquet4 (read
 # /status/config).
-observability_tempo_image: grafana/tempo:3.0.3
+observability_k8s_tempo_image: grafana/tempo:3.0.3
 observability_tempo_storage: 5Gi
 # 720h (30d) — the same window as the Prometheus retention, a day under Loki's 744h. Its own
 # variable rather than a shared one because spans are per-turn and far bulkier than counters,

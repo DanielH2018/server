@@ -22,7 +22,7 @@ metadata:
   name: kuma-status-page-sync
   namespace: {{ k8s_namespace }}
 spec:
-  schedule: "{{ kuma_status_page_sync_schedule }}"
+  schedule: "{{ uptime_kuma_k8s_status_page_sync_schedule }}"
   timeZone: {{ tz }}
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
@@ -30,8 +30,8 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
-      ttlSecondsAfterFinished: {{ kuma_status_page_sync_job_ttl_seconds }}
-      activeDeadlineSeconds: {{ kuma_status_page_sync_deadline_seconds }}
+      ttlSecondsAfterFinished: {{ uptime_kuma_k8s_status_page_sync_job_ttl_seconds }}
+      activeDeadlineSeconds: {{ uptime_kuma_k8s_status_page_sync_deadline_seconds }}
       template:
         metadata:
           labels:
@@ -56,15 +56,15 @@ spec:
    Kuma's Service has no endpoint at all for ~100s of a deploy rollout and for ~16 minutes of the
    Sunday reboot cron. The attempt count is DERIVED from the two budget variables rather than
    written here, so the loop and the job deadline cannot drift apart — see the comments on
-   kuma_status_page_sync_deadline_seconds in this role's defaults for the measurements. #}
+   uptime_kuma_k8s_status_page_sync_deadline_seconds in this role's defaults for the measurements. #}
             - name: dump
-              image: {{ kuma_cli_k8s_image }}
+              image: {{ uptime_kuma_k8s_cli_image }}
               command: ["/busybox/sh", "-c"]
               args:
                 - |
                   set -eu
                   attempt=1
-                  while [ "$attempt" -le {{ (kuma_status_page_sync_dump_budget_seconds // kuma_status_page_sync_dump_attempt_seconds) | int }} ]; do
+                  while [ "$attempt" -le {{ (uptime_kuma_k8s_status_page_sync_dump_budget_seconds // uptime_kuma_k8s_status_page_sync_dump_attempt_seconds) | int }} ]; do
                     if /usr/local/bin/kuma monitor list > /work/monitors.json &&
                        /usr/local/bin/kuma status-page get "$SLUG" > /work/page.json; then
                       exit 0
@@ -76,7 +76,7 @@ spec:
                   exit 1
               env:
                 - name: SLUG
-                  value: "{{ kuma_status_page_slug }}"
+                  value: "{{ uptime_kuma_k8s_status_page_slug }}"
                 - name: KUMA__URL
                   value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
 {# `@/path` is kuma-client's own file reference (resolve_file_ref) — it reads the file and strips
@@ -104,13 +104,13 @@ spec:
                   readOnly: true
               resources:
                 limits:
-                  cpu: "{{ kuma_status_page_sync_cpu_limit }}"
-                  memory: {{ kuma_status_page_sync_mem_limit }}
+                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_limit }}
                 requests:
-                  cpu: "{{ kuma_status_page_sync_cpu_request }}"
-                  memory: {{ kuma_status_page_sync_mem_request }}
+                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_request }}
             - name: render
-              image: {{ kuma_status_page_sync_image }}
+              image: {{ uptime_kuma_k8s_status_page_sync_image }}
               command:
                 - python3
                 - /config/render_status_page.py
@@ -134,16 +134,16 @@ spec:
                   readOnly: true
               resources:
                 limits:
-                  cpu: "{{ kuma_status_page_sync_cpu_limit }}"
-                  memory: {{ kuma_status_page_sync_mem_limit }}
+                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_limit }}
                 requests:
-                  cpu: "{{ kuma_status_page_sync_cpu_request }}"
-                  memory: {{ kuma_status_page_sync_mem_request }}
+                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_request }}
 {# No desired.json means the render stage found the page already grouped as declared, which is
    the steady state. Writing it anyway would be a saveStatusPage into Kuma's SQLite on every
    run. #}
             - name: apply
-              image: {{ kuma_cli_k8s_image }}
+              image: {{ uptime_kuma_k8s_cli_image }}
               command: ["/busybox/sh", "-c"]
               args:
                 - |
@@ -178,14 +178,14 @@ spec:
                   readOnly: true
               resources:
                 limits:
-                  cpu: "{{ kuma_status_page_sync_cpu_limit }}"
-                  memory: {{ kuma_status_page_sync_mem_limit }}
+                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_limit }}
                 requests:
-                  cpu: "{{ kuma_status_page_sync_cpu_request }}"
-                  memory: {{ kuma_status_page_sync_mem_request }}
+                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_request }}
           containers:
             - name: beat
-              image: {{ kuma_status_page_sync_image }}
+              image: {{ uptime_kuma_k8s_status_page_sync_image }}
               command: ["python3", "/config/push_heartbeat.py"]
               env:
                 - name: KUMA_URL
@@ -208,11 +208,11 @@ spec:
                   readOnly: true
               resources:
                 limits:
-                  cpu: "{{ kuma_status_page_sync_cpu_limit }}"
-                  memory: {{ kuma_status_page_sync_mem_limit }}
+                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_limit }}
                 requests:
-                  cpu: "{{ kuma_status_page_sync_cpu_request }}"
-                  memory: {{ kuma_status_page_sync_mem_request }}
+                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_request }}
           volumes:
             - name: status-page-sync-work
               emptyDir: {}

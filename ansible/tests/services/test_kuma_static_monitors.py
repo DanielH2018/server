@@ -88,7 +88,7 @@ def test_autokuma_pin_carries_resend_interval_on_push_monitors():
     # Versions verified BY READING kuma-client/src/models/monitor.rs at the tag, not by trusting
     # a release note. Add a version here only after doing the same.
     CARRIES_RESEND_ON_PUSH = {"2.1.0-rc.2"}
-    pinned = ROLE_DEFAULTS["autokuma_k8s_image"]
+    pinned = ROLE_DEFAULTS["uptime_kuma_k8s_autokuma_image"]
     tag = pinned.rsplit(":", 1)[-1]
     assert tag in CARRIES_RESEND_ON_PUSH, (
         f"AutoKuma pin moved to {pinned!r} — re-verify in that tag's monitor.rs that "
@@ -199,7 +199,7 @@ _WINDOW_PROBE_S = 7777
 
 
 def test_bridge_push_monitors_share_one_interval():
-    # Every tile the bridge feeds must take its heartbeat window from kuma_bridge_push_interval,
+    # Every tile the bridge feeds must take its heartbeat window from uptime_kuma_k8s_bridge_push_interval,
     # so widening the window is one edit rather than one per tile. A new bridge
     # check that hardcodes an interval reads as covered while sitting on the old, tighter window —
     # which is the flap this variable exists to stop.
@@ -210,7 +210,7 @@ def test_bridge_push_monitors_share_one_interval():
     # templates.
     bridge_tokens = bridge_push_tokens()
     tokens = push_tokens_by_monitor()
-    want = ROLE_DEFAULTS["kuma_bridge_push_interval"]
+    want = ROLE_DEFAULTS["uptime_kuma_k8s_bridge_push_interval"]
     off = {
         name: e["interval"]
         for name, e in _entities().items()
@@ -218,7 +218,9 @@ def test_bridge_push_monitors_share_one_interval():
         and tokens.get(e["name"]) in bridge_tokens
         and e["interval"] != want
     }
-    assert not off, "bridge-fed monitors not on kuma_bridge_push_interval: %s" % off
+    assert not off, (
+        "bridge-fed monitors not on uptime_kuma_k8s_bridge_push_interval: %s" % off
+    )
 
 
 def test_non_bridge_push_monitors_keep_their_own_interval():
@@ -231,18 +233,20 @@ def test_non_bridge_push_monitors_keep_their_own_interval():
     # widening would move. Comparing rendered numbers at one value could not answer it — eight
     # non-bridge monitors already sit at 1200 for their own reasons, and a coincidence would read
     # as a violation. Asking for a difference rather than for `== _WINDOW_PROBE_S` also catches a
-    # tile that derives its window (`kuma_bridge_push_interval * 2`) rather than taking it whole.
+    # tile that derives its window (`uptime_kuma_k8s_bridge_push_interval * 2`) rather than taking it whole.
     bridge_tokens = bridge_push_tokens()
     at_inventory = {e["name"]: e.get("interval") for e in _entities().values()}
     moved = {
         e["name"]
-        for e in entities_with({"kuma_bridge_push_interval": _WINDOW_PROBE_S}).values()
+        for e in entities_with(
+            {"uptime_kuma_k8s_bridge_push_interval": _WINDOW_PROBE_S}
+        ).values()
         if e["type"] == "push" and e.get("interval") != at_inventory.get(e["name"])
     }
     # Non-vacuity: a template that stopped reading the variable moves nothing, and an empty set
     # satisfies every subset claim below.
     assert len(moved) >= 20, (
-        f"only {len(moved)} tiles move with kuma_bridge_push_interval — the variable has stopped "
+        f"only {len(moved)} tiles move with uptime_kuma_k8s_bridge_push_interval — the variable has stopped "
         "reaching the heartbeat windows it is meant to set"
     )
     tokens = push_tokens_by_monitor()
@@ -257,7 +261,7 @@ def test_bridge_push_interval_is_a_multiple_of_the_loop():
     # push — at exactly 2x it is back to the 600s window that flaps. The loop's cadence is read
     # from the Secret the bridge pod receives, so a changed INTERVAL re-checks the window here.
     loop = int(bridge_env()["INTERVAL"])
-    want = ROLE_DEFAULTS["kuma_bridge_push_interval"]
+    want = ROLE_DEFAULTS["uptime_kuma_k8s_bridge_push_interval"]
     assert want % loop == 0, "%s is not a whole number of %ss bridge cycles" % (
         want,
         loop,

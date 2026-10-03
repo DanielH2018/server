@@ -38,7 +38,7 @@ spec:
       enableServiceLinks: false
       containers:
         - name: probe
-          image: {{ media_volume_probe_image }}
+          image: {{ media_volume_k8s_probe_image }}
           command:
             - /bin/sh
             - -c

@@ -17,11 +17,12 @@ verification commands).
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "observability"`
-- **Images:** `otel/opentelemetry-collector-contrib` (`observability_collector_image`),
-  `grafana/loki` (`observability_loki_image`), `prom/prometheus`
-  (`observability_prometheus_image`), `grafana/grafana` (`observability_grafana_image`),
-  `registry.k8s.io/kube-state-metrics/kube-state-metrics`
-  (`observability_kube_state_metrics_image`), `grafana/tempo` (`observability_tempo_image`)
+- **Images:** `otel/opentelemetry-collector-contrib` (`observability_k8s_collector_image`),
+  `grafana/loki` (`observability_k8s_loki_image`), `prom/prometheus`
+  (`observability_k8s_prometheus_image`), `grafana/grafana`
+  (`observability_k8s_grafana_image`), `registry.k8s.io/kube-state-metrics/kube-state-metrics`
+  (`observability_k8s_kube_state_metrics_image`), `grafana/tempo`
+  (`observability_k8s_tempo_image`)
 - **Route:** `grafana.<domain>` · `grafana.local.<domain>`, Authelia one_factor
 - **Claims:** `grafana-data` (no backup (StorageClass longhorn-nobackup)), `loki-data` (no
   backup (StorageClass longhorn-nobackup)), `prometheus-data` (no backup (StorageClass

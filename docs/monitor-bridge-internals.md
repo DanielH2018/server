@@ -31,7 +31,7 @@ table, the gate-set membership, the operator prerequisites and the test-side sea
 
 ## Push-monitor plumbing
 
-- **The heartbeat window is `kuma_bridge_push_interval` = 1200 s**, 4 × the loop.
+- **The heartbeat window is `uptime_kuma_k8s_bridge_push_interval` = 1200 s**, 4 × the loop.
 - **Liveness probe:** `cli.py` touches `/tmp/heartbeat` after every cycle and the probe in
   `templates/deployment.yaml.j2` fails past ~3×INTERVAL, so the kubelet restarts a hung loop.
 - **Push tokens:** `templates/env-secret.yaml.j2`'s `KUMA_PUSH_*` keys are the list, one SOPS

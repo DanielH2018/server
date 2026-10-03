@@ -64,8 +64,8 @@ def dump_attempt_cap(text):
 
 def test_the_dump_attempt_cap_comes_out_of_the_budget_variables():
     expected = (
-        DEFAULTS["kuma_status_page_sync_dump_budget_seconds"]
-        // DEFAULTS["kuma_status_page_sync_dump_attempt_seconds"]
+        DEFAULTS["uptime_kuma_k8s_status_page_sync_dump_budget_seconds"]
+        // DEFAULTS["uptime_kuma_k8s_status_page_sync_dump_attempt_seconds"]
     )
     assert expected > 3, (
         "a cap this small is the pre-2026-09-06 value that failed every restart"
@@ -76,8 +76,8 @@ def test_the_dump_attempt_cap_comes_out_of_the_budget_variables():
 def test_a_bigger_budget_moves_the_cap():
     """The rejecting half: a cap hardcoded back to a literal would not move with the budget."""
     doubled = render(
-        kuma_status_page_sync_dump_budget_seconds=(
-            DEFAULTS["kuma_status_page_sync_dump_budget_seconds"] * 2
+        uptime_kuma_k8s_status_page_sync_dump_budget_seconds=(
+            DEFAULTS["uptime_kuma_k8s_status_page_sync_dump_budget_seconds"] * 2
         )
     )
     assert dump_attempt_cap(doubled) == dump_attempt_cap(render()) * 2
@@ -87,14 +87,14 @@ def test_the_retry_window_outlasts_the_sunday_reboot_with_margin():
     """`backoffLimit: 1` runs two pods, so the job's total wait is two budgets."""
     doc = yaml.safe_load(render())
     assert doc["spec"]["jobTemplate"]["spec"]["backoffLimit"] == 1
-    total = DEFAULTS["kuma_status_page_sync_dump_budget_seconds"] * 2
+    total = DEFAULTS["uptime_kuma_k8s_status_page_sync_dump_budget_seconds"] * 2
     assert total > SUNDAY_REBOOT_WAIT_SECONDS * 1.5
 
 
 def test_the_first_pod_alone_covers_a_deploy_rollout():
     """A rollout can start at any moment, so its whole endpoint gap falls on one pod."""
     assert (
-        DEFAULTS["kuma_status_page_sync_dump_budget_seconds"]
+        DEFAULTS["uptime_kuma_k8s_status_page_sync_dump_budget_seconds"]
         > ROLLOUT_ENDPOINT_GAP_SECONDS
     )
 
@@ -103,13 +103,18 @@ def test_both_retry_windows_fit_inside_the_job_deadline():
     """Otherwise the pod is killed mid-attempt and reports DeadlineExceeded, not the diagnostic."""
     doc = yaml.safe_load(render())
     deadline = doc["spec"]["jobTemplate"]["spec"]["activeDeadlineSeconds"]
-    assert deadline == DEFAULTS["kuma_status_page_sync_deadline_seconds"]
-    assert DEFAULTS["kuma_status_page_sync_dump_budget_seconds"] * 2 < deadline
+    assert deadline == DEFAULTS["uptime_kuma_k8s_status_page_sync_deadline_seconds"]
+    assert (
+        DEFAULTS["uptime_kuma_k8s_status_page_sync_dump_budget_seconds"] * 2 < deadline
+    )
 
 
 def test_the_deadline_stays_inside_one_cron_period():
-    assert DEFAULTS["kuma_status_page_sync_schedule"] == "*/15 * * * *"
-    assert DEFAULTS["kuma_status_page_sync_deadline_seconds"] < CRON_PERIOD_SECONDS
+    assert DEFAULTS["uptime_kuma_k8s_status_page_sync_schedule"] == "*/15 * * * *"
+    assert (
+        DEFAULTS["uptime_kuma_k8s_status_page_sync_deadline_seconds"]
+        < CRON_PERIOD_SECONDS
+    )
 
 
 # The Status Page Sync push monitor's interval in static-monitors.yaml.j2: DOWN fires after
@@ -123,7 +128,7 @@ def test_a_finished_job_is_reaped_after_its_logs_have_outlived_the_down_window()
     days."""
     doc = yaml.safe_load(render())
     ttl = doc["spec"]["jobTemplate"]["spec"]["ttlSecondsAfterFinished"]
-    assert ttl == DEFAULTS["kuma_status_page_sync_job_ttl_seconds"]
+    assert ttl == DEFAULTS["uptime_kuma_k8s_status_page_sync_job_ttl_seconds"]
     assert ttl > PUSH_MONITOR_SILENCE_SECONDS * 2
     assert ttl <= 2 * 24 * 3600
 
@@ -131,12 +136,12 @@ def test_a_finished_job_is_reaped_after_its_logs_have_outlived_the_down_window()
 def test_a_longer_ttl_moves_the_rendered_value():
     """The rejecting half: a literal in the template would not move with the default."""
     longer = render(
-        kuma_status_page_sync_job_ttl_seconds=(
-            DEFAULTS["kuma_status_page_sync_job_ttl_seconds"] + 1
+        uptime_kuma_k8s_status_page_sync_job_ttl_seconds=(
+            DEFAULTS["uptime_kuma_k8s_status_page_sync_job_ttl_seconds"] + 1
         )
     )
     doc = yaml.safe_load(longer)
     assert (
         doc["spec"]["jobTemplate"]["spec"]["ttlSecondsAfterFinished"]
-        == DEFAULTS["kuma_status_page_sync_job_ttl_seconds"] + 1
+        == DEFAULTS["uptime_kuma_k8s_status_page_sync_job_ttl_seconds"] + 1
     )

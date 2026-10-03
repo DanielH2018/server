@@ -58,7 +58,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: probe
-          image: {{ netpol_baseline_probe_image }}
+          image: {{ netpol_baseline_k8s_probe_image }}
           command:
             - sh
             - -c

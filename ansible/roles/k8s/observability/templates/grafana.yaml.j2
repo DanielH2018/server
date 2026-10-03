@@ -142,7 +142,7 @@ spec:
 {{ pod_shell('homelab-best-effort', run_as_user=472, run_as_group=472, fs_group=472) }}
       containers:
         - name: grafana
-          image: {{ observability_grafana_image }}
+          image: {{ observability_k8s_grafana_image }}
 {{ hardened_security_context(non_root=true) }}
           env:
             - name: GF_SECURITY_ADMIN_PASSWORD

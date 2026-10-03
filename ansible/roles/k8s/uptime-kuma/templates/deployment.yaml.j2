@@ -80,7 +80,7 @@ spec:
           # `depends_on: {restart: true}` — a pod recreate cycles both.
 {{ container_resources(cpu_limit=uptime_kuma_k8s_cpu_limit, mem_limit=uptime_kuma_k8s_mem_limit, cpu_request=uptime_kuma_k8s_cpu_request, mem_request=uptime_kuma_k8s_mem_request) }}
         - name: autokuma
-          image: {{ autokuma_k8s_image }}
+          image: {{ uptime_kuma_k8s_autokuma_image }}
           env:
             - name: AUTOKUMA__KUMA__URL
               value: http://localhost:3001
@@ -126,7 +126,7 @@ spec:
             # declared notification configs — see the comment above them in
             # static-monitors.yaml.j2 — and fixing that is what made the loop converge.
             - name: AUTOKUMA__SYNC_INTERVAL
-              value: "{{ autokuma_k8s_sync_interval }}"
+              value: "{{ uptime_kuma_k8s_autokuma_sync_interval }}"
             # Flipped keep → delete 2026-08-10 after the transcription ledger closed:
             # every one of the 77 live monitors has a static-monitors declaration
             # (audited name-by-name against `kuma-cli monitor list`; the only file-only
@@ -136,7 +136,7 @@ spec:
             # outside this Secret.
             #
             # A variable rather than a literal so that a risky sidecar upgrade can be deployed
-            # once with `-e autokuma_k8s_on_delete=keep`, checked, and then redeployed at the
+            # once with `-e uptime_kuma_k8s_autokuma_on_delete=keep`, checked, and then redeployed at the
             # committed default. Only `keep` is safe to pass that way — it is the value that
             # cannot destroy history.
             #
@@ -154,7 +154,7 @@ spec:
             # ansible/tests/services/test_kuma_static_monitors.py and
             # test_kuma_tags_and_descriptions.py. Full account in this role's CLAUDE.md.
             - name: AUTOKUMA__ON_DELETE
-              value: {{ autokuma_k8s_on_delete }}
+              value: {{ uptime_kuma_k8s_autokuma_on_delete }}
           # Per-container, not pod-level: the uptime-kuma container in this same pod
           # runs as root and cannot carry this assertion.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000, run_as_group=1000) }}
@@ -204,7 +204,7 @@ spec:
             initialDelaySeconds: 300
             periodSeconds: 30
             failureThreshold: 3
-{{ container_resources(cpu_limit=autokuma_k8s_cpu_limit, mem_limit=autokuma_k8s_mem_limit, cpu_request=autokuma_k8s_cpu_request, mem_request=autokuma_k8s_mem_request) }}
+{{ container_resources(cpu_limit=uptime_kuma_k8s_autokuma_cpu_limit, mem_limit=uptime_kuma_k8s_autokuma_mem_limit, cpu_request=uptime_kuma_k8s_autokuma_cpu_request, mem_request=uptime_kuma_k8s_autokuma_mem_request) }}
       volumes:
         - name: uptime-kuma-data
           persistentVolumeClaim:

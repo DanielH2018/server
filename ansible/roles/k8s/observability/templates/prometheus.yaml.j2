@@ -868,7 +868,7 @@ spec:
 {{ pod_shell('homelab-critical', service_account='prometheus', run_as_user=65534, run_as_group=65534, fs_group=65534) }}
       containers:
         - name: prometheus
-          image: {{ observability_prometheus_image }}
+          image: {{ observability_k8s_prometheus_image }}
 {{ hardened_security_context(non_root=true) }}
           args:
             - --config.file=/etc/prometheus/prometheus.yml

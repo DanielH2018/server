@@ -29,19 +29,19 @@ metadata:
   name: kuma-maintenance-sync
   namespace: {{ k8s_namespace }}
 spec:
-  schedule: "{{ kuma_maintenance_sync_schedule }}"
+  schedule: "{{ uptime_kuma_k8s_maintenance_sync_schedule }}"
 {# The WINDOW's clock, not `tz`. The schedule here and the window it declares are compared in one
    clock by test_the_sync_never_runs_inside_the_window_it_declares, and two clocks five hours
    apart would make that comparison say nothing. #}
-  timeZone: {{ kuma_maintenance_window_timezone }}
+  timeZone: {{ uptime_kuma_k8s_maintenance_window_timezone }}
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2
   jobTemplate:
     spec:
       backoffLimit: 1
-      ttlSecondsAfterFinished: {{ kuma_maintenance_sync_job_ttl_seconds }}
-      activeDeadlineSeconds: {{ kuma_maintenance_sync_deadline_seconds }}
+      ttlSecondsAfterFinished: {{ uptime_kuma_k8s_maintenance_sync_job_ttl_seconds }}
+      activeDeadlineSeconds: {{ uptime_kuma_k8s_maintenance_sync_deadline_seconds }}
       template:
         metadata:
           labels:
@@ -65,13 +65,13 @@ spec:
    The attempt count is DERIVED from the two budget variables, so the loop and the job deadline
    cannot drift apart — the measurements are on those variables in this role's defaults. #}
             - name: dump
-              image: {{ kuma_cli_k8s_image }}
+              image: {{ uptime_kuma_k8s_cli_image }}
               command: ["/busybox/sh", "-c"]
               args:
                 - |
                   set -eu
                   attempt=1
-                  while [ "$attempt" -le {{ (kuma_maintenance_sync_dump_budget_seconds // kuma_maintenance_sync_dump_attempt_seconds) | int }} ]; do
+                  while [ "$attempt" -le {{ (uptime_kuma_k8s_maintenance_sync_dump_budget_seconds // uptime_kuma_k8s_maintenance_sync_dump_attempt_seconds) | int }} ]; do
                     if /usr/local/bin/kuma monitor list > /work/monitors.json &&
                        /usr/local/bin/kuma maintenance list > /work/maintenances.json &&
                        /usr/local/bin/kuma status-page get "$SLUG" > /work/page.json; then
@@ -84,7 +84,7 @@ spec:
                   exit 1
               env:
                 - name: SLUG
-                  value: "{{ kuma_status_page_slug }}"
+                  value: "{{ uptime_kuma_k8s_status_page_slug }}"
                 - name: KUMA__URL
                   value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
 {# `@/path` is kuma-client's own file reference (resolve_file_ref) — it reads the file and strips
@@ -111,13 +111,13 @@ spec:
                   readOnly: true
               resources:
                 limits:
-                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
-                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
                 requests:
-                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
-                  memory: {{ kuma_maintenance_sync_mem_request }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
             - name: select
-              image: {{ kuma_status_page_sync_image }}
+              image: {{ uptime_kuma_k8s_status_page_sync_image }}
               command:
                 - python3
                 - /config/render_maintenance.py
@@ -140,18 +140,18 @@ spec:
                   readOnly: true
               resources:
                 limits:
-                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
-                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
                 requests:
-                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
-                  memory: {{ kuma_maintenance_sync_mem_request }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
 {# `maintenance list` carries the schedule and NOT the monitors: Kuma's getMaintenanceList emits
    toPublicJSON(), and only getMaintenance fills in monitors and statusPages (server/model/
    maintenance.js, 2.5.5). Membership is the field that decays, so the detail read is the one
    that makes the comparison honest. An empty id file is the first-run case — there is nothing
    to read, and `null` is what the render stage reads as "no live window". #}
             - name: detail
-              image: {{ kuma_cli_k8s_image }}
+              image: {{ uptime_kuma_k8s_cli_image }}
               command: ["/busybox/sh", "-c"]
               args:
                 - |
@@ -187,13 +187,13 @@ spec:
                   readOnly: true
               resources:
                 limits:
-                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
-                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
                 requests:
-                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
-                  memory: {{ kuma_maintenance_sync_mem_request }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
             - name: render
-              image: {{ kuma_status_page_sync_image }}
+              image: {{ uptime_kuma_k8s_status_page_sync_image }}
               command:
                 - python3
                 - /config/render_maintenance.py
@@ -219,18 +219,18 @@ spec:
                   readOnly: true
               resources:
                 limits:
-                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
-                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
                 requests:
-                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
-                  memory: {{ kuma_maintenance_sync_mem_request }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
           containers:
 {# No desired.json means the live window already says what the reboot schedule implies, which
    is the steady state. Kuma's editMaintenance rewrites the row AND deletes and reinserts every
    monitor_maintenance row, so writing anyway would be a per-run churn of ~85 rows in the SQLite
    on Kuma's Longhorn volume. #}
             - name: apply
-              image: {{ kuma_cli_k8s_image }}
+              image: {{ uptime_kuma_k8s_cli_image }}
               command: ["/busybox/sh", "-c"]
               args:
                 - |
@@ -265,11 +265,11 @@ spec:
                   readOnly: true
               resources:
                 limits:
-                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
-                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
                 requests:
-                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
-                  memory: {{ kuma_maintenance_sync_mem_request }}
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
           volumes:
             - name: maintenance-sync-work
               emptyDir: {}

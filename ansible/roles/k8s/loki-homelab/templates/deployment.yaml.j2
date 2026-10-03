@@ -25,7 +25,7 @@ spec:
 {{ node_affinity_preference('daniel-server') }}
       containers:
         - name: loki
-          image: {{ loki_homelab_image }}
+          image: {{ loki_homelab_k8s_image }}
           args: ["-config.file=/etc/loki/loki.yaml"]
           # No readOnlyRootFilesystem: Loki writes its WAL and compactor scratch outside the
           # /loki mount, and the fleet-standard pair is what actually closes the gap here.

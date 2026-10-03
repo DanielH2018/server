@@ -1,6 +1,6 @@
 """The committed group rules must place every committed monitor declaration.
 
-These read the two sources that have to agree — `kuma_status_page_groups` in defaults and the
+These read the two sources that have to agree — `uptime_kuma_k8s_status_page_groups` in defaults and the
 declarations in static-monitors.yaml.j2 — so a monitor added without a home fails here rather
 than landing in the runtime catch-all where nobody looks.
 """
@@ -67,7 +67,7 @@ def monitor_index():
 
 def rules():
     return yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())[
-        "kuma_status_page_groups"
+        "uptime_kuma_k8s_status_page_groups"
     ]
 
 

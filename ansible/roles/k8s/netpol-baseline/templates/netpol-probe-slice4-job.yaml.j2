@@ -75,7 +75,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: probe
-          image: {{ netpol_baseline_probe_image }}
+          image: {{ netpol_baseline_k8s_probe_image }}
           command:
             - sh
             - -c
@@ -111,7 +111,7 @@ spec:
               # fallback even with pihole fenced out.
               #
               # Two forms, either of which passing is a pass. The image is
-              # {{ netpol_baseline_probe_image }}, whose nslookup is BusyBox's applet, and this
+              # {{ netpol_baseline_k8s_probe_image }}, whose nslookup is BusyBox's applet, and this
               # is the first probe in the role to resolve a name outside cluster.local -- so
               # its search-list behaviour has no precedent here to lean on. `daniel-pi.lan` has
               # one dot against the pod's `ndots:5`, so a resolver that honours the search list
