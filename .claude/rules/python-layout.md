@@ -65,6 +65,12 @@ because `pyproject.toml` puts `ansible/tests` on `pythonpath`. A new guard goes 
 whose name answers "what does it read", and keeps a unique basename — there are no
 `__init__.py` files, so pytest names modules by basename alone.
 
+A property of the rendered k8s manifests that is one selector and one predicate goes in as a
+row of `ansible/tests/k8s/test_rendered_properties.py`, not as a new file. The row carries its
+floor, its named members and its red/green fixtures, and a row whose selector stops matching
+fails with `subject gone: delete this row`. A property needing a second render context, a
+cross-document join or a long exemption list keeps its own file.
+
 ## No tests under `ansible/filter_plugins/`
 
 Ansible's plugin loader imports every `.py` there at deploy time and would choke on the
