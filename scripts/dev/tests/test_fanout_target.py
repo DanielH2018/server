@@ -6,6 +6,8 @@ claim each differ from this repo's, and the claim has to fall between the tree a
 Run: uv run pytest scripts/dev/tests/test_fanout_target.py
 """
 
+import json
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -93,6 +95,34 @@ def test_a_dotfiles_unit_reads_the_system_prompt_from_this_repos_checkout():
     assert f"--append-system-prompt-file {prompt}" in cmd
     assert f"-p WorkingDirectory={DOT_WT} " in cmd
     assert (REPO_ROOT / SYSTEM_PROMPT_FILE).is_file()
+
+
+def _settings_arg(cmd: str) -> dict | None:
+    """The JSON `--settings` value in a systemd-run line, as the shell would hand it over."""
+    argv = shlex.split(cmd)
+    if "--settings" not in argv:
+        return None
+    return json.loads(argv[argv.index("--settings") + 1])
+
+
+def test_a_dotfiles_unit_registers_the_fanout_stop_hook_through_settings():
+    """The dotfiles worktree has no `.claude/settings.json`, so the hook must ride the argv."""
+    settings = _settings_arg(systemd_run_command("763", DOTFILES))
+    assert settings is not None
+    [stop] = settings["hooks"]["Stop"]
+    [hook] = stop["hooks"]
+    assert (
+        hook["command"] == "/home/ubuntu/server/.claude/hooks/run-hook.sh fanout-stop"
+    )
+    assert (REPO_ROOT / ".claude" / "hooks" / "fanout-stop.py").is_file()
+
+
+def test_a_server_unit_takes_the_hook_from_its_project_settings_not_the_argv():
+    """A second registration would fire the hook twice per stop and halve its block cap."""
+    assert _settings_arg(systemd_run_command("763", SERVER_TARGET)) is None
+    project = json.loads((REPO_ROOT / ".claude" / "settings.json").read_text())
+    commands = [h["command"] for s in project["hooks"]["Stop"] for h in s["hooks"]]
+    assert any(c.endswith("run-hook.sh fanout-stop") for c in commands)
 
 
 def test_a_dotfiles_launch_claims_between_the_tree_and_the_agent():

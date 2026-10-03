@@ -39,6 +39,7 @@ from docs.route_facts import (
     reachability,
     route_cell,
 )
+from lib.ansible_inventory import containers_entries_in
 from lib.render_guard import host_files, load_yaml
 from lib.repo_paths import HOST_VARS, K8S_ROLES
 
@@ -62,12 +63,10 @@ def build_rows(
     """One row per k8s service that declares a route."""
     rows = []
     for host, data in _load_host_vars(host_vars).items():
-        for entry in data.get("containers_list") or []:
-            if not isinstance(entry, dict) or entry.get("platform") != "k8s":
+        for entry in containers_entries_in(data):
+            if entry.get("platform") != "k8s":
                 continue
-            name = entry.get("name")
-            if not name:
-                continue
+            name = entry["name"]
             templates = ingressroute_templates(k8s_roles / str(name))
             if not templates:
                 continue

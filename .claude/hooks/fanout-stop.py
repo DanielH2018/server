@@ -31,7 +31,10 @@ printing the URL. The text check also needs no network call and no `gh` auth ins
 
 WHERE IT RUNS. Only in a fan-out worktree, meaning `.fanout/brief.md` exists at or above the
 payload's `cwd`. That is the marker `launch.py` writes and the dotfiles `worktree-landed.sh`
-already keys on. Everywhere else the hook prints nothing.
+already keys on. Everywhere else the hook prints nothing. This repo's `.claude/settings.json`
+registers it for a batch here. Another repo's batch, such as a dotfiles one, has no such file
+in its worktree, so `launch.py` passes the hook to that `claude -p` through `--settings`
+(`STOP_HOOK_SETTINGS`, #3363).
 
 THE CAP. A counter in `.fanout/stop-blocks` allows at most `MAX_BLOCKS` blocks per batch.
 After that it lets the session end, and `status` reports the batch `no-pr` rather than `done`.

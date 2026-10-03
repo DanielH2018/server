@@ -25,6 +25,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from lib.ansible_inventory import containers_entries_in, inventory_hosts
 from lib.render_guard import load_yaml as _load_yaml_mapping
 from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI
 
@@ -40,29 +41,6 @@ ROLES = {
     "UPS hardware behind the NUT shutdown chain.",
     "daniel-pi": "Raspberry Pi, and the only remaining Docker host. LAN-only utilities.",
 }
-
-
-def parse_hosts_ini(path: Path = HOSTS_INI) -> list[dict[str, str]]:
-    """Hosts and their connection settings, in inventory order.
-
-    Parsed by hand rather than with configparser: an ini host line is
-    `name key=value key=value`, which configparser reads as one long key.
-    """
-    hosts: list[dict[str, str]] = []
-    if not path.is_file():
-        return hosts
-    for raw in path.read_text().splitlines():
-        line = raw.strip()
-        if not line or line.startswith(("#", ";", "[")):
-            continue
-        name, *settings = line.split()
-        entry = {"name": name}
-        for setting in settings:
-            if "=" in setting:
-                key, value = setting.split("=", 1)
-                entry[key] = value
-        hosts.append(entry)
-    return hosts
 
 
 def load_host_vars(name: str, host_vars: Path = HOST_VARS) -> dict:
@@ -107,17 +85,16 @@ def build_rows(
     # fixture depend on the repo it is meant to stand in for.
     defaults = _load_yaml_mapping(all_vars)
     rows = []
-    for entry in parse_hosts_ini(hosts_ini):
-        name = entry["name"]
+    for host in inventory_hosts(hosts_ini):
+        name = host.name
         data = load_host_vars(name, host_vars)
-        services = data.get("containers_list")
         rows.append(
             {
                 "name": name,
                 "role": ROLES.get(name, f"{UNKNOWN} (no description recorded)"),
                 "ip": str(data.get("server_ip", f"{UNKNOWN} (server_ip not declared)")),
-                "connection": entry.get("ansible_connection", "ssh"),
-                "services": str(len(services)) if isinstance(services, list) else "0",
+                "connection": host.connection,
+                "services": str(len(containers_entries_in(data))),
                 "gitops": _flag(data, "has_gitops", defaults),
                 "docker": _flag(data, "has_docker", defaults),
             }

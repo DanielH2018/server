@@ -44,22 +44,6 @@ def _make_inventory(tmp_path):
     return ini, host_vars
 
 
-def test_parses_host_lines_with_settings(tmp_path):
-    """An ini host line is `name key=value ...`, which configparser reads as one key."""
-    ini, _ = _make_inventory(tmp_path)
-    hosts = g.parse_hosts_ini(ini)
-    assert [h["name"] for h in hosts] == ["daniel-server", "daniel-pi"]
-    assert hosts[1]["ansible_host"] == "10.0.0.139"
-    assert hosts[1]["ansible_connection"] == "ssh"
-
-
-def test_skips_comments_and_group_headers(tmp_path):
-    ini, _ = _make_inventory(tmp_path)
-    names = [h["name"] for h in g.parse_hosts_ini(ini)]
-    assert "[homeservers]" not in names
-    assert not any(n.startswith("#") for n in names)
-
-
 def test_counts_services_per_host(tmp_path):
     ini, host_vars = _make_inventory(tmp_path)
     rows = {r["name"]: r for r in g.build_rows(ini, host_vars)}

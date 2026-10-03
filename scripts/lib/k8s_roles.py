@@ -20,6 +20,7 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
+from lib.ansible_inventory import containers_entries_in
 from lib.jinja_comments import strip_jinja_comments
 from lib.render_guard import HOST_VARS as HOST_VARS_DIR, load_yaml
 from lib.repo_paths import K8S_ROLES, REPO, SHARED_TPL
@@ -146,7 +147,7 @@ def non_manifest_documents(docs) -> list:
 
 def k8s_entries() -> dict[str, dict]:
     """containers_list entries for the k8s platform, keyed by service name."""
-    entries = load_yaml(HOST_VARS).get("containers_list") or []
+    entries = containers_entries_in(load_yaml(HOST_VARS))
     return {c["name"]: c for c in entries if c.get("platform") == "k8s"}
 
 

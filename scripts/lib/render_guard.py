@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.git import git, git_stdout
+from lib.ansible_inventory import containers_entries_in
 from lib.repo_paths import (
     ALL_VARS,
     ANSIBLE,
@@ -194,22 +195,6 @@ def host_files(host_vars: Path = HOST_VARS) -> list[Path]:
     ``tmp_path`` through it.
     """
     return sorted(p for p in host_vars.glob("*.yml") if not p.name.startswith("_"))
-
-
-def containers_entries_in(data: dict) -> list[dict]:
-    """The named ``containers_list`` entries in an already-parsed host_vars mapping.
-
-    Split out of ``containers_entries`` so a reader that has the file's TEXT rather than its
-    path — ``deploy_tags.service_tags_at``, which reads host_vars at a git ref — applies the
-    same rule instead of writing a second one.
-
-    Entries with no ``name`` are dropped rather than raising: every caller skipped them
-    individually before, because ``deploy.yml`` derives a service's tags from its name and an
-    unnamed entry selects nothing. A non-mapping entry is dropped for the same reason — it
-    cannot answer ``.get("name")``.
-    """
-    entries = (data or {}).get("containers_list") or []
-    return [e for e in entries if isinstance(e, dict) and e.get("name")]
 
 
 def containers_entries(path: Path) -> list[dict]:

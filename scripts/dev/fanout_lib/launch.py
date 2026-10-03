@@ -1,6 +1,8 @@
 """Create the worktree, write the brief, start the transient service — spec §3."""
 
+import json
 import re
+import shlex
 import subprocess
 from datetime import UTC, datetime
 
@@ -38,6 +40,28 @@ CLAUDE_ARGS_PREFIX = (
 # reports as `failed`.
 BUDGET_USD = 40
 CLAUDE_ARGS = CLAUDE_ARGS_PREFIX.format(budget=BUDGET_USD, prompt=SYSTEM_PROMPT_FILE)
+# The `fanout-stop` Stop hook, registered for another repo's batch through `--settings`.
+# Claude Code loads project settings from the session's cwd, so a batch in this repo's
+# worktree gets the hook from `.claude/settings.json`, and a batch in the dotfiles worktree,
+# which has no such file, got no hook at all (#3363). Passing it here for the server target
+# too would run it twice per stop and spend the hook's block cap at double speed. A probe on
+# 2026-10-03 confirmed a `--settings` Stop hook fires under `claude -p`. The hook command
+# names this repo's primary checkout by absolute path, as `.claude/settings.json` does.
+STOP_HOOK_SETTINGS = {
+    "hooks": {
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": f"{REPO}/.claude/hooks/run-hook.sh fanout-stop",
+                        "timeout": 10,
+                    }
+                ]
+            }
+        ]
+    }
+}
 # DECIDED: `RuntimeMaxSec=` here, where `claude-rc-restart.service.j2` rejects it for
 # claude-rc.service. systemd records its expiry as a failure (`Result=timeout`); for a
 # long-lived service host that is a false alarm, and for a batch that ran out of time it is
@@ -210,12 +234,15 @@ def claude_args(target: Target = SERVER_TARGET) -> str:
     The system prompt file is relative to the worktree for this repo, whose worktree always
     carries it. Another repo's worktree does not, so there it is read from this repo's primary
     checkout on the same host, and a missing file would end the session before its first turn.
+    Another repo's batch also gets the `fanout-stop` hook through `--settings`, because its
+    worktree carries no `.claude/settings.json` to register it.
     """
     if target.is_server:
         return CLAUDE_ARGS
-    return CLAUDE_ARGS_PREFIX.format(
+    prefix = CLAUDE_ARGS_PREFIX.format(
         budget=BUDGET_USD, prompt=f"{REPO}/{SYSTEM_PROMPT_FILE}"
     )
+    return f"{prefix} --settings {shlex.quote(json.dumps(STOP_HOOK_SETTINGS))}"
 
 
 def systemd_run_command(batch: str, target: Target = SERVER_TARGET) -> str:

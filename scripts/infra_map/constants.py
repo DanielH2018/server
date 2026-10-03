@@ -13,12 +13,15 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib.ansible_inventory import host_names
 from lib.repo_paths import REPO as REPO_ROOT  # noqa: F401 -- re-exported
 
 
 DEFAULT_OUTPUT = Path.home() / ".claude" / "artifacts" / "homelab-infra-map.html"
 
-HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
+# Every inventory host, in hosts.ini order. HOST_PLANE and HOST_ROLE below state what each
+# one is, and test_every_inventory_host_has_a_plane_and_a_role holds them to this list.
+HOSTS = host_names()
 
 # What each host actually is. Stated rather than inferred from the platform keys
 # in its ``containers_list``: daniel-server has no Docker and an empty list, so
