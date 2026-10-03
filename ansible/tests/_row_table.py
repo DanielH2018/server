@@ -20,6 +20,8 @@ What a row buys over a file:
   retirement rule in `.claude/rules/python-layout.md`, enforced instead of remembered.
 - **The floor and the named members are data.** `min_matches` catches a census that shrank.
   `must_find` names the members a row exists for, so the failure says which one went.
+  A row whose subject is a match inside a file rather than the file sets `count`, and then
+  the floor counts matches and only a file holding one is a member.
 - **The red proof is mandatory.** A row cannot be built without `red` (subjects the predicate
   must flag) and `green` (subjects it must pass), and each table runs both for every row.
 - **An exemption carries its reason, and a stale one fails.** `allow` maps a key to why it is
@@ -139,6 +141,10 @@ class Census:
     min_matches: int = 1
     must_find: frozenset[str] = frozenset()
     allow: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    # How many matches a file holds, for a row whose subject is a match inside the file (a
+    # ship line in a tasks file). None counts every selected file once. A file holding no
+    # match is not a member, so `must_find` names files that still hold one.
+    count: Callable[[Subject], int] | None = None
 
 
 @cache
@@ -162,7 +168,8 @@ def check(row: Census, files: Iterable[str | Subject] | None = None) -> list[str
     offenders = []
     for item in row.files() if files is None else files:
         subject = item if isinstance(item, Subject) else Subject(item)
-        found[subject.rel] = 1
+        if hits := 1 if row.count is None else row.count(subject):
+            found[subject.rel] = hits
         offenders += [
             (subject.rel, f"{subject.rel}: {hit}") for hit in row.offence(subject)
         ]

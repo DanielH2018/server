@@ -13,8 +13,12 @@ Run: uv run pytest ansible/tests/repo/test_census_rows_python.py
 
 import ast
 import re
+import tomllib
+from functools import cache
+from pathlib import PurePosixPath
 
 import pytest
+from _helpers import REPO
 from _row_table import (
     Census,
     Subject,
@@ -165,6 +169,62 @@ def _raw_call_offence(subject: Subject) -> list[str]:
     return hits
 
 
+# ── Top-level module basenames across import roots ───────────────────────────────────
+
+
+def pythonpath_roots() -> list[str]:
+    cfg = tomllib.loads((REPO / "pyproject.toml").read_text())
+    return list(cfg["tool"]["pytest"]["ini_options"]["pythonpath"])
+
+
+@cache
+def _import_roots() -> frozenset[str]:
+    """The `pythonpath` roots plus every role's `files/` directory.
+
+    A role test reaches its own `files/` through a `sys.path.insert` at collection time, and
+    every such insert lands in the one session a full run shares, so a role's `files/` is an
+    import root as much as a `pythonpath` entry is.
+    """
+    roles = {
+        rel.rsplit("/", 1)[0]
+        for rel in tracked("ansible/roles/*/files/*.py")
+        if len(parts := rel.split("/")) == 6 and parts[4] == "files"
+    }
+    return frozenset(pythonpath_roots()) | roles
+
+
+def _top_level_modules() -> list[str]:
+    """Every bare-importable top-level module: a `*.py` directly in an import root.
+
+    A module in a subdirectory of a root is reached as `package.module` and shadows nothing.
+    `conftest.py` is skipped: pytest imports each under its own unique module key.
+    """
+    return [
+        rel
+        for rel in tracked("*.py")
+        if str(PurePosixPath(rel).parent) in _import_roots()
+        and not rel.endswith("/conftest.py")
+    ]
+
+
+@cache
+def _homes_by_basename() -> dict[str, tuple[str, ...]]:
+    homes: dict[str, list[str]] = {}
+    for rel in _top_level_modules():
+        homes.setdefault(PurePosixPath(rel).stem, []).append(rel)
+    return {name: tuple(paths) for name, paths in homes.items()}
+
+
+def _shadowing_offence(subject: Subject) -> list[str]:
+    """The other import roots holding a module of this one's name."""
+    others = [
+        rel
+        for rel in _homes_by_basename().get(PurePosixPath(subject.rel).stem, ())
+        if rel != subject.rel
+    ]
+    return [f"also a top-level module at {rel}" for rel in others]
+
+
 ROWS = (
     Census(
         name="no-future-annotations",
@@ -295,6 +355,48 @@ ROWS = (
         allow={SELF: "the red fixtures above hold the offending spelling as text"},
     ),
     Census(
+        name="no-two-import-roots-share-a-module-basename",
+        reason=(
+            "There are no `__init__.py` files, so every `*.py` directly in an import root is a "
+            "bare top-level module, and two roots holding one name resolve `import <name>` by "
+            "`sys.path` order rather than by construction. Two roles' `files/app.py` failed six "
+            "tests only in a full run (#2608). Rename one. "
+            "`scripts/docs/tests/test_gen_reference_scripts.py` holds a different invariant, "
+            "basenames at ANY depth under `scripts/`, for the reference page."
+        ),
+        files=_top_level_modules,
+        offence=_shadowing_offence,
+        # The live index decides, so the red subject is a second home for a real module.
+        red=(Subject("scripts/lib/registry.py", ""),),
+        green=(Subject("scripts/lib/no_other_root_holds_this_name.py", ""),),
+        min_matches=100,
+        # One per root shape: a filter plugin, a cross-role host module, a deployer module,
+        # a monitor-bridge module reached bare inside its image, a k8s role's `files/`
+        # reached only through a role test's insert, and two `scripts/` modules.
+        must_find=frozenset(
+            {
+                "ansible/filter_plugins/toposort.py",
+                "ansible/roles/setup/common/files/host_lib.py",
+                "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+                "ansible/roles/k8s/monitor-bridge/files/registry.py",
+                "ansible/roles/k8s/homelab-mcp/files/safe_reads.py",
+                "scripts/lib/cli_registry.py",
+                "scripts/lib/repo_paths.py",
+            }
+        ),
+        allow={
+            rel: (
+                "ONE module at two roots by construction: `scripts/dev/gen_gitops_markers.py` "
+                "writes monitor-bridge's copy verbatim, and "
+                "`ansible/tests/deploy/test_gitops_markers_copies.py` fails once they differ"
+            )
+            for rel in (
+                "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
+                "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
+            )
+        },
+    ),
+    Census(
         name="git-and-gh-go-through-lib",
         reason=(
             "`lib.git.git` strips every GIT_* variable so `cwd` alone picks the repository, and "
@@ -348,6 +450,14 @@ def test_census_row_holds_on_the_tree(row: Census):
 @pytest.mark.parametrize("row", ROWS, ids=_IDS)
 def test_census_row_flags_its_red_subjects_and_passes_its_green_ones(row: Census):
     assert not proof_problems(row)
+
+
+def test_every_pythonpath_root_is_a_real_directory():
+    """A root that moved would leave the basename census silently short."""
+    missing = [root for root in pythonpath_roots() if not (REPO / root).is_dir()]
+    assert not missing, (
+        f"pyproject pythonpath names directories that do not exist: {missing}"
+    )
 
 
 def test_the_future_annotations_exemption_finds_the_host_shipped_modules():

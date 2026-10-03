@@ -55,6 +55,18 @@ def test_check_is_clean_on_an_allowed_offender_and_flags_a_stale_allow_entry():
     assert any("allow entry 'b' is stale" in p for p in problems), problems
 
 
+def test_a_counted_row_floors_matches_and_finds_only_files_holding_one():
+    counted = _toy(
+        count=lambda s: s.text.count("ship"),
+        min_matches=3,
+        must_find=frozenset({"a", "b"}),
+    )
+    assert check(counted, [Subject("a", "ship ship"), Subject("b", "ship")]) == []
+    problems = check(counted, [Subject("a", "ship ship"), Subject("b", "none")])
+    assert any("2 matches, floor is 3" in p for p in problems), problems
+    assert any("never matched ['b']" in p for p in problems), problems
+
+
 def test_a_row_whose_red_subject_passes_is_flagged():
     assert proof_problems(_toy(red=(Subject("r", "good"),))) == ["red 'r' passed"]
     assert proof_problems(_toy()) == []
