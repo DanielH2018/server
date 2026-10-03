@@ -151,7 +151,6 @@ NARROWED_SETUP_FILES = {
     ("renovate_notify", "tasks/service.yml"): {"renovate-notify-service"},
     ("gitops_deploy", "tasks/code.yml"): {"gitops-deploy-code"},
     ("gitops_deploy", "tasks/service.yml"): {"gitops-deploy-service"},
-    ("gitops_deploy", "tasks/retired.yml"): {"gitops-deploy-retired"},
     ("gitops_deploy", "tasks/github_checks.yml"): {
         "cron",
         "gitops-deploy-github-checks",
@@ -159,7 +158,6 @@ NARROWED_SETUP_FILES = {
     ("gitops_deploy", "tasks/teardown.yml"): {"gitops-deploy-teardown"},
     ("hypervisor", "tasks/network.yml"): {"hypervisor-network"},
     ("hypervisor", "tasks/etcd_drill.yml"): {"hypervisor-etcd-drill"},
-    ("hypervisor", "tasks/reap_staging.yml"): {"hypervisor-reap-staging"},
     ("hypervisor", "tasks/teardown.yml"): {"hypervisor-teardown"},
 }
 

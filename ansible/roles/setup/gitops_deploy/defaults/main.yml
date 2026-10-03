@@ -244,12 +244,6 @@ gitops_deploy_k8s_rollback_timeout_s: 1620
 # carries why.
 gitops_deploy_broad_timeout_s: 1800
 
-# The retired staging gate's dedicated ssh identity, a reap target rather than a deployed file.
-#
-# install.yml deletes this path; the name stays only so both halves of the role name the same
-# file. Drop it once every has_gitops host has applied the role at least once.
-gitops_deploy_retired_staging_gate_key_path: /etc/gitops-deploy/staging_gate_ed25519
-
 # ── self-render kick ──────────────────────────────────────────────────────────────────────────
 # Whether applying this role kicks an immediate `systemctl start gitops-deploy.service`. True for
 # every ordinary apply: it is what makes activation fully IaC on a first install. The deployer's

@@ -39,7 +39,7 @@ _PR_2792_SHA = "66ed500637abd09effe00c6bafde538c851914a9"
 _PR_2792_PATHS = [
     "ansible/roles/setup/hypervisor/CLAUDE.md",
     "ansible/roles/setup/hypervisor/tasks/teardown.yml",
-    "ansible/tests/staging/test_staging_tick_arm_retired.py",
+    "ansible/tests/staging/test_etcd_drill_vm.py",
     _SHIPPED,
     _NOT_SHIPPED,
 ]

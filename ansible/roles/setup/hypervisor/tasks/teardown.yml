@@ -106,22 +106,6 @@
     autoremove: true
   become: true
 
-- name: Remove what the retired staging gate left on this host
-  tags: [hypervisor-teardown]
-  # The gate and its guest are retired, so these are reap targets rather
-  # than this role's own state. reap_staging.yml removes the same paths on the has_hypervisor:
-  # true path, and refuses first if the checkout holds uncommitted work; here the checkout is
-  # already gone by the time a host ever reaches this file, so this is the plain removal.
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - "{{ hypervisor_retired_staging_gate_repo }}"
-    - "{{ hypervisor_retired_staging_gate_lock }}"
-    - "{{ hypervisor_retired_staging_gate_dispatch_path }}"
-    - "{{ hypervisor_retired_staging_gate_runner_path }}"
-  become: true
-
 - name: Deauthorize every retired staging-gate key
   tags: [hypervisor-teardown]
   # Removes only these keys, by their public halves. The operator's own key is untouched — this

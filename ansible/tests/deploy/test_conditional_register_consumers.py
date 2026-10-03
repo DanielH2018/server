@@ -69,7 +69,6 @@ _COREDNS = _ROLES / "setup" / "k3s" / "tasks" / "coredns.yml"
 _KNOWN_TASK_FILES = frozenset(
     {
         "setup/k3s/tasks/coredns.yml",
-        "setup/hypervisor/tasks/reap_staging.yml",
         "k8s/jellyfin/tasks/verify.yml",
         "k8s/media-volume/tasks/sync.yml",
         # Each of these holds a consumer flagged through the `stdout_lines`/`stderr_lines`/`delta`
@@ -399,9 +398,7 @@ def test_a_when_gated_producer_is_still_judged_under_the_check_mode_rule(
 def test_a_when_gated_producer_that_opts_out_of_check_mode_is_clean(
     tmp_path: Path,
 ) -> None:
-    """The accepting half: `check_mode: false` on the read.
-
-    `setup/hypervisor/tasks/reap_staging.yml` carries the same shape."""
+    """The accepting half: `check_mode: false` on the read."""
     opted_out = _GUEST_PRODUCER.replace(
         "  register: hypervisor_staging_vm_live_xml\n",
         "  register: hypervisor_staging_vm_live_xml\n  check_mode: false\n",

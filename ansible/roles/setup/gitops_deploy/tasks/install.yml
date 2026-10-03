@@ -27,10 +27,6 @@
   tags: [gitops-deploy-service]
   ansible.builtin.import_tasks: service.yml
 
-- name: Reap what the retired staging gate and backfill ratchet left on the deployer
-  tags: [gitops-deploy-retired]
-  ansible.builtin.import_tasks: retired.yml
-
 # `cron` is the repo-wide tag for scheduled checks, kept beside the subject tag.
 - name: Install the GitHub ruleset and interaction-limit checks
   tags: [cron, gitops-deploy-github-checks]
