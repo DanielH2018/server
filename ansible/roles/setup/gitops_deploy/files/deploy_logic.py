@@ -47,7 +47,7 @@ from deploy_changes import (  # noqa: F401
     _SETUP_ROLES_OUTSIDE_INITIAL_SETUP,
     ChangeSet,
     _is_test_only_path,
-    _note_setup_role,
+    setup_roles_for,
     comment_only_broad_changes,
     is_doc,
     role_of,

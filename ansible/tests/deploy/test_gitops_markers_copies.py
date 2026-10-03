@@ -1,15 +1,16 @@
-"""Every consumer of the deployer's markers ships a fresh copy of `gitops_markers.py`.
+"""Every consumer of the deployer's markers ships the source or a fresh copy of it.
 
 `ansible/roles/setup/gitops_deploy/files/gitops_markers.py` is the one source for the state
-directory, the marker basenames and the line parsers; `scripts/dev/gen_gitops_markers.py`
-copies it into each role that ships it to a host or a pod, because a change to the deployer's
-`files/` re-applies only the deployer (the generator's docstring has why). This is the freshness half of that arrangement, the same
-shape as `test_every_committed_fragment_matches_what_the_generator_writes_now` for the docs
-fragments: a committed copy that differs from what the generator writes now fails here, and
-so does a copy the generator knows about that the consumer role does not ship.
+directory, the marker basenames and the line parsers. deploy-ui and renovate-agent install the
+source itself into `/opt`, and `scripts/dev/gen_gitops_markers.py` copies it into
+monitor-bridge, which ships its own `files/` into a pod (the generator's docstring has why).
+This is the freshness half of that arrangement, the same shape as
+`test_every_committed_fragment_matches_what_the_generator_writes_now` for the docs fragments:
+a committed copy that differs from what the generator writes now fails here, and so does a
+consumer whose ship list does not carry the module.
 
-Non-vacuity is a named census rather than a count: `EXPECTED_COPIES` is every consumer this
-test knows, so a copy dropped from the generator fails by name, and the generator gaining a
+Non-vacuity is a named census rather than a count: `EXPECTED_COPIES` is every copy this test
+knows, so a copy dropped from the generator fails by name, and the generator gaining a
 consumer nobody added here fails the other way.
 
 Run: uv run pytest ansible/tests/deploy/test_gitops_markers_copies.py
@@ -24,12 +25,11 @@ from lib import yaml_fast
 from dev.gen_gitops_markers import COPIES, SOURCE, render
 
 EXPECTED_COPIES = frozenset(
-    {
-        "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
-        "ansible/roles/setup/deploy_ui/files/gitops_markers.py",
-        "ansible/roles/setup/renovate_agent/files/gitops_markers.py",
-    }
+    {"ansible/roles/k8s/monitor-bridge/files/gitops_markers.py"}
 )
+
+# The loop item that installs the source itself, as the setup consumers spell it.
+SOURCE_ITEM = "{{ role_path }}/../gitops_deploy/files/gitops_markers.py"
 
 # The copy task that installs each setup consumer's files under /opt, by task file and task
 # name. The loop is what reaches the host: the stamp pair beside it records provenance only,
@@ -38,11 +38,11 @@ EXPECTED_COPIES = frozenset(
 # module list drives the ConfigMap and the mount), and `test_gitops_deploy_ship_list.py`
 # covers the deployer's own loop.
 _COPY_TASKS = {
-    "ansible/roles/setup/deploy_ui/files/gitops_markers.py": (
+    "deploy_ui": (
         "ansible/roles/setup/deploy_ui/tasks/code.yml",
         "Install the deploy-ui files",
     ),
-    "ansible/roles/setup/renovate_agent/files/gitops_markers.py": (
+    "renovate_agent": (
         "ansible/roles/setup/renovate_agent/tasks/code.yml",
         "Install agent Python files",
     ),
@@ -110,12 +110,12 @@ def _tasks_named(task_file: str, name: str) -> list[dict]:
     return list(walk(yaml_fast.safe_load((REPO / task_file).read_text())))
 
 
-def test_every_setup_consumer_copy_loop_installs_the_module():
-    for target, (task_file, task_name) in _COPY_TASKS.items():
+def test_every_setup_consumer_copy_loop_installs_the_source():
+    for task_file, task_name in _COPY_TASKS.values():
         tasks = _tasks_named(task_file, task_name)
         assert len(tasks) == 1, f"{task_file}: {len(tasks)} tasks named {task_name!r}"
-        assert "gitops_markers.py" in tasks[0]["loop"], (
-            f"{task_file}: the {task_name!r} loop does not install {target}"
+        assert SOURCE_ITEM in tasks[0]["loop"], (
+            f"{task_file}: the {task_name!r} loop does not install {SOURCE}"
         )
 
 
@@ -129,7 +129,7 @@ def test_the_monitor_bridge_module_list_carries_the_copy():
 
 
 def test_the_source_is_import_free():
-    """A copy runs in a pod, a hook and three /opt directories; only the stdlib is common."""
+    """The module runs in a pod, a hook and three /opt directories; only the stdlib is common."""
     for line in (REPO / SOURCE).read_text().splitlines():
         if line.startswith(("import ", "from ")):
             assert line == "from typing import NamedTuple", line

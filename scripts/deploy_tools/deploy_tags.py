@@ -443,12 +443,6 @@ def changed(ref: str, cwd: Path = REPO) -> int:
             "deploy by hand if it needs to go out.",
             file=sys.stderr,
         )
-    if cs.meta:
-        print(
-            f"deploy --changed: meta/deps.yml changed in {sorted(cs.meta)} — the deploy-order "
-            "graph may have shifted; review manually.",
-            file=sys.stderr,
-        )
     if cs.secrets:
         print(
             "deploy --changed: ansible/vars/secrets.yml changed — a new value only reaches a "

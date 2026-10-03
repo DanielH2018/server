@@ -417,8 +417,8 @@ def handle_no_services(
     # on its next deploy. Defer-and-alert (once per SHA) so the operator redeploys the
     # consumer(s); without this the rotated secret sits stale.
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
-    # tasks/ and meta/deps.yml changes aren't auto-deployed but DO change what a deploy does, so
-    # they must not sit silently ff-merged. Nothing was deployed this tick (deployed=set()), so
+    # tasks/ changes aren't auto-deployed but DO change what a deploy does, so they must not
+    # sit silently ff-merged. Nothing was deployed this tick (deployed=set()), so
     # the full sets are flagged. Same helper runs on the deploy path for a combined push.
     deploy_defer.alert_and_record_deferred(
         tools, state, config, origin, set(), cs, plan.k8s_services

@@ -304,7 +304,6 @@ class ChangeSet:
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
     # tasks/ plus the role-root catch-all (defaults/, vars/, handlers/, …), named for history.
     tasks: set[str] = field(default_factory=set)
-    meta: set[str] = field(default_factory=set)
     # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...) and are not promoted to
     # `k8s_deploy` below. Each defer-and-alerts; nothing this tick applies can cover one.
     k8s: set[str] = field(default_factory=set)
@@ -422,8 +421,8 @@ def is_doc(path: str) -> bool:
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     """Classify one push's changed paths into a ChangeSet.
 
-    Routes each path to the plane it belongs to — Docker service config, the tasks/meta
-    defer-and-alert channels, a k8s role, or one of the broad-change prefixes — in the order
+    Routes each path to the plane it belongs to — Docker service config, the tasks
+    defer-and-alert channel, a k8s role, or one of the broad-change prefixes — in the order
     each branch below requires (test paths first, then documentation, then secrets, then
     broad-manual ahead of broad-setup, then the active-role regexes).
 
@@ -466,12 +465,12 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.broad = True
             cs.broad_manual = True
             cs.broad_setup = True
-            _note_setup_role(cs, p)
+            cs.setup_roles |= setup_roles_for(p)
             continue
         if any(p.startswith(prefix) for prefix in _BROAD_SETUP_PREFIXES):
             cs.broad = True
             cs.broad_setup = True
-            _note_setup_role(cs, p)
+            cs.setup_roles |= setup_roles_for(p)
             continue
         if p.startswith(_PI_SHARED_PREFIX):
             cs.pi_shared = True
@@ -500,17 +499,10 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             # config template / files/ asset. It reaches the container on its next deploy, so
             # it maps to a scoped, health-gated redeploy rather than a silent ff-merge.
             cs.services.add(at.role)
-        elif at.subdir == "meta":
-            # meta/deps.yml is NOT auto-deployed (structural, like tasks/), but unlike a doc
-            # edit it DOES change what a deploy does: `ansible/filter_plugins/toposort.py`
-            # reads it for the cross-service deploy ORDER and the dep CLOSURE a scoped
-            # `--tags` deploy expands. So it defer-and-alerts rather than ff-merging as an
-            # invisible graph change. (filter_plugins/ is the toposort LOGIC and is already a
-            # broad prefix; this is its DATA.)
-            cs.meta.add(at.role)
         else:
             # tasks/, and the catch-all for any other file under a container role —
-            # `defaults/`, `vars/`, `handlers/`, a file at the role's root, or a future dir.
+            # `defaults/`, `vars/`, `handlers/`, `meta/`, a file at the role's root, or a
+            # future dir.
             # None is auto-deployed, and each changes what a deploy of that service does, so
             # it defer-and-alerts on the tasks channel instead of taking the silent docs-only
             # ff-merge — the same asymmetry the secrets / requirements.yml paths close. A
@@ -519,11 +511,22 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     return cs
 
 
-def _note_setup_role(cs: "ChangeSet", path: str) -> None:
-    """Record which setup role a broad path belongs to, if any. A bring-up playbook has none."""
+# A file one setup role installs from another's `files/`, mapped to the installing roles, so a
+# change to it re-applies them beside the owner (#3306). Keyed by file, so no other module of the
+# owner reaches them. `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
+SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
+    "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
+        {"deploy_ui", "renovate_agent"}
+    ),
+}
+
+
+def setup_roles_for(path: str) -> set[str]:
+    """Every setup role a change to `path` re-applies: its owner and each role shipping it."""
     at = role_of(path)
-    if at is not None and at.plane == "setup":
-        cs.setup_roles.add(at.role)
+    if at is None or at.plane != "setup":
+        return set()
+    return {at.role} | SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(path, frozenset())
 
 
 # Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.
@@ -587,13 +590,9 @@ def setup_tags_for(paths) -> set[str]:
             # Installed by sops_setup — see the comment on _BROAD_SETUP_PREFIXES.
             tags.add("collections")
             continue
-        at = role_of(p)
-        if at is not None and at.plane == "setup":
-            role = at.role
-            # A role initial_setup.yml does not include cannot be applied by the automatic
-            # arm at all, so it must return NOTHING and route to defer-and-alert. Returning
-            # the role name here is the guess this function's docstring forbids: the run
-            # would exit 0 having matched no task.
+        for role in setup_roles_for(p):
+            # A role initial_setup.yml does not include returns NOTHING: its tag would match
+            # no task and exit 0, the guess this function's docstring forbids.
             if setup_role_playbook(role) != "ansible/initial_setup.yml":
                 continue
             tags.add(setup_role_tag(role))

@@ -114,6 +114,52 @@ def test_a_derivation_landing_on_the_role_tag_is_flagged(tree):
         narrow(tree, *_refs(tree))
 
 
+# ── another role's file this role ships by path maps to the task shipping it (#3306) ────
+
+SHIPPED = "ansible/roles/setup/owner/files/shared.py"
+SHIP_TASK = """\
+- name: Install the owner's shared module
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/roles/setup/owner/files/shared.py"
+    dest: /opt/demo/shared.py
+  tags: [alpha]
+"""
+
+
+@pytest.fixture
+def ships(tree, monkeypatch) -> Tree:
+    """The demo role declared a consumer of `SHIPPED`, which the owner role holds."""
+    monkeypatch.setitem(
+        narrow_setup.SETUP_FILES_SHIPPED_BY_OTHER_ROLES, SHIPPED, frozenset({"demo"})
+    )
+    tree.write(SHIPPED, "VALUE = 1\n")
+    tree.commit("the owner role's module")
+    return tree
+
+
+def test_a_shipped_file_another_role_owns_narrows_to_the_shipping_task(ships):
+    ships.write(f"{ROLE}/tasks/alpha.yml", ALPHA + SHIP_TASK)
+    ships.commit("demo ships it")
+    ships.write(SHIPPED, "VALUE = 2\n")
+    assert narrow(ships, *_refs(ships)) == frozenset({"alpha"})
+
+
+@pytest.mark.parametrize(
+    ("role", "tag"),
+    [("deploy_ui", "deploy-ui-code"), ("renovate_agent", "renovate-agent-code")],
+)
+def test_the_real_consumers_of_gitops_markers_narrow_to_their_code_tag(role, tag):
+    """The two roles #3275 points at the deployer's file, read from the real tree."""
+    index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
+    assert index.readers_of("gitops_markers.py") == frozenset({tag})
+
+
+def test_a_shipped_file_no_task_of_the_role_names_is_flagged(ships):
+    ships.write(SHIPPED, "VALUE = 2\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="names shared.py"):
+        narrow(ships, *_refs(ships))
+
+
 # ── the real tree: the case #2307 names, so the scan cannot go vacuous ─────────────────
 
 

@@ -111,7 +111,7 @@ def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
         pending: `unapplyable_setup_roles(cs)`.
 
     A setup-plane range with neither a resolvable tag nor a nameable role is the second half
-    of this, and it is not hypothetical padding: `_note_setup_role` matches
+    of this, and it is not hypothetical padding: `setup_roles_for` matches
     `roles/setup/<name>/`, so a file sitting directly under `roles/setup/` is broad,
     unroutable and nameless at once. Fast-forwarding it would apply nothing, record nothing
     and say nothing.

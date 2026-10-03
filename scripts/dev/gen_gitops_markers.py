@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy the deployer's `gitops_markers.py` into every tree that reads its markers.
+"""Copy the deployer's `gitops_markers.py` into monitor-bridge, the one tree that cannot ship it.
 
 Run: uv run python scripts/dev/gen_gitops_markers.py [--check]
 
@@ -8,24 +8,20 @@ directory, the marker basenames and the parsers for the `behind_since`, `manual_
 `contention_since` line formats. Each reader once restated the directory and its basenames,
 and three parsed the same lines independently (issue #2063).
 
-Code that runs from the checkout imports the source directly, through a named `sys.path`
-insert of `GITOPS_DEPLOY_FILES` (`scripts/lib/deployer_park.py`, `gitops_state.py`); a
-`scripts/lib/` copy did that job until #3275. The three roles below SHIP the module, and for
-them a copy is not a stylistic choice. monitor-bridge ships its own `files/` into a pod
-through a ConfigMap. deploy-ui and renovate-agent install theirs into `/opt` from their own
-role, and pointing that `src:` at the deployer's `files/` would break the GitOps routing: a
-change under `roles/setup/gitops_deploy/` re-applies only the `gitops_deploy` tag
-(`deploy_changes.setup_tags_for`), and `narrow_setup.role_tags` reads one role's prefix, so
-the other roles' hosts would keep the old module behind a green apply. A copy under each
-consumer's own directory makes that consumer's apply follow the change. So a committed copy
-with a freshness test stays the single source for those three — the arrangement
-`scripts/docs/gen_doc_fragments.py` already uses for the docs fragments.
+Every other reader uses the source itself. Code that runs from the checkout imports it
+through a named `sys.path` insert of `GITOPS_DEPLOY_FILES` (`scripts/lib/deployer_park.py`,
+`gitops_state.py`). deploy-ui and renovate-agent install it into `/opt` with a `src:` naming
+the deployer's `files/`, and `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a
+change to it to both roles (#3275, #3306). monitor-bridge is the exception: it ships its own
+`files/` into a pod through a ConfigMap built from `monitor_bridge_modules`, so the module has
+to sit in that directory. A committed copy with a freshness test is the single source there,
+the arrangement `scripts/docs/gen_doc_fragments.py` already uses for the docs fragments.
 
 Every copy is the source verbatim under a `generated_from:` header. That literal is what
 `.claude/hooks/block-protected-edits.py` reads to tell a generated file from a hand-written
 one, and it names this script, so a reader who opens a copy knows where to edit.
 `ansible/tests/deploy/test_gitops_markers_copies.py` fails when a committed copy differs from
-what this script writes now, and when a consumer role's ship list does not carry its copy.
+what this script writes now, and when monitor-bridge's module list does not carry it.
 
 `COPIES` is the list. Add a consumer here and to that test's named census, then run this.
 """
@@ -41,13 +37,9 @@ from lib.repo_paths import REPO
 SELF = "scripts/dev/gen_gitops_markers.py"
 SOURCE = "ansible/roles/setup/gitops_deploy/files/gitops_markers.py"
 
-# Every role that ships the deployer's markers, by the path its copy lands at. Each consumer
-# reaches it as a sibling module (`import gitops_markers`).
-COPIES = (
-    "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
-    "ansible/roles/setup/deploy_ui/files/gitops_markers.py",
-    "ansible/roles/setup/renovate_agent/files/gitops_markers.py",
-)
+# Every role that ships the deployer's markers from its own `files/`, by the path its copy
+# lands at. Each consumer reaches it as a sibling module (`import gitops_markers`).
+COPIES = ("ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",)
 
 
 def header(target: str) -> str:

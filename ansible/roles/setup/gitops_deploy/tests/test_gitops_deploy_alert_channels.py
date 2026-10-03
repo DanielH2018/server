@@ -103,11 +103,11 @@ def test_alert_once_marks_detection_not_delivery(gitops_deploy, state_dir, setti
     # anyway, and redelivery is the pending queue's job. Real deliver(), refused webhook.
     tools = DeployTools(discord_post=lambda _webhook, _content: False)
     deploy_alerts.alert_once(
-        tools, gitops_deploy.STATE, settings, "meta", ORIGIN, "changed"
+        tools, gitops_deploy.STATE, settings, "tasks", ORIGIN, "changed"
     )
-    assert _alerted(state_dir, "meta") == ORIGIN
+    assert _alerted(state_dir, "tasks") == ORIGIN
     queued = json.loads((state_dir / "pending_alerts.json").read_text())
-    assert queued == {f"meta:{ORIGIN}": "changed"}
+    assert queued == {f"tasks:{ORIGIN}": "changed"}
 
 
 # ── alert_secrets_deferred() ──────────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ def test_no_secrets_change_pages_nothing(
     assert _alerted(state_dir, "secrets") is None
 
 
-# ── alert_deferred(): tasks, meta and k8s channels ────────────────────────────────────────────
+# ── alert_deferred(): tasks and k8s channels ──────────────────────────────────────────────────
 def test_an_empty_changeset_pages_nothing(
     gitops_deploy, monkeypatch, state_dir, settings
 ):
@@ -153,23 +153,20 @@ def test_an_empty_changeset_pages_nothing(
     assert _marker(state_dir, "alerted_shas") is None
 
 
-def test_tasks_and_meta_name_only_what_this_tick_did_not_deploy(
+def test_tasks_name_only_what_this_tick_did_not_deploy(
     gitops_deploy, monkeypatch, state_dir, settings
 ):
-    # A combined push: svcA's template rode its scoped redeploy, svcB's tasks/ and svcC's
-    # meta/deps.yml did not.
+    # A combined push: svcA's template rode its scoped redeploy, svcB's tasks/ did not.
     tools, seen = _posts(state_dir)
-    cs = ChangeSet(services={"svca"}, tasks={"svca", "svcb"}, meta={"svcc"})
+    cs = ChangeSet(services={"svca"}, tasks={"svca", "svcb"})
     deploy_alerts.alert_deferred(
         tools, gitops_deploy.STATE, settings, ORIGIN, {"svca"}, cs
     )
     by_key = dict(seen)
-    assert set(by_key) == {f"tasks:{ORIGIN}", f"meta:{ORIGIN}"}
+    assert set(by_key) == {f"tasks:{ORIGIN}"}
     assert "`svcb`" in by_key[f"tasks:{ORIGIN}"]
     assert "svca" not in by_key[f"tasks:{ORIGIN}"]
-    assert "`svcc`" in by_key[f"meta:{ORIGIN}"]
     assert _alerted(state_dir, "tasks") == ORIGIN
-    assert _alerted(state_dir, "meta") == ORIGIN
 
 
 def test_a_structural_change_that_rode_its_own_redeploy_is_not_flagged(

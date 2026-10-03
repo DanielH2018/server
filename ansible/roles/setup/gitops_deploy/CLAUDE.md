@@ -70,6 +70,10 @@ Each arm is a rule and the function that holds it. The record page has the incid
   both together apply both, setup first. `setup_role_playbook` / `setup_role_tag` route a role
   directory to its real tag. `docs/gitops-pipeline.md`'s *Broad changes* has the narrowing and
   denylist each keeps.
+- **A setup role that installs another setup role's file by path re-applies with it**
+  (`deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, #3306): deploy-ui and renovate-agent
+  ship this role's `files/gitops_markers.py`. A new cross-role `src:` needs a table entry.
+  ENFORCED: `ansible/tests/setup/test_setup_cross_role_files.py`.
 - **The ff-merge runs BEFORE the apply**, since applying first renders the pre-merge tree, and
   **every broad arm is FORWARD-ONLY**: a failure writes `hold_sha` and a `hold_plane` entry and
   leaves the tree merged, because a reset would claim the old commit over half-new state.

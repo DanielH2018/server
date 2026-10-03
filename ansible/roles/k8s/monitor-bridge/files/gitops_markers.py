@@ -4,21 +4,20 @@
 # commit every copy in the same PR.
 """The deployer's state directory, its marker basenames, and the parsers for their formats.
 
-THIS FILE IS COPIED, NOT IMPORTED ACROSS TREES. Five trees read the markers under
-`/var/lib/gitops-deploy` and none of them may import another: the deployer runs from
-`/opt/gitops-deploy`, monitor-bridge ships its `files/` into a pod, deploy-ui and
-renovate-agent run from their own `/opt` directories, and `scripts/lib/deployer_park.py` is
-imported by the SessionStart hook before anything else is on `sys.path`. Until issue #2063
-each restated the directory and the basenames it read, and three of them parsed the same
-`contention_since` and `manual_plane` line formats independently, held together after the
-fact by `ansible/tests/deploy/test_*_parsers_agree.py`.
+ONE SOURCE, SHIPPED FROM HERE. Every tree that reads the markers under
+`/var/lib/gitops-deploy` gets this file. The deployer runs from `/opt/gitops-deploy`, and the
+deploy-ui and renovate-agent roles install this same file into their own `/opt` directories by
+path, which `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes so a change here
+re-applies all three (#3306). Code that runs from the checkout (`scripts/lib/deployer_park.py`,
+`scripts/deploy_tools/gitops_state.py`) imports it through a `sys.path` insert of this
+directory. Until issue #2063 each reader restated the directory and the basenames it read, and
+three of them parsed the same `contention_since` and `manual_plane` line formats
+independently.
 
-This is the one hand-edited source. `scripts/dev/gen_gitops_markers.py` writes a copy with a
-provenance header into each consumer's tree — `COPIES` there is the list — and
-`ansible/tests/deploy/test_gitops_markers_copies.py` fails when a committed copy differs from
-what the generator writes now, the way `test_every_committed_fragment_matches_what_the_generator_writes_now`
-keeps the docs fragments fresh. Edit here, run the generator, commit every copy in the same
-PR.
+monitor-bridge is the one copy. It ships its own `files/` into a pod through a ConfigMap, so
+`scripts/dev/gen_gitops_markers.py` writes this file there under a provenance header, and
+`ansible/tests/deploy/test_gitops_markers_copies.py` fails when that copy differs from what
+the generator writes now. Edit here, run the generator, and commit the copy in the same PR.
 
 Stdlib only and import-free by construction: the pod, the hook and the `/opt` scripts share
 nothing else. The formats are the deployer's — `DeployerState` in `deploy_state.py` writes
@@ -130,8 +129,7 @@ MARKERS: dict[str, str] = {
     # The per-SHA alert dedupe slots, ONE file holding every channel as `"<slot> <origin_sha>"`
     # lines (`ALERT_SLOTS`, `parse_alerted`). The operator is paged ONCE per origin SHA about
     # a deferred broad change, a secrets-only push (a rotated value with no service template
-    # change), a tasks-only push (a role tasks/ change, not auto-deployed), a meta-only push
-    # (a role meta/deps.yml change — the cross-service deploy graph), a k8s-role push (no
+    # change), a tasks-only push (a role tasks/ change, not auto-deployed), a k8s-role push (no
     # mechanism here ever applies one, so there is no "rode a redeploy" case to dedupe against
     # `deployed`), a stale denylist (the DISARM itself is stateless and recomputed every tick —
     # only the page is throttled), a master tip that FAILED CI (until the operator fixes or
@@ -178,11 +176,11 @@ MARKERS: dict[str, str] = {
 # channel `deploy_alerts.alert_once` keys the `pending_alerts` queue with, so a caller names
 # one string rather than a marker and a channel that have to agree.
 #
-# A NAMED SET, so a typo raises rather than opening an eighth slot — the check
+# A NAMED SET, so a typo raises rather than opening a seventh slot — the check
 # `DeployerState.path` gave each slot while it was its own `MARKERS` entry.
 # `tests/test_alert_once_markers.py` checks every call site's literal against it.
 ALERT_SLOTS: frozenset[str] = frozenset(
-    {"broad", "secrets", "tasks", "meta", "k8s", "stale_denylist", "ci"}
+    {"broad", "secrets", "tasks", "k8s", "stale_denylist", "ci"}
 )
 
 # What the playbook field of a `manual_plane` line holds for a role no playbook applies

@@ -116,6 +116,18 @@ A setup role the deployer cannot apply is a fourth case that behaved like the th
 derives nothing for either. Such a range fast-forwards and records the role instead of
 parking — see *A role only a hand can apply is recorded, not parked* below.
 
+A setup role can ship another setup role's file by path. The `deploy_ui` and `renovate_agent`
+roles install the deployer's `files/gitops_markers.py` that way. `deploy_changes.setup_roles_for` maps a
+change to such a file to its owner AND every role listed for it in
+`SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#3306). `ChangeSet.setup_roles` and `setup_tags_for`
+both read it, so the `manual_plane` marker, the narrowed apply, the `hold_plane` coverage and
+`land.sh`'s host reach all see the consumers. `narrow_setup.role_tags` diffs the shipped files
+beside the consumer role's own directory, so the consumer narrows to the block that installs
+the file. The table is static because every caller passes paths alone, and
+`ansible/tests/setup/test_setup_cross_role_files.py` fails when it differs from the
+cross-role `src:` references in the setup roles' tasks. `common` is left out of that table:
+its files route to `manual_plane`, as described above.
+
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's
 own role, `roles/setup/gitops_deploy/`, sat there until 2026-09-01 on the claim that applying
 it restarts the unit executing the tick. It does not: the role's handler is `state: started`,
@@ -732,7 +744,7 @@ stay).
     `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml` — the bring-up playbooks, which run
     by hand by construction. Staying parked is what keeps `behind_since` set, which is the only
     durable signal those have. A setup-plane path that resolves to no ROLE joins them — a file
-    directly under `roles/setup/`, which `_note_setup_role` cannot name — because there is no
+    directly under `roles/setup/`, which `setup_roles_for` cannot name — because there is no
     hand command to print and no role to record.
   - **A setup ROLE whose tag cannot be derived no longer parks: it fast-forwards and is
     recorded in `manual_plane`.** `k3s` (applied by `k3s-bringup.yml`) and `common` (applied by
@@ -1087,10 +1099,10 @@ stay).
   returned an empty `ChangeSet`, and `main()`'s `if not cs.services:` branch took that as a
   docs-only push — silently `--ff-only` merging a Traefik/Authelia/etc. manifest change with no
   redeploy and no alert (verified 2026-08-13). `deploy_logic.role_of` now matches the whole
-  role dir into `ChangeSet.k8s`, and `alert_deferred` (the same call site tasks/meta already use,
+  role dir into `ChangeSet.k8s`, and `alert_deferred` (the same call site the tasks channel already uses,
   reached on both the no-services branch and after a successful deploy) alerts on it once per SHA
   (the `k8s` alert slot) — still `--ff-only` merges, still doesn't deploy. **Compose/GitOps
-  mechanisms in this doc — `tasks/`, `meta/deps.yml`, `containers_for()`, the health gate — are
+  mechanisms in this doc — `tasks/`, `containers_for()`, the health gate — are
   inert for k8s roles**; they only ever act on `containers/<svc>/docker-compose.yml`, which no k8s
   role renders. Redeploy a k8s change by hand the same way the alert says:
   `uv run ansible-playbook ansible/deploy.yml --tags <svc>` (deploy.yml's k8s play picks up
@@ -1100,14 +1112,14 @@ stay).
   narrows to a list that names the role — and a refused narrowing runs the whole play. Without
   the subtraction the tick ran `deploy.yml --tags radarr,sonarr` and then posted "fast-forwarded
   but **not applied**" for those same roles, prescribing the command it had just run.
-- **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`) and `meta/deps.yml`**
+- **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`, `meta/`)**
   are ff-merged but NOT auto-deployed, so the deployer defers-and-alerts (once per SHA,
-  the `tasks` / `meta` alert slots) to redeploy the affected services by hand. `tasks/` and
-  the `defaults`/`vars`/`handlers` role-root catch-all share the `tasks` channel;
-  `*.md` (CLAUDE.md/README) stays a silent ff-merge. This fires whether or not the tick deployed something else: a
-  *combined* push (`svcA`'s template + `svcB`'s `meta/deps.yml`) deploys `svcA` but still flags `svcB`'s
-  unapplied graph change (`deploy_logic.deferred_service_alerts`, keyed on the not-deployed
-  remainder `cs.tasks|meta - deployed`, run on both branches). A service whose own template changed
+  the `tasks` alert slot) to redeploy the affected services by hand. `tasks/` and
+  the role-root catch-all share that channel; `*.md` (CLAUDE.md/README) stays a silent
+  ff-merge. This fires whether or not the tick deployed something else: a
+  *combined* push (`svcA`'s template + `svcB`'s `tasks/`) deploys `svcA` but still flags `svcB`'s
+  unapplied structural change (`deploy_logic.deferred_service_alerts`, keyed on the not-deployed
+  remainder `cs.tasks - deployed`, run on both branches). A service whose own template changed
   rode its scoped `--tags` redeploy, so it's not re-flagged. Only fires on a clean deploy — a
   health-gate rollback git-resets the whole commit, reverting the structural change too.
 - Acts **only when origin is strictly ahead of local** (`is_ancestor(local, origin)` →
@@ -1269,21 +1281,22 @@ same names absent, which reaps the units and the crons they replaced on a non-de
   DOWN with `UNVERIFIED` or `NOT applied`, never `armed` — the tests in
   `ansible/tests/setup/test_github_interaction_limit.py` drive each of those branches.
 
-**One marker module, copied.** `files/gitops_markers.py` holds the state directory, the
-`MARKERS` table and the parsers for the `behind_since`, `manual_plane` and `contention_since`
-line formats, plus the two clear commands every surface prints. It is the one hand-edited
-source; `deploy_state` imports it. Four other trees read those files and none can import this
-`files/` — monitor-bridge ships its own `files/` into a pod, `deploy-ui` and `renovate-agent`
-run from their own `/opt` directories, and `scripts/lib/deployer_park.py` is imported by the
-SessionStart hook with only `scripts/` on `sys.path` — so until issue #2063 each restated the
-directory and basenames, and three parsed the same lines independently, held together by two
-`test_*_parsers_agree.py` guards. Now `scripts/dev/gen_gitops_markers.py` writes a verbatim
-copy under a `generated_from:` header into each of them (`COPIES` there is the list), and
-`ansible/tests/deploy/test_gitops_markers_copies.py` fails when a committed copy differs from
-what the generator writes, when a consumer role's ship list lacks its copy, or when the
-source grows an import (a copy runs in a pod, a hook and three `/opt` directories, so only
-the stdlib is common ground). To change a basename or a line format: edit the source, run
-the generator, commit every copy in the same PR. The shell and manifest literals that cannot
+**One marker module, shipped from one source.** `files/gitops_markers.py` holds the state
+directory, the `MARKERS` table and the parsers for the `behind_since`, `manual_plane` and
+`contention_since` line formats, plus the two clear commands every surface prints.
+`deploy_state` imports it. Until issue #2063 each reader restated the directory and
+basenames, and three parsed the same lines independently. Now every reader uses this file.
+Checkout code (`scripts/lib/deployer_park.py`, `gitops_state.py`) imports it through a
+`sys.path` insert. `deploy-ui` and `renovate-agent` install it into their `/opt` directories
+with a `src:` naming this role's `files/`, and
+`deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to it to both roles, so
+their hosts receive it in the same tick (#3306). monitor-bridge ships its own `files/` into a
+pod, so `scripts/dev/gen_gitops_markers.py` writes a verbatim copy there under a
+`generated_from:` header. `ansible/tests/deploy/test_gitops_markers_copies.py` fails when that
+copy differs from what the generator writes, when a consumer's ship list lacks the module, or
+when the source grows an import (it runs in a pod, a hook and three `/opt` directories, so
+only the stdlib is common ground). To change a basename or a line format: edit the source, run
+the generator, and commit the copy in the same PR. The shell and manifest literals that cannot
 import anything — `gitops_tick.sh`, `deploy-ui.service.j2`, monitor-bridge's hostPath — are
 pinned to `STATE_DIR` by the same test.
 
@@ -1465,7 +1478,7 @@ direction. Before moving any value that lands in a host config file, check which
 A second instance appeared during slice 2 (PR #292), a different mechanism with the same
 failure. The stale-denylist alert added in slice 1c split on the direction of the set
 difference: `added` (denied at origin, absent from config) → "config is behind, re-render";
-`removed` (in config, not denied at origin) → "config is ahead — `git push` it". That second
+`removed` (in config, not denied at origin) → "config is ahead — `git push` it." That second
 branch assumed one cause and has two. An operator rendering locally before pushing is one.
 The other is a promotion: a role leaving the denylist at origin shrinks the set, producing
 the identical signature while meaning the opposite. Promoting `node-exporter` was the first
@@ -1789,10 +1802,10 @@ is decided by what it touches.
 - **Configuration is parsed once, and parsing cannot fail.** `deploy_config.load_config` collects
   a malformed value into `Config.errors`; `CONFIG.validate()` at the top of `main()` turns it into
   one line naming the key plus a Discord post.
-- **One marker module, copied.** `files/gitops_markers.py` is the hand-edited source;
-  `scripts/dev/gen_gitops_markers.py` writes a verbatim copy into every other reader, and
+- **One marker module.** `files/gitops_markers.py` is the source. The `deploy_ui` and
+  `renovate_agent` roles ship it by path, and `scripts/dev/gen_gitops_markers.py` writes monitor-bridge's copy;
   `ansible/tests/deploy/test_gitops_markers_copies.py` fails on a stale copy. Edit the source,
-  run the generator, commit every copy in the same PR.
+  run the generator, and commit the copy in the same PR.
 - **State is one object.** `deploy_state.DeployerState` wraps the marker files and the hold
   writes; a caller names a marker (`state.path("hold")`), never a path. `read()` returns None for
   a missing AND an empty marker, and PROPAGATES any other `OSError` — an unreadable state

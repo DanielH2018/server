@@ -78,6 +78,11 @@ import sys
 
 from deploy_tools import narrow_paths
 from lib.git import git
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+
+from deploy_changes import SETUP_FILES_SHIPPED_BY_OTHER_ROLES
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 from narrow_setup_index import SETUP_TREE, RoleIndex, foreign_tags
 from narrow_setup_playbook import playbook_applies_role
@@ -180,24 +185,50 @@ def role_tags(
         CannotNarrow: any doubt at all. The caller prints the role tag instead.
     """
     prefix = f"{SETUP_TREE}/{role}/"
-    r = git("diff", "--name-only", f"{old}..{new}", "--", prefix, cwd=repo, check=False)
+    # Another role's file this role ships by path is this role's change too (#3306), so the
+    # diff reads those paths beside the role's own prefix.
+    shipped = sorted(
+        path
+        for path, consumers in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
+        if role in consumers
+    )
+    r = git(
+        "diff",
+        "--name-only",
+        f"{old}..{new}",
+        "--",
+        prefix,
+        *shipped,
+        cwd=repo,
+        check=False,
+    )
     if r.returncode != 0:
         raise CannotNarrow(
             f"`git diff {old}..{new} -- {prefix}` failed: {r.stderr.strip()}"
         )
     changed = [line for line in r.stdout.splitlines() if line]
     if not changed:
-        raise CannotNarrow(f"{old}..{new} changes nothing under {prefix}")
+        raise CannotNarrow(
+            f"{old}..{new} changes nothing under {prefix} or in a file it ships"
+        )
     playbook_text = show_at(new, playbook, repo)
     if not playbook_applies_role(playbook_text, role):
         raise CannotNarrow(f"no play in {playbook} lists {role} under roles:")
     index = RoleIndex(role, new, repo)
     tags: set[str] = set()
     for path in changed:
-        rel = path[len(prefix) :]
-        if _reaches_no_host(rel):
-            continue
-        got = path_tags(rel, index, old, new, repo)
+        if path.startswith(prefix):
+            rel = path[len(prefix) :]
+            if _reaches_no_host(rel):
+                continue
+            got = path_tags(rel, index, old, new, repo)
+        else:
+            # A shipped file is named by this role's tasks the way its own `files/` are, and
+            # `readers_of` refuses one that none of them names.
+            rel = path
+            got = index.readers_of(path.rsplit("/", 1)[-1])
+            if not got:
+                raise CannotNarrow(f"{path} reaches no task file of {role}")
         print(f"narrow-setup: {rel} -> {','.join(sorted(got))}", file=sys.stderr)
         tags |= got
     if not tags:

@@ -30,7 +30,7 @@ For each doc claim, find the live source of truth and diff it:
 - **image tags / versions / ports** → match `host_vars`, the compose template, `renovate.json`?
 - **cron cadence / thresholds / env** a doc states → match the role's template/cron/`host_vars` default?
 - **service names, placement, deps** → match `containers_list` in `host_vars/daniel-box.yml`
-  (`platform: k8s`) / `daniel-pi.yml`, the role's rendered manifests, `meta/deps.yml`, compose networks?
+  (`platform: k8s`) / `daniel-pi.yml`, the role's rendered manifests, the entry's `depends_on:`, compose networks?
 - **commands** (`--tags foo`, script names, flags) → does the tag/script/flag still exist?
 - **"we do X / don't do Y" claims** → verify against the executable code, not another doc.
 

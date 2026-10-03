@@ -10,7 +10,7 @@ Each Docker role has separate channels (the compose or a config template deploys
 
 import pytest
 
-from deploy_changes import role_of, services_from_changed_paths
+from deploy_changes import role_of, services_from_changed_paths, setup_tags_for
 
 
 def test_single_service_template():
@@ -119,7 +119,7 @@ def test_a_common_change_is_pi_work_not_broad_and_not_a_service(path):
     cs = services_from_changed_paths([path])
     assert cs.pi_shared is True
     assert cs.broad is False
-    assert cs.services == cs.tasks == cs.meta == set()
+    assert cs.services == cs.tasks == set()
 
 
 def test_role_tasks_change_flags_tasks_not_deploy():
@@ -155,19 +155,6 @@ def test_template_and_tasks_same_service_deploys_and_flags_tasks():
     )
     assert cs.services == {"prometheus"}
     assert cs.tasks == {"prometheus"}
-
-
-# M4: meta/deps.yml drives the cross-service toposort (deploy ORDER + dep CLOSURE via
-# filter_plugins/toposort.py). It isn't auto-deployed (structural, like tasks/), but a meta-only
-# push must be FLAGGED (defer-and-alert), not silently ff-merged as a docs edit — otherwise the
-# graph change is invisible. Maps to cs.meta (for the alert), NOT cs.services.
-def test_role_meta_change_flags_meta_not_deploy():
-    cs = services_from_changed_paths(["ansible/roles/containers/dozzle/meta/deps.yml"])
-    assert cs.meta == {"dozzle"}
-    assert cs.services == set()
-    assert cs.tasks == set()
-    assert cs.broad is False
-    assert cs.secrets is False
 
 
 # k8s roles (ansible/roles/k8s/<role>/...) matched NONE of the regexes above (all containers/-
@@ -249,20 +236,6 @@ def test_role_readme_md_stays_silent_like_claude_md():
     assert cs.broad is False
 
 
-def test_template_and_meta_same_service_deploys_and_flags_meta():
-    # A push changing both a template and meta/ for the same service deploys it (scoped --tags)
-    # and records the meta flag too — the combined-push case where the meta change must not be
-    # swallowed.
-    cs = services_from_changed_paths(
-        [
-            "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
-            "ansible/roles/containers/dozzle/meta/deps.yml",
-        ]
-    )
-    assert cs.services == {"dozzle"}
-    assert cs.meta == {"dozzle"}
-
-
 def test_config_change_with_compose_change_dedupes_to_one_service():
     cs = services_from_changed_paths(
         [
@@ -306,3 +279,15 @@ def test_role_of_names_the_plane_the_role_and_the_subdirectory(path, expected):
 )
 def test_role_of_is_none_for_a_path_in_no_role_directory(path):
     assert role_of(path) is None
+
+
+def test_a_file_other_roles_ship_reaches_every_role_shipping_it():
+    """deploy_ui and renovate_agent install the deployer's `gitops_markers.py` by path (#3306),
+    so both re-apply beside its owner. Another deployer module reaches neither."""
+    markers = ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"]
+    roles = {"gitops_deploy", "deploy_ui", "renovate_agent"}
+    assert services_from_changed_paths(markers).setup_roles == roles
+    assert setup_tags_for(markers) == roles
+    other = ["ansible/roles/setup/gitops_deploy/files/deploy_logic.py"]
+    assert services_from_changed_paths(other).setup_roles == {"gitops_deploy"}
+    assert setup_tags_for(other) == {"gitops_deploy"}

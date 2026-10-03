@@ -35,7 +35,6 @@ _KNOWN_CHANNELS = frozenset(
     {
         "secrets",
         "tasks",
-        "meta",
         "k8s",
         "stale_denylist",
         "ci",

@@ -214,7 +214,6 @@ def refusing_paths(
             | cs.k8s
             | cs.k8s_deploy
             | cs.tasks
-            | cs.meta
             | shared_module_consumers([path], repo)
         )
         hit = sorted(reached & tags)

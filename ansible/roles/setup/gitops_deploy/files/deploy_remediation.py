@@ -65,7 +65,7 @@ def broad_park_reason(cs: ChangeSet) -> str:
     Two shapes still park, and this says which. A bring-up playbook
     (`_BROAD_MANUAL_PREFIXES`) runs by hand by construction. A setup-plane path that resolves
     to no ROLE has no hand command to print and no role to record, so parking is the only
-    signal it has — `deploy_defer.parks_the_tick` is the predicate, and `_note_setup_role`
+    signal it has — `deploy_defer.parks_the_tick` is the predicate, and `setup_roles_for`
     matches `roles/setup/<name>/`, so a file directly under `roles/setup/` is broad,
     unroutable and nameless at once. That second branch can never name a role: any role this
     deployer cannot apply puts the range on `deploy_defer.record`'s path instead, which
@@ -363,23 +363,21 @@ def k8s_remediation(
     return lead
 
 
-def deferred_service_alerts(
-    cs: ChangeSet, deployed: set[str]
-) -> tuple[set[str], set[str]]:
-    """Return the (tasks, meta) service sets that still need a defer-and-alert.
+def deferred_service_alerts(cs: ChangeSet, deployed: set[str]) -> set[str]:
+    """Return the `tasks` service set that still needs a defer-and-alert.
 
     Given a tick that redeployed `deployed` (empty on the docs-only branch — no service
-    mapped). A `tasks/` or `meta/deps.yml` change is NOT auto-deployed, and unlike a doc edit it changes
+    mapped). A `tasks/` change is NOT auto-deployed, and unlike a doc edit it changes
     what a deploy DOES — so for a service that was not itself redeployed it must be flagged, not
     silently ff-merged. Subtracting `deployed` is the combined-push fix: a single push that
-    deploys svcA (its template changed) while also carrying svcB's `meta/deps.yml` leaves svcB's
-    deploy-graph change ff-merged but unapplied. The alert used to live only inside
+    deploys svcA (its template changed) while also carrying svcB's `tasks/` leaves svcB's
+    structural change ff-merged but unapplied. The alert used to live only inside
     `if not cs.services:`, so ANY push that deployed something swallowed that remainder — the exact
-    hole the meta/tasks defer-and-alert was added to close. A service whose own template changed is
-    in `deployed`, so its bundled tasks/meta change rode the scoped `--tags` redeploy — no alert.
+    hole the tasks defer-and-alert was added to close. A service whose own template changed is
+    in `deployed`, so its bundled tasks change rode the scoped `--tags` redeploy — no alert.
 
     Secrets are intentionally excluded here: the `/add-secret` flow ships `secrets.yml` WITH its
     consuming template (that consumer is in `deployed`), so keying a secrets alert on 'any deploy
     happened' would false-fire the happy path — the secrets alert stays on the no-services branch.
     """
-    return cs.tasks - deployed, cs.meta - deployed
+    return cs.tasks - deployed

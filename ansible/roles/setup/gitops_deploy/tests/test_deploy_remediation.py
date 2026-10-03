@@ -90,64 +90,38 @@ def test_broad_remediation_names_the_branch_it_is_given():
     assert "origin/master" in broad_remediation(False, True)
 
 
-# The tasks/meta defer-and-alert runs on BOTH branches of main(), so a COMBINED push (svcA's
-# template + svcB's meta/tasks) cannot swallow svcB's unapplied structural change.
-# deferred_service_alerts(cs, deployed) returns the (tasks, meta) remainder that was NOT
-# redeployed. deployed == cs.services on the deploy path, set() on the docs-only branch.
-def test_deferred_alerts_combined_push_flags_other_services_meta():
-    # svcA template + svcB meta: svcA deploys, but svcB's graph change is ff-merged with no
-    # redeploy — it must still be flagged (the exact combined-push hole).
-    cs = services_from_changed_paths(
-        [
-            "ansible/roles/containers/prometheus/templates/prometheus.yml.j2",
-            "ansible/roles/containers/dozzle/meta/deps.yml",
-        ]
-    )
-    assert cs.services == {"prometheus"}
-    assert deferred_service_alerts(cs, cs.services) == (set(), {"dozzle"})
-
-
+# The tasks defer-and-alert runs on BOTH branches of main(), so a COMBINED push (svcA's
+# template + svcB's tasks) cannot swallow svcB's unapplied structural change.
+# deferred_service_alerts(cs, deployed) returns the tasks remainder that was NOT redeployed.
+# deployed == cs.services on the deploy path, set() on the docs-only branch.
 def test_deferred_alerts_combined_push_flags_other_services_tasks():
-    # Same hole, tasks/ channel: svcA template deploys svcA, svcB's tasks change is left unapplied.
+    # svcA template deploys svcA, svcB's tasks change is left unapplied.
     cs = services_from_changed_paths(
         [
             "ansible/roles/containers/prometheus/templates/prometheus.yml.j2",
             "ansible/roles/containers/sonarr/tasks/main.yml",
         ]
     )
-    assert deferred_service_alerts(cs, cs.services) == ({"sonarr"}, set())
+    assert deferred_service_alerts(cs, cs.services) == {"sonarr"}
 
 
-def test_deferred_alerts_same_service_meta_rode_the_redeploy():
-    # svcA template + svcA meta: svcA IS redeployed (scoped --tags reran its role / it's on the
-    # graph), so its bundled meta change needs no alert — the remainder is empty.
+def test_deferred_alerts_same_service_tasks_rode_the_redeploy():
+    # svcA template + svcA tasks: svcA IS redeployed (scoped --tags reran its role), so its
+    # bundled tasks change needs no alert — the remainder is empty.
     cs = services_from_changed_paths(
         [
-            "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
-            "ansible/roles/containers/dozzle/meta/deps.yml",
+            "ansible/roles/containers/sonarr/templates/docker-compose.yml.j2",
+            "ansible/roles/containers/sonarr/tasks/main.yml",
         ]
     )
-    assert deferred_service_alerts(cs, cs.services) == (set(), set())
+    assert deferred_service_alerts(cs, cs.services) == set()
 
 
 def test_deferred_alerts_docs_only_branch_flags_full_sets():
-    # The no-services branch passes deployed=set(): a meta-only (or tasks-only) push flags the
-    # whole set, preserving the original defer-and-alert behavior.
-    cs = services_from_changed_paths(["ansible/roles/containers/dozzle/meta/deps.yml"])
-    assert deferred_service_alerts(cs, set()) == (set(), {"dozzle"})
-
-
-def test_deferred_alerts_mixed_tasks_and_meta_remainders():
-    # A three-way push: svcA deploys; svcB tasks and svcC meta are both left unapplied and flagged
-    # on their respective channels.
-    cs = services_from_changed_paths(
-        [
-            "ansible/roles/containers/prometheus/templates/prometheus.yml.j2",
-            "ansible/roles/containers/sonarr/tasks/main.yml",
-            "ansible/roles/containers/radarr/meta/deps.yml",
-        ]
-    )
-    assert deferred_service_alerts(cs, cs.services) == ({"sonarr"}, {"radarr"})
+    # The no-services branch passes deployed=set(): a tasks-only push flags the whole set,
+    # preserving the original defer-and-alert behavior.
+    cs = services_from_changed_paths(["ansible/roles/containers/sonarr/tasks/main.yml"])
+    assert deferred_service_alerts(cs, set()) == {"sonarr"}
 
 
 def _prescribed_tags(msg: str) -> set[str]:
