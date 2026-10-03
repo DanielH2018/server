@@ -13,10 +13,16 @@ of those a library -- through the importing package's own directory, through a r
 or by naming the tests that are its only importers. So this test filters on the verdict
 alone.
 
-RUNTIME. Each script runs under this interpreter with `scripts/` on `PYTHONPATH`, not under
-`uv run` -- one `uv run` per entry point cost a minute and a half where direct invocation costs
-ten seconds, over a census this size. The environment is otherwise the caller's, which is the point:
-a `--help` that needs a kubeconfig, a cluster or a lock is the failure this catches.
+RUNTIME. Each script runs under this interpreter, not under `uv run` -- one `uv run` per entry
+point cost a minute and a half where direct invocation costs ten seconds, over a census this
+size. The environment is otherwise the caller's, which is the point: a `--help` that needs a
+kubeconfig, a cluster or a lock is the failure this catches.
+
+NO `scripts/` ON `PYTHONPATH`. Each script runs from the repo root with `scripts/` removed from
+`PYTHONPATH`, the way a cron or `uv run python scripts/...` runs it. An `import lib...` then
+resolves only through the module's own `sys.path` bootstrap, so deleting that bootstrap fails
+this test for that entry point. With `scripts/` on the path every such import succeeded
+regardless, and the test could not see the one failure a cron hits first (#3296).
 
 Run: uv run pytest scripts/lib/tests/test_entry_points_answer_help.py
 """
@@ -64,6 +70,14 @@ def _entry_points():
 ENTRY_POINTS = _entry_points()
 
 
+def _pythonpath_without_scripts():
+    """The caller's `PYTHONPATH` minus `scripts/`, so only a module's bootstrap can supply it."""
+    entries = os.environ.get("PYTHONPATH", "").split(os.pathsep)
+    return os.pathsep.join(
+        e for e in entries if e and os.path.realpath(e) != os.path.realpath(SCRIPTS)
+    )
+
+
 def test_the_census_still_finds_the_entry_points_it_is_measured_against():
     missing = MUST_FIND - set(ENTRY_POINTS)
     assert not missing, f"the entry-point census lost {sorted(missing)}"
@@ -78,10 +92,7 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
         if name.endswith(".py")
         else ["bash", str(path), "--help"]
     )
-    env = {
-        **os.environ,
-        "PYTHONPATH": f"{SCRIPTS}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
-    }
+    env = {**os.environ, "PYTHONPATH": _pythonpath_without_scripts()}
     try:
         r = subprocess.run(
             argv,
