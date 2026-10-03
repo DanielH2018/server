@@ -415,12 +415,12 @@ def cmd_clean_one(
 
     # Resolved paths, not exact string equality: a worktree launched through one spelling
     # of REPO (a symlink, say) is still the tree `git worktree list` names by its target.
-    target = Path(args.worktree).resolve()
+    wanted = Path(args.worktree).resolve()
     tree = next(
         (
             t
             for t in parse_worktree_list(list_worktrees())
-            if Path(t.path).resolve() == target
+            if Path(t.path).resolve() == wanted
         ),
         None,
     )
