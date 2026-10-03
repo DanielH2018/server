@@ -229,16 +229,19 @@ def test_every_registered_command_resolves_the_sibling_it_runs():
 
 # --- the `.py` sibling each shim resolves for itself -------------------------
 
-# The idiom every shim in this repo uses, and the only one `sibling_py_paths` rules on.
+# The form `run-hook.sh` uses, and the only one `sibling_py_paths` rules on: the name comes from
+# the registered command, so `_RUNNER` below passes `new`.
 _SHIM_BODY = (
-    "exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python \\\n"
-    '  "$(dirname "$(readlink -f "$0")")/new.py"\n'
+    'HOOKS_DIR="$(dirname "$(readlink -f "$0")")"\n'
+    'name="$1"\n'
+    'script="$HOOKS_DIR/$name.py"\n'
 )
+_RUNNER = f"{_HOOKS}/run-hook.sh"
 
 
 def _sibling_lines(present, shim_body=_SHIM_BODY):
-    """The banner lines when `new.sh` is registered and carries `shim_body`."""
-    settings = {"hooks": {"PreToolUse": [{"hooks": [{"command": f"{_HOOKS}/new.sh"}]}]}}
+    """The banner lines when `run-hook.sh new` is registered and the runner carries `shim_body`."""
+    settings = {"hooks": {"PreToolUse": [{"hooks": [{"command": f"{_RUNNER} new"}]}]}}
     return arm.missing_hook_script_lines(
         checkout=_CHECKOUT,
         read_settings=lambda: settings,
@@ -248,11 +251,11 @@ def _sibling_lines(present, shim_body=_SHIM_BODY):
 
 
 def test_a_shim_whose_py_sibling_the_primary_checkout_has_is_clean():
-    assert _sibling_lines(present=(f"{_HOOKS}/new.sh", f"{_HOOKS}/new.py")) == []
+    assert _sibling_lines(present=(_RUNNER, f"{_HOOKS}/new.py")) == []
 
 
 def test_a_shim_whose_py_sibling_the_primary_checkout_lacks_is_flagged():
-    (line,) = _sibling_lines(present=(f"{_HOOKS}/new.sh",))
+    (line,) = _sibling_lines(present=(_RUNNER,))
     assert f"{_HOOKS}/new.py" in line
     assert "127" not in line, (
         "the shim is present and runs, so nothing exits 127 — handing the operator the "
@@ -265,7 +268,7 @@ def test_a_shim_whose_py_sibling_the_primary_checkout_lacks_is_flagged():
 
 def test_the_sibling_resolves_against_the_checkout_that_holds_the_shim():
     """Joining it to the SESSION's checkout would point the arm at the tree that has the file."""
-    (line,) = _sibling_lines(present=(f"{_HOOKS}/new.sh",))
+    (line,) = _sibling_lines(present=(_RUNNER,))
     assert _CHECKOUT not in line
 
 
@@ -276,7 +279,7 @@ def test_each_failure_mode_gets_its_own_line():
                 {
                     "hooks": [
                         {"command": f"{_HOOKS}/gone.sh"},
-                        {"command": f"{_HOOKS}/new.sh"},
+                        {"command": f"{_RUNNER} new"},
                     ]
                 }
             ]
@@ -285,7 +288,7 @@ def test_each_failure_mode_gets_its_own_line():
     shim, sibling = arm.missing_hook_script_lines(
         checkout=_CHECKOUT,
         read_settings=lambda: settings,
-        exists=lambda path: path == f"{_HOOKS}/new.sh",
+        exists=lambda path: path == _RUNNER,
         read_text=lambda _path: _SHIM_BODY,
     )
     assert f"{_HOOKS}/gone.sh" in shim and "127" in shim
@@ -298,7 +301,7 @@ def test_a_missing_shim_is_not_also_read_for_siblings():
     def boom(path):
         raise AssertionError(f"read the shim that does not exist: {path}")
 
-    settings = {"hooks": {"PreToolUse": [{"hooks": [{"command": f"{_HOOKS}/new.sh"}]}]}}
+    settings = {"hooks": {"PreToolUse": [{"hooks": [{"command": f"{_RUNNER} new"}]}]}}
     (line,) = arm.missing_hook_script_lines(
         checkout=_CHECKOUT,
         read_settings=lambda: settings,
@@ -309,8 +312,9 @@ def test_a_missing_shim_is_not_also_read_for_siblings():
 
 
 def test_a_shim_that_names_no_sibling_is_not_ruled_on():
-    """A shim with no `exec` into a sibling has nothing for this arm to rule on."""
-    assert _sibling_lines(present=(f"{_HOOKS}/new.sh",), shim_body="exit 0\n") == []
+    """A shim with no `exec` into a sibling has nothing for this arm to rule on, even when its
+    registration passes a hook name."""
+    assert _sibling_lines(present=(_RUNNER,), shim_body="exit 0\n") == []
 
 
 def test_a_sibling_path_composed_from_a_variable_is_not_ruled_on():
@@ -320,45 +324,29 @@ def test_a_sibling_path_composed_from_a_variable_is_not_ruled_on():
     that does must report its own missing script loudly itself — this arm cannot rule on it.
     """
     body = 'script_path="$repo_root/scripts/validate/${script}.py"\n'
-    assert _sibling_lines(present=(f"{_HOOKS}/new.sh",), shim_body=body) == []
+    assert _sibling_lines(present=(_RUNNER,), shim_body=body) == []
 
 
 def test_a_shim_this_cannot_read_says_nothing():
     def boom(path):
         raise PermissionError(path)
 
-    settings = {"hooks": {"PreToolUse": [{"hooks": [{"command": f"{_HOOKS}/new.sh"}]}]}}
+    settings = {"hooks": {"PreToolUse": [{"hooks": [{"command": f"{_RUNNER} new"}]}]}}
     assert (
         arm.missing_hook_script_lines(
             checkout=_CHECKOUT,
             read_settings=lambda: settings,
-            exists=lambda path: path == f"{_HOOKS}/new.sh",
+            exists=lambda path: path == _RUNNER,
             read_text=boom,
         )
         == []
     )
 
 
-def test_the_repos_own_shims_name_the_siblings_this_parse_must_find():
-    """Non-vacuity: the census of shell entry points this parse reads.
-
-    The six per-hook shims that spelled the literal `$(dirname …)/<name>.py` idiom were deleted
-    in #3304, so `run-hook.sh` is the only `.sh` left, and it names no sibling FROM ITS TEXT
-    ALONE: it takes the hook name as an argument, and
-    `test_the_runner_resolves_the_sibling_its_argument_names` is that half. A NEW shim fails
-    here by name instead of abstaining in silence.
-    """
-    hooks = Path(__file__).resolve().parents[1]
-    found = {
-        shim.name: {Path(p).name for p in arm.sibling_py_paths(str(shim))}
-        for shim in sorted(hooks.glob("*.sh"))
-    }
-    assert found == {"run-hook.sh": set()}, found
-
-
 def test_the_runner_resolves_the_sibling_its_argument_names():
     """`run-hook.sh <name>` composes `<name>.py` from its argument, so the name is in the
-    registered command rather than in the shim. The pair to the abstain above."""
+    registered command rather than in the shim. Drives the real runner, so a `run-hook.sh` that
+    stops composing its sibling as `$HOOKS_DIR/$name.py` fails here."""
     runner = Path(__file__).resolve().parents[1] / "run-hook.sh"
     found = arm.sibling_py_paths(
         str(runner),
@@ -377,11 +365,3 @@ def test_the_runner_abstains_when_no_argument_names_a_hook():
         )
         == []
     )
-
-
-def test_every_named_sibling_exists_in_this_checkout():
-    """The parse resolves real files, not plausible names: a typo would abstain-by-existing."""
-    hooks = Path(__file__).resolve().parents[1]
-    for shim in sorted(hooks.glob("*.sh")):
-        for sibling in arm.sibling_py_paths(str(shim)):
-            assert Path(sibling).is_file(), f"{shim.name} names a missing {sibling}"
