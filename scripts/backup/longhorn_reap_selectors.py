@@ -223,6 +223,13 @@ def select_seeds(
     every seed look like a migration orphan rather than a superseded seed, and this mode must
     not decide that. `claim` narrows the selection to one PVC, which is how the Class C spend is
     paced when the whole set does not fit in a day.
+
+    A `claim` no backup carries is refused too, rather than narrowing to nothing. A mistyped PVC
+    name — or a volume name passed where a claim name belongs — would otherwise print "0
+    superseded seed(s)" and exit 0, which reads as "this volume's seeds are already gone". That
+    is the shape of this module's founding incident, where a disarmed floor reported `0 reapable`
+    and the operator read it as nothing to do. The migrated-chain mode gets the same refusal from
+    `claim_volume`; this one has no PVC read to get it from.
     """
     records = completed_backup_records(backups)
     result = SeedSelection()
@@ -231,6 +238,14 @@ def select_seeds(
             "ABORT: the live-volume list is empty. An empty list is a broken read, not an empty "
             "cluster, and every seed would misread as a migration orphan. Nothing has been "
             "deleted."
+        )
+        return result
+    if claim and not any(r["claim"] == claim for r in records):
+        result.refusal = (
+            "ABORT: no Completed backup records the PVC %s, so narrowing to it selects nothing "
+            "and an empty plan would read as 'already retired'. Check the claim name — the mode "
+            "matches the PVC Longhorn recorded on each backup, not a volume name."
+            % claim
         )
         return result
 

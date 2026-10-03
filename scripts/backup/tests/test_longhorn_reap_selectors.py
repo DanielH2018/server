@@ -286,14 +286,22 @@ def test_a_claim_narrows_the_seed_selection_to_one_pvc():
     ) == ["seed-pvc-a", "seed-pvc-b"]
     assert [
         name
-        for name, *_ in selectors.select_seeds(backups, live, claim="pvc-a").superseded
-    ] == []
-    assert [
-        name
         for name, *_ in selectors.select_seeds(
             backups, live, claim="valheim-config"
         ).superseded
     ] == ["seed-pvc-a"]
+
+
+def test_a_claim_no_backup_records_is_refused_not_narrowed_to_nothing():
+    """A volume name passed where a claim name belongs must not read as "already retired"."""
+    backups = [
+        _claimed("seed-pvc-a", "pvc-a", "2026-08-10T00:00:00Z", "", "valheim-config"),
+        _backup("rot-a1", "pvc-a", "2026-08-20T00:00:00Z", "weekly-backup-d2"),
+        _backup("rot-a2", "pvc-a", "2026-08-19T00:00:00Z", "weekly-backup-d2"),
+    ]
+    seeds = selectors.select_seeds(backups, {"pvc-a"}, claim="pvc-a")
+    assert seeds.superseded == []
+    assert "no Completed backup records the PVC pvc-a" in seeds.refusal
 
 
 def test_claim_volume_resolves_the_pvcs_current_volume():
