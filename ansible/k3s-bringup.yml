@@ -18,17 +18,11 @@
   # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
   environment:
     PYTHONDONTWRITEBYTECODE: "1"
-  # Facts are gathered explicitly after the SOPS sudo password is set — same reason as
-  # initial_setup.yml: with gather_facts: true the play escalates before secrets load, so
-  # a passworded-sudo host would need --ask-become-pass.
+  # The shared preamble gathers facts once the SOPS sudo password is set.
   gather_facts: false
   pre_tasks:
     - name: Load encrypted secrets and set the become password (shared preamble)
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
-      tags: always
-
-    - name: Gather facts (escalated — the become password is now available)
-      ansible.builtin.setup:
       tags: always
 
     - name: Refuse to run on a host that is not a k3s server node
@@ -70,6 +64,9 @@
   environment:
     PYTHONDONTWRITEBYTECODE: "1"
   gather_facts: false
+  # Reads a token and stages it; nothing here reads a fact.
+  vars:
+    load_secrets_gather_facts: false
   pre_tasks:
     - name: Load encrypted secrets and set the become password (shared preamble)
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml

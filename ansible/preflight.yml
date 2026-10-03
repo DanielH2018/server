@@ -9,8 +9,8 @@
 #     uv run ansible-playbook ansible/preflight.yml
 #     uv run ansible-playbook ansible/preflight.yml -e target=daniel-pi
 #
-# Deliberately mirrors initial_setup.yml's preamble (gather_facts: false + the shared
-# load_secrets import), so reaching the asserts at all already proves SOPS decryption and
+# Opens like every playbook: gather_facts: false, then the shared preamble, which loads secrets
+# and gathers facts escalated. Reaching the asserts at all therefore proves SOPS decryption and
 # privilege escalation work on this host.
 - name: Preflight checks for a new host
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
@@ -24,10 +24,6 @@
   pre_tasks:
     - name: Load encrypted secrets and set the become password (shared preamble)
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
-      tags: always
-
-    - name: Gather facts (escalated — the become password is now available)
-      ansible.builtin.setup:
       tags: always
   tasks:
     - name: Required host_vars are defined

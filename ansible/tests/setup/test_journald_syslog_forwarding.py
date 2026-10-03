@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 from lib import yaml_fast
-from _helpers import ALL_VARS, ANSIBLE, HOST_VARS, SETUP_ROLES
+from _helpers import ALL_VARS, HOST_VARS, SETUP_ROLES
 
 ROLE = SETUP_ROLES / "initial_setup"
 SYSTEM_TUNING = ROLE / "tasks" / "system-tuning.yml"
-PLAYBOOK = ANSIBLE / "initial_setup.yml"
+HANDLERS = ROLE / "handlers" / "main.yml"
 
 JOURNALD_DEST = "/etc/systemd/journald.conf.d/50-homelab.conf"
 FILTER_DEST = "/etc/rsyslog.d/49-homelab-info-filter.conf"
@@ -70,15 +70,11 @@ def exempted_facilities(filter_content: str) -> set[str]:
 
 
 def handler_names(path: Path) -> list[str]:
-    plays = yaml_fast.safe_load(path.read_text())
-    for play in plays:
-        if isinstance(play, dict) and "handlers" in play:
-            return [
-                h["name"]
-                for h in play["handlers"]
-                if isinstance(h, dict) and "name" in h
-            ]
-    return []
+    return [
+        h["name"]
+        for h in yaml_fast.safe_load(path.read_text()) or []
+        if isinstance(h, dict) and "name" in h
+    ]
 
 
 def test_journald_forwards_at_info():
@@ -163,7 +159,7 @@ def test_rsyslog_restarts_before_journald():
     journald forwards at info the moment it restarts. If it restarted first, every info line
     on the host would reach /var/log/syslog until rsyslog loaded the filter that drops them.
     """
-    names = handler_names(PLAYBOOK)
+    names = handler_names(HANDLERS)
     assert "Restart rsyslog" in names, "no Restart rsyslog handler"
     assert "Restart systemd-journald" in names, "no Restart systemd-journald handler"
     assert names.index("Restart rsyslog") < names.index("Restart systemd-journald"), (

@@ -1,0 +1,12 @@
+---
+# Restart systemd-journald and Restart Watchdog, which this role also notifies, are defined in
+# initial_setup's handlers/main.yml: this role's `when:` would gate them, and each belongs to an
+# ordered pair that has to stay in one file.
+- name: Restart earlyoom
+  ansible.builtin.service:
+    name: earlyoom
+    state: restarted
+
+- name: Reboot Pi
+  ansible.builtin.reboot:
+    msg: "Rebooting to apply low-level hardware changes (GPU/Watchdog/Log2Ram)"
