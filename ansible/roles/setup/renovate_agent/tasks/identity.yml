@@ -10,12 +10,15 @@
 # (ansible/tests/setup/test_host_python_invocations.py). Root runs nothing here that
 # sys_user does not already run in the claude_code and initial_setup roles.
 
-- name: Create the agent user's bin directory
+- name: Create the agent user's bin and claude-guard directories
   tags: [renovate-agent-code, renovate-agent-service]
   ansible.builtin.file:
-    path: "{{ renovate_agent_home }}/.local/bin"
+    path: "{{ item }}"
     state: directory
     mode: "0755"
+  loop:
+    - "{{ renovate_agent_home }}/.local/bin"
+    - "{{ renovate_agent_home }}/.local/share/claude-guard"
   become: true
 
 - name: Give the agent user the operator's pinned uv
@@ -32,6 +35,31 @@
     group: "{{ sys_user }}"
     mode: "0755"
   become: true
+
+- name: Look for the operator's deployed claude_guard package
+  tags: [renovate-agent-code, renovate-agent-service]
+  ansible.builtin.stat:
+    path: /home/{{ sys_user }}/.local/share/claude-guard/claude_guard
+  register: renovate_agent_claude_guard
+  become: true
+
+- name: Give the agent user the operator's claude_guard package
+  tags: [renovate-agent-code, renovate-agent-service]
+  # block-footguns splits every command naming gh, kubectl or ssh with this package, which the
+  # dotfiles repo deploys under the operator's home (.claude/hooks/_claude_guard.py looks in
+  # ~/.local/share/claude-guard). Without it the guard asks on each such command, the session's
+  # work is `gh pr` calls, and an unattended `ask` is a denial. Copied rather than pinned, as
+  # uv is above, so the agent runs the operator's rules. A host without the dotfiles deploy
+  # skips this, and the agent asks exactly where the operator's own sessions would.
+  ansible.builtin.copy:
+    src: /home/{{ sys_user }}/.local/share/claude-guard/claude_guard
+    dest: "{{ renovate_agent_home }}/.local/share/claude-guard/"
+    remote_src: true
+    owner: "{{ renovate_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: preserve
+  become: true
+  when: renovate_agent_claude_guard.stat.exists
 
 - name: Install the pinned host Python for the agent user
   tags: [renovate-agent-code, renovate-agent-service]

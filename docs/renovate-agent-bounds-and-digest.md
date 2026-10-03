@@ -69,7 +69,10 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
   unit sets `RUN_HOOK_PROJECT_DIR` to the run worktree and `RUN_HOOK_UV` to the agent's uv, and
   `prepare_worktree` runs `uv sync --frozen` in that tree before the session starts. A guard
   that cannot import its dependencies raises, and the dispatcher drops its verdict without a
-  word.
+  word. `block-footguns` also needs the `claude_guard` package, which the dotfiles repo deploys
+  only under the operator's home; without it the guard asks on every command naming `gh`. The
+  role copies the operator's package into the agent's `~/.local/share/claude-guard` on each
+  apply.
 - **GitHub token.** `renovate_agent_gh_token` is a fine-grained token for this repo alone:
   pull requests and actions read-write, contents, checks and metadata read. With no contents
   write it cannot push or merge, and with no issues write it cannot file a finding, so the
