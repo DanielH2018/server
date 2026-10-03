@@ -207,6 +207,30 @@ def test_cmd_clean_one_reaches_clean_one_for_a_registered_tree(capsys):
     assert "kept:" in out and "not merged" in out
 
 
+def test_cmd_clean_one_default_ask_merges_into_the_targets_base():
+    """Every other test here injects `ask`, so none built the default one. A worktree path
+    once rebound the name holding the Target, and every real `clean` died on
+    `'PosixPath' object has no attribute 'base'` with this file green.
+    """
+    from fanout_lib.target import resolve
+
+    seen = {}
+
+    def fake_clean_one(checkout, tree, *, ask, **_):
+        seen["base"] = ask.keywords["base"]
+        return "kept", "(fake)"
+
+    args = SimpleNamespace(worktree=B.worktree, repo="DanielH2018/server")
+    code = cmd_clean_one(
+        args,
+        Tools(),
+        list_worktrees=lambda: _porcelain(B.worktree),
+        clean=fake_clean_one,
+    )
+    assert code == 0
+    assert seen["base"] == resolve("DanielH2018/server").base
+
+
 def test_cmd_clean_one_reports_removed_for_an_absent_tree(capsys):
     """Critical 1: an already-gone worktree is the goal state, not a failure — it must read
     `removed`, or a re-run of `clean` after a partial first pass can never delete the
