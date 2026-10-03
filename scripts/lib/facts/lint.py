@@ -9,14 +9,18 @@ backref). ``fact_status.py lint`` exits non-zero on errors only.
 """
 
 import re
-import subprocess
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from lib.git import git
+
 from .atoms import Ambiguous, backrefs, hash_atom
 from .citations import (
-    git_env,
     in_tree,
     parse_citations,
     repo_docs,
@@ -199,27 +203,15 @@ def changed_units(repo: Path, since: str) -> set[str]:
     empty, and every section in the repo reads as changed — the hook then lints the whole
     tree and reports a wall of errors that names nothing the commit touched.
     """
-    resolved = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"],
-        cwd=repo,
-        env=git_env(),
-        capture_output=True,
-        text=True,
-        check=False,
+    resolved = git(
+        "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}", cwd=repo, check=False
     )
     if resolved.returncode != 0:
         raise ValueError(f"cannot resolve {since!r}")
     changed: set[str] = set()
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
-        old = subprocess.run(
-            ["git", "show", f"{since}:{rel}"],
-            cwd=repo,
-            env=git_env(),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        old = git("show", f"{since}:{rel}", cwd=repo, check=False)
         before = (
             {s.key: s.body for s in sections(rel, old.stdout)}
             if old.returncode == 0

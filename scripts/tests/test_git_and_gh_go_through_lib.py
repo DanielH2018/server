@@ -6,8 +6,9 @@ either. A raw `subprocess.run(["git", ...])` beside them has neither property, a
 repo re-grew fourteen of them after the helpers existed. This refuses the
 next one.
 
-Scope is every directory under `scripts/` except `lib/` itself, whose clients are the one place
-the raw call belongs, and `tests/`. `ansible/roles/*/files/*.py` stays raw on purpose: those
+Scope is every directory under `scripts/` except `tests/` and `lib/`. The clients in `lib/` are
+the one place the raw call belongs. `lib/facts/` is the exception inside `lib/`: it is a client
+of `lib.git`, not a client module itself. `ansible/roles/*/files/*.py` stays raw on purpose: those
 deploy to hosts without `scripts/lib`.
 
 Run: uv run pytest scripts/tests/test_git_and_gh_go_through_lib.py
@@ -30,6 +31,8 @@ KNOWN_MEMBERS = frozenset(
         "dev/fanout_lib/signing.py",
         "validate/root_ignored_files.py",
         "infra_map/live.py",
+        "lib/facts/citations.py",
+        "lib/facts/lint.py",
     }
 )
 
@@ -38,7 +41,8 @@ def _production_modules() -> list[Path]:
     return [
         p
         for p in _SCRIPTS.rglob("*.py")
-        if (parts := p.relative_to(_SCRIPTS).parts)[0] != "lib" and "tests" not in parts
+        if ((parts := p.relative_to(_SCRIPTS).parts)[0] != "lib" or parts[1] == "facts")
+        and "tests" not in parts
     ]
 
 

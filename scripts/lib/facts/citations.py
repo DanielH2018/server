@@ -10,11 +10,15 @@ The grammar is closed on purpose. An unrecognised span is not support, so a new 
 change here plus a paired test, never an ad-hoc regex in a caller.
 """
 
-import os
 import re
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from lib.git import git
 
 FORMS = frozenset({"path", "symbol", "yaml", "test", "marker", "probe"})
 REJECT_REASONS = frozenset({"file:line"})
@@ -125,30 +129,13 @@ def sections(doc_path: str, text: str) -> list[Section]:
     return out
 
 
-def git_env() -> dict[str, str]:
-    """The environment every git call in this package runs under.
-
-    ``GIT_*`` is stripped so ``cwd`` alone decides which tree is read: under a git hook
-    ``GIT_DIR`` and ``GIT_WORK_TREE`` both point at the hook's own repository, and ``git -C``
-    does not override them.
-    """
-    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-
-
 def repo_docs(repo: Path) -> list[Path]:
     """Every TRACKED ``CLAUDE.md`` under ``repo`` — the repo store, and nothing else.
 
     ``git ls-files`` rather than ``rglob``: a worktree session has other sessions' full
     checkouts under ``.claude/worktrees/``, and a walk would grade this commit against them.
     """
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "CLAUDE.md", "**/CLAUDE.md"],
-        cwd=repo,
-        env=git_env(),
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = git("ls-files", "-z", "--", "CLAUDE.md", "**/CLAUDE.md", cwd=repo).stdout
     return [repo / p for p in sorted(listed.split("\0")) if p]
 
 
@@ -159,14 +146,7 @@ def tracked_files(repo: Path) -> frozenset[str]:
     when it names something in this set, so an untracked or gitignored file reads the same
     on every checkout, never just the one that happens to have it on disk.
     """
-    listed = subprocess.run(
-        ["git", "ls-files", "-z"],
-        cwd=repo,
-        env=git_env(),
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = git("ls-files", "-z", cwd=repo).stdout
     return frozenset(p for p in listed.split("\0") if p)
 
 
