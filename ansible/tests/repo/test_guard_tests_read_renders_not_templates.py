@@ -211,6 +211,11 @@ TEMPLATE_SOURCE_READERS = {
         "undefined token fails the play or renders empty. A render resolves every secret to "
         "`STUB`, so no render distinguishes `mandatory` from `default('')`"
     ),
+    "setup/test_setup_cross_role_files.py": (
+        "which roles' TASK files name another role's file by path, the edge the GitOps "
+        "deployer routes on. It reads no template; a task file's `src:` and `import_tasks:` "
+        "paths are the subject, and the `{{ item }}` in one is what it expands"
+    ),
 }
 
 # Modules the census must reach. An empty or partial scan means the walk stopped matching

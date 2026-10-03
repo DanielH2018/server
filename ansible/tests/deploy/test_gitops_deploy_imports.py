@@ -36,7 +36,9 @@ QUALIFIED = {"deploy_io", "deploy_alerts", "deploy_alert_text"}
 # only the entry module gets it. Checked with `==` against what is on disk, not `<=`: a new
 # module with no entry here would otherwise be governed by nothing.
 ALLOWED: dict[str, set[str] | None] = {
-    "deploy_changes": set(),
+    # The cross-role tables, a leaf of their own so the classifier stays under its line cap.
+    "deploy_changes": {"deploy_cross_role"},
+    "deploy_cross_role": set(),
     # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and
     # `deploy_git` for `held_tag`, the hold-marker format `broad_hold_cleared_by` reads back
     # (#3138) — an import-free leaf, so no cycle. It must NOT import `deploy_toolbox`, which
