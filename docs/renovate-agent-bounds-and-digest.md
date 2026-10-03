@@ -179,26 +179,22 @@ headline is that delta:
 - `ran and no Renovate PR changed state` — the failure that would otherwise read green.
 - `FAILED — <reason>` — timeout, non-zero exit, or `is_error`.
 
-Leaving the open set is not landing. The `renovate-prs` skill finishes a `manual —` bump by
-closing the Renovate PR in favour of a superseding PR, and that PR stays open for a person
-(#2746). So the wrapper runs `gh pr view <n> --json state` for every PR that left the open set, and
-only a `MERGED` one counts as resolved (#2755). A failed lookup lands in `state unreadable`, never
-in `resolved`.
+Leaving the open set is not landing. A session can close a Renovate PR without merging it,
+for one it judges superseded or dropped (#2746). So the wrapper runs `gh pr view <n> --json
+state` for every PR that left the open set, and only a `MERGED` one counts as resolved (#2755). A
+failed lookup lands in `state unreadable`, never in `resolved`.
 
-The superseding PR is authored by the session's account, not `app/renovate`, so a second census
-finds it: the open PRs authored by the login `gh api user` names, before and after, kept to the
-PRs whose head branch is the run branch or `<run branch>-<n>` (#2769). The prompt pins that name.
-The branch filter is required because interactive sessions open PRs as the same account on
-`worktree-renovate-<slug>` branches all day. A PR new to the after-census appears as `handed off,
-open for a person to land: #n`, and a failed census as `hand-off census unreadable`, never as an
-empty list.
+The session opens no PR of its own. Its token has no contents write, so a `manual —` work order
+ends as a line in the session's summary for a person to finish (#3420). The census therefore
+reads only PRs authored by `app/renovate`. A census of the session account's own PRs, which
+counted the superseding PRs earlier sessions opened, was retired with that change (#3421).
 
-**Both censuses filter the author locally, never with `gh pr list --author`** (#2772). With
+**The census filters the author locally, never with `gh pr list --author`** (#2772). With
 `--author`, gh runs a GraphQL `search(` query, and GitHub's search index is eventually consistent.
-The after-census runs seconds after the session exits, so the index can omit a superseding PR
-opened near the end, or still list a Renovate PR just merged as open. Without the flag, gh reads
-`repository.pullRequests`, which is current. `_open_pr_listing` in `files/renovate_agent.py` is the
-one listing both censuses read, and `test_agent_logic.py::TestOpenPrs` refuses the flag.
+The after-census runs seconds after the session exits, so the index can still list a Renovate PR
+just merged as open. Without the flag, gh reads `repository.pullRequests`, which is current.
+`_open_pr_listing` in `files/renovate_agent.py` is the listing the census reads, and
+`test_agent_logic.py::TestOpenPrs` refuses the flag.
 
 `permission denials:` on a digest line is the one to act on. Headless auto mode approving the
 session's writes is the assumption the whole design rests on; it was measured against Claude Code
@@ -215,9 +211,9 @@ whether the agent is worth its cost is a count over one file rather than a read 
 - `skipped` — the gate spent no session. `reason` says why, including the quiet empty-backlog
   skip that posts nothing to Discord.
 - `blocked` — the run worktree still holds unlanded work.
-- `ran` or `failed` — a session ran. The line carries `merged`, `closed`, `handed_off`,
-  `unread`, `left_open`, `touched` and `opened` from the measured delta, plus `cost_usd`,
-  `turns` and the denial count. `handed_off` is `null` when its census failed.
+- `ran` or `failed` — a session ran. The line carries `merged`, `closed`, `unread`,
+  `left_open`, `touched` and `opened` from the measured delta, plus `cost_usd`, `turns` and the
+  denial count. Lines written before #3421 also carry `handed_off`, which no reader uses.
 - `crashed` — the wrapper threw. `report_crash` writes this line before its Kuma push.
 
 The PR fields come from the census, not from the session's summary. `left_open` is the PRs
@@ -238,7 +234,6 @@ A 30-day count:
 jq -s --argjson since "$(date -d '-30 days' +%s)" '[.[] | select(.ts >= $since)]
   | {ticks: length, sessions: map(select(.result == "ran" or .result == "failed")) | length,
      merged: map(.merged // [] | length) | add, closed: map(.closed // [] | length) | add,
-     handed_off: map(.handed_off // [] | length) | add,
      touched: map(.touched // [] | length) | add, cost_usd: map(.cost_usd // 0) | add}' \
   /var/lib/renovate-agent/runs.jsonl
 ```

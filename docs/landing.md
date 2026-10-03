@@ -67,8 +67,8 @@ otherwise.
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
-PR; the unattended agent never passes it, because the superseding PR it opens for a `manual —`
-bump goes to a person through a hand-off finding (issue #2746). An interactive shell leaves the
+PR; the unattended agent never passes it, because a `manual —` bump goes to a person through the
+digest (issues #2746, #3420). An interactive shell leaves the
 variable unset and never sees this.
 
 **The arm refuses a body whose closing keyword is not its own `Closes #N` line.** GitHub closes
