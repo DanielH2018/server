@@ -3,6 +3,7 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_status.py
 """
 
+import dataclasses
 import subprocess
 
 from fanout_lib.brief import Issue
@@ -169,7 +170,7 @@ def test_a_batch_with_no_block_in_the_reply_stays_failed():
 
 def test_status_line_names_the_branch_it_could_not_reconcile():
     unresolved = parse_status([B], FINISHED_AND_TIDIED)[0]
-    line, tier = status_line(unresolved, "daniel-box", B.branch, lambda _: "", str)
+    line, tier = status_line(unresolved, "daniel-box", B.branch, lambda *_: "", str)
     assert tier == 1
     assert line == f"b on daniel-box: no-report (exit 0)  no merged PR for {B.branch}"
 
@@ -237,7 +238,7 @@ def test_a_clean_finish_without_a_pr_prints_its_final_text_and_exits_1():
         (STOPPED_ON_A_BLOCKER, "needs-input"),
     ):
         st = parse_status([B], block)[0]
-        line, tier = status_line(st, "daniel-box", B.branch, lambda _b: "", str)
+        line, tier = status_line(st, "daniel-box", B.branch, lambda *_: "", str)
         assert tier == 1
         assert line.startswith(f"b on daniel-box: {state} ")
         assert st.final_text in line
@@ -428,7 +429,7 @@ def test_a_landing_host_batch_with_a_pr_and_no_verdict_is_not_done(tmp_path, cap
     stopped = parse_status([B], OPENED_BUT_NOT_LANDED)[0]
     assert stopped.state == "no-verdict"
     assert stopped.pr_url == "https://github.com/DanielH2018/server/pull/1500"
-    line, tier = status_line(stopped, "daniel-box", B.branch, lambda _b: "", str)
+    line, tier = status_line(stopped, "daniel-box", B.branch, lambda *_: "", str)
     assert tier == 1
     assert stopped.pr_url in line and "land.sh printed no VERDICT" in line
     assert parse_status([B], DONE)[0].state == "done"
@@ -450,3 +451,23 @@ def test_a_daniel_server_batch_is_done_on_the_pr_url_alone():
 def test_status_reads_the_land_log_over_the_same_call():
     cmd = status_command([B])
     assert "land*.log" in cmd and "'^VERDICT:'" in cmd
+
+
+def test_a_dotfiles_batch_on_the_landing_host_is_done_on_the_pr_url_alone():
+    """The clean half of `test_a_landing_host_batch_with_a_pr_and_no_verdict_is_not_done`."""
+    dotfiles = dataclasses.replace(B, repo="DanielH2018/dotfiles")
+    assert parse_status([dotfiles], OPENED_BUT_NOT_LANDED)[0].state == "done"
+
+
+def test_a_tidied_up_batch_is_reconciled_against_its_own_repo():
+    unresolved = parse_status([B], FINISHED_AND_TIDIED)[0]
+    asked = []
+    status_line(
+        unresolved,
+        "daniel-box",
+        B.branch,
+        lambda branch, repo: asked.append((branch, repo)) or "",
+        str,
+        "DanielH2018/dotfiles",
+    )
+    assert asked == [(B.branch, "DanielH2018/dotfiles")]

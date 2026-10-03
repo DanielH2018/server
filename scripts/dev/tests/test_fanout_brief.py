@@ -8,6 +8,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_brief.py
 """
 
 from fanout_lib.brief import Issue, render_brief
+from fanout_lib.target import Target
 
 ISSUES = [
     Issue(1345, "Traefik startupProbe has no red-proof", "body one\nline two"),
@@ -124,3 +125,22 @@ def test_a_body_carrying_its_own_fence_gets_a_longer_one_and_the_title_sits_insi
     title = text.index("title: Fix the parser")
     assert opened < title < closed
     assert "````\n```\nstill inside\n```\n````" in text
+
+
+DOTFILES = Target(
+    "DanielH2018/dotfiles", "/home/ubuntu/.local/share/chezmoi", "origin/main"
+)
+
+
+def test_a_dotfiles_brief_names_its_repo_and_stops_at_the_pr_on_every_host():
+    """Against the landing host too: `land.sh` serves this repo alone."""
+    for host in ("daniel-box", "daniel-server"):
+        brief = render_brief(ISSUES, host, "1345-1386", "worktree-orch", [], DOTFILES)
+        assert "land.sh" not in brief and "VERDICT" not in brief
+        assert "gh pr create" in brief and "do not merge" in brief.lower()
+        assert "gh issue comment 1345 --repo DanielH2018/dotfiles" in brief
+        assert "claimed under `worktree-fanout-1345-1386`" in brief
+        assert "worktree-orch" not in brief
+        assert "findings.py open --repo DanielH2018/dotfiles" in brief
+        assert "of /home/ubuntu/.local/share/chezmoi, checked out" in brief
+        assert "fresh from origin/main" in brief

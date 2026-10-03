@@ -6,6 +6,14 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+# Reach the sibling package: a directly-invoked script gets only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from fanout_lib.target import SERVER
+
 MANIFEST_DIR = Path.home() / ".claude" / "fanout"
 
 
@@ -25,6 +33,9 @@ class Batch:
             This is what makes a second `clean` pass converge: the remote leg cannot report
             on a worktree it already deleted, so the manifest remembers instead of asking.
             Absent from manifests written before this field existed, hence the default.
+        repo: the GitHub repo whose issues the batch works and whose checkout holds its
+            worktree. Absent from manifests written before `--repo` existed, every one of
+            which launched in this repo, hence the default.
     """
 
     batch: str
@@ -35,6 +46,7 @@ class Batch:
     issues: list[int]
     launched_at: str
     removed_at: str | None = None
+    repo: str = SERVER
 
 
 @dataclass(frozen=True)
@@ -104,7 +116,7 @@ def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
     )
 
 
-def live_batches(root: Path = MANIFEST_DIR) -> dict[str, tuple[str, Batch]]:
+def live_batches(root: Path = MANIFEST_DIR) -> dict[tuple[str, str], tuple[str, Batch]]:
     """Every batch id still standing across every run under `root`, to its run and record.
 
     "Still standing" means no `removed_at`: a batch cleaned in one run and relaunched in
@@ -113,10 +125,13 @@ def live_batches(root: Path = MANIFEST_DIR) -> dict[str, tuple[str, Batch]]:
     cannot read is skipped on its own rather than raising — one unreadable file must not
     refuse every launch on the host.
 
+    Keyed by repo as well as batch id, because a batch id is only issue numbers and those
+    collide across repos: dotfiles batch `763` is not server batch `763`.
+
     Returns:
-        `{batch id: (run_id, Batch)}` for every batch with no `removed_at`.
+        `{(repo, batch id): (run_id, Batch)}` for every batch with no `removed_at`.
     """
-    live: dict[str, tuple[str, Batch]] = {}
+    live: dict[tuple[str, str], tuple[str, Batch]] = {}
     if not root.is_dir():
         return live
     for manifest_file in sorted(root.glob("*.json")):
@@ -128,5 +143,5 @@ def live_batches(root: Path = MANIFEST_DIR) -> dict[str, tuple[str, Batch]]:
             continue
         for b in batches:
             if not b.removed_at:
-                live[b.batch] = (run_id, b)
+                live[(b.repo, b.batch)] = (run_id, b)
     return live

@@ -12,8 +12,9 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from fanout_lib.brief import LANDS
+from fanout_lib.brief import lands
 from fanout_lib.manifest import Batch
+from fanout_lib.target import SERVER
 
 STATUS_TIMEOUT_S = 30.0
 PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
@@ -177,9 +178,10 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
         elif props.get("Result") == "success" and final and not is_error:
             # A non-empty final text is not a finish: a turn that ends on "Next I will open
             # the PR" exits the process just as cleanly as one that opened it.
-            if m and b.host == LANDS and not landed:
+            if m and lands(b.host, b.repo) and not landed:
                 # The brief tells a landing-host batch to wait for `land.sh`'s VERDICT line.
-                # Without that, a PR URL only means `gh pr create` returned.
+                # Without that, a PR URL only means `gh pr create` returned. Another repo's
+                # batch stops at the PR on every host, so its PR URL is the finish.
                 state = NO_VERDICT
             elif m:
                 state = "done"
@@ -233,8 +235,9 @@ def status_line(
     s: BatchStatus,
     host: str,
     branch: str,
-    merged_pr: Callable[[str], str],
+    merged_pr: Callable[[str, str], str],
     one_line: Callable[[str], str],
+    repo: str = SERVER,
 ) -> tuple[str, int]:
     """Render one batch's status line, and the exit tier it contributes.
 
@@ -252,8 +255,9 @@ def status_line(
         s: the parsed status.
         host: the host the batch ran on, for the line's prefix.
         branch: the batch's branch, the key `merged_pr` is asked about.
-        merged_pr: branch -> merged PR url, or "" when GitHub knows of none.
+        merged_pr: (branch, repo) -> merged PR url, or "" when GitHub knows of none.
         one_line: collapse the agent's final text to one line.
+        repo: the repo the batch's branch lives in, which `merged_pr` asks about.
 
     Returns:
         The line to print, and the exit tier: 0 for running/done/landed, 1 for an
@@ -261,7 +265,7 @@ def status_line(
         5 for a genuine failure.
     """
     state = s.state
-    landed_url = merged_pr(branch) if state == NO_REPORT else ""
+    landed_url = merged_pr(branch, repo) if state == NO_REPORT else ""
     if landed_url:
         state = "landed"
     line = f"{s.batch} on {host}: {state}"

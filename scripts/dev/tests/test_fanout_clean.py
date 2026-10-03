@@ -11,6 +11,7 @@ import pytest
 
 from fanout_lib.clean import clean_one, remote_clean_command
 from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
+from fanout_lib.target import Target
 from fanout_lib.transport import Tools
 from fanout_place import cmd_clean_one, main
 from prune_worktrees import Worktree
@@ -191,7 +192,7 @@ def _porcelain(*paths: str, locked_reason: str | None = None) -> str:
 
 
 def test_cmd_clean_one_reaches_clean_one_for_a_registered_tree(capsys):
-    args = SimpleNamespace(worktree=B.worktree)
+    args = SimpleNamespace(worktree=B.worktree, repo="DanielH2018/server")
     code = cmd_clean_one(
         args,
         Tools(),
@@ -211,7 +212,7 @@ def test_cmd_clean_one_reports_removed_for_an_absent_tree(capsys):
     `removed`, or a re-run of `clean` after a partial first pass can never delete the
     manifest (Ruling C).
     """
-    args = SimpleNamespace(worktree=B.worktree)
+    args = SimpleNamespace(worktree=B.worktree, repo="DanielH2018/server")
     code = cmd_clean_one(args, Tools(), list_worktrees=lambda: "")
     assert code == 0
     out = capsys.readouterr().out
@@ -224,7 +225,7 @@ def test_cmd_clean_one_matches_a_symlinked_path_spelling(tmp_path, capsys):
     real.mkdir()
     link = tmp_path / "link"
     link.symlink_to(real)
-    args = SimpleNamespace(worktree=str(link))
+    args = SimpleNamespace(worktree=str(link), repo="DanielH2018/server")
     code = cmd_clean_one(
         args,
         Tools(),
@@ -248,7 +249,7 @@ def test_cmd_clean_one_forwards_unlocker_and_locker_seams(tmp_path):
     wt = tmp_path / "wt"
     wt.mkdir()
     calls = []
-    args = SimpleNamespace(worktree=str(wt))
+    args = SimpleNamespace(worktree=str(wt), repo="DanielH2018/server")
     code = cmd_clean_one(
         args,
         Tools(),
@@ -308,3 +309,32 @@ def test_help_lists_clean_and_gives_clean_one_no_help_bullet(capsys):
     # No subcommand here gets a help bullet under "positional arguments" — clean-one stays
     # exactly as undocumented as its siblings, rather than standing out with its own line.
     assert "clean-one " not in plain.split("positional arguments:", 1)[1]
+
+
+def test_a_dotfiles_clean_fetches_main_and_runs_this_repos_copy_with_repo():
+    """Its worktree carries no copy of this script, and its default branch is `main`."""
+    wt = "/home/ubuntu/.local/share/chezmoi/.claude/worktrees/fanout-763"
+    dotfiles = Batch(
+        "763",
+        "daniel-box",
+        wt,
+        "worktree-fanout-763",
+        "fanout-dotfiles-763",
+        [763],
+        "t",
+        repo="DanielH2018/dotfiles",
+    )
+    target = Target(
+        "DanielH2018/dotfiles", "/home/ubuntu/.local/share/chezmoi", "origin/main"
+    )
+    cmd = remote_clean_command(dotfiles, target=target)
+    assert (
+        "git -C /home/ubuntu/.local/share/chezmoi fetch --quiet origin main && " in cmd
+    )
+    assert (
+        "else cd /home/ubuntu/.local/share/chezmoi && "
+        "uv run --no-project --no-python-downloads --python 3.14.6 python "
+        f"/home/ubuntu/server/scripts/dev/fanout_place.py clean-one {wt} "
+        "worktree-fanout-763 --repo DanielH2018/dotfiles" in cmd
+    )
+    assert f"{wt}/scripts/dev" not in cmd

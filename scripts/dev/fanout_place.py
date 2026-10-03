@@ -12,6 +12,7 @@ Usage::
 
     fanout_place.py read
     fanout_place.py launch --batch 1345,1386 [--batch 1288] [--host daniel-box] --orchestrator-branch <b>
+    fanout_place.py launch --repo DanielH2018/dotfiles --batch 763 --orchestrator-branch <b>
     fanout_place.py status <run-id>
     fanout_place.py stop <run-id> [batch]
     fanout_place.py clean <run-id>
@@ -29,6 +30,14 @@ call. `--host` pins every batch to one host; leave it unset and placement reads 
 and chooses per batch. Calls to the host this script itself runs on go over `bash -c`, not
 ssh, so they never count against `ufw limit ssh` — `fanout_lib.launch_gates` holds the cap
 that keeps a placement on an actual remote host under it.
+
+`--repo` launches in another register `findings.py --repo` can judge claims for, such as the
+dotfiles repo. Its trees go in that repo's checkout, from its default branch. Its batches run
+on this host only, because `findings.py` judges a claim in that register against this host's
+checkout of it. `launch` claims each such batch itself, under the batch's own branch, once the
+tree is locked and before the agent starts. Its agents stop at the PR on every host, and
+`status` reads a PR URL as `done` without a `VERDICT:` line. The orchestrator lands those PRs
+with the repo's own tooling.
 
 Launch locks each worktree with reason `fanout-<batch>` so a merged-worktree prune cannot
 remove it while the unit still runs; `clean <run-id>` is the escape — it removes a batch's
@@ -61,10 +70,12 @@ from fanout_lib.launch_gates import (
 )
 from lib.git import git
 from fanout_lib.placement import NoHeadroom, place
+from fanout_lib.target import SERVER, for_launch, registered_repos, resolve
 from fanout_lib.transport import (
     HOSTS,
     REPO,
     Tools,
+    _local_host,
     error_text,
     read_host,
     registered_keys,
@@ -153,7 +164,7 @@ def _parse_batches(specs: list[str]) -> dict[str, list[int]] | None:
 
 
 def _fetch_issues(
-    tools: Tools, batches: dict[str, list[int]]
+    tools: Tools, batches: dict[str, list[int]], repo: str = SERVER
 ) -> dict[int, Issue] | None:
     """Fetch every batch's issues up front, or return None having said why it refused.
 
@@ -164,7 +175,7 @@ def _fetch_issues(
     fetched: dict[int, Issue] = {}
     for number in [n for numbers in batches.values() for n in numbers]:
         try:
-            fetched[number] = tools.gh_issue(number)
+            fetched[number] = tools.gh_issue(number, repo)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             print(
                 f"launch: could not fetch issue {number}: {error_text(exc)}",
@@ -187,9 +198,16 @@ def cmd_launch(args, tools: Tools) -> int:
     batches = _parse_batches(args.batch)
     if batches is None:
         return 1
-    if live_elsewhere(batches, args.manifest_root):
+    try:
+        target, args.host = for_launch(
+            args.repo, args.host, _local_host(), tools.default_ref
+        )
+    except ValueError as exc:
+        print(f"launch: {exc}", file=sys.stderr)
         return 1
-    fetched = _fetch_issues(tools, batches)
+    if live_elsewhere(batches, args.manifest_root, target.repo):
+        return 1
+    fetched = _fetch_issues(tools, batches, target.repo)
     if fetched is None:
         return 1
     if refuse_shared_files(batches, fetched, args.allow_shared_file):
@@ -238,10 +256,12 @@ def cmd_launch(args, tools: Tools) -> int:
     )
     for batch, host in placed:
         issues = [fetched[n] for n in batches[batch]]
-        brief = render_brief(issues, host, batch, args.orchestrator_branch, health)
+        brief = render_brief(
+            issues, host, batch, args.orchestrator_branch, health, target
+        )
         try:
             run.batches.append(
-                launch_mod.launch(tools, host, batch, brief, batches[batch])
+                launch_mod.launch(tools, host, batch, brief, batches[batch], target)
             )
         except launch_mod.LaunchError as exc:
             print(f"{batch} on {host}: {exc}", file=sys.stderr)
@@ -260,7 +280,7 @@ def cmd_launch(args, tools: Tools) -> int:
                 file=sys.stderr,
             )
             return 1
-        print(f"{batch} -> {host} ({launch_mod.unit_name(batch)})")
+        print(f"{batch} -> {host} ({launch_mod.unit_name(batch, target)})")
     path = manifest_mod.save(run, root=args.manifest_root)
     print(f"run {run.run_id} recorded at {path}")
     return 0
@@ -310,10 +330,11 @@ def cmd_status(args, tools: Tools) -> int:
                 print(f"{b.batch} on {host}: status read timed out")
             worst = max(worst, 1)
             continue
-        branches = {b.batch: b.branch for b in mine}
+        by_id = {b.batch: b for b in mine}
         for st in status_mod.parse_status(mine, proc.stdout):
+            b = by_id[st.batch]
             line, tier = status_mod.status_line(
-                st, host, branches[st.batch], tools.merged_pr, _one_line
+                st, host, b.branch, tools.merged_pr, _one_line, b.repo
             )
             worst = max(worst, tier)
             print(line)
@@ -376,16 +397,21 @@ def cmd_clean_one(
     case before this interpreter could start (Ruling 30). The path below stays for a
     `clean-one` run by hand against a tree that is already gone.
     """
+    import functools
+
     from fanout_lib.clean import clean_one
     from fanout_lib.clean import delete_branch as default_brancher
     from fanout_lib.clean import lock as default_locker
     from fanout_lib.clean import unlock as default_unlocker
     from prune_worktrees import is_dirty, is_merged, parse_worktree_list, remove
 
+    target = resolve(args.repo)
+    checkout = target.checkout
+
     if list_worktrees is None:
 
         def list_worktrees():
-            return git("worktree", "list", "--porcelain", cwd=REPO).stdout
+            return git("worktree", "list", "--porcelain", cwd=checkout).stdout
 
     # Resolved paths, not exact string equality: a worktree launched through one spelling
     # of REPO (a symlink, say) is still the tree `git worktree list` names by its target.
@@ -402,9 +428,9 @@ def cmd_clean_one(
         print(f"removed: {args.worktree} (already gone)")
         return 0
     state, why = clean_one(
-        REPO,
+        checkout,
         tree,
-        ask=ask if ask is not None else is_merged,
+        ask=ask if ask is not None else functools.partial(is_merged, base=target.base),
         dirty=dirty if dirty is not None else is_dirty,
         remover=remover if remover is not None else remove,
         unlocker=unlocker if unlocker is not None else default_unlocker,
@@ -436,7 +462,15 @@ def cmd_clean(args, tools: Tools) -> int:
             print(f"{b.batch} on {b.host}: removed earlier ({b.removed_at})")
             continue
         try:
-            proc = tools.run(b.host, remote_clean_command(b), 120.0, None)
+            target = resolve(b.repo, tools.default_ref)
+        except ValueError as exc:
+            print(f"{b.batch} on {b.host}: clean failed: {exc}")
+            failed.append(b.batch)
+            continue
+        try:
+            proc = tools.run(
+                b.host, remote_clean_command(b, target=target), 120.0, None
+            )
         except subprocess.TimeoutExpired:
             print(f"{b.batch} on {b.host}: clean timed out")
             failed.append(b.batch)
@@ -490,6 +524,13 @@ def main(argv=None, tools: Tools | None = None) -> int:
         "--orchestrator-branch", required=True, help="the branch holding the claims"
     )
     launch_parser.add_argument(
+        "--repo",
+        choices=registered_repos(),
+        default=SERVER,
+        help="the register whose issues the batches work; another repo's batches run on "
+        "this host, are claimed by launch under their own branch, and stop at the PR",
+    )
+    launch_parser.add_argument(
         "--allow-shared-file",
         action="append",
         default=[],
@@ -526,6 +567,7 @@ def main(argv=None, tools: Tools | None = None) -> int:
     # the worktree it re-parses); it's a positional here only so `ps` on the host names the
     # batch, the same reason systemd-run's --unit does at launch.
     clean_one_parser.add_argument("branch")
+    clean_one_parser.add_argument("--repo", default=SERVER)
     clean_one_parser.set_defaults(fn=cmd_clean_one)
     args = p.parse_args(argv)
     # The three manifest-reading subcommands, checked here rather than caught as a
