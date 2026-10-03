@@ -4,8 +4,10 @@
   ansible.builtin.copy:
     src: "{{ item }}"
     dest: "/opt/renovate-agent/{{ item | basename }}"
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
+    # Root-owned: the agent's user runs these and the lander runs land_renovate_pr.py, and
+    # neither may change what the other runs.
+    owner: root
+    group: root
     mode: "0755"
   loop:
     - renovate_agent.py
@@ -24,7 +26,6 @@
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
   vars:
     host_lib_dir: /opt/renovate-agent
-    host_lib_owner: "{{ sys_user }}"
 
 - name: Record the deployed renovate-agent code
   tags: [renovate-agent-code]

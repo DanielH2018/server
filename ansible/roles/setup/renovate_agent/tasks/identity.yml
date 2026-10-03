@@ -1,0 +1,107 @@
+---
+# What the agent's own user needs that the operator's user used to supply: a Claude Code
+# install, a clone to work in, and read access to the deployer's hold markers. Each task runs
+# as that user or grants it read-only access.
+
+- name: Hand the agent's earlier state to its own user
+  tags: [renovate-agent-code, renovate-agent-service]
+  # The run record and transcripts were written by sys_user before the move. Recursing over
+  # the clone on each run costs a few seconds of stat calls and keeps ownership true.
+  ansible.builtin.file:
+    path: "{{ renovate_agent_home }}"
+    state: directory
+    recurse: true
+    owner: "{{ renovate_agent_user }}"
+    group: "{{ sys_user }}"
+  become: true
+
+- name: Create the agent user's bin directory
+  tags: [renovate-agent-code, renovate-agent-service]
+  ansible.builtin.file:
+    path: "{{ renovate_agent_home }}/.local/bin"
+    state: directory
+    owner: "{{ renovate_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Give the agent user the operator's pinned uv
+  tags: [renovate-agent-code, renovate-agent-service]
+  # /usr/local/bin/uv is a symlink into /home/{{ sys_user }}, which ProtectHome= and the 0750
+  # home both hide from this user. A copy of the binary initial_setup pins, rather than a second
+  # installer pin, so a uv bump reaches the agent on the next apply of this role.
+  ansible.builtin.copy:
+    src: /home/{{ sys_user }}/.local/bin/uv
+    dest: "{{ renovate_agent_home }}/.local/bin/uv"
+    remote_src: true
+    # The agent's own ownership, as the recursive chown above sets it; root would flip back and
+    # forth with that task on every apply. Only this user runs this copy.
+    owner: "{{ renovate_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Install the pinned host Python for the agent user
+  tags: [renovate-agent-code, renovate-agent-service]
+  # The wrapper and every project hook run under `uv run --python {{ host_python_version }}`,
+  # and uv keeps interpreters under the user's own data dir. Without one, each of the session's
+  # Bash calls meets a hook that cannot start, and an unattended `ask` is a denial.
+  ansible.builtin.command:
+    cmd: "{{ renovate_agent_home }}/.local/bin/uv python install {{ host_python_version }}"
+  environment:
+    HOME: "{{ renovate_agent_home }}"
+  register: renovate_agent_python
+  changed_when: "'Installed' in renovate_agent_python.stderr + renovate_agent_python.stdout"
+  become: true
+  become_user: "{{ renovate_agent_user }}"
+
+- name: Download the Claude Code installer for the agent's user
+  tags: [renovate-agent-code, renovate-agent-service]
+  ansible.builtin.get_url:
+    url: https://claude.ai/install.sh
+    dest: "{{ renovate_agent_home }}/claude-install.sh"
+    mode: "0755"
+  become: true
+  become_user: "{{ renovate_agent_user }}"
+
+- name: Install Claude Code for the agent's user
+  tags: [renovate-agent-code, renovate-agent-service]
+  # Run-once, as in the claude_code role: the native installer updates itself thereafter.
+  ansible.builtin.command:
+    cmd: bash {{ renovate_agent_home }}/claude-install.sh
+  args:
+    creates: "{{ renovate_agent_home }}/.local/bin/claude"
+  environment:
+    HOME: "{{ renovate_agent_home }}"
+  become: true
+  become_user: "{{ renovate_agent_user }}"
+
+- name: Clone the repo for the agent's user
+  tags: [renovate-agent-code, renovate-agent-service]
+  # Its own clone, so the session never writes the primary checkout's .git, which the deployer
+  # fetches and fast-forwards. update: false, because run_worktree.py fetches on each run.
+  ansible.builtin.git:
+    repo: "https://github.com/{{ renovate_agent_repo }}.git"
+    dest: "{{ renovate_agent_clone_dir }}"
+    version: master
+    update: false
+  become: true
+  become_user: "{{ renovate_agent_user }}"
+
+- name: Let the agent's user read the deployer's hold markers
+  tags: [renovate-agent-code, renovate-agent-service]
+  # The wrapper skips a run while the deployer holds (agent_logic.decide), and the deployer's
+  # state directory is 0750 sys_user. Read-only, by ACL. The default entry keeps markers the
+  # deployer writes later readable too.
+  ansible.posix.acl:
+    path: /var/lib/gitops-deploy
+    entity: "{{ renovate_agent_user }}"
+    etype: user
+    permissions: "{{ item.permissions }}"
+    default: "{{ item.default }}"
+    recursive: true
+    state: present
+  loop:
+    - {permissions: rX, default: false}
+    - {permissions: r, default: true}
+  become: true

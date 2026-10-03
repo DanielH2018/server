@@ -1,4 +1,20 @@
 ---
+# Arming needs the agent's two credentials. Without them the session would run on nothing, or
+# be tempted back onto the operator's token, which is what the agent's own user exists to end.
+- name: Refuse to arm the agent without its own GitHub token and Claude credential
+  tags: [renovate-agent-service]
+  ansible.builtin.assert:
+    that:
+      - renovate_agent_gh_token | default('') | length > 0
+      - renovate_agent_claude_oauth_token | default('') | length > 0
+    fail_msg: >-
+      renovate_agent_enabled is true, but renovate_agent_gh_token or
+      renovate_agent_claude_oauth_token is not in secrets.yml. Add both with the add-secret
+      skill first; the role's CLAUDE.md lists what each must be.
+    quiet: true
+  when: renovate_agent_enabled
+  no_log: true
+
 # Rendered rather than shipped as a file so it can carry the caps the unit actually enforces.
 # A prompt naming a different PR cap or timeout from the ones in defaults/main.yml is how the
 # session ends up starting a landing it has no budget to finish.
@@ -7,18 +23,32 @@
   ansible.builtin.template:
     src: prompt.txt.j2
     dest: /opt/renovate-agent/prompt.txt
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
+    owner: root
+    group: root
     mode: "0644"
   become: true
 
+# Readable by the agent, writable by root alone: a session steered by text it read could
+# otherwise raise its own budget or timeout, or point PROMPT_FILE at a prompt of its own for
+# the next run.
 - name: Write agent config (secret webhook, host-only)
   tags: [renovate-agent-service]
   ansible.builtin.template:
     src: config.env.j2
     dest: /etc/renovate-agent/config.env
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
+    owner: root
+    group: "{{ renovate_agent_user }}"
+    mode: "0640"
+  become: true
+  no_log: true
+
+- name: Write the session's GitHub token and Claude credential where only systemd reads them
+  tags: [renovate-agent-service]
+  ansible.builtin.template:
+    src: session.env.j2
+    dest: /etc/renovate-agent/session.env
+    owner: root
+    group: root
     mode: "0600"
   become: true
   no_log: true
@@ -88,5 +118,6 @@
       # The stamp and the check both hash the repo source, never the rendered file, so an
       # .env.j2 carries no secret into either.
       - ansible/roles/setup/renovate_agent/templates/config.env.j2
+      - ansible/roles/setup/renovate_agent/templates/session.env.j2
       - ansible/roles/setup/renovate_agent/templates/alert-webhook.env.j2
       - ansible/roles/setup/renovate_agent/templates/prompt.txt.j2

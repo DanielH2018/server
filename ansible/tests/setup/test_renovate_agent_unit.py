@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The renovate-agent systemd unit and prompt must keep the guards that bound an unattended run.
 
-This unit spends a Claude session that merges PRs and deploys them. Four of its lines exist to
+This unit spends a Claude session that picks PRs for the lander to land. Four of its lines exist to
 defeat failures that produce no error, and each is invisible at deploy time — Ansible reports
 the template as applied either way:
 
@@ -72,7 +72,7 @@ def test_execstart_serializes_with_a_nonblocking_lock(unit: str) -> None:
     exec_starts = directive(unit, "ExecStart")
     assert exec_starts, "the unit has no ExecStart"
     assert any("flock -n" in e for e in exec_starts), (
-        "ExecStart must take /var/lock/renovate-agent.lock with -n: two overlapping runs "
+        "ExecStart must take the agent's run.lock with -n: two overlapping runs "
         "fight over the same worktree, and a daily timer should say so rather than queue"
     )
 
@@ -92,18 +92,23 @@ def test_path_carries_the_user_local_bin(unit: str) -> None:
     assert ".local/bin" in paths[-1]
 
 
-def test_the_unit_pins_land_sh_to_renovates_prs(unit: str) -> None:
-    """The contract's "never a PR by another author" is held by `land.sh --arm-merge`,
-    which reads LAND_REQUIRE_AUTHOR. The login must be the one the wrapper's own
-    census filters on (`RENOVATE_AUTHOR`), read from its source rather than typed here."""
+def test_the_lander_pins_land_sh_to_renovates_prs() -> None:
+    """The contract's "never a PR by another author" is held twice: by the lander's own
+    check, and by `land.sh --arm-merge`, which reads LAND_REQUIRE_AUTHOR from the lander's
+    unit. The login must be the one the wrapper's own census filters on (`RENOVATE_AUTHOR`),
+    read from its source rather than typed here."""
     # fact: ansible/roles/setup/renovate_agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
-    envs = directive(unit, "Environment")
+    envs = directive(render("renovate-agent-land@.service.j2"), "Environment")
     required = [e for e in envs if e.startswith("LAND_REQUIRE_AUTHOR=")]
     assert required, "the unit sets no LAND_REQUIRE_AUTHOR"
     wrapper = (ROLE / "files" / "renovate_agent.py").read_text()
     census = re.search(r'^RENOVATE_AUTHOR = "([^"]+)"', wrapper, re.MULTILINE)
     assert census, "the wrapper's RENOVATE_AUTHOR census filter is gone"
     assert required[-1] == f"LAND_REQUIRE_AUTHOR={census.group(1)}"
+    lander = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    assert f'\nAUTHOR = "{census.group(1)}"\n' in lander, (
+        "the lander's own author check must name the login the census keys on"
+    )
 
 
 def test_onfailure_pages(unit: str) -> None:
@@ -253,10 +258,11 @@ def test_config_env_carries_the_gated_push_url() -> None:
     )
     tasks = TASKS.read_text()
     assert re.search(
-        r"dest: /etc/renovate-agent/config\.env\n\s+owner:.*\n\s+group:.*\n\s+mode: \"0600\"",
+        r"dest: /etc/renovate-agent/config\.env\n\s+owner: root\n\s+group:.*\n\s+mode: \"0640\"",
         tasks,
     ), (
-        "config.env must stay 0600 — it is now the only place the push token lands on disk"
+        "config.env must stay root-owned and group-read only — it is the only place the push "
+        "token lands on disk, and the session must not be able to rewrite it"
     )
 
 
@@ -394,68 +400,6 @@ def test_a_prompt_missing_any_one_of_them_is_flagged(
     parts = [_TITLE_TELL, _SLUG_TELL, _BRANCH_READ, _LAND]
     prompt = "- leave a PR " + "; ".join(p for p in parts if p != dropped)
     problems = prompt_exclusion_problems(prompt, "k8s_autodeploy: false")
-    assert len(problems) == 1 and fragment in problems[0], problems
-
-
-# ── the manual hand-off: the prompt must hand its own superseding PR to a person ──
-#
-# A finished `manual —` bump ends as a PR the session opened itself, which LAND_REQUIRE_AUTHOR
-# refuses to arm. The operator hands that PR off rather than landing it, so the prompt has
-# to rule out the `--any-author` override.
-
-
-def prompt_handoff_problems(prompt: str) -> list[str]:
-    """Every way the prompt can fail to hand off its own superseding PR. Empty means it does."""
-    problems: list[str] = []
-    if "never pass `--any-author`" not in prompt:
-        problems.append(
-            "the prompt does not forbid --any-author, so the agent can override the author "
-            "gate and land the superseding PR it opened"
-        )
-    if "hand-off finding" not in prompt:
-        problems.append(
-            "the prompt does not ask for a hand-off finding, so a finished manual bump sits "
-            "open with nothing telling a person to land it"
-        )
-    if _BRANCH not in prompt:
-        problems.append(
-            "the prompt does not name the hand-off branch, so the wrapper's census of the PRs "
-            "the run handed off (agent_logic.handed_off) matches nothing it opened"
-        )
-    return problems
-
-
-def test_the_prompt_hands_off_its_own_superseding_pr() -> None:
-    # fact: ansible/roles/setup/renovate_agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
-    problems = prompt_handoff_problems(render(PROMPT))
-    assert not problems, "\n".join(problems)
-
-
-_FORBID = "never pass `--any-author`"
-_HANDOFF = "file a hand-off finding"
-# The prefix agent_logic.handed_off matches: the run branch (config.env's BRANCH) plus `-`.
-# Read from defaults rather than written as the Jinja reference: the prompt is asserted on its
-# RENDER, where the reference has become the branch name itself.
-_BRANCH = f"`{yaml_fast.safe_load(DEFAULTS.read_text())['renovate_agent_branch']}-<"
-
-
-def test_a_prompt_forbidding_the_override_and_asking_for_a_handoff_is_clean() -> None:
-    assert prompt_handoff_problems(f"{_FORBID}; {_HANDOFF}; {_BRANCH}") == []
-
-
-@pytest.mark.parametrize(
-    ("dropped", "fragment"),
-    [
-        (_FORBID, "--any-author"),
-        (_HANDOFF, "hand-off finding"),
-        (_BRANCH, "hand-off branch"),
-    ],
-)
-def test_a_prompt_missing_any_handoff_rule_is_flagged(
-    dropped: str, fragment: str
-) -> None:
-    prompt = "; ".join(p for p in (_FORBID, _HANDOFF, _BRANCH) if p != dropped)
-    problems = prompt_handoff_problems(prompt)
     assert len(problems) == 1 and fragment in problems[0], problems
 
 

@@ -4,19 +4,41 @@
 # rather than the whole role (#3135). `narrow_setup` reads a task file's OWN tags, so each task
 # in code.yml and service.yml carries its tag, and each import below repeats it so an edit to
 # this file narrows too. The directories serve both halves.
+- name: Create the agent session's own user
+  tags: [renovate-agent-code, renovate-agent-service]
+  # The session reads third-party text, so it runs as a user with no sudo and no read on
+  # /home/{{ sys_user }} (0750). renovate-agent-land@.service is the one privileged thing it
+  # may start.
+  ansible.builtin.user:
+    name: "{{ renovate_agent_user }}"
+    system: true
+    home: "{{ renovate_agent_home }}"
+    create_home: false
+    shell: /bin/bash
+    password_lock: true
+  become: true
+
 - name: Create renovate-agent directories
   tags: [renovate-agent-code, renovate-agent-service]
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
     state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0750"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
   loop:
-    - /opt/renovate-agent       # wrapper scripts + the rendered prompt
-    - /var/lib/renovate-agent   # state (last_run) + the last session's transcript
-    - /etc/renovate-agent       # config.env (0600 secret)
+    # Code and the rendered prompt: readable by the agent and by the lander, writable by root
+    # alone, so the session cannot change what the lander runs.
+    - {path: /opt/renovate-agent, owner: root, group: root, mode: "0755"}
+    # The agent's home, state and clone. Group sys_user and setgid, so the docs cron reads the
+    # run record (scripts/docs/reference/state.py) while the agent reads nothing of sys_user's.
+    - {path: "{{ renovate_agent_home }}", owner: "{{ renovate_agent_user }}", group: "{{ sys_user }}", mode: "2750"}
+    - {path: /etc/renovate-agent, owner: root, group: "{{ renovate_agent_user }}", mode: "0750"}
   become: true
+
+- name: Install the agent user's Claude Code, clone and read access
+  tags: [renovate-agent-code, renovate-agent-service]
+  ansible.builtin.import_tasks: identity.yml
 
 - name: Install the renovate-agent code
   tags: [renovate-agent-code]
