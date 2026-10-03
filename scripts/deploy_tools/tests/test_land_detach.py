@@ -187,8 +187,13 @@ def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdic
         caller.wait(timeout=10)
 
         [log] = _logs(tmp_path)
+        # Wait for the exit code as well as the verdict: the landing prints the VERDICT line
+        # and only then exits and writes its `.rc`, so a read straight after the verdict can
+        # see none. That window failed this test on CI twice on 2026-10-03.
         deadline = time.monotonic() + 60
-        while detach.verdict_in(log) is None and time.monotonic() < deadline:
+        while (
+            detach.verdict_in(log) is None or detach.recorded_code(log) is None
+        ) and time.monotonic() < deadline:
             time.sleep(0.2)
         verdict = detach.verdict_in(log) or ""
         assert verdict.startswith("VERDICT: nothing-to-deploy (PR #939"), (
