@@ -23,25 +23,13 @@ so an assertion names the value the pod receives rather than a line of `deployme
 Run: uv run pytest ansible/tests/services/test_anisync_pin_matches_server.py
 """
 
-import re
-
 from _helpers import ANSIBLE, load_defaults
-from _jellyfin_plugins import PLUGIN_ROOT, plugin_constants, script
+from _jellyfin_plugins import PLUGIN_ROOT, plugin_constants, script, version_tuple
 
 JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
 
 INSTALLER = "install-ani-sync"
 PLUGIN_NAME = "Ani-Sync"
-
-# Leading dotted version of a string: "10.11.6.-.ani-sync_4.1.0.0.zip" -> "10.11.6",
-# "10.11.10ubu2404-ls35" -> "10.11.10".
-LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
-
-
-def _version_tuple(text: str, what: str) -> tuple[int, ...]:
-    match = LEADING_VERSION.match(text)
-    assert match, f"{what} does not start with a dotted version: {text!r}"
-    return tuple(int(part) for part in match.group(1).split("."))
 
 
 def test_the_release_url_carries_the_pinned_version():
@@ -70,10 +58,10 @@ def test_the_plugin_target_abi_does_not_exceed_the_server():
     image = defaults["jellyfin_k8s_image"]
 
     asset = url.rsplit("/", 1)[-1]
-    target_abi = _version_tuple(asset, "the release asset filename")
+    target_abi = version_tuple(asset, "the release asset filename")
 
     tag = image.rsplit(":", 1)[-1]
-    server = _version_tuple(tag, "the jellyfin image tag")
+    server = version_tuple(tag, "the jellyfin image tag")
 
     assert target_abi <= server, (
         f"jellyfin-ani-sync asset {asset!r} targets Jellyfin "

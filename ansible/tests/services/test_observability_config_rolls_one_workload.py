@@ -28,7 +28,7 @@ with NOT ROLLED rather than going quiet. That half is the loud one; these two ar
 import pytest
 
 from _helpers import REPO, load_defaults
-from _k8s_render import rendered_docs
+from _k8s_render import pod_spec, pod_template, rendered_docs
 
 
 _ROLE = "observability"
@@ -67,27 +67,22 @@ def _names_of_kind(docs, kind):
     }
 
 
-def _pod_spec(workload):
-    return ((workload.get("spec") or {}).get("template") or {}).get("spec") or {}
-
-
 def _pod_annotations(workload):
-    template = (workload.get("spec") or {}).get("template") or {}
-    return (template.get("metadata") or {}).get("annotations") or {}
+    return (pod_template(workload).get("metadata") or {}).get("annotations") or {}
 
 
 def _mounted_configmaps(workload):
     """ConfigMap names the workload's pod mounts as a volume."""
     return {
         (volume.get("configMap") or {}).get("name")
-        for volume in _pod_spec(workload).get("volumes") or []
+        for volume in pod_spec(workload).get("volumes") or []
         if volume.get("configMap")
     }
 
 
 def _secret_inputs(workload):
     """Secret names the pod reads, as a volume or through `env.valueFrom.secretKeyRef`."""
-    spec = _pod_spec(workload)
+    spec = pod_spec(workload)
     names = {
         (volume.get("secret") or {}).get("secretName")
         for volume in spec.get("volumes") or []

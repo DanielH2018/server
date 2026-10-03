@@ -30,9 +30,11 @@ from _helpers import ANSIBLE, REPO, load_defaults
 from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,
-    plugin_constants,
     init_containers,
+    padded,
+    plugin_constants,
     script,
+    version_tuple,
     without_assignment,
 )
 
@@ -43,24 +45,7 @@ RENOVATE = REPO / "renovate.json"
 INSTALLER = "install-media-cleaner"
 PLUGIN_NAME = "Media Cleaner"
 
-LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
-
-
-def _version_tuple(text: str, what: str) -> tuple[int, ...]:
-    match = LEADING_VERSION.match(text)
-    assert match, f"{what} does not start with a dotted version: {text!r}"
-    return tuple(int(part) for part in match.group(1).split("."))
-
-
-def _padded(left: tuple[int, ...], right: tuple[int, ...]) -> tuple[tuple, tuple]:
-    """Both tuples zero-padded, so a prefix tie does not decide the comparison.
-
-    `(10, 11, 9, 0) <= (10, 11, 11)` compares a four-part targetAbi against a three-part image
-    tag; without padding the longer tuple wins ties and the pin that is correct fails.
-    """
-    width = max(len(left), len(right))
-    return left + (0,) * (width - len(left)), right + (0,) * (width - len(right))
 
 
 def _assert_release_tag(defaults: dict) -> None:
@@ -111,7 +96,7 @@ def _assert_pin_agrees(defaults: dict) -> None:
         f"the pin was taken from the release TAG rather than from the published manifest."
     )
 
-    abi = _version_tuple(target_abi, "jellyfin_k8s_mediacleaner_target_abi")
+    abi = version_tuple(target_abi, "jellyfin_k8s_mediacleaner_target_abi")
     assert len(abi) >= 3, f"targetAbi {target_abi!r} has fewer than three segments"
     expected_suffix = f"{abi[0]}{abi[1]:02d}{abi[2]:02d}"
 
@@ -159,14 +144,14 @@ def test_the_digest_is_the_right_shape():
 def test_the_plugin_target_abi_does_not_exceed_the_server():
     """The constraint the pin exists to satisfy, checked rather than remembered."""
     defaults = load_defaults(JELLYFIN)
-    target_abi = _version_tuple(
+    target_abi = version_tuple(
         defaults["jellyfin_k8s_mediacleaner_target_abi"],
         "jellyfin_k8s_mediacleaner_target_abi",
     )
     image = defaults["jellyfin_k8s_image"]
-    server = _version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
 
-    abi, srv = _padded(target_abi, server)
+    abi, srv = padded(target_abi, server)
     assert abi <= srv, (
         f"Media Cleaner {defaults['jellyfin_k8s_mediacleaner_version']} targets Jellyfin "
         f"{defaults['jellyfin_k8s_mediacleaner_target_abi']}, but jellyfin_k8s_image is "

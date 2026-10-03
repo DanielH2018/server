@@ -19,6 +19,7 @@ follow it.
 """
 
 import ast
+import re
 
 from _k8s_render import render_role_template, rendered_docs
 from lib import yaml_fast
@@ -167,4 +168,30 @@ def compares_against(installer: str, name: str) -> bool:
             for side in [node.left, *node.comparators]
         )
         for node in ast.walk(ast.parse(installer))
+    )
+
+
+# Leading dotted version of a string: "10.11.6.-.ani-sync_4.1.0.0.zip" -> "10.11.6",
+# "10.11.10ubu2404-ls35" -> "10.11.10".
+LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
+
+
+def version_tuple(text: str, what: str) -> tuple[int, ...]:
+    """The dotted version `text` starts with, as ints; `what` names `text` in the failure."""
+    match = LEADING_VERSION.match(text)
+    assert match, f"{what} does not start with a dotted version: {text!r}"
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def padded(left: tuple[int, ...], right: tuple[int, ...]) -> tuple[tuple, tuple]:
+    """Both tuples zero-padded to the same length.
+
+    Not cosmetic. A plugin declares a four-part targetAbi (`10.11.11.0`) while the image tag
+    carries three parts (`10.11.11`), and `(10, 11, 11, 0) <= (10, 11, 11)` is False in Python —
+    the longer tuple wins a prefix tie. Comparing them unpadded fails the pin that is correct.
+    """
+    width = max(len(left), len(right))
+    return (
+        left + (0,) * (width - len(left)),
+        right + (0,) * (width - len(right)),
     )

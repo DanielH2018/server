@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 import pytest
 from _gates_fakes import fake_tools
 from deploy_tools import pinned_rotation_gates as gates
-from lib import kubectl, yaml_fast
+from lib import yaml_fast
 
 from lib.repo_paths import REPO as _REPO
 from lib.proc_testing import run
@@ -57,13 +57,6 @@ AVAILABLE = _deployment(1)
 
 def _registry_yaml(tier: str) -> str:
     return f"entries:\n  {gates.SECRET}:\n    last_rotated: '2025-06-27'\n    tier: {tier}\n"
-
-
-@pytest.fixture(autouse=True)
-def _fresh_identity():
-    kubectl.forget_served_cluster()
-    yield
-    kubectl.forget_served_cluster()
 
 
 @pytest.fixture

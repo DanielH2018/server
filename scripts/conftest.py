@@ -16,6 +16,8 @@ import sys
 
 import pytest
 
+from lib import kubectl
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -99,3 +101,16 @@ def live_verdicts():
     from lib import script_classify as sc
 
     return sc.classify()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_served_cluster():
+    """Start and end every test with no cached cluster identity.
+
+    `lib.kubectl.served_cluster` caches its answer per `Tools` for the life of the process,
+    and an xdist worker runs many tests in one process. Without the clear, one test's fake
+    cluster answers the next test's identity check.
+    """
+    kubectl.forget_served_cluster()
+    yield
+    kubectl.forget_served_cluster()

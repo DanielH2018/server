@@ -21,7 +21,6 @@ Run: uv run pytest ansible/tests/services/test_introskipper_install.py
 """
 
 import json
-import re
 
 import pytest
 
@@ -29,9 +28,11 @@ from _helpers import ANSIBLE, REPO, load_defaults
 from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,
-    plugin_constants,
     init_containers,
+    padded,
+    plugin_constants,
     script,
+    version_tuple,
     without_assignment,
 )
 
@@ -62,7 +63,7 @@ def _introskipper_manager() -> dict:
 
 def _assert_anchor_tracks_the_image(manager: dict, image: str) -> None:
     """The manager's release-line anchor must name the Jellyfin minor the image runs."""
-    server = _version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
     anchor = manager["extractVersionTemplate"]
 
     assert f"{server[0]}\\.{server[1]}" in anchor, (
@@ -71,29 +72,6 @@ def _assert_anchor_tracks_the_image(manager: dict, image: str) -> None:
         f"Raise the anchor with the image, or the manager tracks a release line upstream has "
         f"moved off — it then matches nothing and offers nothing, which reads exactly like a "
         f"plugin with no updates available."
-    )
-
-
-LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
-
-
-def _version_tuple(text: str, what: str) -> tuple[int, ...]:
-    match = LEADING_VERSION.match(text)
-    assert match, f"{what} does not start with a dotted version: {text!r}"
-    return tuple(int(part) for part in match.group(1).split("."))
-
-
-def _padded(left: tuple[int, ...], right: tuple[int, ...]) -> tuple[tuple, tuple]:
-    """Both tuples zero-padded to the same length.
-
-    Not cosmetic. The plugin declares a four-part targetAbi (`10.11.11.0`) while the image tag
-    carries three parts (`10.11.11`), and `(10, 11, 11, 0) <= (10, 11, 11)` is False in Python —
-    the longer tuple wins a prefix tie. Comparing them unpadded fails the pin that is correct.
-    """
-    width = max(len(left), len(right))
-    return (
-        left + (0,) * (width - len(left)),
-        right + (0,) * (width - len(right)),
     )
 
 
@@ -125,7 +103,7 @@ def test_the_release_comes_from_the_jellyfin_line_that_is_deployed():
     url = defaults["jellyfin_k8s_introskipper_url"]
     image = defaults["jellyfin_k8s_image"]
 
-    server = _version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
     line = f"{server[0]}.{server[1]}"
 
     assert f"/releases/download/{line}/" in url, (
@@ -139,14 +117,14 @@ def test_the_release_comes_from_the_jellyfin_line_that_is_deployed():
 def test_the_plugin_target_abi_does_not_exceed_the_server():
     """The constraint the pin exists to satisfy, checked rather than remembered."""
     defaults = load_defaults(JELLYFIN)
-    target_abi = _version_tuple(
+    target_abi = version_tuple(
         defaults["jellyfin_k8s_introskipper_target_abi"],
         "jellyfin_k8s_introskipper_target_abi",
     )
     image = defaults["jellyfin_k8s_image"]
-    server = _version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
 
-    abi, srv = _padded(target_abi, server)
+    abi, srv = padded(target_abi, server)
     assert abi <= srv, (
         f"Intro Skipper {defaults['jellyfin_k8s_introskipper_version']} targets Jellyfin "
         f"{defaults['jellyfin_k8s_introskipper_target_abi']}, but jellyfin_k8s_image is "

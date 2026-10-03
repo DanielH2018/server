@@ -17,7 +17,7 @@ this cannot drift from what that validator considers a renderable manifest.
 """
 
 from _helpers import K8S_ROLES
-from _k8s_render import rendered_docs
+from _k8s_render import pod_spec, rendered_docs
 
 _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "Job", "CronJob"}
 
@@ -82,19 +82,12 @@ _UNCOVERED_ROLES = {
 _MIN_CONTAINERS = 90
 
 
-def _pod_specs(doc: dict):
-    spec = doc.get("spec", {})
-    if doc["kind"] == "CronJob":
-        spec = spec.get("jobTemplate", {}).get("spec", {})
-    return spec.get("template", {}).get("spec", {})
-
-
 def _containers():
     """(role, template, container name, securityContext) for every container in the fleet."""
     for role, tpl, doc in rendered_docs():
         if doc.get("kind") not in _POD_KINDS:
             continue
-        pod = _pod_specs(doc)
+        pod = pod_spec(doc)
         for key in ("initContainers", "containers"):
             for container in pod.get(key) or []:
                 yield (
@@ -325,7 +318,7 @@ def _containers_with_pod():
     for role, tpl, doc in rendered_docs():
         if doc.get("kind") not in _POD_KINDS:
             continue
-        pod = _pod_specs(doc)
+        pod = pod_spec(doc)
         pod_sc = pod.get("securityContext") or {}
         for key in ("initContainers", "containers"):
             for container in pod.get(key) or []:

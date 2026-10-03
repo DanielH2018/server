@@ -42,7 +42,7 @@ and one it must reject, so each guard carries its own proof that it can go red.
 import pytest
 from lib import yaml_fast
 
-from _k8s_render import rendered_docs
+from _k8s_render import pod_spec, rendered_docs
 from _setup_render import rendered_setup_text
 
 _LONG_RUNNING = {"Deployment", "DaemonSet", "StatefulSet"}
@@ -93,13 +93,6 @@ def _homelab_tiers() -> frozenset[str]:
     return names
 
 
-def _pod_spec(doc: dict) -> dict:
-    spec = doc.get("spec", {})
-    if doc["kind"] == "CronJob":
-        spec = spec.get("jobTemplate", {}).get("spec", {})
-    return spec.get("template", {}).get("spec", {})
-
-
 def _pod_templates(kinds: set[str]):
     """(role, template, "<kind>/<name>", pod spec) for every rendered doc of the given kinds.
 
@@ -110,7 +103,7 @@ def _pod_templates(kinds: set[str]):
         if doc.get("kind") not in kinds:
             continue
         label = f"{doc['kind']}/{doc.get('metadata', {}).get('name', '<unnamed>')}"
-        yield role, tpl, label, _pod_spec(doc)
+        yield role, tpl, label, pod_spec(doc)
 
 
 # ── the predicates ────────────────────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ a root or privileged one. This file pins the boundaries around that decision, no
 
 from lib import yaml_fast
 
-from _k8s_render import rendered_build_job_text
+from _k8s_render import pod_spec, rendered_build_job_text
 
 _TEMPLATE = "build-job.yaml.j2"
 
@@ -36,12 +36,8 @@ def _build_job() -> dict:
     return doc
 
 
-def _pod_spec(doc: dict) -> dict:
-    return doc["spec"]["template"]["spec"]
-
-
 def _containers(doc: dict) -> list[dict]:
-    spec = _pod_spec(doc)
+    spec = pod_spec(doc)
     return list(spec.get("initContainers") or []) + list(spec["containers"])
 
 
@@ -62,7 +58,7 @@ def test_build_job_runs_unprivileged_uid():
     rootless the moment this becomes 0.
     """
     doc = _build_job()
-    pod_uid = (_pod_spec(doc).get("securityContext") or {}).get("runAsUser")
+    pod_uid = (pod_spec(doc).get("securityContext") or {}).get("runAsUser")
     for container in _containers(doc):
         uid = (container.get("securityContext") or {}).get("runAsUser", pod_uid)
         assert uid not in (0, None), (
@@ -90,7 +86,7 @@ def test_build_job_mounts_no_host_path():
     pin exists to avoid.
     """
     offenders = [
-        v["name"] for v in _pod_spec(_build_job()).get("volumes", []) if "hostPath" in v
+        v["name"] for v in pod_spec(_build_job()).get("volumes", []) if "hostPath" in v
     ]
     assert not offenders, (
         f"image-builder mounts hostPath volume(s): {', '.join(offenders)}"
@@ -98,7 +94,7 @@ def test_build_job_mounts_no_host_path():
 
 
 def test_build_job_does_not_join_host_namespaces():
-    spec = _pod_spec(_build_job())
+    spec = pod_spec(_build_job())
     for key in ("hostNetwork", "hostPID", "hostIPC"):
         assert spec.get(key) is not True, f"image-builder must not set {key}"
 
@@ -109,7 +105,7 @@ def test_build_job_does_not_mount_a_service_account_token():
     A mounted token on a container running Unconfined is a credential inside the least-confined
     thing in the fleet.
     """
-    spec = _pod_spec(_build_job())
+    spec = pod_spec(_build_job())
     assert spec.get("automountServiceAccountToken") is False, (
         "image-builder must set automountServiceAccountToken: false — it needs no Kubernetes "
         "API access, and it is the fleet's least-confined container."

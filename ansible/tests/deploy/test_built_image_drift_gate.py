@@ -22,27 +22,17 @@ failure. Hence a test rather than a comment.
 
 import re
 
-from lib import yaml_fast
 from _helpers import ANSIBLE, jinja_env, load_tasks
+from _k8s_render import deploy_play
 
 _ANSIBLE = ANSIBLE
 _GATE = _ANSIBLE / "post_tasks" / "k8s_image_drift_gate.yml"
-_DEPLOY = _ANSIBLE / "deploy.yml"
 _BUILDER = _ANSIBLE / "roles" / "k8s" / "image-builder" / "tasks" / "main.yml"
 
 
 def _tasks(path):
     """Every task in a task file, as dicts."""
     return [t for t in load_tasks(path) if isinstance(t, dict)]
-
-
-def _k8s_play():
-    """The k8s play, selected by name — deploy.yml opens with the Docker play for the Pi."""
-    plays = yaml_fast.safe_load(_DEPLOY.read_text())
-    for play in plays:
-        if play.get("name") == "Deploy k8s workloads":
-            return play
-    raise AssertionError("deploy.yml has no play named 'Deploy k8s workloads'")
 
 
 def test_the_gate_exists_and_asserts_something():
@@ -61,7 +51,7 @@ def test_the_gate_exists_and_asserts_something():
 
 def test_the_gate_is_wired_into_the_play():
     """An unincluded post_task is dead code that still passes its own unit test."""
-    play = _k8s_play()
+    play = deploy_play()
     included = {
         t.get("ansible.builtin.include_tasks")
         for t in play.get("post_tasks", [])
@@ -75,7 +65,7 @@ def test_the_gate_is_wired_into_the_play():
 
 def test_the_gate_runs_after_the_stabilisation_gate():
     """Ordering is load-bearing: a pod mid-replacement has not finished resolving its image."""
-    play = _k8s_play()
+    play = deploy_play()
     order = [
         t.get("ansible.builtin.include_tasks")
         for t in play.get("post_tasks", [])
@@ -91,7 +81,7 @@ def test_the_gate_runs_after_the_stabilisation_gate():
 
 def test_the_play_resets_the_accumulator():
     """Facts persist across plays and resumed runs — a leftover entry is a false failure."""
-    play = _k8s_play()
+    play = deploy_play()
     reset = [
         t["ansible.builtin.set_fact"]
         for t in play.get("pre_tasks", [])

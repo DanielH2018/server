@@ -52,17 +52,29 @@ PATCHES = Ratchet(
 )
 
 
+def tracked_files(*pathspec: str) -> list[str]:
+    """Every tracked path matching `pathspec` (all of them if none), repo-relative.
+
+    `-z`, because without it git C-quotes a path holding a non-ASCII byte, a quote or a
+    newline, and the quoted form names no file. Raises on a failed `git ls-files`: an empty
+    list would pass every guard that asserts over it.
+    """
+    listed = run(
+        ["git", "ls-files", "-z", "--", *pathspec], cwd=REPO, check=True
+    ).stdout
+    return [rel for rel in listed.split("\0") if rel]
+
+
 def tracked_python_files() -> list[str]:
     """Every tracked first-party `.py` path, repo-relative.
 
     `git ls-files` rather than a walk, which from the repo root descends into
     `.claude/worktrees/<name>/` — see test_tracked_python_hazards.py for that incident.
     """
-    listed = run_git("ls-files", "-z", "--", "*.py").stdout
     return [
         rel
-        for rel in listed.split("\0")
-        if rel and not rel.startswith("ansible/collections/")
+        for rel in tracked_files("*.py")
+        if not rel.startswith("ansible/collections/")
     ]
 
 

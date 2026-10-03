@@ -27,7 +27,7 @@ the class.
 Run: uv run pytest ansible/tests/k8s/test_built_images_pull_always.py
 """
 
-from _k8s_render import rendered_docs
+from _k8s_render import pod_spec, rendered_docs
 
 _POD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
 
@@ -36,20 +36,13 @@ _POD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJo
 _BUILT_PREFIX = "localhost:"
 
 
-def _pod_spec(doc: dict) -> dict:
-    spec = doc.get("spec", {})
-    if doc.get("kind") == "CronJob":
-        spec = spec.get("jobTemplate", {}).get("spec", {})
-    return spec.get("template", {}).get("spec", {})
-
-
 def offenders(docs) -> list[str]:
     """`role/template:container` for every built-image container not pulling Always."""
     found = []
     for role, tpl, doc in docs:
         if doc.get("kind") not in _POD_KINDS:
             continue
-        pod = _pod_spec(doc)
+        pod = pod_spec(doc)
         for key in ("initContainers", "containers"):
             for container in pod.get(key) or []:
                 image = str(container.get("image", ""))
@@ -68,7 +61,7 @@ def test_every_built_image_container_pulls_always():
         and any(
             str(c.get("image", "")).startswith(_BUILT_PREFIX)
             for key in ("initContainers", "containers")
-            for c in _pod_spec(doc).get(key) or []
+            for c in pod_spec(doc).get(key) or []
         )
     ]
     # The collector has to see the fleet it guards: seven roles include k8s/image-builder.

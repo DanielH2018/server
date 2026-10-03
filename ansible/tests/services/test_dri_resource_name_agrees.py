@@ -28,7 +28,7 @@ import re
 from itertools import pairwise
 
 from _helpers import K8S_ROLES
-from _k8s_render import rendered_docs
+from _k8s_render import pod_spec, rendered_docs
 from lib import yaml_fast
 
 # The roles whose rendered Deployment must request the render node. Restated here so a consumer
@@ -43,13 +43,9 @@ _PLUGIN_DEFAULT_DOMAIN = "devic.es"
 _BRIDGE_CHECK = K8S_ROLES / "monitor-bridge" / "files" / "bridge/config.py"
 
 
-def _pod_spec(doc: dict) -> dict:
-    return ((doc.get("spec") or {}).get("template") or {}).get("spec") or {}
-
-
 def extended_resources(doc: dict) -> set[str]:
     """Every domain-qualified resource a workload's containers set a limit on."""
-    spec = _pod_spec(doc)
+    spec = pod_spec(doc)
     return {
         name
         for container in (spec.get("containers") or [])
@@ -143,7 +139,7 @@ def test_the_plugin_advertises_the_name_the_consumers_request():
     advertised: set[str] = set()
     for role, _tpl, doc in rendered_docs():
         if role == _PLUGIN_ROLE and doc.get("kind") == "DaemonSet":
-            for container in _pod_spec(doc).get("containers") or []:
+            for container in pod_spec(doc).get("containers") or []:
                 advertised |= advertised_resources(container.get("args") or [])
     assert advertised, (
         f"the rendered {_PLUGIN_ROLE} DaemonSet passes no --device, so it advertises nothing"

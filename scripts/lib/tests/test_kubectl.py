@@ -21,14 +21,6 @@ PROD_NODES = {
 STAGE_NODES = {"items": [{"metadata": {"name": "daniel-stage"}}]}
 
 
-@pytest.fixture(autouse=True)
-def _fresh_identity_cache():
-    """Each test starts with no cached cluster identity and ends leaving none behind."""
-    kubectl_lib.forget_served_cluster()
-    yield
-    kubectl_lib.forget_served_cluster()
-
-
 class _FakeCluster:
     """Stand in a cluster: discovery resolves, and `get nodes` answers with `nodes`.
 
