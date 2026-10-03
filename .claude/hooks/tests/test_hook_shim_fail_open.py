@@ -22,14 +22,23 @@ failure these issues are about — must produce a stderr line and still exit 0),
 by python's own "can't open file" error appearing instead once it fails to find the `.py`
 next to a throwaway copy of the shim).
 
+Issue #3278 moved every registration onto `run-hook.sh <name> <flags>`, so the posture a
+session gets is the flags `settings.json` passes the runner. The last section runs each
+registered command as written, which is what ties a deny guard to `--ask-on-cd`. The per-hook
+shims stay, unregistered, for a session whose `settings.json` predates that switch: its
+commands still name them by path into the primary checkout, and a deleted shim exits 127 there
+with the guard skipped. The tests above keep them honest until they go.
+
 Run: uv run pytest .claude/hooks/tests/test_hook_shim_fail_open.py
 """
 
 import json
+import shlex
 import subprocess
 from pathlib import Path
 
 import pytest
+from test_run_hook import _variant_runner
 
 HOOKS = Path(__file__).resolve().parent.parent
 
@@ -189,3 +198,77 @@ def test_accept_a_valid_cd_target_stays_silent_on_that_line(tmp_path, hook_name)
     assert "did not run" not in proc.stderr
     # Reached exec: some interpreter-level error about the missing .py, not a clean no-op.
     assert proc.returncode != 0
+
+
+# --- the registered commands, each run through the runner as settings.json writes it -------
+
+
+def _registered() -> dict[str, list[str]]:
+    """`{hook name: runner flags}` for every hook `settings.json` registers."""
+    settings = json.loads((HOOKS.parent / "settings.json").read_text(encoding="utf-8"))
+    out: dict[str, list[str]] = {}
+    for groups in settings["hooks"].values():
+        for group in groups:
+            for hook in group["hooks"]:
+                runner, name, *flags = shlex.split(hook["command"])
+                assert runner.endswith("/run-hook.sh"), hook["command"]
+                out[name] = flags
+    return out
+
+
+REGISTERED = _registered()
+# The hooks whose `cd` arm must ask: the PreToolUse guards whose only decisions are deny and
+# ask. Named, so a registration that drops `--ask-on-cd` fails here rather than going quiet.
+ASKING = frozenset({"bash-pretool", "block-protected-edits"})
+
+
+def test_the_registered_census_is_non_vacuous():
+    assert set(REGISTERED) == {
+        "auto-mode-bridge",
+        "bash-pretool",
+        "block-protected-edits",
+        "fanout-stop",
+        "log-instructions",
+        "session-health",
+    }
+    asking = {
+        name
+        for name, flags in REGISTERED.items()
+        if any(f.split("=")[0] == "--ask-on-cd" for f in flags)
+    }
+    assert asking == ASKING
+
+
+@pytest.mark.parametrize("name", sorted(ASKING))
+def test_reject_a_registered_deny_guard_that_cannot_cd_asks(tmp_path, name):
+    runner = _variant_runner(tmp_path, str(tmp_path / "does-not-exist"))
+    proc = subprocess.run(
+        ["bash", str(runner), name, *REGISTERED[name]],
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "ask"
+    assert name in out["permissionDecisionReason"]
+    if name == "bash-pretool":
+        for guard in MERGED_DENY_GUARDS:
+            assert guard in out["permissionDecisionReason"], guard
+
+
+@pytest.mark.parametrize("name", sorted(set(REGISTERED) - ASKING))
+def test_accept_a_registered_non_deny_hook_that_cannot_cd_stays_silent(tmp_path, name):
+    """The near miss: an `ask` from a pass-through hook would be a prompt the design never
+    makes. The quiet hooks never `cd`, so for them this is a run that reaches no `.py`."""
+    runner = _variant_runner(tmp_path, str(tmp_path / "does-not-exist"))
+    proc = subprocess.run(
+        ["bash", str(runner), name, *REGISTERED[name]],
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == ""

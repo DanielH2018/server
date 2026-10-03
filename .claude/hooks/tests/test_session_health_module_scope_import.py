@@ -5,7 +5,7 @@ The file defers `lib.git` and `prune_worktrees` into the functions that use them
 at `parked_deployer_problems`: an import that fails there costs one `⚠` line, not the banner.
 A module-scope `from lib.deployer_park import ...` would make that claim false — an
 ImportError there takes out the scrape-target, live-session and stale-worktree sections too,
-silently, because `session-health.sh` routes stderr to /dev/null and exits 0.
+silently, because `run-hook.sh` routes this hook's stderr to /dev/null and exits 0.
 
 Both halves: the hook must still run and REPORT the breakage when the import cannot resolve,
 and it must still really import `lib.deployer_park` on a healthy checkout — a fallback that

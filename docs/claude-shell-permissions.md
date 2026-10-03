@@ -60,11 +60,10 @@ Code evaluates `ask` rules whatever a PreToolUse hook returns, so a PreToolUse d
 reaches an ask-listed command; this repo registers no PermissionRequest hook of its own.
 
 **A machine without the dotfiles deploy gets no auto-approve at all, rather than a stale local
-copy:** the classifier is part of the deployed hook. This repo's two PreToolUse shims take the
-other posture on a failed cd —
-`bash-pretool.sh`, which carries the three Bash deny guards since #2394, and
-`block-protected-edits.sh`: an **ask** naming the guards that did not run, because a bare exit 0
-from a deny guard is an allow (#2171).
+copy:** the classifier is part of the deployed hook. This repo's two PreToolUse guards take the
+other posture on a failed cd. `run-hook.sh --ask-on-cd` runs both `bash-pretool`, which carries
+the three Bash deny guards since #2394, and `block-protected-edits`. It emits an **ask** naming
+the guards that did not run, because a bare exit 0 from a deny guard is an allow (#2171).
 
 **As of 2026-08-16 those PermissionRequest hooks no longer fire in a normal session.** `Bash(ssh:*)`
 and `Bash(curl:*)` were removed from the `ask` tier — they were the largest single source of prompts

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-# gen-hooks: library
-#   reason: the four PreToolUse:Bash arms, run in one process by bash-pretool.sh
+# gen-hooks: register
+#   event: PreToolUse
+#   matcher: Bash
+#   timeout: 15
+#   order: 10
+#   args: --ask-on-cd=block-protected-bash,nudge-land-sh,block-footguns
 """One PreToolUse:Bash hook that runs the four Bash arms in a single process.
 
 WHY. Each Bash tool call used to start five `uv run --no-sync --quiet python <arm>.py`
@@ -101,7 +105,7 @@ def _attributed(arm_name, reason):
     """`reason` prefixed with the arm that returned it, as `[<arm>] <reason>`.
 
     The OTEL `tool_decision` stream names the hook that decided, and since the merge that
-    hook is `bash-pretool.sh` for every Bash verdict. The prefix puts back what the stream
+    hook is `run-hook.sh bash-pretool` for every Bash verdict. The prefix puts back what the stream
     lost: which arm decided, greppable in the reason itself.
     """
     return f"[{arm_name}] {reason}"

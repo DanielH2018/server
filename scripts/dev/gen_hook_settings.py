@@ -14,7 +14,7 @@ from those declarations, and `--check` fails on a file that declares nothing.
 
 THE GRAMMAR is the one `bin/gen-hooks-lib.js` in the dotfiles repo reads, minus the chezmoi
 keys (`when:` and a raw `command:` override) that a plain-JSON file has no use for. One block
-per registration; a file may carry several (`auto-mode-bridge.sh` fires on two events). A
+per registration; a file may carry several (`auto-mode-bridge.py` fires on two events). A
 file a sibling invokes and no event registers carries `library` with the reason spelled out::
 
     # gen-hooks: register
@@ -27,7 +27,11 @@ file a sibling invokes and no event registers carries `library` with the reason 
     #   statusMessage: Formatting...    optional
 
     # gen-hooks: library
-    #   reason: run by bash-pretool.sh through `uv run python`
+    #   reason: an arm of bash-pretool.py, imported rather than run
+
+A register block in a `.py` renders as `run-hook.sh <stem> <args>`: the runner owns the
+interpreter pin and the failure posture, and `args:` carries its flags. A register block in a
+`.sh` renders as that file, for a hook that is shell all the way down.
 
 The opener is the only delimiter: a block runs from its `# gen-hooks:` line to the first line
 that is not a `#   key: value` continuation. In a Python hook the block sits between the
@@ -37,8 +41,8 @@ THE CENSUS is every `*.sh` and `*.py` directly under `.claude/hooks/`, by suffix
 the exec bit, non-recursive. The bit is the property with the recorded history of drifting:
 `uv-python.sh` shipped 100644 in #361, which is the incident `test_hook_scripts_executable.py`
 exists for, and a new hook committed the same way would be exactly the file a bit-based
-census skips. It is also incoherent on the Python modules here (five of the twelve are
-100755, all twelve are run by a `.sh` shim through `uv run python`, none is ever exec'd).
+census skips. It is also incoherent on the Python modules here: some are 100755, and none
+is ever exec'd, since `run-hook.sh` runs each through `uv run python`.
 `tests/` and `hooklib/` are one level down and are reached by import, never by a
 registration.
 
@@ -68,6 +72,11 @@ SETTINGS = REPO / ".claude" / "settings.json"
 # What a registration's `command` starts with. `test_hook_scripts_executable.py` anchors its
 # own census on `^(?:~/server/|\./)`, so any other prefix empties that test's census.
 COMMAND_PREFIX = "~/server/.claude/hooks/"
+
+# What a `.py` registration runs through: `run-hook.sh <stem> <args>`, where `args:` carries the
+# runner's posture flags (`--project`, `--ask-on-cd[=<guards>]`). One interpreter pin and one
+# failure posture for every Python hook, instead of a per-hook shim each (#3278).
+RUNNER = "run-hook.sh"
 
 OPENER_RE = re.compile(r"^# gen-hooks: (\S+)\s*$")
 FIELD_RE = re.compile(r"^#   ([a-zA-Z]+): (.*)$")
@@ -116,7 +125,10 @@ class Registration:
 
     @property
     def command(self) -> str:
-        base = f"{COMMAND_PREFIX}{self.file}"
+        if self.file.endswith(".py"):
+            base = f"{COMMAND_PREFIX}{RUNNER} {self.file.removesuffix('.py')}"
+        else:
+            base = f"{COMMAND_PREFIX}{self.file}"
         return f"{base} {self.args}" if self.args else base
 
     def entry(self) -> dict:

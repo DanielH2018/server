@@ -161,7 +161,9 @@ def test_the_timeout_check_reads_the_entries_it_claims_to():
     """The RED half: prove the walk actually reaches entries, not an empty list."""
     entries = hook_entries()
     assert len(entries) >= 5, "the hook walk found almost nothing — the shape changed"
-    assert any(e.get("command", "").endswith("session-health.sh") for _, e in entries)
+    assert any(
+        e.get("command", "").endswith("run-hook.sh session-health") for _, e in entries
+    )
 
 
 # The project-scope plugin disables this file may carry. `superpowers` is off here by choice

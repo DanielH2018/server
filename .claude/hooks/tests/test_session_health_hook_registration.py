@@ -6,9 +6,9 @@ worktree cut from a fresher `origin/master` registers scripts that checkout does
 `/bin/sh` exits 127, and the tool call runs with the guard skipped. `fanout_lib/launch.py`
 closed the fan-out half; this arm is how a hand-made worktree hears about it.
 
-`settings.json` names only the `.sh` shims, and each shim runs a `.py` sibling it resolves
-itself, so a present `session-health.sh` beside a missing `session-health.py` must not read as
-covered. That one fails quieter than the 127 — the shim runs — so it gets its own banner line,
+`settings.json` names only `run-hook.sh` (or, before #3278, a per-hook `.sh` shim), and each
+runs a `.py` sibling it resolves itself, so a present `run-hook.sh` beside a missing
+`session-health.py` must not read as covered. That one fails quieter than the 127 — the shim runs — so it gets its own banner line,
 and the pairs below hold the two diagnoses apart.
 
 Every test drives `hooklib.hook_registration_lines` through its `checkout`, `read_settings` and
@@ -212,8 +212,19 @@ def test_the_repos_own_settings_registers_the_hooks_this_walk_must_find():
     )
     commands = arm.registered_hook_commands(settings)
     assert len(commands) >= 7, commands
-    names = {os.path.basename(c) for c in commands}
-    assert {"session-health.sh", "bash-pretool.sh", "block-protected-edits.sh"} <= names
+    names = {arm._runner_hook_name(c) for c in commands}
+    assert {"session-health", "bash-pretool", "block-protected-edits"} <= names
+
+
+def test_every_registered_command_resolves_the_sibling_it_runs():
+    """Non-vacuity for the sibling half: every hook is `run-hook.sh <name>` since #3278, so a
+    registration this parse could not read would leave the quieter failure unreported."""
+    hooks = Path(__file__).resolve().parents[1]
+    settings = json.loads((hooks.parent / "settings.json").read_text())
+    for command in arm.registered_hook_commands(settings):
+        siblings = arm.sibling_py_paths(str(hooks / "run-hook.sh"), command=command)
+        assert len(siblings) == 1, command
+        assert Path(siblings[0]).is_file(), command
 
 
 # --- the `.py` sibling each shim resolves for itself -------------------------

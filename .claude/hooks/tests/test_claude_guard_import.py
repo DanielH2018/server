@@ -43,7 +43,7 @@ _runnable = pytest.mark.skipif(
 def test_deployed_import_reaches_the_segmenter():
     """Run the real invocation path: `uv run python`, hooks dir on the path via PYTHONPATH.
 
-    This is the shape `bash-pretool.sh` actually runs under — `cd
+    This is the shape `run-hook.sh --project` actually runs under — `cd
     /home/ubuntu/server && exec uv run --no-sync --quiet python <hooks-dir>/<script>.py`,
     which puts the hooks dir at `sys.path[0]` because that is where the invoked script lives.
     `python -c` has no script file, so `sys.path[0]` is the cwd instead; PYTHONPATH is what

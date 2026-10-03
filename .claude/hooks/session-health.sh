@@ -1,8 +1,6 @@
 #!/bin/bash
-# gen-hooks: register
-#   event: SessionStart
-#   timeout: 15
-#   order: 10
+# gen-hooks: library
+#   reason: kept for a session whose settings.json predates the switch to `run-hook.sh session-health` (#3278); registered from session-health.py
 # SessionStart hook — print a homelab health banner (unhealthy/restarting
 # containers + down Prometheus targets) when a session opens in this repo,
 # plus the other Claude sessions currently working this repo and the paths

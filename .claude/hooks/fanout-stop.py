@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-# gen-hooks: library
-#   reason: run by fanout-stop.sh through `uv run python`
+# gen-hooks: register
+#   event: Stop
+#   timeout: 10
+#   order: 10
 """Stop hook: keep a headless fan-out session going until it names a PR or a blocker.
 
 THE PROBLEM. A fan-out batch is one `claude -p` process under a transient systemd unit

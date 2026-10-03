@@ -13,8 +13,8 @@ a worktree `EnterWorktree` created — where nothing fast-forwards anything.
 
 Two limits, stated rather than implied:
 
-  * **This cannot report its own absence.** `session-health.sh` is itself a file a behind
-    primary checkout may lack, and a SessionStart hook that does not exist prints nothing. The
+  * **This cannot report its own absence.** `run-hook.sh` and `session-health.py` are files a
+    behind primary checkout may lack, and a SessionStart hook that does not exist prints nothing. The
     window this arm closes is "the primary checkout is missing SOME hook scripts"; the window
     where it is missing THIS one stays open, and only a fast-forward closes it.
   * **It rules on the `.py` sibling only in the two forms this repo's shims use.** A per-hook
