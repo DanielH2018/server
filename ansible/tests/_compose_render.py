@@ -6,8 +6,7 @@ still matches the pattern while the container ships without it. Parsing the rend
 service sees what Compose would.
 
 The same gap reaches a role's bind-mounted CONFIG templates, which `_k8s_render` does not
-cover (it renders `roles/k8s/` only) and `validate/config_templates.py` renders for its own
-YAML parse without exposing the text. alloy's `config.alloy.j2` is River, so its guard reads
+cover (it renders `roles/k8s/` only). alloy's `config.alloy.j2` is River, so its guard reads
 text rather than a parsed document — `rendered_texts` is that text, with `{{ domain }}`
 already expanded (#3175).
 

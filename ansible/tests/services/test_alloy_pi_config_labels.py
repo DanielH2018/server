@@ -3,8 +3,8 @@
 `container`, `job`, `machine` and `stream` are the contract that lets one LogQL query span
 the estate: monitor-bridge's `LOKI_PI_STREAM` selects `{job="pi"}`, `probe.py alerts` reads
 `{job="syslog"} |= "status=down"` and relies on `machine="daniel-pi"` to tell the Pi's health
-crons from the cluster hosts' syslog. The config is River, which `validate/config_templates.py`
-cannot parse, so this reads the RENDERED config as text — what the container receives, with
+crons from the cluster hosts' syslog. The config is River, which no YAML render guard can
+parse, so this reads the RENDERED config as text — what the container receives, with
 `{{ domain }}` already expanded (#3175).
 """
 

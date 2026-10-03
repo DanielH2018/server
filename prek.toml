@@ -160,23 +160,7 @@ language = "system"
 pass_filenames = false
 files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/roles/k8s/observability/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboards\\.py)$"
 
-# Render the high-value NON-compose YAML config templates with stubbed vars and assert each
-# parses — the render-then-parse guard the compose templates already get
-# (validate-compose-templates), extended to the bind-mounted config templates that re-render
-# every deploy. Catches a Jinja indentation bug that check-yaml/ansible-lint miss (they don't
-# render .j2). validate-k8s-manifests below covers the k8s manifests, so CONFIG_TEMPLATES is
-# deliberately empty and the hook holds the wiring for the next config-bearing template.
-[[repos.hooks]]
-id = "validate-config-templates"
-name = "Validate rendered config templates"
-entry = "uv run --frozen python scripts/validate/config_templates.py"
-language = "system"
-pass_filenames = false
-# group_vars/all.yml is in scope because the validator renders with it (ALL_VARS) — an
-# edit there can change what these templates render to, same as the compose hook's scope.
-files = "^(ansible/inventory/group_vars/all\\.yml|scripts/validate/config_templates\\.py|scripts/lib/ansible_jinja_env\\.py)$"
-
-# Same render-then-parse guard as the two above, for the k8s manifests.
+# Same render-then-parse guard as validate-compose-templates above, for the k8s manifests.
 # Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's
 # static config and Authelia's configuration.yml is trivially valid whatever those opaque block
 # scalars contain, so an outer-only check would miss the indentation bugs that matter most. A
@@ -200,7 +184,7 @@ files = "^(ansible/roles/k8s/.*\\.j2|ansible/templates/ingressroute\\.yml\\.j2|a
 
 # Render every Jinja-templated shell script (*.sh.j2) with stubbed vars and lint the OUTPUT
 # (bash -n + shellcheck) — the same render-then-lint pattern as validate-compose-templates /
-# validate-config-templates, but for shell instead of YAML. identify tags a `.sh.j2` file as
+# validate-k8s-manifests, but for shell instead of YAML. identify tags a `.sh.j2` file as
 # {jinja, text}, never `shell`, so the bash-syntax-check / shellcheck hooks above never see these
 # templates no matter how broken the rendered script is. shellcheck comes via the `shellcheck-py`
 # dev dependency (pyproject.toml) so `uv run` can reach it; the script fails closed (not skips) if

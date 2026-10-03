@@ -6,7 +6,7 @@ Renders with stubbed vars, then lints with `bash -n` + shellcheck. The prek
 shebang-aware `types = ["shell"]`), but identify tags a `*.sh.j2` template as `{jinja, text}` —
 never `shell` — so a Jinja-templated script (e.g. an entrypoint or cron script) is invisible to
 both gates no matter how badly it's broken. This is the same render-then-lint pattern as
-`validate/compose_templates.py` / `validate/config_templates.py`, extended from YAML parsing to
+`validate/compose_templates.py` / `validate/k8s_manifests.py`, extended from YAML parsing to
 shell linting: render structure with stubbed vars, then prove the OUTPUT is valid shell.
 
 A render takes the inventory plus the template's own role defaults, laid under it the way

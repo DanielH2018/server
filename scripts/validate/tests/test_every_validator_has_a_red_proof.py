@@ -11,10 +11,9 @@ only ever observed passing, so without the rejecting half there is no evidence i
 WHAT THIS ENFORCES, AND WHAT IT CANNOT. It looks for a red-proof SIGNAL in the test module's
 source: an assertion that the validator reported a problem, or a `pytest.raises`. That is a proxy
 for "this suite exercises the failing path", and a determined author can satisfy it without
-meaning it. It is not a proxy for the naming convention — matching test NAMES would fail
-`test_validate_config_templates.py`, whose red proof is really there under the name
-`test_yaml_error_passes_valid_and_catches_invalid`. A guard that fires on a correct suite is worse
-than no guard, because it gets switched off.
+meaning it. It is not a proxy for the naming convention: matching test NAMES would fail a suite
+whose red proof is really there under a name outside the `..._is_flagged` pattern. A guard that
+fires on a correct suite is worse than no guard, because it gets switched off.
 
 SCOPE IS DELIBERATELY NARROW. The validator modules in `scripts/validate/`, derived by glob rather
 than listed. 46 of 156 test files in this repo carry an explicit rejecting half, but most of the
