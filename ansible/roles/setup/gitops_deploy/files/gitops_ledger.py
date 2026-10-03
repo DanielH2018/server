@@ -18,7 +18,7 @@ Stdlib only, plus `gitops_markers`.
 import json
 from typing import NamedTuple
 
-from gitops_markers import K8sDeferredEntry, parse_k8s_deferred
+from gitops_markers import K8sDeferredEntry
 
 # ── the owed-work ledger (#3392) ─────────────────────────────────────────────────────────
 
@@ -205,23 +205,16 @@ def drop_owed(text: str | None, cls: str, subjects) -> tuple[str, list[str]]:
     return "\n".join(kept), sorted(dropped)
 
 
-def k8s_unapplied_entries(
-    owed: str | None, legacy: str | None = None
-) -> list[K8sDeferredEntry]:
-    """Every pending `k8s_unapplied` change, from the ledger and the pre-#3392 file.
+def k8s_unapplied_entries(owed: str | None) -> list[K8sDeferredEntry]:
+    """Every pending `k8s_unapplied` change in the `owed` ledger.
 
-    `legacy` is the `k8s_unapplied_legacy` marker. A host whose deployer has not yet folded it
-    into the ledger still holds its lines there, so a reader unions the two; a service the
-    ledger already names is read from the ledger. Returned as `K8sDeferredEntry` because every
-    caller reads `.service`, `.origin` and `.at` off it.
+    Returned as `K8sDeferredEntry` because every caller reads `.service`, `.origin` and `.at`
+    off it.
     """
-    entries = [
+    return [
         K8sDeferredEntry(e.origin, e.subject, e.at)
         for e in parse_owed(owed, OWED_K8S_UNAPPLIED)
     ]
-    named = {e.service for e in entries}
-    entries += [e for e in parse_k8s_deferred(legacy) if e.service not in named]
-    return entries
 
 
 # ── the per-SHA tick receipt (#3391) ─────────────────────────────────────────────────────

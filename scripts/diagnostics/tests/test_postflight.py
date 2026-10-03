@@ -366,7 +366,7 @@ GATED_AND_ABSENT = {
         "type": "push",
         "interval": 86400,
         "gated": True,
-        "gate": "etcd_snapshot_push_token",
+        "gate": ("etcd_snapshot_push_token | default('')",),
     }
 }
 
@@ -375,7 +375,7 @@ GATED_AND_ABSENT = {
     "gate_is_set, expected, expected_text",
     [
         (True, FAIL_, "Off-box etcd Snapshot: declared, not live"),
-        (False, OK_, "genuinely unset, skipped"),
+        (False, OK_, "flag false), skipped"),
     ],
     ids=["set-and-absent-is-drift", "unset-is-excused"],
 )

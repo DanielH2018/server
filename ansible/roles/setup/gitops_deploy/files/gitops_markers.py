@@ -77,10 +77,6 @@ MARKERS: dict[str, str] = {
     # with one field too many, so a field a new writer appended read as NO pending work in a
     # reader copy that had not redeployed. `gitops_ledger.parse_owed` has the format.
     "owed": "owed.jsonl",
-    # The `k8s_unapplied` marker file as it stood before #3392 moved the class into `owed`.
-    # Read only to fold it in (`DeployerState.fold_legacy_k8s_unapplied`) and by the readers
-    # that union it until then. Delete this entry once daniel-box has ticked past the fold.
-    "k8s_unapplied_legacy": "k8s_unapplied",
     # One JSON line per origin SHA a tick crossed with a broad change (#3391): the planes it
     # applied and the setup roles it left to a hand. `land.sh` reads it instead of
     # re-deriving. `gitops_ledger.parse_receipts` has the format.
@@ -459,9 +455,6 @@ def format_alerted(alerted: dict[str, str]) -> str | None:
 
 def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
     """Every pending line of `k8s_deferred`, in the order they stand.
-
-    The pre-#3392 `k8s_unapplied` file shares this format, so `k8s_unapplied_entries` reads it
-    with this parser until the deployer has folded it into the `owed` ledger.
 
     A line this cannot parse is SKIPPED, never guessed at, for the reason
     `parse_manual_plane` skips one: a page raised off a torn line names no service and cannot

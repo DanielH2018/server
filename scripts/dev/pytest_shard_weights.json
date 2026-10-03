@@ -755,6 +755,7 @@
  "scripts/diagnostics/tests/test_probe_longhorn.py": 0.0,
  "scripts/diagnostics/tests/test_probe_metric_span.py": 0.0,
  "scripts/diagnostics/tests/test_probe_monitors.py": 0.06,
+ "scripts/diagnostics/tests/test_probe_monitors_gates.py": 0.03,
  "scripts/diagnostics/tests/test_probe_pi_plane.py": 0.0,
  "scripts/diagnostics/tests/test_probe_readonly_rbac.py": 0.0,
  "scripts/diagnostics/tests/test_probe_registry.py": 0.03,
