@@ -1,0 +1,32 @@
+[Unit]
+Description=Land Renovate PR #%i for the unattended Renovate agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The operator's user, because land.sh deploys: it decrypts secrets and runs Ansible with
+# become. The agent's session runs as {{ renovate_agent_user }} and can only START this unit,
+# through the polkit rule 50-renovate-agent-land.rules. land_renovate_pr.py re-reads the PR
+# from GitHub before landing anything, so the instance name is the only input the session gives.
+User={{ sys_user }}
+WorkingDirectory={{ renovate_agent_repo_dir }}
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/{{ sys_user }}
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=RENOVATE_AGENT_REPO={{ renovate_agent_repo }}
+Environment=RENOVATE_AGENT_REPO_DIR={{ renovate_agent_repo_dir }}
+# land.sh's own author check, behind the lander's: --arm-merge refuses any other author.
+Environment=LAND_REQUIRE_AUTHOR=app/renovate
+# /var/lib/renovate-agent-land/<n>.verdict is the one thing the session reads back, so the
+# directory is world-readable and only this unit writes it.
+StateDirectory=renovate-agent-land
+StateDirectoryMode=0755
+SyslogLevel=notice
+# Above land_renovate_pr.py's LAND_TIMEOUT_S, so the script reports a slow landing itself
+# rather than systemd killing it inside an Ansible run.
+TimeoutStartSec=60min
+# One landing at a time: two would race for the same tick and the same service locks.
+ExecStart=/usr/bin/flock -w 3600 /var/lock/renovate-agent-land.lock \
+  /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  /opt/renovate-agent/land_renovate_pr.py %i

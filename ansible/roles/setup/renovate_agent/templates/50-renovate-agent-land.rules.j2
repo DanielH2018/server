@@ -1,0 +1,22 @@
+// Managed by Ansible (roles/setup/renovate_agent) — edits here are overwritten.
+//
+// Lets the unattended agent's own user START one landing unit, and nothing else. The session
+// cannot merge: its GitHub token has no contents write. It asks for a landing by starting
+// renovate-agent-land@<n>.service, which runs as the operator's user and re-checks the PR
+// before running land.sh. The instance must be a plain PR number, matching what
+// land_renovate_pr.py accepts, so no other unit name or verb reaches this rule's YES.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return undefined;
+    }
+    if (subject.user !== "{{ renovate_agent_user }}") {
+        return undefined;
+    }
+    if (!/^renovate-agent-land@[1-9][0-9]{0,6}\.service$/.test(action.lookup("unit"))) {
+        return undefined;
+    }
+    if (action.lookup("verb") !== "start") {
+        return undefined;
+    }
+    return polkit.Result.YES;
+});

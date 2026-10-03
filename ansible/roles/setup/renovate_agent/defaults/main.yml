@@ -10,6 +10,9 @@ renovate_agent_enabled: false
 # renovate_agent_host lives in inventory/group_vars/all.yml, not here: initial_setup.yml's
 # `when:` on the role entry is evaluated before this file is in scope.
 renovate_agent_repo: DanielH2018/server
+# The agent session's own Unix user. It may start renovate-agent-land@<n>.service and nothing
+# else with privilege; the lander runs as sys_user and alone holds a token able to merge.
+renovate_agent_user: renovate-agent
 renovate_agent_repo_dir: "/home/{{ sys_user }}/server"
 
 # The session's worktree, recreated at origin/master on every tick. Named so

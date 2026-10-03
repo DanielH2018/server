@@ -45,8 +45,20 @@
     - renovate-agent.service
     - renovate-agent-alert.service
     - renovate-agent.timer
+    - renovate-agent-land@.service
   become: true
   notify: Reload systemd
+
+- name: Let the agent's user start a landing and nothing else (polkit)
+  tags: [renovate-agent-service]
+  ansible.builtin.template:
+    src: 50-renovate-agent-land.rules.j2
+    dest: /etc/polkit-1/rules.d/50-renovate-agent-land.rules
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  # No handler: polkitd watches rules.d and reloads a changed rule on its own.
 
 # Both directions are wired: setting renovate_agent_enabled back to false stops AND disables
 # the timer. A one-way arming switch is the reverse-state bug this repo keeps paying for.
@@ -71,6 +83,8 @@
       - ansible/roles/setup/renovate_agent/templates/renovate-agent.service.j2
       - ansible/roles/setup/renovate_agent/templates/renovate-agent-alert.service.j2
       - ansible/roles/setup/renovate_agent/templates/renovate-agent.timer.j2
+      - ansible/roles/setup/renovate_agent/templates/renovate-agent-land@.service.j2
+      - ansible/roles/setup/renovate_agent/templates/50-renovate-agent-land.rules.j2
       # The stamp and the check both hash the repo source, never the rendered file, so an
       # .env.j2 carries no secret into either.
       - ansible/roles/setup/renovate_agent/templates/config.env.j2
