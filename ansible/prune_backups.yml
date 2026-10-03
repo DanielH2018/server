@@ -48,6 +48,8 @@
   connection: local
   gather_facts: false
   vars:
+    # Nothing here reads a fact.
+    load_secrets_gather_facts: false
     # One mode, and the selector stays: `-e prune_mode=b2-drain` is the command an operator has
     # in their shell history, and the assert below is what redirects the two retired modes to
     # the reaper rather than failing on a missing task file.
@@ -63,6 +65,13 @@
     prune_repo: "{{ playbook_dir | dirname }}"
     prune_drain_live_file: /tmp/longhorn-live-volumes.txt
   pre_tasks:
+    # The preamble's first task refuses this local-connection play when it runs anywhere but
+    # daniel-box. Without it, a run from daniel-server drains B2 from there under a daniel-box
+    # recap.
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
+
     - name: Require a known mode
       ansible.builtin.assert:
         that: (prune_mode | default('')) in prune_modes
@@ -72,17 +81,6 @@
           scripts/backup/longhorn_reap_orphan_backups.py --mode migrated-chain --claim <pvc>
           and --mode seeds since #3279: they delete Longhorn Backup CRs, and their selection
           and floors are unit tested there.
-
-    - name: Load secrets
-      community.sops.load_vars:
-        file: "{{ playbook_dir }}/vars/secrets.yml"
-      delegate_to: localhost
-      no_log: true
-
-    - name: Set become password
-      ansible.builtin.set_fact:
-        ansible_become_password: "{{ become_password }}"
-      no_log: true
 
   tasks:
     - name: Run the requested mode
