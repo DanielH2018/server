@@ -95,9 +95,10 @@ ENFORCED:
 which renders the script and runs it against a stub `docker`.
 
 ## Notable
-- **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart Watchdog`,
-  `Restart earlyoom` and `Restart systemd-journald` are defined in `initial_setup.yml`; a new
-  `notify:` here needs a matching handler there.
+- **Two of this role's handlers live in [[initial_setup]]:** `Restart Watchdog` and
+  `Restart systemd-journald`. Each belongs to an ordered pair defined there, and a handler
+  defined here would inherit this role's host gate. `Reboot Pi` and `Restart earlyoom` are in
+  this role's `handlers/main.yml`.
 - **A zram config change reboots the Pi; the device is never restarted live.**
   `docs/pi-host-tuning-record.md` has why. GPU, watchdog and Log2Ram changes `notify: Reboot
   Pi` too, so expect a reboot when any of the four change.

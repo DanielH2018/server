@@ -12,7 +12,6 @@ from _helpers import load_tasks
 from _helpers import walk_tasks
 from lib import yaml_fast
 
-PLAYBOOK = ANSIBLE / "initial_setup.yml"
 SETUP = ANSIBLE / "roles" / "setup"
 SERVICE_MODULES = (
     "ansible.builtin.service",
@@ -71,8 +70,10 @@ def _real_tasks() -> list[dict]:
 
 
 def _real_handlers() -> list[dict]:
-    plays = yaml_fast.safe_load(PLAYBOOK.read_text())
-    return [h for play in plays for h in play.get("handlers", [])]
+    handlers: list[dict] = []
+    for handlers_file in sorted(SETUP.glob("*/handlers/main.yml")):
+        handlers.extend(yaml_fast.safe_load(handlers_file.read_text()) or [])
+    return handlers
 
 
 def test_the_census_finds_the_provisioning_stop() -> None:

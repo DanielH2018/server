@@ -7,18 +7,12 @@
   environment:
     PYTHONDONTWRITEBYTECODE: "1"
   become: true
-  # Facts are gathered EXPLICITLY below, after the SOPS-stored sudo password is set.
-  # With gather_facts: true the play escalated at fact-gathering — before secrets
-  # loaded — so hosts with passworded sudo (daniel-server) needed --ask-become-pass
-  # run interactively. Same pattern as deploy.yml; -K still works as an override.
+  # The shared preamble gathers facts once the SOPS-stored sudo password is set; -K still
+  # works as an override.
   gather_facts: false
   pre_tasks:
     - name: Load encrypted secrets and set the become password (shared preamble)
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
-      tags: always
-
-    - name: Gather facts (escalated — the become password is now available)
-      ansible.builtin.setup:
       tags: always
   roles:
     - { role: config_files, tags: ["config_files"] }
@@ -72,89 +66,3 @@
     # The fake-remux detector + reconciler run on the media stack's host (fake_remux_host).
     # Host-conditional like optimize_pi/renovate_notify.
     - { role: fake_remux, tags: ["fake_remux"], when: inventory_hostname == fake_remux_host }
-  handlers:
-    - name: Restart fail2ban
-      ansible.builtin.service:
-        name: fail2ban
-        state: restarted
-
-    # BEFORE Restart systemd-journald, and the order is the point: handlers fire in the order
-    # they are DEFINED here, not the order tasks notify them. journald forwards at info
-    # (MaxLevelSyslog, see roles/setup/initial_setup/tasks/system-tuning.yml), so if journald
-    # restarted first there would be a window where every info line on the host reached
-    # /var/log/syslog before the filter that discards them was loaded.
-    - name: Restart rsyslog
-      ansible.builtin.service:
-        name: rsyslog
-        state: restarted
-
-    - name: Restart systemd-journald
-      ansible.builtin.service:
-        name: systemd-journald
-        state: restarted
-
-    - name: Reload Postfix
-      ansible.builtin.service:
-        name: postfix
-        state: reloaded
-
-    # inet_interfaces changes require a full restart — `postfix reload` does not
-    # rebind listening sockets (per Postfix docs), so loopback-only wouldn't take
-    # effect until the next restart without this.
-    - name: Restart Postfix
-      ansible.builtin.service:
-        name: postfix
-        state: restarted
-
-    - name: Restart SSH
-      ansible.builtin.service:
-        name: ssh
-        state: restarted
-
-    - name: Reload audit rules
-      ansible.builtin.command: augenrules --load
-      become: true
-      changed_when: true
-
-    - name: Restart earlyoom
-      ansible.builtin.service:
-        name: earlyoom
-        state: restarted
-
-    - name: Restart Watchdog
-      ansible.builtin.service:
-        name: watchdog
-        state: restarted
-
-    # Notified by initial_setup's "Stop the hardware watchdog during provisioning (Pi)". After
-    # Restart Watchdog, because handlers fire in definition order and a restart already starts it.
-    - name: Start Watchdog after provisioning
-      ansible.builtin.service:
-        name: watchdog
-        state: started
-
-    - name: Restart Docker
-      ansible.builtin.service:
-        name: docker
-        state: restarted
-
-    - name: Reboot Pi
-      ansible.builtin.reboot:
-        msg: "Rebooting to apply low-level hardware changes (GPU/Watchdog/Log2Ram)"
-
-    # i915 loads from the initramfs, so a modprobe.d option only reaches it once the
-    # initramfs is regenerated. update-grub is NOT run: kernel module parameters set this way
-    # don't touch the boot loader config.
-    - name: Rebuild initramfs for i915
-      ansible.builtin.command: update-initramfs -u
-      changed_when: true
-
-    # Deliberately no reboot handler. Unlike "Reboot Pi" — which is gated to daniel-pi —
-    # this fires on the machine running the whole homelab, and rebooting it unattended to
-    # apply a transcode tunable is not a trade initial_setup.yml should make on its own.
-    - name: Warn that a reboot is required for i915 GuC
-      ansible.builtin.debug:
-        msg: >-
-          /etc/modprobe.d/i915.conf changed and the initramfs was rebuilt, but GuC firmware
-          loading only takes effect after a reboot. Reboot this host when convenient, then
-          confirm with `ls /dev/dri` and `dmesg | grep -i guc`.

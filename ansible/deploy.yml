@@ -6,7 +6,7 @@
   # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
   environment:
     PYTHONDONTWRITEBYTECODE: "1"
-  gather_facts: true
+  gather_facts: false
   pre_tasks:
     # The preamble refuses a local-connection deploy aimed at a different host before any task
     # can write. Its comment and tests/deploy/test_local_connection_target.py carry the why.
@@ -57,7 +57,7 @@
   # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
   environment:
     PYTHONDONTWRITEBYTECODE: "1"
-  gather_facts: true
+  gather_facts: false
   pre_tasks:
     - name: Load encrypted secrets and set the become password (shared preamble)
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
