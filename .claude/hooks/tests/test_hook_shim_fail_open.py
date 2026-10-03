@@ -52,15 +52,25 @@ DENY_GUARD_SHIMS = frozenset(
 MERGED_DENY_GUARDS = ("block-protected-bash", "nudge-land-sh", "block-footguns")
 
 
+# `run-hook.sh` holds the same `cd` guard and is NOT a per-hook shim: its posture is decided by
+# the flags a registration passes it, so `bash run-hook.sh` with no arguments — what every
+# parametrized test below runs — exercises none of them. `test_run_hook.py` covers it per
+# variant, and `test_the_shim_census_is_non_vacuous` asserts this exclusion is for cause.
+_PARAMETERISED_RUNNER = "run-hook.sh"
+
+
 def _cd_guarded_shims() -> list[str]:
-    """Every hook shim that changes into the repo before doing its work.
+    """Every per-hook shim that changes into the repo before doing its work.
 
     DERIVED, not listed. A hardcoded list with a `len(...) == 4` non-vacuity anchor cannot
     notice a shim that is added and never listed, so several guards could keep disarming
     silently while this file reported full coverage.
     """
     return sorted(
-        p.name for p in HOOKS.glob("*.sh") if _CD_GUARD in p.read_text(encoding="utf-8")
+        p.name
+        for p in HOOKS.glob("*.sh")
+        if _CD_GUARD in p.read_text(encoding="utf-8")
+        and p.name != _PARAMETERISED_RUNNER
     )
 
 
@@ -88,6 +98,11 @@ def test_the_shim_census_is_non_vacuous():
         "block-protected-edits.sh",
     }
     assert DENY_GUARD_SHIMS <= set(SHIM_NAMES)
+    # The exclusion is for cause, not a typo that quietly drops a shim: the runner exists and
+    # does carry the guard, so it was skipped for being parameterised rather than for missing.
+    runner = HOOKS / _PARAMETERISED_RUNNER
+    assert runner.is_file(), runner
+    assert _CD_GUARD in runner.read_text(encoding="utf-8")
     # Every cd-guarded shim execs into a paired .py, so the ACCEPT half below covers all of
     # them. A future shim that does not exec drops out of EXEC_SHIM_NAMES and fails here.
     assert set(SHIM_NAMES) == set(EXEC_SHIM_NAMES)

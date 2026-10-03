@@ -211,7 +211,7 @@ def test_the_repos_own_settings_registers_the_hooks_this_walk_must_find():
         (Path(__file__).resolve().parents[1].parent / "settings.json").read_text()
     )
     commands = arm.registered_hook_commands(settings)
-    assert len(commands) >= 8, commands
+    assert len(commands) >= 7, commands
     names = {os.path.basename(c) for c in commands}
     assert {"session-health.sh", "bash-pretool.sh", "block-protected-edits.sh"} <= names
 
@@ -298,7 +298,7 @@ def test_a_missing_shim_is_not_also_read_for_siblings():
 
 
 def test_a_shim_that_names_no_sibling_is_not_ruled_on():
-    """`uv-python.sh` runs no `.py` at all."""
+    """A shim with no `exec` into a sibling has nothing for this arm to rule on."""
     assert _sibling_lines(present=(f"{_HOOKS}/new.sh",), shim_body="exit 0\n") == []
 
 
@@ -350,11 +350,36 @@ def test_the_repos_own_shims_name_the_siblings_this_parse_must_find():
     }
     for name, siblings in expected.items():
         assert found.get(name) == siblings, found
-    # The one that names no resolvable sibling, listed so a NEW shim with an unrecognised
-    # idiom fails here instead of abstaining in silence.
+    # The one that names no resolvable sibling FROM ITS TEXT ALONE, listed so a NEW shim with
+    # an unrecognised idiom fails here instead of abstaining in silence. `run-hook.sh` takes
+    # the hook name as an argument, so its sibling comes from the registered command —
+    # `test_the_runner_resolves_the_sibling_its_argument_names` is that half.
     assert {name for name, siblings in found.items() if not siblings} == {
-        "uv-python.sh",
+        "run-hook.sh",
     }, found
+
+
+def test_the_runner_resolves_the_sibling_its_argument_names():
+    """`run-hook.sh <name>` composes `<name>.py` from its argument, so the name is in the
+    registered command rather than in the shim. The pair to the abstain above."""
+    runner = Path(__file__).resolve().parents[1] / "run-hook.sh"
+    found = arm.sibling_py_paths(
+        str(runner),
+        command="~/server/.claude/hooks/run-hook.sh bash-pretool --project",
+    )
+    assert [Path(p).name for p in found] == ["bash-pretool.py"]
+    assert Path(found[0]).parent == runner.parent
+
+
+def test_the_runner_abstains_when_no_argument_names_a_hook():
+    """A runner invoked with flags only names no `.py`, and a guessed one would cry wolf."""
+    runner = Path(__file__).resolve().parents[1] / "run-hook.sh"
+    assert (
+        arm.sibling_py_paths(
+            str(runner), command="~/server/.claude/hooks/run-hook.sh --project"
+        )
+        == []
+    )
 
 
 def test_every_named_sibling_exists_in_this_checkout():

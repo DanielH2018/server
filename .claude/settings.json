@@ -29,11 +29,6 @@
             "type": "command",
             "command": "~/server/.claude/hooks/bash-pretool.sh",
             "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "~/server/.claude/hooks/uv-python.sh",
-            "timeout": 10
           }
         ]
       },

@@ -14,9 +14,11 @@ The fifth arm, `auto-approve-readonly`, moved into the dotfiles `claude_guard` p
 (`claude_guard/readonly.py`, dotfiles #628), whose user-level PreToolUse hook allows a
 provably read-only command in every trusted checkout. No arm here returns `allow` since.
 
-`uv-python.sh` stays a separate hook. It rewrites the command rather than judging it, so it
-has no verdict to merge, and a rewrite arm inside a verdict dispatcher would have to decide
-whether the arms after it judge the old text or the new one.
+`uv-python` is the fifth arm since #3286, and the only one that rewrites rather than judges.
+It runs LAST, so every decision arm reads the command the session typed — which is what the
+two separate hooks did, `bash-pretool.sh` at order 10 and `uv-python.sh` at order 20. Its own
+docstring owns the rewrite rules and what the harness does with an `updatedInput` that arrives
+beside a `deny` or an `ask`.
 
 THE MERGE is the one Claude Code performs across separate hooks, read from the 2.1.267
 bundle: `deny` is sticky, `defer` outranks `ask`, `ask` outranks `allow`, and `allow` only
@@ -26,12 +28,14 @@ give them (block-protected-bash 30, nudge-land-sh 40, block-footguns 50,
 inject-nested-docs 70) and the first arm at the winning level keeps the reason. No arm
 returns `defer` or `allow`, so in practice this carries `deny > ask`.
 
-`permissionDecision` and `additionalContext` ride in ONE `hookSpecificOutput` object. The
-bundle's PreToolUse branch reads the two keys independently off the same object
-(`O.additionalContext=e.hookSpecificOutput.additionalContext` runs after the
+`permissionDecision`, `additionalContext` and `updatedInput` ride in ONE `hookSpecificOutput`
+object. The bundle's PreToolUse branch reads `additionalContext` independently off the same
+object (`O.additionalContext=e.hookSpecificOutput.additionalContext` runs after the
 `permissionDecision` switch, unconditionally), and a hook that denies still yields its
 context. So a denied command keeps the nested-docs injection it had when the injector was
-its own hook.
+its own hook. `updatedInput` is the one key the decision does govern: a `deny` drops it, an
+`ask` carries it into the prompt. `uv-python.py`'s docstring has the evidence and why that
+reproduces what two separate hooks did.
 
 DECIDED: every arm runs under its own `try/except`, and an arm that raises loses its verdict
 while the others keep theirs. That matches what separate processes did — an
@@ -60,6 +64,10 @@ _DECISION_ARMS = (
     ("block-footguns", "block_footguns"),
 )
 _CONTEXT_ARM = ("inject-nested-docs", "inject_nested_docs")
+
+# The one arm that rewrites rather than judges. Asked last, so every decision above read the
+# command as typed.
+_REWRITE_ARM = ("uv-python", "uv_python")
 
 # Highest first. `defer` is in the table because the harness ranks it between deny and ask; no
 # arm returns one today, and leaving it out would silently demote an arm that grew one.
@@ -99,8 +107,14 @@ def _attributed(arm_name, reason):
     return f"[{arm_name}] {reason}"
 
 
-def collect(payload, arms=_DECISION_ARMS, context_arm=_CONTEXT_ARM, load=load_arm):
-    """Every arm's verdict for `payload`: a list of (decision, reason), plus the context text.
+def collect(
+    payload,
+    arms=_DECISION_ARMS,
+    context_arm=_CONTEXT_ARM,
+    load=load_arm,
+    rewrite_arm=_REWRITE_ARM,
+):
+    """Every arm's output for `payload`: the verdicts, the context text and the rewrite.
 
     Each reason carries its arm's name as a `[<arm>] ` prefix, so the merged verdict still
     says which arm decided. An arm that raises — including one that cannot be imported — contributes nothing and is
@@ -113,6 +127,8 @@ def collect(payload, arms=_DECISION_ARMS, context_arm=_CONTEXT_ARM, load=load_ar
         load: how to turn a pair into a module. The tests hand one that raises, or one that
             returns a real arm with its temp paths redirected, because each arm is loaded
             fresh here and so cannot be monkeypatched from outside.
+        rewrite_arm: the one pair asked for a rewritten command. Asked after the decision arms
+            so they judge the command as typed.
     """
     verdicts = []
     for filename, module_name in arms:
@@ -129,7 +145,12 @@ def collect(payload, arms=_DECISION_ARMS, context_arm=_CONTEXT_ARM, load=load_ar
         context = load(*context_arm).context(payload)
     except Exception as exc:
         _report(context_arm[0], exc)
-    return verdicts, context
+    command = None
+    try:
+        command = load(*rewrite_arm).rewrite(payload)
+    except Exception as exc:
+        _report(rewrite_arm[0], exc)
+    return verdicts, context, command
 
 
 def merge(verdicts):
@@ -146,14 +167,22 @@ def merge(verdicts):
     return None, None
 
 
-def emit(decision, reason, context):
-    """Print the single `hookSpecificOutput` carrying whatever the arms produced."""
+def emit(decision, reason, context, command=None):
+    """Print the single `hookSpecificOutput` carrying whatever the arms produced.
+
+    A rewrite is emitted whatever the decision is, rather than suppressed under a `deny`. The
+    harness already drops it there, and suppressing it here would put a second rule in a second
+    place for the same outcome — the rewrite arm would then be the only arm whose output another
+    arm's verdict can erase before it is printed.
+    """
     output = {"hookEventName": "PreToolUse"}
     if decision:
         output["permissionDecision"] = decision
         output["permissionDecisionReason"] = reason
     if context:
         output["additionalContext"] = context
+    if command is not None:
+        output["updatedInput"] = {"command": command}
     if len(output) == 1:
         return
     print(json.dumps({"hookSpecificOutput": output}))
@@ -169,9 +198,9 @@ def main(load=load_arm):
         payload = json.load(sys.stdin)
     except Exception:  # An unreadable payload is one no arm could have judged.
         return 0
-    verdicts, context = collect(payload, load=load)
+    verdicts, context, command = collect(payload, load=load)
     decision, reason = merge(verdicts)
-    emit(decision, reason, context)
+    emit(decision, reason, context, command)
     return 0
 
 

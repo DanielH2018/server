@@ -96,6 +96,12 @@ def test_hook_wrappers_reference_existing_python():
     are skipped — only actual invocations count. The .py may live in hooks/ (sibling
     invocation) or at repo-root scripts/, so membership is checked by basename across the
     whole repo.
+
+    A reference carrying a `$` names no file this can check: `run-hook.sh` composes
+    `$HOOKS_DIR/$name.py` from the hook name its registration passes, so the name is not in the
+    wrapper at all (#3278). Abstaining here is the same posture
+    `hooklib/hook_registration_lines.py` takes, and that arm DOES rule on the composed form —
+    it reads the registered command, which this test does not have.
     """
     py_names = _repo_python_basenames()
     hooks_dir = os.path.join(CLAUDE, "hooks")
@@ -106,7 +112,9 @@ def test_hook_wrappers_reference_existing_python():
         for line in _read(os.path.join(hooks_dir, fn)).splitlines():
             if line.lstrip().startswith("#"):  # skip comments / doc mentions
                 continue
-            for pyref in re.findall(r"[\w./-]+\.py", line):
+            for pyref in re.findall(r"[\w./${}-]+\.py", line):
+                if "$" in pyref:
+                    continue
                 if os.path.basename(pyref) not in py_names:
                     broken.append((fn, pyref))
     assert not broken, f".sh wrappers invoke missing python files: {broken}"

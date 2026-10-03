@@ -186,7 +186,7 @@ def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
     # Bash tool hands its child both with O_NONBLOCK set. The flag lives on the open
     # file description this process shares with the child, so clearing it here clears
     # it for ansible; anywhere else it is already clear and this does nothing. The
-    # .claude/hooks/uv-python.sh fixup cannot reach here — this command names ansible
+    # .claude/hooks/uv-python.py fixup cannot reach here — this command names ansible
     # nowhere a hook reading the session's command text could see it.
     for handle in (_sys.stdin, _sys.stdout, _sys.stderr):
         with contextlib.suppress(OSError, ValueError):
