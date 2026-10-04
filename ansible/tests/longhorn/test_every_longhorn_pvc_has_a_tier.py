@@ -114,10 +114,10 @@ def _volume_claim_longhorn_pvcs(base: dict) -> set[tuple[str, str]]:
 
     `volume-claim`'s own defaults are merged in UNDER the calling role's context (Ansible's
     real precedence: role defaults are the weakest layer), not just used as a naming guess.
-    terraria-stats's `include_role` passes `volume_claim_name` but never overrides
-    `volume_claim_storage_class`, so it inherits volume-claim's own default (`longhorn`) —
-    without this merge that caller's storage class would resolve to nothing and its PVC
-    would silently drop out of the census.
+    A caller that passes `volume_claim_name` but never overrides `volume_claim_storage_class`
+    inherits volume-claim's own default (`longhorn`) — without this merge that caller's
+    storage class would resolve to nothing and its PVC would silently drop out of the census.
+    terraria-stats was such a caller until it moved to `k8s_claims` (#3387).
     """
     entries = k8s_entries()
     env = make_env([SHARED_TPL])

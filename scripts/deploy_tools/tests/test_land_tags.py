@@ -287,9 +287,7 @@ def test_pr_617_deploys_the_shared_roles_callers_and_reports_only_the_setup_plan
     Dropped from the report with no callers to deploy would be the setup-plane silence again.
     """
     reached = land_tags.shared_caller_tags(_PR_617_FILES)
-    assert {"home-assistant", "jellyfin"} <= reached["manifests"] & reached[
-        "volume-claim"
-    ]
+    assert {"uptime-kuma", "jellyfin"} <= reached["manifests"] & reached["volume-claim"]
     note = land_tags.plane_note(_PR_617_FILES)
     assert "manifests" not in note and "ansible/deploy.yml" not in note
     # `k3s-bringup.yml`, NOT `initial_setup.yml`. The k3s role appears only in the bring-up
