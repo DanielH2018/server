@@ -14,9 +14,19 @@
    last apply winning. netpol-baseline's CLAUDE.md, "Where a per-workload policy lives", has
    the rule.
 
+   An entry also lists `netpol_fences: [{app, port, from}]` for a sub-workload of its role that
+   has no entry of its own (freshrss's feed cache). Each item carries its own pod label and
+   port, because the entry's `port` describes the entry's workload, not the sub-workload.
+
    Each fence reads `netpol_baseline_enforced`, so the rollback lever still covers it; the
    reasoning is in networkpolicy-traefik.yaml.j2. #}
 {% for entry in containers_list if 'netpol_from' in entry and not entry.get('netpol_role_owned', false) %}
 ---
 {{ networkpolicy(entry.get('netpol_app', entry.name), entry.port, entry.netpol_from, netpol_baseline_enforced | bool) }}
+{% endfor %}
+{% for entry in containers_list %}
+{% for fence in entry.get('netpol_fences', []) %}
+---
+{{ networkpolicy(fence.app, fence.port, fence['from'], netpol_baseline_enforced | bool) }}
+{% endfor %}
 {% endfor %}

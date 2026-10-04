@@ -343,6 +343,19 @@ containers_list:
     port: 80
     use_authelia: true
     auth_tier: one_factor
+    # Fences for this role's sub-workloads, which have no entry of their own, rendered by
+    # netpol-baseline's networkpolicy-callers.yaml.j2. Each names its own pod label and port,
+    # so freshrss's own port and any fence freshrss later declares stay separate.
+    netpol_fences:
+      # The nginx feed cache (files/nginx-feed-cache.conf). Its Service is `feed-cache`, its pod
+      # label `app: freshrss-feed-cache`; port 80 is the containerPort and Service port both,
+      # verified 2026-08-20.
+      - app: freshrss-feed-cache
+        port: 80
+        from:
+          - freshrss  # the subscription URL lives in FreshRSS's own database, so no template
+                      # names `feed-cache` as a target and a grep cannot see this caller.
+                      # Confirm after a deploy that the rachelbythebay feed still refreshes.
   # Parked at replicas 0 — see roles/k8s/navidrome/defaults/main.yml. The entry stays in the
   # list so the Deployment, Service and route keep being reconciled; only the pod count is 0.
   - name: navidrome

@@ -10,20 +10,23 @@
   - netpol-baseline's `networkpolicy-callers.yaml.j2` loops over every entry carrying
     `netpol_from`, gated on `netpol_baseline_enforced`. An entry whose pod label differs from
     its name sets `netpol_app:` to that label, and the loop passes it as `name` (scrutiny).
+    A sub-workload with no entry of its own is a `netpol_fences: [{app, port, from}]` item on
+    its role's entry, and the same template renders it (freshrss's feed cache).
   - A role whose deploy must carry its own fence renders it from its own template, reading
     `container_item.netpol_from`, and its entry sets `netpol_role_owned: true` so the loop
     skips it. sonarr, radarr, prowlarr and qbittorrent do this; netpol-baseline's CLAUDE.md
     says when a policy belongs in the workload's role.
 
   A fence of any other shape (a namespaceSelector, an ipBlock, several ports, a caller scoped
-  to a different port, a sub-workload with no containers_list entry of its own) stays bespoke.
+  to a different port) stays bespoke.
   Do not grow this macro to absorb one.
 
   Arguments:
     name       Pod `app` label this policy selects, and the NetworkPolicy's own name: the
-               entry's `netpol_app` where it sets one, else the entry's name.
-    port       TCP port every caller is scoped to (the entry's `port`; qbittorrent passes its
-               WebUI port, which equals it).
+               entry's `netpol_app` where it sets one, else the entry's name, or a
+               `netpol_fences` item's `app`.
+    port       TCP port every caller is scoped to (the entry's `port`, or a `netpol_fences`
+               item's own; qbittorrent passes its WebUI port, which equals the entry's).
     from_apps  The `app` labels admitted, one `podSelector` peer each.
     enforced   False renders the allow-all body, so `netpol_baseline_enforced` stays a real
                rollback lever for the fences netpol-baseline owns. Pass it through `| bool`

@@ -51,8 +51,9 @@ needs, decides which one.
   `ansible/templates/networkpolicy.yml.j2`. `templates/networkpolicy-callers.yaml.j2` loops
   over every entry carrying the key, behind the `netpol_baseline_enforced` lever. An entry
   whose pod label is not its own name sets `netpol_app:` to the label (scrutiny's
-  `scrutiny-web`). An entry
-  whose role renders its own copy also sets `netpol_role_owned: true`, and the loop skips it.
+  `scrutiny-web`). A sub-workload with no entry of its own is a `netpol_fences: [{app, port,
+  from}]` item on its role's entry, carrying its own label and port (freshrss's feed cache).
+  An entry whose role renders its own copy also sets `netpol_role_owned: true`, and the loop skips it.
   `ansible/tests/k8s/test_netpol_from.py` fails if a policy name renders from two roles.
 - **In the workload's own role**, when the workload's deploy depends on the policy:
   - A workload in `netpol_baseline_exempt_workloads` keeps its complete fence beside it:
