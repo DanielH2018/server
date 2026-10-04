@@ -153,6 +153,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_alerts",
         "deploy_changes",
         "deploy_config",
+        "deploy_cross_role",
         "deploy_git",
         "deploy_inventory",
         "deploy_io",
