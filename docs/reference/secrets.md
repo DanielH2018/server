@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-10-04 06:17 UTC
-generated_sha: 737397f95
+generated_at: 2026-10-04 18:25 UTC
+generated_sha: 64ee055fc
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 737397f95
 
 # Secrets
 
-180 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+178 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -65,9 +65,7 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `headlamp_oidc_client_secret` | 2026-05-17 | 2027-05-08 | 216 |
 | `headlamp_oidc_client_secret_hash` | 2026-05-29 | 2027-05-02 | 210 |
 | `healthchecks_api_read_only_key` | 2025-11-12 | 2026-11-10 | 37 |
-| `healthchecks_password` | 2026-08-23 | 2027-07-27 | 296 |
 | `healthchecks_ping_key` | 2026-08-31 | 2027-08-20 | 320 |
-| `healthchecks_secret_key` | 2026-07-07 | 2027-06-10 | 249 |
 | `homelab_mcp_token` | 2025-09-01 | 2026-08-10 | -55 |
 | `homepage_ha_token` | 2025-09-14 | 2026-08-28 | -37 |
 | `jellyfin_api_key` | 2026-09-10 | 2027-08-15 | 315 |
