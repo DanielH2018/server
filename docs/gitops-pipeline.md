@@ -669,7 +669,7 @@ stay).
       the release records, and it is not a dependable backstop on its own: the monitor is DOWN
       for any stale record anywhere in the fleet, so a new deferral adds nothing an operator
       can see on a tile that is already red (the state PR #2381's second review found it in).
-      So the deferral is also written to **`k8s_deferred`**, one line per service, and
+      So the deferral is also written to **`k8s_deferred`**, one entry per service, and
       `gitops_status` pages on the oldest line's age at the six hours `manual_plane` uses
       (#2449). One of the classes on that channel is recorded, decided per class rather than
       per channel (#2471): the BUDGET deferral, where the tick chose it rather than a person
@@ -1182,10 +1182,9 @@ stay).
 ### The `k8s_deferred` and `k8s_unapplied` markers, in full
 
 Moved from the role file's *Safety* section on 2026-09-26 (#2679). Both hold one entry per
-service for a k8s change a broad tick merged and did not deploy. `k8s_deferred` is a line
-marker, `"<origin_sha> <service> <unix_ts>"`. `k8s_unapplied` is a class of the `owed` ledger,
-`/var/lib/gitops-deploy/owed.jsonl` (#3392): one JSON object per line carrying `class`,
-`subject`, `origin` and `at`.
+service for a k8s change a broad tick merged and did not deploy. Both are classes of the
+`owed` ledger, `/var/lib/gitops-deploy/owed.jsonl` (#3392): one JSON object per line carrying
+`class`, `subject`, `origin` and `at`.
 
 **The ledger exists because the line markers break on a new field.** Each line parser accepts
 an exact field count and skips anything else, and the monitor-bridge, `deploy_ui` and
@@ -1205,13 +1204,17 @@ readers, the fold and both `MARKERS` entries, and `tasks/install.yml` reaps the 
 Every reader calls `gitops_ledger.manual_plane_entries`. A line missing `playbook` or carrying
 malformed `tags` still pages, for the whole role.
 
-**`k8s_deferred` is moving the same way, and its readers have moved.** monitor-bridge, the
-SessionStart banner and the `deploy_ui` panel read `gitops_ledger.k8s_deferred_entries`, which
-unions the line marker with the ledger's `k8s_deferred` class. A service in both sources is one
-bump, dated and attributed from the older entry. `deploy_ui` installs the `gitops_ledger.py`
-source beside its `gitops_markers.py` for this. The deployer still records and clears the line
-marker alone, and `gitops_state.py clear-k8s-deferred` still edits that file. The next step
-moves the writer and its clear into the ledger together.
+**`k8s_deferred` is moving the same way, and its readers and writer have moved.** The
+readers shipped first (#3531). monitor-bridge, the SessionStart banner and the `deploy_ui`
+panel read `gitops_ledger.k8s_deferred_entries`, which unions the legacy
+`"<origin_sha> <service> <unix_ts>"` line marker with the ledger's `k8s_deferred` class. A
+service in both sources is one bump, dated and attributed from the older entry. `deploy_ui`
+installs the `gitops_ledger.py` source beside its `gitops_markers.py` for this. The writer
+moved next: `DeployerState.record_k8s_deferred` and `clear_k8s_deferred` write the class, and
+`gitops_state.py clear-k8s-deferred` clears it through them. Their first record or clear folds
+any line left in the legacy marker into the ledger, keeping its origin and stamp. The next
+step, once daniel-box holds no legacy file, deletes the line-marker half of
+`k8s_deferred_entries` and the `MARKERS` entry, and reaps the basename.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
@@ -1912,11 +1915,10 @@ under-sized.
   the `tags` key `deploy_defer.record` writes on the role's ledger line. A row is logged on every later
   tick, paged once per SHA, and cleared by the tick applying the role's real playbook or by
   `gitops_state.py clear-manual-plane <role>`, with `--applied <tags>` after a narrowed apply.
-- **The `k8s_deferred` marker and the `k8s_unapplied` ledger class** each hold one entry per
-  service: the first, a `"<origin_sha> <service> <unix_ts>"` line, for a budget deferral, which
-  `gitops_status` pages on at six hours; the second, a JSON line in `owed.jsonl`, for the
-  hand-edited and denylisted classes, which never pages and which the SessionStart banner
-  reads. The hand clears are
+- **The `k8s_deferred` and `k8s_unapplied` ledger classes** each hold one entry per service
+  as a JSON line in `owed.jsonl`: the first for a budget deferral, which `gitops_status` pages
+  on at six hours; the second for the hand-edited and denylisted classes, which never pages
+  and which the SessionStart banner reads. The hand clears are
   `gitops_state.py clear-k8s-deferred <svc>` and `clear-k8s-unapplied <svc>`.
 - **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True)`):
   `last_run` is still written, so GitOps-Alive stays green, and the page is throttled to twice per

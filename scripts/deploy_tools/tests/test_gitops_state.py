@@ -430,14 +430,16 @@ def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(
 
 # ── clear-k8s-deferred: the same shape one plane over ─────────────────────────────
 
-SONARR = "abc123def4567890 sonarr 1000.0"
-RADARR = "def456abc7890123 radarr 2000.0"
+
+_LINE = '{{"at": {}, "class": "k8s_deferred", "origin": "{}", "subject": "{}"}}'
+SONARR = _LINE.format(1000, "abc123def4567890", "sonarr")
+RADARR = _LINE.format(2000, "def456abc7890123", "radarr")
 
 
 @pytest.fixture
 def deferred(tmp_path: Path) -> Path:
-    (tmp_path / "k8s_deferred").write_text(f"{SONARR}\n{RADARR}\n")
-    return tmp_path / "k8s_deferred"
+    (tmp_path / "owed.jsonl").write_text(f"{SONARR}\n{RADARR}\n")
+    return tmp_path / "owed.jsonl"
 
 
 def test_clearing_one_deferred_bump_leaves_the_other(deferred, run, capsys, journal):
@@ -446,6 +448,8 @@ def test_clearing_one_deferred_bump_leaves_the_other(deferred, run, capsys, jour
     assert "sonarr" in capsys.readouterr().out
     service, dropped, _ = journal[0]
     assert (service, dropped.origin) == ("sonarr", "abc123def4567890")
+    assert run(deferred.parent, "clear-k8s-deferred", "radarr") == 0
+    assert not deferred.exists(), "clearing the last bump removes the ledger"
 
 
 def test_clearing_a_bump_that_is_not_deferred_exits_zero_and_says_so(
@@ -458,30 +462,29 @@ def test_clearing_a_bump_that_is_not_deferred_exits_zero_and_says_so(
     assert journal[0][1] is None, "nothing was dropped, so the line says so"
 
 
-def test_clearing_the_last_deferred_bump_removes_the_marker(tmp_path, run):
-    (tmp_path / "k8s_deferred").write_text(f"{SONARR}\n")
+def test_a_legacy_line_marker_bump_is_still_clearable(tmp_path, run, journal):
+    """The clear folds a pre-ledger deployer's lines into the ledger first (#3392)."""
+    legacy = "abc123def4567890 sonarr 1000\ndef456abc7890123 radarr 2000\n"
+    (tmp_path / "k8s_deferred").write_text(legacy)
     assert run(tmp_path, "clear-k8s-deferred", "sonarr") == 0
-    assert not (tmp_path / "k8s_deferred").exists()
+    assert journal[0][1].origin == "abc123def4567890"
+    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [RADARR]
 
 
-# ── clear-k8s-unapplied: the marker nothing pages on ───────────────────────────────
+# ── clear-k8s-unapplied: the class nothing pages on ────────────────────────────────
 
-AUTHELIA = json.dumps(
-    {"at": 1000, "class": "k8s_unapplied", "origin": "a" * 40, "subject": "authelia"},
-    sort_keys=True,
+AUTHELIA = _LINE.replace("k8s_deferred", "k8s_unapplied").format(
+    1000, "a" * 40, "authelia"
 )
 
 
-def test_clearing_an_unapplied_role_rewrites_its_own_marker_only(
+def test_clearing_an_unapplied_role_leaves_the_deferred_class_alone(
     tmp_path, run, capsys, journal
 ):
-    """`k8s_unapplied` is a class of the `owed` ledger and `k8s_deferred` a line marker of its
-    own (#3392): a clear aimed at one must not touch the other."""
-    (tmp_path / "owed.jsonl").write_text(f"{AUTHELIA}\n")
-    (tmp_path / "k8s_deferred").write_text(f"{SONARR}\n")
+    """Two classes of one ledger (#3392): a clear aimed at one leaves the other's line."""
+    (tmp_path / "owed.jsonl").write_text(f"{AUTHELIA}\n{SONARR}\n")
     assert run(tmp_path, "clear-k8s-unapplied", "authelia") == 0
-    assert not (tmp_path / "owed.jsonl").exists()
-    assert (tmp_path / "k8s_deferred").read_text().splitlines() == [SONARR]
+    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [SONARR]
     assert "authelia" in capsys.readouterr().out
 
 

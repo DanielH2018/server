@@ -15,6 +15,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 import dataclasses
 
 import deploy_locks
+from gitops_ledger import OWED_K8S_DEFERRED, parse_owed
 from _broad_k8s_range import (
     alerted,
     APPLYABLE_ROLE,
@@ -175,7 +176,12 @@ def test_a_budget_deferred_bump_is_still_named_by_the_deferral_post(
     assert any("sonarr" in post for post in tick.posts)
 
 
-# ── the k8s_deferred marker: the durable half of a budget deferral ────────────────
+# ── the k8s_deferred class: the durable half of a budget deferral ─────────────────
+
+
+def deferred(state_dir):
+    """The `owed` ledger's `k8s_deferred` entries, which every reader pages on (#3392)."""
+    return parse_owed(marker(state_dir, "owed.jsonl"), OWED_K8S_DEFERRED)
 
 
 def _out_of_budget(settings, tick):
@@ -194,7 +200,7 @@ def _out_of_budget(settings, tick):
     return config
 
 
-def test_a_budget_deferred_bump_is_recorded_in_the_k8s_deferred_marker(
+def test_a_budget_deferred_bump_is_recorded_in_the_k8s_deferred_class(
     gitops_deploy, tick, settings, state_dir
 ):
     """The post fires once and the range is merged, so the marker is the durable half.
@@ -204,9 +210,9 @@ def test_a_budget_deferred_bump_is_recorded_in_the_k8s_deferred_marker(
     is already red. The marker pages GitOps Deploy — Status on its own age instead.
     """
     assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
-    origin, service, stamp = marker(state_dir, "k8s_deferred").split()
-    assert (origin, service) == (ORIGIN, "sonarr")
-    assert float(stamp) > 0, "the first-seen stamp is what monitor-bridge pages on"
+    [entry] = deferred(state_dir)
+    assert (entry.origin, entry.subject) == (ORIGIN, "sonarr")
+    assert entry.at > 0, "the first-seen stamp is what monitor-bridge pages on"
 
 
 def test_a_bump_the_tick_deployed_is_not_recorded(
@@ -217,7 +223,7 @@ def test_a_bump_the_tick_deployed_is_not_recorded(
     tick.narrow = (0, "jellyfin")
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks[-1] == DEPLOY_SONARR, "the bump was deployed, not deferred"
-    assert marker(state_dir, "k8s_deferred") is None
+    assert deferred(state_dir) == []
 
 
 def test_the_service_deploy_a_later_tick_runs_clears_the_marker(
@@ -229,11 +235,11 @@ def test_the_service_deploy_a_later_tick_runs_clears_the_marker(
     `gitops_state.py clear-k8s-deferred` exists for; a deploy the TICK runs is not.
     """
     assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
-    assert marker(state_dir, "k8s_deferred") is not None
+    assert deferred(state_dir) != []
     tick.head = LOCAL
     assert gitops_deploy.main(tick.tools, mixed(settings, tick)) == 0
     assert tick.playbooks[-1] == DEPLOY_SONARR, "the retry deployed the bump"
-    assert marker(state_dir, "k8s_deferred") is None
+    assert deferred(state_dir) == []
 
 
 def test_a_deploy_plane_that_applies_the_service_clears_the_marker(
@@ -244,10 +250,12 @@ def test_a_deploy_plane_that_applies_the_service_clears_the_marker(
     The pending set is asked rather than the range, because the tick that deferred the bump
     merged it — no later `local..origin` carries that commit.
     """
-    (state_dir / "k8s_deferred").write_text(f"{'9' * 40} radarr 1000.0\n")
+    (state_dir / "owed.jsonl").write_text(
+        f'{{"at": 1000, "class": "k8s_deferred", "origin": "{"9" * 40}", "subject": "radarr"}}\n'
+    )
     assert gitops_deploy.main(tick.tools, plane_applies_radarr(settings, tick)) == 0
     assert tick.playbooks[0] == [*DEPLOY_SONARR[:-1], "radarr"], "the plane ran"
-    assert marker(state_dir, "k8s_deferred") is None
+    assert deferred(state_dir) == []
 
 
 def test_a_hand_edited_k8s_role_is_not_recorded(
@@ -261,4 +269,4 @@ def test_a_hand_edited_k8s_role_is_not_recorded(
     config = mixed(settings, tick, APPLYABLE_ROLE, HAND_EDITED_K8S)
     assert gitops_deploy.main(tick.tools, config) == 0
     assert alerted(state_dir, "k8s") == ORIGIN, "it took the defer-and-alert path"
-    assert marker(state_dir, "k8s_deferred") is None
+    assert deferred(state_dir) == []

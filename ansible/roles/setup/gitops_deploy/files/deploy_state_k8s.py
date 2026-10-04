@@ -8,10 +8,10 @@ service's entry advances to the new origin. That shared shape is the seam this m
 along (#2663): `deploy_state.py` stood at the 600-line module cap, so the next change to a
 marker family had nowhere to land.
 
-They no longer share a FILE FORMAT. `k8s_deferred` is still the three-field line
-monitor-bridge pages on. `k8s_unapplied` is the first class of the `owed` JSON-lines ledger
-(#3392), which nothing pages on, so it could move before every reader copy had the tolerant
-parser.
+Both are classes of the `owed` JSON-lines ledger (#3392). `k8s_unapplied` moved first, since
+nothing pages on it. `k8s_deferred` moved once every reader copy unioned its class with the
+three-field line marker monitor-bridge pages on; a record or clear folds any line left in that
+marker into the ledger first.
 
 It is a MIXIN rather than a second object because every caller reaches these methods as
 `state.<method>` — `deploy_defer`, `deploy_broad_k8s` and `scripts/deploy_tools/gitops_state.py`
@@ -24,9 +24,13 @@ Stdlib only, plus `gitops_markers` and `gitops_ledger` — the leaf contract `de
 carries.
 """
 
+import time
+
 from gitops_ledger import (
+    OWED_K8S_DEFERRED,
     OWED_K8S_UNAPPLIED,
     drop_owed,
+    k8s_deferred_entries,
     k8s_unapplied_entries,
     owed_line,
     parse_owed,
@@ -46,62 +50,109 @@ class K8sLineMarkers:
     Mixed into `deploy_state.DeployerState`, which supplies `read` and `write`.
     """
 
-    def _k8s_line_pending(self, marker: str) -> list[K8sDeferredEntry]:
-        """Every line `marker` still holds, oldest first."""
-        return parse_k8s_deferred(self.read(marker))
-
-    def _record_k8s_line(
-        self, marker: str, origin: str, services, now: float
+    def _record_owed(
+        self,
+        owed: str | None,
+        cls: str,
+        origin: str,
+        services,
+        now: float,
+        advance: bool,
     ) -> list[str]:
-        """Append a line per service `marker` does not list yet. Returns the ones added.
+        """Append a `cls` line per service the ledger `owed` does not list yet. Returns those.
 
-        `rewrite_k8s_lines` owns the repair of a TORN line naming one of `services` (#2657):
-        a repaired service reads as listed, so this updates its line rather than appending a
-        second one beside it.
+        `rewrite_owed` owns the repair of a TORN line naming one of `services` (#2657), and
+        the move to `origin` under `advance`. A repaired service reads as listed, so this
+        updates its line rather than appending a second one beside it.
         """
         wanted = set(services)
-        text = rewrite_k8s_lines(self.read(marker), wanted, now)
-        added = sorted(wanted - {e.service for e in parse_k8s_deferred(text)})
-        lines = text.splitlines() + [f"{origin} {s} {now:.0f}" for s in added]
-        if added or text != (self.read(marker) or ""):
-            self.write(marker, "\n".join(lines))
+        text = rewrite_owed(owed, cls, wanted, origin, now, advance)
+        added = sorted(wanted - {e.subject for e in parse_owed(text, cls)})
+        lines = text.splitlines() + [owed_line(cls, s, origin, now) for s in added]
+        if added or text != (self.read("owed") or ""):
+            self.write("owed", "\n".join(lines))
         return added
 
-    def _clear_k8s_lines(self, marker: str, services) -> list[str]:
-        """Drop `marker`'s lines naming any of `services`. Returns the names cleared.
+    def _fold_k8s_deferred_marker(self, now: float) -> str | None:
+        """Move every bump the legacy `k8s_deferred` line marker holds into the ledger.
 
-        A TORN LINE NAMING ONE OF `services` GOES TOO (#2657), where a line naming nobody is
-        carried through untouched: dropping that one loses the only record that something was
-        deferred, and a clear of every service would still leave it standing forever.
+        Returns:
+            The ledger text after the fold, which the caller writes on top of.
+
+        The writer moved into the ledger after every reader learned the class (#3392), so a
+        line a pre-ledger deployer wrote is still read, and this moves it on the first record
+        or clear. A bump keeps its own origin and first-seen stamp; where the ledger already
+        names the service, the OLDER stamp stands, as in `k8s_deferred_entries`. A TORN line
+        naming a service is repaired first (#2657), and a line naming nobody stays in the
+        marker: dropping it loses the only record that something was deferred.
+
+        The ledger is written BEFORE the marker is emptied. A crash between the two leaves
+        the bump in both, which every reader's union reads once and the next fold re-reads as
+        already folded. The other order would lose it.
         """
-        wanted = set(services)
-        kept, cleared = [], []
-        for line in (self.read(marker) or "").splitlines():
-            service = k8s_line_service(line)
-            if service in wanted:
-                cleared.append(service)
-                continue
-            kept.append(line)
-        if cleared:
-            self.write(marker, "\n".join(kept) or None)
-        return sorted(set(cleared))
+        marker = self.read("k8s_deferred")
+        owed = self.read("owed")
+        if not marker:
+            return owed
+        named = {k8s_line_service(line) for line in marker.splitlines()} - {None}
+        legacy = parse_k8s_deferred(rewrite_k8s_lines(marker, named, now))
+        listed = {e.subject: e.at for e in parse_owed(owed, OWED_K8S_DEFERRED)}
+        older = {
+            e.service: e
+            for e in sorted(legacy, key=lambda e: e.at, reverse=True)
+            if e.service not in listed or e.at < listed[e.service]
+        }
+        text, _ = drop_owed(owed, OWED_K8S_DEFERRED, older)
+        lines = text.splitlines() + [
+            owed_line(OWED_K8S_DEFERRED, e.service, e.origin, e.at)
+            for e in sorted(older.values(), key=lambda e: e.at)
+        ]
+        folded = "\n".join(lines)
+        if folded != (owed or ""):
+            self.write("owed", folded)
+        unnamed = [
+            line for line in marker.splitlines() if k8s_line_service(line) is None
+        ]
+        if unnamed != marker.splitlines():
+            self.write("k8s_deferred", "\n".join(unnamed) or None)
+        return folded
+
+    # ── the image bumps a broad tick merged and could not deploy (#2449), in the ledger ──
+    # The paging half: monitor-bridge pages on the oldest entry past its age gate.
 
     def k8s_deferred_pending(self) -> list[K8sDeferredEntry]:
-        """Every bump the `k8s_deferred` marker still holds, oldest line first."""
-        return self._k8s_line_pending("k8s_deferred")
+        """Every bump still owed, oldest entry first, from the ledger and any legacy line.
+
+        The legacy line marker is read too, through the same union every other reader uses,
+        so a bump a pre-ledger deployer wrote is never invisible to the deployer's own skip
+        and journal before the next write folds it.
+        """
+        return k8s_deferred_entries(self.read("k8s_deferred"), self.read("owed"))
 
     def record_k8s_deferred(self, origin: str, services, now: float) -> list[str]:
         """Record the bumps this tick merged and could not deploy. Returns the ones added.
 
         A service already listed keeps its first-seen stamp, the age monitor-bridge pages on.
         IT KEEPS ITS ORIGIN TOO, where `record_k8s_unapplied` advances it (#2644): nothing
-        compares this marker's SHA, and `deploy_defer.unrecord` can reset the merge.
+        compares this class's SHA, and `deploy_defer.unrecord` can reset the merge.
         """
-        return self._record_k8s_line("k8s_deferred", origin, services, now)
+        owed = self._fold_k8s_deferred_marker(now)
+        return self._record_owed(
+            owed, OWED_K8S_DEFERRED, origin, services, now, advance=False
+        )
 
     def clear_k8s_deferred(self, services) -> list[str]:
-        """Drop the `k8s_deferred` lines naming any of `services`. Returns the names cleared."""
-        return self._clear_k8s_lines("k8s_deferred", services)
+        """Drop the `k8s_deferred` entries naming any of `services`. Returns the names cleared.
+
+        A torn line naming one of `services` goes as well (#2657), in the ledger or in the
+        legacy marker, which the fold empties first.
+        """
+        text, cleared = drop_owed(
+            self._fold_k8s_deferred_marker(time.time()), OWED_K8S_DEFERRED, services
+        )
+        if cleared:
+            self.write("owed", text or None)
+        return cleared
 
     # ── the k8s changes a tick merged and will never apply (#2570), in the ledger (#3392) ──
     # The non-paging half: the SessionStart banner and the journal read it, nothing else.
@@ -120,19 +171,9 @@ class K8sLineMarkers:
         That moved entry stays OUT of the return value, which `deploy_defer.unrecord` clears:
         an entry predating the tick survives the reset.
         """
-        before = self.read("owed")
-        wanted = set(services)
-        text = rewrite_owed(
-            before, OWED_K8S_UNAPPLIED, wanted, origin, now, advance=True
+        return self._record_owed(
+            self.read("owed"), OWED_K8S_UNAPPLIED, origin, services, now, advance=True
         )
-        listed = {e.subject for e in parse_owed(text, OWED_K8S_UNAPPLIED)}
-        added = sorted(wanted - listed)
-        lines = text.splitlines() + [
-            owed_line(OWED_K8S_UNAPPLIED, s, origin, now) for s in added
-        ]
-        if added or text != (before or ""):
-            self.write("owed", "\n".join(lines))
-        return added
 
     def clear_k8s_unapplied(self, services) -> list[str]:
         """Drop the `k8s_unapplied` entries naming any of `services`. Returns the names cleared.

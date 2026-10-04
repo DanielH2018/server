@@ -51,6 +51,10 @@ MARKERS: dict[str, str] = {
     # person who is landing it and can deploy it, and forty of the fifty-four k8s roles are
     # denylisted, so recording those would hold GitOps Deploy — Status red as normal operation.
     # A budget deferral has no such person: nothing chose it, and nothing reports it again.
+    #
+    # LEGACY. The deployer records this deferral as the `owed` ledger's `k8s_deferred` class
+    # (#3392) and folds any line left here into it on its next record or clear. Every reader
+    # still unions this file with the class until the file is reaped.
     "k8s_deferred": "k8s_deferred",
     # The owed-work ledger (#3392): one JSON object per line, each naming work a tick left for
     # somebody else under a `class`. JSON lines because the line formats here skip a line

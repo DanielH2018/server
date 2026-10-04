@@ -15,9 +15,9 @@ naming the role, the line it dropped and who ran it: `journalctl -t gitops-state
 its trace, since the marker's own truncation records nothing. `clear-contention` writes no such line on purpose: it silences no
 page, and the tick rewrites that marker itself on its next undeferred run.
 
-`clear-k8s-deferred <service>` is the same shape one plane over. `/var/lib/gitops-deploy/
-k8s_deferred` holds one line per promoted image bump a BROAD tick fast-forwarded and then
-deferred for lack of budget: the range is merged, so no later tick's `local..origin`
+`clear-k8s-deferred <service>` is the same shape one plane over. The `owed` ledger's
+`k8s_deferred` class (#3392) holds one line per promoted image bump a BROAD tick fast-forwarded
+and then deferred for lack of budget: the range is merged, so no later tick's `local..origin`
 carries the bump and the defer-and-alert post names it exactly once. monitor-bridge pages once
 the oldest line is six hours old. The deployer clears a line itself on any tick that deploys
 the service; this command is for the `./scripts/deploy.sh` an operator ran, which the deployer
@@ -75,6 +75,7 @@ _sys.path.insert(0, str(HOST_LIB_FILES))
 from deploy_changes import setup_role_tag
 from deploy_locks import TREE_LOCK, take
 from deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
+from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED
 from gitops_markers import manual_plane_clear_cmd, maximal_apply_warning
 
 # Seconds to wait for it. Every other waiter on this lock waits 3000 (the census in the
@@ -324,9 +325,9 @@ def clear_k8s_deferred(
     lock_path: str | None = None,
     lock_wait_s: float | None = None,
     journal: Journal | None = None,
-    marker: str = "k8s_deferred",
+    cls: str = OWED_K8S_DEFERRED,
 ) -> int:
-    """Drop `service`'s line from `marker`. Exit 0 whether or not there was one to drop.
+    """Drop `service`'s `cls` line from the `owed` ledger. Exit 0 whether or not there was one.
 
     **The deploy comes first, this second**, for the reason `clear_manual_plane` states: the
     marker is the only durable signal that a change a tick merged is still unapplied, and
@@ -339,25 +340,17 @@ def clear_k8s_deferred(
       lock_path: the tree lock to serialise the rewrite against. None reads `TREE_LOCK`.
       lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
       journal: what records the clear, called with the service, the line it dropped and an
-        empty remaining set. None means the default for `marker`.
-      marker: which file to rewrite — `k8s_deferred`, the one monitor-bridge pages on, or
-        `owed`, the ledger whose `k8s_unapplied` class nothing pages on. The two carry
-        identical clear semantics, so they share this function rather than a copy of it.
+        empty remaining set. None means the default for `cls`.
+      cls: which ledger class to clear — `k8s_deferred`, the one monitor-bridge pages on, or
+        `k8s_unapplied`, which nothing pages on. The two carry identical clear semantics, so
+        they share this function rather than a copy of it. A `k8s_deferred` clear also drops
+        the service from the legacy line marker, which `DeployerState` folds in first.
     """
-    pending = (
-        state.k8s_deferred_pending
-        if marker == "k8s_deferred"
-        else state.k8s_unapplied_pending
-    )
-    clear = (
-        state.clear_k8s_deferred
-        if marker == "k8s_deferred"
-        else state.clear_k8s_unapplied
-    )
+    deferred = cls == OWED_K8S_DEFERRED
+    pending = state.k8s_deferred_pending if deferred else state.k8s_unapplied_pending
+    clear = state.clear_k8s_deferred if deferred else state.clear_k8s_unapplied
     default_journal = (
-        journal_clear_k8s_deferred
-        if marker == "k8s_deferred"
-        else journal_clear_k8s_unapplied
+        journal_clear_k8s_deferred if deferred else journal_clear_k8s_unapplied
     )
     try:
         with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
@@ -380,15 +373,15 @@ def clear_k8s_deferred(
         return 1
     except PermissionError:
         print(
-            f"cannot write {state.path(marker)} as this user — the state directory "
+            f"cannot write {state.path('owed')} as this user — the state directory "
             "is owned by the deploy user; retry with `sudo -u ubuntu`",
             file=sys.stderr,
         )
         return 1
     (default_journal if journal is None else journal)(
         service,
-        # The two markers keep different line shapes, and the journal only needs the SHA the
-        # clear was owed against. `ManualPlaneEntry` is what `journal_clear` reads, so the
+        # A k8s entry names no playbook, and the journal only needs the SHA the clear was
+        # owed against. `ManualPlaneEntry` is what `journal_clear` reads, so the
         # deferred entry is rendered into one rather than given a second formatter.
         ManualPlaneEntry(dropped.origin, "ansible/deploy.yml", service, dropped.at)
         if cleared and dropped
@@ -396,9 +389,9 @@ def clear_k8s_deferred(
         frozenset(),
     )
     if not cleared:
-        print(f"{service} is not pending in {state.path(marker)} — nothing to clear")
+        print(f"{service} is not pending in {state.path('owed')} — nothing to clear")
         return 0
-    print(f"cleared {service} from {state.path(marker)}")
+    print(f"cleared {service} from {state.path('owed')}")
     return 0
 
 
@@ -513,7 +506,7 @@ def main(
             lock_path,
             lock_wait_s,
             journal,
-            marker="owed",
+            cls=OWED_K8S_UNAPPLIED,
         )
     if args.command != "clear-manual-plane":
         # argparse refuses any other value, so this catches a subcommand added to the parser
