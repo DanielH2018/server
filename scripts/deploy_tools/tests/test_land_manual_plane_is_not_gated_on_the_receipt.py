@@ -21,7 +21,7 @@ import pytest
 
 
 import land_tags
-from _land_fakes import MERGE_SHA
+from _land_fakes import MERGE_SHA, RECEIPTS
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -59,7 +59,7 @@ def _state_reads(landing, files: list[str]) -> tuple[Outcome, list[str]]:
 def test_a_manual_plane_never_reads_the_receipt(landing, files):
     outcome, read = _state_reads(landing, files)
     assert land_tags.self_applied(files) is False
-    assert "receipts" not in read
+    assert RECEIPTS not in read
     assert outcome.verdict == "needs-manual-apply"
     assert "is not done" in outcome.detail
 
@@ -68,7 +68,7 @@ def test_the_plane_the_deployer_applies_itself_is_gated_on_the_receipt(landing):
     """The other side of the boundary: here an absent receipt IS what decides."""
     outcome, read = _state_reads(landing, _ROUTABLE_ROLE)
     assert land_tags.self_applied(_ROUTABLE_ROLE) is True
-    assert "receipts" in read
+    assert RECEIPTS in read
     assert outcome.verdict == "needs-manual-apply"
     assert "the tick converged without recording an apply" in outcome.detail
 

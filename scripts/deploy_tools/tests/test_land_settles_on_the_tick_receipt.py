@@ -14,8 +14,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_settles_on_the_tick_rece
 
 import pytest
 
-from _land_fakes import MERGE_SHA, Fakes, receipt
-from deploy_tools.land_lib import deploy
+from _land_fakes import MERGE_SHA, RECEIPTS, Fakes, receipt
+from deploy_tools.land_lib import deploy, tools
 from deploy_tools.land_lib.outcome import Outcome
 
 
@@ -62,3 +62,18 @@ def test_a_receipt_recording_no_apply_of_this_pr_still_needs_a_hand(
     outcome = _verdict(landing, state, is_ancestor_rc)
     assert outcome.verdict == "needs-manual-apply"
     assert "converged without recording an apply" in outcome.detail
+
+
+def test_the_receipt_is_read_from_the_file_the_tick_writes(landing, tmp_path):
+    """Through the real `read_state`, against the basename the deployer writes.
+
+    Every other test here hands the fake a dict keyed by the name the code asks for, so a
+    name that matches no file on disk passes them all. #3419 shipped reading `receipts`
+    while the tick writes `receipts.jsonl`, and the first landing to depend on it read
+    `needs-manual-apply` beside a receipt recording the apply (PR #3462).
+    """
+    (tmp_path / RECEIPTS).write_text(receipt({"ansible/deploy.yml": []})[RECEIPTS])
+    ln, _ = landing(Fakes())
+    ln.tools.read_state = lambda _root, name: tools.read_state(tmp_path, name)
+    assert RECEIPTS == "receipts.jsonl"
+    assert ln.tick_applied(MERGE_SHA)
