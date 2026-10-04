@@ -134,9 +134,9 @@
       - networkpolicy-nut.yaml
       - networkpolicy-jellyfin.yaml
       - networkpolicy-netpol-sentinel.yaml
-      - networkpolicy-freshrss-feed-cache.yaml
       - networkpolicy-loki-homelab.yaml
-      # Every fence declared as `netpol_from` on a containers_list entry (the callers template).
+      # Every fence declared as `netpol_from` or `netpol_fences` on a containers_list entry
+      # (the callers template).
       - networkpolicy-callers.yaml
       - networkpolicy-terraria.yaml
       - networkpolicy-valheim.yaml
