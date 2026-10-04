@@ -185,7 +185,12 @@ A shared template maps to the roles that import it, and two importer edges are c
 maps to the roles whose `defaults/main.yml` declares `k8s_claims`, not to every caller of
 `k8s/manifests`. Before the fix, a claim-template edit reached 57 of 60 services and refused.
 The derivation refuses again if `k8s_claims` is set anywhere but a role's defaults.
-`scripts/deploy_tools/narrow_templates.py` holds both rules.
+An edit that changes only a shared template's own Jinja comments maps to no tags at all
+(#3459). The rule reads the template at both refs through the `jinja2` lexer and compares the
+token streams without their comments, under both `trim_blocks` settings. Before it, a
+comment-only edit to `pvc.yml.j2` deployed its 14 importers, and one to
+`container-resources.yml.j2` refused as most of the fleet.
+`scripts/deploy_tools/narrow_templates.py` holds all three rules.
 
 **Every deploy-plane tick also logs a render-digest shadow line** (#3045), one
 `narrow shadow:` line beside the outcome above. It names the services whose applied digests

@@ -127,3 +127,60 @@ def test_manifests_renders_the_claim_template_only_per_k8s_claims_entry():
     naming = [t for t in tasks if "claim-default.yaml.j2" in str(t)]
     assert len(naming) == 1
     assert "k8s_claims" in naming[0]["loop"]
+
+
+MACRO = "ansible/templates/container-resources.yml.j2"
+
+
+@pytest.fixture
+def importer(tree: Tree) -> Tree:
+    """`sonarr` imports the macro, with a comment and a string holding `{#` beside the code."""
+    tree.write(
+        MACRO,
+        "{# sizes for every container #}\n"
+        "{% macro resources(c) %}{{ c.cpu }}{% endmacro %}\n"
+        'x: {{ "{# literal #}" }}\n',
+    )
+    tree.write(
+        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
+        "{% from 'container-resources.yml.j2' import resources %}\n",
+    )
+    tree.commit("sonarr imports the macro")
+    return tree
+
+
+def test_a_comment_only_template_edit_narrows_to_nothing(importer: Tree):
+    """#3459: an edit inside `{# #}`, even one adding lines, renders no bytes."""
+    importer.write(
+        MACRO,
+        "{# sizes for every container,\n   now on two lines #}\n"
+        "{% macro resources(c) %}{{ c.cpu }}{% endmacro %}\n"
+        'x: {{ "{# literal #}" }}\n',
+    )
+    assert importer.narrow(*_refs(importer)) == set()
+
+
+@pytest.mark.parametrize(
+    "edited",
+    [
+        # a comment edit beside a code edit
+        "{# sizes #}\n{% macro resources(c) %}{{ c.mem }}{% endmacro %}\n"
+        'x: {{ "{# literal #}" }}\n',
+        # whitespace control added to the comment strips the data around it
+        "{# sizes for every container -#}\n"
+        "{% macro resources(c) %}{{ c.cpu }}{% endmacro %}\n"
+        'x: {{ "{# literal #}" }}\n',
+        # a `{#` inside a string literal is content, not a comment
+        "{# sizes for every container #}\n"
+        "{% macro resources(c) %}{{ c.cpu }}{% endmacro %}\n"
+        'x: {{ "{# edited #}" }}\n',
+        # a whole comment line removed changes the render without trim_blocks
+        '{% macro resources(c) %}{{ c.cpu }}{% endmacro %}\nx: {{ "{# literal #}" }}\n',
+    ],
+    ids=["code-too", "whitespace-control", "string-literal", "comment-line-removed"],
+)
+def test_an_edit_that_renders_differently_still_reaches_its_importers(
+    importer: Tree, edited: str
+):
+    importer.write(MACRO, edited)
+    assert importer.narrow(*_refs(importer)) == {"sonarr"}
