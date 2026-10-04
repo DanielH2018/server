@@ -3,12 +3,22 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_probe.py
 """
 
+import pytest
+
 import fanout_probe
+from fanout_lib.status import BatchStatus, status_line
 
 
 def status(**runs: tuple[int, str]):
     """A status reader answering each run id with (exit tier, printed lines)."""
     return lambda run_id: runs[run_id]
+
+
+def rendered(batch: str, state: str, pr_url: str = "") -> str:
+    """One batch line as `fanout_place status` prints it, from the real renderer."""
+    s = BatchStatus(batch, state, pr_url, final_text="", exit_code=0, stderr_tail="")
+    line, _tier = status_line(s, "daniel-box", f"worktree-{batch}", lambda *_: "", str)
+    return line
 
 
 def test_a_running_batch_keeps_the_wait_open_and_names_the_finished_ones():
@@ -17,9 +27,23 @@ def test_a_running_batch_keeps_the_wait_open_and_names_the_finished_ones():
     assert reading == {"state": "running", "detail": "1 running; finished: b done"}
 
 
-def test_every_batch_landed_or_cleaned_is_finished():
-    text = "a on daniel-box: landed https://x/pull/1\nb on daniel-box: cleaned (2026-10-04)\n"
-    assert fanout_probe.read(["r1"], status(r1=(0, text)))["state"] == "finished"
+def test_every_batch_done_is_finished_and_counts_them():
+    text = (
+        rendered("a", "done", "https://x/pull/1")
+        + "\n"
+        + rendered("b", "done", "u")
+        + "\n"
+    )
+    reading = fanout_probe.read(["r1"], status(r1=(0, text)))
+    assert reading == {"state": "finished", "detail": "2 batches finished"}
+
+
+def test_output_with_no_batch_line_is_unreadable_not_finished():
+    """An empty read's worst tier is 0, which read `finished` before this was refused."""
+    with pytest.raises(fanout_probe.Unreadable):
+        fanout_probe.read(
+            ["r1"], status(r1=(0, "fanout_place: something else entirely\n"))
+        )
 
 
 def test_a_batch_needing_a_hand_ends_needs_attention_with_its_line():

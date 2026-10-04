@@ -25,7 +25,8 @@ decides:
     failed           5   a batch failed (status's own tier 5)
 
 The detail then carries each batch line that is not plain success, so the last line is what
-to act on.
+to act on. An output with no batch line this can parse is unreadable, never `finished`: the
+probe exits 1, so cc-wait counts a failed read.
 
 A REMOTE SOURCE. `status` reads each host over ssh and asks GitHub about merged PRs, so this
 declares `remote` and a 90s interval. cc-wait then shares one read per interval among every
@@ -51,6 +52,10 @@ _SUCCESS = frozenset({"done", "landed", "cleaned"})
 
 # (exit tier, printed lines) for one run id.
 StatusReader = Callable[[str], tuple[int, str]]
+
+
+class Unreadable(Exception):
+    """`status` printed no batch line this probe can parse."""
 
 
 def read_status(run_id: str) -> tuple[int, str]:
@@ -82,6 +87,11 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
             else:
                 finished.append((match["batch"], match["state"], line.strip()))
     finished.sort()
+    if not running and not finished:
+        # No line parsed is an unreadable output, not a finished run: the worst tier of an
+        # empty read is 0, which would end the wait as `finished`. Unreadable is a failed
+        # read, which cc-wait retries and then gives up on with exit 2.
+        raise Unreadable(f"no batch line in `status` output for {', '.join(run_ids)}")
     if running:
         done = ", ".join(f"{batch} {state}" for batch, state, _ in finished) or "none"
         return {
@@ -107,7 +117,11 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"fanout_probe: no fan-out run {run_id!r}: {exc}", file=sys.stderr)
             return 1
-    print(json.dumps(describe() if ns.describe else read(ns.run_ids)))
+    try:
+        print(json.dumps(describe() if ns.describe else read(ns.run_ids)))
+    except Unreadable as exc:
+        print(f"fanout_probe: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 
