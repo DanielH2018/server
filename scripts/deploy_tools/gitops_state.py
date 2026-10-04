@@ -3,8 +3,8 @@
 
 Three subcommands. `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the marker the deployer writes while
 consecutive ticks defer on one busy service lock; the tick clears it itself on its next run that is not deferred, so this is for a
-marker an operator wants gone now, after ending the holder. `clear-manual-plane <role>` drops a role's line from
-`/var/lib/gitops-deploy/manual_plane`, the marker the deployer writes when a range carries a setup role no playbook it runs can
+marker an operator wants gone now, after ending the holder. `clear-manual-plane <role>` drops a role's `manual_plane` line from
+`/var/lib/gitops-deploy/owed.jsonl`, the ledger the deployer writes when a range carries a setup role no playbook it runs can
 apply — `k3s` (applied by `k3s-bringup.yml`) or `common` (applied by no playbook at all). The tick fast-forwards past such a range
 rather than parking it, so the marker is what says the apply is still owed: monitor-bridge pages once the oldest pending role is six
 hours old, and `land.sh` prints the same clear command.
@@ -106,8 +106,8 @@ class LockUnavailable(Exception):
 def tree_lock(path: str, wait_s: float | None = None):
     """Hold the tree lock across a read-modify-write of the marker, or raise `LockBusy`.
 
-    `DeployerState.record_manual_plane` reads every line, appends one and writes the file
-    back; so does `clear_manual_plane`. Interleaved, the loser's write drops the winner's
+    `DeployerState.record_manual_plane` reads every ledger line, appends one and writes the
+    file back; so does `clear_manual_plane`. Interleaved, the loser's write drops the winner's
     line — a role recorded and then silently lost, or a cleared role reappearing. The tick
     already runs under this lock, so taking it here is what makes the pair safe.
 
@@ -279,7 +279,7 @@ def clear_manual_plane(
         return 1
     except PermissionError:
         print(
-            f"cannot write {state.path('manual_plane')} as this user — the state directory "
+            f"cannot write {state.path('owed')} as this user — the state directory "
             "is owned by the deploy user; retry with `sudo -u ubuntu`",
             file=sys.stderr,
         )
@@ -297,8 +297,8 @@ def clear_manual_plane(
         # and this one printed it bare.
         warning = maximal_apply_warning(key, frozenset({key}))
         print(
-            f"kept {role} in {state.path('manual_plane')}: its row in "
-            f"{state.path('manual_plane_tags')} is empty or missing, so the whole role is "
+            f"kept {role} in {state.path('owed')}: its line names no narrow tags, "
+            "so the whole role is "
             f"pending, not just {','.join(sorted(applied))}. Apply the whole role"
             + (f" (WARNING: {warning})" if warning else "")
             + f", then clear it without --applied: `{manual_plane_clear_cmd(key)}`"
@@ -306,17 +306,15 @@ def clear_manual_plane(
         return 0
     if remaining:
         print(
-            f"cleared {','.join(sorted(applied))} from {role}'s row in "
-            f"{state.path('manual_plane_tags')}; {role} is STILL pending for "
+            f"cleared {','.join(sorted(applied))} from {role}'s tags in "
+            f"{state.path('owed')}; {role} is STILL pending for "
             f"{','.join(sorted(remaining))} — a later range added it, so apply that too"
         )
         return 0
     if not cleared:
-        print(
-            f"{role} is not pending in {state.path('manual_plane')} — nothing to clear"
-        )
+        print(f"{role} is not pending in {state.path('owed')} — nothing to clear")
         return 0
-    print(f"cleared {role} from {state.path('manual_plane')}")
+    print(f"cleared {role} from {state.path('owed')}")
     return 0
 
 

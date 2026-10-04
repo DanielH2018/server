@@ -120,7 +120,7 @@ A setup role can ship another setup role's file by path. The `deploy_ui` and `re
 roles install the deployer's `files/gitops_markers.py` that way. `deploy_changes.setup_roles_for` maps a
 change to such a file to its owner AND every role listed for it in
 `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#3306). `ChangeSet.setup_roles` and `setup_tags_for`
-both read it, so the `manual_plane` marker, the narrowed apply, the `hold_plane` coverage and
+both read it, so the `manual_plane` ledger class, the narrowed apply, the `hold_plane` coverage and
 `land.sh`'s host reach all see the consumers. `narrow_setup.role_tags` diffs the shipped files
 beside the consumer role's own directory, so the consumer narrows to the block that installs
 the file. The table is static because every caller passes paths alone, and
@@ -243,16 +243,16 @@ ansible/k3s-bringup.yml --tags k3s` whether or not the range is merged, while ev
 session's landing behind it exits 4 from `deploy.sh` until a hand pulls the primary checkout.
 Ten episodes over the seven days to then spanned 30 ticks, the longest about forty minutes.
 
-The tick fast-forwards instead, and writes the role to
-`/var/lib/gitops-deploy/manual_plane`, one line per role as
-`"<origin_sha> <playbook-or-none> <role> <unix_ts>"`. A role already listed is not re-added,
+The tick fast-forwards instead, and writes the role to the `owed` ledger
+(`/var/lib/gitops-deploy/owed.jsonl`) as one `manual_plane` line per role, carrying its
+origin SHA, playbook, first-seen stamp and narrow tags. A role already listed is not re-added,
 so its first-seen stamp is the age everything else reads. Four consequences:
 
 - the journal says `manual_plane pending: <roles> — apply by hand: <commands>` on **every**
   tick, not only the one that recorded it. The recording tick says
   `manual_plane recorded: <roles>` instead, naming only the roles it added, so no tick prints
   both lines;
-- Discord pages once per SHA, with the same commands and the marker's path;
+- Discord pages once per SHA, with the same commands and the ledger's path;
 - **GitOps Deploy — Status** goes down once the oldest pending line is older than
   `GITOPS_BEHIND_MAX_S` (6 h), naming the roles and the clear command;
 - the **SessionStart banner** names one line per pending role — the role, its playbook, how
@@ -316,9 +316,9 @@ control plane, MetalLB, Longhorn, CoreDNS and the node config untouched.
 
 **One derivation, four surfaces.** `deploy_defer.record` asks
 `scripts/deploy_tools/narrow_setup.py` which of the role's own tags the changed paths reach,
-and writes the answer to `/var/lib/gitops-deploy/manual_plane_tags`, one line per role as
-`"<role> <tag,tag>"` or `"<role> -"` for a range it could not narrow. The journal line, the
-Discord alert and the SessionStart banner read that marker. Only the tick has the changed
+and writes the answer as the `tags` key of the role's ledger line, where an empty list is a
+range it could not narrow. The journal line, the Discord alert and the SessionStart banner
+read that key. Only the tick has the changed
 paths in reach — the banner runs from an isolated worktree and cannot ask git about the
 primary checkout — so quoting one stored answer is what keeps them from disagreeing about the
 same deferral.
@@ -328,7 +328,7 @@ derivation into `/var/lib/gitops-deploy/receipts.jsonl`, one JSON line per origi
 each plane the tick applied (`deploy_handlers.handle_broad`). After the tick it awaited,
 `classify.narrow_plane` takes the oldest receipt whose origin contains the PR's merge commit,
 which is the tick that crossed it, and quotes that receipt's narrowing as it stands. The
-sidecar row could not be quoted that way: it spans every range that made the role pending,
+ledger's `tags` key could not be quoted that way: it spans every range that made the role pending,
 so `land.sh` had to re-derive the PR's own tags to prove a stale `coredns` row was not being
 printed for an RBAC PR. No covering receipt, or a role the receipt could not narrow, prints
 the role tag. A contended tick that resets its ff-merge drops its receipt with the rest of
@@ -341,11 +341,10 @@ next tick records. Until #3126 that path printed the role tag. PR #3091 touched 
 one k3s cron template, and its note asked for `--tags k3s` and the control-plane tasks that tag
 arms.
 
-**A sidecar file, not a fifth field on the `manual_plane` line.** `parse_manual_plane` accepts
-exactly four fields and skips anything else, and `gitops_markers.py` reaches each of its
-readers one role deploy at a time. A widened line would read as *no pending role* in an
-un-redeployed monitor-bridge, and its six-hour page would stop firing. A reader that has never
-heard of the sidecar prints the role tag instead, which is what every surface printed before.
+**The tags lived in a sidecar file until the ledger (#3392).** The legacy `manual_plane`
+line parser accepts exactly four fields and skips anything else, so a fifth field would have
+read as *no pending role* in an un-redeployed monitor-bridge. The ledger's readers ignore
+unknown keys, which is what let the tags move onto the line.
 
 **Every task file in a setup role carries its own tags**, so the derivation maps a changed
 path to the tags of the tasks that read it:
@@ -391,9 +390,8 @@ restart and `secrets-encrypt rotate-keys`, so `--tags k3s_server` prints beside
 Two ranges can make one role pending, since the first line keeps its first-seen stamp. The
 tags then union: both changes are merged and unapplied, so both tags have to run. A refusal on
 either side absorbs the pair, because a narrow tag beside work nothing could narrow
-would read like the complete answer. A line that was already pending with NO row is the same
-refusal. The deployer from before the sidecar wrote such lines, including the tick that merged
-#2307 itself, and so does a row too garbled to parse. What that earlier range needed is
+would read like the complete answer. A line that was already pending with empty tags is the
+same refusal, and so is a legacy line with no sidecar row. What that earlier range needed is
 unknown, so the role stays at the role tag until its line is cleared.
 
 ### When a tick parks
@@ -782,9 +780,9 @@ stay).
   - **A setup ROLE whose tag cannot be derived no longer parks: it fast-forwards and is
     recorded in `manual_plane`.** `k3s` (applied by `k3s-bringup.yml`) and `common` (applied by
     no playbook at all) are the two, and `deploy_defer.py`'s module docstring carries the
-    `DECIDED:` marker and the measurement. The tick writes one line per role to
-    `/var/lib/gitops-deploy/manual_plane` — `"<origin_sha> <playbook-or-none> <role>
-    <unix_ts>"`, deduplicated by role so a role already listed keeps its first-seen stamp —
+    `DECIDED:` marker and the measurement. The tick writes one `manual_plane` line per role
+    to the `owed` ledger, deduplicated by role so a role already listed keeps its first-seen
+    stamp,
     logs `manual_plane pending: <roles> — apply by hand: <commands>` on EVERY later tick, and
     pages once per SHA. The receipt records the unapplied role under `manual`, not `applied`;
     a plane in the same range that DID apply still records its own. Three things clear a line: applying the
@@ -869,7 +867,7 @@ stay).
     test_a_parked_range_keeps_its_stamp_while_green_commits_land_above_it` pins the
     combination: a parked bring-up change with green commits landing above it every tick
     keeps the first stamp.
-  - **The `manual_plane` marker is the second arm of that watchdog, for the deferral that no
+  - **The `manual_plane` ledger class is the second arm of that watchdog, for the deferral that no
     longer leaves the host behind.** A recorded role fast-forwards, so `behind_since` clears
     and every marker the watchdog reads goes quiet while the role stays unapplied.
     `checks.gitops.gitops_status` therefore reads `manual_plane` too and pages once the
@@ -1195,14 +1193,16 @@ therefore read as no pending work in a reader that had not redeployed, which is 
 and every writer carries them through a rewrite. `k8s_unapplied` moved first because nothing
 pages on it.
 
-**`manual_plane` is the second class, and its readers shipped before any writer.** A line
+**`manual_plane` is the second class, and its readers shipped before its writer.** A line
 carries `playbook` and `tags` beside the four common keys, so the sidecar folds into the line.
 monitor-bridge pages on the class, so it carries a generated `gitops_ledger.py` copy, and
-`gitops_ledger.merge_manual_plane` unions the class with the line marker for both that page
-and the SessionStart banner. A role pending in both sources takes the older stamp, and its
-tags union unless either side needs the whole role. A line missing `playbook` or carrying
-malformed `tags` still pages, for the whole role. The deployer still writes the line marker
-and its sidecar; moving that writer into the ledger is the next step of #3392.
+`gitops_ledger.merge_manual_plane` unions the class with the line marker for that page, the
+SessionStart banner and the deployer itself. A role pending in both sources takes the older
+stamp, and its tags union unless either side needs the whole role. A line missing `playbook`
+or carrying malformed `tags` still pages, for the whole role. The deployer writes only the
+ledger. Its first write folds any legacy line and sidecar row into the ledger and removes both
+files, keeping a legacy line it cannot parse (`DeployerState._fold_manual_plane_lines`). The
+legacy readers and the two `MARKERS` entries go once no host can hold a legacy file.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
@@ -1899,7 +1899,7 @@ under-sized.
   (`chezmoi_setup` → `chezmoi`). `setup_role_playbook` and `setup_role_tag` own the routing;
   `ansible/tests/deploy/test_setup_role_playbooks_agree.py` derives the truth.
 - **A `manual_plane` row's remediation names the NARROWEST tag the change needs** (#2307), from
-  the `manual_plane_tags` sidecar `deploy_defer.record` writes. A row is logged on every later
+  the `tags` key `deploy_defer.record` writes on the role's ledger line. A row is logged on every later
   tick, paged once per SHA, and cleared by the tick applying the role's real playbook or by
   `gitops_state.py clear-manual-plane <role>`, with `--applied <tags>` after a narrowed apply.
 - **The `k8s_deferred` marker and the `k8s_unapplied` ledger class** each hold one entry per

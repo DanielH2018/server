@@ -324,7 +324,8 @@ Four things sit in that position:
   `land_tags.py`).
 
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
-the tick fast-forwards the range and records the role in `/var/lib/gitops-deploy/manual_plane`,
+the tick fast-forwards the range and records the role as a `manual_plane` line in
+`/var/lib/gitops-deploy/owed.jsonl`,
 which pages **GitOps Deploy — Status** six hours later. So the printed remediation ends with
 `uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>`, and running the
 playbook without it leaves a page over work that is already live. Where the apply it printed was

@@ -40,12 +40,19 @@ from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are r
     STATE_DIR,
     ContentionEntry,
     ManualPlaneEntry,
-    format_manual_plane_tags,
     parse_contention,
     parse_manual_plane,
     parse_manual_plane_tags,
 )
-from gitops_ledger import RECEIPT_KEEP, parse_receipts, receipt_line
+from gitops_ledger import (
+    OWED_MANUAL_PLANE,
+    RECEIPT_KEEP,
+    drop_owed,
+    merge_manual_plane,
+    parse_receipts,
+    put_manual_plane,
+    receipt_line,
+)
 from host_lib import atomic_write
 
 
@@ -182,18 +189,57 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         self.write("receipts", "\n".join(kept) or None)
 
     # ── the setup roles this deployer cannot apply itself ─────────────────────────────────
+    #
+    # Written to the `owed` ledger's `manual_plane` class (#3392), one line per role carrying
+    # its `playbook` and `tags` keys. The `manual_plane` line marker and its
+    # `manual_plane_tags` sidecar are only READ now: a host still holding lines a deployer from
+    # before the move wrote keeps them pending, and the first write here folds them into the
+    # ledger (`_fold_manual_plane_lines`).
 
-    @property
-    def manual_plane(self) -> str | None:
-        """The raw `manual_plane` marker, or None when no role is pending."""
-        return self.read("manual_plane")
+    def _manual_plane(self) -> tuple[list[ManualPlaneEntry], dict[str, frozenset[str]]]:
+        """Every pending role and its tags, the ledger merged with the legacy line marker."""
+        return merge_manual_plane(
+            parse_manual_plane(self.read("manual_plane")),
+            parse_manual_plane_tags(self.read("manual_plane_tags")),
+            self.read("owed"),
+        )
 
     def manual_plane_pending(self) -> list[ManualPlaneEntry]:
-        """Every pending role, oldest line first; a garbled line is skipped, never lost.
+        """Every pending role, oldest first; a garbled line is skipped, never lost.
 
-        `record_manual_plane` and `clear_manual_plane` carry such a line through untouched.
+        The ledger's writers carry such a line through untouched, and
+        `_fold_manual_plane_lines` leaves a garbled legacy line in its file.
         """
-        return parse_manual_plane(self.manual_plane)
+        return self._manual_plane()[0]
+
+    def _fold_manual_plane_lines(self) -> None:
+        """Move every readable legacy `manual_plane` line into the ledger, with its tags.
+
+        Each role takes the merged answer `merge_manual_plane` gives, so a role in both
+        sources keeps its oldest stamp. The sidecar goes whole: a row means something only
+        beside its line. A line the legacy parser cannot read stays in its file, for the
+        reason `owed_line_key` keeps a torn ledger line.
+        """
+        legacy = self.read("manual_plane")
+        if legacy is None and self.read("manual_plane_tags") is None:
+            return
+        entries, tags = self._manual_plane()
+        owed = self.read("owed")
+        for entry in entries:
+            owed = put_manual_plane(owed, entry, tags[entry.role])
+        self.write("owed", owed or None)
+        torn = [
+            line for line in (legacy or "").splitlines() if not parse_manual_plane(line)
+        ]
+        self.write("manual_plane", "\n".join(torn) or None)
+        self.write("manual_plane_tags", None)
+
+    def _put_manual_plane_tags(self, role: str, tags: frozenset[str]) -> None:
+        """Set a pending role's tags. A role that is not pending is left alone."""
+        self._fold_manual_plane_lines()
+        entry = next((e for e in self.manual_plane_pending() if e.role == role), None)
+        if entry is not None:
+            self.write("owed", put_manual_plane(self.read("owed"), entry, tags))
 
     def record_manual_plane(
         self, origin: str, playbook: str, role: str, now: float
@@ -210,6 +256,9 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         Returns:
             True when a line was appended, False when this role was already pending.
 
+        A new line names the whole role until `record_manual_plane_tags` narrows it, so a
+        reader between the two calls prints the blunt answer rather than a narrow one.
+
         The stamp is NOT refreshed for a role already listed. It measures how long the role
         has waited for a hand-applied run, and a later commit touching the same role is not
         that run — it is more of the same waiting. Refreshing on one would restart the clock
@@ -217,36 +266,30 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         of `behind_marker`, which re-stamps on every fast-forward, because progress is
         exactly what a tick that moves the tree HAS made.)
         """
-        lines: list[str] = (self.manual_plane or "").splitlines()
-        if any(self._line_role(line) == role for line in lines):
+        self._fold_manual_plane_lines()
+        if any(e.role == role for e in self.manual_plane_pending()):
             return False
-        lines.append(f"{origin} {playbook} {role} {now}")
-        self.write("manual_plane", "\n".join(lines))
+        entry = ManualPlaneEntry(origin, playbook, role, now)
+        self.write("owed", put_manual_plane(self.read("owed"), entry, frozenset()))
         return True
 
     def clear_manual_plane(self, role: str) -> bool:
-        """Drop `role`'s line and its narrow-tag row, removing each marker when it empties.
+        """Drop `role`'s line, tags and all, removing the ledger when it empties.
 
         Returns:
             True when a line went, False when that role was not pending — which is what an
             operator clearing twice, or naming a role nobody recorded, must get.
-
-        The sidecar row goes with the line whatever the answer. A row outliving its line is
-        a row nothing can clear: every reader looks the role up by the `manual_plane` line
-        it no longer has, so the stale narrowing would be handed to the NEXT range that
-        records the same role, naming a tag that range never touched.
         """
-        self._drop_manual_plane_tags(role)
-        lines = (self.manual_plane or "").splitlines()
-        kept = [line for line in lines if self._line_role(line) != role]
-        if len(kept) == len(lines):
+        self._fold_manual_plane_lines()
+        text, dropped = drop_owed(self.read("owed"), OWED_MANUAL_PLANE, [role])
+        if not dropped:
             return False
-        self.write("manual_plane", "\n".join(kept) or None)
+        self.write("owed", text or None)
         return True
 
     def manual_plane_tags_pending(self) -> dict[str, frozenset[str]]:
         """The narrowest tags each pending role needs, by role; empty means "use the role tag"."""
-        return parse_manual_plane_tags(self.read("manual_plane_tags"))
+        return self._manual_plane()[1]
 
     def record_manual_plane_tags(
         self, role: str, tags: frozenset[str] | None, line_predates: bool
@@ -255,10 +298,10 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
 
         Args:
             role: the role, under the `--tags` value that selects it — the same key
-                `record_manual_plane` writes, so a reader joins the two by one name.
+                `record_manual_plane` writes.
             tags: what the derivation returned, or None when it refused.
-            line_predates: the role's `manual_plane` line was already there before this
-                range recorded it, so an earlier range made it pending.
+            line_predates: the role's line was already there before this range recorded it,
+                so an earlier range made it pending.
 
         Two ranges can make one role pending, because `record_manual_plane` keeps the first
         line and its first-seen stamp. The tags then UNION: both changes are merged and
@@ -266,83 +309,71 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         range nothing could narrow needs the whole role, and a narrow tag beside it would
         under-describe the work while reading like the complete answer.
 
-        A line that predates this range with NO row is the same refusal. Its earlier range's
-        needs are unknown: the line was written by a deployer from before this sidecar, or
-        its row was too garbled for `parse_manual_plane_tags`. Unknown joined with anything
-        is the whole role.
+        An earlier line with EMPTY tags is the same refusal. Either an earlier derivation
+        refused, or the line came from the legacy marker with no sidecar row, whose needs are
+        unknown. Unknown joined with anything is the whole role.
         """
-        pending = self.manual_plane_tags_pending()
-        known = role in pending
-        unknown_earlier = line_predates and not known
-        if tags is None or unknown_earlier or (known and not pending[role]):
-            pending[role] = frozenset()
+        earlier = self.manual_plane_tags_pending().get(role, frozenset())
+        if tags is None or (line_predates and not earlier):
+            new = frozenset()
+        elif line_predates:
+            new = earlier | tags
         else:
-            pending[role] = pending.get(role, frozenset()) | tags
-        self.write("manual_plane_tags", format_manual_plane_tags(pending))
+            new = tags
+        self._put_manual_plane_tags(role, new)
 
     def restore_manual_plane_tags(self, role: str, tags: frozenset[str] | None) -> None:
-        """Put `role`'s narrow-tag row back to a value a caller snapshotted, or remove it.
+        """Put `role`'s tags back to a value a caller snapshotted.
 
         Args:
             role: the role, under the `--tags` value that selects it.
-            tags: the row as it stood before, or None when the role had no row at all.
+            tags: the tags as they stood before, or None when the role had none recorded,
+                which reads as the whole role.
 
         The inverse of `record_manual_plane_tags` for a tick whose ff-merge was undone, and it
         restores rather than subtracting because the union is not invertible: a refusal
-        collapses the row to the empty set, which no subtraction can unwind back to the
+        collapses the tags to the empty set, which no subtraction can unwind back to the
         earlier range's tags. `deploy_defer.record` takes the snapshot, `unrecord` hands it
         back (#2320).
         """
-        pending = self.manual_plane_tags_pending()
-        if tags is None:
-            pending.pop(role, None)
-        else:
-            pending[role] = tags
-        self.write("manual_plane_tags", format_manual_plane_tags(pending))
-
-    def _drop_manual_plane_tags(self, role: str) -> None:
-        """Drop one role's narrow-tag row, removing the marker when it was the last one."""
-        pending = self.manual_plane_tags_pending()
-        if pending.pop(role, None) is None:
-            return
-        self.write("manual_plane_tags", format_manual_plane_tags(pending))
+        self._put_manual_plane_tags(role, tags or frozenset())
 
     def clear_manual_plane_tags_applied(
         self, role: str, applied: frozenset[str]
     ) -> frozenset[str] | None:
-        """Drop `applied` from `role`'s row, keeping the line when work is left on it.
+        """Drop `applied` from `role`'s tags, keeping the line when work is left on it.
 
         Args:
             role: the role, under the `--tags` value that selects it.
             applied: the tags the operator actually ran. Naming `role` itself is a whole-role
-                apply, and clears the line however the row has grown.
+                apply, and clears the line however its tags have grown.
 
         Returns:
             The tags still pending, or None when the whole line went — which is also what a
             role that was not pending returns. `{role}` alone means the line was KEPT because
-            the row is empty or missing: the role needs its whole-role tag, which no narrowed
-            apply covers.
+            its tags are empty: the role needs its whole-role tag, which no narrowed apply
+            covers.
 
         The operator's narrowed clear (#2349). `land.sh` prints `--tags kubeconfig` and the
-        clear beside it, and between the two a second range can widen the row to
+        clear beside it, and between the two a second range can widen the tags to
         `coredns,kubeconfig`. A whole-line clear there drops `coredns` with it, leaving that
-        change merged, unapplied and recorded nowhere. Only a row the apply covered entirely
-        takes the line.
+        change merged, unapplied and recorded nowhere. Only tags the apply covered entirely
+        take the line.
 
-        An EMPTY or MISSING row keeps the line too, and writes nothing. Every printer names
-        `--applied` only while it holds a non-empty row, so meeting an empty one means the row
-        changed after the command was printed: a later range's derivation refused, collapsing
-        the row to "the whole role". Clearing there drops that range unapplied. A missing row
-        is the same unknown — a line written before the sidecar existed, or a row too garbled
-        to parse.
+        EMPTY tags keep the line too, and write nothing. Every printer names `--applied` only
+        while it holds non-empty tags, so meeting empty ones means they changed after the
+        command was printed: a later range's derivation refused, collapsing them to "the
+        whole role". Clearing there drops that range unapplied.
 
         `clear_manual_plane` is deliberately left alone: `deploy_defer.unrecord` and
-        `clear_manual_plane_applied` both depend on it dropping the line and the row together.
+        `clear_manual_plane_applied` both depend on it dropping the line, tags and all.
         """
         if role in applied:
             self.clear_manual_plane(role)
             return None
         row = self.manual_plane_tags_pending().get(role)
+        if row is None:
+            return None
         if not row:
             return frozenset({role})
         # DECIDED: subtract-and-keep, with no guard on the origin SHA the command was printed
@@ -445,12 +476,6 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         if entry is not None and entry.last_seen >= tick_started:
             return False
         return self.clear_contention()
-
-    @staticmethod
-    def _line_role(line: str) -> str | None:
-        """The role field of one marker line, or None when the line has no third field."""
-        parts = line.split()
-        return parts[2] if len(parts) > 2 else None
 
     @property
     def diverged_sha(self) -> str | None:

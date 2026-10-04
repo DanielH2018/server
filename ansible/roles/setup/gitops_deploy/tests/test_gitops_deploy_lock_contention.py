@@ -175,7 +175,7 @@ def test_a_contended_mixed_range_records_no_pending_role(
         _plan(_MIXED, _MIXED_PATHS),
     )
     assert code == 0
-    assert not (state_dir / "manual_plane").exists(), (
+    assert gitops_deploy.STATE.manual_plane_pending() == [], (
         "a role was left recorded as merged-and-unapplied for a merge that was undone"
     )
     # The one keyed marker, by the name it actually has: a read of a basename the deployer
@@ -279,7 +279,7 @@ def test_a_failed_mixed_apply_still_records_its_pending_role(
         _plan(_MIXED, _MIXED_PATHS),
     )
     assert code == 0
-    assert "k3s" in (state_dir / "manual_plane").read_text()
+    assert "k3s" in (state_dir / "owed.jsonl").read_text()
     assert tick.head == ORIGIN, (
         "a failed broad apply must not reset; it is forward-only"
     )

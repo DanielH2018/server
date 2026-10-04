@@ -587,7 +587,7 @@ self-matching `pgrep -f` and a partial `security_and_analysis` PATCH.
 On opening a session here, it prints a banner of any down Prometheus targets. It is silent when
 all-green, read-only and timeout-bounded. It also names a
 **dirty primary checkout**, a **GitOps deployer parked behind origin**, and a **setup role the
-tick merged but cannot apply** (the `manual_plane` marker). The first two states stop every
+tick merged but cannot apply** (the `manual_plane` ledger class). The first two states stop every
 deploy in the fleet, and a worktree session cannot look at either for itself: the isolation
 guard refuses a git command targeting the shared checkout, and the failure it does see
 (`deploy.sh` exit 4) names its own tree instead. The banner is the only place that cause

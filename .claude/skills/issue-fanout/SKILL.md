@@ -314,7 +314,7 @@ Each agent starts with none of this conversation's context, so its brief must ca
   Tell the agent to read the deployer's markers after the verdict:
 
   ```bash
-  cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/manual_plane
+  cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/owed.jsonl
   ```
 
   Then exactly one of two things, never neither: apply and verify the change where CLAUDE.md

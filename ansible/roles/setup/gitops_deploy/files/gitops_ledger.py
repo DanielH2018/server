@@ -46,10 +46,11 @@ OWED_K8S_UNAPPLIED = "k8s_unapplied"
 # playbook that applies the role or `NO_PLAYBOOK`, and `tags`, the narrowest `--tags` values
 # the change needs, where an empty list means the whole role.
 #
-# THE READERS SHIP FIRST. monitor-bridge pages on this class and redeploys on its own schedule,
-# so every reader unions the class with the line marker (`merge_manual_plane`) before any
-# writer records it here. A line missing either class key still pages, under the default
-# `manual_plane_entries` gives it.
+# The deployer writes this class (`DeployerState.record_manual_plane`) and no longer writes
+# the line marker. Every reader still unions the two (`merge_manual_plane`), so a host holding
+# lines an older deployer wrote keeps paging on them until the first write folds them in. A
+# line missing either class key still pages, under the default `manual_plane_entries` gives
+# it.
 OWED_MANUAL_PLANE = "manual_plane"
 
 # Every class a ledger line may carry. A reader asks for its classes by name and never sees
@@ -330,7 +331,46 @@ def merge_manual_plane(
     return sorted(oldest.values(), key=lambda e: e.at), tags
 
 
-# ── the per-SHA tick receipt (#3391) ─────────────────────────────────────────────────────
+def put_manual_plane(
+    owed: str | None, entry: ManualPlaneEntry, tags: frozenset[str]
+) -> str:
+    """`owed` with `entry.role`'s `manual_plane` line set to `entry` and `tags`.
+
+    The line is rewritten where it stands and appended where the role has none. Every key it
+    carries beyond the class's own survives, for the reason `rewrite_owed` keeps them. A
+    second line for the same role, readable or torn, is dropped: the first stands for it, and
+    two would page twice for one change.
+    """
+    own = ("class", "subject", "origin", "at", "playbook", "tags")
+    lines, placed = [], False
+    for line in (owed or "").splitlines():
+        if owed_line_key(line) != (OWED_MANUAL_PLANE, entry.role):
+            lines.append(line)
+            continue
+        if placed:
+            continue
+        extra = {k: v for k, v in (_json_object(line) or {}).items() if k not in own}
+        lines.append(_manual_plane_line(entry, tags, extra))
+        placed = True
+    if not placed:
+        lines.append(_manual_plane_line(entry, tags, {}))
+    return "\n".join(lines)
+
+
+def _manual_plane_line(entry: ManualPlaneEntry, tags: frozenset[str], extra) -> str:
+    """One `manual_plane` ledger line, the reverse of `manual_plane_entries` for one role."""
+    return owed_line(
+        OWED_MANUAL_PLANE,
+        entry.role,
+        entry.origin,
+        entry.at,
+        **extra,
+        playbook=entry.playbook,
+        tags=sorted(tags),
+    )
+
+
+# ── the per-SHA tick receipt (#3391)─────────────────────────────────────────────────────
 
 # How many receipts the `receipts` marker keeps. A landing reads the receipt for its own
 # merge commit within one or two ticks, and a broad range is a few a day at most, so this is
