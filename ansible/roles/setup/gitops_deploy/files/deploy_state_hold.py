@@ -167,7 +167,11 @@ class HoldMarkers:
         Any other entry stays held: without this, an unrelated service deploy clears
         `hold_sha` and orphans the held planes, which `gitops_status` never reads on its own.
         """
-        if self.hold_plane and not services:
-            log(f"hold kept: {self.hold_plane} is still unapplied")
-            return
+        if not services:
+            # Torn lines included, as in `clear_broad_hold`: an untagged deploy.yml covers
+            # every deploy.yml plane, so a torn one skipped here would clear over nothing.
+            held = self._held_subjects(self._fold_hold_plane_marker(time.time()))
+            if held:
+                log(f"hold kept: {HOLD_PLANE_SEP.join(held)} is still unapplied")
+                return
         self.clear_broad_hold("ansible/deploy.yml", sorted(services))

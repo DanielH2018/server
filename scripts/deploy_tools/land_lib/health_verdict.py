@@ -103,7 +103,7 @@ def health(ln: Landing) -> NoReturn:
         if state == TickState.HELD:
             print(
                 f"  services deployed, but the deployer is holding {ln.state('hold_sha')}: "
-                "its own apply failed — see hold_plane"
+                "its own apply failed — see the held planes in owed.jsonl"
             )
             ln.ledger.cause = Cause.TICK_HELD
             ln.finish(

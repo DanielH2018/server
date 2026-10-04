@@ -336,6 +336,8 @@ def test_a_torn_hold_plane_line_keeps_the_hold(state):
     state.write("owed", torn)
     state.clear_broad_hold("ansible/initial_setup.yml", [])
     assert (state.hold_sha, state.read("owed")) == (SHA, torn)
+    state.clear_service_hold(set())
+    assert (state.hold_sha, state.read("owed")) == (SHA, torn)
     state.clear_service_hold({"radarr"})
     assert (state.hold_sha, state.read("owed")) == (None, None)
 

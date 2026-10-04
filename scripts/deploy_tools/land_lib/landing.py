@@ -360,7 +360,7 @@ class Landing:
         if state == TickState.HELD:
             return [
                 f"  The deployer is also holding {self.state('hold_sha')}: its own apply "
-                "failed — see hold_plane and the gitops-deploy journal. A hold blocks every "
+                "failed — see the held planes in owed.jsonl and the gitops-deploy journal. A hold blocks every "
                 "session's deploy until it is cleared, so this PR's half stays unapplied."
             ]
         if state == TickState.BEHIND:

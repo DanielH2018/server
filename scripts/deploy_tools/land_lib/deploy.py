@@ -201,7 +201,7 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
         )
     if state == TickState.HELD:
         print(
-            f"  the deployer is holding {ln.state('hold_sha')}: its apply failed — see hold_plane and the gitops-deploy journal"
+            f"  the deployer is holding {ln.state('hold_sha')}: its apply failed — see the held planes in owed.jsonl and the gitops-deploy journal"
         )
         ln.ledger.cause = Cause.TICK_HELD
         ln.finish(

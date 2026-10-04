@@ -1438,7 +1438,10 @@ section's `rm` of `hold_sha` still clears that one.
 clear. Since #2381 that can be several planes, so the page lists the entries one per line, the
 confirm prompt names them, and the reply repeats them
 (`deploy_ui_writes.hold_cleared_message`, #2453). After the Clear nothing records those planes
-at all: no marker, no monitor sentence, no banner line.
+at all: no marker, no monitor sentence, no banner line. From a shell on daniel-box, the page's
+own request is the same Clear:
+`curl -X POST -H 'X-Deploy-UI: 1' -d '{"expected_sha": "<full hold_sha>"}' http://10.0.0.215:8790/api/hold/clear`.
+No `gitops_state.py` verb repeats it, because #3392 retires `clear-*` verbs rather than adding them.
 
 **The cost, stated: a surviving hold parks the Renovate agent** (`agent_logic.decide` returns
 `run=False` for any non-empty `hold_sha`). That is the intended direction — an unapplied plane
