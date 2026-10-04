@@ -16,12 +16,12 @@ uptime_kuma_k8s_autokuma_image: ghcr.io/bigboot/autokuma:2.1.0-rc.2
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: this IS the alerting spine every push/HTTP monitor and the Discord chain depend
 # on — a broken deploy cannot page about being broken. It ALSO independently matches the
-# migrating-state shape: Recreate + a real PVC seeded through k8s/volume-claim (hardcoded
-# ReadWriteOnce) holding the heartbeat history — a bad image swap can migrate that volume before
+# migrating-state shape: Recreate + a real ReadWriteOnce PVC (a `k8s_claims` entry) holding
+# the heartbeat history — a bad image swap can migrate that volume before
 # the gate observes a fault, same class as sonarr/prowlarr. Either reason alone would justify
 # the denylist entry.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "observability — the alerting spine; a broken deploy cannot page about being broken. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two PVCs (uptime-kuma-data, autokuma-data) that must revert together; a partial revert desyncs AutoKuma's entity-ID map from Kuma's DB, the same shape as the recorded KD5 migration finding"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — the alerting spine; a broken deploy cannot page about being broken. ALSO Recreate + RWO PVC (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two PVCs (uptime-kuma-data, autokuma-data) that must revert together; a partial revert desyncs AutoKuma's entity-ID map from Kuma's DB, the same shape as the recorded KD5 migration finding"  # noqa var-naming[no-role-prefix]
 
 # Heartbeat history, 1.5 G at sizing.
 uptime_kuma_k8s_claim: uptime-kuma-data
@@ -32,6 +32,15 @@ uptime_kuma_k8s_storage_class: longhorn
 # manages nothing and static files recreate duplicates.
 uptime_kuma_k8s_autokuma_claim: autokuma-data
 uptime_kuma_k8s_autokuma_size: 1Gi
+
+# The claims k8s/manifests renders and applies for this role, ahead of the workload.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ uptime_kuma_k8s_claim }}"
+    storage_class: "{{ uptime_kuma_k8s_storage_class }}"
+    size: "{{ uptime_kuma_k8s_size }}"
+  - name: "{{ uptime_kuma_k8s_autokuma_claim }}"
+    storage_class: "{{ uptime_kuma_k8s_storage_class }}"
+    size: "{{ uptime_kuma_k8s_autokuma_size }}"
 
 # Mirrors resources('0.50', '512M', '0.05', '64M') for kuma; autokuma is a reconciler.
 uptime_kuma_k8s_cpu_limit: "500m"

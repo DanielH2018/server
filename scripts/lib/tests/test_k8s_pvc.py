@@ -119,16 +119,16 @@ spec:
 
 
 def test_volume_claim_pvc_names_resolves_a_real_claim_backed_role():
-    # uptime-kuma's data PVC is created by volume-claim's own pvc.yaml.j2 (never rendered under
-    # volume-claim's own role — it's in SKIP_ROLES), using vars uptime-kuma's include_role task
+    # jellyfin's config PVC is created by volume-claim's own pvc.yaml.j2 (never rendered under
+    # volume-claim's own role — it's in SKIP_ROLES), using vars jellyfin's include_role task
     # passes. Its deployment.yaml.j2 references the SAME value directly as a claimName, so without
-    # this resolving, uptime-kuma's data claim would show as unresolved on every real run.
+    # this resolving, jellyfin's config claim would show as unresolved on every real run.
     base = {
         **BASE_CONTEXT,
         **load_yaml(ALL_VARS),
         "playbook_dir": str(ANSIBLE),
     }
     base = resolve_vars(base, base)
-    ctx = {**base, **role_defaults("uptime-kuma", base)}
-    names = volume_claim_pvc_names("uptime-kuma", ctx, make_env([SHARED_TPL]))
-    assert ctx["uptime_kuma_k8s_claim"] in names
+    ctx = {**base, **role_defaults("jellyfin", base)}
+    names = volume_claim_pvc_names("jellyfin", ctx, make_env([SHARED_TPL]))
+    assert ctx["jellyfin_k8s_claim"] in names

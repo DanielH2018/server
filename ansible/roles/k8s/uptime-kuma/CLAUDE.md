@@ -14,10 +14,10 @@ reading behind each rule below.
 - **Claims:** `uptime-kuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes)),
   `autokuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — the alerting spine; a
-  broken deploy cannot page about being broken. ALSO Recreate + RWO volume-claim PVC
-  (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two
-  PVCs (uptime-kuma-data, autokuma-data) that must revert together; a partial revert desyncs
-  AutoKuma's entity-ID map from Kuma's DB, the same shape as the recorded KD5 migration finding
+  broken deploy cannot page about being broken. ALSO Recreate + RWO PVC (migrating-state shape)
+  — two independent reasons. COUPLING NOTE for a future promotion: two PVCs (uptime-kuma-data,
+  autokuma-data) that must revert together; a partial revert desyncs AutoKuma's entity-ID map
+  from Kuma's DB, the same shape as the recorded KD5 migration finding
 <!-- /generated_from -->
 
 - **Both claims are in the no-backup tier** — monitors and notifications regenerate from the
