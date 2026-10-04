@@ -22,7 +22,7 @@ spec:
         app: crowdsec-node-agent
         netpol-baseline: enforced
     spec:
-{{ pod_shell('homelab-critical') }}
+{{ pod_shell(containers_list | tier_priority_class('crowdsec')) }}
       initContainers:
         # Seeds /etc/crowdsec before the entrypoint fills in defaults: the auth.log
         # acquis plus the same whitelist parsers the other agents carry (from the

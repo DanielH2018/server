@@ -28,7 +28,7 @@ spec:
       # unit; this pin only ever moves together with the L2Advertisement nodeSelector.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-{{ pod_shell('homelab-automation', run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
+{{ pod_shell(containers_list | tier_priority_class('mosquitto'), run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
       # mosquitto 2.1's password-file plugin refuses the pwfile straight off a Secret mount
       # ("Unable to open pwfile") even though a plain open() of the same path succeeds — the
       # root-owned ..data symlink farm fails whatever ownership/symlink check the plugin does.

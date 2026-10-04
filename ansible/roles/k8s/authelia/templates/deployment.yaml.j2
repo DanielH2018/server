@@ -26,7 +26,7 @@ spec:
       # capabilities: the image's entrypoint only su-execs down to the authelia user when it
       # starts as root, and skips that path entirely otherwise.
       # fsGroup makes the config PVC writable for the SQLite database and notification file.
-{{ pod_shell('homelab-critical', run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
+{{ pod_shell(containers_list | tier_priority_class('authelia'), run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
 {# Two independent sources of init containers — CrowdSec's three seeding steps and the
    wait-for-redis gate — each with its own lever. Gate the KEY on either being on, so it is
    absent rather than left with no list under it. #}

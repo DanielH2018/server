@@ -23,7 +23,7 @@ spec:
         app: zigbee2mqtt
         netpol-baseline: enforced
     spec:
-{{ pod_shell('homelab-automation', run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
+{{ pod_shell(containers_list | tier_priority_class('zigbee2mqtt'), run_as_user=puid, run_as_group=pgid, fs_group=pgid) }}
       # Re-install the Ansible-rendered configuration.yaml into the data volume on every start
       # (see the Secret's comment). install -m 640 mirrors the Docker role's 0640 render; the
       # rest of the data dir (database.db, devices.yaml, coordinator_backup.json) is z2m's own

@@ -14,7 +14,8 @@ rule — joined with one, which keys on a variable NAME. `deploy/` joined with t
 the raw-byte hash the render stamp compares, and the autodeploy derivation's source fallback
 for synthetic role trees no render reaches. `k8s/` joined with two (#3203): whether a
 template CALLS the shared *arr macro or copies its body, and whether two roles ship
-byte-identical templates — both render differently from what they test. `staging/` joined
+byte-identical templates — both render differently from what they test — and a third
+(#3452): whether a tiered role passes `pod_shell` a literal class. `staging/` joined
 with none (#3205). `setup/` joined with two, each keyed on something no render carries: a
 Jinja FILTER, and the behaviour of a variable no render leaves undefined (#3202). Every
 test directory is now scanned. Entries are keyed
@@ -82,6 +83,10 @@ SCANNED = (
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
 # Every entry is permanent: a render erases the thing it reads.
 TEMPLATE_SOURCE_READERS = {
+    "k8s/test_priority_class_is_derived_from_tier.py": (
+        "whether a tiered role's `pod_shell(...)` call passes a literal class or the derived "
+        "one — both render the same `priorityClassName`, so only the source tells them apart"
+    ),
     "services/_kuma_entities.py": (
         "the `*_push_token` NAMES are a render INPUT — they decide which gated tiles render "
         "at all, so they are read before the render rather than out of it"

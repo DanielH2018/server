@@ -24,7 +24,7 @@ spec:
       # preference — it does NOT unwind with the drain's L2/VIP pins.
       nodeSelector:
         kubernetes.io/hostname: daniel-server
-{{ pod_shell('homelab-critical') }}
+{{ pod_shell(containers_list | tier_priority_class('nut')) }}
       containers:
         - name: nut
           image: {{ nut_k8s_image }}

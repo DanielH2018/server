@@ -36,7 +36,7 @@ spec:
       # The registry image runs as root by default and writes to /var/lib/registry. fsGroup
       # gives the unprivileged user access to the Longhorn volume at mount time, so it does
       # not need to chown a volume it does not own.
-{{ pod_shell('homelab-critical', run_as_user=1000, run_as_group=1000, fs_group=1000) }}
+{{ pod_shell(containers_list | tier_priority_class('registry'), run_as_user=1000, run_as_group=1000, fs_group=1000) }}
       containers:
         - name: registry
           image: {{ registry_k8s_image }}

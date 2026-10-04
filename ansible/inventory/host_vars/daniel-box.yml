@@ -51,10 +51,14 @@ autofix_fake_remux_policy:
 # scoped bypass (uptime-kuma's push API, scrutiny's read-only probes) has no per-service shape
 # and stays a hand-written rule in the authelia template; the entry's tier is what its UI gets.
 #
-# `tier: home-critical` marks the services the house and SSO stop working without: the edge
-# (crowdsec, traefik), SSO (authelia), LAN DNS (pihole) and the automation chain (mosquitto,
-# zigbee2mqtt, home-assistant). It is declared here once and derived elsewhere
-# (filter_plugins/service_tier.py, #3389). A tiered entry's `backup_claims` names its Longhorn
+# `tier:` ranks a service, and is declared here once and derived elsewhere
+# (filter_plugins/service_tier.py, #3389). `home-edge` is the edge (crowdsec, traefik), SSO
+# (authelia) and LAN DNS (pihole); `home-automation` is the automation chain (mosquitto,
+# zigbee2mqtt, home-assistant). Together they are the `home-critical` group, the services the
+# house and SSO stop working without. `platform` is critical without being home-critical: the
+# registry, the alert bridge, the UPS primary and the remote-access tunnel. Each tier names one
+# PriorityClass, and a tiered role's templates take it from `tier_priority_class` rather than
+# writing it (#3452). A home-critical entry's `backup_claims` names its Longhorn
 # volumes worth a daily backup; the k3s role's `k3s_longhorn_r2_volumes` is those claims, and
 # `ansible/tests/longhorn/test_r2_tier_is_derived.py` checks them against the role's rendered
 # PVCs. A tiered entry with no `backup_claims` holds nothing worth a daily copy.
@@ -78,12 +82,12 @@ containers_list:
     port: 8080
     use_authelia: false
     # crowdsec-db is in k3s_longhorn_nobackup_volumes: decisions re-derive from logs.
-    tier: home-critical
+    tier: home-edge
   - name: traefik
     platform: k8s
     port: 8080
     depends_on: [crowdsec]
-    tier: home-critical
+    tier: home-edge
     backup_claims: [traefik-acme]
   - name: authelia
     platform: k8s
@@ -91,7 +95,7 @@ containers_list:
     hostname: "auth"
     port: 9091
     use_authelia: false
-    tier: home-critical
+    tier: home-edge
     backup_claims: [authelia-config]
   - name: bento-pdf
     platform: k8s
@@ -448,6 +452,7 @@ containers_list:
   # the LAN.
   - name: registry
     platform: k8s
+    tier: platform
   # two_factor even on the LAN: arbitrary workflow execution on a stolen
   # password alone. /webhook/ below is unaffected — that route carries no forward-auth at all,
   # and monitor-bridge's check_n8n rides the API-key route.
@@ -470,7 +475,7 @@ containers_list:
   # longhorn-nobackup class, so the broker is tiered for placement and alerting only.
   - name: mosquitto
     platform: k8s
-    tier: home-critical
+    tier: home-automation
 
   # Must follow mosquitto — z2m resolves the broker by bare Service name. The SLZB
   # coordinator accepts one client, hence `strategy: Recreate` in the role.
@@ -483,7 +488,7 @@ containers_list:
     auth_tier: one_factor
     # Named Service port, which the shared default Service renders on request.
     service_port_name: http
-    tier: home-critical
+    tier: home-automation
     backup_claims: [zigbee2mqtt-data]
 
   # use_authelia false: forward-auth breaks the companion app, so HA's own login + TOTP is
@@ -495,7 +500,7 @@ containers_list:
     use_authelia: false
     # Named Service port, which the shared default Service renders on request.
     service_port_name: http
-    tier: home-critical
+    tier: home-automation
     backup_claims: [home-assistant-config]
     # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
     # prometheus scrapes this port and browsers arrive through traefik; the baseline admits
@@ -514,7 +519,7 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
     # Both pihole-etc claims are longhorn-nobackup: every byte regenerates.
-    tier: home-critical
+    tier: home-edge
   # Pi-hole v6 serves no Prometheus endpoint, so this polls its admin API and exports
   # `pihole_*` — for BOTH instances, since each FTL keeps its own query database and one alone
   # reports half the house's volume. `port` is the port it DIALS on the Pi-holes, not one it
@@ -557,6 +562,7 @@ containers_list:
   # inside the pod — see roles/k8s/wg-easy/defaults/main.yml.
   - name: wg-easy
     platform: k8s
+    tier: platform
     hostname: "wg-easy"
     port: 51821
     udp_port: 51820
@@ -625,6 +631,7 @@ containers_list:
   # every metric/API check; autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge
     platform: k8s
+    tier: platform
   # Host metrics for BOTH nodes.
   - name: node-exporter
     platform: k8s
@@ -636,6 +643,7 @@ containers_list:
   # 127.0.0.1:3493 target via hostPort.
   - name: nut
     platform: k8s
+    tier: platform
   # The Prometheus face of the same upsd, as its own workload rather than a sidecar: the nut pod
   # is privileged and USB-pinned, and a sidecar there would restart the shutdown chain on every
   # exporter bump. No port and no route derive — it is a scrape target only.
