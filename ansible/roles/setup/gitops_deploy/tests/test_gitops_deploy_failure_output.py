@@ -234,8 +234,6 @@ def test_the_broad_alert_fits_discords_head_slice_with_the_action_line_intact(
         [],
         "2d25ced3" * 5,
         exc,
-        gitops_deploy.STATE.path("hold"),
-        gitops_deploy.STATE.path("hold_plane"),
         NINE_BUMPS,
     )
     assert len(message) <= 1900
@@ -252,18 +250,16 @@ def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
         ["k3s"],
         "2d25ced3" * 5,
         exc,
-        gitops_deploy.STATE.path("hold"),
-        gitops_deploy.STATE.path("hold_plane"),
         set(),
     )
     assert FATAL in message
     assert "--tags `k3s`" in message
     assert "not deployed" not in message, "a range with no bump names none"
-    hold_plane = gitops_deploy.STATE.path("hold_plane")
-    assert message.count(hold_plane) == 2, (
-        "hold_plane can hold several entries, each cleared on its own, so the post points "
-        "at that list before its rm rather than naming the marker only as a file to delete"
+    assert message.endswith(deploy_alert_text.HOLD_CLEAR_NOTE), (
+        "the held planes are ledger lines, so the post names the Clear that drops them "
+        "with the hold rather than an rm that leaves them behind"
     )
+    assert "`rm /" not in message
 
 
 def test_the_broad_k8s_alert_fits_the_head_slice_and_names_the_services_once(
@@ -283,7 +279,6 @@ def test_the_broad_k8s_alert_fits_the_head_slice_and_names_the_services_once(
         NINE_BUMPS,
         exc,
         gitops_deploy.STATE.path("hold"),
-        gitops_deploy.STATE.path("hold_plane"),
     )
     assert len(message) <= 1900
     assert "Nothing was rolled back" in message

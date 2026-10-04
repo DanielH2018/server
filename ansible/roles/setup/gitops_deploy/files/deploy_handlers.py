@@ -270,8 +270,6 @@ def handle_broad(
                     tags,
                     origin,
                     exc,
-                    state.path("hold"),
-                    state.path("hold_plane"),
                     cs.k8s_deploy,
                 ),
             )

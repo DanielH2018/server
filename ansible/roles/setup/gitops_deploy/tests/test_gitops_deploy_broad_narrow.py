@@ -85,7 +85,7 @@ def test_a_failed_narrowed_apply_holds_the_tags_it_tried(
     tick.playbook_outcomes = [RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools) == 0
     assert (state_dir / "hold_sha").read_text() == ORIGIN
-    assert (state_dir / "hold_plane").read_text() == "ansible/deploy.yml sonarr"
+    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml sonarr"
 
 
 def test_the_setup_plane_never_consults_the_deploy_plane_narrowing(gitops_deploy, tick):
@@ -138,7 +138,7 @@ def test_a_mixed_range_whose_deploy_half_fails_keeps_the_setup_apply_recorded(
     tick.narrow = (0, "sonarr")
     tick.playbook_outcomes = [None, RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools) == 0
-    assert (state_dir / "hold_plane").read_text() == "ansible/deploy.yml sonarr"
+    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml sonarr"
     assert receipt_applied(gitops_deploy.STATE) == {
         "ansible/initial_setup.yml": ("gitops_deploy",)
     }

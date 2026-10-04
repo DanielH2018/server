@@ -1214,17 +1214,20 @@ ledger (#3533). Once daniel-box held no legacy file, the line-marker half of
 source beside its `gitops_markers.py` for this. Two lines naming one service read as one bump,
 dated and attributed from the older line.
 
-**`hold_plane` is moving the same way, and its readers have moved.** Every reader of the
-`hold_plane` marker calls `gitops_ledger.held_planes`, which returns the marker's entries and
-then each `hold_plane` ledger entry not already among them, oldest first. The readers are
-monitor-bridge's Status check, the `deploy_ui` panel, `renovate_agent`'s skip reason,
-`k3s_upgrade_gates.held_sha` and the scheduled-jobs page. A ledger line's subject is the whole
-entry, `<playbook> <tags>`, so two failed applies of one playbook stay two entries. The
-`deploy_ui` Clear also drops the class's ledger lines, under the git-tree lock, so a cleared
+**`hold_plane` is the fourth class, and its writer has moved.** The readers shipped first
+(#3538): every reader calls `gitops_ledger.held_planes`, which returns the legacy `hold_plane`
+marker's entries and then each `hold_plane` ledger entry not already among them, oldest
+first. The readers are monitor-bridge's Status check, the `deploy_ui` panel,
+`renovate_agent`'s skip reason, `k3s_upgrade_gates.held_sha` and the scheduled-jobs page. A
+ledger line's subject is the whole entry, `<playbook> <tags>`, so two failed applies of one
+playbook stay two entries. `DeployerState.hold_failed_apply`, `clear_broad_hold` and
+`clear_service_hold` now record and drop the class, and the hold-clear rule is a query over
+it. The first hold or clear folds any legacy marker entry into the ledger, at `hold_sha` and
+in the marker's order, writing the ledger before it removes the marker. Once daniel-box has
+ticked past the fold, the line-marker half of `held_planes` and `MARKERS["hold_plane"]` go.
+The `deploy_ui` Clear drops the class's ledger lines under the git-tree lock, so a cleared
 hold cannot replay them into the next one. `renovate_agent` installs `gitops_ledger.py` for
-this. The deployer still records and clears the line marker alone, and the `rm` remediation in
-the alert and monitor text still names it. The next step moves the writer, that remediation and
-the hold-clear rule into the ledger together.
+its skip reason.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
@@ -1391,7 +1394,7 @@ an unreadable state directory must not read as "no hold," or a held host reports
 ### Which apply clears a hold
 
 **`hold_sha` clears only when the plane the hold names is applied**
-(`DeployerState.clear_broad_hold` / `DeployerState.clear_service_hold` in `deploy_state.py`,
+(`DeployerState.clear_broad_hold` / `DeployerState.clear_service_hold` in `deploy_state_hold.py`,
 deciding through `deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run applies the
 whole playbook and covers any tag set held against it, a tagged run covers a held tag set it is
 a superset of, and a tagged run covers an untagged hold not at all. A narrowed setup apply holds
@@ -1401,10 +1404,11 @@ covers it, so the whole-role fallback clears it, while an apply narrowed to a di
 of the same role does not. The Discord alert quotes the tags the apply ran, not the held form,
 because `--tags gitops_deploy:gitops-config` is no command Ansible accepts.
 
-**`hold_plane` holds one entry per failed apply, joined by `; `**
-(`DeployerState.hold_failed_apply`, `deploy_git.hold_plane_with`). A second failure adds its
-entry beside the first rather than writing over it. An apply drops only the entries it covers,
-and `hold_sha` clears once none is left. Before this, a failed bump on a broad tick overwrote
+**The `hold_plane` class holds one ledger line per failed apply**
+(`DeployerState.hold_failed_apply`). A second failure adds its line beside the first rather
+than writing over it, and a repeat of a held entry keeps its first line. An apply drops only
+the entries it covers, and `hold_sha` clears once none is left. A torn line still counts as
+held, so a plane the readers cannot parse never lets `hold_sha` clear over it. Before this, a failed bump on a broad tick overwrote
 an earlier plane's entry, and the bump's own fix-forward deploy then cleared both markers
 while that earlier plane was still unapplied: #878 again, through the service door.
 
@@ -1421,18 +1425,23 @@ session while one is set. So the erasure turned **GitOps Deploy — Status** gre
 nothing had applied.
 
 **The way out is manual, and both surfaces name it.** A hand `ansible-playbook` run is not the
-deployer, so it clears nothing. Once every entry `hold_plane` lists is applied,
-`rm /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/hold_plane`. The Discord alert and
-the monitor's own message both print that; the monitor counts the entries still owed. This is the same hand-clear the *Health gate + rollback* section already prescribes for a
-hold whose commits map to no service on this host.
+deployer, so it clears nothing. Once every held plane is applied, clear the hold with the
+deploy UI's Clear, described below. The Discord alert and the monitor's own message both name
+it, and the monitor counts the planes still owed. An `rm` of `hold_sha` is no longer the way
+out: it leaves the class's lines in `owed.jsonl`, and the next failure's hold then waits on
+planes nobody owes. A k8s rollback hold records no plane, so the *Health gate + rollback*
+section's `rm` of `hold_sha` still clears that one.
 
-**The other way out is the Clear button in the deploy UI, and it drops every entry at once.**
+**The Clear button in the deploy UI drops every entry at once.**
 `deploy_ui_writes.clear_hold` removes `hold_sha`, `hold_plane` and the `owed` ledger's
 `hold_plane` lines together as soon as the typed SHA matches, whatever is still unapplied — it is the operator's override, not a per-entry
 clear. Since #2381 that can be several planes, so the page lists the entries one per line, the
 confirm prompt names them, and the reply repeats them
 (`deploy_ui_writes.hold_cleared_message`, #2453). After the Clear nothing records those planes
-at all: no marker, no monitor sentence, no banner line.
+at all: no marker, no monitor sentence, no banner line. From a shell on daniel-box, the page's
+own request is the same Clear:
+`curl -X POST -H 'X-Deploy-UI: 1' -d '{"expected_sha": "<full hold_sha>"}' http://10.0.0.215:8790/api/hold/clear`.
+No `gitops_state.py` verb repeats it, because #3392 retires `clear-*` verbs rather than adding them.
 
 **The cost, stated: a surviving hold parks the Renovate agent** (`agent_logic.decide` returns
 `run=False` for any non-empty `hold_sha`). That is the intended direction — an unapplied plane
@@ -1858,7 +1867,7 @@ is decided by what it touches.
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, when an alert is sent, and the alert queue's own I/O |
 | the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS (#2600) |
-| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_failtext` | the marker table, its parsers and line rewrites, the config file, the state directory, the two k8s marker families as a mixin, and the text a failed run's alert quotes |
+| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_state_hold`, `deploy_failtext` | the marker table, its parsers and line rewrites, the config file, the state directory, the two k8s marker families and the hold, each a mixin class, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s` | `assess` and `plan_tick`; one `handle_*` per terminal branch |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` and `entrypoint()` |

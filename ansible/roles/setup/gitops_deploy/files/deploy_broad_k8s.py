@@ -177,7 +177,6 @@ def apply_broad_k8s(
                     bumps,
                     exc,
                     state.path("hold"),
-                    state.path("hold_plane"),
                 ),
             )
             return 0 if posted else 1

@@ -201,7 +201,7 @@ def test_a_setup_plane_push_merges_then_applies_its_own_playbook(
     applied = tick.log[tick.index("playbook", "ansible/initial_setup.yml")][2]
     assert fits_budget(applied, gitops_deploy.BROAD_DEPLOY_TIMEOUT_S)
     assert _marker(state_dir, "hold_sha") is None
-    assert _marker(state_dir, "hold_plane") is None
+    assert gitops_deploy.STATE.hold_plane is None
 
 
 def test_a_failed_broad_apply_holds_the_plane_and_rolls_nothing_back(
@@ -211,7 +211,7 @@ def test_a_failed_broad_apply_holds_the_plane_and_rolls_nothing_back(
     tick.playbook_outcomes = [RuntimeError("timed out")]
     assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "hold_sha") == ORIGIN
-    assert _marker(state_dir, "hold_plane") == "ansible/initial_setup.yml gitops_deploy"
+    assert gitops_deploy.STATE.hold_plane == "ansible/initial_setup.yml gitops_deploy"
     assert tick.head == ORIGIN, "the arm is forward-only: no reset"
     assert all(argv[1] != "reset" for argv in tick.git)
     (post,) = tick.posts
@@ -248,7 +248,7 @@ def test_a_setup_plane_success_keeps_a_deploy_plane_hold(
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.playbooks, "the setup plane still applies"
     assert _marker(state_dir, "hold_sha") == "f" * 40
-    assert _marker(state_dir, "hold_plane") == "ansible/deploy.yml"
+    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml"
 
 
 def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir):
@@ -258,7 +258,7 @@ def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir)
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
     assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "hold_sha") is None
-    assert _marker(state_dir, "hold_plane") is None
+    assert gitops_deploy.STATE.hold_plane is None
 
 
 # ── the k8s auto-deploy path ──────────────────────────────────────────────────────────────────

@@ -189,26 +189,18 @@ def _held_tag_covered(held: str, applied: set[str]) -> bool:
     return block in applied or role in applied
 
 
-# Between the entries of a `hold_plane` that more than one failed apply wrote. Not a newline:
-# every reader outside this role prints the marker on one line.
+# Between the entries of a legacy `hold_plane` marker, and between the planes the deployer
+# prints on one line. Not a newline: every reader outside this role prints them on one line.
 HOLD_PLANE_SEP = "; "
 
 
 def hold_plane_entries(held: str | None) -> list[str]:
-    """Each failed apply a `hold_plane` marker records, oldest first."""
-    return [e.strip() for e in (held or "").split(";") if e.strip()]
+    """Each failed apply a legacy `hold_plane` marker records, oldest first.
 
-
-def hold_plane_with(held: str | None, playbook: str, tags: list[str] | None) -> str:
-    """`held` with a failed apply of `playbook`/`tags` added beside what it already records.
-
-    A second failure used to OVERWRITE the marker, so the first plane's entry was gone while
-    that plane was still unapplied: the second failure's fix then cleared `hold_sha` over it,
-    and GitOps Deploy — Status read green (#878's class). Each entry clears on its own.
+    The deployer records the planes in the `owed` ledger (#3392); this splits a marker a
+    pre-ledger deployer left, for the fold into it.
     """
-    entries = hold_plane_entries(held)
-    entry = hold_plane_marker(playbook, tags)
-    return HOLD_PLANE_SEP.join(entries if entry in entries else [*entries, entry])
+    return [e.strip() for e in (held or "").split(";") if e.strip()]
 
 
 def broad_hold_cleared_by(held: str, playbook: str, tags: list[str] | None) -> bool:

@@ -18,6 +18,7 @@ import dataclasses
 import json
 
 import deploy_handlers
+import deploy_io
 import deploy_locks
 import deploy_tick_types
 from deploy_changes import ChangeSet
@@ -62,7 +63,9 @@ def _deferred(tick, state_dir, posts: int = 0) -> None:
         "the ff-merge was not undone, so the next tick sees no range"
     )
     assert not (state_dir / "hold_sha").exists(), "contention must not hold the SHA"
-    assert not (state_dir / "hold_plane").exists(), "contention must not hold a plane"
+    assert deploy_io.DeployerState(state_dir).hold_plane is None, (
+        "contention must not hold a plane"
+    )
     assert len(tick.posts) == posts, "contention is not a page; the next tick retries"
     marker = (state_dir / "contention_since").read_text().split()
     assert marker[0] == ORIGIN and marker[4] == "1", (

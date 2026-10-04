@@ -24,6 +24,7 @@ import yaml
 
 import deploy_io
 from gitops_ledger import (
+    OWED_HOLD_PLANE,
     OWED_K8S_DEFERRED,
     RECEIPT_KEEP,
     owed_line,
@@ -282,6 +283,63 @@ def test_a_torn_k8s_deferred_line_naming_the_service_is_cleared(state):
     state.write("owed", _TORN_SONARR)
     assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
     assert state.read("owed") is None
+
+
+# ── the hold_plane class of the owed ledger ────────────────────────────────────
+def _held(state) -> list[tuple[str, str]]:
+    return [
+        (e.subject, e.origin) for e in parse_owed(state.read("owed"), OWED_HOLD_PLANE)
+    ]
+
+
+def test_a_second_failure_is_held_beside_the_first_and_a_repeat_is_not(state):
+    """Each failed apply is its own ledger entry, so each clears on its own (#878's class)."""
+    state.hold_failed_apply(SHA, "ansible/deploy.yml", ["radarr"])
+    state.hold_failed_apply("f" * 40, "ansible/deploy.yml", ["sonarr"])
+    state.hold_failed_apply("e" * 40, "ansible/deploy.yml", ["radarr"])
+    assert state.hold_sha == "e" * 40
+    assert _held(state) == [
+        ("ansible/deploy.yml radarr", SHA),
+        ("ansible/deploy.yml sonarr", "f" * 40),
+    ]
+    assert state.read("hold_plane") is None, "the writer records no line marker"
+
+
+def test_an_apply_drops_only_the_plane_it_covers_and_the_last_one_clears_the_hold(
+    state,
+):
+    state.hold_failed_apply(SHA, "ansible/deploy.yml", ["radarr"])
+    state.hold_failed_apply(SHA, "ansible/initial_setup.yml", ["gitops_deploy"])
+    state.clear_service_hold({"radarr"})
+    assert state.hold_sha == SHA
+    assert state.hold_plane == "ansible/initial_setup.yml gitops_deploy"
+    state.clear_broad_hold("ansible/initial_setup.yml", [])
+    assert (state.hold_sha, state.read("owed")) == (None, None)
+
+
+def test_a_legacy_hold_plane_marker_is_folded_into_the_ledger_in_order(state):
+    """A marker a pre-ledger deployer wrote moves on the first hold, at `hold_sha`."""
+    state.write("hold", SHA)
+    state.write("hold_plane", "ansible/deploy.yml radarr; ansible/deploy.yml sonarr")
+    state.hold_failed_apply("f" * 40, "ansible/deploy.yml", ["sonarr"])
+    assert _held(state) == [
+        ("ansible/deploy.yml radarr", SHA),
+        ("ansible/deploy.yml sonarr", SHA),
+    ]
+    assert state.read("hold_plane") is None
+
+
+def test_a_torn_hold_plane_line_keeps_the_hold(state):
+    """A plane the readers skip as torn is still unapplied, so `hold_sha` must not clear."""
+    torn = json.dumps({"class": "hold_plane", "subject": "ansible/deploy.yml radarr"})
+    state.write("hold", SHA)
+    state.write("owed", torn)
+    state.clear_broad_hold("ansible/initial_setup.yml", [])
+    assert (state.hold_sha, state.read("owed")) == (SHA, torn)
+    state.clear_service_hold(set())
+    assert (state.hold_sha, state.read("owed")) == (SHA, torn)
+    state.clear_service_hold({"radarr"})
+    assert (state.hold_sha, state.read("owed")) == (None, None)
 
 
 # ── the alert dedupe slots, and their one file ─────────────────────────
