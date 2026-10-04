@@ -14,7 +14,7 @@ Read-only homelab diagnostics, allow-listed (no prompt). It resolves the live co
 ```
 uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
   alerts | monitors | kuma-drift | releases | scrutiny | pi containers | cert <host> | health <svc> |
-  ha <state|automation|get> … | b2-spend | vip-placement | readonly-rbac>
+  ha <state|automation|get> … | b2-spend | vip-placement | readonly-rbac | shed-set>
 ```
 
 `uv run python scripts/diagnostics/probe.py --list` prints every subcommand with a one-line
@@ -26,9 +26,9 @@ with a `run_*`/`main` entry point is covered). Running a subcommand is owned els
 unchanged: argparse in `probe_lib/cli_parser.py`, `plan()` in `probe_lib/curl_pipeline.py`, and
 the `handlers` table in `probe.py`'s `main()`.
 
-### Measurements and invariant checks: `b2-spend`, `vip-placement`, `readonly-rbac`
+### Measurements and invariant checks: `b2-spend`, `vip-placement`, `readonly-rbac`, `shed-set`
 
-Three subcommands turn a fact an operator once had to remember into one they can re-derive. Each
+Four subcommands turn a fact an operator once had to remember into one they can re-derive. Each
 has its own test under `scripts/diagnostics/tests/`.
 
 - **`b2-spend [--since 24h]`** sums the Class B spend per volume out of Longhorn's own "changed
@@ -45,6 +45,10 @@ has its own test under `scripts/diagnostics/tests/`.
 - **`readonly-rbac`** asks live RBAC whether the SA plain `kubectl` runs as still refuses
   `get`/`list` on Secrets and `create`/`delete` on pods, and exits 1 naming any verb it gained
   (`probe_lib/readonly_rbac.py`).
+- **`shed-set`** prints the Deployments and StatefulSets to scale to zero when one node is
+  lost, so the tiered services fit on the survivor (`probe_lib/shed_set.py`). The set is every
+  k8s entry with no `tier:`, derived by `shed_entries` in `filter_plugins/service_tier.py`, and
+  each role is rendered to name its scalable workloads. It reads the inventory only.
 
 ### `alerts [--days N --check X]`
 

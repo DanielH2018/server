@@ -185,6 +185,16 @@ def role_workload_targets(role, default_namespace):
     return _role_kind_targets(role, default_namespace, WORKLOAD_KINDS)
 
 
+def role_scalable_targets(role, default_namespace):
+    """[(namespace, kind, name)] for every Deployment and StatefulSet `role` renders.
+
+    The workloads `kubectl scale` reaches, which is what `probe.py shed-set` lists. A
+    DaemonSet runs one pod per node and has no replica count to lower. None on the same terms
+    as role_workload_targets.
+    """
+    return _role_kind_targets(role, default_namespace, {"Deployment", "StatefulSet"})
+
+
 def role_cronjob_targets(role, default_namespace):
     """[(namespace, name)] for every CronJob `role`'s rendered manifests declare.
 

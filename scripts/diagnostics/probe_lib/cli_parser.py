@@ -249,6 +249,12 @@ def _build_parser():
         action="store_true",
         help="print the kubectl calls without making them",
     )
+    sub.add_parser(
+        "shed-set",
+        help="the untiered k8s workloads to scale down when one node is lost, derived from "
+        "the containers_list `tier` field (inventory only, no kubectl). Exit 2 when the set "
+        "comes back empty.",
+    )
     pi = sub.add_parser("pi", help="daniel-pi container view over one ssh")
     pi.add_argument(
         "subpath",

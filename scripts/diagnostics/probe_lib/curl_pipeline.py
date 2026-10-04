@@ -8,9 +8,9 @@ those through its own `handlers` table.
 The runner is named `stream_pipeline`, not `run_pipeline` as it was in probe.py. Inside
 `probe_lib/` a module-level `run_*` means "this module backs a subcommand":
 `lib.cli_registry.package_entry_points` collects those names, and
-`scripts/diagnostics/tests/test_probe_registry.py` asserts the set is exactly the twelve
+`scripts/diagnostics/tests/test_probe_registry.py` asserts the set is exactly the thirteen
 subcommand backends. Moving the function in under its old name would have made this module a
-thirteenth. `main()`'s own docstring already called this path the streaming one.
+fourteenth. `main()`'s own docstring already called this path the streaming one.
 
 This module imports `cli_parser.py`; `cli_parser.py` never imports this one.
 
