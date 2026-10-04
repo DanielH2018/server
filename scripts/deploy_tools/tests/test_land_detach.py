@@ -176,6 +176,27 @@ def _descendants(root: int) -> set[int]:
     return found
 
 
+def _cmdline(pid: int) -> str:
+    """`pid`'s command line, or empty once it has gone."""
+    try:
+        return Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace")
+    except OSError:
+        return ""
+
+
+def _full_pipe() -> tuple[int, int]:
+    """A pipe with no room left: a blocking write to its write end waits until it is read."""
+    read_end, write_end = os.pipe()
+    os.set_blocking(write_end, False)
+    # Capacity is not guaranteed to be 64 KiB, so fill in blocks and then byte by byte.
+    for chunk in (b"x" * 4096, b"x"):
+        with contextlib.suppress(BlockingIOError):
+            while True:
+                os.write(write_end, chunk)
+    os.set_blocking(write_end, True)
+    return read_end, write_end
+
+
 def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdict(
     tmp_path,
 ):
@@ -183,24 +204,40 @@ def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdic
 
     The kill here is both halves of what a harness does: the caller's process group and every
     descendant found by parent pid. `setsid` alone survives the first and not the second, so
-    this goes red on a landing that is merely a child in its own session. The caller is the
-    chained form a session runs, with `sleep` standing in for the `cc-wait` that waits.
+    this goes red on a landing that is merely a child in its own session.
+
+    The second half only reaches a setsid-only child while `land.py` is alive to be its parent;
+    once `land.py` exits, the child reparents to init and leaves the walk (issue #3526). So
+    the caller's stdout is a pipe with no room left. `land.py` writes the pid file, then
+    blocks in its announcement, and stays alive across the walk and the kill. The pid file
+    therefore stands in for the announcement line, which can never be read here.
     """
     # A slow first `gh` call holds the landing open long enough to kill the caller under it.
     slow_gh = _GH_STUB.replace('case "$*" in', 'sleep 3\ncase "$*" in', 1)
+    read_end, write_end = _full_pipe()
     caller = subprocess.Popen(
         ["bash", "-c", f'"{_LAND_SH}" --pr 939 --detach && sleep 30'],
         env=_env(tmp_path, gh=slow_gh),
-        stdout=subprocess.PIPE,
-        text=True,
+        stdout=write_end,
         start_new_session=True,
     )
+    os.close(write_end)
     landing_pid = None
     try:
-        assert caller.stdout is not None
-        announced = caller.stdout.readline()
-        landing_pid = int(re.search(r"\(pid (\d+)\)", announced).group(1))
+        deadline = time.monotonic() + 60
+        while not _logs(tmp_path) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        [log] = _logs(tmp_path)
+        while detach.recorded_pid(log) is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        # None here means the parent blocked before it forked: something printed to stdout
+        # ahead of `detach.fork`'s flush and filled the pipe first.
+        landing_pid = detach.recorded_pid(log)
+        assert landing_pid is not None, "land.py never recorded the landing's pid"
         tree = _descendants(caller.pid)
+        # The precondition that keeps the walk meaningful: land.py is still in the tree, so a
+        # setsid-only landing would still be its child and inside this walk.
+        assert any("land.py" in _cmdline(pid) for pid in tree), tree
         with contextlib.suppress(ProcessLookupError):
             os.killpg(caller.pid, signal.SIGKILL)
         for pid in tree:
@@ -208,7 +245,6 @@ def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdic
                 os.kill(pid, signal.SIGKILL)
         caller.wait(timeout=10)
 
-        [log] = _logs(tmp_path)
         # Wait for the exit code as well as the verdict: the landing prints the VERDICT line
         # and only then exits and writes its `.rc`, so a read straight after the verdict can
         # see none. That window failed this test on CI twice on 2026-10-03.
@@ -228,8 +264,7 @@ def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdic
                 os.kill(landing_pid, signal.SIGKILL)
         caller.kill()
         caller.wait()
-        if caller.stdout:
-            caller.stdout.close()
+        os.close(read_end)
 
 
 def _user_manager_reachable() -> bool:
