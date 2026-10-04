@@ -1,0 +1,75 @@
+---
+# Tear down one retired k8s service: delete what its staged manifests declare, then the staged
+# directories and its release records. Included once per `k8s_retired_services` entry from the
+# k8s play in deploy.yml; the list's comment in group_vars/all.yml says when to add an entry.
+#
+# Every task is `tags: [always]`, like roles/k8s/manifests/tasks/drain.yml: a tag on an
+# include_tasks reaches only the include, and the gitops deployer runs this play with
+# `--tags <service>` for services that are not this one.
+#
+# The staged directory is the source of truth for what the role had live, rather than a
+# hand-written object list: it holds every file the role's last real deploy applied, its
+# Secret and its `claim-<name>.yaml` included. Deleting the claim deletes the Longhorn volume,
+# because the `longhorn` StorageClass reclaims with `Delete`.
+
+- name: Refuse to retire a service containers_list still deploys, here {{ retired_service.name }}
+  tags: [always]
+  ansible.builtin.assert:
+    that:
+      - retired_service.name not in (containers_list | map(attribute='name') | list)
+    fail_msg: >-
+      k8s_retired_services names {{ retired_service.name }}, which containers_list still
+      deploys. Retiring it here would delete the objects the same play applies. Drop one of the
+      two entries.
+    quiet: true
+
+- name: Find the staged manifest directories of {{ retired_service.name }}
+  tags: [always]
+  ansible.builtin.stat:
+    path: "/etc/rancher/k3s/manifests/{{ item }}"
+  loop: "{{ retired_service.dirs | default([retired_service.name]) }}"
+  register: k8s_retire_dirs
+  become: true
+
+# --ignore-not-found makes a re-run over a half-finished teardown succeed. --wait holds the
+# directory removal below until the objects are gone: the claim's pvc-protection finalizer
+# keeps it until the Deployment's pod has terminated, and a directory removed before that
+# leaves nothing to retry from.
+- name: Delete every object the staged manifests declare for {{ retired_service.name }}
+  tags: [always]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl delete -f {{ item.stat.path }}/
+      -n {{ retired_service.namespace | default(k8s_namespace) }}
+      --ignore-not-found --wait=true --timeout=300s
+  loop: "{{ k8s_retire_dirs.results | selectattr('stat.exists') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: k8s_retire_delete
+  changed_when: k8s_retire_delete.stdout_lines | select('search', ' deleted$') | list | length > 0
+  become: true
+
+- name: Remove the staged manifest directories of {{ retired_service.name }}
+  tags: [always]
+  ansible.builtin.file:
+    path: "{{ item.stat.path }}"
+    state: absent
+  loop: "{{ k8s_retire_dirs.results | selectattr('stat.exists') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+
+# Paths mirror manifests_release_dir and manifests_render_record_dir in
+# roles/k8s/manifests/defaults/main.yml, which a play-level task cannot read. A record left
+# behind keeps the service in `probe.py releases`, and in `--stale-only` against a render
+# that no longer exists.
+- name: Remove the release and render records of {{ retired_service.name }}
+  tags: [always]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/var/lib/homelab/k8s-releases.d/{{ retired_service.name }}.json"
+    - "/var/lib/homelab/k8s-releases.d/{{ retired_service.name }}.previous.json"
+    - "/var/lib/homelab/k8s-renders.d/{{ retired_service.name }}.json"
+  become: true

@@ -144,6 +144,24 @@ So exercise the thing you actually changed as well.
 - **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
   most of the deploy.
 
+## Retiring a k8s service
+
+Deleting a role from the repo removes nothing live. `kubectl apply` never deletes, and the
+role's own prune cannot run once the role is gone. To retire a k8s service, delete its role and
+its `containers_list` entry, then add its name to `k8s_retired_services` in
+`ansible/inventory/group_vars/all.yml`, all in one PR.
+
+The next k8s deploy runs `ansible/tasks/k8s_retire.yml` for each entry, whatever its `--tags`.
+The task file deletes every object the service's staged directory under
+`/etc/rancher/k3s/manifests/` declares, its Secret and its `claim-<name>.yaml` included. It
+then removes that directory and the service's release and render records. A run that finds
+nothing reports `ok`.
+
+Deleting the claim deletes its Longhorn volume, because the `longhorn` StorageClass reclaims
+with `Delete`. Land the entry before the next `k3s-bringup.yml --tags longhorn` apply: that
+apply returns a volume in no routing list to the `default` group, and a volume outside
+`k3s_longhorn_r2_volumes` then backs up daily to B2.
+
 ## The deploy queue page
 
 `deploy.local.<domain>` (Authelia two-factor) shows the four things "the queue" means here:
