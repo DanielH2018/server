@@ -1,15 +1,15 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 {#
-  Gated on the replica count, because a route to a workload with no pods is not free.
-  Traefik's kubernetescrd provider re-reads every IngressRoute on each config refresh and
-  logs `error ... no servers found for homelab/navidrome` whenever the EndpointSlice behind
-  one is empty — every ~20s, forever, while navidrome sits at replicas 0. That drowns the
-  traefik log, which is where a real edge failure shows up first.
+  Listed in manifests_files only while navidrome has pods, because a route to a workload with
+  no pods is not free. Traefik's kubernetescrd provider re-reads every IngressRoute on each
+  config refresh and logs `error ... no servers found for homelab/navidrome` whenever the
+  EndpointSlice behind one is empty — every ~20s, forever, while navidrome sits at replicas 0.
+  That drowns the traefik log, which is where a real edge failure shows up first (#1323).
 
-  Rendering nothing is only half the retirement: `tasks/main.yml` also deletes the live
-  IngressRoute while the workload is parked. See the comment there.
+  The gate lives in tasks/main.yml rather than here. The role arms `manifests_prune`, whose
+  labelling wrapper refuses a template that renders no document, and dropping the name from
+  the list is what makes the prune delete the live route.
 #}
-{% if navidrome_k8s_replicas | int > 0 %}
 ---
 {{ ingressroute(
     container_item.name,
@@ -18,6 +18,3 @@
     container_item.use_authelia,
   )
 }}
-{% else %}
-# navidrome is parked at navidrome_k8s_replicas: 0 — no route while parked (issue #1323).
-{% endif %}

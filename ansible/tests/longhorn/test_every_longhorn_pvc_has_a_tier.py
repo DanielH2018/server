@@ -53,13 +53,14 @@ _ROUTING_LISTS = (
 )
 
 # A named floor, not just a count: proves the collector still recognises PVCs declared
-# through both mechanisms below (its own template, and the shared volume-claim role) rather
-# than passing vacuously because a glob or a role-name check stopped matching. Pick real,
-# stable members — these have not moved tiers since the lists existed.
+# through every mechanism below (its own template or `k8s_claims`, both rendered, and the
+# shared volume-claim role) rather than passing vacuously because a glob or a role-name check
+# stopped matching. Pick real, stable members — these have not moved tiers since the lists
+# existed.
 _KNOWN_LONGHORN_PVCS = frozenset(
     {
-        "homelab/navidrome-data",  # volume-claim role, weekly tier
-        "homelab/sonarr-config",  # volume-claim role, weekly tier
+        "homelab/jellyfin-config",  # volume-claim role, weekly tier
+        "homelab/sonarr-config",  # k8s_claims, weekly tier
         "homelab/traefik-acme",  # own template, R2 tier
         "homelab/crowdsec-db",  # own template, nobackup tier
     }

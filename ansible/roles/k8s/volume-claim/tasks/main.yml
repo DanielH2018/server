@@ -6,15 +6,16 @@
 #   volume_claim_name                   PVC name
 #   volume_claim_size / _storage_class   as needed
 #
-# WHY THIS ROLE EXISTS AT ALL, given k8s/manifests renders a role's manifests: 16 of the caller
-# roles ship no pvc.yaml.j2 of their own, and this is the only thing that creates their claim.
+# WHY THIS ROLE EXISTS AT ALL, given k8s/manifests renders a role's manifests: its callers
+# ship no pvc.yaml.j2 of their own and declare no `k8s_claims`, so this is the only thing that
+# creates their claim.
 # It runs BEFORE k8s/manifests so the workload never starts against a claim that does not exist.
 #
 # The role name is read by gitops_deploy's deploy_logic.py, land_tags.py,
 # validate.k8s_manifests.SKIP_ROLES, group_vars' dry-run-unsupported list and two skills.
 # `seed` still names ansible/seed_volume_backup.yml, which seeds a claim from a Longhorn backup.
 #
-# The k8s_no_mutate gate has to live HERE rather than at the 24 call sites. A tag-based
+# The k8s_no_mutate gate has to live HERE rather than at every call site. A tag-based
 # refusal in deploy.yml cannot work: it asserts against `ansible_run_tags`, which is what the
 # operator typed, while what actually runs is the role closure. `--tags freshrss` names no
 # unsupported role and still reaches this one.

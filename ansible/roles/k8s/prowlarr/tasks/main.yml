@@ -1,16 +1,6 @@
 ---
 # The indexer proxy, plus the headless browser it drives.
 
-- name: Create the prowlarr config volume claim
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: prowlarr
-    volume_claim_name: "{{ prowlarr_k8s_claim }}"
-    volume_claim_storage_class: "{{ prowlarr_k8s_storage_class }}"
-    volume_claim_size: "{{ prowlarr_k8s_size }}"
-
 # flaresolverr's volume is NOT seeded. It is a browser profile cache that regenerates on first
 # use, so there is nothing to copy.
 - name: Deploy prowlarr and flaresolverr to the cluster

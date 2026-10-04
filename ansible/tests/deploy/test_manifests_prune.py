@@ -47,7 +47,7 @@ _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
 _FORBIDDEN_PRUNE_KINDS = ("Secret", "PersistentVolumeClaim")
 # The roles armed so far. A role arming the prune is added here on purpose, so the census
 # below fails on an arming nobody meant.
-_ARMED_ROLES = frozenset({"registry", "bazarr", "littlelink", "texbrain"})
+_ARMED_ROLES = frozenset({"registry", "bazarr", "littlelink", "texbrain", "navidrome"})
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
 _RENDER_TASKS = (
     "Render manifests",

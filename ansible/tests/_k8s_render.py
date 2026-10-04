@@ -202,7 +202,7 @@ def render_role_template(
     # never uses. For daniel-box the guard makes the two orders render the same text.
     """
     base = host_context(host)
-    # A default rather than a raise: `k8s/volume-claim` is included by 16 caller roles and is not
+    # A default rather than a raise: `k8s/volume-claim` is included by caller roles and is not
     # a `containers_list` entry at all, so the lookup finds nothing for it and the bare `next()`
     # raised `StopIteration` before the render ever started. The key is LEFT OUT in that case
     # rather than set to None, so a template reading `container_item.name` renders `STUB` the way

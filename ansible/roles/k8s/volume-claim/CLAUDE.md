@@ -7,7 +7,8 @@ workload never starts against a claim that doesn't exist yet.
 **It is being retired in favour of `k8s_claims`** (#3387): a `{name, size, storage_class}`
 list in the caller's `defaults/main.yml`, which `k8s/manifests` renders, digests, dry-runs and
 applies ahead of its snapshot (`ansible/roles/k8s/manifests/CLAUDE.md`). freshrss,
-zigbee2mqtt, speedtest, livesync, healthchecks, bazarr, sonarr and radarr use it. Convert a
+zigbee2mqtt, speedtest, livesync, healthchecks, bazarr, sonarr, radarr, navidrome, prowlarr and
+karakeep use it. Convert a
 caller rather than adding a new one here.
 
 **No standalone deploy tag.** Callers reach it via `include_role: name: k8s/volume-claim`
@@ -17,7 +18,7 @@ image bump here would match no play and deploy nothing while reporting success.
 
 **`k8s_autodeploy: false`** for the same reason: it renders only a PVC, so there is no
 workload for `rollout status` to gate, and a stray auto-deploy has an outsized blast
-radius as the shared path 16 roles depend on. Reason is in `defaults/main.yml`.
+radius as the shared path its callers depend on. Reason is in `defaults/main.yml`.
 
 ## Where the claim is staged
 
@@ -49,7 +50,8 @@ no deploy tag able to clear it (#1672). `_is_real_change` in
 read by `pvc.yaml.j2`, so a change there does move the applied PVC.
 
 A role that later drops its `k8s/volume-claim` include (wg-easy, zigbee2mqtt, freshrss,
-speedtest, livesync, healthchecks, bazarr, sonarr and radarr all did) leaves its
+speedtest, livesync, healthchecks, bazarr, sonarr, radarr, navidrome, prowlarr and karakeep
+all did) leaves its
 `<service>-claims/` file behind. `k8s/manifests` removes that directory on the role's next deploy when the role declares
 `k8s_claims` or lists its own `pvc.yaml` (#3458). A role converted some other way still
 leaves the file, which is inert but stale.
@@ -60,7 +62,7 @@ leaves the file, which is inert but stale.
   Docker was uninstalled there at the end of the k3s migration, so the seeding — and the
   name — were retired; only the PVC creation is left.
 - Every mutating task is guarded on `k8s_no_mutate`, set at the role level rather than
-  at each of the 24 call sites: an earlier guard checked `ansible_run_tags` instead,
+  at each call site: an earlier guard checked `ansible_run_tags` instead,
   which only sees what the operator typed on the command line — `--tags freshrss` names
   no unsupported role and still reached this one, and a dry run of freshrss once removed
   a real seed pod against freshrss's live Longhorn PVC.

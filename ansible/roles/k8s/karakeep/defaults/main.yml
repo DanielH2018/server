@@ -28,8 +28,8 @@ karakeep_k8s_tagger_image: "{{ k8s_registry_pull_host }}/karakeep:{{ k8s_built_i
 # is not atomic, so a failure mid-flight needs a human to reindex rather than a retry; (2)
 # probe-less — the time-tagger sub-deployment renders no readinessProbe, so `rollout status`
 # would return on Running and prove nothing for it even if the primary Deployment were fine;
-# (3) migrating state — strategy is Recreate and the config PVC is seeded through
-# k8s/volume-claim (hardcoded ReadWriteOnce). Any one of the three would justify the denylist
+# (3) migrating state — strategy is Recreate and the config PVC comes from k8s_claims below
+# (hardcoded ReadWriteOnce). Any one of the three would justify the denylist
 # entry; a reason naming only one would miss the other two.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "three reasons: (1) stateful — meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger sub-deployment; (3) migrating state — Recreate + RWO volume-claim PVC. COUPLING NOTE for a future promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting karakeep-data alone desyncs the search index until a manual reindex"  # noqa var-naming[no-role-prefix]
@@ -77,3 +77,15 @@ karakeep_k8s_meili_size: 2Gi
 # because a ConfigMap must render from something that exists at render time and CI renders every
 # template on a machine that has never deployed. It is 17K, far inside the 1M ConfigMap ceiling.
 # test_karakeep_time_tagger_script.py pins it to the upstream commit URL and sha256.
+
+# The claims k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+# karakeep-meili is a plain claim on longhorn-nobackup: the Meilisearch index is derived from
+# db.db and rebuilt with "Reindex All Bookmarks", so it is neither seeded nor worth B2
+# transactions.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ karakeep_k8s_claim }}"
+    storage_class: "{{ karakeep_k8s_storage_class }}"
+    size: "{{ karakeep_k8s_size }}"
+  - name: "{{ karakeep_k8s_meili_claim }}"
+    storage_class: "{{ karakeep_k8s_meili_storage_class }}"
+    size: "{{ karakeep_k8s_meili_size }}"

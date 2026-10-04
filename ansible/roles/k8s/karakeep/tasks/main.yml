@@ -12,17 +12,8 @@
     image_builder_name: karakeep
     image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/karakeep/templates/Dockerfile.j2"
 
-# Create the data volume claim BEFORE deploying the workload, so the pod has a PVC to mount.
-- name: Create the karakeep data volume claim
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: karakeep
-    volume_claim_name: "{{ karakeep_k8s_claim }}"
-    volume_claim_storage_class: "{{ karakeep_k8s_storage_class }}"
-    volume_claim_size: "{{ karakeep_k8s_size }}"
-
+# Both claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
+# ahead of the workload (#3387).
 - name: Deploy karakeep to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -71,8 +62,6 @@
       - middleware.yaml
       - networkpolicy-chrome.yaml
       - networkpolicy-meilisearch.yaml
-      # The Meilisearch index gets a claim but no seed — see pvc-meili.yaml.j2.
-      - pvc-meili.yaml
       - deployment.yaml
       - deployment-chrome.yaml
       - deployment-meilisearch.yaml
