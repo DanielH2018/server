@@ -91,7 +91,7 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     Three sources, because this repo builds a PVC three different ways:
 
     1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2`, such as
-       valheim's `server-pvc.yaml.j2`.
+       pi-peer-backup's `pvc.yaml.j2`.
     2. A `vars: volume_claim_name: ...` on a task that includes `k8s/volume-claim` — how the
        other claims are created. Read through `_live_tasks`, the same walker
        `_batch_gated_names` uses, so a commented-out or `when: false`-gated include credits

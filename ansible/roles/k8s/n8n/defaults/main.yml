@@ -31,7 +31,7 @@ n8n_k8s_runners_image: "{{ k8s_registry_pull_host }}/n8n-runners:{{ k8s_built_im
 # Two independent reasons: (1) probe-less — the n8n-runners sub-deployment (which executes
 # every workflow's actual code) renders no readinessProbe, so `rollout status` would return on
 # Running and prove nothing for it; (2) migrating state — strategy is Recreate and n8n-data (the
-# `data` PVC, n8n_k8s_claim below) is seeded through k8s/volume-claim (hardcoded ReadWriteOnce)
+# `data` PVC, n8n_k8s_claim below) comes from k8s_claims below (hardcoded ReadWriteOnce)
 # and holds the credential-encryption key + SQLite database co-located (see the DR note in
 # CLAUDE.md) — a bad image swap can migrate it before the gate observes a fault. n8n-files
 # (n8n_k8s_files_claim) is a SEPARATE, unseeded claim for the /files mount.
@@ -60,8 +60,19 @@ n8n_k8s_size: 4Gi
 # emptyDir would silently turn "the file persists" into "the file vanishes on restart", which
 # fails at workflow-run time rather than at deploy time. Nothing to seed; created empty.
 n8n_k8s_files_claim: n8n-files
+# `longhorn` (backed up) rather than longhorn-nobackup: unlike a search index, nothing
+# regenerates a file a workflow wrote here.
 n8n_k8s_files_storage_class: longhorn
 n8n_k8s_files_size: 1Gi
+
+# The claims k8s/manifests renders and applies for this role, ahead of the workload.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ n8n_k8s_claim }}"
+    storage_class: "{{ n8n_k8s_storage_class }}"
+    size: "{{ n8n_k8s_size }}"
+  - name: "{{ n8n_k8s_files_claim }}"
+    storage_class: "{{ n8n_k8s_files_storage_class }}"
+    size: "{{ n8n_k8s_files_size }}"
 
 # The task-runner broker port. Not container_item.port (5678, the UI) — a second port on the
 # same Service, so N8N_RUNNERS_TASK_BROKER_URI stays http://n8n:5679 and the runners image
@@ -69,6 +80,5 @@ n8n_k8s_files_size: 1Gi
 n8n_k8s_broker_port: 5679
 
 # The runners' readiness gate (see deployment-runners.yaml.j2). alpine because busybox `nc -z`
-# is all it needs and the image is already the fleet's small-utility choice — volume-claim uses
-# the same one.
+# is all it needs and the image is already the fleet's small-utility choice.
 n8n_k8s_wait_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6

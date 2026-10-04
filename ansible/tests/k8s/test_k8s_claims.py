@@ -40,6 +40,12 @@ _KNOWN_CLAIMS = {
     ("homelab", "terraria-config"): ("longhorn", "1Gi"),
     ("homelab", "code-server-config"): ("longhorn", "10Gi"),
     ("homelab", "code-server-workspace"): ("longhorn", "1Gi"),
+    ("homelab", "n8n-data"): ("longhorn", "4Gi"),
+    ("homelab", "n8n-files"): ("longhorn", "1Gi"),
+    ("homelab", "valheim-config"): ("longhorn", "5Gi"),
+    ("homelab", "valheim-server"): ("longhorn-nobackup", "20Gi"),
+    ("homelab", "scrutiny-influxdb-data"): ("longhorn", "2Gi"),
+    ("homelab", "scrutiny-web-config"): ("longhorn", "1Gi"),
 }
 
 

@@ -17,28 +17,21 @@
     image_builder_name: valheim
     image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/valheim/templates/Dockerfile.j2"
 
-- name: Create the valheim config volume claim
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: valheim
-    volume_claim_name: "{{ valheim_k8s_claim }}"
-    volume_claim_storage_class: "{{ valheim_k8s_storage_class }}"
-    volume_claim_size: "{{ valheim_k8s_size }}"
-
+# Both claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
+# ahead of the workload (#3387).
 - name: Deploy valheim to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
     manifests_service: valheim
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
     manifests_rollout: valheim
     # The shared default is not enough for the first boot: the pod is not Ready until SteamCMD
     # has pulled ~1.8 G into the empty install PVC and the world has loaded. The number lives in
     # defaults/main.yml because the Deployment's progressDeadlineSeconds reads it too.
     manifests_rollout_timeout: "{{ valheim_k8s_rollout_timeout }}"
     manifests_files:
-      - server-pvc.yaml
       - deployment.yaml
       - service.yaml
     manifests_secret_files:

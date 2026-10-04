@@ -1,29 +1,13 @@
 ---
-- name: Create the influxdb history volume claim
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: scrutiny
-    volume_claim_name: "{{ scrutiny_k8s_influxdb_claim }}"
-    volume_claim_storage_class: "{{ scrutiny_k8s_influxdb_storage_class }}"
-    volume_claim_size: "{{ scrutiny_k8s_influxdb_size }}"
-
-- name: Create the web config volume claim
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: scrutiny
-    volume_claim_name: "{{ scrutiny_k8s_config_claim }}"
-    volume_claim_storage_class: "{{ scrutiny_k8s_config_storage_class }}"
-    volume_claim_size: "{{ scrutiny_k8s_config_size }}"
-
+# Both claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
+# ahead of the workload (#3387).
 - name: Deploy scrutiny to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
     manifests_service: scrutiny
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
     manifests_rollout: scrutiny-web
     # networkpolicy-influxdb.yaml is listed HERE rather than in netpol-baseline on purpose.
     # scrutiny-web panics rather than retries when InfluxDB is unreachable, so the policy

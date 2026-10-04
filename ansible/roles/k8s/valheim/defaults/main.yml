@@ -170,7 +170,7 @@ valheim_k8s_mods:
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Two independent reasons: (1) probe-less — the
 # Deployment renders no readinessProbe at all, same shape as terraria; (2) migrating state —
-# strategy is Recreate and valheim-config is seeded through k8s/volume-claim (hardcoded
+# strategy is Recreate and valheim-config comes from k8s_claims below (hardcoded
 # ReadWriteOnce), holding worlds/lists/prefs. Either alone would justify the denylist entry.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe at all; (2) migrating state — Recreate + RWO volume-claim PVC holding worlds"  # noqa var-naming[no-role-prefix]
@@ -206,6 +206,7 @@ valheim_k8s_storage_class: longhorn
 # 100%. longhorn-nobackup allows expansion, so this line grows the live claim in place.
 valheim_k8s_server_claim: valheim-server
 valheim_k8s_server_size: 20Gi
+# nobackup: every byte here is re-downloadable from Steam, and B2 is the scarce resource.
 valheim_k8s_server_storage_class: longhorn-nobackup
 # The largest single transient an update writes to the claim: the fourth install copy in
 # bepinex.tmp, 2.2 G measured, declared as 3 GiB so the floor fires before the
@@ -254,3 +255,13 @@ valheim_k8s_cpu_limit: "6"
 valheim_k8s_mem_limit: 9216Mi
 valheim_k8s_cpu_request: "750m"
 valheim_k8s_mem_request: 3072Mi
+
+# The claims k8s/manifests renders and applies for this role, ahead of the workload: the
+# backed-up world claim and the nobackup SteamCMD install.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ valheim_k8s_claim }}"
+    storage_class: "{{ valheim_k8s_storage_class }}"
+    size: "{{ valheim_k8s_size }}"
+  - name: "{{ valheim_k8s_server_claim }}"
+    storage_class: "{{ valheim_k8s_server_storage_class }}"
+    size: "{{ valheim_k8s_server_size }}"

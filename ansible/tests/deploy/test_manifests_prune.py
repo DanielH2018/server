@@ -57,6 +57,9 @@ _ARMED_ROLES = frozenset(
         "qbittorrent",
         "terraria",
         "code-server",
+        "n8n",
+        "valheim",
+        "scrutiny",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
@@ -279,6 +282,17 @@ def test_a_string_kubectl_reads_as_a_number_or_bool_is_written_quoted(
     value: str,
 ) -> None:
     """kubectl's go-yaml v2 resolves these plain scalars to bools and numbers; PyYAML does not."""
+    assert _env_value_line(value) == f"  v: {value}"
+
+
+@pytest.mark.parametrize("value", ["0o444", "y", "1e3"])
+def test_a_plain_scalar_kubectl_reads_as_a_number_or_bool_stays_plain(
+    value: str,
+) -> None:
+    """scrutiny's `defaultMode: 0o444` is a string to PyYAML and 292 to go-yaml.
+
+    Quoted, the API server receives the string "0o444" and refuses the Deployment.
+    """
     assert _env_value_line(value) == f"  v: {value}"
 
 

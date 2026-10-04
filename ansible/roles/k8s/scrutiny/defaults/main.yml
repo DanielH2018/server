@@ -11,8 +11,8 @@ scrutiny_k8s_influxdb_image: influxdb:2.9@sha256:05d6fb735bc22449c401094d4284612
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Stateful / manual-upgrade: pins a rolling upstream branch tag on a stateful monitoring
 # service by policy — moving to a different tag/branch is deliberately a manual, supervised
-# redeploy, never unsupervised auto-merge. ALSO Recreate + a real config PVC seeded through
-# k8s/volume-claim (hardcoded ReadWriteOnce) — the migrating-state shape compounds the
+# redeploy, never unsupervised auto-merge. ALSO Recreate + a real config PVC from k8s_claims
+# below (hardcoded ReadWriteOnce) — the migrating-state shape compounds the
 # manual-upgrade policy, on top of the pinned influxdb engine holding the SMART trend history.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "stateful / manual-upgrade — rolling branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two independent reasons"  # noqa var-naming[no-role-prefix]
@@ -27,6 +27,15 @@ scrutiny_k8s_influxdb_storage_class: longhorn
 scrutiny_k8s_config_claim: scrutiny-web-config
 scrutiny_k8s_config_size: 1Gi
 scrutiny_k8s_config_storage_class: longhorn
+
+# The claims k8s/manifests renders and applies for this role, ahead of the workload.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ scrutiny_k8s_influxdb_claim }}"
+    storage_class: "{{ scrutiny_k8s_influxdb_storage_class }}"
+    size: "{{ scrutiny_k8s_influxdb_size }}"
+  - name: "{{ scrutiny_k8s_config_claim }}"
+    storage_class: "{{ scrutiny_k8s_config_storage_class }}"
+    size: "{{ scrutiny_k8s_config_size }}"
 
 # Collector cadence, pinned because monitor-bridge's SMART Data Freshness window (26 h)
 # must not depend on the image's default.
