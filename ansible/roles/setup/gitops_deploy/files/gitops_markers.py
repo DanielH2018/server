@@ -39,12 +39,6 @@ MARKERS: dict[str, str] = {
     # wrong remediation for a broad apply: the tree is already fast-forwarded and a playbook is
     # what broke, so reverting the PR undoes nothing. This names what to re-run instead.
     "hold_plane": "hold_plane",
-    # The last broad plane this host APPLIED, as `<origin_sha> <playbook> <tags>`. The only
-    # durable evidence that a tick applied a plane, as against fast-forwarding past it:
-    # `behind_since` empty says local == origin, which any session's `git merge --ff-only`
-    # also produces, and after that `next_action()` returns `noop` forever so the plane is
-    # stranded (issue #1537). Read by `land.sh` before it says `settled`.
-    "broad_applied": "broad_applied",
     # One line per setup role this host fast-forwarded past and cannot apply itself,
     # `"<origin_sha> <playbook-or-none> <role> <unix_ts>"`. See `parse_manual_plane`.
     "manual_plane": "manual_plane",
@@ -79,7 +73,11 @@ MARKERS: dict[str, str] = {
     "owed": "owed.jsonl",
     # One JSON line per origin SHA a tick crossed with a broad change (#3391): the planes it
     # applied and the setup roles it left to a hand. `land.sh` reads it instead of
-    # re-deriving. `gitops_ledger.parse_receipts` has the format.
+    # re-deriving. Its `applied` half is the only durable evidence that a tick applied a plane,
+    # as against fast-forwarding past it: `behind_since` empty says local == origin, which any
+    # session's `git merge --ff-only` also produces, and after that `next_action()` returns
+    # `noop` forever, so the plane is stranded (#1537). `gitops_ledger.parse_receipts` has the
+    # format.
     "receipts": "receipts.jsonl",
     # The unix time the last tick completed; monitor-bridge's GitOps Alive reads its age.
     "last_run": "last_run",

@@ -76,9 +76,9 @@ def _step_tick(ln: Landing) -> None:
     # path existed, and step 5 deploys from the primary checkout with no `--at`.
     #
     # Because for that half the TICK is the apply, and step 6 grades it from the deployer's own
-    # markers (`tick_state`, `broad_applied_covers`). Kicking a tick and reading those markers
-    # seconds later grades a tick that has not run: `broad_applied` still holds an older origin
-    # SHA, so `broad_applied_covers` is False and the landing prints `needs-manual-apply` with
+    # markers (`tick_state`, `tick_applied`). Kicking a tick and reading those markers seconds
+    # later grades a tick that has not run: no receipt covers the merge commit yet, so
+    # `tick_applied` is False and the landing prints `needs-manual-apply` with
     # a hand-run remedy the kicked tick performs a minute later -- or `deferred` (exit 75) when
     # a concurrent tick has left `behind_since` set. Neither is recoverable by re-reading: the
     # verdict has already been printed and the exit code returned.

@@ -128,39 +128,6 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         """Each failed apply's playbook (and tags), `; `-joined (`hold_plane_with`), or None."""
         return self.read("hold_plane")
 
-    @property
-    def broad_applied(self) -> str | None:
-        """`"<origin_sha> <playbook> <tags>"` for the last broad plane applied, or None."""
-        return self.read("broad_applied")
-
-    def record_broad_applied(self, origin: str, playbook: str, tags: list[str]) -> None:
-        """Record that this host applied `playbook`/`tags` at `origin`.
-
-        Written only after `deploy_io.deploy_broad` returned, so the marker means "applied",
-        never "attempted" — the failure path writes `hold_sha`/`hold_plane` instead.
-        """
-        self.write(
-            "broad_applied", f"{origin} {hold_plane_marker(playbook, tags)}".strip()
-        )
-
-    def restore_broad_applied(self, marker: str | None) -> None:
-        """Put the marker back to a value a caller snapshotted, or remove it.
-
-        Args:
-            marker: the whole marker as it stood before this tick, or None when there was
-                none at all.
-
-        The reverse of `record_broad_applied` for a tick whose ff-merge was undone. One plan's
-        apply is recorded inside the loop, and a LATER plan's busy lock resets the tree to
-        `local` — the marker then claims a SHA this tree does not carry was applied, and
-        `land.sh` reads it to tell a plane the tick applied from one it merely fast-forwarded
-        past (#2382). It RESTORES rather than clearing, because an earlier tick's marker is
-        still true; the single marker records the last plane applied, not a row per plan, so
-        the earlier value is the only way back (the problem `Recorded.tags_before` solves for
-        the `manual_plane` sidecar).
-        """
-        self.write("broad_applied", marker)
-
     # ── the per-SHA tick receipt (#3391) ──────────────────────────────────────────────────
 
     def record_receipt(
@@ -205,8 +172,7 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         """Remove `origin`'s receipt, for a tick whose ff-merge was undone.
 
         The next tick re-crosses the range and writes it again, so a receipt the reset leaves
-        behind would describe an apply at a SHA no tree here carries — #2382's failure for
-        `broad_applied`, one marker over.
+        behind would describe an apply at a SHA no tree here carries (#2382).
         """
         kept = [
             receipt_line(r)

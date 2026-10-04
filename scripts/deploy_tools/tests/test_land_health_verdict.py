@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from _land_fakes import MERGE_SHA, Fakes
+from _land_fakes import MERGE_SHA, Fakes, receipt
 from deploy_tools.land_lib import health_verdict
 from deploy_tools.land_lib.outcome import Outcome
 
 
 # The deployer's record of a broad apply that CONTAINS this PR. A self-applied landing needs
 # it before it may settle: `behind_since` empty proves only that local == origin.
-APPLIED = {"broad_applied": f"{MERGE_SHA} ansible/initial_setup.yml renovate_agent"}
+APPLIED = receipt({"ansible/initial_setup.yml": ["renovate_agent"]})
 
 
 def _deployed(landing, fakes=None):
@@ -159,12 +159,12 @@ def test_a_tick_still_behind_origin_is_not_told_it_will_never_return(landing, ca
 
 
 def test_an_apply_recorded_at_a_commit_without_this_pr_is_not_settled(landing):
-    """The marker exists but names an EARLIER apply — coverage, not presence, decides."""
+    """A receipt exists but for an EARLIER range — coverage, not presence, decides."""
     ln, _ = _deployed(
         landing,
         Fakes(
             self_applied=True,
-            state={"broad_applied": "0000000 ansible/deploy.yml "},
+            state=receipt({"ansible/deploy.yml": []}),
             is_ancestor_rc=1,
         ),
     )
@@ -177,8 +177,8 @@ def test_an_unrecorded_apply_read_mid_tick_is_deferred_not_owed_to_a_hand(
     landing, capsys
 ):
     """A tick that already ff-merged this PR answers CONVERGED, never BEHIND, so the
-    abandoned-watch arm above cannot catch it — and `broad_applied` is written only once the
-    apply returns."""
+    abandoned-watch arm above cannot catch it — and the receipt's `applied` is written only
+    once the apply returns."""
     ln, _ = _deployed(landing, Fakes(self_applied=True, state={}, merge_applied_rc=0))
     ln.tick_watch_abandoned = True
     with pytest.raises(Outcome) as exc:
@@ -188,7 +188,7 @@ def test_an_unrecorded_apply_read_mid_tick_is_deferred_not_owed_to_a_hand(
 
 
 def test_an_ordinary_service_pr_never_asks_about_a_broad_apply(landing):
-    """`broad_applied` speaks to a landing only when the tick applies part of THIS PR."""
+    """The receipt speaks to a landing only when the tick applies part of THIS PR."""
     ln, _ = _deployed(landing, Fakes(self_applied=False, state={}))
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)

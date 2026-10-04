@@ -14,6 +14,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 """
 
 import dataclasses
+import json
 
 import pytest
 
@@ -32,7 +33,7 @@ from _broad_k8s_range import (
     mixed,
     plane_applies_radarr,
 )
-from _deploy_fakes import fits_budget
+from _deploy_fakes import fits_budget, receipt_applied
 
 # ── the promoted half is deployed, after the plane under it ───────────────────────────────
 
@@ -256,43 +257,44 @@ def test_a_contended_bump_annotates_nothing_the_next_tick_will_annotate_again(
     assert not [entry for entry in tick.log if entry[0] == "annotation"]
 
 
-# What the plan loop records for `plane_applies_radarr`'s narrowed deploy plane, and what the
-# bump's contention arm below has to take back.
-PLANE_APPLIED = f"{ORIGIN} ansible/deploy.yml radarr"
-
-
-def test_a_contended_bump_takes_back_the_planes_broad_applied(
+def test_a_contended_bump_takes_back_the_planes_receipt(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The bump's own contention arm restores the marker too.
+    """The bump's own contention arm drops the receipt too.
 
-    The plane applied and recorded `broad_applied`, then the bump's lock wait reset the tree to
-    `local` — and `land.sh` reads that marker to tell a plane the tick APPLIED from one it
-    merely fast-forwarded past, which after the reset this tree carries neither of.
+    The plane applied and recorded it in this origin's receipt, then the bump's lock wait reset
+    the tree to `local` — and `land.sh` reads the receipt to tell a plane the tick APPLIED from
+    one it merely fast-forwarded past, which after the reset this tree carries neither of.
     """
     config = plane_applies_radarr(settings, tick)
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy("lock sonarr busy")]
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == LOCAL, "the ff-merge was undone"
-    assert marker(state_dir, "broad_applied") != PLANE_APPLIED
-    assert marker(state_dir, "broad_applied") is None
+    assert receipt_applied(gitops_deploy.STATE) is None
 
 
-def test_a_contended_bump_leaves_an_earlier_ticks_broad_applied_alone(
+def test_a_contended_bump_leaves_an_earlier_ticks_receipt_alone(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The rejecting half: the reverse RESTORES the earlier value, it does not clear.
+    """The rejecting half: the reverse drops THIS origin's receipt and no other.
 
-    An earlier tick's record is true — that plane was applied and the tree still carries it —
+    An earlier tick's receipt is true — that plane was applied and the tree still carries it —
     so a reverse that blanked the marker would send an operator at a run they already made.
     """
-    earlier = f"{'9' * 40} ansible/initial_setup.yml gitops_deploy"
-    (state_dir / "broad_applied").write_text(earlier)
+    earlier = json.dumps(
+        {
+            "origin": "9" * 40,
+            "base": "8" * 40,
+            "applied": {"ansible/initial_setup.yml": ["gitops_deploy"]},
+            "manual": {},
+        },
+        sort_keys=True,
+    )
+    (state_dir / "receipts.jsonl").write_text(earlier)
     config = plane_applies_radarr(settings, tick)
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy("lock sonarr busy")]
     assert gitops_deploy.main(tick.tools, config) == 0
-    assert marker(state_dir, "broad_applied") != PLANE_APPLIED
-    assert marker(state_dir, "broad_applied") == earlier
+    assert marker(state_dir, "receipts.jsonl") == earlier
 
 
 def test_a_busy_service_lock_undoes_the_range_and_the_manual_plane_line(

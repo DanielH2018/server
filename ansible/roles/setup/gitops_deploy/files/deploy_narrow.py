@@ -22,9 +22,9 @@ from typing import Callable, NamedTuple
 from deploy_config import log
 from deploy_git import held_tag
 
-# What `record_broad_applied` records in the tag slot when a deploy-plane range moves no
+# What the tick's receipt records as a plane's tags when a deploy-plane range moves no
 # rendered output at all — a comment-only inventory edit, a variable nothing reads, a macro
-# nothing imports. The fast-forward IS the whole apply there, so the marker has to say that
+# nothing imports. The fast-forward IS the whole apply there, so the receipt has to say that
 # an apply happened without naming tags that were never passed to anything.
 NARROWED_TO_NOTHING = "narrowed-to-nothing"
 
@@ -515,7 +515,7 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
 # k8s_autodeploy: false` rule names `group_vars/all.yml` beside a denied role's own defaults
 # (#1936), so no pin a denied role reads through a shared key merges unattended.
 # `denylisted_in` exists so the journal line above can name which of a narrowed apply's tags
-# were denied ones; the `broad_applied` marker carries the same tag list durably, and the
+# were denied ones; the tick's receipt carries the same tag list durably, and the
 # denied subset of it is that list intersected with the denylist.
 def denylisted_in(tags: list[str], denylist: frozenset[str] | set[str]) -> list[str]:
     """The tags in a narrowed list that `K8S_AUTODEPLOY_DENYLIST` names, in the list's order.

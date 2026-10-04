@@ -9,7 +9,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_plane_keeps_the_remainin
 
 import pytest
 
-from _land_fakes import MERGE_SHA, Fakes
+from _land_fakes import MERGE_SHA, Fakes, receipt
 from deploy_tools.land_lib import deploy, health_verdict
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -21,7 +21,7 @@ _REMAINING = (
 )
 # The deployer's record of a broad apply containing this PR, so the tick's own half settles
 # and only the two remediations are left open.
-_APPLIED = {"broad_applied": f"{MERGE_SHA} ansible/initial_setup.yml initial_setup"}
+_APPLIED = receipt({"ansible/initial_setup.yml": ["initial_setup"]})
 
 
 def _landing_at(landing, fakes):

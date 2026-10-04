@@ -168,10 +168,10 @@ unit runs under `uv run --no-project`.
 
 Three outcomes, and the journal names which one it took on every tick:
 
-- **tags** -- `ansible/deploy.yml --tags <tags>`, recorded in `broad_applied` with those tags.
+- **tags** -- `ansible/deploy.yml --tags <tags>`, recorded in the tick's receipt with those tags.
 - **no tags** -- the range moves no rendered output (a comment-only inventory edit, a
   variable nothing reads, a macro nothing imports). The fast-forward is the whole apply, and
-  `broad_applied` records `narrowed-to-nothing` in the tag slot.
+  the receipt records `narrowed-to-nothing` as the plane's tags.
 - **a refusal** -- the full `deploy.yml`, exactly as before. Anything the derivation cannot
   map lands here: a variable the play itself reads, `hosts.ini`, a tag list covering most
   of the fleet, or a crash in the derivation. A missed consumer would be a service left
@@ -254,8 +254,8 @@ so its first-seen stamp is the age everything else reads. Four consequences:
   long it has waited and the clear command — from the moment the tick records it. Not
   age-gated, unlike the monitor: the monitor pages, where the banner is a passive notice, and
   the session reading it is usually not the session that landed the change;
-- `broad_applied` is not written for that role — a role in the same range that DID apply
-  still records its own, so a mixed push still proves the half it applied.
+- the receipt records that role under `manual`, not `applied` — a plane in the same range
+  that DID apply still records its own, so a mixed push still proves the half it applied.
 
 Applying the role by hand is half the job. The line stays until something clears it, and a
 role left in the marker pages six hours later over work that is already live:
@@ -713,7 +713,7 @@ stay).
     derivation parses YAML and this unit runs under `uv run --no-project` — before the
     ff-merge, so it reads the two refs the tick pinned. Tags come back and the apply is
     `deploy.yml --tags <tags>`; an empty list means the range moves no rendered output, so
-    nothing is applied and `broad_applied` records `narrowed-to-nothing` in the tag slot;
+    nothing is applied and the receipt records `narrowed-to-nothing` as the plane's tags;
     any refusal (exit 3, a timeout, a crash) runs the full `deploy.yml` this arm always ran.
     The journal says which branch it took on every tick. The rules and what each one refuses
     are in `scripts/deploy_tools/narrow_broad.py`; the `# DECIDED:` at the fallback in
@@ -781,8 +781,8 @@ stay).
     `/var/lib/gitops-deploy/manual_plane` — `"<origin_sha> <playbook-or-none> <role>
     <unix_ts>"`, deduplicated by role so a role already listed keeps its first-seen stamp —
     logs `manual_plane pending: <roles> — apply by hand: <commands>` on EVERY later tick, and
-    pages once per SHA. `broad_applied` is NOT written for the unapplied role; a role in the
-    same range that DID apply still records its own. Three things clear a line: applying the
+    pages once per SHA. The receipt records the unapplied role under `manual`, not `applied`;
+    a plane in the same range that DID apply still records its own. Three things clear a line: applying the
     role's real playbook and tag through the tick (`DeployerState.clear_manual_plane_applied`,
     which no role reaches today because the tick runs neither playbook), an operator running
     `uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>` (with
@@ -1737,15 +1737,15 @@ reset undoes the ff-merge, which is what keeps `local..origin` carrying the rang
 tick. `tests/test_gitops_deploy_lock_contention.py` drives all three handlers.
 
 **Every marker the tick wrote about that merge goes back with it**, through
-`deploy_defer.unrecord`. Three now: the `manual_plane` line this tick appended, the
-`manual_plane_tags` row it widened (#2320), and the `broad_applied` an earlier plan in the same
-loop wrote (#2382) — that one claimed a SHA the reset took away, and `land.sh` reads it to tell
-a plane the tick applied from one it merely fast-forwarded past. The reverse is a restore, not
-a delete: an earlier tick's `broad_applied` is still true. The promoted bumps a narrowed deploy
+`deploy_defer.unrecord`. Three: the `manual_plane` line this tick appended, the
+`manual_plane_tags` row it widened (#2320), and this origin's receipt, which an earlier plan in
+the same loop wrote (#2382). That receipt claimed a SHA the reset took away, and `land.sh` reads
+it to tell a plane the tick applied from one it merely fast-forwarded past. Only this origin's
+receipt goes: an earlier tick's receipt is still true. The promoted bumps a narrowed deploy
 plane applied are not annotated on this path either, for the same reason — the next tick
-re-applies the plane, and Grafana drew two annotations for one deploy (#2453). `restore_broad_applied`
-is pinned on this path from the bump's own contention arm as well as the plan loop's
-(`test_a_contended_bump_takes_back_the_planes_broad_applied`). There is no `secrets` alert slot
+re-applies the plane, and Grafana drew two annotations for one deploy (#2453). Dropping the
+receipt is pinned on this path from the bump's own contention arm as well as the plan loop's
+(`test_a_contended_bump_takes_back_the_planes_receipt`). There is no `secrets` alert slot
 to take back: the secrets page is sent from the non-contention exits only, so a contended tick
 never wrote one (#2459).
 

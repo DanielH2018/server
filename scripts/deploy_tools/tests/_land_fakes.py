@@ -11,6 +11,7 @@ that wants the REAL derivation passes `Classifier()` and keeps the fake boundari
 
 import atexit
 import contextlib
+import json
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -25,6 +26,24 @@ from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
 from deploy_tools.land_tags import Derivation, DeriveSource
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
+# The base of the range a `receipt()` covers. `Fakes.is_ancestor_of` answers non-zero for it
+# by default, so the merge commit reads as inside `base..origin` unless a test says otherwise.
+RECEIPT_BASE = "b" * 40
+
+
+def receipt(applied: dict[str, list[str]], manual=None, origin: str = "f" * 40) -> dict:
+    """A `state` holding the receipt of the tick that crossed the merge commit.
+
+    Args:
+        applied: playbook -> the tags the tick applied it with, `[]` for the whole play.
+        manual: setup role tag -> its narrowest tags, for each role left to a hand.
+        origin: the SHA the tick crossed to; `Fakes.is_ancestor_rc` decides whether it
+            contains the merge commit.
+    """
+    line = {"origin": origin, "base": RECEIPT_BASE, "applied": applied}
+    return {"receipts": json.dumps({**line, "manual": manual or {}})}
+
+
 # A real directory, because the pipeline refuses a primary checkout that is not one. Made
 # once per session rather than per test, so `cwd=PRIMARY` assertions stay comparable.
 #
@@ -107,7 +126,7 @@ class Fakes:
     is_ancestor_rc: int = 0
     # Per-ref overrides of `is_ancestor_rc`, keyed by the ref the query asks about (the last
     # argument), for a test that needs one SHA's ancestry to differ from another's.
-    is_ancestor_of: dict[str, int] = field(default_factory=dict)
+    is_ancestor_of: dict[str, int] = field(default_factory=lambda: {RECEIPT_BASE: 1})
     # The same query against HEAD — `Landing.merge_applied`, which asks whether the primary
     # checkout already carries this PR. Non-zero by default so `behind_since` alone still
     # answers BEHIND unless a test says the tick crossed the merge commit.

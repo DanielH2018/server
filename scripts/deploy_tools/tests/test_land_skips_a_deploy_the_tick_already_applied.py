@@ -4,7 +4,7 @@ When the tick's own apply already covered the merge commit, step 5's second depl
 the tree lock and could fail its snapshot, grading live work `deploy-failed`. The step exists for
 what the tick deferred, and that tick deferred nothing.
 
-The skip is per HOST: the tick's broad apply names no `-e target=`, so its marker speaks only to
+The skip is per HOST: the tick's broad apply names no `-e target=`, so its receipt speaks only to
 the host it was written on, and a Pi-declared tag still gets its deploy. Step 6 is untouched --
 the gate still runs over every tag.
 
@@ -13,30 +13,30 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_skips_a_deploy_the_tick_
 
 import pytest
 
-from _land_fakes import MERGE_SHA, PRIMARY, Fakes
+from _land_fakes import MERGE_SHA, PRIMARY, Fakes, receipt
 from deploy_tools.land_lib import deploy
 
 from lib.repo_paths import REPO as _REPO
 
 _DEPLOY_NARROW = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_narrow.py"
 
-APPLIED_AT = "f" * 40
+WHOLE_PLAY = {"ansible/deploy.yml": []}
 # What `deploy_tags.py hosts` answers; the fake returns it whatever the tags asked about.
 LOCAL_ONLY = "daniel-box\tsonarr\n"
 WITH_THE_PI = "daniel-box\tsonarr\ndaniel-pi\talloy\n"
 
 
 def _fakes(
-    marker: str,
+    applied: dict[str, list[str]],
     hosts: str = LOCAL_ONLY,
     is_ancestor_rc: int = 0,
     merge_applied_rc: int = 0,
     self_applied: bool = False,
 ) -> Fakes:
-    """A deployer that recorded `marker` at a commit containing the PR, carried by the primary."""
+    """A tick whose receipt covers the PR and records `applied`, carried by the primary."""
     return Fakes(
         hosts=hosts,
-        state={"broad_applied": marker},
+        state=receipt(applied),
         is_ancestor_rc=is_ancestor_rc,
         merge_applied_rc=merge_applied_rc,
         self_applied=self_applied,
@@ -55,21 +55,20 @@ def _run(landing, fakes: Fakes, tags: list[str]):
 
 
 @pytest.mark.parametrize(
-    "tag_slot", ["", "sonarr,radarr"], ids=["whole-play", "narrowed-and-covering"]
+    "tags", [[], ["radarr", "sonarr"]], ids=["whole-play", "narrowed-and-covering"]
 )
-def test_a_local_tag_the_tick_applied_is_not_deployed_again(landing, tag_slot, capsys):
-    marker = f"{APPLIED_AT} ansible/deploy.yml {tag_slot}".strip()
-    rc, calls = _run(landing, _fakes(marker), ["sonarr"])
+def test_a_local_tag_the_tick_applied_is_not_deployed_again(landing, tags, capsys):
+    rc, calls = _run(landing, _fakes({"ansible/deploy.yml": tags}), ["sonarr"])
     assert rc == 0
     assert _deploys(calls) == []
     assert "the tick already applied these on daniel-box" in capsys.readouterr().out
 
 
 def test_a_pi_tag_still_deploys_while_the_local_one_is_skipped(landing):
-    """The rejecting half by host: the marker says nothing about what daniel-pi runs."""
+    """The rejecting half by host: the receipt says nothing about what daniel-pi runs."""
     rc, calls = _run(
         landing,
-        _fakes(f"{APPLIED_AT} ansible/deploy.yml", hosts=WITH_THE_PI),
+        _fakes(WHOLE_PLAY, hosts=WITH_THE_PI),
         ["sonarr", "alloy"],
     )
     assert rc == 0
@@ -77,43 +76,43 @@ def test_a_pi_tag_still_deploys_while_the_local_one_is_skipped(landing):
 
 
 @pytest.mark.parametrize(
-    "marker, overrides",
+    "applied, overrides",
     [
-        (f"{APPLIED_AT} ansible/deploy.yml radarr", {}),
-        (f"{APPLIED_AT} ansible/deploy.yml narrowed-to-nothing", {}),
-        (f"{APPLIED_AT} ansible/initial_setup.yml", {}),
-        (f"{APPLIED_AT} ansible/deploy.yml", {"is_ancestor_rc": 1}),
-        (f"{APPLIED_AT} ansible/deploy.yml", {"merge_applied_rc": 1}),
+        ({"ansible/deploy.yml": ["radarr"]}, {}),
+        ({"ansible/deploy.yml": ["narrowed-to-nothing"]}, {}),
+        ({"ansible/initial_setup.yml": []}, {}),
+        ({}, {}),
+        (WHOLE_PLAY, {"is_ancestor_rc": 1}),
+        (WHOLE_PLAY, {"merge_applied_rc": 1}),
     ],
     ids=[
         "narrowed-past-the-tag",
         "narrowed-to-nothing",
         "setup-plane",
+        "nothing-applied",
         "an-earlier-commit",
         "primary-behind-the-merge",
     ],
 )
-def test_a_marker_that_does_not_cover_the_tag_here_deploys_it(
-    landing, marker, overrides
+def test_a_receipt_that_does_not_cover_the_tag_here_deploys_it(
+    landing, applied, overrides
 ):
-    """The rejecting half by marker: every part has to say the tag was applied, or it deploys."""
-    rc, calls = _run(landing, _fakes(marker, **overrides), ["sonarr"])
+    """The rejecting half by receipt: every part has to say the tag was applied, or it deploys."""
+    rc, calls = _run(landing, _fakes(applied, **overrides), ["sonarr"])
     assert rc == 0
     assert _deploys(calls) == [(PRIMARY, ["sonarr"], None)]
 
 
 def test_a_tag_under_no_host_is_skipped_on_the_same_terms(landing):
     """The no-host fallthrough is a local deploy, so the local skip applies to it too."""
-    rc, calls = _run(
-        landing, _fakes(f"{APPLIED_AT} ansible/deploy.yml", hosts=""), ["k8s-manifests"]
-    )
+    rc, calls = _run(landing, _fakes(WHOLE_PLAY, hosts=""), ["k8s-manifests"])
     assert rc == 0
     assert _deploys(calls) == []
 
 
 def test_the_skip_holds_across_the_whole_deploy_phase(landing):
     """A deploy-plane PR the tick applied leaves step 5 with nothing to run, and step 6 to gate."""
-    ln, calls = landing(_fakes(f"{APPLIED_AT} ansible/deploy.yml", self_applied=True))
+    ln, calls = landing(_fakes(WHOLE_PLAY, self_applied=True))
     ln.merge_sha = MERGE_SHA
     ln.resolved_tags = ["sonarr"]
     ln.self_applied = True

@@ -132,13 +132,13 @@ def health(ln: Landing) -> NoReturn:
         # CONVERGED says the tick is not deferring this PR, which any session's `git merge
         # --ff-only` also produces — and once local == origin the tick returns `noop` forever,
         # so a plane it never applied is stranded while this reads `settled`.
-        if not ln.broad_applied_covers(sha):
+        if not ln.tick_applied(sha):
             print(
                 "  services deployed, but the tick recorded no broad apply covering this PR "
-                f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
+                f"({ln.receipt_summary(sha)})"
             )
             # The same hole `deploy.no_tag_outcome` carries, one arm over and for the same
-            # reason: `broad_applied` is written only after the apply returns, and a tick that
+            # reason: the receipt's `applied` is written only after the apply returns, and a tick that
             # already ff-merged this PR answers CONVERGED rather than BEHIND, so the
             # abandoned-watch arm above never sees it.
             if ln.tick_watch_abandoned:

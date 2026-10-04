@@ -270,10 +270,11 @@ re-run, because no later tick crosses a hold.
 `git merge --ff-only` produces too — and once it holds, `next_action()` returns `noop` for every
 later tick, so a plane the tick never applied is stranded permanently. PR #1529 read `settled`
 that way on 2026-09-10 while `/opt/renovate-agent/renovate_agent.py` was four days stale (issue
-#1537). A self-applied landing now also requires the deployer's `broad_applied` marker — written
-by `deploy_handlers.handle_broad` only after the apply returned, holding the origin SHA it ran
-at — to contain the PR's own merge commit. When it does not, the verdict is
-`needs-manual-apply`.
+#1537). A self-applied landing also requires the receipt of the tick that crossed the PR's merge
+commit to record an applied plane. `deploy_handlers.handle_broad` writes that half of the
+receipt only after the apply returned. With no such receipt, the verdict is
+`needs-manual-apply`. That includes a range another session's `git merge --ff-only` crossed,
+which no tick ever applied (#3391).
 
 **Read every remediation line, not the first one.** One PR can reach two of these at once — a
 plane a hand applies, and a self-applied setup role the tick installed on its own host alone —

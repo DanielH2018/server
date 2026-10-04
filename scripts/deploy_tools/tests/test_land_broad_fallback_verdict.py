@@ -11,7 +11,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_broad_fallback_verdict.p
 
 import pytest
 
-from _land_fakes import MERGE_SHA, Fakes
+from _land_fakes import MERGE_SHA, Fakes, receipt
 from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
@@ -35,12 +35,12 @@ def _broad_fallback(landing, fakes, **opts):
 
 def test_a_broad_fallback_grades_from_the_deployers_markers(landing):
     """A landing must end with a `VERDICT:` line while the tick is applying its own merge
-    commit; `broad_applied` reads that commit minutes later."""
+    commit; its receipt records that commit minutes later."""
     ln, _calls = _broad_fallback(
         landing,
         Fakes(
             changed_rc=DEPLOY_BROAD,
-            state={"broad_applied": f"{MERGE_SHA} ansible/deploy.yml"},
+            state=receipt({"ansible/deploy.yml": []}),
             merge_applied_rc=0,
         ),
     )
@@ -51,8 +51,8 @@ def test_a_broad_fallback_grades_from_the_deployers_markers(landing):
 
 
 def test_a_broad_fallback_over_an_abandoned_tick_watch_is_deferred(landing):
-    """`broad_applied` is written only after the apply RETURNS, and a tick that already
-    ff-merged this PR answers CONVERGED rather than BEHIND — so the marker read mid-apply is
+    """The receipt's `applied` is written only after the apply RETURNS, and a tick that already
+    ff-merged this PR answers CONVERGED rather than BEHIND — so the receipt read mid-apply is
     not evidence the tick skipped it."""
     ln, _calls = _broad_fallback(
         landing, Fakes(changed_rc=DEPLOY_BROAD, state={}, merge_applied_rc=0)

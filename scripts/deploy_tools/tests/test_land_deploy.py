@@ -5,7 +5,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy.py
 
 import pytest
 
-from _land_fakes import MERGE_SHA, PRIMARY, Fakes
+from _land_fakes import MERGE_SHA, PRIMARY, Fakes, receipt
 from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
@@ -13,7 +13,7 @@ from deploy_tools.land_lib.outcome import Outcome
 
 # The deployer's record of a broad apply CONTAINING this PR. Converging with origin is not
 # that: any session's `git merge --ff-only` produces it too.
-_APPLIED = {"broad_applied": f"{MERGE_SHA} ansible/initial_setup.yml renovate_agent"}
+_APPLIED = receipt({"ansible/initial_setup.yml": ["renovate_agent"]})
 
 
 def _ready(landing, fakes=None, **opts):

@@ -19,6 +19,7 @@ import deploy_handlers
 import deploy_phases
 import deploy_tick_types
 from deploy_changes import ChangeSet
+from _deploy_fakes import receipt_applied
 
 LOCAL = "1" * 40
 ORIGIN = "2" * 40
@@ -353,9 +354,9 @@ def test_a_successful_broad_apply_records_what_it_applied(
     deploy_handlers.handle_broad(
         tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
     )
-    assert gitops_deploy.STATE.broad_applied == (
-        f"{ORIGIN} ansible/initial_setup.yml gitops_deploy"
-    )
+    assert receipt_applied(gitops_deploy.STATE) == {
+        "ansible/initial_setup.yml": ("gitops_deploy",)
+    }
 
 
 def test_a_failed_broad_apply_records_no_apply(
@@ -372,7 +373,7 @@ def test_a_failed_broad_apply_records_no_apply(
     deploy_handlers.handle_broad(
         tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
     )
-    assert gitops_deploy.STATE.broad_applied is None
+    assert receipt_applied(gitops_deploy.STATE) is None
 
 
 def test_a_failed_broad_apply_holds_the_plane_and_does_not_reset(
