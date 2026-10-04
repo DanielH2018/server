@@ -67,14 +67,6 @@ SERVICES = [
     ("homepage", "My Awesome Homepage", "/"),
     ("sonarr", "Sonarr", "/"),
     ("freshrss", "Login · FreshRSS", "/i/"),
-    # Its own Django login behind Authelia's `*.local` one_factor rule, so `/` redirects to
-    # `/accounts/login/`. Title and path both observed against the live route, not guessed:
-    # `Home Server healthchecks` is the role's own `SITE_NAME`
-    # (`roles/k8s/healthchecks/templates/deployment.yaml.j2:45`), so a page rendered without
-    # that setting carries the image's default and fails here — do not relax to a substring.
-    # It earns an entry because it is the dead-man's switch the fleet's crons ping, so its
-    # silent breakage is least likely to be caught by anything else.
-    ("healthchecks", "Log In - Home Server healthchecks", "/accounts/login/"),
     # Routed by the `observability` role, whose containers_list entry names Grafana alone.
     # `Grafana` at `/login` is Grafana's OWN login page: it sits behind the one_factor
     # Authelia rule, so reaching it proves ingress → Authelia → backend. It does NOT prove a

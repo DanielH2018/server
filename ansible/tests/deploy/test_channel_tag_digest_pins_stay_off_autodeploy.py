@@ -39,10 +39,10 @@ _PIN = re.compile(
     re.MULTILINE,
 )
 
-# The roles that are the expensive subset: a torrent client mid-transfer, a transcoder
-# holding a queue, and the service every OTHER check reports through. Named rather than derived
+# The roles that are the expensive subset: a torrent client mid-transfer and a transcoder
+# holding a queue. Named rather than derived
 # — "expensive" is a judgement about what a regression costs, which no file states.
-_EXPENSIVE = frozenset({"qbittorrent", "tdarr", "healthchecks"})
+_EXPENSIVE = frozenset({"qbittorrent", "tdarr"})
 
 # The floor the census must clear. Below it the regex has stopped matching and every assertion
 # built on it passes over an empty set (CLAUDE.md: a check that finds its own subject by
@@ -79,7 +79,7 @@ def test_a_version_pin_is_not_read_as_a_channel_pin():
 def test_an_expensive_channel_pin_is_denied_auto_deploy(role):
     """The RED half: promote one of these while its pin stays unreadable and this fails.
 
-    A digest bump on an auto-deployable role merges and deploys itself, so for these three the
+    A digest bump on an auto-deployable role merges and deploys itself, so for these the
     first sign of a downgrade would be the service behaving like an older release. Either keep
     the role denylisted, or move its pin to a version tag a diff can be read against — the
     guard accepts the second remedy because the pin then leaves the census.

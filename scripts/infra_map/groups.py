@@ -41,7 +41,6 @@ SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "scrutiny",
             "monitor-bridge",
             "autofix-bridge",
-            "healthchecks",
             "speedtest",
         ),
     ),

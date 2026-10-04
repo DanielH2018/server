@@ -343,9 +343,9 @@ def test_a_404_accepting_monitor_whose_keyword_is_not_inverted_is_flagged():
 def test_no_live_monitor_accepts_404_without_checking_the_body():
     entities = _entities()
     # Non-vacuity by name, not by count: this rule inspects only the monitors that accept 404,
-    # and a render that stopped emitting them would leave an all() over nothing passing. These
-    # two are the census members the rule exists for.
-    named = {"healthchecks-k8s.json", "homelab-mcp-k8s.json"}
+    # and a render that stopped emitting them would leave an all() over nothing passing. This
+    # is the census member the rule exists for.
+    named = {"homelab-mcp-k8s.json"}
     assert named.issubset(entities), sorted(entities)
     offenders = [n for n, e in entities.items() if _accepts_404_without_a_body_check(e)]
     assert not offenders, (

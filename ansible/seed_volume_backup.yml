@@ -22,7 +22,7 @@
 #
 # Usage (one volume at a time, deliberately — to avoid exceeding the B2 transaction cap):
 #   uv run ansible-playbook ansible/seed_volume_backup.yml \
-#     -i ansible/inventory/hosts.ini -e seed_claim=healthchecks-config
+#     -i ansible/inventory/hosts.ini -e seed_claim=navidrome-data
 #
 # It refuses a volume that already has a backup, one in no backup tier, and one routed to a
 # disarmed target. None of those is a fault worth spending a transaction on.

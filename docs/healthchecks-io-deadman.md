@@ -177,7 +177,7 @@ For `pi-peer-backup` the URL is a key in the existing k8s Secret, not a file on 
 
 `initial_setup` writes the same file on every host, with the same content, mode and owner as the k3s role's task, because its two pinging crons run on hosts the k3s role does not write it on: the reboot on all three, the Docker prune on the Pi (#2806). The two writers agree, so a second apply on daniel-box reports no change. The reboot cron runs as root. The prune cron runs as `{{ sys_user }}`, which is the file's group. Each cron sources the file inside a `[ -r ] &&` guard, because a `.` of a missing file exits `/bin/sh` and would skip the reboot that follows.
 
-Until the self-hosted Healthchecks retires, both crons ping it too, on their old UUIDs. So neither the old checks nor the new ones go silent during the move. The retirement removes the old ping together with the `healthchecks` role.
+Both crons also pinged the self-hosted Healthchecks on their old UUIDs until it retired (#2806), so neither the old checks nor the new ones went silent during the move.
 
 ## Activating it
 

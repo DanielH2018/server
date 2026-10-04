@@ -2,7 +2,7 @@
 | Stance | Roles |
 |---|---|
 | Eligible | 26 |
-| Denied | 38 |
+| Denied | 37 |
 | Not declaring | 1 |
 
-Denylisted (`k8s_autodeploy: false`): `arr-notification`, `authelia`, `autofix-bridge`, `cloudflare-ddns`, `code-server`, `cronjob-gate`, `crowdsec`, `deploy-ui`, `dri-device-plugin`, `game-stats`, `healthchecks`, `image-builder`, `janitorr`, `karakeep`, `livesync`, `loki-homelab`, `longhorn-api`, `longhorn-ui`, `monitor-bridge`, `mosquitto`, `n8n`, `navidrome`, `nut`, `observability`, `pihole`, `qbittorrent`, `registry`, `scrutiny`, `tdarr`, `terraria`, `traefik`, `uptime-kuma`, `valheim`, `volume-claim`, `volume-revert`, `volume-snapshot`, `wg-easy`, `zigbee2mqtt`.
+Denylisted (`k8s_autodeploy: false`): `arr-notification`, `authelia`, `autofix-bridge`, `cloudflare-ddns`, `code-server`, `cronjob-gate`, `crowdsec`, `deploy-ui`, `dri-device-plugin`, `game-stats`, `image-builder`, `janitorr`, `karakeep`, `livesync`, `loki-homelab`, `longhorn-api`, `longhorn-ui`, `monitor-bridge`, `mosquitto`, `n8n`, `navidrome`, `nut`, `observability`, `pihole`, `qbittorrent`, `registry`, `scrutiny`, `tdarr`, `terraria`, `traefik`, `uptime-kuma`, `valheim`, `volume-claim`, `volume-revert`, `volume-snapshot`, `wg-easy`, `zigbee2mqtt`.

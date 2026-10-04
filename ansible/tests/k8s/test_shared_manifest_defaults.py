@@ -48,7 +48,6 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
         "code-server",
         "docs",
         "headlamp",
-        "healthchecks",
         "home-assistant",
         "homelab-mcp",
         "homepage",

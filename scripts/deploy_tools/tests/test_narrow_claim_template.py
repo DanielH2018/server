@@ -112,7 +112,6 @@ def test_the_real_claim_template_narrows_to_exactly_its_declarers():
     declarers = _declaring_roles()
     assert {
         "freshrss",
-        "healthchecks",
         "livesync",
         "speedtest",
         "zigbee2mqtt",
