@@ -187,11 +187,13 @@ def test_a_plane_hold_names_the_playbook_instead(cfg):
     assert "revert the offending PR" not in msg
 
 
-def test_a_hold_on_several_planes_counts_each_entry_the_rm_waits_for(cfg):
+def test_a_hold_on_several_planes_counts_each_entry_the_clear_waits_for(cfg):
     """`hold_plane` holds one `; `-joined entry per failed apply, and each clears on its own.
 
-    The SHA is the newest failure's, not each entry's. An rm after re-running only the newest
-    plane would erase an earlier one still unapplied, so the page counts what is owed.
+    The SHA is the newest failure's, not each entry's. A Clear after re-running only the
+    newest plane would erase an earlier one still unapplied, so the page counts what is owed.
+    It names the deploy UI's Clear, not an rm: the planes are `owed` ledger lines (#3392),
+    and an rm of `hold_sha` would leave them to re-hold the next failure.
     """
     ok, msg = checks.gitops.gitops_status(
         cfg,
@@ -202,6 +204,8 @@ def test_a_hold_on_several_planes_counts_each_entry_the_rm_waits_for(cfg):
     assert "ansible/deploy.yml radarr" in msg
     assert "ansible/initial_setup.yml gitops_deploy" in msg
     assert "2 planes unapplied" in msg
+    assert "Clear the hold in the deploy UI" in msg
+    assert " rm " not in msg
 
 
 def test_a_plane_marker_without_a_hold_does_not_page(cfg):

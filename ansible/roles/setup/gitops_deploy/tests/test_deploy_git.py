@@ -20,7 +20,6 @@ from deploy_git import (
     dirty_summary,
     hold_plane_entries,
     hold_plane_marker,
-    hold_plane_with,
     held_tag,
     is_diverged,
     next_action,
@@ -380,22 +379,7 @@ def test_a_role_tag_holds_bare_so_a_hold_from_before_the_qualifier_reads_the_sam
     )
 
 
-# ── a hold_plane that more than one failed apply wrote ──────────────────────────────────────
-def test_a_second_failure_is_appended_beside_the_first():
-    held = hold_plane_with(
-        "ansible/deploy.yml radarr", "ansible/deploy.yml", ["sonarr"]
-    )
-    assert hold_plane_entries(held) == [
-        "ansible/deploy.yml radarr",
-        "ansible/deploy.yml sonarr",
-    ]
-
-
-def test_a_failure_already_held_is_not_added_twice():
-    held = "ansible/initial_setup.yml gitops_deploy"
-    assert hold_plane_with(held, "ansible/initial_setup.yml", ["gitops_deploy"]) == held
-
-
+# ── a legacy hold_plane marker that more than one failed apply wrote ──────────────────────────
 def test_a_trailing_separator_parses_as_no_extra_entry():
     assert hold_plane_entries("ansible/deploy.yml; ") == ["ansible/deploy.yml"]
 
@@ -403,7 +387,6 @@ def test_a_trailing_separator_parses_as_no_extra_entry():
 def test_an_empty_or_missing_marker_holds_no_entry():
     assert hold_plane_entries("") == []
     assert hold_plane_entries(None) == []
-    assert hold_plane_with(None, "ansible/deploy.yml", []) == "ansible/deploy.yml"
 
 
 def test_a_tagged_run_does_not_clear_an_untagged_hold():

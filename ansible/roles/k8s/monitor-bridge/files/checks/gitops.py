@@ -21,7 +21,6 @@ from bridge.config import Config
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     MARKERS,
-    STATE_DIR,
     NO_PLAYBOOK,
     k8s_deferred_clear_cmd,
     k8s_deferred_deploy_cmd,
@@ -153,24 +152,22 @@ def gitops_status(
         # partway, so reverting the PR undoes nothing and the operator has to fix forward
         # and re-run. hold_sha still decides whether we page — hold_plane only says which
         # sentence to print, so a stale marker left by a cleared hold cannot page alone.
-        # The marker holds one `; `-joined entry per failed apply (the deployer's
-        # `hold_plane_with`), and hold_sha is the NEWEST failure's SHA, not each entry's.
-        # An rm after re-running only one entry would erase another still unapplied.
-        # `held_planes` unions that marker with the ledger's `hold_plane` class, which the
-        # deployer records once every reader reads it (#3392).
+        # There is one plane per failed apply, and hold_sha is the NEWEST failure's SHA, not
+        # each plane's. A Clear after re-running only one would erase another still
+        # unapplied. `held_planes` unions the legacy `hold_plane` marker with the ledger's
+        # `hold_plane` class, where the deployer records them (#3392). The Clear is named
+        # rather than an rm because an rm of hold_sha leaves the ledger's planes behind.
         planes = held_planes(hold_plane, owed)
         if planes:
             return False, (
                 "broad apply held at %s (the newest failure) — %d plane%s unapplied: %s; "
-                "fix forward and re-run each, then rm %s + %s in %s once all are applied"
+                "fix forward and re-run each, then Clear the hold in the deploy UI once all "
+                "are applied"
                 % (
                     hold_sha[:8],
                     len(planes),
                     "s" if len(planes) > 1 else "",
                     "; ".join(planes),
-                    MARKERS["hold"],
-                    MARKERS["hold_plane"],
-                    STATE_DIR,
                 )
             )
         return False, "deploy held at %s — revert the offending PR" % hold_sha[:8]

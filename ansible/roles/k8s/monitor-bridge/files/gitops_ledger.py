@@ -79,8 +79,9 @@ OWED_K8S_DEFERRED = "k8s_deferred"
 # which is #878's erasure over again. `hold_sha` still decides whether anything pages; this
 # class only says which planes the hold is waiting on.
 #
-# It is moving the way `k8s_deferred` did (#3392): every reader unions it with the
-# `hold_plane` line marker through `held_planes` before any writer records it.
+# It is moving the way `k8s_deferred` did (#3392). Every reader unions it with the legacy
+# `hold_plane` line marker through `held_planes`, and the deployer records it here, folding
+# any marker entry in on its first hold or clear.
 OWED_HOLD_PLANE = "hold_plane"
 
 # Every class a ledger line may carry. A reader asks for its classes by name and never sees

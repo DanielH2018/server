@@ -4,8 +4,8 @@
 Each marker is a file recording what this host believes. `gitops_markers.MARKERS` is that
 files — the directory literal, every basename and the line parsers live there, copied into
 every other tree that reads them; this module holds the reading and the writing.
-This is a leaf: `gitops_markers`, `deploy_config` for `log`, `deploy_git` for the two pure
-hold-marker decisions `clear_broad_hold` makes, `deploy_state_k8s` for the `k8s_deferred` and
+This is a leaf: `gitops_markers`, `gitops_ledger`, `deploy_git` for `behind_marker`,
+`deploy_state_hold` for the hold and its planes, `deploy_state_k8s` for the `k8s_deferred` and
 `k8s_unapplied` families, `deploy_state_alerts` for the alert dedupe slots, `host_lib` and the
 standard library. Nothing
 else from this role, and nothing that reaches a process — a hold is written to a file, and
@@ -22,16 +22,9 @@ import os
 import pathlib
 from typing import ClassVar
 
-from deploy_config import log
-from deploy_git import (
-    HOLD_PLANE_SEP,
-    behind_marker,
-    broad_hold_cleared_by,
-    hold_plane_entries,
-    hold_plane_marker,
-    hold_plane_with,
-)
+from deploy_git import behind_marker
 from deploy_state_alerts import AlertSlotMarkers
+from deploy_state_hold import HoldMarkers
 from deploy_state_k8s import K8sLineMarkers
 from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are re-exported
     MARKERS,
@@ -53,7 +46,7 @@ from gitops_ledger import (
 from host_lib import atomic_write
 
 
-class DeployerState(AlertSlotMarkers, K8sLineMarkers):
+class DeployerState(AlertSlotMarkers, HoldMarkers, K8sLineMarkers):
     """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
 
     The two k8s marker families come from `deploy_state_k8s.K8sLineMarkers` and the alert
@@ -121,16 +114,12 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
 
     # The four markers with a reader outside this deployer (monitor-bridge reads three of them
     # off the same mount) get a named property; the alert dedupe slots are reached through
-    # `alerted_sha`/`record_alerted` by the alert code that owns them.
+    # `alerted_sha`/`record_alerted` by the alert code that owns them. `hold_plane` is the
+    # fourth, in `deploy_state_hold.HoldMarkers` with the rest of the hold.
     @property
     def hold_sha(self) -> str | None:
         """The commit this host refuses to redeploy, or None."""
         return self.read("hold")
-
-    @property
-    def hold_plane(self) -> str | None:
-        """Each failed apply's playbook (and tags), `; `-joined (`hold_plane_with`), or None."""
-        return self.read("hold_plane")
 
     # ── the per-SHA tick receipt (#3391) ──────────────────────────────────────────────────
 
@@ -449,55 +438,6 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
     def behind_since(self) -> str | None:
         """`"<origin_sha> <unix_ts_first_seen>"` while behind origin, or None."""
         return self.read("behind")
-
-    # ── holding, and the two ways a hold clears ───────────────────────────────────────────
-
-    def write_hold(self, sha: str | None) -> None:
-        """Record `sha` as the commit this host refuses to redeploy, or clear the hold."""
-        self.write("hold", sha)
-
-    def hold_failed_apply(self, sha: str, playbook: str, tags: list[str]) -> None:
-        """Hold `sha` for a failed apply of `playbook`/`tags`, beside any plane already held.
-
-        Added to `hold_plane`, never written over it: see `deploy_git.hold_plane_with`.
-        """
-        self.write_hold(sha)
-        self.write("hold_plane", hold_plane_with(self.hold_plane, playbook, tags))
-
-    def clear_broad_hold(self, playbook: str, tags: list[str]) -> None:
-        """Clear the hold after a broad apply, but only once no held plane is left unapplied.
-
-        A hold says a plane is unapplied, and every consumer gates on `hold_sha` — so
-        clearing it after a success in a DIFFERENT plane turns GitOps Deploy — Status green
-        over a plane nothing has applied (issue #878). This apply drops the entries it
-        covers; while one survives, the tick still succeeded and the marker is kept.
-        """
-        held = hold_plane_entries(self.hold_plane)
-        left = [e for e in held if not broad_hold_cleared_by(e, playbook, tags)]
-        if left:
-            if left != held:
-                self.write("hold_plane", HOLD_PLANE_SEP.join(left))
-            log(
-                f"hold kept: {HOLD_PLANE_SEP.join(left)} is still unapplied "
-                f"(this tick applied {hold_plane_marker(playbook, tags)})"
-            )
-            return
-        self.write("hold_plane", None)
-        self.write_hold(None)
-
-    def clear_service_hold(self, services: set[str]) -> None:
-        """Clear a hold after a successful service deploy, unless it leaves a plane unapplied.
-
-        A k8s deploy is `ansible/deploy.yml --tags <services>`, so it drops a held
-        entry naming that playbook at a subset of those tags — a failed bump on a broad tick
-        writes exactly that, and the fix-forward deploy of the same service is its way out.
-        Any other entry stays held: without this, an unrelated service deploy clears
-        `hold_sha` and orphans `hold_plane`, which `gitops_status` never reads on its own.
-        """
-        if self.hold_plane and not services:
-            log(f"hold kept: {self.hold_plane} is still unapplied")
-            return
-        self.clear_broad_hold("ansible/deploy.yml", sorted(services))
 
     def record_behind(
         self, origin: str, behind: bool, now: float, *, fast_forwarded: bool

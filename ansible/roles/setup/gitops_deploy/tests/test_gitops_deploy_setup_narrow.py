@@ -166,8 +166,9 @@ def test_a_failed_narrowed_setup_apply_holds_the_blocks_it_ran_with_their_role(
     )
     assert (state_dir / "hold_sha").read_text() == ORIGIN
     assert (
-        state_dir / "hold_plane"
-    ).read_text() == "ansible/initial_setup.yml gitops_deploy:gitops-config"
+        gitops_deploy.STATE.hold_plane
+        == "ansible/initial_setup.yml gitops_deploy:gitops-config"
+    )
 
 
 def test_a_narrowed_apply_of_another_block_keeps_the_hold(
@@ -188,7 +189,7 @@ def test_a_narrowed_apply_of_another_block_keeps_the_hold(
     assert gitops_deploy.main(tick.tools) == 0
     assert _playbook_argv(tick)[-1] == "gitops-timer"
     assert (state_dir / "hold_sha").read_text() == "1" * 40
-    assert (state_dir / "hold_plane").read_text() == held
+    assert gitops_deploy.STATE.hold_plane == held
 
 
 def test_the_whole_role_fallback_clears_a_hold_a_narrowed_apply_left(
@@ -208,7 +209,7 @@ def test_the_whole_role_fallback_clears_a_hold_a_narrowed_apply_left(
     assert gitops_deploy.main(tick.tools) == 0
     assert _playbook_argv(tick)[-1] == "gitops_deploy"
     assert not (state_dir / "hold_sha").exists()
-    assert not (state_dir / "hold_plane").exists()
+    assert gitops_deploy.STATE.hold_plane is None
 
 
 def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
@@ -265,7 +266,7 @@ def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
     assert _playbook_argv(tick)[-1] == (
         "deploy-ui-code,gitops-deploy-code,renovate-agent-code"
     )
-    assert (state_dir / "hold_plane").read_text() == (
+    assert gitops_deploy.STATE.hold_plane == (
         "ansible/initial_setup.yml deploy_ui:deploy-ui-code,"
         "gitops_deploy:gitops-deploy-code,renovate_agent:renovate-agent-code"
     )

@@ -75,14 +75,22 @@ def bad_config_alert(hostname: str, config_path: str, exc: BaseException) -> str
     )
 
 
+# How a hand clears a hold once every held plane is applied. The planes are lines of the
+# `owed` ledger (#3392), so removing `hold_sha` by hand would leave them behind to re-hold
+# the next failure. The deploy UI's Clear removes `hold_sha` and every held plane together,
+# under the git-tree lock (`deploy_ui_writes.clear_hold`).
+HOLD_CLEAR_NOTE = (
+    "Once every held plane is applied, clear the hold with **Clear** in the deploy UI "
+    "(deploy.local); a hand `rm` of the hold leaves its planes in `owed.jsonl`."
+)
+
+
 def broad_failure_alert(
     hostname: str,
     playbook: str,
     tags: list[str],
     origin: str,
     exc: BaseException,
-    hold_file: str,
-    hold_plane_file: str,
     bumps: set[str],
 ) -> str:
     """The post for a failed broad apply.
@@ -102,8 +110,7 @@ def broad_failure_alert(
         f"failed run left.\n"
         f"{bump_note if bumps else ''}"
         f"**Action:** fix forward and re-run that playbook by hand. A later tick clears each "
-        f"`{hold_plane_file}` entry by applying it or deploying the services it tags; run "
-        f"`rm {hold_file} {hold_plane_file}` only once every entry there is applied."
+        f"held plane by applying it or deploying the services it tags. {HOLD_CLEAR_NOTE}"
     )
 
 
@@ -220,7 +227,6 @@ def broad_k8s_failure_alert(
     services: set[str],
     exc: BaseException,
     hold_file: str,
-    hold_plane_file: str,
 ) -> str:
     """The post for a promoted image bump that failed inside a BROAD tick.
 
@@ -240,6 +246,5 @@ def broad_k8s_failure_alert(
         f"revert is available by hand.\n"
         f"**Action:** fix forward on master, or redeploy by hand with "
         f'`./scripts/deploy.sh --tags "{",".join(sorted(services))}"`. A later tick that '
-        f"deploys these services clears their `{hold_plane_file}` entry; run "
-        f"`rm {hold_file} {hold_plane_file}` only once every entry there is applied."
+        f"deploys these services clears their held plane. {HOLD_CLEAR_NOTE}"
     )

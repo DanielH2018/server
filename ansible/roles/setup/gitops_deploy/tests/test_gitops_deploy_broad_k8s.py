@@ -119,7 +119,7 @@ def test_a_failed_bump_holds_the_sha_and_its_plane_and_does_not_reset(
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == ORIGIN, "the tree stays fast-forwarded"
     assert marker(state_dir, "hold_sha") == ORIGIN
-    assert marker(state_dir, "hold_plane") == "ansible/deploy.yml sonarr"
+    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml sonarr"
     assert "Nothing was rolled back" in tick.posts[-1]
 
 
@@ -213,7 +213,7 @@ def test_a_failed_bump_keeps_an_earlier_plane_held_past_the_bumps_fix(
     assert gitops_deploy.main(tick.tools, config) == 0
     gitops_deploy.STATE.clear_service_hold({"sonarr"})
     assert marker(state_dir, "hold_sha") is not None, "the earlier plane is still owed"
-    assert marker(state_dir, "hold_plane") == earlier
+    assert gitops_deploy.STATE.hold_plane == earlier
 
 
 def test_a_failed_plane_keeps_an_earlier_plane_held_beside_its_own(
@@ -227,7 +227,7 @@ def test_a_failed_plane_keeps_an_earlier_plane_held_beside_its_own(
     assert gitops_deploy.main(tick.tools, config) == 0
     gitops_deploy.STATE.clear_broad_hold("ansible/initial_setup.yml", ["gitops_deploy"])
     assert marker(state_dir, "hold_sha") == ORIGIN
-    assert marker(state_dir, "hold_plane") == "ansible/deploy.yml radarr"
+    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml radarr"
 
 
 def test_a_failed_bump_still_annotates_the_bump_the_plane_applied(
