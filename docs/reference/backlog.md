@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-03 18:17 UTC
-generated_sha: 1eb3891b5
+generated_at: 2026-10-04 06:17 UTC
+generated_sha: 737397f95
 ---
 
 !!! warning "Generated file — do not edit"
@@ -21,28 +21,20 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#3325](https://github.com/DanielH2018/server/issues/3325) | medium | gap | - | Renovate run held: manual_plane k3s from 167901a6f unapplied | 2026-10-03 | 0 | - | - |
 | [#3382](https://github.com/DanielH2018/server/issues/3382) | medium | gap | backup-observability | Decide Longhorn's node-down pod deletion policy and write the daniel-server-loss runbook — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
 | [#3383](https://github.com/DanielH2018/server/issues/3383) | medium | improvement | cicd | Fold the policy-shaped rendered-manifest tests into one property table — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3384](https://github.com/DanielH2018/server/issues/3384) | medium | improvement | cicd | Fold the textual tree-census tests into one convention table — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3386](https://github.com/DanielH2018/server/issues/3386) | medium | improvement | network | Declare NetworkPolicy callers as data on the containers_list entry — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3389](https://github.com/DanielH2018/server/issues/3389) | medium | improvement | backup-observability | Declare one service tier and derive priority, backup tier and alert severity from it — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3391](https://github.com/DanielH2018/server/issues/3391) | medium | improvement | cicd | Have the GitOps tick write one receipt per origin SHA for land.sh to read — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
 | [#3392](https://github.com/DanielH2018/server/issues/3392) | medium | improvement | cicd | Replace the owed-work marker families with one append-only ledger — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3394](https://github.com/DanielH2018/server/issues/3394) | medium | improvement | cicd | Register Claude hooks from the session's own checkout — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3399](https://github.com/DanielH2018/server/issues/3399) | medium | gap | cicd | Apply the k3s plane PR #3397 left in manual_plane on daniel-box | 2026-10-03 | 0 | - | ✓ |
+| [#3452](https://github.com/DanielH2018/server/issues/3452) | medium | improvement | container | Derive priority class, Kuma severity and node placement from the containers_list tier field | 2026-10-04 | 0 | worktree-fanout-3452 | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
 | [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
 | [#3281](https://github.com/DanielH2018/server/issues/3281) | low | improvement | cicd | Digest-pin the third-party images still pinned only by tag | 2026-10-02 | 0 | - | ✓ |
-| [#3354](https://github.com/DanielH2018/server/issues/3354) | low | gap | cicd | Report a failed service-lock flock as unavailable, not busy | 2026-10-03 | 0 | - | ✓ |
-| [#3358](https://github.com/DanielH2018/server/issues/3358) | low | improvement | cicd | Bring secret-rotate's say_failure back in line with the other two repo-committing crons | 2026-10-03 | 0 | - | ✓ |
-| [#3373](https://github.com/DanielH2018/server/issues/3373) | low | improvement | docs | Two comments still list only two git-tree lock holders | 2026-10-03 | 0 | - | ✓ |
-| [#3385](https://github.com/DanielH2018/server/issues/3385) | low | improvement | docs | Resolve every doc citation through scripts/lib/facts/citations.py — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
 | [#3387](https://github.com/DanielH2018/server/issues/3387) | low | improvement | container | Create every PVC through one path — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
 | [#3388](https://github.com/DanielH2018/server/issues/3388) | low | improvement | container | Prune every role's removed objects by injecting the role label at render time — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
 | [#3390](https://github.com/DanielH2018/server/issues/3390) | low | improvement | network | Run the second DNS resolver on daniel-pi and retire pihole-2 — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3393](https://github.com/DanielH2018/server/issues/3393) | low | improvement | cicd | Find out why the deployer unit runs uv --no-project, then decide on a pinned venv — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3395](https://github.com/DanielH2018/server/issues/3395) | low | improvement | cicd | Delete the nudge-land-sh hook — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3396](https://github.com/DanielH2018/server/issues/3396) | low | improvement | docs | Point findings.py's command reference at --help instead of restating it — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
+| [#3471](https://github.com/DanielH2018/server/issues/3471) | low | gap | container | Deploy the six converted roles once so the manifests sweep removes their stale <service>-claims files | 2026-10-04 | 0 | - | ✓ |
+| [#3478](https://github.com/DanielH2018/server/issues/3478) | low | improvement | network | Render role-owned sub-workload fences (authelia-redis, karakeep backends) from netpol_fences | 2026-10-04 | 0 | - | ✓ |
+| [#3480](https://github.com/DanielH2018/server/issues/3480) | low | improvement | backup-observability | Decide whether a home-critical service's own Kuma tile pages by severity and email | 2026-10-04 | 0 | - | ✓ |
+| [#3481](https://github.com/DanielH2018/server/issues/3481) | low | addition | container | Derive the shed set for a lost node from the containers_list tier field | 2026-10-04 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -95,6 +87,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#3270](https://github.com/DanielH2018/server/issues/3270) | refuted | Move the two one-file test directories next to the code they test | Operator decision 2026-10-03. The .claude/tests half was fixed in PR #3297. The scripts/z2m half rested on a wrong premise: the directory holds set_device_option.sh, which the z2m-device-setting skill and the home-assistant-engineer agent call by that path, and its test already sits in a tests/ sibling. |
 | [#3284](https://github.com/DanielH2018/server/issues/3284) | refuted | Narrow the static bootstrap guard to what the runtime --help test cannot reach | Operator decision 2026-10-03. The issue's required mutation run disproved it: test_entry_points_answer_help ran with PYTHONPATH=scripts/ and passed with a bootstrap deleted, while the static guard failed. Follow-ups #3296 (PR #3311) and #3310 (PR #3316) landed. |
 | [#3322](https://github.com/DanielH2018/server/issues/3322) | accepted | Narrow a setup role's apply through the common task file that renders a changed kuma-check template | Operator accepted the trade-off on 2026-10-03. The refusal applies more than the change needs, never less: gitops_deploy and render_records get a whole-role reapply, and k3s a whole k3s-bringup.yml --tags k3s hand-run note. The trigger is rare (the kuma-check templates changed twice, both 2026-09-19). The four routing fixes after the narrowing landed on 2026-10-01 (ff8dc1a99, 080567a6f, e05add716, 8d0a33d9a) each found the next layer of indirection, and resolving a template through the task file that renders it would be one more. PR #3342 records this as a DECIDED marker at the shipped-file branch of narrow_setup.role_tags. Reopen if the trigger recurs or the fallback grows costlier than a longer apply. |
+| [#3358](https://github.com/DanielH2018/server/issues/3358) | refuted | Bring secret-rotate's say_failure back in line with the other two repo-committing crons | Operator-approved 2026-10-03. PR #3417: the only say_failure caller commits with --no-verify, so no hook output can reach the log and the filtered body would never match; the divergence is recorded as a DECIDED marker with a test that fails once --no-verify is dropped. |
 
 ### container
 
