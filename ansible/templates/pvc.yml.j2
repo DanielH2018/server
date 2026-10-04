@@ -13,17 +13,12 @@
   the line that makes the trade-off, which is the one place it is worth having.
 
   `claim-default.yaml.j2` calls this macro once per entry of a role's `k8s_claims`, which is
-  how freshrss and zigbee2mqtt create their claims. `_rendered_pvc_claims` reads `k8s_claims`
-  from the role's defaults, so the textual-guard gap below does not apply to that path.
-
-  code-server's pvc-workspace.yaml.j2 has the identical body but is deliberately NOT converted:
-  ansible/tests/deploy/_autodeploy.py's `_rendered_pvc_claims` (consumed by
-  test_k8s_autodeploy_guard.py::test_snapshot_pvc_declarations_match_rendered_claims) greps a
-  role's own `templates/*.j2` text for a literal `kind: PersistentVolumeClaim` block — it does
-  not render Jinja, so a claim built via this macro is invisible to it. code-server is the only
-  one of the five whose `k8s_autodeploy_snapshot_pvcs` declares that specific claim name, so it
-  is the only one the guard actually checks; the other four have no such declaration and the gap
-  is inert for them. See "Textual guard checks break on an indirection" in project memory.
+  how the roles converted under #3387 create their claims. `_rendered_pvc_claims` reads
+  `k8s_claims` from the role's defaults, so a claim declared there stays visible to
+  test_k8s_autodeploy_guard.py::test_snapshot_pvc_declarations_match_rendered_claims. A role
+  template that calls this macro does not: that reader greps a template's text for a literal
+  `kind: PersistentVolumeClaim` block and renders no Jinja. See "Textual guard checks break on
+  an indirection" in project memory.
 
   Arguments:
     name           PVC name; matches whatever claimName a Deployment mounts.

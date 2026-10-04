@@ -36,6 +36,10 @@ _KNOWN_CLAIMS = {
     ("homelab", "prowlarr-config"): ("longhorn", "2Gi"),
     ("homelab", "karakeep-data"): ("longhorn", "4Gi"),
     ("homelab", "karakeep-meili"): ("longhorn-nobackup", "2Gi"),
+    ("homelab", "qbittorrent-config"): ("longhorn", "1Gi"),
+    ("homelab", "terraria-config"): ("longhorn", "1Gi"),
+    ("homelab", "code-server-config"): ("longhorn", "10Gi"),
+    ("homelab", "code-server-workspace"): ("longhorn", "1Gi"),
 }
 
 
