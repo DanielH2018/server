@@ -6,7 +6,7 @@
 # This tag pins the WRAPPER, not the game. SteamCMD fetches the current Valheim build on every
 # start, so the server is always on the latest release regardless of what this says; the tag
 # is the wrapper's own release.
-valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.2.0
+valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.4.0@sha256:f3ccde9a4e292663cf5096d502ff33cc9617015f6d70b6a9ca0968543f165ef2
 
 # The first-boot budget for this server, declared ONCE. Read by the `manifests_rollout_timeout`
 # passed to k8s/manifests in tasks/main.yml (the drain's `rollout status --timeout`) and by
