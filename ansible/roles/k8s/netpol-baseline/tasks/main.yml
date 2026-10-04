@@ -133,14 +133,14 @@
       - networkpolicy-mosquitto.yaml
       - networkpolicy-nut.yaml
       - networkpolicy-jellyfin.yaml
-      - networkpolicy-ical-proxy.yaml
       - networkpolicy-netpol-sentinel.yaml
       - networkpolicy-karakeep.yaml
       - networkpolicy-freshrss-feed-cache.yaml
       - networkpolicy-scrutiny-web.yaml
       - networkpolicy-loki-homelab.yaml
       - networkpolicy-home-assistant.yaml
-      - networkpolicy-speedtest.yaml
+      # speedtest's and ical-proxy's fences, rendered from their containers_list entries.
+      - networkpolicy-callers.yaml
       - networkpolicy-uptime-kuma.yaml
       - networkpolicy-terraria.yaml
       - networkpolicy-valheim.yaml

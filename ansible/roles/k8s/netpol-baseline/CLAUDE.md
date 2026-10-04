@@ -39,13 +39,19 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 
 ## Where a per-workload policy lives
 
-A per-workload policy has two homes. What the policy reads, and what the workload's deploy
+A per-workload policy has three homes. What the policy reads, and what the workload's deploy
 needs, decides which one.
 
 - **In this role**, when the policy reads one of this role's variables: the
   `netpol_baseline_enforced` lever or `netpol_baseline_node_cidrs`. Role defaults are
   role-scoped, so neither resolves in another role. Every `templates/networkpolicy-*.yaml.j2`
   file here reads one of them.
+- **As data on the `containers_list` entry**, when the fence is one port and a list of caller
+  pods: `netpol_from: [apps]`, rendered through the `networkpolicy` macro in
+  `ansible/templates/networkpolicy.yml.j2`. `templates/networkpolicy-callers.yaml.j2` loops
+  over every entry carrying the key, behind the `netpol_baseline_enforced` lever. An entry
+  whose role renders its own copy also sets `netpol_role_owned: true`, and the loop skips it.
+  `ansible/tests/k8s/test_netpol_from.py` fails if a policy name renders from two roles.
 - **In the workload's own role**, when the workload's deploy depends on the policy:
   - A workload in `netpol_baseline_exempt_workloads` keeps its complete fence beside it:
     headlamp, n8n, registry, prowlarr's flaresolverr and karakeep's chrome. Exempt, it is
@@ -53,7 +59,8 @@ needs, decides which one.
   - A backend that the pod's startup waits on ships with the pod. The precedents are
     authelia's session store (#1609) and the scrutiny and karakeep backends (#1620).
   - The additive caller rules of the *arr stack and qbittorrent live with the workload they
-    admit callers to.
+    admit callers to. sonarr's, radarr's and prowlarr's caller lists are `netpol_from` on
+    their entries, with `netpol_role_owned: true`.
 
 **A hand `--tags <svc>` deploy does not apply that service's policy when the policy lives
 here.** When a change needs a policy change and a workload change together, deploy both

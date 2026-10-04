@@ -197,7 +197,7 @@ stringData:
   # ClusterIP, not the edge route, since 2026-08-24. The route's ClientIP guard had been widened
   # to the whole pod CIDR so this prober could reach it, which meant every pod could read the
   # unauthenticated private calendars. Both callers moved in-cluster so a podSelector can gate
-  # them (networkpolicy-ical-proxy.yaml.j2 admits this pod and homepage). The tile therefore no
+  # them (ical-proxy's `netpol_from` in host_vars/daniel-box.yml admits this pod and homepage). The tile therefore no
   # longer exercises the Traefik route — accepted, because nothing reaches ical-proxy through the
   # edge any more.
   ical-proxy-k8s.json: |
