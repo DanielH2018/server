@@ -46,7 +46,9 @@ loop to auto-tag bookmarks.
   errors and serves — so the warrant is the init gate rather than the app, which is the one
   difference from authelia's session store (#1609, where the app exits).
   `ansible/tests/services/test_karakeep_backend_policies.py` pins the co-location, the ports and
-  the `manifests_files` entries. The policies carry no `netpol_baseline_enforced` branch: that
+  the `manifests_files` entries. Each port and caller list is a `netpol_fences` item with
+  `role_owned: true` on this role's containers_list entry, and each template renders its item
+  through the `networkpolicy` macro. The policies carry no `netpol_baseline_enforced` branch: that
   lever is a netpol-baseline role default and role defaults are role-scoped, so it does not
   resolve here.
 - `manifests_extra_rollouts` rolls `karakeep-meilisearch` and `karakeep-time-tagger` on every

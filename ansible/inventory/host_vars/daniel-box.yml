@@ -97,6 +97,14 @@ containers_list:
     use_authelia: false
     tier: home-edge
     backup_claims: [authelia-config]
+    # Rendered by this role's templates/networkpolicy-redis.yaml.j2, not netpol-baseline:
+    # the portal exits without its session store, so the fence ships with the portal (#1609).
+    # `role_owned: true` makes netpol-baseline's callers loop skip the item.
+    netpol_fences:
+      - app: authelia-redis
+        port: 6379  # the containerPort and Service port; test_authelia_redis_sessions.py pins it
+        from: [authelia]  # session.redis.host in config-secret.yaml.j2; nothing else dials it
+        role_owned: true
   - name: bento-pdf
     platform: k8s
     # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
@@ -470,6 +478,21 @@ containers_list:
       # census missed it because it excluded karakeep's own role: read a role's own templates
       # for init containers and wait loops (`grep -rn 'create_connection\|nc -z'`) too.
       - karakeep-time-tagger
+    # The backends `wait-for-deps` (karakeep/templates/deployment.yaml.j2) dials in an unbounded
+    # loop. Each fence ships with this role, rendered by its templates/networkpolicy-<backend>
+    # template, so `--tags karakeep` never stages a pod that waits in Init forever (#1620).
+    # Ports are the containerPort and Service port both; test_karakeep_backend_policies.py pins them.
+    netpol_fences:
+      - app: karakeep-meilisearch
+        port: 7700
+        from: [karakeep]  # MEILI_ADDR in deployment.yaml.j2
+        role_owned: true
+      # Exempt from the baseline (netpol_baseline_exempt_workloads), so this is the pod's only
+      # policy: it serves unauthenticated DevTools, and karakeep is its one caller.
+      - app: karakeep-chrome
+        port: 9222
+        from: [karakeep]  # BROWSER_WEB_URL in deployment.yaml.j2
+        role_owned: true
   # An unauthenticated plain-HTTP registry, reachable only on the node's loopback via
   # hostPort and in-cluster via its Service. Giving it an ingress would put push access on
   # the LAN.

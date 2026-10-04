@@ -1,3 +1,4 @@
+{% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
 # karakeep's search index. karakeep dials it at MEILI_ADDR=http://karakeep-meilisearch:7700
 # (deployment.yaml.j2), and nothing else does.
@@ -23,22 +24,10 @@
 # Dropping it is also the right behaviour rather than a concession — the lever exists to
 # restore reachability in a rollback, and the only path that reaches meilisearch at all is the
 # one this file grants, so leaving it on cannot be what an operator is rolling back from.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: karakeep-meilisearch
-  namespace: {{ k8s_namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      app: karakeep-meilisearch
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: karakeep
-      ports:
-        - port: 7700
-          protocol: TCP
+#
+# The port and caller list are the `netpol_fences` item for `karakeep-meilisearch` on this role's
+# containers_list entry (inventory/host_vars/daniel-box.yml). Its `role_owned: true` keeps
+# netpol-baseline's callers loop from rendering a second copy. A missing item fails the render
+# rather than shipping no policy.
+{% set fence = container_item.netpol_fences | selectattr('app', 'equalto', 'karakeep-meilisearch') | first %}
+{{ networkpolicy(fence.app, fence.port, fence['from']) }}

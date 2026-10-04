@@ -15,7 +15,9 @@
   - A role whose deploy must carry its own fence renders it from its own template, reading
     `container_item.netpol_from`, and its entry sets `netpol_role_owned: true` so the loop
     skips it. sonarr, radarr, prowlarr and qbittorrent do this; netpol-baseline's CLAUDE.md
-    says when a policy belongs in the workload's role.
+    says when a policy belongs in the workload's role. A `netpol_fences` item its role renders
+    sets `role_owned: true` instead, and the role's template selects the item by `app`
+    (authelia's session store, karakeep's meilisearch and chrome).
 
   A fence of any other shape (a namespaceSelector, an ipBlock, several ports, a caller scoped
   to a different port) stays bespoke.

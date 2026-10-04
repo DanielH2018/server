@@ -6,7 +6,8 @@ qbittorrent) renders it from its own template while its entry sets `netpol_role_
 An entry whose pod label is not its own name names the label in `netpol_app`, and the fence
 selects that label and takes its name (scrutiny -> scrutiny-web). A sub-workload with no entry
 of its own is a `netpol_fences: [{app, port, from}]` item on its role's entry, rendered by the
-same template (freshrss -> freshrss-feed-cache). Forgetting the `netpol_role_owned`
+same template (freshrss -> freshrss-feed-cache), unless the item sets `role_owned: true` and
+its role renders it (authelia -> authelia-redis). Forgetting the `netpol_role_owned`
 flag renders one NetworkPolicy name from two roles, and whichever role deploys last silently
 wins. Rendering neither leaves the service with no caller fence, and every listed caller is
 denied by the baseline.
@@ -38,6 +39,10 @@ KNOWN_FENCES = {
     "scrutiny-web": "netpol-baseline",
     # A `netpol_fences` item on entry `freshrss`.
     "freshrss-feed-cache": "netpol-baseline",
+    # `role_owned` `netpol_fences` items, each a backend its role's pod waits on.
+    "authelia-redis": "authelia",
+    "karakeep-meilisearch": "karakeep",
+    "karakeep-chrome": "karakeep",
 }
 
 
@@ -58,7 +63,8 @@ def declared_fences() -> dict[str, dict]:
     """Each fence daniel-box's entries declare, by the policy name it renders.
 
     Covers an entry's own `netpol_from` and each of its `netpol_fences` items, normalised to
-    `{"owner", "port", "callers"}`. Only an entry's own fence can be role-owned.
+    `{"owner", "port", "callers"}`. A fence is role-owned through the entry's
+    `netpol_role_owned` or the item's `role_owned`, and its owner is then the entry's role.
     """
     fences = {}
     for e in containers_entries_in(host_context()):
@@ -70,7 +76,7 @@ def declared_fences() -> dict[str, dict]:
             }
         for f in e.get("netpol_fences", []):
             fences[f["app"]] = {
-                "owner": "netpol-baseline",
+                "owner": e["name"] if f.get("role_owned") else "netpol-baseline",
                 "port": f["port"],
                 "callers": f["from"],
             }
