@@ -52,7 +52,7 @@ repo-root `CLAUDE.md` for shared conventions.
   `init-speedtest-tracker-config` script (same file, byte-identical, at both `main` and
   the pinned commit) seeds `DB_CONNECTION`, `APP_KEY` and migrations from env — nothing
   Prometheus-related. This role has no precedent for seeding an app's DB-backed setting
-  either (`tasks/main.yml` only creates the PVC and applies manifests) — unlike
+  either (`tasks/main.yml` only applies manifests) — unlike
   `SPEEDTEST_SCHEDULE` and the other `SPEEDTEST_*` env vars in
   `templates/deployment.yaml.j2`, which the app *does* read directly.
 
