@@ -49,10 +49,10 @@ no deploy tag able to clear it (#1672). `_is_real_change` in
 read by `pvc.yaml.j2`, so a change there does move the applied PVC.
 
 A role that later drops its `k8s/volume-claim` include (wg-easy, zigbee2mqtt, freshrss,
-speedtest, livesync and healthchecks all did)
-leaves its `<service>-claims/` file behind, where the consuming role's prune used to clear
-it. Nothing sweeps that directory, so the file is inert rather than resurrecting an object —
-but it is stale, and removing it is a manual step.
+speedtest, livesync and healthchecks all did) leaves its `<service>-claims/` file behind.
+`k8s/manifests` removes that directory on the role's next deploy when the role declares
+`k8s_claims` or lists its own `pvc.yaml` (#3458). A role converted some other way still
+leaves the file, which is inert but stale.
 
 ## Notable
 - Until 2026-09-01 this role also **seeded** claims from a Docker bind mount on
