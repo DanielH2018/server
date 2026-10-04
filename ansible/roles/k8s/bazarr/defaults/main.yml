@@ -3,8 +3,8 @@
 bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.6.1-ls365
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Migrating state — strategy is Recreate and the config volume is seeded through
-# k8s/volume-claim (hardcoded ReadWriteOnce), so a bad image swap can migrate the database
+# Migrating state — strategy is Recreate and the config volume comes from
+# k8s_claims below (hardcoded ReadWriteOnce), so a bad image swap can migrate the database
 # holding subtitle-path state before the gate observes a fault. Same class as sonarr/radarr;
 # the linuxserver -lsNN scheme hides a breaking bump as a routine patch bump.
 # k8s/manifests takes a pre-apply Longhorn snapshot of the claim below and reverts it if the
@@ -38,3 +38,9 @@ bazarr_k8s_cpu_limit: "1"
 bazarr_k8s_mem_limit: 1024Mi
 bazarr_k8s_cpu_request: "100m"
 bazarr_k8s_mem_request: 128Mi
+
+# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ bazarr_k8s_claim }}"
+    storage_class: "{{ bazarr_k8s_storage_class }}"
+    size: 1Gi

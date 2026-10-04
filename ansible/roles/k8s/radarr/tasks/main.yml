@@ -1,14 +1,4 @@
 ---
-- name: Create the radarr config volume claim
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: radarr
-    volume_claim_name: "{{ radarr_k8s_claim }}"
-    volume_claim_storage_class: "{{ radarr_k8s_storage_class }}"
-    volume_claim_size: "{{ radarr_k8s_size }}"
-
 - name: Deploy radarr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
