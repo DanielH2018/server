@@ -27,8 +27,7 @@
     port ≠ targetPort qbittorrent's service.yaml.j2 publishes `container_item.port` and
                       targets `qbittorrent_k8s_webui_port`. This macro emits one number for
                       both, which is why the `port` argument above says there is only one.
-    extra metadata    registry's Service carries a `homelab/role` label (the --prune selector
-                      keys on it) and a pinned `clusterIP`. observability's loki, tempo and
+    extra metadata    registry's Service pins a `clusterIP`. observability's loki, tempo and
                       prometheus Services pin a `clusterIP` too (host-side query tools carry
                       the address), and prometheus carries a `headlamp-prometheus` label. The
                       macro emits neither.

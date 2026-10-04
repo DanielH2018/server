@@ -90,15 +90,15 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
 
     Three sources, because this repo builds a PVC three different ways:
 
-    1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2` —
-       zigbee2mqtt's data claim and code-server's workspace claim are the only two.
+    1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2`, such as
+       valheim's `server-pvc.yaml.j2`.
     2. A `vars: volume_claim_name: ...` on a task that includes `k8s/volume-claim` — how the
        other claims are created. Read through `_live_tasks`, the same walker
        `_batch_gated_names` uses, so a commented-out or `when: false`-gated include credits
        nothing, the same "argument-against read as the thing itself" trap this file's other
        matchers are written against.
     3. A `name:` in the role's `k8s_claims` default, which `k8s/manifests` renders from the
-       shared `claim-default.yaml.j2` — freshrss's and zigbee2mqtt's claims.
+       shared `claim-default.yaml.j2` — the path #3387 moves every claim onto.
 
     Every token found by any path is resolved through `_resolve_claim_token`. A token that
     doesn't resolve is returned UNCHANGED in the second element rather than dropped — dropping

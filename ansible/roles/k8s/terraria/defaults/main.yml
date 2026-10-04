@@ -14,7 +14,7 @@ terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_ta
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Two independent reasons: (1) probe-less — the Deployment renders no readinessProbe, so
 # `rollout status` would return the moment the pod reports Running; (2) migrating state —
-# strategy is Recreate and the worlds/config PVC is seeded through k8s/volume-claim (hardcoded
+# strategy is Recreate and the worlds/config PVC comes from k8s_claims below (hardcoded
 # ReadWriteOnce), holding the one irreplaceable dataset the backup consolidation exists to
 # protect. Either alone would justify the denylist entry.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
@@ -36,3 +36,9 @@ terraria_k8s_mem_request: 512Mi
 # terraria_k8s_replicas is NOT here: it lives in inventory (group_vars/all.yml), because
 # k8s/game-stats renders the terraria-stats exporter at the same count and role defaults do
 # not cross a role boundary.
+
+# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ terraria_k8s_claim }}"
+    storage_class: "{{ terraria_k8s_storage_class }}"
+    size: "{{ terraria_k8s_size }}"
