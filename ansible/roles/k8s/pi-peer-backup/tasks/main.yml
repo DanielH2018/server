@@ -60,6 +60,7 @@
     image_builder_context_files:
       "{{ playbook_dir }}/roles/k8s/pi-peer-backup/files/pull-pi-peers.sh": pull-pi-peers.sh
 
+# The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy pi-peer-backup to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -69,7 +70,6 @@
     # triggered) run is the proof.
     manifests_rollout: ''
     manifests_files:
-      - pvc.yaml
       - cronjob.yaml
     manifests_secret_files:
       - secret.yaml

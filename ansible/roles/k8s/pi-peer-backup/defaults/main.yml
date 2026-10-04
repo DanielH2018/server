@@ -8,6 +8,15 @@ k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS but deliberately does not enforce a successful run; concurrencyPolicy Forbid and a retention-free rsync mirror, so the gate's one-off run is idempotent and a briefly unreachable Pi is reported rather than fatal. NOTHING CAN TRIGGER THIS PROMOTION: the only pin, pi_peer_backup_k8s_image, is a registry-built image listed in REGISTRY_BUILT_IMAGES (scripts/tests/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer — so what moves is the FROM in templates/Dockerfile.j2, which is not the defaults/main.yml path split_k8s_auto_deploy promotes. The promotion is correct and harmless, not active."  # noqa var-naming[no-role-prefix]
 
 pi_peer_backup_k8s_claim: pi-peer-backup-data
+# Plain `longhorn` ON PURPOSE (not -nobackup): riding the Longhorn backup to B2 (the Saturday
+# weekly shard, weekly-backup-d6) is this volume's entire reason to exist. It replaces the
+# retired Kopia scope for the Pi's un-rebuildable WireGuard peer keys.
+pi_peer_backup_k8s_storage_class: longhorn
+# 128Mi, not 100Mi: Longhorn's admission webhook rejects any volume whose size is not an
+# integer multiple of default-backup-block-size, which is 16Mi since 2026-08-19. At 100Mi this
+# claim provisions today and would fail to be recreated, which is exactly the
+# disaster-recovery path it exists to serve.
+pi_peer_backup_k8s_size: 128Mi
 # 23:00 local. The Longhorn jobs that touch this PVC fire in UTC — the 03:30 daily tick, the
 # 04:10 restore drill and the 04:30 weekly shard (weekly-backup-d6, Saturday) — and this
 # CronJob follows `tz`, so the UTC slot it lands on moves with DST: 04:00 under CDT, 05:00
@@ -22,3 +31,9 @@ pi_peer_backup_k8s_schedule: "0 23 * * *"
 # the CronJob's PI_SRC and the forced command sshd pins the key to (files/pi-peer-backup-shell.sh
 # refuses any other path).
 pi_peer_backup_src_dir: "/home/{{ sys_user }}/server/containers/wg-easy/config/"
+
+# The claim k8s/manifests renders and applies for this role, ahead of the CronJob (#3387).
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ pi_peer_backup_k8s_claim }}"
+    storage_class: "{{ pi_peer_backup_k8s_storage_class }}"
+    size: "{{ pi_peer_backup_k8s_size }}"

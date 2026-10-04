@@ -67,6 +67,11 @@ _ARMED_ROLES = frozenset(
         "freshrss",
         "sonarr",
         "radarr",
+        "zigbee2mqtt",
+        "prowlarr",
+        "karakeep",
+        "livesync",
+        "speedtest",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
