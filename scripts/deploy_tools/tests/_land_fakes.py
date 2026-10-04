@@ -24,8 +24,11 @@ from deploy_tools.land_lib import landing as landing_mod
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
 from deploy_tools.land_tags import Derivation, DeriveSource
+from gitops_markers import MARKERS
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
+# The receipt marker's basename on disk, which is the name `read_state` is asked for.
+RECEIPTS = MARKERS["receipts"]
 # The base of the range a `receipt()` covers. `Fakes.is_ancestor_of` answers non-zero for it
 # by default, so the merge commit reads as inside `base..origin` unless a test says otherwise.
 RECEIPT_BASE = "b" * 40
@@ -41,7 +44,7 @@ def receipt(applied: dict[str, list[str]], manual=None, origin: str = "f" * 40) 
             contains the merge commit.
     """
     line = {"origin": origin, "base": RECEIPT_BASE, "applied": applied}
-    return {"receipts": json.dumps({**line, "manual": manual or {}})}
+    return {RECEIPTS: json.dumps({**line, "manual": manual or {}})}
 
 
 # A real directory, because the pipeline refuses a primary checkout that is not one. Made

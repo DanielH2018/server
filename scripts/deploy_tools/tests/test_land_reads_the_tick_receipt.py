@@ -17,7 +17,7 @@ import json
 import pytest
 
 import land_tags
-from _land_fakes import Fakes, build_classifier
+from _land_fakes import RECEIPTS, Fakes, build_classifier
 from _narrow_fixtures import Tree, _refs
 
 RBAC = "ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2"
@@ -103,7 +103,7 @@ def _landing(
     f = Fakes(
         gh_views={"files,changedFiles": _RBAC_PR},
         derived=([], "pr"),
-        state={"receipts": receipts},
+        state={RECEIPTS: receipts},
         is_ancestor_rc=is_ancestor_rc,
         is_ancestor_of=ancestry or {"e" * 40: 1},
     )
