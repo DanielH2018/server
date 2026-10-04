@@ -96,6 +96,12 @@ line, and `claude_code_fleet_caps_enabled: false` removes both.
 **Re-derive the number in `defaults/main.yml`**, never from a summary. **The `Slice=` line takes
 effect at the next start**, so the deploy that changes it drops the RC host's sessions.
 
+## The agent user
+
+`claude_code_agent_user_enabled` (daniel-box) builds `claude` with
+`ansible/roles/setup/common/tasks/agent_user.yml`. No unit runs as it; `defaults/main.yml`
+covers logging in and switching it off.
+
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 
 - **Scope:** `rsync --delete` of `claude_code_memory_sync_dir` to the same path on

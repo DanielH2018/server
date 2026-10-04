@@ -204,3 +204,25 @@ claude_code_memory_sync_dir: "/home/{{ sys_user }}/.claude/projects/{{ claude_co
 # How often the copy runs, as a systemd time span. A memory written here reaches the other
 # host's next session within this interval.
 claude_code_memory_sync_interval: 15min
+
+# ── The agent user ──────────────────────────────────────────────────────────────────────
+# A dedicated Unix user for the operator's Claude sessions, built by the same shared task file
+# as renovate-agent's (roles/setup/common/tasks/agent_user.yml). A session running as
+# {{ sys_user }} reads everything that user can: the age key, which decrypts the become
+# password, the operator's gh token, ssh keys, and the deployer's primary checkout. This user
+# reaches none of them. No unit runs as it: claude-rc.service runs as {{ sys_user }}.
+#
+# To start a session as it, open a login shell, which reads the .profile this role writes, then
+# run `claude` in ~/server. The first run needs `/login` and trusting the directory:
+#   sudo machinectl shell claude@ /bin/bash -l
+#
+# True only in daniel-box's host_vars. False expires the account rather than removing it, so
+# nothing can log in as it, and its home keeps the clone and any work not yet pushed. True
+# again lifts the expiry.
+claude_code_agent_user_enabled: false
+claude_code_agent_user: claude
+# Outside /home, as renovate-agent's is, so a unit's ProtectHome= hides every human home and
+# not this one.
+claude_code_agent_user_home: /var/lib/claude
+claude_code_agent_user_clone_dir: "{{ claude_code_agent_user_home }}/server"
+claude_code_agent_user_repo: DanielH2018/server

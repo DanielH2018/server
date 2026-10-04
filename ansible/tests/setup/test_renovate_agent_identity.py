@@ -265,7 +265,8 @@ def test_the_agent_gets_claude_guard_where_the_hook_looks_for_it() -> None:
         re.M,
     )
     assert lookup, "the hook no longer names its claude_guard directory"
-    tasks = yaml_fast.safe_load((ROLE / "tasks" / "identity.yml").read_text())
+    shared = ANSIBLE / "roles" / "setup" / "common" / "tasks" / "agent_user.yml"
+    tasks = yaml_fast.safe_load(shared.read_text())
     copies = [
         t["ansible.builtin.copy"]
         for t in tasks
@@ -275,7 +276,7 @@ def test_the_agent_gets_claude_guard_where_the_hook_looks_for_it() -> None:
     ]
     assert len(copies) == 1, "expected one claude_guard copy task"
     rel = lookup.group(1)
-    assert copies[0]["dest"].rstrip("/") == "{{ renovate_agent_home }}" + rel
+    assert copies[0]["dest"].rstrip("/") == "{{ agent_user_home }}" + rel
     assert copies[0]["src"] == "/home/{{ sys_user }}" + rel + "/claude_guard"
 
 

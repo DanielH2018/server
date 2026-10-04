@@ -1,0 +1,158 @@
+---
+# A Claude agent's own Unix user, and what that user needs that the operator's user used to
+# supply: uv and the pinned Python, a Claude Code install, the operator's claude_guard rules and
+# a clone to work in.
+#
+# WHY A SEPARATE USER. A session running as sys_user can read everything sys_user can: the age
+# key that decrypts the become password, the operator's gh token, ssh keys and the deployer's
+# primary checkout. This user has no sudo, no group membership beyond its own, and no read on
+# the 0750 /home/{{ sys_user }}. Privileged work reaches it only through a unit polkit lets it
+# start, which runs root-owned code (renovate-agent-land@.service is the first).
+#
+# Callers: renovate_agent (the unattended Renovate session) and claude_code (the operator's
+# interactive and Remote Control sessions, on hosts that set claude_code_agent_user_enabled).
+# deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES routes a change here to both.
+#
+# Variable contract, passed as `vars:` on the import:
+#   agent_user_name       the Unix user to create
+#   agent_user_home       its home, outside /home so a unit's ProtectHome= hides every human
+#                         home without hiding this one
+#   agent_user_clone_dir  its own clone, never the primary checkout
+#   agent_user_repo       OWNER/NAME of the repo to clone
+#
+# Every task runs as root with HOME pointed at the agent's home, and the last one hands the
+# home to the agent. Not `become_user`: a module run as the agent needs an interpreter it can
+# execute, and the controller's is the repo venv under the 0750 /home/{{ sys_user }}, while the
+# system python3 is below the repo's syntax floor
+# (ansible/tests/setup/test_host_python_invocations.py). Root runs nothing here that
+# sys_user does not already run in the claude_code and initial_setup roles.
+
+- name: Create the agent's own user
+  # No `groups:`. The home's group is sys_user so the operator reads in; the agent joins no
+  # group, so it reads nothing group-readable of the operator's (/etc/rancher/k3s/*.env is
+  # root:sys_user 0640).
+  ansible.builtin.user:
+    name: "{{ agent_user_name }}"
+    system: true
+    home: "{{ agent_user_home }}"
+    create_home: false
+    shell: /bin/bash
+    password_lock: true
+  become: true
+
+- name: Create the agent's home
+  # Group sys_user and setgid, so the operator and the docs cron read what the agent writes
+  # while the agent reads nothing of sys_user's.
+  ansible.builtin.file:
+    path: "{{ agent_user_home }}"
+    state: directory
+    owner: "{{ agent_user_name }}"
+    group: "{{ sys_user }}"
+    mode: "2750"
+  become: true
+
+- name: Create the agent user's bin and claude-guard directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ agent_user_home }}/.local/bin"
+    - "{{ agent_user_home }}/.local/share/claude-guard"
+  become: true
+
+- name: Give the agent user the operator's pinned uv
+  # /usr/local/bin/uv is a symlink into /home/{{ sys_user }}, which ProtectHome= and the 0750
+  # home both hide from this user. A copy of the binary initial_setup pins, rather than a second
+  # installer pin, so a uv bump reaches the agent on the next apply of the calling role.
+  ansible.builtin.copy:
+    src: /home/{{ sys_user }}/.local/bin/uv
+    dest: "{{ agent_user_home }}/.local/bin/uv"
+    remote_src: true
+    # The ownership the closing chown sets, so the two tasks do not flip it on every apply.
+    owner: "{{ agent_user_name }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Look for the operator's deployed claude_guard package
+  ansible.builtin.stat:
+    path: /home/{{ sys_user }}/.local/share/claude-guard/claude_guard
+  register: common_agent_user_claude_guard
+  become: true
+
+- name: Give the agent user the operator's claude_guard package
+  # block-footguns splits every command naming gh, kubectl or ssh with this package, which the
+  # dotfiles repo deploys under the operator's home (.claude/hooks/_claude_guard.py looks in
+  # ~/.local/share/claude-guard). Without it the guard asks on each such command, and an
+  # unattended `ask` is a denial. Copied rather than pinned, as uv is above, so the agent runs
+  # the operator's rules. A host without the dotfiles deploy skips this, and the agent asks
+  # exactly where the operator's own sessions would.
+  ansible.builtin.copy:
+    src: /home/{{ sys_user }}/.local/share/claude-guard/claude_guard
+    dest: "{{ agent_user_home }}/.local/share/claude-guard/"
+    remote_src: true
+    owner: "{{ agent_user_name }}"
+    group: "{{ sys_user }}"
+    mode: preserve
+  become: true
+  # `default`: both callers import this file, and a skipped stat above still sets the register,
+  # with no `stat` key in it.
+  when: common_agent_user_claude_guard.stat.exists | default(false)
+
+- name: Install the pinned host Python for the agent user
+  # Every project hook runs under `uv run --python {{ host_python_version }}`, and uv keeps
+  # interpreters under the user's own data dir. Without one, each of the session's Bash calls
+  # meets a hook that cannot start, and an unattended `ask` is a denial.
+  ansible.builtin.command:
+    cmd: "{{ agent_user_home }}/.local/bin/uv python install {{ host_python_version }}"
+  environment:
+    HOME: "{{ agent_user_home }}"
+  register: common_agent_user_python
+  changed_when: >-
+    'Installed' in (common_agent_user_python.stderr | default(''))
+    + (common_agent_user_python.stdout | default(''))
+  become: true
+
+- name: Download the Claude Code installer for the agent's user
+  ansible.builtin.get_url:
+    url: https://claude.ai/install.sh
+    dest: "{{ agent_user_home }}/claude-install.sh"
+    mode: "0755"
+  become: true
+
+- name: Install Claude Code for the agent's user
+  # Run-once, as in the claude_code role: the native installer updates itself thereafter.
+  ansible.builtin.command:
+    cmd: bash {{ agent_user_home }}/claude-install.sh
+  args:
+    creates: "{{ agent_user_home }}/.local/bin/claude"
+  environment:
+    HOME: "{{ agent_user_home }}"
+  become: true
+
+- name: Clone the repo for the agent's user
+  # Its own clone, so the session never writes the primary checkout's .git, which the deployer
+  # fetches and fast-forwards. git refuses a repository whose gitdir another uid owns, so a
+  # shared checkout is not an option either way. Run-once rather than the git module: root's
+  # git refuses a repository another user owns, and the session fetches for itself.
+  ansible.builtin.command:
+    argv:
+      - git
+      - clone
+      - --quiet
+      - "https://github.com/{{ agent_user_repo }}.git"
+      - "{{ agent_user_clone_dir }}"
+  args:
+    creates: "{{ agent_user_clone_dir }}/.git"
+  become: true
+
+- name: Hand the agent's home to its own user
+  # Everything above ran as root. The group stays sys_user so the operator reads in.
+  ansible.builtin.file:
+    path: "{{ agent_user_home }}"
+    state: directory
+    recurse: true
+    owner: "{{ agent_user_name }}"
+    group: "{{ sys_user }}"
+  become: true
