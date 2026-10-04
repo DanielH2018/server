@@ -16,7 +16,7 @@ repo-root `CLAUDE.md` for shared conventions.
   `database.sqlite`, but its Laravel `APP_KEY` lives in SOPS so a rebuilt instance still
   works — losing the volume loses history, not function.
 - **Auto-deploy since slice 7b:** `Recreate` + an RWO PVC that
-  `k8s/volume-claim` creates is protected by a pre-apply Longhorn snapshot and
+  `k8s/manifests` creates from `k8s_claims` is protected by a pre-apply Longhorn snapshot and
   revert (`k8s_autodeploy_snapshot_pvcs: [speedtest-config]`).
 - **REQUIRED one-time post-deploy step (#996):** log in at `speedtest.<domain>`, open
   **Settings -> Data Integration**, and turn on **Prometheus**. Without this the
@@ -52,7 +52,7 @@ repo-root `CLAUDE.md` for shared conventions.
   `init-speedtest-tracker-config` script (same file, byte-identical, at both `main` and
   the pinned commit) seeds `DB_CONNECTION`, `APP_KEY` and migrations from env — nothing
   Prometheus-related. This role has no precedent for seeding an app's DB-backed setting
-  either (`tasks/main.yml` only creates the PVC and applies manifests) — unlike
+  either (`tasks/main.yml` only applies manifests) — unlike
   `SPEEDTEST_SCHEDULE` and the other `SPEEDTEST_*` env vars in
   `templates/deployment.yaml.j2`, which the app *does* read directly.
 

@@ -17,7 +17,8 @@ can move because of it:
     or through `hostvars[...]`, #2044); every other key is grepped for across the role trees
     and the shared templates, and a hit maps to that role's tag.
   - `ansible/templates/<f>.j2`: every role whose templates import or include `<f>`,
-    following a macro that another macro imports.
+    following a macro that another macro imports. `narrow_templates` drops a mention inside a
+    Jinja comment, and maps the claim template to the roles declaring `k8s_claims`.
 
 ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` turns a refusal back into today's
 full run. A missed consumer is a service left silently stale until something unrelated
@@ -54,7 +55,7 @@ import sys
 from pathlib import Path
 from typing import Callable, NamedTuple
 
-from deploy_tools import narrow_containers, narrow_paths
+from deploy_tools import narrow_containers, narrow_paths, narrow_templates
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.git import git, git_stdout
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
@@ -250,8 +251,9 @@ def template_importers(
     """
     ctx = Context(cwd, ref, set(), {}, explain)
     seen.add(name)
-    hits = _sort_hits(_grep(ctx, name, word=False), f"the macro {name}", ctx)
-    roles = set(hits.roles)
+    found = narrow_templates.real_mentions(_grep(ctx, name, word=False), name, ref, cwd)
+    hits = _sort_hits(found, f"the macro {name}", ctx)
+    roles = narrow_templates.rendering_roles(name, hits.roles, ref, cwd, explain)
     for other in sorted(hits.templates - seen):
         roles |= template_importers(other, ref, cwd, seen, explain)
     return roles

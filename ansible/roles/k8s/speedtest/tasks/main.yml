@@ -1,16 +1,5 @@
 ---
-# Create the PVC BEFORE the workload starts. The Deployment mounts the same claim, so the pod
-# has a claim ready on boot rather than a pending volume request.
-- name: Create the speedtest config volume claim
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: speedtest
-    volume_claim_name: "{{ speedtest_k8s_claim }}"
-    volume_claim_storage_class: "{{ speedtest_k8s_storage_class }}"
-    volume_claim_size: "{{ speedtest_k8s_size }}"
-
+# The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy speedtest to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
