@@ -1,11 +1,12 @@
-"""`land.sh --detach --await-verdict` end to end, plus the unit rules of `land_lib/detach.py`.
+"""`land.sh --detach` end to end, plus the unit rules of `land_lib/detach.py`.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_detach.py
 
 The end-to-end half runs the shim as a process against the same `gh`/`git` stubs
 `test_land_arm_merge_through_the_shim.py` uses, because what is under test is the wiring: the
-flags reaching `Options`, the fork, the logfile, and the parent exiting with the CHILD's code
-and printing the CHILD's verdict. A unit test against a fake `Tools` cannot see any of that.
+flags reaching `Options`, the fork, the logfile and pid file the wait reads, and the CHILD
+recording its own code and verdict. A unit test against a fake `Tools` cannot see any of that.
+The wait itself is cc-wait's `land` source, covered in `test_land_probe.py`.
 
 THE PROVEN PATH MUST STAY BYTE-IDENTICAL. `--detach` is in a script that lands every PR in
 this repo, unattended, so `test_no_flags_reaches_the_same_landing_as_before` asserts a run
@@ -14,7 +15,6 @@ that makes the new mode safe to ship before it has been exercised on a real land
 """
 
 import contextlib
-import io
 import json
 import os
 import re
@@ -27,10 +27,11 @@ from pathlib import Path
 
 import pytest
 
+from deploy_tools import land_probe
 from deploy_tools.land_lib import detach
 from _deploy_sh_fakes import BUSCTL_REFUSED
 
-from lib.exit_codes import LAND_GAVE_UP
+from lib.exit_codes import LAND_BAD_ARGS
 from lib.git_testing import scrubbed_env
 from lib.proc_testing import fake_bin, path_with
 
@@ -94,33 +95,52 @@ def _logs(tmp_path: Path) -> list[Path]:
     return sorted((tmp_path / "job" / "tmp").glob("land939-*.log"))
 
 
-def test_await_verdict_prints_the_childs_verdict_and_exits_with_its_code(tmp_path):
-    result = _run(tmp_path, "--detach", "--await-verdict")
-
-    assert result.returncode == 0, result.stderr
-    assert "land --detach: running in background (pid " in result.stdout
-    assert "VERDICT: nothing-to-deploy" in result.stdout
-    # The parent printed it; the child WROTE it, which is the whole point of the log. The
-    # count is asserted rather than unpacked: a glob that stops matching returns empty, and
-    # `in log.read_text()` over nothing would never run.
-    logs = _logs(tmp_path)
-    assert len(logs) == 1, logs
-    assert "VERDICT: nothing-to-deploy" in logs[0].read_text()
+def _recorded(log: Path, timeout_s: float = 60) -> int | None:
+    """The landing's recorded exit code, once it has written it."""
+    deadline = time.monotonic() + timeout_s
+    while detach.recorded_code(log) is None and time.monotonic() < deadline:
+        time.sleep(0.1)
+    return detach.recorded_code(log)
 
 
-def test_detach_alone_returns_at_once_and_names_the_log(tmp_path):
-    """The reject half of the wait: without `--await-verdict` the parent must not block."""
+def test_the_land_source_reads_the_childs_verdict_and_code(tmp_path):
+    """What `cc-wait land 939` reads: the child's own code, and its verdict as the detail."""
     result = _run(tmp_path, "--detach")
 
     assert result.returncode == 0, result.stderr
-    assert "tail: " in result.stdout
-    assert "Waiting up to" not in result.stdout
+    # The count is asserted rather than unpacked: a glob that stops matching returns empty, and
+    # a check over nothing would never run.
+    logs = _logs(tmp_path)
+    assert len(logs) == 1, logs
+    assert _recorded(logs[0]) == 0, logs[0].read_text()
+    reading = land_probe.read(logs[0])
+    assert reading["state"] == "landed"
+    assert reading["detail"].startswith("VERDICT: nothing-to-deploy (PR #939")
+
+
+def test_detach_returns_at_once_and_names_the_wait(tmp_path):
+    """The log and the pid file exist on return, so a wait chained after it finds THIS landing."""
+    result = _run(tmp_path, "--detach")
+
+    assert result.returncode == 0, result.stderr
+    [log] = _logs(tmp_path)
+    assert f"wait: cc-wait land 939 --log {log}" in result.stdout
     assert "VERDICT:" not in result.stdout
+    assert detach.recorded_pid(log) is not None
+
+
+def test_await_verdict_is_refused_and_names_its_replacement(tmp_path):
+    """Retired: the wait is cc-wait's. A caller still passing it must hear what replaced it."""
+    result = _run(tmp_path, "--detach", "--await-verdict")
+
+    assert result.returncode == LAND_BAD_ARGS
+    assert "cc-wait land 939" in result.stderr
+    assert _logs(tmp_path) == []
 
 
 def test_detach_resolves_since_from_origin_master_itself(tmp_path):
     """The `git rev-parse origin/master` the skill asked the caller to run first."""
-    _run(tmp_path, "--detach", "--await-verdict")
+    _run(tmp_path, "--detach")
     assert "rev-parse origin/master" in _git_argv(tmp_path)
 
 
@@ -163,12 +183,13 @@ def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdic
 
     The kill here is both halves of what a harness does: the caller's process group and every
     descendant found by parent pid. `setsid` alone survives the first and not the second, so
-    this goes red on a landing that is merely a child in its own session.
+    this goes red on a landing that is merely a child in its own session. The caller is the
+    chained form a session runs, with `sleep` standing in for the `cc-wait` that waits.
     """
     # A slow first `gh` call holds the landing open long enough to kill the caller under it.
     slow_gh = _GH_STUB.replace('case "$*" in', 'sleep 3\ncase "$*" in', 1)
     caller = subprocess.Popen(
-        ["bash", str(_LAND_SH), "--pr", "939", "--detach", "--await-verdict"],
+        ["bash", "-c", f'"{_LAND_SH}" --pr 939 --detach && sleep 30'],
         env=_env(tmp_path, gh=slow_gh),
         stdout=subprocess.PIPE,
         text=True,
@@ -180,7 +201,8 @@ def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdic
         announced = caller.stdout.readline()
         landing_pid = int(re.search(r"\(pid (\d+)\)", announced).group(1))
         tree = _descendants(caller.pid)
-        os.killpg(caller.pid, signal.SIGKILL)
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(caller.pid, signal.SIGKILL)
         for pid in tree:
             with contextlib.suppress(ProcessLookupError):
                 os.kill(pid, signal.SIGKILL)
@@ -258,11 +280,9 @@ def test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict(tmp
             "-c",
             launcher,
             str(env_file),
-            str(_LAND_SH),
-            "--pr",
-            "939",
-            "--detach",
-            "--await-verdict",
+            "-c",
+            # The chained form a session runs, with `sleep` standing in for the cc-wait wait.
+            f'"{_LAND_SH}" --pr 939 --detach && sleep 60',
         ],
         capture_output=True,
         text=True,
@@ -353,48 +373,3 @@ def test_a_log_with_no_verdict_line_reads_as_none(tmp_path, text):
 
 def test_an_unreadable_log_reads_as_none(tmp_path):
     assert detach.verdict_in(tmp_path / "absent.log") is None
-
-
-def test_await_verdict_gives_up_on_its_budget_and_leaves_the_child_running(tmp_path):
-    """A landing holds the deploy locks, so killing it mid-apply is worse than losing sight
-    of it. The give-up is `LAND_GAVE_UP`, and it says where to look."""
-    log = tmp_path / "land7.log"
-    log.write_text("still going\n")
-    ticks = iter([0.0, 1.0, 99.0])
-    out = io.StringIO()
-    child = subprocess.Popen(["sleep", "30"])
-    try:
-        rc = detach.await_verdict(
-            child.pid,
-            log,
-            timeout_s=10,
-            poll_s=0,
-            clock=lambda: next(ticks),
-            sleep=lambda _: None,
-            out=out,
-        )
-    finally:
-        child.kill()
-        child.wait()
-    assert rc == LAND_GAVE_UP
-    assert "no verdict within 10s" in out.getvalue()
-    assert str(log) in out.getvalue()
-
-
-def test_await_verdict_reports_a_child_that_finished_without_a_verdict(tmp_path):
-    """The exit code is the authority, so the wait
-    must end on the child rather than sit out its whole budget waiting for a line."""
-    log = tmp_path / "land7.log"
-    log.write_text("a traceback, and nothing else\n")
-    out = io.StringIO()
-    # A raw fork, not Popen: `await_verdict` reaps the pid itself, and Popen's finalizer warns
-    # when it finds the child already gone.
-    pid = os.fork()
-    if pid == 0:
-        os._exit(1)
-
-    # A real clock and a short poll: only the reap may end this wait, so the budget is far
-    # larger than the child takes to exit.
-    rc = detach.await_verdict(pid, log, timeout_s=60, poll_s=0.05, out=out)
-    assert rc == 1
-    assert "(none printed" in out.getvalue() and str(log) in out.getvalue()

@@ -80,11 +80,10 @@ class Options:
     stale_retries: int = 3
     primary: Path = PRIMARY_CHECKOUT
     deployer_state: Path = Path(STATE_DIR)
-    # `--detach` forks the landing into a logfile this script names; `--await-verdict` then
-    # blocks on that child's own VERDICT line. Both default off, so an invocation that omits
-    # them reaches the same code path as a plain landing.
+    # `--detach` forks the landing into a logfile this script names and returns; `cc-wait land
+    # <pr>` is the wait. It defaults off, so an invocation that omits it reaches the same code
+    # path as a plain landing.
     detach: bool = False
-    await_verdict: bool = False
     # Where `--detach` writes. Empty means `$CLAUDE_JOB_DIR/tmp`, or `detach.FALLBACK_LOG_DIR`
     # outside a Claude session. The fan-out passes its worktree's `.fanout/`, which is where
     # `fanout_lib/status.py` greps for the verdict.
@@ -135,17 +134,20 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         action="store_true",
         help="fork the landing into a logfile this script names, and return",
     )
-    parser.add_argument(
-        "--await-verdict",
-        action="store_true",
-        help="with --detach: block until the landing prints its VERDICT line",
-    )
+    # Retired, and kept only so a caller still passing it hears what replaced it rather than
+    # argparse's bare "unrecognized arguments".
+    parser.add_argument("--await-verdict", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--log-dir",
         default="",
         help="with --detach: where to write the log (default: $CLAUDE_JOB_DIR/tmp)",
     )
     ns = parser.parse_args(argv)
+    if ns.await_verdict:
+        parser.error(
+            "--await-verdict is retired; wait with cc-wait instead: "
+            f"land.sh --pr {ns.pr} ... --detach && cc-wait land {ns.pr}"
+        )
     return Options(
         pr=ns.pr,
         since=ns.since,
@@ -158,6 +160,5 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         merge_poll=_merge_poll_from_env(),
         primary=_primary_from_env(),
         detach=ns.detach,
-        await_verdict=ns.await_verdict,
         log_dir=ns.log_dir,
     )
