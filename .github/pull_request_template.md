@@ -35,6 +35,10 @@ pod. Say what you exercised.
 ## Blast radius
 
 - [ ] This is a **broad** change (`ansible/roles/setup/`, `ansible/inventory/`, `ansible/templates/`,
-      `ansible.cfg`, or a bring-up playbook). It parks the GitOps tick's fast-forward for every
-      session, so it needs its playbook run by hand and an `--ff-only` merge afterwards.
+      `ansible.cfg`, or a bring-up playbook). The GitOps deployer applies a setup-plane change as
+      `initial_setup.yml --tags <role>` and a deploy-plane change as `deploy.yml`, so do not
+      hand-run those. Only a bring-up playbook (`bootstrap.yml`, `k3s-bringup.yml`,
+      `initial_setup.yml`) parks the tick for every session and needs its playbook run by hand.
+      A setup role whose tag the deployer cannot derive merges and lands in `manual_plane`;
+      `land.sh` prints the command to apply it.
 - [ ] New check, guard, or probe — ships with a paired test: one input it must accept, one it must reject.
