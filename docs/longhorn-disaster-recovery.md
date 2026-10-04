@@ -26,7 +26,8 @@ which one holds the volume it wants. Routing is per-volume, via `spec.backupTarg
 
 The R2 set (`k3s_longhorn_r2_volumes`) is `homelab/traefik-acme`,
 `homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data`.
-The k3s role derives it from the `backup_claims` of every `tier: home-critical` entry in
+The k3s role derives it from the `backup_claims` of every `home-critical` entry (tier
+`home-edge` or `home-automation`) in
 `containers_list`, so a change to the set is an edit to those entries. The four volumes are
 the TLS material every route depends on, the SSO store behind every authenticated route,
 and the two home-automation stores that are slow to rebuild by hand. They are on **both**

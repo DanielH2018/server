@@ -645,8 +645,9 @@ k3s_longhorn_r2_poll_interval: 0
 # the set worth putting on a target with free egress. Names are namespace/pvcName, matching
 # k3s_longhorn_weekly_volumes below.
 #
-# Derived, not listed: every `backup_claims` volume of a `tier: home-critical` containers_list
-# entry (filter_plugins/service_tier.py, #3389). To change the set, edit the entry. Python
+# Derived, not listed: every `backup_claims` volume of every `home-critical` containers_list
+# entry (tier `home-edge` or `home-automation`; filter_plugins/service_tier.py, #3389). To
+# change the set, edit the entry. Python
 # readers resolve it through scripts/lib/service_tiers.py, because a raw YAML read returns
 # this expression. No `default([])` on containers_list: an empty result does not route
 # nothing, it makes "Return de-listed volumes to the default backup target" move all four
