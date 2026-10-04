@@ -1,7 +1,7 @@
 ---
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest@sha256:6816d2b144b1eb97665f886e41e18a14d026ba78c9d0953fc68a1211ea819433
+qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest@sha256:b522f9f4b769f8f36d49d22d5eb6a92e9aa18904c6a1830b1439df511ec21983
 qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:3abfd4b82212106e357989750b9c0c9859aa511f5305a9a55c18c8de7198b655
 
 # The throwaway pod verify.yml runs to prove the tunnel's return path. It is a defaults key
