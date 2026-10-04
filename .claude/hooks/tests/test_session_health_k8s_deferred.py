@@ -15,6 +15,7 @@ Run: uv run pytest .claude/hooks/tests/test_session_health_k8s_deferred.py
 """
 
 import importlib.util
+import json
 import os
 
 _HOOK = os.path.join(
@@ -31,7 +32,16 @@ branch refs/heads/master
 """
 
 _SHA = "abc1230000000000000000000000000000000000"
-_SONARR = f"{_SHA} sonarr 1000.0"
+
+
+def _deferred(service, at):
+    """One `owed` ledger line of the `k8s_deferred` class, as the deployer records it."""
+    return json.dumps(
+        {"class": "k8s_deferred", "subject": service, "origin": _SHA, "at": at}
+    )
+
+
+_SONARR = _deferred("sonarr", 1000)
 
 
 def _problems(k8s_deferred=None, now=1000.0):
@@ -68,7 +78,7 @@ def test_a_bump_deferred_minutes_ago_is_already_reported():
 
 
 def test_every_pending_bump_gets_a_line_oldest_first():
-    marker = f"{_SHA} radarr 2000.0\n{_SONARR}\n"
+    marker = f"{_deferred('radarr', 2000)}\n{_SONARR}\n"
     lines = _problems(marker, now=9000.0)
     assert [("sonarr" in line) for line in lines] == [True, False], lines
     assert "`radarr`" in lines[1]
@@ -78,7 +88,7 @@ def test_an_absent_or_garbled_marker_is_clean():
     """A line this cannot parse is skipped, never guessed at: a deploy command naming no
     service is worse than silence."""
     assert _problems(None, now=1e9) == []
-    assert _problems(f"{_SHA} sonarr not-a-stamp", now=1e9) == []
+    assert _problems(_deferred("sonarr", "not-a-stamp"), now=1e9) == []
     assert _problems("garbage", now=1e9) == []
 
 

@@ -23,7 +23,13 @@ import pytest
 import yaml
 
 import deploy_io
-from gitops_ledger import OWED_K8S_DEFERRED, RECEIPT_KEEP, parse_owed, parse_receipts
+from gitops_ledger import (
+    OWED_K8S_DEFERRED,
+    RECEIPT_KEEP,
+    owed_line,
+    parse_owed,
+    parse_receipts,
+)
 
 SHA = "c0ffee12" * 5
 ROLE = pathlib.Path(__file__).resolve().parents[1]
@@ -43,7 +49,6 @@ EXPECTED_MARKERS = frozenset(
         ("hold", "hold_sha"),
         ("hold_plane", "hold_plane"),
         ("contention", "contention_since"),
-        ("k8s_deferred", "k8s_deferred"),
         ("owed", "owed.jsonl"),
         ("receipts", "receipts.jsonl"),
         ("last_run", "last_run"),
@@ -201,7 +206,7 @@ def test_an_operators_clear_removes_the_marker(state):
     assert state.read("contention") is None
 
 
-# ── the k8s_deferred class of the owed ledger, and its legacy line marker ──────
+# ── the k8s_deferred class of the owed ledger ──────────────────────────────────
 def test_a_deferred_bump_keeps_its_first_seen_stamp_and_its_origin(state):
     """The age monitor-bridge pages on, so a second deferral must not reset it.
 
@@ -217,32 +222,6 @@ def test_a_deferred_bump_keeps_its_first_seen_stamp_and_its_origin(state):
     assert [e.subject for e in parse_owed(state.read("owed"), OWED_K8S_DEFERRED)] == [
         "sonarr"
     ], "the bump is a ledger class (#3392)"
-    assert state.read("k8s_deferred") is None, (
-        "no writer touches the legacy line marker"
-    )
-
-
-def test_a_legacy_line_folds_into_the_ledger_keeping_the_older_stamp(state):
-    """A pre-ledger deployer's line moves on the first record, with its own origin and stamp.
-
-    Where the ledger already names the service, the OLDER first-seen stamp stands, as in every
-    reader's union: monitor-bridge dates the page from the first deferral.
-    """
-    state.write("k8s_deferred", f"{SHA} sonarr 500\n{SHA} radarr 3000")
-    state.write(
-        "owed",
-        '{"at": 2000, "class": "k8s_deferred", "origin": "b", "subject": "radarr"}',
-    )
-    assert state.record_k8s_deferred("f" * 40, {"jellyfin"}, 9000.0) == ["jellyfin"]
-    assert state.read("k8s_deferred") is None
-    assert [
-        (e.subject, e.origin, e.at)
-        for e in parse_owed(state.read("owed"), OWED_K8S_DEFERRED)
-    ] == [
-        ("radarr", "b", 2000.0),
-        ("sonarr", SHA, 500.0),
-        ("jellyfin", "f" * 40, 9000.0),
-    ]
 
 
 def test_a_key_this_writer_does_not_know_survives_a_record(state):
@@ -274,21 +253,24 @@ def test_clearing_one_deferred_bump_leaves_the_others(state):
 def test_a_garbled_k8s_deferred_line_is_carried_through_a_clear(state):
     """Skipped by every reader, never dropped: it is the only record of a deferral.
 
-    The REJECTING half of the #2657 repair, and the line the split turns on: this one names
-    nobody, so no clear and no record can act on it without guessing.
+    The REJECTING half of the #2657 repair: this line names nobody, so no clear and no record
+    can act on it without guessing.
     """
-    state.write("k8s_deferred", f"garbage\n{SHA} sonarr 1000.0")
+    state.write("owed", f"garbage\n{owed_line(OWED_K8S_DEFERRED, 'sonarr', SHA, 1000)}")
     assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
-    assert state.read("k8s_deferred") == "garbage"
+    assert state.read("owed") == "garbage"
+
+
+_TORN_SONARR = json.dumps({"class": "k8s_deferred", "subject": "sonarr", "origin": SHA})
 
 
 def test_a_torn_k8s_deferred_line_is_repaired_at_its_own_origin(state):
-    """This marker keeps the recorded origin where `k8s_unapplied` advances it, repair included.
+    """This class keeps the recorded origin where `k8s_unapplied` advances it, repair included.
 
     A tick clears `k8s_deferred` by deploying the service and `deploy_defer.unrecord` can reset
     the tree, so an advanced SHA here would name a commit the host no longer carries.
     """
-    state.write("k8s_deferred", f"{SHA} sonarr")
+    state.write("owed", _TORN_SONARR)
     assert state.record_k8s_deferred("f" * 40, {"sonarr"}, 9000.0) == []
     assert [(e.origin, e.service, e.at) for e in state.k8s_deferred_pending()] == [
         (SHA, "sonarr", 9000.0)
@@ -296,10 +278,10 @@ def test_a_torn_k8s_deferred_line_is_repaired_at_its_own_origin(state):
 
 
 def test_a_torn_k8s_deferred_line_naming_the_service_is_cleared(state):
-    """Nothing else ever drops it: the clear is the only reverse this marker has."""
-    state.write("k8s_deferred", f"{SHA} sonarr")
+    """Nothing else ever drops it: the clear is the only reverse this class has."""
+    state.write("owed", _TORN_SONARR)
     assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
-    assert state.read("k8s_deferred") is None
+    assert state.read("owed") is None
 
 
 # ── the alert dedupe slots, and their one file ─────────────────────────

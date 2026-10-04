@@ -78,6 +78,12 @@ def test_a_ledger_line_with_a_key_this_reader_never_heard_of_is_still_read():
 def test_both_k8s_markers_report_side_by_side():
     """A host can hold a deferred bump and an unapplied role at once, and the two mean
     different things — one the tick chose, one it was never allowed to make."""
-    lines = _problems(_AUTHELIA, k8s_deferred=f"{_SHA} sonarr 1000.0", now=9000.0)
+    lines = _problems(
+        _AUTHELIA,
+        k8s_deferred=json.dumps(
+            {"class": "k8s_deferred", "subject": "sonarr", "origin": _SHA, "at": 1000}
+        ),
+        now=9000.0,
+    )
     assert [("sonarr" in line) for line in lines] == [True, False], lines
     assert "`authelia`" in lines[1]

@@ -1204,23 +1204,21 @@ readers, the fold and both `MARKERS` entries, and `tasks/install.yml` reaps the 
 Every reader calls `gitops_ledger.manual_plane_entries`. A line missing `playbook` or carrying
 malformed `tags` still pages, for the whole role.
 
-**`k8s_deferred` is moving the same way, and its readers and writer have moved.** The
-readers shipped first (#3531). monitor-bridge, the SessionStart banner and the `deploy_ui`
-panel read `gitops_ledger.k8s_deferred_entries`, which unions the legacy
-`"<origin_sha> <service> <unix_ts>"` line marker with the ledger's `k8s_deferred` class. A
-service in both sources is one bump, dated and attributed from the older entry. `deploy_ui`
-installs the `gitops_ledger.py` source beside its `gitops_markers.py` for this. The writer
-moved next: `DeployerState.record_k8s_deferred` and `clear_k8s_deferred` write the class, and
-`gitops_state.py clear-k8s-deferred` clears it through them. Their first record or clear folds
-any line left in the legacy marker into the ledger, keeping its origin and stamp. The next
-step, once daniel-box holds no legacy file, deletes the line-marker half of
-`k8s_deferred_entries` and the `MARKERS` entry, and reaps the basename.
+**`k8s_deferred` is the third class, and it moved the same way.** The readers shipped first
+and read the class together with the legacy `"<origin_sha> <service> <unix_ts>"` line marker
+(#3531). The writer moved next, and its first record or clear folded any legacy line into the
+ledger (#3533). Once daniel-box held no legacy file, the line-marker half of
+`gitops_ledger.k8s_deferred_entries`, the fold and the `MARKERS` entry were deleted, and
+`tasks/install.yml` reaps the basename. monitor-bridge, the SessionStart banner and the
+`deploy_ui` panel read `k8s_deferred_entries`; `deploy_ui` installs the `gitops_ledger.py`
+source beside its `gitops_markers.py` for this. Two lines naming one service read as one bump,
+dated and attributed from the older line.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
 later tick's `local..origin` carries the bump. `Release Staleness Drift` reads the unapplied
 pin, but that monitor is DOWN for any stale record in the fleet, so a new deferral adds
-nothing to an already-red tile. `gitops_status` therefore pages on the marker's own age, at
+nothing to an already-red tile. `gitops_status` therefore pages on the line's own age, at
 the six hours `manual_plane` uses.
 
 **`k8s_unapplied` records the hand-edited and denylisted classes** (#2570). Forty of the
@@ -1346,7 +1344,7 @@ same names absent, which reaps the units and the crons they replaced on a non-de
   `ansible/tests/setup/test_github_interaction_limit.py` drive each of those branches.
 
 **One marker module, shipped from one source.** `files/gitops_markers.py` holds the state
-directory, the `MARKERS` table and the parsers for the `behind_since`, `k8s_deferred` and
+directory, the `MARKERS` table and the parsers for the `behind_since` and
 `contention_since` line formats, plus the two clear commands every surface prints.
 `deploy_state` imports it. Until issue #2063 each reader restated the directory and
 basenames, and three parsed the same lines independently. Now every reader uses this file.

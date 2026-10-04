@@ -462,15 +462,6 @@ def test_clearing_a_bump_that_is_not_deferred_exits_zero_and_says_so(
     assert journal[0][1] is None, "nothing was dropped, so the line says so"
 
 
-def test_a_legacy_line_marker_bump_is_still_clearable(tmp_path, run, journal):
-    """The clear folds a pre-ledger deployer's lines into the ledger first (#3392)."""
-    legacy = "abc123def4567890 sonarr 1000\ndef456abc7890123 radarr 2000\n"
-    (tmp_path / "k8s_deferred").write_text(legacy)
-    assert run(tmp_path, "clear-k8s-deferred", "sonarr") == 0
-    assert journal[0][1].origin == "abc123def4567890"
-    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [RADARR]
-
-
 # ── clear-k8s-unapplied: the class nothing pages on ────────────────────────────────
 
 AUTHELIA = _LINE.replace("k8s_deferred", "k8s_unapplied").format(

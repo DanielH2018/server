@@ -25,7 +25,6 @@ from gitops_markers import (
     NO_PLAYBOOK,
     K8sDeferredEntry,
     ManualPlaneEntry,
-    parse_k8s_deferred,
 )
 
 # ── the owed-work ledger (#3392) ─────────────────────────────────────────────────────────
@@ -61,10 +60,8 @@ OWED_MANUAL_PLANE = "manual_plane"
 # A promoted image bump a BROAD tick fast-forwarded and ran out of budget to deploy. The
 # subject is the service, under the `--tags` value that selects it. monitor-bridge pages on it
 # past its age gate, so it moved the way `manual_plane` did: every reader learned the class
-# before the writer recorded it (#3392). The deployer records and clears the class here, and
-# folds any line a pre-ledger deployer left in the `k8s_deferred` line marker into it on its
-# first record or clear (`deploy_state_k8s`). `k8s_deferred_entries` still reads both until
-# the line marker's readers go.
+# before the writer recorded it, and the line-marker readers and the fold of its last lines
+# went once daniel-box held no legacy file (#3392).
 #
 # Unlike `k8s_unapplied`, a line KEEPS its recorded origin: the deployer clears it on the
 # apply that covers it, so nothing needs the origin to advance.
@@ -185,8 +182,8 @@ def rewrite_owed(
 ) -> str:
     """`text` with every `cls` line naming one of `subjects` brought up to date.
 
-    The ledger's form of `rewrite_k8s_lines`, with one difference: every key a line carries
-    beyond the four survives the rewrite, because a newer writer may have put it there.
+    Every key a line carries beyond the four survives the rewrite, because a newer writer may
+    have put it there.
 
     Two rewrites, and both keep the line's first-seen stamp. A TORN LINE IS MADE READABLE
     (#2657), taking its own `at` where that reads as a number and `now` where it does not.
@@ -259,32 +256,17 @@ def k8s_unapplied_entries(owed: str | None) -> list[K8sDeferredEntry]:
     ]
 
 
-def k8s_deferred_entries(
-    marker: str | None, owed: str | None
-) -> list[K8sDeferredEntry]:
-    """Every pending deferred image bump, from the line marker and the `owed` ledger.
+def k8s_deferred_entries(owed: str | None) -> list[K8sDeferredEntry]:
+    """Every pending deferred image bump in the `owed` ledger, oldest first.
 
-    Args:
-        marker: the `k8s_deferred` line marker, or None for an absent one.
-        owed: the `owed` ledger, or None for an absent one.
-
-    Returns:
-        One entry per service, oldest first. A service in both sources keeps the OLDER entry,
-        its origin included, because the age gate dates the page from the first deferral.
-
-    The union is what lets the writer move second (#3392). A reader of the ledger alone
-    would lose every bump the deployer still records in the line marker, and a reader of the
-    marker alone would lose every bump a moved writer records in the ledger.
+    One entry per service. A service on two lines keeps the OLDER one, its origin included,
+    because the age gate dates the page from the first deferral.
     """
     oldest: dict[str, K8sDeferredEntry] = {}
-    ledger = [
-        K8sDeferredEntry(e.origin, e.subject, e.at)
-        for e in parse_owed(owed, OWED_K8S_DEFERRED)
-    ]
-    for entry in parse_k8s_deferred(marker) + ledger:
-        held = oldest.get(entry.service)
-        if held is None or entry.at < held.at:
-            oldest[entry.service] = entry
+    for e in parse_owed(owed, OWED_K8S_DEFERRED):
+        held = oldest.get(e.subject)
+        if held is None or e.at < held.at:
+            oldest[e.subject] = K8sDeferredEntry(e.origin, e.subject, e.at)
     return sorted(oldest.values(), key=lambda e: e.at)
 
 
