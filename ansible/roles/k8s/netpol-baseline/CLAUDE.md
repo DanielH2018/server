@@ -54,6 +54,7 @@ needs, decides which one.
   `scrutiny-web`). A sub-workload with no entry of its own is a `netpol_fences: [{app, port,
   from}]` item on its role's entry, carrying its own label and port (freshrss's feed cache).
   An entry whose role renders its own copy also sets `netpol_role_owned: true`, and the loop skips it.
+  A `netpol_fences` item its role renders sets `role_owned: true`, and the loop skips that too.
   `ansible/tests/k8s/test_netpol_from.py` fails if a policy name renders from two roles.
 - **In the workload's own role**, when the workload's deploy depends on the policy:
   - A workload in `netpol_baseline_exempt_workloads` keeps its complete fence beside it:
@@ -61,6 +62,8 @@ needs, decides which one.
     fenced by nothing else.
   - A backend that the pod's startup waits on ships with the pod. The precedents are
     authelia's session store (#1609) and the scrutiny and karakeep backends (#1620).
+    authelia's and karakeep's are `netpol_fences` items with `role_owned: true`, each rendered
+    through the macro by a template in that role.
   - The additive caller rules of the *arr stack and qbittorrent live with the workload they
     admit callers to. sonarr's, radarr's, prowlarr's and qbittorrent's caller lists are
     `netpol_from` on their entries, with `netpol_role_owned: true`.

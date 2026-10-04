@@ -1,10 +1,12 @@
+{% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
 # karakeep's headless Chrome. karakeep dials it at BROWSER_WEB_URL=http://karakeep-chrome:9222
 # (deployment.yaml.j2) to render pages it is archiving.
 #
 # It renders attacker-supplied pages, so it is worth fencing tightly: karakeep is the only
-# caller that has any business here. The baseline already admits traefik and prometheus on
-# every port; this rule adds the one real caller.
+# caller that has any business here. The pod is in netpol_baseline_exempt_workloads, so the
+# baseline selects nothing here and this policy is the pod's whole fence: karakeep on 9222,
+# and no traefik, prometheus or node bridge on any port. No route or scrape targets the pod.
 #
 # THIS POLICY SHIPS WITH THE ROLE THAT NEEDS IT, for the same reason as
 # networkpolicy-meilisearch.yaml.j2 beside it (#1620) — read that file for the full rationale.
@@ -16,22 +18,10 @@
 #
 # NO `netpol_baseline_enforced` BRANCH — same reason as the meilisearch policy: the lever is a
 # netpol-baseline role default and does not resolve in this role.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: karakeep-chrome
-  namespace: {{ k8s_namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      app: karakeep-chrome
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: karakeep
-      ports:
-        - port: 9222
-          protocol: TCP
+#
+# The port and caller list are the `netpol_fences` item for `karakeep-chrome` on this role's
+# containers_list entry (inventory/host_vars/daniel-box.yml). Its `role_owned: true` keeps
+# netpol-baseline's callers loop from rendering a second copy. A missing item fails the render
+# rather than shipping no policy.
+{% set fence = container_item.netpol_fences | selectattr('app', 'equalto', 'karakeep-chrome') | first %}
+{{ networkpolicy(fence.app, fence.port, fence['from']) }}

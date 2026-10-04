@@ -16,7 +16,9 @@
 
    An entry also lists `netpol_fences: [{app, port, from}]` for a sub-workload of its role that
    has no entry of its own (freshrss's feed cache). Each item carries its own pod label and
-   port, because the entry's `port` describes the entry's workload, not the sub-workload.
+   port, because the entry's `port` describes the entry's workload, not the sub-workload. An
+   item whose role renders it sets `role_owned: true`, and the loop skips it (authelia's
+   session store, karakeep's backends).
 
    Each fence reads `netpol_baseline_enforced`, so the rollback lever still covers it; the
    reasoning is in networkpolicy-traefik.yaml.j2. #}
@@ -25,7 +27,7 @@
 {{ networkpolicy(entry.get('netpol_app', entry.name), entry.port, entry.netpol_from, netpol_baseline_enforced | bool) }}
 {% endfor %}
 {% for entry in containers_list %}
-{% for fence in entry.get('netpol_fences', []) %}
+{% for fence in entry.get('netpol_fences', []) if not fence.get('role_owned', false) %}
 ---
 {{ networkpolicy(fence.app, fence.port, fence['from'], netpol_baseline_enforced | bool) }}
 {% endfor %}
