@@ -271,7 +271,7 @@
   # digest and the dry-run apply this role already has; a sibling directory would need each of
   # the three wired a second time. The filename carries the claim name so a role with two claims
   # stages two files. The cost: a role moving here from k8s/volume-claim leaves its old
-  # `<service>-claims/` file behind, inert, for a manual delete.
+  # `<service>-claims/` file behind, which the next task removes.
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/claim-default.yaml.j2"
     dest: "{{ manifests_dest_dir }}/claim-{{ manifests_claim.name }}.yaml"
@@ -283,6 +283,22 @@
     loop_var: manifests_claim
     label: "{{ manifests_claim.name }}"
   become: true
+
+- name: Remove the retired volume-claim staging directory for {{ manifests_service }}
+  tags: [config]
+  # A role whose claims render here (`k8s_claims`) or from its own `pvc.yaml` no longer stages
+  # through k8s/volume-claim, so its `<service>-claims/` sibling holds only the file that role
+  # wrote before it converted (#3458). Nothing else sweeps that directory. A role that still
+  # includes k8s/volume-claim under its own manifests_service would lose a live staged claim
+  # here on every deploy; test_k8s_claims.py refuses that pairing. The literal root, not
+  # manifests_dest_dir, because a dry run renders into a tempdir and removes nothing.
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/manifests/{{ manifests_service }}-claims"
+    state: absent
+  become: true
+  when:
+    - not (k8s_no_mutate | bool)
+    - manifests_claim_files | length > 0 or 'pvc.yaml' in (manifests_files | default([]))
 
 - name: Create the deferred manifest directory for {{ manifests_service }}
   tags: [config]

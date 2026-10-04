@@ -38,7 +38,9 @@ deferred pair below.
   The claims ride the prune keep-set, the digest and the dry run, and a real deploy applies
   them before the snapshot, which fails on a claim that does not exist yet. This role declares
   no default for it, because its own default would outrank the caller's. `k8s/volume-claim`
-  is the older path it replaces (#3387).
+  is the older path it replaces (#3387). A role with `k8s_claims` or its own `pvc.yaml`
+  removes its `<service>-claims/` sibling, the file the older path staged before the role
+  converted, so it must not also include `k8s/volume-claim` under its own service name.
 
 - **Templates stay in the caller's role**, at `roles/k8s/<service>/templates/<name>.j2`, and the
   `src` is anchored to `playbook_dir`: a relative `src` resolves against this role, and so does a
