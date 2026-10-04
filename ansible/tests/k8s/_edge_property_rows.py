@@ -1,11 +1,16 @@
-"""Rendered-manifest property rows whose subject is a Traefik edge object.
+"""Rendered-manifest property rows whose subject is a Traefik edge object or its placement.
 
 `test_rendered_properties.py` runs these rows beside its own. A row lives here only to keep that
 file under the test-module length cap; the rules for what makes a row are in its docstring.
 """
 
 import re
+from functools import cache
 
+from service_tier import tier_entries
+
+from _helpers import ALL_VARS, load_yaml
+from _k8s_render import k8s_entries, pod_spec
 from _property_table import Property
 
 # The guard keys on FIELD NAMES, never on values. The render corpus stubs every secret lookup
@@ -128,6 +133,37 @@ _TRAEFIK_MUST_FIND = frozenset(
     }
 )
 
+
+@cache
+def _home_critical_roles() -> frozenset[str]:
+    entries = list(k8s_entries().values())
+    return frozenset(e["name"] for e in tier_entries(entries, "home-critical"))
+
+
+@cache
+def _primary_node() -> str:
+    return load_yaml(ALL_VARS)["k8s_primary_node"]
+
+
+def _home_critical_workloads(role: str, tpl: str, doc: dict):
+    # A DaemonSet runs on every node by design, and a Job or CronJob serves no client.
+    if role in _home_critical_roles() and doc.get("kind") in {
+        "Deployment",
+        "StatefulSet",
+    }:
+        yield doc["metadata"]["name"], pod_spec(doc)
+
+
+def _vip_node_offence(role: str, pod: dict) -> str | None:
+    pinned = (pod.get("nodeSelector") or {}).get("kubernetes.io/hostname")
+    if pinned == _primary_node():
+        return None
+    return (
+        f"pinned to {pinned!r}, not k8s_primary_node {_primary_node()!r}; a preferred "
+        "affinity does not count, because a pod rescheduled during a reboot stays put after it"
+    )
+
+
 EDGE_PROPERTIES = (
     Property(
         name="traefik-crds-carry-no-inline-credential",
@@ -222,5 +258,43 @@ EDGE_PROPERTIES = (
         # 106 traefik.io objects render: 80 IngressRoutes, 21 Middlewares, 5 TLSOptions.
         min_matches=95,
         must_find=_TRAEFIK_MUST_FIND,
+    ),
+    Property(
+        name="home-critical-workloads-pinned-to-the-vip-node",
+        reason=(
+            "Traefik, pihole and mosquitto run on the node that announces their MetalLB VIPs, "
+            "so the house already goes down with that node. The rest of a home-critical "
+            "entry's workloads are pinned there too (#3452): HA and authelia on daniel-server "
+            "made a second node whose loss broke SSO and home automation. The selector reads "
+            "`tier` on containers_list entries, so a newly tiered role joins without an edit "
+            "here. The DECIDED marker on `tier:` in inventory/host_vars/daniel-box.yml has the "
+            "trade-off."
+        ),
+        select=_home_critical_workloads,
+        offence=_vip_node_offence,
+        red=("home-assistant", {"affinity": {"nodeAffinity": {}}}),
+        green=(
+            "home-assistant",
+            {"nodeSelector": {"kubernetes.io/hostname": "daniel-box"}},
+        ),
+        more_red=(
+            (
+                "home-assistant",
+                {"nodeSelector": {"kubernetes.io/hostname": "daniel-server"}},
+            ),
+        ),
+        must_find=frozenset(
+            {
+                "traefik",
+                "pihole",
+                "pihole-2",
+                "mosquitto",
+                "authelia",
+                "authelia-redis",
+                "crowdsec",
+                "zigbee2mqtt",
+                "home-assistant",
+            }
+        ),
     ),
 )
