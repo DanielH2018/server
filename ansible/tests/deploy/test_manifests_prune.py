@@ -77,6 +77,12 @@ _ARMED_ROLES = frozenset(
         "peanut",
         "janitorr",
         "deploy-ui",
+        "artifacts",
+        "docs",
+        "nut-exporter",
+        "pihole-exporter",
+        "node-exporter",
+        "jellyfin",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.

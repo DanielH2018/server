@@ -3,6 +3,7 @@
 # verbatim-prompts store the LAN route it deliberately lacks. Ships with the pod-log DaemonSet
 # (Grafana Alloy) that feeds terraria-stats and the log-based checks for cluster services.
 
+# The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy loki-homelab to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -11,7 +12,6 @@
     manifests_rollout: loki-homelab
     manifests_files:
       - configmap.yaml
-      - pvc.yaml
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml

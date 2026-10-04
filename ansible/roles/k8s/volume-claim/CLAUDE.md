@@ -9,7 +9,7 @@ list in the caller's `defaults/main.yml`, which `k8s/manifests` renders, digests
 applies ahead of its snapshot (`ansible/roles/k8s/manifests/CLAUDE.md`). freshrss,
 zigbee2mqtt, speedtest, livesync, healthchecks, bazarr, sonarr, radarr, navidrome, prowlarr,
 karakeep, qbittorrent, terraria, code-server, n8n, valheim, scrutiny, tdarr, home-assistant,
-game-stats, uptime-kuma, pi-peer-backup and mosquitto use it. Convert a caller rather than adding a new one here.
+game-stats, uptime-kuma, pi-peer-backup, mosquitto, registry and loki-homelab use it. Convert a caller rather than adding a new one here.
 
 **No standalone deploy tag.** Callers reach it via `include_role: name: k8s/volume-claim`
 with `volume_claim_service`/`volume_claim_name`/`volume_claim_size`/`_storage_class`

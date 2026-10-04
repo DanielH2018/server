@@ -55,6 +55,8 @@ _KNOWN_CLAIMS = {
     ("homelab", "autokuma-data"): ("longhorn", "1Gi"),
     ("homelab", "pi-peer-backup-data"): ("longhorn", "128Mi"),
     ("homelab", "mosquitto-data"): ("longhorn-nobackup", "1Gi"),
+    ("homelab", "registry-data"): ("longhorn-nobackup", "10Gi"),
+    ("homelab", "loki-homelab-data"): ("longhorn-nobackup", "5Gi"),
 }
 
 
