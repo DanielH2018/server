@@ -9,9 +9,10 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_claim_template.py
 """
 
 import pytest
-import yaml
+
 
 import narrow_broad
+from lib import yaml_fast
 from lib.git import git_stdout
 from lib.repo_paths import REPO
 
@@ -109,14 +110,20 @@ def _declaring_roles() -> set[str]:
 
 def test_the_real_claim_template_narrows_to_exactly_its_declarers():
     declarers = _declaring_roles()
-    assert {"freshrss", "zigbee2mqtt"} <= declarers
+    assert {
+        "freshrss",
+        "healthchecks",
+        "livesync",
+        "speedtest",
+        "zigbee2mqtt",
+    } <= declarers
     ctx = narrow_broad.context_for("HEAD", REPO)
     assert narrow_broad.broad_path_tags(CLAIM, "HEAD", ctx) == declarers
 
 
 def test_manifests_renders_the_claim_template_only_per_k8s_claims_entry():
     """The fact the claim rule rests on: one task names the template, and it loops the key."""
-    tasks = yaml.safe_load((REPO / RENDERER).read_text())
-    naming = [t for t in tasks if "claim-default.yaml.j2" in yaml.safe_dump(t)]
+    tasks = yaml_fast.safe_load((REPO / RENDERER).read_text())
+    naming = [t for t in tasks if "claim-default.yaml.j2" in str(t)]
     assert len(naming) == 1
     assert "k8s_claims" in naming[0]["loop"]
