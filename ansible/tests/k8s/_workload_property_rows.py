@@ -191,7 +191,103 @@ def _homepage_with_post_start(command: list[str]) -> dict:
     return {"spec": {"template": {"spec": {"containers": [container]}}}}
 
 
+def _pod_specs(role: str, tpl: str, doc: dict):
+    # The object name is in the key because one template can carry two Deployments (pihole's
+    # does), and a key naming only the file would merge them.
+    if doc.get("kind") in POD_KINDS:
+        yield f"{doc['kind']}/{doc['metadata']['name']}", pod_spec(doc)
+
+
+def _automount_offence(role: str, pod: dict) -> str | None:
+    if pod.get("serviceAccountName"):
+        return None
+    if pod.get("automountServiceAccountToken") is False:
+        return None
+    return (
+        "names no serviceAccountName and does not set automountServiceAccountToken: false, "
+        "so the default SA's token is mounted into a pod that never uses it"
+    )
+
+
+def _service_links_offence(role: str, pod: dict) -> str | None:
+    if pod.get("enableServiceLinks") is False:
+        return None
+    return "inherits Docker-link env vars for every Service in the namespace"
+
+
+# 88 pod templates render, Jobs and CronJobs included. Close enough to notice a contraction.
+_MIN_POD_TEMPLATES = 78
+# One pod per role the census was written against, so a lost role is named, not counted.
+_POD_TEMPLATES_MUST_FIND = frozenset(
+    {
+        "Deployment/prometheus",
+        "Deployment/valheim",
+        "Deployment/valheim-stats",
+        "DaemonSet/dri-device-plugin",
+        "Deployment/traefik",
+        "Deployment/authelia",
+    }
+)
+
 WORKLOAD_PROPERTIES = (
+    Property(
+        name="sa-less-pods-refuse-the-default-token",
+        reason=(
+            "A pod that names no ServiceAccount runs as `default`, whose token grants nothing "
+            "this cluster's RBAC hands out. A token that grants nothing is still a bearer "
+            "credential on a tmpfs in every container. `pod_shell` in "
+            "ansible/templates/workload-shell.yml.j2 encodes the rule (no service_account -> "
+            "`false`; one named -> no line), so an offence on a Deployment or DaemonSet is a "
+            "call that overrides it. A pod that names an SA is left alone: the SA object may set "
+            "the field, and the pod's own value then means nothing. Read off the parsed pod "
+            "spec, because a grep counts the `automountServiceAccountToken: true` on a "
+            "ServiceAccount OBJECT as if it were the pod's."
+        ),
+        select=_pod_specs,
+        offence=_automount_offence,
+        red=("nut", {}),
+        green=("nut", {"automountServiceAccountToken": False}),
+        more_red=(
+            ("nut", {"automountServiceAccountToken": True}),
+            ("nut", {"automountServiceAccountToken": "false"}),
+        ),
+        more_green=(
+            ("observability", {"serviceAccountName": "prometheus"}),
+            (
+                "headlamp",
+                {
+                    "serviceAccountName": "headlamp",
+                    "automountServiceAccountToken": True,
+                },
+            ),
+        ),
+        min_matches=_MIN_POD_TEMPLATES,
+        must_find=_POD_TEMPLATES_MUST_FIND,
+    ),
+    Property(
+        name="pods-disable-service-link-env-vars",
+        reason=(
+            "Kubernetes injects <NAME>_SERVICE_HOST, <NAME>_PORT_<n>_TCP and so on for every "
+            "Service in the namespace, and an app that reads its config from <NAME>_* env vars "
+            "takes them as configuration. Authelia did, and exited before serving anything: "
+            "`error occurred performing deprecation mapping for keys 'server.host', "
+            "'server.port', and 'server.path' to new key server.address: the new key already "
+            "exists with value 'tcp4://:9091' but the deprecated keys and the new key can't "
+            "both be configured`. A Service name matching an app's env-var prefix is the normal "
+            "case in this namespace, so every pod template of every kind sets "
+            "enableServiceLinks: false, not just `deployment.yaml.j2`."
+        ),
+        select=_pod_specs,
+        offence=_service_links_offence,
+        red=("authelia", {}),
+        green=("authelia", {"enableServiceLinks": False}),
+        more_red=(
+            ("authelia", {"enableServiceLinks": True}),
+            ("authelia", {"enableServiceLinks": "false"}),
+        ),
+        min_matches=_MIN_POD_TEMPLATES,
+        must_find=_POD_TEMPLATES_MUST_FIND,
+    ),
     Property(
         name="service-macro-places-the-namespace",
         reason=(

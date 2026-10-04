@@ -14,8 +14,9 @@
   ansible/tests/k8s/test_workload_shell_uses_the_macros.py is the call-site guard: every
   Deployment template calls both, every DaemonSet template calls `pod_shell`, and none writes
   an owned field out by hand. A macro cannot force its own call, so the rendered-fleet census
-  in test_pod_template_hygiene.py, test_deploy_strategy.py and the
-  deployment-revision-history-limit row of test_rendered_properties.py stays — it is the half that tells an omission from
+  in test_pod_template_hygiene.py, test_deploy_strategy.py, the
+  deployment-revision-history-limit row of test_rendered_properties.py and the two pod-spec
+  rows of _workload_property_rows.py stays — it is the half that tells an omission from
   a macro call, which a grep cannot.
 
   ── spec_shell(strategy, max_surge=none, max_unavailable=none) ── Deployments only ──

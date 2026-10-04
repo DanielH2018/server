@@ -26,7 +26,8 @@ pihole's two-Deployment macro already forced, one directory further out.
 Jobs and CronJobs are out of scope: their pod spec sits at another depth for a CronJob and
 carries no priority tier for either (`test_pod_template_hygiene.py` says why), so a literal in
 a Job document is not an offence. The rendered-fleet census in `test_pod_template_hygiene.py`,
-`test_deploy_strategy.py` and `test_rendered_properties.py`'s revision-history row is the other half —
+`test_deploy_strategy.py` and `test_rendered_properties.py`'s revision-history and pod-spec rows is
+the other half —
 it tells an omitted call from a present one, which a grep cannot.
 
 Run: uv run pytest ansible/tests/k8s/test_workload_shell_uses_the_macros.py

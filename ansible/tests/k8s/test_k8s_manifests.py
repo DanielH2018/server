@@ -12,8 +12,9 @@ The four split along those consequences: the moved VIP is
 are `test_k8s_manifests_routes.py`, and the read-only RBAC that keeps Ansible the only write
 path is `test_k8s_manifests_rbac.py`. What stays here is pod-level hygiene — nothing mounts
 over the ServiceAccount token path — plus two guards on the k8s play itself. Pod-template
-hygiene the whole fleet must satisfy (priority tier, SA token, service links) is
-`test_pod_template_hygiene.py`. The renderer and inventory vars shared here are
+hygiene the whole fleet must satisfy is `test_pod_template_hygiene.py` (priority tier) and the
+`sa-less-pods-refuse-the-default-token` and `pods-disable-service-link-env-vars` rows of
+`_workload_property_rows.py`. The renderer and inventory vars shared here are
 `_manifest_guards.py`.
 
 Run: uv run pytest ansible/tests/k8s/test_k8s_manifests.py
@@ -176,8 +177,8 @@ def test_a_mount_under_run_secrets_is_flagged():
     assert token_shadowing_mounts(cronjob("/run/secretsx")) == []
 
 
-# The service-link env var guard is test_pod_template_hygiene.py's
-# test_every_pod_template_disables_service_link_env_vars. It reads the whole rendered corpus.
+# The service-link env var guard is the `pods-disable-service-link-env-vars` row of
+# _workload_property_rows.py. It reads the whole rendered corpus.
 
 
 # The public-route and bouncer pairing guard is test_the_public_route_and_the_bouncer_move_together
