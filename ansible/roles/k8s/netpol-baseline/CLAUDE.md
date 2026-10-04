@@ -50,6 +50,8 @@ needs, decides which one.
   pods: `netpol_from: [apps]`, rendered through the `networkpolicy` macro in
   `ansible/templates/networkpolicy.yml.j2`. `templates/networkpolicy-callers.yaml.j2` loops
   over every entry carrying the key, behind the `netpol_baseline_enforced` lever. An entry
+  whose pod label is not its own name sets `netpol_app:` to the label (scrutiny's
+  `scrutiny-web`). An entry
   whose role renders its own copy also sets `netpol_role_owned: true`, and the loop skips it.
   `ansible/tests/k8s/test_netpol_from.py` fails if a policy name renders from two roles.
 - **In the workload's own role**, when the workload's deploy depends on the policy:
@@ -59,8 +61,8 @@ needs, decides which one.
   - A backend that the pod's startup waits on ships with the pod. The precedents are
     authelia's session store (#1609) and the scrutiny and karakeep backends (#1620).
   - The additive caller rules of the *arr stack and qbittorrent live with the workload they
-    admit callers to. sonarr's, radarr's and prowlarr's caller lists are `netpol_from` on
-    their entries, with `netpol_role_owned: true`.
+    admit callers to. sonarr's, radarr's, prowlarr's and qbittorrent's caller lists are
+    `netpol_from` on their entries, with `netpol_role_owned: true`.
 
 **A hand `--tags <svc>` deploy does not apply that service's policy when the policy lives
 here.** When a change needs a policy change and a workload change together, deploy both

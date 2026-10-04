@@ -1,8 +1,10 @@
 """Guards `netpol_from:`, the caller list a containers_list entry declares for its fence.
 
 Two templates render the same key. netpol-baseline's `networkpolicy-callers.yaml.j2` loops over
-every entry carrying it, and a role that must carry its own fence (sonarr, radarr, prowlarr)
-renders it from its own template while its entry sets `netpol_role_owned: true`. Forgetting that
+every entry carrying it, and a role that must carry its own fence (sonarr, radarr, prowlarr,
+qbittorrent) renders it from its own template while its entry sets `netpol_role_owned: true`.
+An entry whose pod label is not its own name names the label in `netpol_app`, and the fence
+selects that label and takes its name (scrutiny -> scrutiny-web). Forgetting that
 flag renders one NetworkPolicy name from two roles, and whichever role deploys last silently
 wins. Rendering neither leaves the service with no caller fence, and every listed caller is
 denied by the baseline.
@@ -13,11 +15,13 @@ Jinja: a text scan of the inventory says what was declared, not what renders.
 Run: uv run pytest ansible/tests/k8s/test_netpol_from.py
 """
 
+from _helpers import K8S_ROLES
 from _k8s_render import host_context, pod_template, rendered_docs
 from lib.ansible_inventory import containers_entries_in
 
-# Entries this guard must find, one per renderer. Named rather than counted: if the key were
-# renamed, the census below would go empty and every `all()` here would pass on nothing.
+# Entries this guard must find, by the policy name each renders, with its renderer. Named rather
+# than counted: if the key were renamed, the census below would go empty and every `all()` here
+# would pass on nothing.
 KNOWN_FENCES = {
     "speedtest": "netpol-baseline",
     "ical-proxy": "netpol-baseline",
@@ -27,13 +31,29 @@ KNOWN_FENCES = {
     "sonarr": "sonarr",
     "radarr": "radarr",
     "prowlarr": "prowlarr",
+    "qbittorrent": "qbittorrent",
+    # Entry `scrutiny`, rendered under its `netpol_app`.
+    "scrutiny-web": "netpol-baseline",
+}
+
+
+def fence_name(entry: dict) -> str:
+    """The pod label a fence selects, which is also the NetworkPolicy's name."""
+    return entry.get("netpol_app", entry["name"])
+
+
+# Callers that are pods a task creates with `kubectl run`, so no rendered manifest carries their
+# label. Each maps to the task file that must still stamp it: a probe that loses the label stops
+# matching the fence and reports a denial that is the probe's, not the service's.
+UNRENDERED_CALLERS = {
+    "qbittorrent-reach-probe": K8S_ROLES / "qbittorrent" / "tasks" / "verify.yml",
 }
 
 
 def declared_fences() -> dict[str, dict]:
-    """Each daniel-box entry carrying `netpol_from`, by name."""
+    """Each daniel-box entry carrying `netpol_from`, by the policy name it renders."""
     return {
-        e["name"]: e
+        fence_name(e): e
         for e in containers_entries_in(host_context())
         if "netpol_from" in e
     }
@@ -97,7 +117,7 @@ def test_each_entry_renders_one_fence_from_its_owner_admitting_its_callers():
         doc["metadata"]["name"]: (role, doc) for role, doc in network_policies()
     }
     for name, entry in declared_fences().items():
-        owner = name if entry.get("netpol_role_owned") else "netpol-baseline"
+        owner = entry["name"] if entry.get("netpol_role_owned") else "netpol-baseline"
         assert name in rendered, f"{name} declares netpol_from but no policy renders"
         role, doc = rendered[name]
         assert role == owner, f"{name}'s fence renders from {role}, expected {owner}"
@@ -119,6 +139,14 @@ def test_every_caller_is_a_label_some_rendered_pod_carries():
         (name, caller)
         for name, entry in declared_fences().items()
         for caller in entry["netpol_from"]
-        if caller not in labels
+        if caller not in labels and caller not in UNRENDERED_CALLERS
     }
     assert unknown == set()
+
+
+def test_each_unrendered_caller_is_still_labelled_by_its_task():
+    for caller, tasks in UNRENDERED_CALLERS.items():
+        assert f"--labels app={caller}" in tasks.read_text(), (
+            f"{tasks} no longer runs a pod labelled app={caller}; drop it from "
+            "UNRENDERED_CALLERS and from the netpol_from list that names it"
+        )

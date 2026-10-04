@@ -10,6 +10,12 @@
 #
 # Its Service is named `feed-cache`; the pod label is `app: freshrss-feed-cache`. Port 80 is the
 # containerPort and the Service port both — verified 2026-08-20.
+#
+# DECIDED: this fence stays bespoke rather than `netpol_from` + `netpol_app` on the freshrss
+# entry. The entry describes freshrss, not this pod: its `port` matches the cache's port only by
+# coincidence, and spending its one fence on a sub-workload would leave freshrss no way to declare
+# its own. scrutiny converted because its entry's port IS scrutiny-web's port. Converting this
+# needs a way to declare a fence for a workload that has no entry of its own (#3473).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

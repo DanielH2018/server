@@ -14,6 +14,7 @@ Run: uv run pytest ansible/tests/k8s/test_netpol_baseline_labels.py
 
 from _k8s_render import pod_template, rendered_docs
 from _helpers import K8S_ROLES
+from lib import yaml_fast
 
 # Slice 1 of the rollout: the six traefik-only leaf apps (docs/networkpolicy-default-deny.md).
 # Adding a role here without labelling it — or labelling one without listing it — fails below.
@@ -172,30 +173,15 @@ SLICE_45C_WORKLOADS = {
 SLICE_45C_ROLES = {role for role, _name in SLICE_45C_WORKLOADS}
 
 # Workloads inside a fenced role that are fenced by their OWN NetworkPolicy rather than by the
-# baseline label. Each entry must name the policy that covers it: an unexplained exemption is
-# indistinguishable from a workload someone forgot to label.
-#
-# flaresolverr: roles/k8s/prowlarr/templates/networkpolicy-flaresolverr.yaml.j2 admits app=prowlarr only, on one
-# port. That is TIGHTER than the baseline, which would also admit traefik, prometheus and the node
-# CIDRs — so labelling it would widen the fence around a headless browser that renders
-# attacker-supplied pages.
-#
-# n8n: roles/k8s/n8n/templates/networkpolicy.yaml.j2 (live name `n8n-broker`) fences it already.
-# Slice 4.5 labels n8n-runners, which drags the whole n8n role into the fenced set — but labelling
-# n8n itself would ADD the baseline's traefik + prometheus + node-CIDR allow-list on top of a
-# tighter bespoke policy, widening it. Same reasoning as flaresolverr, and the same reasoning that
-# keeps headlamp and registry out of slice 4.5 entirely.
-BESPOKE_POLICY_WORKLOADS = {
-    ("prowlarr", "flaresolverr"),
-    ("n8n", "n8n"),
-    # The baseline's rule has no `ports:`, so labelling a headless browser would admit traefik
-    # and prometheus to its unauthenticated DevTools port. Fenced by its own policy instead.
-    ("karakeep", "karakeep-chrome"),
-}
+# baseline label are exactly the ones carrying the exemption label, so the exemption below reads
+# `_exempt_workloads()` rather than a second hand-kept list. That set is pinned to
+# `netpol_baseline_exempt_workloads` and each member to a policy that selects it, further down.
+# Labelling one would ADD the baseline's traefik + prometheus + node-CIDR allow-list on top of
+# its tighter policy, widening it.
 
 # Pod-producing docs that are deliberately unlabelled and deliberately NOT fenced: a netpol probe
 # stands in for a compromised pod with no allow-list entry, so labelling one would make it prove
-# nothing. This is a different category from BESPOKE_POLICY_WORKLOADS, which is "fenced by its own
+# nothing. This is a different category from the exempt workloads, which are "fenced by their own
 # policy" — these are fenced by nothing, on purpose.
 #
 # Entries are used only as a subtrahend, so one that matches no rendered doc is a silent no-op —
@@ -276,14 +262,14 @@ def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
         and doc.get("kind") in POD_KINDS
         and _pod_template_labels(doc).get(LABEL[0]) != LABEL[1]
     }
-    exempt = BESPOKE_POLICY_WORKLOADS | UNFENCED_BY_DESIGN_WORKLOADS
+    exempt = _exempt_workloads() | UNFENCED_BY_DESIGN_WORKLOADS
     unexplained = sorted(f"{role}/{name}" for role, name in unlabelled - exempt)
     assert not unexplained, (
         "pod-producing docs inside a fenced role are missing the baseline label:\n"
         f"  {unexplained}\n"
         "Every workload in a fenced role must carry it — the role is not the unit. Pick one: "
-        "label it; if it is already fenced by its own NetworkPolicy, add (role, name) to "
-        "BESPOKE_POLICY_WORKLOADS above with a comment naming that policy file; if it is a probe "
+        "label it; if it is already fenced by its own NetworkPolicy, give it the "
+        "netpol-baseline-exempt label and list it in netpol_baseline_exempt_workloads; if it is a probe "
         "that must stay unfenced to test the fence, add it to UNFENCED_BY_DESIGN_WORKLOADS."
     )
 
@@ -342,32 +328,19 @@ def test_exactly_the_slice_3_workloads_carry_the_baseline_label() -> None:
     )
 
 
-# Slice 5 flips the baseline to namespace scope, where the selector inverts: it fences every pod
-# that does NOT carry `netpol-baseline-exempt`. These four workloads own a bespoke policy TIGHTER
-# than the baseline, and a NetworkPolicy is additive — selecting one would ADD traefik, prometheus
-# and both node CIDRs on top of it. The exemption keeps the tighter policy the only thing fencing
-# them. Each entry names the policy it protects.
+# The baseline is namespace-scoped, where the selector inverts: it fences every pod that does
+# NOT carry `netpol-baseline-exempt`. An exempt workload owns a bespoke policy TIGHTER than the
+# baseline, and a NetworkPolicy is additive — selecting one would ADD traefik, prometheus and both
+# node CIDRs on top of it. The exemption keeps the tighter policy the only thing fencing it.
 #
-# The pairing with BESPOKE_POLICY_WORKLOADS above is deliberate but not identical: that set is the
-# same idea under LABEL scope (do not add the opt-in label), and it lists only the two bespoke
-# workloads that live inside a role some slice already fenced. headlamp and registry are in no
-# slice at all, so they never needed an entry there and do need one here.
+# The expected set is the role default the live gate in tasks/main.yml compares the cluster
+# against, so the templates, the default and the cluster all answer to one list.
 EXEMPT_LABEL = ("netpol-baseline-exempt", "true")
 
-EXEMPT_WORKLOADS = {
-    # roles/k8s/prowlarr/templates/networkpolicy-flaresolverr.yaml.j2 — admits app=prowlarr only, on :8191.
-    ("prowlarr", "flaresolverr"),
-    # roles/k8s/headlamp/templates/networkpolicy.yaml.j2
-    ("headlamp", "headlamp"),
-    # roles/k8s/n8n/templates/networkpolicy.yaml.j2 (live name `n8n-broker`), which selects
-    # app=n8n ONLY. n8n-runners is covered by nothing else, so it must NOT appear here.
-    ("n8n", "n8n"),
-    # roles/k8s/registry/templates/networkpolicy.yaml.j2
-    ("registry", "registry"),
-    # netpol-baseline/templates/networkpolicy-karakeep-chrome.yaml.j2 — admits app=karakeep only,
-    # on :9222. The other three karakeep workloads stay labelled; only chrome is exempt.
-    ("karakeep", "karakeep-chrome"),
-}
+_DEFAULTS = yaml_fast.safe_load(
+    (K8S_ROLES / "netpol-baseline" / "defaults" / "main.yml").read_text()
+)
+EXEMPT_NAMES = set(_DEFAULTS["netpol_baseline_exempt_workloads"])
 
 
 def _exempt_workloads() -> set[tuple[str, str]]:
@@ -380,21 +353,92 @@ def _exempt_workloads() -> set[tuple[str, str]]:
     }
 
 
-def test_exactly_the_bespoke_workloads_are_exempt_from_the_baseline() -> None:
+def test_the_exempt_default_names_a_known_member() -> None:
+    """Non-vacuity: an empty or renamed default would make the exact-set check below pass on
+    two empty sets."""
+    assert "karakeep-chrome" in EXEMPT_NAMES
+
+
+def test_exactly_the_default_exempt_workloads_carry_the_exemption() -> None:
     """Under namespace scope this label is the ONLY way out of the fence.
 
     A missing entry is a workload about to be widened. An extra entry is a workload fenced by
     nothing at all — the more dangerous direction, and the one a grep for the label cannot tell
     apart from the safe one.
     """
-    exempt = _exempt_workloads()
-    assert exempt == EXEMPT_WORKLOADS, (
-        "the set of workloads opted out of the baseline no longer matches EXEMPT_WORKLOADS.\n"
+    exempt = {name for _role, name in _exempt_workloads()}
+    assert exempt == EXEMPT_NAMES, (
+        "the workloads carrying netpol-baseline-exempt no longer match "
+        "netpol_baseline_exempt_workloads in roles/k8s/netpol-baseline/defaults/main.yml.\n"
         f"  exempt:   {sorted(exempt)}\n"
-        f"  expected: {sorted(EXEMPT_WORKLOADS)}\n"
+        f"  expected: {sorted(EXEMPT_NAMES)}\n"
         "An extra entry is unfenced by everything; a missing one gets the baseline's allow-list "
         "added on top of its own tighter policy."
     )
+
+
+def _namespaced(doc: dict) -> str:
+    return doc.get("metadata", {}).get("namespace", "")
+
+
+def unselected(workloads: list[tuple[str, dict]], policies: list[dict]) -> set[str]:
+    """Names of the (name, pod-producing doc) workloads no policy's `matchLabels` selects.
+
+    Only `matchLabels` selectors count. The baseline selects by `matchExpressions` on the
+    exemption label, so it can never be the policy that covers an exempt workload.
+    """
+    missing = set()
+    for name, doc in workloads:
+        labels = _pod_template_labels(doc)
+        if not any(
+            _namespaced(policy) == _namespaced(doc)
+            and (wanted := policy["spec"]["podSelector"].get("matchLabels"))
+            and wanted.items() <= labels.items()
+            for policy in policies
+        ):
+            missing.add(name)
+    return missing
+
+
+def test_every_exempt_workload_is_selected_by_its_own_policy() -> None:
+    """An exempt workload no policy selects is open to every pod in the namespace."""
+    workloads = [
+        (doc["metadata"]["name"], doc)
+        for _role, _tpl, doc in rendered_docs()
+        if doc.get("kind") in POD_KINDS and doc["metadata"]["name"] in EXEMPT_NAMES
+    ]
+    policies = [
+        doc for _r, _t, doc in rendered_docs() if doc.get("kind") == "NetworkPolicy"
+    ]
+    assert {name for name, _doc in workloads} == EXEMPT_NAMES
+    assert unselected(workloads, policies) == set()
+
+
+def test_an_exempt_workload_only_the_baseline_selects_is_flagged() -> None:
+    """The rejecting half: a namespace-wide matchExpressions selector covers nothing here."""
+    pod = {
+        "kind": "Deployment",
+        "metadata": {"name": "chrome", "namespace": "homelab"},
+        "spec": {"template": {"metadata": {"labels": {"app": "chrome"}}}},
+    }
+    baseline = {
+        "metadata": {"namespace": "homelab"},
+        "spec": {
+            "podSelector": {
+                "matchExpressions": [{"key": "x", "operator": "DoesNotExist"}]
+            }
+        },
+    }
+    own = {
+        "metadata": {"namespace": "homelab"},
+        "spec": {"podSelector": {"matchLabels": {"app": "chrome"}}},
+    }
+    elsewhere = {
+        "metadata": {"namespace": "observability"},
+        "spec": {"podSelector": {"matchLabels": {"app": "chrome"}}},
+    }
+    assert unselected([("chrome", pod)], [baseline, elsewhere]) == {"chrome"}
+    assert unselected([("chrome", pod)], [baseline, own]) == set()
 
 
 def test_no_workload_is_both_labelled_and_exempt() -> None:
