@@ -14,6 +14,9 @@ Type=oneshot
 # the full webhook to any local user with no sudo (2026-08-23b review M5). Mirrors
 # gitops-deploy-alert.service.
 EnvironmentFile=/etc/renovate-notify/alert-webhook.env
-ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
+# Retries every failure, a refused connection and a failed DNS lookup included: one attempt
+# lost the page for claude-rc's 2026-10-04 07:46 crash to a DNS failure (#3523). Plain
+# --retry skips a refused connection. Worst case about two minutes; a oneshot has no start timeout.
+ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors -H "Content-Type: application/json" \
   -d '{"content":"🚨 renovate-notify unit failed on {{ inventory_hostname }} — check `journalctl -u renovate-notify`."}' \
   "${ALERT_WEBHOOK}"

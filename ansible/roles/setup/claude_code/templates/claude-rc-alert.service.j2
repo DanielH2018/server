@@ -21,6 +21,9 @@ Type=oneshot
 # CLAUDE.md — that gap needs a check that asserts the host is registered, not that the
 # process is up.
 EnvironmentFile=/etc/claude-rc/alert-webhook.env
-ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
+# Retries every failure, a refused connection and a failed DNS lookup included: one attempt
+# lost the page for claude-rc's 2026-10-04 07:46 crash to a DNS failure (#3523). Plain
+# --retry skips a refused connection. Worst case about two minutes; a oneshot has no start timeout.
+ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors -H "Content-Type: application/json" \
   -d '{"content":"🚨 claude-rc unit failed on {{ inventory_hostname }} — Remote Control sessions cannot be started from the phone. Check `journalctl -u claude-rc`."}' \
   "${ALERT_WEBHOOK}"
