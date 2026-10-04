@@ -6,6 +6,9 @@ Type=oneshot
 # The same one-key EnvironmentFile as claude-rc-alert.service, for the same reason: systemd
 # serves unit text over the system bus, so the webhook must not appear in it.
 EnvironmentFile=/etc/claude-rc/alert-webhook.env
-ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
+# Retries every failure, a refused connection and a failed DNS lookup included: one attempt
+# lost the page for claude-rc's 2026-10-04 07:46 crash to a DNS failure (#3523). Plain
+# --retry skips a refused connection. Worst case about two minutes; a oneshot has no start timeout.
+ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors -H "Content-Type: application/json" \
   -d '{"content":"claude-memory-sync failed on {{ inventory_hostname }}: sessions on {{ claude_code_memory_sync_target }} keep reading a stale memory store. Check `journalctl -u claude-memory-sync`."}' \
   "${ALERT_WEBHOOK}"

@@ -4,7 +4,7 @@ systemd serves unit content over the system bus, so `systemctl show <unit> -p Ex
 prints the rendered command to any local user regardless of the file's mode. A tree walk
 rather than an enumeration, so a new unit cannot inherit the shape unseen; alert units must
 also read a dedicated webhook file, since the role's config.env is exactly what can be
-unreadable when the thing they alert for has failed.
+unreadable when the thing they alert for has failed. Alert units also retry a failed delivery.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py
@@ -74,4 +74,51 @@ def test_alert_units_read_a_dedicated_webhook_file():
             f"{unit_path.relative_to(_ROLES)} does not read a dedicated alert-webhook.env. It "
             f"must NOT fall back to the role's config.env — that file is exactly what can be "
             f"unreadable when the thing this unit alerts for has failed."
+        )
+
+
+def _retries_every_failure(exec_start: str) -> bool:
+    """Whether an alert's curl retries a refused connection and a failed lookup.
+
+    Measured with curl 8.5: plain `--retry` retried a DNS failure (exit 6) but not a refused
+    connection (exit 7); `--retry-all-errors` retried both.
+    """
+    return (
+        bool(re.search(r"--retry [1-9]", exec_start))
+        and "--retry-all-errors" in exec_start
+    )
+
+
+def test_the_retry_rule_rejects_a_single_attempt_and_plain_retry():
+    retrying = (
+        'ExecStart=/usr/bin/curl -fsS --retry 5 --retry-all-errors "${ALERT_WEBHOOK}"'
+    )
+    assert _retries_every_failure(retrying)
+    assert not _retries_every_failure(
+        'ExecStart=/usr/bin/curl -fsS -m 10 "${ALERT_WEBHOOK}"'
+    )
+    assert not _retries_every_failure(
+        'ExecStart=/usr/bin/curl -fsS --retry 5 "${ALERT_WEBHOOK}"'
+    )
+
+
+def test_alert_units_retry_a_failed_delivery():
+    # One attempt lost the page for claude-rc's 2026-10-04 07:46 crash: curl exited 6 (could
+    # not resolve host) at the moment the host failed, and nothing tried again (#3523).
+    alerts = {
+        p.name: p for p in _unit_templates() if p.name.endswith("-alert.service.j2")
+    }
+    assert "claude-rc-alert.service.j2" in alerts, (
+        "the walk no longer finds the #3523 unit"
+    )
+    for unit_path in alerts.values():
+        exec_start = re.search(
+            r"^ExecStart=.*?(?=\n(?!\s)|\Z)",
+            unit_path.read_text(),
+            re.MULTILINE | re.DOTALL,
+        )
+        assert exec_start and _retries_every_failure(exec_start.group(0)), (
+            f"{unit_path.relative_to(_ROLES)} sends its page once. Give its curl "
+            f"`--retry 5 --retry-delay 10 --retry-all-errors`, or, if it no longer uses curl, "
+            f"an equivalent retry that covers a refused connection and a failed DNS lookup."
         )
