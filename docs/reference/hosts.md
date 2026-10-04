@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-09-29 15:49 UTC
-generated_sha: eb3890ca3
+generated_at: 2026-10-04 18:25 UTC
+generated_sha: 64ee055fc
 ---
 
 !!! warning "Generated file — do not edit"
@@ -23,7 +23,7 @@ k3s server / control-plane node. Ansible runs here, and so do the GitOps timer, 
 |---|---|
 | LAN address | `10.0.0.215` |
 | Ansible connection | `local` |
-| Services declared | 57 |
+| Services declared | 56 |
 | Runs the GitOps timer | yes |
 | Has Docker | no |
 

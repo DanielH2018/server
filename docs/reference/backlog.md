@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-04 06:17 UTC
-generated_sha: 737397f95
+generated_at: 2026-10-04 18:26 UTC
+generated_sha: 64ee055fc
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,25 +16,17 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks — **escalated** | 2026-09-28 | 2 | - | ✓ |
 | [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 1 | - | ✓ |
-| [#3325](https://github.com/DanielH2018/server/issues/3325) | medium | gap | - | Renovate run held: manual_plane k3s from 167901a6f unapplied | 2026-10-03 | 0 | - | - |
-| [#3382](https://github.com/DanielH2018/server/issues/3382) | medium | gap | backup-observability | Decide Longhorn's node-down pod deletion policy and write the daniel-server-loss runbook — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3383](https://github.com/DanielH2018/server/issues/3383) | medium | improvement | cicd | Fold the policy-shaped rendered-manifest tests into one property table — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
 | [#3392](https://github.com/DanielH2018/server/issues/3392) | medium | improvement | cicd | Replace the owed-work marker families with one append-only ledger — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3452](https://github.com/DanielH2018/server/issues/3452) | medium | improvement | container | Derive priority class, Kuma severity and node placement from the containers_list tier field | 2026-10-04 | 0 | worktree-fanout-3452 | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
-| [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
 | [#3281](https://github.com/DanielH2018/server/issues/3281) | low | improvement | cicd | Digest-pin the third-party images still pinned only by tag | 2026-10-02 | 0 | - | ✓ |
 | [#3387](https://github.com/DanielH2018/server/issues/3387) | low | improvement | container | Create every PVC through one path — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
 | [#3388](https://github.com/DanielH2018/server/issues/3388) | low | improvement | container | Prune every role's removed objects by injecting the role label at render time — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3390](https://github.com/DanielH2018/server/issues/3390) | low | improvement | network | Run the second DNS resolver on daniel-pi and retire pihole-2 — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3471](https://github.com/DanielH2018/server/issues/3471) | low | gap | container | Deploy the six converted roles once so the manifests sweep removes their stale <service>-claims files | 2026-10-04 | 0 | - | ✓ |
-| [#3478](https://github.com/DanielH2018/server/issues/3478) | low | improvement | network | Render role-owned sub-workload fences (authelia-redis, karakeep backends) from netpol_fences | 2026-10-04 | 0 | - | ✓ |
-| [#3480](https://github.com/DanielH2018/server/issues/3480) | low | improvement | backup-observability | Decide whether a home-critical service's own Kuma tile pages by severity and email | 2026-10-04 | 0 | - | ✓ |
-| [#3481](https://github.com/DanielH2018/server/issues/3481) | low | addition | container | Derive the shed set for a lost node from the containers_list tier field | 2026-10-04 | 0 | - | ✓ |
+| [#3518](https://github.com/DanielH2018/server/issues/3518) | low | gap | backup-observability | Delete navidrome-data's orphaned d0 Longhorn backups once a d3 backup exists | 2026-10-04 | 0 | - | ✓ |
+| [#3519](https://github.com/DanielH2018/server/issues/3519) | low | gap | backup-observability | Decide the fate of the retired healthchecks-config volume's Longhorn backups | 2026-10-04 | 0 | - | ✓ |
+| [#3526](https://github.com/DanielH2018/server/issues/3526) | low | gap | cicd | The kill-tree landing test can pass a setsid-only landing since --await-verdict was retired — *no vetted remediation* | 2026-10-04 | 0 | - | - |
 
 ## Settled findings — do not re-flag
 
@@ -117,6 +109,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#1933](https://github.com/DanielH2018/server/issues/1933) | refuted | Validate: speedtest monitoring route admits the whole pod CIDR to /api/ for a caller that sends no credential | Upstream routes/api.php at v1.14.7: only /api/healthcheck and the deprecated public /api/speedtest/latest are unauthenticated; every other /api/ route sits behind auth:sanctum, so a caller with no credential cannot create, start or delete a result. |
 | [#2446](https://github.com/DanielH2018/server/issues/2446) | refuted | Traefik access log ClientHost uses the client-sent X-Forwarded-For for Cloudflare requests | Traefik logs ClientHost as the whole X-Forwarded-For chain; the live crowdsecurity/traefik-logs 1.5 parser takes the rightmost entry, which through Cloudflare is the address Cloudflare appends. Live evidence: a scanner's XFF 127.0.0.1 chain was banned by its real address 195.178.110.72. The issue's harness skipped Cloudflare's append. Evidence on the issue; mechanism recorded in the traefik CLAUDE.md by PR #2464. |
 | [#2764](https://github.com/DanielH2018/server/issues/2764) | accepted | A Traefik router rejected for a reason other than empty endpoints still pins long-lived clients on 421 | Every production router rejection since filing (5 Traefik starts, 09-27 to 10-01) landed 4-13s before the pod went Ready, so the startupProbe and Recreate strategy kept clients off it. Stage showed a missing Middleware does not pin 'default' on a held connection (302, never 421). What remains is a Ready Traefik dropping a Host router mid-reload, mainly when a TLSOption it names is removed or renamed. That case is rare (traefik role is denylisted from auto-deploy) and check_traefik_421 (#2757) pages within 15 minutes, so a wedge is caught rather than running for hours. Option 1 (a default TLSOption plus dropping options: from every LAN router) touches every role to close a window production has not opened. Evidence: https://github.com/DanielH2018/server/issues/2764#issuecomment-5957615924 |
+| [#3390](https://github.com/DanielH2018/server/issues/3390) | accepted | Run the second DNS resolver on daniel-pi and retire pihole-2 | Operator decision 2026-10-04: keep pihole-2 on daniel-box rather than moving the second resolver to daniel-pi and changing router DHCP. |
 
 ### security
 

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-10-02 06:17 UTC
-generated_sha: 7df0bfaaa
+generated_at: 2026-10-04 18:25 UTC
+generated_sha: 64ee055fc
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,12 @@ generated_sha: 7df0bfaaa
 
 # Services
 
-61 service(s) declared across 2 host(s).
+60 service(s) declared across 2 host(s).
 
 
 ## daniel-box
 
-57 service(s).
+56 service(s).
 
 | Service | Platform | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|---|
@@ -37,14 +37,13 @@ generated_sha: 7df0bfaaa
 | game-stats | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | denylisted (games — companions to the hand-operated terraria and valheim servers. ALSO Recreate + RWO PVCs holding irreplaceable stats — two independent reasons) |
 | gpu-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | headlamp | k8s | <span class="fqdn" data-host="headlamp">headlamp.&lt;domain&gt;</span> · <span class="fqdn" data-host="headlamp.local">headlamp.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
-| healthchecks | k8s | <span class="fqdn" data-host="healthchecks">healthchecks.&lt;domain&gt;</span> · <span class="fqdn" data-host="healthchecks.local">healthchecks.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | denylisted (observability — cron dead-man's-switch monitor. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: check UUIDs here are baked into ping URLs in unrelated crons fleet-wide; a revert past a check's creation leaves those crons pinging a dead UUID, silently dropped) |
 | home-assistant | k8s | <span class="fqdn" data-host="home-assistant">home-assistant.&lt;domain&gt;</span> · <span class="fqdn" data-host="home-assistant.local">home-assistant.local.&lt;domain&gt;</span> | none (public/no-auth) | daily -> R2 | eligible |
 | homelab-mcp | k8s | no route (infra role) | none (public/no-auth) | no PVC (stateless) | eligible |
 | homepage | k8s | <span class="fqdn" data-host="homepage">homepage.&lt;domain&gt;</span> · <span class="fqdn" data-host="homepage.local">homepage.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
 | ical-proxy | k8s | <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | no PVC (stateless) | eligible |
 | janitorr | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | not Longhorn (media-local) | denylisted (probe-less — no readinessProbe on the Deployment; also the only role that deletes real media, so a wedge is not merely inert) |
 | jellyfin | k8s | <span class="fqdn" data-host="jellyfin">jellyfin.&lt;domain&gt;</span> · <span class="fqdn" data-host="jellyfin.local">jellyfin.local.&lt;domain&gt;</span> | none (public/no-auth) | weekly -> B2 (default target); not Longhorn (media-local) | eligible |
-| karakeep | k8s | <span class="fqdn" data-host="karakeep">karakeep.&lt;domain&gt;</span> · <span class="fqdn" data-host="karakeep.local">karakeep.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup); weekly -> B2 (default target) | denylisted (three reasons: (1) stateful — meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger sub-deployment; (3) migrating state — Recreate + RWO volume-claim PVC. COUPLING NOTE for a future promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting karakeep-data alone desyncs the search index until a manual reindex) |
+| karakeep | k8s | <span class="fqdn" data-host="karakeep">karakeep.&lt;domain&gt;</span> · <span class="fqdn" data-host="karakeep.local">karakeep.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup); weekly -> B2 (default target) | denylisted (three reasons: (1) stateful — meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger sub-deployment; (3) migrating state — Recreate + RWO PVC. COUPLING NOTE for a future promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting karakeep-data alone desyncs the search index until a manual reindex) |
 | littlelink | k8s | <span class="fqdn" data-host="www">www.&lt;domain&gt;</span> · <span class="fqdn" data-host="www.local">www.local.&lt;domain&gt;</span> | none (public/no-auth) | no PVC (stateless) | eligible |
 | livesync | k8s | no route (infra role) | none (public/no-auth) | no backup (StorageClass longhorn-nobackup) | denylisted (state coupled outside the volume — reverting the CouchDB B-tree to a snapshot desynchronises it from connected Obsidian clients' already-synced revisions, inviting a conflict storm an un-reverted rollback would not cause; the pre-apply snapshot and revert work fine and are not the blocker) |
 | loki-homelab | k8s | <span class="fqdn" data-host="loki-homelab.local">loki-homelab.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | no backup (StorageClass longhorn-nobackup) | denylisted (observability — log store other monitors read from; a broken deploy blinds them without paging. ALSO Recreate + PVC on its own log data) |
