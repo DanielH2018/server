@@ -24,6 +24,7 @@ from lib import yaml_fast
 from lib.jinja_comments import strip_jinja_comments
 from lib.render_guard import load_yaml as _load_yaml
 from lib.repo_paths import FILTER_PLUGINS, SHARED_TPL
+from lib.service_tiers import resolved_tier_lists
 
 _sys.path.insert(0, str(FILTER_PLUGINS))
 
@@ -388,7 +389,7 @@ def claim_names(role_dir: Path, k8s_roles: Path = K8S_ROLES) -> list[str]:
 
 def load_longhorn_tier_lists(k3s_defaults: Path = K3S_DEFAULTS) -> LonghornTiers:
     """The R2, weekly and no-backup volume lists from the k3s role's defaults."""
-    data = _load_yaml(k3s_defaults)
+    data = resolved_tier_lists(_load_yaml(k3s_defaults))
     return LonghornTiers(
         r2=frozenset(data.get("k3s_longhorn_r2_volumes") or []),
         weekly=frozenset(data.get("k3s_longhorn_weekly_volumes") or []),

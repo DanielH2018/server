@@ -23,6 +23,7 @@ Run: uv run pytest ansible/tests/longhorn/test_every_longhorn_pvc_has_a_tier.py
 
 import yaml
 from lib import yaml_fast
+from lib.service_tiers import resolved_tier_lists
 
 from _helpers import SETUP_ROLES, load_defaults
 from _role_census import role_dirs
@@ -70,14 +71,14 @@ def _base_context() -> dict:
     return resolve_vars(base, base)
 
 
-def _rendered_longhorn_pvcs() -> set[str]:
-    """`namespace/name` for every PVC a role renders directly, on the `longhorn` class.
+def _rendered_longhorn_pvcs() -> set[tuple[str, str]]:
+    """`(role, namespace/name)` for every PVC a role renders directly, on the `longhorn` class.
 
     Covers roles that own their PVC manifest (traefik-acme, crowdsec-db, n8n-files, ...).
     Namespace is read off the rendered document, never assumed.
     """
     found = set()
-    for _role, _tpl, doc in rendered_docs():
+    for role, _tpl, doc in rendered_docs():
         if doc.get("kind") != "PersistentVolumeClaim":
             continue
         metadata = doc.get("metadata") or {}
@@ -89,12 +90,12 @@ def _rendered_longhorn_pvcs() -> set[str]:
             and isinstance(namespace, str)
             and storage_class == _LONGHORN_CLASS
         ):
-            found.add(f"{namespace}/{name}")
+            found.add((role, f"{namespace}/{name}"))
     return found
 
 
-def _volume_claim_longhorn_pvcs(base: dict) -> set[str]:
-    """`namespace/name` for every PVC the shared `k8s/volume-claim` role creates.
+def _volume_claim_longhorn_pvcs(base: dict) -> set[tuple[str, str]]:
+    """`(role, namespace/name)` for every PVC the shared `k8s/volume-claim` role creates.
 
     `k8s/volume-claim` is never rendered under its own role (it has no `container_item` /
     `containers_list` entry) — its `templates/pvc.yaml.j2` only ever renders with the vars a
@@ -161,14 +162,22 @@ def _volume_claim_longhorn_pvcs(base: dict) -> set[str]:
                 except Exception:  # noqa: S112 -- unresolvable under this stub context, not a finding
                     continue
                 if storage_class == _LONGHORN_CLASS:
-                    found.add(f"{namespace}/{name}")
+                    found.add((role, f"{namespace}/{name}"))
     return found
+
+
+def longhorn_pvcs_by_role() -> dict[str, set[str]]:
+    """The `namespace/name` PVCs on storageClassName EXACTLY `longhorn`, by declaring role."""
+    pairs = _rendered_longhorn_pvcs() | _volume_claim_longhorn_pvcs(_base_context())
+    by_role: dict[str, set[str]] = {}
+    for role, pvc in pairs:
+        by_role.setdefault(role, set()).add(pvc)
+    return by_role
 
 
 def _longhorn_class_pvcs() -> set[str]:
     """Every `namespace/name` PVC declared with storageClassName EXACTLY `longhorn`."""
-    base = _base_context()
-    return _rendered_longhorn_pvcs() | _volume_claim_longhorn_pvcs(base)
+    return set().union(*longhorn_pvcs_by_role().values())
 
 
 def _uncovered(declared: set[str], lists: dict[str, set[str]]) -> set[str]:
@@ -180,7 +189,7 @@ def _uncovered(declared: set[str], lists: dict[str, set[str]]) -> set[str]:
 
 
 def test_every_longhorn_pvc_has_a_tier():
-    defaults = load_defaults(K3S)
+    defaults = resolved_tier_lists(load_defaults(K3S))
     lists = {name: set(defaults.get(name) or []) for name in _ROUTING_LISTS}
     declared = _longhorn_class_pvcs()
     assert len(declared) >= 25, (

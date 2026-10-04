@@ -78,6 +78,7 @@ from fragment_renderers import (
 )
 from lib.docs_provenance import write_if_body_changed
 from lib.repo_paths import REPO
+from lib.service_tiers import resolved_tier_lists
 
 SELF = "scripts/docs/gen_doc_fragments.py"
 DEFAULT_OUT_DIR = "docs/assets/generated/fragments"
@@ -112,7 +113,7 @@ def header(sources: list[str]) -> str:
 
 
 def _longhorn() -> tuple[str, list[str]]:
-    return render_longhorn_tiers(role_defaults(K3S_DEFAULTS)), [
+    return render_longhorn_tiers(resolved_tier_lists(role_defaults(K3S_DEFAULTS))), [
         "ansible/roles/setup/k3s/defaults/main.yml"
     ]
 
