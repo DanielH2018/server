@@ -15,7 +15,11 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
+import deploy_cross_role
+
 # Re-exported: `narrow_setup` and the cross-role scan read the tables through this module.
+# This module's own readers go through `deploy_cross_role.<TABLE>` instead, so a tick that
+# swaps the tables with `deploy_cross_role.use_tables` reaches them (#3512).
 from deploy_cross_role import (  # noqa: F401
     K8S_ROLES_IMPORTING_SETUP_FILES,
     SETUP_FILES_ROUTED_TO_OWNER,
@@ -483,7 +487,9 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             # A k8s role importing this setup file defer-and-alerts like its own change would.
             # Here rather than in `plan_tick`, because `k8s_change_commits` reads `.k8s` from
             # this function alone to name the commit each `k8s_unapplied` line records (#3111).
-            cs.k8s |= K8S_ROLES_IMPORTING_SETUP_FILES.get(p, frozenset())
+            cs.k8s |= deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES.get(
+                p, frozenset()
+            )
             continue
         if p.startswith(_PI_SHARED_PREFIX):
             cs.pi_shared = True
@@ -528,7 +534,9 @@ def setup_roles_for(path: str) -> set[str]:
     at = role_of(path)
     if at is None or at.plane != "setup":
         return set()
-    shippers = SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(path, frozenset())
+    shippers = deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(
+        path, frozenset()
+    )
     # DECIDED: `common` is not named beside its file's shippers (#3312); see its CLAUDE.md.
     owner = set() if shippers and setup_role_playbook(at.role) is None else {at.role}
     return owner | shippers

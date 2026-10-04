@@ -13,7 +13,7 @@ freshrss_k8s_cache_image: nginx:alpine@sha256:1ed1b0e1d7652937d6cbdaf4018c7b6fc0
 # below and reverts it if the deploy fails, so a bad digest swap reverts instead of migrating
 # the config volume with no version signal to have even warned about it.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert; still tracks :latest by digest with no version signal to misread"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, now protected by the pre-apply Longhorn snapshot and revert; still tracks :latest by digest with no version signal to misread"  # noqa var-naming[no-role-prefix]
 # The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Declared regardless of k8s_autodeploy — protects a manual deploy too, and the revert
 # is what this role's auto-deploy depends on.

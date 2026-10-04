@@ -16,8 +16,8 @@ loop to auto-tag bookmarks.
   (weekly -> B2 (default target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — three reasons: (1) stateful —
   meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger
-  sub-deployment; (3) migrating state — Recreate + RWO volume-claim PVC. COUPLING NOTE for a
-  future promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting
+  sub-deployment; (3) migrating state — Recreate + RWO PVC. COUPLING NOTE for a future
+  promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting
   karakeep-data alone desyncs the search index until a manual reindex
 <!-- /generated_from -->
 

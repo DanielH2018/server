@@ -19,6 +19,7 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 import deploy_alert_text
 import deploy_alerts
 import deploy_io
+import deploy_cross_role
 from deploy_changes import (
     ChangeSet,
     comment_only_broad_changes,
@@ -235,6 +236,8 @@ def plan_tick(
             "not parking; the tick treats it as no change"
         )
         paths = [p for p in paths if p not in quiet]
+    if deploy_cross_role.CROSS_ROLE_FILE in paths:
+        _adopt_incoming_cross_role_tables(tools, config, target.origin)
     cs = services_from_changed_paths(paths)
     cs.k8s_consumers = shared_module_consumers(paths, config.repo)
     hostvars = deploy_io.host_vars_text(config.repo, config.hostname)
@@ -242,6 +245,26 @@ def plan_tick(
     cs = _promote_k8s_auto_deploys(tools, state, config, cs, paths, target)
     cs.k8s_origins = k8s_change_commits(tools, config, target, set(quiet))
     return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services)
+
+
+def _adopt_incoming_cross_role_tables(
+    tools: DeployTools, config: Config, origin: str
+) -> None:
+    """Classify a range that edits the cross-role tables with origin's copy of them (#3512).
+
+    A read or exec failure keeps the installed copy, which is the behaviour before #3512.
+    """
+    path = deploy_cross_role.CROSS_ROLE_FILE
+    try:
+        source = tools.run(["git", "show", f"{origin}:{path}"], cwd=config.repo)
+        deploy_cross_role.use_tables(deploy_cross_role.tables_in(source))
+    except Exception as exc:
+        log(
+            f"range edits {path}, and its copy at {origin[:8]} is unusable "
+            f"({exc}) — classifying with the installed tables"
+        )
+        return
+    log(f"range edits {path} — classifying with its copy at {origin[:8]}")
 
 
 # The line `git log` prints ahead of each commit's paths. No tracked path starts with it.

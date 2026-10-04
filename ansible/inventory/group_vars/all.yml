@@ -265,10 +265,13 @@ k8s_namespace: homelab
 # the service's release and render records. A run that finds nothing reports `ok`.
 #
 #   name:      the retired role's `manifests_service`
-#   dirs:      staged directories under /etc/rancher/k3s/manifests/; default `[name]`. List a
-#              reserved sibling (`<name>-netpol`, `<name>-claims`) by hand: a `<name>-*` glob
-#              would match another live service's directory.
+#   dirs:      staged directories under /etc/rancher/k3s/manifests/; default `[name,
+#              <name>-netpol, <name>-claims]`, by exact name. List any other sibling by hand:
+#              a `<name>-*` glob would match another live service's directory.
 #   namespace: for documents that carry none, such as a claim; default `k8s_namespace`
+#   allow_cluster_scoped: `Kind/name` of each cluster-scoped object (a Namespace, ClusterRole,
+#              PersistentVolume, StorageClass) the teardown may delete. Without it the play
+#              refuses before any delete and names the object; default `[]`.
 #
 # An entry stays until the deploy that removes its objects has run; leaving it longer costs
 # one stat per directory per deploy. ansible/tests/deploy/test_k8s_retired_services.py
