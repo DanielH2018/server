@@ -16,7 +16,9 @@ edit re-applies the setup roles that copy or import it
 consumers apply on the tick, and `k3s` is recorded in `manual_plane` under its own name.
 `common` itself is not recorded for those files. Its line would print the resolv.conf
 remediation, which names the wrong roles, and leave one more marker to clear after the
-consumers are applied. The kuma-check templates route to the importers of
+consumers are applied. A PR may add a file and its table entry together: the tick classifies
+a range that edits `deploy_cross_role.py` with origin's copy of it, not the installed one
+(#3512). The kuma-check templates route to the importers of
 `kuma_check_timer.yml`, the task file that renders them (#3319). The k8s roles `janitorr` and
 `configarr` import `install_host_lib.yml` and `stamp_deployed.yml` too, so a change to those or
 to `host_lib.py` also defer-and-alerts both (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`,

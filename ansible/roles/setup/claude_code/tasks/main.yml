@@ -434,6 +434,31 @@
   become: true
   when: claude_code_agent_user_enabled
 
+- name: Sync the repo's venv in the agent user's clone
+  tags: [claude_code]
+  # The profile points the hook shim at this clone, and the shim runs every guard with
+  # `uv run --no-sync`. A clone with no .venv has guards that cannot import, and each one
+  # falls back to `ask` (#3513). renovate-agent syncs its own worktree before each session
+  # (renovate_agent/files/run_worktree.py); nothing else does it for this user. runuser for
+  # the reason the shared task file gives: a root-run sync leaves a root-owned .venv.
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - "{{ claude_code_agent_user_home }}/.local/bin/uv"
+      - sync
+      - --frozen
+    chdir: "{{ claude_code_agent_user_clone_dir }}"
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+  register: claude_code_agent_user_sync
+  changed_when: >-
+    claude_code_agent_user_sync.stderr is search('^(Installed|Uninstalled) ', multiline=True)
+  become: true
+  when: claude_code_agent_user_enabled
+
 - name: Create the agent user's kubeconfig directory
   tags: [claude_code]
   ansible.builtin.file:

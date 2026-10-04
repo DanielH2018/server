@@ -3,7 +3,7 @@ zigbee2mqtt_k8s_image: ghcr.io/koenkk/zigbee2mqtt:2.14.2@sha256:addbfb08fcef2e44
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # DENIED — state coupling, not missing recovery. Deploy mechanics alone would allow it:
-# Recreate + RWO volume-claim PVC, protected by the pre-apply Longhorn snapshot and revert.
+# Recreate + RWO PVC, protected by the pre-apply Longhorn snapshot and revert.
 # The volume's state is coupled to something the snapshot cannot capture: the
 # SLZB-06M coordinator's own NVRAM keeps the network key and frame counters. A revert puts
 # database.db/devices.yaml/coordinator_backup.json back to the snapshot while the coordinator

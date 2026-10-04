@@ -10,7 +10,7 @@ speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:52ffdb0
 # pre-apply Longhorn snapshot of that claim and reverts it if the deploy fails. The data at
 # risk is regenerable speed-test history (see the storage-class comment below).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + an RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert added in slice 7b. Same shape as sonarr/prowlarr; the data at risk was already regenerable speed-test history"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + an RWO PVC, now protected by the pre-apply Longhorn snapshot and revert added in slice 7b. Same shape as sonarr/prowlarr; the data at risk was already regenerable speed-test history"  # noqa var-naming[no-role-prefix]
 # The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
 # Declared regardless of k8s_autodeploy — protects a manual deploy too, and the revert it
 # enables is what this role's auto-deploy depends on.

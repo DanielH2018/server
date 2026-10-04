@@ -9,6 +9,9 @@ asserts the containers_list half at run time; these tests catch both halves at r
 Run: uv run pytest ansible/tests/deploy/test_k8s_retired_services.py
 """
 
+import pytest
+from ansible.errors import AnsibleFilterError
+from k8s_retire import k8s_cluster_scoped, k8s_staged_objects
 from lib import yaml_fast
 
 from _helpers import (
@@ -57,3 +60,42 @@ def test_the_delete_survives_a_rerun_and_holds_the_directory_until_objects_are_g
     cmd = command_of(task_named(load_tasks(_RETIRE_TASKS), "Delete every object"))
     assert "--ignore-not-found" in cmd
     assert "--wait=true" in cmd
+
+
+_NAMESPACED_ONLY = "kind: Deployment\nmetadata:\n  name: svc\n---\nkind: Secret\nmetadata:\n  name: svc\n"
+_WITH_RBAC = "kind: Namespace\nmetadata:\n  name: observability\n---\nkind: ClusterRole\nmetadata:\n  name: svc\n"
+_API_RESOURCES = (
+    "namespaces   ns   v1   false   Namespace\n"
+    "clusterroles        rbac.authorization.k8s.io/v1   false   ClusterRole\n"
+)
+
+
+def test_a_service_staging_only_namespaced_objects_is_clean():
+    objects = k8s_staged_objects([_NAMESPACED_ONLY])
+    assert objects == [
+        {"kind": "Deployment", "name": "svc"},
+        {"kind": "Secret", "name": "svc"},
+    ]
+    assert k8s_cluster_scoped(objects, _API_RESOURCES) == []
+
+
+def test_a_staged_namespace_or_cluster_role_is_flagged_unless_the_entry_allows_it():
+    objects = k8s_staged_objects([_NAMESPACED_ONLY, _WITH_RBAC])
+    assert k8s_cluster_scoped(objects, _API_RESOURCES) == [
+        "Namespace/observability",
+        "ClusterRole/svc",
+    ]
+    allowed = ["Namespace/observability"]
+    assert k8s_cluster_scoped(objects, _API_RESOURCES, allowed) == ["ClusterRole/svc"]
+
+
+def test_an_unreadable_api_resources_listing_refuses_rather_than_passing():
+    with pytest.raises(AnsibleFilterError, match="names no Namespace kind"):
+        k8s_cluster_scoped(k8s_staged_objects([_WITH_RBAC]), "")
+
+
+def test_the_refusal_runs_before_the_delete():
+    names = [t.get("name", "") for t in load_tasks(_RETIRE_TASKS)]
+    refuse = next(i for i, n in enumerate(names) if n.startswith("Refuse to delete"))
+    delete = next(i for i, n in enumerate(names) if n.startswith("Delete every object"))
+    assert refuse < delete

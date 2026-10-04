@@ -142,3 +142,58 @@ def test_switching_the_agent_user_off_expires_it_and_on_lifts_the_expiry() -> No
         if (t.get("ansible.builtin.user") or {}).get("state") == "absent"
     ]
     assert removals == []
+
+
+def root_run_writers(task_list: list[dict]) -> list[str]:
+    """Every command task that runs as root on each apply rather than as the agent (#3510).
+
+    A command run as root inside the agent's home leaves root-owned files there, and the
+    closing recursive chown then reports `changed` on every apply. A `creates:`-gated command
+    runs once, and the chown hands its output over on that first apply.
+    """
+    flagged = []
+    for t in task_list:
+        cmd = t.get("ansible.builtin.command")
+        if cmd is None or "creates" in cmd or "creates" in (t.get("args") or {}):
+            continue
+        if (cmd.get("argv") or [None])[0] != "runuser":
+            flagged.append(str(t.get("name")))
+    return flagged
+
+
+def agent_tasks(task_list: list[dict]) -> list[dict]:
+    """claude_code's tasks that act on the agent user's home."""
+    return [t for t in task_list if t.get("when") == "claude_code_agent_user_enabled"]
+
+
+def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent() -> (
+    None
+):
+    shared = tasks(SHARED)
+    claude = agent_tasks(tasks(CLAUDE_TASKS))
+    # The named members, so the census cannot pass on a renamed or vanished task.
+    named(shared, "Install the pinned host Python for the agent user")
+    named(claude, "Sync the repo's venv in the agent user's clone")
+    assert root_run_writers(shared) == []
+    assert root_run_writers(claude) == []
+
+
+def test_a_command_run_as_root_on_each_apply_is_flagged() -> None:
+    root_run = {
+        "name": "Install it",
+        "ansible.builtin.command": {"cmd": "/srv/agent/.local/bin/uv python install"},
+    }
+    run_once = {
+        "name": "Clone it",
+        "ansible.builtin.command": {"argv": ["git", "clone"], "creates": "/srv/x"},
+    }
+    assert root_run_writers([root_run, run_once]) == ["Install it"]
+
+
+def test_the_agents_clone_gets_a_venv_its_hooks_can_import_from() -> None:
+    """#3513: the hook shim runs `uv run --no-sync` in the clone the profile names."""
+    task = named(tasks(CLAUDE_TASKS), "Sync the repo's venv in the agent user's clone")
+    cmd = task["ansible.builtin.command"]
+    assert cmd["argv"][-2:] == ["sync", "--frozen"]
+    assert cmd["chdir"] == "{{ claude_code_agent_user_clone_dir }}"
+    assert task["environment"] == {"HOME": "{{ claude_code_agent_user_home }}"}

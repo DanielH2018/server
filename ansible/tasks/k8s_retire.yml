@@ -11,6 +11,11 @@
 # hand-written object list: it holds every file the role's last real deploy applied, its
 # Secret and its `claim-<name>.yaml` included. Deleting the claim deletes the Longhorn volume,
 # because the `longhorn` StorageClass reclaims with `Delete`.
+#
+# It is also every kind those files declare, and some roles stage a Namespace, cluster RBAC, a
+# PersistentVolume or a StorageClass into their own directory (#3521). So the delete waits on a
+# listing of what it will remove, and refuses while any of it is cluster-scoped, naming each
+# object. An entry that means to remove one lists it in `allow_cluster_scoped`.
 
 - name: Refuse to retire a service containers_list still deploys, here {{ retired_service.name }}
   tags: [always]
@@ -27,9 +32,75 @@
   tags: [always]
   ansible.builtin.stat:
     path: "/etc/rancher/k3s/manifests/{{ item }}"
-  loop: "{{ retired_service.dirs | default([retired_service.name]) }}"
+  # The reserved siblings by exact name, never a `<name>-*` glob, which would match another
+  # live service's directory. A sibling that does not exist is skipped below.
+  loop: >-
+    {{ retired_service.dirs | default([retired_service.name,
+                                       retired_service.name ~ '-netpol',
+                                       retired_service.name ~ '-claims']) }}
   register: k8s_retire_dirs
   become: true
+
+- name: Find the staged manifest files of {{ retired_service.name }}
+  tags: [always]
+  # The files `kubectl delete -f <dir>/` reads: one level, these three extensions.
+  ansible.builtin.find:
+    paths: "{{ k8s_retire_dirs.results | selectattr('stat.exists') | map(attribute='stat.path') | list }}"
+    patterns: ["*.yaml", "*.yml", "*.json"]
+  register: k8s_retire_files
+  when: k8s_retire_dirs.results | selectattr('stat.exists') | list | length > 0
+  become: true
+
+- name: Read the staged manifest files of {{ retired_service.name }}
+  tags: [always]
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  # `default`: a skipped find still sets its register, with no `files` key in it.
+  loop: "{{ k8s_retire_files.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: k8s_retire_texts
+  # The directory holds the service's Secret.
+  no_log: true
+  become: true
+
+- name: List the kinds this cluster serves without a namespace, for {{ retired_service.name }}
+  tags: [always]
+  ansible.builtin.command:
+    cmd: k3s kubectl api-resources --namespaced=false --no-headers
+  register: k8s_retire_cluster_kinds
+  changed_when: false
+  when: k8s_retire_files.files | default([]) | length > 0
+  become: true
+
+- name: Show every object the teardown deletes, for {{ retired_service.name }}
+  tags: [always]
+  ansible.builtin.debug:
+    msg: "{{ k8s_retire_objects | map(attribute='kind') | zip(k8s_retire_objects | map(attribute='name')) | map('join', '/') | list }}"
+  vars:
+    k8s_retire_objects: >-
+      {{ k8s_retire_texts.results | default([]) | map(attribute='content')
+         | map('b64decode') | list | k8s_staged_objects }}
+  when: k8s_retire_files.files | default([]) | length > 0
+
+- name: Refuse to delete a cluster-scoped object staged by {{ retired_service.name }}
+  tags: [always]
+  ansible.builtin.assert:
+    that:
+      - k8s_retire_refused | length == 0
+    fail_msg: >-
+      k8s_retired_services names {{ retired_service.name }}, whose staged manifests declare
+      cluster-scoped objects: {{ k8s_retire_refused | join(', ') }}. Deleting them would remove
+      them for every service, not only this one. Nothing was deleted. Move each object to the
+      role that still owns it, or list it in the entry's `allow_cluster_scoped` as Kind/name.
+    quiet: true
+  vars:
+    k8s_retire_refused: >-
+      {{ k8s_retire_texts.results | default([]) | map(attribute='content')
+         | map('b64decode') | list | k8s_staged_objects
+         | k8s_cluster_scoped(k8s_retire_cluster_kinds.stdout,
+                              retired_service.allow_cluster_scoped | default([])) }}
+  when: k8s_retire_files.files | default([]) | length > 0
 
 # --ignore-not-found makes a re-run over a half-finished teardown succeed. --wait holds the
 # directory removal below until the objects are gone: the claim's pvc-protection finalizer

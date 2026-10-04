@@ -534,6 +534,37 @@ def setup_roles_for(path: str) -> set[str]:
     return owner | shippers
 
 
+# The tables above, by the path of the module that defines them and the names it binds.
+CROSS_ROLE_FILE = "ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py"
+_CROSS_ROLE_TABLES = (
+    "K8S_ROLES_IMPORTING_SETUP_FILES",
+    "SETUP_FILES_ROUTED_TO_OWNER",
+    "SETUP_FILES_SHIPPED_BY_OTHER_ROLES",
+)
+
+
+def adopt_cross_role_tables(source: str) -> None:
+    """Rebind this module's cross-role tables to the ones `source` defines (#3512).
+
+    The tick classifies with the installed `/opt/gitops-deploy` copy, which predates a range
+    that edits `deploy_cross_role.py`. A PR adding a `common/tasks` file and its table entry
+    together then found no shippers and recorded `common` in `manual_plane`.
+    `deploy_phases.plan_tick` passes origin's copy of the file here before it classifies.
+    Rebinding the globals reaches every reader in this module, since each looks the name up
+    at call time. Raises when `source` fails to run or lacks a table, and changes nothing then.
+    """
+    namespace: dict[str, object] = {}
+    # DECIDED: exec origin's copy rather than parse it. The file builds its tables with set
+    # unions and f-strings, which `ast.literal_eval` refuses. Origin has passed the CI gate,
+    # and the same tick's `gitops-deploy-code` apply installs and imports this exact file.
+    exec(compile(source, CROSS_ROLE_FILE, "exec"), namespace)
+    missing = [name for name in _CROSS_ROLE_TABLES if name not in namespace]
+    if missing:
+        raise KeyError(f"{CROSS_ROLE_FILE} defines no {', '.join(missing)}")
+    for name in _CROSS_ROLE_TABLES:
+        globals()[name] = namespace[name]
+
+
 # Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.
 # `None` means no playbook includes the role at all.
 #

@@ -215,6 +215,8 @@ claude_code_memory_sync_interval: 15min
 # To start a session as it, open a login shell, which reads the .profile this role writes, then
 # run `claude` in ~/server. The first run needs `/login` and trusting the directory:
 #   sudo machinectl shell claude@ /bin/bash -l
+# Each apply of this role syncs the clone's .venv, which the hooks run in. A pull that changes
+# uv.lock needs `uv sync` in ~/server before the next `claude`, as in any checkout.
 #
 # True only in daniel-box's host_vars. False expires the account rather than removing it, so
 # nothing can log in as it, and its home keeps the clone and any work not yet pushed. True
