@@ -114,7 +114,7 @@ gitops_deploy_k8s_autodeploy_pilot: []
 # renovate.json states the intent ("keeps each auto-deploy tick to a single service, which is
 # what the deploy timeout is sized for"), and this cap enforces it: a tick diffs local..origin,
 # spanning every commit since the last one, and the per-service k8s PRs share one daily window
-# with platformAutomerge. The pilot list bounds the tick at one service while it is non-empty;
+# with automerge. The pilot list bounds the tick at one service while it is non-empty;
 # the cap still holds once the pilot is cleared.
 #
 # 3 rather than 1: a cap of 1 would defer routine multi-bump mornings a tick at a time for no

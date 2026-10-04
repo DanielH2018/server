@@ -272,7 +272,7 @@ def split_k8s_auto_deploy(
     # batch discards the good bumps alongside the bad one. renovate.json states the intent
     # ("keeps each auto-deploy tick to a single service, which is what the deploy timeout is
     # sized for") but nothing enforced it: a tick diffs local..origin, spanning every commit
-    # since the last one, and per-service k8s PRs share one daily window with platformAutomerge.
+    # since the last one, and per-service k8s PRs share one daily window with automerge.
     #
     # The surplus stays in cs.k8s, which defer-and-alerts — the same fail-closed path as any
     # unpromotable change. It is NOT picked up on a later tick, and it is worth being exact
