@@ -23,26 +23,38 @@ manifests_secret_digest_key: /var/lib/homelab/k8s-secret-digest.key
 manifests_render_record: false
 manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 
-# Opt-in live prune (#1076). `kubectl apply -f <dir>/` only adds/updates, so a manifest
+# Live prune (#1076, #3388). `kubectl apply -f <dir>/` only adds/updates, so a manifest
 # dropped from manifests_files leaves its live object running — the "Prune staged manifests
-# dropped from the file lists" task above only deletes the STAGED FILE, never the live object.
+# dropped from the file lists" task only deletes the STAGED FILE, never the live object.
 # manifest-prune-check.sh pages about that gap after the fact; this is the in-place fix.
 #
-# DECIDED: default false, armed per-role rather than globally. Two things block a global flip:
-# (1) there is no shared metadata-labels macro yet, so every one of the other ~63 roles would
-# need its templates hand-edited to carry `homelab/role: <service>` before --prune could ever
-# see their objects — doing that without a proven mechanism first is the wrong order. (2) a
-# label added to a role's manifests only protects objects APPLIED AFTER the label lands: an
-# orphan whose staged file was already deleted before this feature shipped (the
-# claude-otel-ingest IngressRoute this issue names) never receives the label and stays
-# invisible to `-l homelab/role=...` — it still needs one manual kubectl delete, same as today.
-# roles/k8s/registry is the one role armed so far, proving the mechanism end-to-end on a role
-# with a normal Deployment+Service+NetworkPolicy shape. Arming another role means: label its
-# object metadata the same way, list every kind it renders in manifests_prune_kinds (the
-# default --prune-allowlist misses NetworkPolicy and every Traefik CRD), and never include
-# Secret or PersistentVolumeClaim — see the guard test on that.
+# DECIDED: armed per role, moving to every role a slice at a time. The operator overturned the
+# earlier "default false, hand-label each template" marker on 2026-10-04 (#3388). Its first
+# blocker was a missing mechanism: a role arming the prune now renders through
+# ansible/templates/role-labelled.yaml.j2, which stamps `homelab/role: <service>` onto every
+# document, so no template needs a hand edit. Its second blocker still holds: an orphan whose
+# staged file was deleted before its role was armed never receives the label and needs one
+# kubectl delete by hand. A role is armed once those orphans are cleared. registry, bazarr,
+# littlelink and texbrain are armed. The default stays false until every role is, because
+# flipping it moves every role's rendered bytes and needs one full deploy.
 manifests_prune: false
-manifests_prune_kinds: []
+
+# The kinds the prune may delete, one list for every armed role. Namespaced kinds only: the
+# apply passes `-n`, and a cluster-scoped kind would be listed outside that scope. Secret and
+# PersistentVolumeClaim are absent and must stay absent: a pruned Secret loses a rotated value
+# no re-apply can restore, and a pruned claim loses its data. A kind a role renders that is not
+# listed here is never pruned, which is the safe direction.
+# ansible/tests/deploy/test_manifests_prune.py holds both rules.
+manifests_prune_allowlist:
+  - apps/v1/Deployment
+  - apps/v1/DaemonSet
+  - batch/v1/CronJob
+  - core/v1/ConfigMap
+  - core/v1/Service
+  - core/v1/ServiceAccount
+  - networking.k8s.io/v1/NetworkPolicy
+  - traefik.io/v1alpha1/IngressRoute
+  - traefik.io/v1alpha1/Middleware
 
 # The rollout budget `k8s/manifests/tasks/drain.yml` waits for a workload whose role passes no
 # `manifests_rollout_timeout` of its own — the ONE place that number is written, so a role that

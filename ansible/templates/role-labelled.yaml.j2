@@ -1,0 +1,15 @@
+{#
+  The render k8s/manifests writes for a role that arms `manifests_prune` (#3388): the role's own
+  template, rendered, then passed through the `homelab_role_label` filter
+  (ansible/filter_plugins/role_label.py), which stamps `homelab/role: <manifests_service>` onto
+  every document and refuses an empty render.
+
+  A wrapper rather than a second task that relabels the staged file. The template module
+  writes the final bytes once, so the render's `changed` still means "these bytes moved". A
+  relabel pass after the write would read changed on every deploy and restart the workload
+  each time.
+
+  `manifests_label_src` is the absolute path of the template this wraps, set per loop item by
+  the render task.
+#}
+{{ lookup('ansible.builtin.template', manifests_label_src) | homelab_role_label(manifests_service) }}

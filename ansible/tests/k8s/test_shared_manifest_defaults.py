@@ -187,7 +187,10 @@ def test_the_render_task_resolves_the_shared_source():
     render = next(
         t for t in tasks if t.get("name", "").startswith("Render manifests for ")
     )
-    src = render["ansible.builtin.template"]["src"]
+    # An armed role's src is the labelling wrapper, which renders `manifests_label_src`; an
+    # unarmed role's src is `manifests_label_src` itself. Either way the source is chosen there.
+    src = render["vars"]["manifests_label_src"]
+    assert "manifests_label_src" in render["ansible.builtin.template"]["src"]
     assert "manifests_shared_defaults[item]" in src, (
         "the render task's src no longer consults manifests_shared_defaults, so every role "
         f"relying on the fallback fails at the render. src is: {src!r}"

@@ -2,8 +2,8 @@
 radarr_k8s_image: lscr.io/linuxserver/radarr:6.4.4.10685-ls318
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Migrating state — strategy is Recreate and the config volume is seeded through
-# k8s/volume-claim (hardcoded ReadWriteOnce), so a bad image swap can migrate the library
+# Migrating state — strategy is Recreate and the config volume comes from
+# k8s_claims below (hardcoded ReadWriteOnce), so a bad image swap can migrate the library
 # database + root-folder paths before the gate observes a fault, then fail the rollback
 # redeploy against data it can no longer read. The linuxserver -lsNN scheme hides a breaking
 # bump as a routine patch bump.
@@ -64,3 +64,9 @@ radarr_k8s_log_rotate: "10"
 # ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep
 # fails if the three drift apart.
 radarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0
+
+# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ radarr_k8s_claim }}"
+    storage_class: "{{ radarr_k8s_storage_class }}"
+    size: "{{ radarr_k8s_size }}"

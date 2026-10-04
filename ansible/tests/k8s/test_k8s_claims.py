@@ -56,7 +56,9 @@ def duplicate_claims(pvcs) -> dict[tuple[str | None, str | None], int]:
 
 def test_the_render_task_renders_the_template_the_harnesses_render():
     task = task_named(load_tasks(MANIFESTS / "tasks/main.yml"), "Render volume claims")
-    assert task["ansible.builtin.template"]["src"].endswith(
+    # The src is the labelling wrapper for an armed role, which renders `manifests_label_src`.
+    assert "manifests_label_src" in task["ansible.builtin.template"]["src"]
+    assert task["vars"]["manifests_label_src"].endswith(
         f"/templates/{CLAIM_TEMPLATE.name}"
     )
     assert task["loop_control"]["loop_var"] == "manifests_claim"

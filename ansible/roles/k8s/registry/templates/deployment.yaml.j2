@@ -7,10 +7,6 @@ kind: Deployment
 metadata:
   name: registry
   namespace: {{ k8s_namespace }}
-  # See defaults/main.yml manifests_prune DECIDED comment: this is the label the --prune
-  # selector for this role keys on.
-  labels:
-    homelab/role: registry
 spec:
   # Recreate, for two independent reasons that both bite here: the PVC is ReadWriteOnce, and
   # the hostPort below is node-exclusive. A rolling update would leave the new pod Pending on

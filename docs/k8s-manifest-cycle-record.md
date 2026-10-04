@@ -80,20 +80,28 @@ refuses a `manifests_service` that claims a reserved sibling name. `observabilit
 dashboard ConfigMaps out for the same reason and carries an explicit `state: absent` for the
 copies it left behind.
 
-**`manifests_prune` (#1076) removes the live object too, opt-in per role.** Set
-`manifests_prune: true` and `manifests_prune_kinds: [<group/version/Kind>, ...]` on the
-`include_role` call and the apply gains `--prune -l homelab/role=<service>
---prune-allowlist=<kinds> -n <namespace>`. Every kind named must have the matching
-`homelab/role: <service>` label rendered in ITS OWN template's `metadata.labels` — an unlabeled
-object is invisible to the selector and cannot be pruned, which is the mechanism's entire safety
-argument (a bad kinds list can only ever touch this role's own labeled objects).
-`roles/k8s/registry` is the only role armed so far; see the `manifests_prune` DECIDED comment in
-`defaults/main.yml` for why arming another role is a deliberate two-step (label the templates,
-then list the kinds) rather than a global flip, and why `Secret` and `PersistentVolumeClaim`
-must never appear in any role's kinds list (guarded by
-`ansible/tests/deploy/test_manifests_prune.py`). An orphan whose staged file was deleted BEFORE
-its role armed this — including the claude-otel-ingest IngressRoute #1076 names — never receives
-the label and stays invisible to the selector; it still needs one manual `kubectl delete`.
+**`manifests_prune` (#1076, #3388) removes the live object too, armed per role.** Set
+`manifests_prune: true` on the `include_role` call and the apply gains `--prune -l
+homelab/role=<service>`, one `--prune-allowlist=<kind>` per entry of the fixed
+`manifests_prune_allowlist`, and `-n <namespace>`. An unlabelled object is invisible to the
+selector and cannot be pruned, which is the mechanism's safety argument: a bad allowlist can
+only ever touch this role's own labelled objects.
+
+The selector also filters the apply. kubectl applies only the documents that carry the label
+and skips the rest without a word. So an armed role renders every document, its Secrets and
+claims included, through `ansible/templates/role-labelled.yaml.j2`. That wrapper renders the
+role's template and passes the result to the `homelab_role_label` filter
+(`ansible/filter_plugins/role_label.py`), which stamps `homelab/role: <service>` onto each
+document's `metadata.labels`. No template carries the label by hand. The filter refuses an
+empty render, and an assert refuses an armed role that names no manifest, because a prune over
+nothing deletes everything the role has live. Both refusals run before the apply.
+
+`Secret` and `PersistentVolumeClaim` are labelled so they are applied, and are never in the
+allowlist, so they are never pruned (guarded by `ansible/tests/deploy/test_manifests_prune.py`).
+registry, bazarr, littlelink and texbrain are armed. An orphan whose staged file was deleted
+BEFORE its role was armed — including the claude-otel-ingest IngressRoute #1076 names — never
+receives the label and stays invisible to the selector; it still needs one manual
+`kubectl delete`, which is why a role is armed only after its orphans are cleared.
 `manifest-prune-check.sh` keeps watching every role, armed or not, until a real deploy has been
 seen pruning a real orphan.
 

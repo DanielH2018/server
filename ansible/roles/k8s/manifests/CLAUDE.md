@@ -64,11 +64,11 @@ deferred pair below.
   whose manifests were *accepted*, not one whose pods are up. Every task in `drain.yml` is
   `tags: [always]`: a gitops-deploy run filters `[deploy]` out, which left the drain waiting
   on nothing behind a `failed=0` recap.
-- **Dropping a name from `manifests_files` is only half a retirement.** The staged file goes,
-  the **live object keeps serving**, and it needs one hand `kubectl delete` the
-  `manifest-prune-check.sh` host cron flags. `manifests_prune: true` plus `manifests_prune_kinds`
-  removes the live object too, per role, and each kind named must render the
-  `homelab/role: <service>` label itself.
+- **Dropping a name from `manifests_files` leaves the live object serving** unless the role
+  passes `manifests_prune: true`. An armed role renders through
+  `ansible/templates/role-labelled.yaml.j2`, which labels every document, since the `-l`
+  selector also filters the apply. Pruned kinds:
+  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`.
 - **The prune owns the whole directory, so nothing else may stage a file there**; an unnamed
   file is deleted on that role's next deploy. Write it to a reserved sibling directory
   (`<service>-netpol`, `<service>-claims`, `registry-jobs`) no `manifests_service` claims.

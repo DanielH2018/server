@@ -7,7 +7,7 @@ workload never starts against a claim that doesn't exist yet.
 **It is being retired in favour of `k8s_claims`** (#3387): a `{name, size, storage_class}`
 list in the caller's `defaults/main.yml`, which `k8s/manifests` renders, digests, dry-runs and
 applies ahead of its snapshot (`ansible/roles/k8s/manifests/CLAUDE.md`). freshrss,
-zigbee2mqtt, speedtest, livesync and healthchecks use it. Convert a caller rather than
+zigbee2mqtt, speedtest, livesync, healthchecks, bazarr, sonarr and radarr use it. Convert a caller rather than
 adding a new one here.
 
 **No standalone deploy tag.** Callers reach it via `include_role: name: k8s/volume-claim`
@@ -49,7 +49,7 @@ no deploy tag able to clear it (#1672). `_is_real_change` in
 read by `pvc.yaml.j2`, so a change there does move the applied PVC.
 
 A role that later drops its `k8s/volume-claim` include (wg-easy, zigbee2mqtt, freshrss,
-speedtest, livesync and healthchecks all did) leaves its `<service>-claims/` file behind.
+speedtest, livesync, healthchecks, bazarr, sonarr and radarr all did) leaves its `<service>-claims/` file behind.
 `k8s/manifests` removes that directory on the role's next deploy when the role declares
 `k8s_claims` or lists its own `pvc.yaml` (#3458). A role converted some other way still
 leaves the file, which is inert but stale.
