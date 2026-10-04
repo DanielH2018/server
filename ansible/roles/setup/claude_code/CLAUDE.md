@@ -54,11 +54,6 @@ same account and directory.
   `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py` holds the whole repo to
   that shape. `no_log: true` sits on the rendering task only and also hides an undefined-variable
   failure — check `gitops_deploy_discord_webhook` is in scope if that task fails opaquely.
-- **The alert retries a failed delivery for about two minutes.** On 2026-10-04 a single attempt
-  lost the page for a host crash: curl could not resolve Discord at that moment (#3523). Every
-  `*-alert.service.j2` in the repo carries `--retry-all-errors`, which
-  `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py::test_alert_units_retry_a_failed_delivery`
-  enforces.
 - **It cannot catch an expired login.** The host keeps reporting `active` while every session
   fails, so no `OnFailure=` fires. Closing it needs a check that the host is *registered*, not
   just up — **not yet built**.

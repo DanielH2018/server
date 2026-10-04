@@ -124,6 +124,21 @@ role landed, and this role's header comment cited them as justification for keep
 `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py` now walks every `*.service.j2`
 in the repo rather than naming units, so the next role cannot inherit it.
 
+## The page a single curl lost (#3523)
+
+At 07:46:58 UTC on 2026-10-04, `claude-rc.service` exited 1 and systemd restarted it 8 seconds
+later. Its `OnFailure=claude-rc-alert.service` ran one `curl`, which exited 6 (could not resolve
+host), so the page never reached Discord. systemd labels any exit 6 `NOTCONFIGURED`, which hid
+the cause. All five alert units in the repo sent their page once.
+
+Each alert `curl` now carries `--retry 5 --retry-delay 10 --retry-all-errors`. Plain `--retry` is
+not enough: with curl 8.5 it retried a failed lookup but not a refused connection, and a network
+fault at the moment of a failure can produce either. The cost is that a dead webhook (HTTP 404)
+retries for about a minute before the unit fails. A oneshot unit has no start timeout
+(`TimeoutStartUSec=infinity`), so the retries cannot be cut short.
+`test_alert_units_retry_a_failed_delivery` in the same test file holds every `*-alert.service.j2`
+to it.
+
 ## Why the weekly restart uses `try-restart`, not `RuntimeMaxSec=`
 
 `claude-rc-restart.timer` exists to pick up the binary Claude Code updates in the background,
