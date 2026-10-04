@@ -26,8 +26,9 @@ def _discord_webhooks(cfg: Config) -> list[tuple[str, str]]:
     security-ban delivery hop with no other backstop; GitOps/Renovate's carries the gitops-deploy
     rollback alert AND the renovate_notify digests (whose "alive" marker greens regardless of
     delivery); Arr's carries the *arr apps' own onHealthIssue alerts (direct POST from their
-    in-app Discord Connect, config only in the app DBs); Healthchecks' is the healthchecks.io app's
-    own check-down/up webhook (config only in hc.sqlite, a redundant secondary to its SMTP path).
+    in-app Discord Connect, config only in the app DBs); Healthchecks' was the self-hosted healthchecks
+    app's check-down/up webhook. That app retired in #2806; whether the healthchecks.io account's
+    own integrations post to the same webhook is recorded nowhere, so it stays verified.
     None has a Kuma backstop, so all five are verified together.
     """
     return [

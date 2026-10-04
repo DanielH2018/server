@@ -35,8 +35,8 @@ NGINX_ALPINE_PINS = {
 # default. Its auto-deploy flag is irrelevant here: the denylist rule overrides automerge,
 # never minimumReleaseAge.
 CONTROL_PIN = (
-    "lscr.io/linuxserver/healthchecks",
-    "ansible/roles/k8s/healthchecks/defaults/main.yml",
+    "ghcr.io/flaresolverr/flaresolverr",
+    "ansible/roles/k8s/prowlarr/defaults/main.yml",
 )
 
 NGINX_SOAK = "1 day"

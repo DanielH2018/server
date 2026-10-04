@@ -298,7 +298,6 @@ extra-paths = [
   "ansible/roles/k8s/configarr/files",
   "ansible/roles/k8s/janitorr/files",
   "ansible/roles/k8s/qbittorrent/files",
-  "ansible/roles/k8s/healthchecks/files",
   "ansible/roles/k8s/arr-notification/files",
   "ansible/roles/k8s/manifests/files",
   "ansible/roles/setup/fake_remux/files",
@@ -393,9 +392,6 @@ possibly-missing-submodule = "error"
 include = [
   "ansible/roles/k8s/homelab-mcp/files/app.py",
   "ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py",
-  # Piped into `manage.py shell` inside the healthchecks pod, so `hc.api.models` is
-  # resolvable only there. It imports nothing first-party, so the collateral above is nil.
-  "ansible/roles/k8s/healthchecks/files/seed_discord_channel.py",
 ]
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"

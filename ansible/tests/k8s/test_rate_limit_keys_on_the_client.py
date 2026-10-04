@@ -57,7 +57,6 @@ REQUIRED_PUBLIC_ROUTERS = frozenset(
     {
         "karakeep-public",
         "karakeep-public-api-v1",
-        "healthchecks-ping-public",
         "n8n-public-webhook",
         "grafana-public",
         "livesync-sync-public",

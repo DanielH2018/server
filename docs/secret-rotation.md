@@ -175,9 +175,8 @@ survives it. Each has a different mechanism:
   makes a changed `authelia_password` inert. The one path that applies a new value is
   `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`
   (`roles/k8s/authelia/defaults/main.yml` documents the flag).
-- `healthchecks_password` — feeds `SUPERUSER_PASSWORD`, which Django reads only while the
-  superuser does not exist. The seeded database has one, so the key documents the app's
-  password. Change it in Healthchecks (or `manage.py changepassword`), then record it here.
+- `healthchecks_password` — fed the self-hosted Healthchecks superuser, which retired in #2806.
+  Nothing in the tree reads it; it stays in SOPS until the key is removed.
 - `bazarr_api_key` — the only reference in the tree is a reader,
   `roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`. Regenerate it in Bazarr's
   Settings → General, `sops set` the new value, then redeploy monitor-bridge; setting SOPS

@@ -99,18 +99,6 @@ def test_k8s_authelia_database_is_on_its_own_volume():
 # otherwise-gated service has to be a conscious edit here, with a reason, rather than something
 # that slips in behind a passing test.
 AUTHELIA_BYPASS_ROUTES = {
-    "healthchecks-ping": (
-        "Monitored jobs POST to /ping/<uuid> with no credentials. Gating it would not fail "
-        "loudly — every check would silently go red while the jobs kept working. Carried over "
-        "from the Docker role's hand-rolled healthchecks-ping router."
-    ),
-    # The public name's twin of the route above, split off so the public host
-    # can require Cloudflare's origin-pull client certificate and the .local. host
-    # cannot. Same callers, same reason.
-    "healthchecks-ping-public": (
-        "Monitored jobs POST to /ping/<uuid> with no credentials, through Cloudflare. Same "
-        "silent-red failure mode as healthchecks-ping; the two are one route on two hosts."
-    ),
     # The three below are the NATIVE public bypasses on the UNSUFFIXED names —
     # emitted by the ingressroute() macro from each entry's bridge_bypass_prefixes.
     # Each serves session-less callers that arrive at this edge directly.

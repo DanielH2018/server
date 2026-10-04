@@ -16,13 +16,12 @@ from _k8s_render import pod_template, rendered_docs
 from _helpers import K8S_ROLES
 from lib import yaml_fast
 
-# Slice 1 of the rollout: the six traefik-only leaf apps (docs/networkpolicy-default-deny.md).
+# Slice 1 of the rollout: the traefik-only leaf apps (docs/networkpolicy-default-deny.md).
 # Adding a role here without labelling it — or labelling one without listing it — fails below.
 SLICE_1_ROLES = {
     "bento-pdf",
     "littlelink",
     "speedtest",
-    "healthchecks",
     "ical-proxy",
     "code-server",
 }

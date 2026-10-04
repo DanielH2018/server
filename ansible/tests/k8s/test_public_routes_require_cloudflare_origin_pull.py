@@ -57,16 +57,13 @@ REQUIRED_PUBLIC_ROUTERS = frozenset(
     {
         "karakeep-public",
         "karakeep-public-api-v1",
-        "healthchecks-ping-public",
         "grafana-public",
         "livesync-sync-public",
         "livesync-utils-public",
     }
 )
 # `.local.` routers the walk must find, so the negative half is not vacuous either.
-REQUIRED_LOCAL_ROUTERS = frozenset(
-    {"karakeep", "healthchecks-ping", "grafana", "livesync-probe"}
-)
+REQUIRED_LOCAL_ROUTERS = frozenset({"karakeep", "grafana", "livesync-probe"})
 # Namespaces that must render both the option and its CA Secret.
 REQUIRED_NAMESPACES = frozenset({"homelab", "observability"})
 

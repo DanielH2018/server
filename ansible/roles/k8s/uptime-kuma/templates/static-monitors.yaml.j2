@@ -124,15 +124,6 @@ stringData:
     {"type": "http", "name": "k3s FreshRSS", "url": "https://freshrss.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   headlamp-k8s.json: |
     {"type": "http", "name": "k3s Headlamp", "url": "https://headlamp.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # The 404 here is the healthy signal — /ping/<unknown-uuid> is the one healthchecks path the
-  # ingressroute bypasses Authelia for, and healthchecks answers it `not found`. Accepting the
-  # STATUS CODE alone read green through the 3.5-hour total-404 edge of #1322 (measured 1 at
-  # 09:17Z while 33 other monitors were 0), so the tile also has to prove WHICH 404 it got.
-  # An inverted keyword does that: Traefik's own 404 body is Go's `404 page not found`, which
-  # healthchecks' `not found` does not contain, and a positive keyword cannot separate them
-  # because the healthy body is a substring of the broken one. #1341.
-  healthchecks-k8s.json: |
-    {"type": "keyword", "name": "k3s healthchecks", "url": "https://healthchecks.local.{{ domain }}/ping/00000000-0000-0000-0000-000000000000", "keyword": "404 page not found", "invertKeyword": true, "interval": 60, "maxretries": 2, "accepted_statuscodes": ["404"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Probes the edge's LAN-only `livesync-probe` router (roles/k8s/traefik/templates/
   # livesync-gate-secret.yaml.j2), the one token-free path on this host: k8s edge -> probe
   # router -> CouchDB. A 401 is CouchDB's require_valid_user answering unauthenticated, the

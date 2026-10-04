@@ -609,7 +609,6 @@
         "ansible/roles/k8s/deploy-ui/defaults/main.yml",
         "ansible/roles/k8s/dri-device-plugin/defaults/main.yml",
         "ansible/roles/k8s/game-stats/defaults/main.yml",
-        "ansible/roles/k8s/healthchecks/defaults/main.yml",
         "ansible/roles/k8s/image-builder/defaults/main.yml",
         "ansible/roles/k8s/janitorr/defaults/main.yml",
         "ansible/roles/k8s/karakeep/defaults/main.yml",

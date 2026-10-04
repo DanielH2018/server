@@ -35,7 +35,6 @@ from _renovate import _REPO, _resolve_setting
 # rule was written for. cloudflare-ddns is a Docker Hub image on `latest`: it has no
 # timestamp because its tag names no version, not because of its registry.
 HELD_PINS = {
-    "lscr.io/linuxserver/healthchecks": "ansible/roles/k8s/healthchecks/defaults/main.yml",
     "lscr.io/linuxserver/qbittorrent": "ansible/roles/k8s/qbittorrent/defaults/main.yml",
     "ghcr.io/schaka/janitorr": "ansible/roles/k8s/janitorr/defaults/main.yml",
     "favonia/cloudflare-ddns": "ansible/roles/k8s/cloudflare-ddns/defaults/main.yml",
@@ -121,17 +120,17 @@ _DIGEST_RULE = {
     "matchUpdateTypes": ["digest", "pinDigest"],
     "minimumReleaseAge": "3 days",
 }
-_HEALTHCHECKS = (
-    "lscr.io/linuxserver/healthchecks",
-    HELD_PINS["lscr.io/linuxserver/healthchecks"],
+_QBITTORRENT = (
+    "lscr.io/linuxserver/qbittorrent",
+    HELD_PINS["lscr.io/linuxserver/qbittorrent"],
 )
 
 
 def test_a_digest_rule_setting_the_key_is_clean() -> None:
     rule = {**_DIGEST_RULE, "minimumReleaseAgeBehaviour": OPTIONAL}
-    assert _behaviour(*_HEALTHCHECKS, "digest", rules=[rule]) == OPTIONAL
+    assert _behaviour(*_QBITTORRENT, "digest", rules=[rule]) == OPTIONAL
 
 
 def test_a_digest_rule_without_the_key_is_flagged() -> None:
     """The pre-#3368 config: Renovate's default `timestamp-required` holds the digest."""
-    assert _behaviour(*_HEALTHCHECKS, "digest", rules=[_DIGEST_RULE]) is None
+    assert _behaviour(*_QBITTORRENT, "digest", rules=[_DIGEST_RULE]) is None

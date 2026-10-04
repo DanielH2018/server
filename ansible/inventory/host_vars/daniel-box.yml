@@ -372,15 +372,6 @@ containers_list:
     port: 4533
     use_authelia: true
     auth_tier: one_factor
-  # port 8000, not 80 — uWSGI serves directly, there is no nginx in front of it. Assuming
-  # 80 costs a five-minute rollout timeout with a perfectly healthy app behind a probe
-  # pointed at a closed port.
-  - name: healthchecks
-    platform: k8s
-    hostname: "healthchecks"
-    port: 8000
-    use_authelia: true
-    auth_tier: one_factor
   # CouchDB for Obsidian LiveSync. use_authelia is false because the LiveSync client uses
   # non-interactive basic auth and cannot pass 2FA — CouchDB's own require_valid_user is
   # the gate. Its data volume is longhorn-NOBACKUP, so the backup plane ignores this PVC

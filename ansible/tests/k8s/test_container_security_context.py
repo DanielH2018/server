@@ -173,7 +173,6 @@ _LSIO_CHOWN_THEN_DROP = {
     ("bazarr", "bazarr"),
     ("code-server", "code-server"),
     ("freshrss", "freshrss"),
-    ("healthchecks", "healthchecks"),
     ("home-assistant", "home-assistant"),
     ("jellyfin", "jellyfin"),
     ("prowlarr", "prowlarr"),

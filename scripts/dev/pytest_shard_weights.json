@@ -39,8 +39,6 @@
  "ansible/roles/k8s/game-stats/tests/test_stats_lib.py": 1.0,
  "ansible/roles/k8s/game-stats/tests/test_valheim_stats.py": 0.02,
  "ansible/roles/k8s/gpu-exporter/tests/test_gpu_exporter.py": 0.0,
- "ansible/roles/k8s/healthchecks/tests/test_seed_discord_channel.py": 0.0,
- "ansible/roles/k8s/healthchecks/tests/test_strip_local_settings_owned.py": 0.0,
  "ansible/roles/k8s/home-assistant/tests/test_diagnostics_macros.py": 0.0,
  "ansible/roles/k8s/home-assistant/tests/test_fan_macros.py": 0.13,
  "ansible/roles/k8s/home-assistant/tests/test_ha_round_semantics.py": 0.0,
