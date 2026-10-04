@@ -21,6 +21,9 @@ from lib.ansible_inventory import containers_entries_in
 KNOWN_FENCES = {
     "speedtest": "netpol-baseline",
     "ical-proxy": "netpol-baseline",
+    "home-assistant": "netpol-baseline",
+    "karakeep": "netpol-baseline",
+    "uptime-kuma": "netpol-baseline",
     "sonarr": "sonarr",
     "radarr": "radarr",
     "prowlarr": "prowlarr",

@@ -134,14 +134,11 @@
       - networkpolicy-nut.yaml
       - networkpolicy-jellyfin.yaml
       - networkpolicy-netpol-sentinel.yaml
-      - networkpolicy-karakeep.yaml
       - networkpolicy-freshrss-feed-cache.yaml
       - networkpolicy-scrutiny-web.yaml
       - networkpolicy-loki-homelab.yaml
-      - networkpolicy-home-assistant.yaml
-      # speedtest's and ical-proxy's fences, rendered from their containers_list entries.
+      # Every fence declared as `netpol_from` on a containers_list entry (the callers template).
       - networkpolicy-callers.yaml
-      - networkpolicy-uptime-kuma.yaml
       - networkpolicy-terraria.yaml
       - networkpolicy-valheim.yaml
       - networkpolicy-wg-easy.yaml

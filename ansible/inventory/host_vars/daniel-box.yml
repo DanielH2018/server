@@ -434,6 +434,15 @@ containers_list:
       - /api/v1/
       - /api/trpc/
       - /api/assets
+    # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
+    # Browsers arrive through traefik and prometheus scrapes this port; the baseline admits both.
+    netpol_from:
+      # The `wait-for-karakeep` init container (karakeep/templates/deployment-time-tagger.yaml.j2)
+      # dials karakeep:3000 every 5s until it connects. Denied, the new tagger pod sits in Init
+      # forever while the old one keeps running, so the rollout never completes. The first
+      # census missed it because it excluded karakeep's own role: read a role's own templates
+      # for init containers and wait loops (`grep -rn 'create_connection\|nc -z'`) too.
+      - karakeep-time-tagger
   # An unauthenticated plain-HTTP registry, reachable only on the node's loopback via
   # hostPort and in-cluster via its Service. Giving it an ingress would put push access on
   # the LAN.
@@ -488,6 +497,13 @@ containers_list:
     service_port_name: http
     tier: home-critical
     backup_claims: [home-assistant-config]
+    # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
+    # prometheus scrapes this port and browsers arrive through traefik; the baseline admits
+    # both. probe.py's `ha` subcommands run on a node, so the baseline's cni0 /32s cover them.
+    netpol_from:
+      - homelab-mcp     # HA_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's read tools
+      - monitor-bridge  # HA_URL (monitor-bridge/templates/env-secret.yaml.j2), the
+                        # scheduler-stuck check the container healthcheck cannot see
 
   # LAN DNS on its own pinned VIP (dns_k8s_vip). Not seeded: blocklist state is declared in
   # the role defaults (pihole_k8s_adlists) and everything else in /etc/pihole regenerates.
@@ -554,6 +570,21 @@ containers_list:
     port: 3001
     use_authelia: true
     auth_tier: one_factor
+    # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
+    # Everything that pushes a heartbeat dials :3001 directly rather than through traefik.
+    # Host crons arrive with a node address and are covered by the baseline's cni0 /32s, and
+    # browsers arrive through traefik. The `autokuma` sidecar needs no entry: it reaches Kuma
+    # over pod-local loopback, which no NetworkPolicy evaluates.
+    netpol_from:
+      - monitor-bridge           # KUMA_URL (monitor-bridge/templates/env-secret.yaml.j2)
+      - autofix-bridge           # KUMA_URL (autofix-bridge/templates/env-secret.yaml.j2)
+      - cloudflare-ddns-direct   # push URL (cloudflare-ddns/templates/deployment-direct.yaml.j2)
+      - cloudflare-ddns-proxied  # push URL (cloudflare-ddns/templates/deployment-proxied.yaml.j2)
+      # push_url (pi-peer-backup/templates/secret.yaml.j2), a CronJob. The first census read
+      # Deployments only and missed it: its 2026-08-21 run succeeded and lost its heartbeat.
+      - pi-peer-backup
+      - kuma-status-page-sync    # KUMA__URL + deadman push (uptime-kuma's status-page-sync CronJob)
+      - kuma-maintenance-sync    # KUMA__URL (uptime-kuma's maintenance-sync CronJob)
 
   # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
   # Image built in-cluster from the containers role's Dockerfile, which is the build source.
