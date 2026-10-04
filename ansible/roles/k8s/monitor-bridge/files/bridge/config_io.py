@@ -437,7 +437,10 @@ def io_config(
         # a daily producer's lost verdict is the newest line for its tag until tomorrow.
         # check_swallowed_verdicts skips entirely inside this window and then reads only back to
         # the end of it, so the reboot's own failures are never in range and the tile clears at
-        # recovery instead of 2.9h later.
+        # recovery instead of 2.9h later. check_shipper_dropped bounds both shipper queries the
+        # same way (#3490): daniel-pi's Alloy drops what Loki refuses while Loki is down for the
+        # restart, and a 1h lookback held that loss in range 24 minutes past the Kuma
+        # maintenance window on 2026-10-04.
         BOOT_SETTLE_S=_int("BOOT_SETTLE_S", "1200"),
         # SHIPPER_BACKLOG_GRACE_S covers a different fault with the same trigger: Alloy ships
         # its post-reboot backlog for hours, and Loki discards what arrives outside its accept

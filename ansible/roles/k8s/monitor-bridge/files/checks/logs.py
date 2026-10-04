@@ -15,6 +15,7 @@ from collections.abc import Callable
 from bridge.common import host_uptime_s
 from bridge.config import Config
 import bridge.net
+from bridge.parsing import duration_seconds
 from verdicts.cluster import log_error_verdict
 from verdicts.logs import (
     kuma_notify_failures,
@@ -84,27 +85,54 @@ def check_shipper_dropped(
     # `tcp_open`, and what keeps the grace below from being provable only by inspection.
     prom_scalar = prom_scalar or bridge.net.prom_scalar
     prom_vector = prom_vector or bridge.net.prom_vector
+    # The node's uptime, not this pod's age: an ordinary deploy restarts the bridge without
+    # rebooting anything, and both reboot arms below cover a fault only a reboot produces. An
+    # unreadable /proc/uptime reads as no grace, so the check evaluates normally.
+    uptime = uptime_s()
+    # Never read back past the reboot (#3490), the rule check_swallowed_verdicts follows. While
+    # Loki is down for the weekly restart, daniel-pi's Alloy keeps shipping and drops what Loki
+    # refuses: 179,396 `ingester_error` entries on 2026-10-04, all before daniel-box finished
+    # booting. A 1h lookback held that loss in range until 08:39, 24 minutes past the Kuma
+    # maintenance window. Inside BOOT_SETTLE_S the shipper arms are skipped; after it the
+    # lookback grows back from the end of the settle window to its configured length, so a
+    # drop after the reboot still pages. The export-failure arm keeps its own window and stays
+    # live throughout.
+    window = cfg.SHIPPER_DROPPED_WINDOW
+    if uptime is not None:
+        since_settle = int(uptime - cfg.BOOT_SETTLE_S)
+        if since_settle <= 0:
+            return with_export_failures(
+                cfg,
+                True,
+                "shipper drops skipped — the node booted %ds ago, inside BOOT_SETTLE_S "
+                "(%ds): the reboot's own drops are owned by the reboot, not by this tile"
+                % (int(uptime), cfg.BOOT_SETTLE_S),
+                prom_scalar=prom_scalar,
+            )
+        try:
+            configured_s = duration_seconds(window)
+        except ValueError:
+            # A window this cannot read keeps its configured text: Prometheus parses the
+            # query, and a malformed range then fails there, where it already did.
+            configured_s = None
+        if configured_s is not None and since_settle < configured_s:
+            window = "%ds" % since_settle
     client_count = prom_scalar(
         cfg,
-        'sum(increase({__name__=~"%s"}[%s]))'
-        % (cfg.SHIPPER_DROPPED_METRICS, cfg.SHIPPER_DROPPED_WINDOW),
+        'sum(increase({__name__=~"%s"}[%s]))' % (cfg.SHIPPER_DROPPED_METRICS, window),
     )
     server_reasons = [
         (labels.get("reason", "unknown"), value)
         for labels, value in prom_vector(
             cfg,
             'sum by (reason) (increase({__name__=~"%s"}[%s]))'
-            % (cfg.SHIPPER_DROPPED_SERVER_METRIC, cfg.SHIPPER_DROPPED_WINDOW),
+            % (cfg.SHIPPER_DROPPED_SERVER_METRIC, window),
         )
     ]
-    # The node's uptime, not this pod's age: an ordinary deploy restarts the bridge without
-    # rebooting anything, and the grace covers a fault only a reboot produces. An unreadable
-    # /proc/uptime reads as no grace, so the check evaluates normally.
-    uptime = uptime_s()
     ok, msg = shipper_dropped(
         client_count,
         server_reasons,
-        cfg.SHIPPER_DROPPED_WINDOW,
+        window,
         cfg.SHIPPER_DROPPED_MAX,
         backlog_grace_active=uptime is not None
         and uptime < cfg.SHIPPER_BACKLOG_GRACE_S,
