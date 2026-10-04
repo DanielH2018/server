@@ -46,10 +46,10 @@ as a SUBPROCESS because this module parses YAML and the deployer's unit runs und
 established for the deploy plane.
 
 `deploy_defer.record` asks for a role the deployer CANNOT apply. The tags go in the
-`manual_plane_tags` marker, so the journal line, the Discord alert, the SessionStart banner
-and `land.sh` all quote ONE derivation rather than each repeating it.
-`land_tags.confirmed_narrow_tags` also calls `role_tags` in-process, over one PR's own range,
-but only as a guard: `land.sh` prints the stored row, and only when it contains that answer.
+`manual_plane_tags` marker and in the tick's receipt, so the journal line, the Discord alert,
+the SessionStart banner and `land.sh` all quote ONE derivation rather than each repeating it.
+`land_tags.own_narrow_tags` also calls `role_tags` in-process, over one PR's own range, for a
+landing that never awaits the tick and so has no receipt to read.
 
 `deploy_narrow.narrowed_setup_tags` asks for a role the deployer DOES apply, and the answer
 is the `--tags` value of the `initial_setup.yml` run (#3120). That makes the refusals above
