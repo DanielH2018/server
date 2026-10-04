@@ -21,6 +21,7 @@ _HOST_LIB = frozenset(
 _STAMPED = _HOST_LIB | {"claude_code", "deploy_ui", "initial_setup"}
 _KUMA_CHECK = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
+    f"{_COMMON}/tasks/agent_user.yml": frozenset({"claude_code", "renovate_agent"}),
     f"{_COMMON}/files/host_lib.py": _HOST_LIB,
     f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
     f"{_COMMON}/tasks/kuma_check_timer.yml": _KUMA_CHECK,

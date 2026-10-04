@@ -399,6 +399,93 @@
   when: not claude_code_memory_sync_enabled
   notify: Reload systemd
 
+# ── The agent user ──────────────────────────────────────────────────────────────────────
+# A Unix user for the operator's Claude sessions with no sudo, no group membership and no read
+# on /home/{{ sys_user }}. See defaults/main.yml and this role's CLAUDE.md.
+
+- name: Create the agent user, its tools and its clone
+  tags: [claude_code]
+  when: claude_code_agent_user_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/agent_user.yml"
+  vars:
+    agent_user_name: "{{ claude_code_agent_user }}"
+    agent_user_home: "{{ claude_code_agent_user_home }}"
+    agent_user_clone_dir: "{{ claude_code_agent_user_clone_dir }}"
+    agent_user_repo: "{{ claude_code_agent_user_repo }}"
+
+# The reverse of the expiry the switched-off arm below sets.
+- name: Lift the agent user's account expiry
+  tags: [claude_code]
+  ansible.builtin.user:
+    name: "{{ claude_code_agent_user }}"
+    expires: -1
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Give the agent user a login profile
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: agent-user-profile.j2
+    dest: "{{ claude_code_agent_user_home }}/.profile"
+    owner: "{{ claude_code_agent_user }}"
+    # The group the shared task file's recursive chown sets, so the two never flip each other.
+    group: "{{ sys_user }}"
+    mode: "0644"
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Create the agent user's kubeconfig directory
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_user_home }}/.kube"
+    state: directory
+    owner: "{{ claude_code_agent_user }}"
+    # The group the shared task file's recursive chown sets, so the two never flip each other.
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Give the agent user the operator's read-only kubeconfig
+  tags: [claude_code]
+  # The homelab-readonly ServiceAccount the k3s role writes for {{ sys_user }}: get, list and
+  # watch, with Secrets and pods/exec refused. Never /etc/rancher/k3s/k3s.yaml, which is
+  # cluster-admin. Copied, as uv is, so a token the k3s role re-mints reaches the agent on the
+  # next apply of this role.
+  ansible.builtin.copy:
+    src: "/home/{{ sys_user }}/.kube/config"
+    dest: "{{ claude_code_agent_user_home }}/.kube/config"
+    remote_src: true
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  # The file carries the ServiceAccount's token, which a --diff run would print.
+  diff: false
+  no_log: true
+  when: claude_code_agent_user_enabled
+
+- name: Look for the agent user on a host that has it switched off
+  tags: [claude_code]
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ claude_code_agent_user }}"
+    fail_key: false
+  when: not claude_code_agent_user_enabled
+
+# The way out. Expired rather than removed: removing the user strands its files under a bare
+# uid, and the home holds the agent's clone and any work it has not pushed. 86400 is
+# 1970-01-02, because a shadow expiry of day 0 also reads as "never expires".
+- name: Expire the agent user's account when it is switched off
+  tags: [claude_code]
+  ansible.builtin.user:
+    name: "{{ claude_code_agent_user }}"
+    expires: 86400
+  become: true
+  when:
+    - not claude_code_agent_user_enabled
+    - ansible_facts.getent_passwd[claude_code_agent_user] is not none
+
 # Render provenance for manifest-prune-check.sh's stale-script arm: without a stamp, an edit to
 # a rendered file can sit undeployed on this host with every repo-side check green. Last in the
 # role so a failed run leaves the previous checksums rather than claiming these. `import_tasks`,
