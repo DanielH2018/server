@@ -7,6 +7,8 @@ services is derived from it (#3389). Three consumers read it:
   to R2, is every `backup_claims` volume of a `home-critical` entry.
 - `tier_priority_class`: a tiered role's templates pass `containers_list |
   tier_priority_class('<role>')` to `pod_shell(...)` instead of a literal PriorityClass (#3452).
+- `in_service_tier`: uptime-kuma's static monitors page a home-critical service's own tile by
+  email and tag it `severity: critical`, so the email tier follows the tier field (#3480).
 - `shed_entries`: `probe.py shed-set` prints the untiered workloads to scale down when one node
   is lost, so the tiered ones fit on the survivor (#3481). No template reads it, so it is not a
   registered filter.
@@ -104,6 +106,22 @@ def tier_backup_claims(containers_list, tier, namespace):
     ]
 
 
+def in_service_tier(containers_list, name, tier):
+    """Whether the `containers_list` entry `name` is in `tier`.
+
+    `tier` is one of `SERVICE_TIERS` or a group name from `TIER_GROUPS`.
+
+    Raises ValueError when no entry is named `name`: a renamed or removed entry must fail the
+    render rather than read as untiered, which would quietly drop its tile off the email tier.
+    """
+    if not any(
+        isinstance(entry, dict) and entry.get("name") == name
+        for entry in containers_list or []
+    ):
+        raise ValueError(f"no containers_list entry named {name!r}")
+    return any(entry["name"] == name for entry in tier_entries(containers_list, tier))
+
+
 def tier_priority_class(containers_list, name):
     """The PriorityClass the `containers_list` entry `name` runs at, from its `tier`.
 
@@ -125,6 +143,7 @@ def tier_priority_class(containers_list, name):
 class FilterModule:
     def filters(self):
         return {
+            "in_service_tier": in_service_tier,
             "tier_backup_claims": tier_backup_claims,
             "tier_priority_class": tier_priority_class,
         }
