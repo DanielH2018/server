@@ -54,8 +54,10 @@ BRANCH_PREFIX = "renovate/"
 # same string (`notify_logic.DASHBOARD_TITLE`), copied rather than imported because that
 # module ships into `/opt` and is not on a script's path.
 DASHBOARD_TITLE = "Dependency Dashboard"
-# `<verb>-branch=renovate/...` — any verb, see the module docstring.
-DASHBOARD_BRANCH = re.compile(r"[a-z-]+-branch=(renovate/[^\s)]+)")
+# `<verb>-branch=renovate/...` — any verb, see the module docstring. The slug ends at
+# whitespace or at the `-->` closing the HTML comment, never at `)`: a `(manual — ...)` group
+# puts a parenthesised suffix in the slug itself, and a `)` stop orphaned every such branch.
+DASHBOARD_BRANCH = re.compile(r"[a-z-]+-branch=(renovate/\S+?)(?=\s|-->|$)")
 
 Gh = Callable[..., subprocess.CompletedProcess[str]]
 Git = Callable[..., subprocess.CompletedProcess[str]]

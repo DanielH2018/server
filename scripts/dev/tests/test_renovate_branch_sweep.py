@@ -44,6 +44,15 @@ def test_any_dashboard_verb_counts_not_only_the_known_three():
     assert orphans(["renovate/d"], [], DASHBOARD) == []
 
 
+def test_a_parenthesised_manual_slug_matches_whole():
+    # A `)` stop captured the slug without its closing paren and orphaned it (#3489).
+    manual = "renovate/k8s-image-redis-(manual-k8s_autodeploy-false)"
+    spaced = f" - [ ] <!-- unpend-branch={manual} -->Pin redis (manual — ...)\n"
+    abutting = f" - [ ] <!-- unpend-branch={manual}-->Pin redis\n"
+    assert orphans([manual], [], spaced) == []
+    assert orphans([manual], [], abutting) == []
+
+
 def test_a_non_renovate_branch_is_never_an_orphan():
     assert orphans(["master", "worktree-x"], [], "") == []
 
