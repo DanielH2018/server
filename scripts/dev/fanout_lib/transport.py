@@ -22,9 +22,16 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib import signing
-from fanout_lib.brief import Issue
+from fanout_lib.brief import WORKED_BY, Comment, Issue
 from fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
+from findings_lib.issue_model import (
+    _CLAIM_RE,
+    _RELEASE_RE,
+    _REOBSERVED,
+    is_operator_comment,
+    ordered_comments,
+)
 from lib.gh import gh
 
 HOSTS = ("daniel-box", "daniel-server")
@@ -42,8 +49,23 @@ GH_TIMEOUT_S = 30.0
 # per 30s) has none spare. The key goes last; parse_reading documents the full line order.
 HOST_READ_COMMAND = f"{READ_COMMAND}; {signing.signing_key_read_command(REPO)}"
 # `labels` is what the launch gate reads; dropping it from this list would refuse every
-# issue rather than fail loudly, which is why issue_from_view indexes it.
-ISSUE_FIELDS = "number,title,body,labels"
+# issue rather than fail loudly, which is why issue_from_view indexes it. `comments` is
+# indexed the same way: a fetch that stopped asking for it would silently drop every
+# operator decision posted as a comment, which is the defect #3498 fixed.
+ISSUE_FIELDS = "number,title,body,labels,comments"
+
+# The openings of the records `findings.py` and the fan-out itself post as the operator's
+# account (findings_lib/plans.py and brief.WORKED_BY). They say who held or deferred an
+# issue, which the brief already states or the agent has no use for. Claim and release
+# records are matched by their trailer instead, through the claim protocol's own regexes.
+_BOOKKEEPING_PREFIXES = (
+    WORKED_BY,
+    _REOBSERVED,
+    "Deferred until ",
+    "Deferral cleared.",
+    "Marked manual:",
+    "Manual cleared:",
+)
 
 
 def _local_host() -> str:
@@ -132,6 +154,34 @@ def run_command(
     )
 
 
+def _is_bookkeeping(body: str) -> bool:
+    return (
+        body.startswith(_BOOKKEEPING_PREFIXES)
+        or bool(_CLAIM_RE.search(body))
+        or bool(_RELEASE_RE.search(body))
+    )
+
+
+def operator_comments(issue: dict) -> tuple[Comment, ...]:
+    """The comments of ``issue`` the brief carries, oldest first.
+
+    Only the operator's comments count, judged by the claim protocol's own author check:
+    the repo is public, and a drive-by account's comment is not a decision. That check
+    drops almost nothing in practice, because `gh` posts every claim, release and
+    "Worked by" record as the operator. The bookkeeping filter does the real narrowing.
+
+    Raises:
+        KeyError: ``issue`` carries no `comments` key — see ISSUE_FIELDS.
+    """
+    if "comments" not in issue:
+        raise KeyError("comments")
+    return tuple(
+        Comment(str(c.get("createdAt") or "unknown time"), c.get("body") or "")
+        for c in ordered_comments(issue)
+        if is_operator_comment(c) and not _is_bookkeeping(c.get("body") or "")
+    )
+
+
 def issue_from_view(data: dict) -> Issue:
     """Map one `gh issue view --json ISSUE_FIELDS` object onto an `Issue`.
 
@@ -145,13 +195,15 @@ def issue_from_view(data: dict) -> Issue:
         KeyError: a field ISSUE_FIELDS asks for is missing. `labels` is read with `[]`
             rather than `.get()` on purpose: gh returns an empty list for an unlabelled
             issue, so an absent key means the fetch stopped asking for it — and the launch
-            gate would then refuse every issue instead of the unlabelled ones.
+            gate would then refuse every issue instead of the unlabelled ones. `comments`
+            is strict for the same reason.
     """
     return Issue(
         data["number"],
         data["title"],
         data["body"],
         tuple(str(label["name"]) for label in data["labels"]),
+        operator_comments(data),
     )
 
 

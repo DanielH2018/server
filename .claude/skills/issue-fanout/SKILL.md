@@ -281,6 +281,11 @@ Each agent starts with none of this conversation's context, so its brief must ca
   backtick longer than the longest run in the title and body, and put the title inside it too
   — a newline in a title breaks the structure exactly as one in a body does.
   `scripts/dev/fanout_lib/brief.py` renders this; keep the two in step.
+- The **operator's own comments** on each issue, oldest first, each in its own fence under
+  the issue. Leave out the bookkeeping records `findings.py` and this skill post (claim,
+  release, `Worked by`, `Re-observed`, defer and manual). An operator decision posted as a
+  comment otherwise never reaches the agent: #3382's agent shipped the value the decision
+  had replaced. `transport.operator_comments` selects them for `fanout_place.py launch`.
 - That the issues are **already claimed** under the orchestrator's worktree, and it must not
   claim them again.
 - That its **first act** is to post a plain comment naming its own worktree, so the thread

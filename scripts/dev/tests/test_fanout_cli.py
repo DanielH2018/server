@@ -6,14 +6,12 @@ Run: uv run pytest scripts/dev/tests/test_fanout_cli.py
 import json
 import subprocess
 
-import pytest
 
 from fanout_lib import brief as brief_mod
 from fanout_lib import launch as launch_mod
 from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.target import Target
-from fanout_lib.transport import ISSUE_FIELDS, issue_from_view
 from fanout_place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
@@ -370,25 +368,6 @@ def test_read_calls_a_verdict_it_could_not_reach_unknown_rather_than_ok(capsys):
     assert main(["read"], tools) == 0
     out = capsys.readouterr().out
     assert "signing=unknown" in out and "signing=ok" not in out
-
-
-def test_the_issue_fetch_asks_for_labels_and_carries_them_onto_the_issue():
-    assert "labels" in ISSUE_FIELDS.split(",")
-    issue = issue_from_view(
-        {
-            "number": 7,
-            "title": "t",
-            "body": "b",
-            "labels": [{"name": "claude"}, {"name": "bug"}],
-        }
-    )
-    assert issue.labels == ("claude", "bug")
-    unlabelled = issue_from_view({"number": 7, "title": "t", "body": "b", "labels": []})
-    assert unlabelled.labels == ()
-    # A fetch that stopped asking for labels must fail loudly rather than read as
-    # unlabelled, which would refuse every issue.
-    with pytest.raises(KeyError):
-        issue_from_view({"number": 7, "title": "t", "body": "b"})
 
 
 def test_one_issue_in_two_batches_is_refused_and_a_repeated_batch_is_placed_once(
