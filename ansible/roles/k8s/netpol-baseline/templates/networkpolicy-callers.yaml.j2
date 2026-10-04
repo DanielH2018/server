@@ -1,8 +1,8 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
-{# One additive caller fence per containers_list entry carrying `netpol_from`: speedtest and
-   ical-proxy. Each admits its listed callers on the entry's `port`, and the reason for each
-   caller sits beside it in inventory/host_vars/daniel-box.yml. The shared macro's header says
-   which fences fit this shape and which stay bespoke.
+{# One additive caller fence per containers_list entry carrying `netpol_from`: speedtest,
+   ical-proxy, home-assistant, karakeep and uptime-kuma. Each admits its listed callers on the
+   entry's `port`, and the reason for each caller sits beside it in
+   inventory/host_vars/daniel-box.yml. The macro's header says which fences fit this shape.
 
    DECIDED: an entry with `netpol_role_owned: true` is skipped here, because its own role
    renders the same NetworkPolicy so that `--tags <svc>` carries the fence (sonarr, radarr,
