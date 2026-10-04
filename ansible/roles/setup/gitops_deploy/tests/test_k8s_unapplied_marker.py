@@ -25,6 +25,7 @@ import deploy_defer
 import deploy_release
 from deploy_changes import ChangeSet
 from deploy_toolbox import DeployTools
+from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED
 
 ORIGIN = "a" * 40
 APPLIED = "b" * 40
@@ -51,7 +52,8 @@ def test_a_deferred_k8s_role_is_recorded_with_the_sha_and_the_stamp(
         declared_k8s={"authelia"},
     )
     ((origin, service, _at),) = [
-        (e.origin, e.service, e.at) for e in gitops_deploy.STATE.k8s_unapplied_pending()
+        (e.origin, e.service, e.at)
+        for e in gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED)
     ]
     assert (origin, service) == (ORIGIN, "authelia")
 
@@ -71,7 +73,8 @@ def test_each_line_names_the_commit_that_changed_its_service(
         declared_k8s={"sonarr", "authelia"},
     )
     assert sorted(
-        (e.service, e.origin) for e in gitops_deploy.STATE.k8s_unapplied_pending()
+        (e.service, e.origin)
+        for e in gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED)
     ) == [("authelia", ORIGIN), ("sonarr", APPLIED)]
 
 
@@ -85,7 +88,7 @@ def test_a_range_with_no_k8s_role_records_nothing(gitops_deploy, state_dir, sett
         set(),
         ChangeSet(tasks={"svca"}),
     )
-    assert gitops_deploy.STATE.k8s_unapplied_pending() == []
+    assert gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED) == []
     assert not (state_dir / "owed.jsonl").exists()
 
 
@@ -98,7 +101,7 @@ def test_a_second_deferral_of_the_same_role_moves_the_origin_and_keeps_the_stamp
     later range touching the role must not reset it.
     """
     state = gitops_deploy.STATE
-    state.record_k8s_unapplied(ORIGIN, {"authelia"}, 1000.0)
+    state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
     deploy_defer.alert_and_record_deferred(
         _tools(),
         state,
@@ -108,7 +111,7 @@ def test_a_second_deferral_of_the_same_role_moves_the_origin_and_keeps_the_stamp
         ChangeSet(k8s={"authelia"}),
         declared_k8s={"authelia"},
     )
-    assert [(e.origin, e.at) for e in state.k8s_unapplied_pending()] == [
+    assert [(e.origin, e.at) for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == [
         (LATER, 1000.0)
     ]
 
@@ -120,12 +123,12 @@ def test_a_first_deferral_of_a_role_appends_its_line(
     stamped now, and is what `record_k8s_unapplied` returns — `deploy_defer.unrecord` clears
     exactly that, so an advanced line must stay out of it."""
     state = gitops_deploy.STATE
-    state.record_k8s_unapplied(ORIGIN, {"authelia"}, 1000.0)
-    assert state.record_k8s_unapplied(LATER, {"authelia", "sonarr"}, 2000.0) == [
-        "sonarr"
-    ]
+    state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
+    assert state.record_owed(
+        OWED_K8S_UNAPPLIED, LATER, {"authelia", "sonarr"}, 2000.0
+    ) == ["sonarr"]
     assert sorted(
-        (e.origin, e.service, e.at) for e in state.k8s_unapplied_pending()
+        (e.origin, e.service, e.at) for e in state.owed_pending(OWED_K8S_UNAPPLIED)
     ) == [
         (LATER, "authelia", 1000.0),
         (LATER, "sonarr", 2000.0),
@@ -146,7 +149,7 @@ def test_a_torn_line_survives_an_origin_advance(gitops_deploy, state_dir, settin
     lines, which the parsed entries are not aligned with once one of them is skipped."""
     state = gitops_deploy.STATE
     state.write("owed", f"garbled\n{_line('authelia')}")
-    state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
+    state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0)
     assert state.read("owed").splitlines() == ["garbled", _line("authelia", LATER)]
 
 
@@ -157,8 +160,8 @@ def test_a_key_this_writer_does_not_know_survives_an_origin_advance(
     skip the line nor something an older writer strips on its way through."""
     state = gitops_deploy.STATE
     state.write("owed", _line("authelia", future=["kept"]))
-    assert [e.service for e in state.k8s_unapplied_pending()] == ["authelia"]
-    state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
+    assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["authelia"]
+    state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0)
     assert json.loads(state.read("owed"))["future"] == ["kept"]
 
 
@@ -181,13 +184,13 @@ def test_a_torn_line_naming_a_service_is_repaired_rather_than_duplicated(
     """
     state = gitops_deploy.STATE
     state.write("owed", torn)
-    assert state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0) == [], (
+    assert state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0) == [], (
         "a line predating the tick must stay out of what `unrecord` clears"
     )
-    assert [(e.origin, e.service) for e in state.k8s_unapplied_pending()] == [
+    assert [(e.origin, e.service) for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == [
         (LATER, "authelia")
     ]
-    assert state.clear_k8s_unapplied({"authelia"}) == ["authelia"]
+    assert state.clear_owed(OWED_K8S_UNAPPLIED, {"authelia"}) == ["authelia"]
     assert state.read("owed") is None
 
 
@@ -198,8 +201,8 @@ def test_a_repaired_line_keeps_a_stamp_that_reads_as_one(
     state = gitops_deploy.STATE
     torn = {"class": "k8s_unapplied", "subject": "authelia", "origin": 7, "at": 1000}
     state.write("owed", json.dumps(torn))
-    state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
-    assert [e.at for e in state.k8s_unapplied_pending()] == [1000.0]
+    state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0)
+    assert [e.at for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == [1000.0]
 
 
 def test_a_torn_line_beside_a_readable_one_is_dropped(
@@ -208,7 +211,7 @@ def test_a_torn_line_beside_a_readable_one_is_dropped(
     """Repairing here would duplicate what the readable line already says."""
     state = gitops_deploy.STATE
     state.write("owed", f"{_line('authelia', at=None)}\n{_line('authelia')}")
-    state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
+    state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0)
     assert state.read("owed").splitlines() == [_line("authelia", LATER)]
 
 
@@ -216,17 +219,17 @@ def test_the_two_k8s_markers_are_separate_files(gitops_deploy, state_dir, settin
     """A class tag on a `k8s_deferred` line would read as NO pending bump in an un-redeployed
     monitor-bridge, which is why `k8s_unapplied` lives in the `owed` ledger instead."""
     state = gitops_deploy.STATE
-    state.record_k8s_deferred(ORIGIN, {"sonarr"}, 1000.0)
-    state.record_k8s_unapplied(ORIGIN, {"authelia"}, 1000.0)
-    assert [e.service for e in state.k8s_deferred_pending()] == ["sonarr"]
-    assert [e.service for e in state.k8s_unapplied_pending()] == ["authelia"]
+    state.record_owed(OWED_K8S_DEFERRED, ORIGIN, {"sonarr"}, 1000.0)
+    state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
+    assert [e.service for e in state.owed_pending(OWED_K8S_DEFERRED)] == ["sonarr"]
+    assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["authelia"]
 
 
 # ── the discharge: a deploy the deployer never saw still drops the line ────────────────────
 @pytest.fixture
 def pending(gitops_deploy, state_dir, settings):
     """A state with one pending `k8s_unapplied` line for authelia at ORIGIN."""
-    gitops_deploy.STATE.record_k8s_unapplied(ORIGIN, {"authelia"}, 1000.0)
+    gitops_deploy.STATE.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
     return gitops_deploy.STATE
 
 
@@ -239,13 +242,13 @@ def _discharge(state, settings, release_commit, is_ancestor=lambda *_a: True):
 def test_a_release_record_carrying_the_change_discharges_the_line(pending, settings):
     """FLAGGED half: this is what an operator's own `deploy.sh` looks like from here."""
     assert _discharge(pending, settings, lambda _svc: APPLIED) == ["authelia"]
-    assert pending.k8s_unapplied_pending() == []
+    assert pending.owed_pending(OWED_K8S_UNAPPLIED) == []
 
 
 def test_a_release_record_predating_the_change_keeps_the_line(pending, settings):
     """CLEAN half: the service was deployed, but not at a commit carrying this change."""
     assert _discharge(pending, settings, lambda _svc: APPLIED, lambda *_a: False) == []
-    assert [e.service for e in pending.k8s_unapplied_pending()] == ["authelia"]
+    assert [e.service for e in pending.owed_pending(OWED_K8S_UNAPPLIED)] == ["authelia"]
 
 
 def test_a_deploy_between_two_changes_does_not_discharge_the_second(pending, settings):
@@ -255,7 +258,7 @@ def test_a_deploy_between_two_changes_does_not_discharge_the_second(pending, set
     which descends from ORIGIN and not from LATER. With the line advanced to LATER that
     deploy proves nothing about B, and the line stays.
     """
-    pending.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
+    pending.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0)
     assert (
         _discharge(
             pending,
@@ -265,23 +268,25 @@ def test_a_deploy_between_two_changes_does_not_discharge_the_second(pending, set
         )
         == []
     )
-    assert [(e.origin, e.service) for e in pending.k8s_unapplied_pending()] == [
-        (LATER, "authelia")
-    ]
+    assert [
+        (e.origin, e.service) for e in pending.owed_pending(OWED_K8S_UNAPPLIED)
+    ] == [(LATER, "authelia")]
 
 
 def test_a_missing_release_record_keeps_the_line(pending, settings):
     """No evidence of a deploy is not evidence of a deploy. A kept line costs one glance; a
     dropped one loses the only record that the change was never applied."""
     assert _discharge(pending, settings, lambda _svc: None) == []
-    assert [e.service for e in pending.k8s_unapplied_pending()] == ["authelia"]
+    assert [e.service for e in pending.owed_pending(OWED_K8S_UNAPPLIED)] == ["authelia"]
 
 
 # ── a shared role has no record of its own, so its callers' records stand in ───────────
 @pytest.fixture
 def shared_pending(gitops_deploy, state_dir, settings):
     """A pending `k8s_unapplied` line for the shared role `game-stats-lib` at ORIGIN."""
-    gitops_deploy.STATE.record_k8s_unapplied(ORIGIN, {"game-stats-lib"}, 1000.0)
+    gitops_deploy.STATE.record_owed(
+        OWED_K8S_UNAPPLIED, ORIGIN, {"game-stats-lib"}, 1000.0
+    )
     return gitops_deploy.STATE
 
 
@@ -308,13 +313,13 @@ def test_a_shared_role_whose_callers_all_carry_the_change_is_discharged(
 ):
     """FLAGGED half: a full deploy that carries the change at every caller discharges the line."""
     assert _discharge_shared(shared_pending, settings) == ["game-stats-lib"]
-    assert shared_pending.k8s_unapplied_pending() == []
+    assert shared_pending.owed_pending(OWED_K8S_UNAPPLIED) == []
 
 
 def test_a_shared_role_with_one_caller_behind_is_kept(shared_pending, settings):
     """CLEAN half: one caller's record predates the change, so it is not applied there."""
     assert _discharge_shared(shared_pending, settings, behind={"valheim-stats"}) == []
-    assert [e.service for e in shared_pending.k8s_unapplied_pending()] == [
+    assert [e.service for e in shared_pending.owed_pending(OWED_K8S_UNAPPLIED)] == [
         "game-stats-lib"
     ]
 
@@ -334,7 +339,7 @@ def test_a_shared_role_with_no_derivable_caller_is_kept(
 ):
     """An empty caller set must not read as vacuously covered, nor a crash as evidence."""
     assert _discharge_shared(shared_pending, settings, (), shared_role_callers) == []
-    assert [e.service for e in shared_pending.k8s_unapplied_pending()] == [
+    assert [e.service for e in shared_pending.owed_pending(OWED_K8S_UNAPPLIED)] == [
         "game-stats-lib"
     ]
 
@@ -349,7 +354,7 @@ def test_a_manifests_line_discharges_on_a_matching_render(
     gitops_deploy, state_dir, settings
 ):
     """FLAGGED half: valheim-stats was never redeployed, but its bytes did not move."""
-    gitops_deploy.STATE.record_k8s_unapplied(ORIGIN, {"manifests"}, 1000.0)
+    gitops_deploy.STATE.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"manifests"}, 1000.0)
     assert _discharge_shared(
         gitops_deploy.STATE, settings, {"valheim-stats"}, None, _render_proved
     ) == ["manifests"]
@@ -406,7 +411,7 @@ def test_an_own_line_ignores_a_matching_render_unless_provable(
 ):
     """CLEAN half: a role that writes a host file or calls an API is not proved by bytes."""
     assert _discharge_own(pending, settings, digest_provable) == []
-    assert [e.service for e in pending.k8s_unapplied_pending()] == ["authelia"]
+    assert [e.service for e in pending.owed_pending(OWED_K8S_UNAPPLIED)] == ["authelia"]
 
 
 # ── the release record reader ──────────────────────────────────────────────────────────────
@@ -444,7 +449,7 @@ def test_a_service_already_paging_from_k8s_deferred_is_not_recorded_twice(
     """`deploy_broad_k8s` folds a budget-deferred bump back into `cs.k8s` after recording it
     in the paging marker, so the banner would otherwise name the service twice."""
     state = gitops_deploy.STATE
-    state.record_k8s_deferred(ORIGIN, {"sonarr"}, 1000.0)
+    state.record_owed(OWED_K8S_DEFERRED, ORIGIN, {"sonarr"}, 1000.0)
     deploy_defer.alert_and_record_deferred(
         _tools(),
         state,
@@ -454,4 +459,4 @@ def test_a_service_already_paging_from_k8s_deferred_is_not_recorded_twice(
         ChangeSet(k8s={"sonarr", "authelia"}),
         declared_k8s={"sonarr", "authelia"},
     )
-    assert [e.service for e in state.k8s_unapplied_pending()] == ["authelia"]
+    assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["authelia"]

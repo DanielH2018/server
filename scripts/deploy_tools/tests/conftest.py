@@ -3,6 +3,8 @@
 Keeps `land.sh`'s landing annotations out of the real syslog (see `_no_syslog`), and holds
 the two fixtures every land_lib phase test drives: a Landing for one phase, and `land_run`
 for the whole pipeline through land.main. The fakes they build on live in _land_fakes.py.
+It also holds `tree_lock`, `journal` and `run`, the fixtures the two `gitops_state` test files
+share.
 
 Run: uv run pytest scripts/deploy_tools/tests -k land
 """
@@ -139,3 +141,56 @@ def _no_syspath_leak():
         "by bare name would resolve against it. Remove the entry in a finally, or use "
         "monkeypatch.syspath_prepend."
     )
+
+
+# ── gitops_state: the injected tree lock and journal every clear test runs against ──
+
+
+@pytest.fixture
+def tree_lock(tmp_path: Path) -> Path:
+    """The lock `run` injects, in place of the git-tree lock.
+
+    A deploy or a gitops tick on this very host may hold the real one: a suite that took it
+    would block that deploy, and one that ran while a tick held it would sit through the whole
+    wait on every test. `main()` takes the path as an argument so no test has to patch it.
+
+    It lives in its own directory, NOT beside the markers. The real lock is in `/var/lock`
+    while the markers are in `/var/lib/gitops-deploy`, and a test that put them together
+    would make the unwritable-state-directory test fail at the lock instead of at the marker
+    write it is named for — passing on a path it does not exercise.
+    """
+    lock_dir = tmp_path / "lock"
+    lock_dir.mkdir()
+    return lock_dir / "tree.lock"
+
+
+@pytest.fixture
+def journal() -> list[tuple]:
+    """Every (role, dropped line, still-pending tags) a clear recorded, in place of
+    the real `logger` line.
+
+    `run` injects it into every test: a real line from a test run would read as an
+    operator's clear (`cleared=true role=k3s`) to the next investigator of this host.
+    """
+    return []
+
+
+@pytest.fixture
+def run(tree_lock: Path, journal):
+    """`run(state_dir, *argv)` -> the command's exit code, against the injected lock."""
+
+    # Imported here, not at the top: `gitops_state` puts the deployer's `files/` on sys.path,
+    # which the land tests this conftest also serves must not inherit.
+    from deploy_tools import gitops_state
+
+    def _run(state_dir: Path, *args: str) -> int:
+        return gitops_state.main(
+            ["--state-dir", str(state_dir), *args],
+            lock_path=str(tree_lock),
+            lock_wait_s=0.05,
+            journal=lambda role, dropped, remaining: journal.append(
+                (role, dropped, remaining)
+            ),
+        )
+
+    return _run
