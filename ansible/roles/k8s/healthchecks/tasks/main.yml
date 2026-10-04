@@ -1,16 +1,5 @@
 ---
-# Create the PVC BEFORE the workload starts. Django runs migrations against whatever database
-# it finds on boot, so having the claim ready prevents a first-boot-then-overwrite sequence.
-- name: Create the healthchecks config volume claim
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: healthchecks
-    volume_claim_name: "{{ healthchecks_k8s_claim }}"
-    volume_claim_storage_class: "{{ healthchecks_k8s_storage_class }}"
-    volume_claim_size: "{{ healthchecks_k8s_size }}"
-
+# The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy healthchecks to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

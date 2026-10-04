@@ -20,7 +20,7 @@ noticed instead of silently going quiet.
   manager.
 - **Port:** 8000.
 - **Storage:** `healthchecks-config` PVC (`longhorn`, 1Gi) — check definitions and ping
-  history, seeded through `k8s/volume-claim`.
+  history, created from `k8s_claims` in `defaults/main.yml`.
 - **Secrets** (SOPS keys, not values): `smtp_notify_app_password` (outbound mail, shared with
   Uptime Kuma and monitor-bridge), `healthchecks_password` (the seed superuser),
   `healthchecks_discord_webhook_url` (the notification channel), `healthchecks_secret_key`

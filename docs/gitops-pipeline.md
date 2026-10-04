@@ -180,6 +180,13 @@ Three outcomes, and the journal names which one it took on every tick:
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and
 what each one refuses, are in `scripts/deploy_tools/narrow_broad.py`.
 
+A shared template maps to the roles that import it, and two importer edges are corrected
+(#3445). A name inside a Jinja `{# #}` comment is not an import. `claim-default.yaml.j2`
+maps to the roles whose `defaults/main.yml` declares `k8s_claims`, not to every caller of
+`k8s/manifests`. Before the fix, a claim-template edit reached 57 of 60 services and refused.
+The derivation refuses again if `k8s_claims` is set anywhere but a role's defaults.
+`scripts/deploy_tools/narrow_templates.py` holds both rules.
+
 **Every deploy-plane tick also logs a render-digest shadow line** (#3045), one
 `narrow shadow:` line beside the outcome above. It names the services whose applied digests
 differ from a render record of the commit being applied, counts the ones that match, and
