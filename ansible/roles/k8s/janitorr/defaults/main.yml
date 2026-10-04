@@ -3,7 +3,7 @@
 #
 # Digest-pinned: `jvm-stable` is a floating non-semver alias Renovate cannot version-track.
 # Manual update: `docker pull ghcr.io/schaka/janitorr:jvm-stable`, take the new digest.
-janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:6becfbed9098d27e6bf81a114976394a091d095ee5aba3ae8d86a4fd94af8e7a
+janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:eecb604b6307f4ba5674bec7e3fc142d7212361571a1a9dc1f39e0fd069a4434
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Probe-less: the Deployment renders no readinessProbe, so `rollout status` would return the
