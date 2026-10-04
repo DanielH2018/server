@@ -8,6 +8,8 @@
     name: k8s/manifests
   vars:
     manifests_service: node-exporter
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
     # The stabilisation gate compares ready against desired for this DaemonSet (2 nodes). If
     # daniel-server goes NotReady mid-window, desired stays 2 while ready drops to 1 and the
     # gate rolls back — for a cause unrelated to this change. Accepted: it fails safe, and a

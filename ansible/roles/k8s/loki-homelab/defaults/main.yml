@@ -18,6 +18,12 @@ loki_homelab_claim: loki-homelab-data
 loki_homelab_size: 5Gi
 loki_homelab_storage_class: longhorn-nobackup
 
+# The claim k8s/manifests renders and applies for this role (#3387).
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ loki_homelab_claim }}"
+    storage_class: "{{ loki_homelab_storage_class }}"
+    size: "{{ loki_homelab_size }}"
+
 loki_homelab_retention: 744h
 
 loki_homelab_cpu_limit: "1"

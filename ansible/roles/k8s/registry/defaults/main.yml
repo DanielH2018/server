@@ -22,6 +22,12 @@ registry_k8s_claim: registry-data
 registry_k8s_storage_class: longhorn-nobackup
 registry_k8s_size: 10Gi
 
+# The claim k8s/manifests renders and applies for this role (#3387).
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ registry_k8s_claim }}"
+    storage_class: "{{ registry_k8s_storage_class }}"
+    size: "{{ registry_k8s_size }}"
+
 # ── garbage collection (registry-gc.sh, gc-job.yaml) ───────────────────────────────────────
 # DELETE_ENABLED only permits deletes, and the registry never collects on its own. Every rebuild
 # pushes the same `latest` tag, which orphans the previous manifest, so the store grows until it

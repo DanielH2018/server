@@ -1,9 +1,9 @@
 {#
   PersistentVolumeClaim for a k8s-hosted service — the plain RWO/longhorn-family body that
-  authelia, crowdsec, loki-homelab, mosquitto, pihole (both claims), registry, valheim-stats and
-  wg-easy share. Each carries its own WHY for the storage class / backup posture it picked,
-  which stays at the call site (via `{% call %}`) rather than being swallowed here — the whole
-  point of these comments is that they differ role to role.
+  authelia, crowdsec, pihole (both claims) and traefik share, plus every `k8s_claims` entry
+  through `claim-default.yaml.j2`. Each carries its own WHY for the storage class / backup
+  posture it picked, which stays at the call site (via `{% call %}`) rather than being swallowed
+  here — the whole point of these comments is that they differ role to role.
 
   THE CALLER SLOT SITS BETWEEN `spec:` AND `accessModes:`, so a comment that governs
   `storageClassName` cannot sit on that line here. A `k8s_claims` role keeps that kind of
