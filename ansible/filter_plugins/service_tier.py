@@ -1,7 +1,7 @@
 """Ansible filter plugin deriving per-tier sets from the `tier` field on containers_list entries.
 
 A service's tier is declared once, on its `containers_list` entry, and every set that ranks
-services is derived from it (#3389). Three consumers read it:
+services is derived from it (#3389). Four consumers read it:
 
 - `tier_backup_claims`: the k3s role's `k3s_longhorn_r2_volumes`, the volumes backed up daily
   to R2, is every `backup_claims` volume of a `home-critical` entry.
