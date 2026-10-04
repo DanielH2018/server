@@ -67,7 +67,7 @@ registry_k8s_keep_content_tags: 3
 # The proof-of-loop pair (see tasks/main.yml). crane rather than docker or skopeo: it is a
 # static binary in a distroless image, needs no daemon, and copies between registries directly
 # without a local store to fill the node's disk.
-registry_k8s_crane_image: gcr.io/go-containerregistry/crane:v0.22.0
+registry_k8s_crane_image: gcr.io/go-containerregistry/crane:v0.22.1@sha256:1f968817b95790bed063f71175aa6b8ff879fa17064020415f3e18bb6e6a36e1
 # Deliberately tiny and deliberately not something the fleet runs — the point is to move bytes
 # through the registry, and a real image would make a failure ambiguous between "the registry
 # is broken" and "that image changed".
