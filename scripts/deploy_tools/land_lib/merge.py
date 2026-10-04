@@ -23,6 +23,15 @@ so and trusts the exit code.
 --await-merge polls the PR's state until merged, so `gh pr create` -> `gh pr merge --auto`
 -> one backgrounded land.sh is the whole procedure.
 
+A PR whose `reviewDecision` is REVIEW_REQUIRED is never armed. GitHub's auto-merge does not
+apply a ruleset bypass, so an armed PR waiting on a review that only a bypass clears stays
+BLOCKED until merge-timeout (github/docs#45265, open since 2026-07-23). `gh pr merge` refuses it
+at its own pre-flight as well (cli/cli#13388). The REST merge endpoint applies the bypass, so
+--await-merge merges such a PR through it once await_ci reads the head green, pinned to that
+head SHA. A ruleset with no bypass actor, such as the master CI gate, still refuses that call
+until its own checks pass. A refusal is reported and the wait goes on, so a caller who cannot
+bypass reaches merge-timeout rather than a merge.
+
 --arm-merge also refuses a PR whose body carries a closing keyword outside a `Closes #N` line,
 before any merge call. A "Filed and not fixed: #N" line closes #N on merge, because GitHub
 reads the keyword and not the sentence around it. `stray_closing_refs` owns the
@@ -44,7 +53,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.exit_codes import CI_RED
+from lib.exit_codes import CI_GREEN, CI_RED
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 
@@ -177,6 +186,55 @@ def _merge_direct(ln: Landing, subject: str) -> None:
     say(f"merged directly: {subject}")
 
 
+def _leave_for_a_direct_merge(ln: Landing, subject: str) -> None:
+    """Hand a PR blocked by a missing review to await_merge, which merges it directly.
+
+    Arming `--auto` here would leave it BLOCKED until merge-timeout; the module docstring has
+    why. Without --await-merge nothing in this run would merge it, so that dies instead.
+    """
+    pr = ln.opts.pr
+    if not ln.opts.await_merge:
+        ln.die(
+            f"PR #{pr} waits on a review that only a ruleset bypass clears, and auto-merge "
+            "never applies a bypass — re-run with --await-merge, which merges it directly "
+            "once CI is green",
+            1,
+        )
+    ln.direct_merge_subject = subject
+    say(
+        f"PR #{pr} waits on a review; not arming auto-merge, which ignores a ruleset "
+        "bypass — merging directly once CI is green"
+    )
+
+
+def _merge_past_review(ln: Landing, head: str) -> str:
+    """Squash-merge the PR at `head` through the REST endpoint; '' on success, else why not.
+
+    The REST endpoint is the merge path that applies a ruleset bypass (module docstring).
+    `sha` makes GitHub refuse if the head moved since await_ci read it green.
+    `{owner}/{repo}` resolves from the checkout, as every `gh pr view` here does.
+    """
+    try:
+        ln.tools.gh(
+            "api",
+            "-X",
+            "PUT",
+            f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/merge",
+            "-f",
+            "merge_method=squash",
+            "-f",
+            f"sha={head}",
+            "-f",
+            f"commit_title={ln.direct_merge_subject}",
+        )
+    except subprocess.CalledProcessError as exc:
+        return (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
+    except subprocess.TimeoutExpired:
+        return "gh timed out"
+    say(f"merged directly past the review requirement: {ln.direct_merge_subject}")
+    return ""
+
+
 def _require_author(ln: Landing) -> None:
     """Die unless the PR's author is `opts.require_author`; a no-op when it is unset.
 
@@ -202,7 +260,7 @@ def _require_author(ln: Landing) -> None:
 def arm_merge(ln: Landing) -> None:
     """Run `gh pr merge --squash --auto` for this PR, unless it is already merged."""
     pr = ln.opts.pr
-    view = ln.view("state,title,body")
+    view = ln.view("state,title,body,reviewDecision")
     if view.get("state") == "MERGED":
         say("already merged; --arm-merge is a no-op")
         return
@@ -211,6 +269,9 @@ def arm_merge(ln: Landing) -> None:
     _require_author(ln)
     _refuse_stray_closing_refs(ln, view.get("body") or "")
     subject = ln.opts.subject or view.get("title", "")
+    if view.get("reviewDecision") == "REVIEW_REQUIRED":
+        _leave_for_a_direct_merge(ln, subject)
+        return
     try:
         ln.tools.gh("pr", "merge", pr, "--squash", "--auto", "--subject", subject)
     except subprocess.CalledProcessError:
@@ -270,10 +331,14 @@ def await_merge(ln: Landing) -> None:
     CI is the other way an armed auto-merge never fires; GitHub says only `BLOCKED`, the
     same word it uses while checks run, so await_ci owns that verdict, one-shot. Only its
     exit 1 bails: `pending` IS the grace period, derived rather than guessed.
+
+    A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
+    reads its head green.
     """
     o, t = ln.opts, ln.tools
     waited = 0
     conflicting = 0
+    last_refusal = ""
     while True:
         view = ln.view("state,mergeable,headRefOid")
         state = view.get("state", "")
@@ -299,6 +364,15 @@ def await_merge(ln: Landing) -> None:
                     1,
                     Verdict.PR_CI_RED,
                 )
+            if rc == CI_GREEN and ln.direct_merge_subject:
+                refusal = _merge_past_review(ln, head)
+                if not refusal:
+                    continue
+                if refusal != last_refusal:
+                    say(
+                        f"GitHub refused the direct merge at {head[:8]}; waiting: {refusal}"
+                    )
+                    last_refusal = refusal
         if waited >= o.merge_timeout:
             ln.die(
                 f"PR #{o.pr} still {state} after {o.merge_timeout}s — not being merged; "
