@@ -24,7 +24,7 @@ a range that edits `deploy_cross_role.py` with origin's copy of it, not the inst
 to `host_lib.py` also defer-and-alerts both (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`,
 #3320). `resolv.conf.j2` still records `common`, for the reason its `DECIDED:` marker in
 `deploy_cross_role` gives. For that, `land.sh` names each consumer's playbook and tag, then the
-`gitops_state.py clear-manual-plane common` that clears the deployer's marker.
+`gitops_state.py clear-owed manual_plane common` that clears the deployer's marker.
 
 | File | What it gives a caller |
 |---|---|

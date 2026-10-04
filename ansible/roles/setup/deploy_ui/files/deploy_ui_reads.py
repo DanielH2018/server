@@ -251,7 +251,9 @@ def k8s_deferred_rows(owed: str | None) -> list[dict[str, str]]:
             "service": e.service,
             "origin": e.origin[:8],
             "deploy": gitops_markers.k8s_deferred_deploy_cmd([e.service]),
-            "clear": gitops_markers.k8s_deferred_clear_cmd(e.service),
+            "clear": gitops_markers.owed_clear_cmd(
+                gitops_ledger.OWED_K8S_DEFERRED, e.service
+            ),
         }
         for e in gitops_ledger.k8s_deferred_entries(owed)
     ]

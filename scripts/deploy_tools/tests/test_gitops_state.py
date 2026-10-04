@@ -123,7 +123,7 @@ def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
     assert pending(tmp_path) == {"k3s": frozenset()}
     out = capsys.readouterr().out
-    assert "kept k3s" in out and "clear-manual-plane k3s`" in out
+    assert "kept k3s" in out and "clear-owed manual_plane k3s`" in out
     ((_role, dropped, remaining),) = journal
     assert dropped is None and remaining == frozenset({"k3s"})
 

@@ -66,14 +66,14 @@ def test_a_narrowed_note_clears_only_the_tags_it_told_you_to_apply(pr):
     """
     note = land_tags.plane_note([RBAC], narrow_tags={"k3s": frozenset({"kubeconfig"})})
     assert "ansible/k3s-bringup.yml --tags kubeconfig" in note
-    assert "clear-manual-plane k3s --applied kubeconfig" in note
+    assert "clear-owed manual_plane k3s --applied kubeconfig" in note
 
 
 def test_a_role_tag_note_clears_the_whole_line(pr):
     """The rejecting half: a whole-role apply covers whatever the row has gained."""
     note = land_tags.plane_note([RBAC], narrow_tags={})
     assert "ansible/k3s-bringup.yml --tags k3s`" in note
-    assert "clear-manual-plane k3s`" in note
+    assert "clear-owed manual_plane k3s`" in note
     assert "--applied" not in note
 
 
@@ -215,7 +215,7 @@ def test_the_fast_path_prints_this_prs_narrow_tag(land_run):
     )
     assert "own_narrowing" in [c[0] for c in calls]
     assert "ansible/k3s-bringup.yml --tags kubeconfig" in out
-    assert "clear-manual-plane k3s --applied kubeconfig" in out
+    assert "clear-owed manual_plane k3s --applied kubeconfig" in out
     assert "--tags k3s`" not in out
 
 

@@ -232,7 +232,7 @@ def test_the_service_deploy_a_later_tick_runs_clears_the_marker(
     """The way out the deployer owns. Without it the page never stops.
 
     An operator's own `./scripts/deploy.sh` is invisible here, which is what
-    `gitops_state.py clear-k8s-deferred` exists for; a deploy the TICK runs is not.
+    `gitops_state.py clear-owed k8s_deferred` exists for; a deploy the TICK runs is not.
     """
     assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
     assert deferred(state_dir) != []

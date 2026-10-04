@@ -214,7 +214,7 @@ def test_the_marker_key_is_the_role_name_for_every_pending_role():
     The marker's third field is `setup_role_tag(role)`, and only a role
     `initial_setup.yml` does not apply can ever be written there. Both of those roles are
     tagged by their own name today. A future one that is not (the `chezmoi_setup` /
-    `chezmoi` shape) would make `clear-manual-plane <role>` miss its line, so it fails here
+    `chezmoi` shape) would make `clear-owed manual_plane <role>` miss its line, so it fails here
     rather than on a host.
     """
     import deploy_changes

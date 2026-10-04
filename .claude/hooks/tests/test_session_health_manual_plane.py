@@ -81,7 +81,7 @@ def test_a_pending_role_is_flagged_with_its_playbook_and_the_clear_command():
     assert "`k3s`" in line
     assert "ansible/k3s-bringup.yml" in line
     assert "3h" in line
-    assert "gitops_state.py clear-manual-plane k3s" in line, (
+    assert "gitops_state.py clear-owed manual_plane k3s" in line, (
         "the way out belongs in the line: the session reading it is usually not the "
         "session that landed the change"
     )

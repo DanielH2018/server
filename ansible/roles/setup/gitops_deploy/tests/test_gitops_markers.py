@@ -10,8 +10,8 @@ import pytest
 
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
-    MANUAL_PLANE_CLEAR_CMD,
     ContentionEntry,
+    owed_clear_cmd,
     parse_behind,
     parse_contention,
 )
@@ -52,5 +52,16 @@ def test_a_garbled_contention_marker_reads_as_no_streak(text):
 
 # ── the clear commands every surface prints ───────────────────────────────────────────────
 def test_the_clear_commands_name_the_gitops_state_subcommands():
-    assert "clear-manual-plane <role>" in MANUAL_PLANE_CLEAR_CMD
+    assert owed_clear_cmd("k8s_deferred", "sonarr").endswith(
+        "gitops_state.py clear-owed k8s_deferred sonarr"
+    )
     assert CONTENTION_CLEAR_CMD.endswith("clear-contention")
+
+
+def test_an_owed_clear_names_applied_tags_only_where_the_cli_takes_them():
+    """`gitops_state.py` refuses `--applied` off `manual_plane`, so it must never be printed."""
+    assert owed_clear_cmd("manual_plane", "k3s", {"k3s", "kubeconfig"}).endswith(
+        "clear-owed manual_plane k3s --applied kubeconfig"
+    )
+    with pytest.raises(ValueError, match="manual_plane only"):
+        owed_clear_cmd("k8s_unapplied", "authelia", {"authelia"})
