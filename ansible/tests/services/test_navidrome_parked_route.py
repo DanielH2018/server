@@ -30,14 +30,13 @@ from validate.k8s_manifests import (
 ROLE = ANSIBLE / "roles" / "k8s" / "navidrome"
 
 
-def _render_route(replicas: int) -> str:
+def _render_route() -> str:
     base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
     base = resolve_vars(base, base)
     ctx = {
         **base,
         **role_defaults("navidrome", base),
         "container_item": k8s_entries()["navidrome"],
-        "navidrome_k8s_replicas": replicas,
     }
     env = make_env([ROLE / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
@@ -46,13 +45,12 @@ def _render_route(replicas: int) -> str:
 
 
 def test_the_route_renders_when_navidrome_has_a_pod():
-    """The accept half, and the only thing still schema-checking this route.
+    """The accept half: the template always renders the route, and the list carries the gate.
 
-    `navidrome_k8s_replicas: 0` is what the repo commits, so validate/k8s_manifests.py now
-    renders this template empty and stops seeing the route at all. Raising the replica count
-    is the documented way to bring the workload back, and it must bring the route with it.
+    Raising the replica count is the documented way to bring the workload back, and the route
+    it lists must then be a real one.
     """
-    docs = [d for d in yaml_fast.safe_load_all(_render_route(1)) if d]
+    docs = [d for d in yaml_fast.safe_load_all(_render_route()) if d]
     # One object per host: the `.local.` route and its public twin.
     assert [d["metadata"]["name"] for d in docs] == ["navidrome", "navidrome-public"], (
         docs
