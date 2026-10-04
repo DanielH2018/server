@@ -146,8 +146,16 @@ Narrow the fan-out, do not queue. For the third, `clean <run-id>` the finished r
 uncleaned worktree counts against its host. `--host daniel-box` pins a batch that must land in
 the same run or that only daniel-box can verify.
 
-Poll with `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints one line per
-batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
+Watch the run with a Monitor (`timeout_ms` 1800000) running `cc-wait fanout <run-id>
+[<run-id> …] --budget 1740`, and re-arm it if it exits 75. Do not write the `while … status …
+sleep` loop by hand. The Monitor prints a line each time a batch finishes, and nothing in
+between. Its last line ends the run: `finished` (exit 0), `needs-attention` (1) or `failed` (5).
+That line names every batch that is not plain success. The source is
+`scripts/dev/fanout_probe.py`, which reads the `status` command below and shares one read per
+90s among every watcher on the host.
+
+For a batch's detail, run `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints
+one line per batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
 <PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
 (`permission_denials=N` is
 appended when the agent hit classifier denials). `done` requires a PR URL in the agent's final
