@@ -133,7 +133,8 @@ def _sweeps(**context) -> bool:
 def test_the_sweep_removes_the_sibling_volume_claim_staged_into():
     module = _sweep_task()["ansible.builtin.file"]
     assert module["state"] == "absent"
-    assert module["path"] == "/etc/rancher/k3s/manifests/{{ manifests_service }}-claims"
+    # Under a real deploy manifests_dest_dir is /etc/rancher/k3s/manifests/<service>.
+    assert module["path"] == "{{ manifests_dest_dir }}-claims"
 
 
 def test_the_sweep_runs_for_a_role_with_k8s_claims_or_its_own_pvc():

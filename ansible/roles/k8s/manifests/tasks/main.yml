@@ -290,10 +290,10 @@
   # through k8s/volume-claim, so its `<service>-claims/` sibling holds only the file that role
   # wrote before it converted (#3458). Nothing else sweeps that directory. A role that still
   # includes k8s/volume-claim under its own manifests_service would lose a live staged claim
-  # here on every deploy; test_k8s_claims.py refuses that pairing. The literal root, not
-  # manifests_dest_dir, because a dry run renders into a tempdir and removes nothing.
+  # here on every deploy; test_k8s_claims.py refuses that pairing. Skipped under
+  # k8s_no_mutate, so manifests_dest_dir is the real staging directory whenever this runs.
   ansible.builtin.file:
-    path: "/etc/rancher/k3s/manifests/{{ manifests_service }}-claims"
+    path: "{{ manifests_dest_dir }}-claims"
     state: absent
   become: true
   when:
