@@ -27,11 +27,13 @@ from lib.repo_paths import K8S_ROLES, REPO, SHARED_TPL
 
 __all__ = [
     "CALLER_RENDERED_ROLES",
+    "CLAIM_TEMPLATE",
     "HOST_VARS",
     "K8S_ROLES",
     "NO_MANIFEST_ROLES",
     "SHARED_MANIFEST_DEFAULTS",
     "SKIP_ROLES",
+    "claim_contexts",
     "is_manifest_template",
     "manifest_template",
     "shared_default_templates",
@@ -310,3 +312,19 @@ def shared_default_templates(role, k8s_roles=None) -> list[Path]:
         if basename in declared
         and not (roles_dir / role / "templates" / f"{basename}.j2").is_file()
     )
+
+
+# The shared template `k8s/manifests` renders once per entry of a role's `k8s_claims`, as
+# `claim-<name>.yaml`. One template, many renders, so a harness cannot find these claims by
+# walking templates: it renders this once per context `claim_contexts` returns.
+CLAIM_TEMPLATE = SHARED_TPL / "claim-default.yaml.j2"
+
+
+def claim_contexts(ctx: dict) -> list[dict]:
+    """One render context per `k8s_claims` entry in a role's resolved context `ctx`.
+
+    `manifests_claim` is the loop variable the deploy's render task binds, so rendering
+    CLAIM_TEMPLATE under each of these gives the bytes the deploy stages. Empty for a role
+    that declares no claims.
+    """
+    return [{**ctx, "manifests_claim": claim} for claim in ctx.get("k8s_claims") or []]

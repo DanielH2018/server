@@ -29,7 +29,16 @@ Optional and empty by default: `manifests_extra_rollouts` (`{name, image}` per e
 this role should roll), `manifests_self_rollouts` (`{name, kind, image?, namespace?,
 rolled_by_role?}`, for a role restarting its own workloads afterwards),
 `manifests_rollout_timeout` (default `manifests_rollout_timeout_default`, `600s`), `k8s_autodeploy_snapshot_pvcs` (declared in the
-caller's own `defaults/main.yml`, snapshotted before the apply), and the deferred pair below.
+caller's own `defaults/main.yml`, snapshotted before the apply), `k8s_claims` (below), and the
+deferred pair below.
+
+- **A role's PersistentVolumeClaims are data, not templates.** `k8s_claims: [{name, size,
+  storage_class}]` in the caller's own `defaults/main.yml` renders each entry from
+  `ansible/templates/claim-default.yaml.j2` to `claim-<name>.yaml` in the role's directory.
+  The claims ride the prune keep-set, the digest and the dry run, and a real deploy applies
+  them before the snapshot, which fails on a claim that does not exist yet. This role declares
+  no default for it, because its own default would outrank the caller's. `k8s/volume-claim`
+  is the older path it replaces (#3387).
 
 - **Templates stay in the caller's role**, at `roles/k8s/<service>/templates/<name>.j2`, and the
   `src` is anchored to `playbook_dir`: a relative `src` resolves against this role, and so does a

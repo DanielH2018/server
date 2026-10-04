@@ -52,11 +52,14 @@ def test_a_task_file_with_its_own_digest_is_flagged():
     assert _hashes_itself(copied)
 
 
-def test_the_digest_stats_the_ordinary_manifests_only():
+def test_the_digest_stats_the_ordinary_manifests_and_the_claims_only():
+    """The claims are in the digest, so a size or class change reads stale; secrets are not."""
     stat = task_named(
         load_tasks(TASKS / DIGEST_FILE), "Checksum the rendered manifests"
     )
-    assert stat["loop"] == "{{ manifests_files | default([]) }}"
+    assert (
+        stat["loop"] == "{{ (manifests_files | default([])) + manifests_claim_files }}"
+    )
 
 
 def test_the_render_entry_is_not_shadowed_by_the_mode_flag():

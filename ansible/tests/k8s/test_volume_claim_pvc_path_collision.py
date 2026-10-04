@@ -48,7 +48,7 @@ def _included_role(task: dict) -> str:
 def _lists_owned_file(task: dict) -> bool:
     """Whether a manifests include stages `pvc.yaml`, for either shape of `manifests_files`.
 
-    A list is checked by membership. A Jinja string (freshrss builds its list conditionally)
+    A list is checked by membership. A Jinja string (a list built conditionally)
     is checked by substring, which over-reports rather than under-reports: the collision is
     then decided by whether the volume-claim include is conditional.
     """
@@ -85,7 +85,7 @@ def paths_inside_consumed_dir(claim_tasks: Path) -> set[str]:
 def colliding_roles(roles_dir: Path) -> dict[str, str]:
     """Role name -> reason, for every role with two creators for one claim.
 
-    A conditional volume-claim include is exempt: freshrss guards its own `pvc.yaml` behind the
+    A conditional volume-claim include is exempt: a role may guard its own `pvc.yaml` behind the
     inverse of that same condition, so at most one creator runs per deploy.
     """
     found: dict[str, str] = {}
@@ -115,7 +115,7 @@ def volume_claim_callers(roles_dir: Path) -> set[str]:
 
 
 # A census that finds none of these is reading the wrong path, not a tree with no callers.
-KNOWN_CALLERS = frozenset({"valheim", "navidrome", "freshrss", "jellyfin", "sonarr"})
+KNOWN_CALLERS = frozenset({"valheim", "navidrome", "jellyfin", "sonarr"})
 
 REAL_CLAIM_TASKS = K8S_ROLES / "volume-claim" / "tasks" / "claim.yml"
 

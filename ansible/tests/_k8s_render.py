@@ -19,6 +19,8 @@ from validate.k8s_manifests import (
     K8S_ROLES,
     SHARED_TPL,
     SKIP_ROLES,
+    claim_contexts,
+    CLAIM_TEMPLATE,
     k8s_entries,
     load_yaml,
     make_env,
@@ -92,6 +94,15 @@ def _render_texts(overrides: dict | None = None):
             if rendered is None:
                 raise AssertionError(f"{role}/{tpl.name} failed to render: {err}")
             yield role, tpl.name, rendered
+        # `k8s_claims` renders one shared template per entry, so it is reached by the role's
+        # declared data rather than by any template it ships.
+        for claim_ctx in claim_contexts(ctx):
+            rendered, err = render_or_error(env, CLAIM_TEMPLATE.name, claim_ctx)
+            if rendered is None:
+                raise AssertionError(
+                    f"{role}/{CLAIM_TEMPLATE.name} failed to render: {err}"
+                )
+            yield role, CLAIM_TEMPLATE.name, rendered
 
 
 def _render_all():

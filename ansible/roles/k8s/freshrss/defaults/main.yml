@@ -5,9 +5,9 @@ freshrss_k8s_image: lscr.io/linuxserver/freshrss:latest@sha256:5358f396069b36f13
 freshrss_k8s_cache_image: nginx:alpine@sha256:1ed1b0e1d7652937d6cbdaf4018c7b6fc009a7dd6c3047351e2eddda745de43f
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Migrating state — strategy is Recreate and the config volume is seeded through
-# k8s/volume-claim (hardcoded ReadWriteOnce). This role tracks :latest by digest, so it rides
-# whatever image lands after Renovate's digest soak with no version-scheme signal at all —
+# Migrating state — strategy is Recreate and the config volume is ReadWriteOnce. This role
+# tracks :latest by digest, so it rides whatever image lands after Renovate's digest soak with
+# no version-scheme signal at all —
 # sharper than the -lsNN roles, which at least advertise a version number that CAN be misread.
 # Auto-deploy is allowed because k8s/manifests takes a pre-apply Longhorn snapshot of the claim
 # below and reverts it if the deploy fails, so a bad digest swap reverts instead of migrating
@@ -29,19 +29,13 @@ freshrss_k8s_cache_cpu_request: "50m"
 freshrss_k8s_cache_mem_request: 16Mi
 
 # 86M and 730 files — mostly the extensions unpacked under
-# config/www/freshrss/extensions, which seeding carries across for free because they live
-# inside the same directory. Sized with room for the feed database to grow.
+# config/www/freshrss/extensions. Sized with room for the feed database to grow.
 freshrss_k8s_claim: freshrss-config
 freshrss_k8s_storage_class: longhorn
 freshrss_k8s_size: 2Gi
 
-# Whether this cluster creates the config volume via k8s/volume-claim role.
-#
-# DECIDED 2026-08-28: per-cluster. Until 2026-08-14 the seed mechanism could populate the
-# PVC from the pre-migration Docker tree on daniel-server. Docker was uninstalled there
-# on 2026-08-14, so that source no longer exists. Prod clusters already have PVCs populated
-# from before the removal, so they skip seeding based on existing volume state. A cluster
-# with a fresh PVC has no such marker, so a deploy with this true will call k8s/volume-claim
-# (which creates an empty claim) while a staging cluster could set this false and render
-# `pvc.yaml` directly instead, letting the app run first-boot setup against an empty volume.
-freshrss_k8s_manage_claim: true
+# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ freshrss_k8s_claim }}"
+    storage_class: "{{ freshrss_k8s_storage_class }}"
+    size: "{{ freshrss_k8s_size }}"

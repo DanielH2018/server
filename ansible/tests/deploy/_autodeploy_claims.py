@@ -88,7 +88,7 @@ def _resolve_claim_token(token: str, defaults: dict) -> str | None:
 def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     """PVC claim names `role` actually causes to exist, as `(resolved, unresolved_tokens)`.
 
-    Two sources, because this repo builds a PVC two different ways:
+    Three sources, because this repo builds a PVC three different ways:
 
     1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2` —
        zigbee2mqtt's data claim and code-server's workspace claim are the only two.
@@ -97,8 +97,10 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
        `_batch_gated_names` uses, so a commented-out or `when: false`-gated include credits
        nothing, the same "argument-against read as the thing itself" trap this file's other
        matchers are written against.
+    3. A `name:` in the role's `k8s_claims` default, which `k8s/manifests` renders from the
+       shared `claim-default.yaml.j2` — freshrss's and zigbee2mqtt's claims.
 
-    Every token found by either path is resolved through `_resolve_claim_token`. A token that
+    Every token found by any path is resolved through `_resolve_claim_token`. A token that
     doesn't resolve is returned UNCHANGED in the second element rather than dropped — dropping
     it would silently pass a role whose claim var was renamed or removed out from under a live
     declaration, which is the same shape as crediting a comment, this time by omission.
@@ -116,6 +118,10 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
             claim = (task.get("vars") or {}).get("volume_claim_name")
             if isinstance(claim, str):
                 raw.append(claim)
+
+    for claim in defaults.get("k8s_claims") or []:
+        if isinstance(claim, dict) and isinstance(claim.get("name"), str):
+            raw.append(claim["name"])
 
     resolved: set[str] = set()
     unresolved: list[str] = []
@@ -189,7 +195,7 @@ def _migrating_state(role: Path) -> bool:
 # therefore cannot revert.
 #
 # `_rendered_pvc_claims` reads only what a role CAUSES to exist — a PVC document in its own
-# templates, or a `k8s/volume-claim` include. `media-data` is rendered by `k8s/media-volume`, so
+# templates, a `k8s/volume-claim` include, or a `k8s_claims` entry. `media-data` is rendered by `k8s/media-volume`, so
 # every *arr role mounting it is invisible to that reader. The gap this closes is the NEXT role
 # added with such a mount, promoted with nobody asked.
 #
