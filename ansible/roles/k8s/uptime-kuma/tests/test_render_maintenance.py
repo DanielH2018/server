@@ -13,7 +13,7 @@ import pytest
 ROLE = _Path(__file__).resolve().parents[1]
 _sys.path.insert(0, str(ROLE / "files"))
 
-from render_maintenance import main, window_cron  # noqa: E402
+from render_maintenance import down_monitor_ids, main, window_cron  # noqa: E402
 
 WINDOW = {
     "title": "Weekly system restart",
@@ -24,8 +24,14 @@ WINDOW = {
     "shutdown_delay_minutes": 5,
     "lead_minutes": 5,
     "recovery_allowance_minutes": 40,
+    "down_exclusion_minutes": 60,
     "timezone": "America/Chicago",
 }
+
+# The :20 sync run five minutes before the 07:25 opening, on a Sunday (2026-10-04).
+BEFORE_OPENING = "2026-10-04T07:20:30+00:00"
+# The run after the window closes, which puts a left-out monitor back.
+AFTER_CLOSING = "2026-10-04T08:20:30+00:00"
 
 MONITORS = {
     "7": {"id": 7, "name": "k3s Grafana"},
@@ -41,7 +47,7 @@ def write(tmp_path, name, payload):
     return path
 
 
-def plan(tmp_path, live, monitors=..., page=...):
+def plan(tmp_path, live, monitors=..., page=..., down=None, now=BEFORE_OPENING):
     """Run the plan phase; return (desired-or-None, mode-or-None)."""
     out = tmp_path / "desired.json"
     mode = tmp_path / "mode"
@@ -53,6 +59,8 @@ def plan(tmp_path, live, monitors=..., page=...):
                 f"--monitors={write(tmp_path, 'monitors.json', MONITORS if monitors is ... else monitors)}",
                 f"--page={write(tmp_path, 'page.json', PAGE if page is ... else page)}",
                 f"--live={write(tmp_path, 'live.json', live)}",
+                f"--down={write(tmp_path, 'down.json', down)}",
+                f"--now={now}",
                 f"--out={out}",
                 f"--mode-out={mode}",
             ]
@@ -195,3 +203,88 @@ def test_the_select_phase_reports_the_id_the_detail_stage_reads(tmp_path):
     write(tmp_path, "maintenances.json", {"5": {"id": 5, "title": "something else"}})
     assert main(args) == 0
     assert out.read_text() == ""
+
+
+def test_a_monitor_already_down_is_left_out_of_the_window_about_to_open(tmp_path):
+    """#3506: Kuma pages `MAINTENANCE -> DOWN`, so a DOWN monitor carried through the window
+    pages a second time when it closes."""
+    desired, mode = plan(tmp_path, live_window(), down=[8], now=BEFORE_OPENING)
+    assert mode == "edit"
+    assert [monitor["id"] for monitor in desired["monitors"]] == [7]
+
+
+def test_the_run_after_the_window_puts_a_left_out_monitor_back(tmp_path):
+    desired, mode = plan(
+        tmp_path,
+        live_window(monitors=[{"id": 7, "pathName": "k3s Grafana"}]),
+        down=[8],
+        now=AFTER_CLOSING,
+    )
+    assert mode == "edit"
+    assert [monitor["id"] for monitor in desired["monitors"]] == [7, 8]
+
+
+def test_a_down_monitor_stays_in_the_window_on_every_other_run(tmp_path):
+    """Only the run before the opening edits for a DOWN monitor, so a flapping one does not
+    rewrite ~85 monitor_maintenance rows every hour."""
+    assert plan(tmp_path, live_window(), down=[8], now="2026-10-04T06:20:30+00:00") == (
+        None,
+        None,
+    )
+
+
+def test_an_unreadable_status_keeps_every_monitor_in_the_window(tmp_path):
+    assert plan(tmp_path, live_window(), down=None, now=BEFORE_OPENING) == (None, None)
+
+
+def test_every_monitor_down_keeps_every_monitor_in_the_window(tmp_path):
+    """That is Kuma's own network failing; an empty window would page the reboot for all."""
+    assert plan(tmp_path, live_window(), down=[7, 8], now=BEFORE_OPENING) == (
+        None,
+        None,
+    )
+
+
+def test_only_a_down_series_counts_as_down():
+    metrics = "\n".join(
+        [
+            "# HELP monitor_status Monitor Status (1 = UP, 0= DOWN, 2= PENDING, 3= MAINTENANCE)",
+            "# TYPE monitor_status gauge",
+            'monitor_status{monitor_id="449",monitor_name="Arr Queue Warnings",'
+            'monitor_type="push",monitor_url="https://",monitor_hostname="null",'
+            'monitor_port="null"} 0',
+            'monitor_status{monitor_id="7",monitor_name="k3s Grafana",monitor_type="http"} 1',
+            'monitor_status{monitor_id="8",monitor_name="Pending",monitor_type="push"} 2',
+            'monitor_status{monitor_id="9",monitor_name="In window",monitor_type="push"} 3',
+            'monitor_response_time{monitor_id="10",monitor_name="x"} 0',
+            'monitor_status{monitor_name="no id",monitor_type="push"} 0',
+        ]
+    )
+    assert down_monitor_ids(metrics) == [449]
+
+
+def status(tmp_path, url, key):
+    out = tmp_path / "down.json"
+    key_file = tmp_path / "metrics_api_key"
+    key_file.write_text(key)
+    assert (
+        main(
+            [
+                "--phase=status",
+                f"--metrics-url={url}",
+                f"--api-key-file={key_file}",
+                f"--out={out}",
+            ]
+        )
+        == 0
+    )
+    return json.loads(out.read_text())
+
+
+def test_an_unreachable_exporter_writes_null_rather_than_failing_the_job(tmp_path):
+    """A failed job would also stop adding new monitors to the window."""
+    assert status(tmp_path, "http://127.0.0.1:1/metrics", "uk1_key") is None
+
+
+def test_no_api_key_writes_null(tmp_path):
+    assert status(tmp_path, "http://127.0.0.1:1/metrics", "") is None

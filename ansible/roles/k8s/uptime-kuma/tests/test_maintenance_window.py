@@ -9,7 +9,7 @@ suppress an ordinary hour and page through the restart.
 
 import json
 import sys as _sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path as _Path
 
@@ -21,7 +21,7 @@ from lib.repo_paths import REPO
 ROLE = _Path(__file__).resolve().parents[1]
 _sys.path.insert(0, str(ROLE / "files"))
 
-from render_maintenance import window_cron  # noqa: E402
+from render_maintenance import opens_within, window_cron  # noqa: E402
 
 SHARED_TEMPLATES = REPO / "ansible" / "templates"
 DEFAULTS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
@@ -137,6 +137,43 @@ def test_a_sync_schedule_inside_the_window_is_caught():
     assert week_minutes("30 7 * * *") & week_minutes(cron, duration)
 
 
+def sync_runs_leaving_down_monitors_out(**overrides):
+    """The sync runs in a week whose plan would leave a DOWN monitor out of the window."""
+    configmap = yaml.safe_load(
+        render("maintenance-sync-configmap.yaml.j2", **overrides)
+    )
+    config = json.loads(configmap["data"]["window.json"])
+    # week_minutes counts from Sunday 00:00, cron's day 0; 2026-10-04 is a Sunday.
+    sunday = datetime(2026, 10, 4, tzinfo=ZoneInfo("UTC"))
+    runs = week_minutes(DEFAULTS["uptime_kuma_k8s_maintenance_sync_schedule"])
+    return [
+        run
+        for run in sorted(runs)
+        if opens_within(
+            config, sunday + timedelta(minutes=run), config["down_exclusion_minutes"]
+        )
+    ]
+
+
+def test_exactly_one_sync_run_a_week_leaves_down_monitors_out():
+    """#3506. More than one run means a flapping monitor edits the window every hour; none
+    means the DOWN monitor is carried into the window and pages again when it closes."""
+    # fact: ansible/roles/k8s/uptime-kuma/CLAUDE.md#The weekly reboot's maintenance window is reconciled over the API
+    assert sync_runs_leaving_down_monitors_out() == [7 * 60 + 20]
+
+
+def test_a_lookahead_spanning_two_runs_would_be_caught():
+    """The rejecting half."""
+    assert (
+        len(
+            sync_runs_leaving_down_monitors_out(
+                uptime_kuma_k8s_maintenance_down_exclusion_minutes=120
+            )
+        )
+        == 2
+    )
+
+
 def test_the_configmap_ships_the_script_beside_the_window():
     data = yaml.safe_load(render("maintenance-sync-configmap.yaml.j2"))["data"]
     compile(data["render_maintenance.py"], "render_maintenance.py", "exec")
@@ -153,6 +190,7 @@ def test_the_job_applies_only_after_every_read_and_decision_succeeded():
     ]["spec"]["template"]["spec"]
     assert [c["name"] for c in spec["initContainers"]] == [
         "dump",
+        "status",
         "select",
         "detail",
         "render",
