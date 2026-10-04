@@ -105,6 +105,48 @@ daniel-server keeps its own SOPS key, so decryption still works without the reco
 4. Deploy: `uv run ansible-playbook ansible/deploy.yml`.
 5. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's step 6.
 
+### Scenario: daniel-server is dead, daniel-box survives
+
+daniel-box holds the control plane, etcd and its own SOPS key, so the cluster stays up and
+needs no restore. The home-critical chain is pinned to `k8s_primary_node` (daniel-box), so it
+keeps running. What breaks is every workload that was on daniel-server.
+
+Placement moves between deploys, so read it rather than trusting a list. From daniel-box:
+`kubectl get pods -A -o wide --field-selector spec.nodeName=daniel-server`.
+
+What happens without any action:
+
+- **Stateless pods reschedule on their own.** The node controller marks daniel-server
+  unreachable after about 50 s, and each pod's default `node.kubernetes.io/unreachable`
+  toleration expires 300 s later. The pods then start on daniel-box.
+- **CoreDNS is one of those, and it has one replica.** In-cluster name resolution fails for
+  about six minutes, until the replacement pod is Ready. Pods with a cached answer or an IP
+  keep working. Do not chase DNS errors in that window.
+- **Pods with a Longhorn RWO volume stay Terminating.** Longhorn's
+  `node-down-pod-deletion-policy` is `do-nothing`, and the `DECIDED:` comment on
+  `k3s_longhorn_node_down_pod_deletion_policy` in `ansible/roles/setup/k3s/defaults/main.yml`
+  says why. Their volumes stay attached to the dead node until step 2 below.
+- **`nut` cannot move.** It is pinned to daniel-server because the UPS is USB-attached there.
+  While daniel-server is down, daniel-box gets no power-loss shutdown signal and runs to battery
+  end on a power cut.
+
+Steps:
+
+1. Confirm daniel-server is down rather than cut off. Check its console or power. If it is
+   still running but unreachable from daniel-box, fix the network instead: step 2 would start a
+   second copy of each stateful pod against the other replica.
+2. Shed load first, per *one node is down and the survivor runs short of memory* below.
+   daniel-box does not have the memory for daniel-server's whole load.
+3. Force-delete each stuck pod that you still need, using the k3s admin kubeconfig, because plain
+   `kubectl` is read-only: `sudo k3s kubectl -n <ns> delete pod <pod> --force --grace-period=0`.
+   The replacement can then report a Multi-Attach error for up to about 6 minutes, until
+   Kubernetes force-detaches the volume from the dead node. That wait is expected. Longhorn
+   then attaches the volume on daniel-box from its local replica.
+4. Verify with `probe.py targets` and `probe.py health <svc>` for each service you brought back.
+5. Once daniel-server is back, Longhorn rebuilds its replicas from daniel-box. Redeploy each
+   shed service as the shed scenario's step 3 says. The rescheduled pods stay on daniel-box
+   until their next rollout.
+
 ### Scenario: one node is down and the survivor runs short of memory
 
 k3s reschedules the lost node's pods onto the survivor, which may not hold every workload.
