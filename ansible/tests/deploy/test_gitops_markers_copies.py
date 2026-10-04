@@ -1,7 +1,8 @@
 """Every consumer of the deployer's markers ships the source or a fresh copy of it.
 
 `ansible/roles/setup/gitops_deploy/files/gitops_markers.py` is the one source for the state
-directory, the marker basenames and the line parsers. deploy-ui and renovate-agent install the
+directory, the marker basenames and the line parsers, and `gitops_ledger.py` beside it is the
+one source for the JSON-lines markers. deploy-ui and renovate-agent install the
 source itself into `/opt`, and `scripts/dev/gen_gitops_markers.py` copies it into
 monitor-bridge, which ships its own `files/` into a pod (the generator's docstring has why).
 This is the freshness half of that arrangement, the same shape as
@@ -22,10 +23,13 @@ from _helpers import REPO
 from lib import yaml_fast
 
 
-from dev.gen_gitops_markers import COPIES, SOURCE, render
+from dev.gen_gitops_markers import COPIES, LEDGER_SOURCE, SOURCE, render
 
 EXPECTED_COPIES = frozenset(
-    {"ansible/roles/k8s/monitor-bridge/files/gitops_markers.py"}
+    {
+        (SOURCE, "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py"),
+        (LEDGER_SOURCE, "ansible/roles/k8s/monitor-bridge/files/gitops_ledger.py"),
+    }
 )
 
 # The loop item that installs the source itself, as the setup consumers spell it.
@@ -78,11 +82,11 @@ def test_the_generator_knows_exactly_the_named_consumers():
 
 
 def test_every_committed_copy_matches_what_the_generator_writes_now():
-    source_text = (REPO / SOURCE).read_text()
     stale = [
         target
-        for target in EXPECTED_COPIES
-        if (REPO / target).read_text() != render(target, source_text)
+        for source, target in EXPECTED_COPIES
+        if (REPO / target).read_text()
+        != render(target, (REPO / source).read_text(), source)
     ]
     assert not stale, (
         f"stale copies {sorted(stale)}: run `uv run python scripts/dev/gen_gitops_markers.py`"
@@ -91,8 +95,10 @@ def test_every_committed_copy_matches_what_the_generator_writes_now():
 
 def test_a_copy_carries_the_provenance_banner_and_the_source_does_not():
     """The banner is the second line of every copy, and the source has no banner at all."""
-    assert not (REPO / SOURCE).read_text().startswith(f"# {SOURCE}\n# generated_from:")
-    for target in EXPECTED_COPIES:
+    for source, target in EXPECTED_COPIES:
+        assert (
+            not (REPO / source).read_text().startswith(f"# {source}\n# generated_from:")
+        )
         assert (
             (REPO / target).read_text().startswith(f"# {target}\n# generated_from:")
         ), target
@@ -125,7 +131,8 @@ def test_the_monitor_bridge_module_list_carries_the_copy():
     defaults = yaml_fast.safe_load(
         (REPO / "ansible/roles/k8s/monitor-bridge/defaults/main.yml").read_text()
     )
-    assert "gitops_markers.py" in defaults["monitor_bridge_modules"]
+    for _, target in EXPECTED_COPIES:
+        assert target.rsplit("/", 1)[1] in defaults["monitor_bridge_modules"], target
 
 
 def test_the_source_is_import_free():
@@ -133,6 +140,20 @@ def test_the_source_is_import_free():
     for line in (REPO / SOURCE).read_text().splitlines():
         if line.startswith(("import ", "from ")):
             assert line == "from typing import NamedTuple", line
+
+
+def test_the_ledger_imports_only_the_stdlib_and_the_markers_copy_beside_it():
+    """Every tree that ships the ledger ships `gitops_markers` next to it, and nothing else."""
+    imports = [
+        line
+        for line in (REPO / LEDGER_SOURCE).read_text().splitlines()
+        if line.startswith(("import ", "from "))
+    ]
+    assert "import json" in imports, "non-vacuity: the census reads the import lines"
+    for line in imports:
+        assert line in ("import json", "from typing import NamedTuple") or (
+            line.startswith("from gitops_markers import ")
+        ), line
 
 
 def test_every_non_python_literal_names_the_same_directory():

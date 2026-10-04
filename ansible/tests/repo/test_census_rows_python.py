@@ -387,12 +387,14 @@ ROWS = (
         allow={
             rel: (
                 "ONE module at two roots by construction: `scripts/dev/gen_gitops_markers.py` "
-                "writes monitor-bridge's copy verbatim, and "
+                "writes monitor-bridge's copies verbatim, and "
                 "`ansible/tests/deploy/test_gitops_markers_copies.py` fails once they differ"
             )
             for rel in (
                 "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
                 "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
+                "ansible/roles/k8s/monitor-bridge/files/gitops_ledger.py",
+                "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
             )
         },
     ),

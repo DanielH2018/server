@@ -2,7 +2,8 @@
 
 Both read the deployer's state directory off a hostPath the pod is pinned to; the basenames
 and the line parsers come from `gitops_markers`, the deployer's own module copied into this
-`files/` (its header says how it is kept fresh). `gitops_status` is a
+`files/` (its header says how it is kept fresh), and the `owed` ledger's reader comes from
+the `gitops_ledger` copy beside it. `gitops_status` is a
 verdict that reads `cfg` itself — its thresholds default to `None` and resolve inside the
 body, because a default argument is evaluated at import and there is no `Config` then — so it
 lives here beside its only caller rather than in `verdicts/service.py`, where `gitops_alive`
@@ -32,6 +33,7 @@ from gitops_markers import (
     parse_manual_plane,
     parse_manual_plane_tags,
 )
+from gitops_ledger import merge_manual_plane
 from verdicts.service import gitops_alive
 
 
@@ -84,6 +86,7 @@ def gitops_status(
     max_contention_s: float | None = None,
     manual_plane_tags: str | None = None,
     k8s_deferred: str | None = None,
+    owed: str | None = None,
 ) -> tuple[bool, str]:
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
 
@@ -142,6 +145,9 @@ def gitops_status(
         nobody has deployed blocks no other session's landing. It is here at all because the
         deferring tick MERGED the bump, so `behind_since` is empty and no later tick's range
         carries it — the failure mode `manual_plane` closed one plane over (#2449).
+      owed: the deployer's `owed` ledger, or None. Its `manual_plane` class pages exactly as
+        the line marker does, merged with it role by role (`gitops_ledger.merge_manual_plane`),
+        so the writer can move into the ledger without a window where nothing pages (#3392).
     """
     max_behind_s = cfg.GITOPS_BEHIND_MAX_S if max_behind_s is None else max_behind_s
     max_contention_s = (
@@ -204,13 +210,16 @@ def gitops_status(
                 "— deploy deferred (broad change / dirty tree); run the manual deploy on the "
                 "host" % (age_s / 3600, sha[:8], max_behind_s / 3600)
             )
-    pending = parse_manual_plane(manual_plane)
+    pending, narrow = merge_manual_plane(
+        parse_manual_plane(manual_plane),
+        parse_manual_plane_tags(manual_plane_tags),
+        owed,
+    )
     if pending:
         oldest = min(e.at for e in pending)
         age_s = (time.time() if now is None else now) - oldest
         if age_s > max_behind_s:
             roles = ", ".join(sorted({e.role for e in pending}))
-            narrow = parse_manual_plane_tags(manual_plane_tags)
             return False, (
                 "%s unapplied for %.0fh (> %.0fh) — the tick cannot apply %s; %s"
                 % (
@@ -274,21 +283,20 @@ def _read_gitops_marker(cfg: Config, name: str) -> str | None:
         return None
 
 
-def _read_manual_plane_tags(cfg: Config) -> str | None:
-    """The `manual_plane_tags` sidecar, with every line that does not decode dropped.
+def _read_decodable_lines(cfg: Config, name: str) -> str | None:
+    """A marker's text with every line that does not decode dropped, or None when absent.
 
-    The sidecar alone tolerates a decode error, because it only narrows the remediation a
-    page prints; a role with no line falls back to the whole-role tag. Raising on it turned
+    Two markers tolerate a decode error. The `manual_plane_tags` sidecar only narrows the
+    remediation a page prints; a role with no line falls back to the whole-role tag. The
+    `owed` ledger holds a class nothing pages on beside `manual_plane`, and one torn byte in
+    a line about either must not blank the whole check. Raising on either turned
     `gitops_status` into DOWN "check error" every cycle, masking the hold, diverged, behind and
     contention arms this monitor exists to raise (#2371). The skip is per line, as in every
     parser in `gitops_markers`: a torn `k3s kube\\xffconfig` still splits into two fields, and
     printing its tag would select nothing.
     """
     try:
-        with open(
-            os.path.join(cfg.GITOPS_STATE_DIR, MARKERS["manual_plane_tags"]),
-            errors="replace",
-        ) as fh:
+        with open(os.path.join(cfg.GITOPS_STATE_DIR, name), errors="replace") as fh:
             text = fh.read()
     except FileNotFoundError:
         return None
@@ -305,6 +313,7 @@ def check_gitops_status(cfg: Config) -> tuple[bool, str]:
         hold_plane=_read_gitops_marker(cfg, MARKERS["hold_plane"]),
         manual_plane=_read_gitops_marker(cfg, MARKERS["manual_plane"]),
         contention_since=_read_gitops_marker(cfg, MARKERS["contention"]),
-        manual_plane_tags=_read_manual_plane_tags(cfg),
+        manual_plane_tags=_read_decodable_lines(cfg, MARKERS["manual_plane_tags"]),
         k8s_deferred=_read_gitops_marker(cfg, MARKERS["k8s_deferred"]),
+        owed=_read_decodable_lines(cfg, MARKERS["owed"]),
     )

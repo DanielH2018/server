@@ -7,16 +7,20 @@ answered it for nothing are indistinguishable from the passing side alone.
 Run: uv run pytest scripts/lib/tests/test_deployer_park.py
 """
 
+import json
+
 from lib.deployer_park import (
     BEHIND_PARK_SECONDS,
+    manual_plane_lines,
     park_age,
     park_note,
     read_behind_marker,
     read_k8s_unapplied_marker,
     read_manual_plane_marker,
+    read_manual_plane_tags_marker,
 )
 from gitops_ledger import OWED_K8S_UNAPPLIED, owed_line, parse_owed
-from gitops_markers import MARKERS
+from gitops_markers import MARKERS, parse_manual_plane
 
 # The shape the deployer writes: the origin SHA it is behind, then when it first saw it.
 _MARKER = "abc1230000000000000000000000000000000000 1000"
@@ -77,7 +81,35 @@ _PENDING = (
 
 def test_the_manual_plane_marker_is_read_from_the_state_dir(tmp_path):
     (tmp_path / MARKERS["manual_plane"]).write_text(_PENDING + "\n")
-    assert read_manual_plane_marker(str(tmp_path)) == _PENDING
+    marker = read_manual_plane_marker(str(tmp_path))
+    assert parse_manual_plane(marker) == parse_manual_plane(_PENDING)
+
+
+def test_a_manual_plane_ledger_line_with_an_unknown_key_reaches_the_banner(tmp_path):
+    """The Verify-by of #3392 for the banner: a key a newer writer added is ignored.
+
+    The role is pending in the line marker too, with no sidecar row, so its needs are
+    unknown there and the whole-role clear wins over the ledger's narrower tags.
+    """
+    (tmp_path / MARKERS["manual_plane"]).write_text(_PENDING + "\n")
+    line = {
+        "class": "manual_plane",
+        "subject": "k3s",
+        "origin": "f" * 40,
+        "at": 500,
+        "playbook": "ansible/k3s-bringup.yml",
+        "tags": ["kubeconfig"],
+        "added_by_a_newer_writer": 1,
+    }
+    (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
+    state = str(tmp_path)
+    lines = manual_plane_lines(
+        read_manual_plane_marker(state), 4000, read_manual_plane_tags_marker(state)
+    )
+    assert len(lines) == 2, lines
+    assert "`k3s` setup role 58 min ago" in lines[0], "the older ledger stamp decides"
+    assert lines[0].endswith("clear-manual-plane k3s`")
+    assert "`common` setup role" in lines[1]
 
 
 def test_an_absent_manual_plane_marker_reads_as_nothing_pending(tmp_path):

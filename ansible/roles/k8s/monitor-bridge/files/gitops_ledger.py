@@ -1,4 +1,7 @@
-# ansible/roles/setup/gitops_deploy/files/gitops_ledger.py
+# ansible/roles/k8s/monitor-bridge/files/gitops_ledger.py
+# generated_from: ansible/roles/setup/gitops_deploy/files/gitops_ledger.py -- do not edit.
+# A verbatim copy written by scripts/dev/gen_gitops_markers.py; edit the source, run it, and
+# commit every copy in the same PR.
 """The JSON-lines markers: the owed-work ledger (#3392) and the per-SHA tick receipt (#3391).
 
 `gitops_markers` holds the line-format markers, whose parsers accept an exact field count and
