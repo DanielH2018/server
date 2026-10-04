@@ -19,6 +19,22 @@
     - /etc/gitops-deploy      # config.env (0600 secrets) — template won't mkdir its parent
   become: true
 
+# State files whose marker was retired from `MARKERS`. Nothing removes a file the code stops
+# naming, and `teardown.yml` removes the state directory only on a host that is NOT the
+# deployer, so the deployer converges here (#3079 was the first). `broad_applied` lost its
+# writer and every reader when `land.sh` moved onto `receipts.jsonl` (#3391, #3461); a
+# `land.sh` from a worktree cut before that still reads it, and only its absence stops that
+# read going stale. A marker retired later joins this list in the PR that drops its `MARKERS`
+# entry, never before: `tests/test_deployer_state.py` fails on a live basename here.
+- name: Remove the state files of retired deployer markers
+  tags: [gitops-deploy-code]
+  ansible.builtin.file:
+    path: "/var/lib/gitops-deploy/{{ item }}"
+    state: absent
+  loop:
+    - broad_applied
+  become: true
+
 - name: Install the deployer code
   tags: [gitops-deploy-code]
   ansible.builtin.import_tasks: code.yml
