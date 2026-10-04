@@ -6,6 +6,7 @@ The refusals mirror the repo CLAUDE.md *When to wait* list: nothing lands or dep
 orphans the plane marker (gitops_deploy's CLAUDE.md records the incident).
 """
 
+import fcntl
 import os
 import signal
 import subprocess
@@ -16,7 +17,13 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from deploy_ui_reads import HOLD_PLANE_SEP, Run
+from gitops_ledger import OWED_HOLD_PLANE, drop_owed, owed_line_key
 from gitops_markers import MARKERS
+
+# Seconds a Clear waits for the git-tree lock before it refuses. `gitops_state.py` waits as
+# long for the same reason: an operator is waiting on the reply, a tick can hold the lock for
+# most of an hour, and a refused Clear costs nothing to repeat.
+LOCK_WAIT_S = 5.0
 
 REQUIRED_HEADER = "X-Deploy-UI"
 
@@ -84,12 +91,62 @@ def guard_cancel(pid: int, listed: set[int]) -> str | None:
     return None
 
 
-def clear_hold(state_dir: Path, expected_sha: str) -> str | None:
-    """Remove `hold_sha` and `hold_plane` together, only when `expected_sha` matches the live hold."""
+def _held_plane_subjects(text: str) -> set[str]:
+    """Every subject a `hold_plane` line of the `owed` ledger names, torn lines included."""
+    keys = (owed_line_key(line) for line in text.splitlines())
+    return {k[1] for k in keys if k is not None and k[0] == OWED_HOLD_PLANE}
+
+
+def _drop_held_planes(state_dir: Path, tree_lock: Path) -> str | None:
+    """Drop every `hold_plane` line from the `owed` ledger. None on success, else the refusal.
+
+    The ledger holds other classes the deployer rewrites under the git-tree lock, so this
+    rewrite takes that lock too: unlocked, a tick's write between the read and the replace
+    would be lost. A ledger with no such line is not touched and no lock is taken, which is
+    every Clear until the deployer records the class (#3392).
+
+    `surrogateescape` carries a torn byte in another class's line through the rewrite
+    unchanged, where a lossy decode would rewrite it as U+FFFD.
+    """
+    owed = state_dir / MARKERS["owed"]
+    try:
+        if not _held_plane_subjects(owed.read_text(errors="surrogateescape")):
+            return None
+    except FileNotFoundError:
+        return None
+    with open(tree_lock, "a") as lock:
+        deadline = time.monotonic() + LOCK_WAIT_S
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    return "a tick or deploy holds the git-tree lock; retry once it finishes"
+                time.sleep(0.1)
+        # Re-read under the lock: the tick may have rewritten the ledger since.
+        text = owed.read_text(errors="surrogateescape")
+        kept, _ = drop_owed(text, OWED_HOLD_PLANE, _held_plane_subjects(text))
+        tmp = owed.with_name(owed.name + ".tmp")
+        tmp.write_text(kept, errors="surrogateescape")
+        os.replace(tmp, owed)
+    return None
+
+
+def clear_hold(state_dir: Path, expected_sha: str, tree_lock: Path) -> str | None:
+    """Remove `hold_sha` and every plane the hold waits on, only when `expected_sha` matches.
+
+    The planes are the `hold_plane` marker and the `owed` ledger's `hold_plane` lines, the two
+    sources `gitops_ledger.held_planes` reads. The ledger goes first, because it is the half
+    that can refuse: a refusal then leaves the hold whole.
+    """
     sha_file = state_dir / MARKERS["hold"]
     live = sha_file.read_text().strip() if sha_file.exists() else ""
     if live != expected_sha:
         return f"hold is {live or 'clear'}, not {expected_sha}; reload and retry"
+    refusal = _drop_held_planes(state_dir, tree_lock)
+    if refusal:
+        return refusal
     for name in (MARKERS["hold"], MARKERS["hold_plane"]):
         (state_dir / name).unlink(missing_ok=True)
     return None

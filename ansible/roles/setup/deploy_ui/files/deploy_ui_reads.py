@@ -236,15 +236,6 @@ def log_path_of(pid: int) -> str:
         return ""
 
 
-def hold_plane_entries(held: str) -> list[str]:
-    """Each failed apply a `hold_plane` marker records, oldest first.
-
-    One entry per apply that failed since the hold was taken, not one hold. The page shows
-    them separately because a Clear drops all of them at once (#2453).
-    """
-    return [e.strip() for e in held.split(";") if e.strip()]
-
-
 def k8s_deferred_rows(owed: str | None) -> list[dict[str, str]]:
     """Each image bump the deployer deferred and still holds, oldest deferral first.
 
@@ -286,10 +277,12 @@ def _read_owed(state_dir: Path) -> str | None:
 def read_state(state_dir: Path) -> dict[str, str | list]:
     """Read the `MARKERS` above, plus `hold_plane` split into its entries and the deferred bumps.
 
-    A missing marker is ''. The `hold_plane_entries` key is the parsed form of its marker,
-    and it is what the page lists; the raw string stays beside it. The `k8s_deferred_entries`
-    key comes from the `owed` ledger's `k8s_deferred` class. The ledger is read but not
-    served, because its other classes have no panel here.
+    A missing marker is ''. The `hold_plane_entries` key is every plane the hold waits on,
+    from `gitops_ledger.held_planes`: the marker's entries, then the `owed` ledger's
+    `hold_plane` class (#3392). It is what the page lists, one entry per failed apply, because
+    a Clear drops all of them at once (#2453); the raw marker string stays beside it. The
+    `k8s_deferred_entries` key comes from the ledger's `k8s_deferred` class. The ledger is
+    read but not served, because its other classes have no panel here.
 
     Raises:
         OSError: a marker exists but can't be read (e.g. permission denied). Only a
@@ -305,8 +298,9 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
             st[name] = ""
             continue
         st[name] = text.strip()
-    st["hold_plane_entries"] = hold_plane_entries(str(st[_HOLD_PLANE]))
-    st["k8s_deferred_entries"] = k8s_deferred_rows(_read_owed(state_dir))
+    owed = _read_owed(state_dir)
+    st["hold_plane_entries"] = gitops_ledger.held_planes(str(st[_HOLD_PLANE]), owed)
+    st["k8s_deferred_entries"] = k8s_deferred_rows(owed)
     return st
 
 

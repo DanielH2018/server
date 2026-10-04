@@ -31,8 +31,9 @@ def log(msg: str) -> None:
 
 
 def read_file(path: str) -> str:
+    """`path`'s text, or '' when it cannot be opened. An undecodable byte reads as U+FFFD."""
     try:
-        with open(path) as fh:
+        with open(path, errors="replace") as fh:
             return fh.read()
     except OSError:
         return ""

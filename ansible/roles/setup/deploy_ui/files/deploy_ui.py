@@ -318,7 +318,7 @@ class App:
         # and what they are dropping with it is one unapplied plane per entry (#2453).
         dropped = self.state()["hold_plane_entries"]
         refusal = writes.clear_hold(
-            self.cfg.state_dir, str(body.get("expected_sha", ""))
+            self.cfg.state_dir, str(body.get("expected_sha", "")), self.cfg.tree_lock
         )
         if refusal:
             return 409, refusal

@@ -282,6 +282,31 @@ def _tools(host: _FakeHost) -> renovate_agent.AgentTools:
     )
 
 
+def test_held_plane_text_names_the_ledgers_hold_plane_entry_after_the_markers() -> None:
+    """The skip reason names a ledger plane, unknown key and all, and drops a torn line (#3392)."""
+    files = {
+        renovate_agent.HOLD_PLANE_FILE: "ansible/deploy.yml sonarr\n",
+        renovate_agent.OWED_FILE: "\n".join(
+            [
+                json.dumps(
+                    {
+                        "class": "hold_plane",
+                        "subject": "ansible/initial_setup.yml k3s",
+                        "origin": "abc",
+                        "at": 1,
+                        "added_by_a_newer_writer": 1,
+                    }
+                ),
+                '{"class": "hold_plane", "subject": "torn\ufffd", "origin": "a", "at": 2}',
+            ]
+        ),
+    }
+    tools = renovate_agent.AgentTools(read_file=lambda path: files.get(path, ""))
+    assert renovate_agent.held_plane_text(tools) == (
+        "ansible/deploy.yml sonarr; ansible/initial_setup.yml k3s"
+    )
+
+
 class TestPrStates:
     """The digest's merged/closed split rests on this read, so a failed read must not
     come back as a state."""

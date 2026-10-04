@@ -19,6 +19,7 @@ Run: uv run pytest ansible/tests/deploy/test_gitops_markers_copies.py
 
 import re
 
+import pytest
 from _helpers import REPO
 from lib import yaml_fast
 
@@ -125,9 +126,11 @@ def test_every_setup_consumer_copy_loop_installs_the_source():
         )
 
 
-def test_the_deploy_ui_copy_loop_installs_the_ledger_beside_the_markers():
-    """`deploy_ui_reads` imports `gitops_ledger` for its `k8s_deferred` panel (#3392)."""
-    task_file, task_name = _COPY_TASKS["deploy_ui"]
+@pytest.mark.parametrize("role", ["deploy_ui", "renovate_agent"])
+def test_the_setup_copy_loops_install_the_ledger_beside_the_markers(role):
+    """Both import `gitops_ledger`: deploy-ui for its panels, renovate-agent for the planes
+    its hold skip names (#3392)."""
+    task_file, task_name = _COPY_TASKS[role]
     (task,) = _tasks_named(task_file, task_name)
     assert "{{ role_path }}/../gitops_deploy/files/gitops_ledger.py" in task["loop"]
 

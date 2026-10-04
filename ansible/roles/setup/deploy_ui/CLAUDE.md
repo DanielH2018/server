@@ -80,7 +80,9 @@ logfmt line via `logger -t deploy-ui`. Land and deploy refuse under `hold_sha`; 
 clears only as the `hold_sha` + `hold_plane` pair against a SHA the operator typed.
 
 `hold_plane` holds one entry per failed apply, and Clear drops all of them whatever is still
-unapplied. The state panel lists the entries one per line, the confirm prompt names them, and
+unapplied. The entries are `gitops_ledger.held_planes`: the marker's, then the `owed` ledger's
+`hold_plane` class (#3392). Clear drops that class's ledger lines under the git-tree lock and
+refuses after five seconds of waiting, since a tick rewrites the ledger under the same lock. The state panel lists the entries one per line, the confirm prompt names them, and
 the reply repeats them — after the Clear nothing records those planes at all (#2453).
 
 `/api/deploy` takes one SERVICE tag. `deploy.sh --list-services` also prints the block tags

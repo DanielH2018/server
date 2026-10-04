@@ -117,8 +117,8 @@ derives nothing for either. Such a range fast-forwards and records the role inst
 parking — see *A role only a hand can apply is recorded, not parked* below.
 
 A setup role can ship another setup role's file by path. The `deploy_ui` and `renovate_agent`
-roles install the deployer's `files/gitops_markers.py` that way, and `deploy_ui` installs
-`files/gitops_ledger.py` beside it. `deploy_changes.setup_roles_for` maps a
+roles install the deployer's `files/gitops_markers.py` that way, and `files/gitops_ledger.py`
+beside it. `deploy_changes.setup_roles_for` maps a
 change to such a file to its owner AND every role listed for it in
 `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#3306). `ChangeSet.setup_roles` and `setup_tags_for`
 both read it, so the `manual_plane` ledger class, the narrowed apply, the `hold_plane` coverage and
@@ -1214,6 +1214,18 @@ ledger (#3533). Once daniel-box held no legacy file, the line-marker half of
 source beside its `gitops_markers.py` for this. Two lines naming one service read as one bump,
 dated and attributed from the older line.
 
+**`hold_plane` is moving the same way, and its readers have moved.** Every reader of the
+`hold_plane` marker calls `gitops_ledger.held_planes`, which returns the marker's entries and
+then each `hold_plane` ledger entry not already among them, oldest first. The readers are
+monitor-bridge's Status check, the `deploy_ui` panel, `renovate_agent`'s skip reason,
+`k3s_upgrade_gates.held_sha` and the scheduled-jobs page. A ledger line's subject is the whole
+entry, `<playbook> <tags>`, so two failed applies of one playbook stay two entries. The
+`deploy_ui` Clear also drops the class's ledger lines, under the git-tree lock, so a cleared
+hold cannot replay them into the next one. `renovate_agent` installs `gitops_ledger.py` for
+this. The deployer still records and clears the line marker alone, and the `rm` remediation in
+the alert and monitor text still names it. The next step moves the writer, that remediation and
+the hold-clear rule into the ledger together.
+
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
 later tick's `local..origin` carries the bump. `Release Staleness Drift` reads the unapplied
@@ -1352,8 +1364,8 @@ Checkout code (`scripts/lib/deployer_park.py`, `gitops_state.py`) imports it thr
 `sys.path` insert. `deploy-ui` and `renovate-agent` install it into their `/opt` directories
 with a `src:` naming this role's `files/`, and
 `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to it to both roles, so
-their hosts receive it in the same tick (#3306). `deploy-ui` installs `gitops_ledger.py` the
-same way. monitor-bridge ships its own `files/` into a
+their hosts receive it in the same tick (#3306). Both install `gitops_ledger.py` the same
+way. monitor-bridge ships its own `files/` into a
 pod, so `scripts/dev/gen_gitops_markers.py` writes a verbatim copy there under a
 `generated_from:` header. `ansible/tests/deploy/test_gitops_markers_copies.py` fails when that
 copy differs from what the generator writes, when a consumer's ship list lacks the module, or
@@ -1415,8 +1427,8 @@ the monitor's own message both print that; the monitor counts the entries still 
 hold whose commits map to no service on this host.
 
 **The other way out is the Clear button in the deploy UI, and it drops every entry at once.**
-`deploy_ui_writes.clear_hold` removes `hold_sha` and `hold_plane` together as soon as the typed
-SHA matches, whatever is still unapplied — it is the operator's override, not a per-entry
+`deploy_ui_writes.clear_hold` removes `hold_sha`, `hold_plane` and the `owed` ledger's
+`hold_plane` lines together as soon as the typed SHA matches, whatever is still unapplied — it is the operator's override, not a per-entry
 clear. Since #2381 that can be several planes, so the page lists the entries one per line, the
 confirm prompt names them, and the reply repeats them
 (`deploy_ui_writes.hold_cleared_message`, #2453). After the Clear nothing records those planes

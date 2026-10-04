@@ -1,5 +1,7 @@
 """Every guard has an accept case and a reject case; the hold clears as a pair."""
 
+import fcntl
+import json
 import time
 
 import deploy_ui_writes as w
@@ -85,19 +87,56 @@ def test_guard_cancel_unlisted_pid_is_flagged():
     assert "4321" in w.guard_cancel(4321, {9})
 
 
-def test_clear_hold_matching_sha_removes_both_is_clean(state_dir):
+def test_clear_hold_matching_sha_removes_both_is_clean(state_dir, tmp_path):
     (state_dir / "hold_sha").write_text("deadbeef\n")
     (state_dir / "hold_plane").write_text("k3s\n")
-    assert w.clear_hold(state_dir, "deadbeef") is None
+    assert w.clear_hold(state_dir, "deadbeef", tmp_path / "tree.lock") is None
     assert not (state_dir / "hold_sha").exists()
     assert not (state_dir / "hold_plane").exists()
 
 
-def test_clear_hold_mismatch_touches_nothing_is_flagged(state_dir):
+def test_clear_hold_mismatch_touches_nothing_is_flagged(state_dir, tmp_path):
     (state_dir / "hold_sha").write_text("deadbeef\n")
     (state_dir / "hold_plane").write_text("k3s\n")
-    assert "deadbeef" in w.clear_hold(state_dir, "cafef00d")
+    assert "deadbeef" in w.clear_hold(state_dir, "cafef00d", tmp_path / "tree.lock")
     assert (state_dir / "hold_plane").exists()
+
+
+def _owed_line(cls: str, subject: str) -> str:
+    return json.dumps({"class": cls, "subject": subject, "origin": "abc", "at": 1})
+
+
+def test_clear_hold_drops_the_ledgers_hold_plane_lines_and_keeps_the_rest_is_clean(
+    state_dir, tmp_path
+):
+    """A Clear that left the ledger class behind would replay it into the next hold (#3392).
+
+    The torn byte on the `manual_plane` line survives the rewrite unchanged.
+    """
+    (state_dir / "hold_sha").write_text("deadbeef\n")
+    keep = _owed_line("manual_plane", "k3s").encode().replace(b"k3s", b"k3\xffs")
+    (state_dir / "owed.jsonl").write_bytes(
+        _owed_line("hold_plane", "ansible/deploy.yml sonarr").encode() + b"\n" + keep
+    )
+    assert w.clear_hold(state_dir, "deadbeef", tmp_path / "tree.lock") is None
+    assert (state_dir / "owed.jsonl").read_bytes() == keep
+    assert not (state_dir / "hold_sha").exists()
+
+
+def test_clear_hold_under_a_held_tree_lock_refuses_and_keeps_the_hold_is_flagged(
+    state_dir, tmp_path, monkeypatch
+):
+    """The tick rewrites the ledger under the tree lock; an unlocked rewrite would lose that."""
+    monkeypatch.setattr(w, "LOCK_WAIT_S", 0.0)
+    (state_dir / "hold_sha").write_text("deadbeef\n")
+    owed = _owed_line("hold_plane", "ansible/deploy.yml sonarr")
+    (state_dir / "owed.jsonl").write_text(owed)
+    lock = tmp_path / "tree.lock"
+    with open(lock, "a") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        assert "git-tree lock" in w.clear_hold(state_dir, "deadbeef", lock)
+    assert (state_dir / "hold_sha").exists()
+    assert (state_dir / "owed.jsonl").read_text() == owed
 
 
 def test_hold_cleared_message_names_every_dropped_plane_is_clean():

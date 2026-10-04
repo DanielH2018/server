@@ -15,8 +15,10 @@ key is invisible to an old reader instead of erasing the line.
 Shipped with the deployer (`tasks/code.yml`) and imported from the checkout through the same
 `sys.path` insert as `gitops_markers`. monitor-bridge carries a copy beside its `gitops_markers`
 copy, written by `scripts/dev/gen_gitops_markers.py`, because it pages on `manual_plane` and
-`k8s_deferred`: a class it pages on can move into the ledger only once that copy reads it.
-deploy-ui installs this source beside its `gitops_markers`, for its `k8s_deferred` panel.
+`k8s_deferred` and names the `hold_plane` entries: a class it reads can move into the ledger
+only once that copy reads it. deploy-ui installs this source beside its `gitops_markers`, for
+its `k8s_deferred` panel and its hold panel and Clear. renovate-agent installs it for the
+plane its hold skip names.
 
 Stdlib only, plus `gitops_markers`.
 """
@@ -70,10 +72,21 @@ OWED_MANUAL_PLANE = "manual_plane"
 # apply that covers it, so nothing needs the origin to advance.
 OWED_K8S_DEFERRED = "k8s_deferred"
 
+# A broad apply that failed and holds the deployer. The subject is the whole entry text
+# `deploy_git.hold_plane_marker` writes, `<playbook> <tags>`, rather than the playbook alone:
+# two failed applies of one playbook with different tags are two entries, and each clears
+# on its own apply. Keyed on the playbook, `drop_owed` would erase both on the first apply,
+# which is #878's erasure over again. `hold_sha` still decides whether anything pages; this
+# class only says which planes the hold is waiting on.
+#
+# It is moving the way `k8s_deferred` did (#3392): every reader unions it with the
+# `hold_plane` line marker through `held_planes` before any writer records it.
+OWED_HOLD_PLANE = "hold_plane"
+
 # Every class a ledger line may carry. A reader asks for its classes by name and never sees
 # the rest, which is what lets a new class ship before every reader knows it.
 OWED_CLASSES: frozenset[str] = frozenset(
-    {OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, OWED_MANUAL_PLANE}
+    {OWED_HOLD_PLANE, OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, OWED_MANUAL_PLANE}
 )
 
 
@@ -271,6 +284,25 @@ def k8s_deferred_entries(owed: str | None) -> list[K8sDeferredEntry]:
         if held is None or e.at < held.at:
             oldest[e.subject] = K8sDeferredEntry(e.origin, e.subject, e.at)
     return sorted(oldest.values(), key=lambda e: e.at)
+
+
+def held_planes(hold_plane: str | None, owed: str | None) -> list[str]:
+    """Every plane a hold waits on: the `hold_plane` line marker's entries, then the ledger's.
+
+    Args:
+        hold_plane: the `hold_plane` line marker's text, `; `-joined entries, or None.
+        owed: the `owed` ledger's text, or None.
+
+    Oldest first. The line marker's entries keep their order, and each `hold_plane` ledger
+    entry not already among them follows in the order it was first recorded. An entry in
+    both sources is one plane. The split matches `deploy_git.hold_plane_entries`, which this
+    module cannot import because monitor-bridge carries a copy of it alone.
+    """
+    planes = [e.strip() for e in (hold_plane or "").split(";") if e.strip()]
+    for e in sorted(parse_owed(owed, OWED_HOLD_PLANE), key=lambda e: e.at):
+        if e.subject.strip() not in planes:
+            planes.append(e.subject.strip())
+    return planes
 
 
 def _token(value) -> str | None:

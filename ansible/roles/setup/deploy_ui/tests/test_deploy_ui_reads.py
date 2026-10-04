@@ -196,6 +196,28 @@ def test_read_state_with_no_hold_plane_lists_no_entry_is_flagged(state_dir):
     assert reads.read_state(state_dir)["hold_plane_entries"] == []
 
 
+def test_read_state_lists_a_hold_plane_ledger_entry_after_the_markers_is_clean(
+    state_dir,
+):
+    """The ledger class joins the marker, a key this copy never heard of included (#3392)."""
+    (state_dir / "hold_plane").write_text("ansible/deploy.yml sonarr\n")
+    (state_dir / "owed.jsonl").write_text(
+        json.dumps(
+            {
+                "class": "hold_plane",
+                "subject": "ansible/initial_setup.yml k3s",
+                "origin": "deadbeefcafe",
+                "at": 1000,
+                "added_by_a_newer_writer": True,
+            }
+        )
+    )
+    assert reads.read_state(state_dir)["hold_plane_entries"] == [
+        "ansible/deploy.yml sonarr",
+        "ansible/initial_setup.yml k3s",
+    ]
+
+
 def test_read_state_lists_a_deferred_bump_with_its_deploy_then_clear_is_clean(
     state_dir,
 ):
@@ -243,15 +265,17 @@ def test_k8s_deferred_rows_skips_a_garbled_line_is_flagged():
 def test_hold_plane_sep_matches_the_deployers_own_separator():
     """The oracle for the literal in `deploy_ui_reads`.
 
-    The daemon runs outside the repo venv and cannot import `deploy_git`, so the separator and
-    its parser are copied. pytest CAN import both: a change to how the deployer joins entries
-    fails here rather than leaving the page showing one run-on entry.
+    The daemon runs outside the repo venv and cannot import `deploy_git`, so the separator is
+    copied here and its parser lives in `gitops_ledger.held_planes`. pytest CAN import all
+    three: a change to how the deployer joins entries fails here rather than leaving the page
+    showing one run-on entry.
     """
     import deploy_git
+    import gitops_ledger
 
     held = "ansible/initial_setup.yml k3s; ansible/deploy.yml sonarr"
     assert reads.HOLD_PLANE_SEP == deploy_git.HOLD_PLANE_SEP
-    assert reads.hold_plane_entries(held) == deploy_git.hold_plane_entries(held)
+    assert gitops_ledger.held_planes(held, None) == deploy_git.hold_plane_entries(held)
 
 
 def test_parse_stale_lines_is_clean():

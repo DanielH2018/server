@@ -1,4 +1,6 @@
-"""GitOps Deploy — Status reads the `manual_plane` and `k8s_deferred` classes of `owed` (#3392).
+"""GitOps Deploy — Status reads the `manual_plane`, `k8s_deferred` and `hold_plane` classes of `owed`.
+
+The ledger replaces the line markers under #3392.
 
 This pod redeploys on its own schedule, so a writer can be newer than this copy. Each line
 here is what a writer may put in the ledger, including keys this copy has never heard of, and
@@ -99,3 +101,37 @@ def test_check_gitops_status_reads_the_ledger_off_the_mount(tmp_path, cfg):
     ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
     assert msg.endswith("clear-manual-plane k3s`")
+
+
+def _held(subject: str, at: int, **extra) -> str:
+    return json.dumps(
+        {"class": "hold_plane", "subject": subject, "origin": "abc", "at": at, **extra}
+    )
+
+
+def test_a_hold_plane_ledger_line_with_an_unknown_key_joins_the_markers_planes(cfg):
+    """The Verify-by of #3392 for `hold_plane`: the marker's entries first, then the ledger's.
+
+    A plane in both sources is one plane, so the count stays honest.
+    """
+    owed = "\n".join(
+        [
+            _held("ansible/initial_setup.yml k3s", 2000, added_by_a_newer_writer=[1]),
+            _held("ansible/deploy.yml sonarr", 1000),
+        ]
+    )
+    ok, msg = checks.gitops.gitops_status(
+        cfg, "deadbeefcafe", hold_plane="ansible/deploy.yml sonarr", owed=owed
+    )
+    assert not ok
+    assert (
+        "2 planes unapplied: ansible/deploy.yml sonarr; ansible/initial_setup.yml k3s;"
+        in msg
+    )
+
+
+def test_a_hold_plane_ledger_line_without_a_held_sha_pages_nothing(cfg):
+    """`hold_sha` decides whether the page fires; the planes only say what it waits on."""
+    owed = _held("ansible/deploy.yml sonarr", 1000)
+    ok, _ = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
+    assert ok

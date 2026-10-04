@@ -30,7 +30,7 @@ from gitops_markers import (
     parse_behind,
     parse_contention,
 )
-from gitops_ledger import k8s_deferred_entries, manual_plane_entries
+from gitops_ledger import held_planes, k8s_deferred_entries, manual_plane_entries
 from verdicts.service import gitops_alive
 
 
@@ -133,8 +133,9 @@ def gitops_status(
       contention_since: the deployer's `contention_since` marker, or None.
       max_contention_s: how long a contention streak may run before this pages. None reads
         cfg.GITOPS_CONTENTION_MAX_S, for the reason `max_behind_s` does.
-      owed: the deployer's `owed` ledger, or None. Its `manual_plane` class is the setup-role
-        arm above (#3392); `gitops_ledger.manual_plane_entries` reads it. Its `k8s_deferred`
+      owed: the deployer's `owed` ledger, or None. Its `hold_plane` class joins the
+        `hold_plane` marker's entries in the held arm. Its `manual_plane` class is the
+        setup-role arm above (#3392); `gitops_ledger.manual_plane_entries` reads it. Its `k8s_deferred`
         class is the last arm, through `gitops_ledger.k8s_deferred_entries`. That arm is
         age-gated on `max_behind_s`, for the reasons the `manual_plane` arm is: a bump deferred
         ten minutes ago is a tick that ran out of wall clock rather than a fault, and a bump
@@ -155,7 +156,9 @@ def gitops_status(
         # The marker holds one `; `-joined entry per failed apply (the deployer's
         # `hold_plane_with`), and hold_sha is the NEWEST failure's SHA, not each entry's.
         # An rm after re-running only one entry would erase another still unapplied.
-        planes = [p.strip() for p in (hold_plane or "").split(";") if p.strip()]
+        # `held_planes` unions that marker with the ledger's `hold_plane` class, which the
+        # deployer records once every reader reads it (#3392).
+        planes = held_planes(hold_plane, owed)
         if planes:
             return False, (
                 "broad apply held at %s (the newest failure) — %d plane%s unapplied: %s; "
