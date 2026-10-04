@@ -12,7 +12,7 @@
 # Renovate's k8s-defaults manager matches on, and a digest-only pin slips its regex and would
 # age forever with no update signal — which test_every_k8s_role_image_is_renovate_tracked
 # refuses. Same shape as the dri-device-plugin role's pin, for the same reason.
-tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:e5163f305367b47baacee761aa98f420fb4e46a8e5db22b197f23a550f96dd6b
+tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:e06ecd0a5fc27ab248622f61b59b5ab1d797d8249a3a6e12f2bcce6decfebd8c
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # k8s/manifests takes a pre-apply Longhorn snapshot of both config claims below and reverts
