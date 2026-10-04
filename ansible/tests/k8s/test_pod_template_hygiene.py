@@ -1,42 +1,31 @@
-"""Three pod-spec fields every template must set, censused over the RENDERED fleet.
+"""Every long-running pod template names one of the four homelab PriorityClasses.
 
-Each one fails silently when omitted. The pod schedules, the deploy goes green, and the
-consequence is only visible later — as a workload evicted before the things it outranks on
-paper, a token mounted into a pod that never uses it, or an app reading a Service's env vars
-as its own configuration. A grep for the field name cannot tell a template that omits it from
-one that sets it inside a macro, and it counts the `automountServiceAccountToken: true` on a
-ServiceAccount OBJECT as if it were the pod's — so these guards read the parsed pod spec.
+A pod with no priorityClassName sits at 0, so it is evicted before the things it outranks on
+paper. The pod schedules and the deploy goes green, and the consequence shows only under
+memory pressure. A grep for the field name cannot tell a template that omits it from one that
+sets it inside a macro, so this guard reads the parsed pod spec.
 
-Every Deployment and DaemonSet takes these fields from `pod_shell` in
+Every Deployment and DaemonSet takes the field from `pod_shell` in
 `ansible/templates/workload-shell.yml.j2`, and `test_workload_shell_uses_the_macros.py`
-refuses a hand-written copy. This census is the other half: a macro cannot force its
-own call, and a template that skips it renders without the fields, which only the parsed pod
-spec can see. The macro encodes the automount rule below structurally (no service_account →
-`false`; one named → no line), so an offence here on a Deployment or DaemonSet is a call
-that overrides it.
+refuses a hand-written copy. This census is the other half: a macro cannot force its own
+call, and a template that skips it renders without the field, which only the parsed pod spec
+can see. Jobs and CronJobs are out of scope on purpose: each is a probe or a GC pass that
+completes in seconds, and a priority buys nothing for a pod that is gone before pressure can
+build.
 
-    priorityClassName        every long-running pod template names one of the four homelab
-                             tiers. Jobs and CronJobs are out of scope on purpose:
-                             each is a probe or a GC pass that completes in seconds, and a
-                             priority buys nothing for a pod that is gone before pressure
-                             can build.
-    automountServiceAccountToken
-                             a pod that names no serviceAccountName runs as the namespace's
-                             `default` SA and never uses its token, so it must not mount one
-                             A pod that names an SA is left alone — the SA object
-                             may set the field, and the pod's own value then means nothing.
-    enableServiceLinks       every pod template, of every kind, sets it false.
+The two other pod-template fields every template sets, `automountServiceAccountToken` and
+`enableServiceLinks`, are the `sa-less-pods-refuse-the-default-token` and
+`pods-disable-service-link-env-vars` rows of `_workload_property_rows.py`. This one keeps its
+own file for two reasons. It reads the four tier names from a second render, the setup
+plane's `priorityclass.yaml.j2`. Its exemption is also value-specific: dri-device-plugin may
+name `system-node-critical` and nothing else, where a table row's `allow` would exempt any
+offence on that key.
 
-Rendering goes through `_k8s_render.rendered_docs()` — the same corpus
-`test_container_security_context.py` and `test_readiness_coverage.py` census — so coverage
-here cannot drift from theirs. That corpus inherits `validate.k8s_manifests.SKIP_ROLES`, and
-`_UNCOVERED_ROLES` in `test_container_security_context.py` pins which roles that leaves out.
-The one pod spec among them, `image-builder/templates/build-job.yaml.j2`, sets both boolean
-fields and is a Job, so nothing here would say anything about it that
-`test_image_builder_security_context.py` does not.
-
-Every predicate is a pure function over one pod spec, tested on an inline dict it must accept
-and one it must reject, so each guard carries its own proof that it can go red.
+Rendering goes through `_k8s_render.rendered_docs()`, the same corpus
+`test_container_security_context.py` and `test_readiness_coverage.py` census. That corpus
+inherits `validate.k8s_manifests.SKIP_ROLES`, and `_UNCOVERED_ROLES` in
+`test_container_security_context.py` pins which roles that leaves out. The one pod spec among
+them, `image-builder/templates/build-job.yaml.j2`, is a Job and out of scope here.
 """
 
 import pytest
@@ -46,7 +35,6 @@ from _k8s_render import pod_spec, rendered_docs
 from _setup_render import rendered_setup_text
 
 _LONG_RUNNING = {"Deployment", "DaemonSet", "StatefulSet"}
-_POD_KINDS = _LONG_RUNNING | {"Job", "CronJob"}
 
 # The setup-plane template that defines the four tiers, read as it renders.
 _PRIORITYCLASS_TEMPLATE = ("k3s", "priorityclass.yaml.j2")
@@ -60,11 +48,10 @@ _SYSTEM_TIER = {
     ("dri-device-plugin", "daemonset.yaml.j2"): "system-node-critical",
 }
 
-# Non-vacuity. The census renders 70 long-running pod templates and 86 with Jobs and CronJobs.
-# A floor far below the live count cannot tell "the collector broke" from "half
-# the fleet dropped out of the render", so these sit close enough to notice a contraction.
+# Non-vacuity. The census renders 70 long-running pod templates. A floor far below the live
+# count cannot tell "the collector broke" from "half the fleet dropped out of the render", so
+# this one sits close enough to notice a contraction.
 _MIN_LONG_RUNNING = 60
-_MIN_ALL_KINDS = 78
 
 # Roles the census must contain, so a missing member is named rather than counted: a guard
 # that stopped seeing them would read green for the exact regression it was written against.
@@ -106,8 +93,7 @@ def _pod_templates(kinds: set[str]):
         yield role, tpl, label, pod_spec(doc)
 
 
-# ── the predicates ────────────────────────────────────────────────────────────────────────
-# Each returns None for a clean spec and a one-line reason otherwise.
+# ── the predicate: None for a clean spec, a one-line reason otherwise ────────────────────
 
 
 def priority_offence(
@@ -123,24 +109,7 @@ def priority_offence(
     return f"names {name!r}, which is not one of {sorted(tiers)}"
 
 
-def automount_offence(pod: dict) -> str | None:
-    if pod.get("serviceAccountName"):
-        return None
-    if pod.get("automountServiceAccountToken") is False:
-        return None
-    return (
-        "names no serviceAccountName and does not set automountServiceAccountToken: false, "
-        "so the default SA's token is mounted into a pod that never uses it"
-    )
-
-
-def service_links_offence(pod: dict) -> str | None:
-    if pod.get("enableServiceLinks") is False:
-        return None
-    return "inherits Docker-link env vars for every Service in the namespace"
-
-
-# ── red proofs: one spec each predicate accepts, one it rejects ────────────────────────────
+# ── red proof: the specs the predicate accepts and the ones it rejects ────────────────────
 
 
 def test_priority_offence_is_clean_on_a_homelab_tier():
@@ -172,45 +141,6 @@ def test_priority_offence_is_clean_on_an_allowlisted_system_class():
 )
 def test_priority_offence_is_flagged(pod):
     assert priority_offence(pod, _homelab_tiers()) is not None
-
-
-@pytest.mark.parametrize(
-    "pod",
-    [
-        {"automountServiceAccountToken": False},
-        {"serviceAccountName": "prometheus"},
-        {"serviceAccountName": "headlamp", "automountServiceAccountToken": True},
-    ],
-    ids=["no-sa-and-false", "sa-and-unset", "sa-and-true"],
-)
-def test_automount_offence_is_clean(pod):
-    assert automount_offence(pod) is None
-
-
-@pytest.mark.parametrize(
-    "pod",
-    [
-        {},
-        {"automountServiceAccountToken": True},
-        {"automountServiceAccountToken": "false"},
-    ],
-    ids=["absent", "true", "string-false"],
-)
-def test_automount_offence_is_flagged(pod):
-    assert automount_offence(pod) is not None
-
-
-def test_service_links_offence_is_clean():
-    assert service_links_offence({"enableServiceLinks": False}) is None
-
-
-@pytest.mark.parametrize(
-    "pod",
-    [{}, {"enableServiceLinks": True}, {"enableServiceLinks": "false"}],
-    ids=["absent", "true", "string-false"],
-)
-def test_service_links_offence_is_flagged(pod):
-    assert service_links_offence(pod) is not None
 
 
 # ── the census ────────────────────────────────────────────────────────────────────────────
@@ -264,44 +194,3 @@ def test_system_tier_allowlist_names_only_templates_that_use_it():
         f"long-running pod templates outside the homelab tiers: {flat}; "
         f"allowlisted: {_SYSTEM_TIER}"
     )
-
-
-def test_every_sa_less_pod_template_refuses_the_default_token():
-    """A pod that names no ServiceAccount runs as `default`, whose token grants nothing this
-    cluster's RBAC hands out — and a token that grants nothing is still a bearer credential
-    sitting on a tmpfs in every container."""
-    offenders, seen_roles, count = [], set(), 0
-    for role, tpl, label, pod in _pod_templates(_POD_KINDS):
-        seen_roles.add(role)
-        count += 1
-        reason = automount_offence(pod)
-        if reason:
-            offenders.append(f"{role}/{tpl} {label}: {reason}")
-    _assert_not_vacuous(seen_roles, count, _MIN_ALL_KINDS)
-    assert not offenders, "\n".join(offenders)
-
-
-def test_every_pod_template_disables_service_link_env_vars():
-    """Kubernetes' legacy Docker-link env vars are read as config by some apps.
-
-    It injects <NAME>_SERVICE_HOST, <NAME>_PORT_<n>_TCP and so on for every Service in the
-    namespace. Any app that reads its own config from <NAME>_* env vars then picks them up as
-    configuration. Authelia did, and exited before serving anything:
-
-        error occurred performing deprecation mapping for keys 'server.host', 'server.port',
-        and 'server.path' to new key server.address: the new key already exists with value
-        'tcp4://:9091' but the deprecated keys and the new key can't both be configured
-
-    Triggering it needs only that a Service name match an app's env-var prefix, which is the
-    normal case in this namespace — so the guard covers every pod template of every kind,
-    not just `deployment.yaml.j2`.
-    """
-    offenders, seen_roles, count = [], set(), 0
-    for role, tpl, label, pod in _pod_templates(_POD_KINDS):
-        seen_roles.add(role)
-        count += 1
-        reason = service_links_offence(pod)
-        if reason:
-            offenders.append(f"{role}/{tpl} {label}: {reason}")
-    _assert_not_vacuous(seen_roles, count, _MIN_ALL_KINDS)
-    assert not offenders, "\n".join(offenders)
