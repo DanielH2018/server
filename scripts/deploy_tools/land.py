@@ -12,14 +12,19 @@ accepted, loops and all. Run it backgrounded and the session is re-invoked when 
 of hand-polling CI for five to fifteen minutes -- 835 polls across 213 wait episodes before this
 existed.
 
-``--detach --await-verdict`` IS THE ONE-COMMAND FORM, and it is what a session should reach for.
-It names its own logfile, forks the landing into it, then blocks until that landing prints its
-``VERDICT:`` line and exits with the landing's code. It covers three steps a caller would
-otherwise write by hand: the ``git rev-parse origin/master`` for ``--since`` (resolved here when
-the flag is absent, before the merge is armed, so it is still the PRE-merge tip), the redirect,
-and ``timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'``. The landing runs as a detached
-grandchild outside the caller's process tree, so a harness that kills the waiting call leaves it
-running to its verdict (issue #3158). The mechanics are ``land_lib/detach.py``.
+``--detach && cc-wait land <pr>`` IS THE ONE-COMMAND FORM, and it is what a session should reach
+for. ``--detach`` names its own logfile, forks the landing into it and returns; ``cc-wait land
+<pr>`` then waits until that landing records its exit code, prints its ``VERDICT:`` line and
+exits with the landing's code. ``--detach`` covers two steps a caller would otherwise write by
+hand: the ``git rev-parse origin/master`` for ``--since`` (resolved here when the flag is absent,
+before the merge is armed, so it is still the PRE-merge tip) and the redirect. The landing runs
+as a detached grandchild outside the caller's process tree, so a harness that kills the waiting
+call leaves it running to its verdict (issue #3158). The mechanics are ``land_lib/detach.py``.
+
+THE WAIT IS cc-wait's, NOT THIS SCRIPT'S. ``cc-wait`` is the one wait loop every repo shares (the
+dotfiles ``cc-wait`` package), and ``land_probe.py`` is this repo's ``land`` source for it. A
+wait that runs out of budget exits 75 and prints the command that resumes it: re-run THAT, never
+``land.sh``, which would start a second landing. ``--await-verdict`` is retired and refused.
 
 WITHOUT ``--detach``, REDIRECT STDOUT AND STDERR TO A FILE YOURSELF. A backgrounded Bash call
 hands this script a non-blocking pipe, and Ansible refuses to start on one ("Ansible requires
@@ -41,9 +46,10 @@ Usage::
     land.sh --pr 574 --since <sha> --await-merge   # arm `gh pr merge --auto` first, then this
     land.sh --pr 574 --arm-merge --await-merge --since <sha>   # arm the merge INSIDE this script
     land.sh --pr 574 --tags sonarr,radarr    # skip derivation, scope by hand
-    land.sh --pr 574 --arm-merge --await-merge --detach --await-verdict
-                                             # the one-command form: own logfile, own wait
-    land.sh --pr 574 --detach --await-verdict --log-dir .fanout   # put the log somewhere else
+    land.sh --pr 574 --arm-merge --await-merge --detach && cc-wait land 574
+                                             # the one-command form: own logfile, shared wait
+    land.sh --pr 574 --detach --log-dir .fanout && cc-wait land 574 --log-dir .fanout
+                                             # put the log somewhere else
 
 Exit codes:
   0   deployed and settled, or there was nothing to deploy
@@ -162,13 +168,11 @@ def _resolve_since(opts: Options) -> Options:
 
 
 def _detached(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
-    """Fork the landing into its own logfile; wait for its verdict under `--await-verdict`."""
+    """Fork the landing into its own logfile and name the `cc-wait` command that waits on it."""
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)
     pid = detach.fork(log, lambda: _land(opts, tools, classifier), f"land{opts.pr}")
-    detach.announce(pid, log, opts.await_verdict)
-    if not opts.await_verdict:
-        return 0
-    return detach.await_verdict(pid, log)
+    detach.announce(pid, log, opts.pr)
+    return 0
 
 
 def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:

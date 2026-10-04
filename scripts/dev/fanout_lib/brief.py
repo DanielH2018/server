@@ -129,15 +129,18 @@ issues once it has landed. Print the PR URL as the last line of your final messa
         # verdict.
         log_dir = f"{_worktree_path(batch)}/.fanout"
         return f"""## Landing
-Land with ONE `land.sh` command (the `land-after-merge` skill); do not hand-poll CI.
-It names its own logfile, forks into it, and blocks until the landing prints its verdict:
+Land with ONE command (the `land-after-merge` skill); do not hand-poll CI. `land.sh --detach`
+forks the landing into its own logfile and returns, and `cc-wait land` waits on it:
 
 ```bash
-./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach --await-verdict \\
-  --log-dir "{log_dir}"
+./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach \\
+  --log-dir "{log_dir}" && cc-wait land <n> --log-dir "{log_dir}"
 ```
-Do not background it, do not redirect it, and do not end your turn on it — it returns with the
-landing's own exit code once the `VERDICT:` line is printed, and prints that line for you.
+Run it in the foreground with the Bash tool's `timeout: 600000`, do not redirect it, and do not
+end your turn on it: `cc-wait` prints the landing's `VERDICT:` line and exits with the landing's
+own code. It waits at most 570s. Exit 75 means the landing is still running: re-run ONLY
+`cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which would start a second landing.
+State `gave-up` (exit 3) is land.sh's own give-up, a resume point: re-run the whole command.
 `deploy.sh` exit 75 is a resume point to retry, not a failure to report.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and
 `--accepted` are operator-only.

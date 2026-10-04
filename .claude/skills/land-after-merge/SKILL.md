@@ -12,19 +12,26 @@ reasoning behind every rule below, and the incident that put it there, is
 
 ## The invocation
 
-One command. Do not write the redirect, do not background it by hand, do not poll CI, do not
-run `gh pr merge` yourself.
+One command. Do not write the redirect, do not poll CI, do not run `gh pr merge` yourself.
 
 ```bash
-./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach --await-verdict
+./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>
 ```
 
 It arms `gh pr merge --squash --auto`, waits for the merge, waits for master CI on the merge
 commit, deploys that commit, kicks the tick, gates the health, and prints the landing's
-`VERDICT:` line. `--detach` names its own logfile and forks into it; `--await-verdict` blocks
-until the landing prints its verdict and exits with the landing's own code. The landing runs
-outside the caller's process tree, so a Bash call killed at its time limit does not kill it:
-read the log for the `VERDICT:` line instead. Started from a systemd user unit, such as a
+`VERDICT:` line. `--detach` names its own logfile, forks into it and returns. `cc-wait land <n>`
+is the wait: it prints the landing's `VERDICT:` line and exits with the landing's own code.
+
+`cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
+`cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
+is `land.sh`'s own give-up, a resume point for the whole command. Where a task notification can
+wake the session, run the command with `run_in_background: true`. A headless `claude -p` agent
+cannot be woken once its turn ends, so it runs the command in the foreground with
+`timeout: 600000` and does not end its turn on it.
+
+The landing runs outside the caller's process tree, so a Bash call killed at its time limit does
+not kill it. Started from a systemd user unit, such as a
 fan-out batch, the landing also moves into its own `land<pr>-<pid>.scope`, so stopping the unit
 does not kill it either. The log's first line names that scope, which is the way to stop the
 landing itself. `--since` is
@@ -40,9 +47,9 @@ resolved from `origin/master` before the merge is armed, so you do not pass it.
 
 **Without `--detach` you own the redirect.** `> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1` is not
 optional: Ansible refuses to start on the non-blocking pipe a backgrounded Bash call hands the
-script, and the error names Ansible rather than the harness. Then block on
-`timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'` and **do not end your turn** on the
-landing — nothing wakes a session whose backgrounded output went to a file.
+script, and the error names Ansible rather than the harness. Then wait with
+`cc-wait file <log> --match '^VERDICT:' --fail '^Traceback'` and **do not end your turn** on the
+landing.
 
 ## Two command shapes the classifier refuses, and what to write instead
 

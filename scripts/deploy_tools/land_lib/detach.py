@@ -1,9 +1,11 @@
-"""`land.sh --detach`: fork the landing into a logged child, and optionally wait for its verdict.
+"""`land.sh --detach`: fork the landing into a logged child, and record where to find it.
 
 WHAT THIS REPLACES. A session had to write three things around every landing, by hand, in the
 exact shape the `land-after-merge` skill spelled out: `git rev-parse origin/master` for
 `--since`, a redirect to a logfile under `$CLAUDE_JOB_DIR/tmp`, and `timeout 1200 tail -f -n +1
-<log> | grep -m1 '^VERDICT:'` to block on the result.
+<log> | grep -m1 '^VERDICT:'` to block on the result. This module does the first two. The wait
+is `cc-wait land <pr>`, whose source is `land_probe.py`: one wait loop for every repo, defined in
+the dotfiles `cc-wait` package rather than once per waiter.
 
 THE REDIRECT IS THE POINT, NOT AN ASIDE. Ansible refuses to start on a non-blocking stdout or
 stderr ("Ansible requires blocking IO on stdin/stdout/stderr"), and a backgrounded Bash call
@@ -33,18 +35,21 @@ leaves its landing running to its verdict. The log's first line names the scope 
 
 THE LANDING'S EXIT CODE IS THE AUTHORITY, NEVER THE GREP. A grandchild cannot be reaped by the
 waiter, so the landing records its own exit code in `<log stem>.rc` after flushing its last line.
-`await_verdict` reads that file first and the log second. A landing can exit with no `VERDICT:`
+`land_probe.py` reads that file first and the log second. A landing can exit with no `VERDICT:`
 line at all (`tests/test_land_broad_fallback_verdict.py` covers a truncated file list), and a
-parent that exited on the grep alone would either race the last flush or wait out its whole budget
+waiter that ended on the grep alone would either race the last flush or wait out its whole budget
 on a run that had already finished. A landing that dies without writing the file -- SIGKILL, OOM
--- is reported as exactly that.
+-- is reported as exactly that, through the pid `fork` records in `<log stem>.pid`.
+
+THE LOG AND THE PID FILE EXIST BEFORE `land.sh --detach` RETURNS. The grandchild opens the log
+itself, so without the parent's own `touch` a wait started straight after the return could find
+no log, or an earlier landing's log for the same PR, and report that landing's verdict.
 """
 
 import contextlib
 import os
 import re
 import sys
-import time
 import traceback
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -52,18 +57,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.detach_fork import close_inherited, fork_detached, leave_unit_cgroup
-from lib.exit_codes import LAND_GAVE_UP
 
 # Where a detached landing writes. `$CLAUDE_JOB_DIR/tmp` is what the skill told sessions to
 # use, and it is per-session and cleaned up; this falls back to /tmp so the flag works from a
 # plain shell and from a systemd unit.
 LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
-
-# How long `--await-verdict` waits for the child, and how often it looks. The default is
-# twenty minutes (the `timeout 1200` the skill's wait command carries).
-AWAIT_TIMEOUT_S = 1200
-AWAIT_POLL_S = 2.0
 
 _VERDICT_LINE = re.compile(r"^VERDICT:.*$", re.MULTILINE)
 
@@ -74,13 +73,14 @@ def log_path(pr: str, log_dir: Path | None = None) -> Path:
     The PR number leads, because that is what a session looking for its own log greps for, and
     `fanout_lib/status.py` already globs `land*.log`.
     """
-    base = log_dir or _default_log_dir()
+    base = log_dir or default_log_dir()
     base.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return base / f"land{pr}-{stamp}.log"
 
 
-def _default_log_dir() -> Path:
+def default_log_dir() -> Path:
+    """Where `land.sh --detach` writes when given no `--log-dir`. Creates nothing."""
     job_dir = os.environ.get(LOG_DIR_ENV)
     return Path(job_dir) / "tmp" if job_dir else FALLBACK_LOG_DIR
 
@@ -99,13 +99,20 @@ def rc_path(log: Path) -> Path:
     return log.with_suffix(".rc")
 
 
+def pid_path(log: Path) -> Path:
+    """Where `fork` records the landing's pid: the log's own name with `.pid` for `.log`."""
+    return log.with_suffix(".pid")
+
+
 def fork(log: Path, landing: Callable[[], int], scope_prefix: str = "land") -> int:
     """Run `landing` in a detached, logged grandchild; its pid, in the parent.
 
     The grandchild is in its own session, outside the caller's process tree, and out of any
     fan-out unit's cgroup. It gets stdin on /dev/null, stdout/stderr on `log` and no other
     inherited descriptor. It runs `landing`, writes the exit code to `rc_path(log)`, and leaves
-    through `os._exit` so none of the parent's frames unwind twice.
+    through `os._exit` so none of the parent's frames unwind twice. The parent creates `log`
+    first and records the pid in `pid_path(log)` before it returns, so a wait started straight
+    after the return finds this landing and no earlier one.
 
     Args:
       log: the file the landing's stdout and stderr are rebound to. Opened here, by this
@@ -116,9 +123,12 @@ def fork(log: Path, landing: Callable[[], int], scope_prefix: str = "land") -> i
     Returns:
       The landing's pid. Only the parent ever returns from this function.
     """
+    log.touch()
     sys.stdout.flush()
     sys.stderr.flush()
-    return fork_detached(lambda: _run_landing(log, landing, scope_prefix))
+    pid = fork_detached(lambda: _run_landing(log, landing, scope_prefix))
+    pid_path(log).write_text(f"{pid}\n")
+    return pid
 
 
 def _run_landing(log: Path, landing: Callable[[], int], scope_prefix: str) -> None:
@@ -163,7 +173,15 @@ def recorded_code(log: Path) -> int | None:
         return None
 
 
-def _alive(pid: int) -> bool:
+def recorded_pid(log: Path) -> int | None:
+    """The landing's pid as `fork` recorded it next to `log`, or None when there is none."""
+    try:
+        return int(pid_path(log).read_text().strip())
+    except OSError, ValueError:
+        return None
+
+
+def alive(pid: int) -> bool:
     """Whether `pid` still runs. A zombie is dead: its new parent may never reap it."""
     with contextlib.suppress(ChildProcessError):
         # Our own child (only in tests): reap it, or it stays a zombie of this process.
@@ -178,66 +196,15 @@ def _alive(pid: int) -> bool:
     return stat.rpartition(")")[2].split()[0] not in ("Z", "X")
 
 
-def announce(pid: int, log: Path, awaiting: bool, out=None) -> None:
-    """Tell the caller where the landing is and how to follow it."""
+def wait_command(pr: str, log: Path) -> str:
+    """The `cc-wait` command that waits on this landing, and resumes the wait when re-run."""
+    return f"cc-wait land {pr} --log {log}"
+
+
+def announce(pid: int, log: Path, pr: str, out=None) -> None:
+    """Tell the caller where the landing is and the one command that waits on it."""
     out = out if out is not None else sys.stdout
     print(f"land --detach: running in background (pid {pid}).", file=out)
     print(f"  log:  {log}", file=out)
-    print(f"  tail: tail -f {log}", file=out)
-    if awaiting:
-        print(
-            f"  Waiting up to {AWAIT_TIMEOUT_S}s for this landing's own VERDICT line.",
-            file=out,
-        )
+    print(f"  wait: {wait_command(pr, log)}", file=out)
     out.flush()
-
-
-def await_verdict(
-    pid: int,
-    log: Path,
-    timeout_s: int = AWAIT_TIMEOUT_S,
-    poll_s: float = AWAIT_POLL_S,
-    clock: Callable[[], float] = time.monotonic,
-    sleep: Callable[[float], None] = time.sleep,
-    out=None,
-) -> int:
-    """Wait for the landing, print its `VERDICT:` line, and return the code to exit with.
-
-    Reads the recorded exit code first and `log` second: the code is the authority, and a
-    landing can finish without writing a verdict at all. A landing that is gone without a
-    recorded code was killed, and this says so. On timeout the landing is left running -- it
-    holds the deploy locks and killing it mid-apply is worse than losing sight of it -- and
-    this returns `LAND_GAVE_UP` with a line saying where to look.
-
-    Returns:
-      The landing's exit code, 1 when it died without recording one, or `LAND_GAVE_UP` when
-      the budget elapsed first.
-    """
-    out = out if out is not None else sys.stdout
-    deadline = clock() + timeout_s
-    while True:
-        code = recorded_code(log)
-        # Checked again after the liveness probe: the landing writes its code, then exits.
-        if code is None and not _alive(pid):
-            code = recorded_code(log)
-            if code is None:
-                print(
-                    f"land --detach: the landing (pid {pid}) died without recording an exit "
-                    f"code; it was killed mid-run. Read {log}",
-                    file=out,
-                )
-                code = 1
-        if code is not None:
-            verdict = verdict_in(log)
-            print(verdict or f"VERDICT: (none printed — read {log})", file=out)
-            out.flush()
-            return code
-        if clock() >= deadline:
-            print(
-                f"land --detach: no verdict within {timeout_s}s; the landing (pid {pid}) is "
-                f"still running. Follow it with: tail -f {log}",
-                file=out,
-            )
-            out.flush()
-            return LAND_GAVE_UP
-        sleep(poll_s)

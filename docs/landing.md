@@ -12,14 +12,22 @@ still matter; they just do not have to be resident (issue #2853).
 
 ## The command line
 
-`land.sh --pr <n> --arm-merge --await-merge --detach --await-verdict` is the whole landing.
+`land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` is the whole landing.
 `land.sh --help` prints the flags, the exit codes and the verdicts.
 
-**`--detach --await-verdict` replaced three hand-written steps.** The skill used to spell out
+**`--detach` and `cc-wait land` replaced three hand-written steps.** The skill used to spell out
 `git rev-parse origin/master` for `--since`, a redirect to a logfile under
 `$CLAUDE_JOB_DIR/tmp`, and `timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'`. Each was
-a step to get wrong. `land_lib/detach.py` does all three, and its docstring carries why the
-child's exit code is the authority rather than the grep.
+a step to get wrong. `land_lib/detach.py` does the first two, and its docstring carries why the
+child's exit code is the authority rather than the grep. The third is `cc-wait`'s `land` source,
+`scripts/deploy_tools/land_probe.py`.
+
+**The wait is `cc-wait`'s, and it fits a foreground Bash call.** `cc-wait` is the one wait loop
+every repo shares (the dotfiles `cc-wait` package). Its predecessor, `--await-verdict`, waited
+up to 1200s, twice the 600s limit of a foreground Bash call. 15 such waits overran that limit in
+the 30 days to 2026-10-04; the harness moved each one to the background, and 12 of the 15, all
+in fan-out `claude -p` agents, never woke. `cc-wait` waits at most 570s, then exits 75 with the
+command that resumes the wait. Re-run that, never `land.sh`, which would start a second landing.
 
 **`--since` is the PRE-merge tip.** It bounds the range the truncated-list fallback derives tags
 from, so `--detach` resolves it before the arm. Reading it afterwards would capture the tip that

@@ -53,7 +53,7 @@ Stop conditions, which are outcomes and not failures:
   failed deploy the health gate cannot see (authelia's middleware answers before the backend,
   traefik's outage leaves the host probes green), so the review its denial asks for is a
   person, and your gated land is not that person. Do not merge it, do not land it. Name it in the summary with the command an interactive session
-  runs: `./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach --await-verdict`,
+  runs: `./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>`,
   the `land-after-merge` skill's invocation.
 
 You cannot file a finding, so the summary is the only hand-off. Give every PR you leave open its
