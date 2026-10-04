@@ -91,11 +91,13 @@ def check_shipper_dropped(
     uptime = uptime_s()
     # Never read back past the reboot (#3490), the rule check_swallowed_verdicts follows. While
     # Loki is down for the weekly restart, daniel-pi's Alloy keeps shipping and drops what Loki
-    # refuses: 179,396 `ingester_error` entries on 2026-10-04, all before daniel-box finished
-    # booting. A 1h lookback held that loss in range until 08:39, 24 minutes past the Kuma
-    # maintenance window. Inside BOOT_SETTLE_S the shipper arms are skipped; after it the
-    # lookback grows back from the end of the settle window to its configured length, so a
-    # drop after the reboot still pages. The export-failure arm keeps its own window and stays
+    # refuses: 179,396 `ingester_error` entries on 2026-10-04. The Pi pushes through Traefik on
+    # daniel-box, this pod's node, so its loss cannot outlast that node's boot. The tile
+    # recovered at 08:39:30 against the 1h lookback, so the drops ended by ~07:39, before
+    # daniel-box finished booting at 07:46:35, yet the lookback held them in range 24 minutes
+    # past the Kuma maintenance window. Inside BOOT_SETTLE_S the shipper arms are skipped;
+    # after it the lookback grows back from the end of the settle window to its configured
+    # length, so a drop after the reboot still pages. The export-failure arm keeps its own window and stays
     # live throughout.
     window = cfg.SHIPPER_DROPPED_WINDOW
     if uptime is not None:

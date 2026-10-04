@@ -1197,10 +1197,11 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   **The reboot also loses entries on the client side, and that loss is bounded by the lookback
   rather than held by a grace** (#3490). While Loki is down for the restart, daniel-pi's Alloy
   keeps shipping and drops what Loki refuses: 179,396 `reason="ingester_error"` entries on
-  2026-10-04 under `job="alloy-pi"`, a node that did not reboot. daniel-box booted at 07:46:35
-  UTC and the Pi's counter was already flat at 180,224 by 08:00:13, yet the 1h lookback held the
-  loss in range until 08:39 and the tile paged at 08:19:30, four minutes after the Kuma
-  maintenance window closed. Both shipper queries therefore follow `check_swallowed_verdicts`:
+  2026-10-04 under `job="alloy-pi"`, a node that did not reboot. The tile paged at 08:19:30,
+  four minutes after the Kuma maintenance window closed, and recovered at 08:39:30. Against a 1h
+  lookback that recovery puts the last drop at about 07:39, before daniel-box finished booting at
+  07:46:35 UTC. The Pi pushes through Traefik on daniel-box, the node this pod runs on, so the
+  loss cannot outlast that node's boot whichever node comes back first. Both shipper queries therefore follow `check_swallowed_verdicts`:
   inside `BOOT_SETTLE_S` (1200 s) of the node's boot the shipper arms are skipped with an `up`
   message, and after it the range is the time since the settle window ended, growing back to
   `SHIPPER_DROPPED_WINDOW`. A drop after the settle window is inside that range and still pages.
