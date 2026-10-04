@@ -17,7 +17,7 @@ directory, so the library mount is an `emptyDir`.
 - **Pinned `tag@sha256`.**
 - **Host:** daniel-server preferred (`node_affinity_preference`), not pinned — schedules
   elsewhere if daniel-server is cordoned or full.
-- **The route is not rendered while parked**, see below.
+- **The route is not deployed while parked**, see below.
 - **`navidrome-data`** (`navidrome_k8s_claim`), Longhorn, 2Gi — SQLite index and transcoding
   cache, sized as headroom rather than a measurement.
 - **Parked at `navidrome_k8s_replicas: 0`**, which is what the denylist reason above means.
@@ -29,14 +29,13 @@ directory, so the library mount is an `emptyDir`.
 - **`ND_ENABLEEXTERNALSERVICES` is `"false"`**, which is load-bearing for the network posture:
   it disables both the GitHub release check and the metadata agents, so the pod opens no
   outbound connection at all — that's what puts it in `netpol-baseline`'s `BORN_FENCED_ROLES`.
-- **The route is gated on the replica count.** `templates/ingressroute.yaml.j2` renders
-  nothing while `navidrome_k8s_replicas` is 0, and `tasks/main.yml` deletes the live
-  IngressRoute in the same state. Traefik re-reads every IngressRoute on each config refresh
-  and logs `no servers found for homelab/navidrome` whenever the EndpointSlice behind one is
-  empty — every ~20s, forever, burying every other router error (issue #1323). Both halves
-  are needed: `kubectl apply` only adds and updates, so rendering nothing leaves the live
-  route serving. `k8s/manifests`' opt-in `manifests_prune` cannot do the deleting here — the
-  live object predates any `homelab/role` label, so its selector structurally cannot match it.
+- **The route is gated on the replica count.** `tasks/main.yml` lists `ingressroute.yaml` in
+  `manifests_files` only while `navidrome_k8s_replicas` is above 0. Traefik re-reads every
+  IngressRoute on each config refresh and logs `no servers found for homelab/navidrome`
+  whenever the EndpointSlice behind one is empty — every ~20s, forever, burying every other
+  router error (issue #1323). The role arms `manifests_prune` (#3388), so dropping the name
+  deletes the live route on that deploy. The gate is in the list rather than the template
+  because the prune's labelling wrapper refuses a template that renders no document.
 - **`Recreate` strategy**, not rolling: the data PVC is RWO on a single Longhorn replica, and
   SQLite wants one writer.
 

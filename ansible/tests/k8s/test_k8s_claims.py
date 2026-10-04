@@ -32,6 +32,10 @@ MANIFESTS = ANSIBLE / "roles/k8s/manifests"
 _KNOWN_CLAIMS = {
     ("homelab", "freshrss-config"): ("longhorn", "2Gi"),
     ("homelab", "zigbee2mqtt-data"): ("longhorn", "2Gi"),
+    ("homelab", "navidrome-data"): ("longhorn", "2Gi"),
+    ("homelab", "prowlarr-config"): ("longhorn", "2Gi"),
+    ("homelab", "karakeep-data"): ("longhorn", "4Gi"),
+    ("homelab", "karakeep-meili"): ("longhorn-nobackup", "2Gi"),
 }
 
 

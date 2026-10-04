@@ -127,11 +127,6 @@ def _derived_traefik_edge(entries: list[dict]) -> set[str]:
 # ordering constraint that is already true, while a missing one applies a Traefik CRD before
 # traefik owns the CRDs. Each name carries the reason it is one-directional.
 OVER_DERIVED_TRAEFIK_EDGE = {
-    "navidrome": (
-        "ingressroute.yaml.j2 renders only when navidrome_k8s_replicas > 0 — the workload "
-        "is parked at 0, and a route to an empty EndpointSlice makes traefik log "
-        "'no servers found' every ~20s (issue #1323)"
-    ),
     "livesync": (
         "its route is a file-provider router in the traefik role "
         "(templates/livesync-gate-secret.yaml.j2), not an IngressRoute of its own, so the "

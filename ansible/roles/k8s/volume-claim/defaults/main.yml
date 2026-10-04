@@ -3,12 +3,12 @@
 # Covered by every guard in the ansible/tests/test_k8s_autodeploy_*.py family. Also in
 # gitops_deploy_k8s_autodeploy_denylist, matching this declaration. Declared false because this
 # role renders only a PersistentVolumeClaim — there is no workload here for `rollout status` to
-# gate — and because it is the shared PVC path that 16 caller roles depend on, so a stray
+# gate — and because it is the shared PVC path its caller roles depend on, so a stray
 # auto-deploy has an outsized blast radius for a role that would otherwise be invisible to this
 # whole mechanism. It is also not a containers_list entry, so a promoted bump would match no
 # play and deploy nothing while reporting success.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "renders only a PVC, so there is no workload for rollout status to gate; shared PVC path for 16 caller roles, so a stray auto-deploy has outsized blast radius; not a containers_list entry, so a promoted bump matches no play and deploys nothing while reporting success"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "renders only a PVC, so there is no workload for rollout status to gate; shared PVC path for its caller roles, so a stray auto-deploy has outsized blast radius; not a containers_list entry, so a promoted bump matches no play and deploys nothing while reporting success"  # noqa var-naming[no-role-prefix]
 
 # PVC. volume_claim_name defaults to <service>-data in the calling role.
 volume_claim_size: 1Gi

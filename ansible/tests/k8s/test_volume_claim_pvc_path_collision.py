@@ -115,7 +115,7 @@ def volume_claim_callers(roles_dir: Path) -> set[str]:
 
 
 # A census that finds none of these is reading the wrong path, not a tree with no callers.
-KNOWN_CALLERS = frozenset({"valheim", "navidrome", "jellyfin", "prowlarr"})
+KNOWN_CALLERS = frozenset({"valheim", "jellyfin", "n8n", "home-assistant"})
 
 REAL_CLAIM_TASKS = K8S_ROLES / "volume-claim" / "tasks" / "claim.yml"
 

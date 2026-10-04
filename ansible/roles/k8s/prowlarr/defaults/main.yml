@@ -3,7 +3,7 @@ prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.6.5.5623-ls162
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume (indexer definitions + API keys)
-# is seeded through k8s/volume-claim (hardcoded ReadWriteOnce). This role renders TWO
+# comes from k8s_claims below (hardcoded ReadWriteOnce). This role renders TWO
 # Deployments (prowlarr + flaresolverr) and gates both correctly via manifests_extra_rollouts,
 # so gatedness is not the issue; the PVC/Recreate shape is. The linuxserver -lsNN scheme also
 # hides a breaking bump as a routine patch bump.
@@ -132,3 +132,9 @@ prowlarr_k8s_log_rotate: "10"
 # ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep
 # fails if the three drift apart.
 prowlarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0
+
+# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ prowlarr_k8s_claim }}"
+    storage_class: "{{ prowlarr_k8s_storage_class }}"
+    size: "{{ prowlarr_k8s_size }}"

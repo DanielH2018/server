@@ -35,8 +35,9 @@ manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 # document, so no template needs a hand edit. Its second blocker is a cost, not a hazard: an
 # orphan whose staged file was deleted before its role was armed never receives the label and
 # needs one kubectl delete by hand. The prune cannot see such an orphan, so arming a role that
-# still has one is safe, and manifest-prune-check.sh keeps flagging it. registry, bazarr, littlelink and texbrain are armed. The default stays false until every
-# role is, because flipping it moves every role's rendered bytes and needs one full deploy.
+# still has one is safe, and manifest-prune-check.sh keeps flagging it. registry, bazarr,
+# littlelink, texbrain and navidrome are armed. The default stays false until every role is,
+# because flipping it moves every role's rendered bytes and needs one full deploy.
 manifests_prune: false
 
 # The kinds the prune may delete, one list for every armed role. Namespaced kinds only: the

@@ -83,7 +83,7 @@ def test_a_pi_template_that_will_not_render_fails_the_caller() -> None:
 
 
 def test_an_included_role_with_no_census_entry_renders() -> None:
-    """`k8s/volume-claim` is included by 16 caller roles and is in no `containers_list`.
+    """`k8s/volume-claim` is included by caller roles and is in no `containers_list`.
 
     The accessor looked its entry up with a bare `next()`, so asking it for this role raised
     `StopIteration` before the render started — and the freshrss guard had to read the
