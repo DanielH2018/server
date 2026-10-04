@@ -63,6 +63,10 @@ _ARMED_ROLES = frozenset(
         "tdarr",
         "home-assistant",
         "game-stats",
+        "uptime-kuma",
+        "freshrss",
+        "sonarr",
+        "radarr",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.

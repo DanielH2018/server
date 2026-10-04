@@ -5,6 +5,8 @@
     name: k8s/manifests
   vars:
     manifests_service: sonarr
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
     # The startupProbe allows up to 10 min of first-boot DOCKER_MODS install; the shared rollout default times out against it and aborts
     # the whole deploy while the pod is still coming up healthy. The number lives in
     # defaults/main.yml because verify.yml's own rollout gate waits the same budget.

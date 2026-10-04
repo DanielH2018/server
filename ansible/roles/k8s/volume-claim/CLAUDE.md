@@ -8,9 +8,8 @@ workload never starts against a claim that doesn't exist yet.
 list in the caller's `defaults/main.yml`, which `k8s/manifests` renders, digests, dry-runs and
 applies ahead of its snapshot (`ansible/roles/k8s/manifests/CLAUDE.md`). freshrss,
 zigbee2mqtt, speedtest, livesync, healthchecks, bazarr, sonarr, radarr, navidrome, prowlarr,
-karakeep, qbittorrent, terraria, code-server, n8n, valheim, scrutiny, tdarr, home-assistant
-and game-stats use it. Convert a
-caller rather than adding a new one here.
+karakeep, qbittorrent, terraria, code-server, n8n, valheim, scrutiny, tdarr, home-assistant,
+game-stats and uptime-kuma use it. Convert a caller rather than adding a new one here.
 
 **No standalone deploy tag.** Callers reach it via `include_role: name: k8s/volume-claim`
 with `volume_claim_service`/`volume_claim_name`/`volume_claim_size`/`_storage_class`
@@ -33,9 +32,10 @@ and a claim never re-applied from the role's own directory (#1654, the benign si
 directory under the manifest root that no role's `manifests_service` claims, so no
 `kubectl apply -f <dir>/` sweeps it.
 
-The filename is the **claim name**, not `pvc.yaml`. uptime-kuma includes this role
-twice under one `volume_claim_service`, and a fixed filename had the second
-claim's render overwrite the first — only the last claim of a service was ever staged.
+The filename is the **claim name**, not `pvc.yaml`. tdarr and uptime-kuma each included this
+role twice under one `volume_claim_service` before moving to `k8s_claims`, and a fixed filename
+had the second claim's render overwrite the first — only the last claim of a service was ever
+staged.
 
 Both invariants are ENFORCED by
 `ansible/tests/k8s/test_volume_claim_pvc_path_collision.py`.
@@ -52,8 +52,8 @@ read by `pvc.yaml.j2`, so a change there does move the applied PVC.
 
 A role that later drops its `k8s/volume-claim` include (wg-easy, zigbee2mqtt, freshrss,
 speedtest, livesync, healthchecks, bazarr, sonarr, radarr, navidrome, prowlarr, karakeep,
-qbittorrent, terraria, code-server, n8n, valheim, scrutiny, tdarr, home-assistant and
-game-stats all did) leaves its
+qbittorrent, terraria, code-server, n8n, valheim, scrutiny, tdarr, home-assistant, game-stats
+and uptime-kuma all did) leaves its
 `<service>-claims/` file behind. `k8s/manifests` removes that directory on the role's next deploy when the role declares
 `k8s_claims` or lists its own `pvc.yaml` (#3458). A role converted some other way still
 leaves the file, which is inert but stale.
