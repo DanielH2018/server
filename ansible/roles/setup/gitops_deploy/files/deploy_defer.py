@@ -41,7 +41,12 @@ from deploy_remediation import (
     broad_remediation,
     manual_plane_remediation,
 )
-from deploy_state import NO_PLAYBOOK, DeployerState
+from deploy_state import (
+    NO_PLAYBOOK,
+    OWED_K8S_DEFERRED,
+    OWED_K8S_UNAPPLIED,
+    DeployerState,
+)
 from gitops_markers import k8s_deferred_clear_cmd, k8s_deferred_deploy_cmd
 from deploy_tick_types import TickTarget
 from deploy_toolbox import DeployTools
@@ -328,18 +333,18 @@ def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
 
 def pending_k8s_deferred(state: DeployerState) -> set[str]:
     """The services the `k8s_deferred` marker still holds."""
-    return {entry.service for entry in state.k8s_deferred_pending()}
+    return {entry.service for entry in state.owed_pending(OWED_K8S_DEFERRED)}
 
 
 def clear_applied_k8s_deferred(state: DeployerState, services) -> None:
     """Drop the `k8s_deferred` lines an apply of `services` covers, and say so.
 
-    The deployer's own reverse of `DeployerState.record_k8s_deferred`, called wherever a tick
+    The deployer's own reverse of `DeployerState.record_owed`, called wherever a tick
     applies a k8s service. The operator's reverse is `gitops_state.py clear-k8s-deferred`,
     which is what a hand deploy needs: the deployer cannot see a `deploy.sh` somebody else ran,
     the same gap `clear-manual-plane` fills for a pending setup role.
     """
-    cleared = state.clear_k8s_deferred(services)
+    cleared = state.clear_owed(OWED_K8S_DEFERRED, services)
     if cleared:
         log(f"k8s_deferred cleared for {', '.join(cleared)}: this tick applied them")
 
@@ -399,7 +404,7 @@ def alert_and_record_deferred(
     for service in cs.k8s - pending_k8s_deferred(state):
         by_commit.setdefault(cs.k8s_origins.get(service, origin), set()).add(service)
     for commit, services in by_commit.items():
-        state.record_k8s_unapplied(commit, services, now)
+        state.record_owed(OWED_K8S_UNAPPLIED, commit, services, now)
     deploy_alerts.alert_deferred(
         tools, state, config, origin, deployed, cs, declared_k8s
     )
@@ -447,7 +452,7 @@ def discharge_k8s_unapplied(
     derivation runs only for a line its record did not already drop, and a failure reads as
     "no role is", which keeps the line.
     """
-    pending = state.k8s_unapplied_pending()
+    pending = state.owed_pending(OWED_K8S_UNAPPLIED)
     records = {e.service: tools.release_commit(e.service) for e in pending}
     callers = _shared_callers(tools, config, {s for s, c in records.items() if not c})
 
@@ -478,7 +483,7 @@ def discharge_k8s_unapplied(
         if tags and all(carries(t, entry.origin, by_digest) for t in tags):
             discharged.append(entry.service)
     if discharged:
-        state.clear_k8s_unapplied(discharged)
+        state.clear_owed(OWED_K8S_UNAPPLIED, discharged)
         log(
             f"k8s_unapplied discharged for {', '.join(sorted(discharged))}: a release "
             f"record or a matching render names a commit that carries the change"
@@ -550,7 +555,7 @@ def log_k8s_unapplied(state: DeployerState) -> None:
     line written only where the marker is written would appear once. Nothing pages on this,
     so the journal and the SessionStart banner are the whole of its reach.
     """
-    services = sorted({e.service for e in state.k8s_unapplied_pending()})
+    services = sorted({e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)})
     if not services:
         return
     log(

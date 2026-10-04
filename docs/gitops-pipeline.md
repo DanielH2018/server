@@ -1939,6 +1939,13 @@ under-sized.
   on at six hours; the second for the hand-edited and denylisted classes, which never pages
   and which the SessionStart banner reads. The hand clears are
   `gitops_state.py clear-k8s-deferred <svc>` and `clear-k8s-unapplied <svc>`.
+- **`gitops_state.py clear-owed <class> <subject>` is the one hand clear for every owed
+  class an operator may clear** (#3544): `manual_plane`, `k8s_deferred` and `k8s_unapplied`.
+  It refuses `hold_plane`, which clears only once an apply covers it. `clear-manual-plane`,
+  `clear-k8s-deferred` and `clear-k8s-unapplied` are aliases for it. They stay while the
+  commands monitor-bridge, deploy-ui and the alerts print still name them, since those copies
+  redeploy on their own schedules. On the deployer side, `DeployerState` has one `record_owed`,
+  `clear_owed` and `owed_pending` trio for the two k8s classes, keyed by class.
 - **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True)`):
   `last_run` is still written, so GitOps-Alive stays green, and the page is throttled to twice per
   America/Chicago day.

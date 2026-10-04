@@ -34,7 +34,9 @@ from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are r
     ManualPlaneEntry,
     parse_contention,
 )
-from gitops_ledger import (
+from gitops_ledger import (  # noqa: F401 — the k8s owed classes are re-exported
+    OWED_K8S_DEFERRED,
+    OWED_K8S_UNAPPLIED,
     OWED_MANUAL_PLANE,
     RECEIPT_KEEP,
     drop_owed,
@@ -50,7 +52,7 @@ class DeployerState(AlertSlotMarkers, HoldMarkers, K8sLineMarkers):
     """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
 
     The two k8s marker families come from `deploy_state_k8s.K8sLineMarkers` and the alert
-    dedupe slots from `deploy_state_alerts.AlertSlotMarkers`, so `state.record_k8s_unapplied(...)`
+    dedupe slots from `deploy_state_alerts.AlertSlotMarkers`, so `state.record_owed(...)`
     and `state.alerted_sha(...)` are reached here as they always were. This class stays the one
     place a marker file is read or written.
 

@@ -24,7 +24,7 @@ import deploy_io
 import deploy_locks
 from deploy_changes import ChangeSet
 from deploy_config import Config, log
-from deploy_state import DeployerState
+from deploy_state import OWED_K8S_DEFERRED, DeployerState
 from deploy_tick_types import TickPlan, TickTarget
 from deploy_toolbox import DeployTools
 
@@ -132,7 +132,7 @@ def apply_broad_k8s(
         # Safe to write here rather than on an exit: this branch empties `bumps`, so the
         # deploy below is skipped and neither the contention arm nor the failure arm that
         # would have to take the marker back is reachable from it.
-        state.record_k8s_deferred(origin, bumps, time.time())
+        state.record_owed(OWED_K8S_DEFERRED, origin, bumps, time.time())
         bumps = set()
     # The deploy plane has already applied these, so they are annotated on every path out of
     # here BUT the reset one — a failed bump beside them must not hide that they went out.

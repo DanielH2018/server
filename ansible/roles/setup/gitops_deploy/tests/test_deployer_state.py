@@ -218,11 +218,11 @@ def test_a_deferred_bump_keeps_its_first_seen_stamp_and_its_origin(state):
     by a tick deploying the service, never off the origin, and `deploy_defer.unrecord` resets
     the tree — so an advanced SHA here would name a commit the host no longer carries.
     """
-    assert state.record_k8s_deferred(SHA, {"sonarr"}, 1000.0) == ["sonarr"]
-    assert state.record_k8s_deferred("f" * 40, {"sonarr"}, 9000.0) == []
-    assert [(e.origin, e.service, e.at) for e in state.k8s_deferred_pending()] == [
-        (SHA, "sonarr", 1000.0)
-    ]
+    assert state.record_owed(OWED_K8S_DEFERRED, SHA, {"sonarr"}, 1000.0) == ["sonarr"]
+    assert state.record_owed(OWED_K8S_DEFERRED, "f" * 40, {"sonarr"}, 9000.0) == []
+    assert [
+        (e.origin, e.service, e.at) for e in state.owed_pending(OWED_K8S_DEFERRED)
+    ] == [(SHA, "sonarr", 1000.0)]
     assert [e.subject for e in parse_owed(state.read("owed"), OWED_K8S_DEFERRED)] == [
         "sonarr"
     ], "the bump is a ledger class (#3392)"
@@ -242,15 +242,15 @@ def test_a_key_this_writer_does_not_know_survives_a_record(state):
             }
         ),
     )
-    state.record_k8s_deferred("f" * 40, {"sonarr", "radarr"}, 9000.0)
+    state.record_owed(OWED_K8S_DEFERRED, "f" * 40, {"sonarr", "radarr"}, 9000.0)
     assert json.loads(state.read("owed").splitlines()[0])["new"] == 1
 
 
 def test_clearing_one_deferred_bump_leaves_the_others(state):
-    state.record_k8s_deferred(SHA, {"sonarr", "radarr"}, 1000.0)
-    assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
-    assert [e.service for e in state.k8s_deferred_pending()] == ["radarr"]
-    assert state.clear_k8s_deferred({"radarr"}) == ["radarr"]
+    state.record_owed(OWED_K8S_DEFERRED, SHA, {"sonarr", "radarr"}, 1000.0)
+    assert state.clear_owed(OWED_K8S_DEFERRED, {"sonarr"}) == ["sonarr"]
+    assert [e.service for e in state.owed_pending(OWED_K8S_DEFERRED)] == ["radarr"]
+    assert state.clear_owed(OWED_K8S_DEFERRED, {"radarr"}) == ["radarr"]
     assert state.read("owed") is None
 
 
@@ -261,7 +261,7 @@ def test_a_garbled_k8s_deferred_line_is_carried_through_a_clear(state):
     can act on it without guessing.
     """
     state.write("owed", f"garbage\n{owed_line(OWED_K8S_DEFERRED, 'sonarr', SHA, 1000)}")
-    assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
+    assert state.clear_owed(OWED_K8S_DEFERRED, {"sonarr"}) == ["sonarr"]
     assert state.read("owed") == "garbage"
 
 
@@ -275,16 +275,29 @@ def test_a_torn_k8s_deferred_line_is_repaired_at_its_own_origin(state):
     the tree, so an advanced SHA here would name a commit the host no longer carries.
     """
     state.write("owed", _TORN_SONARR)
-    assert state.record_k8s_deferred("f" * 40, {"sonarr"}, 9000.0) == []
-    assert [(e.origin, e.service, e.at) for e in state.k8s_deferred_pending()] == [
-        (SHA, "sonarr", 9000.0)
-    ]
+    assert state.record_owed(OWED_K8S_DEFERRED, "f" * 40, {"sonarr"}, 9000.0) == []
+    assert [
+        (e.origin, e.service, e.at) for e in state.owed_pending(OWED_K8S_DEFERRED)
+    ] == [(SHA, "sonarr", 9000.0)]
 
 
 def test_a_torn_k8s_deferred_line_naming_the_service_is_cleared(state):
     """Nothing else ever drops it: the clear is the only reverse this class has."""
     state.write("owed", _TORN_SONARR)
-    assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
+    assert state.clear_owed(OWED_K8S_DEFERRED, {"sonarr"}) == ["sonarr"]
+    assert state.read("owed") is None
+
+
+@pytest.mark.parametrize("call", ["owed_pending", "record_owed", "clear_owed"])
+def test_a_class_the_k8s_trio_does_not_own_is_refused(state, call):
+    """`hold_plane` has its own writer: the trio must not write a line with k8s semantics."""
+    args = {
+        "owed_pending": (),
+        "record_owed": (SHA, {"x"}, 1.0),
+        "clear_owed": ({"x"},),
+    }[call]
+    with pytest.raises(ValueError, match="not a k8s owed class"):
+        getattr(state, call)(OWED_HOLD_PLANE, *args)
     assert state.read("owed") is None
 
 
