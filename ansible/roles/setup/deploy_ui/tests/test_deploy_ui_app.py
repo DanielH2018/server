@@ -353,10 +353,8 @@ def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
     """
     monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
     (state_dir / "hold_sha").write_text("deadbeef")
-    line = '{"class": "hold_plane", "subject": "%s", "origin": "a", "at": 1}'
-    (state_dir / "owed.jsonl").write_text(
-        line % "k3s" + "\n" + line % "deploy.yml sonarr"
-    )
+    line = '{"class": "hold_plane", "subject": "%s", "origin": "a", "at": 1}\n'
+    (state_dir / "owed.jsonl").write_text(line % "k3s" + line % "deploy.yml sonarr")
     status, text = app.post(
         "/api/hold/clear", HDRS, json.dumps({"expected_sha": "deadbeef"})
     )
