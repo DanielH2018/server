@@ -68,7 +68,7 @@
   ansible.builtin.stat:
     path: "{{ manifests_dest_dir }}/{{ item }}"
     checksum_algorithm: sha256
-  loop: "{{ manifests_files | default([]) }}"
+  loop: "{{ (manifests_files | default([])) + manifests_claim_files }}"
   register: manifests_release_stat
   become: true
 
@@ -120,7 +120,7 @@
   # without walking the per-file map. `dictsort` before `to_json` because dict ordering is
   # not guaranteed and an order-dependent digest would differ for identical bytes.
   #
-  # Secret manifests never reach it: the stats above loop `manifests_files` and
+  # Secret manifests never reach it: the stats above loop `manifests_files`, the claim files and
   # `manifests_deferred_files` only. They get their own keyed digest below, in a separate field,
   # so this one is unchanged by that. Adding a deferred file to a role DOES move this
   # digest, so that service reads stale until its next deploy writes a fresh record.

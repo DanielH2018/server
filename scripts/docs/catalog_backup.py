@@ -51,16 +51,19 @@ __all__ = [
 # whose StorageClass asks for backups" in ansible/roles/setup/k3s/tasks/longhorn.yml):
 #
 #   1. an inline `kind: PersistentVolumeClaim` block carrying its own `storageClassName:` line
-#      (media-volume, valheim, zigbee2mqtt, freshrss, code-server's workspace);
+#      (media-volume, valheim, code-server's workspace);
 #   2. a call to the shared `pvc()` macro in ansible/templates/pvc.yml.j2, whose second
 #      positional argument is the class (authelia, registry, karakeep-meili, observability's four);
 #   3. an `include_role: k8s/volume-claim` task, whose `vars:` carry `volume_claim_name` and,
 #      optionally, `volume_claim_storage_class` — the volume-claim role's own default applies
 #      when the caller leaves it out (uptime-kuma, karakeep's main claim, the *arrs, ~20 roles).
 #      Nothing about such a claim appears in the calling role's templates/ at all.
+#   4. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
+#      which k8s/manifests renders from the shared claim-default.yaml.j2 (freshrss,
+#      zigbee2mqtt).
 #
-# A `claimName:` reference in a pod spec is the fourth pattern. It declares nothing — it names
-# a claim one of the three shapes above declares, in this role or another (`media-data` is
+# A `claimName:` reference in a pod spec is the fifth pattern. It declares nothing — it names
+# a claim one of the four shapes above declares, in this role or another (`media-data` is
 # media-volume's, mounted by seven consumers), which is why `claim_index` is built across
 # every role before any one role is classified.
 
@@ -235,9 +238,27 @@ def _volume_claim_includes(role_dir: Path, k8s_roles: Path) -> list[ClaimDecl]:
     return decls
 
 
+def _k8s_claims_entries(role_dir: Path) -> list[ClaimDecl]:
+    """Shape 4: every `k8s_claims` entry in the role's defaults, name and class as written."""
+    claims = _load_yaml(role_dir / "defaults" / "main.yml").get("k8s_claims") or []
+    return [
+        _decl(
+            claim["name"],
+            claim.get("storage_class")
+            if isinstance(claim.get("storage_class"), str)
+            else None,
+            role_dir,
+        )
+        for claim in claims
+        if isinstance(claim, dict) and isinstance(claim.get("name"), str)
+    ]
+
+
 def _declared_claims(role_dir: Path, k8s_roles: Path) -> list[ClaimDecl]:
-    return _template_declarations(role_dir) + _volume_claim_includes(
-        role_dir, k8s_roles
+    return (
+        _template_declarations(role_dir)
+        + _volume_claim_includes(role_dir, k8s_roles)
+        + _k8s_claims_entries(role_dir)
     )
 
 

@@ -352,6 +352,27 @@ def test_pvc_template_claim_is_found_when_name_is_not_the_first_metadata_key(
     assert unresolved == []
 
 
+def test_k8s_claims_entry_is_resolved_through_defaults(tmp_path: Path) -> None:
+    """A `k8s_claims` entry is a rendered claim, its name resolved through the role's defaults.
+
+    The red half: the same role declaring no `k8s_claims` renders nothing, so a snapshot
+    declaration against it would be reported rather than credited.
+    """
+    role = tmp_path / "widget"
+    (role / "defaults").mkdir(parents=True)
+    defaults = role / "defaults" / "main.yml"
+    defaults.write_text(
+        "widget_k8s_claim: widget-config\n"
+        "k8s_claims:\n"
+        '  - name: "{{ widget_k8s_claim }}"\n'
+        "    storage_class: longhorn\n"
+        "    size: 1Gi\n"
+    )
+    assert _rendered_pvc_claims(role) == ({"widget-config"}, [])
+    defaults.write_text("widget_k8s_claim: widget-config\n")
+    assert _rendered_pvc_claims(role) == (set(), [])
+
+
 def test_snapshot_pvc_declarations_match_rendered_claims() -> None:
     """A declared `k8s_autodeploy_snapshot_pvcs` entry must be a claim the role actually renders.
 
@@ -359,7 +380,7 @@ def test_snapshot_pvc_declarations_match_rendered_claims() -> None:
     isn't protected, and nothing says so; this is the only pre-deploy catch for that, since
     --dry-run never reaches volume-snapshot (see the section comment above).
 
-    See `_rendered_pvc_claims` for why this reads two sources.
+    See `_rendered_pvc_claims` for why this reads three sources.
     """
     offenders = []
     for role in _roles():

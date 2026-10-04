@@ -1,9 +1,9 @@
 ---
 # Navidrome: one Deployment, one Longhorn claim, one Authelia-gated route.
 
-# The claim is created BEFORE the workload, so the pod has a PVC to mount. Created here rather
-# than rendered as a pvc.yaml: exactly one path must own a claim name, and volume-claim is the
-# path every other Longhorn-backed role in this fleet uses.
+# The claim is created BEFORE the workload, so the pod has a PVC to mount. Exactly one path must
+# own a claim name. `k8s_claims` in defaults/main.yml is the path new claims take (#3387); this
+# role is still on k8s/volume-claim until it is converted.
 - name: Create the navidrome data volume claim
   tags: [deploy]
   ansible.builtin.include_role:

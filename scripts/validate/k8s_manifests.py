@@ -70,6 +70,8 @@ from lib.k8s_pvc import (
     volume_claim_pvc_names,
 )
 from lib.k8s_roles import (
+    CLAIM_TEMPLATE,
+    claim_contexts,
     CALLER_RENDERED_ROLES,
     HOST_VARS,
     K8S_ROLES,
@@ -327,6 +329,21 @@ def main() -> int:
                     "not a Kubernetes manifest; app config belongs in templates/config/",
                     file=sys.stderr,
                 )
+                continue
+            for doc in docs:
+                pvc_names.update(find_pvc_names(doc))
+            parsed_templates.append((rel, docs))
+            print(f"  [ok]   {rel}")
+        # A role's `k8s_claims`: one shared template, rendered once per entry the way the
+        # deploy's render task loops it, so the claims reach the schema pass and the claimName
+        # cross-reference below like any template the role ships.
+        for claim_ctx in claim_contexts(ctx):
+            checked += 1
+            rel = f"{role}/{CLAIM_TEMPLATE.name}[{claim_ctx['manifests_claim'].get('name')}]"
+            err, docs = check_template(role, CLAIM_TEMPLATE, claim_ctx)
+            if err:
+                failures += 1
+                print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
                 continue
             for doc in docs:
                 pvc_names.update(find_pvc_names(doc))

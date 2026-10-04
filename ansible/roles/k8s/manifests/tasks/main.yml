@@ -18,6 +18,13 @@
 #                           /etc/rancher/k3s/manifests/. Required with the above, and reserved
 #                           the way `<service>-netpol` is -- see
 #                           ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py
+#   k8s_claims              [{name, size, storage_class}] the PersistentVolumeClaims this role
+#                           creates for the caller. Declared in the CALLER's defaults/main.yml,
+#                           like k8s_autodeploy_snapshot_pvcs, never here: a default in this
+#                           role would outrank the caller's. Each renders from the shared
+#                           ansible/templates/claim-default.yaml.j2 to `claim-<name>.yaml` in the
+#                           caller's own directory, so it is in the prune keep-set, the
+#                           `manifests_digest` and the `--dry-run=server` apply.
 #   manifests_self_rollouts [{name, kind, image?, namespace?, rolled_by_role?}] a role with
 #                           `manifests_rollout: ''` restarts through its OWN task after this
 #                           role returns. Reaches the release record's `rollouts[]`
@@ -125,6 +132,23 @@
     quiet: true
   when: (manifests_deferred_files | default([]) | length) > 0
 
+- name: Check that every k8s_claims entry carries a name, a size and a storage class
+  tags: [deploy]
+  # Required rather than defaulted: a claim's storage class is immutable once created and decides
+  # its backup tier, so a silent `longhorn` fallback is a decision nobody made at the call site.
+  ansible.builtin.assert:
+    that:
+      - item.name | default('') | trim | length > 0
+      - item.size | default('') | string | trim | length > 0
+      - item.storage_class | default('') | trim | length > 0
+    fail_msg: >-
+      k8s_claims entry {{ item }} for {{ manifests_service }} must set name, size and
+      storage_class.
+    quiet: true
+  loop: "{{ k8s_claims | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default('?') }}"
+
 - name: Create a throwaway render directory for {{ manifests_service }}
   # `always`, because manifests_dest_dir is read by BOTH config-tagged tasks (the renders) and
   # the deploy-tagged apply, and neither tag alone survives every documented invocation. Tags
@@ -174,6 +198,18 @@
       {{ '' if (manifests_deferred_dir_name | default('') | trim | length) == 0
          else (manifests_dest_dir ~ '/' ~ manifests_deferred_dir_name) if k8s_dry_run | bool
          else '/etc/rancher/k3s/manifests/' ~ manifests_deferred_dir_name }}
+
+- name: Name the volume claim files for {{ manifests_service }}
+  tags: [always]
+  # The basenames the caller's `k8s_claims` render to, read by the prune keep-set and the digest.
+  # Set unconditionally, for the same host-scoped reason as the deferred directory above: an
+  # earlier role's claims would otherwise be kept and digested here. A task rather than a
+  # default in defaults/main.yml, because a change to a shared role's defaults reads as a change
+  # to every service that includes it.
+  ansible.builtin.set_fact:
+    manifests_claim_files: >-
+      {{ k8s_claims | default([]) | map(attribute='name')
+         | map('regex_replace', '^', 'claim-') | map('regex_replace', '$', '.yaml') | list }}
 
 - name: Create the manifest directory for {{ manifests_service }}
   tags: [config]
@@ -227,6 +263,26 @@
   loop: "{{ manifests_secret_files | default([]) }}"
   become: true
   register: manifests_secret_render
+
+- name: Render volume claims for {{ manifests_service }}
+  tags: [config]
+  # DECIDED: claims are staged in the caller's OWN directory as `claim-<name>.yaml`, not in the
+  # `<service>-claims/` sibling k8s/volume-claim uses. Here they ride the prune keep-set, the
+  # digest and the dry-run apply this role already has; a sibling directory would need each of
+  # the three wired a second time. The filename carries the claim name so a role with two claims
+  # stages two files. The cost: a role moving here from k8s/volume-claim leaves its old
+  # `<service>-claims/` file behind, inert, for a manual delete.
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/claim-default.yaml.j2"
+    dest: "{{ manifests_dest_dir }}/claim-{{ manifests_claim.name }}.yaml"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ k8s_claims | default([]) }}"
+  loop_control:
+    loop_var: manifests_claim
+    label: "{{ manifests_claim.name }}"
+  become: true
 
 - name: Create the deferred manifest directory for {{ manifests_service }}
   tags: [config]
@@ -318,10 +374,28 @@
     state: absent
   loop: >-
     {{ manifests_staged.files | map(attribute='path') | map('basename')
-       | difference((manifests_files | default([])) + (manifests_secret_files | default([])))
+       | difference((manifests_files | default([])) + (manifests_secret_files | default([]))
+                    + manifests_claim_files)
        | list }}
   become: true
   when: not k8s_dry_run | bool
+
+# Ahead of the snapshot, which fails the deploy on a claim that does not exist yet: a new
+# service's first deploy would otherwise stop there. The directory apply below re-applies the
+# same files as `unchanged`. Skipped under k8s_no_mutate; a dry run judges the claims in that
+# directory apply instead.
+- name: Apply the volume claims for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.command:
+    argv: >-
+      {{ ['k3s', 'kubectl', 'apply']
+         + (manifests_claim_files | map('regex_replace', '^', '--filename=' ~ manifests_dest_dir ~ '/') | list) }}
+  register: manifests_claim_apply
+  become: true
+  changed_when: "'created' in manifests_claim_apply.stdout or 'configured' in manifests_claim_apply.stdout"
+  when:
+    - not (k8s_no_mutate | bool)
+    - manifests_claim_files | length > 0
 
 # Snapshot before the apply, not after: the apply below is what changes the Deployment spec,
 # terminates the old pod and starts the new one — and the replacement pod is what migrates the
