@@ -14,8 +14,9 @@ key is invisible to an old reader instead of erasing the line.
 
 Shipped with the deployer (`tasks/code.yml`) and imported from the checkout through the same
 `sys.path` insert as `gitops_markers`. monitor-bridge carries a copy beside its `gitops_markers`
-copy, written by `scripts/dev/gen_gitops_markers.py`, because it pages on `manual_plane`: a
-class it pages on can move into the ledger only once that copy reads it.
+copy, written by `scripts/dev/gen_gitops_markers.py`, because it pages on `manual_plane` and
+`k8s_deferred`: a class it pages on can move into the ledger only once that copy reads it.
+deploy-ui installs this source beside its `gitops_markers`, for its `k8s_deferred` panel.
 
 Stdlib only, plus `gitops_markers`.
 """
@@ -23,7 +24,12 @@ Stdlib only, plus `gitops_markers`.
 import json
 from typing import NamedTuple
 
-from gitops_markers import NO_PLAYBOOK, K8sDeferredEntry, ManualPlaneEntry
+from gitops_markers import (
+    NO_PLAYBOOK,
+    K8sDeferredEntry,
+    ManualPlaneEntry,
+    parse_k8s_deferred,
+)
 
 # ── the owed-work ledger (#3392) ─────────────────────────────────────────────────────────
 
@@ -55,9 +61,21 @@ OWED_K8S_UNAPPLIED = "k8s_unapplied"
 # `manual_plane_entries` gives it.
 OWED_MANUAL_PLANE = "manual_plane"
 
+# A promoted image bump a BROAD tick fast-forwarded and ran out of budget to deploy. The
+# subject is the service, under the `--tags` value that selects it. monitor-bridge pages on it
+# past its age gate, so it moves the way `manual_plane` did: every reader learns the class
+# before any writer records it (#3392). Until the writer moves, the deployer records and
+# clears the `k8s_deferred` line marker alone, and `k8s_deferred_entries` reads both.
+#
+# Unlike `k8s_unapplied`, a line KEEPS its recorded origin: the deployer clears it on the
+# apply that covers it, so nothing needs the origin to advance.
+OWED_K8S_DEFERRED = "k8s_deferred"
+
 # Every class a ledger line may carry. A reader asks for its classes by name and never sees
 # the rest, which is what lets a new class ship before every reader knows it.
-OWED_CLASSES: frozenset[str] = frozenset({OWED_K8S_UNAPPLIED, OWED_MANUAL_PLANE})
+OWED_CLASSES: frozenset[str] = frozenset(
+    {OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, OWED_MANUAL_PLANE}
+)
 
 
 class OwedEntry(NamedTuple):
@@ -240,6 +258,35 @@ def k8s_unapplied_entries(owed: str | None) -> list[K8sDeferredEntry]:
         K8sDeferredEntry(e.origin, e.subject, e.at)
         for e in parse_owed(owed, OWED_K8S_UNAPPLIED)
     ]
+
+
+def k8s_deferred_entries(
+    marker: str | None, owed: str | None
+) -> list[K8sDeferredEntry]:
+    """Every pending deferred image bump, from the line marker and the `owed` ledger.
+
+    Args:
+        marker: the `k8s_deferred` line marker, or None for an absent one.
+        owed: the `owed` ledger, or None for an absent one.
+
+    Returns:
+        One entry per service, oldest first. A service in both sources keeps the OLDER entry,
+        its origin included, because the age gate dates the page from the first deferral.
+
+    The union is what lets the writer move second (#3392). A reader of the ledger alone
+    would lose every bump the deployer still records in the line marker, and a reader of the
+    marker alone would lose every bump a moved writer records in the ledger.
+    """
+    oldest: dict[str, K8sDeferredEntry] = {}
+    ledger = [
+        K8sDeferredEntry(e.origin, e.subject, e.at)
+        for e in parse_owed(owed, OWED_K8S_DEFERRED)
+    ]
+    for entry in parse_k8s_deferred(marker) + ledger:
+        held = oldest.get(entry.service)
+        if held is None or entry.at < held.at:
+            oldest[entry.service] = entry
+    return sorted(oldest.values(), key=lambda e: e.at)
 
 
 def _token(value) -> str | None:

@@ -125,6 +125,13 @@ def test_every_setup_consumer_copy_loop_installs_the_source():
         )
 
 
+def test_the_deploy_ui_copy_loop_installs_the_ledger_beside_the_markers():
+    """`deploy_ui_reads` imports `gitops_ledger` for its `k8s_deferred` panel (#3392)."""
+    task_file, task_name = _COPY_TASKS["deploy_ui"]
+    (task,) = _tasks_named(task_file, task_name)
+    assert "{{ role_path }}/../gitops_deploy/files/gitops_ledger.py" in task["loop"]
+
+
 def test_the_monitor_bridge_module_list_carries_the_copy():
     """The list, not just the file: it drives the ConfigMap and the mount, so a bare grep hit
     in a comment would not prove the pod gets the module."""

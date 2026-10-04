@@ -29,9 +29,8 @@ from gitops_markers import (
     maximal_apply_warning,
     parse_behind,
     parse_contention,
-    parse_k8s_deferred,
 )
-from gitops_ledger import manual_plane_entries
+from gitops_ledger import k8s_deferred_entries, manual_plane_entries
 from verdicts.service import gitops_alive
 
 
@@ -142,7 +141,10 @@ def gitops_status(
         deferring tick MERGED the bump, so `behind_since` is empty and no later tick's range
         carries it — the failure mode `manual_plane` closed one plane over (#2449).
       owed: the deployer's `owed` ledger, or None. Its `manual_plane` class is the setup-role
-        arm above (#3392); `gitops_ledger.manual_plane_entries` reads it.
+        arm above (#3392); `gitops_ledger.manual_plane_entries` reads it. Its `k8s_deferred`
+        class joins the `k8s_deferred` marker in the last arm, through
+        `gitops_ledger.k8s_deferred_entries`, so the deployer can move that writer into the
+        ledger without this page going quiet in between.
     """
     max_behind_s = cfg.GITOPS_BEHIND_MAX_S if max_behind_s is None else max_behind_s
     max_contention_s = (
@@ -221,7 +223,7 @@ def gitops_status(
                     _apply_and_clear(pending, narrow),
                 )
             )
-    deferred = parse_k8s_deferred(k8s_deferred)
+    deferred = k8s_deferred_entries(k8s_deferred, owed)
     if deferred:
         oldest = min(e.at for e in deferred)
         age_s = (time.time() if now is None else now) - oldest

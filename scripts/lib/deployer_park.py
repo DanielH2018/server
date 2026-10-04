@@ -28,7 +28,8 @@ nothing while the change sits merged and unapplied — only the banner names it.
 ``k8s_deferred`` is the same shape for the k8s plane: one line per promoted image bump a BROAD
 tick merged and then could not apply, because the broad arm returns before the k8s arm runs. It
 too leaves ``behind_since`` empty. The banner names it so that a session opening on
-daniel-box — the reader who can clear it with one deploy — is told.
+daniel-box — the reader who can clear it with one deploy — is told. It is moving into the
+``owed`` ledger as a class (#3392), so the banner reads the line marker and that class together.
 
 ``k8s_unapplied`` is that same shape again for the k8s changes this deployer never applies at
 all: a hand-edited role, or one of the forty denylisted ones. Nothing pages on it, by
@@ -77,6 +78,7 @@ from gitops_markers import (
 )
 from gitops_ledger import (
     OWED_K8S_UNAPPLIED,
+    k8s_deferred_entries,
     k8s_unapplied_entries,
     manual_plane_entries,
     owed_line,
@@ -326,13 +328,19 @@ def read_k8s_unapplied_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
 
 
 def read_k8s_deferred_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The host's `k8s_deferred` marker text, or None when it cannot be read.
+    """The host's deferred image bumps in the `k8s_deferred` line format, or None when none.
 
-    Absent and unreadable collapse to the same answer for the reason the readers above give:
-    every caller here only asks "is a bump merged and unapplied?", and for a marker nobody can
-    read the answer is no. `gitops_markers.parse_k8s_deferred` turns the text into entries.
+    The bumps come from the line marker and the `owed` ledger's `k8s_deferred` class, one line
+    per service, through `gitops_ledger.k8s_deferred_entries`, so this banner and
+    monitor-bridge's page agree while the class moves into the ledger (#3392). Absent and
+    unreadable collapse to the same answer for the reason the readers above give: every caller
+    here only asks "is a bump merged and unapplied?", and for a marker nobody can read the
+    answer is no. `gitops_markers.parse_k8s_deferred` turns the text into entries.
     """
-    return _read(state_dir, MARKERS["k8s_deferred"])
+    entries = k8s_deferred_entries(
+        _read(state_dir, MARKERS["k8s_deferred"]), _read(state_dir, MARKERS["owed"])
+    )
+    return "\n".join(f"{e.origin} {e.service} {e.at}" for e in entries) or None
 
 
 def read_contention_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
