@@ -195,6 +195,16 @@ containers_list:
     port: 8080
     use_authelia: true
     auth_tier: one_factor
+    # Callers of roles/k8s/qbittorrent/templates/networkpolicy.yaml.j2, the additive fence on
+    # the WebUI port; the header there says why each caller is listed. The role renders it
+    # itself so `--tags qbittorrent` carries its own fence, hence netpol_role_owned.
+    netpol_role_owned: true
+    netpol_from:
+      - traefik                  # deliberate, not redundant — see the policy's header
+      - sonarr                   # download client, app DB host `wireguard` (compat Service)
+      - radarr                   # same as sonarr
+      - qbittorrent-reach-probe  # tasks/verify.yml pod-CIDR reachability check
+      - homepage                 # dashboard widget, ClusterIP — see the policy's header
   - name: radarr
     platform: k8s
     depends_on: [media-volume]
@@ -663,6 +673,20 @@ containers_list:
     port: 8080
     use_authelia: true
     auth_tier: one_factor
+    # Callers of scrutiny's web UI and API, rendered by netpol-baseline's
+    # networkpolicy-callers.yaml.j2 on this port. The Service is `scrutiny` but the pod label is
+    # `app: scrutiny-web`, so netpol_app names the pod the fence selects; a fence written
+    # against the entry name would select nothing.
+    netpol_app: scrutiny-web
+    netpol_from:
+      - scrutiny-collector  # COLLECTOR_API_ENDPOINT (scrutiny/templates/collector-daemonset.yaml.j2),
+                            # posts SMART data from both nodes
+      - monitor-bridge      # SCRUTINY_URL (monitor-bridge/templates/env-secret.yaml.j2), the
+                            # Kuma disk-health tile
+      - homelab-mcp         # SCRUTINY_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's
+                            # disk-health read tool
+      - homepage            # dashboard widget, ClusterIP: scrutiny's route is Authelia-gated,
+                            # so this is the only grant, and a denial reads as a widget error
   # LAST on purpose, and it must NOT sit in traefik's rollout batch.
   #
   # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a

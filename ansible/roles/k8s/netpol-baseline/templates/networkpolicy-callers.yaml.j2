@@ -1,12 +1,16 @@
 {% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 {# One additive caller fence per containers_list entry carrying `netpol_from`: speedtest,
-   ical-proxy, home-assistant, karakeep and uptime-kuma. Each admits its listed callers on the
-   entry's `port`, and the reason for each caller sits beside it in
+   ical-proxy, home-assistant, karakeep, uptime-kuma and scrutiny. Each admits its listed
+   callers on the entry's `port`, and the reason for each caller sits beside it in
    inventory/host_vars/daniel-box.yml. The macro's header says which fences fit this shape.
+
+   The fence selects, and is named after, the entry's `netpol_app` where the entry sets one
+   and the entry's own name otherwise. scrutiny sets it because its pod label is
+   `scrutiny-web`, not `scrutiny`.
 
    DECIDED: an entry with `netpol_role_owned: true` is skipped here, because its own role
    renders the same NetworkPolicy so that `--tags <svc>` carries the fence (sonarr, radarr,
-   prowlarr). Rendering it here too would apply two objects of one name from two roles, the
+   prowlarr, qbittorrent). Rendering it here too would apply two objects of one name from two roles, the
    last apply winning. netpol-baseline's CLAUDE.md, "Where a per-workload policy lives", has
    the rule.
 
@@ -14,5 +18,5 @@
    reasoning is in networkpolicy-traefik.yaml.j2. #}
 {% for entry in containers_list if 'netpol_from' in entry and not entry.get('netpol_role_owned', false) %}
 ---
-{{ networkpolicy(entry.name, entry.port, entry.netpol_from, netpol_baseline_enforced | bool) }}
+{{ networkpolicy(entry.get('netpol_app', entry.name), entry.port, entry.netpol_from, netpol_baseline_enforced | bool) }}
 {% endfor %}

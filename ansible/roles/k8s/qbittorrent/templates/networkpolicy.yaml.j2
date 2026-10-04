@@ -1,10 +1,13 @@
+{% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
 # Slice 2 of the ingress default-deny.
 #
 # sonarr and radarr reach this pod as the download client at `wireguard:8080` — a compat Service
 # (service-wireguard.yaml.j2) that selects `app: qbittorrent`, carrying the hostname their SQLite
 # databases were seeded with under Docker. The Service name differs; the pod is the same, so a
-# podSelector on `app: qbittorrent` covers it. The PORT is the WebUI port, not container_item.port.
+# podSelector on `app: qbittorrent` covers it. The PORT is the WebUI port, which the macro call
+# below passes explicitly; it equals the entry's `port` today, and test_netpol_from.py fails if
+# the two ever diverge.
 #
 # This rule is PORT-SCOPED, and for the callers below that scoping is the whole grant: the baseline
 # admits none of sonarr, radarr, qbittorrent-reach-probe or homepage, so they reach this pod only through
@@ -37,31 +40,8 @@
 # (roles/k8s/homepage/templates/config/services.yaml.j2). It goes direct rather than through Traefik
 # because qbittorrent's public route is Authelia-gated — so this entry is the whole grant, and
 # fencing it out breaks the widget.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: qbittorrent
-  namespace: {{ k8s_namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      app: qbittorrent
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: traefik
-        - podSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
-                  - sonarr
-                  - radarr
-                  - qbittorrent-reach-probe  # tasks/verify.yml pod-CIDR reachability check
-                  - homepage                 # dashboard widget, ClusterIP — see header
-      ports:
-        - protocol: TCP
-          port: {{ qbittorrent_k8s_webui_port }}
+#
+# The caller list is `netpol_from:` on this role's containers_list entry
+# (inventory/host_vars/daniel-box.yml), each caller's reason beside it. The entry's
+# `netpol_role_owned: true` keeps netpol-baseline from rendering a second copy.
+{{ networkpolicy(container_item.name, qbittorrent_k8s_webui_port, container_item.netpol_from) }}
