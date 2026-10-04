@@ -110,7 +110,7 @@ class Landing:
 
         Exactly the two classifications `health_verdict.health` grades against the deployer's
         own markers: `self_applied` (a deploy-plane change, or a setup role
-        `initial_setup.yml` includes) gates the `tick_state` / `broad_applied_covers` reads,
+        `initial_setup.yml` includes) gates the `tick_state` / `tick_applied` reads,
         and `remaining_setup` gates the branch that asserts the tick applied on this host.
 
         NOT `plane`, which is by construction what the tick does not apply: awaiting a tick
@@ -235,7 +235,7 @@ class Landing:
         False when there is no merge SHA to look for and when the query itself fails — an
         unresolvable SHA is not evidence the tick applied it, and the conservative answer
         keeps the landing on the resume path rather than reporting work as done. Same stance
-        as `broad_applied_covers`, for the same reason.
+        as `tick_applied`, for the same reason.
         """
         if not self.merge_sha:
             return False
@@ -244,31 +244,32 @@ class Landing:
             == 0
         )
 
-    def broad_applied_covers(self, sha: str) -> bool:
-        """Did the deployer RECORD applying a broad plane that contains `sha`?
+    def tick_applied(self, sha: str) -> bool:
+        """Did the tick that crossed `sha` RECORD applying a broad plane?
 
         CONVERGED is not that answer. It says local == origin, which any session's `git merge
         --ff-only` also produces — and once it holds, `next_action()` returns `noop` for every
         later tick, so a setup plane the tick never applied is stranded permanently while this
         landing reports `settled`.
 
-        `broad_applied` is written by `deploy_handlers.handle_broad` only after
-        `deploy_io.deploy_broad` returned, and holds the origin SHA that apply ran at. `sha`
-        being an ancestor of it means A BROAD APPLY RAN AT A COMMIT CONTAINING THIS PR — not
-        that it named this PR's own roles, since `handle_broad` scopes `--tags` to the roles in
-        the range it crossed. That is the right strength for the bug: the tick that crosses this
-        landing's range carries its paths, and the failure this guards against leaves the marker at
-        an OLDER commit, which fails the ancestry test.
+        The answer is the `applied` half of the receipt covering `sha` (`receipt_for`).
+        `deploy_handlers.handle_broad` writes it only after `deploy_io.deploy_broad` returned,
+        so it means "applied", never "attempted". It is not a check that the apply named this
+        PR's own roles: `handle_broad` scopes `--tags` to the range it crossed, which carries
+        this PR's paths. A receipt holding only `manual` roles is a range the tick left to a
+        hand, and reads False.
 
-        False for an absent marker, an unreadable state directory, and a marker whose SHA this
-        checkout cannot resolve. Reporting work as unfinished when it was done costs one hand
-        check; the other direction is the bug.
+        Before #3391 this read the `broad_applied` marker, the LAST plane applied, and passed
+        whenever that apply ran at a commit containing `sha`. A range crossed by another
+        session's ff-merge then read as applied once any later broad tick ran. The receipt is
+        scoped to the one range containing `sha`, so that landing now reads as unapplied.
+
+        False for an absent marker, an unreadable state directory, and a receipt this checkout
+        cannot resolve. Reporting work as unfinished when it was done costs one hand check;
+        the other direction is the bug.
         """
-        marker = self.state("broad_applied")
-        if not marker:
-            return False
-        applied = marker.split()[0]
-        return self.git("merge-base", "--is-ancestor", sha, applied).returncode == 0
+        receipt = self.receipt_for(sha)
+        return bool(receipt and receipt.applied)
 
     def receipt_for(self, sha: str) -> Receipt | None:
         """The deployer's receipt for the tick that crossed `sha`, or None when there is none.
@@ -311,7 +312,7 @@ class Landing:
         return (
             bool(self.self_applied)
             and self.tick_state() == TickState.CONVERGED
-            and not self.broad_applied_covers(self.merge_sha)
+            and not self.tick_applied(self.merge_sha)
         )
 
     def tick_half_remediation(self) -> list[str]:
@@ -373,9 +374,24 @@ class Landing:
             return []
         return [
             "  The tick also converged without recording an apply of this PR "
-            f"(broad_applied: {self.state('broad_applied') or 'absent'})",
+            f"({self.receipt_summary(self.merge_sha)})",
             *self.tick_half_remediation(),
         ]
+
+    def receipt_summary(self, sha: str) -> str:
+        """What the receipt covering `sha` says the tick applied, for a printed line.
+
+        The receipt is JSON, so a line quoting it raw would be unreadable; this names its
+        origin and each plane with its tags.
+        """
+        receipt = self.receipt_for(sha)
+        if receipt is None:
+            return "receipt: none covers this commit"
+        planes = "; ".join(
+            f"{playbook} {','.join(tags) or '(whole play)'}"
+            for playbook, tags in sorted(receipt.applied.items())
+        )
+        return f"receipt {receipt.origin[:8]}: {planes or 'no plane applied'}"
 
     def tick_already_deployed(self, sha: str, tags: list[str]) -> bool:
         """Did the tick's recorded deploy-plane apply already deploy `tags` on THIS host?
@@ -384,38 +400,37 @@ class Landing:
         just applied: queueing behind the next tick's tree lock for the same render only adds a
         way to fail.
 
-        True only when every part of the marker says so: its SHA contains `sha` (the
-        `broad_applied_covers` test), the primary checkout carries `sha` (`merge_applied`,
-        because the health gate renders from the primary when nothing was deployed `--at`),
-        the playbook is `ansible/deploy.yml` (a setup-plane apply deploys no service), and
-        its tag slot covers `tags`: empty means the whole play ran, `narrowed-to-nothing`
-        means no play ran, and a list covers the tags it is a superset of. Those are the
-        semantics `deploy_git.broad_hold_cleared_by` gives the same slot on the deployer's
-        side; land_lib does not import across that boundary, so they are restated here.
+        True only when every part of the receipt says so: one covers `sha` (`receipt_for`),
+        the primary checkout carries `sha` (`merge_applied`, because the health gate renders
+        from the primary when nothing was deployed `--at`), it applied `ansible/deploy.yml`
+        (a setup-plane apply deploys no service), and that plane's tags cover `tags`: empty
+        means the whole play ran, `narrowed-to-nothing` means no play ran, and a list covers
+        the tags it is a superset of. Those are the semantics `deploy_git.broad_hold_cleared_by`
+        gives the same tags on the deployer's side; land_lib does not import across that
+        boundary, so they are restated here.
 
-        The tick applies with no `-e target=`, so the marker speaks only to the host it was
+        The tick applies with no `-e target=`, so the receipt speaks only to the host it was
         written on. The CALLER routes the tags by host and asks this for the local host's.
 
-        DECIDED: this reads the tag slot, which
-        `test_land_reads_a_narrowed_broad_applied_marker.py` says must stay unread -- there.
-        That rule governs a read that FAILS a landing: the slot is scoped to the range the
+        DECIDED: this reads the applied tags, which
+        `test_land_settles_whatever_tags_the_tick_applied` says the verdict must not read.
+        That rule governs a read that FAILS a landing: the tags are scoped to the range the
         tick crossed, not to this PR, so a mismatch there is not evidence the PR went
         unapplied. Here a mismatch falls through to the deploy the landing ran anyway, so the
-        only cost of reading it is one redundant deploy, and the only cost of NOT reading it
-        is skipping a deploy the tick never ran.
+        only cost of reading them is one redundant deploy, and the only cost of NOT reading
+        them is skipping a deploy the tick never ran.
         """
-        if not tags or not self.broad_applied_covers(sha) or not self.merge_applied():
+        if not tags or not self.merge_applied():
             return False
-        # `<sha> <playbook> [<tags>]`, as `deploy_state.record_broad_applied` writes it.
-        parts = (self.state("broad_applied") or "").split()
-        if len(parts) < 2 or parts[1] != "ansible/deploy.yml":
+        receipt = self.receipt_for(sha)
+        applied = receipt.applied.get("ansible/deploy.yml") if receipt else None
+        if applied is None:
             return False
-        slot = parts[2] if len(parts) > 2 else ""
-        if not slot:
+        if not applied:
             return True
-        if slot == "narrowed-to-nothing":
+        if "narrowed-to-nothing" in applied:
             return False
-        return set(tags).issubset(t for t in slot.split(",") if t)
+        return set(tags).issubset(applied)
 
 
 def retry_while_locked(

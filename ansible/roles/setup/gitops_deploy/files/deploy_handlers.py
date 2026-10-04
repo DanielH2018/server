@@ -203,7 +203,7 @@ def handle_broad(
     recorded = (
         deploy_defer.record(tools, state, config, target, pending)
         if pending
-        else deploy_defer.nothing_recorded(state)
+        else deploy_defer.nothing_recorded()
     )
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
@@ -234,7 +234,7 @@ def handle_broad(
             # Before the generic arm: nothing was applied, so this plane must not be held —
             # and the reset undoes the ff-merge, so the manual_plane lines this tick just
             # wrote describe a range that is no longer merged. Take them back with their page,
-            # and with the `broad_applied` an EARLIER plan in this loop wrote (#2382).
+            # and with the receipt an EARLIER plan in this loop wrote (#2382).
             deploy_defer.unrecord(state, origin, recorded)
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:
@@ -280,13 +280,11 @@ def handle_broad(
             return 0 if posted else 1
 
         # Recorded BEFORE the hold is cleared: `clear_broad_hold` may keep a hold naming a
-        # DIFFERENT plane, and this apply still happened. `land.sh` reads it to tell a plane
-        # the tick applied from one it merely fast-forwarded past — `behind_since` empty
-        # cannot (issue #1537). Written per plan and on nothing else: a range whose whole
-        # broad half is a role this deployer cannot apply has no plan, so no marker says an
-        # apply happened — #1537's failure, in reverse. The receipt beside it is what
-        # `land.sh` reads for a narrowing (#3391); `broad_applied` stays until it reads that too.
-        state.record_broad_applied(origin, playbook, tags)
+        # DIFFERENT plane, and this apply still happened. `land.sh` reads the receipt's
+        # `applied` half to tell a plane the tick applied from one it merely fast-forwarded
+        # past — `behind_since` empty cannot (issue #1537). Written per plan and on nothing
+        # else: a range whose whole broad half is a role this deployer cannot apply has no
+        # plan, so no receipt says an apply happened — #1537's failure, in reverse.
         state.record_receipt(origin, target.local, applied={playbook: tags})
         state.clear_broad_hold(playbook, tags)
         deploy_defer.clear_applied(state, playbook, tags)

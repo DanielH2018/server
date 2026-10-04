@@ -19,6 +19,7 @@ import pytest
 import deploy_defer
 import deploy_locks
 from deploy_tick_types import TickTarget
+from _deploy_fakes import receipt_applied
 from gitops_ledger import parse_receipts
 
 # The two SHAs the `tick` fixture bounds a range with; see test_gitops_deploy_main_branches.py
@@ -96,8 +97,8 @@ def test_an_unapplyable_setup_role_fast_forwards_and_records_the_marker(
     assert "ansible/k3s-bringup.yml --tags k3s" in out
     assert len(tick.posts) == 1, "one page per SHA, naming the hand command"
     assert "k3s-bringup.yml" in tick.posts[0]
-    assert gitops_deploy.STATE.broad_applied is None, (
-        "nothing was applied, so the marker that says one was must stay empty"
+    assert not receipt_applied(gitops_deploy.STATE), (
+        "nothing was applied, so the receipt must not say one was"
     )
 
 
@@ -271,9 +272,9 @@ def test_a_mixed_range_applies_the_deploy_plane_and_still_records_the_role(
     assert tick.merges == [ORIGIN]
     assert tick.playbooks[0][-3:] == ["ansible/deploy.yml", "--tags", "sonarr"]
     assert [e.role for e in gitops_deploy.STATE.manual_plane_pending()] == ["k3s"]
-    assert gitops_deploy.STATE.broad_applied == f"{ORIGIN} ansible/deploy.yml sonarr", (
-        "the half that WAS applied still records it"
-    )
+    assert receipt_applied(gitops_deploy.STATE) == {
+        "ansible/deploy.yml": ("sonarr",)
+    }, "the half that WAS applied still records it"
 
 
 def test_a_mixed_range_writes_one_receipt_naming_both_halves(gitops_deploy, tick):
@@ -312,7 +313,7 @@ def test_a_failed_apply_still_records_the_role(gitops_deploy, tick):
     tick.playbook_outcomes = [RuntimeError("boom")]
     gitops_deploy.main(tick.tools)
     assert [e.role for e in gitops_deploy.STATE.manual_plane_pending()] == ["k3s"]
-    assert gitops_deploy.STATE.broad_applied is None
+    assert not receipt_applied(gitops_deploy.STATE)
     assert gitops_deploy.STATE.hold_sha == ORIGIN, "the failed apply is still held"
 
 

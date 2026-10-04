@@ -3,7 +3,7 @@
 A role outside both `roles/setup/` and `roles/k8s/` matches no deploy tag, no
 `_BROAD_SETUP_PREFIXES` entry and no `land_reach` role dir. A change to its tasks then lands on
 master with nothing saying it is unapplied: the landing reports `needs-manual-apply` for
-`initial_setup` alone, and the deployer's `broad_applied` records the same.
+`initial_setup` alone, and the deployer's receipt records the same.
 
 Both mappers derive the setup plane from one shape, `ansible/roles/setup/<role>/`:
 `deploy_changes.role_of` on the deployer side, `land_reach._SETUP_ROLES_DIR` on the

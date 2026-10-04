@@ -40,7 +40,6 @@ EXPECTED_MARKERS = frozenset(
     {
         ("hold", "hold_sha"),
         ("hold_plane", "hold_plane"),
-        ("broad_applied", "broad_applied"),
         ("manual_plane", "manual_plane"),
         ("manual_plane_tags", "manual_plane_tags"),
         ("contention", "contention_since"),

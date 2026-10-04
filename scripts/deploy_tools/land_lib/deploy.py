@@ -227,12 +227,12 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
         ln.finish(
             Verdict.DEFERRED, 75, f"PR #{pr} — landed, not yet applied by the tick"
         )
-    if not ln.broad_applied_covers(sha):
+    if not ln.tick_applied(sha):
         print(
             "  the tick crossed this PR but recorded no broad apply covering it "
-            f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
+            f"({ln.receipt_summary(sha)})"
         )
-        # `broad_applied` is written by `handle_broad` only after the apply RETURNS, so a run
+        # The receipt's `applied` is written by `handle_broad` only after the apply RETURNS, so a run
         # still applying reads exactly like a tick that converged without applying — and a
         # tick that already ff-merged this PR answers CONVERGED, never BEHIND, so the arm
         # above cannot catch it.
@@ -352,7 +352,7 @@ def _skip_tick_applied(ln: Landing, host: str, tags: list[str]) -> bool:
         return False
     say(
         f"{','.join(tags)}: the tick already applied these on {host} "
-        f"({ln.state('broad_applied')}); not deploying them again"
+        f"({ln.receipt_summary(ln.merge_sha)}); not deploying them again"
     )
     return True
 

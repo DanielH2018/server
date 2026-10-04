@@ -15,6 +15,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_lo
 """
 
 import dataclasses
+import json
 
 import deploy_handlers
 import deploy_locks
@@ -106,7 +107,7 @@ def test_a_busy_service_lock_defers_a_broad_apply(
     )
     assert code == 0
     _deferred(tick, state_dir)
-    assert not (state_dir / "broad_applied").exists(), (
+    assert not (state_dir / "receipts.jsonl").exists(), (
         "an apply that never ran was recorded as one; land.sh reads this to believe a plane "
         "is live"
     )
@@ -190,7 +191,7 @@ def test_a_contended_mixed_range_records_no_pending_role(
 
 # A range carrying BOTH broad planes, so `deploy_narrow.plan` gives the loop two plans: the
 # setup plane's `initial_setup.yml`, then the deploy plane's `deploy.yml`. Plan 1 applies and
-# records `broad_applied`; plan 2 is where the busy lock lands.
+# records it in the receipt; plan 2 is where the busy lock lands.
 _TWO_PLANES = ChangeSet(
     broad=True,
     broad_setup=True,
@@ -203,15 +204,15 @@ _TWO_PLANE_PATHS = [
 ]
 
 
-def test_a_contended_second_plan_takes_back_the_first_plans_broad_applied(
+def test_a_contended_second_plan_takes_back_the_first_plans_receipt(
     gitops_deploy, tick, settings, state_dir
 ):
     """CLEAN half: the reset undoes the merge, so no marker may claim that SHA.
 
     Nothing here is pending — `gitops_deploy` is a role this deployer applies — which is why
-    the snapshot cannot hang off the `Recorded` of a tick with no pending role. `land.sh` reads
-    `broad_applied` to tell a plane the tick APPLIED from one it merely fast-forwarded past,
-    and after the reset this tree carries neither.
+    the reverse cannot hang off the `Recorded` of a tick with no pending role. `land.sh` reads
+    the receipt to tell a plane the tick APPLIED from one it merely fast-forwarded past, and
+    after the reset this tree carries neither.
     """
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
     code = deploy_handlers.handle_broad(
@@ -223,25 +224,31 @@ def test_a_contended_second_plan_takes_back_the_first_plans_broad_applied(
     )
     assert code == 0
     assert len(tick.playbooks) == 2, "both plans must have been attempted"
-    assert not (state_dir / "broad_applied").exists(), (
-        "the first plan's apply is still recorded against a SHA the reset took away"
-    )
     assert not (state_dir / "receipts.jsonl").exists(), (
-        "the receipt is the same claim, and the next tick re-crosses the range to write it"
+        "the first plan's apply is still recorded against a SHA the reset took away; the "
+        "next tick re-crosses the range to write it"
     )
     _deferred(tick, state_dir)
 
 
-def test_a_contended_tick_leaves_an_earlier_ticks_broad_applied_alone(
+def test_a_contended_tick_leaves_an_earlier_ticks_receipt_alone(
     gitops_deploy, tick, settings, state_dir
 ):
-    """FLAGGED half: the reverse RESTORES, it does not clear.
+    """FLAGGED half: the reverse drops this origin's receipt, not every receipt.
 
     An earlier tick's record is true — that plane was applied and the tree still carries it —
     and `land.sh` reading it as unapplied would send an operator at a run they already made.
     """
-    earlier = f"{'9' * 40} ansible/initial_setup.yml gitops_deploy"
-    (state_dir / "broad_applied").write_text(earlier)
+    earlier = json.dumps(
+        {
+            "origin": "9" * 40,
+            "base": "8" * 40,
+            "applied": {"ansible/initial_setup.yml": ["gitops_deploy"]},
+            "manual": {},
+        },
+        sort_keys=True,
+    )
+    (state_dir / "receipts.jsonl").write_text(earlier)
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
     deploy_handlers.handle_broad(
         tick.tools,
@@ -250,7 +257,7 @@ def test_a_contended_tick_leaves_an_earlier_ticks_broad_applied_alone(
         _target(),
         _plan(_TWO_PLANES, _TWO_PLANE_PATHS),
     )
-    assert (state_dir / "broad_applied").read_text() == earlier
+    assert (state_dir / "receipts.jsonl").read_text() == earlier
 
 
 def test_a_failed_mixed_apply_still_records_its_pending_role(

@@ -1,20 +1,20 @@
-"""Which planes the `broad_applied` marker gates, and which it cannot reach.
+"""Which planes the tick's receipt gates, and which it cannot reach.
 
-WHY THIS TEST EXISTS. A hand-applied bring-up change leaves `broad_applied` stale, but that cannot
-make land.sh report needs-manual-apply for a change that is already live. `broad_applied` is read
-from exactly two places, `land_lib/deploy.py` and `land_lib/health_verdict.py`, and BOTH sit behind
+WHY THIS TEST EXISTS. A hand-applied bring-up change gets no receipt, but that cannot make
+land.sh report needs-manual-apply for a change that is already live. The receipt's `applied` half
+is read from exactly two places, `land_lib/deploy.py` and `land_lib/health_verdict.py`, and BOTH sit behind
 `ln.self_applied`. A `_BROAD_MANUAL_PREFIXES` path and a setup role outside `initial_setup.yml` are
 both `self_applied is False`, so the marker is never their gate: their `needs-manual-apply` comes
 from `plane_note`, which says a HUMAN still owes the apply and is correct at landing time. The
 `reaches no service tag, but is not done` line is `no_tag_outcome`'s `if ln.plane:` branch, which
-returns before the marker is read. The marker's staleness on those planes is real and inert.
+returns before the receipt is read. Its absence on those planes is real and inert.
 
-WHAT IS ASSERTED is therefore the boundary, both sides of it: the marker decides for the plane
+WHAT IS ASSERTED is therefore the boundary, both sides of it: the receipt decides for the plane
 the deployer applies itself, and is never consulted for the planes it never applies. A future
 change that widened `self_applied` to cover a manual plane would make the issue's claim true,
 and fails here.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_land_manual_plane_is_not_gated_on_broad_applied.py
+Run: uv run pytest scripts/deploy_tools/tests/test_land_manual_plane_is_not_gated_on_the_receipt.py
 """
 
 import pytest
@@ -30,7 +30,7 @@ from deploy_tools.land_lib.outcome import Outcome
 _BRINGUP = ["ansible/k3s-bringup.yml"]
 _UNROUTABLE_ROLE = ["ansible/roles/setup/k3s/defaults/main.yml"]
 # The plane it does apply itself, as `initial_setup.yml --tags renovate_agent`. This is the
-# shape `broad_applied` exists for.
+# shape the receipt's `applied` half exists for.
 _ROUTABLE_ROLE = ["ansible/roles/setup/renovate_agent/files/renovate_agent.py"]
 
 
@@ -56,19 +56,19 @@ def _state_reads(landing, files: list[str]) -> tuple[Outcome, list[str]]:
 
 
 @pytest.mark.parametrize("files", [_BRINGUP, _UNROUTABLE_ROLE])
-def test_a_manual_plane_never_reads_the_marker(landing, files):
+def test_a_manual_plane_never_reads_the_receipt(landing, files):
     outcome, read = _state_reads(landing, files)
     assert land_tags.self_applied(files) is False
-    assert "broad_applied" not in read
+    assert "receipts" not in read
     assert outcome.verdict == "needs-manual-apply"
     assert "is not done" in outcome.detail
 
 
-def test_the_plane_the_deployer_applies_itself_is_gated_on_the_marker(landing):
-    """The other side of the boundary: here an absent marker IS what decides."""
+def test_the_plane_the_deployer_applies_itself_is_gated_on_the_receipt(landing):
+    """The other side of the boundary: here an absent receipt IS what decides."""
     outcome, read = _state_reads(landing, _ROUTABLE_ROLE)
     assert land_tags.self_applied(_ROUTABLE_ROLE) is True
-    assert "broad_applied" in read
+    assert "receipts" in read
     assert outcome.verdict == "needs-manual-apply"
     assert "the tick converged without recording an apply" in outcome.detail
 

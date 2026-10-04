@@ -12,7 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_plane_keeps_the_tick_hal
 
 import pytest
 
-from _land_fakes import MERGE_SHA, Fakes
+from _land_fakes import MERGE_SHA, Fakes, receipt
 from deploy_tools.land_lib import deploy, health_verdict
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -21,7 +21,7 @@ _PLANE = "`ansible-playbook ansible/k3s-bringup.yml --tags backup-health`"
 _COMMAND = "`ansible-playbook ansible/initial_setup.yml --tags renovate_agent`"
 # The deployer's record of a broad apply containing this PR: the tick's half is settled, so
 # the reject half below must print no apply command for it.
-_APPLIED = {"broad_applied": f"{MERGE_SHA} ansible/initial_setup.yml renovate_agent"}
+_APPLIED = receipt({"ansible/initial_setup.yml": ["renovate_agent"]})
 
 
 def _landing_at(landing, fakes):

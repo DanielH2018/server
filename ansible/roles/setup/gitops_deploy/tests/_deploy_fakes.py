@@ -18,6 +18,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from deploy_toolbox import DeployTools
+from gitops_ledger import parse_receipts
 
 LOCAL = "1" * 40
 ORIGIN = "2" * 40
@@ -327,6 +328,14 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         emit_deploy_annotation=scripted.emit_deploy_annotation,
         now=scripted.now,
     )
+
+
+def receipt_applied(state, origin: str = ORIGIN) -> dict[str, tuple[str, ...]] | None:
+    """The planes `origin`'s receipt records as applied, or None when it has no receipt."""
+    for receipt in parse_receipts(state.read("receipts")):
+        if receipt.origin == origin:
+            return receipt.applied
+    return None
 
 
 def fits_budget(kwargs: dict, budget: float) -> bool:

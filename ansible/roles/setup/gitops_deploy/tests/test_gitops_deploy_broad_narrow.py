@@ -15,6 +15,7 @@ import dataclasses
 
 import deploy_narrow
 import deploy_tick_types
+from _deploy_fakes import receipt_applied
 
 ORIGIN = "2" * 40
 # A deploy-plane path: inventory is in `_BROAD_DEPLOY_PREFIXES`, and the tick used to run
@@ -38,10 +39,9 @@ def test_a_narrowed_range_deploys_only_the_tags_it_named(gitops_deploy, tick):
         "radarr,sonarr",
     ]
     assert tick.merges == [ORIGIN]
-    assert (
-        gitops_deploy.STATE.broad_applied
-        == f"{ORIGIN} ansible/deploy.yml radarr,sonarr"
-    )
+    assert receipt_applied(gitops_deploy.STATE) == {
+        "ansible/deploy.yml": ("radarr", "sonarr")
+    }
 
 
 def test_a_refused_range_still_runs_the_whole_play(gitops_deploy, tick, capsys):
@@ -57,7 +57,7 @@ def test_a_refused_range_still_runs_the_whole_play(gitops_deploy, tick, capsys):
         "ansible/deploy.yml",
     ]
     assert "cannot narrow (exit 3)" in capsys.readouterr().out
-    assert gitops_deploy.STATE.broad_applied == f"{ORIGIN} ansible/deploy.yml"
+    assert receipt_applied(gitops_deploy.STATE) == {"ansible/deploy.yml": ()}
 
 
 def test_a_range_that_moves_no_rendered_output_applies_nothing(gitops_deploy, tick):
@@ -71,10 +71,9 @@ def test_a_range_that_moves_no_rendered_output_applies_nothing(gitops_deploy, ti
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.playbooks == []
     assert tick.merges == [ORIGIN]
-    assert (
-        gitops_deploy.STATE.broad_applied
-        == f"{ORIGIN} ansible/deploy.yml narrowed-to-nothing"
-    )
+    assert receipt_applied(gitops_deploy.STATE) == {
+        "ansible/deploy.yml": ("narrowed-to-nothing",)
+    }
 
 
 def test_a_failed_narrowed_apply_holds_the_tags_it_tried(
@@ -125,7 +124,10 @@ def test_a_mixed_range_applies_the_setup_plane_and_then_the_deploy_plane(
         ["--frozen", "ansible-playbook", "ansible/deploy.yml"],
     ]
     assert tick.merges == [ORIGIN]
-    assert gitops_deploy.STATE.broad_applied == f"{ORIGIN} ansible/deploy.yml"
+    assert receipt_applied(gitops_deploy.STATE) == {
+        "ansible/initial_setup.yml": ("gitops_deploy",),
+        "ansible/deploy.yml": (),
+    }
 
 
 def test_a_mixed_range_whose_deploy_half_fails_keeps_the_setup_apply_recorded(
@@ -137,10 +139,9 @@ def test_a_mixed_range_whose_deploy_half_fails_keeps_the_setup_apply_recorded(
     tick.playbook_outcomes = [None, RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools) == 0
     assert (state_dir / "hold_plane").read_text() == "ansible/deploy.yml sonarr"
-    assert (
-        gitops_deploy.STATE.broad_applied
-        == f"{ORIGIN} ansible/initial_setup.yml gitops_deploy"
-    )
+    assert receipt_applied(gitops_deploy.STATE) == {
+        "ansible/initial_setup.yml": ("gitops_deploy",)
+    }
 
 
 def test_a_setup_only_range_plans_no_deploy_plane(gitops_deploy, tick):

@@ -202,25 +202,21 @@ class Recorded(NamedTuple):
         tags_before: role tag -> its `manual_plane_tags` row as it stood BEFORE this tick, or
             None where the role had no row. One entry per role the tick wrote a row for,
             which is every role it was handed — including the ones already pending.
-        broad_applied_before: the `broad_applied` marker as it stood before the tick's plan
-            loop, or None where there was none. Snapshotted whether or not the tick records a
-            role, because the loop writes that marker on a range with nothing pending too.
     """
 
     roles: list[str]
     tags_before: dict[str, frozenset[str] | None]
-    broad_applied_before: str | None
 
 
-def nothing_recorded(state: DeployerState) -> Recorded:
+def nothing_recorded() -> Recorded:
     """What `handle_broad` passes to `unrecord` for a tick that records no role.
 
-    A module constant cannot serve, and that is #2382 in one line: `broad_applied_before`
-    varies per tick, and the range the bug is reported on — an applyable setup plane, then a
-    busy lock in a later plan — is exactly the one with nothing pending. A shared empty
-    snapshot there would leave the stale marker standing.
+    A fresh value per call rather than a module constant, so no caller can share the list.
+    `unrecord` still drops the tick's receipt for it, which is #2382's fix: the range the bug
+    is reported on — an applyable setup plane, then a busy lock in a later plan — is exactly
+    the one with nothing pending.
     """
-    return Recorded([], {}, state.broad_applied)
+    return Recorded([], {})
 
 
 def record(
@@ -248,12 +244,10 @@ def record(
         reverses (#2320). The lines it appended are dropped outright. The rows it WIDENED
         belong to a role an earlier range made pending, so they are put back to the snapshot
         taken here — the union is not invertible, and dropping the line with them would take
-        back a range that is still merged. The `broad_applied` marker is snapshotted here
-        because this runs before the plan loop that writes it (#2382).
+        back a range that is still merged.
     """
     now = time.time()
     origin = target.origin
-    broad_applied_before = state.broad_applied
     before = state.manual_plane_tags_pending()
     tags_before = {
         setup_role_tag(role): before.get(setup_role_tag(role)) for role in roles
@@ -289,7 +283,7 @@ def record(
             state.path("manual_plane"),
         ),
     )
-    return Recorded(recorded, tags_before, broad_applied_before)
+    return Recorded(recorded, tags_before)
 
 
 def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
@@ -300,11 +294,11 @@ def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
     the marker would page for six hours about work no tree carries. The dedupe page is cleared
     with it, but only when it names THIS origin: a page for an earlier SHA is somebody else's.
 
-    THE `broad_applied` MARKER GOES BACK TOO (#2382). A plan that applied before the reset
-    wrote it, and after the reset it names a SHA no tree here carries — which `land.sh` reads
-    as "this tick applied that plane". The plane really was applied, and the next tick
-    re-crosses the whole range and re-applies it idempotently, so the marker the reset leaves
-    behind is a claim about a range that has to be made again.
+    THE RECEIPT GOES TOO (#2382). A plan that applied before the reset recorded it, and after
+    the reset it names a SHA no tree here carries — which `land.sh` reads as "this tick
+    applied that plane". The plane really was applied, and the next tick re-crosses the whole
+    range and re-applies it idempotently, so the receipt the reset leaves behind is a claim
+    about a range that has to be made again.
 
     THE TWO MANUAL-PLANE HALVES NEED DIFFERENT REVERSES (#2320). A role whose line this tick
     appended is cleared outright, and `clear_manual_plane` takes its row with it. A role ALREADY
@@ -318,7 +312,6 @@ def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
         origin: the SHA this tick recorded under.
         recorded: what `record` returned for this tick.
     """
-    state.restore_broad_applied(recorded.broad_applied_before)
     state.drop_receipt(origin)
     cleared = {setup_role_tag(role) for role in recorded.roles}
     for tag in cleared:
