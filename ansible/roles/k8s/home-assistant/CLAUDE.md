@@ -22,7 +22,11 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   macro tests, `sanctioned_writers.yml` and the skills all anchor here, and its ConfigMap
   ships `files/` into the cluster. Edit HA config HERE, and deploy from daniel-box.
 - **Port 8123, no Authelia**, so the companion app works unchanged. MQTT goes via the
-  in-cluster `mosquitto` Service, NUT via daniel-server's LAN `3493` (DOCKER-USER-locked).
+  in-cluster `mosquitto` Service, NUT via the in-cluster `nut` Service (admitted by
+  `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-nut.yaml.j2`).
+- **Pinned to `k8s_primary_node`** with the home-critical chain, beside mosquitto and the
+  VIPs (#3452):
+  `ansible/roles/k8s/home-assistant/templates/deployment.yaml.j2:DECIDED: every Deployment of a home-critical`.
 
 ## Where things are documented
 This file holds the at-a-glance facts, the copy-not-template convention (the trap that

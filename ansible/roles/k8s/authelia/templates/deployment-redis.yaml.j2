@@ -31,6 +31,11 @@ spec:
         app: authelia-redis
         netpol-baseline: enforced
     spec:
+      # Pinned with the rest of the home-critical chain to the node announcing its VIPs
+      # (#3452); the DECIDED marker in roles/k8s/home-assistant/templates/deployment.yaml.j2
+      # has why.
+      nodeSelector:
+        kubernetes.io/hostname: {{ k8s_primary_node }}
       # The same class as authelia itself: an evicted redis logs the whole fleet out of SSO, so
       # it is exactly as critical as the portal in front of it.
 {{ pod_shell(containers_list | tier_priority_class('authelia')) }}

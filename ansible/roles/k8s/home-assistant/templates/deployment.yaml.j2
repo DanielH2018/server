@@ -35,6 +35,17 @@ spec:
         app: home-assistant
         netpol-baseline: enforced
     spec:
+      # DECIDED: every Deployment of a home-critical entry is pinned to k8s_primary_node (#3452).
+      # Traefik, pihole and mosquitto must run on the node that announces their MetalLB VIPs, so
+      # the house already stops working when that node goes down. HA, authelia and its redis,
+      # the crowdsec engine and zigbee2mqtt were free to land on daniel-server, which made it a
+      # second node whose loss broke SSO and home automation. Pinning them costs no availability
+      # the VIP pins had not already spent, and the pin moves with k8s_primary_node. On
+      # 2026-10-04 daniel-box used 11.2Gi of 28.2Gi allocatable, and this pod (881Mi, limit
+      # 2Gi) is the largest that moved. The `home-critical-workloads-pinned-to-the-vip-node`
+      # row in ansible/tests/k8s/_edge_property_rows.py derives the set from `tier`.
+      nodeSelector:
+        kubernetes.io/hostname: {{ k8s_primary_node }}
 {{ pod_shell(containers_list | tier_priority_class('home-assistant')) }}
       # No pod-level runAsUser/fsGroup: the LSIO image starts as root and s6 drops to
       # PUID/PGID itself, chowning /config on the way — same contract as under Docker.
