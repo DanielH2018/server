@@ -23,7 +23,7 @@ import pytest
 import yaml
 
 import deploy_io
-from gitops_ledger import RECEIPT_KEEP, parse_receipts
+from gitops_ledger import OWED_K8S_DEFERRED, RECEIPT_KEEP, parse_owed, parse_receipts
 
 SHA = "c0ffee12" * 5
 ROLE = pathlib.Path(__file__).resolve().parents[1]
@@ -201,7 +201,7 @@ def test_an_operators_clear_removes_the_marker(state):
     assert state.read("contention") is None
 
 
-# ── the k8s_deferred marker ─────────────────────────────────────────────────
+# ── the k8s_deferred class of the owed ledger, and its legacy line marker ──────
 def test_a_deferred_bump_keeps_its_first_seen_stamp_and_its_origin(state):
     """The age monitor-bridge pages on, so a second deferral must not reset it.
 
@@ -214,6 +214,53 @@ def test_a_deferred_bump_keeps_its_first_seen_stamp_and_its_origin(state):
     assert [(e.origin, e.service, e.at) for e in state.k8s_deferred_pending()] == [
         (SHA, "sonarr", 1000.0)
     ]
+    assert [e.subject for e in parse_owed(state.read("owed"), OWED_K8S_DEFERRED)] == [
+        "sonarr"
+    ], "the bump is a ledger class (#3392)"
+    assert state.read("k8s_deferred") is None, (
+        "no writer touches the legacy line marker"
+    )
+
+
+def test_a_legacy_line_folds_into_the_ledger_keeping_the_older_stamp(state):
+    """A pre-ledger deployer's line moves on the first record, with its own origin and stamp.
+
+    Where the ledger already names the service, the OLDER first-seen stamp stands, as in every
+    reader's union: monitor-bridge dates the page from the first deferral.
+    """
+    state.write("k8s_deferred", f"{SHA} sonarr 500\n{SHA} radarr 3000")
+    state.write(
+        "owed",
+        '{"at": 2000, "class": "k8s_deferred", "origin": "b", "subject": "radarr"}',
+    )
+    assert state.record_k8s_deferred("f" * 40, {"jellyfin"}, 9000.0) == ["jellyfin"]
+    assert state.read("k8s_deferred") is None
+    assert [
+        (e.subject, e.origin, e.at)
+        for e in parse_owed(state.read("owed"), OWED_K8S_DEFERRED)
+    ] == [
+        ("radarr", "b", 2000.0),
+        ("sonarr", SHA, 500.0),
+        ("jellyfin", "f" * 40, 9000.0),
+    ]
+
+
+def test_a_key_this_writer_does_not_know_survives_a_record(state):
+    """A newer writer's key is carried, not dropped: the reason the class left the line format."""
+    state.write(
+        "owed",
+        json.dumps(
+            {
+                "at": 1000,
+                "class": "k8s_deferred",
+                "new": 1,
+                "origin": SHA,
+                "subject": "sonarr",
+            }
+        ),
+    )
+    state.record_k8s_deferred("f" * 40, {"sonarr", "radarr"}, 9000.0)
+    assert json.loads(state.read("owed").splitlines()[0])["new"] == 1
 
 
 def test_clearing_one_deferred_bump_leaves_the_others(state):
@@ -221,7 +268,7 @@ def test_clearing_one_deferred_bump_leaves_the_others(state):
     assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
     assert [e.service for e in state.k8s_deferred_pending()] == ["radarr"]
     assert state.clear_k8s_deferred({"radarr"}) == ["radarr"]
-    assert state.read("k8s_deferred") is None
+    assert state.read("owed") is None
 
 
 def test_a_garbled_k8s_deferred_line_is_carried_through_a_clear(state):

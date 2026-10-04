@@ -63,9 +63,11 @@ OWED_MANUAL_PLANE = "manual_plane"
 
 # A promoted image bump a BROAD tick fast-forwarded and ran out of budget to deploy. The
 # subject is the service, under the `--tags` value that selects it. monitor-bridge pages on it
-# past its age gate, so it moves the way `manual_plane` did: every reader learns the class
-# before any writer records it (#3392). Until the writer moves, the deployer records and
-# clears the `k8s_deferred` line marker alone, and `k8s_deferred_entries` reads both.
+# past its age gate, so it moved the way `manual_plane` did: every reader learned the class
+# before the writer recorded it (#3392). The deployer records and clears the class here, and
+# folds any line a pre-ledger deployer left in the `k8s_deferred` line marker into it on its
+# first record or clear (`deploy_state_k8s`). `k8s_deferred_entries` still reads both until
+# the line marker's readers go.
 #
 # Unlike `k8s_unapplied`, a line KEEPS its recorded origin: the deployer clears it on the
 # apply that covers it, so nothing needs the origin to advance.
