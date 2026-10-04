@@ -18,7 +18,8 @@ can move because of it:
     and the shared templates, and a hit maps to that role's tag.
   - `ansible/templates/<f>.j2`: every role whose templates import or include `<f>`,
     following a macro that another macro imports. `narrow_templates` drops a mention inside a
-    Jinja comment, and maps the claim template to the roles declaring `k8s_claims`.
+    Jinja comment, and maps the claim template to the roles declaring `k8s_claims`. An edit
+    that changes only the template's own Jinja comments renders no bytes and maps to nothing.
 
 ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` turns a refusal back into today's
 full run. A missed consumer is a service left silently stale until something unrelated
@@ -397,6 +398,11 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     after = show_at(ctx.ref, path, ctx.cwd)
     if path.startswith(SHARED_TEMPLATES):
         name = path[len(SHARED_TEMPLATES) :]
+        # A comment-only edit renders the same bytes for every importer, so it reaches none
+        # of them — and the census reads it the same way: it leaves no service stale.
+        if narrow_templates.comment_only(show_at(old_ref, path, ctx.cwd), after):
+            ctx.explain(f"narrow: {name} comment-only -> (nothing) via {path}")
+            return set()
         roles: set[str] = set()
         try:
             roles = template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)

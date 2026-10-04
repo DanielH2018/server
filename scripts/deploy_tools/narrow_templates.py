@@ -15,6 +15,12 @@ edges carried the fleet, and both were text the grep matched rather than a rende
 Both refuse on doubt, like every rule `narrow_broad` applies: a template carrying `{% raw %}`
 keeps every hit, and a `k8s_claims` mention anywhere but a role's `defaults/main.yml`, the
 renderer's own tasks or a comment raises `CannotNarrow`.
+
+A third rule (#3459) asks whether the changed template renders differently at all.
+`comment_only` lexes it at both refs with Jinja's own lexer and compares the token streams
+less their comments, so an edit to a `{# ... #}` comment reaches no render and narrows to
+nothing. It refuses on doubt too: a lex error, a `#jinja2:` header or a stream that differs
+under either `trim_blocks` setting keeps the importer mapping.
 """
 
 import sys as _sys
@@ -52,6 +58,53 @@ def _outside_comments(text: str | None, word: str) -> bool:
     if text is None or _JINJA_RAW.search(text):
         return True
     return word in _JINJA_COMMENT.sub("", text)
+
+
+def _render_tokens(text: str, trim_blocks: bool) -> list[tuple[str, str]]:
+    """`text`'s Jinja token stream, less its comments, with adjacent data joined.
+
+    Line numbers are dropped, since a line added inside a comment shifts every later one.
+    Whitespace control on a comment survives the drop: the lexer has already stripped it from
+    the neighbouring data tokens.
+    """
+    import jinja2
+
+    tokens: list[tuple[str, str]] = []
+    env = jinja2.Environment(trim_blocks=trim_blocks)
+    for _line, kind, value in env.lex(text):
+        if kind.startswith("comment"):
+            continue
+        if kind == "data" and tokens and tokens[-1][0] == "data":
+            tokens[-1] = ("data", tokens[-1][1] + value)
+        else:
+            tokens.append((kind, value))
+    return tokens
+
+
+def comment_only(before: str | None, after: str | None) -> bool:
+    """Whether a template changed from `before` to `after` only inside Jinja comments.
+
+    Compared under both `trim_blocks` settings, because the lexer applies it to a comment's
+    end as well, and the importers' render settings are not read here. False whenever either
+    side is missing, cannot be lexed, or opens with a `#jinja2:` header that overrides them.
+    False for identical text too: no edit is not a comment edit, and a caller asking what an
+    unchanged template reaches wants its importers.
+    """
+    if before is None or after is None or before == after:
+        return False
+    if before.startswith("#jinja2:") or after.startswith("#jinja2:"):
+        return False
+    try:
+        import jinja2
+    except ImportError:
+        return False
+    try:
+        return all(
+            _render_tokens(before, trim) == _render_tokens(after, trim)
+            for trim in (False, True)
+        )
+    except jinja2.TemplateSyntaxError:
+        return False
 
 
 def real_mentions(hits: Iterable[str], name: str, ref: str, cwd: Path) -> list[str]:
