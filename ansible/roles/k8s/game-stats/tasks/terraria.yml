@@ -1,14 +1,6 @@
 ---
-# terraria-stats' half of game-stats: its claim and its script ConfigMap. The manifests apply
-# is main.yml's.
-
-- name: Seed the stats DB from the Docker copy
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: terraria-stats
-    volume_claim_name: terraria-stats-data
-    volume_claim_size: "{{ game_stats_terraria_pvc_size }}"
+# terraria-stats' half of game-stats: its script ConfigMap. The manifests apply, and the claim
+# in `k8s_claims`, are main.yml's.
 
 - name: Create the staging directory for terraria-stats
   tags: [config]

@@ -60,6 +60,9 @@ _ARMED_ROLES = frozenset(
         "n8n",
         "valheim",
         "scrutiny",
+        "tdarr",
+        "home-assistant",
+        "game-stats",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.

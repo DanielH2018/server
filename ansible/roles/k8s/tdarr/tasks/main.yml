@@ -2,32 +2,15 @@
 # tdarr holds the GPU for minutes at a time on real files and rewrites the library IN PLACE, so
 # it is the one media service where a wrong mount does lasting damage rather than a failed request.
 
-# Two claims, created BEFORE the workload so the pod has PVCs to mount when it starts.
-- name: Seed the tdarr server database
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: tdarr
-    volume_claim_name: "{{ tdarr_k8s_server_claim }}"
-    volume_claim_storage_class: "{{ tdarr_k8s_storage_class }}"
-    volume_claim_size: "{{ tdarr_k8s_server_size }}"
-
-- name: Seed the tdarr flow and plugin configs
-  tags: [deploy]
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: tdarr
-    volume_claim_name: "{{ tdarr_k8s_configs_claim }}"
-    volume_claim_storage_class: "{{ tdarr_k8s_storage_class }}"
-    volume_claim_size: "{{ tdarr_k8s_configs_size }}"
-
+# Both claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
+# ahead of the workload (#3387).
 - name: Deploy tdarr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
     manifests_service: tdarr
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
     manifests_files:
       - deployment.yaml
       - service.yaml

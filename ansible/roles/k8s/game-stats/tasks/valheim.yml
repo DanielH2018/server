@@ -1,8 +1,5 @@
 ---
 # valheim-stats' half of game-stats: its script ConfigMap. The manifests apply is main.yml's.
-#
-# No volume-claim include, unlike terraria.yml: there is nothing to seed.
-# The PVC is declared in templates/pvc-valheim.yaml.j2 and starts empty.
 
 - name: Create the staging directory for valheim-stats
   tags: [config]

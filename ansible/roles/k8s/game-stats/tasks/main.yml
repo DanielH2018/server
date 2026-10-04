@@ -24,11 +24,14 @@
     name: k8s/manifests
   vars:
     manifests_service: game-stats
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    # The script ConfigMaps are applied from their own staging directories without the role
+    # label, so the prune never selects them.
+    manifests_prune: true
     manifests_rollout: terraria-stats
     manifests_extra_rollouts:
       - name: valheim-stats
     manifests_files:
-      - pvc-valheim.yaml
       - deployment-terraria.yaml
       - service-terraria.yaml
       - deployment-valheim.yaml
@@ -37,8 +40,9 @@
 # Leftovers from #2813, which merged the terraria-stats and valheim-stats roles into this one
 # (#3088). The manifests role prunes only inside its own `manifests_service` directory, so the
 # two old staging directories kept their copies of these same objects, and each old service kept
-# its release record. Keep `/etc/rancher/k3s/manifests/terraria-stats-claims/` and
-# `/etc/rancher/k3s/terraria-stats/`: tasks/terraria.yml still stages both.
+# its release record. `terraria-stats-claims/` is the k8s/volume-claim staging directory, which
+# the shared sweep in k8s/manifests cannot reach because it is keyed on `game-stats` (#3387).
+# Keep `/etc/rancher/k3s/terraria-stats/`: tasks/terraria.yml still stages it.
 - name: Remove the staged manifests and release records the pre-#2813 roles left behind
   tags: [config]
   ansible.builtin.file:
@@ -47,6 +51,7 @@
   loop:
     - /etc/rancher/k3s/manifests/terraria-stats
     - /etc/rancher/k3s/manifests/valheim-stats
+    - /etc/rancher/k3s/manifests/terraria-stats-claims
     - /var/lib/homelab/k8s-releases.d/terraria-stats.json
     - /var/lib/homelab/k8s-releases.d/terraria-stats.previous.json
     - /var/lib/homelab/k8s-releases.d/valheim-stats.json

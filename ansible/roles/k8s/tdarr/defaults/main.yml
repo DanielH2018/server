@@ -57,6 +57,15 @@ tdarr_k8s_configs_size: 1Gi
 # point. B2 Reachable is the readout for whether its incrementals strain B2's TRANSACTION cap.
 tdarr_k8s_storage_class: longhorn
 
+# The claims k8s/manifests renders and applies for this role, ahead of the workload.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ tdarr_k8s_server_claim }}"
+    storage_class: "{{ tdarr_k8s_storage_class }}"
+    size: "{{ tdarr_k8s_server_size }}"
+  - name: "{{ tdarr_k8s_configs_claim }}"
+    storage_class: "{{ tdarr_k8s_storage_class }}"
+    size: "{{ tdarr_k8s_configs_size }}"
+
 # ── the media mount ─────────────────────────────────────────────────────────────────────────
 # READ-WRITE, unlike jellyfin's two read-only mounts, and that asymmetry is the point: tdarr
 # rewrites library files IN PLACE. It is the one media consumer that must be able to.

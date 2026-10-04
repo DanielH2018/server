@@ -45,8 +45,8 @@ claims are unchanged.
 
 ## terraria-stats
 
-- **`terraria-stats-data`** is 1Gi, created by `k8s/volume-claim` and seeded once at cutover
-  from the Docker-era DB, on the **weekly** B2 backup tier. It holds the all-time playtime
+- **`terraria-stats-data`** is 1Gi, a `k8s_claims` entry in `defaults/main.yml`, seeded once at
+  cutover from the Docker-era DB, on the **weekly** B2 backup tier. It holds the all-time playtime
   SQLite DB — irreplaceable, since Loki's ~28-day window can't fully reconstruct it.
 - **What is Terraria's own** is `parse_line`, `StatsState`, and `Store`'s schema half — the
   `players` schema, `load_state` and `save`, over a `stats_lib.SqliteStore` subclass.
@@ -64,9 +64,8 @@ Added 2026-08-13 with the Valheim reactivation, the same shape as terraria-stats
 
 - **Reads:** `{container="valheim"}` from `loki-homelab`. **Dashboard:**
   `Apps/valheim-stats.json` → "Valheim — Player Stats".
-- **Storage:** `valheim-stats-data` (`longhorn`, **backed up**), declared by
-  `templates/pvc-valheim.yaml.j2` rather than `k8s/volume-claim`, since there was nothing to
-  seed. Loki keeps 31 days; after that this DB is the only copy of the totals.
+- **Storage:** `valheim-stats-data` (`longhorn`, **backed up**), a `k8s_claims` entry
+  in `defaults/main.yml`, created empty since there was nothing to seed. Loki keeps 31 days; after that this DB is the only copy of the totals.
 - **What is Valheim's own** is `parse_line`, `StatsState`, and `Store`'s schema half — the
   `players` + `steam_names` schemas, `load_state` and `save`, over a `stats_lib.SqliteStore`
   subclass.
