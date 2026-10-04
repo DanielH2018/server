@@ -126,6 +126,10 @@ RETIRED: frozenset[str] = frozenset(
         # The staging gate's restricted ssh identity. Its public halves stay in the hypervisor
         # role's files/staging-gate-retired/ so every host withdraws the authorization.
         "staging_gate_ssh_key",
+        # The self-hosted Healthchecks' admin password and Django signing key, retired with
+        # the app (#2806, #3499).
+        "healthchecks_password",
+        "healthchecks_secret_key",
     }
 )
 

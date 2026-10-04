@@ -257,6 +257,25 @@ zigbee_ext_pan_id: [221, 187, 17, 34, 51, 68, 85, 102]
 # qualified name on every route that follows, for no isolation this homelab needs.
 k8s_namespace: homelab
 
+# k8s services whose role has been deleted from the repo, and whose live objects every deploy
+# of the k8s play tears down (ansible/tasks/k8s_retire.yml). Deleting a role removes nothing
+# live: `kubectl apply` never deletes, and the role's own prune cannot run once the role is
+# gone. Each entry deletes every object its staged manifest directories declare, PVCs
+# included, so the Longhorn volume goes with its claim. Then it removes those directories and
+# the service's release and render records. A run that finds nothing reports `ok`.
+#
+#   name:      the retired role's `manifests_service`
+#   dirs:      staged directories under /etc/rancher/k3s/manifests/; default `[name]`. List a
+#              reserved sibling (`<name>-netpol`, `<name>-claims`) by hand: a `<name>-*` glob
+#              would match another live service's directory.
+#   namespace: for documents that carry none, such as a claim; default `k8s_namespace`
+#
+# An entry stays until the deploy that removes its objects has run; leaving it longer costs
+# one stat per directory per deploy. ansible/tests/deploy/test_k8s_retired_services.py
+# refuses an entry that is still a role or a containers_list entry.
+k8s_retired_services:
+  - name: healthchecks  # self-hosted Healthchecks, retired in #2806; teardown #3499
+
 # The cluster's k3s server / control-plane node. Every nodeSelector pin, node-affinity
 # preference and `hostvars[...]` lookup that means "this cluster's primary node" reads this
 # rather than the literal hostname, so a second cluster can be deployed to from the same

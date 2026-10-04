@@ -151,6 +151,20 @@
         - containers_list | length > 0
       tags: always
 
+    # Before the batches, so a retired service's IngressRoutes and claim are gone before any
+    # role applies. Gated like the namespace apply: it is a write, and a host with no k8s
+    # workloads has no staged manifests to read.
+    - name: Tear down retired k8s services
+      ansible.builtin.include_tasks: tasks/k8s_retire.yml
+      loop: "{{ k8s_retired_services | default([]) }}"
+      loop_control:
+        loop_var: retired_service
+        label: "{{ retired_service.name }}"
+      when:
+        - not k8s_dry_run | bool
+        - containers_list | length > 0
+      tags: always
+
     - name: Start with an empty rollout queue
       # Facts persist for the host across plays and across a resumed run, so a queue left over
       # from an earlier play would be drained here against workloads this play never touched.
