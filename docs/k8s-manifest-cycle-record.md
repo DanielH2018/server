@@ -101,7 +101,7 @@ allowlist, so they are never pruned (guarded by `ansible/tests/deploy/test_manif
 registry, bazarr, littlelink and texbrain are armed. An orphan whose staged file was deleted
 BEFORE its role was armed — including the claude-otel-ingest IngressRoute #1076 names — never
 receives the label and stays invisible to the selector; it still needs one manual
-`kubectl delete`, which is why a role is armed only after its orphans are cleared.
+`kubectl delete`. Arming a role with such an orphan is safe, because the prune cannot see it.
 `manifest-prune-check.sh` keeps watching every role, armed or not, until a real deploy has been
 seen pruning a real orphan.
 

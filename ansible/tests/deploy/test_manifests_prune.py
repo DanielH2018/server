@@ -20,9 +20,12 @@ landing in the fixed allowlist.
 Run: uv run pytest ansible/tests/deploy/test_manifests_prune.py
 """
 
+import sys
+
 import pytest
 from _role_census import role_dirs
 from _helpers import (
+    REPO,
     ROLES,
     jinja_env,
     load_tasks,
@@ -33,13 +36,17 @@ from _k8s_render import rendered_texts
 from lib import yaml_fast
 from role_label import ROLE_LABEL, homelab_role_label
 
+sys.path.insert(0, str(REPO / "ansible/roles/setup/k3s/files"))
+
+from manifest_declares import declared_in
+
 _MANIFESTS_TASKS = ROLES / "k8s" / "manifests" / "tasks" / "main.yml"
 _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
 
 # Kinds that must never be pruned by this mechanism — see the module docstring.
 _FORBIDDEN_PRUNE_KINDS = ("Secret", "PersistentVolumeClaim")
-# The roles armed so far. A role arming the prune is added here on purpose, once its
-# pre-existing unlabelled orphans are cleared.
+# The roles armed so far. A role arming the prune is added here on purpose, so the census
+# below fails on an arming nobody meant.
 _ARMED_ROLES = frozenset({"registry", "bazarr", "littlelink", "texbrain"})
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
 _RENDER_TASKS = (
@@ -249,6 +256,27 @@ def test_another_roles_label_is_flagged() -> None:
         homelab_role_label(held, "widget")
 
 
+def _env_value_line(value: str) -> str:
+    text = homelab_role_label(
+        f"kind: ConfigMap\nmetadata:\n  name: w\ndata:\n  v: {value}\n", "widget"
+    )
+    return next(line for line in text.splitlines() if line.startswith("  v:"))
+
+
+@pytest.mark.parametrize("value", ['"y"', '"N"', '"1e3"', '"0o17"', '"0b1"', '"on"'])
+def test_a_string_kubectl_reads_as_a_number_or_bool_is_written_quoted(
+    value: str,
+) -> None:
+    """kubectl's go-yaml v2 resolves these plain scalars to bools and numbers; PyYAML does not."""
+    assert _env_value_line(value) == f"  v: {value}"
+
+
+def test_an_ordinary_string_and_the_keys_stay_plain() -> None:
+    assert _env_value_line("plain-text") == "  v: plain-text"
+    text = homelab_role_label("kind: Service\nmetadata:\n  name: w\n", "widget")
+    assert "kind: Service" in text.splitlines()
+
+
 def _without_role_label(doc: dict) -> dict:
     labels = dict(doc["metadata"]["labels"])
     labels.pop(ROLE_LABEL)
@@ -262,7 +290,8 @@ def test_every_armed_render_is_labelled_and_otherwise_unchanged() -> None:
     """The armed roles' real renders, passed through the filter the wrapper calls.
 
     Every document gains the label and nothing else: a Deployment's selector and pod-template
-    labels, a quoted string and a multi-line value all read back as rendered. bazarr's claim
+    labels, a quoted string and a multi-line value all read back as rendered, and the host's
+    stdlib reader declares the same objects from the new bytes. bazarr's claim
     is the named member: the selector filters the apply, so an unlabelled claim would stop
     being applied.
     """
@@ -272,7 +301,10 @@ def test_every_armed_render_is_labelled_and_otherwise_unchanged() -> None:
             continue
         seen.add((role, name))
         before = [d for d in yaml_fast.safe_load_all(text) if d is not None]
-        after = list(yaml_fast.safe_load_all(homelab_role_label(text, role)))
+        labelled = homelab_role_label(text, role)
+        after = list(yaml_fast.safe_load_all(labelled))
+        # manifest-prune-check.sh reads the staged bytes by position, without PyYAML.
+        assert declared_in(labelled) == declared_in(text), f"{role}/{name}"
         assert len(after) == len(before), f"{role}/{name} gained or lost a document"
         for old, new in zip(before, after, strict=True):
             assert new["metadata"]["labels"][ROLE_LABEL] == role, f"{role}/{name}"

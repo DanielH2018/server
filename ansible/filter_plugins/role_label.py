@@ -22,9 +22,33 @@ No Ansible import, so the tests call the same function the playbook runs. Ansibl
 filter's `ValueError` in its own error, which fails the render task before any apply.
 """
 
+import re
+
 import yaml
 
 ROLE_LABEL = "homelab/role"
+
+# Plain scalars kubectl's YAML reader (go-yaml v2) resolves to something other than a string.
+# PyYAML quotes a string only when its OWN resolver would misread it, and go-yaml's is wider:
+# `y`/`n` are bools there, and `1e3`, `0o17` and `0b1` are numbers. Dumped plain, a quoted
+# env value "y" would reach the API server as `true` and fail the apply. Every string matching
+# one of these is written double-quoted instead.
+_GO_YAML_NON_STRING = re.compile(
+    r"""
+    (?: y|Y|yes|Yes|YES|n|N|no|No|NO
+      | true|True|TRUE|false|False|FALSE
+      | on|On|ON|off|Off|OFF
+      | null|Null|NULL|~
+      | [-+]?(?:\.[0-9]+|[0-9][0-9_]*(?:\.[0-9_]*)?)(?:[eE][-+]?[0-9]+)?
+      | [-+]?0[xX][0-9a-fA-F_]+
+      | [-+]?0[oO][0-7_]+
+      | [-+]?0[bB][01_]+
+      | [-+]?\.(?:inf|Inf|INF)
+      | \.(?:nan|NaN|NAN)
+    )
+    """,
+    re.VERBOSE,
+)
 
 
 class _Dumper(yaml.SafeDumper):
@@ -32,7 +56,12 @@ class _Dumper(yaml.SafeDumper):
 
 
 def _represent_str(dumper: yaml.SafeDumper, data: str) -> yaml.ScalarNode:
-    style = "|" if "\n" in data else None
+    if "\n" in data:
+        style = "|"
+    elif _GO_YAML_NON_STRING.fullmatch(data):
+        style = '"'
+    else:
+        style = None
     return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=style)
 
 
