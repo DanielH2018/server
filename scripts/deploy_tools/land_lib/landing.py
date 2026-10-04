@@ -33,6 +33,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from gitops_ledger import Receipt, parse_receipts
+from gitops_markers import MARKERS
 
 BRANCH = "master"
 
@@ -286,7 +287,9 @@ class Landing:
         no covering receipt, so the caller keeps the whole-role tag — the answer that is blunt
         but never wrong.
         """
-        for receipt in parse_receipts(self.state("receipts")):
+        # The basename, not the `MARKERS` key: `state` reads `<deployer_state>/<name>` as
+        # given, and the key read a file named `receipts` that the tick never writes.
+        for receipt in parse_receipts(self.state(MARKERS["receipts"])):
             if self.git("merge-base", "--is-ancestor", sha, receipt.origin).returncode:
                 continue
             if (
