@@ -44,7 +44,6 @@ def _problems(k8s_deferred=None, now=1000.0):
         read_contention=lambda: None,
         read_k8s_deferred=lambda: k8s_deferred,
         read_k8s_unapplied=lambda: None,
-        read_manual_tags=lambda: None,
     )
 
 
@@ -96,6 +95,5 @@ def test_a_raising_deferred_read_keeps_the_lines_gathered_before_it():
         read_contention=lambda: None,
         read_k8s_deferred=boom,
         read_k8s_unapplied=lambda: None,
-        read_manual_tags=lambda: None,
     )
     assert any("CLAUDE.md" in line for line in lines)

@@ -877,9 +877,10 @@ stay).
     other session's landing 4 from `deploy.sh` until a hand pulls the primary checkout — where
     a pending role blocks nobody. They are independent faults, so specificity does not order
     them and urgency does. The pod reads
-    it off the same `:ro` state mount as `behind_since`, and parses it with
-    `gitops_markers.parse_manual_plane` — its own copy of the deployer's module, since it
-    cannot import this tree (*One marker module, shipped from one source* below).
+    it off the same `:ro` state mount as `behind_since`, from the `owed` ledger's
+    `manual_plane` class, and parses it with `gitops_ledger.manual_plane_entries` — its own
+    copy of the deployer's module, since it cannot import this tree (*One marker module,
+    shipped from one source* below).
     The SessionStart banner reads the marker too, through `lib.deployer_park`, and names a
     pending role from the moment it is recorded rather than after six hours (issue #1774): the
     monitor pages, where the banner only tells the sessions that did not land the change.
@@ -1189,20 +1190,19 @@ marker, `"<origin_sha> <service> <unix_ts>"`. `k8s_unapplied` is a class of the 
 an exact field count and skips anything else, and the monitor-bridge, `deploy_ui` and
 `renovate_agent` roles each redeploy their copy on their own schedule. A field a new deployer appended
 therefore read as no pending work in a reader that had not redeployed, which is why
-`manual_plane_tags` is a sidecar. `gitops_ledger.parse_owed` ignores keys it does not know,
+`manual_plane_tags` was a sidecar. `gitops_ledger.parse_owed` ignores keys it does not know,
 and every writer carries them through a rewrite. `k8s_unapplied` moved first because nothing
 pages on it.
 
-**`manual_plane` is the second class, and its readers shipped before its writer.** A line
-carries `playbook` and `tags` beside the four common keys, so the sidecar folds into the line.
-monitor-bridge pages on the class, so it carries a generated `gitops_ledger.py` copy, and
-`gitops_ledger.merge_manual_plane` unions the class with the line marker for that page, the
-SessionStart banner and the deployer itself. A role pending in both sources takes the older
-stamp, and its tags union unless either side needs the whole role. A line missing `playbook`
-or carrying malformed `tags` still pages, for the whole role. The deployer writes only the
-ledger. Its first write folds any legacy line and sidecar row into the ledger and removes both
-files, keeping a legacy line it cannot parse (`DeployerState._fold_manual_plane_lines`). The
-legacy readers and the two `MARKERS` entries go once no host can hold a legacy file.
+**`manual_plane` is the second class, and it moved in three steps.** A line carries
+`playbook` and `tags` beside the four common keys, which replaced the `manual_plane` line
+marker and its `manual_plane_tags` sidecar. monitor-bridge pages on the class, so it carries a
+generated `gitops_ledger.py` copy. The readers shipped first and merged the class with the
+line marker (#3477). The writer moved next, and its first write folded any legacy line into
+the ledger (#3488). Once daniel-box held neither legacy file, #3487 deleted the line-marker
+readers, the fold and both `MARKERS` entries, and `tasks/install.yml` reaps the two basenames.
+Every reader calls `gitops_ledger.manual_plane_entries`. A line missing `playbook` or carrying
+malformed `tags` still pages, for the whole role.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
@@ -1334,7 +1334,7 @@ same names absent, which reaps the units and the crons they replaced on a non-de
   `ansible/tests/setup/test_github_interaction_limit.py` drive each of those branches.
 
 **One marker module, shipped from one source.** `files/gitops_markers.py` holds the state
-directory, the `MARKERS` table and the parsers for the `behind_since`, `manual_plane` and
+directory, the `MARKERS` table and the parsers for the `behind_since`, `k8s_deferred` and
 `contention_since` line formats, plus the two clear commands every surface prints.
 `deploy_state` imports it. Until issue #2063 each reader restated the directory and
 basenames, and three parsed the same lines independently. Now every reader uses this file.
@@ -1751,8 +1751,8 @@ reset undoes the ff-merge, which is what keeps `local..origin` carrying the rang
 tick. `tests/test_gitops_deploy_lock_contention.py` drives all three handlers.
 
 **Every marker the tick wrote about that merge goes back with it**, through
-`deploy_defer.unrecord`. Three: the `manual_plane` line this tick appended, the
-`manual_plane_tags` row it widened (#2320), and this origin's receipt, which an earlier plan in
+`deploy_defer.unrecord`. Three: the `manual_plane` ledger line this tick appended, the
+`tags` it widened on a line already there (#2320), and this origin's receipt, which an earlier plan in
 the same loop wrote (#2382). That receipt claimed a SHA the reset took away, and `land.sh` reads
 it to tell a plane the tick applied from one it merely fast-forwarded past. Only this origin's
 receipt goes: an earlier tick's receipt is still true. The promoted bumps a narrowed deploy

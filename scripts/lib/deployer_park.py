@@ -21,8 +21,8 @@ path, so ``behind_since`` ages toward a six-hour page sized for a dirty tree whi
 legitimate holder is a deploy no longer than thirty minutes. Same three readers
 as ``manual_plane`` below.
 
-The second marker is ``manual_plane``, one line per setup role the tick fast-forwarded past and
-cannot apply itself. A recorded role leaves ``behind_since`` empty, so the park half above says
+The second is the ``owed`` ledger's ``manual_plane`` class, one line per setup role the tick
+fast-forwarded past and cannot apply itself. A recorded role leaves ``behind_since`` empty, so the park half above says
 nothing while the change sits merged and unapplied — only the banner names it.
 
 ``k8s_deferred`` is the same shape for the k8s plane: one line per promoted image bump a BROAD
@@ -74,14 +74,11 @@ from gitops_markers import (
     manual_plane_clear_cmd,
     maximal_apply_warning,
     parse_k8s_deferred,
-    format_manual_plane_tags,
-    parse_manual_plane,
-    parse_manual_plane_tags,
 )
 from gitops_ledger import (
     OWED_K8S_UNAPPLIED,
     k8s_unapplied_entries,
-    merge_manual_plane,
+    manual_plane_entries,
     owed_line,
     parse_owed,
 )
@@ -155,44 +152,15 @@ def park_note(marker: str | None, now: float | None = None) -> str:
     )
 
 
-def _manual_plane(state_dir: str):
-    """The pending setup roles across the line marker and the `owed` ledger, and their tags.
-
-    `gitops_ledger.merge_manual_plane` decides both, so this banner and monitor-bridge's page
-    agree on every role and every tag while the class moves into the ledger (#3392).
-    """
-    return merge_manual_plane(
-        parse_manual_plane(_read(state_dir, MARKERS["manual_plane"])),
-        parse_manual_plane_tags(_read(state_dir, MARKERS["manual_plane_tags"])),
-        _read(state_dir, MARKERS["owed"]),
-    )
-
-
 def read_manual_plane_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The host's pending setup roles in the `manual_plane` line format, or None when none.
+    """The host's `owed` ledger text, which holds the pending setup roles, or None when unread.
 
-    The roles come from the line marker and the ledger's `manual_plane` class, one line per
-    role. Absent and unreadable collapse to the same answer, for the reason
-    `read_behind_marker` gives: every caller here only asks "is a role pending?", and for a
-    marker nobody can read the answer is no. `gitops_markers.parse_manual_plane` turns the
-    text into entries.
+    The `manual_plane` class lives in the `owed` ledger (#3392). Absent and unreadable collapse
+    to the same answer, for the reason `read_behind_marker` gives: every caller here only asks
+    "is a role pending?", and for a ledger nobody can read the answer is no.
+    `gitops_ledger.manual_plane_entries` turns the text into entries and their tags.
     """
-    entries, _ = _manual_plane(state_dir)
-    return (
-        "\n".join(f"{e.origin} {e.playbook} {e.role} {e.at}" for e in entries) or None
-    )
-
-
-def read_manual_plane_tags_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The narrowest tags each pending role needs, in the `manual_plane_tags` format.
-
-    Absent and unreadable collapse to the same answer for the reason the reader above gives,
-    and that answer is the safe one here: a caller with no narrowing prints the whole-role
-    tag, which is what every surface printed before the sidecar existed.
-    `gitops_markers.parse_manual_plane_tags` turns the text into the mapping.
-    """
-    _, tags = _manual_plane(state_dir)
-    return format_manual_plane_tags(tags)
+    return _read(state_dir, MARKERS["owed"])
 
 
 # How long a contention streak may run before the banner names it: the same number
@@ -215,7 +183,7 @@ def _age_phrase(seconds):
     return f"{int(seconds // 3600)}h"
 
 
-def manual_plane_lines(marker, now, tags_marker=None):
+def manual_plane_lines(owed, now):
     """One banner line per setup role the deployer merged but cannot apply, or [].
 
     The tick fast-forwards a range carrying `roles/setup/k3s/` or `roles/setup/common/` and
@@ -233,10 +201,10 @@ def manual_plane_lines(marker, now, tags_marker=None):
     that landed the change: `land.sh` printed the apply command to whoever merged it, and the
     banner is the only place the fact reaches anyone else.
 
-    `tags_marker` is the `manual_plane_tags` sidecar, so the way out names the narrowest tags
-    the change needs rather than the whole-role tag (#2307). It is READ, not re-derived: an
-    isolated worktree cannot ask git about the primary checkout. An absent sidecar reads as
-    the role tag.
+    `owed` is the deployer's ledger text. Each role's `tags` key lets the way out name the
+    narrowest tags the change needs rather than the whole-role tag (#2307). It is READ, not
+    re-derived: an isolated worktree cannot ask git about the primary checkout. A role with no
+    tags reads as the role tag.
 
     The command carries `maximal_apply_warning` where it arms something gated (#2345). The
     journal line, the Discord alert and `land.sh` all warn through `deploy_remediation`, which
@@ -245,8 +213,8 @@ def manual_plane_lines(marker, now, tags_marker=None):
     banner was the one place printing `--tags k3s` with nothing beside it.
     """
     lines = []
-    narrow = parse_manual_plane_tags(tags_marker) if tags_marker else {}
-    for e in sorted(parse_manual_plane(marker), key=lambda e: e.at):
+    entries, narrow = manual_plane_entries(owed)
+    for e in entries:
         selected = narrow.get(e.role) or {e.role}
         tags = ",".join(sorted(selected))
         warning = maximal_apply_warning(e.role, selected)

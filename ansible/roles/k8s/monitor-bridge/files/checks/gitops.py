@@ -30,10 +30,8 @@ from gitops_markers import (
     parse_behind,
     parse_contention,
     parse_k8s_deferred,
-    parse_manual_plane,
-    parse_manual_plane_tags,
 )
-from gitops_ledger import merge_manual_plane
+from gitops_ledger import manual_plane_entries
 from verdicts.service import gitops_alive
 
 
@@ -47,9 +45,9 @@ def _apply_and_clear(pending, narrow) -> str:
     names arm something gated — the shape `deployer_park.manual_plane_lines` prints.
 
     Args:
-      pending: the `parse_manual_plane` entries, which may hold several lines for one role.
-        The OLDEST line per role decides its playbook, matching the age this page fired on.
-      narrow: the `parse_manual_plane_tags` rows, by role.
+      pending: the `manual_plane_entries` entries. Should one role appear twice, the OLDEST
+        entry decides its playbook, matching the age this page fired on.
+      narrow: the tags each role needs, by role, from `manual_plane_entries`.
     """
     oldest: dict[str, object] = {}
     for entry in sorted(pending, key=lambda e: e.at):
@@ -81,10 +79,8 @@ def gitops_status(
     now: float | None = None,
     max_behind_s: float | None = None,
     hold_plane: str | None = None,
-    manual_plane: str | None = None,
     contention_since: str | None = None,
     max_contention_s: float | None = None,
-    manual_plane_tags: str | None = None,
     k8s_deferred: str | None = None,
     owed: str | None = None,
 ) -> tuple[bool, str]:
@@ -105,10 +101,10 @@ def gitops_status(
 
     The last is the signal a park used to carry. The deployer no longer holds a whole range
     back for a role only a hand can apply — that parked every other session's landing too — so
-    it merges, records the role in `manual_plane`, and this pages once the OLDEST pending role
+    it merges, records the role in the `owed` ledger's `manual_plane` class, and this pages once the OLDEST pending role
     is older than the same threshold. Age-gated for the same reason the behind arm is: a role
     recorded ten minutes ago is an ordinary merge, not a fault. Its clear names each role and,
-    from the `manual_plane_tags` row, the `--applied` tags a narrowed apply needs — the same
+    from the ledger line's `tags` key, the `--applied` tags a narrowed apply needs — the same
     derivation the SessionStart banner prints (#2349).
 
     It is reported LAST, behind rather than ahead of the behind arm, and the two are
@@ -145,9 +141,8 @@ def gitops_status(
         nobody has deployed blocks no other session's landing. It is here at all because the
         deferring tick MERGED the bump, so `behind_since` is empty and no later tick's range
         carries it — the failure mode `manual_plane` closed one plane over (#2449).
-      owed: the deployer's `owed` ledger, or None. Its `manual_plane` class pages exactly as
-        the line marker does, merged with it role by role (`gitops_ledger.merge_manual_plane`),
-        so the writer can move into the ledger without a window where nothing pages (#3392).
+      owed: the deployer's `owed` ledger, or None. Its `manual_plane` class is the setup-role
+        arm above (#3392); `gitops_ledger.manual_plane_entries` reads it.
     """
     max_behind_s = cfg.GITOPS_BEHIND_MAX_S if max_behind_s is None else max_behind_s
     max_contention_s = (
@@ -210,11 +205,7 @@ def gitops_status(
                 "— deploy deferred (broad change / dirty tree); run the manual deploy on the "
                 "host" % (age_s / 3600, sha[:8], max_behind_s / 3600)
             )
-    pending, narrow = merge_manual_plane(
-        parse_manual_plane(manual_plane),
-        parse_manual_plane_tags(manual_plane_tags),
-        owed,
-    )
+    pending, narrow = manual_plane_entries(owed)
     if pending:
         oldest = min(e.at for e in pending)
         age_s = (time.time() if now is None else now) - oldest
@@ -273,7 +264,7 @@ def _read_gitops_marker(cfg: Config, name: str) -> str | None:
     """One marker's text, or None when it is absent.
 
     Any other failure to read it raises, and `gates._evaluate` reports DOWN "check error". A
-    `hold_sha` or `manual_plane` the check cannot read is NOT "no hold" — the rule
+    `hold_sha` or `hold_plane` the check cannot read is NOT "no hold" — the rule
     `deploy_state.py` states for an unreadable state directory.
     """
     try:
@@ -286,14 +277,12 @@ def _read_gitops_marker(cfg: Config, name: str) -> str | None:
 def _read_decodable_lines(cfg: Config, name: str) -> str | None:
     """A marker's text with every line that does not decode dropped, or None when absent.
 
-    Two markers tolerate a decode error. The `manual_plane_tags` sidecar only narrows the
-    remediation a page prints; a role with no line falls back to the whole-role tag. The
-    `owed` ledger holds a class nothing pages on beside `manual_plane`, and one torn byte in
-    a line about either must not blank the whole check. Raising on either turned
-    `gitops_status` into DOWN "check error" every cycle, masking the hold, diverged, behind and
-    contention arms this monitor exists to raise (#2371). The skip is per line, as in every
-    parser in `gitops_markers`: a torn `k3s kube\\xffconfig` still splits into two fields, and
-    printing its tag would select nothing.
+    The `owed` ledger tolerates a decode error. It holds a class nothing pages on beside
+    `manual_plane`, and one torn byte in a line about either must not blank the whole check.
+    Raising on it turned `gitops_status` into DOWN "check error" every cycle, masking the hold,
+    diverged, behind and contention arms this monitor exists to raise (#2371). The skip is per
+    line, as in every parser in `gitops_markers`: a torn tag would still read as a word, and
+    printing it would select nothing.
     """
     try:
         with open(os.path.join(cfg.GITOPS_STATE_DIR, name), errors="replace") as fh:
@@ -311,9 +300,7 @@ def check_gitops_status(cfg: Config) -> tuple[bool, str]:
         _read_gitops_marker(cfg, MARKERS["diverged"]),
         _read_gitops_marker(cfg, MARKERS["behind"]),
         hold_plane=_read_gitops_marker(cfg, MARKERS["hold_plane"]),
-        manual_plane=_read_gitops_marker(cfg, MARKERS["manual_plane"]),
         contention_since=_read_gitops_marker(cfg, MARKERS["contention"]),
-        manual_plane_tags=_read_decodable_lines(cfg, MARKERS["manual_plane_tags"]),
         k8s_deferred=_read_gitops_marker(cfg, MARKERS["k8s_deferred"]),
         owed=_read_decodable_lines(cfg, MARKERS["owed"]),
     )

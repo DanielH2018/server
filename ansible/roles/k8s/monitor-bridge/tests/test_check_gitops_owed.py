@@ -1,8 +1,8 @@
 """GitOps Deploy — Status reads the `manual_plane` class of the `owed` ledger (#3392).
 
-The reader ships before any writer records the class, because this pod redeploys on its own
-schedule. Each line here is what a writer may put in the ledger, including keys this copy has
-never heard of, and the page must read it exactly as it reads the line marker.
+This pod redeploys on its own schedule, so a writer can be newer than this copy. Each line
+here is what a writer may put in the ledger, including keys this copy has never heard of, and
+the page must still read it.
 
 Run: uv run pytest ansible/roles/k8s/monitor-bridge/tests/test_check_gitops_owed.py
 """
@@ -35,7 +35,7 @@ def test_a_ledger_line_with_an_unknown_key_pages_with_its_tags(cfg):
 
 
 def test_a_fresh_ledger_role_is_ok(cfg):
-    """The age gate the line marker has: a role recorded ten minutes ago is a merge."""
+    """A role recorded ten minutes ago is an ordinary merge, not a fault."""
     owed = _owed(subject="k3s", at=1000, playbook="ansible/k3s-bringup.yml", tags=[])
     ok, msg = checks.gitops.gitops_status(cfg, None, now=1000.0 + 600, owed=owed)
     assert ok
@@ -49,44 +49,6 @@ def test_a_ledger_line_missing_its_class_keys_still_pages_for_the_whole_role(cfg
     assert not ok
     assert "apply the role by hand, then `" in msg
     assert msg.endswith("clear-manual-plane k3s`")
-
-
-def test_a_whole_role_side_absorbs_a_narrowed_one_across_the_two_sources(cfg):
-    """A role pending in both sources needs both changes applied.
-
-    The line marker's row says the whole role, so a narrowed ledger line must not print an
-    `--applied` clear that drops work nobody applied. The older stamp decides the age.
-    """
-    owed = _owed(
-        subject="k3s", at=20000, playbook="ansible/k3s-bringup.yml", tags=["kubeconfig"]
-    )
-    ok, msg = checks.gitops.gitops_status(
-        cfg,
-        None,
-        now=_LATE,
-        manual_plane="abc123def4567890 ansible/k3s-bringup.yml k3s 1000.0",
-        manual_plane_tags="k3s -",
-        owed=owed,
-    )
-    assert not ok
-    assert "unapplied for 7h" in msg
-    assert msg.endswith("clear-manual-plane k3s`")
-
-
-def test_two_narrowed_sides_union(cfg):
-    owed = _owed(
-        subject="k3s", at=1000, playbook="ansible/k3s-bringup.yml", tags=["registries"]
-    )
-    ok, msg = checks.gitops.gitops_status(
-        cfg,
-        None,
-        now=_LATE,
-        manual_plane="abc123def4567890 ansible/k3s-bringup.yml k3s 1000.0",
-        manual_plane_tags="k3s kubeconfig",
-        owed=owed,
-    )
-    assert not ok
-    assert msg.endswith("clear-manual-plane k3s --applied kubeconfig,registries`")
 
 
 def test_other_classes_in_the_ledger_page_nothing(cfg):

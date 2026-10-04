@@ -35,20 +35,17 @@ from deploy_state_alerts import AlertSlotMarkers
 from deploy_state_k8s import K8sLineMarkers
 from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are re-exported
     MARKERS,
-    NARROWED_TO_ROLE,
     NO_PLAYBOOK,
     STATE_DIR,
     ContentionEntry,
     ManualPlaneEntry,
     parse_contention,
-    parse_manual_plane,
-    parse_manual_plane_tags,
 )
 from gitops_ledger import (
     OWED_MANUAL_PLANE,
     RECEIPT_KEEP,
     drop_owed,
-    merge_manual_plane,
+    manual_plane_entries,
     parse_receipts,
     put_manual_plane,
     receipt_line,
@@ -190,53 +187,22 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
 
     # ── the setup roles this deployer cannot apply itself ─────────────────────────────────
     #
-    # Written to the `owed` ledger's `manual_plane` class (#3392), one line per role carrying
-    # its `playbook` and `tags` keys. The `manual_plane` line marker and its
-    # `manual_plane_tags` sidecar are only READ now: a host still holding lines a deployer from
-    # before the move wrote keeps them pending, and the first write here folds them into the
-    # ledger (`_fold_manual_plane_lines`).
+    # The `owed` ledger's `manual_plane` class (#3392), one line per role carrying its
+    # `playbook` and `tags` keys.
 
     def _manual_plane(self) -> tuple[list[ManualPlaneEntry], dict[str, frozenset[str]]]:
-        """Every pending role and its tags, the ledger merged with the legacy line marker."""
-        return merge_manual_plane(
-            parse_manual_plane(self.read("manual_plane")),
-            parse_manual_plane_tags(self.read("manual_plane_tags")),
-            self.read("owed"),
-        )
+        """Every pending role and its tags."""
+        return manual_plane_entries(self.read("owed"))
 
     def manual_plane_pending(self) -> list[ManualPlaneEntry]:
         """Every pending role, oldest first; a garbled line is skipped, never lost.
 
-        The ledger's writers carry such a line through untouched, and
-        `_fold_manual_plane_lines` leaves a garbled legacy line in its file.
+        The ledger's writers carry such a line through untouched.
         """
         return self._manual_plane()[0]
 
-    def _fold_manual_plane_lines(self) -> None:
-        """Move every readable legacy `manual_plane` line into the ledger, with its tags.
-
-        Each role takes the merged answer `merge_manual_plane` gives, so a role in both
-        sources keeps its oldest stamp. The sidecar goes whole: a row means something only
-        beside its line. A line the legacy parser cannot read stays in its file, for the
-        reason `owed_line_key` keeps a torn ledger line.
-        """
-        legacy = self.read("manual_plane")
-        if legacy is None and self.read("manual_plane_tags") is None:
-            return
-        entries, tags = self._manual_plane()
-        owed = self.read("owed")
-        for entry in entries:
-            owed = put_manual_plane(owed, entry, tags[entry.role])
-        self.write("owed", owed or None)
-        torn = [
-            line for line in (legacy or "").splitlines() if not parse_manual_plane(line)
-        ]
-        self.write("manual_plane", "\n".join(torn) or None)
-        self.write("manual_plane_tags", None)
-
     def _put_manual_plane_tags(self, role: str, tags: frozenset[str]) -> None:
         """Set a pending role's tags. A role that is not pending is left alone."""
-        self._fold_manual_plane_lines()
         entry = next((e for e in self.manual_plane_pending() if e.role == role), None)
         if entry is not None:
             self.write("owed", put_manual_plane(self.read("owed"), entry, tags))
@@ -266,7 +232,6 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         of `behind_marker`, which re-stamps on every fast-forward, because progress is
         exactly what a tick that moves the tree HAS made.)
         """
-        self._fold_manual_plane_lines()
         if any(e.role == role for e in self.manual_plane_pending()):
             return False
         entry = ManualPlaneEntry(origin, playbook, role, now)
@@ -280,7 +245,6 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
             True when a line went, False when that role was not pending — which is what an
             operator clearing twice, or naming a role nobody recorded, must get.
         """
-        self._fold_manual_plane_lines()
         text, dropped = drop_owed(self.read("owed"), OWED_MANUAL_PLANE, [role])
         if not dropped:
             return False
@@ -309,9 +273,8 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         range nothing could narrow needs the whole role, and a narrow tag beside it would
         under-describe the work while reading like the complete answer.
 
-        An earlier line with EMPTY tags is the same refusal. Either an earlier derivation
-        refused, or the line came from the legacy marker with no sidecar row, whose needs are
-        unknown. Unknown joined with anything is the whole role.
+        An earlier line with EMPTY tags is the same refusal: an earlier derivation refused, so
+        that range's needs are unknown. Unknown joined with anything is the whole role.
         """
         earlier = self.manual_plane_tags_pending().get(role, frozenset())
         if tags is None or (line_predates and not earlier):
@@ -381,7 +344,7 @@ class DeployerState(AlertSlotMarkers, K8sLineMarkers):
         # `kubeconfig`) leaves the row unchanged, so an operator who applied `kubeconfig`
         # before PR-B fast-forwarded clears PR-B's pending work with their own. Closing that
         # needs the printed command to carry a token of what the row was, which widens the
-        # marker grammar the sidecar exists to leave alone. Accepted in #2349 (PR #2364).
+        # clear command's grammar. Accepted in #2349 (PR #2364).
         remaining = row - applied
         if not remaining:
             self.clear_manual_plane(role)

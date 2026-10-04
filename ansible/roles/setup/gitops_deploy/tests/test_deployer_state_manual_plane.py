@@ -1,8 +1,7 @@
 """`DeployerState`'s `manual_plane` ledger class: recording, narrowing and clearing a role.
 
-The deployer writes the class to the `owed` ledger (#3392) and only reads the legacy
-`manual_plane` line marker and its `manual_plane_tags` sidecar, folding them into the ledger on
-its first write. Split from `test_deployer_state.py`, which pins the on-disk layout.
+The class lives in the `owed` ledger (#3392); it replaced the `manual_plane` line marker and
+its `manual_plane_tags` sidecar, whose readers went in #3487. Split from `test_deployer_state.py`, which pins the on-disk layout.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deployer_state_manual_plane.py
 """
@@ -31,7 +30,7 @@ COMMON_LINE = ("none", "common")
 
 
 def test_a_pending_role_is_recorded_as_one_ledger_line(state):
-    """The writer moved to the ledger (#3392), and it writes no legacy line marker."""
+    """The writer records one ledger line and no other file (#3392)."""
     assert state.record_manual_plane(SHA, *K3S_LINE, 1000.0) is True
     (line,) = pathlib.Path(state.path("owed")).read_text().splitlines()
     assert json.loads(line) == {
@@ -42,7 +41,10 @@ def test_a_pending_role_is_recorded_as_one_ledger_line(state):
         "playbook": "ansible/k3s-bringup.yml",
         "tags": [],
     }
-    assert not os.path.exists(state.path("manual_plane"))
+    files = {
+        f.name for f in pathlib.Path(state.path("owed")).parent.iterdir() if f.is_file()
+    }
+    assert files == {"owed.jsonl"}
     (entry,) = state.manual_plane_pending()
     assert entry.origin == SHA
     assert entry.playbook == "ansible/k3s-bringup.yml"
@@ -128,40 +130,16 @@ def test_a_refusal_widens_a_role_that_was_already_narrowed(state):
     )
 
 
-def test_a_legacy_line_with_no_row_is_flagged_as_the_whole_role(state):
+def test_a_line_whose_range_was_never_narrowed_is_flagged_as_the_whole_role(state):
     """Unknown joined with anything is the whole role.
 
-    A legacy line with no sidecar row says nothing about what its range needed. Narrowing it
-    to the NEXT range's answer would leave the first change unapplied behind a clear command.
+    A line recorded with no tags says nothing about what its range needed. Narrowing it to the
+    NEXT range's answer would leave the first change unapplied behind a clear command.
     """
-    pathlib.Path(state.path("manual_plane")).write_text(
-        f"{SHA} ansible/k3s-bringup.yml k3s 1000.0\n"
-    )
+    state.record_manual_plane(SHA, *K3S_LINE, 1000.0)
     assert state.record_manual_plane("beef" * 10, *K3S_LINE, 2000.0) is False
     state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}), line_predates=True)
     assert state.manual_plane_tags_pending() == {"k3s": frozenset()}
-
-
-def test_the_first_write_folds_legacy_lines_into_the_ledger(state):
-    """A host holding lines an older deployer wrote keeps them pending, stamps and tags kept.
-
-    Both legacy files go once their content is in the ledger, so no line is owed twice.
-    """
-    pathlib.Path(state.path("manual_plane")).write_text(
-        f"{SHA} ansible/k3s-bringup.yml k3s 1000.0\n"
-    )
-    pathlib.Path(state.path("manual_plane_tags")).write_text("k3s kubeconfig\n")
-    state.record_manual_plane("beef" * 10, *COMMON_LINE, 2000.0)
-    assert [(e.role, e.at) for e in state.manual_plane_pending()] == [
-        ("k3s", 1000.0),
-        ("common", 2000.0),
-    ]
-    assert state.manual_plane_tags_pending() == {
-        "k3s": frozenset({"kubeconfig"}),
-        "common": frozenset(),
-    }
-    assert not os.path.exists(state.path("manual_plane"))
-    assert not os.path.exists(state.path("manual_plane_tags"))
 
 
 def test_a_key_the_writer_does_not_know_survives_a_tags_rewrite(state):
@@ -222,12 +200,11 @@ def test_an_apply_of_a_different_playbook_leaves_the_line(state):
 
 def test_a_garbled_line_is_neither_pending_nor_lost(state):
     """Fails open like `behind_since`: garbage must not page, and must not be silently dropped."""
-    pathlib.Path(state.path("manual_plane")).write_text(
-        f"{SHA} ansible/k3s-bringup.yml k3s not-a-number\ngarbage\n"
-    )
+    torn = json.dumps({"class": "manual_plane", "subject": "k3s", "at": "not-a-number"})
+    pathlib.Path(state.path("owed")).write_text(f"{torn}\ngarbage\n")
     assert state.manual_plane_pending() == []
     state.record_manual_plane(SHA, *COMMON_LINE, 2000.0)
-    assert "garbage" in pathlib.Path(state.path("manual_plane")).read_text()
+    assert "garbage" in pathlib.Path(state.path("owed")).read_text()
     assert [e.role for e in state.manual_plane_pending()] == ["common"]
 
 

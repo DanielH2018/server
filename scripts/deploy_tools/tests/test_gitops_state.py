@@ -14,11 +14,21 @@ from pathlib import Path
 
 import pytest
 
-
 from deploy_tools import gitops_state
 
-K3S = "abc123def4567890 ansible/k3s-bringup.yml k3s 1000.0"
-COMMON = "def456abc7890123 none common 2000.0"
+
+def _line(origin: str, playbook: str, role: str, at: int, *tags: str) -> str:
+    """One `manual_plane` ledger line, as the deployer writes it, owing `tags`."""
+    obj = {"class": "manual_plane", "subject": role, "origin": origin, "at": at}
+    return json.dumps({**obj, "playbook": playbook, "tags": sorted(tags)})
+
+
+def _k3s(*tags: str) -> str:
+    return _line("abc123def4567890", "ansible/k3s-bringup.yml", "k3s", 1000, *tags)
+
+
+K3S = _k3s()
+COMMON = _line("def456abc7890123", "none", "common", 2000)
 
 
 @pytest.fixture
@@ -68,18 +78,14 @@ def run(tree_lock: Path, journal):
 
 
 def pending(state_dir: Path) -> dict[str, frozenset[str]]:
-    """Role -> tags still owed, read the way the deployer reads them.
-
-    The fixtures seed the legacy line marker, and a clear folds it into the `owed` ledger
-    (#3392), so the answer is read through `DeployerState` rather than off either file.
-    """
+    """Role -> tags still owed, read through `DeployerState` as the deployer reads them."""
     return gitops_state.DeployerState(str(state_dir)).manual_plane_tags_pending()
 
 
 @pytest.fixture
 def marker(tmp_path: Path) -> Path:
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n{COMMON}\n")
-    return tmp_path / "manual_plane"
+    (tmp_path / "owed.jsonl").write_text(f"{K3S}\n{COMMON}\n")
+    return tmp_path / "owed.jsonl"
 
 
 def test_clearing_one_role_leaves_the_other(marker, run, capsys):
@@ -98,7 +104,7 @@ def test_clearing_a_role_that_is_not_pending_exits_zero_and_says_so(
 
 
 def test_clearing_the_last_role_removes_the_marker(tmp_path, run, capsys):
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s") == 0
     assert pending(tmp_path) == {}
 
@@ -122,8 +128,7 @@ def test_a_narrowed_clear_keeps_a_tag_a_later_range_added(
     merged, unapplied and recorded nowhere. Under the old role-tag command the operator's
     `--tags k3s` run would have applied it, so this gap is the narrowing's own.
     """
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
-    (tmp_path / "manual_plane_tags").write_text("k3s coredns,kubeconfig\n")
+    (tmp_path / "owed.jsonl").write_text(f"{_k3s('coredns', 'kubeconfig')}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
     assert pending(tmp_path) == {"k3s": frozenset({"coredns"})}
     assert "STILL pending for coredns" in capsys.readouterr().out
@@ -133,8 +138,7 @@ def test_a_narrowed_clear_keeps_a_tag_a_later_range_added(
 
 def test_a_narrowed_clear_covering_the_whole_row_takes_the_line(tmp_path, run, capsys):
     """The accepting half: nothing left to apply means the role stops being pending."""
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
-    (tmp_path / "manual_plane_tags").write_text("k3s kubeconfig\n")
+    (tmp_path / "owed.jsonl").write_text(f"{_k3s('kubeconfig')}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
     assert pending(tmp_path) == {}
     assert "cleared k3s" in capsys.readouterr().out
@@ -146,8 +150,7 @@ def test_a_bare_clear_still_takes_the_whole_line_and_row(tmp_path, run):
     The bare command is what an operator types from memory and what every surface printed
     before this flag existed, so it keeps its old meaning.
     """
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
-    (tmp_path / "manual_plane_tags").write_text("k3s coredns,kubeconfig\n")
+    (tmp_path / "owed.jsonl").write_text(f"{_k3s('coredns', 'kubeconfig')}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s") == 0
     assert pending(tmp_path) == {}
 
@@ -162,8 +165,7 @@ def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
     collapsed to "the whole role". Clearing there leaves PR-B merged, unapplied and recorded
     nowhere.
     """
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
-    (tmp_path / "manual_plane_tags").write_text("k3s -\n")
+    (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
     assert pending(tmp_path) == {"k3s": frozenset()}
     out = capsys.readouterr().out
@@ -174,15 +176,14 @@ def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
 
 def test_a_narrowed_clear_on_a_line_with_no_row_keeps_it(tmp_path, run):
     """A missing row is the same unknown: a line older than the sidecar, or a garbled row."""
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
     assert pending(tmp_path) == {"k3s": frozenset()}
 
 
 def test_applied_naming_the_role_tag_is_a_whole_role_clear(tmp_path, run):
     """The accepting half for an empty row: the whole-role tag covers it, however spelled."""
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
-    (tmp_path / "manual_plane_tags").write_text("k3s -\n")
+    (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "k3s") == 0
     assert pending(tmp_path) == {}
 
@@ -197,8 +198,7 @@ def test_the_printed_clear_for_k3s_and_common_leaves_no_line_behind(tmp_path, ru
     # Importable only once `gitops_state` has put the deployer's `files/` on sys.path.
     import deploy_remediation
 
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n{COMMON}\n")
-    (tmp_path / "manual_plane_tags").write_text("common -\nk3s kubeconfig\n")
+    (tmp_path / "owed.jsonl").write_text(f"{_k3s('kubeconfig')}\n{COMMON}\n")
     text = deploy_remediation.manual_plane_remediation(
         {"k3s", "common"}, {"k3s": frozenset({"kubeconfig"})}
     )
@@ -390,7 +390,7 @@ def test_an_empty_applied_is_refused(tmp_path, run):
     grown. Refusing costs a retype; clearing silences the only signal that the role is
     unapplied.
     """
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     for empty in ("", ",", " "):
         with pytest.raises(SystemExit) as exc:
             run(tmp_path, "clear-manual-plane", "k3s", "--applied", empty)
@@ -400,8 +400,7 @@ def test_an_empty_applied_is_refused(tmp_path, run):
 
 def test_a_non_empty_applied_still_clears_its_tags(tmp_path, run):
     """The accepting half: the refusal above must not swallow an ordinary narrowed clear."""
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
-    (tmp_path / "manual_plane_tags").write_text("k3s coredns,kubeconfig\n")
+    (tmp_path / "owed.jsonl").write_text(f"{_k3s('coredns', 'kubeconfig')}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
     assert pending(tmp_path) == {"k3s": frozenset({"coredns"})}
 
@@ -414,8 +413,7 @@ def test_the_kept_message_warns_about_the_whole_role_apply_it_prescribes(
     Every other surface printing that command carries `maximal_apply_warning`; this one
     printed it bare.
     """
-    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
-    (tmp_path / "manual_plane_tags").write_text("k3s -\n")
+    (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
     assert "rotate-keys" in capsys.readouterr().out
 
@@ -424,7 +422,7 @@ def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(
     tmp_path, run, capsys
 ):
     """The rejecting half: `common` arms nothing, so it gets no warning to ignore."""
-    (tmp_path / "manual_plane").write_text(f"{COMMON}\n")
+    (tmp_path / "owed.jsonl").write_text(f"{COMMON}\n")
     assert run(tmp_path, "clear-manual-plane", "common", "--applied", "something") == 0
     out = capsys.readouterr().out
     assert "kept common" in out and "WARNING" not in out

@@ -45,8 +45,8 @@ as a SUBPROCESS because this module parses YAML and the deployer's unit runs und
 `uv run --no-project`, which cannot import yaml — the boundary `narrow_deploy_plane` already
 established for the deploy plane.
 
-`deploy_defer.record` asks for a role the deployer CANNOT apply. The tags go in the
-`manual_plane_tags` marker and in the tick's receipt, so the journal line, the Discord alert,
+`deploy_defer.record` asks for a role the deployer CANNOT apply. The tags go in the role's
+`manual_plane` ledger line and in the tick's receipt, so the journal line, the Discord alert,
 the SessionStart banner and `land.sh` all quote ONE derivation rather than each repeating it.
 `land_tags.own_narrow_tags` also calls `role_tags` in-process, over one PR's own range, for a
 landing that never awaits the tick and so has no receipt to read.

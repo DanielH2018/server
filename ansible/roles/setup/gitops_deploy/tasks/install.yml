@@ -24,7 +24,8 @@
 # deployer, so the deployer converges here (#3079 was the first). `broad_applied` lost its
 # writer and every reader when `land.sh` moved onto `receipts.jsonl` (#3391, #3461); a
 # `land.sh` from a worktree cut before that still reads it, and only its absence stops that
-# read going stale. A marker retired later joins this list in the PR that drops its `MARKERS`
+# read going stale. `manual_plane` and its `manual_plane_tags` sidecar lost their writer when the
+# class moved into the `owed` ledger (#3392) and their readers in #3487. A marker retired later joins this list in the PR that drops its `MARKERS`
 # entry, never before: `tests/test_deployer_state.py` fails on a live basename here.
 - name: Remove the state files of retired deployer markers
   tags: [gitops-deploy-code]
@@ -33,6 +34,8 @@
     state: absent
   loop:
     - broad_applied
+    - manual_plane
+    - manual_plane_tags
   become: true
 
 - name: Install the deployer code
