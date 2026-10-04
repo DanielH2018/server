@@ -97,7 +97,7 @@ def _held_plane_subjects(text: str) -> set[str]:
     return {k[1] for k in keys if k is not None and k[0] == OWED_HOLD_PLANE}
 
 
-def _drop_held_planes(state_dir: Path, tree_lock: Path) -> str | None:
+def _drop_held_planes(state_dir: Path, tree_lock: Path, wait_s: float) -> str | None:
     """Drop every `hold_plane` line from the `owed` ledger. None on success, else the refusal.
 
     The ledger holds other classes the deployer rewrites under the git-tree lock, so this
@@ -115,7 +115,7 @@ def _drop_held_planes(state_dir: Path, tree_lock: Path) -> str | None:
     except FileNotFoundError:
         return None
     with open(tree_lock, "a") as lock:
-        deadline = time.monotonic() + LOCK_WAIT_S
+        deadline = time.monotonic() + wait_s
         while True:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -133,18 +133,21 @@ def _drop_held_planes(state_dir: Path, tree_lock: Path) -> str | None:
     return None
 
 
-def clear_hold(state_dir: Path, expected_sha: str, tree_lock: Path) -> str | None:
+def clear_hold(
+    state_dir: Path, expected_sha: str, tree_lock: Path, wait_s: float = LOCK_WAIT_S
+) -> str | None:
     """Remove `hold_sha` and every plane the hold waits on, only when `expected_sha` matches.
 
     The planes are the `hold_plane` marker and the `owed` ledger's `hold_plane` lines, the two
     sources `gitops_ledger.held_planes` reads. The ledger goes first, because it is the half
-    that can refuse: a refusal then leaves the hold whole.
+    that can refuse: a refusal then leaves the hold whole. `wait_s` bounds the wait for the
+    git-tree lock.
     """
     sha_file = state_dir / MARKERS["hold"]
     live = sha_file.read_text().strip() if sha_file.exists() else ""
     if live != expected_sha:
         return f"hold is {live or 'clear'}, not {expected_sha}; reload and retry"
-    refusal = _drop_held_planes(state_dir, tree_lock)
+    refusal = _drop_held_planes(state_dir, tree_lock, wait_s)
     if refusal:
         return refusal
     for name in (MARKERS["hold"], MARKERS["hold_plane"]):

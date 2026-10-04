@@ -124,17 +124,16 @@ def test_clear_hold_drops_the_ledgers_hold_plane_lines_and_keeps_the_rest_is_cle
 
 
 def test_clear_hold_under_a_held_tree_lock_refuses_and_keeps_the_hold_is_flagged(
-    state_dir, tmp_path, monkeypatch
+    state_dir, tmp_path
 ):
     """The tick rewrites the ledger under the tree lock; an unlocked rewrite would lose that."""
-    monkeypatch.setattr(w, "LOCK_WAIT_S", 0.0)
     (state_dir / "hold_sha").write_text("deadbeef\n")
     owed = _owed_line("hold_plane", "ansible/deploy.yml sonarr")
     (state_dir / "owed.jsonl").write_text(owed)
     lock = tmp_path / "tree.lock"
     with open(lock, "a") as held:
         fcntl.flock(held, fcntl.LOCK_EX)
-        assert "git-tree lock" in w.clear_hold(state_dir, "deadbeef", lock)
+        assert "git-tree lock" in w.clear_hold(state_dir, "deadbeef", lock, wait_s=0.0)
     assert (state_dir / "hold_sha").exists()
     assert (state_dir / "owed.jsonl").read_text() == owed
 
