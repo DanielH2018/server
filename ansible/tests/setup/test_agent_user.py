@@ -197,3 +197,37 @@ def test_the_agents_clone_gets_a_venv_its_hooks_can_import_from() -> None:
     assert cmd["argv"][-2:] == ["sync", "--frozen"]
     assert cmd["chdir"] == "{{ claude_code_agent_user_clone_dir }}"
     assert task["environment"] == {"HOME": "{{ claude_code_agent_user_home }}"}
+
+
+def dirs_not_owned_like_the_chown(task_list: list[dict]) -> list[str]:
+    """Each directory task whose owner or group differs from the closing chown's.
+
+    The commands that run as the agent write into these directories, so a root-owned one
+    fails them on a fresh host's first apply, before the closing chown has run.
+    """
+    chown = named(task_list, "Hand the agent's home to its own user")[
+        "ansible.builtin.file"
+    ]
+    return [
+        str(t.get("name"))
+        for t in task_list
+        if (f := t.get("ansible.builtin.file") or {}).get("state") == "directory"
+        and (f.get("owner"), f.get("group")) != (chown["owner"], chown["group"])
+    ]
+
+
+def test_every_directory_the_agent_writes_into_is_the_agents_from_its_first_apply() -> (
+    None
+):
+    shared = tasks(SHARED)
+    named(shared, "Create the agent user's bin and claude-guard directories")
+    assert dirs_not_owned_like_the_chown(shared) == []
+
+
+def test_a_root_owned_directory_is_flagged() -> None:
+    chown = named(tasks(SHARED), "Hand the agent's home to its own user")
+    root_dir = {
+        "name": "Create bin",
+        "ansible.builtin.file": {"path": "/srv/agent/.local/bin", "state": "directory"},
+    }
+    assert dirs_not_owned_like_the_chown([root_dir, chown]) == ["Create bin"]

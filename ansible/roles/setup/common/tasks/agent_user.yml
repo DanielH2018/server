@@ -57,9 +57,14 @@
   become: true
 
 - name: Create the agent user's bin and claude-guard directories
+  # The agent's, with the parents this creates: `uv python install` and the installer run as
+  # the agent below, and write into .local/bin and .local/share. The group is the closing
+  # chown's, so the two tasks never flip each other.
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
+    owner: "{{ agent_user_name }}"
+    group: "{{ sys_user }}"
     mode: "0755"
   loop:
     - "{{ agent_user_home }}/.local/bin"
