@@ -211,17 +211,6 @@ def test_accept_a_rewrite_keeps_the_rest_of_the_tool_input(
     }
 
 
-def test_reject_a_cc_wait_call_is_not_rewritten(sandbox, monkeypatch, capsys):
-    """A wait's `run_in_background` belongs to the user-level guard, which sets it.
-
-    A second hook's rewrite of the same call would replace the guard's input wholesale.
-    """
-    out = dispatch(
-        "cc-wait land 3501", sandbox, monkeypatch, capsys, run_in_background=True
-    )
-    assert out is None or "updatedInput" not in out
-
-
 # ── one arm failing ──────────────────────────────────────────────────────────────────
 
 

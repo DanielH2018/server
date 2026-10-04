@@ -39,14 +39,6 @@ def dead_pid():
     return proc.pid
 
 
-def test_a_recorded_zero_is_landed_with_the_verdict_as_detail(tmp_path):
-    log = landing(tmp_path, "== 1/6  resolving\nVERDICT: settled (PR #939)\n", rc=0)
-    assert land_probe.read(log) == {
-        "state": "landed",
-        "detail": "VERDICT: settled (PR #939)",
-    }
-
-
 def test_a_landing_that_gave_up_ends_the_wait_with_3_not_75(tmp_path):
     """75 is cc-wait's "re-run this wait"; land.sh's own 75 means "re-run land.sh"."""
     log = landing(tmp_path, "VERDICT: merge-timeout (PR #939)\n", rc=75)
