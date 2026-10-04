@@ -164,6 +164,27 @@ def _vip_node_offence(role: str, pod: dict) -> str | None:
     )
 
 
+# Every role whose rendered Service pins an address. jellyfin pins its LAN address in
+# `service-lan.yaml.j2`, which the template glob this row replaced never read.
+_METALLB_PINNED_ROLES = frozenset({"jellyfin", "mosquitto", "pihole", "traefik"})
+
+
+def _metallb_annotations(role: str, tpl: str, doc: dict):
+    """One subject per metallb annotation, keyed by role, so `must_find` needs an annotation."""
+    if doc.get("kind") != "Service":
+        return
+    annotations = (doc.get("metadata") or {}).get("annotations") or {}
+    for key in sorted(annotations):
+        if "metallb" in key:
+            yield role, {"annotation": key}
+
+
+def _metallb_prefix_offence(role: str, subject: dict) -> str | None:
+    if not subject["annotation"].startswith("metallb.universe.tf/"):
+        return None
+    return f"{subject['annotation']} uses the deprecated metallb.universe.tf/ prefix; use metallb.io/"
+
+
 EDGE_PROPERTIES = (
     Property(
         name="traefik-crds-carry-no-inline-credential",
@@ -296,5 +317,24 @@ EDGE_PROPERTIES = (
                 "home-assistant",
             }
         ),
+    ),
+    Property(
+        name="metallb-service-annotations-use-metallb-io",
+        reason=(
+            "Service annotations moved to metallb.io/ in MetalLB v0.15, and universe.tf/ is "
+            "deprecated. v0.16.0 reads both prefixes (controller/service.go "
+            "valueForAnnotation, metallb.io winning) but emits a `deprecatedAnnotation` Warning "
+            "Event per Service on every reconcile for the old one. Kubernetes accepts any "
+            "annotation key and MetalLB ignores one it does not recognise, so a wrong prefix is "
+            "silent: the Service gets an address from the auto-assign pool instead of the pinned "
+            "one, and the deploy is green. The row reads the rendered Services (#3209), so a "
+            "comment naming the old prefix is not credited as an annotation. "
+            "test_k8s_manifests_metallb.py ties the k3s_metallb_version pin to v0.15 or later."
+        ),
+        select=_metallb_annotations,
+        offence=_metallb_prefix_offence,
+        red=("traefik", {"annotation": "metallb.universe.tf/loadBalancerIPs"}),
+        green=("traefik", {"annotation": "metallb.io/loadBalancerIPs"}),
+        must_find=_METALLB_PINNED_ROLES,
     ),
 )

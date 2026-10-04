@@ -215,6 +215,26 @@ def _service_links_offence(role: str, pod: dict) -> str | None:
     return "inherits Docker-link env vars for every Service in the namespace"
 
 
+_TOKEN_PATHS = ("/run/secrets", "/var/run/secrets")
+
+
+def volume_mounts(role: str, tpl: str, doc: dict):
+    """One subject per container mount, init containers included, keyed by role."""
+    if doc.get("kind") not in POD_KINDS:
+        return
+    pod = pod_spec(doc)
+    for container in pod.get("initContainers", []) + pod.get("containers", []):
+        for mount in container.get("volumeMounts", []):
+            yield role, {"container": container["name"], "path": mount["mountPath"]}
+
+
+def token_path_offence(role: str, mount: dict) -> str | None:
+    path = mount["path"].rstrip("/")
+    if not any(path == r or path.startswith(r + "/") for r in _TOKEN_PATHS):
+        return None
+    return f"{mount['container']} mounts {path}, shadowing the ServiceAccount token"
+
+
 # 88 pod templates render, Jobs and CronJobs included. Close enough to notice a contraction.
 _MIN_POD_TEMPLATES = 78
 # One pod per role the census was written against, so a lost role is named, not counted.
@@ -433,5 +453,26 @@ WORKLOAD_PROPERTIES = (
             ),
         ),
         must_find=frozenset({"homepage"}),
+    ),
+    Property(
+        name="no-mount-shadows-the-serviceaccount-token",
+        reason=(
+            "`/run/secrets` is the Docker convention for file-mounted credentials and does not "
+            "survive the port. `/var/run/secrets` symlinks to it, and Kubernetes projects the "
+            "ServiceAccount token there, so a read-only volume at either path leaves runc unable "
+            "to create the mountpoint (`mkdirat .../rootfs/run/secrets/kubernetes.io: read-only "
+            "file system`). The pod CrashLoops with a message that says nothing about the mount. "
+            "Every pod kind and init container is read as it renders, so a path built from a "
+            "variable is checked at its value. test_k8s_manifests.py runs the same predicate "
+            "over the image-builder build Job, which no role renders alone."
+        ),
+        select=volume_mounts,
+        offence=token_path_offence,
+        red=("scrutiny", {"container": "init", "path": "/var/run/secrets/x/"}),
+        green=("scrutiny", {"container": "init", "path": "/run/secretsx"}),
+        more_red=(("scrutiny", {"container": "app", "path": "/run/secrets"}),),
+        # 258 mounts render across 52 roles. Close enough to notice a contraction.
+        min_matches=230,
+        must_find=frozenset({"scrutiny", "headlamp"}),
     ),
 )

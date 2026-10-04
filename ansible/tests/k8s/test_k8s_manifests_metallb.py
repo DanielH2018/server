@@ -2,12 +2,12 @@
 
 The ingress VIP must be a single address that is never auto-assigned, the general pool must
 not contain it, and the narrowing must land before the ingress pool is created -- a moved
-VIP fails silently, because every manifest stays valid. Service annotations must use the
-`metallb.io` namespace, and the pinned MetalLB version must still be one that reads it.
+VIP fails silently, because every manifest stays valid. The pinned MetalLB version must still
+read the `metallb.io` Service annotations, which the
+`metallb-service-annotations-use-metallb-io` row of `_edge_property_rows.py` requires.
 """
 
 from lib import yaml_fast
-from _k8s_render import rendered_docs
 
 from _manifest_guards import ALL_VARS, K3S, K3S_DEFAULTS, _render
 
@@ -68,96 +68,15 @@ def test_the_general_pool_narrows_before_the_ingress_pool_is_created():
     assert names.index("homelab-pool") < names.index("ingress-pool")
 
 
-# Every role whose rendered Service pins an address. A census that stops naming one of these
-# is checking fewer Services and still passing, which is the shape the glob it replaced failed
-# in: it read `service.yaml.j2` only, and jellyfin pins its LAN address in `service-lan.yaml.j2`.
-PINNED_SERVICE_ROLES = frozenset({"jellyfin", "mosquitto", "pihole", "traefik"})
-
-
-def metallb_service_annotations(docs) -> list[tuple[str, str, str]]:
-    """(role, template name, annotation key) for every metallb annotation on a Service.
-
-    Reads the rendered manifests rather than the templates (#3209), so a comment naming the
-    deprecated prefix — traefik's template carries five lines of them — cannot be credited as
-    an annotation, and a Service rendered from a template of any name is covered.
-    """
-    found = []
-    for role, name, doc in docs:
-        if not isinstance(doc, dict) or doc.get("kind") != "Service":
-            continue
-        annotations = (doc.get("metadata") or {}).get("annotations") or {}
-        found.extend(
-            (role, name, key) for key in sorted(annotations) if "metallb" in key
-        )
-    return found
-
-
-def deprecated_annotations(docs) -> list[str]:
-    """`<role>/<template>: <key>` for every Service annotation on the retired prefix."""
-    return [
-        f"{role}/{name}: {key}"
-        for role, name, key in metallb_service_annotations(docs)
-        if key.startswith("metallb.universe.tf/")
-    ]
-
-
-def test_metallb_service_annotations_use_the_metallb_io_namespace():
-    """Service annotations moved to metallb.io/ in MetalLB v0.15; universe.tf/ is deprecated.
-
-    v0.16.0 reads both prefixes (controller/service.go valueForAnnotation, metallb.io winning)
-    but emits a `deprecatedAnnotation` Warning Event per Service on every reconcile for the
-    old one.
-
-    The hazard behind this guard: Kubernetes accepts any annotation key and MetalLB ignores
-    unrecognised ones, so a wrong prefix is completely silent — the Service is created, an
-    address is assigned from the auto-assign pool instead of the pinned one, and the deploy
-    is green.
-    """
-    found = deprecated_annotations(rendered_docs())
-    assert found == [], (
-        "these Services use a deprecated metallb.universe.tf/ annotation — use metallb.io/: "
-        f"{found}"
-    )
-
-
-def test_the_annotation_census_names_every_service_that_pins_an_address():
-    """Guard the guard: a census that matched nothing would pass the test above."""
-    roles = {role for role, _, _ in metallb_service_annotations(rendered_docs())}
-    assert PINNED_SERVICE_ROLES <= roles, (
-        f"the census no longer sees {sorted(PINNED_SERVICE_ROLES - roles)} — the render or "
-        "the annotations moved"
-    )
-
-
-def test_a_deprecated_annotation_is_flagged():
-    """The rejecting half, against a document that is not in the tree."""
-    assert deprecated_annotations(
-        [
-            (
-                "widget",
-                "service.yaml.j2",
-                {
-                    "kind": "Service",
-                    "metadata": {
-                        "annotations": {
-                            "metallb.universe.tf/loadBalancerIPs": "10.0.0.249"
-                        }
-                    },
-                },
-            )
-        ]
-    ) == ["widget/service.yaml.j2: metallb.universe.tf/loadBalancerIPs"]
-
-
 def test_metallb_version_still_supports_the_metallb_io_annotations():
     """metallb.io/ Service annotations are only read from v0.15 onward.
 
     A downgrade past that would make every pinned address silently fall back to the auto-assign
-    pool, so tie the assertion above to the version pin rather than leaving the two to drift apart.
+    pool, so tie the annotation row to the version pin rather than leaving the two to drift apart.
     """
     pin = K3S_DEFAULTS["k3s_metallb_version"].lstrip("v")
     major, minor = (int(p) for p in pin.split(".")[:2])
     assert (major, minor) >= (0, 15), (
         f"k3s_metallb_version is {pin}, which predates the metallb.io/ Service annotations "
-        "the templates now use. Either raise the pin or revert them to metallb.universe.tf/."
+        "the templates use. Either raise the pin or revert them to metallb.universe.tf/."
     )
