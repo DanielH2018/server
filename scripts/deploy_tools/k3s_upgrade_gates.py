@@ -57,6 +57,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from gitops_ledger import held_planes
 from gitops_markers import MARKERS, STATE_DIR
 
 CLUSTER = "prod"
@@ -94,7 +95,10 @@ def in_flight_backups(doc) -> list[str]:
 
 
 def held_sha(state_dir: str | os.PathLike) -> list[str]:
-    """The held SHA (with `hold_plane` when set), or the reason the marker could not be read.
+    """The held SHA (with the planes it waits on), or the reason the marker could not be read.
+
+    The planes are `gitops_ledger.held_planes`: the `hold_plane` marker, then the `owed`
+    ledger's `hold_plane` class (#3392).
 
     An absent or empty `hold_sha` is a cleared hold — that is how the deployer clears it. An
     absent state DIRECTORY is not: it means this is not the deploy host, and reading that as
@@ -113,11 +117,25 @@ def held_sha(state_dir: str | os.PathLike) -> list[str]:
         return [f"<cannot read {state_dir / MARKERS['hold']}: {exc}>"]
     if not sha:
         return []
-    try:
-        plane = (state_dir / MARKERS["hold_plane"]).read_text().strip()
-    except OSError:
-        plane = ""
+    plane = "; ".join(
+        held_planes(
+            _read_or_empty(state_dir / MARKERS["hold_plane"]),
+            _read_or_empty(state_dir / MARKERS["owed"]),
+        )
+    )
     return [f"{sha} ({plane})" if plane else sha]
+
+
+def _read_or_empty(path: _Path) -> str:
+    """`path`'s text, or '' where it cannot be read. Only `held_sha`'s detail reads this.
+
+    The planes only annotate a hold `hold_sha` already proved, so an unreadable marker costs
+    the annotation and never the refusal. An undecodable byte reads as U+FFFD.
+    """
+    try:
+        return path.read_text(errors="replace")
+    except OSError:
+        return ""
 
 
 def nodes_not_ready(doc, expected=CLUSTER_NODES[CLUSTER]) -> list[str]:

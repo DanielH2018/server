@@ -35,6 +35,7 @@ from agent_logic import (
     run_record,
 )
 from agent_toolbox import TOOLS, AgentTools, log, read_file
+from gitops_ledger import held_planes
 from gitops_markers import MARKERS, STATE_DIR
 from host_lib import atomic_write, parse_env_file
 from run_worktree import prepare_worktree, worktree_is_reusable
@@ -58,6 +59,20 @@ RUNS_FILE = "runs.jsonl"
 # from `gitops_markers`, the deployer's own module installed beside this file.
 HOLD_FILE = os.path.join(STATE_DIR, MARKERS["hold"])
 HOLD_PLANE_FILE = os.path.join(STATE_DIR, MARKERS["hold_plane"])
+OWED_FILE = os.path.join(STATE_DIR, MARKERS["owed"])
+
+
+def held_plane_text(tools: AgentTools) -> str:
+    """Every plane a hold waits on, `; `-joined, for the skip reason `decide` writes.
+
+    `gitops_ledger.held_planes` unions the `hold_plane` marker with the `owed` ledger's
+    `hold_plane` class (#3392). A ledger line holding a byte that did not decode is dropped,
+    as monitor-bridge and deploy-ui drop one (#2371), rather than printed garbled.
+    """
+    owed = "\n".join(
+        line for line in tools.read_file(OWED_FILE).splitlines() if "\ufffd" not in line
+    )
+    return "; ".join(held_planes(tools.read_file(HOLD_PLANE_FILE), owed))
 
 
 def _open_pr_listing(repo: str, tools: AgentTools) -> tuple[int, str]:
@@ -201,7 +216,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     log_path = os.path.join(state_dir, "last_session.json")
 
     before = open_prs(cfg["REPO"], tools)
-    gate = decide(before, tools.read_file(HOLD_FILE), tools.read_file(HOLD_PLANE_FILE))
+    gate = decide(before, tools.read_file(HOLD_FILE), held_plane_text(tools))
     if not gate.run:
         log(f"skipping: {gate.reason}")
         record_run(state_dir, run_record(int(time.time()), "skipped", gate.reason))

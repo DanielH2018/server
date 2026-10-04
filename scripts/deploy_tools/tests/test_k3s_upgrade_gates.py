@@ -122,6 +122,16 @@ def test_a_held_sha_is_flagged_with_its_plane(state_dir):
     assert gates.held_sha(state_dir) == ["abc1234 (initial_setup.yml k3s)"]
 
 
+def test_a_held_sha_names_the_ledgers_hold_plane_entries_too(state_dir):
+    """The `owed` ledger's `hold_plane` class follows the marker's entries (#3392)."""
+    (state_dir / MARKERS["hold"]).write_text("abc1234\n")
+    (state_dir / MARKERS["owed"]).write_text(
+        '{"class": "hold_plane", "subject": "deploy.yml sonarr", "origin": "abc", '
+        '"at": 1, "added_by_a_newer_writer": 1}\n'
+    )
+    assert gates.held_sha(state_dir) == ["abc1234 (deploy.yml sonarr)"]
+
+
 def test_an_absent_state_directory_is_not_a_cleared_hold(tmp_path):
     # daniel-server has no /var/lib/gitops-deploy at all; that must read as "wrong host",
     # never as "no hold".

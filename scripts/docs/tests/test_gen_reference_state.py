@@ -77,6 +77,17 @@ def test_gitops_deploy_with_a_hold_surfaces_the_sha_and_plane(tmp_path):
     assert "k8s/manifests/tasks/drain.yml" in run.outcome
 
 
+def test_gitops_deploy_with_a_hold_names_the_ledgers_hold_plane_entry(tmp_path):
+    """The `owed` ledger's `hold_plane` class is a plane too (#3392)."""
+    (tmp_path / "last_run").write_text(str(NOW.timestamp()))
+    (tmp_path / "hold_sha").write_text("deadbeefcafe1234\n")
+    (tmp_path / "owed.jsonl").write_text(
+        '{"class": "hold_plane", "subject": "ansible/deploy.yml sonarr", '
+        '"origin": "abc", "at": 1}\n'
+    )
+    assert "(ansible/deploy.yml sonarr)" in g.gitops_deploy_run(tmp_path).outcome
+
+
 # --- renovate_notify_run(): notified vs. checked-and-quiet ----------------------------------
 
 
