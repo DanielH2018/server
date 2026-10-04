@@ -92,3 +92,6 @@ The operator accepted the cost on 2026-09-28: an outage in the window is silent.
   window's own cron job and can lift the suppression mid-window. ENFORCED:
   `ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py::test_the_sync_never_runs_inside_the_window_it_declares`,
   which also fails if either side stops reading those values.
+- **The 07:20 run drops an already-DOWN monitor from the window; 08:20 restores it**, as
+  Kuma pages `MAINTENANCE -> DOWN` (#3506). ENFORCED:
+  `ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py::test_exactly_one_sync_run_a_week_leaves_down_monitors_out`.

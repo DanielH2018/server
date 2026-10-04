@@ -1,9 +1,11 @@
 {#
   Keeps ONE Kuma maintenance window — the weekly reboot's — matching the schedule
-  group_vars/all.yml declares. Five stages, because only kuma-cli can talk to Kuma, only
-  python can decide what to say, and Kuma answers the membership question in a second call:
+  group_vars/all.yml declares. Six stages, because only kuma-cli can talk to Kuma, only
+  python can decide what to say, Kuma answers the membership question in a second call, and
+  kuma-cli has no command that reads a monitor's status:
 
     dump     read the live monitors, the maintenance list and the page   (kuma-cli)
+    status   read which monitors are DOWN from Kuma's /metrics           (python)
     select   find our window's numeric id in that list, if it exists     (python)
     detail   read THAT window, the only call that carries its monitors   (kuma-cli)
     render   compute the window, write /work/desired.json when it moved  (python)
@@ -116,6 +118,41 @@ spec:
                 requests:
                   cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
                   memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
+{# Never fails the pod: an unreadable /metrics writes `null`, and the render stage then declares
+   every monitor, which is the window as it was before #3506. Kuma's Service was reachable a
+   moment ago, so this stage carries no retry loop of its own. #}
+            - name: status
+              image: {{ uptime_kuma_k8s_status_page_sync_image }}
+              command:
+                - python3
+                - /config/render_maintenance.py
+                - --phase=status
+                - --metrics-url=http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001/metrics
+                - --api-key-file=/etc/kuma/metrics_api_key
+                - --out=/work/down.json
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: maintenance-sync-work
+                  mountPath: /work
+                - name: maintenance-sync-config
+                  mountPath: /config
+                  readOnly: true
+                - name: maintenance-sync-credentials
+                  mountPath: /etc/kuma
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
+                requests:
+                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
+                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
             - name: select
               image: {{ uptime_kuma_k8s_status_page_sync_image }}
               command:
@@ -202,6 +239,7 @@ spec:
                 - --monitors=/work/monitors.json
                 - --page=/work/page.json
                 - --live=/work/live.json
+                - --down=/work/down.json
                 - --out=/work/desired.json
                 - --mode-out=/work/mode
               securityContext:
@@ -282,3 +320,5 @@ spec:
                 items:
                   - key: kuma_password
                     path: kuma_password
+                  - key: metrics_api_key
+                    path: metrics_api_key
