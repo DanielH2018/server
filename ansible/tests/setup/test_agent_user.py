@@ -83,6 +83,15 @@ def test_a_user_task_granting_a_group_is_flagged() -> None:
     assert group_grants(granting) == ["Create it: groups"]
 
 
+def test_claude_code_installs_into_the_agents_home_under_become() -> None:
+    """The installer refuses to run under sudo unless told the home is deliberate."""
+    task = named(tasks(SHARED), "Install Claude Code for the agent's user")
+    assert task["environment"] == {
+        "HOME": "{{ agent_user_home }}",
+        "CLAUDE_INSTALL_ALLOW_SUDO": "1",
+    }
+
+
 def test_the_agent_gets_the_read_only_kubeconfig_and_never_prints_it() -> None:
     task = named(
         tasks(CLAUDE_TASKS), "Give the agent user the operator's read-only kubeconfig"
