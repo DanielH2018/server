@@ -42,8 +42,6 @@ EXPECTED_MARKERS = frozenset(
     {
         ("hold", "hold_sha"),
         ("hold_plane", "hold_plane"),
-        ("manual_plane", "manual_plane"),
-        ("manual_plane_tags", "manual_plane_tags"),
         ("contention", "contention_since"),
         ("k8s_deferred", "k8s_deferred"),
         ("owed", "owed.jsonl"),
@@ -80,9 +78,10 @@ def _retired_basenames_install_reaps() -> list[str]:
     return reap["loop"]
 
 
-def test_the_install_reaps_the_retired_broad_applied_marker():
+def test_the_install_reaps_the_retired_markers():
     # Named rather than counted: a reap list emptied by a refactor must fail here, not pass.
-    assert "broad_applied" in _retired_basenames_install_reaps()
+    reaped = set(_retired_basenames_install_reaps())
+    assert {"broad_applied", "manual_plane", "manual_plane_tags"} <= reaped
 
 
 def test_the_install_reaps_no_live_marker():

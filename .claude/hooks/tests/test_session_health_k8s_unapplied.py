@@ -47,7 +47,6 @@ def _problems(k8s_unapplied=None, k8s_deferred=None, now=1000.0):
         read_contention=lambda: None,
         read_k8s_deferred=lambda: k8s_deferred,
         read_k8s_unapplied=lambda: k8s_unapplied,
-        read_manual_tags=lambda: None,
     )
 
 

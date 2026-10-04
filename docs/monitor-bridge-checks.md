@@ -1194,6 +1194,20 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   other reason and the whole client-side arm stay live, so a throughput fault on a reboot
   morning still pages; suppressing the check outright would be six hours of weekly blindness
   on partial log loss.
+  **The reboot also loses entries on the client side, and that loss is bounded by the lookback
+  rather than held by a grace** (#3490). While Loki is down for the restart, daniel-pi's Alloy
+  keeps shipping and drops what Loki refuses: 179,396 `reason="ingester_error"` entries on
+  2026-10-04 under `job="alloy-pi"`, a node that did not reboot. The tile paged at 08:19:30,
+  four minutes after the Kuma maintenance window closed, and recovered at 08:39:30. Against a 1h
+  lookback that recovery puts the last drop at about 07:39, before daniel-box finished booting at
+  07:46:35 UTC. The Pi pushes through Traefik on daniel-box, the node this pod runs on, so the
+  loss cannot outlast that node's boot whichever node comes back first. Both shipper queries therefore follow `check_swallowed_verdicts`:
+  inside `BOOT_SETTLE_S` (1200 s) of the node's boot the shipper arms are skipped with an `up`
+  message, and after it the range is the time since the settle window ended, growing back to
+  `SHIPPER_DROPPED_WINDOW`. A drop after the settle window is inside that range and still pages.
+  Raising the maintenance window's recovery allowance to ~70 minutes was the alternative. It was
+  not taken, because a window over 60 minutes covers every minute of the hour and the status
+  page sync (`20 * * * *`) would then have to skip hour 8.
   **Arm 3, the collector's export failures**, folded in on 2026-10-01 from the
   `observability` role's `telemetry-health.sh` host cron (#3094), which ran this same query with
   its own Prometheus client: `sum(increase({__name__=~"otelcol_exporter_send_failed_.*"}[15m]))`,

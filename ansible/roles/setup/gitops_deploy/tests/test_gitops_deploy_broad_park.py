@@ -6,15 +6,13 @@ passing side alone.
 
 Two planes differ in how the tick treats them. A bring-up playbook (`_BROAD_MANUAL_PREFIXES`)
 parks. A setup role `initial_setup.yml` does not include fast-forwards and is recorded in the
-`manual_plane` marker, because parking would hold every other session's landing behind a role
+`owed` ledger's `manual_plane` class, because parking would hold every other session's landing behind a role
 a hand is always going to apply.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_park.py
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_park.py
-
-import pytest
 
 import deploy_defer
 import deploy_locks
@@ -183,18 +181,11 @@ def test_a_second_narrowable_range_on_a_role_with_a_row_unions_the_tags(
     }
 
 
-@pytest.mark.parametrize(
-    "sidecar",
-    [None, "k3s"],
-    ids=["line-written-before-the-sidecar-existed", "row-too-garbled-to-parse"],
-)
-def test_a_role_pending_with_no_row_stays_at_the_role_tag(
-    gitops_deploy, tick, capsys, sidecar
-):
+def test_a_role_pending_with_no_row_stays_at_the_role_tag(gitops_deploy, tick, capsys):
     """A pending line nobody narrowed must not be narrowed by the NEXT range's answer.
 
-    A `manual_plane` line can exist with no sidecar row, as a deployer that predates the
-    sidecar writes it. Whatever made that line pending is unknown here, so a second
+    A `manual_plane` line can carry no tags, as `record_manual_plane` writes it before any
+    derivation answers. Whatever made that line pending is unknown here, so a second
     range answering `kubeconfig` would print `--tags kubeconfig` and leave the first range's
     change unapplied behind a clear command. Unknown absorbs anything: the role tag.
 
@@ -207,8 +198,6 @@ def test_a_role_pending_with_no_row_stays_at_the_role_tag(
     gitops_deploy.STATE.record_manual_plane(
         LOCAL, "ansible/k3s-bringup.yml", "k3s", 1000.0
     )
-    if sidecar is not None:
-        gitops_deploy.STATE.write("manual_plane_tags", sidecar)
     tick.paths = [RBAC]
     tick.narrow_setup["k3s"] = (0, "kubeconfig")
     answered = deploy_defer.narrow_tags_for(
@@ -325,7 +314,7 @@ def test_a_failed_apply_still_records_the_role(gitops_deploy, tick):
 def test_a_rolled_back_tick_leaves_an_earlier_ranges_tag_standing(gitops_deploy, tick):
     """The row this tick WIDENED goes back to what it was; the earlier range's tag survives.
 
-    `record` writes the sidecar row for every role it is handed, including one an earlier
+    `record` writes the tags for every role it is handed, including one an earlier
     range already made pending, while `unrecord` takes back the roles whose LINE it
     appended. `unrecord` therefore has to restore the row as it was: leaving `coredns` would
     keep a tag no merged tree carries, and a whole-line reverse would drop the first range's
@@ -369,7 +358,7 @@ def test_a_contended_tick_on_an_already_pending_role_keeps_the_earlier_row(
     """The same sequence through a real tick, which is where the marker is actually written.
 
     A busy service lock resets the tree to `local`, so the second range stops being merged.
-    The sidecar must read what the FIRST range needed, and nothing else.
+    The tags must read what the FIRST range needed, and nothing else.
     """
     state = gitops_deploy.STATE
     state.record_manual_plane(LOCAL, "ansible/k3s-bringup.yml", "k3s", 1000.0)

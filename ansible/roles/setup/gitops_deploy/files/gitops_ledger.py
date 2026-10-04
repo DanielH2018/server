@@ -4,7 +4,8 @@
 `gitops_markers` holds the line-format markers, whose parsers accept an exact field count and
 skip any other line. Their reader copies redeploy on their own schedules, so a field a new
 writer appended read as no pending work in a reader that had not redeployed. That is why
-`manual_plane_tags` is a sidecar and `k8s_unapplied` was its own file. Every reader here
+`manual_plane` once needed a `manual_plane_tags` sidecar and `k8s_unapplied` was its own
+file. Every reader here
 ignores the keys it does not know, and every writer carries them through a rewrite, so a new
 key is invisible to an old reader instead of erasing the line.
 
@@ -40,17 +41,15 @@ from gitops_markers import NO_PLAYBOOK, K8sDeferredEntry, ManualPlaneEntry
 # `deploy.sh` too.
 OWED_K8S_UNAPPLIED = "k8s_unapplied"
 
-# A setup role a tick fast-forwarded past and cannot apply itself: the ledger form of the
-# `manual_plane` line marker and its `manual_plane_tags` sidecar. The subject is the role,
+# A setup role a tick fast-forwarded past and cannot apply itself. The subject is the role,
 # under the `--tags` value that selects it. Two keys are this class's own: `playbook`, the
 # playbook that applies the role or `NO_PLAYBOOK`, and `tags`, the narrowest `--tags` values
 # the change needs, where an empty list means the whole role.
 #
-# The deployer writes this class (`DeployerState.record_manual_plane`) and no longer writes
-# the line marker. Every reader still unions the two (`merge_manual_plane`), so a host holding
-# lines an older deployer wrote keeps paging on them until the first write folds them in. A
-# line missing either class key still pages, under the default `manual_plane_entries` gives
-# it.
+# It replaced the `manual_plane` line marker and its `manual_plane_tags` sidecar (#3392). The
+# readers moved first, then the writer, and the line-marker readers went in #3487 once no host
+# held a legacy file. A line missing either class key still pages, under the default
+# `manual_plane_entries` gives it.
 OWED_MANUAL_PLANE = "manual_plane"
 
 # Every class a ledger line may carry. A reader asks for its classes by name and never sees
@@ -243,8 +242,8 @@ def k8s_unapplied_entries(owed: str | None) -> list[K8sDeferredEntry]:
 def _token(value) -> str | None:
     """`value` where it is a non-empty string with no whitespace, else None.
 
-    A role, playbook or tag is one word in every place it is printed: the `--tags` value, the
-    playbook path and the line marker's fields.
+    A role, playbook or tag is one word in every place it is printed: the `--tags` value and
+    the playbook path.
     """
     if isinstance(value, str) and value and not any(c.isspace() for c in value):
         return value
@@ -289,46 +288,6 @@ def manual_plane_entries(
         entries.append(ManualPlaneEntry(entry.origin, playbook, role, entry.at))
         tags[role] = _manual_plane_tags(obj)
     return sorted(entries, key=lambda e: e.at), tags
-
-
-def merge_manual_plane(
-    line_entries: list[ManualPlaneEntry],
-    line_tags: dict[str, frozenset[str]],
-    owed: str | None,
-) -> tuple[list[ManualPlaneEntry], dict[str, frozenset[str]]]:
-    """The pending roles of the `manual_plane` line marker and the ledger class, as one answer.
-
-    Args:
-        line_entries: the `parse_manual_plane` entries.
-        line_tags: the `parse_manual_plane_tags` rows of the sidecar.
-        owed: the `owed` ledger text, or None.
-
-    Returns:
-        One entry per role, the OLDEST across both sources, oldest first: its stamp is the
-        age a page fires on, and its playbook is the one that page names. Then role -> tags
-        for every role returned.
-
-    The tags follow the rule `DeployerState.record_manual_plane_tags` holds for two ranges.
-    A role pending in both sources needs both changes applied, so its tags UNION. An empty
-    set on either side (the whole role) absorbs the pair, and so does a line-marker role
-    with no sidecar row, whose needs are unknown.
-    """
-    ledger_entries, ledger_tags = manual_plane_entries(owed)
-    oldest: dict[str, ManualPlaneEntry] = {}
-    for entry in sorted([*line_entries, *ledger_entries], key=lambda e: e.at):
-        oldest.setdefault(entry.role, entry)
-    line_roles = {e.role for e in line_entries}
-    tags: dict[str, frozenset[str]] = {}
-    for role in oldest:
-        sides = []
-        if role in line_roles:
-            sides.append(line_tags.get(role, frozenset()))
-        if role in ledger_tags:
-            sides.append(ledger_tags[role])
-        tags[role] = (
-            frozenset() if any(not s for s in sides) else frozenset().union(*sides)
-        )
-    return sorted(oldest.values(), key=lambda e: e.at), tags
 
 
 def put_manual_plane(

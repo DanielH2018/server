@@ -2,7 +2,7 @@
 """Tests for the SessionStart banner's pending-setup-role line.
 
 A range carrying `roles/setup/k3s/` or `roles/setup/common/` does not park the deployer: the
-tick fast-forwards and records the role in `/var/lib/gitops-deploy/manual_plane`. So
+tick fast-forwards and records the role in `/var/lib/gitops-deploy/owed.jsonl`. So
 `behind_since` is empty, the park line says nothing, and the change sits merged and unapplied
 where no session but the one that landed it is told. This line is where it reaches the rest.
 
@@ -14,6 +14,7 @@ Run: uv run pytest .claude/hooks/tests/test_session_health_manual_plane.py
 """
 
 import importlib.util
+import json
 import os
 
 _HOOK = os.path.join(
@@ -29,13 +30,39 @@ HEAD abc1230000000000000000000000000000000000
 branch refs/heads/master
 """
 
-# What the deployer writes for the two roles that can reach this marker: k3s is applied by
+
+def _line(origin, playbook, role, at, tags=()):
+    """One `manual_plane` line of the `owed` ledger, in the shape the deployer writes."""
+    return json.dumps(
+        {
+            "class": "manual_plane",
+            "subject": role,
+            "origin": origin,
+            "at": at,
+            "playbook": playbook,
+            "tags": sorted(tags),
+        },
+        sort_keys=True,
+    )
+
+
+# What the deployer writes for the two roles that can reach this class: k3s is applied by
 # k3s-bringup.yml, common by no playbook at all.
-_K3S = "abc1230000000000000000000000000000000000 ansible/k3s-bringup.yml k3s 1000"
-_COMMON = "beef1230000000000000000000000000000000000 none common 2000"
+def _k3s(tags=()):
+    return _line(
+        "abc1230000000000000000000000000000000000",
+        "ansible/k3s-bringup.yml",
+        "k3s",
+        1000,
+        tags,
+    )
 
 
-def _problems(manual=None, marker=None, now=1000.0, manual_tags=None):
+_K3S = _k3s()
+_COMMON = _line("beef1230000000000000000000000000000000000", "none", "common", 2000)
+
+
+def _problems(manual=None, marker=None, now=1000.0):
     """The banner lines, with a clean primary checkout and no park unless one is passed."""
     return _mod.parked_deployer_problems(
         list_worktrees=lambda: _WORKTREES,
@@ -43,7 +70,6 @@ def _problems(manual=None, marker=None, now=1000.0, manual_tags=None):
         read_marker=lambda: marker,
         now=now,
         read_manual=lambda: manual,
-        read_manual_tags=lambda: manual_tags,
         read_contention=lambda: None,
         read_k8s_deferred=lambda: None,
         read_k8s_unapplied=lambda: None,
@@ -93,7 +119,8 @@ def test_an_empty_marker_is_clean():
 
 def test_a_garbled_marker_is_clean():
     """The must-not-fire half: a line naming no parsable role names nothing to clear."""
-    assert _problems(manual="three fields only\nsha book role later") == []
+    torn = json.dumps({"class": "manual_plane", "subject": "k3s", "origin": "abc"})
+    assert _problems(manual=f"three fields only\n{torn}") == []
 
 
 def test_a_park_and_a_pending_role_are_both_reported():
@@ -117,7 +144,6 @@ def test_a_raising_manual_read_does_not_take_the_dirty_line_with_it():
         read_marker=lambda: None,
         now=0.0,
         read_manual=boom,
-        read_manual_tags=lambda: None,
         read_contention=lambda: None,
         read_k8s_deferred=lambda: None,
         read_k8s_unapplied=lambda: None,
@@ -129,20 +155,21 @@ def test_a_raising_manual_read_does_not_take_the_dirty_line_with_it():
 
 
 def test_a_narrowed_role_names_the_tag_its_own_change_needs():
-    """The banner quotes the sidecar rather than re-deriving it.
+    """The banner quotes the line's `tags` key rather than re-deriving it.
 
     An isolated worktree cannot ask git about the primary checkout, so the deployer's answer —
     written at the tick that recorded the role — is the only one this line can reach.
     """
-    (line,) = _problems(manual=_K3S, manual_tags="k3s kubeconfig")
+    (line,) = _problems(manual=_k3s(["kubeconfig"]))
     assert "--tags kubeconfig" in line
     assert "--tags k3s`" not in line
 
 
 def test_a_role_with_no_narrowing_still_names_the_role_tag():
-    """The rejecting half, for both shapes of "no narrowing": no sidecar, and a refusal in it."""
-    for tags in (None, "k3s -"):
-        (line,) = _problems(manual=_K3S, manual_tags=tags)
+    """The rejecting half, for both shapes of "no narrowing": no `tags` key, and an empty one."""
+    no_key = json.dumps({k: v for k, v in json.loads(_K3S).items() if k != "tags"})
+    for manual in (no_key, _K3S):
+        (line,) = _problems(manual=manual)
         assert "ansible/k3s-bringup.yml --tags k3s" in line
 
 
@@ -156,22 +183,21 @@ def test_a_whole_role_apply_carries_the_control_plane_warning():
     `deploy_remediation`. The banner built its own command and carried nothing, so a session
     reading it took the widest, most destructive form of the apply with no notice.
     """
-    for tags in (None, "k3s -"):
-        (line,) = _problems(manual=_K3S, manual_tags=tags)
-        assert "--tags k3s`" in line
-        assert "rotate-keys" in line, "the warning names the irreversible half"
+    (line,) = _problems(manual=_K3S)
+    assert "--tags k3s`" in line
+    assert "rotate-keys" in line, "the warning names the irreversible half"
 
 
 def test_a_narrowed_apply_reaching_the_gated_tasks_keeps_the_warning():
     """`k3s_server` selects every task in `tasks/server.yml`, restart and re-encryption both."""
-    (line,) = _problems(manual=_K3S, manual_tags="k3s k3s_server")
+    (line,) = _problems(manual=_k3s(["k3s_server"]))
     assert "--tags k3s_server" in line
     assert "rotate-keys" in line
 
 
 def test_a_narrowed_apply_reaching_nothing_gated_carries_no_warning():
     """The rejecting half: a warning printed beside every command is one nobody reads."""
-    (line,) = _problems(manual=_K3S, manual_tags="k3s kubeconfig")
+    (line,) = _problems(manual=_k3s(["kubeconfig"]))
     assert "--tags kubeconfig" in line
     assert "WARNING" not in line and "rotate-keys" not in line
 

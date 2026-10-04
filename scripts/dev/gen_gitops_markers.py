@@ -4,7 +4,7 @@
 Run: uv run python scripts/dev/gen_gitops_markers.py [--check]
 
 WHY A COPY. `ansible/roles/setup/gitops_deploy/files/gitops_markers.py` holds the state
-directory, the marker basenames and the parsers for the `behind_since`, `manual_plane` and
+directory, the marker basenames and the parsers for the `behind_since`, `k8s_deferred` and
 `contention_since` line formats. Each reader once restated the directory and its basenames,
 and three parsed the same lines independently (issue #2063).
 

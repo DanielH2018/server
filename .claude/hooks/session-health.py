@@ -98,7 +98,6 @@ try:
         read_k8s_deferred_marker,
         read_k8s_unapplied_marker,
         read_manual_plane_marker,
-        read_manual_plane_tags_marker,
     )
 
     DEPLOYER_PARK_IMPORT_ERROR = ""
@@ -120,7 +119,6 @@ except ImportError as exc:
     read_behind_marker = _park_unavailable
     manual_plane_lines = _park_unavailable
     read_manual_plane_marker = _park_unavailable
-    read_manual_plane_tags_marker = _park_unavailable
     contention_lines = _park_unavailable
     read_contention_marker = _park_unavailable
     k8s_deferred_lines = _park_unavailable
@@ -230,7 +228,6 @@ def parked_deployer_problems(
     now=None,
     read_manual=None,
     read_contention=None,
-    read_manual_tags=None,
     read_k8s_deferred=None,
     read_k8s_unapplied=None,
 ):
@@ -274,11 +271,6 @@ def parked_deployer_problems(
 
         def read_manual():
             return read_manual_plane_marker(GITOPS_STATE_DIR)
-
-    if read_manual_tags is None:
-
-        def read_manual_tags():
-            return read_manual_plane_tags_marker(GITOPS_STATE_DIR)
 
     if read_contention is None:
 
@@ -325,7 +317,7 @@ def parked_deployer_problems(
         # After the park line and independent of it: the two are different deferrals of the
         # same tick, and a host can be in both. A read that raises keeps the lines gathered
         # before it, the same way the park read does.
-        lines += manual_plane_lines(read_manual(), clock, read_manual_tags())
+        lines += manual_plane_lines(read_manual(), clock)
         lines += contention_lines(read_contention(), clock)
         # Last, after every other deferral: a deferred image bump is the cheapest of them to
         # clear and the least urgent. One deploy of the named service does it, and this banner

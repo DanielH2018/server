@@ -112,7 +112,7 @@ def _grace_seen(cfg, uptime):
 
 
 def test_check_shipper_dropped_arms_the_grace_from_the_node_uptime(cfg):
-    ok, msg = _grace_seen(cfg, 600.0)
+    ok, msg = _grace_seen(cfg, cfg.BOOT_SETTLE_S + 600.0)
     assert ok
     assert "still catching up" in msg
 
@@ -125,6 +125,71 @@ def test_check_shipper_dropped_pages_once_the_grace_has_passed(cfg):
 def test_an_unreadable_clock_does_not_arm_the_backlog_grace(cfg):
     ok, _ = _grace_seen(cfg, None)
     assert not ok
+
+
+# --- shipper_dropped: never read back past the reboot -------------------------------------
+
+
+def _shipper_ranges(cfg, uptime, client=0.0):
+    """The verdict `check_shipper_dropped` gives at a stated node uptime, and every query it ran.
+
+    `client` is what the client-side counter answers. The export-failure arm is disabled, so
+    every recorded query is one of the two shipper arms.
+    """
+    queries = []
+
+    def _scalar(_cfg, query):
+        queries.append(query)
+        return client
+
+    def _vector(_cfg, query):
+        queries.append(query)
+        return []
+
+    ok, msg = checks.logs.check_shipper_dropped(
+        dataclasses.replace(cfg, OTELCOL_SEND_FAILED_METRICS=""),
+        uptime_s=lambda: uptime,
+        prom_scalar=_scalar,
+        prom_vector=_vector,
+    )
+    return ok, msg, queries
+
+
+def test_inside_the_settle_window_the_shipper_arms_are_skipped(cfg):
+    # 2026-10-04: daniel-pi's Alloy dropped 179,396 entries while Loki was down for the reboot.
+    ok, msg, queries = _shipper_ranges(cfg, uptime=300.0, client=179396.0)
+    assert ok
+    assert "inside BOOT_SETTLE_S" in msg
+    assert queries == [], "nothing should be queried when no window is left to read"
+
+
+def test_just_after_the_settle_window_both_shipper_arms_read_only_since_it(cfg):
+    _, _, queries = _shipper_ranges(cfg, uptime=cfg.BOOT_SETTLE_S + 900)
+    assert len(queries) == 2
+    assert all(q.endswith("[900s]))") for q in queries), queries
+
+
+def test_the_configured_shipper_window_returns_once_the_reboot_is_out_of_range(cfg):
+    _, _, queries = _shipper_ranges(cfg, uptime=cfg.BOOT_SETTLE_S + 2 * 3600)
+    assert all(q.endswith("[%s]))" % cfg.SHIPPER_DROPPED_WINDOW) for q in queries), (
+        queries
+    )
+
+
+def test_an_unreadable_clock_leaves_the_configured_shipper_window(cfg):
+    _, _, queries = _shipper_ranges(cfg, uptime=None)
+    assert all(q.endswith("[%s]))" % cfg.SHIPPER_DROPPED_WINDOW) for q in queries), (
+        queries
+    )
+
+
+def test_a_shortened_shipper_window_still_pages_on_a_drop_after_the_reboot(cfg):
+    # The reject half: shortening the lookback must not make the arm inert.
+    ok, msg, _ = _shipper_ranges(
+        cfg, uptime=cfg.BOOT_SETTLE_S + 900, client=cfg.SHIPPER_DROPPED_MAX + 1
+    )
+    assert not ok
+    assert "in 900s" in msg
 
 
 # --- swallowed_verdicts: never read back past the reboot ----------------------------------

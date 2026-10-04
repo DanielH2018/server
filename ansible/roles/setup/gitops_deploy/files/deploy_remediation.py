@@ -110,8 +110,9 @@ def broad_remediation(
     which is what every caller with no path list still gets.
 
     `narrow_tags` narrows the `--tags` value one step further, from the whole-role tag to the
-    tags of the tasks that read what changed. It is the deployer's `manual_plane_tags` marker,
-    so a caller without that marker in reach omits it and gets the role tag.
+    tags of the tasks that read what changed. It is the `tags` key of the deployer's
+    `manual_plane` ledger lines, so a caller without the ledger in reach omits it and gets the
+    role tag.
 
     THE FF-MERGE COMES FIRST, and that is the half this returned string exists to carry.
     Ansible renders from the working tree, so a playbook run before the merge copies the
@@ -191,8 +192,8 @@ def manual_plane_clear_for(
 #
 # THE NARROWER TAG IS DERIVED, AND THIS IS THE FALLBACK (#2307). `deploy_defer.record` asks
 # `scripts/deploy_tools/narrow_setup.py` which of the role's own tags the changed paths reach,
-# and stores the answer in the `manual_plane_tags` sidecar marker; every surface quoting this
-# composer reads that marker, so all four print the same narrow tag. The derivation refuses on
+# and stores the answer as the `tags` key of the role's `manual_plane` ledger line; every
+# surface quoting this composer reads that key, so all four print the same narrow tag. The derivation refuses on
 # any doubt — an untagged task file, a variable nothing in the role reads, a `handlers/` change
 # — and a refusal lands here, on the whole-role tag plus this warning. That is the safe
 # direction: a `--tags` value matching nothing makes Ansible exit 0 having applied nothing,
@@ -268,7 +269,7 @@ def _setup_commands(
     Args:
         setup_roles: the roles to name a command for.
         narrow_tags: role tag -> the narrower tags that role's own change needs, from the
-            `manual_plane_tags` marker. A role absent from it, or present with an empty set,
+            `manual_plane` ledger class. A role absent from it, or present with an empty set,
             gets the whole-role tag.
 
     A role in `_MAXIMAL_ROLE_TAGS` gets its command annotated with what that command does, so

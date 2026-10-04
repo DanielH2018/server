@@ -42,20 +42,6 @@ MARKERS: dict[str, str] = {
     # wrong remediation for a broad apply: the tree is already fast-forwarded and a playbook is
     # what broke, so reverting the PR undoes nothing. This names what to re-run instead.
     "hold_plane": "hold_plane",
-    # One line per setup role this host fast-forwarded past and cannot apply itself,
-    # `"<origin_sha> <playbook-or-none> <role> <unix_ts>"`. See `parse_manual_plane`.
-    "manual_plane": "manual_plane",
-    # The narrowest `--tags` value each pending role's own change actually needs, one line per
-    # role as `"<role> <tag,tag>"` or `"<role> -"` for a range no derivation could narrow.
-    # See `parse_manual_plane_tags`.
-    #
-    # A SIDECAR RATHER THAN A FIFTH FIELD ON THE LINE ABOVE. `parse_manual_plane` accepts
-    # exactly four fields and SKIPS anything else, and these copies reach their hosts one role
-    # deploy at a time — so a five-field line written by a new deployer would read as no
-    # pending role at all in an un-redeployed monitor-bridge, and the page it raises on a
-    # role's age would stop firing. A reader that has never heard of this file degrades to the
-    # whole-role tag, which is the blunt but correct answer it printed before #2307.
-    "manual_plane_tags": "manual_plane_tags",
     # `"<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>"` while
     # consecutive ticks defer on one busy service lock. See `parse_contention`.
     "contention": "contention_since",
@@ -164,16 +150,11 @@ ALERT_SLOTS: frozenset[str] = frozenset(
     {"broad", "secrets", "tasks", "k8s", "stale_denylist", "ci"}
 )
 
-# What the playbook field of a `manual_plane` line holds for a role no playbook applies
+# What the `playbook` key of a `manual_plane` ledger line holds for a role no playbook applies
 # (`common`).
 NO_PLAYBOOK = "none"
 
-# What the tag field of a `manual_plane_tags` line holds when no derivation could narrow the
-# role's change, so the reader prints the whole-role tag. A literal rather than an empty
-# field: a line ending in whitespace splits to one part, which every parser here skips.
-NARROWED_TO_ROLE = "-"
-
-# What an operator runs to clear one role's `manual_plane` line after applying it by hand,
+# What an operator runs to clear one role's `manual_plane` ledger line after applying it by hand,
 # and to end a contention streak once the lock's holder is gone. The deployer's alert,
 # `land.sh`, monitor-bridge's page and the SessionStart banner all print these; one string
 # each so they cannot name four different commands.
@@ -293,7 +274,7 @@ CONTENTION_PAGE_SECONDS = 30 * 60
 
 
 class ManualPlaneEntry(NamedTuple):
-    """One pending line of the `manual_plane` marker.
+    """One pending role of the `owed` ledger's `manual_plane` class.
 
     Attributes:
         origin: the origin SHA whose range first carried this role.
@@ -370,61 +351,6 @@ def parse_behind(marker: str | None) -> tuple[str, float] | None:
         return None
 
 
-def parse_manual_plane(marker: str | None) -> list[ManualPlaneEntry]:
-    """Every pending role in the `manual_plane` marker, oldest line first.
-
-    A line this cannot parse is SKIPPED, never guessed at. `record_manual_plane` and
-    `clear_manual_plane` still carry such a line through, so it is skipped, never lost.
-    """
-    entries = []
-    for line in (marker or "").splitlines():
-        parts = line.split()
-        if len(parts) != 4:
-            continue
-        try:
-            at = float(parts[3])
-        except ValueError:
-            continue
-        entries.append(ManualPlaneEntry(parts[0], parts[1], parts[2], at))
-    return entries
-
-
-def parse_manual_plane_tags(marker: str | None) -> dict[str, frozenset[str]]:
-    """The narrowest tags each pending role needs, by role, from the `manual_plane_tags` marker.
-
-    An EMPTY frozenset means the deployer could not narrow that role's change, so its reader
-    prints the whole-role tag. A role with no line at all is the same answer, reached by a
-    reader that looked before the sidecar existed or by a tick that wrote none — which is why
-    the two are deliberately indistinguishable to a caller using `.get(role, frozenset())`.
-
-    A line this cannot parse is SKIPPED, for the reason every parser here skips: a remediation
-    built from a torn line names a tag that selects nothing, and Ansible exits 0 on one.
-    """
-    out: dict[str, frozenset[str]] = {}
-    for line in (marker or "").splitlines():
-        parts = line.split()
-        if len(parts) != 2:
-            continue
-        tags = [t for t in parts[1].split(",") if t and t != NARROWED_TO_ROLE]
-        out[parts[0]] = frozenset(tags)
-    return out
-
-
-def format_manual_plane_tags(tags: dict[str, frozenset[str]]) -> str | None:
-    """The `manual_plane_tags` marker for a role -> tags mapping, or None when it is empty.
-
-    The reverse of `parse_manual_plane_tags`, here beside it so the two cannot drift: a role
-    whose tags are empty is written as `NARROWED_TO_ROLE`, because a line with a trailing
-    empty field would split to one part and be skipped as garbled.
-    """
-    if not tags:
-        return None
-    return "\n".join(
-        f"{role} {','.join(sorted(tags[role])) or NARROWED_TO_ROLE}"
-        for role in sorted(tags)
-    )
-
-
 def parse_alerted(marker: str | None) -> dict[str, str]:
     """The SHA each alert slot last paged on, by slot, from the `alerted` marker.
 
@@ -457,9 +383,8 @@ def format_alerted(alerted: dict[str, str]) -> str | None:
 def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
     """Every pending line of `k8s_deferred`, in the order they stand.
 
-    A line this cannot parse is SKIPPED, never guessed at, for the reason
-    `parse_manual_plane` skips one: a page raised off a torn line names no service and cannot
-    be cleared.
+    A line this cannot parse is SKIPPED, never guessed at: a page raised off a torn line names
+    no service and cannot be cleared.
     """
     entries = []
     for line in (marker or "").splitlines():
@@ -526,9 +451,10 @@ def rewrite_k8s_lines(marker: str | None, services, now: float) -> str:
     # DECIDED: a repaired line is rewritten to exactly three fields, so a FOURTH field on a
     # line naming one of `services` is discarded rather than carried. Before this, both the
     # record and the clear carried such a line verbatim. Three fields is the format every
-    # reader parses, for the reason the `manual_plane_tags` comment above gives — a fourth
-    # would read as no pending bump in an un-redeployed monitor-bridge — so nothing may write
-    # one, and a line carrying one came from a bug or a hand edit, not from a newer writer.
+    # reader parses, and `parse_k8s_deferred` skips any other count, so a fourth would read as
+    # no pending bump in a monitor-bridge copy that has not redeployed. Nothing may write one,
+    # and a line carrying one came from a bug or a hand edit, not from a newer writer. A new
+    # field belongs in the `owed` ledger, whose readers ignore keys they do not know (#3392).
     for line in (marker or "").splitlines():
         service = k8s_line_service(line)
         if service is None or service not in wanted:

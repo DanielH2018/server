@@ -7,6 +7,7 @@ and is_diverged stays false, so every other GitOps signal reads green. A held BR
 remediation than a held service deploy, so the message says which it is.
 """
 
+import json
 from dataclasses import replace
 
 import pytest
@@ -212,10 +213,29 @@ def test_a_plane_marker_without_a_hold_does_not_page(cfg):
     assert ok
 
 
-# ── the manual_plane marker: a setup role the deployer fast-forwarded past ──────────────
-# One line per pending role, "<origin_sha> <playbook> <role> <unix_ts>", written by
-# DeployerState.record_manual_plane.
-_K3S_PENDING = "abc123def4567890 ansible/k3s-bringup.yml k3s 1000.0"
+# ── the owed ledger's manual_plane class: a setup role the deployer fast-forwarded past ──
+# One JSON line per pending role, written by DeployerState.record_manual_plane.
+
+
+def _pending(origin, playbook, role, at, tags=()):
+    return json.dumps(
+        {
+            "class": "manual_plane",
+            "subject": role,
+            "origin": origin,
+            "at": at,
+            "playbook": playbook,
+            "tags": sorted(tags),
+        }
+    )
+
+
+def _k3s(*tags, at=1000):
+    return _pending("abc123def4567890", "ansible/k3s-bringup.yml", "k3s", at, tags)
+
+
+_K3S_PENDING = _k3s()
+_COMMON_PENDING = _pending("def456abc7890123", "none", "common", 25000)
 
 
 def test_a_freshly_pending_role_is_ok(cfg):
@@ -224,7 +244,7 @@ def test_a_freshly_pending_role_is_ok(cfg):
     Paging on it immediately would page on every one of those merges.
     """
     ok, msg = checks.gitops.gitops_status(
-        cfg, None, None, None, now=1000.0 + 600, manual_plane=_K3S_PENDING
+        cfg, None, None, None, now=1000.0 + 600, owed=_K3S_PENDING
     )
     assert ok
     assert msg == "no held deploy"
@@ -232,7 +252,7 @@ def test_a_freshly_pending_role_is_ok(cfg):
 
 def test_a_role_pending_too_long_pages_and_names_it(cfg):
     ok, msg = checks.gitops.gitops_status(
-        cfg, None, None, None, now=1000.0 + 7 * 3600, manual_plane=_K3S_PENDING
+        cfg, None, None, None, now=1000.0 + 7 * 3600, owed=_K3S_PENDING
     )
     assert not ok
     assert "k3s" in msg
@@ -244,9 +264,9 @@ def test_the_oldest_pending_role_decides(cfg):
 
     A role recorded this minute must not reset the clock on one that has waited all day.
     """
-    marker = _K3S_PENDING + "\ndef456abc7890123 none common 25000.0"
+    marker = _K3S_PENDING + "\n" + _COMMON_PENDING
     ok, msg = checks.gitops.gitops_status(
-        cfg, None, None, None, now=1000.0 + 7 * 3600, manual_plane=marker
+        cfg, None, None, None, now=1000.0 + 7 * 3600, owed=marker
     )
     assert not ok
     assert "common" in msg and "k3s" in msg
@@ -258,13 +278,11 @@ def test_a_narrowed_row_pages_the_clear_that_names_what_it_applied(cfg):
     A bare clear after a narrowed apply drops a tag a later range added to the row.
     `common`'s empty row gets the bare form, since `--applied` there keeps the line.
     """
-    marker = _K3S_PENDING + "\ndef456abc7890123 none common 25000.0"
     ok, msg = checks.gitops.gitops_status(
         cfg,
         None,
         now=1000.0 + 7 * 3600,
-        manual_plane=marker,
-        manual_plane_tags="common -\nk3s kubeconfig",
+        owed=_k3s("kubeconfig") + "\n" + _COMMON_PENDING,
     )
     assert not ok
     assert "apply the role by hand, then `" in msg  # `common` has no playbook
@@ -277,25 +295,24 @@ def test_a_narrowed_row_pages_the_clear_that_names_what_it_applied(cfg):
 def test_a_role_with_no_row_pages_the_bare_clear(cfg):
     """The rejecting half: nothing narrowed, so the whole-role clear."""
     ok, msg = checks.gitops.gitops_status(
-        cfg, None, now=1000.0 + 7 * 3600, manual_plane=_K3S_PENDING
+        cfg, None, now=1000.0 + 7 * 3600, owed=_K3S_PENDING
     )
     assert not ok
     assert msg.endswith("clear-manual-plane k3s`")
 
 
-def test_an_unparseable_manual_plane_marker_is_ok(cfg):
+def test_an_unparseable_manual_plane_line_is_ok(cfg):
     """Same rule as `behind_since`: garbage must not page forever with nothing to clear."""
-    for marker in ("garbage", "a b c notanumber", "", "a b c"):
-        ok, _ = checks.gitops.gitops_status(
-            cfg, None, None, None, now=1e9, manual_plane=marker
-        )
+    torn = json.dumps({"class": "manual_plane", "subject": "k3s", "at": "notanumber"})
+    for marker in ("garbage", "a b c notanumber", "", torn):
+        ok, _ = checks.gitops.gitops_status(cfg, None, None, None, now=1e9, owed=marker)
         assert ok, marker
 
 
 def test_a_hold_wins_over_a_pending_role(cfg):
     """A hold names a broken apply; a pending role names work nobody has started yet."""
     ok, msg = checks.gitops.gitops_status(
-        cfg, "held123abc456789", None, None, now=1e9, manual_plane=_K3S_PENDING
+        cfg, "held123abc456789", None, None, now=1e9, owed=_K3S_PENDING
     )
     assert not ok
     assert "held" in msg
@@ -315,21 +332,20 @@ def test_a_stale_behind_marker_wins_over_a_pending_role(cfg):
         None,
         "abc123def4567890 1000.0",
         now=1000.0 + 7 * 3600,
-        manual_plane=_K3S_PENDING,
+        owed=_K3S_PENDING,
     )
     assert not ok
     assert "behind origin" in msg
     assert "clear-manual-plane" not in msg
 
 
-def test_check_gitops_status_reads_the_manual_plane_file(tmp_path, cfg):
-    """The marker is read off the same :ro state mount as `behind_since`."""
+def test_check_gitops_status_reads_the_manual_plane_class_off_the_mount(tmp_path, cfg):
+    """The ledger is read off the same :ro state mount as `behind_since`."""
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
-    _gw(tmp_path, "manual_plane", "abc123def4567890 ansible/k3s-bringup.yml k3s 1.0")
-    _gw(tmp_path, "manual_plane_tags", "k3s kubeconfig")
+    _gw(tmp_path, "owed.jsonl", _k3s("kubeconfig", at=1))
     ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
-    assert "k3s --applied kubeconfig" in msg, "the tags row is read off the mount too"
+    assert "k3s --applied kubeconfig" in msg, "the tags key is read off the mount too"
 
 
 # ── consecutive ticks deferred on a busy service lock ───────────────────────────
@@ -411,8 +427,7 @@ def test_the_page_names_the_apply_the_clear_belongs_to(cfg):
         cfg,
         None,
         now=1000.0 + 7 * 3600,
-        manual_plane=_K3S_PENDING,
-        manual_plane_tags="k3s -",
+        owed=_K3S_PENDING,
     )
     assert not ok
     assert "apply `ansible/k3s-bringup.yml --tags k3s` by hand" in msg
@@ -425,8 +440,7 @@ def test_a_narrowed_apply_off_the_gated_tags_carries_no_warning(cfg):
         cfg,
         None,
         now=1000.0 + 7 * 3600,
-        manual_plane=_K3S_PENDING,
-        manual_plane_tags="k3s kubeconfig",
+        owed=_k3s("kubeconfig"),
     )
     assert not ok
     assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
@@ -439,51 +453,34 @@ def test_a_role_no_playbook_applies_is_not_told_to_run_none(cfg):
         cfg,
         None,
         now=25000.0 + 7 * 3600,
-        manual_plane="def456abc7890123 none common 25000.0",
+        owed=_COMMON_PENDING,
     )
     assert not ok
     assert "apply the role by hand" in msg
     assert "--tags common" not in msg and "none --tags" not in msg
 
 
-def test_an_undecodable_sidecar_still_pages_the_arm_that_fired(tmp_path, cfg):
-    """An undecodable `manual_plane_tags` sidecar is not a check error.
+def test_an_undecodable_ledger_still_pages_the_arm_that_fired(tmp_path, cfg):
+    """An undecodable `owed` ledger is not a check error.
 
     Raising here would turn `gitops_status` into DOWN "check error" every cycle, which would
     mask the hold, diverged, behind and contention arms — the four this monitor exists to raise.
     """
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     _gw(tmp_path, "hold_sha", "held123abc456789")
-    (tmp_path / "manual_plane_tags").write_bytes(b"k3s \xff\xfe kubeconfig\n")
+    (tmp_path / "owed.jsonl").write_bytes(b'{"class": "manual_plane", "\xff\xfe"}\n')
     ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
     assert "deploy held at held123a" in msg
 
 
-def test_an_undecodable_sidecar_line_is_skipped_and_the_rest_is_read(tmp_path, cfg):
-    """The sidecar's accepting half: one torn line must not cost the valid line beside it.
-
-    `common kube\\xffconfig` still splits into two fields once decoded with replacement, so
-    the skip is per line, which also keeps a tag that selects nothing out of the page.
-    """
-    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
-    _gw(tmp_path, "manual_plane", "abc123def4567890 ansible/k3s-bringup.yml k3s 1.0")
-    (tmp_path / "manual_plane_tags").write_bytes(
-        b"common kube\xffconfig\nk3s kubeconfig\n"
-    )
-    ok, msg = checks.gitops.check_gitops_status(cfg)
-    assert not ok
-    assert "k3s --applied kubeconfig" in msg
-    assert "�" not in msg
-
-
-@pytest.mark.parametrize("marker", ["hold_sha", "manual_plane"])
-def test_an_undecodable_marker_other_than_the_sidecar_is_a_check_error(
+@pytest.mark.parametrize("marker", ["hold_sha", "hold_plane"])
+def test_an_undecodable_marker_other_than_the_ledger_is_a_check_error(
     tmp_path, cfg, marker
 ):
-    """The decode tolerance is the sidecar's alone: a torn hold is NOT "no held deploy".
+    """The decode tolerance is the ledger's alone: a torn hold is NOT "no held deploy".
 
-    A `hold_sha` or `manual_plane` the check cannot decode says nothing about whether a
+    A `hold_sha` or `hold_plane` the check cannot decode says nothing about whether a
     deploy is held, so it raises and `_evaluate` reports DOWN "check error" — the rule
     `deploy_state.py` states for an unreadable state directory.
     """
