@@ -24,8 +24,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 - **Port 8123, no Authelia**, so the companion app works unchanged. MQTT goes via the
   in-cluster `mosquitto` Service, NUT via the in-cluster `nut` Service (admitted by
   `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-nut.yaml.j2`).
-- **Pinned to `k8s_primary_node`** with the rest of the home-critical chain, beside the
-  mosquitto broker and the VIPs (#3452). The reasoning is the marker
+- **Pinned to `k8s_primary_node`** with the home-critical chain, beside mosquitto and the
+  VIPs (#3452):
   `ansible/roles/k8s/home-assistant/templates/deployment.yaml.j2:DECIDED: every Deployment of a home-critical`.
 
 ## Where things are documented
