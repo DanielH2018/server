@@ -33,6 +33,11 @@ ROLE_LABEL = "homelab/role"
 # `y`/`n` are bools there, and `1e3`, `0o17` and `0b1` are numbers. Dumped plain, a quoted
 # env value "y" would reach the API server as `true` and fail the apply. Every string matching
 # one of these is written double-quoted instead.
+#
+# The reverse holds for a scalar the template wrote PLAIN: PyYAML loads `defaultMode: 0o444` as
+# the string "0o444", where go-yaml reads the integer 292. Quoting it would hand the API server
+# a string and fail the apply (scrutiny's secret volumes). `_Loader` keeps such a scalar as a
+# `_GoPlain`, which is written back plain, so kubectl reads what the template said.
 _GO_YAML_NON_STRING = re.compile(
     r"""
     (?: y|Y|yes|Yes|YES|n|N|no|No|NO
@@ -51,6 +56,24 @@ _GO_YAML_NON_STRING = re.compile(
 )
 
 
+class _GoPlain(str):
+    """A plain scalar PyYAML read as a string and go-yaml reads as a number or a bool."""
+
+
+class _Loader(yaml.SafeLoader):
+    """SafeLoader that marks a plain scalar go-yaml would not read as a string."""
+
+
+def _construct_str(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> str:
+    value = loader.construct_scalar(node)
+    if node.style is None and _GO_YAML_NON_STRING.fullmatch(value):
+        return _GoPlain(value)
+    return value
+
+
+_Loader.add_constructor("tag:yaml.org,2002:str", _construct_str)
+
+
 class _Dumper(yaml.SafeDumper):
     """SafeDumper that writes a multi-line string as a `|` block, as a template would."""
 
@@ -65,7 +88,12 @@ def _represent_str(dumper: yaml.SafeDumper, data: str) -> yaml.ScalarNode:
     return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=style)
 
 
+def _represent_go_plain(dumper: yaml.SafeDumper, data: _GoPlain) -> yaml.ScalarNode:
+    return dumper.represent_scalar("tag:yaml.org,2002:str", str(data), style=None)
+
+
 _Dumper.add_representer(str, _represent_str)
+_Dumper.add_representer(_GoPlain, _represent_go_plain)
 
 
 def homelab_role_label(text: str, role: str) -> str:
@@ -80,7 +108,7 @@ def homelab_role_label(text: str, role: str) -> str:
     # ansible-core passes a templated value as a tagged `str` subclass, which SafeDumper
     # refuses to represent ("cannot represent an object").
     role = str(role)
-    docs = [doc for doc in yaml.safe_load_all(str(text)) if doc is not None]
+    docs = [doc for doc in yaml.load_all(str(text), Loader=_Loader) if doc is not None]
     if not docs:
         raise ValueError(
             f"a manifest for {role} rendered no document. Pruning after an empty render "

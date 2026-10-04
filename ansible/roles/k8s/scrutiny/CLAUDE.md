@@ -27,7 +27,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   time series, which the daily collector runs rebuild; the reason sits beside its entry in
   `k3s_longhorn_nobackup_volumes` in `ansible/roles/setup/k3s/defaults/main.yml`.
   **`scrutiny-web-config`** (1Gi) is the SQLite config DB: device metadata and notification
-  settings. `k8s/volume-claim` creates both claims.
+  settings. Both claims are `k8s_claims` entries in `defaults/main.yml`.
 - **The rolling branch tags** are `master-web` and `master-collector`.
 
 ## Notable

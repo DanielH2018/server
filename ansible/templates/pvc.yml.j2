@@ -6,11 +6,11 @@
   point of these comments is that they differ role to role.
 
   THE CALLER SLOT SITS BETWEEN `spec:` AND `accessModes:`, and that is what decides whether a
-  role can adopt this at all. pi-peer-backup and valheim are deliberately NOT converted: each
-  attaches a load-bearing comment to `storageClassName` — "Plain `longhorn` ON PURPOSE (not
-  -nobackup)" and "nobackup: every byte here is re-downloadable from Steam" — and this macro
-  can only place a comment above `accessModes:`. Converting them would move the reasoning off
-  the line that makes the trade-off, which is the one place it is worth having.
+  role can adopt this at all. pi-peer-backup is deliberately NOT converted: it attaches a
+  load-bearing comment to `storageClassName` — "Plain `longhorn` ON PURPOSE (not -nobackup)" —
+  and this macro can only place a comment above `accessModes:`. A `k8s_claims` role keeps that
+  kind of reasoning beside its `*_storage_class` default instead, which is the line that makes
+  the trade-off there (valheim's nobackup install claim does this).
 
   `claim-default.yaml.j2` calls this macro once per entry of a role's `k8s_claims`, which is
   how the roles converted under #3387 create their claims. `_rendered_pvc_claims` reads
