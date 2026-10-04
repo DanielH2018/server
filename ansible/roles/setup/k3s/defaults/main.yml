@@ -510,6 +510,21 @@ k3s_longhorn_cron_evidence_window_hours: 26
 # is degraded, so this cannot stampede a rebuild.
 k3s_longhorn_concurrent_engine_upgrade: 3
 
+# What Longhorn does with a pod whose node goes down while the pod holds an RWO volume.
+# `do-nothing` is upstream's default: the pod stays Terminating, so its volume stays attached
+# to the dead node, until an operator force-deletes it. The rejected values
+# (`delete-statefulset-pod`, `delete-deployment-pod`,
+# `delete-both-statefulset-and-deployment-pod`) have Longhorn force-delete the pod and move the
+# volume to the survivor unattended.
+# DECIDED: `do-nothing` — keep the stateful failover a human step on this two-node cluster.
+# There is no fencing and no third node, so Longhorn cannot tell a dead daniel-server from one
+# cut off from daniel-box: an automatic delete on a partition would run a second copy of the
+# workload against the other replica. The survivor also lacks the memory for the lost node's
+# whole load until the shed set is scaled to zero (docs/break-glass.md, *daniel-server is
+# dead*), and that step is manual too. Stateless pods still reschedule on their own. Revisit
+# when a third node or a fencing mechanism exists.
+k3s_longhorn_node_down_pod_deletion_policy: do-nothing
+
 # Read-only cluster access for {{ sys_user }}. The admin kubeconfig k3s writes is root:root
 # 0640, so every `kubectl` otherwise goes through sudo — which is passworded on this host and
 # therefore needs a TTY, blocking anything unattended (diagnostics, health checks, an agent

@@ -255,6 +255,20 @@
   become: true
   changed_when: "'no change' not in k3s_longhorn_engine_upgrade.stdout"
 
+- name: Set what Longhorn does with a down node's pods
+  tags: [longhorn]
+  # Pins upstream's default so the decision lives in the repo rather than in an unset value.
+  # See the variable's DECIDED comment in defaults/main.yml.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system patch settings.longhorn.io node-down-pod-deletion-policy
+      --type=merge -p {{ node_down_patch | quote }}
+  vars:
+    node_down_patch: '{"value":"{{ k3s_longhorn_node_down_pod_deletion_policy }}"}'
+  register: k3s_longhorn_node_down
+  become: true
+  changed_when: "'no change' not in k3s_longhorn_node_down.stdout"
+
 - name: Render the Longhorn StorageClass
   tags: [longhorn]
   # The setting patched above only governs volumes whose StorageClass stays quiet about
