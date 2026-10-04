@@ -87,23 +87,25 @@ def test_guard_cancel_unlisted_pid_is_flagged():
     assert "4321" in w.guard_cancel(4321, {9})
 
 
-def test_clear_hold_matching_sha_removes_both_is_clean(state_dir, tmp_path):
+def _owed_line(cls: str, subject: str) -> str:
+    return json.dumps({"class": cls, "subject": subject, "origin": "abc", "at": 1})
+
+
+def test_clear_hold_matching_sha_with_no_plane_held_removes_the_sha_is_clean(
+    state_dir, tmp_path
+):
     (state_dir / "hold_sha").write_text("deadbeef\n")
-    (state_dir / "hold_plane").write_text("k3s\n")
     assert w.clear_hold(state_dir, "deadbeef", tmp_path / "tree.lock") is None
     assert not (state_dir / "hold_sha").exists()
-    assert not (state_dir / "hold_plane").exists()
 
 
 def test_clear_hold_mismatch_touches_nothing_is_flagged(state_dir, tmp_path):
     (state_dir / "hold_sha").write_text("deadbeef\n")
-    (state_dir / "hold_plane").write_text("k3s\n")
+    owed = _owed_line("hold_plane", "k3s")
+    (state_dir / "owed.jsonl").write_text(owed)
     assert "deadbeef" in w.clear_hold(state_dir, "cafef00d", tmp_path / "tree.lock")
-    assert (state_dir / "hold_plane").exists()
-
-
-def _owed_line(cls: str, subject: str) -> str:
-    return json.dumps({"class": cls, "subject": subject, "origin": "abc", "at": 1})
+    assert (state_dir / "owed.jsonl").read_text() == owed
+    assert (state_dir / "hold_sha").exists()
 
 
 def test_clear_hold_drops_the_ledgers_hold_plane_lines_and_keeps_the_rest_is_clean(

@@ -168,7 +168,7 @@ apply returns a volume in no routing list to the `default` group, and a volume o
 landings and deploys in flight with the locks each holds, services whose release is behind master,
 the deployer's markers, and open PRs. Each button runs the command you would type: land
 runs `land.sh --pr <n> --since <sha>`, deploy runs `deploy.sh --tags <svc>`, cancel
-SIGTERMs a listed landing, clear hold removes `hold_sha` and `hold_plane` together against a
+SIGTERMs a listed landing, clear hold removes `hold_sha` and its `hold_plane` ledger lines together against a
 SHA you type, and the staging override sets or clears its marker. Output goes to
 `~/.local/state/deploy-ui/` on daniel-box and one audit line per action reaches Loki under
 `deploy-ui`. The daemon is `roles/setup/deploy_ui`; the route is `roles/k8s/deploy-ui`.

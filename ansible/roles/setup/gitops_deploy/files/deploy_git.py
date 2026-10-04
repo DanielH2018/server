@@ -189,18 +189,9 @@ def _held_tag_covered(held: str, applied: set[str]) -> bool:
     return block in applied or role in applied
 
 
-# Between the entries of a legacy `hold_plane` marker, and between the planes the deployer
-# prints on one line. Not a newline: every reader outside this role prints them on one line.
+# Between the held planes the deployer prints on one line. Not a newline: every reader
+# outside this role prints them on one line.
 HOLD_PLANE_SEP = "; "
-
-
-def hold_plane_entries(held: str | None) -> list[str]:
-    """Each failed apply a legacy `hold_plane` marker records, oldest first.
-
-    The deployer records the planes in the `owed` ledger (#3392); this splits a marker a
-    pre-ledger deployer left, for the fold into it.
-    """
-    return [e.strip() for e in (held or "").split(";") if e.strip()]
 
 
 def broad_hold_cleared_by(held: str, playbook: str, tags: list[str] | None) -> bool:

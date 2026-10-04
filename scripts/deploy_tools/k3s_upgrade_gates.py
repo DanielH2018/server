@@ -97,8 +97,8 @@ def in_flight_backups(doc) -> list[str]:
 def held_sha(state_dir: str | os.PathLike) -> list[str]:
     """The held SHA (with the planes it waits on), or the reason the marker could not be read.
 
-    The planes are `gitops_ledger.held_planes`: the `hold_plane` marker, then the `owed`
-    ledger's `hold_plane` class (#3392).
+    The planes are `gitops_ledger.held_planes`, the `owed` ledger's `hold_plane` class
+    (#3392).
 
     An absent or empty `hold_sha` is a cleared hold — that is how the deployer clears it. An
     absent state DIRECTORY is not: it means this is not the deploy host, and reading that as
@@ -117,12 +117,7 @@ def held_sha(state_dir: str | os.PathLike) -> list[str]:
         return [f"<cannot read {state_dir / MARKERS['hold']}: {exc}>"]
     if not sha:
         return []
-    plane = "; ".join(
-        held_planes(
-            _read_or_empty(state_dir / MARKERS["hold_plane"]),
-            _read_or_empty(state_dir / MARKERS["owed"]),
-        )
-    )
+    plane = "; ".join(held_planes(_read_or_empty(state_dir / MARKERS["owed"])))
     return [f"{sha} ({plane})" if plane else sha]
 
 

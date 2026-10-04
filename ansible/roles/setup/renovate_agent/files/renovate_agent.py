@@ -58,21 +58,20 @@ RUNS_FILE = "runs.jsonl"
 # Written by gitops_deploy.py. Read, never written, here; the directory and basenames come
 # from `gitops_markers`, the deployer's own module installed beside this file.
 HOLD_FILE = os.path.join(STATE_DIR, MARKERS["hold"])
-HOLD_PLANE_FILE = os.path.join(STATE_DIR, MARKERS["hold_plane"])
 OWED_FILE = os.path.join(STATE_DIR, MARKERS["owed"])
 
 
 def held_plane_text(tools: AgentTools) -> str:
     """Every plane a hold waits on, `; `-joined, for the skip reason `decide` writes.
 
-    `gitops_ledger.held_planes` unions the `hold_plane` marker with the `owed` ledger's
-    `hold_plane` class (#3392). A ledger line holding a byte that did not decode is dropped,
+    `gitops_ledger.held_planes` reads them off the `owed` ledger's `hold_plane` class
+    (#3392). A ledger line holding a byte that did not decode is dropped,
     as monitor-bridge and deploy-ui drop one (#2371), rather than printed garbled.
     """
     owed = "\n".join(
         line for line in tools.read_file(OWED_FILE).splitlines() if "\ufffd" not in line
     )
-    return "; ".join(held_planes(tools.read_file(HOLD_PLANE_FILE), owed))
+    return "; ".join(held_planes(owed))
 
 
 def _open_pr_listing(repo: str, tools: AgentTools) -> tuple[int, str]:

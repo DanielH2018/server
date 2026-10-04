@@ -122,14 +122,10 @@ def gitops_deploy_run(state_dir: Path = Path(STATE_DIR)) -> LoopRun:
     if not hold_sha_path.is_file():
         return base
     sha = hold_sha_path.read_text().strip()[:8] or "unknown"
-    # The `hold_plane` marker, then the `owed` ledger's `hold_plane` class (#3392).
-    plane_path, owed_path = (
-        state_dir / MARKERS["hold_plane"],
-        state_dir / MARKERS["owed"],
-    )
+    # The `owed` ledger's `hold_plane` class (#3392).
+    owed_path = state_dir / MARKERS["owed"]
     planes = held_planes(
-        plane_path.read_text() if plane_path.is_file() else None,
-        owed_path.read_text(errors="replace") if owed_path.is_file() else None,
+        owed_path.read_text(errors="replace") if owed_path.is_file() else None
     )
     plane = "; ".join(planes) or "a service deploy"
     return LoopRun(

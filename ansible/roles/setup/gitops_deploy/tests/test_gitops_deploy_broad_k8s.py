@@ -34,6 +34,7 @@ from _broad_k8s_range import (
     plane_applies_radarr,
 )
 from _deploy_fakes import fits_budget, receipt_applied
+from gitops_ledger import OWED_HOLD_PLANE, owed_line
 
 # ── the promoted half is deployed, after the plane under it ───────────────────────────────
 
@@ -202,12 +203,14 @@ def test_a_failed_bump_keeps_an_earlier_plane_held_past_the_bumps_fix(
 ):
     """The bump's fix-forward deploy must clear the bump's entry and no other.
 
-    Overwriting `hold_plane` with the bump's entry would let a later sonarr deploy clear both
+    Overwriting the held plane with the bump's entry would let a later sonarr deploy clear both
     markers while the earlier plane was still unapplied, and GitOps Deploy — Status would read
     green.
     """
     (state_dir / "hold_sha").write_text("e" * 40)
-    (state_dir / "hold_plane").write_text(earlier)
+    (state_dir / "owed.jsonl").write_text(
+        owed_line(OWED_HOLD_PLANE, earlier, "e" * 40, 1)
+    )
     config = mixed(settings, tick, broad_path)
     tick.playbook_outcomes = outcomes
     assert gitops_deploy.main(tick.tools, config) == 0
@@ -221,7 +224,9 @@ def test_a_failed_plane_keeps_an_earlier_plane_held_beside_its_own(
 ):
     """The broad loop's own failure arm must not overwrite the marker either."""
     (state_dir / "hold_sha").write_text("e" * 40)
-    (state_dir / "hold_plane").write_text("ansible/deploy.yml radarr")
+    (state_dir / "owed.jsonl").write_text(
+        owed_line(OWED_HOLD_PLANE, "ansible/deploy.yml radarr", "e" * 40, 1)
+    )
     config = mixed(settings, tick, APPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
     assert gitops_deploy.main(tick.tools, config) == 0

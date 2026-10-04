@@ -181,10 +181,18 @@ def test_read_state_present_reads_value_is_flagged(state_dir):
     assert st["hold_sha"] == "deadbeef"
 
 
-def test_read_state_splits_hold_plane_into_its_entries_is_clean(state_dir):
+def _held(subject: str, at: int, **extra) -> str:
+    return json.dumps(
+        {"class": "hold_plane", "subject": subject, "origin": "abc", "at": at, **extra}
+    )
+
+
+def test_read_state_lists_each_held_plane_oldest_first_is_clean(state_dir):
     """One entry per failed apply, and the page lists them before a Clear."""
-    (state_dir / "hold_plane").write_text(
-        "ansible/initial_setup.yml k3s; ansible/deploy.yml sonarr\n"
+    (state_dir / "owed.jsonl").write_text(
+        _held("ansible/deploy.yml sonarr", 2000)
+        + "\n"
+        + _held("ansible/initial_setup.yml k3s", 1000)
     )
     assert reads.read_state(state_dir)["hold_plane_entries"] == [
         "ansible/initial_setup.yml k3s",
@@ -196,25 +204,13 @@ def test_read_state_with_no_hold_plane_lists_no_entry_is_flagged(state_dir):
     assert reads.read_state(state_dir)["hold_plane_entries"] == []
 
 
-def test_read_state_lists_a_hold_plane_ledger_entry_after_the_markers_is_clean(
-    state_dir,
-):
-    """The ledger class joins the marker, a key this copy never heard of included (#3392)."""
-    (state_dir / "hold_plane").write_text("ansible/deploy.yml sonarr\n")
+def test_read_state_lists_a_hold_plane_line_with_an_unknown_key_is_clean(state_dir):
+    """A key this copy never heard of skips no line (#3392)."""
     (state_dir / "owed.jsonl").write_text(
-        json.dumps(
-            {
-                "class": "hold_plane",
-                "subject": "ansible/initial_setup.yml k3s",
-                "origin": "deadbeefcafe",
-                "at": 1000,
-                "added_by_a_newer_writer": True,
-            }
-        )
+        _held("ansible/initial_setup.yml k3s", 1000, added_by_a_newer_writer=True)
     )
     assert reads.read_state(state_dir)["hold_plane_entries"] == [
-        "ansible/deploy.yml sonarr",
-        "ansible/initial_setup.yml k3s",
+        "ansible/initial_setup.yml k3s"
     ]
 
 
@@ -266,16 +262,12 @@ def test_hold_plane_sep_matches_the_deployers_own_separator():
     """The oracle for the literal in `deploy_ui_reads`.
 
     The daemon runs outside the repo venv and cannot import `deploy_git`, so the separator is
-    copied here and its parser lives in `gitops_ledger.held_planes`. pytest CAN import all
-    three: a change to how the deployer joins entries fails here rather than leaving the page
-    showing one run-on entry.
+    copied here. pytest CAN import both: a change to how the deployer joins planes fails here
+    rather than leaving the page printing them two ways.
     """
     import deploy_git
-    import gitops_ledger
 
-    held = "ansible/initial_setup.yml k3s; ansible/deploy.yml sonarr"
     assert reads.HOLD_PLANE_SEP == deploy_git.HOLD_PLANE_SEP
-    assert gitops_ledger.held_planes(held, None) == deploy_git.hold_plane_entries(held)
 
 
 def test_parse_stale_lines_is_clean():

@@ -167,6 +167,14 @@ def test_gitops_status_unparseable_behind_marker_is_ok(cfg):
         assert ok, marker
 
 
+def _held_planes(*subjects: str) -> str:
+    """An `owed` ledger holding one `hold_plane` line per subject, oldest first."""
+    return "\n".join(
+        json.dumps({"class": "hold_plane", "subject": s, "origin": "abc", "at": i})
+        for i, s in enumerate(subjects, 1)
+    )
+
+
 def test_a_service_hold_names_the_pr(cfg):
     ok, msg = checks.gitops.gitops_status(cfg, "deadbeefcafe")
     assert not ok
@@ -180,7 +188,9 @@ def test_a_plane_hold_names_the_playbook_instead(cfg):
     otherwise the monitor prescribes a remediation that cannot work.
     """
     ok, msg = checks.gitops.gitops_status(
-        cfg, "deadbeefcafe", hold_plane="ansible/initial_setup.yml renovate_notify"
+        cfg,
+        "deadbeefcafe",
+        owed=_held_planes("ansible/initial_setup.yml renovate_notify"),
     )
     assert not ok
     assert "ansible/initial_setup.yml" in msg
@@ -188,7 +198,7 @@ def test_a_plane_hold_names_the_playbook_instead(cfg):
 
 
 def test_a_hold_on_several_planes_counts_each_entry_the_clear_waits_for(cfg):
-    """`hold_plane` holds one `; `-joined entry per failed apply, and each clears on its own.
+    """The `hold_plane` class holds one ledger line per failed apply, each cleared on its own.
 
     The SHA is the newest failure's, not each entry's. A Clear after re-running only the
     newest plane would erase an earlier one still unapplied, so the page counts what is owed.
@@ -198,7 +208,9 @@ def test_a_hold_on_several_planes_counts_each_entry_the_clear_waits_for(cfg):
     ok, msg = checks.gitops.gitops_status(
         cfg,
         "deadbeefcafe",
-        hold_plane="ansible/deploy.yml radarr; ansible/initial_setup.yml gitops_deploy",
+        owed=_held_planes(
+            "ansible/deploy.yml radarr", "ansible/initial_setup.yml gitops_deploy"
+        ),
     )
     assert not ok
     assert "ansible/deploy.yml radarr" in msg
@@ -206,15 +218,6 @@ def test_a_hold_on_several_planes_counts_each_entry_the_clear_waits_for(cfg):
     assert "2 planes unapplied" in msg
     assert "Clear the hold in the deploy UI" in msg
     assert " rm " not in msg
-
-
-def test_a_plane_marker_without_a_hold_does_not_page(cfg):
-    """hold_sha is still what decides.
-
-    A stale hold_plane left behind by a cleared hold must not keep the monitor red on its own.
-    """
-    ok, _ = checks.gitops.gitops_status(cfg, None, hold_plane="ansible/deploy.yml")
-    assert ok
 
 
 # ── the owed ledger's manual_plane class: a setup role the deployer fast-forwarded past ──
@@ -478,18 +481,15 @@ def test_an_undecodable_ledger_still_pages_the_arm_that_fired(tmp_path, cfg):
     assert "deploy held at held123a" in msg
 
 
-@pytest.mark.parametrize("marker", ["hold_sha", "hold_plane"])
-def test_an_undecodable_marker_other_than_the_ledger_is_a_check_error(
-    tmp_path, cfg, marker
-):
+def test_an_undecodable_marker_other_than_the_ledger_is_a_check_error(tmp_path, cfg):
     """The decode tolerance is the ledger's alone: a torn hold is NOT "no held deploy".
 
-    A `hold_sha` or `hold_plane` the check cannot decode says nothing about whether a
-    deploy is held, so it raises and `_evaluate` reports DOWN "check error" — the rule
-    `deploy_state.py` states for an unreadable state directory.
+    A `hold_sha` the check cannot decode says nothing about whether a deploy is held, so it
+    raises and `_evaluate` reports DOWN "check error" — the rule `deploy_state.py` states for
+    an unreadable state directory.
     """
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
-    (tmp_path / marker).write_bytes(b"held\xff123abc456789\n")
+    (tmp_path / "hold_sha").write_bytes(b"held\xff123abc456789\n")
     ok, msg = gates._evaluate(cfg, "gitops_status", checks.gitops.check_gitops_status)
     assert not ok
     assert "gitops_status check error" in msg

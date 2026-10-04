@@ -76,7 +76,6 @@ def gitops_status(
     behind_since: str | None = None,
     now: float | None = None,
     max_behind_s: float | None = None,
-    hold_plane: str | None = None,
     contention_since: str | None = None,
     max_contention_s: float | None = None,
     owed: str | None = None,
@@ -132,8 +131,8 @@ def gitops_status(
       contention_since: the deployer's `contention_since` marker, or None.
       max_contention_s: how long a contention streak may run before this pages. None reads
         cfg.GITOPS_CONTENTION_MAX_S, for the reason `max_behind_s` does.
-      owed: the deployer's `owed` ledger, or None. Its `hold_plane` class joins the
-        `hold_plane` marker's entries in the held arm. Its `manual_plane` class is the
+      owed: the deployer's `owed` ledger, or None. Its `hold_plane` class names the planes
+        the held arm prints. Its `manual_plane` class is the
         setup-role arm above (#3392); `gitops_ledger.manual_plane_entries` reads it. Its `k8s_deferred`
         class is the last arm, through `gitops_ledger.k8s_deferred_entries`. That arm is
         age-gated on `max_behind_s`, for the reasons the `manual_plane` arm is: a bump deferred
@@ -150,14 +149,14 @@ def gitops_status(
         # A held BROAD apply is a different fault with a different fix. That arm is
         # forward-only: the tree is already fast-forwarded and a plane playbook failed
         # partway, so reverting the PR undoes nothing and the operator has to fix forward
-        # and re-run. hold_sha still decides whether we page — hold_plane only says which
-        # sentence to print, so a stale marker left by a cleared hold cannot page alone.
+        # and re-run. hold_sha still decides whether we page — the held planes only say
+        # which sentence to print, so a stale line left by a cleared hold cannot page alone.
         # There is one plane per failed apply, and hold_sha is the NEWEST failure's SHA, not
         # each plane's. A Clear after re-running only one would erase another still
-        # unapplied. `held_planes` unions the legacy `hold_plane` marker with the ledger's
-        # `hold_plane` class, where the deployer records them (#3392). The Clear is named
+        # unapplied. `held_planes` reads them off the ledger's `hold_plane` class, where the
+        # deployer records them (#3392). The Clear is named
         # rather than an rm because an rm of hold_sha leaves the ledger's planes behind.
-        planes = held_planes(hold_plane, owed)
+        planes = held_planes(owed)
         if planes:
             return False, (
                 "broad apply held at %s (the newest failure) — %d plane%s unapplied: %s; "
@@ -262,7 +261,7 @@ def _read_gitops_marker(cfg: Config, name: str) -> str | None:
     """One marker's text, or None when it is absent.
 
     Any other failure to read it raises, and `gates._evaluate` reports DOWN "check error". A
-    `hold_sha` or `hold_plane` the check cannot read is NOT "no hold" — the rule
+    `hold_sha` the check cannot read is NOT "no hold" — the rule
     `deploy_state.py` states for an unreadable state directory.
     """
     try:
@@ -297,7 +296,6 @@ def check_gitops_status(cfg: Config) -> tuple[bool, str]:
         _read_gitops_marker(cfg, MARKERS["hold"]),
         _read_gitops_marker(cfg, MARKERS["diverged"]),
         _read_gitops_marker(cfg, MARKERS["behind"]),
-        hold_plane=_read_gitops_marker(cfg, MARKERS["hold_plane"]),
         contention_since=_read_gitops_marker(cfg, MARKERS["contention"]),
         owed=_read_decodable_lines(cfg, MARKERS["owed"]),
     )

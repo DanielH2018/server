@@ -17,6 +17,8 @@ which is the refusal every test written before this slice relies on.
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_setup_narrow.py
 """
 
+from gitops_ledger import OWED_HOLD_PLANE, owed_line
+
 ORIGIN = "2" * 40
 
 # A setup-plane path under one role that `initial_setup.yml` applies. A template rather than a
@@ -183,7 +185,7 @@ def test_a_narrowed_apply_of_another_block_keeps_the_hold(
     """
     held = "ansible/initial_setup.yml gitops_deploy:gitops-config"
     (state_dir / "hold_sha").write_text("1" * 40)
-    (state_dir / "hold_plane").write_text(held)
+    (state_dir / "owed.jsonl").write_text(owed_line(OWED_HOLD_PLANE, held, "1" * 40, 1))
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "gitops-timer")}
     assert gitops_deploy.main(tick.tools) == 0
@@ -201,8 +203,13 @@ def test_the_whole_role_fallback_clears_a_hold_a_narrowed_apply_left(
     has to be one a later apply of the same role covers.
     """
     (state_dir / "hold_sha").write_text("1" * 40)
-    (state_dir / "hold_plane").write_text(
-        "ansible/initial_setup.yml gitops_deploy:gitops-config"
+    (state_dir / "owed.jsonl").write_text(
+        owed_line(
+            OWED_HOLD_PLANE,
+            "ansible/initial_setup.yml gitops_deploy:gitops-config",
+            "1" * 40,
+            1,
+        )
     )
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (1, "")}

@@ -114,8 +114,8 @@ class DeployerState(AlertSlotMarkers, HoldMarkers, K8sLineMarkers):
 
     # The four markers with a reader outside this deployer (monitor-bridge reads three of them
     # off the same mount) get a named property; the alert dedupe slots are reached through
-    # `alerted_sha`/`record_alerted` by the alert code that owns them. `hold_plane` is the
-    # fourth, in `deploy_state_hold.HoldMarkers` with the rest of the hold.
+    # `alerted_sha`/`record_alerted` by the alert code that owns them. The held planes are
+    # the fourth, read off the `owed` ledger in `deploy_state_hold.HoldMarkers`.
     @property
     def hold_sha(self) -> str | None:
         """The commit this host refuses to redeploy, or None."""

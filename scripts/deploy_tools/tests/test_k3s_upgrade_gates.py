@@ -115,16 +115,10 @@ def test_a_missing_or_empty_hold_marker_is_clean(state_dir):
     assert gates.held_sha(state_dir) == []
 
 
-def test_a_held_sha_is_flagged_with_its_plane(state_dir):
+def test_a_held_sha_is_flagged_with_the_ledgers_hold_plane_entries(state_dir):
+    """The planes are the `owed` ledger's `hold_plane` class, a newer key and all (#3392)."""
     (state_dir / MARKERS["hold"]).write_text("abc1234\n")
     assert gates.held_sha(state_dir) == ["abc1234"]
-    (state_dir / MARKERS["hold_plane"]).write_text("initial_setup.yml k3s\n")
-    assert gates.held_sha(state_dir) == ["abc1234 (initial_setup.yml k3s)"]
-
-
-def test_a_held_sha_names_the_ledgers_hold_plane_entries_too(state_dir):
-    """The `owed` ledger's `hold_plane` class follows the marker's entries (#3392)."""
-    (state_dir / MARKERS["hold"]).write_text("abc1234\n")
     (state_dir / MARKERS["owed"]).write_text(
         '{"class": "hold_plane", "subject": "deploy.yml sonarr", "origin": "abc", '
         '"at": 1, "added_by_a_newer_writer": 1}\n'
