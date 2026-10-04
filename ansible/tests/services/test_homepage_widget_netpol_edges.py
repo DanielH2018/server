@@ -108,9 +108,9 @@ def _live_services_and_policies():
                     sel = peer.get("podSelector") or {}
                     if app := sel.get("matchLabels", {}).get("app"):
                         admitted.add(app)
-                    # The *arr policies come from the shared `arr_networkpolicy` macro, which
-                    # writes one matchExpressions `In` list rather than a peer per caller.
-                    # Reading only matchLabels here would report all three as fenced out.
+                    # No in-tree policy writes an `app` matchExpressions `In` list since the
+                    # *arr fences moved to the `networkpolicy` macro's peer per caller. It is
+                    # read anyway because it is a valid way to admit homepage.
                     for expr in sel.get("matchExpressions") or []:
                         if expr.get("key") == "app" and expr.get("operator") == "In":
                             admitted.update(expr.get("values") or [])

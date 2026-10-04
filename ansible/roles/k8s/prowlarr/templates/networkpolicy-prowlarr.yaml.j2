@@ -1,4 +1,4 @@
-{% from 'networkpolicy.yml.j2' import arr_networkpolicy with context %}
+{% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
 # Slice 2 of the ingress default-deny. NOTE: this role's OTHER policy file,
 # networkpolicy-flaresolverr.yaml.j2, fences flaresolverr and is unrelated to this one. Both are
@@ -8,7 +8,7 @@
 # admits none of monitor-bridge, sonarr, radarr or flaresolverr-netpol-probe, so they reach prowlarr
 # only through this rule and only on this one port.
 #
-# TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
+# TRAEFIK IS IN THE CALLER LIST DELIBERATELY — do not remove it as redundant — but be accurate about why.
 # The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
 # additive, so while prowlarr carries that label the union is the same with or without this entry.
 # It was load-bearing for the deploy that INTRODUCED the label: the old pod carried `app: prowlarr`
@@ -32,9 +32,8 @@
 # roles/k8s/registry/templates/networkpolicy.yaml.j2 admitting its own
 # registry-selftest-push/registry-selftest-pull Jobs: a deploy-time test pod that must reach the
 # workload it is fencing. Do not "clean this up" as an unused caller.
-{% call arr_networkpolicy('prowlarr', container_item.port) %}
-                  - monitor-bridge
-                  - sonarr
-                  - radarr
-                  - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
-{% endcall %}
+#
+# The caller list is `netpol_from:` on this role's containers_list entry
+# (inventory/host_vars/daniel-box.yml), each caller's reason beside it. The entry's
+# `netpol_role_owned: true` keeps netpol-baseline from rendering a second copy.
+{{ networkpolicy(container_item.name, container_item.port, container_item.netpol_from) }}

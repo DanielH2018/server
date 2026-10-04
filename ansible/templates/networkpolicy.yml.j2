@@ -1,28 +1,32 @@
 {#
-  NetworkPolicy for an *arr slice-2 ingress rule. sonarr's, radarr's and prowlarr's own
-  policies share this exact structure (podSelector on `app: <name>`, traefik admitted
-  unconditionally, a caller matchExpressions list, one TCP port) and differ only in the caller
-  list and its per-item comments. Those stay at the call site via `{% call %}` rather than
-  being swallowed here. The whole point of the comments is that they differ role to role:
-  sonarr annotates every caller, radarr only prowlarr and homepage, and prowlarr only its
-  isolation probe's control leg. Do not harmonize the call sites to make them look more alike;
-  the macro exists to hold the structure they already share, not to grow the shared surface.
+  An additive caller fence: one NetworkPolicy selecting `app: <name>` and admitting each app in
+  `from_apps` on one TCP port. It unions with the namespace baseline rather than replacing it,
+  so it lists only the callers the baseline does not already admit, plus traefik where a role
+  states its complete caller set on purpose (the *arr headers say why).
 
-  prowlarr's OTHER policy, networkpolicy-flaresolverr.yaml.j2, is NOT this shape and is NOT
-  converted. It fences flaresolverr (podSelector `app: flaresolverr`, one caller
-  `app: prowlarr`, no traefik entry, no matchExpressions list, port from
-  `prowlarr_k8s_flaresolverr_port`), which is a different subject with a different shape.
+  The caller list is data on the service's `containers_list` entry, `netpol_from:`, so each
+  caller's reason sits beside it as a YAML comment. Two places render it:
+
+  - netpol-baseline's `networkpolicy-callers.yaml.j2` loops over every entry carrying
+    `netpol_from`, gated on `netpol_baseline_enforced`.
+  - A role whose deploy must carry its own fence renders it from its own template, reading
+    `container_item.netpol_from`, and its entry sets `netpol_role_owned: true` so the loop
+    skips it. sonarr, radarr and prowlarr do this; netpol-baseline's CLAUDE.md says when a
+    policy belongs in the workload's role.
+
+  A fence of any other shape (a namespaceSelector, an ipBlock, several ports, a caller scoped
+  to a different port) stays bespoke. Do not grow this macro to absorb one.
 
   Arguments:
-    name  Service/pod `app` label this policy selects, and the NetworkPolicy's own name.
-    port  TCP port the caller list is scoped to (`container_item.port` at every call site).
-
-  Call with a body holding the `values:` list — one `- <caller>` line per entry, indented to
-  column 18 (the list's own column) with an optional trailing `# comment`, exactly as it reads
-  in each caller's own file. Call plain (no `{% call %}`) only for a site with no callers to
-  list, which none of the three has.
+    name       Service/pod `app` label this policy selects, and the NetworkPolicy's own name.
+    port       TCP port every caller is scoped to (the entry's `port`).
+    from_apps  The `app` labels admitted, one `podSelector` peer each.
+    enforced   False renders the allow-all body, so `netpol_baseline_enforced` stays a real
+               rollback lever for the fences netpol-baseline owns. Pass it through `| bool`
+               (networkpolicy-traefik.yaml.j2 has the string trap). A role-owned fence leaves
+               it true: it was never gated, and the baseline's allow-all makes it moot.
 #}
-{% macro arr_networkpolicy(name, port) -%}
+{% macro networkpolicy(name, port, from_apps, enforced=true) -%}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -35,17 +39,19 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+{% if enforced %}
     - from:
+{% for app in from_apps %}
         - podSelector:
             matchLabels:
-              app: traefik
-        - podSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
-{% if caller is defined %}{{ caller() }}{% endif %}
+              app: {{ app }}
+{% endfor %}
       ports:
         - protocol: TCP
           port: {{ port }}
-{% endmacro %}
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
+{%- endmacro %}

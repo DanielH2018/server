@@ -1,4 +1,4 @@
-{% from 'networkpolicy.yml.j2' import arr_networkpolicy with context %}
+{% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
 # Slice 2 of the ingress default-deny. The baseline admits traefik, prometheus and the node bridges
 # to every pod carrying `netpol-baseline: enforced`. This file adds radarr's own callers, which are
@@ -8,7 +8,7 @@
 # admits none of janitorr, configarr, monitor-bridge, autofix-bridge, bazarr, prowlarr or homepage, so
 # reach radarr only through this rule and only on this one port.
 #
-# TRAEFIK IS LISTED HERE DELIBERATELY — do not remove it as redundant — but be accurate about why.
+# TRAEFIK IS IN THE CALLER LIST DELIBERATELY — do not remove it as redundant — but be accurate about why.
 # The baseline admits traefik to every baseline-labelled pod on ANY port, and policies are
 # additive, so while radarr carries that label the union is the same with or without this entry.
 # It was load-bearing for the deploy that INTRODUCED the label: the old pod carried `app: radarr`
@@ -33,12 +33,8 @@
 # (roles/k8s/homepage/templates/config/services.yaml.j2). It goes direct rather than through Traefik
 # because radarr's public route is Authelia-gated and its monitoring IngressRoute exposes only
 # that one path — so this entry is the whole grant, and fencing it out breaks the widget.
-{% call arr_networkpolicy('radarr', container_item.port) %}
-                  - janitorr
-                  - configarr
-                  - monitor-bridge
-                  - autofix-bridge
-                  - bazarr
-                  - prowlarr        # Application Sync writes indexers in — see header
-                  - homepage        # dashboard widget, ClusterIP — see header
-{% endcall %}
+#
+# The caller list is `netpol_from:` on this role's containers_list entry
+# (inventory/host_vars/daniel-box.yml), each caller's reason beside it. The entry's
+# `netpol_role_owned: true` keeps netpol-baseline from rendering a second copy.
+{{ networkpolicy(container_item.name, container_item.port, container_item.netpol_from) }}

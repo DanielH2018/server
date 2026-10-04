@@ -85,7 +85,7 @@ spec:
 
               # This pod carries no app label that sonarr's policy admits. Its allowed callers are
               # traefik, janitorr, configarr, monitor-bridge, autofix-bridge, bazarr and prowlarr
-              # (roles/k8s/sonarr/templates/networkpolicy.yaml.j2). Port hardcoded from
+              # (sonarr's `netpol_from` in host_vars/daniel-box.yml). Port hardcoded from
               # ansible/inventory/host_vars/daniel-box.yml's sonarr containers_list entry. A WRONG
               # PORT HERE FAILS SILENTLY GREEN, not loudly: these assertions are inverted, so a
               # port nothing listens on makes `nc` fail, which is the PASS branch. Re-check every
@@ -101,7 +101,7 @@ spec:
               echo "isolated: sonarr unreachable from an unlisted caller"
 
               # radarr's allowed callers are traefik, janitorr, configarr, monitor-bridge,
-              # autofix-bridge, bazarr and prowlarr (roles/k8s/radarr/templates/networkpolicy.yaml.j2).
+              # autofix-bridge, bazarr and prowlarr (radarr's `netpol_from` in host_vars/daniel-box.yml).
               # This pod is none of them. Port hardcoded from radarr's containers_list entry in
               # ansible/inventory/host_vars/daniel-box.yml — see the silently-green warning above.
               if nc -w 5 -z radarr 7878; then

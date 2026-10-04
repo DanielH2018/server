@@ -155,6 +155,19 @@ containers_list:
       # ports, and rejects it at APPLY time, after every repo-side check has read green.
       - name: metrics
         port: 9707
+    # Callers of roles/k8s/sonarr/templates/networkpolicy.yaml.j2, the additive fence on
+    # this port; the header there says why each class of caller is listed. The role renders it
+    # itself so `--tags sonarr` carries its own fence, hence netpol_role_owned.
+    netpol_role_owned: true
+    netpol_from:
+      - traefik         # deliberate, not redundant — see the policy's header
+      - janitorr        # templates/config/application.yml.j2 — deploy-time verify too
+      - configarr       # CronJob; its pod template carries app: configarr
+      - monitor-bridge  # env-secret.yaml.j2, cluster FQDN
+      - autofix-bridge  # env-secret.yaml.j2, cluster FQDN
+      - bazarr          # app DB, bare name — see the policy's header
+      - prowlarr        # Application Sync writes indexers in — see the policy's header
+      - homepage        # dashboard widget, ClusterIP — see the policy's header
   # Runs a WireGuard/Mullvad sidecar sharing the pod's netns, gating qbittorrent's start so
   # it cannot talk to a tracker before the kill-switch exists.
   - name: qbittorrent
@@ -177,6 +190,19 @@ containers_list:
       # ports, and rejects it at APPLY time, after every repo-side check has read green.
       - name: metrics
         port: 9707
+    # Callers of roles/k8s/radarr/templates/networkpolicy.yaml.j2, the additive fence on
+    # this port; the header there says why each class of caller is listed. The role renders it
+    # itself so `--tags radarr` carries its own fence, hence netpol_role_owned.
+    netpol_role_owned: true
+    netpol_from:
+      - traefik         # deliberate, not redundant — see the policy's header
+      - janitorr
+      - configarr
+      - monitor-bridge
+      - autofix-bridge
+      - bazarr
+      - prowlarr        # Application Sync writes indexers in — see the policy's header
+      - homepage        # dashboard widget, ClusterIP — see the policy's header
   # Brings a second workload with it — flaresolverr, which renders attacker-supplied
   # Cloudflare pages. An INGRESS NetworkPolicy keeps it reachable from prowlarr alone;
   # ingress is the direction actually enforced on this cluster.
@@ -192,6 +218,16 @@ containers_list:
       # ports, and rejects it at APPLY time, after every repo-side check has read green.
       - name: metrics
         port: 9707
+    # Callers of roles/k8s/prowlarr/templates/networkpolicy-prowlarr.yaml.j2, the additive fence on
+    # this port; the header there says why each class of caller is listed. The role renders it
+    # itself so `--tags prowlarr` carries its own fence, hence netpol_role_owned.
+    netpol_role_owned: true
+    netpol_from:
+      - traefik                    # deliberate, not redundant — see the policy's header
+      - monitor-bridge
+      - sonarr
+      - radarr
+      - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
   - name: bazarr
     platform: k8s
     depends_on: [media-volume]
@@ -261,6 +297,15 @@ containers_list:
     port: 80
     use_authelia: true
     auth_tier: one_factor
+    # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
+    # Browsers arrive through traefik and prometheus scrapes `/prometheus` on this port; the
+    # baseline already admits both on every port. The baseline's node CIDRs are two /32 cni0
+    # host addresses, so no pod-network caller is covered by them.
+    netpol_from:
+      # SPEEDTEST_URL (monitor-bridge/templates/env-secret.yaml.j2): the check that reads the
+      # newest result row. A failed run leaves no other trace, because the container logs only
+      # its pre-run connectivity ping.
+      - monitor-bridge
   # Headless DDNS client: no web UI, no Traefik route.
   - name: cloudflare-ddns
     platform: k8s
@@ -452,6 +497,19 @@ containers_list:
     hostname: "ical-proxy"
     port: 5000
     use_authelia: false
+    # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
+    # ADDED 2026-08-24 with the ical-proxy route narrowing. The app serves unauthenticated
+    # private calendar feeds (/calendar{1,2,4}.ics is all of it, and there is no health
+    # endpoint). The route's ClientIP guard was once widened to the whole pod CIDR so the Kuma
+    # prober could reach it, which let any pod read the calendars: demonstrated live with a 200
+    # and 847,922 bytes. So the two real callers moved off the edge onto the ClusterIP, where a
+    # podSelector can tell them apart; everything arriving through Traefik carries Traefik's
+    # identity. The baseline admits only traefik, prometheus and the node CIDRs, so without
+    # this list both callers are denied. Traefik keeps its access through the baseline, and the
+    # daniel-server-guarded route still works.
+    netpol_from:
+      - homepage     # the three calendar widgets
+      - uptime-kuma  # the "iCal Proxy k8s" monitor, which probes /calendar1.ics
 
   # The tunnel answers on the node IP (the wg-easy-udp Service's externalIP) rather than a
   # VIP: router UIs forward to devices, and VIPs have no lease. There is no password_hash on
