@@ -172,13 +172,19 @@ def merge(verdicts):
     return None, None
 
 
-def emit(decision, reason, context, command=None):
+def emit(decision, reason, context, command=None, tool_input=None):
     """Print the single `hookSpecificOutput` carrying whatever the arms produced.
 
     A rewrite is emitted whatever the decision is, rather than suppressed under a `deny`. The
     harness already drops it there, and suppressing it here would put a second rule in a second
     place for the same outcome — the rewrite arm would then be the only arm whose output another
     arm's verdict can erase before it is printed.
+
+    The rewrite carries every key of `tool_input` with only `command` replaced. The harness
+    REPLACES the tool input with `updatedInput` rather than merging it, so a rewrite that sent
+    `command` alone dropped `run_in_background`, `timeout` and `description`. A backgrounded bare
+    `pytest --version` ran inline under the 120s default timeout, while an unrewritten
+    backgrounded `printf` got a task ID (#3501, 2026-10-04).
     """
     output = {"hookEventName": "PreToolUse"}
     if decision:
@@ -187,7 +193,7 @@ def emit(decision, reason, context, command=None):
     if context:
         output["additionalContext"] = context
     if command is not None:
-        output["updatedInput"] = {"command": command}
+        output["updatedInput"] = {**(tool_input or {}), "command": command}
     if len(output) == 1:
         return
     print(json.dumps({"hookSpecificOutput": output}))
@@ -204,7 +210,14 @@ def main(load=load_arm):
         return 0
     verdicts, context, command = collect(payload, load=load)
     decision, reason = merge(verdicts)
-    emit(decision, reason, context, command)
+    tool_input = payload.get("tool_input")
+    emit(
+        decision,
+        reason,
+        context,
+        command,
+        tool_input if isinstance(tool_input, dict) else None,
+    )
     return 0
 
 
