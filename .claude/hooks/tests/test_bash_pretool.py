@@ -76,13 +76,17 @@ def sandbox(tmp_path, monkeypatch):
     return load
 
 
-def dispatch(command, load, monkeypatch, capsys, cwd=_REPO):
-    """The dispatcher's parsed output for `command`, or None when it emitted nothing."""
+def dispatch(command, load, monkeypatch, capsys, cwd=_REPO, **tool_input):
+    """The dispatcher's parsed output for `command`, or None when it emitted nothing.
+
+    Extra keyword arguments ride in `tool_input` beside the command, the way the harness sends
+    `run_in_background`, `timeout` and `description`.
+    """
     payload = {
         "tool_name": "Bash",
         "cwd": cwd,
         "session_id": f"test-{uuid.uuid4()}",
-        "tool_input": {"command": command},
+        "tool_input": {"command": command, **tool_input},
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
     assert _mod.main(load=load) == 0
@@ -178,6 +182,44 @@ def test_a_deny_still_carries_the_context_arm_s_injection(sandbox, monkeypatch, 
     )
     assert out["permissionDecision"] == "deny"
     assert "ansible/roles/k8s/home-assistant/CLAUDE.md" in out["additionalContext"]
+
+
+# ── the rewrite ──────────────────────────────────────────────────────────────────────
+
+
+def test_accept_a_rewrite_keeps_the_rest_of_the_tool_input(
+    sandbox, monkeypatch, capsys
+):
+    """The harness replaces the input with `updatedInput`, so a key left out is a key lost.
+
+    Sending `command` alone ran a backgrounded call inline under the 120s default (#3501).
+    """
+    out = dispatch(
+        "pytest --version",
+        sandbox,
+        monkeypatch,
+        capsys,
+        run_in_background=True,
+        timeout=600000,
+        description="Print the pytest version",
+    )
+    assert out["updatedInput"] == {
+        "command": "uv run pytest --version",
+        "run_in_background": True,
+        "timeout": 600000,
+        "description": "Print the pytest version",
+    }
+
+
+def test_reject_a_cc_wait_call_is_not_rewritten(sandbox, monkeypatch, capsys):
+    """A wait's `run_in_background` belongs to the user-level guard, which sets it.
+
+    A second hook's rewrite of the same call would replace the guard's input wholesale.
+    """
+    out = dispatch(
+        "cc-wait land 3501", sandbox, monkeypatch, capsys, run_in_background=True
+    )
+    assert out is None or "updatedInput" not in out
 
 
 # ── one arm failing ──────────────────────────────────────────────────────────────────
