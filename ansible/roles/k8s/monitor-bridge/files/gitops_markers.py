@@ -45,20 +45,6 @@ MARKERS: dict[str, str] = {
     # `"<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>"` while
     # consecutive ticks defer on one busy service lock. See `parse_contention`.
     "contention": "contention_since",
-    # One line per promoted k8s image bump a BROAD tick fast-forwarded and then deferred for
-    # lack of budget, `"<origin_sha> <service> <unix_ts>"`. See `parse_k8s_deferred`.
-    #
-    # Scoped to that one deferral (#2449). The tick has already merged the bump, so no later
-    # tick's range carries it again, and the defer-and-alert post names it exactly once. Every
-    # other k8s defer-and-alert change — a hand-edited role, a denylisted one — is merged by a
-    # person who is landing it and can deploy it, and forty of the fifty-four k8s roles are
-    # denylisted, so recording those would hold GitOps Deploy — Status red as normal operation.
-    # A budget deferral has no such person: nothing chose it, and nothing reports it again.
-    #
-    # LEGACY. The deployer records this deferral as the `owed` ledger's `k8s_deferred` class
-    # (#3392) and folds any line left here into it on its next record or clear. Every reader
-    # still unions this file with the class until the file is reaped.
-    "k8s_deferred": "k8s_deferred",
     # The owed-work ledger (#3392): one JSON object per line, each naming work a tick left for
     # somebody else under a `class`. JSON lines because the line formats here skip a line
     # with one field too many, so a field a new writer appended read as NO pending work in a
@@ -300,7 +286,7 @@ class ManualPlaneEntry(NamedTuple):
 
 
 class K8sDeferredEntry(NamedTuple):
-    """One pending line of the `k8s_deferred` marker.
+    """One pending k8s entry of the `owed` ledger: a `k8s_deferred` or `k8s_unapplied` line.
 
     Attributes:
         origin: the origin SHA whose range carried the bump. The tick merged it, so this is
@@ -382,93 +368,6 @@ def format_alerted(alerted: dict[str, str]) -> str | None:
     if not alerted:
         return None
     return "\n".join(f"{slot} {alerted[slot]}" for slot in sorted(alerted))
-
-
-def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
-    """Every pending line of `k8s_deferred`, in the order they stand.
-
-    A line this cannot parse is SKIPPED, never guessed at: a page raised off a torn line names
-    no service and cannot be cleared.
-    """
-    entries = []
-    for line in (marker or "").splitlines():
-        parts = line.split()
-        if len(parts) != 3:
-            continue
-        try:
-            at = float(parts[2])
-        except ValueError:
-            continue
-        entries.append(K8sDeferredEntry(parts[0], parts[1], at))
-    return entries
-
-
-def k8s_line_service(line: str) -> str | None:
-    """The service a RAW `k8s_deferred` line names, or None for none at all.
-
-    A torn line is still ATTRIBUTABLE where its second field is there: `"<sha> authelia"` and
-    `"<sha> authelia not-a-stamp"` both name authelia, and the writer repairs one rather than
-    appending a second line beside it (#2657). A one-word line names nobody, so every caller
-    carries it untouched — dropping it loses the only record that something was deferred, and
-    nothing can say what.
-    """
-    parts = line.split()
-    return parts[1] if len(parts) >= 2 else None
-
-
-def k8s_line_stamp(line: str, now: float) -> str:
-    """The first-seen stamp a repaired line keeps: its own where it reads as one, else `now`."""
-    parts = line.split()
-    try:
-        return f"{float(parts[2] if len(parts) >= 3 else ''):.0f}"
-    except ValueError:
-        return f"{now:.0f}"
-
-
-def rewrite_k8s_lines(marker: str | None, services, now: float) -> str:
-    """`marker`'s text with every TORN line naming one of `services` made readable.
-
-    The repair keeps the line's first-seen stamp, which is the age a reader dates the change
-    from: its own where that field reads as one, `now` where it does not (#2657). A readable
-    line is carried as it stands — `k8s_deferred` keeps its recorded origin. The ledger's
-    `rewrite_owed` is the same rewrite with an `advance`, which `k8s_unapplied` wants.
-
-    The repair is what stops a writer duplicating a torn line. `parse_k8s_deferred` skips one,
-    so a writer reading only its entries sees no line for the service, appends a second, and
-    every clear and every discharge — matching on the same three fields — then leaves the torn
-    one standing forever. A torn line BESIDE a readable one for the same service is dropped
-    instead, since repairing it would duplicate what that line already says.
-
-    Args:
-        marker: the raw marker text, or None for an absent marker.
-        services: the services the caller is writing about. A line naming anything else is
-            carried untouched, as is a line naming nobody — dropping that one loses the only
-            record that something was deferred, and nothing can say what.
-        now: the stamp a repaired line takes when its own field reads as nothing.
-
-    Returns:
-        The text, rewritten. Compare it with the original to see whether anything changed.
-    """
-    wanted = set(services)
-    readable = {entry.service for entry in parse_k8s_deferred(marker)}
-    kept = []
-    # DECIDED: a repaired line is rewritten to exactly three fields, so a FOURTH field on a
-    # line naming one of `services` is discarded rather than carried. Before this, both the
-    # record and the clear carried such a line verbatim. Three fields is the format every
-    # reader parses, and `parse_k8s_deferred` skips any other count, so a fourth would read as
-    # no pending bump in a monitor-bridge copy that has not redeployed. Nothing may write one,
-    # and a line carrying one came from a bug or a hand edit, not from a newer writer. A new
-    # field belongs in the `owed` ledger, whose readers ignore keys they do not know (#3392).
-    for line in (marker or "").splitlines():
-        service = k8s_line_service(line)
-        if service is None or service not in wanted:
-            kept.append(line)
-        elif parse_k8s_deferred(line):
-            kept.append(line)
-        elif service not in readable:
-            readable.add(service)
-            kept.append(f"{line.split()[0]} {service} {k8s_line_stamp(line, now)}")
-    return "\n".join(kept)
 
 
 def parse_contention(marker: str | None) -> ContentionEntry | None:

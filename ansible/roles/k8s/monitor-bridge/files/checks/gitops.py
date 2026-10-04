@@ -80,7 +80,6 @@ def gitops_status(
     hold_plane: str | None = None,
     contention_since: str | None = None,
     max_contention_s: float | None = None,
-    k8s_deferred: str | None = None,
     owed: str | None = None,
 ) -> tuple[bool, str]:
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
@@ -134,17 +133,14 @@ def gitops_status(
       contention_since: the deployer's `contention_since` marker, or None.
       max_contention_s: how long a contention streak may run before this pages. None reads
         cfg.GITOPS_CONTENTION_MAX_S, for the reason `max_behind_s` does.
-      k8s_deferred: the deployer's `k8s_deferred` marker, or None. Reported LAST and age-gated
-        on `max_behind_s`, for the reasons the `manual_plane` arm above it is: a bump deferred
+      owed: the deployer's `owed` ledger, or None. Its `manual_plane` class is the setup-role
+        arm above (#3392); `gitops_ledger.manual_plane_entries` reads it. Its `k8s_deferred`
+        class is the last arm, through `gitops_ledger.k8s_deferred_entries`. That arm is
+        age-gated on `max_behind_s`, for the reasons the `manual_plane` arm is: a bump deferred
         ten minutes ago is a tick that ran out of wall clock rather than a fault, and a bump
         nobody has deployed blocks no other session's landing. It is here at all because the
         deferring tick MERGED the bump, so `behind_since` is empty and no later tick's range
         carries it — the failure mode `manual_plane` closed one plane over (#2449).
-      owed: the deployer's `owed` ledger, or None. Its `manual_plane` class is the setup-role
-        arm above (#3392); `gitops_ledger.manual_plane_entries` reads it. Its `k8s_deferred`
-        class joins the `k8s_deferred` marker in the last arm, through
-        `gitops_ledger.k8s_deferred_entries`, so the deployer can move that writer into the
-        ledger without this page going quiet in between.
     """
     max_behind_s = cfg.GITOPS_BEHIND_MAX_S if max_behind_s is None else max_behind_s
     max_contention_s = (
@@ -223,7 +219,7 @@ def gitops_status(
                     _apply_and_clear(pending, narrow),
                 )
             )
-    deferred = k8s_deferred_entries(k8s_deferred, owed)
+    deferred = k8s_deferred_entries(owed)
     if deferred:
         oldest = min(e.at for e in deferred)
         age_s = (time.time() if now is None else now) - oldest
@@ -303,6 +299,5 @@ def check_gitops_status(cfg: Config) -> tuple[bool, str]:
         _read_gitops_marker(cfg, MARKERS["behind"]),
         hold_plane=_read_gitops_marker(cfg, MARKERS["hold_plane"]),
         contention_since=_read_gitops_marker(cfg, MARKERS["contention"]),
-        k8s_deferred=_read_gitops_marker(cfg, MARKERS["k8s_deferred"]),
         owed=_read_decodable_lines(cfg, MARKERS["owed"]),
     )

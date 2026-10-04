@@ -61,7 +61,7 @@ def test_other_classes_in_the_ledger_page_nothing(cfg):
 
 
 def test_a_k8s_deferred_ledger_line_with_an_unknown_key_pages(cfg):
-    """The Verify-by of #3392 for `k8s_deferred`: the class pages with no line marker at all."""
+    """The Verify-by of #3392 for `k8s_deferred`: a key a newer writer added still pages."""
     owed = json.dumps(
         {
             "class": "k8s_deferred",
@@ -77,15 +77,15 @@ def test_a_k8s_deferred_ledger_line_with_an_unknown_key_pages(cfg):
     assert msg.endswith("clear-k8s-deferred sonarr`")
 
 
-def test_a_k8s_deferred_bump_in_both_sources_dates_from_the_older(cfg):
-    """A service the line marker and the ledger both hold is one bump, aged from its first."""
-    owed = json.dumps(
-        {"class": "k8s_deferred", "subject": "sonarr", "origin": "b" * 40, "at": 1000}
+def test_a_k8s_deferred_bump_on_two_lines_dates_from_the_older(cfg):
+    """A service two ledger lines both hold is one bump, aged from its first."""
+    owed = "\n".join(
+        json.dumps(
+            {"class": "k8s_deferred", "subject": "sonarr", "origin": sha, "at": at}
+        )
+        for sha, at in (("a" * 40, _LATE - 600), ("b" * 40, 1000))
     )
-    marker = f"{'a' * 40} sonarr {_LATE - 600:.0f}"
-    ok, msg = checks.gitops.gitops_status(
-        cfg, None, now=_LATE, k8s_deferred=marker, owed=owed
-    )
+    ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
     assert not ok
     assert msg.startswith("sonarr merged but not deployed for 7h")
 

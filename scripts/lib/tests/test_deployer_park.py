@@ -111,7 +111,7 @@ def test_k8s_unapplied_with_no_ledger_reads_as_nothing_pending(tmp_path):
 
 
 def test_a_k8s_deferred_ledger_line_with_an_unknown_key_reaches_the_banner(tmp_path):
-    """The Verify-by of #3392 for the banner's `k8s_deferred` lines, with no line marker."""
+    """The Verify-by of #3392 for the banner's `k8s_deferred` lines."""
     line = {
         "class": "k8s_deferred",
         "subject": "sonarr",
@@ -125,14 +125,14 @@ def test_a_k8s_deferred_ledger_line_with_an_unknown_key_reaches_the_banner(tmp_p
     assert "image bump for `sonarr` 58 min ago" in lines[0]
 
 
-def test_k8s_deferred_in_both_sources_is_one_line_from_the_older(tmp_path):
-    (tmp_path / MARKERS["k8s_deferred"]).write_text(f"{'a' * 40} sonarr 3000\n")
-    line = owed_line("k8s_deferred", "sonarr", "f" * 40, 500)
-    (tmp_path / MARKERS["owed"]).write_text(line + "\n")
+def test_k8s_deferred_on_two_lines_is_one_line_from_the_older(tmp_path):
+    older = owed_line("k8s_deferred", "sonarr", "f" * 40, 500)
+    newer = owed_line("k8s_deferred", "sonarr", "a" * 40, 3000)
+    (tmp_path / MARKERS["owed"]).write_text(f"{newer}\n{older}\n")
     lines = k8s_deferred_lines(read_k8s_deferred_marker(str(tmp_path)), 4000)
     assert len(lines) == 1, lines
     assert "58 min ago" in lines[0]
 
 
-def test_k8s_deferred_with_neither_source_reads_as_nothing_pending(tmp_path):
+def test_k8s_deferred_with_no_ledger_reads_as_nothing_pending(tmp_path):
     assert read_k8s_deferred_marker(str(tmp_path)) is None

@@ -26,11 +26,9 @@ MARKERS = tuple(
         "hold_plane",
         "last_run",
         "behind",
-        "k8s_deferred",
     )
 )
 _HOLD_PLANE = gitops_markers.MARKERS["hold_plane"]
-_K8S_DEFERRED = gitops_markers.MARKERS["k8s_deferred"]
 
 # Between the entries of a `hold_plane` that more than one failed apply wrote (#2381). A
 # literal, because the daemon runs under `uv run --no-project` outside the repo venv and
@@ -247,20 +245,19 @@ def hold_plane_entries(held: str) -> list[str]:
     return [e.strip() for e in held.split(";") if e.strip()]
 
 
-def k8s_deferred_rows(marker: str, owed: str | None = None) -> list[dict[str, str]]:
+def k8s_deferred_rows(owed: str | None) -> list[dict[str, str]]:
     """Each image bump the deployer deferred and still holds, oldest deferral first.
 
     Args:
-        marker: the `k8s_deferred` line marker's text.
-        owed: the `owed` ledger's text, whose `k8s_deferred` class `gitops_ledger` reads
-            beside the marker while the deployer moves that writer into the ledger (#3392).
+        owed: the `owed` ledger's text, whose `k8s_deferred` class holds the bumps (#3392).
 
     One row per service, carrying the two commands an operator runs in order: the deploy that
     applies the merged bump, then the clear that drops its line. The page prints both rather
     than offering a button, because this daemon's deploy button takes the service lock and a
     budget deferral means the tick ran out of wall clock — the operator picks the moment.
 
-    A garbled line is skipped, never guessed at, for the reason `parse_k8s_deferred` gives.
+    A garbled line is skipped, never guessed at, for the reason `gitops_ledger.parse_owed`
+    gives.
     """
     return [
         {
@@ -269,7 +266,7 @@ def k8s_deferred_rows(marker: str, owed: str | None = None) -> list[dict[str, st
             "deploy": gitops_markers.k8s_deferred_deploy_cmd([e.service]),
             "clear": gitops_markers.k8s_deferred_clear_cmd(e.service),
         }
-        for e in gitops_ledger.k8s_deferred_entries(marker, owed)
+        for e in gitops_ledger.k8s_deferred_entries(owed)
     ]
 
 
@@ -287,13 +284,12 @@ def _read_owed(state_dir: Path) -> str | None:
 
 
 def read_state(state_dir: Path) -> dict[str, str | list]:
-    """Read the six markers, plus `hold_plane` and `k8s_deferred` split into their entries.
+    """Read the `MARKERS` above, plus `hold_plane` split into its entries and the deferred bumps.
 
-    A missing marker is ''. The override is presence-only, so it reads 'set' or ''. The
-    `hold_plane_entries` and `k8s_deferred_entries` keys are the parsed forms of their
-    markers, and they are what the page lists; the raw strings stay beside them. The
-    `k8s_deferred_entries` also carry the `owed` ledger's `k8s_deferred` class. The ledger is
-    read but not served, because its other classes have no panel here.
+    A missing marker is ''. The `hold_plane_entries` key is the parsed form of its marker,
+    and it is what the page lists; the raw string stays beside it. The `k8s_deferred_entries`
+    key comes from the `owed` ledger's `k8s_deferred` class. The ledger is read but not
+    served, because its other classes have no panel here.
 
     Raises:
         OSError: a marker exists but can't be read (e.g. permission denied). Only a
@@ -310,9 +306,7 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
             continue
         st[name] = text.strip()
     st["hold_plane_entries"] = hold_plane_entries(str(st[_HOLD_PLANE]))
-    st["k8s_deferred_entries"] = k8s_deferred_rows(
-        str(st[_K8S_DEFERRED]), _read_owed(state_dir)
-    )
+    st["k8s_deferred_entries"] = k8s_deferred_rows(_read_owed(state_dir))
     return st
 
 

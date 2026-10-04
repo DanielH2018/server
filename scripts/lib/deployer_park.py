@@ -28,8 +28,8 @@ nothing while the change sits merged and unapplied — only the banner names it.
 ``k8s_deferred`` is the same shape for the k8s plane: one line per promoted image bump a BROAD
 tick merged and then could not apply, because the broad arm returns before the k8s arm runs. It
 too leaves ``behind_since`` empty. The banner names it so that a session opening on
-daniel-box — the reader who can clear it with one deploy — is told. It is moving into the
-``owed`` ledger as a class (#3392), so the banner reads the line marker and that class together.
+daniel-box — the reader who can clear it with one deploy — is told. It is a class of the
+``owed`` ledger (#3392).
 
 ``k8s_unapplied`` is that same shape again for the k8s changes this deployer never applies at
 all: a hand-edited role, or one of the forty denylisted ones. Nothing pages on it, by
@@ -74,9 +74,9 @@ from gitops_markers import (
     parse_contention,
     manual_plane_clear_cmd,
     maximal_apply_warning,
-    parse_k8s_deferred,
 )
 from gitops_ledger import (
+    OWED_K8S_DEFERRED,
     OWED_K8S_UNAPPLIED,
     k8s_deferred_entries,
     k8s_unapplied_entries,
@@ -275,7 +275,7 @@ def k8s_deferred_lines(marker, now):
     That is the same trade `manual_plane_lines` takes and the cost is one line on one banner.
     """
     lines = []
-    for entry in sorted(parse_k8s_deferred(marker), key=lambda e: e.at):
+    for entry in k8s_deferred_entries(marker):
         lines.append(
             f"  ✗ the GitOps deployer merged an image bump for `{entry.service}` "
             f"{_age_phrase(now - entry.at)} ago and deferred the deploy — "
@@ -328,19 +328,20 @@ def read_k8s_unapplied_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
 
 
 def read_k8s_deferred_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The host's deferred image bumps in the `k8s_deferred` line format, or None when none.
+    """The host's deferred image bumps as `owed` ledger lines, or None when none.
 
-    The bumps come from the line marker and the `owed` ledger's `k8s_deferred` class, one line
-    per service, through `gitops_ledger.k8s_deferred_entries`, so this banner and
-    monitor-bridge's page agree while the class moves into the ledger (#3392). Absent and
-    unreadable collapse to the same answer for the reason the readers above give: every caller
-    here only asks "is a bump merged and unapplied?", and for a marker nobody can read the
-    answer is no. `gitops_markers.parse_k8s_deferred` turns the text into entries.
+    One line per service, through `gitops_ledger.k8s_deferred_entries`, so this banner and
+    monitor-bridge's page agree. Absent and unreadable collapse to the same answer for the
+    reason the readers above give: every caller here only asks "is a bump merged and
+    unapplied?", and for a marker nobody can read the answer is no.
     """
-    entries = k8s_deferred_entries(
-        _read(state_dir, MARKERS["k8s_deferred"]), _read(state_dir, MARKERS["owed"])
+    entries = k8s_deferred_entries(_read(state_dir, MARKERS["owed"]))
+    return (
+        "\n".join(
+            owed_line(OWED_K8S_DEFERRED, e.service, e.origin, e.at) for e in entries
+        )
+        or None
     )
-    return "\n".join(f"{e.origin} {e.service} {e.at}" for e in entries) or None
 
 
 def read_contention_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:

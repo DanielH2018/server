@@ -200,9 +200,12 @@ def test_read_state_lists_a_deferred_bump_with_its_deploy_then_clear_is_clean(
     state_dir,
 ):
     """A merged, unapplied image bump is the one park the page could not name."""
-    marker = f"{'a' * 40} sonarr 2000.0\n{'b' * 40} radarr 1000.0\n"
-    (state_dir / "k8s_deferred").write_text(marker)
-    rows = reads.k8s_deferred_rows(marker)
+    owed = "\n".join(
+        json.dumps({"class": "k8s_deferred", "subject": s, "origin": sha, "at": at})
+        for s, sha, at in (("sonarr", "a" * 40, 2000), ("radarr", "b" * 40, 1000))
+    )
+    (state_dir / "owed.jsonl").write_text(owed)
+    rows = reads.k8s_deferred_rows(owed)
     assert [r["service"] for r in rows] == ["radarr", "sonarr"]
     assert rows[0]["origin"] == "b" * 8
     assert rows[0]["deploy"] == './scripts/deploy.sh --tags "radarr"'

@@ -301,7 +301,8 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   pages once the oldest line is older than the same six hours, naming the
   `./scripts/deploy.sh --tags <svc>` that applies it and the
   `gitops_state.py clear-k8s-deferred <svc>` that follows; any tick that deploys the service
-  clears the line itself. Pure `gitops_status()` and its parsers are unit-tested; an
+  clears the line itself. The arm reads the `owed` ledger's `k8s_deferred` class (#3392).
+  Pure `gitops_status()` and its parsers are unit-tested; an
   unparseable marker reads as not-behind rather than paging forever on garbage.)
 - **WG Pi Peer Backup** — RETIRED from this container at the host flips (2026-08-14). The pull
   became the `pi-peer-backup` k8s CronJob, which pushes its Kuma monitor directly, so there is

@@ -343,8 +343,7 @@ def clear_k8s_deferred(
         empty remaining set. None means the default for `cls`.
       cls: which ledger class to clear — `k8s_deferred`, the one monitor-bridge pages on, or
         `k8s_unapplied`, which nothing pages on. The two carry identical clear semantics, so
-        they share this function rather than a copy of it. A `k8s_deferred` clear also drops
-        the service from the legacy line marker, which `DeployerState` folds in first.
+        they share this function rather than a copy of it.
     """
     deferred = cls == OWED_K8S_DEFERRED
     pending = state.k8s_deferred_pending if deferred else state.k8s_unapplied_pending

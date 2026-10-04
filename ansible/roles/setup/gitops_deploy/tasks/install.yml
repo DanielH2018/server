@@ -25,8 +25,10 @@
 # writer and every reader when `land.sh` moved onto `receipts.jsonl` (#3391, #3461); a
 # `land.sh` from a worktree cut before that still reads it, and only its absence stops that
 # read going stale. `manual_plane` and its `manual_plane_tags` sidecar lost their writer when the
-# class moved into the `owed` ledger (#3392) and their readers in #3487. A marker retired later joins this list in the PR that drops its `MARKERS`
-# entry, never before: `tests/test_deployer_state.py` fails on a live basename here.
+# class moved into the `owed` ledger (#3392) and their readers in #3487. `k8s_deferred` lost
+# its writer the same way in #3533, and its readers in the PR that added it here. A marker
+# retired later joins this list in the PR that drops its `MARKERS` entry, never before:
+# `tests/test_deployer_state.py` fails on a live basename here.
 - name: Remove the state files of retired deployer markers
   tags: [gitops-deploy-code]
   ansible.builtin.file:
@@ -36,6 +38,7 @@
     - broad_applied
     - manual_plane
     - manual_plane_tags
+    - k8s_deferred
   become: true
 
 - name: Install the deployer code
