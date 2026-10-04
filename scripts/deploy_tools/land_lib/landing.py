@@ -99,6 +99,11 @@ class Landing:
         # racing that apply, so `behind_since` set with `hold_sha` empty is the state of a run
         # in flight rather than a settled deferral.
         self.tick_watch_abandoned = False
+        # Set by `merge.arm_merge` to the squash subject when the PR waits on a review that
+        # only a ruleset bypass clears. `merge.await_merge` then merges it directly once CI is
+        # green, because GitHub's auto-merge never applies a bypass. Empty means auto-merge
+        # (or nothing) does the merge.
+        self.direct_merge_subject = ""
 
     @property
     def tags_csv(self) -> str:

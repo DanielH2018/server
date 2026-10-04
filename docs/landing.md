@@ -72,6 +72,16 @@ The arm is idempotent, so re-running after a `merge-conflict` or `merge-timeout`
 cleanly. `--subject` overrides the squash commit's subject; the PR's own title is used
 otherwise.
 
+**A PR waiting on a review is merged directly, not armed.** When `reviewDecision` is
+`REVIEW_REQUIRED`, the arm leaves the PR alone. `--await-merge` then merges it through the REST
+merge endpoint on the first poll where `await_ci` reads its head green, pinned to that head SHA.
+GitHub's auto-merge does not apply a ruleset bypass, so an armed PR in that state stays
+`BLOCKED` until `merge-timeout` (github/docs#45265). The REST endpoint does apply the bypass, and
+a ruleset with no bypass actor, such as the master CI gate, still refuses the call until its
+checks pass. A refused merge is printed once and the wait continues, so a caller who cannot
+bypass ends at `merge-timeout`. Without `--await-merge` the arm dies, because nothing else in the
+run would merge the PR.
+
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
