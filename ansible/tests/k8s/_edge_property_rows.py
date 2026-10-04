@@ -267,7 +267,7 @@ EDGE_PROPERTIES = (
             "entry's workloads are pinned there too (#3452): HA and authelia on daniel-server "
             "made a second node whose loss broke SSO and home automation. The selector reads "
             "`tier` on containers_list entries, so a newly tiered role joins without an edit "
-            "here. The DECIDED marker on `tier:` in inventory/host_vars/daniel-box.yml has the "
+            "here. The DECIDED marker in the home-assistant Deployment template has the "
             "trade-off."
         ),
         select=_home_critical_workloads,

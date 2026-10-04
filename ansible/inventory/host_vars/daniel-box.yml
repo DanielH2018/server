@@ -62,17 +62,6 @@ autofix_fake_remux_policy:
 # volumes worth a daily backup; the k3s role's `k3s_longhorn_r2_volumes` is those claims, and
 # `ansible/tests/longhorn/test_r2_tier_is_derived.py` checks them against the role's rendered
 # PVCs. A tiered entry with no `backup_claims` holds nothing worth a daily copy.
-#
-# DECIDED: every Deployment of a home-critical entry is pinned to `k8s_primary_node` (#3452).
-# Traefik, pihole and mosquitto must run on the node that announces their MetalLB VIPs, so the
-# house already stops working when that node goes down. HA, authelia and its redis, the
-# crowdsec engine and zigbee2mqtt were free to land on daniel-server. That made daniel-server a
-# second node whose loss breaks SSO and home automation, and pinning them costs no availability
-# the VIP pins had not already spent. The pin moves with `k8s_primary_node`. On 2026-10-04
-# daniel-box used 11.2Gi of 28.2Gi allocatable, and HA (881Mi, limit 2Gi) is the largest pod
-# that moved. The `home-critical-workloads-pinned-to-the-vip-node` row in
-# `ansible/tests/k8s/_edge_property_rows.py` derives the set from `tier` and fails on an
-# unpinned one.
 containers_list:
   # crowdsec must precede traefik: the traefik pod carries a crowdsec agent sidecar that logs
   # into this engine's LAPI, and a post-deploy task in this role registers the machine

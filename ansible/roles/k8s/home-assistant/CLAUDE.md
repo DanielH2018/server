@@ -25,8 +25,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   in-cluster `mosquitto` Service, NUT via the in-cluster `nut` Service (admitted by
   `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-nut.yaml.j2`).
 - **Pinned to `k8s_primary_node`** with the rest of the home-critical chain, beside the
-  mosquitto broker and the VIPs (#3452). The reasoning is the `DECIDED:` marker on `tier:` in
-  `ansible/inventory/host_vars/daniel-box.yml`.
+  mosquitto broker and the VIPs (#3452). The reasoning is the marker
+  `ansible/roles/k8s/home-assistant/templates/deployment.yaml.j2:DECIDED: every Deployment of a home-critical`.
 
 ## Where things are documented
 This file holds the at-a-glance facts, the copy-not-template convention (the trap that
