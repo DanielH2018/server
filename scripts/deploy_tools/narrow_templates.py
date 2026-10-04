@@ -107,6 +107,24 @@ def comment_only(before: str | None, after: str | None) -> bool:
         return False
 
 
+def comment_edit(
+    path: str,
+    old_ref: str,
+    after: str | None,
+    cwd: Path,
+    explain: Callable[[str], None],
+) -> bool:
+    """Whether the shared template at `path` changed since `old_ref` only in its comments.
+
+    A comment-only edit renders the same bytes for every importer, so it reaches none of them,
+    and the release census reads it the same way: it leaves no service stale.
+    """
+    if not comment_only(show_at(old_ref, path, cwd), after):
+        return False
+    explain(f"narrow: {path.split('/')[-1]} comment-only -> (nothing) via {path}")
+    return True
+
+
 def real_mentions(hits: Iterable[str], name: str, ref: str, cwd: Path) -> list[str]:
     """`hits` less every `.j2` file that names `name` only inside a Jinja comment.
 
