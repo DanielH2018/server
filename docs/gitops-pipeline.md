@@ -1191,9 +1191,18 @@ marker, `"<origin_sha> <service> <unix_ts>"`. `k8s_unapplied` is a class of the 
 an exact field count and skips anything else, and the monitor-bridge, `deploy_ui` and
 `renovate_agent` roles each redeploy their copy on their own schedule. A field a new deployer appended
 therefore read as no pending work in a reader that had not redeployed, which is why
-`manual_plane_tags` is a sidecar. `gitops_markers.parse_owed` ignores keys it does not know,
+`manual_plane_tags` is a sidecar. `gitops_ledger.parse_owed` ignores keys it does not know,
 and every writer carries them through a rewrite. `k8s_unapplied` moved first because nothing
 pages on it.
+
+**`manual_plane` is the second class, and its readers shipped before any writer.** A line
+carries `playbook` and `tags` beside the four common keys, so the sidecar folds into the line.
+monitor-bridge pages on the class, so it carries a generated `gitops_ledger.py` copy, and
+`gitops_ledger.merge_manual_plane` unions the class with the line marker for both that page
+and the SessionStart banner. A role pending in both sources takes the older stamp, and its
+tags union unless either side needs the whole role. A line missing `playbook` or carrying
+malformed `tags` still pages, for the whole role. The deployer still writes the line marker
+and its sidecar; moving that writer into the ledger is the next step of #3392.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no

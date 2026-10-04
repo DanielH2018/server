@@ -74,12 +74,14 @@ from gitops_markers import (
     manual_plane_clear_cmd,
     maximal_apply_warning,
     parse_k8s_deferred,
+    format_manual_plane_tags,
     parse_manual_plane,
     parse_manual_plane_tags,
 )
 from gitops_ledger import (
     OWED_K8S_UNAPPLIED,
     k8s_unapplied_entries,
+    merge_manual_plane,
     owed_line,
     parse_owed,
 )
@@ -153,26 +155,44 @@ def park_note(marker: str | None, now: float | None = None) -> str:
     )
 
 
-def read_manual_plane_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The host's `manual_plane` marker text, or None when it cannot be read.
+def _manual_plane(state_dir: str):
+    """The pending setup roles across the line marker and the `owed` ledger, and their tags.
 
-    Absent and unreadable collapse to the same answer, for the reason `read_behind_marker`
-    gives: every caller here only asks "is a role pending?", and for a marker nobody can read
-    the answer is no. `gitops_markers.parse_manual_plane` turns the text into entries.
+    `gitops_ledger.merge_manual_plane` decides both, so this banner and monitor-bridge's page
+    agree on every role and every tag while the class moves into the ledger (#3392).
     """
-    return _read(state_dir, MARKERS["manual_plane"])
+    return merge_manual_plane(
+        parse_manual_plane(_read(state_dir, MARKERS["manual_plane"])),
+        parse_manual_plane_tags(_read(state_dir, MARKERS["manual_plane_tags"])),
+        _read(state_dir, MARKERS["owed"]),
+    )
+
+
+def read_manual_plane_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
+    """The host's pending setup roles in the `manual_plane` line format, or None when none.
+
+    The roles come from the line marker and the ledger's `manual_plane` class, one line per
+    role. Absent and unreadable collapse to the same answer, for the reason
+    `read_behind_marker` gives: every caller here only asks "is a role pending?", and for a
+    marker nobody can read the answer is no. `gitops_markers.parse_manual_plane` turns the
+    text into entries.
+    """
+    entries, _ = _manual_plane(state_dir)
+    return (
+        "\n".join(f"{e.origin} {e.playbook} {e.role} {e.at}" for e in entries) or None
+    )
 
 
 def read_manual_plane_tags_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The host's `manual_plane_tags` marker text, or None when it cannot be read.
+    """The narrowest tags each pending role needs, in the `manual_plane_tags` format.
 
-    The sidecar naming the narrowest `--tags` value each pending role's change needs.
-    Absent and unreadable collapse to the same answer for the reason the two readers above
-    give, and that answer is the safe one here: a caller with no narrowing prints the
-    whole-role tag, which is what every surface printed before the sidecar existed.
+    Absent and unreadable collapse to the same answer for the reason the reader above gives,
+    and that answer is the safe one here: a caller with no narrowing prints the whole-role
+    tag, which is what every surface printed before the sidecar existed.
     `gitops_markers.parse_manual_plane_tags` turns the text into the mapping.
     """
-    return _read(state_dir, MARKERS["manual_plane_tags"])
+    _, tags = _manual_plane(state_dir)
+    return format_manual_plane_tags(tags)
 
 
 # How long a contention streak may run before the banner names it: the same number
