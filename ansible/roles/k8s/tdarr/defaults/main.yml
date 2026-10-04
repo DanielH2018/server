@@ -31,7 +31,7 @@ tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:e06ecd0a5fc27ab248622f6
 #   3. The digest pin's "stays manual" intent is enforced by nothing: it is true only for
 #      VERSION bumps, since upstream ships no stable tag Renovate can read a semver out of. A
 #      digest re-push is a different kind of update, and renovate.json's digest-bump rule
-#      matches ansible/roles/k8s/** with automerge + platformAutomerge true after a 3-day soak,
+#      matches ansible/roles/k8s/** with automerge true after a 3-day soak,
 #      with no tdarr exclusion — exactly what a `:latest@sha256:` pin receives.
 # k8s_autodeploy_snapshot_pvcs stays declared below: it still protects a manual deploy.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
