@@ -255,25 +255,31 @@ def test_plan_tick_attributes_each_k8s_role_to_the_newest_commit_touching_it(
     assert plan.cs.k8s_origins == {"sonarr": role_change}
 
 
+@pytest.fixture
+def installed_tables():
+    """The cross-role tables a tick starts from, put back after the test swaps them."""
+    import deploy_cross_role
+
+    saved = deploy_cross_role.current_tables()
+    deploy_cross_role.use_tables({**saved, "SETUP_FILES_SHIPPED_BY_OTHER_ROLES": {}})
+    yield deploy_cross_role
+    deploy_cross_role.use_tables(saved)
+
+
 @pytest.mark.parametrize("origin_copy", [True, False])
 def test_plan_tick_routes_a_new_shared_file_with_the_tables_its_own_range_adds(
-    gitops_deploy, tick, settings, monkeypatch, origin_copy
+    gitops_deploy, tick, settings, installed_tables, origin_copy
 ):
     """#3512: a PR adding a common/tasks file and its table entry recorded `common`.
 
     The installed tables have no entry for the new file. Without origin's copy the owner is
     recorded, which is the red half; with it, the shipper the range names is.
     """
-    import deploy_changes
-
-    for name in ("K8S_ROLES_IMPORTING_SETUP_FILES", "SETUP_FILES_ROUTED_TO_OWNER"):
-        monkeypatch.setattr(deploy_changes, name, getattr(deploy_changes, name))
-    monkeypatch.setattr(deploy_changes, "SETUP_FILES_SHIPPED_BY_OTHER_ROLES", {})
     new_file = "ansible/roles/setup/common/tasks/new_shared.yml"
-    tick.paths = [new_file, deploy_changes.CROSS_ROLE_FILE]
+    tick.paths = [new_file, installed_tables.CROSS_ROLE_FILE]
     if origin_copy:
         tick.files = {
-            f"{ORIGIN}:{deploy_changes.CROSS_ROLE_FILE}": (
+            f"{ORIGIN}:{installed_tables.CROSS_ROLE_FILE}": (
                 "K8S_ROLES_IMPORTING_SETUP_FILES = {}\n"
                 "SETUP_FILES_ROUTED_TO_OWNER = frozenset()\n"
                 f"SETUP_FILES_SHIPPED_BY_OTHER_ROLES = {{{new_file!r}: frozenset({{'claude_code'}})}}\n"

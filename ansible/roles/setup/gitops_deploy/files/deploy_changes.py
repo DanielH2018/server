@@ -15,7 +15,11 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
+import deploy_cross_role
+
 # Re-exported: `narrow_setup` and the cross-role scan read the tables through this module.
+# This module's own readers go through `deploy_cross_role.<TABLE>` instead, so a tick that
+# swaps the tables with `deploy_cross_role.use_tables` reaches them (#3512).
 from deploy_cross_role import (  # noqa: F401
     K8S_ROLES_IMPORTING_SETUP_FILES,
     SETUP_FILES_ROUTED_TO_OWNER,
@@ -483,7 +487,9 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             # A k8s role importing this setup file defer-and-alerts like its own change would.
             # Here rather than in `plan_tick`, because `k8s_change_commits` reads `.k8s` from
             # this function alone to name the commit each `k8s_unapplied` line records (#3111).
-            cs.k8s |= K8S_ROLES_IMPORTING_SETUP_FILES.get(p, frozenset())
+            cs.k8s |= deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES.get(
+                p, frozenset()
+            )
             continue
         if p.startswith(_PI_SHARED_PREFIX):
             cs.pi_shared = True
@@ -528,41 +534,12 @@ def setup_roles_for(path: str) -> set[str]:
     at = role_of(path)
     if at is None or at.plane != "setup":
         return set()
-    shippers = SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(path, frozenset())
+    shippers = deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(
+        path, frozenset()
+    )
     # DECIDED: `common` is not named beside its file's shippers (#3312); see its CLAUDE.md.
     owner = set() if shippers and setup_role_playbook(at.role) is None else {at.role}
     return owner | shippers
-
-
-# The tables above, by the path of the module that defines them and the names it binds.
-CROSS_ROLE_FILE = "ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py"
-_CROSS_ROLE_TABLES = (
-    "K8S_ROLES_IMPORTING_SETUP_FILES",
-    "SETUP_FILES_ROUTED_TO_OWNER",
-    "SETUP_FILES_SHIPPED_BY_OTHER_ROLES",
-)
-
-
-def adopt_cross_role_tables(source: str) -> None:
-    """Rebind this module's cross-role tables to the ones `source` defines (#3512).
-
-    The tick classifies with the installed `/opt/gitops-deploy` copy, which predates a range
-    that edits `deploy_cross_role.py`. A PR adding a `common/tasks` file and its table entry
-    together then found no shippers and recorded `common` in `manual_plane`.
-    `deploy_phases.plan_tick` passes origin's copy of the file here before it classifies.
-    Rebinding the globals reaches every reader in this module, since each looks the name up
-    at call time. Raises when `source` fails to run or lacks a table, and changes nothing then.
-    """
-    namespace: dict[str, object] = {}
-    # DECIDED: exec origin's copy rather than parse it. The file builds its tables with set
-    # unions and f-strings, which `ast.literal_eval` refuses. Origin has passed the CI gate,
-    # and the same tick's `gitops-deploy-code` apply installs and imports this exact file.
-    exec(compile(source, CROSS_ROLE_FILE, "exec"), namespace)
-    missing = [name for name in _CROSS_ROLE_TABLES if name not in namespace]
-    if missing:
-        raise KeyError(f"{CROSS_ROLE_FILE} defines no {', '.join(missing)}")
-    for name in _CROSS_ROLE_TABLES:
-        globals()[name] = namespace[name]
 
 
 # Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.

@@ -19,10 +19,9 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 import deploy_alert_text
 import deploy_alerts
 import deploy_io
+import deploy_cross_role
 from deploy_changes import (
-    CROSS_ROLE_FILE,
     ChangeSet,
-    adopt_cross_role_tables,
     comment_only_broad_changes,
     services_from_changed_paths,
     shared_module_consumers,
@@ -237,7 +236,7 @@ def plan_tick(
             "not parking; the tick treats it as no change"
         )
         paths = [p for p in paths if p not in quiet]
-    if CROSS_ROLE_FILE in paths:
+    if deploy_cross_role.CROSS_ROLE_FILE in paths:
         _adopt_incoming_cross_role_tables(tools, config, target.origin)
     cs = services_from_changed_paths(paths)
     cs.k8s_consumers = shared_module_consumers(paths, config.repo)
@@ -255,18 +254,17 @@ def _adopt_incoming_cross_role_tables(
 
     A read or exec failure keeps the installed copy, which is the behaviour before #3512.
     """
+    path = deploy_cross_role.CROSS_ROLE_FILE
     try:
-        source = tools.run(
-            ["git", "show", f"{origin}:{CROSS_ROLE_FILE}"], cwd=config.repo
-        )
-        adopt_cross_role_tables(source)
+        source = tools.run(["git", "show", f"{origin}:{path}"], cwd=config.repo)
+        deploy_cross_role.use_tables(deploy_cross_role.tables_in(source))
     except Exception as exc:
         log(
-            f"range edits {CROSS_ROLE_FILE}, and its copy at {origin[:8]} is unusable "
+            f"range edits {path}, and its copy at {origin[:8]} is unusable "
             f"({exc}) — classifying with the installed tables"
         )
         return
-    log(f"range edits {CROSS_ROLE_FILE} — classifying with its copy at {origin[:8]}")
+    log(f"range edits {path} — classifying with its copy at {origin[:8]}")
 
 
 # The line `git log` prints ahead of each commit's paths. No tracked path starts with it.
