@@ -155,10 +155,10 @@ Say which of these applies, then stop:
   `initial_setup.yml` — sits in the `local..origin` range. The deployer applies every other broad
   change itself, but not the bring-up playbooks: those run by hand by construction. If it is
   another session's, clearing it means applying their change; name it and stop.
-- The host's `manual_plane` marker names a setup role the deployer cannot apply. The role needs
-  its playbook by hand, then `gitops_state.py clear-manual-plane <role>`; the
-  `land-after-merge` skill has the `--applied` form for a narrowed apply. Another session's is
-  theirs to clear.
+- A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer
+  cannot apply. The role needs its playbook by hand, then `gitops_state.py clear-manual-plane
+  <role>`; the `land-after-merge` skill has the `--applied` form for a narrowed apply. Another
+  session's is theirs to clear.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.

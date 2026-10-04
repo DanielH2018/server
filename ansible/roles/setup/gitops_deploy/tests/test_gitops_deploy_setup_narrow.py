@@ -269,4 +269,4 @@ def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
         "ansible/initial_setup.yml deploy_ui:deploy-ui-code,"
         "gitops_deploy:gitops-deploy-code,renovate_agent:renovate-agent-code"
     )
-    assert gitops_deploy.STATE.manual_plane is None
+    assert gitops_deploy.STATE.manual_plane_pending() == []

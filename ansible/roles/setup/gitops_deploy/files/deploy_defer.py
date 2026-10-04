@@ -11,7 +11,7 @@ ff-merge, a journal line every tick, a page once per SHA. Staying parked is what
 
 **Record** (`record`). A setup ROLE `initial_setup.yml` does not include — `k3s`, applied by
 `k3s-bringup.yml`, and `common`, applied by no playbook at all. The tick fast-forwards and
-writes the role to the `manual_plane` marker instead of parking.
+writes the role to the `owed` ledger's `manual_plane` class instead of parking.
 
 # DECIDED: an unapplyable setup ROLE no longer parks the tick. Parking was the signal only
 because nothing else was, and everybody else paid for it. Over the seven days to 2026-09-11
@@ -199,8 +199,8 @@ class Recorded(NamedTuple):
     Attributes:
         roles: the roles whose `manual_plane` LINE this tick appended. A role a previous tick
             recorded keeps its first-seen stamp and is not in here.
-        tags_before: role tag -> its `manual_plane_tags` row as it stood BEFORE this tick, or
-            None where the role had no row. One entry per role the tick wrote a row for,
+        tags_before: role tag -> its tags as they stood BEFORE this tick, or None where the
+            role was not pending. One entry per role the tick wrote a row for,
             which is every role it was handed — including the ones already pending.
     """
 
@@ -232,7 +232,7 @@ def record(
     pages on. The page goes out on the `broad` channel — the same one `park` uses, which a
     range can never take as well as this one.
 
-    The narrow tags go in a sidecar marker for EVERY role in `roles`, not only the ones this
+    The narrow tags go on the ledger line of EVERY role in `roles`, not only the ones this
     tick added: a second range touching an already-pending role adds work the first line
     cannot describe, and `record_manual_plane_tags` unions the two. They go in this origin's
     receipt as well, scoped to this range alone, which is what `land.sh` quotes (#3391).
@@ -280,7 +280,7 @@ def record(
         deploy_alert_text.manual_plane_alert(
             origin,
             manual_plane_remediation(set(roles), narrow),
-            state.path("manual_plane"),
+            state.path("owed"),
         ),
     )
     return Recorded(recorded, tags_before)

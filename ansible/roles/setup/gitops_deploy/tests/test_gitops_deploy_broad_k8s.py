@@ -70,7 +70,7 @@ def test_a_setup_role_the_deployer_cannot_apply_still_deploys_the_bump(
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks == [DEPLOY_SONARR]
     assert tick.merges == [ORIGIN]
-    assert "k3s" in marker(state_dir, "manual_plane")
+    assert "k3s" in marker(state_dir, "owed.jsonl")
     assert ("annotation", {"sonarr"}) in tick.log
 
 
@@ -85,7 +85,7 @@ def test_an_unapplyable_setup_role_alone_runs_no_playbook(
     tick.paths = [UNAPPLYABLE_ROLE]
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks == []
-    assert "k3s" in marker(state_dir, "manual_plane")
+    assert "k3s" in marker(state_dir, "owed.jsonl")
 
 
 def test_a_bump_auto_deploy_never_promoted_is_deferred_not_deployed(
@@ -310,5 +310,5 @@ def test_a_busy_service_lock_undoes_the_range_and_the_manual_plane_line(
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == LOCAL, "the ff-merge was undone"
     assert marker(state_dir, "hold_sha") is None
-    assert marker(state_dir, "manual_plane") is None
+    assert marker(state_dir, "owed.jsonl") is None
     assert marker(state_dir, "contention_since").startswith(ORIGIN)

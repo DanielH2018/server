@@ -112,9 +112,10 @@ Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--re
 line, the remaining-hosts note, and any `gitops_state.py clear-manual-plane <role>`. Read the
 deployer's own markers for what is still pending:
 ```bash
-cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/manual_plane
+cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/owed.jsonl
 ```
-A non-empty `hold_sha` or a `manual_plane` line naming your role is CLAUDE.md *When to wait*.
+A non-empty `hold_sha`, or an `owed.jsonl` line of class `manual_plane` naming your role, is
+CLAUDE.md *When to wait*.
 Do exactly one of these two things, never neither:
 - Apply the change and verify it, where *When to wait* leaves it to you — the marker is this
   PR's own work, no bring-up playbook sits in the range, and no other session owns it.

@@ -56,7 +56,9 @@ def test_a_bring_up_playbook_parks_and_names_its_reason_on_every_tick(
     assert "runs by hand by construction" in out
     assert tick.merges == [] and tick.playbooks == []
     assert len(tick.posts) == 1, "the PAGE is still once per SHA"
-    assert gitops_deploy.STATE.manual_plane is None, "a parked plane needs no marker"
+    assert gitops_deploy.STATE.manual_plane_pending() == [], (
+        "a parked plane needs no marker"
+    )
 
 
 def test_a_setup_path_belonging_to_no_role_still_parks(gitops_deploy, tick, capsys):
@@ -73,7 +75,7 @@ def test_a_setup_path_belonging_to_no_role_still_parks(gitops_deploy, tick, caps
     assert "parked, nothing merged" in out
     assert "names no role" in out, "and the journal says which of the two parks this is"
     assert tick.merges == [] and tick.playbooks == []
-    assert gitops_deploy.STATE.manual_plane is None
+    assert gitops_deploy.STATE.manual_plane_pending() == []
 
 
 # ── the plane that fast-forwards ───────────────────────────────────────────────────
@@ -297,7 +299,7 @@ def test_a_setup_role_the_deployer_can_apply_logs_no_park(gitops_deploy, tick, c
     assert "parked, nothing merged" not in out
     assert "manual_plane pending" not in out
     assert tick.merges == [ORIGIN] and tick.playbooks
-    assert gitops_deploy.STATE.manual_plane is None
+    assert gitops_deploy.STATE.manual_plane_pending() == []
 
 
 def test_a_failed_apply_still_records_the_role(gitops_deploy, tick):
@@ -356,7 +358,7 @@ def test_a_rolled_back_tick_takes_its_own_line_and_row_with_it(gitops_deploy, ti
     tick.narrow_setup["k3s"] = (0, "kubeconfig")
     recorded = deploy_defer.record(tick.tools, state, config, TARGET, ["k3s"])
     deploy_defer.unrecord(state, ORIGIN, recorded)
-    assert state.manual_plane is None
+    assert state.manual_plane_pending() == []
     assert state.manual_plane_tags_pending() == {}
     assert state.alerted_sha("broad") is None, "the page for this SHA goes too"
 

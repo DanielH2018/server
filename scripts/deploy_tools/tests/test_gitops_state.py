@@ -1,4 +1,4 @@
-"""The operator's half of the `manual_plane` marker: clearing one role's line.
+"""The operator's half of the `manual_plane` ledger class: clearing one role's line.
 
 Every rule is a pair. A command that cleared everything and one that cleared nothing read the
 same from the passing side alone, and this one is destructive in the direction that matters:
@@ -67,6 +67,15 @@ def run(tree_lock: Path, journal):
     return _run
 
 
+def pending(state_dir: Path) -> dict[str, frozenset[str]]:
+    """Role -> tags still owed, read the way the deployer reads them.
+
+    The fixtures seed the legacy line marker, and a clear folds it into the `owed` ledger
+    (#3392), so the answer is read through `DeployerState` rather than off either file.
+    """
+    return gitops_state.DeployerState(str(state_dir)).manual_plane_tags_pending()
+
+
 @pytest.fixture
 def marker(tmp_path: Path) -> Path:
     (tmp_path / "manual_plane").write_text(f"{K3S}\n{COMMON}\n")
@@ -75,7 +84,7 @@ def marker(tmp_path: Path) -> Path:
 
 def test_clearing_one_role_leaves_the_other(marker, run, capsys):
     assert run(marker.parent, "clear-manual-plane", "k3s") == 0
-    assert marker.read_text().splitlines() == [COMMON]
+    assert list(pending(marker.parent)) == ["common"]
     assert "k3s" in capsys.readouterr().out
 
 
@@ -84,14 +93,14 @@ def test_clearing_a_role_that_is_not_pending_exits_zero_and_says_so(
 ):
     """An operator clearing twice, or naming a role nobody recorded, has nothing to fix."""
     assert run(marker.parent, "clear-manual-plane", "renovate_agent") == 0
-    assert marker.read_text().splitlines() == [K3S, COMMON]
+    assert list(pending(marker.parent)) == ["k3s", "common"]
     assert "not pending" in capsys.readouterr().out
 
 
 def test_clearing_the_last_role_removes_the_marker(tmp_path, run, capsys):
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s") == 0
-    assert not (tmp_path / "manual_plane").exists()
+    assert pending(tmp_path) == {}
 
 
 def test_an_absent_marker_is_not_an_error(tmp_path, run, capsys):
@@ -116,8 +125,7 @@ def test_a_narrowed_clear_keeps_a_tag_a_later_range_added(
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
     (tmp_path / "manual_plane_tags").write_text("k3s coredns,kubeconfig\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
-    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
-    assert (tmp_path / "manual_plane_tags").read_text().strip() == "k3s coredns"
+    assert pending(tmp_path) == {"k3s": frozenset({"coredns"})}
     assert "STILL pending for coredns" in capsys.readouterr().out
     ((_role, dropped, remaining),) = journal
     assert dropped is None and remaining == frozenset({"coredns"})
@@ -128,8 +136,7 @@ def test_a_narrowed_clear_covering_the_whole_row_takes_the_line(tmp_path, run, c
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
     (tmp_path / "manual_plane_tags").write_text("k3s kubeconfig\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
-    assert not (tmp_path / "manual_plane").exists()
-    assert not (tmp_path / "manual_plane_tags").exists()
+    assert pending(tmp_path) == {}
     assert "cleared k3s" in capsys.readouterr().out
 
 
@@ -142,8 +149,7 @@ def test_a_bare_clear_still_takes_the_whole_line_and_row(tmp_path, run):
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
     (tmp_path / "manual_plane_tags").write_text("k3s coredns,kubeconfig\n")
     assert run(tmp_path, "clear-manual-plane", "k3s") == 0
-    assert not (tmp_path / "manual_plane").exists()
-    assert not (tmp_path / "manual_plane_tags").exists()
+    assert pending(tmp_path) == {}
 
 
 def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
@@ -159,8 +165,7 @@ def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
     (tmp_path / "manual_plane_tags").write_text("k3s -\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
-    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
-    assert (tmp_path / "manual_plane_tags").read_text().strip() == "k3s -"
+    assert pending(tmp_path) == {"k3s": frozenset()}
     out = capsys.readouterr().out
     assert "kept k3s" in out and "clear-manual-plane k3s`" in out
     ((_role, dropped, remaining),) = journal
@@ -171,7 +176,7 @@ def test_a_narrowed_clear_on_a_line_with_no_row_keeps_it(tmp_path, run):
     """A missing row is the same unknown: a line older than the sidecar, or a garbled row."""
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
-    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
+    assert pending(tmp_path) == {"k3s": frozenset()}
 
 
 def test_applied_naming_the_role_tag_is_a_whole_role_clear(tmp_path, run):
@@ -179,7 +184,7 @@ def test_applied_naming_the_role_tag_is_a_whole_role_clear(tmp_path, run):
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
     (tmp_path / "manual_plane_tags").write_text("k3s -\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "k3s") == 0
-    assert not (tmp_path / "manual_plane").exists()
+    assert pending(tmp_path) == {}
 
 
 def test_the_printed_clear_for_k3s_and_common_leaves_no_line_behind(tmp_path, run):
@@ -202,7 +207,7 @@ def test_the_printed_clear_for_k3s_and_common_leaves_no_line_behind(tmp_path, ru
     assert len(commands) == 2, clear
     for argv in commands:
         assert run(tmp_path, *argv) == 0
-    assert not (tmp_path / "manual_plane").exists(), clear
+    assert pending(tmp_path) == {}, clear
 
 
 def test_a_state_directory_this_user_cannot_write_says_who_owns_it(marker, run, capsys):
@@ -348,7 +353,7 @@ def test_a_failing_logger_does_not_change_the_clears_exit_code(marker, tree_lock
         ),
     )
     assert rc == 0
-    assert marker.read_text().splitlines() == [COMMON]
+    assert list(pending(marker.parent)) == ["common"]
 
 
 # ── clear-contention ────────────────────────────────────────────────────────
@@ -390,7 +395,7 @@ def test_an_empty_applied_is_refused(tmp_path, run):
         with pytest.raises(SystemExit) as exc:
             run(tmp_path, "clear-manual-plane", "k3s", "--applied", empty)
         assert exc.value.code == 2
-    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
+    assert pending(tmp_path) == {"k3s": frozenset()}
 
 
 def test_a_non_empty_applied_still_clears_its_tags(tmp_path, run):
@@ -398,7 +403,7 @@ def test_a_non_empty_applied_still_clears_its_tags(tmp_path, run):
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
     (tmp_path / "manual_plane_tags").write_text("k3s coredns,kubeconfig\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
-    assert (tmp_path / "manual_plane_tags").read_text().strip() == "k3s coredns"
+    assert pending(tmp_path) == {"k3s": frozenset({"coredns"})}
 
 
 def test_the_kept_message_warns_about_the_whole_role_apply_it_prescribes(
