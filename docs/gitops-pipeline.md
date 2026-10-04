@@ -1214,17 +1214,17 @@ ledger (#3533). Once daniel-box held no legacy file, the line-marker half of
 source beside its `gitops_markers.py` for this. Two lines naming one service read as one bump,
 dated and attributed from the older line.
 
-**`hold_plane` is the fourth class, and its writer has moved.** The readers shipped first
-(#3538): every reader calls `gitops_ledger.held_planes`, which returns the legacy `hold_plane`
-marker's entries and then each `hold_plane` ledger entry not already among them, oldest
-first. The readers are monitor-bridge's Status check, the `deploy_ui` panel,
+**`hold_plane` is the fourth class, and it moved the same way.** The readers shipped first
+(#3538) and read the class together with the legacy `; `-joined `hold_plane` line marker.
+Every reader calls `gitops_ledger.held_planes`, which returns each `hold_plane` ledger
+subject once, oldest first. The readers are monitor-bridge's Status check, the `deploy_ui` panel,
 `renovate_agent`'s skip reason, `k3s_upgrade_gates.held_sha` and the scheduled-jobs page. A
 ledger line's subject is the whole entry, `<playbook> <tags>`, so two failed applies of one
 playbook stay two entries. `DeployerState.hold_failed_apply`, `clear_broad_hold` and
 `clear_service_hold` now record and drop the class, and the hold-clear rule is a query over
-it. The first hold or clear folds any legacy marker entry into the ledger, at `hold_sha` and
-in the marker's order, writing the ledger before it removes the marker. Once daniel-box has
-ticked past the fold, the line-marker half of `held_planes` and `MARKERS["hold_plane"]` go.
+it (#3540). Its first hold or clear folded any legacy marker entry into the ledger. Once
+daniel-box held no legacy file, the line-marker half of `held_planes`, the fold and
+`MARKERS["hold_plane"]` were deleted, and `tasks/install.yml` reaps the basename.
 The `deploy_ui` Clear drops the class's ledger lines under the git-tree lock, so a cleared
 hold cannot replay them into the next one. `renovate_agent` installs `gitops_ledger.py` for
 its skip reason.
@@ -1433,8 +1433,8 @@ planes nobody owes. A k8s rollback hold records no plane, so the *Health gate + 
 section's `rm` of `hold_sha` still clears that one.
 
 **The Clear button in the deploy UI drops every entry at once.**
-`deploy_ui_writes.clear_hold` removes `hold_sha`, `hold_plane` and the `owed` ledger's
-`hold_plane` lines together as soon as the typed SHA matches, whatever is still unapplied — it is the operator's override, not a per-entry
+`deploy_ui_writes.clear_hold` removes `hold_sha` and the `owed` ledger's `hold_plane` lines
+together as soon as the typed SHA matches, whatever is still unapplied — it is the operator's override, not a per-entry
 clear. Since #2381 that can be several planes, so the page lists the entries one per line, the
 confirm prompt names them, and the reply repeats them
 (`deploy_ui_writes.hold_cleared_message`, #2453). After the Clear nothing records those planes

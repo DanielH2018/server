@@ -18,7 +18,6 @@ from deploy_git import (
     broad_hold_cleared_by,
     dirty_alert_slot,
     dirty_summary,
-    hold_plane_entries,
     hold_plane_marker,
     held_tag,
     is_diverged,
@@ -377,16 +376,6 @@ def test_a_role_tag_holds_bare_so_a_hold_from_before_the_qualifier_reads_the_sam
         "ansible/initial_setup.yml",
         ["gitops_deploy"],
     )
-
-
-# ── a legacy hold_plane marker that more than one failed apply wrote ──────────────────────────
-def test_a_trailing_separator_parses_as_no_extra_entry():
-    assert hold_plane_entries("ansible/deploy.yml; ") == ["ansible/deploy.yml"]
-
-
-def test_an_empty_or_missing_marker_holds_no_entry():
-    assert hold_plane_entries("") == []
-    assert hold_plane_entries(None) == []
 
 
 def test_a_tagged_run_does_not_clear_an_untagged_hold():

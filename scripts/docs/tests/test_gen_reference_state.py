@@ -67,25 +67,18 @@ def test_gitops_deploy_with_no_hold_is_a_plain_tick(tmp_path):
     assert "HOLD" not in run.outcome
 
 
-def test_gitops_deploy_with_a_hold_surfaces_the_sha_and_plane(tmp_path):
-    (tmp_path / "last_run").write_text(str(NOW.timestamp()))
-    (tmp_path / "hold_sha").write_text("deadbeefcafe1234\n")
-    (tmp_path / "hold_plane").write_text("k8s/manifests/tasks/drain.yml\n")
-    run = g.gitops_deploy_run(tmp_path)
-    assert "HOLD" in run.outcome
-    assert "deadbeef" in run.outcome
-    assert "k8s/manifests/tasks/drain.yml" in run.outcome
-
-
-def test_gitops_deploy_with_a_hold_names_the_ledgers_hold_plane_entry(tmp_path):
-    """The `owed` ledger's `hold_plane` class is a plane too (#3392)."""
+def test_gitops_deploy_with_a_hold_surfaces_the_sha_and_the_ledgers_plane(tmp_path):
+    """The planes are the `owed` ledger's `hold_plane` class (#3392)."""
     (tmp_path / "last_run").write_text(str(NOW.timestamp()))
     (tmp_path / "hold_sha").write_text("deadbeefcafe1234\n")
     (tmp_path / "owed.jsonl").write_text(
         '{"class": "hold_plane", "subject": "ansible/deploy.yml sonarr", '
         '"origin": "abc", "at": 1}\n'
     )
-    assert "(ansible/deploy.yml sonarr)" in g.gitops_deploy_run(tmp_path).outcome
+    run = g.gitops_deploy_run(tmp_path)
+    assert "HOLD" in run.outcome
+    assert "deadbeef" in run.outcome
+    assert "(ansible/deploy.yml sonarr)" in run.outcome
 
 
 # --- renovate_notify_run(): notified vs. checked-and-quiet ----------------------------------

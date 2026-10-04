@@ -109,20 +109,19 @@ def _held(subject: str, at: int, **extra) -> str:
     )
 
 
-def test_a_hold_plane_ledger_line_with_an_unknown_key_joins_the_markers_planes(cfg):
-    """The Verify-by of #3392 for `hold_plane`: the marker's entries first, then the ledger's.
+def test_a_hold_plane_ledger_line_with_an_unknown_key_is_read_oldest_first(cfg):
+    """The Verify-by of #3392 for `hold_plane`: a newer writer's extra key skips no line.
 
-    A plane in both sources is one plane, so the count stays honest.
+    A plane on two lines is one plane, so the count stays honest.
     """
     owed = "\n".join(
         [
             _held("ansible/initial_setup.yml k3s", 2000, added_by_a_newer_writer=[1]),
             _held("ansible/deploy.yml sonarr", 1000),
+            _held("ansible/deploy.yml sonarr", 3000),
         ]
     )
-    ok, msg = checks.gitops.gitops_status(
-        cfg, "deadbeefcafe", hold_plane="ansible/deploy.yml sonarr", owed=owed
-    )
+    ok, msg = checks.gitops.gitops_status(cfg, "deadbeefcafe", owed=owed)
     assert not ok
     assert (
         "2 planes unapplied: ansible/deploy.yml sonarr; ansible/initial_setup.yml k3s;"

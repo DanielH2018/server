@@ -282,12 +282,19 @@ def _tools(host: _FakeHost) -> renovate_agent.AgentTools:
     )
 
 
-def test_held_plane_text_names_the_ledgers_hold_plane_entry_after_the_markers() -> None:
+def test_held_plane_text_names_the_ledgers_hold_plane_entries_oldest_first() -> None:
     """The skip reason names a ledger plane, unknown key and all, and drops a torn line (#3392)."""
     files = {
-        renovate_agent.HOLD_PLANE_FILE: "ansible/deploy.yml sonarr\n",
         renovate_agent.OWED_FILE: "\n".join(
             [
+                json.dumps(
+                    {
+                        "class": "hold_plane",
+                        "subject": "ansible/deploy.yml sonarr",
+                        "origin": "abc",
+                        "at": 0,
+                    }
+                ),
                 json.dumps(
                     {
                         "class": "hold_plane",

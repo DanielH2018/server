@@ -16,22 +16,18 @@ from pathlib import Path
 import gitops_ledger
 import gitops_markers
 
-# The five markers the panels show, by basename — `gitops_markers` is the deployer's own table,
+# The three markers the panels show, by basename — `gitops_markers` is the deployer's own table,
 # copied into this `files/` (its header says how it is kept fresh). The basenames are also the
 # keys `/api/state` serves, which is what the page reads.
 MARKERS = tuple(
     gitops_markers.MARKERS[m]
     for m in (
         "hold",
-        "hold_plane",
         "last_run",
         "behind",
     )
 )
-_HOLD_PLANE = gitops_markers.MARKERS["hold_plane"]
-
-# Between the entries of a `hold_plane` that more than one failed apply wrote (#2381). A
-# literal, because the daemon runs under `uv run --no-project` outside the repo venv and
+# Between the held planes a message prints on one line (#2381). A literal, because the daemon runs under `uv run --no-project` outside the repo venv and
 # cannot import `deploy_git.HOLD_PLANE_SEP`, which pytest asserts this matches.
 HOLD_PLANE_SEP = "; "
 
@@ -275,12 +271,12 @@ def _read_owed(state_dir: Path) -> str | None:
 
 
 def read_state(state_dir: Path) -> dict[str, str | list]:
-    """Read the `MARKERS` above, plus `hold_plane` split into its entries and the deferred bumps.
+    """Read the `MARKERS` above, plus the held planes and the deferred bumps.
 
     A missing marker is ''. The `hold_plane_entries` key is every plane the hold waits on,
-    from `gitops_ledger.held_planes`: the marker's entries, then the `owed` ledger's
-    `hold_plane` class (#3392). It is what the page lists, one entry per failed apply, because
-    a Clear drops all of them at once (#2453); the raw marker string stays beside it. The
+    the `owed` ledger's `hold_plane` class read through `gitops_ledger.held_planes` (#3392).
+    It is what the page lists, one entry per failed apply, because a Clear drops all of them
+    at once (#2453). The
     `k8s_deferred_entries` key comes from the ledger's `k8s_deferred` class. The ledger is
     read but not served, because its other classes have no panel here.
 
@@ -299,7 +295,7 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
             continue
         st[name] = text.strip()
     owed = _read_owed(state_dir)
-    st["hold_plane_entries"] = gitops_ledger.held_planes(str(st[_HOLD_PLANE]), owed)
+    st["hold_plane_entries"] = gitops_ledger.held_planes(owed)
     st["k8s_deferred_entries"] = k8s_deferred_rows(owed)
     return st
 

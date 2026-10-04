@@ -76,9 +76,9 @@ OWED_K8S_DEFERRED = "k8s_deferred"
 # which is #878's erasure over again. `hold_sha` still decides whether anything pages; this
 # class only says which planes the hold is waiting on.
 #
-# It is moving the way `k8s_deferred` did (#3392). Every reader unions it with the legacy
-# `hold_plane` line marker through `held_planes`, and the deployer records it here, folding
-# any marker entry in on its first hold or clear.
+# It moved the way `k8s_deferred` did (#3392): every reader learned the class before the
+# writer recorded it, and the line-marker half of `held_planes` and the fold of its last
+# entries went once daniel-box held no legacy `hold_plane` file.
 OWED_HOLD_PLANE = "hold_plane"
 
 # Every class a ledger line may carry. A reader asks for its classes by name and never sees
@@ -284,19 +284,15 @@ def k8s_deferred_entries(owed: str | None) -> list[K8sDeferredEntry]:
     return sorted(oldest.values(), key=lambda e: e.at)
 
 
-def held_planes(hold_plane: str | None, owed: str | None) -> list[str]:
-    """Every plane a hold waits on: the `hold_plane` line marker's entries, then the ledger's.
+def held_planes(owed: str | None) -> list[str]:
+    """Every plane a hold waits on: each `hold_plane` ledger subject, oldest first.
 
     Args:
-        hold_plane: the `hold_plane` line marker's text, `; `-joined entries, or None.
         owed: the `owed` ledger's text, or None.
 
-    Oldest first. The line marker's entries keep their order, and each `hold_plane` ledger
-    entry not already among them follows in the order it was first recorded. An entry in
-    both sources is one plane. The split matches `deploy_git.hold_plane_entries`, which this
-    module cannot import because monitor-bridge carries a copy of it alone.
+    A subject on two lines is one plane, at its first recorded place.
     """
-    planes = [e.strip() for e in (hold_plane or "").split(";") if e.strip()]
+    planes: list[str] = []
     for e in sorted(parse_owed(owed, OWED_HOLD_PLANE), key=lambda e: e.at):
         if e.subject.strip() not in planes:
             planes.append(e.subject.strip())

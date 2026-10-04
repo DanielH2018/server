@@ -37,11 +37,6 @@ MARKERS: dict[str, str] = {
     # The SHA whose deploy failed its health gate or broad apply; the host is HELD there until
     # an operator clears it (`write_hold`, `clear_broad_hold`, `clear_service_hold`).
     "hold": "hold_sha",
-    # The playbook (and tags) whose broad apply failed, written beside `hold_sha`. That marker
-    # alone is service-shaped — monitor-bridge's message says "revert the offending PR", the
-    # wrong remediation for a broad apply: the tree is already fast-forwarded and a playbook is
-    # what broke, so reverting the PR undoes nothing. This names what to re-run instead.
-    "hold_plane": "hold_plane",
     # `"<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>"` while
     # consecutive ticks defer on one busy service lock. See `parse_contention`.
     "contention": "contention_since",

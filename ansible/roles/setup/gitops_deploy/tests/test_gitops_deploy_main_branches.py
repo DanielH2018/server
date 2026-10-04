@@ -18,6 +18,7 @@ from collections.abc import Sequence
 
 import deploy_alerts
 from _deploy_fakes import fits_budget
+from gitops_ledger import OWED_HOLD_PLANE, owed_line
 from gitops_markers import parse_alerted
 
 # The SHAs the `tick` fixture starts from; `from conftest import` is avoided because the
@@ -232,7 +233,9 @@ def test_a_bring_up_playbook_push_parks_and_pages(gitops_deploy, tick, state_dir
 def _hold_the_deploy_plane(state_dir) -> None:
     """The state a failed `ansible/deploy.yml` broad apply leaves behind."""
     (state_dir / "hold_sha").write_text("f" * 40)
-    (state_dir / "hold_plane").write_text("ansible/deploy.yml")
+    (state_dir / "owed.jsonl").write_text(
+        owed_line(OWED_HOLD_PLANE, "ansible/deploy.yml", "f" * 40, 1)
+    )
 
 
 def test_a_setup_plane_success_keeps_a_deploy_plane_hold(
@@ -254,7 +257,11 @@ def test_a_setup_plane_success_keeps_a_deploy_plane_hold(
 def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir):
     """The converse, so the guard is not simply "never clears"."""
     (state_dir / "hold_sha").write_text("f" * 40)
-    (state_dir / "hold_plane").write_text("ansible/initial_setup.yml gitops_deploy")
+    (state_dir / "owed.jsonl").write_text(
+        owed_line(
+            OWED_HOLD_PLANE, "ansible/initial_setup.yml gitops_deploy", "f" * 40, 1
+        )
+    )
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
     assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "hold_sha") is None

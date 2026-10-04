@@ -2,8 +2,8 @@
 
 The refusals mirror the repo CLAUDE.md *When to wait* list: nothing lands or deploys under a
 `hold_sha`, and the hold is cleared HERE, by an operator who typed the SHA, never bypassed.
-`clear_hold` removes `hold_sha` and `hold_plane` together because clearing the SHA alone
-orphans the plane marker (gitops_deploy's CLAUDE.md records the incident).
+`clear_hold` removes `hold_sha` and the `owed` ledger's `hold_plane` lines together because
+clearing the SHA alone orphans the planes (gitops_deploy's CLAUDE.md records the incident).
 """
 
 import fcntl
@@ -103,7 +103,7 @@ def _drop_held_planes(state_dir: Path, tree_lock: Path, wait_s: float) -> str | 
     The ledger holds other classes the deployer rewrites under the git-tree lock, so this
     rewrite takes that lock too: unlocked, a tick's write between the read and the replace
     would be lost. A ledger with no such line is not touched and no lock is taken, which is
-    every Clear until the deployer records the class (#3392).
+    every Clear with no plane held.
 
     `surrogateescape` carries a torn byte in another class's line through the rewrite
     unchanged, where a lossy decode would rewrite it as U+FFFD.
@@ -138,9 +138,9 @@ def clear_hold(
 ) -> str | None:
     """Remove `hold_sha` and every plane the hold waits on, only when `expected_sha` matches.
 
-    The planes are the `hold_plane` marker and the `owed` ledger's `hold_plane` lines, the two
-    sources `gitops_ledger.held_planes` reads. The ledger goes first, because it is the half
-    that can refuse: a refusal then leaves the hold whole. `wait_s` bounds the wait for the
+    The planes are the `owed` ledger's `hold_plane` lines, which `gitops_ledger.held_planes`
+    reads. They go first, because dropping them is the half that can refuse: a refusal then
+    leaves the hold whole. `wait_s` bounds the wait for the
     git-tree lock.
     """
     sha_file = state_dir / MARKERS["hold"]
@@ -150,8 +150,7 @@ def clear_hold(
     refusal = _drop_held_planes(state_dir, tree_lock, wait_s)
     if refusal:
         return refusal
-    for name in (MARKERS["hold"], MARKERS["hold_plane"]):
-        (state_dir / name).unlink(missing_ok=True)
+    sha_file.unlink(missing_ok=True)
     return None
 
 
@@ -161,8 +160,8 @@ def hold_cleared_message(dropped: list[str]) -> str:
     Args:
         dropped: the `hold_plane` entries the Clear removed, from `hold_plane_entries`.
 
-    A Clear removes `hold_plane` whole, whatever it holds. Since #2381 that is one entry per
-    failed apply, and the deployer clears them one at a time as each plane is applied — so a
+    A Clear removes every `hold_plane` line, whatever it holds. Since #2381 that is one entry
+    per failed apply, and the deployer clears them one at a time as each plane is applied — so a
     Clear can drop entries for planes nobody has applied, and after it nothing records them
     (#2453). The message names them and says what is owed.
     """

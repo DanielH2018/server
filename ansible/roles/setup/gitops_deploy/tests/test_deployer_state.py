@@ -48,7 +48,6 @@ def state(tmp_path: pathlib.Path) -> deploy_io.DeployerState:
 EXPECTED_MARKERS = frozenset(
     {
         ("hold", "hold_sha"),
-        ("hold_plane", "hold_plane"),
         ("contention", "contention_since"),
         ("owed", "owed.jsonl"),
         ("receipts", "receipts.jsonl"),
@@ -87,7 +86,12 @@ def _retired_basenames_install_reaps() -> list[str]:
 def test_the_install_reaps_the_retired_markers():
     # Named rather than counted: a reap list emptied by a refactor must fail here, not pass.
     reaped = set(_retired_basenames_install_reaps())
-    assert {"broad_applied", "manual_plane", "manual_plane_tags"} <= reaped
+    assert {
+        "broad_applied",
+        "manual_plane",
+        "manual_plane_tags",
+        "hold_plane",
+    } <= reaped
 
 
 def test_the_install_reaps_no_live_marker():
@@ -154,13 +158,12 @@ def test_writing_none_removes_the_marker_and_removing_twice_is_fine(state):
     ("prop", "marker"),
     [
         ("hold_sha", "hold"),
-        ("hold_plane", "hold_plane"),
         ("diverged_sha", "diverged"),
         ("behind_since", "behind"),
     ],
 )
 def test_each_named_property_reads_its_own_marker(state, prop, marker):
-    """These four are read from outside the deployer (monitor-bridge mounts three of them), so
+    """These three are read from outside the deployer (monitor-bridge mounts all three), so
     a property wired to the wrong file would be a monitor reporting on the wrong fact."""
     state.write(marker, SHA)
     assert getattr(state, prop) == SHA
@@ -302,7 +305,6 @@ def test_a_second_failure_is_held_beside_the_first_and_a_repeat_is_not(state):
         ("ansible/deploy.yml radarr", SHA),
         ("ansible/deploy.yml sonarr", "f" * 40),
     ]
-    assert state.read("hold_plane") is None, "the writer records no line marker"
 
 
 def test_an_apply_drops_only_the_plane_it_covers_and_the_last_one_clears_the_hold(
@@ -315,18 +317,6 @@ def test_an_apply_drops_only_the_plane_it_covers_and_the_last_one_clears_the_hol
     assert state.hold_plane == "ansible/initial_setup.yml gitops_deploy"
     state.clear_broad_hold("ansible/initial_setup.yml", [])
     assert (state.hold_sha, state.read("owed")) == (None, None)
-
-
-def test_a_legacy_hold_plane_marker_is_folded_into_the_ledger_in_order(state):
-    """A marker a pre-ledger deployer wrote moves on the first hold, at `hold_sha`."""
-    state.write("hold", SHA)
-    state.write("hold_plane", "ansible/deploy.yml radarr; ansible/deploy.yml sonarr")
-    state.hold_failed_apply("f" * 40, "ansible/deploy.yml", ["sonarr"])
-    assert _held(state) == [
-        ("ansible/deploy.yml radarr", SHA),
-        ("ansible/deploy.yml sonarr", SHA),
-    ]
-    assert state.read("hold_plane") is None
 
 
 def test_a_torn_hold_plane_line_keeps_the_hold(state):
