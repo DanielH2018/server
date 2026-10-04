@@ -38,8 +38,9 @@ manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 # still has one is safe, and manifest-prune-check.sh keeps flagging it. registry, bazarr,
 # littlelink, texbrain, navidrome, qbittorrent, terraria, code-server, n8n, valheim, scrutiny,
 # tdarr, home-assistant, game-stats, uptime-kuma, freshrss, sonarr, radarr, zigbee2mqtt,
-# prowlarr, karakeep, livesync and speedtest are armed. The default stays false until every
-# role is, because flipping it moves every role's rendered bytes and needs one full deploy.
+# prowlarr, karakeep, livesync, speedtest, bento-pdf, ical-proxy, peanut, janitorr and deploy-ui
+# are armed. The default stays false until every role is, because flipping it moves every
+# role's rendered bytes and needs one full deploy.
 manifests_prune: false
 
 # The kinds the prune may delete, one list for every armed role. Namespaced kinds only: the
