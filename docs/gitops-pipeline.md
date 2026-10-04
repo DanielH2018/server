@@ -117,7 +117,8 @@ derives nothing for either. Such a range fast-forwards and records the role inst
 parking — see *A role only a hand can apply is recorded, not parked* below.
 
 A setup role can ship another setup role's file by path. The `deploy_ui` and `renovate_agent`
-roles install the deployer's `files/gitops_markers.py` that way. `deploy_changes.setup_roles_for` maps a
+roles install the deployer's `files/gitops_markers.py` that way, and `deploy_ui` installs
+`files/gitops_ledger.py` beside it. `deploy_changes.setup_roles_for` maps a
 change to such a file to its owner AND every role listed for it in
 `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#3306). `ChangeSet.setup_roles` and `setup_tags_for`
 both read it, so the `manual_plane` ledger class, the narrowed apply, the `hold_plane` coverage and
@@ -1204,6 +1205,14 @@ readers, the fold and both `MARKERS` entries, and `tasks/install.yml` reaps the 
 Every reader calls `gitops_ledger.manual_plane_entries`. A line missing `playbook` or carrying
 malformed `tags` still pages, for the whole role.
 
+**`k8s_deferred` is moving the same way, and its readers have moved.** monitor-bridge, the
+SessionStart banner and the `deploy_ui` panel read `gitops_ledger.k8s_deferred_entries`, which
+unions the line marker with the ledger's `k8s_deferred` class. A service in both sources is one
+bump, dated and attributed from the older entry. `deploy_ui` installs the `gitops_ledger.py`
+source beside its `gitops_markers.py` for this. The deployer still records and clears the line
+marker alone, and `gitops_state.py clear-k8s-deferred` still edits that file. The next step
+moves the writer and its clear into the ledger together.
+
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
 later tick's `local..origin` carries the bump. `Release Staleness Drift` reads the unapplied
@@ -1342,7 +1351,8 @@ Checkout code (`scripts/lib/deployer_park.py`, `gitops_state.py`) imports it thr
 `sys.path` insert. `deploy-ui` and `renovate-agent` install it into their `/opt` directories
 with a `src:` naming this role's `files/`, and
 `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to it to both roles, so
-their hosts receive it in the same tick (#3306). monitor-bridge ships its own `files/` into a
+their hosts receive it in the same tick (#3306). `deploy-ui` installs `gitops_ledger.py` the
+same way. monitor-bridge ships its own `files/` into a
 pod, so `scripts/dev/gen_gitops_markers.py` writes a verbatim copy there under a
 `generated_from:` header. `ansible/tests/deploy/test_gitops_markers_copies.py` fails when that
 copy differs from what the generator writes, when a consumer's ship list lacks the module, or

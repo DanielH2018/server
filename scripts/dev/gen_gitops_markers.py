@@ -11,10 +11,11 @@ and three parsed the same lines independently (issue #2063).
 Every other reader uses the source itself. Code that runs from the checkout imports it
 through a named `sys.path` insert of `GITOPS_DEPLOY_FILES` (`scripts/lib/deployer_park.py`,
 `gitops_state.py`). `gitops_ledger.py`, the JSON-lines markers, is copied the same way: it
-imports `gitops_markers`, and monitor-bridge reads its `manual_plane` ledger class (#3392).
-deploy-ui and renovate-agent install it into `/opt` with a `src:` naming
-the deployer's `files/`, and `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a
-change to it to both roles (#3275, #3306). monitor-bridge is the exception: it ships its own
+imports `gitops_markers`, and monitor-bridge reads its `manual_plane` and `k8s_deferred`
+ledger classes (#3392). deploy-ui and renovate-agent install `gitops_markers.py` into `/opt`
+with a `src:` naming the deployer's `files/`, deploy-ui installs `gitops_ledger.py` the same
+way, and `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to each file to
+the roles that install it (#3275, #3306). monitor-bridge is the exception: it ships its own
 `files/` into a pod through a ConfigMap built from `monitor_bridge_modules`, so the module has
 to sit in that directory. A committed copy with a freshness test is the single source there,
 the arrangement `scripts/docs/gen_doc_fragments.py` already uses for the docs fragments.

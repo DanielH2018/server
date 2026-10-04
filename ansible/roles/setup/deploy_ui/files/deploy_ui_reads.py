@@ -2,7 +2,8 @@
 
 The daemon runs under `uv run --no-project` on the host interpreter, outside the repo venv,
 so nothing here imports from `scripts/` or `/opt/gitops-deploy` — `gitops_markers`, the
-deployer's own marker table, is installed beside this file from the deployer's `files/`. `land.py`, `probe.py` and
+deployer's own marker table, and `gitops_ledger`, its JSON-lines reader, are installed beside
+this file from the deployer's `files/`. `land.py`, `probe.py` and
 `gh` are reached as subprocesses by `deploy_ui.App`; this module turns their text into rows.
 """
 
@@ -12,6 +13,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import gitops_ledger
 import gitops_markers
 
 # The five markers the panels show, by basename — `gitops_markers` is the deployer's own table,
@@ -245,16 +247,20 @@ def hold_plane_entries(held: str) -> list[str]:
     return [e.strip() for e in held.split(";") if e.strip()]
 
 
-def k8s_deferred_rows(marker: str) -> list[dict[str, str]]:
-    """Each image bump the `k8s_deferred` marker still holds, oldest deferral first.
+def k8s_deferred_rows(marker: str, owed: str | None = None) -> list[dict[str, str]]:
+    """Each image bump the deployer deferred and still holds, oldest deferral first.
+
+    Args:
+        marker: the `k8s_deferred` line marker's text.
+        owed: the `owed` ledger's text, whose `k8s_deferred` class `gitops_ledger` reads
+            beside the marker while the deployer moves that writer into the ledger (#3392).
 
     One row per service, carrying the two commands an operator runs in order: the deploy that
     applies the merged bump, then the clear that drops its line. The page prints both rather
     than offering a button, because this daemon's deploy button takes the service lock and a
     budget deferral means the tick ran out of wall clock — the operator picks the moment.
 
-    A garbled line is skipped by `parse_k8s_deferred`, never guessed at, for the reason that
-    function gives.
+    A garbled line is skipped, never guessed at, for the reason `parse_k8s_deferred` gives.
     """
     return [
         {
@@ -263,8 +269,21 @@ def k8s_deferred_rows(marker: str) -> list[dict[str, str]]:
             "deploy": gitops_markers.k8s_deferred_deploy_cmd([e.service]),
             "clear": gitops_markers.k8s_deferred_clear_cmd(e.service),
         }
-        for e in sorted(gitops_markers.parse_k8s_deferred(marker), key=lambda e: e.at)
+        for e in gitops_ledger.k8s_deferred_entries(marker, owed)
     ]
+
+
+def _read_owed(state_dir: Path) -> str | None:
+    """The `owed` ledger with every line that does not decode dropped, or None when absent.
+
+    A torn byte in one ledger line must not fail the whole `/api/state` read. monitor-bridge
+    drops such a line for the same reason (#2371).
+    """
+    try:
+        text = (state_dir / gitops_markers.MARKERS["owed"]).read_text(errors="replace")
+    except FileNotFoundError:
+        return None
+    return "\n".join(line for line in text.splitlines() if "�" not in line)
 
 
 def read_state(state_dir: Path) -> dict[str, str | list]:
@@ -272,7 +291,9 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
 
     A missing marker is ''. The override is presence-only, so it reads 'set' or ''. The
     `hold_plane_entries` and `k8s_deferred_entries` keys are the parsed forms of their
-    markers, and they are what the page lists; the raw strings stay beside them.
+    markers, and they are what the page lists; the raw strings stay beside them. The
+    `k8s_deferred_entries` also carry the `owed` ledger's `k8s_deferred` class. The ledger is
+    read but not served, because its other classes have no panel here.
 
     Raises:
         OSError: a marker exists but can't be read (e.g. permission denied). Only a
@@ -289,7 +310,9 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
             continue
         st[name] = text.strip()
     st["hold_plane_entries"] = hold_plane_entries(str(st[_HOLD_PLANE]))
-    st["k8s_deferred_entries"] = k8s_deferred_rows(str(st[_K8S_DEFERRED]))
+    st["k8s_deferred_entries"] = k8s_deferred_rows(
+        str(st[_K8S_DEFERRED]), _read_owed(state_dir)
+    )
     return st
 
 

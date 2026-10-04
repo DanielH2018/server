@@ -1,4 +1,4 @@
-"""GitOps Deploy — Status reads the `manual_plane` class of the `owed` ledger (#3392).
+"""GitOps Deploy — Status reads the `manual_plane` and `k8s_deferred` classes of `owed` (#3392).
 
 This pod redeploys on its own schedule, so a writer can be newer than this copy. Each line
 here is what a writer may put in the ledger, including keys this copy has never heard of, and
@@ -58,6 +58,36 @@ def test_other_classes_in_the_ledger_page_nothing(cfg):
     )
     ok, _ = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
     assert ok
+
+
+def test_a_k8s_deferred_ledger_line_with_an_unknown_key_pages(cfg):
+    """The Verify-by of #3392 for `k8s_deferred`: the class pages with no line marker at all."""
+    owed = json.dumps(
+        {
+            "class": "k8s_deferred",
+            "subject": "sonarr",
+            "origin": "abc123def4567890",
+            "at": 1000,
+            "added_by_a_newer_writer": 1,
+        }
+    )
+    ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
+    assert not ok
+    assert msg.startswith("sonarr merged but not deployed for 7h")
+    assert msg.endswith("clear-k8s-deferred sonarr`")
+
+
+def test_a_k8s_deferred_bump_in_both_sources_dates_from_the_older(cfg):
+    """A service the line marker and the ledger both hold is one bump, aged from its first."""
+    owed = json.dumps(
+        {"class": "k8s_deferred", "subject": "sonarr", "origin": "b" * 40, "at": 1000}
+    )
+    marker = f"{'a' * 40} sonarr {_LATE - 600:.0f}"
+    ok, msg = checks.gitops.gitops_status(
+        cfg, None, now=_LATE, k8s_deferred=marker, owed=owed
+    )
+    assert not ok
+    assert msg.startswith("sonarr merged but not deployed for 7h")
 
 
 def test_check_gitops_status_reads_the_ledger_off_the_mount(tmp_path, cfg):

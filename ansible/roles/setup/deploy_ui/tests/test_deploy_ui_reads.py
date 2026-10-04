@@ -1,5 +1,6 @@
 """Readers behind the four panels. Each parser gets an accept and a reject case."""
 
+import json
 import os
 from pathlib import PurePath
 
@@ -211,6 +212,24 @@ def test_read_state_lists_a_deferred_bump_with_its_deploy_then_clear_is_clean(
 
 def test_read_state_with_no_deferred_bump_lists_no_entry_is_flagged(state_dir):
     assert reads.read_state(state_dir)["k8s_deferred_entries"] == []
+
+
+def test_read_state_lists_a_ledger_only_deferred_bump_is_clean(state_dir):
+    """The Verify-by of #3392: a `k8s_deferred` ledger line with an unknown key is a row."""
+    line = {
+        "class": "k8s_deferred",
+        "subject": "sonarr",
+        "origin": "a" * 40,
+        "at": 1000,
+        "added_by_a_newer_writer": 1,
+    }
+    torn = b'{"class": "k8s_deferred", "subject": "rad\xffarr"}'
+    (state_dir / "owed.jsonl").write_bytes(torn + b"\n" + json.dumps(line).encode())
+    st = reads.read_state(state_dir)
+    rows = st["k8s_deferred_entries"]
+    assert isinstance(rows, list)
+    assert [r["service"] for r in rows] == ["sonarr"]
+    assert "owed.jsonl" not in st
 
 
 def test_k8s_deferred_rows_skips_a_garbled_line_is_flagged():

@@ -11,10 +11,12 @@ import json
 
 from lib.deployer_park import (
     BEHIND_PARK_SECONDS,
+    k8s_deferred_lines,
     manual_plane_lines,
     park_age,
     park_note,
     read_behind_marker,
+    read_k8s_deferred_marker,
     read_k8s_unapplied_marker,
     read_manual_plane_marker,
 )
@@ -106,3 +108,31 @@ def test_k8s_unapplied_is_read_from_the_owed_ledger(tmp_path):
 
 def test_k8s_unapplied_with_no_ledger_reads_as_nothing_pending(tmp_path):
     assert read_k8s_unapplied_marker(str(tmp_path)) is None
+
+
+def test_a_k8s_deferred_ledger_line_with_an_unknown_key_reaches_the_banner(tmp_path):
+    """The Verify-by of #3392 for the banner's `k8s_deferred` lines, with no line marker."""
+    line = {
+        "class": "k8s_deferred",
+        "subject": "sonarr",
+        "origin": "f" * 40,
+        "at": 500,
+        "added_by_a_newer_writer": 1,
+    }
+    (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
+    lines = k8s_deferred_lines(read_k8s_deferred_marker(str(tmp_path)), 4000)
+    assert len(lines) == 1, lines
+    assert "image bump for `sonarr` 58 min ago" in lines[0]
+
+
+def test_k8s_deferred_in_both_sources_is_one_line_from_the_older(tmp_path):
+    (tmp_path / MARKERS["k8s_deferred"]).write_text(f"{'a' * 40} sonarr 3000\n")
+    line = owed_line("k8s_deferred", "sonarr", "f" * 40, 500)
+    (tmp_path / MARKERS["owed"]).write_text(line + "\n")
+    lines = k8s_deferred_lines(read_k8s_deferred_marker(str(tmp_path)), 4000)
+    assert len(lines) == 1, lines
+    assert "58 min ago" in lines[0]
+
+
+def test_k8s_deferred_with_neither_source_reads_as_nothing_pending(tmp_path):
+    assert read_k8s_deferred_marker(str(tmp_path)) is None
