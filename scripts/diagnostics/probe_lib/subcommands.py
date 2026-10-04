@@ -9,7 +9,7 @@ still own that, unchanged. `scripts/diagnostics/tests/test_probe_registry.py` is
 completeness guard that reads it.
 
 This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`
-still reports the same twelve subcommand backends — the `run_*` names below are imported, and
+still reports the same thirteen subcommand backends — the `run_*` names below are imported, and
 that function counts only what a module defines.
 """
 
@@ -39,6 +39,7 @@ from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
 from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.releases import run_releases
+from diagnostics.probe_lib.shed_set import run_shed_set
 from diagnostics.probe_lib.vip_placement import run_vip_placement
 from lib.cli_registry import Registry
 
@@ -116,6 +117,12 @@ SUBCOMMANDS = [
         "(exit 1 when one is stranded)",
         "vip_placement",
         run_vip_placement,
+    ),
+    (
+        "shed-set",
+        "the untiered k8s workloads to scale down when one node is lost, derived from tier",
+        "shed_set",
+        run_shed_set,
     ),
     (
         "pi",

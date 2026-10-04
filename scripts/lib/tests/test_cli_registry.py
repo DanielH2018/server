@@ -71,6 +71,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "pi_plane",
         "readonly_rbac",
         "releases",
+        "shed_set",
         "vip_placement",
     ]
     assert "core" not in names  # core.py defines helpers, not a run/main entry point

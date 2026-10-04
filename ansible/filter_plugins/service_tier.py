@@ -1,12 +1,15 @@
 """Ansible filter plugin deriving per-tier sets from the `tier` field on containers_list entries.
 
 A service's tier is declared once, on its `containers_list` entry, and every set that ranks
-services is derived from it (#3389). Two consumers read it:
+services is derived from it (#3389). Three consumers read it:
 
 - `tier_backup_claims`: the k3s role's `k3s_longhorn_r2_volumes`, the volumes backed up daily
   to R2, is every `backup_claims` volume of a `home-critical` entry.
 - `tier_priority_class`: a tiered role's templates pass `containers_list |
   tier_priority_class('<role>')` to `pod_shell(...)` instead of a literal PriorityClass (#3452).
+- `shed_entries`: `probe.py shed-set` prints the untiered workloads to scale down when one node
+  is lost, so the tiered ones fit on the survivor (#3481). No template reads it, so it is not a
+  registered filter.
 
 No Ansible import, so `scripts/lib/service_tiers.py` and the docs generators read the same
 function the playbook runs. Ansible wraps a filter's `ValueError` in its own error.
@@ -64,6 +67,28 @@ def tier_entries(containers_list, tier):
         if _declared_tier(entry) in wanted:
             found.append(entry)
     return found
+
+
+def shed_entries(containers_list):
+    """The named entries of `containers_list` that are in no tier, in list order.
+
+    These are the workloads to scale down when one node is lost, so that every tier in
+    `SERVICE_TIERS` fits on the survivor. The set is the complement of the tiers rather than
+    a test for a missing key, so a tier added to `SERVICE_TIERS` leaves it on its own.
+
+    Raises ValueError when any entry's `tier` is unknown: a misspelt tier must not put a
+    critical service on the list of things to switch off.
+    """
+    kept = {
+        entry["name"]
+        for tier in SERVICE_TIERS
+        for entry in tier_entries(containers_list, tier)
+    }
+    return [
+        entry
+        for entry in containers_list or []
+        if isinstance(entry, dict) and entry.get("name") and entry["name"] not in kept
+    ]
 
 
 def tier_backup_claims(containers_list, tier, namespace):

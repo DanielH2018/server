@@ -33,6 +33,8 @@ Subcommands:
     scrutiny                 Disk SMART summary              (cluster scrutiny, both nodes)
     pi containers            every Pi container: state, health, networks (one ssh)
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
+    shed-set                 untiered k8s workloads to scale down when one node is lost,
+                             derived from the containers_list `tier` field (no kubectl)
     health <service>         k8s rollout + recent-restart rollup (exit 0 = healthy)
                              [--docker inspects the Pi's container instead]
                              [--cluster prod|stage — refuses when the local
@@ -113,6 +115,7 @@ from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
 from diagnostics.probe_lib.curl_pipeline import plan, stream_pipeline
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.releases import run_releases
+from diagnostics.probe_lib.shed_set import run_shed_set
 from diagnostics.probe_lib.subcommands import REGISTRY
 from diagnostics.probe_lib.vip_placement import run_vip_placement
 
@@ -179,6 +182,7 @@ def main(argv=None):
         "b2-spend": run_b2_spend,
         "readonly-rbac": run_readonly_rbac,
         "vip-placement": run_vip_placement,
+        "shed-set": run_shed_set,
         "b2-deletions": run_b2_deletions,
         "ha-state": run_ha_state,
         "monitors": run_monitors,

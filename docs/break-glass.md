@@ -105,6 +105,20 @@ daniel-server keeps its own SOPS key, so decryption still works without the reco
 4. Deploy: `uv run ansible-playbook ansible/deploy.yml`.
 5. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's step 6.
 
+### Scenario: one node is down and the survivor runs short of memory
+
+k3s reschedules the lost node's pods onto the survivor, which may not hold every workload.
+The home-critical chain is pinned to `k8s_primary_node`, so it stays Pending while
+daniel-box is down, whatever this step frees.
+
+1. Print the shed set: `uv run python scripts/diagnostics/probe.py shed-set`. It lists the
+   Deployments and StatefulSets of every service with no `tier:` in `containers_list`. Every
+   tiered service is left off it.
+2. Scale those to zero from a host with write access, starting with the largest. Plain
+   `kubectl` on daniel-box is read-only, so use the k3s admin kubeconfig.
+3. Once the node is back, redeploy each shed service with `./scripts/deploy.sh --tags <svc>`.
+   The deploy applies the replica count its manifests declare, so it scales the service back up.
+
 ### Scenario: the laptop/machine holding your working access is dead, the lab hosts are fine
 
 Ansible runs from daniel-box in normal operation (repo-root CLAUDE.md, *Project Overview*).
