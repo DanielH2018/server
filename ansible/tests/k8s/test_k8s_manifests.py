@@ -99,6 +99,7 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
         rendered = _render(
             tpl,
             container_item=entry,
+            containers_list=_k8s_entries(),
             **_DEPLOYMENT_STUBS,
             **_role_defaults(entry["name"]),
         )

@@ -1,8 +1,8 @@
 """`k3s_longhorn_r2_volumes` is derived from the `tier` field on containers_list entries (#3389).
 
 The daily R2 tier was a hand-written list in the k3s role's defaults. It is now every
-`backup_claims` volume of a `tier: home-critical` entry, computed by
-`filter_plugins/service_tier.py`. These tests pin the derivation to the list it replaced, and
+`backup_claims` volume of a `home-critical` entry, one whose tier is `home-edge` or
+`home-automation`, computed by `filter_plugins/service_tier.py`. These tests pin the derivation to the list it replaced, and
 pin each tiered entry's `backup_claims` to the Longhorn PVCs its role really renders, so the
 claims cannot become a second hand list that drifts from the manifests.
 
@@ -76,11 +76,11 @@ def test_backup_claims_are_the_tiered_roles_backed_up_longhorn_pvcs():
 
 def test_untagging_an_entry_drops_its_claims():
     entries = [
-        {"name": "a", "tier": "home-critical", "backup_claims": ["a-config"]},
+        {"name": "a", "tier": "home-edge", "backup_claims": ["a-config"]},
         {"name": "b", "backup_claims": ["b-config"]},
         {
             "name": "c",
-            "tier": "home-critical",
+            "tier": "home-automation",
             "namespace": "other",
             "backup_claims": ["c-data"],
         },

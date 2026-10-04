@@ -19,7 +19,7 @@ from lib.render_guard import load_yaml
 from lib.repo_paths import ALL_VARS
 from service_tier import tier_backup_claims
 
-R2_TIER = "home-critical"
+R2_TIER = "home-critical"  # a TIER_GROUPS name: home-edge and home-automation
 
 
 def r2_volumes(

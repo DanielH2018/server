@@ -45,6 +45,7 @@ from lib.render_guard import (
 
 _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
 from authelia_access import authelia_service_rules
+from service_tier import tier_priority_class
 from toposort import filter_by_platform
 
 from ansible.plugins.filter.core import (
@@ -76,11 +77,12 @@ def register_ansible_filters(env: Environment) -> Environment:
     ``mandatory`` raises only on Ansible's own UndefinedMarker, so a guard's tracking
     Undefined passes through it and is judged by name as usual.
 
-    ``filter_by_platform`` and ``authelia_service_rules`` are this repo's own filter plugins:
-    pihole's ConfigMap derives its dnsmasq override records through the first, and authelia's
-    config Secret derives its per-service access_control rules through the second, which
-    raises on a ``use_authelia: true`` entry with no ``auth_tier``. Registering the real ones
-    makes that failure reach the guard.
+    ``filter_by_platform``, ``authelia_service_rules`` and ``tier_priority_class`` are this
+    repo's own filter plugins: pihole's ConfigMap derives its dnsmasq override records through
+    the first, and authelia's config Secret derives its per-service access_control rules
+    through the second, which raises on a ``use_authelia: true`` entry with no ``auth_tier``.
+    A tiered role's pods take their PriorityClass from the third, which raises on an entry
+    with no ``tier``. Registering the real ones makes those failures reach the guard.
 
     Args:
         env: The environment to register on, modified in place.
@@ -96,6 +98,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["to_json"] = to_json_stub
     env.filters["filter_by_platform"] = filter_by_platform
     env.filters["authelia_service_rules"] = authelia_service_rules
+    env.filters["tier_priority_class"] = tier_priority_class
     env.tests["search"] = search
     return env
 

@@ -20,7 +20,7 @@ spec:
         app: crowdsec
         netpol-baseline: enforced
     spec:
-{{ pod_shell('homelab-critical') }}
+{{ pod_shell(containers_list | tier_priority_class('crowdsec')) }}
       initContainers:
         # /etc/crowdsec is an emptyDir the image entrypoint populates with defaults on
         # start; this seeds our config first so the entrypoint treats it as existing

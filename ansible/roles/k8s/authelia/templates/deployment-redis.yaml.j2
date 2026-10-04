@@ -33,7 +33,7 @@ spec:
     spec:
       # The same class as authelia itself: an evicted redis logs the whole fleet out of SSO, so
       # it is exactly as critical as the portal in front of it.
-{{ pod_shell('homelab-critical') }}
+{{ pod_shell(containers_list | tier_priority_class('authelia')) }}
       containers:
         - name: redis
           image: {{ authelia_k8s_redis_image }}

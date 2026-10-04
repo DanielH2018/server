@@ -32,7 +32,7 @@ spec:
       # Secret-volume files are root-owned; without fsGroup the 0440 credential files
       # below are unreadable to this non-root uid and both file-mounted checks silently
       # self-disable ("no URL/token" — found on the twin's first cycle, 2026-08-14).
-{{ pod_shell('homelab-critical', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
+{{ pod_shell(containers_list | tier_priority_class('monitor-bridge'), run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
       # Stays off daniel-server so the drain (and its eventual cold boot) never takes the
       # alerting brain down with the thing it is alerting on.
       nodeSelector:

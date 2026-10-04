@@ -54,7 +54,10 @@
                               system class the hygiene test's `_SYSTEM_TIER` allowlists). No
                               default on purpose: five values are in use and none dominates,
                               and an omitted class is priority 0 — BELOW homelab-best-effort,
-                              so the pod loses every eviction race silently.
+                              so the pod loses every eviction race silently. A role whose
+                              containers_list entry declares a `tier` passes
+                              `containers_list | tier_priority_class('<role>')` instead of a
+                              literal (filter_plugins/service_tier.py, #3452).
     service_account           emit `serviceAccountName: <value>`; omitted when none.
     automount                 `automountServiceAccountToken`. Left at none it follows the
                               hygiene rule: a pod that names no service_account runs as the

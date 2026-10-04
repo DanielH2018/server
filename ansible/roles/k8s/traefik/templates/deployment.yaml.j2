@@ -32,7 +32,7 @@ spec:
 {# DECIDED: no automountServiceAccountToken: false here; the kubernetesCRD provider needs the
    token to reach the API server. #}
       # Edge/auth/DNS eviction ordering — see setup/k3s templates/priorityclass.yaml.j2.
-{{ pod_shell('homelab-critical', service_account='traefik-ingress-controller', run_as_user=traefik_k8s_uid, run_as_group=traefik_k8s_uid, fs_group=traefik_k8s_uid) }}
+{{ pod_shell(containers_list | tier_priority_class('traefik'), service_account='traefik-ingress-controller', run_as_user=traefik_k8s_uid, run_as_group=traefik_k8s_uid, fs_group=traefik_k8s_uid) }}
 {# Both init containers below are conditional, and a cluster with neither ACME nor CrowdSec
    leaves the key with no list under it. Gate the key so it is absent rather than empty. #}
 {% if traefik_k8s_manage_acme or traefik_k8s_manage_crowdsec %}

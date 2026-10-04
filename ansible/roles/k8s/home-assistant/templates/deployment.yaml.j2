@@ -35,7 +35,7 @@ spec:
         app: home-assistant
         netpol-baseline: enforced
     spec:
-{{ pod_shell('homelab-automation') }}
+{{ pod_shell(containers_list | tier_priority_class('home-assistant')) }}
       # No pod-level runAsUser/fsGroup: the LSIO image starts as root and s6 drops to
       # PUID/PGID itself, chowning /config on the way — same contract as under Docker.
       initContainers:

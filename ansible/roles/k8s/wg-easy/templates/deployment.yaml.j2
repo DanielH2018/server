@@ -36,7 +36,7 @@ spec:
       # Tier 1, not tier 4 as a VPN utility first looks: this is the remote-access path.
       # Evicting it under memory pressure removes the way back in to deal with whatever
       # caused the pressure, so it ranks with the edge rather than with the dashboards.
-{{ pod_shell('homelab-critical') }}
+{{ pod_shell(containers_list | tier_priority_class('wg-easy')) }}
       securityContext:
         # Both namespaced; kubelet only admits them because setup/k3s allow-lists them.
         # ip_forward: the SERVER routes between wg0 and eth0 inside the pod netns, and

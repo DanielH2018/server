@@ -75,6 +75,7 @@ def test_k8s_authelia_database_is_on_its_own_volume():
         _render(
             K8S / "authelia" / "templates" / "deployment.yaml.j2",
             container_item=next(c for c in _k8s_entries() if c["name"] == "authelia"),
+            containers_list=_k8s_entries(),
             **ALL_VARS,
             **yaml_fast.safe_load(
                 (K8S / "authelia" / "defaults" / "main.yml").read_text()
