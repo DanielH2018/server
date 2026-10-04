@@ -19,6 +19,8 @@
     name: k8s/manifests
   vars:
     manifests_service: karakeep
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
     # meilisearch reads MEILI_MASTER_KEY from this role's Secret as an ENV var, which is only
     # injected at container start. Without this, rotating that key rolls `karakeep` with the new
     # value while `karakeep-meilisearch` keeps serving the old one — the app and its search
