@@ -50,6 +50,14 @@ autofix_fake_remux_policy:
 # `*.local` wildcard by omission. The public name is two_factor whatever is declared here. A
 # scoped bypass (uptime-kuma's push API, scrutiny's read-only probes) has no per-service shape
 # and stays a hand-written rule in the authelia template; the entry's tier is what its UI gets.
+#
+# `tier: home-critical` marks the services the house and SSO stop working without: the edge
+# (crowdsec, traefik), SSO (authelia), LAN DNS (pihole) and the automation chain (mosquitto,
+# zigbee2mqtt, home-assistant). It is declared here once and derived elsewhere
+# (filter_plugins/service_tier.py, #3389). A tiered entry's `backup_claims` names its Longhorn
+# volumes worth a daily backup; the k3s role's `k3s_longhorn_r2_volumes` is those claims, and
+# `ansible/tests/longhorn/test_r2_tier_is_derived.py` checks them against the role's rendered
+# PVCs. A tiered entry with no `backup_claims` holds nothing worth a daily copy.
 containers_list:
   # crowdsec must precede traefik: the traefik pod carries a crowdsec agent sidecar that logs
   # into this engine's LAPI, and a post-deploy task in this role registers the machine
@@ -69,16 +77,22 @@ containers_list:
     hostname: "crowdsec-lapi"
     port: 8080
     use_authelia: false
+    # crowdsec-db is in k3s_longhorn_nobackup_volumes: decisions re-derive from logs.
+    tier: home-critical
   - name: traefik
     platform: k8s
     port: 8080
     depends_on: [crowdsec]
+    tier: home-critical
+    backup_claims: [traefik-acme]
   - name: authelia
     platform: k8s
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
     port: 9091
     use_authelia: false
+    tier: home-critical
+    backup_claims: [authelia-config]
   - name: bento-pdf
     platform: k8s
     # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
@@ -442,8 +456,12 @@ containers_list:
 
   # No port/hostname/route — MQTT is raw TCP and crosses hosts on the role's pinned MetalLB
   # VIP (mosquitto_k8s_lan_ip), not through Traefik.
+  # DECIDED: mosquitto-data stays out of the daily R2 tier (#3389). It holds retained
+  # messages and QoS session state the three clients republish on reconnect, on the
+  # longhorn-nobackup class, so the broker is tiered for placement and alerting only.
   - name: mosquitto
     platform: k8s
+    tier: home-critical
 
   # Must follow mosquitto — z2m resolves the broker by bare Service name. The SLZB
   # coordinator accepts one client, hence `strategy: Recreate` in the role.
@@ -456,6 +474,8 @@ containers_list:
     auth_tier: one_factor
     # Named Service port, which the shared default Service renders on request.
     service_port_name: http
+    tier: home-critical
+    backup_claims: [zigbee2mqtt-data]
 
   # use_authelia false: forward-auth breaks the companion app, so HA's own login + TOTP is
   # the gate. Reaches mosquitto by Service name.
@@ -466,6 +486,8 @@ containers_list:
     use_authelia: false
     # Named Service port, which the shared default Service renders on request.
     service_port_name: http
+    tier: home-critical
+    backup_claims: [home-assistant-config]
 
   # LAN DNS on its own pinned VIP (dns_k8s_vip). Not seeded: blocklist state is declared in
   # the role defaults (pihole_k8s_adlists) and everything else in /etc/pihole regenerates.
@@ -475,6 +497,8 @@ containers_list:
     port: 80
     use_authelia: true
     auth_tier: one_factor
+    # Both pihole-etc claims are longhorn-nobackup: every byte regenerates.
+    tier: home-critical
   # Pi-hole v6 serves no Prometheus endpoint, so this polls its admin API and exports
   # `pihole_*` — for BOTH instances, since each FTL keeps its own query database and one alone
   # reports half the house's volume. `port` is the port it DIALS on the Pi-holes, not one it

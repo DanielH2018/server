@@ -23,6 +23,7 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_storageclass.py
 """
 
 from lib import yaml_fast
+from lib.service_tiers import resolved_tier_lists
 
 from _k8s_render import rendered_docs
 
@@ -195,7 +196,7 @@ def _declared_pvcs() -> set[str]:
 
 
 def test_backup_routing_lists_are_pairwise_disjoint():
-    defaults = load_defaults(K3S)
+    defaults = resolved_tier_lists(load_defaults(K3S))
     lists = {name: set(defaults.get(name) or []) for name in _ROUTING_LISTS}
     overlaps = []
     for i, left in enumerate(_ROUTING_LISTS):
@@ -210,7 +211,7 @@ def test_backup_routing_lists_are_pairwise_disjoint():
 
 
 def test_backup_routing_lists_have_no_duplicates():
-    defaults = load_defaults(K3S)
+    defaults = resolved_tier_lists(load_defaults(K3S))
     for name in _ROUTING_LISTS:
         entries = defaults.get(name) or []
         dupes = sorted({e for e in entries if entries.count(e) > 1})
@@ -220,7 +221,7 @@ def test_backup_routing_lists_have_no_duplicates():
 def test_every_routed_volume_is_a_real_pvc():
     # A typo here does not fail anything at deploy — the label reconcile simply matches no
     # volume and moves on, leaving the PVC on whatever tier it was already in.
-    defaults = load_defaults(K3S)
+    defaults = resolved_tier_lists(load_defaults(K3S))
     declared = _declared_pvcs()
     assert len(declared) > 20, (
         f"only found {len(declared)} PVC names — the collector stopped matching"

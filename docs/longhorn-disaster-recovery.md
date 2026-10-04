@@ -25,7 +25,9 @@ which one holds the volume it wants. Routing is per-volume, via `spec.backupTarg
 | Cloudflare R2 | `r2` | the four volumes below | `longhorn-r2` | `r2_access_key_id` / `r2_secret_access_key` / `r2_account_id` |
 
 The R2 set (`k3s_longhorn_r2_volumes`) is `homelab/traefik-acme`,
-`homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data` —
+`homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data`.
+The k3s role derives it from the `backup_claims` of every `tier: home-critical` entry in
+`containers_list`, so a change to the set is an edit to those entries. The four volumes are
 the TLS material every route depends on, the SSO store behind every authenticated route,
 and the two home-automation stores that are slow to rebuild by hand. They are on **both**
 targets' worth of protection in the sense that matters: a B2 account-level failure (cap,

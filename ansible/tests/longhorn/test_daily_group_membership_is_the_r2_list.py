@@ -18,6 +18,7 @@ Run: uv run pytest ansible/tests/longhorn/test_daily_group_membership_is_the_r2_
 from _helpers import SETUP_ROLES, load_defaults, load_tasks, task_named
 from _setup_render import rendered_setup_text
 from lib import yaml_fast
+from lib.service_tiers import resolved_tier_lists
 from test_every_longhorn_pvc_has_a_tier import _longhorn_class_pvcs
 
 K3S = SETUP_ROLES / "k3s"
@@ -42,7 +43,7 @@ def daily_members(declared: set[str], defaults: dict) -> set[str]:
 
 
 def test_daily_group_membership_equals_the_r2_list():
-    defaults = load_defaults(K3S)
+    defaults = resolved_tier_lists(load_defaults(K3S))
     declared = _longhorn_class_pvcs()
     assert len(declared) >= 4
     assert daily_members(declared, defaults) == set(defaults["k3s_longhorn_r2_volumes"])

@@ -5,6 +5,6 @@
 | Weekly | B2 (`default`) | 22, one weekday each | `30 4 * * <index mod 7>` | 2 |
 | None | — | 5 listed, plus the `longhorn-nobackup` StorageClass | — | — |
 
-Daily tier volumes (`k3s_longhorn_r2_volumes`): `homelab/traefik-acme`, `homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data`.
+Daily tier volumes (`k3s_longhorn_r2_volumes`): `homelab/traefik-acme`, `homelab/authelia-config`, `homelab/zigbee2mqtt-data`, `homelab/home-assistant-config`.
 
 B2 backups are armed (`k3s_longhorn_backup_armed`); the daily B2 budget is 16 backups (`k3s_longhorn_daily_backup_budget`).
