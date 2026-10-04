@@ -82,13 +82,6 @@ manifests_rollout_timeout_default: 600s
 # apply itself does the rolling and `manifests_rolled_by_apply` reports it.
 manifests_restart_triggers_default: [config, secret, image]
 
-# The basenames the caller's `k8s_claims` render to (see the render task). Derived lazily, so
-# each include reads its own caller's claims; a set_fact would carry one role's list into the
-# next role of the play. The prune keep-set and the digest both read this.
-manifests_claim_files: >-
-  {{ k8s_claims | default([]) | map(attribute='name')
-     | map('regex_replace', '^', 'claim-') | map('regex_replace', '$', '.yaml') | list }}
-
 # Manifest basenames this role renders from a SHARED template under `ansible/templates/` when
 # the caller's own role ships no `templates/<basename>.j2`. A role's own template
 # always wins; this is the fallback, not an override.

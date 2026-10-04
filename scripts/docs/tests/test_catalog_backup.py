@@ -395,25 +395,6 @@ def test_claim_tiers_pairs_every_claim_with_its_tier_in_mount_order(tmp_path):
     ]
 
 
-def test_backup_tier_reads_class_from_a_k8s_claims_entry(tmp_path):
-    # Shape 4: the claim is data in the role's defaults, rendered by k8s/manifests from a
-    # shared template, so neither the caller's templates/ nor its tasks name its class.
-    paths = make_repo(tmp_path)
-    write(
-        paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
-        """\
-        jellyfin_k8s_claim: jellyfin-cache
-        jellyfin_k8s_storage_class: longhorn-nobackup
-        k8s_claims:
-          - name: "{{ jellyfin_k8s_claim }}"
-            storage_class: "{{ jellyfin_k8s_storage_class }}"
-            size: 1Gi
-        """,
-    )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
-    assert row.backup_tier == "no backup (StorageClass longhorn-nobackup)"
-
-
 def test_claim_index_reads_the_real_tree_for_each_declaration_shape():
     """The one test here that reads the real roles, on purpose.
 

@@ -199,6 +199,18 @@
          else (manifests_dest_dir ~ '/' ~ manifests_deferred_dir_name) if k8s_dry_run | bool
          else '/etc/rancher/k3s/manifests/' ~ manifests_deferred_dir_name }}
 
+- name: Name the volume claim files for {{ manifests_service }}
+  tags: [always]
+  # The basenames the caller's `k8s_claims` render to, read by the prune keep-set and the digest.
+  # Set unconditionally, for the same host-scoped reason as the deferred directory above: an
+  # earlier role's claims would otherwise be kept and digested here. A task rather than a
+  # default in defaults/main.yml, because a change to a shared role's defaults reads as a change
+  # to every service that includes it.
+  ansible.builtin.set_fact:
+    manifests_claim_files: >-
+      {{ k8s_claims | default([]) | map(attribute='name')
+         | map('regex_replace', '^', 'claim-') | map('regex_replace', '$', '.yaml') | list }}
+
 - name: Create the manifest directory for {{ manifests_service }}
   tags: [config]
   ansible.builtin.file:

@@ -12,7 +12,7 @@ Run: uv run pytest ansible/tests/k8s/test_k8s_claims.py
 
 from collections import Counter
 
-from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named
+from _helpers import ANSIBLE, load_tasks, render_expr, task_named
 from _k8s_render import rendered_docs
 from lib.k8s_roles import CLAIM_TEMPLATE
 
@@ -58,7 +58,10 @@ def test_the_render_task_renders_the_template_the_harnesses_render():
 
 def test_the_claim_file_list_names_what_the_render_task_writes():
     """The prune keep-set and the digest read `manifests_claim_files`, not the render loop."""
-    expr = load_yaml(MANIFESTS / "defaults/main.yml")["manifests_claim_files"]
+    task = task_named(
+        load_tasks(MANIFESTS / "tasks/main.yml"), "Name the volume claim files"
+    )
+    expr = task["ansible.builtin.set_fact"]["manifests_claim_files"]
     claims = [{"name": "a-config"}, {"name": "b-data"}]
     assert render_expr(expr, k8s_claims=claims) == [
         "claim-a-config.yaml",
