@@ -70,9 +70,9 @@ stringData:
       "config": {"type": "webhook", "applyExisting": false, "webhookURL": "{{ monitor_discord_webhook_url }}", "webhookContentType": "custom", "webhookAdditionalHeaders": "{\"Content-Type\": \"application/json\"}", "webhookCustomBody": {{ (tera_raw ~ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/discord-message.liquid') ~ tera_endraw) | to_json }}}
     }
   # Fans out to BOTH channels: the Discord dead-man's-switch below, plus the critical tier
-  # (both backup targets, disks, SMART, SD, cert expiry, UPS) — a *degraded* Discord loses
-  # individual alerts while the watchdog stays green, and those are the ones that can't wait a
-  # day. "Both backup targets" was "backup/B2" until 2026-08-21: B2's headroom tile was on this
+  # (both backup targets, disks, SMART, SD, cert expiry, UPS, and the home-critical services' own
+  # tiles) — a *degraded* Discord loses individual alerts while the watchdog stays green, and
+  # those are the ones that can't wait a day. "Both backup targets" was "backup/B2" until 2026-08-21: B2's headroom tile was on this
   # tier and R2's was not, though R2 is a Longhorn backup target too and a full bucket stops its
   # backups the same way. The membership test is what a monitor guards, not which vendor it names.
   email.json: |
@@ -98,9 +98,22 @@ stringData:
     {"type": "ping", "name": "Daniel Pi Host", "hostname": "{{ hostvars['daniel-pi'].server_ip }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   daniel-pi-wg-easy.json: |
     {"type": "http", "name": "Daniel Pi WG Easy", "url": "http://{{ hostvars['daniel-pi'].server_ip }}:51821", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # A home-critical service's own availability tile pages like the infrastructure tiles do:
+  # `severity: critical` plus the email leg, decided by the operator on 2026-10-04 (#3480).
+  # The macro reads the entry's `tier` from containers_list, so tiering a service puts its tile
+  # on the email tier and untiering one takes it off. The tag and the email list come out
+  # together because `test_severity_critical_is_exactly_the_email_tier` holds them as one fact.
+  # An argument naming no containers_list entry fails the render, not the page.
+{% macro service_alerting(entry) -%}
+{% if containers_list | in_service_tier(entry, 'home-critical') -%}
+"tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]
+{%- else -%}
+"notification_name_list": ["{{ kuma_notification_id }}"]
+{%- endif %}
+{%- endmacro %}
   # ── k3s ingress monitors ───────────────────────────────────────────────────────────────
   auth-k8s.json: |
-    {"type": "http", "name": "k3s Authelia Portal", "url": "https://auth.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Authelia Portal", "url": "https://auth.local.{{ domain }}", "interval": 60, "maxretries": 2, {{ service_alerting('authelia') }}}
   bento-pdf-k8s.json: |
     {"type": "http", "name": "k3s Ingress (bento-pdf)", "url": "https://bento-pdf.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   littlelink-k8s.json: |
@@ -129,7 +142,7 @@ stringData:
   livesync-k8s.json: |
     {"type": "http", "name": "k3s LiveSync", "url": "https://livesync.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   mosquitto-k8s.json: |
-    {"type": "port", "name": "k3s Mosquitto (VIP)", "hostname": "{{ mqtt_k8s_vip }}", "port": 1883, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "port", "name": "k3s Mosquitto (VIP)", "hostname": "{{ mqtt_k8s_vip }}", "port": 1883, "interval": 60, "maxretries": 2, {{ service_alerting('mosquitto') }}}
   # VIP port tiles (kube-proxy ETP-Local DROP mode): joining a Docker host to k3s can
   # black out a container's VIP while host-side probes stay green, so a real cross-host
   # TCP check like this is what actually catches it.
@@ -149,7 +162,7 @@ stringData:
   # wg-easy's VIP is WireGuard-over-UDP — Kuma port monitors are TCP-only, so it cannot get
   # a port-check tile here.
   zigbee2mqtt-k8s.json: |
-    {"type": "http", "name": "k3s Zigbee2MQTT", "url": "https://zigbee2mqtt.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Zigbee2MQTT", "url": "https://zigbee2mqtt.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, {{ service_alerting('zigbee2mqtt') }}}
   slzb-coordinator.json: |
     {"type": "port", "name": "SLZB-06M Coordinator", "hostname": "{{ slzb_ip }}", "port": 6638, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   homepage-k8s.json: |
@@ -174,7 +187,7 @@ stringData:
   homelab-mcp-k8s.json: |
     {"type": "keyword", "name": "k3s homelab-mcp (edge gate)", "url": "https://mcp.local.{{ domain }}/health", "keyword": "ok", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   home-assistant-k8s.json: |
-    {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant.local.{{ domain }}", "interval": 60, "maxretries": 2, {{ service_alerting('home-assistant') }}}
   # Transcribed 2026-08-10 (Phase D.2 step 3): the tile probes the CLUSTER loki-homelab
   # through its
   # ClientIP-gated route (this pod's CIDR is admitted; hostAliases pin the -k8s name to
@@ -205,7 +218,7 @@ stringData:
   code-server-k8s.json: |
     {"type": "http", "name": "k3s code-server", "url": "https://code-server.local.{{ domain }}", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["302"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   pihole-k8s-dns.json: |
-    {"type": "dns", "name": "Pi-hole k8s DNS", "hostname": "homepage.local.{{ domain }}", "dns_resolve_server": "{{ dns_k8s_vip }}", "dns_resolve_type": "A", "port": 53, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "dns", "name": "Pi-hole k8s DNS", "hostname": "homepage.local.{{ domain }}", "dns_resolve_server": "{{ dns_k8s_vip }}", "dns_resolve_type": "A", "port": 53, "interval": 60, "maxretries": 2, {{ service_alerting('pihole') }}}
   # ── off-cluster services ───────────────────────────────────────────────────────────────
   # Email-to-RSS is a Cloudflare Worker, not a homelab workload (docs/email-to-rss.md), so
   # nothing else in the alerting spine sees it — this tile is its only coverage. Probing

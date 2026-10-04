@@ -14,7 +14,7 @@ import pytest
 
 from _helpers import K8S_ROLES
 from _k8s_render import k8s_entries
-from service_tier import SERVICE_TIERS, tier_priority_class
+from service_tier import SERVICE_TIERS, in_service_tier, tier_priority_class
 
 # The class each tiered role's pods ran at when the literals were replaced. A tier edit that
 # moves one of these is a priority change, and should fail here before it reaches the cluster.
@@ -78,6 +78,17 @@ def test_tier_priority_class_refuses_an_untiered_entry():
 def test_tier_priority_class_refuses_a_missing_entry():
     with pytest.raises(ValueError, match="no containers_list entry named 'b'"):
         tier_priority_class([{"name": "a", "tier": "platform"}], "b")
+
+
+def test_in_service_tier_selects_by_tier_group():
+    entries = [{"name": "edge", "tier": "home-edge"}, {"name": "plain"}]
+    assert in_service_tier(entries, "edge", "home-critical")
+    assert not in_service_tier(entries, "plain", "home-critical")
+
+
+def test_in_service_tier_refuses_a_missing_entry():
+    with pytest.raises(ValueError, match="no containers_list entry named 'b'"):
+        in_service_tier([{"name": "a", "tier": "home-edge"}], "b", "home-critical")
 
 
 def test_a_tier_group_is_not_a_declarable_tier():

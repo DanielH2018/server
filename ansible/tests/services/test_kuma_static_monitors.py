@@ -191,6 +191,14 @@ EMAIL_TIER = {
     # compacting and defragmenting, or raising the quota, so it cannot wait for someone to
     # notice a muted channel.
     "etcd DB Size",
+    # A home-critical service's own availability tile, put on the tier by the operator on
+    # 2026-10-04 (#3480): the house or SSO is down. The template derives these from each
+    # entry's containers_list `tier`, so they are named here as the members it must produce.
+    "k3s Authelia Portal",
+    "k3s Mosquitto (VIP)",
+    "k3s Zigbee2MQTT",
+    "k3s Home Assistant",
+    "Pi-hole k8s DNS",
 }
 
 

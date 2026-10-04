@@ -6,7 +6,7 @@ Secret does not declare fails to parse and, under ON_DELETE=delete, is deleted.
 """
 
 from _helpers import ANSIBLE
-from _kuma_entities import _entities, domain
+from _kuma_entities import _entities, _hostvars, domain, entities_with
 from test_kuma_static_monitors import EMAIL_TIER, NOT_MONITORS
 
 
@@ -60,6 +60,21 @@ def test_severity_critical_is_exactly_the_email_tier():
         and "critical" in _tag_values(e, "tag-severity")
     }
     assert critical == EMAIL_TIER
+
+
+def test_a_service_tile_leaves_the_email_tier_with_its_tier():
+    # The five home-critical service tiles take severity and email from containers_list
+    # `tier`, not from a literal. Untier authelia and its tile must lose both together.
+    untiered = [
+        {k: v for k, v in entry.items() if k != "tier"}
+        if entry.get("name") == "authelia"
+        else entry
+        for entry in _hostvars()["daniel-box"]["containers_list"]
+    ]
+    tile = entities_with({"containers_list": untiered})["auth-k8s.json"]
+    assert "email" in _entities()["auth-k8s.json"]["notification_name_list"]
+    assert "email" not in tile["notification_name_list"]
+    assert not _tag_values(tile, "tag-severity")
 
 
 def test_every_runbook_tag_points_at_a_page_the_docs_site_serves():
