@@ -28,11 +28,14 @@
                    prometheus, grafana, tempo) pass `k8s_observability_namespace` explicitly —
                    the one thing that kept them off this macro until every existing caller was
                    checked to confirm none needed the same override.
+    access_modes   defaults to `['ReadWriteOnce']`. media-volume's `media-data` passes
+                   `['ReadWriteMany']` through its `k8s_claims` entry; a claim's access modes are
+                   immutable once created, so this must match the live claim.
 
   Call with a body to insert a comment block between `spec:` and `accessModes:`; call plain
   (no `{% call %}`) when there's nothing to say there.
 #}
-{% macro pvc(name, storage_class, size, namespace=none) -%}
+{% macro pvc(name, storage_class, size, namespace=none, access_modes=none) -%}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -41,7 +44,7 @@ metadata:
 spec:
 {% if caller is defined %}{{ caller() }}{% endif %}
   accessModes:
-    - ReadWriteOnce
+    - {{ (access_modes or ['ReadWriteOnce']) | join('\n    - ') }}
   storageClassName: {{ storage_class }}
   resources:
     requests:

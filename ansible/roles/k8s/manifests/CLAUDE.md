@@ -33,7 +33,7 @@ caller's own `defaults/main.yml`, snapshotted before the apply), `k8s_claims` (b
 deferred pair below.
 
 - **A role's PersistentVolumeClaims are data, not templates.** `k8s_claims: [{name, size,
-  storage_class}]` in the caller's own `defaults/main.yml` renders each entry from
+  storage_class, access_modes?}]` in the caller's own `defaults/main.yml` renders each entry from
   `ansible/templates/claim-default.yaml.j2` to `claim-<name>.yaml` in the role's directory.
   The claims ride the prune keep-set, the digest and the dry run, and a real deploy applies
   them before the snapshot, which fails on a claim that does not exist yet. This role declares

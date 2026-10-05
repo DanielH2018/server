@@ -1,6 +1,6 @@
 """`k8s_claims`: the PersistentVolumeClaims `k8s/manifests` renders from a role's defaults.
 
-A role declares `k8s_claims: [{name, size, storage_class}]` and `k8s/manifests` renders each
+A role declares `k8s_claims: [{name, size, storage_class, access_modes?}]` and `k8s/manifests` renders each
 entry from `ansible/templates/claim-default.yaml.j2` to `claim-<name>.yaml` in the role's own
 directory. The offline harnesses (`_k8s_render`, `validate/k8s_manifests.py`) reach the same
 claims through `lib.k8s_roles.claim_contexts`, because one template rendered per entry is
@@ -60,7 +60,11 @@ _KNOWN_CLAIMS = {
     ("homelab", "pihole-etc-2"): ("longhorn-nobackup", "2Gi"),
     ("homelab", "traefik-acme"): ("longhorn", "128Mi"),
     ("homelab", "wg-easy-config"): ("longhorn", "1Gi"),
+    ("homelab", "media-data"): ("media-local", "400Gi"),
 }
+# The one claim whose `k8s_claims` entry sets `access_modes`. Access modes are immutable, and
+# the size/class pair above would pass a render that dropped the entry's modes for the default.
+_RWX_CLAIMS = {("homelab", "media-data")}
 
 
 def _pvcs(docs):
@@ -120,6 +124,21 @@ def test_known_claims_render_from_k8s_claims_with_their_live_spec():
     }
     missing = {k: v for k, v in _KNOWN_CLAIMS.items() if found.get(k) != v}
     assert not missing, f"k8s_claims no longer renders {missing}; found {found}"
+
+
+def test_known_claims_render_their_live_access_modes():
+    found = {
+        _key(doc): doc["spec"]["accessModes"]
+        for _role, name, doc in _pvcs(rendered_docs())
+        if name == CLAIM_TEMPLATE.name and _key(doc) in _KNOWN_CLAIMS
+    }
+    wrong = {
+        key: modes
+        for key, modes in found.items()
+        if modes != (["ReadWriteMany"] if key in _RWX_CLAIMS else ["ReadWriteOnce"])
+    }
+    assert set(found) == set(_KNOWN_CLAIMS), set(_KNOWN_CLAIMS) - set(found)
+    assert not wrong, f"claims render the wrong accessModes: {wrong}"
 
 
 def test_a_claim_rendered_twice_is_flagged():

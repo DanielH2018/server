@@ -1,10 +1,12 @@
 {#
   One entry of a role's `k8s_claims`, rendered by k8s/manifests as `claim-<name>.yaml` in the
   role's own manifest directory. `manifests_claim` is the loop variable that task sets; it is
-  `{name, size, storage_class}`, every key required (k8s/manifests asserts the shape first).
+  `{name, size, storage_class}`, every key required (k8s/manifests asserts the shape first),
+  plus an optional `access_modes` list that defaults to `['ReadWriteOnce']`.
 
   The body is the shared `pvc()` macro, so a claim declared as data and a claim a role still
   renders from its own template produce the same object.
 #}
 {% from 'pvc.yml.j2' import pvc with context %}
-{{ pvc(manifests_claim.name, manifests_claim.storage_class, manifests_claim.size) }}
+{{ pvc(manifests_claim.name, manifests_claim.storage_class, manifests_claim.size,
+       access_modes=manifests_claim.access_modes | default(none)) }}

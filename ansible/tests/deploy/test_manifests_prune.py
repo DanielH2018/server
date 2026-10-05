@@ -98,6 +98,7 @@ _ARMED_ROLES = frozenset(
         "autofix-bridge",
         "monitor-bridge",
         "homelab-mcp",
+        "media-volume",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
