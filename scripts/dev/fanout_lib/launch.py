@@ -65,13 +65,18 @@ STOP_HOOK_SETTINGS = {
 # the verdict `status` should print. Five hours covers the longest fan-out session measured
 # (286 minutes; the next longest was 104) and bounds one that waits on something forever.
 RUNTIME_MAX_S = 5 * 3600
+
+
 # The user manager's PATH lacks ~/.local/bin (claude, uv) and repo hooks need uv. The fnm
 # default alias is where `node` lives: the dotfiles repo's `bin/gate` runs `node --test`, and an
 # interactive shell finds node only through fnm's per-shell directory, which a unit never gets.
-PATH = (
-    "/home/ubuntu/.local/bin:/home/ubuntu/.local/share/fnm/aliases/default/bin:"
-    "/usr/local/bin:/usr/bin:/bin"
-)
+# Both sit under the launching user's HOME, which is /var/lib/claude for the agent user (#3627).
+def unit_path(home: str) -> str:
+    """The PATH a batch's unit runs with, for a user whose home directory is `home`."""
+    return (
+        f"{home}/.local/bin:{home}/.local/share/fnm/aliases/default/bin:"
+        "/usr/local/bin:/usr/bin:/bin"
+    )
 
 
 class LaunchError(Exception):
@@ -198,8 +203,12 @@ def claude_args(target: Target = SERVER_TARGET) -> str:
     return f"{prefix} --settings {shlex.quote(json.dumps(STOP_HOOK_SETTINGS))}"
 
 
-def systemd_run_command(batch: str, target: Target = SERVER_TARGET) -> str:
+def systemd_run_command(
+    batch: str, target: Target = SERVER_TARGET, home: str | None = None
+) -> str:
+    """The `systemd-run` step; `home` defaults to the launching user's own HOME."""
     wt = worktree_path(batch, target)
+    home = home or str(_Path.home())
     return _step(
         (
             f"systemd-run --user --unit {unit_name(batch, target)} "
@@ -207,7 +216,7 @@ def systemd_run_command(batch: str, target: Target = SERVER_TARGET) -> str:
             f"-p StandardInput=file:{wt}/.fanout/brief.md "
             f"-p StandardOutput=file:{wt}/.fanout/report.json "
             f"-p StandardError=file:{wt}/.fanout/stderr.log "
-            f"-p Environment=PATH={PATH} -p Environment=HOME=/home/ubuntu "
+            f"-p Environment=PATH={unit_path(home)} -p Environment=HOME={home} "
             f"-p RuntimeMaxSec={RUNTIME_MAX_S} "
             f"{claude_args(target)}"
         ),

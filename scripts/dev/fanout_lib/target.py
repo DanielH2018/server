@@ -7,7 +7,7 @@ claims `reap` can judge. There is no second list to keep in step.
 """
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -19,7 +19,20 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 SERVER = "DanielH2018/server"
-SERVER_CHECKOUT = "/home/ubuntu/server"
+# The operator's checkout. The agent user cannot read /home/ubuntu, and its login profile
+# (roles/setup/claude_code/templates/agent-user-profile.j2) points RUN_HOOK_PROJECT_DIR at its
+# own clone instead (#3627). The repo's hook shim, .claude/hooks/run-hook.sh, reads the same
+# variable with the same default.
+OPERATOR_CHECKOUT = "/home/ubuntu/server"
+PROJECT_DIR_ENV = "RUN_HOOK_PROJECT_DIR"
+
+
+def server_checkout(env: Mapping[str, str] = os.environ) -> str:
+    """This repo's primary checkout for the running user: its own clone, or the operator's."""
+    return env.get(PROJECT_DIR_ENV) or OPERATOR_CHECKOUT
+
+
+SERVER_CHECKOUT = server_checkout()
 
 
 @dataclass(frozen=True)
@@ -28,8 +41,9 @@ class Target:
 
     Attributes:
         repo: the GitHub `OWNER/NAME`, which every `gh` call about the batch names.
-        checkout: the primary checkout's absolute path. It is the same path on every host,
-            and the batch's worktree goes under its `.claude/worktrees/`.
+        checkout: the primary checkout's absolute path. It is the same path on every host
+            for one user, and the batch's worktree goes under its `.claude/worktrees/`. The
+            server repo's checkout differs between the operator and the agent user.
         base: the remote default branch the worktree starts from and merges into, such as
             `origin/master`.
     """
