@@ -3,41 +3,36 @@
 
 Two subcommands. `clear-owed <class> <subject>` drops one line of `/var/lib/gitops-deploy/owed.jsonl`, the deployer's owed-work
 ledger, for any class an operator may clear: `manual_plane`, `k8s_deferred` or `k8s_unapplied` (#3544). `hold_plane` is not one of
-them, because a hold clears only once an apply covers each plane it lists. `clear-manual-plane <role>`, `clear-k8s-deferred
-<service>` and `clear-k8s-unapplied <service>` are aliases for `clear-owed` with that class. Every surface prints `clear-owed`
-(`gitops_markers.owed_clear_cmd`, #3547); the aliases stay until the monitor-bridge and deploy-ui copies that printed them are
-redeployed, since those redeploy on their own schedules. The classes are described below under their alias names.
+them, because a hold clears only once an apply covers each plane it lists. Every surface prints this command through
+`gitops_markers.owed_clear_cmd` (#3547).
 
 `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the marker the deployer writes while
 consecutive ticks defer on one busy service lock; the tick clears it itself on its next run that is not deferred, so this is for a
-marker an operator wants gone now, after ending the holder. `clear-manual-plane <role>` drops a role's `manual_plane` line from
-`/var/lib/gitops-deploy/owed.jsonl`, the ledger the deployer writes when a range carries a setup role no playbook it runs can
-apply — `k3s` (applied by `k3s-bringup.yml`) or `common` (applied by no playbook at all). The tick fast-forwards past such a range
-rather than parking it, so the marker is what says the apply is still owed: monitor-bridge pages once the oldest pending role is six
-hours old, and `land.sh` prints the same clear command.
+marker an operator wants gone now, after ending the holder.
+
+`clear-owed manual_plane <role>` drops a role's line from the ledger. The deployer writes that line when a range carries a setup
+role no playbook it runs can apply — `k3s` (applied by `k3s-bringup.yml`) or `common` (applied by no playbook at all). The tick
+fast-forwards past such a range rather than parking it, so the marker is what says the apply is still owed: monitor-bridge pages
+once the oldest pending role is six hours old, and `land.sh` prints the same clear command.
 
 **The apply comes first, this second.** Clearing a role nobody applied silences the only durable signal that it is unapplied, which
-is the state the marker exists to make visible. So every `clear-manual-plane` run writes one journal line, `logger -t gitops-state`,
-naming the role, the line it dropped and who ran it: `journalctl -t gitops-state` is where a clear with no apply behind it leaves
-its trace, since the marker's own truncation records nothing. `clear-contention` writes no such line on purpose: it silences no
-page, and the tick rewrites that marker itself on its next undeferred run.
+is the state the marker exists to make visible. So every `clear-owed` run writes one journal line, `logger -t gitops-state`,
+naming the subject, the line it dropped and who ran it: `journalctl -t gitops-state` is where a clear with no apply behind it leaves
+its trace, since the marker's own truncation records nothing. Every class journals as `event=clear-<class>`, with `-` for `_`, so
+a `manual_plane` clear reads `event=clear-manual-plane`. `clear-contention` writes no such line on purpose: it silences no page,
+and the tick rewrites that marker itself on its next undeferred run.
 
-`clear-k8s-deferred <service>` is the same shape one plane over. The `owed` ledger's
-`k8s_deferred` class (#3392) holds one line per promoted image bump a BROAD tick fast-forwarded
-and then deferred for lack of budget: the range is merged, so no later tick's `local..origin`
-carries the bump and the defer-and-alert post names it exactly once. monitor-bridge pages once
-the oldest line is six hours old. The deployer clears a line itself on any tick that deploys
-the service; this command is for the `./scripts/deploy.sh` an operator ran, which the deployer
-cannot see. The apply comes first here too, and the clear writes the same journal line under
-`event=clear-k8s-deferred`. Every class journals as `event=clear-<class>`, with `-` for `_`.
+`clear-owed k8s_deferred <service>` is the same shape one plane over. The `k8s_deferred` class (#3392) holds one line per promoted
+image bump a BROAD tick fast-forwarded and then deferred for lack of budget: the range is merged, so no later tick's
+`local..origin` carries the bump and the defer-and-alert post names it exactly once. monitor-bridge pages once the oldest line is
+six hours old. The deployer clears a line itself on any tick that deploys the service; this command is for the
+`./scripts/deploy.sh` an operator ran, which the deployer cannot see. The apply comes first here too.
 
-`clear-k8s-unapplied <service>` drops the `k8s_unapplied` entry from the `owed` ledger
-(#3392), the class for the k8s changes this deployer never applies — a hand-edited role, or one
-of the forty denylisted ones. NOTHING PAGES ON THAT CLASS, and every tick discharges an entry whose
-service has since been deployed, so this command is needed for two cases only: a change that
-was reverted rather than applied, and a shared role one of whose callers nothing can prove
-applied — no tag runs it, or a caller writes no release record
-(`scripts/deploy_tools/shared_role_callers.py:caller_tags` names the callers). Same journal line, under `event=clear-k8s-unapplied`.
+`clear-owed k8s_unapplied <service>` drops the entry of the class for the k8s changes this deployer never applies (#3392) — a
+hand-edited role, or one of the forty denylisted ones. NOTHING PAGES ON THAT CLASS, and every tick discharges an entry whose
+service has since been deployed, so this command is needed for two cases only: a change that was reverted rather than applied,
+and a shared role one of whose callers nothing can prove applied — no tag runs it, or a caller writes no release record
+(`scripts/deploy_tools/shared_role_callers.py:caller_tags` names the callers).
 
 This is not a path the deployer takes. Its own reverse is
 `DeployerState.clear_manual_plane_applied`, which fires when a tick applies the role's real
@@ -215,8 +210,8 @@ def journal_clear(
 def journal_event(cls: str) -> str:
     """The journal `event=` value for a clear of ledger class `cls`: `clear-k8s-deferred`.
 
-    The same string as the class's alias verb, so a `journalctl -t gitops-state` query written
-    against the old per-class verbs still matches.
+    The name the retired per-class verbs carried, kept so a `journalctl -t gitops-state` query
+    written against older clears still matches.
     """
     return "clear-" + cls.replace("_", "-")
 
@@ -394,14 +389,6 @@ def clear_k8s_owed(
 # covers each plane it lists.
 CLEARABLE_CLASSES = (OWED_MANUAL_PLANE, OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED)
 
-# The per-class verbs `clear-owed` replaces, kept as aliases until every running copy of a
-# printed remediation names `clear-owed` (#3547).
-ALIAS_CLASSES = {
-    "clear-manual-plane": OWED_MANUAL_PLANE,
-    "clear-k8s-deferred": OWED_K8S_DEFERRED,
-    "clear-k8s-unapplied": OWED_K8S_UNAPPLIED,
-}
-
 
 def clear_owed(
     state: DeployerState,
@@ -508,31 +495,9 @@ def main(
         "subject", help="the setup role (manual_plane) or k8s service (k8s_*)"
     )
     owed.add_argument("--applied", default=None, help=applied_help)
-    clear = sub.add_parser(
-        "clear-manual-plane",
-        help="alias for `clear-owed manual_plane <role>`",
-    )
-    clear.add_argument(
-        "subject", metavar="role", help="the setup role, e.g. k3s or common"
-    )
-    clear.add_argument("--applied", default=None, help=applied_help)
     sub.add_parser(
         "clear-contention",
         help="drop the busy-service-lock streak marker, AFTER ending the lock's holder",
-    )
-    deferred = sub.add_parser(
-        "clear-k8s-deferred",
-        help="alias for `clear-owed k8s_deferred <service>`",
-    )
-    deferred.add_argument(
-        "subject", metavar="service", help="the k8s service, e.g. sonarr"
-    )
-    unapplied = sub.add_parser(
-        "clear-k8s-unapplied",
-        help="alias for `clear-owed k8s_unapplied <service>`",
-    )
-    unapplied.add_argument(
-        "subject", metavar="service", help="the k8s service, e.g. authelia"
     )
     args = parser.parse_args(argv)
     state = DeployerState(args.state_dir)
@@ -540,8 +505,6 @@ def main(
         return clear_contention(state, lock_path, lock_wait_s)
     if args.command == "clear-owed":
         cls = args.cls
-    elif args.command in ALIAS_CLASSES:
-        cls = ALIAS_CLASSES[args.command]
     else:
         # argparse refuses any other value, so this catches a subcommand added to the parser
         # and not to this dispatch — which would otherwise run the clear with its arguments.
