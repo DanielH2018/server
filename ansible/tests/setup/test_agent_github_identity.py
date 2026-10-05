@@ -14,6 +14,7 @@ import re
 
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
+from fanout_lib.target import WORKTREE_PREFIX_ENV, branch_name
 from lib import yaml_fast
 from lib.git_testing import git
 
@@ -186,3 +187,23 @@ def test_a_prefix_outside_the_fence_is_flagged() -> None:
     )
     # The bare slug the repo CLAUDE.md asks of the operator's sessions.
     assert not fence_lets_push(enter_worktree_branch("containers-role-cleanup"))
+
+
+def test_a_fanout_the_agent_launches_names_batch_branches_the_fence_lets_it_push(
+    monkeypatch,
+) -> None:
+    """fanout_place.py names its branches itself, so the profile's prefix must reach it."""
+    profile = render_setup_text("claude_code", "agent-user-profile.j2")
+    found = re.findall(rf"^export {WORKTREE_PREFIX_ENV}=(\S+)$", profile, re.M)
+    assert found == ["claude"], f"no single {WORKTREE_PREFIX_ENV} export in:\n{profile}"
+    monkeypatch.setenv(WORKTREE_PREFIX_ENV, found[0])
+    assert branch_name("3618") == "worktree-claude+fanout-3618"
+    assert fence_lets_push(branch_name("3618"))
+
+
+def test_a_fanout_without_the_prefix_keeps_the_operators_branch_outside_the_fence(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv(WORKTREE_PREFIX_ENV, raising=False)
+    assert branch_name("3618") == "worktree-fanout-3618"
+    assert not fence_lets_push(branch_name("3618"))

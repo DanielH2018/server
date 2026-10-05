@@ -15,7 +15,13 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from fanout_lib.target import SERVER, SERVER_CHECKOUT, SERVER_TARGET, Target
+from fanout_lib.target import (
+    SERVER,
+    SERVER_CHECKOUT,
+    SERVER_TARGET,
+    Target,
+    branch_name,
+)
 
 LANDS = "daniel-box"
 # The label `findings.py` puts on every issue it files. The launch gate refuses anything
@@ -222,7 +228,7 @@ def render_brief(
     Returns:
         The full brief text.
     """
-    branch = f"worktree-fanout-{batch}"
+    branch = branch_name(batch)
     numbers = " ".join(str(i.number) for i in issues)
     bodies = "\n\n".join(_issue_block(i) for i in issues)
     health_block = "\n".join(health) if health else "(both hosts reported clean)"

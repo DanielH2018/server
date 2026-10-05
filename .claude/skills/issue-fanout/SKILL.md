@@ -146,6 +146,12 @@ Narrow the fan-out, do not queue. For the third, `clean <run-id>` the finished r
 uncleaned worktree counts against its host. `--host daniel-box` pins a batch that must land in
 the same run or that only daniel-box can verify.
 
+Each batch's branch is `worktree-fanout-<batch>`, the name used throughout this skill. Run as
+the `claude` agent user, the dispatcher names it `worktree-claude+fanout-<batch>` instead.
+That user's login profile sets `CLAUDE_WORKTREE_PREFIX`, and the agent branch fence lets its
+GitHub account push only `worktree-claude+**` (#3618). Substitute that name in the commands
+below.
+
 Watch the run with a Monitor (`timeout_ms` 1800000) running `cc-wait fanout <run-id>
 [<run-id> …] --budget 1740`, and re-arm it if it exits 75. Do not write the `while … status …
 sleep` loop by hand. The Monitor prints a line each time a batch finishes, and nothing in
