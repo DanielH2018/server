@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-05 06:17 UTC
-generated_sha: cd4d51240
+generated_at: 2026-10-05 18:17 UTC
+generated_sha: 4fdc475b7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -41,7 +41,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/docs/reference/networking.py` | docs | Generate docs/reference/networking.md — what is routed, and what fronts it. | build_docs.py (a cron runs it unattended) | — | — |
 | `scripts/diagnostics/probe.py` | diagnostics | Read-only homelab diagnostics. | cron: B2 deletion accounting | `test_probe.py` | — |
 | `scripts/dev/prune_worktrees.py` | dev | Report and remove Claude session worktrees under .claude/worktrees/ that are done with. | cron: Weekly git object-store repair | `test_prune_worktrees.py` | — |
-| `scripts/deploy_tools/publish_pr.py` | deploy_tools | Publish a cron's local commit as an auto-merging pull request. | cron: Weekly secret rotation (auto tier) (via secret-rotate.sh) | `test_publish_pr.py` | [0, 1, 2, 3](#scriptsdeploytoolspublishprpy) |
+| `scripts/deploy_tools/publish_pr.py` | deploy_tools | Publish a cron's local commit as a pull request, and start the landing that merges it. | cron: Weekly secret rotation (auto tier) (via secret-rotate.sh) | `test_publish_pr.py` | [0, 1, 2, 3](#scriptsdeploytoolspublishprpy) |
 | `scripts/dev/pytest_shard.py` | dev | Split the pytest suite into N fixed shards of whole test modules, for CI's matrix. | cron: Refresh generated docs (via docs-refresh.sh) | — | — |
 | `scripts/docs/reference/scripts.py` | docs | Generate docs/reference/scripts.md — every first-party script and what it is for. | build_docs.py (a cron runs it unattended) | — | — |
 | `scripts/secrets_mgmt/secret_rotation.py` | secrets_mgmt | Secret rotation registry: audit + staggered rotation for ansible/vars/secrets.yml. | cron: Weekly secret rotation (auto tier) (via secret-rotate.sh) | `test_secret_rotation.py` | — |

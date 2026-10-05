@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-05 06:17 UTC
-generated_sha: cd4d51240
+generated_at: 2026-10-05 18:17 UTC
+generated_sha: 4fdc475b7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,15 +18,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 |---|---|---|---|---|---|---|---|---|
 | [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 1 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
-| [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
-| [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
 | [#3281](https://github.com/DanielH2018/server/issues/3281) | low | improvement | cicd | Digest-pin the third-party images still pinned only by tag | 2026-10-02 | 0 | - | ✓ |
-| [#3387](https://github.com/DanielH2018/server/issues/3387) | low | improvement | container | Create every PVC through one path — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3388](https://github.com/DanielH2018/server/issues/3388) | low | improvement | container | Prune every role's removed objects by injecting the role label at render time — *no vetted remediation* | 2026-10-03 | 0 | - | ✓ |
-| [#3518](https://github.com/DanielH2018/server/issues/3518) | low | gap | backup-observability | Delete navidrome-data's orphaned d0 Longhorn backups once a d3 backup exists | 2026-10-04 | 0 | - | ✓ |
-| [#3519](https://github.com/DanielH2018/server/issues/3519) | low | gap | backup-observability | Decide the fate of the retired healthchecks-config volume's Longhorn backups | 2026-10-04 | 0 | - | ✓ |
-| [#3579](https://github.com/DanielH2018/server/issues/3579) | low | improvement | cicd | Three Longhorn and manifest tests still read the retired k8s/volume-claim role | 2026-10-05 | 0 | - | ✓ |
-| [#3581](https://github.com/DanielH2018/server/issues/3581) | low | gap | cicd | Apply k3s-bringup.yml for PR #3580's k3s script template changes on daniel-box | 2026-10-05 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-10-05 06:17 UTC
-generated_sha: cd4d51240
+generated_at: 2026-10-05 18:17 UTC
+generated_sha: 4fdc475b7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: cd4d51240
 
 # Secrets
 
-178 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+181 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -50,6 +50,7 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `calendar_2` | 2026-05-21 | 2027-05-11 | 218 |
 | `calendar_3` | 2025-09-25 | 2026-08-27 | -39 |
 | `calendar_4` | 2025-09-01 | 2026-08-30 | -36 |
+| `claude_code_agent_gh_token` | 2026-02-12 | 2027-01-14 | 101 |
 | `claude_ha_token` | 2025-10-03 | 2026-09-09 | -26 |
 | `cloudflare_analytics_token` | 2026-04-03 | 2027-03-18 | 164 |
 | `code_server_password` | 2026-08-30 | 2027-08-29 | 328 |
@@ -96,6 +97,8 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `r2_access_key_id` | 2026-04-28 | 2027-04-18 | 195 |
 | `r2_secret_access_key` | 2026-04-11 | 2027-04-10 | 187 |
 | `radarr_api_key` | 2026-08-29 | 2027-08-05 | 304 |
+| `renovate_agent_claude_oauth_token` | 2026-06-01 | 2027-05-21 | 228 |
+| `renovate_agent_gh_token` | 2026-07-21 | 2027-07-13 | 281 |
 | `scrutiny_influxdb_admin_password` | 2026-07-23 | 2027-06-29 | 267 |
 | `scrutiny_influxdb_token` | 2026-03-10 | 2027-02-09 | 127 |
 | `smtp_notify_app_password` | 2026-04-29 | 2027-04-24 | 201 |
