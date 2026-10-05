@@ -235,7 +235,7 @@ terraria_k8s_replicas: 0
 # Shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and roles/k8s/traefik
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.
-crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.1
+crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.1@sha256:0f2523fa61ef507f15d953045cface490cc880670c62f2755ced17524107f71a
 crowdsec_k8s_agent_username: k8s-traefik-agent
 # The authelia pod's agent sidecar. Here, not in the authelia role's defaults, because the
 # k8s/crowdsec role registers the machine and only group_vars crosses that boundary.
