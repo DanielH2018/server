@@ -14,7 +14,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from fanout_lib.manifest import Batch
-from fanout_lib.target import SERVER_TARGET, Target
+from fanout_lib.target import SERVER_TARGET, Target, branch_name
 from fanout_lib.transport import REPO, Tools
 
 LAUNCH_TIMEOUT_S = 120.0
@@ -80,10 +80,6 @@ class LaunchError(Exception):
 
 def worktree_path(batch: str, target: Target = SERVER_TARGET) -> str:
     return f"{target.checkout}/.claude/worktrees/fanout-{batch}"
-
-
-def branch_name(batch: str) -> str:
-    return f"worktree-fanout-{batch}"
 
 
 def unit_name(batch: str, target: Target = SERVER_TARGET) -> str:

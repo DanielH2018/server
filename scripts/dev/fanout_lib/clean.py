@@ -69,7 +69,7 @@ def _drop_merged_branch(repo: str, tree: Worktree, merged: bool, brancher) -> st
     """Delete a removed tree's branch when it landed; return the `kept` reason, or `""`.
 
     Removing a worktree leaves its branch, so without this every cleaned batch left a
-    `worktree-fanout-<batch>` branch for the operator to delete by hand.
+    batch branch (`target.branch_name`) for the operator to delete by hand.
     """
     if not (tree.branch and merged):
         return ""

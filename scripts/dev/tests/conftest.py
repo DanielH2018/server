@@ -12,6 +12,12 @@ import pytest
 from _findings_fakes import build_tools, make_issue
 
 
+@pytest.fixture(autouse=True)
+def _no_worktree_prefix(monkeypatch):
+    """Run as the agent user, whose profile sets it, the fan-out tests read the operator's names."""
+    monkeypatch.delenv("CLAUDE_WORKTREE_PREFIX", raising=False)
+
+
 @pytest.fixture
 def issue():
     """`issue(number, *, state=, labels=, fp=, comments=, created=, title=)` -> a gh issue."""

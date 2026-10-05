@@ -6,6 +6,7 @@ already judges claims against, so a repo the dispatcher can launch in is exactly
 claims `reap` can judge. There is no second list to keep in step.
 """
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -59,6 +60,22 @@ class Target:
 
 
 SERVER_TARGET = Target(SERVER, SERVER_CHECKOUT, "origin/master")
+
+# The agent user's login profile (roles/setup/claude_code/templates/agent-user-profile.j2) sets
+# this to `claude_code_agent_worktree_prefix`. The operator's environment leaves it unset.
+WORKTREE_PREFIX_ENV = "CLAUDE_WORKTREE_PREFIX"
+
+
+def branch_name(batch: str) -> str:
+    """The branch a batch's worktree is created on, claimed under and pushed from.
+
+    The agent user's GitHub account may push only `worktree-<prefix>+**` (the "agent branch
+    fence" ruleset, #3618), the branch EnterWorktree gives a `<prefix>/<slug>` worktree. When
+    the running user's environment names a prefix, the batch branch takes that shape.
+    Otherwise it is `worktree-fanout-<batch>`.
+    """
+    prefix = os.environ.get(WORKTREE_PREFIX_ENV, "")
+    return f"worktree-{prefix}+fanout-{batch}" if prefix else f"worktree-fanout-{batch}"
 
 
 def registered_repos() -> list[str]:
