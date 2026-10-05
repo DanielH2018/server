@@ -51,7 +51,7 @@ deferred pair below.
 - **A caller may defer the APPLY of some manifests and keep the render.**
   `manifests_deferred_files` plus `manifests_deferred_dir_name` render, prune and digest them
   into a reserved sibling directory the caller applies itself, gating on
-  `manifests_deferred_render`. `pihole` is the only caller.
+  `manifests_deferred_render`. Callers: `pihole`, `headlamp`.
 
 ## Rules a caller can break
 

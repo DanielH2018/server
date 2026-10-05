@@ -6,6 +6,8 @@
     name: k8s/manifests
   vars:
     manifests_service: headlamp
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
     manifests_files:
       # The policy is listed FIRST so it exists before the pod can be scheduled. `kubectl apply
       # -f <dir>` does not guarantee that ordering, which is why the gap is also survivable: the
@@ -20,6 +22,26 @@
     # dropped (roles/k8s/manifests/CLAUDE.md).
     manifests_secret_files:
       - oidc-secret.yaml
+    # The Prometheus proxy Role and RoleBinding live in the observability namespace, which the
+    # armed apply's `-n homelab` refuses (#3575). The shared role renders, prunes and digests
+    # them in their own directory, and the task below applies them.
+    manifests_deferred_files:
+      - rbac-observability.yaml
+    manifests_deferred_dir_name: headlamp-observability
+
+# No --prune and no -n: each document names its own namespace. The shared role prunes this
+# directory's staged files from `manifests_deferred_files`. A dry run skips this apply, so the
+# server-side dry run never sees these two documents, the same gap pihole's instance 2 has.
+- name: Apply headlamp's observability RBAC
+  when: not k8s_no_mutate
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f {{ manifests_deferred_dir }}/"
+  become: true
+  register: headlamp_k8s_observability_apply
+  changed_when: >-
+    'created' in headlamp_k8s_observability_apply.stdout
+    or 'configured' in headlamp_k8s_observability_apply.stdout
 
 # ── prove the policy is enforced, rather than merely applied ────────────────────────────────
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and

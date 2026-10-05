@@ -107,11 +107,14 @@ def test_readonly_bindings_never_reference_a_writing_clusterrole():
 
 
 def _headlamp_rbac_docs() -> list[dict]:
-    rendered = _render(
-        K8S / "headlamp" / "templates" / "rbac.yaml.j2",
-        **_role_defaults("headlamp"),
-    )
-    return [d for d in yaml_fast.safe_load_all(rendered) if d]
+    """Both of headlamp's RBAC files: the cluster identity and the observability proxy grant."""
+    docs = []
+    for name in ("rbac.yaml.j2", "rbac-observability.yaml.j2"):
+        rendered = _render(
+            K8S / "headlamp" / "templates" / name, **_role_defaults("headlamp")
+        )
+        docs += [d for d in yaml_fast.safe_load_all(rendered) if d]
+    return docs
 
 
 def test_headlamp_cluster_identity_stays_read_only():
