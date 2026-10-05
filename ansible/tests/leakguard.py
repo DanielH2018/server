@@ -61,8 +61,18 @@ carries `GIT_DIR`/`GIT_INDEX_FILE`, and every `clone`/`fetch` names a local `tmp
 `git commit` exports `GIT_DIR` and `GIT_INDEX_FILE` to its hooks, and git resolves those
 before `-C` or `cwd`. So a test that `prek`'s pytest hook runs, and that runs `git -C
 <tmp_path> commit`, writes the REAL repository. This plugin strips them once, for every test,
-at load. `GIT_HOOK_VARS` is the set and `strip_git_hook_env` the seam `test_leakguard.py`
+at load. `GIT_HOOK_VARS` is the set and `strip_env` the seam `test_leakguard.py`
 drives.
+
+## The agent user's profile variables are stripped the same way
+
+The `claude` agent user's login profile exports `RUN_HOOK_PROJECT_DIR` as its own clone, and
+`scripts/dev/fanout_lib/target.py` reads it into `SERVER_CHECKOUT` at import. The fan-out tests
+assert the operator's `/home/ubuntu/server`, so run as the agent user they went red while CI
+stayed green (#3629). A fixture cannot help, because the constant is computed at collection,
+before any fixture runs. `AGENT_PROFILE_VARS` is the set, stripped at load with the git hook
+variables, so every test reads the operator's defaults whichever user runs the suite. A test
+that wants the agent user's value passes it explicitly, as `test_fanout_target.py` does.
 
 A test that BUILDS a scratch repository needs two things this plugin cannot supply: a commit
 identity, and `GIT_CONFIG_GLOBAL` pointed at the null device so this host's global SSH commit
@@ -155,9 +165,14 @@ _state: dict[str, object] = {}
 GIT_HOOK_VARS = frozenset({"GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"})
 
 
-def strip_git_hook_env(environ) -> list[str]:
-    """Remove every `GIT_HOOK_VARS` name from `environ`; returns the names removed, sorted."""
-    removed = sorted(name for name in GIT_HOOK_VARS if name in environ)
+# What the agent user's login profile exports and a module reads at import. Each one swaps an
+# operator path that a test asserts for the agent user's own.
+AGENT_PROFILE_VARS = frozenset({"RUN_HOOK_PROJECT_DIR"})
+
+
+def strip_env(environ, names) -> list[str]:
+    """Remove every one of `names` from `environ`; returns the names removed, sorted."""
+    removed = sorted(name for name in names if name in environ)
     for name in removed:
         del environ[name]
     return removed
@@ -165,7 +180,7 @@ def strip_git_hook_env(environ) -> list[str]:
 
 # At import rather than in a hook: the controller strips before xdist spawns its workers, each
 # worker strips again as it loads the plugin, and no session fixture runs first.
-strip_git_hook_env(os.environ)
+strip_env(os.environ, GIT_HOOK_VARS | AGENT_PROFILE_VARS)
 
 
 def _is_exempt() -> bool:
