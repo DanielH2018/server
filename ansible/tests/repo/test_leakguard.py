@@ -404,12 +404,45 @@ def test_without_the_plugin_the_git_hook_variables_reach_the_test(
     assert proc.returncode != 0, proc.stdout + proc.stderr
 
 
-def test_strip_git_hook_env_removes_only_the_hook_variables() -> None:
+def test_strip_env_removes_only_the_hook_variables() -> None:
     environ = {**_HOOK_ENV, "GIT_AUTHOR_NAME": "t", "PATH": "/bin"}
-    assert leakguard.strip_git_hook_env(environ) == [
+    assert leakguard.strip_env(environ, leakguard.GIT_HOOK_VARS) == [
         "GIT_DIR",
         "GIT_INDEX_FILE",
         "GIT_WORK_TREE",
     ]
     assert environ == {"GIT_AUTHOR_NAME": "t", "PATH": "/bin"}
-    assert leakguard.strip_git_hook_env(environ) == []
+    assert leakguard.strip_env(environ, leakguard.GIT_HOOK_VARS) == []
+
+
+# The agent user's profile value, which `fanout_lib.target` reads into SERVER_CHECKOUT.
+_PROFILE_ENV = {"RUN_HOOK_PROJECT_DIR": "/var/lib/claude/server"}
+
+_READS_SERVER_CHECKOUT = f"""
+import sys
+
+sys.path.insert(0, {str(REPO / "scripts" / "dev")!r})
+from fanout_lib.target import SERVER_CHECKOUT
+
+
+def test_the_server_checkout_is_the_operators():
+    assert SERVER_CHECKOUT == "/home/ubuntu/server"
+"""
+
+
+def test_the_plugin_strips_the_agent_profile_variables_before_collection(
+    tmp_path: Path,
+) -> None:
+    """The agent user's suite asserts the operator's paths, as CI's does (#3629)."""
+    proc = _run_child(tmp_path, _READS_SERVER_CHECKOUT, extra_env=_PROFILE_ENV)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_without_the_plugin_the_agent_profile_moves_the_server_checkout(
+    tmp_path: Path,
+) -> None:
+    """The red half: a module-level import reads the profile before any fixture could."""
+    proc = _run_child(
+        tmp_path, _READS_SERVER_CHECKOUT, plugin=False, extra_env=_PROFILE_ENV
+    )
+    assert proc.returncode != 0, proc.stdout + proc.stderr
