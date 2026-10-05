@@ -47,59 +47,17 @@ _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
 # Kinds that must never be pruned by this mechanism — see the module docstring.
 _FORBIDDEN_PRUNE_KINDS = ("Secret", "PersistentVolumeClaim")
 # The armed roles, each added on purpose, so the census below fails on an unmeant arming.
+# Several per line: one name per line grew this module past its 500-line cap (#3593).
 _ARMED_ROLES = frozenset(
-    {
-        "registry",
-        "bazarr",
-        "littlelink",
-        "texbrain",
-        "navidrome",
-        "qbittorrent",
-        "terraria",
-        "code-server",
-        "n8n",
-        "valheim",
-        "scrutiny",
-        "tdarr",
-        "home-assistant",
-        "game-stats",
-        "uptime-kuma",
-        "freshrss",
-        "sonarr",
-        "radarr",
-        "zigbee2mqtt",
-        "prowlarr",
-        "karakeep",
-        "livesync",
-        "speedtest",
-        "bento-pdf",
-        "ical-proxy",
-        "peanut",
-        "janitorr",
-        "deploy-ui",
-        "artifacts",
-        "docs",
-        "nut-exporter",
-        "pihole-exporter",
-        "node-exporter",
-        "jellyfin",
-        "mosquitto",
-        "cloudflare-ddns",
-        "crowdsec",
-        "configarr",
-        "pi-peer-backup",
-        "pihole",
-        "loki-homelab",
-        "wg-easy",
-        "homepage",
-        "gpu-exporter",
-        "headlamp",
-        "autofix-bridge",
-        "monitor-bridge",
-        "homelab-mcp",
-        "media-volume",
-        "netpol-baseline",
-    }
+    """
+    registry bazarr littlelink texbrain navidrome qbittorrent terraria code-server n8n
+    valheim scrutiny tdarr home-assistant game-stats uptime-kuma freshrss sonarr radarr
+    zigbee2mqtt prowlarr karakeep livesync speedtest bento-pdf ical-proxy peanut janitorr
+    deploy-ui artifacts docs nut-exporter pihole-exporter node-exporter jellyfin mosquitto
+    cloudflare-ddns crowdsec configarr pi-peer-backup pihole loki-homelab wg-easy homepage
+    gpu-exporter headlamp autofix-bridge monitor-bridge homelab-mcp media-volume
+    netpol-baseline traefik
+    """.split()
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
 _RENDER_TASKS = (
