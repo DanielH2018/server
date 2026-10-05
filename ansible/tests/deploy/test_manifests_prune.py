@@ -32,9 +32,9 @@ from _helpers import (
     task_named,
     walk_tasks,
 )
-from _k8s_render import rendered_texts
+from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
-from lib.k8s_roles import declared_manifest_files
+from lib.k8s_roles import declared_manifest_files, manifest_template
 from role_label import ROLE_LABEL, homelab_role_label
 
 sys.path.insert(0, str(REPO / "ansible/roles/setup/k3s/files"))
@@ -94,6 +94,7 @@ _ARMED_ROLES = frozenset(
         "wg-easy",
         "homepage",
         "gpu-exporter",
+        "headlamp",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
@@ -409,6 +410,82 @@ def test_every_armed_render_is_labelled_and_otherwise_unchanged() -> None:
         ("bazarr", "claim-default.yaml.j2"),
         ("littlelink", "service-default.yaml.j2"),
     } <= seen
+
+
+def _staged_templates(role: str) -> set[str]:
+    """The template names the armed apply stages for `role`: its file lists plus its claims.
+
+    A deferred file and a probe Job's own directory are applied outside the armed
+    `kubectl apply -n <namespace>`, so they are left out on purpose.
+    """
+    names = {
+        tpl.name
+        for basename in declared_manifest_files(role)
+        if (tpl := manifest_template(role, basename)) is not None
+    }
+    return names | {"claim-default.yaml.j2"}
+
+
+def _foreign_namespaces(text: str, namespace: str) -> list[tuple[str, str, str]]:
+    """(kind, name, namespace) for each document placed in a namespace other than `namespace`.
+
+    Only `metadata.namespace` counts. A cluster-scoped document carries none, and a binding's
+    `subjects[].namespace` names where its subject lives, not where the binding goes.
+    """
+    return [
+        (doc["kind"], doc["metadata"]["name"], ns)
+        for doc in yaml_fast.safe_load_all(text)
+        if isinstance(doc, dict)
+        and (ns := (doc.get("metadata") or {}).get("namespace"))
+        not in (None, namespace)
+    ]
+
+
+def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
+    """The armed apply passes `-n homelab`, and kubectl refuses a document placed elsewhere.
+
+    The refusal reads `the namespace from the provided object "observability" does not match
+    the namespace "homelab"`, and only a server-side dry run or a real deploy raised it: arming
+    headlamp passed pytest and prek while its rbac.yaml still carried the Prometheus proxy Role
+    in observability (#3575). headlamp is the named member, because it is the armed role whose
+    render reaches another namespace at all, through its deferred file.
+    """
+    namespace = load_yaml_namespace()
+    checked, offenders = set(), []
+    for role, name, text in rendered_texts():
+        if role not in _ARMED_ROLES or name not in _staged_templates(role):
+            continue
+        checked.add(role)
+        offenders += [
+            (role, name, *found) for found in _foreign_namespaces(text, namespace)
+        ]
+    assert "headlamp" in checked, "headlamp's staged render was never examined"
+    assert not offenders, (
+        f"armed roles render documents outside {namespace!r}: {offenders}. The armed apply "
+        f"passes `-n {namespace}`, so kubectl refuses the whole directory. Render them into a "
+        "deferred directory the role applies itself (`manifests_deferred_files`, as headlamp's "
+        "observability RBAC does), or leave the role unarmed."
+    )
+
+
+def test_the_foreign_namespace_check_finds_headlamps_deferred_rbac() -> None:
+    """Control: the real render of headlamp's deferred file is what the check above refuses.
+
+    It also proves the staged set leaves that file out, so the check passes on headlamp because
+    the file is deferred rather than because the reader saw no namespace at all.
+    """
+    name = "rbac-observability.yaml.j2"
+    assert name not in _staged_templates("headlamp")
+    text = render_role_template("headlamp", name)
+    assert {found[2] for found in _foreign_namespaces(text, load_yaml_namespace())} == {
+        "observability"
+    }
+
+
+def load_yaml_namespace() -> str:
+    return yaml_fast.safe_load(
+        (REPO / "ansible/inventory/group_vars/all.yml").read_text()
+    )["k8s_namespace"]
 
 
 def test_manifests_prune_defaults_off() -> None:

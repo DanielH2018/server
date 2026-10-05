@@ -3,7 +3,8 @@
 
 `k8s/manifests` renders `manifests_deferred_files` into
 `/etc/rancher/k3s/manifests/<manifests_deferred_dir_name>/`, prunes that directory from the same
-list, and leaves the apply to the owning role — pihole's instance 2 is the one caller. A role
+list, and leaves the apply to the owning role — pihole's instance 2 and headlamp's
+observability RBAC are the callers. A role
 that later took that directory
 name as its own `manifests_service` would prune the manifest pihole applies and sweep it into its
 own `kubectl apply -f <dir>/`, which is the single request the deferral exists to escape.
@@ -28,7 +29,10 @@ from test_no_role_stages_files_in_a_pruned_manifest_dir import (
 
 # Named rather than counted, so a rename cannot empty the census and leave the invariant below
 # passing over nothing (.claude/rules/python-layout.md).
-KNOWN_DEFERRED_DIRS = {"pihole-instance-2": "pihole"}
+KNOWN_DEFERRED_DIRS = {
+    "pihole-instance-2": "pihole",
+    "headlamp-observability": "headlamp",
+}
 
 
 def deferred_dirs(roles_dir: Path) -> dict[str, str]:

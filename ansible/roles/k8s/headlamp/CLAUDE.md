@@ -19,10 +19,13 @@ groups it doesn't cover. See repo-root `CLAUDE.md`.
   `headlamp_k8s_crd_api_groups` (`traefik.io`, `metallb.io`, `longhorn.io`, `helm.cattle.io`,
   `k3s.cattle.io`) — nothing aggregates a CRD group into `view` automatically, so a group
   missing from that list degrades silently: the UI loads, that resource list is just empty.
+- **The observability-namespace Prometheus proxy grant is deferred** (#3575): the armed apply's
+  `-n homelab` refuses it, so `tasks/main.yml` applies `headlamp-observability/` itself. A
+  `--dry-run` never shows it to the API server.
 
 ## Two identities, one grant
-Each binding in `templates/rbac.yaml.j2` names two subjects: the ServiceAccount, and the
-`headlamp_k8s_oidc_group` Group. They are deliberately the same grant twice.
+Each binding in `templates/rbac.yaml.j2` and `templates/rbac-observability.yaml.j2` names two
+subjects: the ServiceAccount, and the `headlamp_k8s_oidc_group` Group. They are deliberately the same grant twice.
 
 - **The Group is what the dashboard uses since 2026-09-10.** Under OIDC, Headlamp does not
   authorise: it forwards the browser's `id_token` and the **API server** decides. The login
@@ -94,6 +97,7 @@ trust in Authelia (`roles/setup/k3s`), the Authelia client, and these defaults.
   re-reads the ServiceAccount token.
 
 ## Editing
-- Manifests: everything under `templates/`. Two carry a rule of their own —
-  `rbac.yaml.j2` holds the cluster identity plus the Prometheus proxy Role, and
-  `oidc-secret.yaml.j2` renders under `no_log` through the manifests role's secret list.
+- Manifests: everything under `templates/`. Three carry a rule of their own.
+  `rbac.yaml.j2` holds the cluster identity, `rbac-observability.yaml.j2` holds the Prometheus
+  proxy Role, and `oidc-secret.yaml.j2` renders under `no_log` through the manifests role's
+  secret list.
