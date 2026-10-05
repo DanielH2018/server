@@ -46,8 +46,7 @@ _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
 
 # Kinds that must never be pruned by this mechanism — see the module docstring.
 _FORBIDDEN_PRUNE_KINDS = ("Secret", "PersistentVolumeClaim")
-# The roles armed so far. A role arming the prune is added here on purpose, so the census
-# below fails on an arming nobody meant.
+# The armed roles, each added on purpose, so the census below fails on an unmeant arming.
 _ARMED_ROLES = frozenset(
     {
         "registry",
@@ -99,6 +98,7 @@ _ARMED_ROLES = frozenset(
         "monitor-bridge",
         "homelab-mcp",
         "media-volume",
+        "netpol-baseline",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.

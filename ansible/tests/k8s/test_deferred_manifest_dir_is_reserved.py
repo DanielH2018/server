@@ -32,6 +32,7 @@ from test_no_role_stages_files_in_a_pruned_manifest_dir import (
 KNOWN_DEFERRED_DIRS = {
     "pihole-instance-2": "pihole",
     "headlamp-observability": "headlamp",
+    "netpol-baseline-observability": "netpol-baseline",
 }
 
 
