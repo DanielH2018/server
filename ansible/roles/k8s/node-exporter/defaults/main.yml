@@ -1,6 +1,6 @@
 ---
 # Host metrics as a DaemonSet, covering every k3s node. Renovate tracks the pin.
-node_exporter_k8s_image: prom/node-exporter:v1.12.1
+node_exporter_k8s_image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
