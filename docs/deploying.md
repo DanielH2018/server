@@ -163,6 +163,25 @@ with `Delete`. Land the entry before the next `k3s-bringup.yml --tags longhorn` 
 apply returns a volume in no routing list to the `default` group, and a volume outside
 `k3s_longhorn_r2_volumes` then backs up daily to B2.
 
+The teardown does not delete the volume's existing Longhorn backups. Once the volume is gone,
+no RecurringJob selects it, so no `retain` ever prunes them. To finish the retirement, read
+which target holds them from the BackupVolume's `spec.backupTargetName`:
+
+```bash
+kubectl -n longhorn-system get backupvolumes.longhorn.io | grep <pvc-name>
+```
+
+- On `default` (B2), drain the whole prefix through the B2 API with
+  `ansible/prune_backups.yml -e prune_mode=b2-drain -e prune_volumes=<pvc-name>`. A dry run
+  comes first, then the same command with `-e prune_apply=true`. The run costs one store
+  listing, and its target sync drops the BackupVolume and Backup CRs.
+- On `r2`, `b2-drain` cannot reach the backups. Use
+  `scripts/backup/longhorn_reap_orphan_backups.py --apply-deleted-volumes`, which deletes a
+  deleted volume's backups through Longhorn.
+
+Either way, check `probe.py b2-spend` for the day's Class C headroom before the apply. The
+healthchecks-config retirement (#3499) left its B2 backups behind this way (#3519).
+
 ## The deploy queue page
 
 `deploy.local.<domain>` (Authelia two-factor) shows the four things "the queue" means here:
