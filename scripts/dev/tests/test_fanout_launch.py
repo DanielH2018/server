@@ -162,6 +162,14 @@ def test_the_systemd_run_command_is_a_transient_user_service_reading_the_brief()
     assert "claude -p --model opus --permission-mode auto --output-format json" in cmd
 
 
+def test_the_unit_finds_claude_and_uv_under_the_launching_users_home():
+    """The agent user's home is /var/lib/claude, and it cannot read /home/ubuntu (#3627)."""
+    cmd = systemd_run_command("b", home="/var/lib/claude")
+    assert "-p Environment=PATH=/var/lib/claude/.local/bin:" in cmd
+    assert "-p Environment=HOME=/var/lib/claude " in cmd
+    assert "/home/ubuntu/.local" not in cmd
+
+
 def test_the_unit_is_bounded_by_a_runtime_cap_and_a_budget():
     """Nothing bounded a headless batch's wall clock or its spend."""
     cmd = systemd_run_command("b")

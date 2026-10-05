@@ -201,7 +201,8 @@ get past it. A failed batch is cleaned, never re-placed elsewhere.
 
 **Abandoning a batch whose branch never merged takes one more step.** `clean` keeps an
 unmerged tree by design and records no removal, so the refusal above stands until the branch
-is gone. On that batch's host, from `/home/ubuntu/server`, in this order — git refuses
+is gone. On that batch's host, from the launching user's checkout (`/home/ubuntu/server`, or
+`/var/lib/claude/server` for the `claude` agent user), in this order — git refuses
 `branch -D` while the worktree is still registered, and `launch` locked it:
 
 ```bash

@@ -22,7 +22,7 @@ from fanout_lib.launch import (
     systemd_run_command,
     unit_name,
 )
-from fanout_lib.target import SERVER_TARGET, Target, resolve
+from fanout_lib.target import SERVER_TARGET, Target, resolve, server_checkout
 from lib.git_testing import git, init_repo, scrub_process_git_env
 from lib.proc_testing import run as proc_run
 from lib.repo_paths import REPO as REPO_ROOT
@@ -39,6 +39,14 @@ def test_a_register_findings_can_judge_resolves_to_its_checkout_and_default_bran
     assert target.checkout == str(Path.home() / ".local/share/chezmoi")
     assert target.base == "origin/main" and target.base_branch == "main"
     assert resolve("DanielH2018/server") is SERVER_TARGET
+
+
+def test_the_server_checkout_is_the_agent_users_clone_when_its_profile_names_one():
+    """The agent user cannot read /home/ubuntu; its profile exports RUN_HOOK_PROJECT_DIR."""
+    clone = {"RUN_HOOK_PROJECT_DIR": "/var/lib/claude/server"}
+    assert server_checkout(clone) == "/var/lib/claude/server"
+    assert server_checkout({}) == "/home/ubuntu/server"
+    assert server_checkout({"RUN_HOOK_PROJECT_DIR": ""}) == "/home/ubuntu/server"
 
 
 def test_a_repo_with_no_register_or_no_default_branch_is_refused():
