@@ -434,7 +434,8 @@ fi
 # end-of-file-fixer rewrote both generated files until the generators were fixed to emit
 # exactly one trailing newline. Vale is scoped to exclude docs/reference/ for the same
 # reason. Before adding any hook that matches a path staged above, check it cannot fail on
-# generator output.
+# generator output. `static-ratchet-tests` matches the weights table; it runs four files of
+# the suite, which this script runs green just before the commit.
 # No `trap ... EXIT` here any more: on_exit above already removes this file, and a second trap
 # on the same signal would REPLACE that one and take the push with it.
 LOG="$(mktemp)"

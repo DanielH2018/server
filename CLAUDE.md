@@ -261,8 +261,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 
 ## Pre-commit Hooks
 The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
-Run `prek run --all-files` to check before committing. **That does not run the tests.** No
-hook runs the suite, neither at commit nor at push. CI's `pytest` job runs it whole on every
+Run `prek run --all-files` to check before committing. **That does not run the suite.** No
+hook runs it, neither at commit nor at push. The one exception is `static-ratchet-tests`: at
+commit time it runs four static ratchet and lock test files, which caused most of the PR reds
+that the author's own code did not (#3605). CI's `pytest` job runs the suite whole on every
 PR, and `land.sh` waits on that job before it merges. To see a red test before CI does, run
 `uv run pytest` yourself. A pre-push hook that re-ran the suite was removed on 2026-10-02: it
 cost 89s on an idle daniel-box and 235s under load on every push, for a verdict CI repeats
