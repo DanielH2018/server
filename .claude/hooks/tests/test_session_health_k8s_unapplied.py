@@ -56,7 +56,7 @@ def test_an_unapplied_role_names_the_service_the_age_and_the_deploy():
     assert "`authelia`" in line
     assert "10 min ago" in line
     assert './scripts/deploy.sh --tags "authelia"' in line
-    assert "gitops_state.py clear-k8s-unapplied authelia" in line
+    assert "gitops_state.py clear-owed k8s_unapplied authelia" in line
 
 
 def test_an_absent_or_garbled_marker_is_clean():

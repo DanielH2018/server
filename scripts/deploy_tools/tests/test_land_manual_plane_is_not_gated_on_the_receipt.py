@@ -81,7 +81,7 @@ def test_an_unroutable_setup_role_is_told_to_clear_the_deployers_marker():
     """
     note = land_tags.plane_note(["ansible/roles/setup/k3s/defaults/main.yml"])
     assert "ansible/k3s-bringup.yml --tags k3s" in note
-    assert "clear-manual-plane" in note
+    assert "clear-owed manual_plane" in note
 
 
 def test_a_bringup_playbook_is_not_told_to_clear_a_marker():
@@ -99,4 +99,4 @@ def test_a_bringup_playbook_is_not_told_to_clear_a_marker():
     assert "ansible/k3s-bringup.yml --tags k3s" in note, (
         "the hand command is still printed"
     )
-    assert "clear-manual-plane" not in note
+    assert "clear-owed manual_plane" not in note

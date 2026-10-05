@@ -68,16 +68,15 @@ from gitops_markers import (
     CONTENTION_PAGE_SECONDS,
     MARKERS,
     STATE_DIR,
-    k8s_deferred_clear_cmd,
     k8s_deferred_deploy_cmd,
-    k8s_unapplied_clear_cmd,
     parse_contention,
-    manual_plane_clear_cmd,
     maximal_apply_warning,
+    owed_clear_cmd,
 )
 from gitops_ledger import (
     OWED_K8S_DEFERRED,
     OWED_K8S_UNAPPLIED,
+    OWED_MANUAL_PLANE,
     k8s_deferred_entries,
     k8s_unapplied_entries,
     manual_plane_entries,
@@ -229,7 +228,7 @@ def manual_plane_lines(owed, now):
         lines.append(
             f"  ✗ the GitOps deployer merged a change to the `{e.role}` setup role "
             f"{_age_phrase(now - e.at)} ago and cannot apply it itself — {how}, then "
-            f"`{manual_plane_clear_cmd(e.role, selected)}`"
+            f"`{owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected)}`"
         )
     return lines
 
@@ -280,7 +279,7 @@ def k8s_deferred_lines(marker, now):
             f"  ✗ the GitOps deployer merged an image bump for `{entry.service}` "
             f"{_age_phrase(now - entry.at)} ago and deferred the deploy — "
             f"`{k8s_deferred_deploy_cmd([entry.service])}`, then "
-            f"`{k8s_deferred_clear_cmd(entry.service)}`"
+            f"`{owed_clear_cmd(OWED_K8S_DEFERRED, entry.service)}`"
         )
     return lines
 
@@ -307,7 +306,7 @@ def k8s_unapplied_lines(marker, now):
             f"  ✗ the GitOps deployer merged a k8s change for `{entry.subject}` "
             f"{_age_phrase(now - entry.at)} ago and never applies this role — "
             f"`{k8s_deferred_deploy_cmd([entry.subject])}`, or "
-            f"`{k8s_unapplied_clear_cmd(entry.subject)}` if it was reverted"
+            f"`{owed_clear_cmd(OWED_K8S_UNAPPLIED, entry.subject)}` if it was reverted"
         )
     return lines
 

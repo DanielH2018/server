@@ -47,7 +47,7 @@ def test_a_bump_deferred_too_long_pages_and_names_its_two_commands(cfg):
     assert not ok
     assert "sonarr" in msg
     assert './scripts/deploy.sh --tags "sonarr"' in msg
-    assert "clear-k8s-deferred sonarr" in msg
+    assert "clear-owed k8s_deferred sonarr" in msg
 
 
 def test_the_oldest_deferred_bump_decides(cfg):

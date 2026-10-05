@@ -227,7 +227,7 @@ def test_read_state_lists_a_deferred_bump_with_its_deploy_then_clear_is_clean(
     assert [r["service"] for r in rows] == ["radarr", "sonarr"]
     assert rows[0]["origin"] == "b" * 8
     assert rows[0]["deploy"] == './scripts/deploy.sh --tags "radarr"'
-    assert "clear-k8s-deferred radarr" in rows[0]["clear"]
+    assert "clear-owed k8s_deferred radarr" in rows[0]["clear"]
     assert reads.read_state(state_dir)["k8s_deferred_entries"] == rows
 
 

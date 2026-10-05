@@ -136,39 +136,15 @@ ALERT_SLOTS: frozenset[str] = frozenset(
 # (`common`).
 NO_PLAYBOOK = "none"
 
-# What an operator runs to clear one role's `manual_plane` ledger line after applying it by hand,
-# and to end a contention streak once the lock's holder is gone. The deployer's alert,
-# `land.sh`, monitor-bridge's page and the SessionStart banner all print these; one string
-# each so they cannot name four different commands.
-MANUAL_PLANE_CLEAR_CMD = (
-    "uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>"
-)
+# What an operator runs to clear one owed-ledger line after applying, deploying or reverting
+# what it names, and to end a contention streak once the lock's holder is gone. The deployer's
+# alert, `land.sh`, monitor-bridge's page, deploy-ui and the SessionStart banner all print
+# these; one string each so they cannot name different commands. `clear-owed` is the one
+# owed-ledger verb (#3544); every surface prints it (#3547).
+OWED_CLEAR_CMD = "uv run python scripts/deploy_tools/gitops_state.py clear-owed"
 CONTENTION_CLEAR_CMD = (
     "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
 )
-K8S_DEFERRED_CLEAR_CMD = (
-    "uv run python scripts/deploy_tools/gitops_state.py clear-k8s-deferred <service>"
-)
-
-
-K8S_UNAPPLIED_CLEAR_CMD = (
-    "uv run python scripts/deploy_tools/gitops_state.py clear-k8s-unapplied <service>"
-)
-
-
-def k8s_deferred_clear_cmd(service: str = "<service>") -> str:
-    """The clear command to print beside a deferred bump's own deploy command."""
-    return K8S_DEFERRED_CLEAR_CMD.replace("<service>", service)
-
-
-def k8s_unapplied_clear_cmd(service: str = "<service>") -> str:
-    """The clear command for a merged-and-unapplied k8s role change.
-
-    A hand clear exists even though the marker discharges itself off the release record: a
-    role whose change was reverted rather than deployed never gets a record naming it, and a
-    line nobody can drop is a banner entry forever.
-    """
-    return K8S_UNAPPLIED_CLEAR_CMD.replace("<service>", service)
 
 
 def k8s_deferred_deploy_cmd(services) -> str:
@@ -181,23 +157,33 @@ def k8s_deferred_deploy_cmd(services) -> str:
     return './scripts/deploy.sh --tags "%s"' % ",".join(sorted(services))
 
 
-def manual_plane_clear_cmd(role: str = "<role>", tags=()) -> str:
-    """The clear command to print beside an apply of `role` with `tags`.
+def owed_clear_cmd(cls: str, subject: str, tags=()) -> str:
+    """The `clear-owed` command for `subject`'s `cls` line, printed beside what discharges it.
 
-    A bare clear drops the role's whole line, which is right after a WHOLE-ROLE apply and
-    wrong after a narrowed one: a second range can widen the row between the moment a surface
-    prints the command and the moment an operator runs it, and the bare form would then drop
-    a tag nobody applied (#2349). So a narrowed apply prints `--applied <those tags>`, and the
-    clear keeps whatever the row has gained since.
+    For `manual_plane`, a bare clear drops the role's whole line, which is right after a
+    WHOLE-ROLE apply and wrong after a narrowed one: a second range can widen the row between
+    the moment a surface prints the command and the moment an operator runs it, and the bare
+    form would then drop a tag nobody applied (#2349). So a narrowed apply prints `--applied
+    <those tags>`, and the clear keeps whatever the row has gained since.
+
+    A `k8s_unapplied` line needs a hand clear even though the marker discharges itself off the
+    release record: a role whose change was reverted rather than deployed never gets a record
+    naming it, and a line nobody can drop is a banner entry forever.
 
     Args:
-        role: the role, under the `--tags` value that selects it. The default is the
-            placeholder the generic multi-role remediation prints.
-        tags: the tags the apply command names. Empty, or just the role tag, is a whole-role
-            apply and gets the bare form.
+        cls: the ledger class — `manual_plane`, `k8s_deferred` or `k8s_unapplied`. A string,
+            not `gitops_ledger`'s constant, because `gitops_ledger` imports this module.
+        subject: the setup role under the `--tags` value that selects it, or the k8s service.
+            A generic remediation passes the placeholder `<role>` or `<service>`.
+        tags: the tags the apply command names, `manual_plane` only. Empty, or just the role
+            tag, is a whole-role apply and gets the bare form.
     """
-    cmd = MANUAL_PLANE_CLEAR_CMD.replace("<role>", role)
-    applied = [t for t in sorted(frozenset(tags)) if t != role]
+    if tags and cls != "manual_plane":
+        # `gitops_state.py` refuses `--applied` for any other class, so printing it would
+        # hand the operator a command that fails.
+        raise ValueError(f"--applied applies to manual_plane only, not {cls}")
+    cmd = f"{OWED_CLEAR_CMD} {cls} {subject}"
+    applied = [t for t in sorted(frozenset(tags)) if t != subject]
     return f"{cmd} --applied {','.join(applied)}" if applied else cmd
 
 

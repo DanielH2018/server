@@ -63,7 +63,7 @@ def test_a_deferred_bump_names_the_service_the_deploy_and_the_clear():
     assert "`sonarr`" in line
     assert "10 min ago" in line
     assert './scripts/deploy.sh --tags "sonarr"' in line
-    assert "gitops_state.py clear-k8s-deferred sonarr" in line
+    assert "gitops_state.py clear-owed k8s_deferred sonarr" in line
 
 
 def test_a_bump_deferred_minutes_ago_is_already_reported():

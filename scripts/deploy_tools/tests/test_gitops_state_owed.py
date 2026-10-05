@@ -15,6 +15,7 @@ import pytest
 
 from deploy_tools import gitops_state
 from gitops_ledger import OWED_CLASSES, OWED_HOLD_PLANE
+from gitops_markers import owed_clear_cmd
 
 
 def _k3s(*tags: str) -> str:
@@ -128,6 +129,34 @@ def test_clear_owed_and_its_alias_drop_the_same_line(
         assert owed.read_text().splitlines() == kept, argv
     assert [j[0] for j in journal] == [subject, subject]
     assert [j[1] is not None for j in journal] == [True, True]
+
+
+@pytest.mark.parametrize(
+    ("cls", "subject", "tags", "ledger", "kept"),
+    [
+        ("manual_plane", "k3s", (), (K3S, COMMON), [COMMON]),
+        (
+            "manual_plane",
+            "k3s",
+            ("kubeconfig",),
+            (_k3s("kubeconfig"), COMMON),
+            [COMMON],
+        ),
+        ("k8s_deferred", "sonarr", (), (SONARR, RADARR), [RADARR]),
+        ("k8s_unapplied", "authelia", (), (AUTHELIA, SONARR), [SONARR]),
+    ],
+)
+def test_the_printed_clear_command_runs_and_drops_its_line(
+    tmp_path, run, cls, subject, tags, ledger, kept
+):
+    """Every surface prints `owed_clear_cmd`, so its argv must be one this parser accepts (#3547)."""
+    owed = tmp_path / "owed.jsonl"
+    owed.write_text("\n".join(ledger) + "\n")
+    printed = owed_clear_cmd(cls, subject, tags)
+    words = printed.split()
+    argv = words[words.index("scripts/deploy_tools/gitops_state.py") + 1 :]
+    assert run(tmp_path, *argv) == 0
+    assert owed.read_text().splitlines() == kept
 
 
 def test_clear_owed_refuses_hold_plane_and_changes_nothing(deferred, run, capsys):

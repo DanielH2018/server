@@ -89,7 +89,7 @@ def test_a_manual_plane_ledger_line_with_an_unknown_key_reaches_the_banner(tmp_p
     (line_text,) = manual_plane_lines(read_manual_plane_marker(str(tmp_path)), 4000)
     assert "`k3s` setup role 58 min ago" in line_text
     assert "--tags kubeconfig" in line_text
-    assert line_text.endswith("clear-manual-plane k3s --applied kubeconfig`")
+    assert line_text.endswith("clear-owed manual_plane k3s --applied kubeconfig`")
 
 
 def test_an_absent_ledger_reads_as_nothing_pending(tmp_path):

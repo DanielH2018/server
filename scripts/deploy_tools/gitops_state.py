@@ -4,9 +4,9 @@
 Two subcommands. `clear-owed <class> <subject>` drops one line of `/var/lib/gitops-deploy/owed.jsonl`, the deployer's owed-work
 ledger, for any class an operator may clear: `manual_plane`, `k8s_deferred` or `k8s_unapplied` (#3544). `hold_plane` is not one of
 them, because a hold clears only once an apply covers each plane it lists. `clear-manual-plane <role>`, `clear-k8s-deferred
-<service>` and `clear-k8s-unapplied <service>` are aliases for `clear-owed` with that class. They stay because the remediations
-monitor-bridge, deploy-ui, `land.sh` and the alerts print still name them, and those copies redeploy on their own schedules. The
-classes are described below under their alias names.
+<service>` and `clear-k8s-unapplied <service>` are aliases for `clear-owed` with that class. Every surface prints `clear-owed`
+(`gitops_markers.owed_clear_cmd`, #3547); the aliases stay until the monitor-bridge and deploy-ui copies that printed them are
+redeployed, since those redeploy on their own schedules. The classes are described below under their alias names.
 
 `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the marker the deployer writes while
 consecutive ticks defer on one busy service lock; the tick clears it itself on its next run that is not deferred, so this is for a
@@ -84,7 +84,7 @@ from deploy_changes import setup_role_tag
 from deploy_locks import TREE_LOCK, take
 from deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
 from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, OWED_MANUAL_PLANE
-from gitops_markers import manual_plane_clear_cmd, maximal_apply_warning
+from gitops_markers import maximal_apply_warning, owed_clear_cmd
 
 # Seconds to wait for it. Every other waiter on this lock waits 3000 (the census in the
 # deployer's test_gitops_deploy_timeout_budgets.py), because those are unattended jobs that
@@ -299,7 +299,7 @@ def clear_manual_plane(
             "so the whole role is "
             f"pending, not just {','.join(sorted(applied))}. Apply the whole role"
             + (f" (WARNING: {warning})" if warning else "")
-            + f", then clear it without --applied: `{manual_plane_clear_cmd(key)}`"
+            + f", then clear it without --applied: `{owed_clear_cmd(OWED_MANUAL_PLANE, key)}`"
         )
         return 0
     if remaining:
@@ -394,7 +394,8 @@ def clear_k8s_owed(
 # covers each plane it lists.
 CLEARABLE_CLASSES = (OWED_MANUAL_PLANE, OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED)
 
-# The per-class verbs `clear-owed` replaces, kept as aliases while printed remediations name them.
+# The per-class verbs `clear-owed` replaces, kept as aliases until every running copy of a
+# printed remediation names `clear-owed` (#3547).
 ALIAS_CLASSES = {
     "clear-manual-plane": OWED_MANUAL_PLANE,
     "clear-k8s-deferred": OWED_K8S_DEFERRED,

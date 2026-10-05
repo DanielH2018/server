@@ -33,7 +33,7 @@ def test_a_ledger_line_with_an_unknown_key_pages_with_its_tags(cfg):
     ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
     assert not ok
     assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
-    assert msg.endswith("clear-manual-plane k3s --applied kubeconfig`")
+    assert msg.endswith("clear-owed manual_plane k3s --applied kubeconfig`")
 
 
 def test_a_fresh_ledger_role_is_ok(cfg):
@@ -50,7 +50,7 @@ def test_a_ledger_line_missing_its_class_keys_still_pages_for_the_whole_role(cfg
     ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
     assert not ok
     assert "apply the role by hand, then `" in msg
-    assert msg.endswith("clear-manual-plane k3s`")
+    assert msg.endswith("clear-owed manual_plane k3s`")
 
 
 def test_other_classes_in_the_ledger_page_nothing(cfg):
@@ -76,7 +76,7 @@ def test_a_k8s_deferred_ledger_line_with_an_unknown_key_pages(cfg):
     ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
     assert not ok
     assert msg.startswith("sonarr merged but not deployed for 7h")
-    assert msg.endswith("clear-k8s-deferred sonarr`")
+    assert msg.endswith("clear-owed k8s_deferred sonarr`")
 
 
 def test_a_k8s_deferred_bump_on_two_lines_dates_from_the_older(cfg):
@@ -100,7 +100,7 @@ def test_check_gitops_status_reads_the_ledger_off_the_mount(tmp_path, cfg):
     (tmp_path / "owed.jsonl").write_bytes(torn + b"\n" + line.encode())
     ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
-    assert msg.endswith("clear-manual-plane k3s`")
+    assert msg.endswith("clear-owed manual_plane k3s`")
 
 
 def _held(subject: str, at: int, **extra) -> str:

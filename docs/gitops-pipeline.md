@@ -268,7 +268,7 @@ role left in the marker pages six hours later over work that is already live:
 
 ```bash
 ansible-playbook ansible/k3s-bringup.yml --tags k3s
-uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane k3s
+uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
 ```
 
 **After a NARROWED apply, pass `--applied` naming the tags you ran.** A bare clear drops the
@@ -279,7 +279,7 @@ merged, unapplied, and recorded nowhere:
 
 ```bash
 ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig
-uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane k3s --applied kubeconfig
+uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s --applied kubeconfig
 ```
 
 The clear then keeps the line and prints what is still pending. Every surface that prints a
@@ -686,7 +686,7 @@ stay).
       record of its own, so its line drops once every tag that runs it carries the change
       (`scripts/deploy_tools/shared_role_callers.py:caller_tags`, #2643). `deploy.sh` is otherwise
       invisible to the deployer, and without that discharge the marker would hold one
-      permanent line per routine landing. `gitops_state.py clear-k8s-unapplied <svc>` is the
+      permanent line per routine landing. `gitops_state.py clear-owed k8s_unapplied <svc>` is the
       hand clear, for a change that was REVERTED rather than applied, or for a shared role
       with a caller nothing can prove applied.
       A demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
@@ -696,7 +696,7 @@ stay).
       it; a failed broad apply keeps it, because that arm leaves the range merged. Any tick that
       deploys the service clears the line; an operator's own
       `./scripts/deploy.sh` is invisible to the deployer, so it clears with
-      `gitops_state.py clear-k8s-deferred <svc>`, the same shape `clear-manual-plane` has.
+      `gitops_state.py clear-owed k8s_deferred <svc>`, the same shape `clear-owed manual_plane` has.
     - **A failure writes `hold_sha` and adds `ansible/deploy.yml <bumps>` to `hold_plane`**,
       the run that failed, beside any plane already held. With no plane recorded, the next unrelated service deploy cleared the hold
       through `clear_service_hold`, and GitOps Deploy — Status went green over the failed pin.
@@ -789,7 +789,7 @@ stay).
     a plane in the same range that DID apply still records its own. Three things clear a line: applying the
     role's real playbook and tag through the tick (`DeployerState.clear_manual_plane_applied`,
     which no role reaches today because the tick runs neither playbook), an operator running
-    `uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>` (with
+    `uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane <role>` (with
     `--applied <tags>` after a narrowed apply, which drops only those tags and keeps the line
     for anything a later range added), and nothing else. The operator's clear writes one `logger -t gitops-state` line naming the role, the
     user, the cwd and the dropped line's origin SHA, so `journalctl -t gitops-state` says who
@@ -1253,7 +1253,7 @@ skips a line it cannot read, so a writer trusting only the parsed entries would 
 second line beside the torn one, and every clear and every discharge would leave that one
 standing forever. The repair happens at the next record or clear naming that service, so a
 torn line for a service nothing touches again stands until `gitops_state.py
-clear-k8s-unapplied <svc>`. A line naming no service is carried untouched: nothing can say
+clear-owed k8s_unapplied <svc>`. A line naming no service is carried untouched: nothing can say
 what it recorded.
 
 **Who writes, who discharges, who clears.**
@@ -1293,8 +1293,8 @@ what it recorded.
 - Any tick that deploys the service clears its `k8s_deferred` line
   (`deploy_defer.clear_applied_k8s_deferred`, called from both k8s deploy paths and from the
   plane-covered set). An operator's own `deploy.sh` is invisible to the deployer, so it clears
-  with `gitops_state.py clear-k8s-deferred <svc>`.
-- `gitops_state.py clear-k8s-unapplied <svc>` is the hand clear for `k8s_unapplied`, needed
+  with `gitops_state.py clear-owed k8s_deferred <svc>`.
+- `gitops_state.py clear-owed k8s_unapplied <svc>` is the hand clear for `k8s_unapplied`, needed
   for a change that was reverted rather than applied, or for a shared role with a caller
   nothing can prove applied: no tag runs the role, or a caller writes no release record.
 
@@ -1933,18 +1933,18 @@ under-sized.
 - **A `manual_plane` row's remediation names the NARROWEST tag the change needs** (#2307), from
   the `tags` key `deploy_defer.record` writes on the role's ledger line. A row is logged on every later
   tick, paged once per SHA, and cleared by the tick applying the role's real playbook or by
-  `gitops_state.py clear-manual-plane <role>`, with `--applied <tags>` after a narrowed apply.
+  `gitops_state.py clear-owed manual_plane <role>`, with `--applied <tags>` after a narrowed apply.
 - **The `k8s_deferred` and `k8s_unapplied` ledger classes** each hold one entry per service
   as a JSON line in `owed.jsonl`: the first for a budget deferral, which `gitops_status` pages
   on at six hours; the second for the hand-edited and denylisted classes, which never pages
   and which the SessionStart banner reads. The hand clears are
-  `gitops_state.py clear-k8s-deferred <svc>` and `clear-k8s-unapplied <svc>`.
+  `gitops_state.py clear-owed k8s_deferred <svc>` and `clear-owed k8s_unapplied <svc>`.
 - **`gitops_state.py clear-owed <class> <subject>` is the one hand clear for every owed
   class an operator may clear** (#3544): `manual_plane`, `k8s_deferred` and `k8s_unapplied`.
-  It refuses `hold_plane`, which clears only once an apply covers it. `clear-manual-plane`,
-  `clear-k8s-deferred` and `clear-k8s-unapplied` are aliases for it. They stay while the
-  commands monitor-bridge, deploy-ui and the alerts print still name them, since those copies
-  redeploy on their own schedules. On the deployer side, `DeployerState` has one `record_owed`,
+  It refuses `hold_plane`, which clears only once an apply covers it. Every surface prints it
+  through `gitops_markers.owed_clear_cmd` (#3547). The per-class verbs it replaced remain
+  as aliases in `gitops_state.py`'s `ALIAS_CLASSES` until the monitor-bridge and deploy-ui
+  copies that printed them are redeployed. On the deployer side, `DeployerState` has one `record_owed`,
   `clear_owed` and `owed_pending` trio for the two k8s classes, keyed by class.
 - **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True)`):
   `last_run` is still written, so GitOps-Alive stays green, and the page is throttled to twice per

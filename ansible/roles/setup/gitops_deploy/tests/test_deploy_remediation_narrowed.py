@@ -253,7 +253,7 @@ def test_a_narrowed_apply_prints_a_clear_that_names_what_it_applied():
     merged, unapplied and recorded nowhere.
     """
     cmd = manual_plane_remediation({"k3s"}, {"k3s": frozenset({"kubeconfig"})})
-    assert "clear-manual-plane k3s --applied kubeconfig" in cmd
+    assert "clear-owed manual_plane k3s --applied kubeconfig" in cmd
 
 
 def test_a_whole_role_apply_prints_the_bare_clear():
@@ -263,7 +263,7 @@ def test_a_whole_role_apply_prints_the_bare_clear():
     for a tag the operator just ran.
     """
     cmd = manual_plane_remediation({"k3s"}, {})
-    assert "clear-manual-plane k3s`" in cmd
+    assert "clear-owed manual_plane k3s`" in cmd
     assert "--applied" not in cmd
 
 
@@ -276,6 +276,6 @@ def test_two_roles_print_one_clear_each_and_only_the_narrowed_one_says_applied()
     cmd = manual_plane_remediation(
         {"k3s", "common"}, {"k3s": frozenset({"kubeconfig"})}
     )
-    assert "clear-manual-plane common && " in cmd
-    assert "clear-manual-plane k3s --applied kubeconfig`" in cmd
+    assert "clear-owed manual_plane common && " in cmd
+    assert "clear-owed manual_plane k3s --applied kubeconfig`" in cmd
     assert "<" not in cmd.rsplit(", then ", 1)[-1], "the clear names no placeholder"

@@ -65,7 +65,8 @@ ALLOWED: dict[str, set[str] | None] = {
     # names, and keeping this module free of the deployer's config is what lets a test drive
     # it directly.
     "deploy_locks": set(),
-    "deploy_remediation": {"deploy_changes", "gitops_markers"},
+    # `gitops_ledger` for the `manual_plane` class name its clear command prints (#3547).
+    "deploy_remediation": {"deploy_changes", "gitops_ledger", "gitops_markers"},
     # The broad arm's two deferral shapes — park, or record in `manual_plane`. It reaches the
     # alert transport, so it sits with `deploy_handlers` rather than among the pure modules.
     "deploy_defer": {

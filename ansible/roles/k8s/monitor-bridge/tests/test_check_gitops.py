@@ -263,7 +263,7 @@ def test_a_role_pending_too_long_pages_and_names_it(cfg):
     )
     assert not ok
     assert "k3s" in msg
-    assert "clear-manual-plane" in msg
+    assert "clear-owed manual_plane" in msg
 
 
 def test_the_oldest_pending_role_decides(cfg):
@@ -293,9 +293,9 @@ def test_a_narrowed_row_pages_the_clear_that_names_what_it_applied(cfg):
     )
     assert not ok
     assert "apply the role by hand, then `" in msg  # `common` has no playbook
-    assert "clear-manual-plane common`" in msg
+    assert "clear-owed manual_plane common`" in msg
     assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
-    assert msg.endswith("clear-manual-plane k3s --applied kubeconfig`")
+    assert msg.endswith("clear-owed manual_plane k3s --applied kubeconfig`")
     assert "<role>" not in msg
 
 
@@ -305,7 +305,7 @@ def test_a_role_with_no_row_pages_the_bare_clear(cfg):
         cfg, None, now=1000.0 + 7 * 3600, owed=_K3S_PENDING
     )
     assert not ok
-    assert msg.endswith("clear-manual-plane k3s`")
+    assert msg.endswith("clear-owed manual_plane k3s`")
 
 
 def test_an_unparseable_manual_plane_line_is_ok(cfg):
@@ -323,7 +323,7 @@ def test_a_hold_wins_over_a_pending_role(cfg):
     )
     assert not ok
     assert "held" in msg
-    assert "clear-manual-plane" not in msg
+    assert "clear-owed manual_plane" not in msg
 
 
 def test_a_stale_behind_marker_wins_over_a_pending_role(cfg):
@@ -343,7 +343,7 @@ def test_a_stale_behind_marker_wins_over_a_pending_role(cfg):
     )
     assert not ok
     assert "behind origin" in msg
-    assert "clear-manual-plane" not in msg
+    assert "clear-owed manual_plane" not in msg
 
 
 def test_check_gitops_status_reads_the_manual_plane_class_off_the_mount(tmp_path, cfg):

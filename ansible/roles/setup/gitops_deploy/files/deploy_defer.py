@@ -47,7 +47,7 @@ from deploy_state import (
     OWED_K8S_UNAPPLIED,
     DeployerState,
 )
-from gitops_markers import k8s_deferred_clear_cmd, k8s_deferred_deploy_cmd
+from gitops_markers import k8s_deferred_deploy_cmd, owed_clear_cmd
 from deploy_tick_types import TickTarget
 from deploy_toolbox import DeployTools
 
@@ -340,9 +340,9 @@ def clear_applied_k8s_deferred(state: DeployerState, services) -> None:
     """Drop the `k8s_deferred` lines an apply of `services` covers, and say so.
 
     The deployer's own reverse of `DeployerState.record_owed`, called wherever a tick
-    applies a k8s service. The operator's reverse is `gitops_state.py clear-k8s-deferred`,
+    applies a k8s service. The operator's reverse is `gitops_state.py clear-owed k8s_deferred`,
     which is what a hand deploy needs: the deployer cannot see a `deploy.sh` somebody else ran,
-    the same gap `clear-manual-plane` fills for a pending setup role.
+    the same gap `clear-owed manual_plane` fills for a pending setup role.
     """
     cleared = state.clear_owed(OWED_K8S_DEFERRED, services)
     if cleared:
@@ -361,7 +361,8 @@ def log_k8s_deferred(state: DeployerState) -> None:
         return
     log(
         f"k8s_deferred pending: {', '.join(services)} — merged, not applied. Deploy: "
-        f"{k8s_deferred_deploy_cmd(services)}, then {k8s_deferred_clear_cmd()}"
+        f"{k8s_deferred_deploy_cmd(services)}, "
+        f"then {owed_clear_cmd(OWED_K8S_DEFERRED, '<service>')}"
     )
 
 
@@ -427,7 +428,7 @@ def discharge_k8s_unapplied(
     That is deliberately NOT the question `probe.py releases --stale-only` asks: this one
     needs no role paths and no deploy-plane narrowing, so the two cannot drift into
     disagreeing. It discharges an operator's own `deploy.sh`, which the
-    deployer has no other way to see — the gap `clear-manual-plane` fills by hand one plane
+    deployer has no other way to see — the gap `clear-owed manual_plane` fills by hand one plane
     over.
 
     A record that is absent, unreadable or names a commit this checkout cannot resolve KEEPS

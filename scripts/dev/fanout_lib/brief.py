@@ -148,7 +148,7 @@ Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--re
 ### A verdict that leaves a host apply owed
 `needs-manual-apply` and `blocked` mean the PR merged and an apply is still owed on a host.
 `land.sh` has already printed the exact command — the playbook line, the `deploy.sh --tags`
-line, the remaining-hosts note, and any `gitops_state.py clear-manual-plane <role>`. Read the
+line, the remaining-hosts note, and any `gitops_state.py clear-owed manual_plane <role>`. Read the
 deployer's own markers for what is still pending:
 ```bash
 cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/owed.jsonl

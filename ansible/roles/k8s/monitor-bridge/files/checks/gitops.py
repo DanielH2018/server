@@ -22,14 +22,19 @@ from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     MARKERS,
     NO_PLAYBOOK,
-    k8s_deferred_clear_cmd,
     k8s_deferred_deploy_cmd,
-    manual_plane_clear_cmd,
     maximal_apply_warning,
+    owed_clear_cmd,
     parse_behind,
     parse_contention,
 )
-from gitops_ledger import held_planes, k8s_deferred_entries, manual_plane_entries
+from gitops_ledger import (
+    OWED_K8S_DEFERRED,
+    OWED_MANUAL_PLANE,
+    held_planes,
+    k8s_deferred_entries,
+    manual_plane_entries,
+)
 from verdicts.service import gitops_alive
 
 
@@ -65,7 +70,9 @@ def _apply_and_clear(pending, narrow) -> str:
                 " (WARNING: %s)" % warning if warning else "",
             )
         )
-        parts.append("%s, then `%s`" % (how, manual_plane_clear_cmd(role, selected)))
+        parts.append(
+            "%s, then `%s`" % (how, owed_clear_cmd(OWED_MANUAL_PLANE, role, selected))
+        )
     return "; ".join(parts)
 
 
@@ -233,7 +240,7 @@ def gitops_status(
                     age_s / 3600,
                     max_behind_s / 3600,
                     k8s_deferred_deploy_cmd(services),
-                    k8s_deferred_clear_cmd(services[0]),
+                    owed_clear_cmd(OWED_K8S_DEFERRED, services[0]),
                 )
             )
     return True, "no held deploy"

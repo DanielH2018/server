@@ -156,7 +156,7 @@ Say which of these applies, then stop:
   change itself, but not the bring-up playbooks: those run by hand by construction. If it is
   another session's, clearing it means applying their change; name it and stop.
 - A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer
-  cannot apply. The role needs its playbook by hand, then `gitops_state.py clear-manual-plane
+  cannot apply. The role needs its playbook by hand, then `gitops_state.py clear-owed manual_plane
   <role>`; the `land-after-merge` skill has the `--applied` form for a narrowed apply. Another
   session's is theirs to clear.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and

@@ -10,24 +10,17 @@ apart in what order they name the ff-merge and the playbook.
 from __future__ import annotations
 
 from deploy_changes import ChangeSet, setup_role_playbook, setup_role_tag
-from gitops_markers import (  # noqa: F401
-    CONTENTION_CLEAR_CMD,
-    MANUAL_PLANE_CLEAR_CMD,
-    MAXIMAL_ROLE_GATED_TAGS,
-    manual_plane_clear_cmd,
-)
+from gitops_ledger import OWED_MANUAL_PLANE
+from gitops_markers import MAXIMAL_ROLE_GATED_TAGS, owed_clear_cmd
 
 # The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
 # real one from config.env and passes it; the repo-side callers (deploy_tags, land_tags) run
 # against this repo, where it is master.
 BRANCH_DEFAULT = "master"
 
-# The two commands an operator runs against the markers — clearing one role's `manual_plane`
-# line after applying it by hand, and ending a contention streak once the lock's holder is
-# gone — live in `gitops_markers` beside the markers they act on, so monitor-bridge and the
-# SessionStart banner print the same string from their own copies of that module. Imported
-# above and re-exported because `deploy_logic` re-exports this module, and `land.sh` reads
-# them through it.
+# The owed-ledger clear command (`owed_clear_cmd`) lives in `gitops_markers` beside the
+# markers it acts on, so monitor-bridge and the SessionStart banner print the same string from
+# their own copies of that module.
 
 
 # A rollback re-run must fit inside the unit's TimeoutStartSec alongside the forward run and
@@ -177,9 +170,13 @@ def manual_plane_clear_for(
     narrow_tags = narrow_tags or {}
     roles = sorted(setup_roles or ())
     if not roles:
-        return MANUAL_PLANE_CLEAR_CMD
+        return owed_clear_cmd(OWED_MANUAL_PLANE, "<role>")
     return " && ".join(
-        manual_plane_clear_cmd(setup_role_tag(role), _narrowed_tags(role, narrow_tags))
+        owed_clear_cmd(
+            OWED_MANUAL_PLANE,
+            setup_role_tag(role),
+            _narrowed_tags(role, narrow_tags),
+        )
         for role in roles
     )
 
