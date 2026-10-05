@@ -10,6 +10,8 @@ or a log could read.
 Run: uv run pytest ansible/tests/setup/test_agent_github_identity.py
 """
 
+import re
+
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
@@ -111,3 +113,58 @@ def test_switching_the_agent_user_off_removes_its_token() -> None:
         "state": "absent",
     }
     assert task["when"] == "not claude_code_agent_user_enabled"
+
+
+def enter_worktree_branch(name: str) -> str:
+    """The branch EnterWorktree gives a worktree: `/` becomes `+` (observed 2026-10-05)."""
+    return "worktree-" + name.replace("/", "+")
+
+
+def fence_lets_push(branch: str) -> bool:
+    """Whether a branch falls in one of the agent branch fence's exclusions."""
+    defaults = yaml_fast.safe_load(
+        (ANSIBLE / "roles/setup/gitops_deploy/defaults/main.yml").read_text()
+    )
+    globs = defaults["gitops_deploy_fence_ruleset_exclude"]
+    assert globs, "the fence declares no exclusions"
+    return any(
+        re.fullmatch(re.escape(g).replace(r"\*\*", ".*"), f"refs/heads/{branch}")
+        for g in globs
+    )
+
+
+def instructed_worktree_name(rendered: str) -> str:
+    """The worktree name the agent's CLAUDE.md tells a session to pass to EnterWorktree."""
+    found = re.findall(r"call `EnterWorktree` with the name\s+`([^`]+)`", rendered)
+    assert len(found) == 1, f"no single EnterWorktree example in:\n{rendered}"
+    return found[0]
+
+
+def test_the_agents_claude_md_names_worktrees_whose_branches_the_fence_lets_it_push() -> (
+    None
+):
+    task = named(
+        tasks("agent_github.yml"),
+        "Tell the agent user's sessions the branch names its account may push",
+    )
+    assert task["ansible.builtin.template"]["dest"] == (
+        "{{ claude_code_agent_user_home }}/.claude/CLAUDE.md"
+    )
+    name = instructed_worktree_name(
+        render_setup_text("claude_code", "agent-user-claude-md.j2")
+    )
+    assert name == "claude/containers-role-cleanup"
+    assert fence_lets_push(enter_worktree_branch(name))
+
+
+def test_a_prefix_outside_the_fence_is_flagged() -> None:
+    rendered = render_setup_text(
+        "claude_code",
+        "agent-user-claude-md.j2",
+        {"claude_code_agent_worktree_prefix": "agent"},
+    )
+    assert not fence_lets_push(
+        enter_worktree_branch(instructed_worktree_name(rendered))
+    )
+    # The bare slug the repo CLAUDE.md asks of the operator's sessions.
+    assert not fence_lets_push(enter_worktree_branch("containers-role-cleanup"))
