@@ -132,7 +132,7 @@ uptime_kuma_k8s_status_page_slug: containers
 # Same build matrix and tag as uptime_kuma_k8s_autokuma_image above (.github/workflows/docker-build-push.yml
 # builds ghcr.io/bigboot/kuma from Dockerfile.cli) — the CLI and the sidecar speak to the same
 # Kuma through the same kuma-client, so they move together.
-uptime_kuma_k8s_cli_image: ghcr.io/bigboot/kuma:2.1.0-rc.2
+uptime_kuma_k8s_cli_image: ghcr.io/bigboot/kuma:2.1.0-rc.2@sha256:08ac3d0bc4b1e9efc7a2ace3fd69152ac8fa4f6eb418cf7fba37c684d124def6
 # Quarter-hourly. Membership only changes on a deploy, and a run that finds nothing to do costs
 # one pod and writes nothing at all.
 # The render and heartbeat stages are stdlib Python; per-role pin like every other
