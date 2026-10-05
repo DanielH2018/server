@@ -1,6 +1,6 @@
 ---
 # Pinned like the observability Loki (Renovate-tracked).
-loki_homelab_k8s_image: grafana/loki:3.7.8
+loki_homelab_k8s_image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
 # The cluster log shipper.
 loki_homelab_k8s_alloy_image: grafana/alloy:v1.20.0@sha256:f111cce835516c5f99166342be7038496b52ced16667be5a11e19258a3e4cd30
 
