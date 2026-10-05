@@ -11,7 +11,7 @@ import pytest
 
 import land
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools
-from deploy_tools.land_lib import merge
+from deploy_tools.land_lib import merge, policy
 from deploy_tools.land_lib.options import PRIMARY_ENV, REQUIRE_BRANCH_PREFIX_ENV
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -215,3 +215,93 @@ def test_the_verdict_file_reads_pending_until_the_landing_ends(monkeypatch, tmp_
     assert seen and set(seen) == {"PENDING\n"}
     (line,) = verdict.read_text().splitlines()
     assert line.startswith("VERDICT: ")
+
+
+APPROVER = "operator-login"
+_CHANGES_AN_APPROVAL_PATH = [
+    {"filename": "ansible/roles/setup/claude_code/defaults/main.yml"}
+]
+
+
+def _review(state, at="2026-10-05T20:00:00Z", commit=HEAD, login=APPROVER):
+    return {
+        "user": {"login": login},
+        "state": state,
+        "commit_id": commit,
+        "submitted_at": at,
+    }
+
+
+def _arm_approval_path(landing, tmp_path, reviews, **opts):
+    fakes = _fakes(pr_files=_CHANGES_AN_APPROVAL_PATH, pr_reviews=reviews)
+    return _arm(landing, tmp_path, fakes, **opts)
+
+
+def test_without_an_approver_no_review_is_read(landing, tmp_path):
+    fakes = _fakes(pr_files=_CHANGES_AN_APPROVAL_PATH, pr_reviews=[_review("APPROVED")])
+    ln, calls = landing(
+        fakes,
+        arm_merge=True,
+        await_merge=True,
+        require_branch_prefix=PREFIX,
+        approval_paths=_approval_paths(tmp_path),
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert "need the operator's approval" in exc.value.error
+    assert not [c for c in calls if c[0] == "gh:reviews"]
+
+
+def test_the_approvers_approval_of_the_head_lifts_the_refusal(landing, tmp_path):
+    ln, calls = _arm_approval_path(
+        landing, tmp_path, [_review("APPROVED")], approver=APPROVER
+    )
+    assert ln.pinned_head == HEAD
+    assert [c for c in calls if c[0] == "gh:reviews"]
+
+
+# Each review history leaves the head unapproved by the approver, and the refusal says why.
+UNAPPROVED = {
+    "no review": ([], "has not approved it"),
+    "another login's approval": (
+        [_review("APPROVED", login="someone-else")],
+        "has not approved it",
+    ),
+    "an approval of an older commit": (
+        [_review("APPROVED", commit="a" * 40)],
+        "approved aaaaaaaa, not the head cccccccc",
+    ),
+    "changes requested after the approval": (
+        [_review("APPROVED"), _review("CHANGES_REQUESTED", at="2026-10-05T21:00:00Z")],
+        "latest review is changes_requested",
+    ),
+    # Listed out of order, so only the timestamps say which came last.
+    "changes requested after the approval, listed first": (
+        [_review("CHANGES_REQUESTED", at="2026-10-05T21:00:00Z"), _review("APPROVED")],
+        "latest review is changes_requested",
+    ),
+    "a dismissed approval": ([_review("DISMISSED")], "latest review is dismissed"),
+}
+
+
+@pytest.mark.parametrize("case", sorted(UNAPPROVED))
+def test_a_review_history_without_a_head_approval_still_refuses(
+    landing, tmp_path, case
+):
+    reviews, expected = UNAPPROVED[case]
+    with pytest.raises(Outcome) as exc:
+        _arm_approval_path(landing, tmp_path, reviews, approver=APPROVER)
+    assert "need the operator's approval" in exc.value.error
+    assert expected in exc.value.error
+
+
+@pytest.mark.parametrize(
+    "reviews",
+    [
+        [_review("APPROVED"), _review("COMMENTED", at="2026-10-05T21:00:00Z")],
+        [_review("CHANGES_REQUESTED", at="2026-10-05T19:00:00Z"), _review("APPROVED")],
+    ],
+    ids=["a comment after the approval", "an approval after changes requested"],
+)
+def test_the_approvers_latest_verdict_decides(reviews):
+    assert policy.approval_problem(reviews, APPROVER, HEAD) == ""

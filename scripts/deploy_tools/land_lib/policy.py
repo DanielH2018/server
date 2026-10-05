@@ -10,8 +10,12 @@ which is every interactive session and renovate-agent's lander:
 - `LAND_APPROVAL_PATHS`: a file of path prefixes, one per line. A PR changing a path under one
   of them is refused. Those are the paths that widen the agent's own authority: its roles, its
   credentials, the rulesets' drift checks and this code.
+- `LAND_APPROVER`: a GitHub login. A PR the approval list refuses lands anyway when this
+  login's latest review is an approval of the head SHA the checks read. A later
+  changes-requested or a dismissal undoes it, and so does a push: the approval then names an
+  older commit. Unset, nothing lifts the refusal.
 
-When either is set, the policy also refuses while the deployer holds a SHA, and `check`
+When either of the first two is set, the policy also refuses while the deployer holds a SHA, and `check`
 returns the head SHA it checked. `merge.py` pins every merge path to that SHA, so a push after
 the checks fails the merge rather than landing unchecked.
 
@@ -33,6 +37,9 @@ from deploy_tools.land_lib.outcome import say
 # GitHub's REST files endpoint returns at most 3000 files, so a PR at the cap may hide a path
 # the list names.
 FILE_CAP = 3000
+# The review states that change whether a PR is approved. A COMMENTED review after an
+# approval leaves it approved, as it does for GitHub's own review rule.
+VERDICT_STATES = ("APPROVED", "CHANGES_REQUESTED", "DISMISSED")
 
 
 def read_approval_paths(path: str) -> list[str]:
@@ -81,26 +88,48 @@ def approval_hits(files: list[dict[str, Any]], prefixes: list[str]) -> list[str]
     return hits
 
 
+def approval_problem(reviews: list[dict[str, Any]], approver: str, head: str) -> str:
+    """Why `approver` has not approved `head`; empty when their latest verdict approves it."""
+    theirs = sorted(
+        (
+            r
+            for r in reviews
+            if (r.get("user") or {}).get("login") == approver
+            and r.get("state") in VERDICT_STATES
+        ),
+        key=lambda r: r.get("submitted_at") or "",
+    )
+    if not theirs:
+        return f"{approver} has not approved it"
+    latest = theirs[-1]
+    if latest["state"] != "APPROVED":
+        return f"{approver}'s latest review is {latest['state'].lower()}"
+    approved = latest.get("commit_id") or ""
+    if approved != head:
+        return f"{approver} approved {approved[:8] or '<unknown>'}, not the head {head[:8]}"
+    return ""
+
+
 def _refuse(ln: Landing, why: str) -> NoReturn:
     ln.die(f"refused by the landing policy: {why}", 1)
 
 
-def _changed_files(ln: Landing) -> list[dict[str, Any]]:
-    """Every file the PR changes, from the REST endpoint, which also names a rename's old path."""
+def _list(ln: Landing, what: str) -> list[dict[str, Any]]:
+    """Every entry of the PR's REST `what` listing (`files`, `reviews`), across all pages."""
     try:
         pages = ln.tools.gh_json(
             "api",
             "--paginate",
             "--slurp",
-            f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/files",
+            f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/{what}",
         )
     except subprocess.CalledProcessError as exc:
-        _refuse(ln, f"could not list the PR's files: {exc.stderr.strip()}")
+        _refuse(ln, f"could not list the PR's {what}: {exc.stderr.strip()}")
     except subprocess.TimeoutExpired:
-        _refuse(ln, "could not list the PR's files: gh timed out")
+        _refuse(ln, f"could not list the PR's {what}: gh timed out")
     except ValueError:
-        _refuse(ln, "could not list the PR's files: unparseable gh output")
-    return [f for page in pages or [] for f in page]
+        _refuse(ln, f"could not list the PR's {what}: unparseable gh output")
+    return [entry for page in pages or [] for entry in page]
 
 
 def check(ln: Landing) -> str:
@@ -132,16 +161,21 @@ def check(ln: Landing) -> str:
             prefixes = read_approval_paths(o.approval_paths)
         except (OSError, ValueError) as exc:
             _refuse(ln, f"the approval-path list is unusable: {exc}")
-        files = _changed_files(ln)
+        # The REST listing, because it also names a rename's old path.
+        files = _list(ln, "files")
         if len(files) >= FILE_CAP:
             _refuse(ln, f"it changes {len(files)} files, at GitHub's listing cap")
         hits = approval_hits(files, prefixes)
         if hits:
-            _refuse(
-                ln,
-                "it changes paths that need the operator's approval: "
-                + ", ".join(hits),
+            why = (
+                f"it changes paths that need the operator's approval: {', '.join(hits)}"
             )
+            if not o.approver:
+                _refuse(ln, why)
+            problem = approval_problem(_list(ln, "reviews"), o.approver, head)
+            if problem:
+                _refuse(ln, f"{why}; {problem}")
+            say(f"{o.approver} approved {head[:8]}, lifting the approval-path refusal")
     again = ln.view("headRefOid").get("headRefOid") or ""
     if again != head:
         _refuse(

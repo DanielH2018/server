@@ -94,12 +94,13 @@ variable unset and never sees this.
 `land_lib/policy.py` owns the rules, and two settings switch them on.
 `LAND_REQUIRE_BRANCH_PREFIX` requires a head branch in this repo, under the prefix, targeting
 `master`. `LAND_APPROVAL_PATHS` names a file of path prefixes, and a PR changing a path under
-one is refused, renamed files included. With either set, a non-empty `hold_sha` also refuses,
+one is refused, renamed files included. `LAND_APPROVER` names a GitHub login whose latest
+review, if it approves the head SHA, lifts that refusal. With either of the first two set, a non-empty `hold_sha` also refuses,
 and every merge path is pinned to the head SHA the checks read. A push after the checks fails
 the landing, and a re-run checks the new head. `--verdict-file <path>` writes `PENDING`, then
 the landing's one result line, for a unit to hand on to the agent that started it. A landing
 that sets neither setting is unchanged, and `--any-author` lifts neither.
-`claude-land@<n>.service` (`roles/setup/claude_code`) sets all three for the `claude` agent
+`claude-land@<n>.service` (`roles/setup/claude_code`) sets all four for the `claude` agent
 user's PRs, and a polkit rule lets that user start it and do nothing else.
 
 **The arm refuses a body whose closing keyword is not its own `Closes #N` line.** GitHub closes

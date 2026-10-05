@@ -17,10 +17,11 @@ Environment=HOME=/home/{{ sys_user }}
 # The checkout is the deployer's, and an untracked __pycache__ there would park it.
 Environment=PYTHONDONTWRITEBYTECODE=1
 # land.sh's landing policy: only the agent's account, only its fenced branches, and no path
-# on the approval list.
+# on the approval list unless the operator's GitHub login approved the head.
 Environment=LAND_REQUIRE_AUTHOR={{ claude_code_agent_github_login }}
 Environment=LAND_REQUIRE_BRANCH_PREFIX={{ claude_code_lander_branch_prefix }}
 Environment=LAND_APPROVAL_PATHS=/etc/claude-land/approval-paths
+Environment=LAND_APPROVER={{ claude_code_lander_approver }}
 # /var/lib/claude-land/<n>.verdict is what the session reads back, so the directory is
 # world-readable and only this unit writes it.
 StateDirectory=claude-land

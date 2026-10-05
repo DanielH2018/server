@@ -97,6 +97,15 @@ def test_the_unit_switches_on_every_leg_of_the_landing_policy() -> None:
     assert env[options.APPROVAL_PATHS_ENV] == install_dest(write)
 
 
+def test_only_the_operators_approval_lifts_the_approval_path_refusal() -> None:
+    """An approver equal to the agent's own login would let the agent approve itself."""
+    approver = environment(unit())[options.APPROVER_ENV]
+    assert approver == defaults()["claude_code_lander_approver"]
+    assert approver != defaults()["claude_code_agent_github_login"]
+    owner = defaults()["claude_code_agent_user_repo"].split("/")[0]
+    assert approver == owner, "the operator is the repo's owner"
+
+
 def test_the_branch_prefix_is_the_one_the_fence_lets_the_agent_push(
     monkeypatch,
 ) -> None:
