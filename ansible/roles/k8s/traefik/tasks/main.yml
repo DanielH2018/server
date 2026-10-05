@@ -58,6 +58,13 @@
     name: k8s/manifests
   vars:
     manifests_service: traefik
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    # The ClusterRoleBinding in rbac-binding.yaml is cluster-scoped, so the namespaced prune
+    # allowlist in k8s/manifests never selects it; dropping it still leaves it live. The Roles
+    # rbac.yaml.j2 places in other namespaces are applied by the task above, outside this
+    # directory, so the armed `-n` apply never reads them. The TLSOptions and Secrets are
+    # outside the allowlist too.
+    manifests_prune: true
     # The ACME Secret is concatenated rather than listed, because dropping its name is the only
     # way traefik_k8s_manage_acme reaches it — the manifest has no template branch to gate. The
     # ACME claim is `k8s_claims` in defaults/main.yml, gated on the same flag there.
