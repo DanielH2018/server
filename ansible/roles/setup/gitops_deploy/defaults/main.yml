@@ -109,8 +109,10 @@ gitops_deploy_review_ruleset_bypass_actors:
 # cannot approve its own push.
 gitops_deploy_fence_ruleset_id: 24517167
 gitops_deploy_fence_ruleset_exclude:
-  # EnterWorktree names a `claude/<slug>` worktree's branch `worktree-claude/<slug>`.
-  - refs/heads/worktree-claude/**
+  # EnterWorktree names a `claude/<slug>` worktree's branch `worktree-claude+<slug>`: it
+  # replaces `/` with `+` (observed 2026-10-05). `worktree-claude-*` would also match operator
+  # branches such as worktree-claude-agent-github-identity.
+  - refs/heads/worktree-claude+**
 gitops_deploy_fence_ruleset_bypass_actors:
   # `always`, because the operator's sessions and Renovate push branches, not only merge PRs.
   - RepositoryRole:5:always

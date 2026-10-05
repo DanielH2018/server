@@ -130,7 +130,7 @@ def review_ruleset(**overrides):
 
 
 FENCE_RULESET_ID = 24517167
-FENCE_EXCLUDE = ["refs/heads/worktree-claude/**"]
+FENCE_EXCLUDE = ["refs/heads/worktree-claude+**"]
 FENCE_BYPASS = ["Integration:2740:always", "RepositoryRole:5:always"]
 
 
