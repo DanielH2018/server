@@ -319,7 +319,8 @@ jobs:
           set -euo pipefail
           mapfile -t changed < "$RUNNER_TEMP/changed.txt"
           # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
-          prek run --skip ansible-lint --color always --files "${changed[@]}"
+          # --skip static-ratchet-tests: the `pytest` job runs those four test files already.
+          prek run --skip ansible-lint --skip static-ratchet-tests --color always --files "${changed[@]}"
 
       # Every push to master, and any PR the scoping step declined to trust: the full sweep.
       #
@@ -331,7 +332,8 @@ jobs:
       - name: Run hooks (full sweep)
         if: github.event_name != 'pull_request' || steps.changed.outputs.mode == 'full'
         # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
-        run: prek run --all-files --skip ansible-lint --color always
+        # --skip static-ratchet-tests: the `pytest` job runs those four test files already.
+        run: prek run --all-files --skip ansible-lint --skip static-ratchet-tests --color always
 
       # `mkdocs build --strict` also runs in the twice-daily docs-refresh cron, but a broken
       # internal link that reaches master is discovered only there — build_site() bails

@@ -354,8 +354,9 @@ files = "^(pyproject\\.toml|uv\\.lock)$"
 # call. Without it every such edit lands behind a green master and costs a second commit
 # after CI names it.
 # It sits beside the other commit-stage hooks rather than beside `facts-lint-changed`: the
-# suite's test_every_recorded_atom_hashes_as_recorded reads the lock off disk, and no prek
-# hook runs `pytest`, so this has already rewritten the lock by the time that test reads it.
+# suite's test_every_recorded_atom_hashes_as_recorded reads the lock off disk, and the one
+# prek hook that runs it, `static-ratchet-tests`, sits after this one, so this has already
+# rewritten the lock by the time that test reads it.
 [[repos.hooks]]
 id = "facts-reverify-changed"
 name = "re-hash edited CLAUDE.md sections whose citations changed"
@@ -372,9 +373,9 @@ files = "(^|/)CLAUDE\\.md$"
 # it -- and it writes unconditionally, never running the suite first, which is what keeps it out
 # of the #1799 repair deadlock.
 #
-# No prek hook runs `pytest`; CI's `pytest` job and `uv run pytest` run it after the commit,
-# so by the time test_no_module_is_longer_than_its_cap_or_its_allowlist_entry reads the lists
-# off disk this hook has already rewritten them. Like a formatter, it exits non-zero when it
+# `static-ratchet-tests` sits after this hook, and CI's `pytest` job and `uv run pytest` run
+# after the commit, so by the time test_no_module_is_longer_than_its_cap_or_its_allowlist_entry
+# reads the lists off disk this hook has already rewritten them. Like a formatter, it exits non-zero when it
 # rewrote a list, so the author stages what it wrote.
 #
 # Cost, measured: 4.0s wall for a full run, almost all of it the monkeypatch
@@ -403,6 +404,31 @@ entry = "uv run --frozen python scripts/dev/fact_status.py lint --changed-since 
 language = "system"
 pass_filenames = false
 files = "(^|/)CLAUDE\\.md$"
+
+# Four static test modules that turned more PRs red than any other test the author's own code
+# did not break: 24 of 154 failed CI runs from 2026-08-30 to 2026-10-05 (#3605). Each failure
+# names its own one-command repair, so finding it at commit time saves a CI round trip and a
+# fix commit. They run in 3.4s on daniel-box and 7.5s on daniel-server; the whole suite left
+# prek on 2026-10-02 because it cost 89-235s, and still runs only in CI and the two crons.
+#
+# It sits after `tighten-ratchet-allowlists` and `facts-reverify-changed` because the ratchet
+# and facts tests read the files those two rewrite. `files` is wider than `.py`: a `moved`
+# facts atom is often a YAML key or a `DECIDED:` marker in a template, and the doc fragments
+# read role defaults, inventory and the fail2ban template. The shard partition test reads
+# ci.yml and pyproject.toml's `testpaths`.
+#
+# CI skips it on both `prek run` steps: its `pytest` job runs the same four files, and the
+# shallow checkout there skips the ratchet's origin/master comparison anyway. docs-refresh
+# stages scripts/dev/pytest_shard_weights.json, so this fires on that cron's commit, which
+# runs the whole suite green first. eval-run stages nothing this matches, and secret-rotate
+# commits with --no-verify. To commit past it, `SKIP=static-ratchet-tests git commit`.
+[[repos.hooks]]
+id = "static-ratchet-tests"
+name = "Static ratchet tests (module length, facts.lock, shard partition, doc fragments)"
+entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_facts_lock_matches_tree.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py"
+language = "system"
+pass_filenames = false
+files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock$|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/ci\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$)"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file
