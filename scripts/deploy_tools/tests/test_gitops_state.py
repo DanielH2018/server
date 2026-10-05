@@ -43,7 +43,7 @@ def marker(tmp_path: Path) -> Path:
 
 
 def test_clearing_one_role_leaves_the_other(marker, run, capsys):
-    assert run(marker.parent, "clear-manual-plane", "k3s") == 0
+    assert run(marker.parent, "clear-owed", "manual_plane", "k3s") == 0
     assert list(pending(marker.parent)) == ["common"]
     assert "k3s" in capsys.readouterr().out
 
@@ -52,19 +52,19 @@ def test_clearing_a_role_that_is_not_pending_exits_zero_and_says_so(
     marker, run, capsys
 ):
     """An operator clearing twice, or naming a role nobody recorded, has nothing to fix."""
-    assert run(marker.parent, "clear-manual-plane", "renovate_agent") == 0
+    assert run(marker.parent, "clear-owed", "manual_plane", "renovate_agent") == 0
     assert list(pending(marker.parent)) == ["k3s", "common"]
     assert "not pending" in capsys.readouterr().out
 
 
 def test_clearing_the_last_role_removes_the_marker(tmp_path, run, capsys):
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
-    assert run(tmp_path, "clear-manual-plane", "k3s") == 0
+    assert run(tmp_path, "clear-owed", "manual_plane", "k3s") == 0
     assert pending(tmp_path) == {}
 
 
 def test_an_absent_marker_is_not_an_error(tmp_path, run, capsys):
-    assert run(tmp_path, "clear-manual-plane", "k3s") == 0
+    assert run(tmp_path, "clear-owed", "manual_plane", "k3s") == 0
     assert "not pending" in capsys.readouterr().out
 
 
@@ -83,7 +83,10 @@ def test_a_narrowed_clear_keeps_a_tag_a_later_range_added(
     `--tags k3s` run would have applied it, so this gap is the narrowing's own.
     """
     (tmp_path / "owed.jsonl").write_text(f"{_k3s('coredns', 'kubeconfig')}\n")
-    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (
+        run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
+        == 0
+    )
     assert pending(tmp_path) == {"k3s": frozenset({"coredns"})}
     assert "STILL pending for coredns" in capsys.readouterr().out
     ((_role, dropped, remaining),) = journal
@@ -93,7 +96,10 @@ def test_a_narrowed_clear_keeps_a_tag_a_later_range_added(
 def test_a_narrowed_clear_covering_the_whole_row_takes_the_line(tmp_path, run, capsys):
     """The accepting half: nothing left to apply means the role stops being pending."""
     (tmp_path / "owed.jsonl").write_text(f"{_k3s('kubeconfig')}\n")
-    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (
+        run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
+        == 0
+    )
     assert pending(tmp_path) == {}
     assert "cleared k3s" in capsys.readouterr().out
 
@@ -105,7 +111,7 @@ def test_a_bare_clear_still_takes_the_whole_line_and_row(tmp_path, run):
     before this flag existed, so it keeps its old meaning.
     """
     (tmp_path / "owed.jsonl").write_text(f"{_k3s('coredns', 'kubeconfig')}\n")
-    assert run(tmp_path, "clear-manual-plane", "k3s") == 0
+    assert run(tmp_path, "clear-owed", "manual_plane", "k3s") == 0
     assert pending(tmp_path) == {}
 
 
@@ -120,7 +126,10 @@ def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
     nowhere.
     """
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
-    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (
+        run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
+        == 0
+    )
     assert pending(tmp_path) == {"k3s": frozenset()}
     out = capsys.readouterr().out
     assert "kept k3s" in out and "clear-owed manual_plane k3s`" in out
@@ -131,14 +140,17 @@ def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
 def test_a_narrowed_clear_on_a_line_with_no_row_keeps_it(tmp_path, run):
     """A missing row is the same unknown: a line older than the sidecar, or a garbled row."""
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
-    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (
+        run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
+        == 0
+    )
     assert pending(tmp_path) == {"k3s": frozenset()}
 
 
 def test_applied_naming_the_role_tag_is_a_whole_role_clear(tmp_path, run):
     """The accepting half for an empty row: the whole-role tag covers it, however spelled."""
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
-    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "k3s") == 0
+    assert run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "k3s") == 0
     assert pending(tmp_path) == {}
 
 
@@ -146,7 +158,7 @@ def test_the_printed_clear_for_k3s_and_common_leaves_no_line_behind(tmp_path, ru
     """What an operator pastes after applying both roles must clear both.
 
     `common`'s row is always empty, because no playbook applies it and nothing narrows it.
-    A shared `clear-manual-plane <role> --applied <tags>` sent the operator to run it with
+    A shared `clear-owed manual_plane <role> --applied <tags>` sent the operator to run it with
     `--applied` for `common` too, which keeps that line by design.
     """
     # Importable only once `gitops_state` has put the deployer's `files/` on sys.path.
@@ -172,7 +184,7 @@ def test_a_state_directory_this_user_cannot_write_says_who_owns_it(marker, run, 
     """
     marker.parent.chmod(0o500)
     try:
-        assert run(marker.parent, "clear-manual-plane", "k3s") == 1
+        assert run(marker.parent, "clear-owed", "manual_plane", "k3s") == 1
         err = capsys.readouterr().err
         assert "cannot write" in err
     finally:
@@ -187,7 +199,7 @@ def test_a_held_tree_lock_refuses_and_changes_nothing(marker, tree_lock, run, ca
     already; refusing is what keeps the operator's half out of the gap.
     """
     with gitops_state.tree_lock(str(tree_lock)):
-        assert run(marker.parent, "clear-manual-plane", "k3s") == 1
+        assert run(marker.parent, "clear-owed", "manual_plane", "k3s") == 1
     assert marker.read_text().splitlines() == [K3S, COMMON], "nothing was rewritten"
     assert "is held" in capsys.readouterr().err
 
@@ -204,7 +216,7 @@ def test_an_unopenable_lock_names_the_lock_and_not_the_state_directory(
     tree_lock.parent.chmod(0o500)
     try:
         rc = gitops_state.main(
-            ["--state-dir", str(marker.parent), "clear-manual-plane", "k3s"],
+            ["--state-dir", str(marker.parent), "clear-owed", "manual_plane", "k3s"],
             lock_path=str(tree_lock),
             lock_wait_s=0.05,
         )
@@ -219,8 +231,8 @@ def test_an_unopenable_lock_names_the_lock_and_not_the_state_directory(
 
 def test_the_lock_is_released_for_the_next_run(marker, run, capsys):
     """A refusal must not leave the lock held, and neither must a successful clear."""
-    assert run(marker.parent, "clear-manual-plane", "k3s") == 0
-    assert run(marker.parent, "clear-manual-plane", "common") == 0
+    assert run(marker.parent, "clear-owed", "manual_plane", "k3s") == 0
+    assert run(marker.parent, "clear-owed", "manual_plane", "common") == 0
     assert not marker.exists()
 
 
@@ -242,7 +254,7 @@ def test_a_clear_journals_the_role_and_the_line_it_dropped_and_a_no_op_says_so(
     merged SHA it silenced: the marker's own truncation is the only write the command
     makes. The journal call is the evidence that write does not leave.
     """
-    assert run(marker.parent, "clear-manual-plane", "k3s") == 0
+    assert run(marker.parent, "clear-owed", "manual_plane", "k3s") == 0
     ((role, dropped, _remaining),) = journal
     assert role == "k3s"
     assert (dropped.origin, dropped.playbook, dropped.at) == (
@@ -250,7 +262,7 @@ def test_a_clear_journals_the_role_and_the_line_it_dropped_and_a_no_op_says_so(
         "ansible/k3s-bringup.yml",
         1000.0,
     )
-    assert run(marker.parent, "clear-manual-plane", "k3s") == 0
+    assert run(marker.parent, "clear-owed", "manual_plane", "k3s") == 0
     assert journal[1] == ("k3s", None, frozenset()), (
         "a second run drops nothing and still says so"
     )
@@ -259,7 +271,7 @@ def test_a_clear_journals_the_role_and_the_line_it_dropped_and_a_no_op_says_so(
 def test_a_refused_clear_journals_nothing(marker, tree_lock, run, journal):
     """The rejecting half: a line claiming a clear that never happened is worse than none."""
     with gitops_state.tree_lock(str(tree_lock)):
-        assert run(marker.parent, "clear-manual-plane", "k3s") == 1
+        assert run(marker.parent, "clear-owed", "manual_plane", "k3s") == 1
     assert journal == []
 
 
@@ -299,7 +311,7 @@ def test_a_failing_logger_does_not_change_the_clears_exit_code(marker, tree_lock
         raise FileNotFoundError("logger")
 
     rc = gitops_state.main(
-        ["--state-dir", str(marker.parent), "clear-manual-plane", "k3s"],
+        ["--state-dir", str(marker.parent), "clear-owed", "manual_plane", "k3s"],
         lock_path=str(tree_lock),
         lock_wait_s=0.05,
         journal=lambda role, dropped, remaining: gitops_state.journal_clear(
@@ -347,7 +359,7 @@ def test_an_empty_applied_is_refused(tmp_path, run):
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     for empty in ("", ",", " "):
         with pytest.raises(SystemExit) as exc:
-            run(tmp_path, "clear-manual-plane", "k3s", "--applied", empty)
+            run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", empty)
         assert exc.value.code == 2
     assert pending(tmp_path) == {"k3s": frozenset()}
 
@@ -355,7 +367,10 @@ def test_an_empty_applied_is_refused(tmp_path, run):
 def test_a_non_empty_applied_still_clears_its_tags(tmp_path, run):
     """The accepting half: the refusal above must not swallow an ordinary narrowed clear."""
     (tmp_path / "owed.jsonl").write_text(f"{_k3s('coredns', 'kubeconfig')}\n")
-    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (
+        run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
+        == 0
+    )
     assert pending(tmp_path) == {"k3s": frozenset({"coredns"})}
 
 
@@ -368,7 +383,10 @@ def test_the_kept_message_warns_about_the_whole_role_apply_it_prescribes(
     printed it bare.
     """
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
-    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (
+        run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
+        == 0
+    )
     assert "rotate-keys" in capsys.readouterr().out
 
 
@@ -377,6 +395,9 @@ def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(
 ):
     """The rejecting half: `common` arms nothing, so it gets no warning to ignore."""
     (tmp_path / "owed.jsonl").write_text(f"{COMMON}\n")
-    assert run(tmp_path, "clear-manual-plane", "common", "--applied", "something") == 0
+    assert (
+        run(tmp_path, "clear-owed", "manual_plane", "common", "--applied", "something")
+        == 0
+    )
     out = capsys.readouterr().out
     assert "kept common" in out and "WARNING" not in out

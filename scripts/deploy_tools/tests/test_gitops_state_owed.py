@@ -1,7 +1,7 @@
 """The owed-ledger clears beyond `manual_plane`: the two k8s classes and `clear-owed`.
 
-`clear-owed <class> <subject>` is the one verb (#3544); `clear-k8s-deferred`,
-`clear-k8s-unapplied` and `clear-manual-plane` are its aliases. The `manual_plane` clear's own
+`clear-owed <class> <subject>` is the one verb (#3544); the per-class verbs it replaced were
+retired in #3550. The `manual_plane` clear's own
 rules are in test_gitops_state.py, and the shared `tree_lock`, `journal` and `run` fixtures in
 conftest.py.
 
@@ -39,7 +39,7 @@ COMMON = json.dumps(
 )
 
 
-# ── clear-k8s-deferred: the same shape one plane over ─────────────────────────────
+# ── k8s_deferred: the same shape one plane over ───────────────────────────────────
 
 
 _LINE = '{{"at": {}, "class": "k8s_deferred", "origin": "{}", "subject": "{}"}}'
@@ -54,12 +54,12 @@ def deferred(tmp_path: Path) -> Path:
 
 
 def test_clearing_one_deferred_bump_leaves_the_other(deferred, run, capsys, journal):
-    assert run(deferred.parent, "clear-k8s-deferred", "sonarr") == 0
+    assert run(deferred.parent, "clear-owed", "k8s_deferred", "sonarr") == 0
     assert deferred.read_text().splitlines() == [RADARR]
     assert "sonarr" in capsys.readouterr().out
     service, dropped, _ = journal[0]
     assert (service, dropped.origin) == ("sonarr", "abc123def4567890")
-    assert run(deferred.parent, "clear-k8s-deferred", "radarr") == 0
+    assert run(deferred.parent, "clear-owed", "k8s_deferred", "radarr") == 0
     assert not deferred.exists(), "clearing the last bump removes the ledger"
 
 
@@ -67,13 +67,13 @@ def test_clearing_a_bump_that_is_not_deferred_exits_zero_and_says_so(
     deferred, run, capsys, journal
 ):
     """The rejecting half: a command that cleared everything reads the same from here."""
-    assert run(deferred.parent, "clear-k8s-deferred", "jellyfin") == 0
+    assert run(deferred.parent, "clear-owed", "k8s_deferred", "jellyfin") == 0
     assert deferred.read_text().splitlines() == [SONARR, RADARR]
     assert "not pending" in capsys.readouterr().out
     assert journal[0][1] is None, "nothing was dropped, so the line says so"
 
 
-# ── clear-k8s-unapplied: the class nothing pages on ────────────────────────────────
+# ── k8s_unapplied: the class nothing pages on ──────────────────────────────────────
 
 AUTHELIA = _LINE.replace("k8s_deferred", "k8s_unapplied").format(
     1000, "a" * 40, "authelia"
@@ -85,7 +85,7 @@ def test_clearing_an_unapplied_role_leaves_the_deferred_class_alone(
 ):
     """Two classes of one ledger (#3392): a clear aimed at one leaves the other's line."""
     (tmp_path / "owed.jsonl").write_text(f"{AUTHELIA}\n{SONARR}\n")
-    assert run(tmp_path, "clear-k8s-unapplied", "authelia") == 0
+    assert run(tmp_path, "clear-owed", "k8s_unapplied", "authelia") == 0
     assert (tmp_path / "owed.jsonl").read_text().splitlines() == [SONARR]
     assert "authelia" in capsys.readouterr().out
 
@@ -96,7 +96,7 @@ def test_clearing_an_unapplied_role_that_is_not_pending_exits_zero_and_says_so(
     """The rejecting half, and the reason it matters here: the ordinary way out of this
     class is the tick's own discharge, so a hand clear usually finds nothing."""
     (tmp_path / "owed.jsonl").write_text(f"{AUTHELIA}\n")
-    assert run(tmp_path, "clear-k8s-unapplied", "jellyfin") == 0
+    assert run(tmp_path, "clear-owed", "k8s_unapplied", "jellyfin") == 0
     assert (tmp_path / "owed.jsonl").read_text().splitlines() == [AUTHELIA]
     assert "not pending" in capsys.readouterr().out
     assert journal[0][1] is None, "nothing was dropped, so the line says so"
@@ -105,30 +105,14 @@ def test_clearing_an_unapplied_role_that_is_not_pending_exits_zero_and_says_so(
 # ── clear-owed: one verb for every class an operator may clear (#3544) ──────────────
 
 
-@pytest.mark.parametrize(
-    ("alias", "cls", "subject", "ledger", "kept"),
-    [
-        ("clear-manual-plane", "manual_plane", "k3s", (K3S, COMMON), [COMMON]),
-        ("clear-k8s-deferred", "k8s_deferred", "sonarr", (SONARR, RADARR), [RADARR]),
-        (
-            "clear-k8s-unapplied",
-            "k8s_unapplied",
-            "authelia",
-            (AUTHELIA, SONARR),
-            [SONARR],
-        ),
-    ],
-)
-def test_clear_owed_and_its_alias_drop_the_same_line(
-    tmp_path, run, journal, alias, cls, subject, ledger, kept
-):
-    owed = tmp_path / "owed.jsonl"
-    for argv in (["clear-owed", cls, subject], [alias, subject]):
-        owed.write_text("\n".join(ledger) + "\n")
-        assert run(tmp_path, *argv) == 0
-        assert owed.read_text().splitlines() == kept, argv
-    assert [j[0] for j in journal] == [subject, subject]
-    assert [j[1] is not None for j in journal] == [True, True]
+@pytest.mark.parametrize("cls", gitops_state.CLEARABLE_CLASSES)
+def test_the_retired_per_class_verbs_are_refused(deferred, run, capsys, cls):
+    """Every printer names `clear-owed` (#3547), so the per-class verbs are gone (#3550)."""
+    before = deferred.read_text()
+    with pytest.raises(SystemExit):
+        run(deferred.parent, gitops_state.journal_event(cls), "sonarr")
+    assert "invalid choice" in capsys.readouterr().err
+    assert deferred.read_text() == before
 
 
 @pytest.mark.parametrize(
@@ -189,8 +173,10 @@ def test_clear_owed_takes_applied_for_manual_plane(tmp_path, run):
     assert pending == {"k3s": frozenset({"k3s-b"})}
 
 
-def test_the_journal_event_keeps_each_alias_name():
-    """`journalctl -t gitops-state` queries written against the old verbs still match."""
-    assert {
-        gitops_state.journal_event(c) for c in gitops_state.CLEARABLE_CLASSES
-    } == set(gitops_state.ALIAS_CLASSES)
+def test_the_journal_event_keeps_each_retired_verb_name():
+    """`journalctl -t gitops-state` queries written against the retired verbs still match."""
+    assert {gitops_state.journal_event(c) for c in gitops_state.CLEARABLE_CLASSES} == {
+        "clear-manual-plane",
+        "clear-k8s-deferred",
+        "clear-k8s-unapplied",
+    }

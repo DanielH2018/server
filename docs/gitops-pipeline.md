@@ -1942,9 +1942,8 @@ under-sized.
 - **`gitops_state.py clear-owed <class> <subject>` is the one hand clear for every owed
   class an operator may clear** (#3544): `manual_plane`, `k8s_deferred` and `k8s_unapplied`.
   It refuses `hold_plane`, which clears only once an apply covers it. Every surface prints it
-  through `gitops_markers.owed_clear_cmd` (#3547). The per-class verbs it replaced remain
-  as aliases in `gitops_state.py`'s `ALIAS_CLASSES` until the monitor-bridge and deploy-ui
-  copies that printed them are redeployed. On the deployer side, `DeployerState` has one `record_owed`,
+  through `gitops_markers.owed_clear_cmd` (#3547), and the per-class verbs it replaced are
+  gone (#3550). On the deployer side, `DeployerState` has one `record_owed`,
   `clear_owed` and `owed_pending` trio for the two k8s classes, keyed by class.
 - **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True)`):
   `last_run` is still written, so GitOps-Alive stays green, and the page is throttled to twice per
