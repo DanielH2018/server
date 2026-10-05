@@ -1,5 +1,5 @@
 ---
-authelia_k8s_image: authelia/authelia:4.39.28
+authelia_k8s_image: authelia/authelia:4.39.28@sha256:bd97cff4fcbf715b5ff1f9ae286afbe6033afce385302520b0368122d43a6f54
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Platform: the SSO/OIDC gate every Authelia-fronted route depends on. A failed deploy locks
