@@ -65,6 +65,24 @@ def test_the_token_file_is_the_agents_alone_and_never_printed() -> None:
     assert modes["gh"] == "0700"
 
 
+def test_the_private_key_is_the_agents_alone_and_the_public_half_readable() -> None:
+    """The first apply's chown runs before ssh-keygen, so this task sets both itself."""
+    task = named(
+        tasks("agent_github.yml"),
+        "Give the signing key pair the home's group and its modes",
+    )
+    f = task["ansible.builtin.file"]
+    assert (f["owner"], f["group"]) == (
+        "{{ claude_code_agent_user }}",
+        "{{ sys_user }}",
+    )
+    modes = {
+        i["path"].removeprefix("{{ claude_code_agent_signing_key }}"): i["mode"]
+        for i in task["loop"]
+    }
+    assert modes == {"": "0600", ".pub": "0644"}
+
+
 def test_an_enabled_agent_user_without_its_token_fails_the_apply() -> None:
     task = named(
         tasks("agent_github.yml"),

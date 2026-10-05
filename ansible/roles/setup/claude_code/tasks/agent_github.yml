@@ -69,6 +69,22 @@
     - not ansible_check_mode
     - claude_code_agent_signing_pub.content is not defined
 
+- name: Give the signing key pair the home's group and its modes
+  # ssh-keygen gives the pair the agent's own group, with a 0640 public half, and on a host's
+  # first apply the shared file's closing chown has already run. The operator reads the public
+  # half to add it to the account.
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ claude_code_agent_signing_key }}", mode: "0600" }
+    - { path: "{{ claude_code_agent_signing_key }}.pub", mode: "0644" }
+  become: true
+  # The read above found the pair, so it exists. In check mode on a first apply it does not.
+  when: claude_code_agent_signing_pub.content is defined
+
 - name: Trust the agent's own key for its local signature checks
   # git verifies an SSH signature only against allowedSignersFile, and reports a good signature
   # by an unlisted key as unverifiable.

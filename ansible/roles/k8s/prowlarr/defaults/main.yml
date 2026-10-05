@@ -99,9 +99,16 @@ prowlarr_k8s_mem_request: 128Mi
 #
 # HONESTLY SCOPED — upstream documents DISABLE_MEDIA as a BANDWIDTH saving, not a memory one
 # ("To disable loading images, CSS, and other media in the web browser to save network
-# bandwidth"). The memory reduction is an inference: a renderer that never fetches an image
-# never decodes it into a bitmap buffer either. Nothing here measures it, so the limit above
-# stays at 2048Mi until the 7d working-set peak is re-measured against the 934Mi figure above.
+# bandwidth"). A memory reduction was only an inference, and the measurement refutes it (#2962).
+# Over 2026-09-29..10-05, the six pods that ran with this flag peaked at 714-1112Mi on
+# `max_over_time(container_memory_working_set_bytes{container="flaresolverr"}[7d])`. The highest
+# was 1112Mi (kubelet job; 1084Mi on the cadvisor job), above both the 934Mi baseline above and
+# the old 1024Mi cap. The high peaks fell on 2026-10-04, a day of repeated redeploys, which
+# matches the cold-pod burst described above. So this flag buys no memory headroom. The limit
+# stays at 2048Mi, about 1.8x the highest observation. Do not lower it on this flag's account.
+#
+# The flag stays on because it cost nothing measurable. Over the same 7 days Prowlarr logged one
+# flaresolverr solve timeout (1337x, 2026-10-02), which succeeded on retry, and no indexer failed.
 #
 # THE REGRESSION IT RISKS points at the indexers, not at this pod. A Cloudflare interstitial is
 # a rendered widget, and the flag strips STYLESHEETS as well as images — upstream gives no
