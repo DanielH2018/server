@@ -114,9 +114,6 @@ def volume_claim_callers(roles_dir: Path) -> set[str]:
     }
 
 
-# A census that finds none of these is reading the wrong path, not a tree with no callers.
-KNOWN_CALLERS = frozenset({"jellyfin"})
-
 REAL_CLAIM_TASKS = K8S_ROLES / "volume-claim" / "tasks" / "claim.yml"
 
 
@@ -257,9 +254,22 @@ def test_conditional_volume_claim_include_is_clean(tmp_path):
     assert colliding_roles(root) == {}
 
 
-def test_census_finds_the_known_callers():
-    missing = KNOWN_CALLERS - volume_claim_callers(K8S_ROLES)
-    assert not missing, f"volume-claim callers not found in the tree: {sorted(missing)}"
+def test_census_finds_a_caller(tmp_path):
+    """Red proof for the census below: an empty answer there must mean no caller."""
+    root = _write_role(tmp_path, "feed", _CLAIM_INCLUDE.format(svc="feed"))
+    assert volume_claim_callers(root) == {"feed"}
+
+
+def test_no_role_includes_volume_claim():
+    """Every caller moved to `k8s_claims` (#3387); jellyfin was the last.
+
+    `k8s/manifests` removes a converted role's `<service>-claims/` directory, so a role that
+    went back to this include would stage a claim that its next deploy deletes.
+    """
+    found = volume_claim_callers(K8S_ROLES)
+    assert not found, (
+        f"{sorted(found)} include k8s/volume-claim; declare the claim in `k8s_claims` instead"
+    )
 
 
 def test_no_role_stages_pvc_yaml_beside_volume_claim():

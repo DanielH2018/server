@@ -3,23 +3,33 @@
 # *arrs. What it does need is the GPU: this is the first workload to request the
 # `devic.es/dri` resource the device plugin advertises.
 
-# Create the config volume claim BEFORE deploying the workload, so the pod has a PVC to mount.
-- name: Create the jellyfin config volume claim
-  tags: [deploy]
+# The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
+- name: Deploy jellyfin to the cluster
   ansible.builtin.include_role:
-    name: k8s/volume-claim
+    name: k8s/manifests
   vars:
-    volume_claim_service: jellyfin
-    volume_claim_name: "{{ jellyfin_k8s_claim }}"
-    volume_claim_storage_class: "{{ jellyfin_k8s_storage_class }}"
-    volume_claim_size: "{{ jellyfin_k8s_size }}"
+    manifests_service: jellyfin
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
+    manifests_files:
+      - deployment.yaml
+      - service.yaml
+      # The direct-by-IP LAN address, for clients that do not go through Traefik.
+      - service-lan.yaml
+      - ingressroute.yaml
 
 # ── the snapshot-space cap ──────────────────────────────────────────────────────────
-# The PVC above caps the FILESYSTEM. It does not cap the Longhorn backend, because this role
+# The claim caps the FILESYSTEM. It does not cap the Longhorn backend, because this role
 # takes a pre-apply snapshot on every deploy and Longhorn's default snapshotMaxSize is "0" —
-# uncapped. These two tasks set it, and they run HERE: after the claim exists (the `longhorn`
-# StorageClass binds Immediate, so the volume follows the PVC) and before k8s/manifests takes
-# this deploy's snapshot.
+# uncapped. These tasks set it, after k8s/manifests has applied the claim (the `longhorn`
+# StorageClass binds Immediate, so the volume follows the PVC).
+#
+# DECIDED: the cap runs AFTER k8s/manifests, so a brand-new volume's first pre-deploy snapshot
+# is taken uncapped and the cap applies from the next deploy. The claim is `k8s_claims`, which
+# k8s/manifests applies immediately before its snapshot, so no task here can run between the
+# two without a hook in the shared role. The operator chose the one uncapped snapshot over that
+# hook on 2026-10-04 (#3387). The live volume already carries its cap, so only a rebuilt
+# volume sees the gap.
 #
 # Read-then-patch rather than an unconditional patch, because `kubectl patch` reports the
 # no-op case as `patched` too — an unconditional one would report `changed` on every deploy
@@ -97,20 +107,6 @@
     # so without the cast the two never compare equal, the patch fires on every deploy and
     # `changed_when: true` reports changed forever.
     - (jellyfin_k8s_snapshot_cap.stdout | default('') | trim) != (jellyfin_k8s_snapshot_max_size | string)
-
-- name: Deploy jellyfin to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests
-  vars:
-    manifests_service: jellyfin
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
-    manifests_prune: true
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-      # The direct-by-IP LAN address, for clients that do not go through Traefik.
-      - service-lan.yaml
-      - ingressroute.yaml
 
 # `wait` returns the moment MetalLB writes the address, and `-o jsonpath` prints that field
 # once the condition holds — one watch instead of a 12x5s sampling loop.

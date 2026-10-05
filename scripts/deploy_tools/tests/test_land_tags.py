@@ -227,9 +227,11 @@ def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
     assert land_tags.plane_note(files) != ""
 
 
-# A real PR's 32-path file list, read from `gh pr view <n> --json files`. 22 of its role
-# directories have a containers_list entry; `manifests` and `volume-claim` do not, and
-# naming either in --tags makes deploy.sh refuse the whole list.
+# A real PR's file list, read from `gh pr view <n> --json files`. 22 of its role directories
+# have a containers_list entry; `manifests` and `volume-claim` do not, and naming either in
+# --tags makes deploy.sh refuse the whole list. Its `volume-claim/defaults/main.yml` path is
+# dropped: jellyfin, that role's last caller, moved to `k8s_claims` (#3387), so the role now has
+# no caller to deploy it through and rightly lands in the plane note.
 _PR_617_FILES = [
     "ansible/roles/k8s/artifacts/defaults/main.yml",
     "ansible/roles/k8s/autofix-bridge/defaults/main.yml",
@@ -251,7 +253,6 @@ _PR_617_FILES = [
     "ansible/roles/k8s/qbittorrent/defaults/main.yml",
     "ansible/roles/k8s/registry/defaults/main.yml",
     "ansible/roles/k8s/scrutiny/defaults/main.yml",
-    "ansible/roles/k8s/volume-claim/defaults/main.yml",
     "ansible/roles/k8s/sonarr/defaults/main.yml",
     "ansible/roles/k8s/terraria-stats/defaults/main.yml",
     "ansible/roles/k8s/traefik/defaults/main.yml",
@@ -287,7 +288,7 @@ def test_pr_617_deploys_the_shared_roles_callers_and_reports_only_the_setup_plan
     Dropped from the report with no callers to deploy would be the setup-plane silence again.
     """
     reached = land_tags.shared_caller_tags(_PR_617_FILES)
-    assert "jellyfin" in reached["manifests"] & reached["volume-claim"]
+    assert "jellyfin" in reached["manifests"]
     note = land_tags.plane_note(_PR_617_FILES)
     assert "manifests" not in note and "ansible/deploy.yml" not in note
     # `k3s-bringup.yml`, NOT `initial_setup.yml`. The k3s role appears only in the bring-up

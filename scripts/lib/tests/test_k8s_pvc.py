@@ -3,26 +3,15 @@
 
 A Deployment mounting a PVC nothing declares passes admission — PVC binding is a scheduling
 concern, not a validating webhook — so the validator cross-references the two sets across the
-whole tree. These cover the two halves of that index, plus the volume-claim include the
-declaring half would otherwise miss.
+whole tree. These cover the two halves of that index.
 
 Run: uv run pytest scripts/lib/tests/test_k8s_pvc.py
 """
 
-from lib.k8s_context import resolve_vars, role_defaults
 from lib.k8s_pvc import (
     find_claim_name_refs,
     find_pvc_names,
     parse_docs,
-    volume_claim_pvc_names,
-)
-from lib.render_guard import (
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
-    SHARED_TPL,
-    load_yaml,
-    make_env,
 )
 
 
@@ -116,19 +105,3 @@ spec:
 """
     doc = list(parse_docs(rendered))[0]
     assert sorted(find_claim_name_refs(doc)) == ["claim-a", "claim-b"]
-
-
-def test_volume_claim_pvc_names_resolves_a_real_claim_backed_role():
-    # jellyfin's config PVC is created by volume-claim's own pvc.yaml.j2 (never rendered under
-    # volume-claim's own role — it's in SKIP_ROLES), using vars jellyfin's include_role task
-    # passes. Its deployment.yaml.j2 references the SAME value directly as a claimName, so without
-    # this resolving, jellyfin's config claim would show as unresolved on every real run.
-    base = {
-        **BASE_CONTEXT,
-        **load_yaml(ALL_VARS),
-        "playbook_dir": str(ANSIBLE),
-    }
-    base = resolve_vars(base, base)
-    ctx = {**base, **role_defaults("jellyfin", base)}
-    names = volume_claim_pvc_names("jellyfin", ctx, make_env([SHARED_TPL]))
-    assert ctx["jellyfin_k8s_claim"] in names

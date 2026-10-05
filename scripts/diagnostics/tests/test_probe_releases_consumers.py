@@ -164,4 +164,3 @@ def test_the_live_tree_attributes_the_shared_roles_to_named_members():
     assert consumers["arr-notification"] == frozenset({"radarr", "sonarr"})
     assert "n8n" in consumers["image-builder"]
     assert "sonarr" not in consumers["image-builder"]
-    assert "jellyfin" in consumers["volume-claim"]
