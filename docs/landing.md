@@ -80,7 +80,8 @@ GitHub's auto-merge does not apply a ruleset bypass, so an armed PR in that stat
 a ruleset with no bypass actor, such as the master CI gate, still refuses the call until its
 checks pass. A refused merge is printed once and the wait continues, so a caller who cannot
 bypass ends at `merge-timeout`. Without `--await-merge` the arm dies, because nothing else in the
-run would merge the PR.
+run would merge the PR. The direct merge needs both flags in one run: `--await-merge` alone only
+polls, because it merges only a PR the arm left for it.
 
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent.service` sets it to `app/renovate`, so the unattended agent can only merge
