@@ -183,8 +183,12 @@
     # below: authelia_k8s_redis_sessions is a rollback lever, and dropping the names here is
     # what stops a `false` run staging manifests whose config nothing reads. The LIVE redis
     # Deployment and Service survive that — `kubectl apply` does not prune — which is the
-    # intent: flipping the lever back on does not have to recreate them. It is also why this
-    # role does not pass `manifests_prune: true`: an armed prune deletes what the lever drops.
+    # intent: flipping the lever back on does not have to recreate them.
+    #
+    # DECIDED: authelia stays off `manifests_prune` (#3388, operator decision 2026-10-05). An
+    # armed prune deletes what the lever drops, so turning `authelia_k8s_redis_sessions` off
+    # would delete the live redis Deployment, Service and NetworkPolicy the lever exists to keep.
+    # #3388 counts authelia as deliberately excluded.
     #
     # `authelia-redis` is deliberately NOT in manifests_extra_rollouts. That list rolls a
     # Deployment on every change to THIS role's manifests, which is several times a day, and

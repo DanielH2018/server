@@ -2,8 +2,9 @@
 # A second Longhorn StorageClass for volumes that must NOT be backed up to B2.
 #
 # Why this exists rather than a label on the PVC: Longhorn reads recurring-job labels from
-# its own Volume CRs, and PVC labels do not propagate to them (see the note in
-# roles/k8s/authelia/templates/pvc.yaml.j2). The StorageClass `recurringJobSelector`
+# its own Volume CRs, and PVC labels do not propagate to them (see the note beside
+# `authelia_k8s_storage_class` in roles/k8s/authelia/defaults/main.yml). The StorageClass
+# `recurringJobSelector`
 # parameter is the declarative way to get the label onto the Volume at provision time —
 # anything else means labelling volumes by hand after the fact, which drifts the first time
 # a PVC is recreated.
