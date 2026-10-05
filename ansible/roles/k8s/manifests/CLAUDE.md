@@ -3,7 +3,7 @@
 Utility role, not a workload, and it has **no standalone deploy tag**: callers reach it with
 `include_role`, never `--tags manifests`. Nearly every role under `ansible/roles/k8s/` includes
 it from its own `tasks/` (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/` lists them), so a
-change here lands on every service at once. It renders a role's templates, applies them,
+change here reaches every service. It renders a role's templates, applies them,
 reconciles Secret keys, records the release, and **queues** the rollout for someone else to
 wait on.
 
@@ -50,7 +50,7 @@ deferred pair below.
 - **A caller may defer the APPLY of some manifests and keep the render.**
   `manifests_deferred_files` plus `manifests_deferred_dir_name` render, prune and digest them
   into a reserved sibling directory the caller applies itself, gating on
-  `manifests_deferred_render`. Callers: `pihole`, `headlamp`.
+  `manifests_deferred_render`. Callers: `pihole`, `headlamp`, `netpol-baseline`.
 
 ## Rules a caller can break
 

@@ -40,9 +40,10 @@ manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 # three manifests whose live objects must survive the drop) and nut (arming restarts the UPS
 # monitor), each excluded by an operator decision recorded as a DECIDED marker at its include.
 # ansible/tests/deploy/test_manifests_prune.py:_UNARMED_ROLES holds that rule. A deferred render
-# (pihole's instance 2, headlamp's observability RBAC) never goes through the labelling wrapper,
-# so the caller's prune cannot select it. The default stays false while two roles are excluded,
-# and because flipping it moves every role's rendered bytes and needs one full deploy.
+# (pihole's instance 2, headlamp's observability RBAC, netpol-baseline's observability policies)
+# never goes through the labelling wrapper, so the caller's prune cannot select it. The default
+# stays false while two roles are excluded, and because flipping it moves every role's rendered
+# bytes and needs one full deploy.
 manifests_prune: false
 
 # The one namespace an armed role's apply and prune run in (`-n`). kubectl refuses a document
@@ -50,14 +51,14 @@ manifests_prune: false
 # namespaced documents all live in one other namespace passes its own: observability
 # (k8s_observability_namespace), longhorn-ui (k8s_longhorn_namespace) and dri-device-plugin
 # (kube-system). A role that renders into two namespaces defers one set through
-# `manifests_deferred_files` instead, as headlamp does (#3575).
+# `manifests_deferred_files` instead, as headlamp (#3575) and netpol-baseline (#3591) do.
 manifests_prune_namespace: "{{ k8s_namespace }}"
 
 # The kinds the prune may delete, one list for every armed role. Namespaced kinds only: the
 # apply passes `-n`, and a cluster-scoped kind would be listed outside that scope. The same `-n`
 # makes kubectl refuse an armed role's document placed in another namespace, so such a document
-# goes in `manifests_deferred_files` (headlamp's observability RBAC, #3575), or the role passes
-# its own `manifests_prune_namespace`. Secret and
+# goes in `manifests_deferred_files` (headlamp's observability RBAC, #3575; netpol-baseline's
+# observability policies, #3591), or the role passes its own `manifests_prune_namespace`. Secret and
 # PersistentVolumeClaim are absent and must stay absent: a pruned Secret loses a rotated value
 # no re-apply can restore, and a pruned claim loses its data. A kind a role renders that is not
 # listed here is never pruned, which is the safe direction.
