@@ -144,17 +144,34 @@ def test_switching_the_agent_user_off_expires_it_and_on_lifts_the_expiry() -> No
     assert removals == []
 
 
+def reowns_only_roots_files(argv: list[str]) -> bool:
+    """Whether a command is `find <dir> -user root ... -exec chown`, the closing handover."""
+    return argv[:1] == ["find"] and argv[2:4] == ["-user", "root"] and "chown" in argv
+
+
+def chown_owner_group(task_list: list[dict]) -> tuple[str, str]:
+    """The `owner:group` the closing handover chowns root's files to."""
+    argv = named(task_list, "Hand the agent's home to its own user")[
+        "ansible.builtin.command"
+    ]["argv"]
+    owner, group = argv[argv.index("-h") + 1].split(":")
+    return owner, group
+
+
 def root_run_writers(task_list: list[dict]) -> list[str]:
     """Every command task that runs as root on each apply rather than as the agent (#3510).
 
     A command run as root inside the agent's home leaves root-owned files there, and the
-    closing recursive chown then reports `changed` on every apply. A `creates:`-gated command
-    runs once, and the chown hands its output over on that first apply.
+    closing chown then reports `changed` on every apply. A `creates:`-gated command runs once,
+    and the chown hands its output over on that first apply. The chown itself is exempt: it
+    writes only to files root owns, so on a converged home it writes nothing.
     """
     flagged = []
     for t in task_list:
         cmd = t.get("ansible.builtin.command")
         if cmd is None or "creates" in cmd or "creates" in (t.get("args") or {}):
+            continue
+        if reowns_only_roots_files(cmd.get("argv") or []):
             continue
         if (cmd.get("argv") or [None])[0] != "runuser":
             flagged.append(str(t.get("name")))
@@ -190,6 +207,21 @@ def test_a_command_run_as_root_on_each_apply_is_flagged() -> None:
     assert root_run_writers([root_run, run_once]) == ["Install it"]
 
 
+def test_the_handover_reowns_only_roots_files() -> None:
+    """#3607: a recursive chown of the whole home re-grouped the agent's own run-time files."""
+    task = named(tasks(SHARED), "Hand the agent's home to its own user")
+    assert reowns_only_roots_files(task["ansible.builtin.command"]["argv"])
+    assert task["changed_when"] == "common_agent_user_home_handover.stdout | length > 0"
+
+
+def test_a_chown_of_every_file_is_not_the_handover() -> None:
+    everything = ["find", "/srv/agent", "-exec", "chown", "agent:ops", "{}", "+"]
+    assert not reowns_only_roots_files(everything)
+    assert root_run_writers(
+        [{"name": "Chown all", "ansible.builtin.command": {"argv": everything}}]
+    ) == ["Chown all"]
+
+
 def test_the_agents_clone_gets_a_venv_its_hooks_can_import_from() -> None:
     """#3513: the hook shim runs `uv run --no-sync` in the clone the profile names."""
     task = named(tasks(CLAUDE_TASKS), "Sync the repo's venv in the agent user's clone")
@@ -205,14 +237,12 @@ def dirs_not_owned_like_the_chown(task_list: list[dict]) -> list[str]:
     The commands that run as the agent write into these directories, so a root-owned one
     fails them on a fresh host's first apply, before the closing chown has run.
     """
-    chown = named(task_list, "Hand the agent's home to its own user")[
-        "ansible.builtin.file"
-    ]
+    owner_group = chown_owner_group(task_list)
     return [
         str(t.get("name"))
         for t in task_list
         if (f := t.get("ansible.builtin.file") or {}).get("state") == "directory"
-        and (f.get("owner"), f.get("group")) != (chown["owner"], chown["group"])
+        and (f.get("owner"), f.get("group")) != owner_group
     ]
 
 
