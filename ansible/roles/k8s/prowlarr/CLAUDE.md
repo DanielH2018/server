@@ -47,8 +47,9 @@ rendering attacker-supplied pages in a headless browser.
 - **`prowlarr_k8s_fs_disable_media` is the second lever — on how expensive each browser is.**
   It sets FlareSolverr's `DISABLE_MEDIA`, so the browser loads no images, CSS or other media
   while it solves a challenge (#2893). Upstream documents it as a bandwidth saving, not a
-  memory one, and nothing here has measured the memory effect — `prowlarr_k8s_fs_mem_limit`
-  therefore stays at 2048Mi until the 7d working-set peak is re-measured. The failure mode it
+  memory one. The 7d measurement confirms that: the peak with the flag on was 1112Mi, above
+  the 934Mi recorded without it (#2962). `prowlarr_k8s_fs_mem_limit` therefore stays at
+  2048Mi, and the measurement sits beside the flag in the defaults file. The failure mode it
   risks lands on the indexers rather than on this pod: a challenge type needing an image or a
   stylesheet stops solving, and monitor-bridge's `prowlarr_indexers` check pages. Revert by
   setting `ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_disable_media` false and
