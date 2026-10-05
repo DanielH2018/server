@@ -586,8 +586,9 @@
   # default (Deployment/DaemonSet/ReplicaSet/StatefulSet/Job/CronJob/Pod/
   # ReplicationController/Service) because that default has no Traefik CRDs and no
   # NetworkPolicy — a Middleware or IngressRoute dropped from a role armed with the bare flag
-  # would silently NOT be pruned. `-n {{ k8s_namespace }}` is a second, independent scope
-  # layer: even a mislabeled object outside this namespace cannot be listed as a candidate.
+  # would silently NOT be pruned. `-n {{ manifests_prune_namespace }}` is a second, independent
+  # scope layer: even a mislabeled object outside this namespace cannot be listed as a candidate.
+  # It is k8s_namespace unless the role names the one other namespace all its documents live in.
   #
   # `--prune-allowlist` takes exactly ONE <group/version/kind> per flag, repeated for more —
   # unlike most kubectl list flags it does NOT accept a comma-joined value.
@@ -602,7 +603,7 @@
       {{ (
            '--prune -l homelab/role=' ~ manifests_service
            ~ ' ' ~ (manifests_prune_allowlist | map('regex_replace', '^', '--prune-allowlist=') | join(' '))
-           ~ ' -n ' ~ k8s_namespace
+           ~ ' -n ' ~ manifests_prune_namespace
          ) if (manifests_prune | default(false)) and (manifests_prune_allowlist | default([]) | length > 0) else '' }}
   register: manifests_apply
   become: true

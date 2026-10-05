@@ -104,7 +104,7 @@ def _scanned_templates() -> list[tuple[str, Path]]:
     """(label, path) for every template that can carry a workload document.
 
     Both trees, because a whole-Deployment macro in `ansible/templates/` is where its callers'
-    documents live. A shared macro that emits a field block (`service.yml.j2`, `pvc.yml.j2`)
+    documents live. A shared template that emits another kind (`service.yml.j2`, `claim-default.yaml.j2`)
     names no `kind: Deployment` and so contributes nothing here.
     """
     roles = [

@@ -56,14 +56,13 @@
 
     namespace  Namespace the Service lands in. Omit for `k8s_namespace`, which every caller
                but observability wants; observability passes `k8s_observability_namespace`,
-               the same way it calls pvc().
+               the same way its `k8s_claims` entries do.
 
   Call with a body to insert a comment block between `ports:` and the first `- port:` entry;
   call plain (no `{% call %}`) when there's nothing to say there. tdarr is the one caller: its
   list carries "The web UI only. tdarr_k8s_server_port is deliberately absent" on the line the
-  fact governs. pvc()'s slot exists for the same reason, but it cannot reach a
-  `storageClassName` line, so pi-peer-backup and valheim keep that reasoning beside their
-  `*_storage_class` defaults instead; this slot does reach tdarr's line.
+  fact governs. A claim has no such slot, so pi-peer-backup and valheim keep that reasoning
+  beside their `*_storage_class` defaults instead; this slot does reach tdarr's line.
 #}
 {% macro service(name, port, port_name=none, extra_ports=[], namespace=none) -%}
 apiVersion: v1

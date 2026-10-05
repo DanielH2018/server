@@ -44,7 +44,7 @@ __all__ = [
 
 # Backup tier (k8s / Longhorn only — Pi's Docker volumes are not Longhorn-backed)
 #
-# A k8s role declares a PVC in one of three shapes, and each names the claim AND its
+# A k8s role declares a PVC in one of two shapes, and each names the claim AND its
 # StorageClass — the class is what decides whether Longhorn backs the volume up at all
 # (`longhorn` asks for backups, `longhorn-nobackup` does not; see the comment above "Find PVCs
 # whose StorageClass asks for backups" in ansible/roles/setup/k3s/tasks/longhorn.yml):
@@ -52,14 +52,11 @@ __all__ = [
 #   1. an inline `kind: PersistentVolumeClaim` block carrying its own `storageClassName:` line
 #      (no role's template carries one since media-volume moved to `k8s_claims`; the shape stays
 #      read so a new one is classified);
-#   2. a call to the shared `pvc()` macro in ansible/templates/pvc.yml.j2, whose second
-#      positional argument is the class (no role's template calls it since observability moved
-#      to `k8s_claims`; the shape stays read so a new one is classified);
-#   3. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
+#   2. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
 #      which k8s/manifests renders from the shared claim-default.yaml.j2 (every other claim).
 #
-# A `claimName:` reference in a pod spec is the fourth pattern. It declares nothing — it names
-# a claim one of the three shapes above declares, in this role or another (`media-data` is
+# A `claimName:` reference in a pod spec is the third pattern. It declares nothing — it names
+# a claim one of the two shapes above declares, in this role or another (`media-data` is
 # media-volume's, mounted by seven consumers), which is why `claim_index` is built across
 # every role before any one role is classified.
 
@@ -71,17 +68,12 @@ _PVC_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 _STORAGE_CLASS_RE = re.compile(r"storageClassName:\s*(\{\{.*?\}\}|\S+)")
-# Shape 2. Only the first two positional arguments are read: `pvc(name, storage_class, ...)`.
-# An argument is a quoted literal or a bare variable name — the macro's signature admits
-# nothing else at these positions in any current caller.
+# A shared macro's argument: a quoted literal or a bare variable name.
 _MACRO_ARG = r"'[^']*'|\"[^\"]*\"|[A-Za-z_][A-Za-z0-9_]*"
-_PVC_MACRO_CALL_RE = re.compile(
-    rf"\bpvc\(\s*(?P<name>{_MACRO_ARG})\s*,\s*(?P<storage_class>{_MACRO_ARG})\s*,"
-)
-# The fourth pattern — a reference, not a declaration.
+# The third pattern — a reference, not a declaration.
 _CLAIM_NAME_RE = re.compile(r"claimName:\s*(\{\{.*?\}\}|\S+)")
 _SIMPLE_VAR_RE = re.compile(r"^\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$")
-# The fifth: a `claimName:` inside a SHARED macro the role's template calls, naming a macro
+# The fourth: a `claimName:` inside a SHARED macro the role's template calls, naming a macro
 # parameter the call site binds (`arr-deployment.yml.j2`, radarr's and sonarr's whole
 # Deployment). The claim is still the role's — it is mounted by its pod — but no line of the
 # role's own templates names it, so a scan that stops at `templates/` drops it silently. radarr
@@ -124,10 +116,10 @@ class LonghornTiers:
 
 
 def _macro_arg_expr(arg: str) -> str:
-    """A `pvc()` macro argument as the template expression the resolver reads.
+    """A shared macro's argument as the template expression the resolver reads.
 
     `'literal'` becomes `literal`; a bare variable name becomes `{{ name }}`, the form a
-    PVC block's `name:` line already uses, so one resolver serves both shapes.
+    PVC block's `name:` line already uses, so one resolver serves both.
     """
     if arg[0] in "'\"":
         return arg[1:-1]
@@ -166,7 +158,7 @@ def _decl(name_expr: str, class_expr: str | None, role_dir: Path) -> ClaimDecl:
 
 
 def _template_declarations(role_dir: Path) -> list[ClaimDecl]:
-    """Shapes 1 and 2: every PVC a role's templates/*.j2 declare, with its StorageClass."""
+    """Shape 1: every PVC a role's templates/*.j2 declare, with its StorageClass."""
     templates = role_dir / "templates"
     if not templates.is_dir():
         return []
@@ -178,19 +170,11 @@ def _template_declarations(role_dir: Path) -> list[ClaimDecl]:
             decls.append(
                 _decl(block.group("name"), sc.group(1) if sc else None, role_dir)
             )
-        for call in _PVC_MACRO_CALL_RE.finditer(text):
-            decls.append(
-                _decl(
-                    _macro_arg_expr(call.group("name")),
-                    _macro_arg_expr(call.group("storage_class")),
-                    role_dir,
-                )
-            )
     return decls
 
 
 def _k8s_claims_entries(role_dir: Path) -> list[ClaimDecl]:
-    """Shape 3: every `k8s_claims` entry in the role's defaults, name and class as written."""
+    """Shape 2: every `k8s_claims` entry in the role's defaults, name and class as written."""
     claims = _load_yaml(role_dir / "defaults" / "main.yml").get("k8s_claims") or []
     return [
         _decl(

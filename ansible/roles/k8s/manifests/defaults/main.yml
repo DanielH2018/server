@@ -28,30 +28,36 @@ manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 # dropped from the file lists" task only deletes the STAGED FILE, never the live object.
 # manifest-prune-check.sh pages about that gap after the fact; this is the in-place fix.
 #
-# DECIDED: armed per role, moving to every role a slice at a time. The operator overturned the
-# earlier "default false, hand-label each template" marker on 2026-10-04 (#3388). Its first
-# blocker was a missing mechanism: a role arming the prune now renders through
-# ansible/templates/role-labelled.yaml.j2, which stamps `homelab/role: <service>` onto every
-# document, so no template needs a hand edit. Its second blocker is a cost, not a hazard: an
-# orphan whose staged file was deleted before its role was armed never receives the label and
-# needs one kubectl delete by hand. The prune cannot see such an orphan, so arming a role that
-# still has one is safe, and manifest-prune-check.sh keeps flagging it. registry, bazarr,
-# littlelink, texbrain, navidrome, qbittorrent, terraria, code-server, n8n, valheim, scrutiny,
-# tdarr, home-assistant, game-stats, uptime-kuma, freshrss, sonarr, radarr, zigbee2mqtt,
-# prowlarr, karakeep, livesync, speedtest, bento-pdf, ical-proxy, peanut, janitorr, deploy-ui,
-# artifacts, docs, nut-exporter, pihole-exporter, node-exporter, jellyfin, mosquitto,
-# cloudflare-ddns, crowdsec, configarr, pi-peer-backup, pihole, loki-homelab, wg-easy, homepage,
-# gpu-exporter, headlamp, autofix-bridge, monitor-bridge, homelab-mcp and media-volume are armed. A deferred render
-# (pihole's instance 2, headlamp's observability RBAC) never goes through the labelling wrapper, so the caller's prune cannot
-# select it. authelia stays unarmed: its redis lever drops three manifests whose live objects
-# must survive the drop (authelia/tasks/main.yml). The default stays false until every role is, because flipping it
-# moves every role's rendered bytes and needs one full deploy.
+# DECIDED: armed on every role but two. The operator overturned the earlier "default false,
+# hand-label each template" marker on 2026-10-04 (#3388). Its first blocker was a missing
+# mechanism: a role arming the prune renders through ansible/templates/role-labelled.yaml.j2,
+# which stamps `homelab/role: <service>` onto every document, so no template needs a hand edit.
+# Its second blocker is a cost, not a hazard: an orphan whose staged file was deleted before its
+# role was armed never receives the label and needs one kubectl delete by hand. The prune cannot
+# see such an orphan, so arming a role that still has one is safe, and manifest-prune-check.sh
+# keeps flagging it. The armed roles are not listed here, because a hand list drifted behind
+# the armings: every role that includes this one arms it, except authelia (its redis lever drops
+# three manifests whose live objects must survive the drop) and nut (arming restarts the UPS
+# monitor), each excluded by an operator decision recorded as a DECIDED marker at its include.
+# ansible/tests/deploy/test_manifests_prune.py:_UNARMED_ROLES holds that rule. A deferred render
+# (pihole's instance 2, headlamp's observability RBAC) never goes through the labelling wrapper,
+# so the caller's prune cannot select it. The default stays false while two roles are excluded,
+# and because flipping it moves every role's rendered bytes and needs one full deploy.
 manifests_prune: false
+
+# The one namespace an armed role's apply and prune run in (`-n`). kubectl refuses a document
+# placed in any other namespace, and the prune lists candidates only here. A role whose
+# namespaced documents all live in one other namespace passes its own: observability
+# (k8s_observability_namespace), longhorn-ui (k8s_longhorn_namespace) and dri-device-plugin
+# (kube-system). A role that renders into two namespaces defers one set through
+# `manifests_deferred_files` instead, as headlamp does (#3575).
+manifests_prune_namespace: "{{ k8s_namespace }}"
 
 # The kinds the prune may delete, one list for every armed role. Namespaced kinds only: the
 # apply passes `-n`, and a cluster-scoped kind would be listed outside that scope. The same `-n`
 # makes kubectl refuse an armed role's document placed in another namespace, so such a document
-# goes in `manifests_deferred_files` (headlamp's observability RBAC, #3575). Secret and
+# goes in `manifests_deferred_files` (headlamp's observability RBAC, #3575), or the role passes
+# its own `manifests_prune_namespace`. Secret and
 # PersistentVolumeClaim are absent and must stay absent: a pruned Secret loses a rotated value
 # no re-apply can restore, and a pruned claim loses its data. A kind a role renders that is not
 # listed here is never pruned, which is the safe direction.

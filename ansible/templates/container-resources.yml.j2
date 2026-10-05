@@ -3,7 +3,7 @@
   across the k8s roles share, differing only in the values.
 
   NOT the same key as two other `resources:` in this tree, and this macro is for neither:
-  a PersistentVolumeClaim's `spec.resources.requests.storage` (see pvc.yml.j2), and an RBAC
+  a PersistentVolumeClaim's `spec.resources.requests.storage` (see claim-default.yaml.j2), and an RBAC
   Role's `rules[].resources`, which is a list of API resource names. Both sit at a different
   depth and neither has cpu/memory under it.
 

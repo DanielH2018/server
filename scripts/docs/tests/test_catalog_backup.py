@@ -254,27 +254,6 @@ def test_backup_tier_unresolvable_class_on_a_list_is_classified_by_the_list(tmp_
     )
 
 
-def test_backup_tier_reads_class_from_the_pvc_macro_call(tmp_path):
-    # Shape 2: `pvc(name, storage_class, size)` — a bare variable resolves through the role's
-    # defaults, a quoted literal stands as written.
-    paths = make_repo(tmp_path)
-    write(
-        paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
-        "jellyfin_k8s_claim: jellyfin-cache\njellyfin_k8s_storage_class: longhorn-nobackup\n",
-    )
-    template = (
-        "{% from 'pvc.yml.j2' import pvc with context %}\n"
-        "{{ pvc(jellyfin_k8s_claim, jellyfin_k8s_storage_class, jellyfin_k8s_size) }}\n"
-        "---\n"
-        "{% call pvc('jellyfin-config', 'longhorn', jellyfin_k8s_size) %}\n"
-        "  # why this one is backed up\n"
-        "{% endcall %}\n"
-    )
-    assert _jellyfin_tier(paths, template) == (
-        "no backup (StorageClass longhorn-nobackup); weekly -> B2 (default target)"
-    )
-
-
 def test_backup_tier_claimname_reference_finds_the_class_in_the_declaring_role(
     tmp_path,
 ):
@@ -337,14 +316,15 @@ def test_claim_index_reads_the_real_tree_for_each_declaration_shape():
 
     Every fixture above hands the parser a shape it already matches. CLAUDE.md's rule for a
     check that finds its subject by pattern is a named member it must find: one claim per
-    declaration shape (inline block, `pvc()` macro call, `k8s_claims` entry), so a regex
-    or task walk that stops matching names the claim it lost rather than moving a count.
+    declaration shape the tree still uses (`k8s_claims` entries, one per StorageClass), so a
+    task walk that stops matching names the claim it lost rather than moving a count. No role
+    template carries an inline claim block since #3387; the fixtures above hold that shape.
     """
     index = claim_index(K8S_ROLES)
     expected = {
-        "media-data": "media-local",  # inline block, media-volume
-        "wg-easy-config": "longhorn",  # pvc() macro call, wg-easy
-        "zigbee2mqtt-data": "longhorn",  # k8s_claims entry, zigbee2mqtt
+        "media-data": "media-local",  # k8s_claims entry, media-volume
+        "wg-easy-config": "longhorn",  # k8s_claims entry, wg-easy
+        "registry-data": "longhorn-nobackup",  # k8s_claims entry, registry
     }
     missing = {name: sc for name, sc in expected.items() if index.get(name) != sc}
     assert not missing, f"claim_index no longer resolves: {missing}"

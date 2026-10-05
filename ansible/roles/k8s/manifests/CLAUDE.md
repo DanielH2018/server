@@ -67,7 +67,8 @@ deferred pair below.
   passes `manifests_prune: true`. An armed role renders through
   `ansible/templates/role-labelled.yaml.j2`, which labels every document, since the `-l`
   selector also filters the apply. Pruned kinds:
-  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`.
+  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`. It applies in
+  `manifests_prune_namespace` (default `k8s_namespace`) only.
 - **The prune owns the whole directory, so nothing else may stage a file there**; an unnamed
   file is deleted on that role's next deploy. Write it to a reserved sibling directory
   (`<service>-netpol`, `<service>-claims`, `registry-jobs`) no `manifests_service` claims.

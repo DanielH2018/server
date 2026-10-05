@@ -189,7 +189,7 @@ The derivation refuses again if `k8s_claims` is set anywhere but a role's defaul
 An edit that changes only a shared template's own Jinja comments maps to no tags at all
 (#3459). The rule reads the template at both refs through the `jinja2` lexer and compares the
 token streams without their comments, under both `trim_blocks` settings. Before it, a
-comment-only edit to `pvc.yml.j2` deployed its 14 importers, and one to
+comment-only edit to the retired `pvc()` macro deployed its 14 importers, and one to
 `container-resources.yml.j2` refused as most of the fleet.
 `scripts/deploy_tools/narrow_templates.py` holds all three rules.
 
