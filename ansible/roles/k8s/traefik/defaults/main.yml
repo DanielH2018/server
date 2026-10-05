@@ -100,6 +100,18 @@ traefik_k8s_acme_ca_server: ""
 # small.
 traefik_k8s_acme_storage: 128Mi
 
+# Plain `longhorn`, so the claim rides the daily R2 tier, though nothing on it is load-bearing:
+# acme.json is regenerable, and losing it costs one ACME re-issue rather than data.
+traefik_k8s_acme_storage_class: longhorn
+
+# The ACME claim k8s/manifests renders and applies for this role (#3387). An expression rather
+# than a plain list, because traefik_k8s_manage_acme must reach the claim: a staging cluster
+# with ACME off renders no claim at all. `dict(...)` rather than a `{...}` literal: the offline
+# renders (scripts/lib/k8s_context.py:_PURE_TEMPLATE) evaluate a whole-value expression to its
+# own type only when it holds no brace, and otherwise hand on the list's text.
+k8s_claims: >-  # noqa var-naming[no-role-prefix]
+  {{ [dict(name='traefik-acme', storage_class=traefik_k8s_acme_storage_class, size=traefik_k8s_acme_storage)] if traefik_k8s_manage_acme | bool else [] }}
+
 # "1", not "1.0" — Kubernetes canonicalises quantities, so a manifest saying 1.0 produces a live
 # object saying 1. The values match, but kubectl's last-applied-configuration annotation does not,
 # so every `kubectl apply` patches the annotation and reports the Deployment "configured" forever.

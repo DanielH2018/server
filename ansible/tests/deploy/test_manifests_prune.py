@@ -86,6 +86,8 @@ _ARMED_ROLES = frozenset(
         "mosquitto",
         "cloudflare-ddns",
         "crowdsec",
+        "configarr",
+        "pi-peer-backup",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.

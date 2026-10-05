@@ -19,7 +19,8 @@ defaults on — are `ansible/tests/k8s/test_staging_opt_out_flags_render.py`'s.
 
 from lib import yaml_fast
 
-from _k8s_render import render_role_template
+from _k8s_render import _inventory_base, render_role_template
+from validate.k8s_manifests import K8S_ROLES, load_yaml, resolve_vars
 
 _ROLE = "traefik"
 _FLAG = "traefik_k8s_manage_acme"
@@ -27,6 +28,17 @@ _FLAG = "traefik_k8s_manage_acme"
 
 def _render(template: str, manage_acme: bool) -> str:
     return render_role_template(_ROLE, template, {_FLAG: manage_acme})
+
+
+def _claims(manage_acme: bool) -> list:
+    # Resolved here rather than through render_role_template: `k8s_claims` is a role default
+    # computed from the flag, and resolved defaults outrank overrides laid over them, so the flag
+    # has to change before the defaults resolve.
+    defaults = {
+        **load_yaml(K8S_ROLES / _ROLE / "defaults" / "main.yml"),
+        _FLAG: manage_acme,
+    }
+    return resolve_vars(defaults, _inventory_base())["k8s_claims"]
 
 
 def _deployment(manage_acme: bool) -> dict:
@@ -80,3 +92,11 @@ def test_acme_volumes_are_declared_with_acme_on_and_absent_with_it_off() -> None
 
     declared = {v["name"] for v in _pod_spec(False)["volumes"]}
     assert not {"traefik-acme", "traefik-cloudflare"} & declared
+
+
+def test_acme_claim_is_declared_with_acme_on_and_absent_with_it_off() -> None:
+    assert _claims(True) == [
+        {"name": "traefik-acme", "storage_class": "longhorn", "size": "128Mi"}
+    ]
+
+    assert _claims(False) == []

@@ -1,6 +1,0 @@
-{% from 'pvc.yml.j2' import pvc with context %}
----
-{% call pvc('traefik-acme', 'longhorn', traefik_k8s_acme_storage) %}
-  # Backed up by the `default`-group RecurringJob the k3s role installs, but not load-bearing:
-  # acme.json is regenerable, and losing it costs one ACME re-issue rather than data.
-{% endcall %}
