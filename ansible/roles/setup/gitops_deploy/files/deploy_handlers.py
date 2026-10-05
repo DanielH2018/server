@@ -223,6 +223,7 @@ def handle_broad(
     # lock on the second plane resets the ff-merge like one on the first: the setup plane
     # is idempotent, and the next tick re-crosses the whole range.
     deadline = time.monotonic() + config.broad_deploy_timeout_s
+    releases_before = deploy_narrow.releases_before(tools.release_records, plans)
     for broad in plans:
         playbook, tags = broad.playbook, broad.tags
         try:
@@ -283,6 +284,9 @@ def handle_broad(
         # past — `behind_since` empty cannot (issue #1537). Written per plan and on nothing
         # else: a range whose whole broad half is a role this deployer cannot apply has no
         # plan, so no receipt says an apply happened — #1537's failure, in reverse.
+        deploy_narrow.log_applied_shadow(
+            tools.release_records, tools.applied_diff, releases_before, origin, broad
+        )
         state.record_receipt(origin, target.local, applied={playbook: tags})
         state.clear_broad_hold(playbook, tags)
         deploy_defer.clear_applied(state, playbook, tags)

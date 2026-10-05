@@ -123,3 +123,32 @@ def test_the_render_dir_matches_the_manifests_role():
         / "roles/k8s/manifests/defaults/main.yml"
     ).read_text()
     assert f"manifests_render_record_dir: {deploy_release.K8S_RENDER_DIR}" in defaults
+
+
+def test_the_applied_diff_names_what_the_play_moved():
+    """A record stamped at the ref is a render of it; anything else is unstamped."""
+    stamped = {**RENDER, "service": "web"}
+    before = {
+        "web": {**stamped, "commit": OTHER},
+        "api": {**stamped, "service": "api", "commit": OTHER},
+        "db": {**stamped, "service": "db", "commit": OTHER},
+    }
+    after = {
+        "web": stamped,
+        "api": {**stamped, "service": "api", "manifests_digest": "d2"},
+        "db": before["db"],
+        "new": {**stamped, "service": "new"},
+        "dirty": {**stamped, "service": "dirty", "tree_dirty": True},
+    }
+    assert deploy_release.applied_diff(before, after, REF) == {
+        "moved": ["api", "new"],
+        "unchanged": ["web"],
+        "unstamped": ["db", "dirty"],
+    }
+
+
+def test_release_records_skip_the_previous_step_and_torn_files(tmp_path):
+    _write(tmp_path, RELEASE)
+    (tmp_path / "web.previous.json").write_text(json.dumps(RELEASE))
+    (tmp_path / "torn.json").write_text("{")
+    assert deploy_release.release_records(tmp_path) == {"web": RELEASE}

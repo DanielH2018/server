@@ -418,8 +418,8 @@ def plan(
 # narrowing chose and decides nothing yet. A render record exists only for a service
 # `render_targets.py` lists — a daniel-box k8s entry whose role includes `k8s/manifests` — and
 # the hourly producer writes it at the newest green commit, so at a tick that has just
-# fetched a merge the commit being applied usually has no render at all. A week of these
-# lines is what measures how often the diff could answer; a service with no usable record
+# fetched a merge the commit being applied usually has no render at all, so these lines
+# rarely answer; the DECIDED below says what measures instead. A service with no usable record
 # would keep this function's answer, and the full run stays the fallback either way.
 def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
     """Log the tags a render-digest diff at `origin` would apply, beside `deploy`'s answer.
@@ -447,6 +447,61 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
         f"narrow shadow: render digest at {origin[:8]} would apply "
         f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get('current', []))}; "
         f"unknown: {unknown or 'none'}); the narrowing chose {chose}"
+    )
+
+
+# DECIDED: the shadow's evidence comes from the full play itself, not from an extra render.
+# The line above compares against an hourly render, which matched the commit being applied on
+# 0 of 39 deploy-plane ticks from 2026-10-01 to 2026-10-05: the tick applies a merge that no
+# render has seen yet. A full play stamps every service it applies through the same
+# `release_digest.yml` a render uses (56 of 56 release digests equalled the render digests
+# at one commit, 2026-10-05), so the records either side of the play name exactly what a digest
+# diff would have applied. That costs no render and no lock time. Rendering inside the tick
+# would add ~500s of lock time to every broad tick to measure something that applies nothing.
+# A narrowed tick re-stamps only its own tags, so it measures nothing here, and its line
+# above stays the only evidence for it.
+def is_full_deploy_play(broad: BroadPlan) -> bool:
+    """True for the unscoped `deploy.yml` run a refused narrowing falls back to."""
+    return broad.apply and not broad.tags and broad.playbook == "ansible/deploy.yml"
+
+
+def releases_before(release_records, plans: list[BroadPlan]) -> dict | None:
+    """The release records before a full deploy play, or None when no plan is one.
+
+    Never raises: it runs after the ff-merge and before the apply, where an escape would
+    leave the merged range unapplied.
+    """
+    if not any(is_full_deploy_play(broad) for broad in plans):
+        return None
+    try:
+        return release_records()
+    except Exception as exc:
+        log(f"narrow measured: no release records ({type(exc).__name__}: {exc})")
+        return None
+
+
+def log_applied_shadow(
+    release_records, applied_diff, before: dict | None, origin: str, broad: BroadPlan
+) -> None:
+    """After a full play succeeds, log the services whose applied digests it moved.
+
+    `before` is `releases_before`'s snapshot; None, or a plan that is not the full play,
+    logs nothing. Never raises, for the reason `releases_before` gives.
+    """
+    if before is None or not is_full_deploy_play(broad):
+        return
+    try:
+        verdicts = applied_diff(before, release_records(), origin)
+    except Exception as exc:
+        log(f"narrow measured: no applied diff ({type(exc).__name__}: {exc})")
+        return
+    moved = verdicts.get("moved", [])
+    log(
+        f"narrow measured: the full play at {origin[:8]} moved "
+        f"{','.join(moved) or 'nothing'} (moved {len(moved)}; "
+        f"unchanged {len(verdicts.get('unchanged', []))}; "
+        f"unstamped {len(verdicts.get('unstamped', []))}); "
+        "a render-digest diff would have applied only the moved services"
     )
 
 

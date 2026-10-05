@@ -267,3 +267,50 @@ def test_a_digest_diff_that_raises_leaves_the_narrowed_apply_alone(
         "narrow shadow: no digest diff (OSError: permission denied)"
         in capsys.readouterr().out
     )
+
+
+# ── the measured shadow (#3045): a full play's own release records, either side of it ──────
+def _stamped(digest, commit=ORIGIN):
+    return {
+        "commit": commit,
+        "tree_dirty": False,
+        "host": "daniel-box",
+        "manifests_digest": digest,
+        "secret_manifests": [],
+        "secret_digest": "",
+    }
+
+
+def test_a_full_play_logs_the_services_its_apply_moved(gitops_deploy, tick, capsys):
+    """Only the digest that changed counts; a service the play did not re-stamp is unstamped."""
+    before = {
+        "radarr": _stamped("r1", "1" * 40),
+        "sonarr": _stamped("s1", "1" * 40),
+        "traefik": _stamped("t1", "1" * 40),
+    }
+    after = {**before, "radarr": _stamped("r2"), "sonarr": _stamped("s1")}
+    snapshots = iter([before, after])
+    tick.paths = [GROUP_VARS]
+    tick.narrow = (3, "")
+    tick.tools = dataclasses.replace(
+        tick.tools, release_records=lambda: next(snapshots)
+    )
+    assert gitops_deploy.main(tick.tools) == 0
+    assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
+    assert (
+        "narrow measured: the full play at 22222222 moved radarr (moved 1; unchanged 1; "
+        "unstamped 1)"
+    ) in capsys.readouterr().out
+
+
+def test_a_narrowed_apply_reads_no_release_records(gitops_deploy, tick, capsys):
+    """The rejecting half: a narrowed play re-stamps only its tags, so it measures nothing."""
+
+    def unread():
+        raise AssertionError("a narrowed tick read the release records")
+
+    tick.paths = [GROUP_VARS]
+    tick.narrow = (0, "radarr,sonarr")
+    tick.tools = dataclasses.replace(tick.tools, release_records=unread)
+    assert gitops_deploy.main(tick.tools) == 0
+    assert "narrow measured" not in capsys.readouterr().out

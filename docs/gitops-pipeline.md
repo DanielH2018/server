@@ -197,8 +197,10 @@ comment-only edit to the retired `pvc()` macro deployed its 14 importers, and on
 `narrow shadow:` line beside the outcome above. It names the services whose applied digests
 differ from a render record of the commit being applied, counts the ones that match, and
 counts the ones with no usable record, grouped by the reason. It applies nothing. The
-shadow is the first step toward replacing the refusal's full run with a digest diff, and a
-week of these lines is the measurement that decides whether the diff can.
+shadow is the first step toward replacing the refusal's full run with a digest diff. These
+lines alone cannot decide whether the diff can, because the render they compare against is
+almost never of the applied commit; the `narrow measured:` line below carries the
+measurement.
 
 Which services have a render record, and how often:
 
@@ -207,9 +209,21 @@ Which services have a render record, and how often:
   `k8s/manifests`.
 - It runs hourly at `:17`, rendering the newest commit on origin/master with green CI. A tick
   that has just fetched a merge is applying a commit no render has seen yet, so the line
-  reads `unknown: render is of another commit` for most services on most broad ticks.
+  reads `unknown: render is of another commit`. From 2026-10-01 to 2026-10-05 that held for
+  every service on all 39 deploy-plane ticks, so the `narrow shadow:` line measured nothing.
 - A service with no usable record keeps the answer `narrow` gave. When the diff decides, the
   full run stays the fallback for a range where too many services are unknown.
+
+**A full play measures itself instead** (#3045). `release_stamp.yml` hashes every service
+it applies through the same `release_digest.yml` a render record uses. At one commit on
+2026-10-05, 56 of 56 release digests equalled the render digests. So when `narrow` refuses
+and the tick runs the whole play, the tick snapshots the release records before the apply.
+After a successful apply it logs one `narrow measured:` line. The line names the services
+whose digests moved, which is exactly what a digest diff at that commit would have applied.
+It also counts the services left unchanged and the ones with no usable record at that
+commit. The measurement costs no render and no lock time. A narrowed tick re-stamps only its
+own tags, so it logs no `narrow measured:` line. A failed full play takes the hold path and
+logs none either. `deploy_release.applied_diff` is the reader.
 
 `deploy_release.digest_diff` is the reader, a stdlib restatement of
 `probe_lib/releases_render.py:digest_verdict`. `tests/test_deploy_release_digest.py` runs the
