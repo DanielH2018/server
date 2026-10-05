@@ -24,7 +24,6 @@ SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "configarr",
             "janitorr",
             "media-volume",
-            "volume-claim",
         ),
     ),
     (

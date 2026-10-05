@@ -17,10 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
 
 from catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
-from lib import yaml_fast
 from lib.jinja_comments import strip_jinja_comments
 from lib.render_guard import load_yaml as _load_yaml
 from lib.repo_paths import FILTER_PLUGINS, SHARED_TPL
@@ -52,19 +50,14 @@ __all__ = [
 # whose StorageClass asks for backups" in ansible/roles/setup/k3s/tasks/longhorn.yml):
 #
 #   1. an inline `kind: PersistentVolumeClaim` block carrying its own `storageClassName:` line
-#      (media-volume, valheim, code-server's workspace);
+#      (media-volume);
 #   2. a call to the shared `pvc()` macro in ansible/templates/pvc.yml.j2, whose second
-#      positional argument is the class (authelia, registry, karakeep-meili, observability's four);
-#   3. an `include_role: k8s/volume-claim` task, whose `vars:` carry `volume_claim_name` and,
-#      optionally, `volume_claim_storage_class` — the volume-claim role's own default applies
-#      when the caller leaves it out (uptime-kuma, karakeep's main claim, the *arrs, ~20 roles).
-#      Nothing about such a claim appears in the calling role's templates/ at all.
-#   4. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
-#      which k8s/manifests renders from the shared claim-default.yaml.j2 (freshrss,
-#      zigbee2mqtt).
+#      positional argument is the class (observability's four);
+#   3. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
+#      which k8s/manifests renders from the shared claim-default.yaml.j2 (every other claim).
 #
-# A `claimName:` reference in a pod spec is the fifth pattern. It declares nothing — it names
-# a claim one of the four shapes above declares, in this role or another (`media-data` is
+# A `claimName:` reference in a pod spec is the fourth pattern. It declares nothing — it names
+# a claim one of the three shapes above declares, in this role or another (`media-data` is
 # media-volume's, mounted by seven consumers), which is why `claim_index` is built across
 # every role before any one role is classified.
 
@@ -83,8 +76,6 @@ _MACRO_ARG = r"'[^']*'|\"[^\"]*\"|[A-Za-z_][A-Za-z0-9_]*"
 _PVC_MACRO_CALL_RE = re.compile(
     rf"\bpvc\(\s*(?P<name>{_MACRO_ARG})\s*,\s*(?P<storage_class>{_MACRO_ARG})\s*,"
 )
-# Shape 3 is read from parsed YAML, not a regex: see _volume_claim_includes.
-_VOLUME_CLAIM_ROLE = "k8s/volume-claim"
 # The fourth pattern — a reference, not a declaration.
 _CLAIM_NAME_RE = re.compile(r"claimName:\s*(\{\{.*?\}\}|\S+)")
 _SIMPLE_VAR_RE = re.compile(r"^\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$")
@@ -196,51 +187,8 @@ def _template_declarations(role_dir: Path) -> list[ClaimDecl]:
     return decls
 
 
-def _volume_claim_includes(role_dir: Path, k8s_roles: Path) -> list[ClaimDecl]:
-    """Shape 3: every PVC a role has the volume-claim role render on its behalf.
-
-    Read from the `include_role` task's `vars:` in tasks/*.yml. A caller that sets no
-    `volume_claim_storage_class` gets the volume-claim role's own default, read from that
-    role's defaults rather than assumed — absent both, the class is unknown. Best-effort in
-    the same way as `lib.k8s_pvc.volume_claim_pvc_names`: only a plain string `vars:` value is
-    read, which is the only form any current caller uses.
-    """
-    tasks_dir = role_dir / "tasks"
-    if not tasks_dir.is_dir():
-        return []
-    vc_defaults = _load_yaml(k8s_roles / "volume-claim" / "defaults" / "main.yml")
-    default_class = vc_defaults.get("volume_claim_storage_class")
-    decls = []
-    for task_file in sorted(tasks_dir.glob("*.yml")):
-        try:
-            tasks = yaml_fast.safe_load(task_file.read_text())
-        except yaml.YAMLError:
-            continue
-        if not isinstance(tasks, list):
-            continue
-        for task in tasks:
-            if not isinstance(task, dict):
-                continue
-            inc = task.get("ansible.builtin.include_role")
-            if not isinstance(inc, dict) or inc.get("name") != _VOLUME_CLAIM_ROLE:
-                continue
-            task_vars = task.get("vars") or {}
-            name = task_vars.get("volume_claim_name")
-            if not isinstance(name, str):
-                continue
-            storage_class = task_vars.get("volume_claim_storage_class", default_class)
-            decls.append(
-                _decl(
-                    name,
-                    storage_class if isinstance(storage_class, str) else None,
-                    role_dir,
-                )
-            )
-    return decls
-
-
 def _k8s_claims_entries(role_dir: Path) -> list[ClaimDecl]:
-    """Shape 4: every `k8s_claims` entry in the role's defaults, name and class as written."""
+    """Shape 3: every `k8s_claims` entry in the role's defaults, name and class as written."""
     claims = _load_yaml(role_dir / "defaults" / "main.yml").get("k8s_claims") or []
     return [
         _decl(
@@ -255,12 +203,8 @@ def _k8s_claims_entries(role_dir: Path) -> list[ClaimDecl]:
     ]
 
 
-def _declared_claims(role_dir: Path, k8s_roles: Path) -> list[ClaimDecl]:
-    return (
-        _template_declarations(role_dir)
-        + _volume_claim_includes(role_dir, k8s_roles)
-        + _k8s_claims_entries(role_dir)
-    )
+def _declared_claims(role_dir: Path) -> list[ClaimDecl]:
+    return _template_declarations(role_dir) + _k8s_claims_entries(role_dir)
 
 
 def _call_kwargs(text: str, macro: str) -> dict[str, str]:
@@ -335,7 +279,7 @@ def _role_claims(role_dir: Path, k8s_roles: Path) -> list[ClaimDecl]:
     declaration's StorageClass; a reference alone is left None here and looked up in
     `claim_index` by the classifier, since the declaring role may be another one.
     """
-    declared = _declared_claims(role_dir, k8s_roles)
+    declared = _declared_claims(role_dir)
     by_name = {claim.name: claim for claim in declared if claim.resolved}
     ordered = [
         _decl(expr, None, role_dir) for expr in _referenced_claim_exprs(role_dir)
@@ -371,7 +315,7 @@ def claim_index(k8s_roles: Path = K8S_ROLES) -> dict[str, str | None]:
     if not k8s_roles.is_dir():
         return index
     for role_dir in role_dirs(k8s_roles):
-        for claim in _declared_claims(role_dir, k8s_roles):
+        for claim in _declared_claims(role_dir):
             if claim.resolved and index.get(claim.name) is None:
                 index[claim.name] = claim.storage_class
     return index

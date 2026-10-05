@@ -47,9 +47,10 @@ Two limits worth knowing before you trust a green dry run:
   `roles/k8s/manifests` and are guarded on `k8s_no_mutate`, so a dry run proves the manifests
   and not those. `ansible/tests/deploy/test_k8s_dry_run.py` refuses a role that grows such a
   write without the guard.
-- **A brand-new service is only half-checked.** `volume-claim` is skipped (it is a dependency of
-  25 roles and mutates), and nothing at admission verifies that a referenced PVC exists — so
-  the Deployment validates while the volume is never proven provisionable.
+- **A brand-new service is only half-checked.** Its `k8s_claims` are applied with
+  `--dry-run=server`, which validates the claim object and provisions nothing, and nothing at
+  admission verifies that a referenced PVC exists. So the Deployment validates while the volume
+  is never proven provisionable.
 
 Steps:
 1. Confirm the service name matches a role, and note which of the two trees it's in.

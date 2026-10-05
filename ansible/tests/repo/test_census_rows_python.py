@@ -104,7 +104,6 @@ YAML_FAST_USERS = frozenset(
     {
         "ansible/tests/_k8s_render.py",
         "scripts/lib/invocation_sites.py",
-        "scripts/lib/k8s_pvc.py",
         "scripts/validate/compose_templates.py",
     }
 )

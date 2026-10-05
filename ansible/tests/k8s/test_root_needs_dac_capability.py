@@ -68,15 +68,14 @@ _ADD = re.compile(r"^\s*add:\s*$")
 _DROP = re.compile(r"^\s*drop:\s*$")
 
 
-# The three role templates no render reaches: `_k8s_render` skips `k8s/image-builder` and
-# `k8s/volume-claim`, which are `include_role` helpers with no `containers_list` entry, so their
-# image, tag and claim name all arrive on the calling role's include task. Their source is read
+# The two role templates no render reaches: `_k8s_render` skips `k8s/image-builder`, an
+# `include_role` helper with no `containers_list` entry, so its image and tag arrive on the
+# calling role's include task. Their source is read
 # instead, and `test_the_render_reaches_every_role_template` fails if the set grows.
 FALLBACK_TEMPLATES = frozenset(
     {
         "k8s/image-builder/templates/build-job.yaml.j2",
         "k8s/image-builder/templates/context-configmap.yaml.j2",
-        "k8s/volume-claim/templates/pvc.yaml.j2",
     }
 )
 

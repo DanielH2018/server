@@ -67,7 +67,6 @@ from lib.k8s_pvc import (
     find_claim_name_refs,
     find_pvc_names,
     parse_docs,
-    volume_claim_pvc_names,
 )
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
@@ -93,7 +92,6 @@ from validate.validate_lib.k8s_schema import (
     schema_error,
 )
 from lib.ansible_jinja_env import (
-    make_ansible_env,
     register_ansible_filters,
     template_env,
 )
@@ -151,7 +149,6 @@ __all__ = [
     "schema_error",
     "shared_default_templates",
     "service_port_translations",
-    "volume_claim_pvc_names",
     "workload_container_ports",
     "yaml_error",
 ]
@@ -227,16 +224,12 @@ def main() -> int:
     roles = role_names(K8S_ROLES)
     checked = failures = 0
     # Built up alongside the existing per-template loop below (one render pass, not two): every
-    # declared PVC name (from a rendered PersistentVolumeClaim, or from a volume-claim include —
-    # see volume_claim_pvc_names), and every (rel, docs) this run successfully parsed. The
+    # declared PVC name (from a rendered PersistentVolumeClaim), and every (rel, docs) this run successfully parsed. The
     # claimName cross-reference check runs once, after the loop, once the PVC index is complete
     # — a reference in role A can legitimately name a PVC role B declares (media_volume_claim,
     # ~7 consumers), so it can't be checked role-by-role as the loop goes.
     pvc_names: set[str] = set()
     parsed_templates: list[tuple[str, list]] = []
-    # The env volume_claim_pvc_names renders a claim name with. Built once here rather than
-    # inside that function so the function needs nothing from this module.
-    claim_env = make_ansible_env([SHARED_TPL])
     for role in roles:
         # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
         # helper script (observability's telemetry-health.sh.j2) or a Dockerfile for
@@ -293,7 +286,6 @@ def main() -> int:
         # fix a collision that does not exist. Full reasoning in that function's docstring.
         # Contradict it with a case where the guard passes and the render is still wrong.
         ctx = {**base, **role_vars, "container_item": entries[role]}
-        pvc_names.update(volume_claim_pvc_names(role, ctx, claim_env))
         # A manifest `k8s/manifests` renders from ansible/templates/ because this role ships
         # none of its own. Rendered here under the role's own context, exactly as the
         # deploy renders it -- 25 roles' Service manifests left the tree with their template

@@ -74,17 +74,16 @@ NO_MANIFEST_ROLES = {
 }
 
 # These DO carry manifest templates; they are exempt for a different reason. Their templates
-# render only with vars a CALLING role passes on its `include_role` task — which image, which
-# Dockerfile, which claim — and this validator reads role defaults and inventory, not task-level
+# render only with vars a CALLING role passes on its `include_role` task — which image and which
+# Dockerfile — and this validator reads role defaults and inventory, not task-level
 # `vars:` overrides. Rendering them standalone produces STUB-filled manifests that prove nothing.
 #
 # That exemption is a coverage gap, not a clean bill. The build job is closed for the test
 # suite: `ansible/tests/_k8s_render.py:rendered_build_job_text` renders it against a fixture of
 # a caller's vars, and the security-context, token-mount and namespace-defaults guards parse
-# that render. Two manifests (volume-claim's pvc, image-builder's context-configmap) are still
-# parsed as YAML nowhere; this names that gap where someone will look for it.
+# that render. One manifest (image-builder's context-configmap) is still parsed as YAML
+# nowhere; this names that gap where someone will look for it.
 CALLER_RENDERED_ROLES = {
-    "volume-claim",
     "image-builder",
 }
 

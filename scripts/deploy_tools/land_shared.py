@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Which role a changed path belongs to, the shared-role expansion, and the #3124 narrowing.
 
-A shared k8s role — `manifests`, `volume-claim`, `arr-notification` — has no `containers_list`
+A shared k8s role — `manifests`, `image-builder`, `arr-notification` — has no `containers_list`
 entry, so `--tags` cannot select it. `deploy.yml` runs it under the tag of every role that
 includes it, so the landing deploys all of those instead of reporting the role to a hand
 (#2704, #1397).
@@ -29,7 +29,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import deploy_tags
 from lib.k8s_roles import role_callers
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, ROLES
 from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, caller_tags, smoke_caller
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -91,8 +91,8 @@ def is_role_test_path(path: str) -> bool:
     caller separately — arr-notification's seed a Discord Connect notification into the *arr's
     own database — so deploying one caller is not the change applied
     (`tests/test_land_tags_caller_coverage.py:76`). And `_supplies_manifest_bytes`
-    puts `volume-claim` in the reported set by name:
-    the role ships `templates/pvc.yaml.j2`.
+    puts `image-builder` in the reported set by name:
+    the role ships `templates/build-job.yaml.j2`.
 
     Read HERE rather than folded into `role_for`, which stays the plain "which role directory is
     this path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's
@@ -113,18 +113,32 @@ def is_role_test_path(path: str) -> bool:
 _DEPLOY_RUN_SUBDIRS = frozenset({"tasks", "handlers"})
 
 
-def shared_roles(files, declared: set[str] | None = None) -> list[str]:
+def shared_roles(
+    files, declared: set[str] | None = None, roles_root: _Path | None = None
+) -> list[str]:
     """The changed role directories that have no `containers_list` entry.
 
     These are the shared k3s plane — `manifests` is the apply-and-roll path every workload
-    includes, `volume-claim` and `volume-revert` are storage paths several include. Naming one
+    includes, `volume-snapshot` and `volume-revert` are storage paths several include. Naming one
     in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2), so they must be split off the
     tags and reported as work a human still owes.
 
     A role's own `tests/` does not put it here at all — `is_role_test_path`.
+
+    Nor does a role the change DELETED. Its directory is gone from the tree this reads, so no
+    play can run it: an `include_role` still naming it fails with "role not found" rather than
+    applying anything. Retiring `k8s/volume-claim` (#3387) otherwise reported a full
+    `ansible/deploy.yml` as owed for a role that had no callers left to deploy.
     """
     declared = declared_tags() if declared is None else declared
-    roles = {r for p in files if (r := role_for(p)) and not is_role_test_path(p)}
+    roles_root = ROLES if roles_root is None else roles_root
+    roles = set()
+    for p in files:
+        role = role_for(p)
+        if not role or is_role_test_path(p):
+            continue
+        if (roles_root / role_of(p).plane / role).is_dir():
+            roles.add(role)
     return sorted(roles - declared)
 
 

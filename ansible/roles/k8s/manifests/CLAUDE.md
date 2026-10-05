@@ -37,9 +37,9 @@ deferred pair below.
   `ansible/templates/claim-default.yaml.j2` to `claim-<name>.yaml` in the role's directory.
   The claims ride the prune keep-set, the digest and the dry run, and a real deploy applies
   them before the snapshot, which fails on a claim that does not exist yet. This role declares
-  no default for it, because its own default would outrank the caller's. `k8s/volume-claim`
-  is the older path it replaces (#3387); the deploy removes its stale `<service>-claims/`, so
-  such a role must not also include it.
+  no default for it, because its own default would outrank the caller's. It replaced the
+  `k8s/volume-claim` role, retired in #3387; the deploy removes the stale `<service>-claims/`
+  directory that role staged.
 
 - **Templates stay in the caller's role**, at `roles/k8s/<service>/templates/<name>.j2`, and the
   `src` is anchored to `playbook_dir`: a relative `src` resolves against this role, and so does a

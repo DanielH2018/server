@@ -278,7 +278,6 @@ def test_deploy_time_shared_roles_spares_the_manifest_renderer():
     assert deploy_time == {
         "arr-notification",
         "image-builder",
-        "volume-claim",
     }
 
 

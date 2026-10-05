@@ -320,7 +320,6 @@ def test_every_role_that_mutates_outside_manifests_guards_itself() -> None:
     ]
     # Non-vacuity: the census must keep finding the roles this rule exists for.
     assert {r.name for r in scanned} >= {
-        "volume-claim",
         "image-builder",
         "cronjob-gate",
     }, "the role census stopped finding the roles that mutate outside manifests"

@@ -12,8 +12,8 @@ WHAT THIS KEEPS, and why the reject halves below are `tasks/` cases. Dropping a 
 `tasks/` as well is wrong for three reasons: a tasks-only PR adding an unregistered role must
 still be reported (`test_land_classify.py:110`); a helper's tasks apply live state per caller,
 so one caller deployed is not the change applied (`test_land_tags_caller_coverage.py:76`); and
-`_supplies_manifest_bytes` names `volume-claim/templates/pvc.yaml.j2` as a byte supplier, which
-puts that role's own example in the REPORTED set.
+`_supplies_manifest_bytes` names `image-builder/templates/build-job.yaml.j2` as a byte supplier,
+which puts that role's own example in the REPORTED set.
 
 THE VERDICT IS ASSERTED for the tests-only half, not just `plane_note`, for the reason
 `test_land_doc_change_reaches_a_verdict.py` asserts it: `no_tag_outcome` reads `plane_note`
@@ -36,17 +36,17 @@ from lib.repo_paths import REPO as REPO_ROOT
 _ROLE_TESTS = "ansible/roles/k8s/arr-notification/tests/test_seed_arr_notification.py"
 _ROLE_FILES = "ansible/roles/k8s/arr-notification/files/seed_arr_notification.py"
 _ROLE_TASKS = "ansible/roles/k8s/arr-notification/tasks/main.yml"
-_CLAIM_TASKS = "ansible/roles/k8s/volume-claim/tasks/claim.yml"
+_BUILD_TASKS = "ansible/roles/k8s/image-builder/tasks/main.yml"
 
 
 def test_the_paths_under_test_still_exist():
     """Non-vacuity: every case below reads green over a renamed file or role."""
-    named = (_ROLE_TESTS, _ROLE_FILES, _ROLE_TASKS, _CLAIM_TASKS)
+    named = (_ROLE_TESTS, _ROLE_FILES, _ROLE_TASKS, _BUILD_TASKS)
     missing = [p for p in named if not (REPO_ROOT / p).exists()]
     assert not missing, f"paths moved, so these cases check nothing: {missing}"
     declared = land_tags.declared_tags()
-    still_shared = {"arr-notification", "volume-claim"} - declared
-    assert still_shared == {"arr-notification", "volume-claim"}, (
+    still_shared = {"arr-notification", "image-builder"} - declared
+    assert still_shared == {"arr-notification", "image-builder"}, (
         f"gained a containers_list entry, so no longer a shared role: {declared & still_shared}"
     )
 
@@ -70,9 +70,24 @@ def test_a_role_task_file_is_flagged():
     }
 
 
-def test_a_shared_storage_role_task_file_is_flagged():
-    """volume-claim ships templates/, so it supplies applied bytes."""
-    assert land_tags.shared_roles([_CLAIM_TASKS]) == ["volume-claim"]
+def test_a_shared_build_role_task_file_is_flagged():
+    """image-builder ships templates/, so it supplies applied bytes."""
+    assert land_tags.shared_roles([_BUILD_TASKS]) == ["image-builder"]
+
+
+def test_a_deleted_shared_role_owes_nothing(tmp_path):
+    """A role whose directory the change removed has nothing left for any play to run (#3387)."""
+    retired = "ansible/roles/k8s/retired-helper/templates/pvc.yaml.j2"
+    assert land_tags.shared_roles([retired], declared=set(), roles_root=tmp_path) == []
+
+
+def test_a_shared_role_still_in_the_tree_is_flagged(tmp_path):
+    """The reject half: the same path with its directory present is still reported."""
+    (tmp_path / "k8s" / "retired-helper").mkdir(parents=True)
+    retired = "ansible/roles/k8s/retired-helper/templates/pvc.yaml.j2"
+    assert land_tags.shared_roles([retired], declared=set(), roles_root=tmp_path) == [
+        "retired-helper"
+    ]
 
 
 def test_a_role_shipped_file_is_flagged():

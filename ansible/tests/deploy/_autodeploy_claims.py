@@ -10,7 +10,7 @@ Consumed by `test_k8s_autodeploy_guard.py`.
 import re
 from pathlib import Path
 
-from _autodeploy import _LITERAL_NAME, _live_tasks, _role_defaults, _strip_comments
+from _autodeploy import _LITERAL_NAME, _role_defaults, _strip_comments
 
 
 _PVC_KIND = re.compile(
@@ -88,17 +88,12 @@ def _resolve_claim_token(token: str, defaults: dict) -> str | None:
 def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     """PVC claim names `role` actually causes to exist, as `(resolved, unresolved_tokens)`.
 
-    Three sources, because this repo builds a PVC three different ways:
+    Two sources, because this repo builds a PVC two different ways:
 
     1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2`, such as
        media-volume's `pvc.yaml.j2`.
-    2. A `vars: volume_claim_name: ...` on a task that includes `k8s/volume-claim` — how the
-       other claims are created. Read through `_live_tasks`, the same walker
-       `_batch_gated_names` uses, so a commented-out or `when: false`-gated include credits
-       nothing, the same "argument-against read as the thing itself" trap this file's other
-       matchers are written against.
-    3. A `name:` in the role's `k8s_claims` default, which `k8s/manifests` renders from the
-       shared `claim-default.yaml.j2` — the path #3387 moves every claim onto.
+    2. A `name:` in the role's `k8s_claims` default, which `k8s/manifests` renders from the
+       shared `claim-default.yaml.j2` — the path #3387 moved every claim onto.
 
     Every token found by any path is resolved through `_resolve_claim_token`. A token that
     doesn't resolve is returned UNCHANGED in the second element rather than dropped — dropping
@@ -111,13 +106,6 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     tdir = role / "templates"
     for t in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
         raw.extend(_pvc_names(t.read_text()))
-
-    for task in _live_tasks(role):
-        include = task.get("ansible.builtin.include_role")
-        if isinstance(include, dict) and include.get("name") == "k8s/volume-claim":
-            claim = (task.get("vars") or {}).get("volume_claim_name")
-            if isinstance(claim, str):
-                raw.append(claim)
 
     for claim in defaults.get("k8s_claims") or []:
         if isinstance(claim, dict) and isinstance(claim.get("name"), str):
@@ -176,7 +164,7 @@ def _migrating_state(role: Path) -> bool:
     and bites instead of matching an empty loop.
 
     Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes `accessModes:
-    [ReadWriteOnce]` (both direct templates and k8s/volume-claim's shared one), so a rendered claim
+    [ReadWriteOnce]` (both direct templates and the shared `claim-default.yaml.j2`), so a rendered claim
     existing at all is normally sufficient without a separate accessModes read. The one exception:
     `k8s/media-volume`'s own `pvc.yaml.j2` is `ReadWriteMany`. It does not corrupt this predicate
     today — `media-volume` itself renders no Recreate Deployment, so `_migrating_state` never
@@ -195,7 +183,7 @@ def _migrating_state(role: Path) -> bool:
 # therefore cannot revert.
 #
 # `_rendered_pvc_claims` reads only what a role CAUSES to exist — a PVC document in its own
-# templates, a `k8s/volume-claim` include, or a `k8s_claims` entry. `media-data` is rendered by `k8s/media-volume`, so
+# templates or a `k8s_claims` entry. `media-data` is rendered by `k8s/media-volume`, so
 # every *arr role mounting it is invisible to that reader. The gap this closes is the NEXT role
 # added with such a mount, promoted with nobody asked.
 #

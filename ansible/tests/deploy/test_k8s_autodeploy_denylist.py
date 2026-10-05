@@ -251,7 +251,6 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     for role in (
         "traefik",
         "authelia",
-        "volume-claim",
         "code-server",
     ):
         assert role in denied

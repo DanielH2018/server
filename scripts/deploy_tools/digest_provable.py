@@ -6,7 +6,7 @@ as proof that a role's change is live (`deploy_release.render_proof`). That proo
 `manifests_digest` and `secret_digest` and nothing else, so it is sound only for a role whose
 whole effect is the manifests `k8s/manifests` renders. A role that also writes a host file,
 stages a ConfigMap with `kubectl create --from-file`, calls an API or includes another shared
-role (`volume-claim`, `image-builder`) acts outside the digest, and a digest match would drop
+role (`image-builder`) acts outside the digest, and a digest match would drop
 its line with that half never applied.
 
 THE RULE, FAIL-CLOSED. A role is digest-provable when every task its `tasks/main.yml` reaches is

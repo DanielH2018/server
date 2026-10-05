@@ -307,7 +307,7 @@ Four things sit in that position:
   The tick applies every other setup role itself, and `deploy.yml` is a `containers_list` loop.
 - **A shared k8s role that no declared role runs** has no tag at all and still needs a full
   `ansible/deploy.yml`. Every other shared k8s role is deployed rather than reported (#2704):
-  `manifests`, `volume-claim`, `volume-snapshot`, `image-builder`, `arr-notification` and the
+  `manifests`, `volume-snapshot`, `image-builder`, `arr-notification` and the
   rest have no `containers_list` entry, but `deploy.yml` runs each under the tag of every role
   that includes it, so the landing adds the tags of every caller, followed through callers that
   are themselves shared. A `tasks/` change to `volume-snapshot` reaches about 58

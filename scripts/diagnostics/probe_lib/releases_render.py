@@ -191,8 +191,7 @@ def path_reason(hits):
 def undigested_hits(service, hits):
     """The `hits` a matching digest cannot clear for `service`.
 
-    That is a hit under a shared k8s role outside `DIGEST_PROVABLE_ROLES`. `volume-claim`
-    stages its PVC in a directory `release_digest.yml` never stats, `image-builder`'s build Job
+    That is a hit under a shared k8s role outside `DIGEST_PROVABLE_ROLES`. `image-builder`'s build Job
     is outside the digest, and `arr-notification` writes an app's database over its API. Each
     changes what is live while every caller's digest stays CURRENT, so clearing its hit on a
     digest match would hide a change nothing has applied. A hit under the service's own role,

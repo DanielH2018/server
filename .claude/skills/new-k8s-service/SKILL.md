@@ -147,9 +147,10 @@ remove it live. Patch it out and verify.
 The `deploy` skill covers the wrapper's exit codes and the `--check` / `--dry-run` / `prek`
 split. Two limits specific to a *brand-new* service:
 
-- `--dry-run` only half-checks it. `volume-claim` is skipped (it is a dependency of 25 roles
-  and mutates), and nothing at admission verifies that a referenced PVC exists — so the
-  Deployment validates while the volume is never proven provisionable.
+- `--dry-run` only half-checks it. Its `k8s_claims` are applied with `--dry-run=server`, which
+  validates the claim object and provisions nothing, and nothing at admission verifies that a
+  referenced PVC exists. So the Deployment validates while the volume is never proven
+  provisionable.
 - A green dry run says nothing about scheduling, PVC binding, probe or rollout behaviour.
   Those need a real deploy, gated with
   `uv run python scripts/diagnostics/probe.py health <name>`.

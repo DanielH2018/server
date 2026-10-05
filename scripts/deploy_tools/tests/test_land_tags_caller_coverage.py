@@ -12,6 +12,7 @@ Split from test_land_tags.py rather than appended to it: that module is at its l
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_caller_coverage.py
 """
 
+import land_shared
 import land_tags
 
 # The declared set these cases need, passed to each call rather than patched over
@@ -82,12 +83,17 @@ def test_a_helper_called_only_by_helpers_reaches_their_callers():
     )
 
 
-def test_a_changed_role_with_neither_an_entry_nor_a_caller_is_still_reported():
+def test_a_changed_role_with_neither_an_entry_nor_a_caller_is_still_reported(
+    tmp_path, monkeypatch
+):
     """The reject half by census: a role nothing includes can only be applied by hand.
 
     The suppression keys on the caller map, so a role absent from it must fall through to the
-    note exactly as before -- otherwise the fix trades a false alarm for a silence.
+    note exactly as before -- otherwise the fix trades a false alarm for a silence. The role's
+    directory exists, as a new unregistered role's does: a DELETED role owes nothing.
     """
+    (tmp_path / "k8s" / "nosuchrole").mkdir(parents=True)
+    monkeypatch.setattr(land_shared, "ROLES", tmp_path)
     files = ["ansible/roles/k8s/nosuchrole/templates/deployment.yaml.j2"]
     assert land_tags.derive(files, 1, set(_DECLARED)).tags == []
     note = land_tags.plane_note(files, set(_DECLARED))

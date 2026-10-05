@@ -155,7 +155,7 @@ def _deploy_tags():
     return deploy_tags
 
 
-# Roles under ansible/roles/k8s/ with no containers_list entry -- manifests, volume-claim and
+# Roles under ansible/roles/k8s/ with no containers_list entry -- manifests, image-builder and
 # the rest render or gate the applied bytes for EVERY k8s service, not just their own. Read at
 # call time rather than pinned as a frozenset here: split_shared_roles derives it from the tree
 # rather than repeating the SHARED_K8S_ROLES list gitops_deploy/files/deploy_k8s.py already
@@ -186,8 +186,7 @@ def _supplies_manifest_bytes(role_dir):
     """Whether `role_dir` contributes bytes to some service's APPLIED manifests.
 
     A shared role does that by shipping `templates/` or `files/`. It renders templates that
-    are applied beside the consumer's own (`volume-claim/templates/pvc.yaml.j2`,
-    `image-builder/templates/build-job.yaml.j2`), or it ships `files/` its tasks run against
+    are applied beside the consumer's own (`image-builder/templates/build-job.yaml.j2`), or it ships `files/` its tasks run against
     the consumer. `arr-notification`'s `files/` hold a seed script that writes the app's
     database over the app's API, so it changes live state while rendering no manifest at all.
     A role with only `tasks/` and `defaults/` changes how a deploy RUNS, never what it applies.
@@ -232,9 +231,9 @@ def manifest_affecting_shared_roles(k8s_roles_dir=None, host_vars=None):
 
 
 # Subdirectories of a shared role that decide how a deploy RUNS rather than what it applies.
-# `defaults/` is deliberately absent: `volume-claim/defaults/main.yml` holds `volume_claim_size`
-# and `volume_claim_storage_class`, both read by that role's `pvc.yaml.j2`, so a change there
-# does move the applied bytes.
+# `defaults/` is deliberately absent: a shared role's defaults can hold a value its own template
+# renders (the retired `volume-claim`'s `volume_claim_size` was one), so a change there can move
+# the applied bytes.
 _DEPLOY_TIME_SUBDIRS = frozenset({"tasks", "handlers", "meta"})
 
 K8S_ROLES_PREFIX = ("ansible", "roles", "k8s")
@@ -246,7 +245,7 @@ def _deploy_time_shared_roles(shared_roles):
     `manifests` is excluded because it ships no templates of its own -- its `tasks/` IS the
     render, prune and apply logic that produces every service's bytes, so a change there is
     exactly the false GREEN this reader exists to catch. Every other byte-supplying shared
-    role (`volume-claim`, `image-builder`, `arr-notification`) is in the census for its
+    role (`image-builder`, `arr-notification`) is in the census for its
     `templates/` or `files/`, and its `tasks/` is deploy-time behaviour.
     """
     return frozenset(shared_roles) - {MANIFEST_RENDERER}

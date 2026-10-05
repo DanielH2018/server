@@ -83,25 +83,23 @@ def test_a_pi_template_that_will_not_render_fails_the_caller() -> None:
 
 
 def test_an_included_role_with_no_census_entry_renders() -> None:
-    """`k8s/volume-claim` is included by caller roles and is in no `containers_list`.
+    """`k8s/image-builder` is included by caller roles and is in no `containers_list`.
 
-    The accessor looked its entry up with a bare `next()`, so asking it for this role raised
-    `StopIteration` before the render started — and the freshrss guard had to read the
-    template's bytes instead, which is the exposure #2809's series removes. The caller's own
-    `vars:` arrive as overrides, so the claim renders under the name its caller hands over.
+    The accessor looked its entry up with a bare `next()`, so asking it for such a role raised
+    `StopIteration` before the render started — and a guard had to read the template's bytes
+    instead, which is the exposure #2809's series removes. The caller's own `vars:` arrive as
+    overrides, so the Job renders under the name its caller hands over.
     """
-    pvc = yaml_fast.safe_load(
+    job = yaml_fast.safe_load(
         render_k8s_template(
-            "volume-claim", "pvc.yaml.j2", {"volume_claim_name": "freshrss-config"}
+            "image-builder", "build-job.yaml.j2", {"image_builder_name": "freshrss"}
         )
     )
-    assert pvc["kind"] == "PersistentVolumeClaim"
-    assert pvc["metadata"]["name"] == "freshrss-config"
+    assert job["kind"] == "Job"
+    assert job["metadata"]["name"] == "build-freshrss"
     # The role's own defaults still reach the render; only the census entry is absent.
-    assert (
-        pvc["spec"]["storageClassName"]
-        == VOLUME_CLAIM_DEFAULTS["volume_claim_storage_class"]
-    )
+    containers = job["spec"]["template"]["spec"]["containers"]
+    assert containers[0]["image"] == IMAGE_BUILDER_DEFAULTS["image_builder_k8s_image"]
 
 
 def test_every_build_role_dockerfile_is_rendered() -> None:
@@ -140,7 +138,7 @@ GUARDED_SHELL_TEMPLATES = frozenset(
 )
 
 ARTIFACTS_DEFAULTS = load_defaults(ROLES / "k8s" / "artifacts")
-VOLUME_CLAIM_DEFAULTS = load_defaults(ROLES / "k8s" / "volume-claim")
+IMAGE_BUILDER_DEFAULTS = load_defaults(ROLES / "k8s" / "image-builder")
 
 
 def test_every_shell_template_in_the_tree_is_rendered() -> None:
