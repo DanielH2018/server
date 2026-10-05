@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
 from deploy_tools.deploy_detach_notify import GateResult
@@ -134,7 +135,10 @@ class Fakes:
     # checkout already carries this PR. Non-zero by default so `behind_since` alone still
     # answers BEHIND unless a test says the tick crossed the merge commit.
     merge_applied_rc: int = 1
-    state: dict[str, str] = field(default_factory=dict)
+    # A marker's value; None is a read that failed, which `Landing.state` passes on as None.
+    # Mapping, not dict: a dict is invariant in its values, so the many `dict[str, str]`
+    # callers would no longer type-check.
+    state: Mapping[str, str | None] = field(default_factory=dict)
     # What `tools.own_narrowing` answers on the fast path: role tag -> this PR's derivation.
     own_narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
     # The paths `tools.paths_a_hand_must_apply` drops: a shared role's change that moves no
@@ -144,6 +148,10 @@ class Fakes:
     hostname: str = "daniel-box"
     # What `gh api repos/{owner}/{repo}` answers: the visibility --arm-merge refuses on.
     repo: dict[str, Any] = field(default_factory=lambda: {"visibility": "public"})
+    # What the REST `pulls/<n>/files` listing answers, as one page: the landing policy's input.
+    pr_files: list[dict[str, Any]] = field(
+        default_factory=lambda: [{"filename": "docs/landing.md"}]
+    )
 
 
 def _seq(values: list, calls: list, name: str):
@@ -228,6 +236,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         if args[:2] == ("api", "repos/{owner}/{repo}"):
             calls.append(("gh:repo", args, kwargs))
             return f.repo
+        if args[0] == "api" and args[-1].endswith("/files"):
+            calls.append(("gh:files", args, kwargs))
+            return [f.pr_files]
         return view_seq[args[args.index("--json") + 1]]()
 
     gh_rc = _seq(f.gh_merge_rc, calls, "gh")

@@ -90,6 +90,7 @@ from deploy_tools.land_lib import detach, pipeline
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line
 from deploy_tools.land_lib.options import Options, parse_args
+from deploy_tools.land_lib.outcome import write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
 
 
@@ -184,11 +185,19 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
     _prepare_stdio()
     ln = Landing(opts, tools, classifier)
     rc = 1
+    # PENDING first, so a reader never takes an earlier landing's line for this one's.
+    line = "STOPPED: rc=1 the landing raised before it reached a verdict"
+    if opts.verdict_file:
+        write_verdict_file(opts.verdict_file, "PENDING")
     try:
         outcome = pipeline.run(ln)
         rc = outcome.rc
         outcome.emit()
+        line = outcome.file_line()
     finally:
+        if opts.verdict_file:
+            with contextlib.suppress(OSError):
+                write_verdict_file(opts.verdict_file, line)
         # Fire-and-forget: a landing that succeeded must never report failure because
         # logging it did not. An unexpected exception still annotates, as `aborted`.
         with contextlib.suppress(Exception):

@@ -14,6 +14,7 @@ runtime check in `Outcome.__init__` stays for a value that arrives from outside.
 
 import sys
 from enum import StrEnum
+from pathlib import Path
 
 
 class Verdict(StrEnum):
@@ -121,6 +122,24 @@ class Outcome(Exception):
             print(f"land: {self.error}", file=sys.stderr)
         if self.verdict:
             print(f"VERDICT: {self.verdict} ({self.detail})")
+
+    def file_line(self) -> str:
+        """The one line `--verdict-file` records: the VERDICT line, or why it stopped without one."""
+        if self.verdict:
+            return f"VERDICT: {self.verdict} ({self.detail})"
+        return f"STOPPED: rc={self.rc} {self.detail}"
+
+
+def write_verdict_file(path: str, line: str) -> None:
+    """Replace `path` with `line`, whole: a reader sees the old line or the new one, never half.
+
+    A lander unit hands this file to the agent that started it, instead of the landing's whole
+    output, as renovate-agent's lander does with its own verdict file.
+    """
+    target = Path(path)
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(line + "\n")
+    tmp.replace(target)
 
 
 def say(text: str) -> None:

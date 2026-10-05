@@ -84,11 +84,21 @@ run would merge the PR. The direct merge needs both flags in one run: `--await-m
 polls, because it merges only a PR the arm left for it.
 
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
-`renovate-agent.service` sets it to `app/renovate`, so the unattended agent can only merge
+`renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
 PR; the unattended agent never passes it, because a `manual —` bump goes to a person through the
 digest (issues #2746, #3420). An interactive shell leaves the
 variable unset and never sees this.
+
+**A lander unit can set a landing policy, which `--arm-merge` checks before any merge call.**
+`land_lib/policy.py` owns the rules, and two settings switch them on.
+`LAND_REQUIRE_BRANCH_PREFIX` requires a head branch in this repo, under the prefix, targeting
+`master`. `LAND_APPROVAL_PATHS` names a file of path prefixes, and a PR changing a path under
+one is refused, renamed files included. With either set, a non-empty `hold_sha` also refuses,
+and every merge path is pinned to the head SHA the checks read. A push after the checks fails
+the landing, and a re-run checks the new head. `--verdict-file <path>` writes `PENDING`, then
+the landing's one result line, for a unit to hand on to the agent that started it. A landing
+that sets neither setting is unchanged, and `--any-author` lifts neither.
 
 **The arm refuses a body whose closing keyword is not its own `Closes #N` line.** GitHub closes
 an issue named after `close`/`fixes`/`resolved` however the sentence reads, so PR #2510's "Filed
