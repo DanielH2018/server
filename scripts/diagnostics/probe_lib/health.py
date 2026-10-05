@@ -467,11 +467,16 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
         # with neither. This message is load-bearing text: deploy_detach_notify.py's
         # NOT_APPLICABLE_MARKERS matches it by substring, so a reword here must keep it intact
         # (test_deploy_detach_notify.py asserts the exact string is in this file's source).
+        # DECIDED: exit 0, a pass with a note (#3596). Exit 1 made `probe.py health <role>`
+        # unpassable on a healthy deploy, while the notifier already skipped it via the marker.
+        # Gating the probe Jobs instead was rejected: their `ttlSecondsAfterFinished: 86400`
+        # deletes them a day after a deploy, so a later run would fail a healthy cluster.
         print(
             f"{container}: the role declares no rollout-checkable workload "
-            "(no Deployment, DaemonSet or StatefulSet in its manifests)"
+            "(no Deployment, DaemonSet or StatefulSet in its manifests) — nothing to gate, "
+            "reporting a pass"
         )
-        return 1
+        return 0
 
     now = datetime.now(timezone.utc)
     checked = [
