@@ -138,8 +138,8 @@ def test_every_rendered_container_sets_requests_and_limits() -> None:
 def test_the_roles_outside_the_render_walk_are_accounted_for() -> None:
     """rendered_docs() cannot see every pod that lands in these namespaces. Name the gap.
 
-    The walk covers roles that are `containers_list` members. The caller-rendered roles are
-    not: `volume-claim` renders only a PVC, but `image-builder`'s build Job is a pod that lands
+    The walk covers roles that are `containers_list` members. The caller-rendered role is
+    not: `image-builder`'s build Job is a pod that lands
     in `homelab` all the same, which is exactly the population the LimitRange exists for. It is
     rendered here with a caller's variables instead.
 

@@ -95,6 +95,8 @@ _ARMED_ROLES = frozenset(
         "homepage",
         "gpu-exporter",
         "headlamp",
+        "autofix-bridge",
+        "monitor-bridge",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.

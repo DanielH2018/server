@@ -41,7 +41,7 @@ manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 # prowlarr, karakeep, livesync, speedtest, bento-pdf, ical-proxy, peanut, janitorr, deploy-ui,
 # artifacts, docs, nut-exporter, pihole-exporter, node-exporter, jellyfin, mosquitto,
 # cloudflare-ddns, crowdsec, configarr, pi-peer-backup, pihole, loki-homelab, wg-easy, homepage,
-# gpu-exporter and headlamp are armed. A deferred render
+# gpu-exporter, headlamp, autofix-bridge and monitor-bridge are armed. A deferred render
 # (pihole's instance 2, headlamp's observability RBAC) never goes through the labelling wrapper, so the caller's prune cannot
 # select it. authelia stays unarmed: its redis lever drops three manifests whose live objects
 # must survive the drop (authelia/tasks/main.yml). The default stays false until every role is, because flipping it

@@ -170,7 +170,7 @@ def test_the_check_finds_the_observability_shape(tmp_path: Path) -> None:
 
 
 def test_the_check_accepts_a_lazy_conditional_guard(tmp_path: Path) -> None:
-    """k8s/volume-claim's shape: the deref sits behind `if <same gate> else`.
+    """The retired k8s/volume-claim's shape: the deref sits behind `if <same gate> else`.
 
     Jinja's conditional expression is lazy, so `seed_volume_marker.rc` is never evaluated on
     the run where its producer was skipped. Demanding a `| default()` here is not a tidier
