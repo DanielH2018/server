@@ -60,6 +60,9 @@ _KNOWN_CLAIMS = {
     ("homelab", "jellyfin-config"): ("longhorn", "8Gi"),
     ("homelab", "authelia-config"): ("longhorn", "1Gi"),
     ("homelab", "crowdsec-db"): ("longhorn", "1Gi"),
+    ("homelab", "pihole-etc"): ("longhorn-nobackup", "2Gi"),
+    ("homelab", "pihole-etc-2"): ("longhorn-nobackup", "2Gi"),
+    ("homelab", "traefik-acme"): ("longhorn", "128Mi"),
 }
 
 

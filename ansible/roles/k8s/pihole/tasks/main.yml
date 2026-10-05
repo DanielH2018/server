@@ -1,4 +1,5 @@
 ---
+# The claims are `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies them.
 - name: Deploy pihole to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -30,7 +31,6 @@
       - { name: pihole, kind: deploy, image: pihole }
       - { name: pihole-2, kind: deploy, image: pihole, rolled_by_role: true }
     manifests_files:
-      - pvc.yaml
       - configmap.yaml
       - deployment.yaml
       - service.yaml

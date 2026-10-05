@@ -25,6 +25,15 @@ pihole_k8s_claim_2: pihole-etc-2
 pihole_k8s_storage_class: longhorn-nobackup
 pihole_k8s_size: 2Gi
 
+# Both instances' claims, which k8s/manifests renders and applies for this role (#3387).
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ pihole_k8s_claim }}"
+    storage_class: "{{ pihole_k8s_storage_class }}"
+    size: "{{ pihole_k8s_size }}"
+  - name: "{{ pihole_k8s_claim_2 }}"
+    storage_class: "{{ pihole_k8s_storage_class }}"
+    size: "{{ pihole_k8s_size }}"
+
 # Unbound listens here inside the pod — FTL owns :53 in the shared network namespace.
 # Consumed by the ConfigMap (unbound server config), the probes, and FTL's upstream env.
 pihole_k8s_unbound_port: 5335

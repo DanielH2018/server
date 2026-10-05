@@ -17,6 +17,12 @@
     # No Deployment to wait on. The manifests role treats '' as "skip the rollout entirely",
     # which is the whole reason that option exists.
     manifests_rollout: ""
+    # Live prune (see k8s/manifests defaults/main.yml manifests_prune DECIDED comment). The
+    # render stamps homelab/role on the CronJob and the Secret; the fixed allowlist never names
+    # Secret, so config-secret is applied but never pruned. The deploy-gate Job k8s/cronjob-gate
+    # creates is a Job made with `kubectl create job --from=cronjob`, never staged here, and
+    # batch/v1 Job is not in the allowlist, so the prune cannot reach it.
+    manifests_prune: true
 
 # THE ONE CONSUMER-SIDE BARRIER IN THE k8s PLAY. The reconcile below runs against sonarr and radarr
 # over HTTP, and both are listed BEFORE configarr in containers_list. That ordering does not

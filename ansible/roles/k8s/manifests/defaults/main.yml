@@ -40,8 +40,9 @@ manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 # tdarr, home-assistant, game-stats, uptime-kuma, freshrss, sonarr, radarr, zigbee2mqtt,
 # prowlarr, karakeep, livesync, speedtest, bento-pdf, ical-proxy, peanut, janitorr, deploy-ui,
 # artifacts, docs, nut-exporter, pihole-exporter, node-exporter, jellyfin, mosquitto,
-# cloudflare-ddns and crowdsec are armed. authelia stays unarmed: its redis lever drops three
-# manifests whose live objects must survive the drop (authelia/tasks/main.yml). The default stays false until every role is, because flipping it
+# cloudflare-ddns, crowdsec, configarr and pi-peer-backup are armed. authelia stays unarmed:
+# its redis lever drops three manifests whose live objects must survive the drop
+# (authelia/tasks/main.yml). The default stays false until every role is, because flipping it
 # moves every role's rendered bytes and needs one full deploy.
 manifests_prune: false
 

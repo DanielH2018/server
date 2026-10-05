@@ -58,14 +58,12 @@
     name: k8s/manifests
   vars:
     manifests_service: traefik
-    # The ACME names are concatenated rather than listed, because dropping a name from the list
-    # is the only way traefik_k8s_manage_acme reaches the PVC and the token Secret — neither
-    # manifest has a template branch to gate.
+    # The ACME Secret is concatenated rather than listed, because dropping its name is the only
+    # way traefik_k8s_manage_acme reaches it — the manifest has no template branch to gate. The
+    # ACME claim is `k8s_claims` in defaults/main.yml, gated on the same flag there.
     manifests_files: >-
-      {{ ['rbac-binding.yaml']
-         + (['acme-pvc.yaml'] if traefik_k8s_manage_acme | bool else [])
-         + ['static-config.yaml', 'dynamic.yaml', 'deployment.yaml', 'service.yaml',
-            'metrics-service.yaml', 'dashboard-ingressroute.yaml']
+      {{ ['rbac-binding.yaml', 'static-config.yaml', 'dynamic.yaml', 'deployment.yaml',
+          'service.yaml', 'metrics-service.yaml', 'dashboard-ingressroute.yaml']
          + (['edge-selfcheck-ingressroute.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
          + (['cloudflare-realip-plugin.yaml'] if traefik_k8s_manage_crowdsec | bool else []) }}
     manifests_secret_files: >-

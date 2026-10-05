@@ -61,7 +61,7 @@ _KNOWN_LONGHORN_PVCS = frozenset(
     {
         "homelab/jellyfin-config",  # k8s_claims, weekly tier
         "homelab/sonarr-config",  # k8s_claims, weekly tier
-        "homelab/traefik-acme",  # own template, R2 tier
+        "homelab/traefik-acme",  # k8s_claims, R2 tier
         "homelab/crowdsec-db",  # k8s_claims, nobackup tier
     }
 )
@@ -75,8 +75,8 @@ def _base_context() -> dict:
 def _rendered_longhorn_pvcs() -> set[tuple[str, str]]:
     """`(role, namespace/name)` for every PVC a role renders directly, on the `longhorn` class.
 
-    Covers roles that own their PVC manifest (traefik-acme, the pihole and observability
-    claims, ...).
+    Covers roles that own their PVC manifest (the observability claims) and the claims
+    `k8s_claims` renders (traefik-acme, the pihole pair, ...).
     Namespace is read off the rendered document, never assumed.
     """
     found = set()
