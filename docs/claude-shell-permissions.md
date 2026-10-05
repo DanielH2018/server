@@ -148,7 +148,7 @@ So the classifier judges each `kubectl` command on its full text, and the verb t
 in Manual mode or if `classifyAllShell` is turned off. Treat them as a fallback, not as the
 mechanism.
 
-**The cluster credential is the real ceiling, and it is lower than any of this.** Plain `kubectl`
+**The cluster credential is the ceiling for `kubectl`, and it is lower than any of this.** Plain `kubectl`
 authenticates as `system:serviceaccount:kube-system:homelab-readonly`, which holds `get list watch`
 and nothing else (`k3s_readonly_sa_name` in `ansible/roles/setup/k3s/defaults/main.yml`). Every write
 verb is refused by RBAC — verified 2026-08-16, `kubectl auth can-i` answers **no** for `delete pods`,
@@ -159,6 +159,18 @@ than a permission prompt.
 outright, not prompted. (This paragraph used to say `sudo` was ask-listed; that was wrong.) With the
 read-only SA on one side and denied `sudo` on the other, **Ansible is the only write path to this
 cluster.**
+
+**That ceiling bounds `kubectl`, not the session.** A session holds everything its Unix user
+holds. Interactive and Remote Control sessions run as `sys_user`, and the header of
+`ansible/roles/setup/common/tasks/agent_user.yml` lists what that user can read: among it, the
+age key that decrypts the become password, and the repo owner's `gh` token. With the first, the
+session can run `deploy.sh` and `initial_setup.yml` as root on every host. With the second, it
+can merge its own PR past the master review gate through the REST bypass, which is how `land.sh`
+merges every landing. The GitOps deployer then applies master with `become`. So for these
+sessions the boundary is the permission layer this page describes, plus the trail every change
+leaves: the review gate refuses a direct push to master from any token, so every change reaches
+master as a PR. The unattended Renovate session is the exception. It runs as its own user, on a
+token that can neither push nor merge (`ansible/roles/setup/renovate_agent/CLAUDE.md`).
 
 **A `Bash()` rule matches on `kubectl <verb>` and nothing finer — flags and sub-subcommands in the
 rule are decorative.** Measured 2026-08-08 against the OTEL `tool_decision` stream:
