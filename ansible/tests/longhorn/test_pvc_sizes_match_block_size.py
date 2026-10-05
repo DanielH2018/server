@@ -16,8 +16,8 @@ converts a cost optimisation into a recovery failure.
 
 The census reads the RENDERED manifests (#3209). Reading the templates meant resolving each
 `storage: {{ var }}` against a hand-merged map of role defaults and group_vars, and reading the
-`pvc()` macro's third argument with a regex because a claim built through
-`ansible/templates/pvc.yml.j2` has no `storage:` line of its own. The render resolves both —
+`pvc()` macro's third argument with a regex because a claim built through that macro (folded
+into `ansible/templates/claim-default.yaml.j2` by #3387) had no `storage:` line of its own. The render resolves both —
 Ansible's own context resolves the variable, and the macro expands — so the var map, the
 macro-call regex and the floor assertion that watched for their resolution falling over are all
 gone with their subject. What replaces them is `KNOWN_SIZED_ROLES`: a census that stops naming a

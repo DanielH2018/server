@@ -25,10 +25,12 @@ import sys
 import pytest
 from _role_census import role_dirs
 from _helpers import (
+    ANSIBLE,
     REPO,
     ROLES,
     jinja_env,
     load_tasks,
+    render_expr,
     task_named,
     walk_tasks,
 )
@@ -46,19 +48,9 @@ _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
 
 # Kinds that must never be pruned by this mechanism — see the module docstring.
 _FORBIDDEN_PRUNE_KINDS = ("Secret", "PersistentVolumeClaim")
-# The armed roles, each added on purpose, so the census below fails on an unmeant arming.
-# Several per line: one name per line grew this module past its 500-line cap (#3593).
-_ARMED_ROLES = frozenset(
-    """
-    registry bazarr littlelink texbrain navidrome qbittorrent terraria code-server n8n
-    valheim scrutiny tdarr home-assistant game-stats uptime-kuma freshrss sonarr radarr
-    zigbee2mqtt prowlarr karakeep livesync speedtest bento-pdf ical-proxy peanut janitorr
-    deploy-ui artifacts docs nut-exporter pihole-exporter node-exporter jellyfin mosquitto
-    cloudflare-ddns crowdsec configarr pi-peer-backup pihole loki-homelab wg-easy homepage
-    gpu-exporter headlamp autofix-bridge monitor-bridge homelab-mcp media-volume
-    netpol-baseline traefik
-    """.split()
-)
+# The roles that include k8s/manifests without arming its prune, each by operator decision
+# recorded as a DECIDED marker at its include (#3388). Every other caller is armed.
+_UNARMED_ROLES = frozenset({"authelia", "nut"})
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
 _RENDER_TASKS = (
     "Render manifests",
@@ -85,6 +77,7 @@ _BASE_CONTEXT = {
     "k8s_dry_run": False,
     "manifests_service": "widget",
     "k8s_namespace": "homelab",
+    "manifests_prune_namespace": "homelab",
     "manifests_prune_allowlist": ["apps/v1/Deployment", "core/v1/Service"],
 }
 
@@ -115,6 +108,18 @@ def test_prune_flags_render_when_armed() -> None:
     assert "--prune-allowlist=apps/v1/Deployment" in rendered
     assert "--prune-allowlist=core/v1/Service" in rendered
     assert "-n homelab" in rendered
+
+
+def test_prune_namespace_defaults_to_homelab_and_takes_a_roles_own() -> None:
+    """A role passing no `manifests_prune_namespace` renders the `-n homelab` it always did."""
+    context = {**_BASE_CONTEXT, "manifests_prune": True}
+    default = _defaults()["manifests_prune_namespace"]
+    shared = _render(
+        {**context, "manifests_prune_namespace": render_expr(default, **context)}
+    )
+    own = _render({**context, "manifests_prune_namespace": "observability"})
+    assert shared.split()[-2:] == ["-n", "homelab"]
+    assert own.split()[-2:] == ["-n", "observability"]
 
 
 def test_prune_allowlist_uses_one_flag_per_kind_not_a_comma_joined_value() -> None:
@@ -175,25 +180,38 @@ def test_the_forbidden_kind_check_actually_fires() -> None:
     ]
 
 
-def _include_vars_by_role() -> dict[str, list[dict]]:
-    """Every `vars:` block of every k8s role's tasks/main.yml, keyed by role."""
+def _manifests_includes() -> dict[str, list[dict]]:
+    """The `vars:` of each role's `include_role: k8s/manifests` tasks, keyed by role."""
     found: dict[str, list[dict]] = {}
     for role in role_dirs():
         main = role / "tasks" / "main.yml"
         if not main.is_file():
             continue
         for task in walk_tasks(load_tasks(main)):
-            vars_ = task.get("vars")
-            if isinstance(vars_, dict):
-                found.setdefault(role.name, []).append(vars_)
+            include = task.get("ansible.builtin.include_role") or {}
+            if include.get("name") == "k8s/manifests":
+                found.setdefault(role.name, []).append(task.get("vars") or {})
     return found
+
+
+def _armed_roles() -> dict[str, dict]:
+    """Each armed role and the `vars:` of the include that arms it."""
+    return {
+        role: vars_
+        for role, blocks in _manifests_includes().items()
+        for vars_ in blocks
+        if vars_.get("manifests_prune") is True
+    }
+
+
+_ARMED_ROLES = frozenset(_armed_roles())
 
 
 def test_no_role_widens_the_allowlist_or_keeps_a_kinds_list() -> None:
     """The allowlist is one list for every armed role, so no caller passes its own."""
     offenders = sorted(
         role
-        for role, blocks in _include_vars_by_role().items()
+        for role, blocks in _manifests_includes().items()
         for vars_ in blocks
         if {"manifests_prune_allowlist", "manifests_prune_kinds"} & vars_.keys()
     )
@@ -203,16 +221,15 @@ def test_no_role_widens_the_allowlist_or_keeps_a_kinds_list() -> None:
     )
 
 
-def test_the_armed_roles_are_the_named_pilots() -> None:
-    armed = {
-        role
-        for role, blocks in _include_vars_by_role().items()
-        if any(vars_.get("manifests_prune") is True for vars_ in blocks)
-    }
-    assert armed == _ARMED_ROLES, (
-        f"armed roles changed: added {sorted(armed - _ARMED_ROLES)}, dropped "
-        f"{sorted(_ARMED_ROLES - armed)}. Arming a role means clearing its unlabelled orphans "
-        "first; update _ARMED_ROLES once that is done."
+def test_every_caller_arms_the_prune_but_the_decided_exclusions() -> None:
+    """registry, the first armed role, and observability, armed in its own namespace, are the
+    named members: a census that stopped finding the include would pass on an empty set."""
+    callers = set(_manifests_includes())
+    assert {"registry", "observability"} <= _ARMED_ROLES
+    assert callers - _ARMED_ROLES == _UNARMED_ROLES, (
+        f"unarmed callers {sorted(callers - _ARMED_ROLES)} differ from the decided exclusions "
+        f"{sorted(_UNARMED_ROLES)}. Arm a new caller with `manifests_prune: true`; excluding one "
+        "needs an operator decision and a DECIDED marker at its include."
     )
 
 
@@ -403,8 +420,15 @@ def _foreign_namespaces(text: str, namespace: str) -> list[tuple[str, str, str]]
     ]
 
 
+def _prune_namespace(vars_: dict) -> str:
+    """The namespace an armed include's apply passes as `-n`, resolved against group_vars."""
+    expr = vars_.get("manifests_prune_namespace", "{{ k8s_namespace }}")
+    return render_expr(str(expr), **_group_vars())
+
+
 def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
-    """The armed apply passes `-n homelab`, and kubectl refuses a document placed elsewhere.
+    """The armed apply passes `-n <manifests_prune_namespace>`, and kubectl refuses a document
+    placed elsewhere.
 
     The refusal reads `the namespace from the provided object "observability" does not match
     the namespace "homelab"`, and only a server-side dry run or a real deploy raised it: arming
@@ -412,22 +436,36 @@ def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
     in observability (#3575). headlamp is the named member, because it is the armed role whose
     render reaches another namespace at all, through its deferred file.
     """
-    namespace = load_yaml_namespace()
+    armed = {role: _prune_namespace(vars_) for role, vars_ in _armed_roles().items()}
     checked, offenders = set(), []
     for role, name, text in rendered_texts():
-        if role not in _ARMED_ROLES or name not in _staged_templates(role):
+        if role not in armed or name not in _staged_templates(role):
             continue
         checked.add(role)
         offenders += [
-            (role, name, *found) for found in _foreign_namespaces(text, namespace)
+            (role, name, *found) for found in _foreign_namespaces(text, armed[role])
         ]
-    assert "headlamp" in checked, "headlamp's staged render was never examined"
+    assert {"headlamp", "observability", "dri-device-plugin"} <= checked
     assert not offenders, (
-        f"armed roles render documents outside {namespace!r}: {offenders}. The armed apply "
-        f"passes `-n {namespace}`, so kubectl refuses the whole directory. Render them into a "
-        "deferred directory the role applies itself (`manifests_deferred_files`, as headlamp's "
-        "observability RBAC does), or leave the role unarmed."
+        f"armed roles render documents outside their prune namespace: {offenders}. The armed "
+        "apply passes `-n <manifests_prune_namespace>`, so kubectl refuses the whole directory. "
+        "Pass the role's one namespace as `manifests_prune_namespace`, or render the stray "
+        "documents into a deferred directory the role applies itself "
+        "(`manifests_deferred_files`, as headlamp's observability RBAC does)."
     )
+
+
+def test_each_role_armed_outside_homelab_names_its_own_namespace() -> None:
+    """Control: observability's render passes only against its own prune namespace.
+
+    Checked against `homelab`, the check above refuses it.
+    """
+    armed = _armed_roles()
+    assert _prune_namespace(armed["observability"]) == "observability"
+    assert _prune_namespace(armed["dri-device-plugin"]) == "kube-system"
+    text = render_role_template("observability", "loki.yaml.j2")
+    assert _foreign_namespaces(text, load_yaml_namespace())
+    assert not _foreign_namespaces(text, "observability")
 
 
 def test_the_foreign_namespace_check_finds_headlamps_deferred_rbac() -> None:
@@ -444,10 +482,12 @@ def test_the_foreign_namespace_check_finds_headlamps_deferred_rbac() -> None:
     }
 
 
+def _group_vars() -> dict:
+    return yaml_fast.safe_load((ANSIBLE / "inventory/group_vars/all.yml").read_text())
+
+
 def load_yaml_namespace() -> str:
-    return yaml_fast.safe_load(
-        (REPO / "ansible/inventory/group_vars/all.yml").read_text()
-    )["k8s_namespace"]
+    return _group_vars()["k8s_namespace"]
 
 
 def test_manifests_prune_defaults_off() -> None:

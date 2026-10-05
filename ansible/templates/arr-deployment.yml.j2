@@ -7,8 +7,8 @@
   either a name derived from the app or a value the role already holds in `defaults/main.yml`.
   There is no shape to share short of the document: splitting it into a container macro and a
   volumes macro would leave the metadata, the selector, the labels and both shell calls
-  copied in two places, which is where a field drifts. `service.yml.j2`, `pvc.yml.j2` and
-  `ingressroute.yml.j2` already emit a whole object from this directory; this is the same move
+  copied in two places, which is where a field drifts. `service.yml.j2`, `claim-default.yaml.j2`
+  and `ingressroute.yml.j2` already emit a whole object from this directory; this is the same move
   for a Deployment.
 
   PROWLARR IS NOT A CALLER, and should not become one. It mounts no media volume at all (an

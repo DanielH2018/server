@@ -1,14 +1,33 @@
 {#
   One entry of a role's `k8s_claims`, rendered by k8s/manifests as `claim-<name>.yaml` in the
-  role's own manifest directory. `manifests_claim` is the loop variable that task sets; it is
+  role's own manifest directory. This is the only template that renders a PersistentVolumeClaim
+  (#3387). `manifests_claim` is the loop variable that task sets; it is
   `{name, size, storage_class}`, every key required (k8s/manifests asserts the shape first),
-  plus an optional `access_modes` list that defaults to `['ReadWriteOnce']` and an optional
-  `namespace` that defaults to `k8s_namespace` (observability's four claims set it).
+  plus two optional keys:
 
-  The body is the shared `pvc()` macro, so a claim declared as data and a claim a role still
-  renders from its own template produce the same object.
+    access_modes   defaults to `['ReadWriteOnce']`. media-volume's `media-data` passes
+                   `['ReadWriteMany']`; a claim's access modes are immutable once created, so
+                   this must match the live claim.
+    namespace      defaults to the shared `k8s_namespace`. observability's four claims (loki,
+                   prometheus, grafana, tempo) pass `k8s_observability_namespace`.
+
+  A claim's WHY (its storage class, its backup posture) differs role to role, so it sits beside
+  the role's own `*_storage_class` / `*_size` default rather than here: valheim's nobackup
+  install claim and pi-peer-backup's "Plain `longhorn` ON PURPOSE (not -nobackup)" both do this.
+
+  The last value carries its own newline so the file ends in a blank line, the bytes the retired
+  `pvc()` macro rendered. Without it every claim role's `manifests_digest` moves on a change that
+  alters no object. A literal blank line would not survive the end-of-file-fixer hook.
 #}
-{% from 'pvc.yml.j2' import pvc with context %}
-{{ pvc(manifests_claim.name, manifests_claim.storage_class, manifests_claim.size,
-       namespace=manifests_claim.namespace | default(none),
-       access_modes=manifests_claim.access_modes | default(none)) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ manifests_claim.name }}
+  namespace: {{ manifests_claim.namespace | default(k8s_namespace, true) }}
+spec:
+  accessModes:
+    - {{ manifests_claim.access_modes | default(['ReadWriteOnce'], true) | join('\n    - ') }}
+  storageClassName: {{ manifests_claim.storage_class }}
+  resources:
+    requests:
+      storage: {{ manifests_claim.size ~ '\n' }}

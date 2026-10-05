@@ -83,7 +83,9 @@ copies it left behind.
 **`manifests_prune` (#1076, #3388) removes the live object too, armed per role.** Set
 `manifests_prune: true` on the `include_role` call and the apply gains `--prune -l
 homelab/role=<service>`, one `--prune-allowlist=<kind>` per entry of the fixed
-`manifests_prune_allowlist`, and `-n <namespace>`. An unlabelled object is invisible to the
+`manifests_prune_allowlist`, and `-n <manifests_prune_namespace>`. That namespace is
+`k8s_namespace` unless the role passes the one other namespace all its documents live in, as
+observability, longhorn-ui and dri-device-plugin do. An unlabelled object is invisible to the
 selector and cannot be pruned, which is the mechanism's safety argument: a bad allowlist can
 only ever touch this role's own labelled objects.
 

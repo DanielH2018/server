@@ -168,6 +168,37 @@ def test_no_claim_has_two_creators():
     assert not found, f"claims rendered by more than one template: {found}"
 
 
+def claims_from_other_templates(pvcs) -> list[tuple[str, str]]:
+    """(role, template) for every claim rendered by a template other than the claim template."""
+    return sorted(
+        (role, name) for role, name, _doc in pvcs if name != CLAIM_TEMPLATE.name
+    )
+
+
+def test_a_claim_from_a_roles_own_template_is_flagged():
+    doc = {"kind": "PersistentVolumeClaim", "metadata": {"name": "x"}}
+    assert claims_from_other_templates([("a", "pvc.yaml.j2", doc)]) == [
+        ("a", "pvc.yaml.j2")
+    ]
+    assert claims_from_other_templates([("a", CLAIM_TEMPLATE.name, doc)]) == []
+
+
+def test_every_claim_renders_from_k8s_claims():
+    """`k8s_claims` is the one path that creates a claim (#3387); a role template is not.
+
+    A claim outside it misses the snapshot-ordering apply and the Longhorn tier census
+    that read `k8s_claims`.
+    """
+    pvcs = _pvcs(rendered_docs())
+    assert {("observability", "grafana-data"), ("media-volume", "media-data")} <= {
+        (role, doc["metadata"]["name"]) for role, _name, doc in pvcs
+    }
+    assert not claims_from_other_templates(pvcs), (
+        "these templates render a PersistentVolumeClaim; declare it in the role's "
+        f"k8s_claims instead: {claims_from_other_templates(pvcs)}"
+    )
+
+
 def _early_applies(**context) -> bool:
     """Whether "Apply the volume claims" runs ahead of the snapshot for this context."""
     task = task_named(
