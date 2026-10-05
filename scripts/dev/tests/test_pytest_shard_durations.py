@@ -193,6 +193,16 @@ def test_the_cli_exits_zero_when_every_heavy_module_is_recorded(tmp_path, capsys
     assert "no unweighted module" in capsys.readouterr().out
 
 
+def test_warn_only_annotates_the_same_complaint_and_exits_zero(tmp_path, capsys):
+    """CI passes `--warn-only` on a push to master, where nobody can apply the repair (#3604).
+    The complaint must still reach the log as an annotation, not vanish with the exit code."""
+    log = tmp_path / "durations.log"
+    log.write_text(REPORT)
+    assert pytest_shard.main(["--warn-only", "--check-durations", str(log)]) == 0
+    printed = capsys.readouterr().out
+    assert printed.startswith("::warning::") and NEW_MODULE in printed
+
+
 def test_the_stale_repair_refuses_a_path_no_shard_runs():
     """`--record-files` measures whatever it is handed, so a typo or an unstaged file would
     otherwise write a table row no census ever reads back."""

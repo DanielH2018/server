@@ -181,6 +181,23 @@ def test_the_workflow_measures_every_shard_and_checks_what_it_measured():
     )
 
 
+def test_the_gate_fails_only_where_its_repair_can_be_applied():
+    """The gate compares one wall-clock reading against a fixed bound, and runner variance spans
+    it. On a push to master nobody can re-record, yet a red run there parks every landing, so
+    push and merge_group annotate (`--warn-only`) and a pull_request still fails (#3604)."""
+    gate = next(
+        s
+        for s in _pytest_job()["steps"]
+        if "--check-durations" in str(s.get("run", ""))
+    )
+    assert gate["env"]["EVENT"] == "${{ github.event_name }}"
+    assert re.search(
+        r'\[ "\$EVENT" = push \] \|\| \[ "\$EVENT" = merge_group \]; then mode=\(--warn-only\)',
+        gate["run"],
+    ), "push and merge_group must pass --warn-only, and nothing else may"
+    assert '"${mode[@]}"' in gate["run"]
+
+
 def test_the_workflow_derives_the_shard_count_from_the_matrix():
     """The drift this guard exists for. A literal `--of 4` beside a matrix of any other length
     silently drops or double-runs part of the suite, and every leg still reports green."""
