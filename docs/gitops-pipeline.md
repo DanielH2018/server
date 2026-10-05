@@ -1265,6 +1265,10 @@ what it recorded.
   role and a role with no callers has no tag whose deploy could discharge it.
   `land_shared.shared_roles` applies the same rule on the landing side. An empty or unreadable
   listing drops nothing.
+- A line an earlier tick wrote before a later range deleted its role is dropped on the next
+  tick by `deploy_phases.drop_deleted_k8s_unapplied` (#3569), which `main()` runs right after
+  `deploy_defer.discharge_k8s_unapplied`. It asks the same helper `plan_tick` uses,
+  `deploy_phases.k8s_roles_deleted_at`, at `HEAD` instead of at origin.
 - The demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
   `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm after
   it resets the tree. A contention arm takes the line back with the `manual_plane` lines beside

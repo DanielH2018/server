@@ -36,7 +36,7 @@ from deploy_k8s import (
     k8s_roles_listed,
     split_k8s_auto_deploy,
 )
-from deploy_state import DeployerState
+from deploy_state import OWED_K8S_UNAPPLIED, DeployerState
 from deploy_tick_types import (
     NotTheDeployerHost,
     RetryableFetchError,
@@ -240,7 +240,15 @@ def plan_tick(
     if deploy_cross_role.CROSS_ROLE_FILE in paths:
         _adopt_incoming_cross_role_tables(tools, config, target.origin)
     cs = services_from_changed_paths(paths)
-    cs.k8s -= _k8s_roles_deleted_at(tools, config, target.origin, cs.k8s)
+    # Read at origin rather than the working tree: this runs before the ff-merge, so the
+    # deleted directory is still on disk.
+    deleted = k8s_roles_deleted_at(tools, config, target.origin, cs.k8s)
+    if deleted:
+        log(
+            f"{', '.join(sorted(deleted))}: role directory deleted at {target.origin[:8]} — "
+            "nothing left to apply, so no k8s_unapplied line"
+        )
+    cs.k8s -= deleted
     cs.k8s_consumers = shared_module_consumers(paths, config.repo)
     hostvars = deploy_io.host_vars_text(config.repo, config.hostname)
     k8s_services = declared_k8s_services(hostvars) if hostvars is not None else set()
@@ -249,39 +257,53 @@ def plan_tick(
     return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services)
 
 
-def _k8s_roles_deleted_at(
-    tools: DeployTools, config: Config, origin: str, roles: set[str]
+def k8s_roles_deleted_at(
+    tools: DeployTools, config: Config, ref: str, roles: set[str]
 ) -> set[str]:
-    """The roles in `roles` whose directory is gone from `origin`'s tree (#3568).
+    """The roles in `roles` whose directory is gone from `ref`'s tree (#3568, #3569).
 
     A deleted role owes nothing: no play can run it, and an `include_role` still naming it
-    fails with "role not found" rather than applying anything. Left in `cs.k8s`, it wrote a
-    `k8s_unapplied` line that never discharges, because a role with no callers has no tag
-    whose deploy could carry it (`volume-claim`, 2026-10-05). `land_shared.shared_roles`
-    drops the same roles on the landing side.
+    fails with "role not found" rather than applying anything. A `k8s_unapplied` line for one
+    never discharges, because a role with no callers has no tag whose deploy could carry it
+    (`volume-claim`, 2026-10-05). `plan_tick` asks this at origin so the tick writes no such
+    line; `drop_deleted_k8s_unapplied` asks it at `HEAD` to drop a line an earlier tick
+    wrote before the range that deleted the role. `land_shared.shared_roles` drops the
+    same roles on the landing side.
 
-    Read at `origin` rather than the working tree: this runs before the ff-merge, so the
-    deleted directory is still on disk. An unreadable or empty listing drops nothing, because
-    a kept line costs one `clear-owed` and a dropped one loses the only record of a change.
+    An unreadable or empty listing drops nothing, because a kept line costs one `clear-owed`
+    and a dropped one loses the only record of a change.
     """
     if not roles:
         return set()
     try:
         listing = tools.run(
-            ["git", "ls-tree", "--name-only", origin, "ansible/roles/k8s/"],
+            ["git", "ls-tree", "--name-only", ref, "ansible/roles/k8s/"],
             cwd=config.repo,
         )
     except Exception as exc:
-        log(f"could not list the k8s roles at {origin[:8]} ({exc}) — dropping none")
+        log(f"could not list the k8s roles at {ref[:8]} ({exc}) — dropping none")
         return set()
     present = k8s_roles_listed(listing)
     if not present:
         return set()
-    deleted = roles - present
+    return roles - present
+
+
+def drop_deleted_k8s_unapplied(
+    tools: DeployTools, state: DeployerState, config: Config
+) -> set[str]:
+    """Drop each `k8s_unapplied` line whose role directory is gone from `HEAD` (#3569).
+
+    The line was written before a later range deleted the role, which `plan_tick` no longer
+    records, and `deploy_defer.discharge_k8s_unapplied` can never drop: no record or caller
+    is left to carry it. `main()` runs this after that discharge, on the merged checkout.
+    """
+    pending = {e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)}
+    deleted = k8s_roles_deleted_at(tools, config, "HEAD", pending)
     if deleted:
+        state.clear_owed(OWED_K8S_UNAPPLIED, sorted(deleted))
         log(
-            f"{', '.join(sorted(deleted))}: role directory deleted at {origin[:8]} — "
-            "nothing left to apply, so no k8s_unapplied line"
+            f"k8s_unapplied dropped for {', '.join(sorted(deleted))}: role deleted at HEAD"
         )
     return deleted
 
