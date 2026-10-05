@@ -1,0 +1,25 @@
+# Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
+
+# The `{{ claude_code_agent_user }}` agent user
+
+You run as `{{ claude_code_agent_user }}`, a Unix user with no sudo, and you push to GitHub as
+`{{ claude_code_agent_github_login }}`. Only this user's sessions read this file; the operator's
+sessions do not.
+
+## Name every worktree `{{ claude_code_agent_worktree_prefix }}/<slug>`
+
+GitHub lets `{{ claude_code_agent_github_login }}` create, update and delete only branches whose
+name starts with `worktree-{{ claude_code_agent_worktree_prefix }}+`. The "agent branch fence"
+ruleset refuses every other push with a generic ruleset error that does not name the fence.
+
+`EnterWorktree` names a worktree's branch `worktree-<name>` and replaces each `/` in the name
+with `+`. So a worktree named `{{ claude_code_agent_worktree_prefix }}/<slug>` gets the branch
+`worktree-{{ claude_code_agent_worktree_prefix }}+<slug>`, which the fence lets you push.
+
+This overrides the repo `CLAUDE.md`'s rule to name the worktree after the branch slug alone.
+Put the slug after `{{ claude_code_agent_worktree_prefix }}/`: for the slug
+`containers-role-cleanup`, call `EnterWorktree` with the name
+`{{ claude_code_agent_worktree_prefix }}/containers-role-cleanup`.
+
+A branch made any other way follows the same rule. To push one, name it
+`worktree-{{ claude_code_agent_worktree_prefix }}+<slug>`.

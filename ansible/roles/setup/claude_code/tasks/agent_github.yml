@@ -1,6 +1,7 @@
 ---
 # The agent user's GitHub identity: a commit-signing key it generates itself, a git config that
-# signs as its machine account, and gh's token for that account. Imported from main.yml when
+# signs as its machine account, gh's token for that account, and a CLAUDE.md naming the only
+# branches that account may push. Imported from main.yml when
 # claude_code_agent_user_enabled, after the shared agent_user.yml has built the user and home.
 # defaults/main.yml says what the account may do and why.
 #
@@ -33,6 +34,8 @@
     - { path: "{{ claude_code_agent_user_home }}/.config/git", mode: "0755" }
     # The token file lives here.
     - { path: "{{ claude_code_agent_user_home }}/.config/gh", mode: "0700" }
+    # Claude Code's own directory, which also holds the session's login.
+    - { path: "{{ claude_code_agent_user_home }}/.claude", mode: "0700" }
   become: true
 
 - name: Generate the agent's commit-signing key
@@ -119,3 +122,15 @@
   become: true
   diff: false
   no_log: true
+
+- name: Tell the agent user's sessions the branch names its account may push
+  # The user-level CLAUDE.md, which only this user's sessions load. Without it a session follows
+  # the repo CLAUDE.md, names its worktree after the bare slug, and its first push is refused by
+  # the branch fence (#3612).
+  ansible.builtin.template:
+    src: agent-user-claude-md.j2
+    dest: "{{ claude_code_agent_user_home }}/.claude/CLAUDE.md"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+  become: true

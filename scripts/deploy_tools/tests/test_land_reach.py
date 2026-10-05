@@ -474,13 +474,20 @@ def test_setup_file_hosts_reads_a_role_markdown_as_shipped_nowhere(
         )
         == frozenset()
     )
+
+    # Only a `src:` reads a repo file: a `.md` dest rendered from a `.j2` (#3612) ships none.
+    ships_md = re.compile(r'"src": "[^"]*\.md"')
+    assert ships_md.search(json.dumps({"copy": {"src": "a.md", "dest": "/b"}}))
+    assert not ships_md.search(
+        json.dumps({"template": {"src": "a.j2", "dest": "/b.md"}})
+    )
     real_tasks = (land_reach._SETUP_ROLES_DIR).glob("*/tasks/*.yml")
     shipping_md = [
         t
         for t in real_tasks
-        if re.search(r"\.md\"", json.dumps(yaml_fast.safe_load(t.read_text())))
+        if ships_md.search(json.dumps(yaml_fast.safe_load(t.read_text())))
     ]
-    assert shipping_md == [], "a setup task now names a .md file; drop the docs rule"
+    assert shipping_md == [], "a setup task now ships a .md file; drop the docs rule"
 
 
 def test_the_host_sets_read_from_hosts_ini_name_the_real_hosts():
