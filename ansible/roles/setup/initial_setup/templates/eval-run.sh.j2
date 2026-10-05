@@ -344,7 +344,7 @@ if [ "$COMMIT_RC" -ne 0 ]; then
   exit 1
 fi
 
-# Branch, push, reset master, PR, auto-merge: scripts/deploy_tools/publish_pr.py, shared with
+# Branch, push, reset master, PR, landing: scripts/deploy_tools/publish_pr.py, shared with
 # docs-refresh and secret-rotate. Exit 1 means the commit is still local on master, 2 that the
 # branch is on origin without a PR; either way the message says which.
 PR_BODY="Weekly hermetic homelab-agent eval sweep, rolled into evals/history.json by evals/trend.py. $(tr '\n' ' ' < "$TREND_OUT" | tail -c 800)"
@@ -365,7 +365,7 @@ fi
 logger -t eval-run "regenerated, committed, $PUB_MSG"
 if [ "$REGRESSED" -eq 1 ]; then
   PUSH_STATUS=down
-  PUSH_MSG="${PUB_MSG%% with auto-merge}; one or more eval cases REGRESSED — see the PR body"
+  PUSH_MSG="${PUB_MSG%%; landing PR #*}; one or more eval cases REGRESSED — see the PR body"
 else
   PUSH_STATUS=up
   PUSH_MSG="regenerated, committed, $PUB_MSG"
