@@ -69,7 +69,8 @@ def test_the_host_unit_pins_the_version_the_cluster_pins() -> None:
         yaml_fast.safe_load(DEFAULTS.read_text())["optimize_pi_node_exporter_version"]
     )
     image = yaml_fast.safe_load(CLUSTER_DEFAULTS.read_text())["node_exporter_k8s_image"]
-    cluster = image.rsplit(":v", 1)[1]
+    # The cluster pin may carry a `@sha256:` digest after the tag; the host unit has no digest.
+    cluster = image.rsplit(":v", 1)[1].split("@", 1)[0]
     assert host == cluster, (
         f"optimize_pi pins node_exporter {host}, the cluster DaemonSet {cluster}; "
         "bump both, and the sha256 beside the host version"
