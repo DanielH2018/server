@@ -202,8 +202,8 @@ def _leave_for_a_direct_merge(ln: Landing, subject: str) -> None:
     if not ln.opts.await_merge:
         ln.die(
             f"PR #{pr} waits on a review that only a ruleset bypass clears, and auto-merge "
-            "never applies a bypass — re-run with --await-merge, which merges it directly "
-            "once CI is green",
+            "never applies a bypass — re-run with both --arm-merge --await-merge, which "
+            "merges it directly once CI is green; --await-merge alone only polls",
             1,
         )
     ln.direct_merge_subject = subject
