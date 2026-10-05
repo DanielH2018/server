@@ -142,7 +142,9 @@ def shared_roles(
     return sorted(roles - declared)
 
 
-def shared_caller_tags(files, declared: set[str] | None = None) -> dict[str, set[str]]:
+def shared_caller_tags(
+    files, declared: set[str] | None = None, roles_root: _Path | None = None
+) -> dict[str, set[str]]:
     """For each shared role `files` changes, the tags of the roles that run it.
 
     A helper role has no tag of its own, but `deploy.yml` runs it under the tag of every role
@@ -159,7 +161,7 @@ def shared_caller_tags(files, declared: set[str] | None = None) -> dict[str, set
     callers = role_callers()
     return {
         r: narrowed(r, caller_tags(r, declared, callers), files)
-        for r in shared_roles(files, declared)
+        for r in shared_roles(files, declared, roles_root)
     }
 
 

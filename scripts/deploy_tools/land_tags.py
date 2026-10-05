@@ -176,6 +176,7 @@ def plane_note(
     declared: set[str] | None = None,
     quiet=(),
     narrow_tags: dict[str, frozenset[str]] | None = None,
+    roles_root=None,
 ) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
@@ -203,6 +204,9 @@ def plane_note(
     named for three edited comments has nothing to apply. The secrets half reads the unfiltered
     list -- `comment_only_broad_changes` cannot return `ansible/vars/secrets.yml`, and
     keeping the reads separate means a later widening there cannot silently mute a rotation.
+
+    `roles_root` is the role tree `land_shared.shared_roles` checks for a deleted role, for a
+    test that needs one present; `None` reads the repo's own.
     """
     files = list(files)
     quiet = set(quiet)
@@ -215,8 +219,8 @@ def plane_note(
     # unmeasured as a tag list. A change reaching no rendered manifest never gets here:
     # `shared_role_reach` drops its paths first. The deployer's `k8s_remediation` keeps the
     # report, because an unattended tick parking a range is a different cost.
-    expanded = shared_caller_tags(files, declared)
-    shared = [r for r in shared_roles(files, declared) if not expanded[r]]
+    expanded = shared_caller_tags(files, declared, roles_root)
+    shared = [r for r in shared_roles(files, declared, roles_root) if not expanded[r]]
     if shared:
         # Passing ONLY the shared half. k8s_remediation appends a scoped `--tags` line for
         # any deployable role it is given, and land.sh has already deployed those itself.
