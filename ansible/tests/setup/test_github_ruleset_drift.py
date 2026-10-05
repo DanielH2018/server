@@ -16,12 +16,14 @@ import json
 import pytest
 from _helpers import ANSIBLE
 from _ruleset_drift import (
+    ANONYMOUS_PRIVATE_REPO,
     BRANCH_RULESET_ID,
     DECLARED,
     FENCE_BYPASS,
     FENCE_EXCLUDE,
     FENCE_RULESET_ID,
     RENOVATE_EXCLUDE,
+    REPO,
     REVIEW_BYPASS,
     REVIEW_RULESET_ID,
     branch_ruleset_body,
@@ -38,6 +40,7 @@ def test_matching_ruleset_is_clean(tmp_path):
     assert rc == 0
     assert status == "up"
     assert "matches the declared set" in msg
+    assert msg.startswith("repo public; ")
     assert f"ruleset {REVIEW_RULESET_ID} requires 1 approving review" in msg
     assert f"ruleset {FENCE_RULESET_ID} fences the agent to {FENCE_EXCLUDE[0]}" in msg
 
@@ -109,6 +112,45 @@ def test_a_200_that_is_not_a_ruleset_is_a_bad_fetch(tmp_path):
     assert status == "down"
     assert "bad fetch" in msg
     assert "UNVERIFIED" in msg
+
+
+@pytest.mark.parametrize("visibility", ["private", "internal"])
+def test_a_repo_that_is_not_public_names_visibility(tmp_path, visibility):
+    """GitHub enforces no ruleset on a private repo on the free plan, while every ruleset still
+    reads `active` (#3610). Each ruleset body here is clean, so only the repo read can say so."""
+    rc, status, msg = run(
+        tmp_path,
+        curl_body=ruleset_body(DECLARED),
+        repo_body=json.dumps({"full_name": REPO, "visibility": visibility}),
+    )
+    assert rc == 1
+    assert status == "down"
+    assert f"repo is {visibility}: rulesets are not enforced" in msg
+    assert "bad fetch" not in msg
+
+
+def test_an_anonymous_not_found_names_visibility_not_a_bad_fetch(tmp_path):
+    """The shape #3610 actually saw: no token, so a private repo answers 404 `Not Found`."""
+    rc, status, msg = run(
+        tmp_path, curl_body=ruleset_body(DECLARED), repo_body=ANONYMOUS_PRIVATE_REPO
+    )
+    assert rc == 1
+    assert status == "down"
+    assert "most likely private" in msg
+    assert "bad fetch" not in msg
+
+
+def test_a_repo_body_with_no_visibility_is_a_bad_fetch(tmp_path):
+    """Any other body is not evidence of a private repo, so it must not claim one."""
+    rc, status, msg = run(
+        tmp_path,
+        curl_body=ruleset_body(DECLARED),
+        repo_body='{"message":"Bad gateway"}',
+    )
+    assert rc == 1
+    assert status == "down"
+    assert "bad fetch, UNVERIFIED" in msg
+    assert "private" not in msg
 
 
 def test_zero_required_contexts_is_flagged(tmp_path):

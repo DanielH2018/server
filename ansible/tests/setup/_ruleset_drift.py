@@ -64,6 +64,18 @@ def ruleset_body(contexts, enforcement="active", bypass_actors=()):
     )
 
 
+REPO = "DanielH2018/server"
+# `repos/{owner}/{repo}` as it answers a token, trimmed to the one field the script reads.
+PUBLIC_REPO = json.dumps({"full_name": REPO, "visibility": "public"})
+# The same read made anonymously against a private repo: GitHub answers 404 with this body.
+ANONYMOUS_PRIVATE_REPO = json.dumps(
+    {
+        "message": "Not Found",
+        "documentation_url": "https://docs.github.com/rest/repos/repos#get-a-repository",
+        "status": "404",
+    }
+)
+
 BRANCH_RULESET_ID = 17358590
 RENOVATE_EXCLUDE = "refs/heads/renovate/**"
 
@@ -162,11 +174,12 @@ def run(
     branch_body=None,
     review_body=None,
     fence_body=None,
+    repo_body=PUBLIC_REPO,
 ):
     """Render the script, stub curl + the push lib, run it. Returns (exit_code, status, message).
 
     `curl_body` answers the merge-gate ruleset fetch, and `branch_body`, `review_body` and
-    `fence_body` the other three. Those three default to a clean body, so each case reads the
+    `fence_body` the other three. `repo_body` answers the repo read that precedes them all. Those three default to a clean body, so each case reads the
     verdict of the arm it is about. Every value the template reads comes from the inventory and
     the role's own defaults, which the shared accessor resolves. The `..._matches_the_role_defaults`
     tests in test_github_ruleset_drift.py keep this module's constants honest against them
@@ -216,6 +229,7 @@ def run(
             f"  */rulesets/{BRANCH_RULESET_ID}) printf '%s' {json.dumps(branch_body)} ;;\n"
             f"  */rulesets/{REVIEW_RULESET_ID}) printf '%s' {json.dumps(review_body)} ;;\n"
             f"  */rulesets/{FENCE_RULESET_ID}) printf '%s' {json.dumps(fence_body)} ;;\n"
+            f"  */repos/{REPO}) printf '%s' {json.dumps(repo_body)} ;;\n"
             f"  *) printf '%s' {json.dumps(curl_body or '')} ;;\n"
             "esac\n"
             f"exit {curl_rc}\n"

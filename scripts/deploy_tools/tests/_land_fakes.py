@@ -142,6 +142,8 @@ class Fakes:
     plane_paths_dropped: frozenset[str] = frozenset()
     lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
+    # What `gh api repos/{owner}/{repo}` answers: the visibility --arm-merge refuses on.
+    repo: dict[str, Any] = field(default_factory=lambda: {"visibility": "public"})
 
 
 def _seq(values: list, calls: list, name: str):
@@ -223,6 +225,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     view_seq = {k: _seq(v, calls, f"gh:{k}") for k, v in views.items()}
 
     def gh_json(*args, **kwargs):
+        if args[:2] == ("api", "repos/{owner}/{repo}"):
+            calls.append(("gh:repo", args, kwargs))
+            return f.repo
         return view_seq[args[args.index("--json") + 1]]()
 
     gh_rc = _seq(f.gh_merge_rc, calls, "gh")

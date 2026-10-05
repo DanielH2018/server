@@ -168,6 +168,36 @@ def test_arm_merge_refuses_a_body_that_would_close_an_unfixed_issue(landing):
     assert not [c for c in calls if c[0] == "gh"]
 
 
+@pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED"])
+def test_arm_merge_refuses_while_the_repo_is_private(landing, review):
+    """No ruleset is enforced on a private free-plan repo, so neither the auto-merge nor the
+    direct merge a review leaves for await_merge may go ahead (#3610)."""
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title,body,reviewDecision": {**_OPEN, "reviewDecision": review}
+            },
+            repo={"visibility": "private"},
+        ),
+        arm_merge=True,
+        await_merge=True,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert exc.value.rc == 1 and "repo is private" in exc.value.error
+    assert not [c for c in calls if c[0] == "gh"]
+    assert not ln.direct_merge_subject
+
+
+def test_arm_merge_arms_a_public_repo_after_reading_its_visibility(landing):
+    ln, calls = landing(
+        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}), arm_merge=True
+    )
+    merge.arm_merge(ln)
+    names = [c[0] for c in calls]
+    assert names.index("gh:repo") < names.index("gh")
+
+
 def test_arm_merge_reads_no_author_when_none_is_required(landing):
     """An interactive landing makes exactly the calls it made before the check existed."""
     ln, calls = landing(
