@@ -34,6 +34,7 @@ from _helpers import (
 )
 from _k8s_render import rendered_texts
 from lib import yaml_fast
+from lib.k8s_roles import declared_manifest_files
 from role_label import ROLE_LABEL, homelab_role_label
 
 sys.path.insert(0, str(REPO / "ansible/roles/setup/k3s/files"))
@@ -88,6 +89,7 @@ _ARMED_ROLES = frozenset(
         "crowdsec",
         "configarr",
         "pi-peer-backup",
+        "pihole",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
@@ -260,6 +262,37 @@ def test_an_armed_role_renders_through_the_labelling_wrapper(name: str) -> None:
     assert "manifests_label_src" in task["vars"]
 
 
+def _render_src(name: str, **context) -> str:
+    task = task_named(load_tasks(_MANIFESTS_TASKS), name)
+    src = str(task["ansible.builtin.template"]["src"])
+    return jinja_env().from_string(src).render(**context).strip()
+
+
+def test_a_deferred_render_never_carries_the_callers_label() -> None:
+    """pihole's instance-2 Deployment must stay invisible to `-l homelab/role=pihole`.
+
+    The deferred directory is applied by the caller, outside the shared apply, so the caller's
+    prune never declares its objects. A deferred document labelled with the caller's service
+    would be a prune candidate and be deleted on every deploy of an armed role. The deferred
+    render keeps the raw template, so its objects carry no `homelab/role` label at all. The
+    control is the caller's own render, which the same armed context does route through the
+    wrapper.
+    """
+    context = {
+        "playbook_dir": "/repo",
+        "manifests_service": "pihole",
+        "item": "deployment-2.yaml",
+        "manifests_label_src": "/repo/roles/k8s/pihole/templates/deployment.yaml.j2",
+        "manifests_shared_defaults": {},
+        "manifests_prune": True,
+    }
+    wrapper = "/repo/templates/role-labelled.yaml.j2"
+    assert _render_src("Render manifests", **context) == wrapper
+    assert _render_src("Render deferred manifests", **context) == (
+        "/repo/roles/k8s/pihole/templates/deployment-2.yaml.j2"
+    )
+
+
 def _empty_files_guard_holds(**context) -> bool:
     task = task_named(
         load_tasks(_MANIFESTS_TASKS), "Check that a role arming the prune"
@@ -352,8 +385,12 @@ def test_every_armed_render_is_labelled_and_otherwise_unchanged() -> None:
     for role, name, text in rendered_texts():
         if role not in _ARMED_ROLES:
             continue
-        seen.add((role, name))
         before = [d for d in yaml_fast.safe_load_all(text) if d is not None]
+        # A macro-only template (pihole's pihole-deployment.yaml.j2) renders empty and is
+        # never staged; the deploy renders only the files the role names.
+        if not before and name.removesuffix(".j2") not in declared_manifest_files(role):
+            continue
+        seen.add((role, name))
         labelled = homelab_role_label(text, role)
         after = list(yaml_fast.safe_load_all(labelled))
         # manifest-prune-check.sh reads the staged bytes by position, without PyYAML.
