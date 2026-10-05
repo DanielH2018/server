@@ -8,8 +8,8 @@
 jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.11ubu2604-ls47
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Migrating state — strategy is Recreate and the config volume is seeded through
-# k8s/volume-claim (hardcoded ReadWriteOnce), so a bad image swap can migrate the library
+# Migrating state — strategy is Recreate and the config volume is a ReadWriteOnce claim
+# (`k8s_claims` below), so a bad image swap can migrate the library
 # database, artwork and trickplay data before the gate observes a fault, then fail the rollback
 # redeploy against data it can no longer read. Also the fleet's only workload requesting the
 # `devic.es/dri` GPU resource — a wrong image can wedge transcoding in a way a plain
@@ -18,7 +18,7 @@ jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.11ubu2604-ls47
 # deploy fails, so a bad swap reverts to the snapshot
 # instead of leaving the library database, artwork and trickplay data unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert; also the only GPU (devic.es/dri) workload in the fleet. WEIGHED: jellyfin also mounts media-data (shared RWX, not reverted); a revert rewinds the library cache and watch history, self-healing on a rescan"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "migrating state — Recreate + RWO config PVC, now protected by the pre-apply Longhorn snapshot and revert; also the only GPU (devic.es/dri) workload in the fleet. WEIGHED: jellyfin also mounts media-data (shared RWX, not reverted); a revert rewinds the library cache and watch history, self-healing on a rescan"  # noqa var-naming[no-role-prefix]
 # The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot. Declared
 # regardless of k8s_autodeploy — protects a manual deploy too, and the revert is what this
 # role's auto-deploy depends on.
@@ -44,6 +44,12 @@ jellyfin_k8s_storage_class: longhorn
 # a multiple of 16MiB and of every smaller block-size candidate, so the expansion is real
 # regardless of which size Longhorn checks against.
 jellyfin_k8s_size: 8Gi
+
+# The claim k8s/manifests renders and applies for this role (#3387).
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ jellyfin_k8s_claim }}"
+    storage_class: "{{ jellyfin_k8s_storage_class }}"
+    size: "{{ jellyfin_k8s_size }}"
 
 # Cap on the AGGREGATE size of this volume's snapshots, in bytes — Longhorn's
 # `Volume.Spec.snapshotMaxSize`. `"0"`, the fleet-wide default, means uncapped, and this role

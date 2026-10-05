@@ -73,7 +73,6 @@ def test_a_role_task_file_is_flagged():
 def test_a_shared_storage_role_task_file_is_flagged():
     """volume-claim ships templates/, so it supplies applied bytes."""
     assert land_tags.shared_roles([_CLAIM_TASKS]) == ["volume-claim"]
-    assert "jellyfin" in land_tags.shared_caller_tags([_CLAIM_TASKS])["volume-claim"]
 
 
 def test_a_role_shipped_file_is_flagged():

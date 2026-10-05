@@ -59,7 +59,7 @@ _ROUTING_LISTS = (
 # existed.
 _KNOWN_LONGHORN_PVCS = frozenset(
     {
-        "homelab/jellyfin-config",  # volume-claim role, weekly tier
+        "homelab/jellyfin-config",  # k8s_claims, weekly tier
         "homelab/sonarr-config",  # k8s_claims, weekly tier
         "homelab/traefik-acme",  # own template, R2 tier
         "homelab/crowdsec-db",  # own template, nobackup tier

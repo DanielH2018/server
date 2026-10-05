@@ -9,7 +9,9 @@ list in the caller's `defaults/main.yml`, which `k8s/manifests` renders, digests
 applies ahead of its snapshot (`ansible/roles/k8s/manifests/CLAUDE.md`). freshrss,
 zigbee2mqtt, speedtest, livesync, healthchecks, bazarr, sonarr, radarr, navidrome, prowlarr,
 karakeep, qbittorrent, terraria, code-server, n8n, valheim, scrutiny, tdarr, home-assistant,
-game-stats, uptime-kuma, pi-peer-backup, mosquitto, registry and loki-homelab use it. Convert a caller rather than adding a new one here.
+game-stats, uptime-kuma, pi-peer-backup, mosquitto, registry, loki-homelab and jellyfin use it.
+**No role includes this one any more**: jellyfin was the last caller. Declare a new claim in
+`k8s_claims`; `ansible/tests/k8s/test_volume_claim_pvc_path_collision.py` refuses a new include.
 
 **No standalone deploy tag.** Callers reach it via `include_role: name: k8s/volume-claim`
 with `volume_claim_service`/`volume_claim_name`/`volume_claim_size`/`_storage_class`
@@ -52,8 +54,8 @@ read by `pvc.yaml.j2`, so a change there does move the applied PVC.
 
 A role that later drops its `k8s/volume-claim` include (wg-easy, zigbee2mqtt, freshrss,
 speedtest, livesync, healthchecks, bazarr, sonarr, radarr, navidrome, prowlarr, karakeep,
-qbittorrent, terraria, code-server, n8n, valheim, scrutiny, tdarr, home-assistant, game-stats
-and uptime-kuma all did) leaves its
+qbittorrent, terraria, code-server, n8n, valheim, scrutiny, tdarr, home-assistant, game-stats,
+uptime-kuma and jellyfin all did) leaves its
 `<service>-claims/` file behind. `k8s/manifests` removes that directory on the role's next deploy when the role declares
 `k8s_claims` or lists its own `pvc.yaml` (#3458). A role converted some other way still
 leaves the file, which is inert but stale.

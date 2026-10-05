@@ -83,6 +83,8 @@ _ARMED_ROLES = frozenset(
         "pihole-exporter",
         "node-exporter",
         "jellyfin",
+        "mosquitto",
+        "cloudflare-ddns",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.

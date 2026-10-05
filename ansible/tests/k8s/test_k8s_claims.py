@@ -57,6 +57,7 @@ _KNOWN_CLAIMS = {
     ("homelab", "mosquitto-data"): ("longhorn-nobackup", "1Gi"),
     ("homelab", "registry-data"): ("longhorn-nobackup", "10Gi"),
     ("homelab", "loki-homelab-data"): ("longhorn-nobackup", "5Gi"),
+    ("homelab", "jellyfin-config"): ("longhorn", "8Gi"),
 }
 
 
