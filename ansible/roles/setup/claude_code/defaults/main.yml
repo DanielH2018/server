@@ -240,7 +240,9 @@ claude_code_agent_github_login: DanielClaudeBot
 # The worktree-name prefix the agent's own CLAUDE.md (templates/agent-user-claude-md.j2) tells
 # its sessions to use. EnterWorktree turns `claude/<slug>` into the branch
 # `worktree-claude+<slug>`, the one shape the fence above lets this account push. The repo
-# CLAUDE.md cannot carry it, because the operator's sessions read that file too (#3612).
+# CLAUDE.md cannot carry it, because the operator's sessions read that file too (#3612). The
+# agent's login profile also exports it as CLAUDE_WORKTREE_PREFIX, which
+# scripts/dev/fanout_lib/target.py:branch_name reads to name fan-out batch branches (#3618).
 claude_code_agent_worktree_prefix: claude
 claude_code_agent_github_id: 338220904
 # The account's noreply address. GitHub attributes a commit to the account by it, and marks the
