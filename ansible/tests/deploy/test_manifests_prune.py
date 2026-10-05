@@ -93,7 +93,6 @@ _ARMED_ROLES = frozenset(
         "loki-homelab",
         "wg-easy",
         "homepage",
-        "headlamp",
         "gpu-exporter",
     }
 )
