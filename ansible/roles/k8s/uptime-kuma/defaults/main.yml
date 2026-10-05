@@ -11,7 +11,7 @@ uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.5
 # 8090 unless AUTOKUMA__HEALTHCHECK_PORT is emptied (autokuma/src/config.rs). The published
 # image builds the DEFAULT feature set, which is Kuma v2 — `uptime-kuma-v1` is opt-in and the
 # Dockerfile's ARG FEATURES is empty.
-uptime_kuma_k8s_autokuma_image: ghcr.io/bigboot/autokuma:2.1.0-rc.2
+uptime_kuma_k8s_autokuma_image: ghcr.io/bigboot/autokuma:2.1.0-rc.2@sha256:12ed0e5085feeac65db760c1a3e3d4fa3acea0e7dc4c0e601e2ea64d82485a45
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: this IS the alerting spine every push/HTTP monitor and the Discord chain depend

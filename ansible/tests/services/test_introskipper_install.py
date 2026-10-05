@@ -24,7 +24,7 @@ import json
 
 import pytest
 
-from _helpers import ANSIBLE, REPO, load_defaults
+from _helpers import ANSIBLE, REPO, image_tag, load_defaults
 from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,
@@ -63,7 +63,7 @@ def _introskipper_manager() -> dict:
 
 def _assert_anchor_tracks_the_image(manager: dict, image: str) -> None:
     """The manager's release-line anchor must name the Jellyfin minor the image runs."""
-    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image_tag(image), "the jellyfin image tag")
     anchor = manager["extractVersionTemplate"]
 
     assert f"{server[0]}\\.{server[1]}" in anchor, (
@@ -103,7 +103,7 @@ def test_the_release_comes_from_the_jellyfin_line_that_is_deployed():
     url = defaults["jellyfin_k8s_introskipper_url"]
     image = defaults["jellyfin_k8s_image"]
 
-    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image_tag(image), "the jellyfin image tag")
     line = f"{server[0]}.{server[1]}"
 
     assert f"/releases/download/{line}/" in url, (
@@ -122,7 +122,7 @@ def test_the_plugin_target_abi_does_not_exceed_the_server():
         "jellyfin_k8s_introskipper_target_abi",
     )
     image = defaults["jellyfin_k8s_image"]
-    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image_tag(image), "the jellyfin image tag")
 
     abi, srv = padded(target_abi, server)
     assert abi <= srv, (

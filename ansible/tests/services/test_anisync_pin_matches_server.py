@@ -23,7 +23,7 @@ so an assertion names the value the pod receives rather than a line of `deployme
 Run: uv run pytest ansible/tests/services/test_anisync_pin_matches_server.py
 """
 
-from _helpers import ANSIBLE, load_defaults
+from _helpers import ANSIBLE, image_tag, load_defaults
 from _jellyfin_plugins import PLUGIN_ROOT, plugin_constants, script, version_tuple
 
 JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
@@ -60,7 +60,7 @@ def test_the_plugin_target_abi_does_not_exceed_the_server():
     asset = url.rsplit("/", 1)[-1]
     target_abi = version_tuple(asset, "the release asset filename")
 
-    tag = image.rsplit(":", 1)[-1]
+    tag = image_tag(image)
     server = version_tuple(tag, "the jellyfin image tag")
 
     assert target_abi <= server, (

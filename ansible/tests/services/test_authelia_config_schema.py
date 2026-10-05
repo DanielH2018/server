@@ -42,7 +42,7 @@ import copy
 import json
 
 import pytest
-from _helpers import REPO
+from _helpers import REPO, image_tag
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
@@ -304,7 +304,7 @@ def test_the_vendored_schema_matches_the_pinned_image():
     """A schema from another minor accepts keys the running binary rejects, or the reverse."""
     defaults = yaml_fast.safe_load(AUTHELIA_DEFAULTS.read_text())
     image = defaults["authelia_k8s_image"]
-    tag = image.rsplit(":", 1)[-1]
+    tag = image_tag(image)
     major, minor = tag.split(".")[:2]
     assert f"v{major}.{minor}" == SCHEMA_MINOR, (
         f"{image} is a {major}.{minor} release but the vendored schema is {SCHEMA_MINOR}. "

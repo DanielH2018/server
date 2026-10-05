@@ -83,6 +83,16 @@ def load_defaults(role: Path) -> dict:
     return load_yaml(role / "defaults" / "main.yml") or {}
 
 
+def image_tag(ref: str) -> str:
+    """The tag of an image ref, with any `@sha256:` digest Renovate pinned beside it dropped.
+
+    `authelia/authelia:4.39.28@sha256:bd97…` -> `4.39.28`. A bare `rsplit(":")` on that ref
+    returns the digest hex, which is how the authelia and AutoKuma version guards failed their
+    digest-pin PRs (#3557, #3564).
+    """
+    return ref.split("@", 1)[0].rsplit(":", 1)[-1]
+
+
 # --- the k8s rollout budget, wherever a role spells it ---------------------------------------
 
 

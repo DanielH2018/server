@@ -12,6 +12,7 @@ Every entity also carries the fields AutoKuma v2.0.0 parses (`type` mandatory), 
 the filenames — must stay unique.
 """
 
+from _helpers import image_tag
 from _kuma_entities import (
     ROLE_DEFAULTS,
     _entities,
@@ -89,7 +90,7 @@ def test_autokuma_pin_carries_resend_interval_on_push_monitors():
     # a release note. Add a version here only after doing the same.
     CARRIES_RESEND_ON_PUSH = {"2.1.0-rc.2"}
     pinned = ROLE_DEFAULTS["uptime_kuma_k8s_autokuma_image"]
-    tag = pinned.rsplit(":", 1)[-1]
+    tag = image_tag(pinned)
     assert tag in CARRIES_RESEND_ON_PUSH, (
         f"AutoKuma pin moved to {pinned!r} — re-verify in that tag's monitor.rs that "
         "`resend_interval` is still in the shared field set and not per-variant, then add the "
