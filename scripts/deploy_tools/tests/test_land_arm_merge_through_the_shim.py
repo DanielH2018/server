@@ -32,6 +32,8 @@ case "$*" in
     printf '{{"state":"{state}","title":"Bump vale to 3.19.0"}}\\n' ;;
   *autoMergeRequest*)
     printf '{{"state":"OPEN","mergeStateStatus":"BLOCKED","autoMergeRequest":{{"enabledAt":"2026-09-04T00:00:00Z"}}}}\\n' ;;
+  "api repos/{{owner}}/{{repo}}")
+    printf '{{"visibility":"public"}}\\n' ;;
   *mergeCommit*)
     printf '{{"mergeCommit":{{"oid":"1f0e7c4a9b2d5e6f8a0c1b3d4e5f60718293a4b5"}}}}\\n' ;;
   *changedFiles*)

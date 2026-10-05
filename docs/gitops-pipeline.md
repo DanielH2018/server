@@ -1343,7 +1343,7 @@ one way that matters: one alerts, the other reconciles. Both run from kuma-check
 2026-09-19 ([[common]]'s `kuma_check_timer.yml`): each exits 1 on a down verdict and
 `Restart=on-failure` reruns it every 30 min until it exits 0, so a red tile clears when the
 ruleset or limit is fixed rather than at the next day's slot. Two runs an hour at worst, at
-four requests a run, stay inside GitHub's unauthenticated limit. Without the token both are red:
+five requests a run, stay inside GitHub's unauthenticated limit. Without the token both are red:
 GitHub shows a ruleset's bypass list only to an admin. The timers are
 `Persistent=true`, so a slot missed inside an outage runs at boot; neither script carries a
 boot-grace arm, because both read GitHub rather than the cluster and a boot changes nothing
@@ -1351,6 +1351,12 @@ they judge. `teardown.yml` imports the
 same names absent, which reaps the units and the crons they replaced on a non-deployer host.
 
 - **`github-ruleset-drift.sh`** reads four ruleset definitions from GitHub and alerts on drift in any of them.
+    - First, the repo itself must be public. On the free plan GitHub enforces no ruleset on a
+      private repo, and each ruleset still reads `enforcement: active`. The repo was private
+      from about 13:07 to 22:47 UTC on 2026-09-21, and 29 PRs merged before their required
+      check reported success (#3610). A token read names `.visibility`; an anonymous read of a
+      private repo answers `Not Found`, and the check names visibility for that shape as well.
+      `land.sh --arm-merge` refuses to arm or direct-merge while the repo is not public.
     - The master CI gate must require exactly `gitops_deploy_expected_ruleset_contexts`.
     - The branch-protection ruleset (`gitops_deploy_branch_ruleset_id`) must exclude
       `refs/heads/renovate/**`. Without that exclusion GitHub refuses Renovate's post-merge

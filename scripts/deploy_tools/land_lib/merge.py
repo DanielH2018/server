@@ -37,6 +37,12 @@ before any merge call. A "Filed and not fixed: #N" line closes #N on merge, beca
 reads the keyword and not the sentence around it. `stray_closing_refs` owns the
 rule.
 
+--arm-merge refuses while the repo is not public, before any merge call. On the free plan GitHub
+enforces no ruleset on a private repo, so `--auto` and both direct merges would go through
+without the CI gate: 29 PRs did on 2026-09-21 (#3610). `_refuse_private_repo` owns it. It cannot
+stop an auto-merge armed while the repo was public from firing after a later flip;
+github-ruleset-drift.sh is the cover for that.
+
 `opts.require_author` (from `LAND_REQUIRE_AUTHOR`, which renovate-agent.service sets to
 `app/renovate`) makes --arm-merge refuse a PR by anyone else, before any merge call. The
 agent's contract says "never a PR by another author", and this is the check; an
@@ -257,6 +263,30 @@ def _require_author(ln: Landing) -> None:
         )
 
 
+def _refuse_private_repo(ln: Landing) -> None:
+    """Die unless `repos/{owner}/{repo}` reads `visibility: public`.
+
+    A failed or unparseable read dies too: an unknown visibility is an unknown merge gate,
+    and the cost is one landing to re-run.
+    """
+    try:
+        repo = ln.tools.gh_json("api", "repos/{owner}/{repo}") or {}
+    except subprocess.CalledProcessError as exc:
+        ln.die(f"could not read the repo's visibility: {exc.stderr.strip()}", 1)
+    except subprocess.TimeoutExpired:
+        ln.die("could not read the repo's visibility: gh timed out", 1)
+    except ValueError:
+        ln.die("could not read the repo's visibility: unparseable gh output", 1)
+    visibility = repo.get("visibility") or "<unknown>"
+    if visibility != "public":
+        ln.die(
+            f"repo is {visibility}: rulesets are not enforced on the free plan, so the CI "
+            f"merge gate is open — not merging PR #{ln.opts.pr} until the repo is public "
+            "again",
+            1,
+        )
+
+
 def arm_merge(ln: Landing) -> None:
     """Run `gh pr merge --squash --auto` for this PR, unless it is already merged."""
     pr = ln.opts.pr
@@ -268,6 +298,7 @@ def arm_merge(ln: Landing) -> None:
         ln.die(f"PR #{pr} was closed without merging — nothing to arm", 1)
     _require_author(ln)
     _refuse_stray_closing_refs(ln, view.get("body") or "")
+    _refuse_private_repo(ln)
     subject = ln.opts.subject or view.get("title", "")
     if view.get("reviewDecision") == "REVIEW_REQUIRED":
         _leave_for_a_direct_merge(ln, subject)

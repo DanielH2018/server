@@ -2,7 +2,8 @@
 # Daily drift check: does the LIVE GitHub ruleset still require the contexts this repo declares,
 # does the branch-protection ruleset still exclude Renovate's branches, does the review ruleset
 # still require a review of everyone outside its declared bypass list, and does the fence still
-# keep the agent's account to its own branches? Four arms, one push.
+# keep the agent's account to its own branches? Four arms, one push. Ahead of all four, the repo
+# must be public: on the free plan GitHub enforces no ruleset on a private repo (#3610).
 #
 # The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
 # tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
@@ -163,6 +164,38 @@ TOKEN=$(sudo -n -u "{{ sys_user }}" -H gh auth token 2>/dev/null || true)
 AUTH_CONFIG=""
 if [ -n "$TOKEN" ]; then
   AUTH_CONFIG=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN")
+fi
+
+# --- First, before any ruleset: is the repo public? ---
+#
+# On the free plan GitHub does not enforce rulesets on a private repo. Each ruleset still reads
+# `enforcement: active`, so every arm below would pass while no merge is gated. From 13:07 to
+# 22:17 UTC on 2026-09-21 the repo was private, and 29 PRs merged before their required check
+# reported success (#3610). An anonymous read of a private repo answers 404, which until then
+# surfaced here only as a failed ruleset fetch and hid the cause. So this read comes first and
+# names visibility in both shapes: `.visibility` to a token, a 404 `Not Found` to no token.
+#
+# No `-f` on this one fetch: the 404 body is the evidence, and `-f` would discard it. curl still
+# exits non-zero on a transport failure, which is the reachout case.
+REPO_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}"
+if ! REPO_BODY=$(curl -s --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
+  -H "Accept: application/vnd.github+json" "$REPO_URL"); then
+  push_reachout "failed to fetch repo {{ gitops_deploy_github_repo }} — visibility and every ruleset UNVERIFIED"
+  exit 1
+fi
+VISIBILITY=$(printf '%s' "$REPO_BODY" | jq -r '.visibility // empty' 2>/dev/null)
+REPO_ERROR=$(printf '%s' "$REPO_BODY" | jq -r '.message // empty' 2>/dev/null)
+if [ -n "$VISIBILITY" ] && [ "$VISIBILITY" != "public" ]; then
+  push down "repo is ${VISIBILITY}: rulesets are not enforced on the free plan, the CI merge gate is open — make {{ gitops_deploy_github_repo }} public again"
+  exit 1
+fi
+if [ -z "$VISIBILITY" ] && [ "$REPO_ERROR" = "Not Found" ]; then
+  push down "repo {{ gitops_deploy_github_repo }} answers Not Found — most likely private, and rulesets are not enforced on a private repo on the free plan, so the CI merge gate is open"
+  exit 1
+fi
+if [ -z "$VISIBILITY" ]; then
+  push down "repo {{ gitops_deploy_github_repo }} response had no .visibility (${REPO_ERROR:-no message}) — bad fetch, UNVERIFIED"
+  exit 1
 fi
 
 # Process substitution, not a pipe. Under `set -o pipefail` a `printf | curl -K -` pipeline
@@ -351,5 +384,5 @@ check_bypass {{ gitops_deploy_ruleset_id }} "$BODY" "$EXPECTED_CI_BYPASS"
 check_bypass {{ gitops_deploy_review_ruleset_id }} "$REVIEW_BODY" "$EXPECTED_REVIEW_BYPASS"
 check_bypass {{ gitops_deploy_fence_ruleset_id }} "$FENCE_BODY" "$EXPECTED_FENCE_BYPASS"
 
-push up "ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ gitops_deploy_branch_ruleset_id }} excludes {{ gitops_deploy_branch_ruleset_renovate_exclude }}; ruleset {{ gitops_deploy_review_ruleset_id }} requires {{ gitops_deploy_review_ruleset_approvals }} approving review; ruleset {{ gitops_deploy_fence_ruleset_id }} fences the agent to {{ gitops_deploy_fence_ruleset_exclude | join(', ') }}; all bypass lists as declared"
+push up "repo public; ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ gitops_deploy_branch_ruleset_id }} excludes {{ gitops_deploy_branch_ruleset_renovate_exclude }}; ruleset {{ gitops_deploy_review_ruleset_id }} requires {{ gitops_deploy_review_ruleset_approvals }} approving review; ruleset {{ gitops_deploy_fence_ruleset_id }} fences the agent to {{ gitops_deploy_fence_ruleset_exclude | join(', ') }}; all bypass lists as declared"
 exit 0
