@@ -62,8 +62,8 @@ pihole_k8s_unbound_mem_request: 32Mi
 
 # Desired blocklist state, reconciled into gravity.db by tasks/main.yml (idempotent
 # INSERT/UPDATE, then a gravity rebuild only when something changed). DECLARED rather than
-# volume-seeded: volume-claim verifies against a quiescent source, and pihole-FTL.db moves on
-# every DNS query, so a coexistence seed can never pass verification.
+# volume-seeded: the retired k8s/volume-claim seed verified against a quiescent source, and
+# pihole-FTL.db moves on every DNS query, so a coexistence seed could never pass verification.
 # StevenBlack is Pi-hole's first-boot default; declaring it disabled keeps a fresh boot from
 # silently re-enabling it.
 pihole_k8s_adlists:

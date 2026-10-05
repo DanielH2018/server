@@ -18,7 +18,7 @@ terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_ta
 # ReadWriteOnce), holding the one irreplaceable dataset the backup consolidation exists to
 # protect. Either alone would justify the denylist entry.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO volume-claim PVC holding irreplaceable worlds"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO PVC holding irreplaceable worlds"  # noqa var-naming[no-role-prefix]
 
 # 36 M of worlds + config — `longhorn`, BACKED UP: this is the one irreplaceable dataset in
 # the service.

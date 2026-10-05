@@ -22,10 +22,8 @@ spec:
         app: speedtest
         netpol-baseline: enforced
     spec:
-      # No fsGroup on purpose. volume-claim restores the source's ownership with
-      # `tar -p --numeric-owner`, and this LSIO image starts as root and chowns /config to
-      # PUID/PGID itself. An fsGroup would recursively rewrite group ownership at mount time,
-      # fighting both.
+      # No fsGroup on purpose. This LSIO image starts as root and chowns /config to PUID/PGID
+      # itself. An fsGroup would recursively rewrite group ownership at mount time, fighting it.
 {{ pod_shell('homelab-best-effort') }}
 {{ node_affinity_preference('daniel-server') }}
       containers:

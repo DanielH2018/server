@@ -40,8 +40,8 @@
 # Leftovers from #2813, which merged the terraria-stats and valheim-stats roles into this one
 # (#3088). The manifests role prunes only inside its own `manifests_service` directory, so the
 # two old staging directories kept their copies of these same objects, and each old service kept
-# its release record. `terraria-stats-claims/` is the k8s/volume-claim staging directory, which
-# the shared sweep in k8s/manifests cannot reach because it is keyed on `game-stats` (#3387).
+# its release record. `terraria-stats-claims/` was the retired k8s/volume-claim role's staging
+# directory, which the shared sweep in k8s/manifests cannot reach because it is keyed on `game-stats` (#3387).
 # Keep `/etc/rancher/k3s/terraria-stats/`: tasks/terraria.yml still stages it.
 - name: Remove the staged manifests and release records the pre-#2813 roles left behind
   tags: [config]

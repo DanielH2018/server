@@ -13,7 +13,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
 - **Claims:** `valheim-config` (weekly -> B2 (default target)), `valheim-server` (no backup
   (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less — no
-  readinessProbe at all; (2) migrating state — Recreate + RWO volume-claim PVC holding worlds
+  readinessProbe at all; (2) migrating state — Recreate + RWO PVC holding worlds
 <!-- /generated_from -->
 
 - **Version-pinned**, and **the tag pins the wrapper, not the game** — SteamCMD fetches the

@@ -6,11 +6,10 @@
 # once qbittorrent has downloaded into the volume would delete those downloads and restore
 # whatever the stale source still holds.
 #
-# NOT roles/k8s/volume-claim, which is the repo's normal way to fill a PVC. That role tars the
-# whole tree through `kubectl exec` and sha256s both ends on every run — right for a 640 M
-# config directory, wrong for 19 G that needs to be re-run several times and resumed after an
-# interruption. rsync gives delta transfer; the checksum verification below keeps what
-# volume-claim's assert was protecting.
+# NOT the tar-through-`kubectl exec` seed the retired roles/k8s/volume-claim used, which sha256'd
+# both ends on every run — right for a 640 M config directory, wrong for 19 G that needs to be
+# re-run several times and resumed after an interruption. rsync gives delta transfer; the
+# checksum verification below keeps what volume-claim's assert protected.
 #
 # Runs as {{ sys_user }}, NOT root: the SSH trust to {{ media_volume_source_host }} belongs to
 # that user, and root has no key there. The destination is owned by {{ puid }}:{{ pgid }} by

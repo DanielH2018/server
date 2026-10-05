@@ -12,7 +12,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 - **Claims:** `scrutiny-influxdb-data` (no backup (listed in k3s_longhorn_nobackup_volumes)),
   `scrutiny-web-config` (weekly -> B2 (default target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — stateful / manual-upgrade — rolling
-  branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO volume-claim PVC
+  branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO PVC
   (migrating-state shape) — two independent reasons
 <!-- /generated_from -->
 
