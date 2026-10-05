@@ -9,6 +9,8 @@
     name: k8s/manifests
   vars:
     manifests_service: gpu-exporter
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
     manifests_rollout: gpu-exporter
     # `daemonset` literally: the assert in k8s/manifests refuses kubectl's `ds`/`DaemonSet`
     # aliases, because the stabilise gate would then read a Deployment's jsonpath off this and

@@ -1,5 +1,5 @@
 ---
-# The PVC is created by the manifests role below, from pvc.yaml.j2.
+# The PVC is created by the manifests role below, from `k8s_claims` in defaults/main.yml.
 #
 # There is no automated way to repopulate this volume from empty. The setup wizard in the
 # browser is the only import path; see the image pin's comment in defaults/main.yml.
@@ -10,15 +10,19 @@
   vars:
     manifests_service: wg-easy
     manifests_rollout: wg-easy
+    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
+    # Secret and PersistentVolumeClaim are outside the prune allowlist, so neither the claim
+    # holding the server keypair nor the orphaned wg-easy-env Secret below can be pruned.
+    manifests_prune: true
     manifests_files:
-      - pvc.yaml
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
     # No manifests_secret_files: v15 owns its admin credentials in its own SQLite DB, so the
-    # wg-easy-env Secret that carried v14's PASSWORD_HASH has no consumer. `kubectl apply`
-    # never prunes an object it stops rendering, so the live Secret survives, orphaned, until
-    # someone deletes it by hand. It is unreferenced but still holds a real bcrypt hash.
+    # wg-easy-env Secret that carried v14's PASSWORD_HASH has no consumer. The prune never
+    # deletes a Secret (it is outside manifests_prune_allowlist), so the live Secret
+    # survives, orphaned, until someone deletes it by hand. It is unreferenced but still holds
+    # a real bcrypt hash.
     #
     # PENDING OPERATOR WORK, and it needs BOTH of these or it fails:
     #

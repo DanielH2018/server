@@ -59,6 +59,7 @@ _KNOWN_CLAIMS = {
     ("homelab", "pihole-etc"): ("longhorn-nobackup", "2Gi"),
     ("homelab", "pihole-etc-2"): ("longhorn-nobackup", "2Gi"),
     ("homelab", "traefik-acme"): ("longhorn", "128Mi"),
+    ("homelab", "wg-easy-config"): ("longhorn", "1Gi"),
 }
 
 
