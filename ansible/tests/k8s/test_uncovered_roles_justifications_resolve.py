@@ -22,7 +22,7 @@ _FILE_TOKEN = re.compile(r"(?<![\w./-])(?:[\w.-]+\.j2|test_\w+\.py)\b")
 # Named members the census must find, so a regex that stops matching fails here rather than
 # passing over an empty set (the non-vacuity rule in CLAUDE.md, Python & Tests).
 _KNOWN_REFERENCES = frozenset(
-    {"pvc.yaml.j2", "build-job.yaml.j2", "test_image_builder_security_context.py"}
+    {"build-job.yaml.j2", "test_image_builder_security_context.py"}
 )
 
 

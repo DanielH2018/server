@@ -1051,7 +1051,7 @@ stay).
     releases --stale-only`: it compares each service's release record (the applied commit
     `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
     `origin/master` under that service's own role AND the shared roles that supply bytes to
-    every service's manifests (`manifests`, `volume-claim`, `image-builder`, `arr-notification`
+    every service's manifests (`manifests`, `image-builder`, `arr-notification`
     — `scripts/diagnostics/probe_lib/releases.py`'s `manifest_affecting_shared_roles()`), and
     pushes the "Release Staleness Drift" Kuma monitor down when any service is stale or missing
     a record entirely. A record whose service no `containers_list` entry declares is dropped
@@ -1095,12 +1095,11 @@ stay).
     defaults rather than the run, which is now a redundancy rather than a gap — a service in that
     list either got its snapshot or never reached the apply.
   - **Accepted: nothing self-heals a volume left attached in Longhorn maintenance mode after a
-    failed rollback, and the seed pod of the next deploy mounts the same RWO claim.** If
+    failed rollback, and the next deploy's pod mounts the same RWO claim.** If
     `k8s/volume-revert` stops partway (a wait exhausts, an API call fails) the volume can be left
     attached with `disableFrontend: true` and the workload at zero replicas — see
-    `docs/volume-revert-drill-and-sizing.md`'s hand-recovery steps. `k8s/volume-claim` runs ahead of
-    `k8s/manifests` on every one of the 13 opted-in roles' NEXT deploy and mounts the same claim
-    to seed it; whether that mount succeeds, hangs, or fails against a volume already attached in
+    `docs/volume-revert-drill-and-sizing.md`'s hand-recovery steps. The workload pod of the opted-in
+    role's NEXT deploy mounts the same claim; whether that mount succeeds, hangs, or fails against a volume already attached in
     maintenance mode by a different (non-pod) attachment is untested — nothing in this repo
     exercises a real Longhorn revert (see `docs/volume-revert-drill-and-sizing.md`'s "What is not
     covered by tests"). Treat a stuck maintenance-mode attach as blocking the affected service's next deploy
@@ -1270,7 +1269,7 @@ what it recorded.
   merge-base --is-ancestor`. That is what drops the line for an operator's own `deploy.sh`,
   which the deployer cannot see; without it the marker would hold a permanent line per routine
   landing. A record that is absent or carries no date KEEPS the line. A shared role
-  (`manifests`, `image-builder`, `volume-claim`) has no record of its own, so its line drops
+  (`manifests`, `image-builder`) has no record of its own, so its line drops
   when every tag that runs it carries the change, as
   `scripts/deploy_tools/shared_role_callers.py:caller_tags` derives them (#2643).
 - A caller carries the change when its release record descends from the line's commit. For
@@ -1284,8 +1283,8 @@ what it recorded.
   fail-closed: every task is a `k8s/manifests` include, a pure fact or check module, or an
   include of a task file that meets the same rule, and the role has no handlers or meta
   dependencies. A comment-only template edit to such a role then discharges within about an
-  hour with no deploy. A role that includes `volume-claim` or `image-builder`, writes a host
-  file or calls an API still needs its record to descend.
+  hour with no deploy. A role that includes `image-builder`, writes a host file or calls an API
+  still needs its record to descend.
 - Each line is written at the newest commit in the tick's range whose own diff reaches its
   service (`deploy_phases.k8s_change_commits`, #3111), not at the tick's tip. A landing
   deploys its PR's commit, so a line at a later, unrelated tip could never discharge by

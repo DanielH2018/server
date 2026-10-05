@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Which deploy tags run a shared k8s role, record or no record.
 
-THE PROBLEM. A shared role — `manifests`, `image-builder`, `volume-claim` — has no
+THE PROBLEM. A shared role — `manifests`, `image-builder`, `arr-notification` — has no
 `containers_list` entry, so a `--tags` run cannot select it and no release record names it.
 Two readers need the tags that DO run it.
 
@@ -77,8 +77,7 @@ def caller_tags(
 # together by `tests/test_shared_role_smoke_caller.py`, so neither can widen alone.
 #
 # Every other shared role acts per caller and needs all of them: `arr-notification` writes
-# each *arr's own database over its API, `volume-claim` stages a PVC in the caller's own
-# directory, `image-builder` ships a build job per caller. Deploying one of those is not the
+# each *arr's own database over its API, and `image-builder` ships a build job per caller. Deploying one of those is not the
 # change applied — `land_tags.shared_caller_tags`' own measured case is PR #1393 (#1397).
 SMOKE_TESTABLE_SHARED_ROLES = frozenset({"manifests"})
 

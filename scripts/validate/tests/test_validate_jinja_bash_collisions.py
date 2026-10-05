@@ -66,7 +66,7 @@ def test_the_scan_finds_the_templates():
     """Without this, the live-tree test below passes vacuously on an empty glob."""
     found = {str(p.relative_to(v.REPO)) for p in v.templates()}
     assert CENSUS_MEMBERS <= found, f"census lost: {CENSUS_MEMBERS - found}"
-    assert len(found) >= 400
+    assert len(found) >= 399
 
 
 def test_no_live_template_carries_the_collision():

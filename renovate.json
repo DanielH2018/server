@@ -630,7 +630,6 @@
         "ansible/roles/k8s/traefik/defaults/main.yml",
         "ansible/roles/k8s/uptime-kuma/defaults/main.yml",
         "ansible/roles/k8s/valheim/defaults/main.yml",
-        "ansible/roles/k8s/volume-claim/defaults/main.yml",
         "ansible/roles/k8s/volume-revert/defaults/main.yml",
         "ansible/roles/k8s/volume-snapshot/defaults/main.yml",
         "ansible/roles/k8s/wg-easy/defaults/main.yml",

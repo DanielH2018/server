@@ -83,7 +83,6 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
         "qbittorrent",
         "registry",
         "traefik",
-        "volume-claim",
     }
 )
 
@@ -116,7 +115,7 @@ def _unguarded_host_writes(role: Path) -> list[str]:
 
     The guard has to sit on the task itself or on the include that pulled its whole file in —
     `_guard_covered_files` is the same closure the cluster-side check uses, and it is what
-    covers observability's `dashboards.yml` and volume-claim's `claim.yml`.
+    covers observability's `dashboards.yml`.
     """
     covered = _guard_covered_files(role)
     offenders = []

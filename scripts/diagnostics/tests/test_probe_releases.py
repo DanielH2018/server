@@ -290,7 +290,6 @@ def test_shared_k8s_roles_matches_the_known_set():
         "image-builder",
         "longhorn-api",
         "manifests",
-        "volume-claim",
         "volume-revert",
         "volume-snapshot",
     }
@@ -307,14 +306,13 @@ def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():
 
     Named rather than counted: a role that moves directories or loses its `templates/` fails
     here by name, where a count would only slide by one. `manifests` renders everyone's
-    templates, `volume-claim` and `image-builder` render their own, and `arr-notification`
+    templates, `image-builder` renders its own, and `arr-notification`
     ships `files/` a consumer's manifest embeds.
     """
     assert pr.manifest_affecting_shared_roles() == {
         "arr-notification",
         "image-builder",
         "manifests",
-        "volume-claim",
     }
 
 

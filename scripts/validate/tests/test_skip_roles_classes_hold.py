@@ -3,8 +3,8 @@
 
 A role in SKIP_ROLES is never rendered and never parsed as YAML by the manifest validator, so an
 entry whose stated reason has stopped being true is an unvalidated role that reads as a
-deliberate decision. Two of its eight entries — volume-claim and image-builder — carry manifest
-templates while sitting beside six that carry none, so a single literal list could not
+deliberate decision. One of its seven entries — image-builder — carries manifest templates
+while sitting beside six that carry none, so a single literal list could not
 distinguish the two cases mechanically.
 
 The classes rot in OPPOSITE directions, which is why each gets its own assertion:

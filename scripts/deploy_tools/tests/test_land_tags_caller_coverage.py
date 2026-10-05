@@ -82,14 +82,16 @@ def test_a_helper_called_only_by_helpers_reaches_their_callers():
     )
 
 
-def test_a_changed_role_with_neither_an_entry_nor_a_caller_is_still_reported():
+def test_a_changed_role_with_neither_an_entry_nor_a_caller_is_still_reported(tmp_path):
     """The reject half by census: a role nothing includes can only be applied by hand.
 
     The suppression keys on the caller map, so a role absent from it must fall through to the
-    note exactly as before -- otherwise the fix trades a false alarm for a silence.
+    note exactly as before -- otherwise the fix trades a false alarm for a silence. The role's
+    directory exists, as a new unregistered role's does: a DELETED role owes nothing.
     """
+    (tmp_path / "k8s" / "nosuchrole").mkdir(parents=True)
     files = ["ansible/roles/k8s/nosuchrole/templates/deployment.yaml.j2"]
     assert land_tags.derive(files, 1, set(_DECLARED)).tags == []
-    note = land_tags.plane_note(files, set(_DECLARED))
+    note = land_tags.plane_note(files, set(_DECLARED), roles_root=tmp_path)
     assert "nosuchrole" in note
     assert "ansible/deploy.yml" in note

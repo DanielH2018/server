@@ -11,16 +11,12 @@ Run: uv run pytest ansible/tests/k8s/test_k8s_claims.py
 """
 
 from collections import Counter
-from pathlib import Path
 
 from _helpers import (
     ANSIBLE,
-    K8S_ROLES,
-    load_defaults,
     load_tasks,
     render_expr,
     task_named,
-    walk_tasks,
 )
 from _k8s_render import rendered_docs
 from lib.k8s_roles import CLAIM_TEMPLATE
@@ -140,8 +136,7 @@ def test_no_claim_has_two_creators():
     """A role's own PVC template and a `k8s_claims` entry naming one claim both apply it.
 
     `kubectl apply` reports the second over the first as success, so the two templates drift
-    apart silently. `k8s/volume-claim` includes are outside the render and are guarded by
-    `test_volume_claim_pvc_path_collision.py`.
+    apart silently.
     """
     found = duplicate_claims(_pvcs(rendered_docs()))
     assert not found, f"claims rendered by more than one template: {found}"
@@ -180,73 +175,4 @@ def test_the_sweep_skips_a_role_with_neither_and_any_dry_run():
     assert not _sweeps()
     assert not _sweeps(
         manifests_claim_files=["claim-a-config.yaml"], k8s_no_mutate=True
-    )
-
-
-def _include(task: dict, role: str) -> dict | None:
-    include = task.get("ansible.builtin.include_role") or {}
-    return task.get("vars") or {} if include.get("name") == role else None
-
-
-def sweep_collisions(roles_dir: Path) -> tuple[set[str], dict[str, str]]:
-    """The roles the sweep runs for, and those that still stage into the swept directory.
-
-    A role is swept when its defaults declare `k8s_claims` or its manifests include lists
-    `pvc.yaml`. One that also includes `k8s/volume-claim` under its own `manifests_service`
-    has the claim that include stages deleted on every deploy.
-    """
-    swept: set[str] = set()
-    collisions: dict[str, str] = {}
-    for tasks_file in sorted(roles_dir.glob("*/tasks/*.yml")):
-        role = tasks_file.parent.parent
-        tasks = list(walk_tasks(load_tasks(tasks_file)))
-        claimed = {
-            str(v.get("volume_claim_service"))
-            for t in tasks
-            if (v := _include(t, "k8s/volume-claim")) is not None
-        }
-        for t in tasks:
-            v = _include(t, "k8s/manifests")
-            if v is None:
-                continue
-            files = v.get("manifests_files", [])
-            if not (load_defaults(role).get("k8s_claims") or "pvc.yaml" in files):
-                continue
-            service = str(v.get("manifests_service"))
-            swept.add(service)
-            if service in claimed:
-                collisions[service] = str(tasks_file.relative_to(roles_dir))
-    return swept, collisions
-
-
-def test_a_swept_role_still_staging_through_volume_claim_is_flagged(tmp_path):
-    (tmp_path / "feed" / "defaults").mkdir(parents=True)
-    (tmp_path / "feed" / "defaults" / "main.yml").write_text("---\n")
-    tasks = tmp_path / "feed" / "tasks" / "main.yml"
-    tasks.parent.mkdir()
-    tasks.write_text(
-        """
-- name: Create the feed claim
-  ansible.builtin.include_role:
-    name: k8s/volume-claim
-  vars:
-    volume_claim_service: feed
-- name: Deploy feed
-  ansible.builtin.include_role:
-    name: k8s/manifests
-  vars:
-    manifests_service: feed
-    manifests_files: [pvc.yaml, deployment.yaml]
-"""
-    )
-    assert sweep_collisions(tmp_path) == ({"feed"}, {"feed": "feed/tasks/main.yml"})
-
-
-def test_no_swept_role_still_stages_through_volume_claim():
-    swept, collisions = sweep_collisions(K8S_ROLES)
-    # Named members: a census that finds neither is reading the wrong path or key.
-    assert {"freshrss", "wg-easy"} <= swept, swept
-    assert not collisions, (
-        f"the claims-directory sweep deletes what k8s/volume-claim stages for {collisions}; "
-        "convert the role to k8s_claims fully rather than keeping both"
     )

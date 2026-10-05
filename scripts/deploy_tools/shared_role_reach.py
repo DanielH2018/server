@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Which changed SHARED k8s roles move no rendered manifest, so no hand has to apply them.
 
-THE PROBLEM. A shared role — `manifests`, `volume-claim`, `volume-revert` — has no
+THE PROBLEM. A shared role — `manifests`, `volume-snapshot`, `volume-revert` — has no
 `containers_list` entry, so no `--tags` value applies it and `land_tags.plane_note` reports it
 as work a human still owes: a full `ansible/deploy.yml`, about 20 minutes. That is the right
 answer when the change moves the bytes a service has live. It is the wrong answer when the
@@ -25,9 +25,9 @@ deploy-time only:
 
 DECIDED: per KEY, not per role and not per subdirectory. `releases._supplies_manifest_bytes`
 names `manifests` as byte-supplying outright and `releases._DEPLOY_TIME_SUBDIRS` leaves
-`defaults/` out, both deliberately — `volume-claim/defaults/main.yml` holds
-`volume_claim_size`, which its own `pvc.yaml.j2` renders, and `manifests/tasks/` IS the render
-and apply logic (#947, #1636, #1672). Neither prior is overturned here: a key a template
+`defaults/` out, both deliberately — a shared role's defaults can hold a value its own
+template renders, as the retired `volume-claim`'s `volume_claim_size` did, and
+`manifests/tasks/` IS the render and apply logic (#947, #1636, #1672). Neither prior is overturned here: a key a template
 mentions stays loud, and a `tasks/` change that is not a changed key's consumer stays loud.
 This only refines them one level finer, at the key.
 

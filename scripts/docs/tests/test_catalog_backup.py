@@ -275,69 +275,6 @@ def test_backup_tier_reads_class_from_the_pvc_macro_call(tmp_path):
     )
 
 
-def test_backup_tier_reads_class_from_a_volume_claim_include(tmp_path):
-    # Shape 3: the claim is rendered by the volume-claim role on the caller's behalf, so
-    # nothing in the caller's templates/ names its class — only the include task's vars do.
-    paths = make_repo(tmp_path)
-    write(
-        paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
-        "jellyfin_k8s_claim: jellyfin-cache\njellyfin_k8s_storage_class: longhorn-nobackup\n",
-    )
-    write(
-        paths["k8s_roles"] / "jellyfin" / "tasks" / "main.yml",
-        """\
-        - name: Provision the cache claim
-          ansible.builtin.include_role:
-            name: k8s/volume-claim
-          vars:
-            volume_claim_name: "{{ jellyfin_k8s_claim }}"
-            volume_claim_storage_class: "{{ jellyfin_k8s_storage_class }}"
-        """,
-    )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
-    assert row.backup_tier == "no backup (StorageClass longhorn-nobackup)"
-
-
-def test_backup_tier_volume_claim_include_without_a_class_reads_the_role_default(
-    tmp_path,
-):
-    # terraria-stats' shape: no volume_claim_storage_class on the include, so the class is
-    # the volume-claim role's own default — read from that role, not assumed.
-    paths = make_repo(tmp_path)
-    write(
-        paths["k8s_roles"] / "volume-claim" / "defaults" / "main.yml",
-        "volume_claim_storage_class: longhorn\n",
-    )
-    write(
-        paths["k8s_roles"] / "jellyfin" / "tasks" / "main.yml",
-        """\
-        - name: Provision the claim
-          ansible.builtin.include_role:
-            name: k8s/volume-claim
-          vars:
-            volume_claim_name: some-other-claim
-        """,
-    )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
-    assert row.backup_tier == "daily -> B2 (default group)"
-
-
-def test_backup_tier_volume_claim_include_with_no_default_anywhere_is_unknown(tmp_path):
-    paths = make_repo(tmp_path)
-    write(
-        paths["k8s_roles"] / "jellyfin" / "tasks" / "main.yml",
-        """\
-        - name: Provision the claim
-          ansible.builtin.include_role:
-            name: k8s/volume-claim
-          vars:
-            volume_claim_name: some-other-claim
-        """,
-    )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
-    assert row.backup_tier.startswith("unknown")
-
-
 def test_backup_tier_claimname_reference_finds_the_class_in_the_declaring_role(
     tmp_path,
 ):
@@ -400,15 +337,13 @@ def test_claim_index_reads_the_real_tree_for_each_declaration_shape():
 
     Every fixture above hands the parser a shape it already matches. CLAUDE.md's rule for a
     check that finds its subject by pattern is a named member it must find: one claim per
-    declaration shape (inline block, `pvc()` macro call, volume-claim include, `k8s_claims`
-    entry), so a regex
+    declaration shape (inline block, `pvc()` macro call, `k8s_claims` entry), so a regex
     or task walk that stops matching names the claim it lost rather than moving a count.
     """
     index = claim_index(K8S_ROLES)
     expected = {
         "media-data": "media-local",  # inline block, media-volume
-        "karakeep-meili": "longhorn-nobackup",  # pvc() macro call, karakeep
-        "uptime-kuma-data": "longhorn",  # volume-claim include, uptime-kuma
+        "wg-easy-config": "longhorn",  # pvc() macro call, wg-easy
         "zigbee2mqtt-data": "longhorn",  # k8s_claims entry, zigbee2mqtt
     }
     missing = {name: sc for name, sc in expected.items() if index.get(name) != sc}

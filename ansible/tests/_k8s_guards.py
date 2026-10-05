@@ -62,11 +62,11 @@ _INCLUDED_FILE = re.compile(r"(?:import_tasks|include_tasks):\s*[\"']?([\w.-]+\.
 def _guard_covered_files(role: Path) -> set[str]:
     """Task files every one of whose tasks inherits a no-mutation guard from its caller.
 
-    volume-claim is the shape this exists for: main.yml is a single
-    `import_tasks: seed.yml` under `when: not k8s_no_mutate`, and the import propagates that
-    `when` to every task in seed.yml — and on to copy.yml, which seed.yml includes. Nothing in
-    either file names the guard, so a per-task rule alone would call the role unguarded and
-    demand a fix it does not need — volume-claim is reached as a dependency of 25 roles, so
+    The retired volume-claim role was the shape this exists for: main.yml was a single
+    `import_tasks: seed.yml` under `when: not k8s_no_mutate`, and the import propagated that
+    `when` to every task in seed.yml — and on to copy.yml, which seed.yml included. Nothing in
+    either file named the guard, so a per-task rule alone would call the role unguarded and
+    demand a fix it did not need — volume-claim was reached as a dependency of 25 roles, so
     nothing keyed on --tags could have covered it either.
 
     Only main.yml is scanned for the guarded include; from there the closure is transitive and

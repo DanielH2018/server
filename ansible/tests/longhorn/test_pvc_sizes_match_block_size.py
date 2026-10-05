@@ -23,11 +23,6 @@ macro-call regex and the floor assertion that watched for their resolution falli
 gone with their subject. What replaces them is `KNOWN_SIZED_ROLES`: a census that stops naming a
 role fails there rather than passing on fewer claims.
 
-`k8s/volume-claim` renders only when a caller includes it, so no render reaches it. Its
-`volume_claim_size` default is read from its `defaults/main.yml` instead — a defaults read, not
-a template read. A caller that overrides the size does so in its include vars, which neither
-this census nor the one it replaces ever covered.
-
 Run: uv run pytest ansible/tests/longhorn/test_pvc_sizes_match_block_size.py
 """
 
@@ -40,7 +35,6 @@ from _k8s_render import rendered_docs
 
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
 K3S_DEFAULTS = ANSIBLE / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
-CLAIM_DEFAULTS = K8S_ROLES / "volume-claim" / "defaults" / "main.yml"
 
 UNITS = {"Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "Ti": 1024**4}
 SIZE_RE = re.compile(r"^(\d+)(Ki|Mi|Gi|Ti)$")
@@ -72,19 +66,14 @@ def _requested_size(doc: dict) -> str | None:
 
 
 def declared_sizes() -> list[tuple[str, str]]:
-    """(where, size) for every volume the k8s roles declare, plus the shared claim's default."""
-    found = [
+    """(where, size) for every volume the k8s roles declare."""
+    return sorted(
         (f"{role}/{name}", size)
         for role, name, doc in rendered_docs()
         if isinstance(doc, dict)
         and doc.get("kind") in VOLUME_KINDS
         and (size := _requested_size(doc))
-    ]
-    claim_default = yaml_fast.safe_load(CLAIM_DEFAULTS.read_text())["volume_claim_size"]
-    found.append(
-        ("volume-claim/defaults/main.yml:volume_claim_size", str(claim_default))
     )
-    return sorted(found)
 
 
 def test_the_census_names_every_role_that_sizes_a_volume() -> None:

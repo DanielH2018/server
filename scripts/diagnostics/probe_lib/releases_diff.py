@@ -1,9 +1,8 @@
 """The one staleness question a path cannot answer: did this `tasks/` diff move any bytes?
 
 `releases._is_real_change` is a path predicate, and that is enough for every rule but one. A
-k8s SERVICE role's own `tasks/main.yml` names its `manifests_files`, and passes
-`volume_claim_size` and `volume_claim_storage_class` to `k8s/volume-claim`, whose
-`pvc.yaml.j2` reads both -- so a change there usually does move the applied bytes and must
+k8s SERVICE role's own `tasks/main.yml` names its `manifests_files` and the vars it passes to
+the templates it renders -- so a change there usually does move the applied bytes and must
 count. Usually is not always. `7fd4189cb` added `check_mode: false` and `when: not
 ansible_check_mode` guards across nineteen roles; every one renders byte-identical manifests
 on a real deploy, and tdarr's marked it stale with nothing able to clear it but a hand-run

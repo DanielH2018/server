@@ -90,6 +90,7 @@ _ARMED_ROLES = frozenset(
         "configarr",
         "pi-peer-backup",
         "pihole",
+        "loki-homelab",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.

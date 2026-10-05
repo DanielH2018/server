@@ -29,9 +29,7 @@ _K8S_ROLES = _REPO / "ansible/roles/k8s"
 # Not a workload role — the shared include every other role calls. The invariant: no role in
 # _SHARED may pin an `_image:` var, because that's what makes a role Renovate-visible and
 # therefore auto-deployable in the first place. Both here have no defaults/main.yml at all, so
-# neither pins one — that's the supporting fact, not the rule. volume-claim pins
-# seed_volume_image and does NOT belong here; it's denylisted instead and evaluated by every
-# guard below like any other role.
+# neither pins one — that's the supporting fact, not the rule.
 _SHARED = {"manifests"}
 
 # Shared roles other roles rely on to block until a batch workload is terminal. Membership
@@ -443,15 +441,14 @@ def _declares_autodeploy(role: Path) -> bool:
 # run and surfaces only on a real deploy, as the "PVC has no spec.volumeName" assert failing
 # before the apply. The claim-name test below is therefore the only pre-deploy catch.
 #
-# Most roles delegate PVC creation entirely to the shared `k8s/volume-claim` role
-# (`include_role: k8s/volume-claim`, `vars: volume_claim_name: "{{ <role>_k8s_claim }}"`) and
-# render no PersistentVolumeClaim document of their own. The roles that DO render their own PVC
-# (zigbee2mqtt, code-server's workspace claim) write `metadata.name: {{ <role>_k8s_claim }}`, a
-# Jinja reference, not a literal. A test that parsed only a role's own `templates/*.j2` for
-# literal claim names would find an empty set for the delegating roles and fail their correct
-# declarations. `_rendered_pvc_claims` reads both sources (a role's own PVC template AND a
-# `volume_claim_name` var on a live `k8s/volume-claim` include) and resolves the single-var
-# reference both use through the role's own defaults/main.yml.
+# Most roles declare their claims as `k8s_claims` entries in defaults/main.yml
+# (`name: "{{ <role>_k8s_claim }}"`) and render no PersistentVolumeClaim template of their own.
+# The roles that DO render their own PVC write `metadata.name: {{ <role>_k8s_claim }}`, a Jinja
+# reference, not a literal. A test that parsed only a role's own `templates/*.j2` for literal
+# claim names would find an empty set for the `k8s_claims` roles and fail their correct
+# declarations. `_rendered_pvc_claims` reads both sources (a role's own PVC template AND its
+# `k8s_claims` names) and resolves the single-var reference both use through the role's own
+# defaults/main.yml.
 
 
 def _role_defaults(role: Path) -> dict:

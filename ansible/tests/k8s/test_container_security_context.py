@@ -54,10 +54,6 @@ _PRIVILEGED = {
 _UNCOVERED_ROLES = {
     # Renders no manifests of its own — it is the shared apply/rollout machinery.
     "manifests",
-    # Per-deploy PVC state, not a service manifest set: pvc.yaml.j2 is its only template and
-    # renders no pod spec, so there is no container here for a securityContext to be wrong
-    # about.
-    "volume-claim",
     # Builds images in-cluster; its Job carries reasoned Unconfined seccomp/AppArmor for
     # rootless BuildKit (build-job.yaml.j2). That reason covers only the two profiles, where
     # exemption here also waives uid, privileged, capabilities.add, hostPath and host

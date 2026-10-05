@@ -103,9 +103,10 @@ fails on one that does not.
 pod and inline restarts all sit outside the shared manifests path. Each is guarded on
 `k8s_no_mutate`, so a dry run proves the manifests and not the probes.
 
-**A brand-new service is only half-checked.** `volume-claim` is skipped because it is a
-dependency of many roles and mutates, and nothing at admission verifies that a referenced PVC
-exists. So the Deployment validates while the volume is never proven provisionable.
+**A brand-new service is only half-checked.** Its `k8s_claims` are applied with
+`--dry-run=server`, which validates the claim object and provisions nothing, and nothing at
+admission verifies that a referenced PVC exists. So the Deployment validates while the volume
+is never proven provisionable.
 
 **It says nothing about runtime.** Scheduling, PVC binding, probe behaviour and rollout
 behaviour all need a real deploy.

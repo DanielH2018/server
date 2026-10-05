@@ -76,9 +76,9 @@ whole timeout budget and then failed.
 ## Why the internal guard is the only option here
 
 A role reached as a dependency is invisible to anything keyed on `ansible_run_tags`, so it
-must guard itself on `k8s_no_mutate`. `volume-claim` and `image-builder` are in exactly this
-position; this role is the same shape. The `k8s_dry_run_unsupported` refusal list, the
-alternative for a NAMED role, went empty and was deleted in #2876.
+must guard itself on `k8s_no_mutate`. `image-builder` is in exactly this position; this role
+is the same shape. The `k8s_dry_run_unsupported` refusal list, the alternative for a NAMED
+role, went empty and was deleted in #2876.
 
 ## Provenance
 

@@ -39,7 +39,7 @@ def test_a_file_beside_the_roles_is_not_a_role(tmp_path):
 def test_the_default_census_finds_the_real_k8s_roles():
     """Non-vacuity against the real tree, and the default argument every guard relies on."""
     names = {p.name for p in role_dirs()}
-    assert {"manifests", "volume-claim", "cronjob-gate"} <= names
+    assert {"manifests", "image-builder", "cronjob-gate"} <= names
 
 
 def test_the_census_finds_the_real_setup_and_pi_roles():
