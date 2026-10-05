@@ -635,8 +635,20 @@ jobs:
       # the prek chain on and deselect exactly one ratchet node id; a second test that went red
       # on an unweighted file would fail their commits, and neither cron can
       # run the repair. Nothing a cron commits passes through a workflow step.
+      #
+      # It fails only on a pull_request or a branch dispatch, where the author can re-record.
+      # On push and merge_group it annotates and passes (`--warn-only`): runner variance spans
+      # the fixed bound, so the same code that passed on its PR turned master red three times,
+      # and nobody can apply the repair on master (#3604).
       - name: Check every heavy module's recorded weight
-        run: uv run python scripts/dev/pytest_shard.py --check-durations "$RUNNER_TEMP/durations.log"
+        env:
+          EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
+        run: |
+          set -euo pipefail
+          mode=()
+          if [ "$EVENT" = push ] || [ "$EVENT" = merge_group ]; then mode=(--warn-only); fi
+          uv run python scripts/dev/pytest_shard.py "${mode[@]}" \
+            --check-durations "$RUNNER_TEMP/durations.log"
 
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name

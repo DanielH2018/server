@@ -42,6 +42,13 @@ answers that as a RATIO — see STALE_WEIGHT_RATIO — and `--record-files` is i
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
+THE GATE FAILS ONLY WHERE SOMEONE CAN APPLY THE REPAIR. On a pull request the author re-records
+and pushes. On a push to master nobody can, and a red master run still reaches the deployer's
+CI gate and every session's `land.sh`. Both arms compare one wall-clock reading against a fixed
+bound, and runner variance spans it: one module measured about 8s on its PR run and 15.6s on
+the master run of the same code (#3604). So CI passes `--warn-only` on push and merge_group,
+which prints each complaint as a `::warning::` annotation and exits zero.
+
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --out list.txt
@@ -50,6 +57,7 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --record-missing        # only the unweighted files
     uv run python scripts/dev/pytest_shard.py --record-files a.py b.py  # refresh these entries
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # CI's measured gate
+    uv run python scripts/dev/pytest_shard.py --check-durations ci.log --warn-only  # annotate, exit 0
 """
 
 import argparse
@@ -499,6 +507,14 @@ def main(argv=None) -> int:
         ),
     )
     parser.add_argument(
+        "--warn-only",
+        action="store_true",
+        help=(
+            "print --check-durations complaints as GitHub ::warning:: annotations and exit 0, "
+            "for a run where nobody can apply the repair"
+        ),
+    )
+    parser.add_argument(
         "--threshold",
         type=float,
         default=RUNNER_HEAVY_SECONDS,
@@ -518,6 +534,9 @@ def main(argv=None) -> int:
             threshold=args.threshold,
             ratio=args.stale_ratio,
         )
+        if problems and args.warn_only:
+            print("\n".join(f"::warning::{p}" for p in problems))
+            return 0
         if problems:
             print("\n".join(problems))
             return 1
