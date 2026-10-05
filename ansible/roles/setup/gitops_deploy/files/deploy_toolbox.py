@@ -142,6 +142,9 @@ class DeployTools:
     render_proof: Callable[[str], str | None] = deploy_release.render_proof
     # The render-digest verdicts at one commit, for the deploy-plane shadow log (#3045).
     digest_diff: Callable[[str], dict[str, list[str]]] = deploy_release.digest_diff
+    # The release records either side of a full play, for the measured shadow line (#3045).
+    release_records: Callable[[], dict[str, dict]] = deploy_release.release_records
+    applied_diff: Callable[..., dict[str, list[str]]] = deploy_release.applied_diff
     # The tags whose deploy runs a shared role (#2643), which has no record of its own.
     # A subprocess that parses YAML, so a field for the reason `narrow_setup_role` is one.
     shared_role_callers: Callable[..., dict[str, set[str]]] = (

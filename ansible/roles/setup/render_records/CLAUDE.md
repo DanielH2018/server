@@ -78,7 +78,8 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
   would keep a play running 18% of the time. The GitOps deployer reads the records two more
   ways. Its `k8s_unapplied` discharge accepts a render of any commit holding the change, so
   the cadence costs it at most an hour (#3057). Its deploy-plane shadow log needs a render of
-  the exact commit being applied, which a tick usually precedes (#3045).
+  the exact commit being applied, which a tick usually precedes (#3045). So a full play
+  measures itself from its own release records instead, and needs no render from here.
   `docs/gitops-pipeline.md` has both.
 - **A deferral is silent until the monitor expires.** A master whose CI stays pending or red
   for longer than `render_records_push_interval_s` turns the tile red with no message, because

@@ -323,6 +323,7 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         narrow_setup_role=scripted.narrow_setup_role,
         # The host's render records, read for a log line alone, so no tick test reads them.
         digest_diff=lambda _ref: {},
+        release_records=dict,
         # A subprocess over the real tree; no tick test discharges by an own-role digest.
         digest_provable=lambda _repo, _roles: set(),
         emit_deploy_annotation=scripted.emit_deploy_annotation,
