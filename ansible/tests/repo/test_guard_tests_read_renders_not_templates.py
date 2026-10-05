@@ -176,9 +176,9 @@ TEMPLATE_SOURCE_READERS = {
         "source"
     ),
     "k8s/test_root_needs_dac_capability.py": (
-        "the fallback for the three templates no render reaches: `k8s/image-builder`'s build "
-        "Job and context ConfigMap and `k8s/volume-claim`'s PVC, all three `include_role` "
-        "helpers whose variables arrive on the caller's include task. The census itself spans "
+        "the fallback for the two templates no render reaches: `k8s/image-builder`'s build "
+        "Job and context ConfigMap, both rendered by an `include_role` helper whose "
+        "variables arrive on the caller's include task. The census itself spans "
         "all three planes off five renders, and "
         "`test_the_render_reaches_every_role_template` holds that nothing else falls back"
     ),

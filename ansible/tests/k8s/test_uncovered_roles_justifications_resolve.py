@@ -70,7 +70,7 @@ def test_every_named_file_in_the_exemption_block_exists():
 def test_a_justification_naming_a_dead_file_is_flagged():
     block = (
         "    # seed-pod.yaml.j2 IS a pod spec; test_seed_pod_security_context.py owns it.\n"
-        '    "volume-claim",\n'
+        '    "media-volume",\n'
     )
     assert unresolved(block, {"pvc.yaml.j2"}, {"test_other.py"}) == {
         "seed-pod.yaml.j2",

@@ -37,18 +37,16 @@ from _shell_render import rendered_shell_text
 MANIFEST_ROOT = "/etc/rancher/k3s/manifests"
 MANIFESTS_ROLE = "k8s/manifests"
 
-# The utility roles that legitimately render into a directory named by a variable. `manifests`
-# IS the pruning role, and `volume-claim` has its own guard
-# (test_volume_claim_pvc_path_collision.py). Both are skipped by the Jinja filter below anyway;
-# naming them says so on purpose rather than by accident.
-UTILITY_ROLES = frozenset({"manifests", "volume-claim"})
+# The utility role that legitimately renders into a directory named by a variable: `manifests`
+# IS the pruning role. The Jinja filter below skips it anyway; naming it says so on purpose
+# rather than by accident.
+UTILITY_ROLES = frozenset({"manifests"})
 
 RESERVED_SUFFIXES = ("-claims", "-netpol", "-probe")
 RESERVED_PREFIXES = ("build-",)
 
-# Same pattern as test_volume_claim_pvc_path_collision.py, and for the same reason: a path
-# segment is either a Jinja expression (which contains spaces, so `\S+` cannot be used) or
-# ordinary path characters. Comment prose such as `manifests/<service>/` matches neither and is
+# A path segment is either a Jinja expression (which contains spaces, so `\S+` cannot be used)
+# or ordinary path characters. Comment prose such as `manifests/<service>/` matches neither and is
 # skipped rather than read as a path.
 _PATH_RE = re.compile(
     rf"{re.escape(MANIFEST_ROOT)}(?:/(?:\{{\{{[^}}]*\}}\}}|[A-Za-z0-9._*-])+)+"

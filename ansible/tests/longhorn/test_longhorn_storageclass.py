@@ -27,7 +27,7 @@ from lib.service_tiers import resolved_tier_lists
 
 from _k8s_render import rendered_docs
 
-from _helpers import K8S_ROLES, SETUP_ROLES, imported_tasks, load_defaults
+from _helpers import SETUP_ROLES, imported_tasks, load_defaults
 
 K3S = SETUP_ROLES / "k3s"
 STORAGECLASS = K3S / "files" / "longhorn-storageclass.yaml"
@@ -160,39 +160,44 @@ _ROUTING_LISTS = (
 
 
 def _declared_pvcs() -> set[str]:
-    """Every `namespace/name` a k8s role gets a PersistentVolumeClaim for.
+    """Every `namespace/name` a k8s role renders a PersistentVolumeClaim for.
 
-    Two sources, and both are needed. A few roles render their own PVC manifest, but most get
-    theirs from the shared `volume-claim` role via a `*_claim` var in their defaults — so a
-    collector that only reads rendered manifests finds 20 of the 29 routed volumes and its
-    "missing" list is mostly noise.
+    Every claim is rendered: a role declares it in `k8s_claims` or, for observability and
+    media-volume, in its own template. Both arrive through `rendered_docs()`, so no defaults or
+    tasks sweep is needed now that `k8s/volume-claim` is retired (#3387).
 
     The manifests are read RENDERED rather than text-scanned, because a PVC's name is a Jinja
     expression: scanning the templates would match `{{ ... }}` and find almost nothing, which
-    reads as a clean result rather than as no coverage.
+    reads as a clean result rather than as no coverage. The namespace is read off the rendered
+    document for the same reason.
     """
-    namespace = "homelab"
-    names = {
-        doc["metadata"]["name"]
+    return {
+        f"{doc['metadata'].get('namespace', 'homelab')}/{doc['metadata']['name']}"
         for _role, _tpl, doc in rendered_docs()
         if doc.get("kind") == "PersistentVolumeClaim"
         and doc.get("metadata", {}).get("name")
     }
-    for defaults_file in K8S_ROLES.glob("*/defaults/main.yml"):
-        values = yaml_fast.safe_load(defaults_file.read_text()) or {}
-        names |= {
-            value
-            for key, value in values.items()
-            if key.endswith("_claim") and isinstance(value, str) and "{{" not in value
-        }
-    # A few roles pass the claim name to volume-claim as a literal rather than through a
-    # defaults var (terraria-stats), so the defaults sweep alone misses them.
-    for tasks_file in K8S_ROLES.glob("*/tasks/*.yml"):
-        for line in tasks_file.read_text().splitlines():
-            stripped = line.strip()
-            if stripped.startswith("volume_claim_name:") and "{{" not in stripped:
-                names.add(stripped.split(":", 1)[1].strip().strip("\"'"))
-    return {f"{namespace}/{name}" for name in names}
+
+
+# Members `_declared_pvcs` must find, so a render that stops producing claims fails by name
+# rather than by a count. pihole-etc is a `longhorn-nobackup` claim from a literal
+# `k8s_claims` list; traefik-acme comes from an expression-valued `k8s_claims`; grafana-data is
+# observability's own template, in its own namespace.
+_KNOWN_DECLARED_PVCS = frozenset(
+    {
+        "homelab/pihole-etc",
+        "homelab/traefik-acme",
+        "observability/grafana-data",
+    }
+)
+
+
+def test_declared_pvcs_finds_every_known_claim():
+    missing = _KNOWN_DECLARED_PVCS - _declared_pvcs()
+    assert not missing, (
+        f"_declared_pvcs no longer finds {sorted(missing)} — a render it reads moved, not "
+        "that these claims disappeared"
+    )
 
 
 def test_backup_routing_lists_are_pairwise_disjoint():

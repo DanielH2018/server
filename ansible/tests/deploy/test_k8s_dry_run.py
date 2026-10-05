@@ -416,7 +416,7 @@ def test_a_guard_named_only_in_a_comment_does_not_excuse_a_mutating_task(
 
 
 def test_a_guarded_import_covers_the_file_it_pulls_in(tmp_path: Path) -> None:
-    """volume-claim's shape: the guard is on the import, not on the tasks that write.
+    """The retired volume-claim role's shape: the guard is on the import, not on the tasks that write.
 
     Transitive, because seed.yml includes copy.yml and copy.yml writes too. An unguarded import
     covers nothing — that is the direction that would silently excuse a real mutation.

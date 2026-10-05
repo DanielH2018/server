@@ -8,7 +8,7 @@ CONTENT matches the tree is `scripts/docs/tests/test_gen_role_glance.py`'s gate;
 two apart means a missing heading and a stale value fail with different messages.
 
 Scope is the deployed services: the k8s `containers_list` entries. A helper role with no entry
-(manifests, cronjob-gate, volume-claim, ...) is documented from its callers' side. The
+(manifests, cronjob-gate, ...) is documented from its callers' side. The
 exporter/route-only roles carry the generated block like every other — there is nothing to
 hand-restate, so nothing to exempt.
 

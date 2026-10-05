@@ -21,24 +21,10 @@ prometheus/loki/tempo/grafana volumes) were any of them ever moved onto `longhor
 Run: uv run pytest ansible/tests/longhorn/test_every_longhorn_pvc_has_a_tier.py
 """
 
-import yaml
-from lib import yaml_fast
 from lib.service_tiers import resolved_tier_lists
 
 from _helpers import SETUP_ROLES, load_defaults
-from _role_census import role_dirs
-from _k8s_render import (
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
-    SHARED_TPL,
-    k8s_entries,
-    load_yaml,
-    make_env,
-    rendered_docs,
-    resolve_vars,
-    role_defaults,
-)
+from _k8s_render import rendered_docs
 
 K3S = SETUP_ROLES / "k3s"
 _LONGHORN_CLASS = "longhorn"
@@ -53,10 +39,10 @@ _ROUTING_LISTS = (
 )
 
 # A named floor, not just a count: proves the collector still recognises PVCs declared
-# through every mechanism below (its own template or `k8s_claims`, both rendered, and the
-# shared volume-claim role) rather than passing vacuously because a glob or a role-name check
-# stopped matching. Pick real, stable members — these have not moved tiers since the lists
-# existed.
+# through `k8s_claims` and through a role's own template, both read rendered, rather than
+# passing vacuously because a glob or a role-name check stopped matching. Pick real, stable
+# members — these have not moved tiers since the lists existed. traefik-acme is the member
+# whose `k8s_claims` is an expression rather than a literal list.
 _KNOWN_LONGHORN_PVCS = frozenset(
     {
         "homelab/jellyfin-config",  # k8s_claims, weekly tier
@@ -65,11 +51,6 @@ _KNOWN_LONGHORN_PVCS = frozenset(
         "homelab/crowdsec-db",  # k8s_claims, nobackup tier
     }
 )
-
-
-def _base_context() -> dict:
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
-    return resolve_vars(base, base)
 
 
 def _rendered_longhorn_pvcs() -> set[tuple[str, str]]:
@@ -96,81 +77,9 @@ def _rendered_longhorn_pvcs() -> set[tuple[str, str]]:
     return found
 
 
-def _volume_claim_longhorn_pvcs(base: dict) -> set[tuple[str, str]]:
-    """`(role, namespace/name)` for every PVC the shared `k8s/volume-claim` role creates.
-
-    `k8s/volume-claim` is never rendered under its own role (it has no `container_item` /
-    `containers_list` entry) — its `templates/pvc.yaml.j2` only ever renders with the vars a
-    calling role passes on its `ansible.builtin.include_role` task, e.g. sonarr's
-    `volume_claim_name: "{{ sonarr_k8s_claim }}"` and
-    `volume_claim_storage_class: "{{ sonarr_k8s_storage_class }}"`.
-
-    Both `volume_claim_name` and `volume_claim_storage_class` are rendered with Jinja
-    against the calling role's own context, rather than guessed by stripping `_claim` and
-    appending `_storage_class` from the name var: that naming convention holds for most
-    callers but not autokuma-data, whose task passes uptime-kuma's PARENT
-    `uptime_kuma_k8s_storage_class` var, not a sibling `uptime_kuma_k8s_autokuma_storage_class`
-    that does not exist. Rendering the actual expression handles that caller without a
-    special case.
-
-    `volume-claim`'s own defaults are merged in UNDER the calling role's context (Ansible's
-    real precedence: role defaults are the weakest layer), not just used as a naming guess.
-    A caller that passes `volume_claim_name` but never overrides `volume_claim_storage_class`
-    inherits volume-claim's own default (`longhorn`) — without this merge that caller's
-    storage class would resolve to nothing and its PVC would silently drop out of the census.
-    terraria-stats was such a caller until it moved to `k8s_claims` (#3387).
-    """
-    entries = k8s_entries()
-    env = make_env([SHARED_TPL])
-    volume_claim_defaults = role_defaults("volume-claim", base)
-    found = set()
-    for role_dir in role_dirs():
-        role = role_dir.name
-        tasks_dir = role_dir / "tasks"
-        if role not in entries or not tasks_dir.is_dir():
-            continue
-        ctx = {
-            **base,
-            **volume_claim_defaults,
-            **role_defaults(role, base),
-            "container_item": entries[role],
-        }
-        namespace = ctx.get("k8s_namespace", "homelab")
-        for task_file in sorted(tasks_dir.glob("*.yml")):
-            try:
-                tasks = yaml_fast.safe_load(task_file.read_text())
-            except yaml.YAMLError:
-                continue
-            if not isinstance(tasks, list):
-                continue
-            for task in tasks:
-                if not isinstance(task, dict):
-                    continue
-                inc = task.get("ansible.builtin.include_role")
-                if not isinstance(inc, dict) or inc.get("name") != "k8s/volume-claim":
-                    continue
-                task_vars = task.get("vars") or {}
-                name_expr = task_vars.get(
-                    "volume_claim_name", "{{ volume_claim_name }}"
-                )
-                class_expr = task_vars.get(
-                    "volume_claim_storage_class", "{{ volume_claim_storage_class }}"
-                )
-                if not isinstance(name_expr, str) or not isinstance(class_expr, str):
-                    continue
-                try:
-                    name = env.from_string(name_expr).render(ctx)
-                    storage_class = env.from_string(class_expr).render(ctx)
-                except Exception:  # noqa: S112 -- unresolvable under this stub context, not a finding
-                    continue
-                if storage_class == _LONGHORN_CLASS:
-                    found.add((role, f"{namespace}/{name}"))
-    return found
-
-
 def longhorn_pvcs_by_role() -> dict[str, set[str]]:
     """The `namespace/name` PVCs on storageClassName EXACTLY `longhorn`, by declaring role."""
-    pairs = _rendered_longhorn_pvcs() | _volume_claim_longhorn_pvcs(_base_context())
+    pairs = _rendered_longhorn_pvcs()
     by_role: dict[str, set[str]] = {}
     for role, pvc in pairs:
         by_role.setdefault(role, set()).add(pvc)
@@ -208,7 +117,7 @@ def test_every_longhorn_pvc_has_a_tier():
 
 
 def test_census_finds_every_known_longhorn_pvc():
-    """Non-vacuity floor: the collector must still find PVCs from both enumeration paths."""
+    """Non-vacuity floor: the collector must still find named `k8s_claims` PVCs."""
     declared = _longhorn_class_pvcs()
     missing = _KNOWN_LONGHORN_PVCS - declared
     assert not missing, (
