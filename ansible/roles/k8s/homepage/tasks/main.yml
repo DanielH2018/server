@@ -1,6 +1,5 @@
 ---
-# No volume-claim step, unlike freshrss/speedtest/zigbee2mqtt: homepage carries no runtime
-# state. Every byte under /app/config is Ansible-rendered on every deploy, so nothing needs
+# No PVC, unlike freshrss/speedtest/zigbee2mqtt: homepage carries no runtime state. Every byte under /app/config is Ansible-rendered on every deploy, so nothing needs
 # seeding.
 
 - name: Deploy homepage to the cluster

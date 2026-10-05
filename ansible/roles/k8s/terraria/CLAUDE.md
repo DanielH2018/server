@@ -11,8 +11,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `terraria-config` (weekly -> B2 (default target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less — no
-  readinessProbe; (2) migrating state — Recreate + RWO volume-claim PVC holding irreplaceable
-  worlds
+  readinessProbe; (2) migrating state — Recreate + RWO PVC holding irreplaceable worlds
 <!-- /generated_from -->
 
 - **Built in-cluster** from `templates/Dockerfile.j2`, since 2026-08-31 — a single `chown` layer whose only purpose is to let the server run as a

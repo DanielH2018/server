@@ -15,7 +15,7 @@ scrutiny_k8s_influxdb_image: influxdb:2.9@sha256:05d6fb735bc22449c401094d4284612
 # below (hardcoded ReadWriteOnce) — the migrating-state shape compounds the
 # manual-upgrade policy, on top of the pinned influxdb engine holding the SMART trend history.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateful / manual-upgrade — rolling branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two independent reasons"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateful / manual-upgrade — rolling branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO PVC (migrating-state shape) — two independent reasons"  # noqa var-naming[no-role-prefix]
 
 # SMART history is trend data and the whole point of the tool — backed-up class.
 # It measures 3.1 MB; 2Gi leaves influxdb compaction headroom.

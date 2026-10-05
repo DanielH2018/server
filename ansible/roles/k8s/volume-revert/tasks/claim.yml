@@ -135,8 +135,8 @@
   # `failed_when: false` here and there must never be one.
   #
   # Two ways to reach this legitimately, and both mean the rollback cannot help: the service's
-  # first deploy took no snapshot (k8s/volume-claim leaves the volume detached, and a detached
-  # volume cannot be snapshotted), or a retention pass deleted the recovery point.
+  # first deploy took no snapshot (its claim did not exist before that apply, so there was
+  # nothing to snapshot), or a retention pass deleted the recovery point.
   #
   # Guarded on `k8s_no_mutate` like every other decision that stops the play, and REPORTS the
   # absence in the next task instead of aborting, rather than failing `--check`/`--dry-run` too.
@@ -242,8 +242,8 @@
   #
   # DECIDED: nothing self-heals a volume this attach leaves behind. If a later wait exhausts or
   # an API call fails, the volume stays attached with `disableFrontend: true` and the workload
-  # at zero replicas (CLAUDE.md's manual-recovery steps), and the next deploy's k8s/volume-claim
-  # seed pod mounts the same RWO claim — whether that mount succeeds, hangs or fails against a
+  # at zero replicas (CLAUDE.md's manual-recovery steps), and the pod the next deploy's apply
+  # restores mounts the same RWO claim — whether that mount succeeds, hangs or fails against a
   # non-pod maintenance attachment is untested, because nothing in this repo exercises a real
   # Longhorn revert. Accepted: treat a stuck maintenance-mode attach as blocking that service's
   # next deploy until cleared by hand, not as something the pipeline routes around. Long form:

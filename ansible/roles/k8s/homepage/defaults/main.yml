@@ -6,9 +6,9 @@ homepage_k8s_image: ghcr.io/gethomepage/homepage:latest@sha256:643bd0be730d40f69
 homepage_k8s_init_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Stateless: RollingUpdate Deployment, no PVC — unlike freshrss/speedtest/zigbee2mqtt it carries
-# no volume-claim step, since all its state (services/widgets/bookmarks/CSS) is rendered
-# templates, not runtime data. readinessProbe present, image digest-pinned.
+# Stateless: RollingUpdate Deployment, no PVC — unlike freshrss/speedtest/zigbee2mqtt it declares
+# no `k8s_claims`, since all its state (services/widgets/bookmarks/CSS) is rendered templates,
+# not runtime data. readinessProbe present, image digest-pinned.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC (config is rendered templates, not runtime state), readinessProbe, digest-pinned image"  # noqa var-naming[no-role-prefix]
 

@@ -28,8 +28,9 @@ REASON = "k8s_autodeploy_reason"
 #
 # The invariant that makes this list safe: no role named here may pin an `_image:` var,
 # because pinning one is what makes a role Renovate-visible and therefore auto-deployable
-# at all. volume-claim is the near miss: it is included by other roles the same way, but it
-# carries a defaults/main.yml and declares a stance, where a role named here carries neither.
+# at all. The retired volume-claim role was the near miss: other roles included it the same
+# way, but it carried a defaults/main.yml and declared a stance, where a role named here
+# carries neither.
 SHARED_ROLES = frozenset({"manifests"})
 
 

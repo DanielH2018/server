@@ -19,9 +19,9 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 - **Claims:** `n8n-data` (weekly -> B2 (default target)), `n8n-files` (weekly -> B2 (default
   target))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — two reasons: (1) probe-less
-  n8n-runners sub-deployment; (2) migrating state — Recreate + RWO volume-claim PVC (n8n-data)
-  holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n
-  declares TWO claims, n8n-data and n8n-files — a revert of one without the other desyncs which
+  n8n-runners sub-deployment; (2) migrating state — Recreate + RWO PVC (n8n-data) holding the
+  encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n declares TWO
+  claims, n8n-data and n8n-files — a revert of one without the other desyncs which
   workflow-referenced /files paths actually exist against the credentials/workflow state in
   n8n-data
 <!-- /generated_from -->

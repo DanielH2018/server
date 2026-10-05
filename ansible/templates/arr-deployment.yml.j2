@@ -81,9 +81,8 @@ spec:
         app: {{ app }}
         netpol-baseline: enforced
     spec:
-      # No fsGroup: volume-claim restores ownership with `tar -p --numeric-owner`, the LSIO image
-      # chowns /config itself on startup, and an fsGroup here would make the kubelet recursively
-      # chown the 19 G media volume on every mount.
+      # No fsGroup: the LSIO image chowns /config itself on startup, and an fsGroup here would
+      # make the kubelet recursively chown the 19 G media volume on every mount.
 {{ pod_shell('homelab-standard') }}
       containers:
         - name: {{ app }}

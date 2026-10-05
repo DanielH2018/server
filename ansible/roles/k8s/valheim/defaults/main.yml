@@ -173,7 +173,7 @@ valheim_k8s_mods:
 # strategy is Recreate and valheim-config comes from k8s_claims below (hardcoded
 # ReadWriteOnce), holding worlds/lists/prefs. Either alone would justify the denylist entry.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe at all; (2) migrating state — Recreate + RWO volume-claim PVC holding worlds"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe at all; (2) migrating state — Recreate + RWO PVC holding worlds"  # noqa var-naming[no-role-prefix]
 
 # ── two volumes, deliberately on different backup postures ──────────────────────────────
 # /config is the irreplaceable half: worlds_local (the Dedicated world, ~7 M live plus the
