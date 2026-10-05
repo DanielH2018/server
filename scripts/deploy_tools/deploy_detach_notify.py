@@ -171,9 +171,11 @@ def check_one(
 
     if platforms == {"k8s"}:
         code, line = probe([])
-        if code == 0:
-            return CheckResult("ok", line)
-        return CheckResult("skipped" if not_applicable(line) else "unhealthy", line)
+        # The marker before the exit code: a role with no workload exits 0 (#3596) and is
+        # still reported as `skipped`, not as a workload that was checked and found healthy.
+        if not_applicable(line):
+            return CheckResult("skipped", line)
+        return CheckResult("ok" if code == 0 else "unhealthy", line)
 
     if platforms == {"docker", "k8s"}:
         k8s_code, k8s_line = probe([])

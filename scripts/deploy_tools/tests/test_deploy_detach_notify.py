@@ -65,7 +65,7 @@ def test_check_one_skipped_when_neither_platform_recognizes_it():
 def test_check_one_skips_a_role_that_declares_no_workload():
     """netpol-baseline and media-volume render NetworkPolicies and PVCs, never a workload.
 
-    Nothing to gate, so the tag is skipped rather than failed.
+    probe.py exits 0 for it (#3596), but the marker keeps it `skipped`: nothing was checked.
     """
 
     def run(argv, **kwargs):
@@ -74,13 +74,13 @@ def test_check_one_skips_a_role_that_declares_no_workload():
                 1, "netpol-baseline: not found, and not a declared service on any host"
             )
         return _result(
-            1,
+            0,
             "netpol-baseline: the role declares no rollout-checkable workload "
-            "(no Deployment, DaemonSet or StatefulSet in its manifests)",
+            "(no Deployment, DaemonSet or StatefulSet in its manifests) — nothing to gate",
         )
 
     state, _ = notify_mod.check_one(
-        "netpol-baseline", tools=notify_mod.NotifyTools(run=run)
+        "netpol-baseline", tools=notify_mod.NotifyTools(run=run), platforms={"k8s"}
     )
     assert state == "skipped"
 
