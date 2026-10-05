@@ -10,11 +10,10 @@ or a log could read.
 Run: uv run pytest ansible/tests/setup/test_agent_github_identity.py
 """
 
-import subprocess
-
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
+from lib.git_testing import git
 
 TASKS = ANSIBLE / "roles" / "setup" / "claude_code" / "tasks"
 TOKEN = "sentinel-agent-gh-token"
@@ -78,11 +77,8 @@ def test_an_enabled_agent_user_without_its_token_fails_the_apply() -> None:
 def git_config(rendered: str, tmp_path, key: str) -> list[str]:
     path = tmp_path / "gitconfig"
     path.write_text(rendered)
-    out = subprocess.run(
-        ["git", "config", "--file", str(path), "--get-all", key],
-        capture_output=True,
-        text=True,
-    )
+    # check=False: --get-all exits 1 on a missing key, and the comparison names which one.
+    out = git(tmp_path, "config", "--file", str(path), "--get-all", key, check=False)
     return out.stdout.splitlines()
 
 
