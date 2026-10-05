@@ -1,6 +1,6 @@
 """`k8s_claims`: the PersistentVolumeClaims `k8s/manifests` renders from a role's defaults.
 
-A role declares `k8s_claims: [{name, size, storage_class, access_modes?}]` and `k8s/manifests` renders each
+A role declares `k8s_claims: [{name, size, storage_class, access_modes?, namespace?}]` and `k8s/manifests` renders each
 entry from `ansible/templates/claim-default.yaml.j2` to `claim-<name>.yaml` in the role's own
 directory. The offline harnesses (`_k8s_render`, `validate/k8s_manifests.py`) reach the same
 claims through `lib.k8s_roles.claim_contexts`, because one template rendered per entry is
@@ -61,6 +61,12 @@ _KNOWN_CLAIMS = {
     ("homelab", "traefik-acme"): ("longhorn", "128Mi"),
     ("homelab", "wg-easy-config"): ("longhorn", "1Gi"),
     ("homelab", "media-data"): ("media-local", "400Gi"),
+    # The entries that set `namespace`: a render that dropped it would create four empty
+    # claims in homelab beside the live ones.
+    ("observability", "loki-data"): ("longhorn-nobackup", "10Gi"),
+    ("observability", "prometheus-data"): ("longhorn-nobackup", "12Gi"),
+    ("observability", "grafana-data"): ("longhorn-nobackup", "1Gi"),
+    ("observability", "tempo-data"): ("longhorn-nobackup", "5Gi"),
 }
 # The one claim whose `k8s_claims` entry sets `access_modes`. Access modes are immutable, and
 # the size/class pair above would pass a render that dropped the entry's modes for the default.
@@ -160,6 +166,29 @@ def test_no_claim_has_two_creators():
     """
     found = duplicate_claims(_pvcs(rendered_docs()))
     assert not found, f"claims rendered by more than one template: {found}"
+
+
+def _early_applies(**context) -> bool:
+    """Whether "Apply the volume claims" runs ahead of the snapshot for this context."""
+    task = task_named(
+        load_tasks(MANIFESTS / "tasks/main.yml"), "Apply the volume claims"
+    )
+    context.setdefault("k8s_no_mutate", False)
+    return all(render_expr("{{ " + cond + " }}", **context) for cond in task["when"])
+
+
+def test_claims_apply_ahead_of_the_snapshot_only_for_a_role_that_snapshots():
+    """The snapshot is the early apply's only reader. A role that snapshots nothing gets its
+    claims from the directory apply, after the `00-namespace.yaml` observability's claims
+    need on a fresh cluster."""
+    claims = ["claim-a-config.yaml"]
+    assert _early_applies(
+        manifests_claim_files=claims, k8s_autodeploy_snapshot_pvcs=["a-config"]
+    )
+    assert not _early_applies(manifests_claim_files=claims)
+    assert not _early_applies(
+        manifests_claim_files=claims, k8s_autodeploy_snapshot_pvcs=[]
+    )
 
 
 def _sweep_task() -> dict:
