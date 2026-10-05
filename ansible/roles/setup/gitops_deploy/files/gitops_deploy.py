@@ -249,6 +249,7 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     # names a change somebody's own `deploy.sh` has since applied — that deploy is invisible to
     # every other part of this tick.
     deploy_defer.discharge_k8s_unapplied(tools, STATE, config)
+    deploy_phases.drop_deleted_k8s_unapplied(tools, STATE, config)
     deploy_defer.log_k8s_unapplied(STATE)
 
     target = deploy_phases.assess(tools, STATE, config)

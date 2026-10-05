@@ -6,6 +6,9 @@ directories at origin and drops a changed role that is gone there. An empty or u
 listing drops nothing, because a kept line costs one `clear-owed` and a dropped one loses the
 only record of a change.
 
+A line an earlier tick wrote, before the range that deleted the role, is dropped by the
+discharge on the next tick, which asks the same question of `HEAD` (#3569).
+
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_deleted_k8s_role.py
 """
 
@@ -79,6 +82,29 @@ def test_a_tick_deleting_a_shared_role_leaves_no_k8s_unapplied_line(
     gitops_deploy, tick, settings, listing, owed
 ):
     tick.paths = [DELETED_ROLE]
+    tick.tree_listing = listing
+    assert gitops_deploy.main(tick.tools, settings) == 0
+    pending = gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED)
+    assert [e.service for e in pending] == owed
+
+
+@pytest.mark.parametrize(
+    ("listing", "owed"),
+    [
+        ("ansible/roles/k8s/manifests\n", []),
+        # The red half: the role is still on disk, has no caller to carry it, and stays.
+        (
+            "ansible/roles/k8s/manifests\nansible/roles/k8s/volume-claim\n",
+            ["volume-claim"],
+        ),
+        ("", ["volume-claim"]),
+    ],
+)
+def test_a_pending_line_for_a_role_deleted_since_is_dropped_on_the_next_tick(
+    gitops_deploy, tick, settings, listing, owed
+):
+    gitops_deploy.STATE.record_owed(OWED_K8S_UNAPPLIED, LOCAL, {"volume-claim"}, 1.0)
+    tick.paths = []
     tick.tree_listing = listing
     assert gitops_deploy.main(tick.tools, settings) == 0
     pending = gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED)
