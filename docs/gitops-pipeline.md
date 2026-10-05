@@ -1260,6 +1260,11 @@ what it recorded.
 - `deploy_alerts.alert_deferred` writes the lines. It covers every exit that leaves the range
   merged; the contention arm resets and returns before reaching any of them, so `unrecord`
   owns no reverse for it.
+- A role whose directory is gone at origin gets no line (#3568). `deploy_phases.plan_tick`
+  drops it from `cs.k8s` after a `git ls-tree` at origin, because no play can run a deleted
+  role and a role with no callers has no tag whose deploy could discharge it.
+  `land_shared.shared_roles` applies the same rule on the landing side. An empty or unreadable
+  listing drops nothing.
 - The demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
   `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm after
   it resets the tree. A contention arm takes the line back with the `manual_plane` lines beside

@@ -206,6 +206,20 @@ def k8s_role_paths(listing: str) -> dict[str, str | None]:
     return roles
 
 
+def k8s_roles_listed(listing: str) -> set[str]:
+    """Every k8s role directory a `git ls-tree --name-only <ref> ansible/roles/k8s/` names.
+
+    Takes the FOURTH segment of each `ansible/roles/k8s/<role>[/...]` line, so a recursive
+    listing reads the same as the one-level listing `plan_tick` asks for. Pure, like
+    `k8s_role_paths`; the git read is the caller's.
+    """
+    return {
+        parts[3]
+        for parts in (line.split("/") for line in listing.splitlines())
+        if len(parts) >= 4 and parts[:3] == ["ansible", "roles", "k8s"] and parts[3]
+    }
+
+
 def split_k8s_auto_deploy(
     cs: ChangeSet,
     paths: list[str],

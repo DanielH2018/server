@@ -21,7 +21,9 @@ to catch.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_shared_mapper_agreement.py
 """
 
+import land_shared
 import land_tags
+from deploy_k8s import k8s_roles_listed
 from deploy_logic import services_from_changed_paths
 
 # One real path per shape the two mappers have to agree about. Real, because a made-up path
@@ -116,3 +118,24 @@ def test_tag_for_is_narrower_than_role_for_and_that_is_the_reason_derive_keeps_i
     assert land_tags.role_for(shared) == "manifests"
     assert land_tags.tag_for(shared) is None
     assert _shared_roles(shared) == {"manifests"}
+
+
+def test_both_sides_drop_a_k8s_role_whose_directory_is_gone(tmp_path):
+    """A deleted shared role owes nothing on either side (#3568).
+
+    The mappers above are path-only and still name the role; each side then filters on the
+    tree. `land_shared.shared_roles` reads the role directory on disk, and the deployer's
+    `plan_tick` reads a `git ls-tree` at origin through `k8s_roles_listed`. Both are given the
+    same tree here: `manifests` present, `volume-claim` gone.
+    """
+    present, deleted = "manifests", "volume-claim"
+    (tmp_path / "k8s" / present).mkdir(parents=True)
+    paths = [
+        f"ansible/roles/k8s/{present}/tasks/main.yml",
+        f"ansible/roles/k8s/{deleted}/tasks/main.yml",
+    ]
+    assert _shared_roles(paths[1]) == {deleted}, "the path-only mapper still names it"
+    listed = k8s_roles_listed(f"ansible/roles/k8s/{present}\n")
+    deployer = services_from_changed_paths(paths).k8s & listed
+    landing = set(land_shared.shared_roles(paths, declared=set(), roles_root=tmp_path))
+    assert landing == deployer == {present}
