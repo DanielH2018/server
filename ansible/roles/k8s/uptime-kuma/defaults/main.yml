@@ -1,6 +1,6 @@
 ---
 # This instance is the alerting spine.
-uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.5
+uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.5@sha256:c74379ac4509ce2d2c2633f509e67003ee2e45b6e995c5e43fc101f45a0e1fbe
 # Pinned: the k8s-defaults Renovate manager only tracks
 # versioned pins. 2.1.0-rc.2 is a deliberate prerelease: it is the only release where
 # `resendInterval` reaches a push monitor — see the caveat under uptime_kuma_k8s_push_resend_down_beats.
