@@ -1,5 +1,5 @@
 ---
-livesync_k8s_image: couchdb:3.5.2
+livesync_k8s_image: couchdb:3.5.2@sha256:8cf5f8442585c346d2717ff0ad95605731d2f19f67b8367840baa8d3b24ebc31
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # DENIED — state coupling, not missing recovery. The volume's state is coupled to something
