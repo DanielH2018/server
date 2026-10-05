@@ -1,0 +1,105 @@
+---
+# The agent user's GitHub identity: a commit-signing key it generates itself, a git config that
+# signs as its machine account, and gh's token for that account. Imported from main.yml when
+# claude_code_agent_user_enabled, after the shared agent_user.yml has built the user and home.
+# defaults/main.yml says what the account may do and why.
+#
+# Every path here gets the owner and group the shared file's closing chown sets (the agent, and
+# group {{ sys_user }}), so the next apply's chown finds nothing to change. A command that
+# writes into the home runs as the agent, as the shared file's header explains.
+
+- name: Refuse to give the agent user a GitHub identity without its token
+  ansible.builtin.assert:
+    that:
+      - claude_code_agent_gh_token | default('') | length > 0
+    fail_msg: >-
+      claude_code_agent_user_enabled is true, but claude_code_agent_gh_token is not in
+      secrets.yml. Add the machine account's classic public_repo token with `sops` first.
+    quiet: true
+  no_log: true
+
+- name: Create the agent user's ssh and git config directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    # 0750 so the operator can read the public key to add it to the account. The private key
+    # inside is 0600.
+    - { path: "{{ claude_code_agent_user_home }}/.ssh", mode: "0750" }
+    - { path: "{{ claude_code_agent_user_home }}/.config", mode: "0755" }
+    - { path: "{{ claude_code_agent_user_home }}/.config/git", mode: "0755" }
+    # The token file lives here.
+    - { path: "{{ claude_code_agent_user_home }}/.config/gh", mode: "0700" }
+  become: true
+
+- name: Generate the agent's commit-signing key
+  # Once: a new key has to be added to the account again before its commits read Verified.
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - ssh-keygen
+      - -q
+      - -t
+      - ed25519
+      - -N
+      - ""
+      - -C
+      - "{{ claude_code_agent_github_login }} commit signing ({{ inventory_hostname }})"
+      - -f
+      - "{{ claude_code_agent_signing_key }}"
+    creates: "{{ claude_code_agent_signing_key }}"
+  become: true
+
+- name: Read the agent's public signing key
+  ansible.builtin.slurp:
+    src: "{{ claude_code_agent_signing_key }}.pub"
+  register: claude_code_agent_signing_pub
+  become: true
+  # Check mode skips the keygen above, so a host on its first apply has no key to read yet.
+  failed_when:
+    - not ansible_check_mode
+    - claude_code_agent_signing_pub.content is not defined
+
+- name: Trust the agent's own key for its local signature checks
+  # git verifies an SSH signature only against allowedSignersFile, and reports a good signature
+  # by an unlisted key as unverifiable.
+  vars:
+    claude_code_agent_signer_key: "{{ claude_code_agent_signing_pub.content | b64decode | trim }}"
+  ansible.builtin.copy:
+    # A `|` block, so the file ends in a newline: Ansible escapes a backslash inside `{{ }}`.
+    content: |
+      {{ claude_code_agent_git_email }} namespaces="git" {{ claude_code_agent_signer_key }}
+    dest: "{{ claude_code_agent_user_home }}/.config/git/allowed_signers"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+  become: true
+  when: claude_code_agent_signing_pub.content is defined
+
+- name: Give the agent user a git config that signs as its GitHub account
+  ansible.builtin.template:
+    src: agent-gitconfig.j2
+    dest: "{{ claude_code_agent_user_home }}/.gitconfig"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+  become: true
+
+- name: Give the agent user gh's token for its GitHub account
+  # Written as gh's own hosts file rather than through `gh auth login`, which refuses a token
+  # without the wider `repo` scope.
+  ansible.builtin.template:
+    src: agent-gh-hosts.yml.j2
+    dest: "{{ claude_code_agent_user_home }}/.config/gh/hosts.yml"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  diff: false
+  no_log: true

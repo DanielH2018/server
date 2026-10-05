@@ -98,9 +98,9 @@ effect at the next start**, so the deploy that changes it drops the RC host's se
 
 ## The agent user
 
-`claude_code_agent_user_enabled` (daniel-box) builds `claude` with
+`claude_code_agent_user_enabled` builds `claude` with
 `ansible/roles/setup/common/tasks/agent_user.yml`. No unit runs as it; `defaults/main.yml`
-covers logging in and switching it off.
+covers login, its GitHub account and switching it off.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 

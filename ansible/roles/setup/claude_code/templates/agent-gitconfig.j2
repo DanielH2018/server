@@ -1,0 +1,21 @@
+# Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
+#
+# {{ claude_code_agent_user }} commits as the {{ claude_code_agent_github_login }} GitHub account
+# and signs every commit and tag with its own key.
+[user]
+	name = {{ claude_code_agent_github_login }}
+	email = {{ claude_code_agent_git_email }}
+	signingkey = {{ claude_code_agent_signing_key }}
+[gpg]
+	format = ssh
+[gpg "ssh"]
+	allowedSignersFile = {{ claude_code_agent_user_home }}/.config/git/allowed_signers
+[commit]
+	gpgsign = true
+[tag]
+	gpgsign = true
+# Pushes and fetches over HTTPS take the account's token from gh. The empty entry clears any
+# helper a system config sets, so no other credential is offered first.
+[credential "https://github.com"]
+	helper =
+	helper = !/usr/bin/gh auth git-credential

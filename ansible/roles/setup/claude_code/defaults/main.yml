@@ -228,3 +228,21 @@ claude_code_agent_user: claude
 claude_code_agent_user_home: /var/lib/claude
 claude_code_agent_user_clone_dir: "{{ claude_code_agent_user_home }}/server"
 claude_code_agent_user_repo: DanielH2018/server
+
+# The agent user's GitHub machine account, created 2026-10-05 (tasks/agent_github.yml). It is a
+# write collaborator and a bypass actor on no ruleset. "agent branch fence" lets it create,
+# update and delete only refs/heads/worktree-claude/**, which EnterWorktree names a
+# `claude/<slug>` worktree's branch, and "master review gate" keeps it from merging its own PRs.
+# Its token is claude_code_agent_gh_token in SOPS: a classic token with only public_repo,
+# because GitHub offers no fine-grained token to a collaborator on another personal account's
+# repo. Without the `workflow` scope, GitHub refuses its pushes that edit .github/workflows/.
+claude_code_agent_github_login: DanielClaudeBot
+claude_code_agent_github_id: 338220904
+# The account's noreply address. GitHub attributes a commit to the account by it, and marks the
+# commit Verified when the signing key below is on the account as a Signing Key.
+claude_code_agent_git_email: >-
+  {{ claude_code_agent_github_id }}+{{ claude_code_agent_github_login }}@users.noreply.github.com
+# Generated on the host as the agent, so the private half never leaves its home. The operator
+# adds the `.pub` beside it to the account as a Signing Key, never an Authentication Key: the
+# agent pushes over HTTPS with the token, so the key can sign and cannot push.
+claude_code_agent_signing_key: "{{ claude_code_agent_user_home }}/.ssh/git_signing_ed25519"

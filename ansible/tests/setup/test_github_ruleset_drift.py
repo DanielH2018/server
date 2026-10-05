@@ -7,240 +7,44 @@ unreachable source is distinguishable from a healthy one. A textual guard sees n
 a check that reports "no drift" when it could not look is the exact failure this script exists to
 prevent (see a-deadman-is-not-a-failure-report).
 
-Every case below drives the real script. Only two absolute paths are repointed: the Kuma push
-helper it sources, and `curl`, which is shadowed on PATH by a stub serving a canned body.
+Every case below drives the real script through `_ruleset_drift.run`, which repoints only the
+Kuma push helper the script sources and `curl`.
 """
 
 import json
-import os
-import subprocess
 
 import pytest
-from lib.proc_testing import fake_bin, path_with, write_exec
 from _helpers import ANSIBLE
-from _shell_render import render_shell_script
-
-TEMPLATE = ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2")
-REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
-CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-
-# The declared set the script bakes in. Kept here as a literal rather than read from defaults:
-# the point of these tests is the comparison, and a fixture that moves with the thing under test
-# would pass no matter what the comparison did.
-DECLARED = [
-    "prek (lint + validate + tests + secrets)",
-    "pull + boot changed images",
-    "renovate config validator",
-]
-
-# kuma_push, recording instead of pushing. Signature from
-# roles/setup/initial_setup/files/kuma-push-lib.sh: STATUS MSG PUSH_URL HOST RESOLVE_IP TAG.
-LIB_STUB = """\
-kuma_push() {
-  printf '%s\\n%s\\n' "$1" "$2" > "$KUMA_PUSH_OUT"
-}
-# `reachout_verdict` from the real library, stubbed to the WAN-reachable answer — which is what
-# every case here means: the source refused, so the tile must page. The skip path is covered by
-# ansible/tests/setup/test_kuma_push_wan_skip.py against the real function.
-reachout_verdict() { REACHOUT_STATUS=down; REACHOUT_NOTE=""; }
-"""
-
-
-def _ruleset_body(contexts, enforcement="active", bypass_actors=()):
-    """A ruleset payload in the shape the live endpoint returns to an admin token.
-
-    `bypass_actors=None` is the anonymous shape, where GitHub returns null for the list.
-    """
-    return json.dumps(
-        {
-            "id": 20912512,
-            "enforcement": enforcement,
-            "bypass_actors": None if bypass_actors is None else list(bypass_actors),
-            "rules": [
-                {"type": "deletion"},
-                {
-                    "type": "required_status_checks",
-                    "parameters": {
-                        "required_status_checks": [
-                            {"context": c, "integration_id": 15368} for c in contexts
-                        ]
-                    },
-                },
-            ],
-        }
-    )
-
-
-BRANCH_RULESET_ID = 17358590
-RENOVATE_EXCLUDE = "refs/heads/renovate/**"
-
-
-def _branch_ruleset_body(exclude=(RENOVATE_EXCLUDE,), enforcement="active"):
-    """The branch-protection ruleset, in the shape the live endpoint returns."""
-    return json.dumps(
-        {
-            "id": BRANCH_RULESET_ID,
-            "name": "Default",
-            "enforcement": enforcement,
-            "conditions": {"ref_name": {"include": ["~ALL"], "exclude": list(exclude)}},
-            "rules": [{"type": "deletion"}, {"type": "non_fast_forward"}],
-        }
-    )
-
-
-REVIEW_RULESET_ID = 24514824
-REVIEW_BYPASS = ["Integration:2740:pull_request", "RepositoryRole:5:pull_request"]
-
-
-def _review_ruleset(**overrides):
-    """The review ruleset as `gh api repos/DanielH2018/server/rulesets/24514824` returned it on
-    2026-10-05, less the links, node id and timestamps. Returned as a dict for a case to edit."""
-    body = {
-        "id": REVIEW_RULESET_ID,
-        "name": "master review gate",
-        "target": "branch",
-        "source_type": "Repository",
-        "source": "DanielH2018/server",
-        "enforcement": "active",
-        "conditions": {"ref_name": {"exclude": [], "include": ["refs/heads/master"]}},
-        "rules": [
-            {
-                "type": "pull_request",
-                "parameters": {
-                    "required_approving_review_count": 1,
-                    "dismiss_stale_reviews_on_push": True,
-                    "required_reviewers": [],
-                    "require_code_owner_review": False,
-                    "require_last_push_approval": False,
-                    "required_review_thread_resolution": False,
-                    "require_extra_approval_for_unattributed_changes": True,
-                    "allowed_merge_methods": ["merge", "squash", "rebase"],
-                },
-            }
-        ],
-        "bypass_actors": [
-            {
-                "actor_id": 5,
-                "actor_type": "RepositoryRole",
-                "bypass_mode": "pull_request",
-            },
-            {
-                "actor_id": 2740,
-                "actor_type": "Integration",
-                "bypass_mode": "pull_request",
-            },
-        ],
-        "current_user_can_bypass": "pull_requests_only",
-    }
-    body.update(overrides)
-    return body
-
-
-def _run(tmp_path, curl_body=None, curl_rc=0, branch_body=None, review_body=None):
-    """Render the script, stub curl + the push lib, run it. Returns (exit_code, status, message).
-
-    `curl_body` answers the merge-gate ruleset fetch; `branch_body` answers the branch-protection
-    one and `review_body` the review one. Both default to a clean body, so each case reads the
-    verdict of the arm it is about. Every value the template reads — the declared
-    contexts, both ruleset ids, the Renovate exclusion, `wan_probe_urls` — comes from the
-    inventory and the role's own defaults, the shared accessor already resolves them, and
-    `test_the_declared_set_matches_the_role_defaults` / `test_the_branch_ruleset_fixture_matches_the_role_defaults`
-    below are what keeps DECLARED/BRANCH_RULESET_ID/RENOVATE_EXCLUDE honest against them (#3178).
-    """
-    if branch_body is None:
-        branch_body = _branch_ruleset_body()
-    if review_body is None:
-        review_body = json.dumps(_review_ruleset())
-    body = render_shell_script(*TEMPLATE)
-
-    assert REAL_LIB in body, (
-        "the script no longer sources the shared Kuma push helper — this harness repoints that "
-        "exact path, so a rename silently stops these tests exercising the push at all"
-    )
-    lib = tmp_path / "kuma-push-lib.sh"
-    lib.write_text(LIB_STUB)
-    body = body.replace(REAL_LIB, str(lib))
-
-    # The script resets PATH for cron, which would drop the stub dir this harness puts in the
-    # environment — so prepend it inside that same line. Asserted rather than best-effort: if the
-    # reset moves or changes shape, every case below would silently take the curl-failure branch
-    # and still "pass" the DOWN assertions, which is precisely the inert-check shape these tests
-    # exist to rule out.
-    binstub = tmp_path / "bin"
-    binstub.mkdir(parents=True, exist_ok=True)
-    assert CRON_PATH_LINE in body, (
-        "the cron PATH reset changed shape — this harness prepends its stub dir to that exact "
-        "line, and without it the curl stub is never reached"
-    )
-    body = body.replace(
-        CRON_PATH_LINE, f"export PATH={binstub}:/usr/local/bin:/usr/bin:/bin"
-    )
-
-    script = write_exec(tmp_path / "github-ruleset-drift.sh", body)
-
-    # curl stub: exits curl_rc, prints the body for whichever ruleset the URL names. `-sf` means
-    # the real one exits non-zero on an HTTP error, so a transport failure and a 404 both arrive
-    # here as a non-zero rc. The URL is the last argument the script passes.
-    fake_bin(
-        binstub,
-        curl=(
-            "#!/usr/bin/env bash\n"
-            f'case "${{@: -1}}" in\n'
-            f"  */rulesets/{BRANCH_RULESET_ID}) printf '%s' {json.dumps(branch_body)} ;;\n"
-            f"  */rulesets/{REVIEW_RULESET_ID}) printf '%s' {json.dumps(review_body)} ;;\n"
-            f"  *) printf '%s' {json.dumps(curl_body or '')} ;;\n"
-            "esac\n"
-            f"exit {curl_rc}\n"
-        ),
-    )
-
-    # sudo stub: the script's token lookup is `sudo -n -u <user> -H gh auth token`, and on the
-    # box these tests run on the real sudo is passwordless and the real gh is logged in — so
-    # without this stub a unit test reaches out to a live credential. The stub fails the way
-    # a host with no gh login does, which is the anonymous path every case here exercises.
-    fake_bin(binstub, sudo="#!/usr/bin/env bash\nexit 1\n")
-
-    # logger stub: the script's journal line. Recorded rather than sent, so a case can assert the
-    # verdict reached the journal without reading the host's own. The real logger is what a
-    # `journalctl -t github-ruleset-drift` on the deployer reads, which is how a verify-by
-    # confirms this producer ran.
-    fake_bin(
-        binstub,
-        logger=(
-            "#!/usr/bin/env bash\n"
-            "shift 2  # -t <tag>\n"
-            'printf \'%s\\n\' "$*" >> "$LOGGER_OUT"\n'
-        ),
-    )
-
-    out = tmp_path / "push.out"
-    env = {
-        **os.environ,
-        "PATH": path_with(binstub),
-        "KUMA_PUSH_OUT": str(out),
-        "LOGGER_OUT": str(tmp_path / "journal.out"),
-    }
-    proc = subprocess.run(
-        ["bash", str(script)], env=env, capture_output=True, text=True, timeout=60
-    )
-    if not out.exists():
-        return proc.returncode, None, None
-    status, message = out.read_text().split("\n", 1)
-    return proc.returncode, status, message.strip()
+from _ruleset_drift import (
+    BRANCH_RULESET_ID,
+    DECLARED,
+    FENCE_BYPASS,
+    FENCE_EXCLUDE,
+    FENCE_RULESET_ID,
+    RENOVATE_EXCLUDE,
+    REVIEW_BYPASS,
+    REVIEW_RULESET_ID,
+    branch_ruleset_body,
+    fence_ruleset,
+    review_ruleset,
+    ruleset_body,
+    run,
+)
 
 
 def test_matching_ruleset_is_clean(tmp_path):
     """The accepting half: live set equals the declared set, enforcement active -> up."""
-    rc, status, msg = _run(tmp_path, curl_body=_ruleset_body(DECLARED))
+    rc, status, msg = run(tmp_path, curl_body=ruleset_body(DECLARED))
     assert rc == 0
     assert status == "up"
     assert "matches the declared set" in msg
     assert f"ruleset {REVIEW_RULESET_ID} requires 1 approving review" in msg
+    assert f"ruleset {FENCE_RULESET_ID} fences the agent to {FENCE_EXCLUDE[0]}" in msg
 
 
 def test_a_removed_context_is_flagged(tmp_path):
     """The dangerous direction: a required check dropped in the UI stops gating merges."""
-    rc, status, msg = _run(tmp_path, curl_body=_ruleset_body(DECLARED[:-1]))
+    rc, status, msg = run(tmp_path, curl_body=ruleset_body(DECLARED[:-1]))
     assert rc == 1
     assert status == "down"
     assert "DRIFTED" in msg
@@ -251,7 +55,7 @@ def test_a_removed_context_is_flagged(tmp_path):
 
 def test_an_added_context_is_flagged(tmp_path):
     """The other direction: something now required that this repo does not declare."""
-    rc, status, msg = _run(tmp_path, curl_body=_ruleset_body([*DECLARED, "new gate"]))
+    rc, status, msg = run(tmp_path, curl_body=ruleset_body([*DECLARED, "new gate"]))
     assert rc == 1
     assert status == "down"
     assert "newly-required" in msg
@@ -264,7 +68,7 @@ def test_an_unreachable_api_reports_unverified_not_clean(tmp_path):
     A fetch that never happened must never produce "no drift". It reports DOWN and says the gate
     is UNVERIFIED, which is a different claim from "the gate is wrong".
     """
-    rc, status, msg = _run(tmp_path, curl_rc=7, curl_body="")
+    rc, status, msg = run(tmp_path, curl_rc=7, curl_body="")
     assert rc == 1
     assert status == "down"
     assert "UNVERIFIED" in msg
@@ -282,7 +86,7 @@ def test_a_clean_run_reaches_the_journal(tmp_path):
     The push library logs a push only when it fails, so without this line a clean run leaves no
     trace on the host and a verify-by of "confirmed green from its journal" cannot be met.
     """
-    _run(tmp_path, curl_body=_ruleset_body(DECLARED))
+    run(tmp_path, curl_body=ruleset_body(DECLARED))
     lines = _journal(tmp_path)
     assert len(lines) == 1
     assert lines[0].startswith("status=up ")
@@ -291,7 +95,7 @@ def test_a_clean_run_reaches_the_journal(tmp_path):
 
 def test_a_down_run_reaches_the_journal_with_its_reason(tmp_path):
     """The rejecting half: a DOWN logs the same reason the tile shows."""
-    _run(tmp_path, curl_body=_ruleset_body(DECLARED[1:]))
+    run(tmp_path, curl_body=ruleset_body(DECLARED[1:]))
     lines = _journal(tmp_path)
     assert len(lines) == 1
     assert lines[0].startswith("status=down ")
@@ -300,7 +104,7 @@ def test_a_down_run_reaches_the_journal_with_its_reason(tmp_path):
 
 def test_a_200_that_is_not_a_ruleset_is_a_bad_fetch(tmp_path):
     """A truncated body or an error object must not read as "every check was removed"."""
-    rc, status, msg = _run(tmp_path, curl_body='{"message":"Not Found"}')
+    rc, status, msg = run(tmp_path, curl_body='{"message":"Not Found"}')
     assert rc == 1
     assert status == "down"
     assert "bad fetch" in msg
@@ -309,7 +113,7 @@ def test_a_200_that_is_not_a_ruleset_is_a_bad_fetch(tmp_path):
 
 def test_zero_required_contexts_is_flagged(tmp_path):
     """A well-formed ruleset that requires nothing: every merge gate is open."""
-    rc, status, msg = _run(tmp_path, curl_body=_ruleset_body([]))
+    rc, status, msg = run(tmp_path, curl_body=ruleset_body([]))
     assert rc == 1
     assert status == "down"
     assert "NO status checks" in msg
@@ -318,8 +122,8 @@ def test_zero_required_contexts_is_flagged(tmp_path):
 @pytest.mark.parametrize("enforcement", ["evaluate", "disabled"])
 def test_inactive_enforcement_is_flagged(tmp_path, enforcement):
     """Contexts can all be present while the ruleset enforces none of them."""
-    rc, status, msg = _run(
-        tmp_path, curl_body=_ruleset_body(DECLARED, enforcement=enforcement)
+    rc, status, msg = run(
+        tmp_path, curl_body=ruleset_body(DECLARED, enforcement=enforcement)
     )
     assert rc == 1
     assert status == "down"
@@ -332,10 +136,10 @@ def test_a_missing_renovate_exclusion_is_flagged(tmp_path):
     With `renovate/**` under the deletion and non_fast_forward rules, Renovate can neither
     delete a merged branch nor rebase it, so the next PR reuses a SHA that already carries a
     green verdict and automerges empty."""
-    rc, status, msg = _run(
+    rc, status, msg = run(
         tmp_path,
-        curl_body=_ruleset_body(DECLARED),
-        branch_body=_branch_ruleset_body(exclude=()),
+        curl_body=ruleset_body(DECLARED),
+        branch_body=branch_ruleset_body(exclude=()),
     )
     assert rc == 1
     assert status == "down"
@@ -344,10 +148,10 @@ def test_a_missing_renovate_exclusion_is_flagged(tmp_path):
 
 def test_a_narrower_exclusion_is_not_the_exclusion(tmp_path):
     """`refs/heads/renovate/*` is one level; the app's branches nest. Literal match only."""
-    rc, status, msg = _run(
+    rc, status, msg = run(
         tmp_path,
-        curl_body=_ruleset_body(DECLARED),
-        branch_body=_branch_ruleset_body(exclude=("refs/heads/renovate/*",)),
+        curl_body=ruleset_body(DECLARED),
+        branch_body=branch_ruleset_body(exclude=("refs/heads/renovate/*",)),
     )
     assert rc == 1
     assert status == "down"
@@ -356,9 +160,9 @@ def test_a_narrower_exclusion_is_not_the_exclusion(tmp_path):
 
 def test_an_unreachable_branch_ruleset_reports_unverified_not_clean(tmp_path):
     """Merge gate fetched and clean, branch ruleset fetch fails -> down UNVERIFIED, never up."""
-    rc, status, msg = _run(
+    rc, status, msg = run(
         tmp_path,
-        curl_body=_ruleset_body(DECLARED),
+        curl_body=ruleset_body(DECLARED),
         branch_body="",
     )
     # An empty body parses to no `.enforcement`, which is the bad-fetch branch.
@@ -369,7 +173,7 @@ def test_an_unreachable_branch_ruleset_reports_unverified_not_clean(tmp_path):
 
 
 def _review_rule(**params):
-    rule = _review_ruleset()["rules"][0]
+    rule = review_ruleset()["rules"][0]
     return [{**rule, "parameters": {**rule["parameters"], **params}}]
 
 
@@ -397,6 +201,10 @@ REVIEW_DRIFT = {
     "stale approvals kept": (
         {"rules": _review_rule(dismiss_stale_reviews_on_push=False)},
         ["dismiss_stale_reviews_on_push=false"],
+    ),
+    "a pusher may approve its own push": (
+        {"rules": _review_rule(require_last_push_approval=False)},
+        ["require_last_push_approval=false (declared true)"],
     ),
     "the agent's account added": (
         {"bypass_actors": [ADMIN, RENOVATE, _actor("User", 123, "always")]},
@@ -427,9 +235,9 @@ REVIEW_DRIFT = {
 @pytest.mark.parametrize("case", sorted(REVIEW_DRIFT))
 def test_a_weakened_review_ruleset_is_flagged(tmp_path, case):
     overrides, expected = REVIEW_DRIFT[case]
-    review = json.dumps(_review_ruleset(**overrides))
-    rc, status, msg = _run(
-        tmp_path, curl_body=_ruleset_body(DECLARED), review_body=review
+    review = json.dumps(review_ruleset(**overrides))
+    rc, status, msg = run(
+        tmp_path, curl_body=ruleset_body(DECLARED), review_body=review
     )
     assert (rc, status) == (1, "down")
     assert f"ruleset {REVIEW_RULESET_ID}" in msg
@@ -437,10 +245,61 @@ def test_a_weakened_review_ruleset_is_flagged(tmp_path, case):
         assert fragment in msg
 
 
+def _fence_conditions(include=("~ALL",), exclude=tuple(FENCE_EXCLUDE)):
+    return {"ref_name": {"include": list(include), "exclude": list(exclude)}}
+
+
+ALWAYS = [_actor("RepositoryRole", 5, "always"), _actor("Integration", 2740, "always")]
+
+# Each way the fence can let the agent's account push outside its prefix.
+FENCE_DRIFT = {
+    "switched to evaluate": (
+        {"enforcement": "evaluate"},
+        ["enforcement is 'evaluate'"],
+    ),
+    "narrowed to master": (
+        {"conditions": _fence_conditions(include=["refs/heads/master"])},
+        ["no longer covers ~ALL"],
+    ),
+    "an operator branch opened": (
+        {"conditions": _fence_conditions(exclude=[*FENCE_EXCLUDE, "refs/heads/fix-*"])},
+        ["exclusions DRIFTED", "newly-open-to-the-agent:[refs/heads/fix-* ]"],
+    ),
+    "the agent's own prefix dropped": (
+        {"conditions": _fence_conditions(exclude=[])},
+        [f"no-longer-excluded:[{FENCE_EXCLUDE[0]} ]"],
+    ),
+    "updates no longer restricted": (
+        {"rules": [{"type": "creation"}, {"type": "deletion"}]},
+        ["no longer restricts [update ]"],
+    ),
+    "the agent's account added": (
+        {"bypass_actors": [*ALWAYS, _actor("User", 338220904, "always")]},
+        ["newly-allowed:[User:338220904:always ]"],
+    ),
+    "a body that is not a ruleset": (
+        {"enforcement": None},
+        ["response had no .enforcement", "UNVERIFIED"],
+    ),
+    "an anonymous read": ({"bypass_actors": None}, ["UNVERIFIED"]),
+}
+
+
+@pytest.mark.parametrize("case", sorted(FENCE_DRIFT))
+def test_a_weakened_fence_is_flagged(tmp_path, case):
+    overrides, expected = FENCE_DRIFT[case]
+    fence = json.dumps(fence_ruleset(**overrides))
+    rc, status, msg = run(tmp_path, curl_body=ruleset_body(DECLARED), fence_body=fence)
+    assert (rc, status) == (1, "down")
+    assert f"ruleset {FENCE_RULESET_ID}" in msg
+    for fragment in expected:
+        assert fragment in msg
+
+
 def test_a_bypass_actor_on_the_ci_gate_is_flagged(tmp_path):
     """land.sh's direct merge applies a bypass, so an actor here merges an un-CI'd PR."""
-    rc, status, msg = _run(
-        tmp_path, curl_body=_ruleset_body(DECLARED, bypass_actors=[ADMIN])
+    rc, status, msg = run(
+        tmp_path, curl_body=ruleset_body(DECLARED, bypass_actors=[ADMIN])
     )
     assert (rc, status) == (1, "down")
     assert "ruleset 20912512 bypass actors DRIFTED" in msg
@@ -449,8 +308,8 @@ def test_a_bypass_actor_on_the_ci_gate_is_flagged(tmp_path):
 
 def test_an_anonymous_read_of_the_ci_gate_is_unverified(tmp_path):
     """An anonymous read still judges the contexts; it cannot vouch for the bypass list."""
-    rc, status, msg = _run(
-        tmp_path, curl_body=_ruleset_body(DECLARED, bypass_actors=None)
+    rc, status, msg = run(
+        tmp_path, curl_body=ruleset_body(DECLARED, bypass_actors=None)
     )
     assert (rc, status) == (1, "down")
     assert "ruleset 20912512 returned no bypass_actors list (null)" in msg
@@ -474,6 +333,9 @@ def test_the_review_ruleset_fixture_matches_the_role_defaults(tmp_path):
         sorted(defaults["gitops_deploy_review_ruleset_bypass_actors"]) == REVIEW_BYPASS
     )
     assert defaults["gitops_deploy_ruleset_bypass_actors"] == []
+    assert defaults["gitops_deploy_fence_ruleset_id"] == FENCE_RULESET_ID
+    assert defaults["gitops_deploy_fence_ruleset_exclude"] == FENCE_EXCLUDE
+    assert sorted(defaults["gitops_deploy_fence_ruleset_bypass_actors"]) == FENCE_BYPASS
 
 
 def test_the_branch_ruleset_fixture_matches_the_role_defaults(tmp_path):

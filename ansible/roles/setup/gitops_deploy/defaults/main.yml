@@ -100,6 +100,22 @@ gitops_deploy_review_ruleset_bypass_actors:
   # The Renovate GitHub App, so its own merge of an automerge-eligible PR needs no review.
   - Integration:2740:pull_request
 
+# The fence ruleset ("agent branch fence", created 2026-10-05): creating, updating and deleting
+# a branch is restricted everywhere except the exclusions below. The agent's GitHub account is
+# not a bypass actor, so it cannot push onto a branch an operator session or Renovate opened,
+# where land.sh's admin merge would carry its commit to master unreviewed. An exclusion added to
+# the live ruleset is a branch the agent can push to, so the drift check compares the list
+# exactly. The review ruleset's require_last_push_approval closes the other half: a pusher
+# cannot approve its own push.
+gitops_deploy_fence_ruleset_id: 24517167
+gitops_deploy_fence_ruleset_exclude:
+  # EnterWorktree names a `claude/<slug>` worktree's branch `worktree-claude/<slug>`.
+  - refs/heads/worktree-claude/**
+gitops_deploy_fence_ruleset_bypass_actors:
+  # `always`, because the operator's sessions and Renovate push branches, not only merge PRs.
+  - RepositoryRole:5:always
+  - Integration:2740:always
+
 # Daily, offset from the other daniel-box health crons. Rulesets change on a human cadence, and
 # the endpoint is rate-limited per source IP (60/hr unauthenticated, shared with renovate_notify),
 # so this is a safety net rather than a control loop.

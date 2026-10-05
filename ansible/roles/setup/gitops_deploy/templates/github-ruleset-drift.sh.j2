@@ -1,8 +1,8 @@
 #!/bin/bash
 # Daily drift check: does the LIVE GitHub ruleset still require the contexts this repo declares,
-# does the branch-protection ruleset still exclude Renovate's branches, and does the review
-# ruleset still require a review of everyone outside its declared bypass list? Three arms, one
-# push.
+# does the branch-protection ruleset still exclude Renovate's branches, does the review ruleset
+# still require a review of everyone outside its declared bypass list, and does the fence still
+# keep the agent's account to its own branches? Four arms, one push.
 #
 # The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
 # tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
@@ -147,6 +147,13 @@ EXPECTED_REVIEW_BYPASS=$(
 {% endfor %}
 ACTORS
 )
+EXPECTED_FENCE_BYPASS=$(
+  sed '/^[[:space:]]*$/d' <<'ACTORS' | sort
+{% for actor in gitops_deploy_fence_ruleset_bypass_actors %}
+{{ actor }}
+{% endfor %}
+ACTORS
+)
 
 # This cron runs as root; the gh login belongs to the deploy user, so the lookup drops to that
 # user. `-H` matters: gh finds its login under $HOME, and a plain runuser/sudo keeps root's.
@@ -274,8 +281,67 @@ fi
 # `tostring`, not `// empty`: jq's `//` treats false as missing, and false is the value to catch.
 APPROVALS=$(printf '%s' "$REVIEW_RULE" | jq -r '.required_approving_review_count | tostring')
 DISMISS_STALE=$(printf '%s' "$REVIEW_RULE" | jq -r '.dismiss_stale_reviews_on_push | tostring')
-if [ "$APPROVALS" != "{{ gitops_deploy_review_ruleset_approvals }}" ] || [ "$DISMISS_STALE" != "true" ]; then
-  push down "ruleset {{ gitops_deploy_review_ruleset_id }} review rule DRIFTED — required_approving_review_count=${APPROVALS} (declared {{ gitops_deploy_review_ruleset_approvals }}), dismiss_stale_reviews_on_push=${DISMISS_STALE} (declared true); reconcile gitops_deploy_review_ruleset_approvals only if the change was deliberate"
+# GitHub stops only a PR's author approving it. Without this, a collaborator could push onto
+# someone else's PR, approve it and merge it.
+LAST_PUSH=$(printf '%s' "$REVIEW_RULE" | jq -r '.require_last_push_approval | tostring')
+if [ "$APPROVALS" != "{{ gitops_deploy_review_ruleset_approvals }}" ] || [ "$DISMISS_STALE" != "true" ] \
+  || [ "$LAST_PUSH" != "true" ]; then
+  push down "ruleset {{ gitops_deploy_review_ruleset_id }} review rule DRIFTED — required_approving_review_count=${APPROVALS} (declared {{ gitops_deploy_review_ruleset_approvals }}), dismiss_stale_reviews_on_push=${DISMISS_STALE} (declared true), require_last_push_approval=${LAST_PUSH} (declared true); reconcile gitops_deploy_review_ruleset_approvals only if the change was deliberate"
+  exit 1
+fi
+
+# --- Fourth ruleset: the agent's account pushes only under its own prefix ---
+#
+# "agent branch fence" restricts creating, updating and deleting every branch outside the
+# declared exclusions, and the agent's account is no bypass actor. Without it, the agent could
+# push onto a branch an operator session opened, and land.sh's admin merge, pinned to whatever
+# head GitHub reports, would carry its commit to master. An added exclusion is a branch the agent
+# can push to, so the list is compared exactly rather than for one member.
+FENCE_RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulesets/{{ gitops_deploy_fence_ruleset_id }}"
+if ! FENCE_BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
+  -H "Accept: application/vnd.github+json" "$FENCE_RULESET_URL"); then
+  push_reachout "failed to fetch ruleset {{ gitops_deploy_fence_ruleset_id }} — agent push fence UNVERIFIED"
+  exit 1
+fi
+
+FENCE_ENFORCEMENT=$(printf '%s' "$FENCE_BODY" | jq -r '.enforcement // empty')
+if [ -z "$FENCE_ENFORCEMENT" ]; then
+  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
+  exit 1
+fi
+if [ "$FENCE_ENFORCEMENT" != "active" ]; then
+  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} enforcement is '${FENCE_ENFORCEMENT}', not active — the agent can push to any branch"
+  exit 1
+fi
+
+if ! printf '%s' "$FENCE_BODY" | jq -r '.conditions.ref_name.include[]? // empty' | grep -qxF '~ALL'; then
+  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} no longer covers ~ALL — the agent can push to the branches it dropped"
+  exit 1
+fi
+
+EXPECTED_FENCE_EXCLUDE=$(
+  sed '/^[[:space:]]*$/d' <<'REFS' | sort
+{% for ref in gitops_deploy_fence_ruleset_exclude %}
+{{ ref }}
+{% endfor %}
+REFS
+)
+FENCE_EXCLUDE=$(printf '%s' "$FENCE_BODY" | jq -r '.conditions.ref_name.exclude[]? // empty' | sort)
+if [ "$FENCE_EXCLUDE" != "$EXPECTED_FENCE_EXCLUDE" ]; then
+  OPENED=$(comm -23 <(printf '%s\n' "$FENCE_EXCLUDE") <(printf '%s\n' "$EXPECTED_FENCE_EXCLUDE") | grep . | tr '\n' ' ')
+  CLOSED=$(comm -13 <(printf '%s\n' "$FENCE_EXCLUDE") <(printf '%s\n' "$EXPECTED_FENCE_EXCLUDE") | grep . | tr '\n' ' ')
+  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} exclusions DRIFTED — newly-open-to-the-agent:[${OPENED}] no-longer-excluded:[${CLOSED}]; reconcile gitops_deploy_fence_ruleset_exclude only if the change was deliberate"
+  exit 1
+fi
+
+UNRESTRICTED=""
+for rule in creation update deletion; do
+  if ! printf '%s' "$FENCE_BODY" | jq -e --arg r "$rule" 'any(.rules[]?; .type == $r)' >/dev/null; then
+    UNRESTRICTED="${UNRESTRICTED}${rule} "
+  fi
+done
+if [ -n "$UNRESTRICTED" ]; then
+  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} no longer restricts [${UNRESTRICTED}] — the agent can do that on any branch"
   exit 1
 fi
 
@@ -283,6 +349,7 @@ fi
 # above before it stops here.
 check_bypass {{ gitops_deploy_ruleset_id }} "$BODY" "$EXPECTED_CI_BYPASS"
 check_bypass {{ gitops_deploy_review_ruleset_id }} "$REVIEW_BODY" "$EXPECTED_REVIEW_BYPASS"
+check_bypass {{ gitops_deploy_fence_ruleset_id }} "$FENCE_BODY" "$EXPECTED_FENCE_BYPASS"
 
-push up "ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ gitops_deploy_branch_ruleset_id }} excludes {{ gitops_deploy_branch_ruleset_renovate_exclude }}; ruleset {{ gitops_deploy_review_ruleset_id }} requires {{ gitops_deploy_review_ruleset_approvals }} approving review; both bypass lists as declared"
+push up "ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ gitops_deploy_branch_ruleset_id }} excludes {{ gitops_deploy_branch_ruleset_renovate_exclude }}; ruleset {{ gitops_deploy_review_ruleset_id }} requires {{ gitops_deploy_review_ruleset_approvals }} approving review; ruleset {{ gitops_deploy_fence_ruleset_id }} fences the agent to {{ gitops_deploy_fence_ruleset_exclude | join(', ') }}; all bypass lists as declared"
 exit 0
