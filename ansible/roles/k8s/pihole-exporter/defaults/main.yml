@@ -7,7 +7,7 @@
 # `GET /api/info/version` returns 401 — the v6 JSON API exists but is authenticated, and
 # nothing there speaks the exposition format. Re-check before replacing this with a native
 # scrape; an upstream that grew `/metrics` would make the whole role redundant.
-pihole_exporter_k8s_image: ekofr/pihole-exporter:v1.2.0
+pihole_exporter_k8s_image: ekofr/pihole-exporter:v1.2.0@sha256:242c53ef3c24b88fcbe8184390b456d05604bd50de5732ca3fd3eb24395585b3
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # TRUE where the `pihole` role it reads from is denylisted. The two have opposite blast radii:
