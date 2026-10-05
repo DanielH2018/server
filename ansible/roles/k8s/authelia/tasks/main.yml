@@ -173,6 +173,7 @@
       Could not read or generate an Authelia password hash. Check that the authelia-hash
       pods could pull {{ authelia_k8s_image }}.
 
+# The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy Authelia to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -182,7 +183,8 @@
     # below: authelia_k8s_redis_sessions is a rollback lever, and dropping the names here is
     # what stops a `false` run staging manifests whose config nothing reads. The LIVE redis
     # Deployment and Service survive that — `kubectl apply` does not prune — which is the
-    # intent: flipping the lever back on does not have to recreate them.
+    # intent: flipping the lever back on does not have to recreate them. It is also why this
+    # role does not pass `manifests_prune: true`: an armed prune deletes what the lever drops.
     #
     # `authelia-redis` is deliberately NOT in manifests_extra_rollouts. That list rolls a
     # Deployment on every change to THIS role's manifests, which is several times a day, and
@@ -200,7 +202,7 @@
     # before the policy admits it. It self-heals within a backoff because the policy arrives
     # in the same deploy.
     manifests_files: >-
-      {{ ['pvc.yaml', 'deployment.yaml', 'service.yaml', 'ingressroute.yaml',
+      {{ ['deployment.yaml', 'service.yaml', 'ingressroute.yaml',
           'forwardauth-middleware.yaml']
          + (['deployment-redis.yaml', 'service-redis.yaml', 'networkpolicy-redis.yaml']
             if authelia_k8s_redis_sessions | bool else []) }}

@@ -25,6 +25,12 @@ crowdsec_k8s_claim: crowdsec-db
 crowdsec_k8s_storage_class: longhorn
 crowdsec_k8s_size: 1Gi
 
+# The claim k8s/manifests renders and applies for this role (#3387).
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ crowdsec_k8s_claim }}"
+    storage_class: "{{ crowdsec_k8s_storage_class }}"
+    size: "{{ crowdsec_k8s_size }}"
+
 # Including the two transitive deps `cscli hub upgrade` never auto-installs (http-cve,
 # whitelist-good-actors) and the two AppSec starter collections (deliberately NOT the full
 # OWASP CRS).

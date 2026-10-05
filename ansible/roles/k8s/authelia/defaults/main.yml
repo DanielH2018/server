@@ -83,6 +83,18 @@ authelia_k8s_redis_maxmemory: 96mb
 # `sops set`.
 authelia_k8s_storage: 1Gi
 
+# Plain `longhorn`, so the claim rides the daily R2 tier. It holds the SQLite database with TOTP
+# secrets, WebAuthn devices and regulation records, which unlike Traefik's acme.json is not
+# regenerable. A recurring-job-group label on the claim would do nothing: Longhorn reads those
+# labels on its own Volume CRs, and PVC labels do not propagate to them.
+authelia_k8s_storage_class: longhorn
+
+# The claim k8s/manifests renders and applies for this role (#3387).
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: authelia-config
+    storage_class: "{{ authelia_k8s_storage_class }}"
+    size: "{{ authelia_k8s_storage }}"
+
 # "1", not "1.0" — see the same note in the traefik role. Kubernetes canonicalises quantities, so
 # 1.0 in the manifest and 1 in the live object never match in last-applied-configuration and every
 # apply reports the Deployment "configured".
