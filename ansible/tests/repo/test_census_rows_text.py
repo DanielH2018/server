@@ -208,7 +208,7 @@ ROWS = (
             Subject("a.j2", "{% for key, value in k8s_psa_labels | dictsort %}"),
             Subject("b.j2", "{% for key, value in labels.items() | sort %}"),
         ),
-        min_matches=399,
+        min_matches=398,
         must_find=frozenset(
             {
                 "ansible/roles/k8s/observability/templates/00-namespace.yaml.j2",

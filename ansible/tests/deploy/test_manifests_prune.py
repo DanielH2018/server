@@ -91,6 +91,10 @@ _ARMED_ROLES = frozenset(
         "pi-peer-backup",
         "pihole",
         "loki-homelab",
+        "wg-easy",
+        "homepage",
+        "headlamp",
+        "gpu-exporter",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
