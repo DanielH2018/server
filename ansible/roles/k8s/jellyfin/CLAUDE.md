@@ -77,10 +77,8 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 `"0"`, uncapped, and this role snapshots before every deploy — so without the patch the backend grows
 behind a PVC that is itself capped.
 
-- **The patch runs after `k8s/manifests`, so a brand-new volume's first snapshot is uncapped.**
-  The claim is `k8s_claims`, which `k8s/manifests` applies just before it snapshots, and the
-  operator chose that one uncapped snapshot over a hook in the shared role (#3387). The
-  `DECIDED:` marker on the cap task carries the reasoning.
+- **The patch runs after `k8s/manifests`, so a new volume's first snapshot is uncapped.** The
+  `DECIDED:` marker on the cap task has why (#3387).
 
 - **Longhorn picks the number, not you.** It accepts `"0"` or a value no smaller than
   `Volume.Spec.Size` × 2, so the var stays derived: a hardcoded one goes illegal the moment the PVC
