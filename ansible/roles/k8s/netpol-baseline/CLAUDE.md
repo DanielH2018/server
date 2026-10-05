@@ -24,6 +24,12 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 - **Observability namespace has its own levers** (`netpol_baseline_obs_enforced`,
   `netpol_baseline_obs_scope`, own node-CIDR list) — rolled out and back independently of
   `homelab`'s.
+- **The observability policies are deferred** (#3591). The role's prune is armed, and the
+  armed apply's `-n homelab` refuses a document in another namespace (#3575). So
+  `networkpolicy-observability`, `-prometheus` and `-loki` render into
+  `netpol-baseline-observability/`, and `tasks/main.yml` applies that directory itself, before
+  the probes. The prune never selects them, and a `--dry-run` never shows them to the API
+  server.
 
 ## Notable
 - **Both boolean levers coerce oddly.** They go through `| bool` on both the template `if`

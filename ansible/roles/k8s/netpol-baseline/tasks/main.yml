@@ -121,11 +121,10 @@
   vars:
     manifests_service: netpol-baseline
     manifests_rollout: ""
+    # Live prune: a policy dropped from manifests_files is deleted on the next deploy (#3388).
+    manifests_prune: true
     manifests_files:
       - networkpolicy.yaml
-      - networkpolicy-observability.yaml
-      - networkpolicy-prometheus.yaml
-      - networkpolicy-loki.yaml
       - networkpolicy-traefik.yaml
       - networkpolicy-authelia.yaml
       - networkpolicy-crowdsec.yaml
@@ -141,6 +140,29 @@
       - networkpolicy-terraria.yaml
       - networkpolicy-valheim.yaml
       - networkpolicy-wg-easy.yaml
+    # The observability namespace's baseline and its two caller policies, which the armed
+    # apply's `-n homelab` refuses (#3575). The shared role renders, prunes and digests them in
+    # their own directory, and the task below applies them.
+    manifests_deferred_files:
+      - networkpolicy-observability.yaml
+      - networkpolicy-prometheus.yaml
+      - networkpolicy-loki.yaml
+    manifests_deferred_dir_name: netpol-baseline-observability
+
+# No --prune and no -n: each document names its own namespace. Applied before the probes,
+# because the slice-3 probe tests these exact policies. A dry run skips this apply, so the
+# server-side dry run never sees these three documents, the same gap headlamp's observability
+# RBAC has.
+- name: Apply the observability namespace's policies
+  when: not k8s_no_mutate
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f {{ manifests_deferred_dir }}/"
+  become: true
+  register: netpol_baseline_observability_apply
+  changed_when: >-
+    'created' in netpol_baseline_observability_apply.stdout
+    or 'configured' in netpol_baseline_observability_apply.stdout
 
 # ── prove the policy is enforced, rather than merely applied ────────────────────────────────
 # DECIDED: probe pods need no per-node placement; ingress NetworkPolicy is enforced on the
