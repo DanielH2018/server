@@ -29,7 +29,7 @@ import re
 import pytest
 
 from lib import yaml_fast
-from _helpers import ANSIBLE, load_defaults
+from _helpers import ANSIBLE, image_tag, load_defaults
 from _jellyfin_plugins import padded, version_tuple
 
 JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
@@ -103,7 +103,7 @@ def test_the_image_satisfies_every_plugin_target_abi():
     defaults = load_defaults(JELLYFIN)
     abis = _declared_abis(defaults)
     image = defaults["jellyfin_k8s_image"]
-    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image_tag(image), "the jellyfin image tag")
 
     too_new = {}
     for plugin, abi in abis.items():
@@ -130,7 +130,7 @@ def test_the_binding_floor_is_the_slowest_plugin():
     floor = max(abis.values())
     holders = sorted(p for p, abi in abis.items() if abi == floor)
     server = version_tuple(
-        defaults["jellyfin_k8s_image"].rsplit(":", 1)[-1], "the jellyfin image tag"
+        image_tag(defaults["jellyfin_k8s_image"]), "the jellyfin image tag"
     )
 
     left, right = padded(floor, server)
@@ -184,7 +184,7 @@ def test_the_guard_rejects_a_mismatched_defaults_file(what, before, after):
 
     abis = _declared_abis(defaults)
     server = version_tuple(
-        defaults["jellyfin_k8s_image"].rsplit(":", 1)[-1], "the jellyfin image tag"
+        image_tag(defaults["jellyfin_k8s_image"]), "the jellyfin image tag"
     )
     left, right = padded(max(abis.values()), server)
     assert left > right, (

@@ -14,6 +14,7 @@ from _helpers import (
     REPO,
     SETUP_ROLES,
     command_of,
+    image_tag,
     imported_task_files,
     imported_tasks,
     leaf_tasks,
@@ -204,3 +205,25 @@ def test_imported_tasks_reaches_the_k3s_role():
     # Non-vacuity against the real tree: a role whose main.yml is imports only.
     assert len(imported_task_files(SETUP_ROLES / "k3s")) >= 5
     assert imported_tasks(SETUP_ROLES / "k3s")
+
+
+@pytest.mark.parametrize(
+    "ref, tag",
+    [
+        ("authelia/authelia:4.39.28", "4.39.28"),
+        (
+            "authelia/authelia:4.39.28@sha256:bd97cff4fcbf715b5ff1f9ae286afbe6",
+            "4.39.28",
+        ),
+        ("registry.local:5000/n8n:2.37.10@sha256:307d606", "2.37.10"),
+    ],
+)
+def test_image_tag_drops_a_pinned_digest(ref, tag):
+    assert image_tag(ref) == tag
+
+
+def test_image_tag_still_sees_a_version_move_behind_a_digest():
+    # The version guards built on it exist to fail when the pin moves; a digest must not hide it.
+    assert image_tag("ghcr.io/bigboot/autokuma:2.2.0@sha256:12ed0e50") not in {
+        "2.1.0-rc.2"
+    }

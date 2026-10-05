@@ -21,7 +21,7 @@ import re
 
 import pytest
 
-from _helpers import ANSIBLE, REPO, load_defaults
+from _helpers import ANSIBLE, REPO, image_tag, load_defaults
 from _jellyfin_plugins import (
     INSTALLERS,
     PLUGIN_ROOT,
@@ -66,7 +66,7 @@ def test_the_plugin_target_abi_does_not_exceed_the_server():
         defaults["jellyfin_k8s_webhook_target_abi"], "jellyfin_k8s_webhook_target_abi"
     )
     image = defaults["jellyfin_k8s_image"]
-    server = version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
+    server = version_tuple(image_tag(image), "the jellyfin image tag")
 
     abi, srv = padded(target_abi, server)
     assert abi <= srv, (
