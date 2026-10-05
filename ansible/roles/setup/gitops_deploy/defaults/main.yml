@@ -70,6 +70,11 @@ gitops_deploy_expected_ruleset_contexts:
   - prek (lint + validate + tests + secrets)
   - pull + boot changed images
   - renovate config validator
+# Nobody merges past the CI gate. land.sh's direct merge relies on that: the REST merge endpoint
+# applies a bypass, so an actor added here could merge an un-CI'd PR. Each entry is
+# `<actor_type>:<actor_id>:<bypass_mode>`, the form gitops_deploy_review_ruleset_bypass_actors
+# below spells out.
+gitops_deploy_ruleset_bypass_actors: []
 
 # The branch-protection ruleset ("Default": `deletion` + `non_fast_forward` on every ref, admin
 # bypass only) must exclude Renovate's branches, or GitHub refuses the app's post-merge delete
@@ -78,6 +83,22 @@ gitops_deploy_expected_ruleset_contexts:
 # check alerts when the exclusion is missing; it never writes the ruleset.
 gitops_deploy_branch_ruleset_id: 17358590
 gitops_deploy_branch_ruleset_renovate_exclude: refs/heads/renovate/**
+
+# The review ruleset ("master review gate", created 2026-10-05): a PR to master needs one
+# approving review, and stale approvals are dismissed on push. The agent's GitHub account is a
+# write collaborator and not a bypass actor, so its PRs reach master only through the lander,
+# which merges as the operator. The drift check alerts when any of the values below differs
+# from the live ruleset, and above all when an actor joins the bypass list.
+gitops_deploy_review_ruleset_id: 24514824
+gitops_deploy_review_ruleset_ref: refs/heads/master
+gitops_deploy_review_ruleset_approvals: 1
+# `<actor_type>:<actor_id>:<bypass_mode>`, as the rulesets API names them. `pull_request` mode
+# bypasses only when merging a PR, never on a direct push.
+gitops_deploy_review_ruleset_bypass_actors:
+  # The repository admin role: the operator, and land.sh's direct merge under the operator's token.
+  - RepositoryRole:5:pull_request
+  # The Renovate GitHub App, so its own merge of an automerge-eligible PR needs no review.
+  - Integration:2740:pull_request
 
 # Daily, offset from the other daniel-box health crons. Rulesets change on a human cadence, and
 # the endpoint is rate-limited per source IP (60/hr unauthenticated, shared with renovate_notify),
