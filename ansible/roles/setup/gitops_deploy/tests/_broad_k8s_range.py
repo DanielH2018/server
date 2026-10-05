@@ -80,7 +80,10 @@ def mixed(settings, tick, *broad_paths, promote: bool = True):
     """
     tick.declare(DECLARES_SONARR)
     tick.paths = [*broad_paths, K8S_DEFAULTS]
-    tick.tree_listing = K8S_DEFAULTS + "\n"
+    # Every role the range edits exists at origin; `plan_tick` drops one that does not.
+    tick.tree_listing = "".join(
+        p + "\n" for p in tick.paths if p.startswith("ansible/roles/k8s/")
+    )
     tick.files[f"{ORIGIN}:{K8S_DEFAULTS}"] = "sonarr_image: x:2\nk8s_autodeploy: true\n"
     tick.diffs["sonarr"] = "--- a\n+++ b\n-sonarr_image: x:1\n+sonarr_image: x:2\n"
     return dataclasses.replace(

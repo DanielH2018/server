@@ -502,10 +502,10 @@ def discharge_k8s_unapplied(
 # digest moves: the line discharges and the difference waits for the next deploy. `probe.py
 # releases` has taken the same gap since #3046. A line that never discharged until a full
 # deploy was the defect (#2643), so the gap is accepted. Every other shared role acts outside
-# the digest: `volume-claim` stages its PVC in a sibling directory the digest never stats,
-# `image-builder`'s `build-job.yaml.j2` is outside it, `arr-notification` writes an app's
-# database over its API, and `cronjob-gate`, `longhorn-api`, `volume-snapshot` and
-# `volume-revert` render nothing at all, so they keep the record-only rule.
+# the digest: `image-builder`'s `build-job.yaml.j2` is outside it, `arr-notification`
+# writes an app's database over its API, and `cronjob-gate`, `longhorn-api`,
+# `volume-snapshot` and `volume-revert` render nothing at all, so they keep the record-only
+# rule.
 DIGEST_PROVABLE_ROLES = frozenset({"manifests"})
 
 

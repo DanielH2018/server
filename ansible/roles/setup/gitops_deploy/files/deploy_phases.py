@@ -33,6 +33,7 @@ from deploy_k8s import (
     declared_denylist,
     declares_snapshot_claims,
     is_image_only_diff,
+    k8s_roles_listed,
     split_k8s_auto_deploy,
 )
 from deploy_state import DeployerState
@@ -239,12 +240,50 @@ def plan_tick(
     if deploy_cross_role.CROSS_ROLE_FILE in paths:
         _adopt_incoming_cross_role_tables(tools, config, target.origin)
     cs = services_from_changed_paths(paths)
+    cs.k8s -= _k8s_roles_deleted_at(tools, config, target.origin, cs.k8s)
     cs.k8s_consumers = shared_module_consumers(paths, config.repo)
     hostvars = deploy_io.host_vars_text(config.repo, config.hostname)
     k8s_services = declared_k8s_services(hostvars) if hostvars is not None else set()
     cs = _promote_k8s_auto_deploys(tools, state, config, cs, paths, target)
     cs.k8s_origins = k8s_change_commits(tools, config, target, set(quiet))
     return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services)
+
+
+def _k8s_roles_deleted_at(
+    tools: DeployTools, config: Config, origin: str, roles: set[str]
+) -> set[str]:
+    """The roles in `roles` whose directory is gone from `origin`'s tree (#3568).
+
+    A deleted role owes nothing: no play can run it, and an `include_role` still naming it
+    fails with "role not found" rather than applying anything. Left in `cs.k8s`, it wrote a
+    `k8s_unapplied` line that never discharges, because a role with no callers has no tag
+    whose deploy could carry it (`volume-claim`, 2026-10-05). `land_shared.shared_roles`
+    drops the same roles on the landing side.
+
+    Read at `origin` rather than the working tree: this runs before the ff-merge, so the
+    deleted directory is still on disk. An unreadable or empty listing drops nothing, because
+    a kept line costs one `clear-owed` and a dropped one loses the only record of a change.
+    """
+    if not roles:
+        return set()
+    try:
+        listing = tools.run(
+            ["git", "ls-tree", "--name-only", origin, "ansible/roles/k8s/"],
+            cwd=config.repo,
+        )
+    except Exception as exc:
+        log(f"could not list the k8s roles at {origin[:8]} ({exc}) — dropping none")
+        return set()
+    present = k8s_roles_listed(listing)
+    if not present:
+        return set()
+    deleted = roles - present
+    if deleted:
+        log(
+            f"{', '.join(sorted(deleted))}: role directory deleted at {origin[:8]} — "
+            "nothing left to apply, so no k8s_unapplied line"
+        )
+    return deleted
 
 
 def _adopt_incoming_cross_role_tables(
