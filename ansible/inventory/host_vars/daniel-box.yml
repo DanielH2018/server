@@ -804,12 +804,14 @@ render_gid: 993
 # is what re-checks it afterwards, every 10 minutes via ups-secondary-health.sh.
 nut_host_secondary_armed: true
 
-# The unattended Renovate agent (roles/setup/renovate_agent). The timer
-# fires at 15:00 UTC daily and spends one headless session over the open Renovate PRs, merging
-# and landing up to renovate_agent_max_prs of them. Setting this back to false stops and
-# disables the timer; that is the rollback. There is no alive monitor yet, so a timer that
-# stops firing shows up only as a growing backlog in the renovate-notify digest.
+# The unattended Renovate agent (roles/setup/renovate_agent). The timer fires at 06:00
+# America/Chicago daily and spends one headless session over the open Renovate PRs, landing up
+# to renovate_agent_max_prs of them through the renovate-agent-land@ lander. Setting this back
+# to false stops and disables the timer; that is the rollback. The same switch gates the
+# `Renovate Agent — Alive` tile in uptime-kuma's static-monitors, so a flip in either
+# direction also needs `./scripts/deploy.sh --tags uptime-kuma`.
 #
-# Disarmed on 2026-10-03, pending a repo-scoped GitHub token for the unattended session and a
-# separate lander unit that alone holds the token able to merge. Re-arm only with both in place.
-renovate_agent_enabled: false
+# Disarmed on 2026-10-03 and re-armed on 2026-10-05, once the session ran as its own user on
+# a repo-scoped token with no contents write (renovate_agent_gh_token) and the lander unit
+# alone could merge. Do not arm it again without both in place.
+renovate_agent_enabled: true
