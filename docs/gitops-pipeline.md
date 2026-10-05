@@ -1343,25 +1343,29 @@ one way that matters: one alerts, the other reconciles. Both run from kuma-check
 2026-09-19 ([[common]]'s `kuma_check_timer.yml`): each exits 1 on a down verdict and
 `Restart=on-failure` reruns it every 30 min until it exits 0, so a red tile clears when the
 ruleset or limit is fixed rather than at the next day's slot. Two runs an hour at worst, at
-three requests a run, stay inside GitHub's unauthenticated limit. Without the token both are red:
+four requests a run, stay inside GitHub's unauthenticated limit. Without the token both are red:
 GitHub shows a ruleset's bypass list only to an admin. The timers are
 `Persistent=true`, so a slot missed inside an outage runs at boot; neither script carries a
 boot-grace arm, because both read GitHub rather than the cluster and a boot changes nothing
 they judge. `teardown.yml` imports the
 same names absent, which reaps the units and the crons they replaced on a non-deployer host.
 
-- **`github-ruleset-drift.sh`** reads three ruleset definitions from GitHub and alerts on drift in any of them.
+- **`github-ruleset-drift.sh`** reads four ruleset definitions from GitHub and alerts on drift in any of them.
     - The master CI gate must require exactly `gitops_deploy_expected_ruleset_contexts`.
     - The branch-protection ruleset (`gitops_deploy_branch_ruleset_id`) must exclude
       `refs/heads/renovate/**`. Without that exclusion GitHub refuses Renovate's post-merge
       branch delete and its rebase force-push, and a merged branch's stale green automerges the
       next PR empty (#1759).
     - The review ruleset (`gitops_deploy_review_ruleset_id`) must stay active on master and
-      require `gitops_deploy_review_ruleset_approvals` approving reviews, with stale approvals
-      dismissed on push.
-    - Each bypass list must equal its declaration: none on the CI gate, and the admin role and
-      the Renovate app on the review ruleset. The agent's GitHub account is in neither list, so
-      its PRs reach master only through the lander.
+      require `gitops_deploy_review_ruleset_approvals` approving reviews. Stale approvals must be
+      dismissed on push, and the last push must be approved by someone other than its pusher.
+    - The fence ruleset (`gitops_deploy_fence_ruleset_id`) must restrict creating, updating and
+      deleting every branch except exactly `gitops_deploy_fence_ruleset_exclude`. Without it,
+      the agent's account could push onto a branch an operator session opened, and `land.sh`'s
+      admin merge would carry that commit to master.
+    - Each bypass list must equal its declaration: none on the CI gate, the admin role and the
+      Renovate app on the review ruleset and the fence. The agent's GitHub account is in no
+      list, so its PRs reach master only through the lander.
 
     It never writes: a ruleset changes because a human changed it, and reconciling would undo
     that with no signal.
@@ -1973,8 +1977,8 @@ under-sized.
 - **The two GitHub settings this role watches** are daily `kuma-check` timers on the deploy host.
   `github-ruleset-drift.sh` compares the live master ruleset against
   `gitops_deploy_expected_ruleset_contexts`, checks the branch ruleset excludes
-  `refs/heads/renovate/**` (#1759), and checks the review ruleset's approval count and each
-  bypass list against its declaration. It never writes, because a ruleset changes when a human
+  `refs/heads/renovate/**` (#1759), checks the review ruleset's approval rules and the agent
+  branch fence's exclusions, and checks each bypass list against its declaration. It never writes, because a ruleset changes when a human
   changes it.
   `github-interaction-limit.sh` re-applies `gitops_deploy_interaction_limit` daily, since GitHub
   lets a limit lapse silently after six months (`none` clears it). A missing token, a failed PUT

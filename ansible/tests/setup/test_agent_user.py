@@ -19,6 +19,8 @@ SETUP = ANSIBLE / "roles" / "setup"
 SHARED = SETUP / "common" / "tasks" / "agent_user.yml"
 SHARED_IMPORT = "{{ role_path }}/../common/tasks/agent_user.yml"
 CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "main.yml"
+# Imported by main.yml under one `when:`, so its tasks carry none and agent_tasks() misses them.
+AGENT_GITHUB = SETUP / "claude_code" / "tasks" / "agent_github.yml"
 # Every role that builds an agent user, with the role variable each contract key must name.
 AGENTS = {
     "renovate_agent": {
@@ -171,11 +173,14 @@ def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent()
 ):
     shared = tasks(SHARED)
     claude = agent_tasks(tasks(CLAUDE_TASKS))
+    github = tasks(AGENT_GITHUB)
     # The named members, so the census cannot pass on a renamed or vanished task.
     named(shared, "Install the pinned host Python for the agent user")
     named(claude, "Sync the repo's venv in the agent user's clone")
+    named(github, "Generate the agent's commit-signing key")
     assert root_run_writers(shared) == []
     assert root_run_writers(claude) == []
+    assert root_run_writers(github) == []
 
 
 def test_a_command_run_as_root_on_each_apply_is_flagged() -> None:
@@ -220,8 +225,17 @@ def test_every_directory_the_agent_writes_into_is_the_agents_from_its_first_appl
     None
 ):
     shared = tasks(SHARED)
+    github = tasks(AGENT_GITHUB)
     named(shared, "Create the agent user's bin and claude-guard directories")
+    named(github, "Create the agent user's ssh and git config directories")
     assert dirs_not_owned_like_the_chown(shared) == []
+    # claude_code names the agent by its own variable, which its import maps to agent_user_name.
+    owners = {
+        (f.get("owner"), f.get("group"))
+        for t in github
+        if (f := t.get("ansible.builtin.file") or {}).get("state") == "directory"
+    }
+    assert owners == {("{{ claude_code_agent_user }}", "{{ sys_user }}")}
 
 
 def test_a_root_owned_directory_is_flagged() -> None:
