@@ -2,7 +2,7 @@
 # Renovate-managed pin.
 pihole_k8s_image: pihole/pihole:2026.09.0
 # Pinned (Renovate k8s-defaults manager). v-prefixed tags track upstream unbound releases.
-pihole_k8s_unbound_image: klutchell/unbound:1.26.1
+pihole_k8s_unbound_image: klutchell/unbound:1.26.1@sha256:9a3939ca33d6d3b42b81a70391bb8e43f0a08d2bd7a3fdffb43d427493345c36
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Platform: the LAN's DNS resolver. A failed deploy breaks name resolution fleet-wide, and
