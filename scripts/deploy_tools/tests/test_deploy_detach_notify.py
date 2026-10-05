@@ -65,8 +65,7 @@ def test_check_one_skipped_when_neither_platform_recognizes_it():
 def test_check_one_skips_a_role_that_declares_no_workload():
     """netpol-baseline and media-volume render NetworkPolicies and PVCs, never a workload.
 
-    probe.py exits 0 for such a role (#3596), and the marker still makes it `skipped` rather
-    than `ok`: nothing was checked, so the report must not read as a healthy workload.
+    probe.py exits 0 for it (#3596), but the marker keeps it `skipped`: nothing was checked.
     """
 
     def run(argv, **kwargs):
@@ -77,8 +76,7 @@ def test_check_one_skips_a_role_that_declares_no_workload():
         return _result(
             0,
             "netpol-baseline: the role declares no rollout-checkable workload "
-            "(no Deployment, DaemonSet or StatefulSet in its manifests) — nothing to gate, "
-            "reporting a pass",
+            "(no Deployment, DaemonSet or StatefulSet in its manifests) — nothing to gate",
         )
 
     state, _ = notify_mod.check_one(
