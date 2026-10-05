@@ -58,6 +58,8 @@ _KNOWN_CLAIMS = {
     ("homelab", "registry-data"): ("longhorn-nobackup", "10Gi"),
     ("homelab", "loki-homelab-data"): ("longhorn-nobackup", "5Gi"),
     ("homelab", "jellyfin-config"): ("longhorn", "8Gi"),
+    ("homelab", "authelia-config"): ("longhorn", "1Gi"),
+    ("homelab", "crowdsec-db"): ("longhorn", "1Gi"),
 }
 
 

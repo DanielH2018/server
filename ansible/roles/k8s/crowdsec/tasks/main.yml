@@ -1,4 +1,5 @@
 ---
+# The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy crowdsec to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
@@ -18,7 +19,6 @@
       - name: crowdsec-node-agent
         kind: daemonset
     manifests_files:
-      - pvc.yaml
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
@@ -27,6 +27,11 @@
       - node-agent-daemonset.yaml
     manifests_secret_files:
       - config-secret.yaml
+    # Live prune (see k8s/manifests defaults/main.yml manifests_prune DECIDED comment). The
+    # render stamps homelab/role on every document, the k8s_claims claim included; the fixed
+    # allowlist never names Secret or PersistentVolumeClaim, so config-secret and crowdsec-db
+    # are applied but never pruned. The tasks below only exec into the pod.
+    manifests_prune: true
 
 - name: Wait for the crowdsec rollout before talking to the LAPI
   when: not k8s_no_mutate

@@ -85,6 +85,7 @@ _ARMED_ROLES = frozenset(
         "jellyfin",
         "mosquitto",
         "cloudflare-ddns",
+        "crowdsec",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.

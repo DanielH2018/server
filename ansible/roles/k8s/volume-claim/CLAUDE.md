@@ -9,7 +9,8 @@ list in the caller's `defaults/main.yml`, which `k8s/manifests` renders, digests
 applies ahead of its snapshot (`ansible/roles/k8s/manifests/CLAUDE.md`). freshrss,
 zigbee2mqtt, speedtest, livesync, healthchecks, bazarr, sonarr, radarr, navidrome, prowlarr,
 karakeep, qbittorrent, terraria, code-server, n8n, valheim, scrutiny, tdarr, home-assistant,
-game-stats, uptime-kuma, pi-peer-backup, mosquitto, registry, loki-homelab and jellyfin use it.
+game-stats, uptime-kuma, pi-peer-backup, mosquitto, registry, loki-homelab, jellyfin,
+authelia and crowdsec use it.
 **No role includes this one any more**: jellyfin was the last caller. Declare a new claim in
 `k8s_claims`; `ansible/tests/k8s/test_volume_claim_pvc_path_collision.py` refuses a new include.
 
