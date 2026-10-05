@@ -14,6 +14,10 @@ media_volume_claim: media-data
 #   3. WaitForFirstConsumer means a dynamic PVC does not bind, and its directory does not
 #      exist, until a pod mounts it. That is a chicken-and-egg for a volume that the seeding
 #      rsync fills BEFORE any workload exists.
+#
+# Named explicitly on the claim (D5). Two StorageClasses on this cluster are both marked
+# default, so an omitted class is non-deterministic, and here it would also let a dynamic
+# provisioner answer the claim with an empty volume somewhere else entirely.
 media_volume_storage_class: media-local
 # Its MODE is inherited from daniel-server's containers/data (0755, owner {{ puid }}) and is
 # deliberately not enforced here — see tasks/main.yml for why pinning it breaks the copy.
@@ -22,7 +26,22 @@ media_volume_host_path: /srv/media
 # ADVISORY ONLY. This is a directory on the node's ext4 root with no quota behind it, so
 # nothing enforces the number — it exists to satisfy the PV/PVC binding contract. Sized as
 # headroom against 838 G free and a 19 G library, not as a limit.
+#
+# The claim requests this same number, matching the PV exactly: binding requires the request to
+# be no larger than the capacity.
 media_volume_size: 400Gi
+
+# The claim k8s/manifests renders and applies for this role (#3387). ReadWriteMany matches the
+# PV and the live claim; a claim's access modes are immutable once created.
+#
+# k8s/manifests applies the claims BEFORE the directory that creates `media-local` and the PV.
+# On a fresh cluster the claim is therefore created first and waits Pending; the PV's
+# pre-bound `claimRef` binds it once the PV exists.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: "{{ media_volume_claim }}"
+    storage_class: "{{ media_volume_storage_class }}"
+    size: "{{ media_volume_size }}"
+    access_modes: [ReadWriteMany]
 
 # ── the seeding rsync ───────────────────────────────────────────────────────────────────────
 media_volume_source_host: daniel-server

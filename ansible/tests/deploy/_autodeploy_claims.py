@@ -91,7 +91,7 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
     Two sources, because this repo builds a PVC two different ways:
 
     1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2`, such as
-       media-volume's `pvc.yaml.j2`.
+       the observability claims.
     2. A `name:` in the role's `k8s_claims` default, which `k8s/manifests` renders from the
        shared `claim-default.yaml.j2` — the path #3387 moved every claim onto.
 
@@ -163,10 +163,10 @@ def _migrating_state(role: Path) -> bool:
     `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` iterates a non-empty set
     and bites instead of matching an empty loop.
 
-    Almost every PVC `_rendered_pvc_claims` can find in this repo hardcodes `accessModes:
-    [ReadWriteOnce]` (both direct templates and the shared `claim-default.yaml.j2`), so a rendered claim
-    existing at all is normally sufficient without a separate accessModes read. The one exception:
-    `k8s/media-volume`'s own `pvc.yaml.j2` is `ReadWriteMany`. It does not corrupt this predicate
+    Almost every PVC `_rendered_pvc_claims` can find in this repo is `ReadWriteOnce` (direct
+    templates, and `claim-default.yaml.j2` when a `k8s_claims` entry sets no `access_modes`), so a
+    rendered claim existing at all is normally sufficient without a separate accessModes read. The
+    one exception: `k8s/media-volume`'s `media-data` entry sets `access_modes: [ReadWriteMany]`. It does not corrupt this predicate
     today — `media-volume` itself renders no Recreate Deployment, so `_migrating_state` never
     reaches that claim — but a future Recreate role sharing that RWX volume would be flagged here as
     if it needed snapshot protection for a migration risk RWX doesn't actually carry the same way

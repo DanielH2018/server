@@ -136,14 +136,18 @@
   tags: [deploy]
   # Required rather than defaulted: a claim's storage class is immutable once created and decides
   # its backup tier, so a silent `longhorn` fallback is a decision nobody made at the call site.
+  # `access_modes` is optional (ReadWriteOnce when absent), but a present one must be a non-empty
+  # list: a bare string would render one mode per character.
   ansible.builtin.assert:
     that:
       - item.name | default('') | trim | length > 0
       - item.size | default('') | string | trim | length > 0
       - item.storage_class | default('') | trim | length > 0
+      - item.access_modes is not defined or (item.access_modes is sequence
+        and item.access_modes is not string and item.access_modes | length > 0)
     fail_msg: >-
       k8s_claims entry {{ item }} for {{ manifests_service }} must set name, size and
-      storage_class.
+      storage_class, and an access_modes it sets must be a non-empty list.
     quiet: true
   loop: "{{ k8s_claims | default([]) }}"
   loop_control:

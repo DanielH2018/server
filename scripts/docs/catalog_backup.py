@@ -50,7 +50,8 @@ __all__ = [
 # whose StorageClass asks for backups" in ansible/roles/setup/k3s/tasks/longhorn.yml):
 #
 #   1. an inline `kind: PersistentVolumeClaim` block carrying its own `storageClassName:` line
-#      (media-volume);
+#      (no role's template carries one since media-volume moved to `k8s_claims`; the shape stays
+#      read so a new one is classified);
 #   2. a call to the shared `pvc()` macro in ansible/templates/pvc.yml.j2, whose second
 #      positional argument is the class (observability's four);
 #   3. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
@@ -62,7 +63,7 @@ __all__ = [
 # every role before any one role is classified.
 
 # Shape 1. The body runs to the next document or object so `storageClassName:` is read from
-# THIS claim, not the PersistentVolume that follows it in media-volume's template.
+# THIS claim, not a PersistentVolume that follows it in the same template.
 _PVC_BLOCK_RE = re.compile(
     r"kind:\s*PersistentVolumeClaim.*?metadata:\s*\n\s*name:\s*(?P<name>\{\{.*?\}\}|\S+)"
     r"(?P<body>.*?)(?=\n---|\nkind:|\Z)",
