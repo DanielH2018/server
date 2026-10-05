@@ -14,7 +14,7 @@ import shlex
 import pytest
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
-from deploy_tools.land_lib import options, policy
+from deploy_tools.land_lib import handoff, options, policy
 from fanout_lib.target import WORKTREE_PREFIX_ENV, branch_name
 from lib import yaml_fast
 
@@ -208,4 +208,54 @@ def test_switching_either_flag_off_removes_everything_the_install_writes() -> No
         assert any(dest == r or dest.startswith(f"{r}/") for r in removed), dest
     assert removed[0].endswith(".rules"), (
         "the rule goes first, so the agent loses the start"
+    )
+
+
+def profile_exports(lander_enabled: bool) -> dict[str, str]:
+    rendered = render_setup_text(
+        "claude_code",
+        "agent-user-profile.j2",
+        {"claude_code_lander_enabled": lander_enabled},
+    )
+    return dict(
+        line.removeprefix("export ").split("=", 1)
+        for line in rendered.splitlines()
+        if line.startswith("export ")
+    )
+
+
+def test_the_agents_land_sh_hands_off_to_the_unit_the_rule_lets_it_start() -> None:
+    name = profile_exports(True)[options.HANDOFF_ENV]
+    assert UNIT == f"{name}@.service.j2"
+    assert rule_pattern(render_setup_text("claude_code", RULE)).search(
+        f"{name}@3633.service"
+    )
+    rendered = unit()
+    assert directive(rendered, "StateDirectory") == [name]
+    (exec_start,) = directive(rendered, "ExecStart")
+    argv = shlex.split(exec_start)
+    verdict = argv[argv.index("--verdict-file") + 1]
+    assert verdict == str(handoff.STATE_ROOT / name / "%i.verdict")
+
+
+def test_without_the_lander_the_agent_hands_off_nothing() -> None:
+    assert options.HANDOFF_ENV not in profile_exports(False)
+
+
+def test_the_lander_unit_never_hands_off_to_itself() -> None:
+    assert options.HANDOFF_ENV not in environment(unit())
+
+
+def test_the_agents_claude_md_names_the_approval_list_the_lander_reads() -> None:
+    doc = " ".join(
+        render_setup_text(
+            "claude_code",
+            "agent-user-claude-md.j2",
+            {"claude_code_lander_enabled": True},
+        ).split()
+    )
+    approval_paths = environment(unit())[options.APPROVAL_PATHS_ENV]
+    assert f"`{approval_paths}`" in doc
+    assert (
+        "land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>" in doc
     )

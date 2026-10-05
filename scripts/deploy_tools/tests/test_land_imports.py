@@ -23,6 +23,7 @@ MODULES = frozenset(
         "health_verdict",
         "pipeline",
         "detach",
+        "handoff",
     }
 )
 ALLOWED = {
@@ -45,6 +46,8 @@ ALLOWED = {
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
+    # The handoff to a lander unit reads the Options it refuses flags from, and nothing else.
+    "handoff": {"options"},
     "pipeline": {
         "landing",
         "outcome",

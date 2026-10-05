@@ -17,6 +17,7 @@ that makes the new mode safe to ship before it has been exercised on a real land
 import contextlib
 import json
 import os
+import pwd
 import re
 import signal
 import subprocess
@@ -380,9 +381,17 @@ def test_the_log_dir_follows_claude_job_dir(monkeypatch, tmp_path):
 
 
 def test_the_log_dir_falls_back_outside_a_claude_session(monkeypatch):
-    """The reject half: the flag has to work from a plain shell and from a systemd unit."""
+    """The reject half: the flag has to work from a plain shell and from a systemd unit.
+
+    One directory per user, so a directory another user created under a private umask never
+    refuses this user's log.
+    """
     monkeypatch.delenv(detach.LOG_DIR_ENV, raising=False)
-    assert detach.log_path("7").parent == detach.FALLBACK_LOG_DIR
+    parent = detach.log_path("7").parent
+    user = pwd.getpwuid(os.geteuid()).pw_name
+    assert parent == detach.FALLBACK_LOG_DIR.with_name(
+        f"{detach.FALLBACK_LOG_DIR.name}-{user}"
+    )
 
 
 def test_the_verdict_is_read_out_of_the_log(tmp_path):

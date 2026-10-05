@@ -101,7 +101,9 @@ the landing, and a re-run checks the new head. `--verdict-file <path>` writes `P
 the landing's one result line, for a unit to hand on to the agent that started it. A landing
 that sets neither setting is unchanged, and `--any-author` lifts neither.
 `claude-land@<n>.service` (`roles/setup/claude_code`) sets all four for the `claude` agent
-user's PRs, and a polkit rule lets that user start it and do nothing else.
+user's PRs, and a polkit rule lets that user start it and do nothing else. That user's profile
+sets `LAND_HANDOFF_UNIT=claude-land`, so its own `land.sh` starts the unit and reports the
+unit's verdict line and exit code as its own (`land_lib/handoff.py`).
 
 **The arm refuses a body whose closing keyword is not its own `Closes #N` line.** GitHub closes
 an issue named after `close`/`fixes`/`resolved` however the sentence reads, so PR #2510's "Filed

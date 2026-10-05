@@ -23,3 +23,26 @@ Put the slug after `{{ claude_code_agent_worktree_prefix }}/`: for the slug
 
 A branch made any other way follows the same rule. To push one, name it
 `worktree-{{ claude_code_agent_worktree_prefix }}+<slug>`.
+
+## Rebase onto `origin/master` before every push
+
+GitHub compares a pushed branch with the default branch. A branch based behind master's latest
+`.github/workflows/` change reads as a workflow edit, and your token cannot push one. Run
+`git fetch origin master` and `git rebase origin/master`, then push.
+{% if claude_code_lander_enabled %}
+
+## Land a PR with the repo's own command
+
+You cannot merge your own PR: the review rule wants an approval from someone other than the
+last pusher, and you have no sudo to deploy. Land it anyway with the command the repo's
+`land-after-merge` skill gives, `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait
+land <n>`. As this user, `land.sh` hands the PR to `claude-land@<n>.service`, which lands it as
+the operator and reports that landing's verdict and exit code as its own. It refuses `--tags`,
+`--since` and `--subject`, because the unit decides what deploys.
+
+The lander refuses a PR that changes a path on its approval list,
+`/etc/claude-land/approval-paths`. Those paths widen your own authority. When it refuses one,
+leave the PR open, tell the operator it needs their review, and stop. Once they approve the PR's
+head commit on GitHub, run the same command again. A push after their approval needs a new
+approval.
+{% endif %}

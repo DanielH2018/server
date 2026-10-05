@@ -48,6 +48,7 @@ no log, or an earlier landing's log for the same PR, and report that landing's v
 
 import contextlib
 import os
+import pwd
 import re
 import sys
 import traceback
@@ -60,7 +61,9 @@ from lib.detach_fork import close_inherited, fork_detached, leave_unit_cgroup
 
 # Where a detached landing writes. `$CLAUDE_JOB_DIR/tmp` is what the skill told sessions to
 # use, and it is per-session and cleaned up; this falls back to /tmp so the flag works from a
-# plain shell and from a systemd unit.
+# plain shell and from a systemd unit. The fallback is one directory per user, suffixed with
+# the user's name: the first landing creates it under its own umask, and the operator's 0007
+# made a shared one 0770, which shut the `claude` agent user out.
 LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
 
@@ -82,7 +85,10 @@ def log_path(pr: str, log_dir: Path | None = None) -> Path:
 def default_log_dir() -> Path:
     """Where `land.sh --detach` writes when given no `--log-dir`. Creates nothing."""
     job_dir = os.environ.get(LOG_DIR_ENV)
-    return Path(job_dir) / "tmp" if job_dir else FALLBACK_LOG_DIR
+    if job_dir:
+        return Path(job_dir) / "tmp"
+    user = pwd.getpwuid(os.geteuid()).pw_name
+    return FALLBACK_LOG_DIR.with_name(f"{FALLBACK_LOG_DIR.name}-{user}")
 
 
 def verdict_in(log: Path) -> str | None:

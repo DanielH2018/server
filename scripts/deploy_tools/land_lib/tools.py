@@ -356,6 +356,17 @@ def syslog(line: str) -> None:
     )
 
 
+def systemctl(*args: str, timeout: float) -> subprocess.CompletedProcess[str]:
+    """`systemctl <args>`, its output captured; never raises on a non-zero exit."""
+    return subprocess.run(
+        ["systemctl", *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
 def lock_holder() -> str:
     """The tree lock's holder as `pid <pid> (etimes, command): <etimes> <command>`, or ''.
 
@@ -518,6 +529,9 @@ class Tools:
         [list[str], str, Path, set[str] | None], list[str]
     ] = shared_role_reach.paths_a_hand_must_apply
     lock_holder: Callable[[], str] = lock_holder
+    # `handoff.land_through_unit`'s one boundary: it starts the lander unit and reads its
+    # recorded exit code.
+    systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
     hostname: Callable[[], str] = socket.gethostname
     logger: Callable[[str], None] = syslog
     sleep: Callable[[float], None] = time.sleep
