@@ -49,6 +49,28 @@ observability_prometheus_storage: 12Gi
 # backup, the export is the save step.
 observability_grafana_storage: 1Gi
 
+# The four claims, rendered by k8s/manifests (#3387). Each names `namespace` because the claims
+# live beside their workloads in k8s_observability_namespace, not in the shared k8s_namespace.
+# No `k8s_autodeploy_snapshot_pvcs` here, so the claims are applied by the directory apply,
+# after 00-namespace.yaml creates the namespace on a fresh cluster.
+k8s_claims:  # noqa var-naming[no-role-prefix]
+  - name: loki-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_loki_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+  - name: prometheus-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_prometheus_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+  - name: grafana-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_grafana_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+  - name: tempo-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_tempo_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+
 # OTLP gRPC, bound to loopback ON THE NODE via hostPort. Deliberately not a MetalLB VIP:
 # with content logging on, this must not be reachable from the LAN. Loopback is the whole
 # access control, exactly as the chezmoi bundle intends.

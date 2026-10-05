@@ -53,7 +53,8 @@ __all__ = [
 #      (no role's template carries one since media-volume moved to `k8s_claims`; the shape stays
 #      read so a new one is classified);
 #   2. a call to the shared `pvc()` macro in ansible/templates/pvc.yml.j2, whose second
-#      positional argument is the class (observability's four);
+#      positional argument is the class (no role's template calls it since observability moved
+#      to `k8s_claims`; the shape stays read so a new one is classified);
 #   3. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
 #      which k8s/manifests renders from the shared claim-default.yaml.j2 (every other claim).
 #

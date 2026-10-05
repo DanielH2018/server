@@ -18,7 +18,8 @@
 #                           /etc/rancher/k3s/manifests/. Required with the above, and reserved
 #                           the way `<service>-netpol` is -- see
 #                           ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py
-#   k8s_claims              [{name, size, storage_class}] the PersistentVolumeClaims this role
+#   k8s_claims              [{name, size, storage_class, access_modes?, namespace?}] the
+#                           PersistentVolumeClaims this role
 #                           creates for the caller. Declared in the CALLER's defaults/main.yml,
 #                           like k8s_autodeploy_snapshot_pvcs, never here: a default in this
 #                           role would outrank the caller's. Each renders from the shared
@@ -431,6 +432,11 @@
 # service's first deploy would otherwise stop there. The directory apply below re-applies the
 # same files as `unchanged`. Skipped under k8s_no_mutate; a dry run judges the claims in that
 # directory apply instead.
+#
+# Skipped too for a role that snapshots nothing, because the snapshot is this apply's only
+# reader. The directory apply then creates the claims in filename order, after a
+# `00-namespace.yaml` that creates their namespace: observability's claims live in
+# k8s_observability_namespace, and applying them here first fails on a fresh cluster (#3387).
 - name: Apply the volume claims for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.command:
@@ -443,6 +449,7 @@
   when:
     - not (k8s_no_mutate | bool)
     - manifests_claim_files | length > 0
+    - (k8s_autodeploy_snapshot_pvcs | default([]) | length) > 0
 
 # Snapshot before the apply, not after: the apply below is what changes the Deployment spec,
 # terminates the old pod and starts the new one — and the replacement pod is what migrates the

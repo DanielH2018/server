@@ -25,9 +25,8 @@
     size           e.g. a role's own `*_k8s_storage` / `*_k8s_size` default.
     namespace      defaults to the shared `k8s_namespace`, same idiom as ingressroute.yml.j2's
                    `namespace | default(k8s_namespace, true)`. observability's four claims (loki,
-                   prometheus, grafana, tempo) pass `k8s_observability_namespace` explicitly —
-                   the one thing that kept them off this macro until every existing caller was
-                   checked to confirm none needed the same override.
+                   prometheus, grafana, tempo) pass `k8s_observability_namespace` through their
+                   `k8s_claims` entries.
     access_modes   defaults to `['ReadWriteOnce']`. media-volume's `media-data` passes
                    `['ReadWriteMany']` through its `k8s_claims` entry; a claim's access modes are
                    immutable once created, so this must match the live claim.
