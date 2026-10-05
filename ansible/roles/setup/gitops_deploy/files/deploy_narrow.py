@@ -418,8 +418,8 @@ def plan(
 # narrowing chose and decides nothing yet. A render record exists only for a service
 # `render_targets.py` lists — a daniel-box k8s entry whose role includes `k8s/manifests` — and
 # the hourly producer writes it at the newest green commit, so at a tick that has just
-# fetched a merge the commit being applied usually has no render at all. A week of these
-# lines is what measures how often the diff could answer; a service with no usable record
+# fetched a merge the commit being applied usually has no render at all, so these lines
+# rarely answer; the DECIDED below says what measures instead. A service with no usable record
 # would keep this function's answer, and the full run stays the fallback either way.
 def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
     """Log the tags a render-digest diff at `origin` would apply, beside `deploy`'s answer.

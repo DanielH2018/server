@@ -197,8 +197,10 @@ comment-only edit to the retired `pvc()` macro deployed its 14 importers, and on
 `narrow shadow:` line beside the outcome above. It names the services whose applied digests
 differ from a render record of the commit being applied, counts the ones that match, and
 counts the ones with no usable record, grouped by the reason. It applies nothing. The
-shadow is the first step toward replacing the refusal's full run with a digest diff, and a
-week of these lines is the measurement that decides whether the diff can.
+shadow is the first step toward replacing the refusal's full run with a digest diff. These
+lines alone cannot decide whether the diff can, because the render they compare against is
+almost never of the applied commit; the `narrow measured:` line below carries the
+measurement.
 
 Which services have a render record, and how often:
 
