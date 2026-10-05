@@ -97,6 +97,7 @@ _ARMED_ROLES = frozenset(
         "headlamp",
         "autofix-bridge",
         "monitor-bridge",
+        "homelab-mcp",
     }
 )
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
