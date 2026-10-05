@@ -13,10 +13,8 @@ true (daniel-box). Invoked from `initial_setup.yml`, **not** `deploy.yml` — th
 uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 ```
 
-`docs/claude-code-rc-caps.md` holds the record behind the rules below — the three memory
-incidents, the fleet-bound argument, the phone check's procedure, why the webhook moved out of
-`ExecStart`, why the weekly restart is `try-restart` and not `RuntimeMaxSec=`, and how to verify
-a caps deploy from cgroupfs.
+`docs/claude-code-rc-caps.md` holds the record behind the rules below: the memory incidents,
+the fleet bound, the phone check, the webhook, the restart design and cgroupfs checks.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -99,8 +97,9 @@ effect at the next start**, so the deploy that changes it drops the RC host's se
 ## The agent user
 
 `claude_code_agent_user_enabled` builds `claude` with
-`ansible/roles/setup/common/tasks/agent_user.yml`. No unit runs as it; `defaults/main.yml`
-covers login, its GitHub account and switching it off.
+`ansible/roles/setup/common/tasks/agent_user.yml`. No unit runs as it. It lands a PR by starting
+`claude-land@<n>.service`, which runs `land.sh` as the operator under the landing policy.
+`defaults/main.yml` covers login, the GitHub account, the lander and switching each off.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 

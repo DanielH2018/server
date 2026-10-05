@@ -145,11 +145,12 @@ def test_discover_templates_finds_the_known_set():
         "gitops-deploy.timer.j2",
         "renovate-agent.timer.j2",
         "renovate-agent-land@.service.j2",
+        "claude-land@.service.j2",
         "node_exporter.service.j2",
         "kuma-check.service.j2",
         "kuma-check.timer.j2",
     } <= names
-    assert len(names) == 24
+    assert len(names) == 25
 
 
 def test_owning_role_defaults_resolves_the_role_directory():
@@ -218,31 +219,53 @@ def test_main_fails_closed_when_systemd_analyze_missing(monkeypatch):
     assert v.main() == 1
 
 
-# ── sibling gap: 50-gitops-deploy.rules.j2 (polkit JS) is content-checked by
-# test_gitops_manual_trigger.py, but nothing else checks its JavaScript syntax.
+# ── sibling gap: the polkit rules (*.rules.j2, JavaScript) are content-checked by their roles'
+# tests, but nothing else checks their JavaScript syntax.
 
 
 requires_node = pytest.mark.skipif(
     shutil.which("node") is None, reason="node not on PATH"
 )
 
+# Every rule a host runs. A rule renamed or moved out of a role's templates/ drops out of the
+# glob, and the check would pass over the rules that remain.
+KNOWN_RULES = frozenset(
+    {
+        "50-gitops-deploy.rules.j2",
+        "50-renovate-agent-land.rules.j2",
+        "50-claude-land.rules.j2",
+    }
+)
+
+
+def test_discover_rules_finds_every_known_rule():
+    assert KNOWN_RULES <= {p.name for p in v.discover_rules()}
+
 
 @requires_node
-def test_check_polkit_rules_passes_the_real_template(tmp_path):
-    err = v.check_polkit_rules(tmp_path, "node")
-    assert err is None
+@pytest.mark.parametrize("name", sorted(KNOWN_RULES))
+def test_check_polkit_rule_passes_each_real_rule(tmp_path, name):
+    (rule,) = [p for p in v.discover_rules() if p.name == name]
+    assert v.check_polkit_rule(rule, tmp_path, "node") is None
 
 
-@requires_node
-def test_check_polkit_rules_catches_unbalanced_braces(tmp_path, monkeypatch):
+def _broken_rule(tmp_path):
     # The measured shape: a stray brace that survives Jinja (no `{{`/`{%`/`{#`) but leaves the
     # rendered JS structurally broken — the class `node --check` exists to catch.
-    broken = tmp_path / "50-gitops-deploy.rules.j2"
+    role = tmp_path / "roles" / "setup" / "fixture"
+    (role / "templates").mkdir(parents=True)
+    broken = role / "templates" / "50-fixture.rules.j2"
     broken.write_text(
         "polkit.addRule(function (action, subject) {\n    return undefined;\n);"
     )
-    monkeypatch.setattr(v, "RULES_TEMPLATE", broken)
-    err = v.check_polkit_rules(tmp_path, "node")
+    return broken
+
+
+@requires_node
+def test_check_polkit_rule_catches_unbalanced_braces(tmp_path):
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    err = v.check_polkit_rule(_broken_rule(tmp_path), out_dir, "node")
     assert err is not None
     assert "node --check" in err
 
@@ -257,11 +280,8 @@ def test_main_skips_the_polkit_check_when_node_missing(monkeypatch):
 
 
 def test_main_fails_when_node_check_flags_the_rendered_rule(tmp_path, monkeypatch):
-    broken = tmp_path / "50-gitops-deploy.rules.j2"
-    broken.write_text(
-        "polkit.addRule(function (action, subject) {\n    return undefined;\n);"
-    )
-    monkeypatch.setattr(v, "RULES_TEMPLATE", broken)
+    broken = _broken_rule(tmp_path)
+    monkeypatch.setattr(v, "discover_rules", lambda: [broken])
     if shutil.which("node") is None:
         pytest.skip("node not on PATH")
     assert v.main() == 1

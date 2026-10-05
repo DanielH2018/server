@@ -40,17 +40,17 @@ not a wrong value (`TimeoutStartSec=45min` when the intent was 60) or a misspell
 TARGET — `--recursive-errors=no` suppresses the line that would name a target unit systemd can't
 find.
 
-Also renders `roles/setup/gitops_deploy/templates/50-gitops-deploy.rules.j2` — the polkit rule
-`test_gitops_manual_trigger.py` content-checks but whose JavaScript syntax nothing checks — and
-runs `node --check` on the output. A missing `node` SKIPS with a message rather than failing
-closed, unlike a missing `systemd-analyze`: `systemd-analyze` is this repo's only way to verify
-a unit file, so its absence must not read as "checked"; the polkit rule is one file checked by a
-tool GitHub's own runner images always carry (they run Actions itself on Node.js), so the skip
-path is a local-workstation fallback, not a gate this repo depends on being armed in CI.
+Also renders every polkit rule (`*.rules.j2`) under ansible/roles/ — JavaScript that the
+roles' tests content-check but whose syntax nothing else checks — and runs `node --check` on
+each output. A missing `node` SKIPS with a message rather than failing closed, unlike a missing
+`systemd-analyze`: `systemd-analyze` is this repo's only way to verify a unit file, so its
+absence must not read as "checked"; the polkit rules are checked by a tool GitHub's own runner
+images always carry (they run Actions itself on Node.js), so the skip path is a
+local-workstation fallback, not a gate this repo depends on being armed in CI.
 
 Run directly or via the ``validate-unit-templates`` prek hook. Exits non-zero if any unit fails
-to render, if `systemd-analyze` reports a matching diagnostic, if the polkit rule fails to
-render, or if `node --check` flags it. Exits non-zero if `systemd-analyze` itself isn't
+to render, if `systemd-analyze` reports a matching diagnostic, if a polkit rule fails to
+render, or if `node --check` flags one. Exits non-zero if `systemd-analyze` itself isn't
 available on PATH (fail loud, matching `shell_templates.py`'s policy — a missing verifier must
 not silently degrade to "renders, so it's fine").
 """
@@ -82,13 +82,6 @@ from lib.render_guard import (
 
 ROLES = ANSIBLE / "roles"
 
-# Not a *.service.j2/*.timer.j2 — a polkit rule (JavaScript), checked by this same hook because
-# it is the sibling gap the finding named: content-checked by test_gitops_manual_trigger.py, but
-# its JS syntax nowhere.
-RULES_TEMPLATE = (
-    ROLES / "setup" / "gitops_deploy" / "templates" / "50-gitops-deploy.rules.j2"
-)
-
 # A line systemd-analyze attributes to the file it's checking looks like
 # "<path>:<lineno>: <message>". A line about a followed unit ("k3s.service: Failed to open...")
 # or an ExecStart binary check ("notreal.service: Command ... is not executable") carries no
@@ -107,6 +100,11 @@ _FAIL_MESSAGE = re.compile(r"Unknown key|Failed to parse|Assignment outside of s
 def discover_templates() -> list[Path]:
     """Return every *.service.j2 / *.timer.j2 under ansible/roles/."""
     return sorted([*ROLES.rglob("*.service.j2"), *ROLES.rglob("*.timer.j2")])
+
+
+def discover_rules() -> list[Path]:
+    """Return every polkit rule template (*.rules.j2) under ansible/roles/."""
+    return sorted(ROLES.rglob("*.rules.j2"))
 
 
 def owning_role_defaults(template: Path) -> Path:
@@ -207,22 +205,21 @@ def check_template(
     return None
 
 
-def check_polkit_rules(out_dir: Path, node_bin: str) -> str | None:
-    """Render `RULES_TEMPLATE` and `node --check` it. Returns an error string, or None.
+def check_polkit_rule(template: Path, out_dir: Path, node_bin: str) -> str | None:
+    """Render one polkit rule and `node --check` it. Returns an error string, or None.
 
-    Uses the same StubUndefined + gitops_deploy defaults context as the unit templates — the
-    rule only interpolates `sys_user`, which the role's own defaults carry, same as the unit
-    templates it sits beside.
+    Uses the same StubUndefined + owning-role defaults context as the unit templates: a rule
+    interpolates only a user name, which its role's own defaults carry.
     """
-    ctx = render_context(RULES_TEMPLATE)
-    env = template_env(RULES_TEMPLATE.parent)
-    rendered, err = render_or_error(env, RULES_TEMPLATE.name, ctx)
+    ctx = render_context(template)
+    env = template_env(template.parent)
+    rendered, err = render_or_error(env, template.name, ctx)
     if rendered is None:
         return err
 
-    # RULES_TEMPLATE.stem drops only the trailing ".j2" ("50-gitops-deploy.rules"); appending
-    # ".js" (not ".rules") gives node a real JS extension without renaming the rule itself.
-    out_path = out_dir / (RULES_TEMPLATE.stem + ".js")
+    # .stem drops only the trailing ".j2" ("50-gitops-deploy.rules"); appending ".js" (not
+    # ".rules") gives node a real JS extension without renaming the rule itself.
+    out_path = out_dir / (template.stem + ".js")
     out_path.write_text(rendered)
 
     proc = subprocess.run(
@@ -230,9 +227,9 @@ def check_polkit_rules(out_dir: Path, node_bin: str) -> str | None:
     )
     if proc.returncode != 0:
         try:
-            rel = RULES_TEMPLATE.relative_to(REPO)
+            rel = template.relative_to(REPO)
         except ValueError:
-            rel = RULES_TEMPLATE  # a test fixture outside REPO, not a real repo path
+            rel = template  # a test fixture outside REPO, not a real repo path
         print(f"\n----- rendered {rel} -----", file=sys.stderr)
         dump_numbered(rendered)
         return f"node --check: {proc.stderr.strip() or f'exited {proc.returncode}'}"
@@ -242,12 +239,12 @@ def check_polkit_rules(out_dir: Path, node_bin: str) -> str | None:
 def main() -> int:
     """Render every discovered unit template, then `systemd-analyze verify` the output.
 
-    Also renders and `node --check`s the polkit rule (RULES_TEMPLATE) — a missing `node` skips
-    that one check with a message rather than failing the whole run closed (see module
+    Also renders and `node --check`s every polkit rule (`discover_rules`) — a missing `node`
+    skips those checks with a message rather than failing the whole run closed (see module
     docstring for why the two missing-tool cases are handled differently).
 
     Returns:
-        0 if every unit rendered clean and verified clean, and the polkit rule either rendered
+        0 if every unit rendered clean and verified clean, and every polkit rule either rendered
         clean or was skipped, 1 otherwise (including when systemd-analyze is missing from PATH
         or no unit templates were found).
     """
@@ -282,27 +279,31 @@ def main() -> int:
             else:
                 print(f"  [ok]   {rel}")
 
-        try:
-            rules_rel = RULES_TEMPLATE.relative_to(REPO)
-        except ValueError:
-            rules_rel = (
-                RULES_TEMPLATE  # a test fixture outside REPO, not a real repo path
-            )
+        rules = discover_rules()
         node_bin = shutil.which("node")
-        if not node_bin:
-            print(
-                f"  [skip] {rules_rel}: node not on PATH — polkit rule JS syntax not checked "
-                "this run"
-            )
-        else:
-            err = check_polkit_rules(out_dir, node_bin)
+        for rule in rules:
+            try:
+                rules_rel = rule.relative_to(REPO)
+            except ValueError:
+                rules_rel = rule  # a test fixture outside REPO, not a real repo path
+            if not node_bin:
+                print(
+                    f"  [skip] {rules_rel}: node not on PATH — polkit rule JS syntax not "
+                    "checked this run"
+                )
+                continue
+            err = check_polkit_rule(rule, out_dir, node_bin)
             if err:
                 failures += 1
                 print(f"  [FAIL] {rules_rel}: {err}", file=sys.stderr)
             else:
                 print(f"  [ok]   {rules_rel}")
 
-    print(f"\n{len(templates)} unit template(s) checked, {failures} failure(s).")
+    rules_checked = len(rules) if node_bin else 0
+    print(
+        f"\n{len(templates)} unit template(s) and {rules_checked} polkit rule(s) checked, "
+        f"{failures} failure(s)."
+    )
     return 1 if failures else 0
 
 
