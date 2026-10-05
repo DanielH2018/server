@@ -180,11 +180,25 @@
 - name: Hand the agent's home to its own user
   # The directories, the installer download and the root-run clone above are root's on their
   # first apply, and this hands them over; on a later apply it finds nothing to change. The
-  # group stays sys_user so the operator reads in.
-  ansible.builtin.file:
-    path: "{{ agent_user_home }}"
-    state: directory
-    recurse: true
-    owner: "{{ agent_user_name }}"
-    group: "{{ sys_user }}"
+  # group is sys_user so the operator reads in.
+  #
+  # It re-owns only what root owns. A recursive `file:` also re-grouped what the agent creates
+  # at run time and reported `changed` on every apply (#3607): gh writes .local/state/gh, whose
+  # parent carries no setgid bit, so it takes the agent's own group. That state is the agent's,
+  # and the operator has no need to read it.
+  ansible.builtin.command:
+    argv:
+      - find
+      - "{{ agent_user_home }}"
+      - -user
+      - root
+      - -print
+      - -exec
+      - chown
+      - -h
+      - "{{ agent_user_name }}:{{ sys_user }}"
+      - "{}"
+      - +
+  register: common_agent_user_home_handover
+  changed_when: common_agent_user_home_handover.stdout | length > 0
   become: true
