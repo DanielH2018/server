@@ -141,7 +141,7 @@ def test_the_regressed_suffix_strip_matches_what_the_publisher_prints():
     assert match, (
         "publish_pr.py's happy-path message literal has moved; re-derive the suffix"
     )
-    suffix = match.group(1)
+    suffix = re.sub(r"\{[^}]*\}", "*", match.group(1))
 
     template = re.search(r"PUB_MSG%%([^}]*)\}", read(EVAL_RUN))
     assert template, "eval-run.sh.j2 no longer strips a %% suffix off PUB_MSG"

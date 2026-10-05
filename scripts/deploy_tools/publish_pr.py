@@ -1,23 +1,33 @@
 #!/usr/bin/env python3
-"""Publish a cron's local commit as an auto-merging pull request.
+"""Publish a cron's local commit as a pull request, and start the landing that merges it.
 
 The three unattended crons that commit -- docs-refresh, eval-run and secret-rotate -- each
 carried this sequence inline, byte for byte, in a template that also carries a Kuma push
 token. A repository ruleset rejects every direct write to master, so the only way a cron
 lands anything is: put the commit on a fresh branch, push that, take the commit back off
 the local master so gitops-deploy's ``--ff-only`` still succeeds when the squash lands
-under a new SHA, open the PR, and enable auto-merge.
+under a new SHA, open the PR, and hand it to a detached ``land.py`` that merges it.
+
+WHY A LANDING AND NOT ``gh pr merge --auto``. The master review gate ruleset requires an
+approving review, and GitHub's auto-merge never applies a ruleset bypass, so an armed cron PR
+waits for an approval nobody is asked to give (#3609). ``gh pr merge`` also refuses such a PR at
+its own pre-flight. ``land.py --arm-merge --await-merge`` is the path that merges past the
+review gate: it waits for CI and merges through the REST endpoint, pinned to the head SHA it
+read green. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
+fd 9 and read this script's output through a pipe, so a landing that inherited either would
+keep the lock for the whole CI wait. The detached landing closes every inherited descriptor
+from 3 up and rebinds its stdio to its own log (``land_lib/detach.py``).
 
 ``publish`` expects the commit to already be at HEAD of the primary checkout; the caller
 made it, because what to stage and how to word it is the cron's business. It prints ONE
 line to stdout that the caller can alert with, and its exit code says what state the
 tree is in:
 
-  0  branch pushed, PR opened, auto-merge enabled; the local commit is gone
+  0  branch pushed, PR opened, landing started; the local commit is gone
   1  the branch never reached origin -- the commit is still local on HEAD. Nothing to
      clean up on origin; the next run refuses on the dirty/ahead tree
-  2  the branch IS on origin but the PR could not be opened or auto-merge could not be
-     enabled -- and the local commit is already gone. This is the state the secret-rotate
+  2  the branch IS on origin but the PR could not be opened or its landing could not be
+     started -- and the local commit is already gone. This is the state the secret-rotate
      audit's ``git ls-remote`` arm exists to see (a branch with no PR). Also covers the
      rarer case where ``reset --hard HEAD~1`` itself failed after the push: the branch is
      on origin, but the local commit is NOT gone -- master is still one commit ahead of
@@ -42,7 +52,9 @@ passes cleanly in exactly that state. Merged branches are deleted on this repo
   0  nothing unlanded; it prints nothing
   1  origin could not be read -- fail closed, because ``|| true`` on an unreachable origin
      reads as "no stale branch" and publishes straight into the state this refuses
-  2  a branch is on origin and its PR is open -- benign, it is waiting on CI
+  2  a branch is on origin and its PR is open -- benign, its landing is waiting on CI. A PR
+     whose checks are already green and which waits only on the review gate is merged here,
+     the backstop for a landing that died or never started (see ``merge_if_stalled``)
   3  a branch is on origin with NO open PR -- the state a create failure leaves behind, and
      the one a human has to clear
 
@@ -51,6 +63,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_publish_pr.py
 
 import argparse
 import json
+import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -94,6 +108,19 @@ OPEN_PR_UNKNOWN = "unknown"
 # beside it.
 LS_REMOTE_TIMEOUT_S = 30.0
 
+# The landing entry point. Run with this interpreter, not through `land.sh`: that wrapper
+# execs `uv` from PATH, and docs-refresh's cron PATH does not carry ~/.local/bin.
+LAND_SCRIPT = Path(__file__).resolve().parent / "land.py"
+
+# `land.py --detach` resolves `--since`, forks and returns; it does not wait for anything.
+LAND_START_TIMEOUT_S = 60.0
+
+# `gh pr create` prints the new PR's URL as its last line.
+PR_URL = re.compile(r"/pull/(\d+)\s*$")
+
+# A check that finished without blocking a merge. A StatusContext reports `state` instead.
+PASSING = frozenset({"SUCCESS", "NEUTRAL", "SKIPPED"})
+
 # The shell's convention for "the command was killed on a timeout". `lib.gh.gh` bounds every
 # call at 60s where the inline shell these crons carried had no bound at all, so this is a
 # state the callers did not have before and must not meet as a traceback.
@@ -104,13 +131,14 @@ Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 @dataclass(frozen=True)
 class PublishTools:
-    """The two process boundaries, injectable so a test drives the sequence without a remote."""
+    """The process boundaries, injectable so a test drives the sequence without a remote."""
 
     git: Runner
     gh: Runner
+    land: Runner
 
 
-def real_tools(repo: Path) -> PublishTools:
+def real_tools(repo: Path, land_script: Path = LAND_SCRIPT) -> PublishTools:
     def git(
         *args: str, timeout: float | None = None
     ) -> subprocess.CompletedProcess[str]:
@@ -119,7 +147,28 @@ def real_tools(repo: Path) -> PublishTools:
     def gh(*args: str) -> subprocess.CompletedProcess[str]:
         return gh_mod.gh(*args, check=False)
 
-    return PublishTools(git=git, gh=gh)
+    def land(*args: str) -> subprocess.CompletedProcess[str]:
+        # The landing deploys through deploy.sh and ansible, which need `uv` and kubectl on
+        # PATH; cron provides neither directory.
+        env = dict(os.environ)
+        env["PATH"] = os.pathsep.join(
+            [
+                str(Path.home() / ".local/bin"),
+                "/usr/local/bin",
+                env.get("PATH", "/usr/bin:/bin"),
+            ]
+        )
+        return subprocess.run(
+            [sys.executable, str(land_script), *args],
+            cwd=repo,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=LAND_START_TIMEOUT_S,
+        )
+
+    return PublishTools(git=git, gh=gh, land=land)
 
 
 @dataclass(frozen=True)
@@ -135,8 +184,10 @@ def failure_tail(proc: subprocess.CompletedProcess[str]) -> str:
     return text[-FAILURE_TAIL:]
 
 
-def run_gh(tools: PublishTools, *args: str) -> subprocess.CompletedProcess[str]:
-    """``tools.gh(*args)`` with a timeout reported as a failed process rather than a raise.
+def run_bounded(
+    tool: Runner, name: str, *args: str
+) -> subprocess.CompletedProcess[str]:
+    """``tool(*args)`` with a timeout reported as a failed process rather than a raise.
 
     Both ``gh`` calls in ``publish`` sit AFTER the push and after ``reset --hard HEAD~1``, so
     the true state at a timeout is branch-on-origin / commit-gone / no-PR -- exit 2. A raise
@@ -144,14 +195,25 @@ def run_gh(tools: PublishTools, *args: str) -> subprocess.CompletedProcess[str]:
     commit is still local and there is nothing to clean up on origin.
     """
     try:
-        return tools.gh(*args)
+        return tool(*args)
     except subprocess.TimeoutExpired as exc:
         return subprocess.CompletedProcess(
-            args=["gh", *args],
+            args=[name, *args],
             returncode=GH_TIMEOUT_RC,
             stdout="",
-            stderr=f"gh {' '.join(args[:2])} timed out after {exc.timeout}s",
+            stderr=f"{name} {' '.join(args[:2])} timed out after {exc.timeout}s",
         )
+
+
+def run_gh(tools: PublishTools, *args: str) -> subprocess.CompletedProcess[str]:
+    return run_bounded(tools.gh, "gh", *args)
+
+
+def pr_number(create_output: str) -> str:
+    """The PR number from ``gh pr create``'s output, or ``""`` when it printed no PR URL."""
+    lines = (create_output or "").strip().splitlines()
+    match = PR_URL.search(lines[-1]) if lines else None
+    return match.group(1) if match else ""
 
 
 def branch_name(prefix: str, now: datetime | None = None) -> str:
@@ -166,7 +228,7 @@ def publish(
     tools: PublishTools,
     now: datetime | None = None,
 ) -> PublishOutcome:
-    """Move HEAD's commit onto ``<prefix><stamp>``, push it, and open an auto-merging PR."""
+    """Move HEAD's commit onto ``<prefix><stamp>``, push it, open a PR and start its landing."""
     branch = branch_name(prefix, now)
 
     proc = tools.git("branch", branch, "HEAD")
@@ -221,17 +283,89 @@ def publish(
             branch,
         )
 
-    proc = run_gh(tools, "pr", "merge", "--auto", "--squash", "--delete-branch", branch)
+    number = pr_number(proc.stdout)
+    if not number:
+        return PublishOutcome(
+            PUBLISH_PUSHED_NO_PR,
+            f"PR opened for {branch} but gh printed no PR number, so no landing was started: "
+            f"{failure_tail(proc)}",
+            branch,
+        )
+
+    # A REST merge does not delete the branch the way `gh pr merge --delete-branch` did; the
+    # repo's deleteBranchOnMerge does, and `unlanded` relies on that.
+    proc = run_bounded(
+        tools.land,
+        "land.py",
+        "--pr",
+        number,
+        "--arm-merge",
+        "--await-merge",
+        "--detach",
+    )
     if proc.returncode != 0:
         return PublishOutcome(
             PUBLISH_PUSHED_NO_PR,
-            f"PR opened for {branch} but auto-merge could not be enabled: {failure_tail(proc)}",
+            f"PR #{number} opened for {branch} but its landing could not be started: "
+            f"{failure_tail(proc)}",
             branch,
         )
 
     return PublishOutcome(
-        PUBLISH_PUBLISHED, f"PR opened for {branch} with auto-merge", branch
+        PUBLISH_PUBLISHED, f"PR opened for {branch}; landing PR #{number}", branch
     )
+
+
+def merge_if_stalled(number: str, tools: PublishTools) -> str:
+    """Merge an open PR that waits only on the review gate, at the head its green checks ran on.
+
+    The backstop for a landing that died or never started. ``publish`` starts one per PR, so in
+    the normal case this finds checks still running and does nothing. A PR whose checks are
+    green but whose review is still required would otherwise stay open, and every later run of
+    its cron would skip on it. The merge is the same REST call ``land_lib/merge.py`` makes,
+    pinned with ``sha`` so GitHub refuses it if the head moved after the checks were read.
+
+    Returns:
+      ``""`` when the PR is not stalled: checks pending or failing, no review required, or a
+      lookup that failed. Otherwise a clause for the caller's message saying the PR was merged
+      or why the merge was refused.
+    """
+    proc = run_gh(
+        tools,
+        "pr",
+        "view",
+        number,
+        "--json",
+        "headRefOid,reviewDecision,statusCheckRollup",
+    )
+    if proc.returncode != 0:
+        return ""
+    try:
+        view = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        return ""
+    checks = view.get("statusCheckRollup") or []
+    # An empty rollup is pending, never green: CI has not registered its checks yet.
+    green = bool(checks) and all(
+        (c.get("conclusion") or c.get("state") or "") in PASSING for c in checks
+    )
+    head = str(view.get("headRefOid") or "")
+    if view.get("reviewDecision") != "REVIEW_REQUIRED" or not green or not head:
+        return ""
+    proc = run_gh(
+        tools,
+        "api",
+        "-X",
+        "PUT",
+        f"repos/{{owner}}/{{repo}}/pulls/{number}/merge",
+        "-f",
+        "merge_method=squash",
+        "-f",
+        f"sha={head}",
+    )
+    if proc.returncode != 0:
+        return f"its checks are green but the merge was refused: {failure_tail(proc)}"
+    return f"its checks were green and it waited only on review, so it was merged at {head[:8]}"
 
 
 def open_pr(prefix: str, tools: PublishTools, branch: str = "") -> str:
@@ -312,9 +446,13 @@ def unlanded(prefix: str, tools: PublishTools) -> PublishOutcome:
             branch,
         )
     if number:
+        # Still UNLANDED_PR_OPEN after a merge: this run's tree predates the merge, so it skips
+        # and the next run starts from a master that holds the merged commit.
+        merged = merge_if_stalled(number, tools)
         return PublishOutcome(
             UNLANDED_PR_OPEN,
-            f"PR #{number} from a previous run is still open ({branch})",
+            f"PR #{number} from a previous run is still open ({branch})"
+            + (f"; {merged}" if merged else ""),
             branch,
         )
     return PublishOutcome(
@@ -342,6 +480,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--prefix", required=True, help='branch prefix, e.g. "docs-refresh/"'
     )
     pub.add_argument("--title", required=True)
+    pub.add_argument(
+        "--land-script",
+        type=Path,
+        default=LAND_SCRIPT,
+        help="the landing entry point, run with this interpreter (default: the sibling land.py)",
+    )
     body = pub.add_mutually_exclusive_group(required=True)
     body.add_argument("--body")
     body.add_argument("--body-file", type=Path)
@@ -360,7 +504,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    tools = real_tools(args.repo)
+    tools = real_tools(args.repo, getattr(args, "land_script", LAND_SCRIPT))
     if args.command == "open-pr":
         print(open_pr(args.prefix, tools), end="")
         return 0

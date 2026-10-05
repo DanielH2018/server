@@ -30,8 +30,9 @@
 # rejected command by hand; the error had been invisible because both the commit and the
 # push discarded their output to /dev/null.
 #
-# A PR satisfies the ruleset (the check runs on the PR) and auto-merge lands it without a
-# human in the loop, so the cron stays unattended. Review is still bypassed in substance,
+# A PR satisfies the ruleset (the check runs on the PR), and the landing publish_pr.py starts
+# merges it past the review gate once CI is green, so the cron stays unattended. Auto-merge
+# cannot: it never applies the review gate's bypass (#3609). Review is still bypassed in substance,
 # which remains acceptable for the same reason as before: every byte it commits was
 # produced by a generator whose output is itself tested.
 #
@@ -493,7 +494,7 @@ if [ "$COMMIT_RC" -ne 0 ]; then
   exit 1
 fi
 
-# Branch, push, reset master, PR, auto-merge: scripts/deploy_tools/publish_pr.py, shared with
+# Branch, push, reset master, PR, landing: scripts/deploy_tools/publish_pr.py, shared with
 # eval-run and secret-rotate. Its header carries the ordering and the HEAD~1 reasoning. It
 # prints one line to alert with, and its exit code says where the commit is: 1 while it is
 # still local on master, 2 once the branch is on origin without a PR.

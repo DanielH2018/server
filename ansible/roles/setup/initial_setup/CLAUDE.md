@@ -79,7 +79,7 @@ are in the record page.
 ## Autonomous-role contract — Generated docs refresh (`crons` tag)
 Twice daily (06:17 and 18:17, daniel-box only): `docs-refresh.sh.j2` regenerates the reference
 pages and the infra map, weights any unweighted test module, rebuilds the site, and publishes
-the diff through a PR that auto-merges.
+the diff through a PR that a detached landing merges (#3609).
 - **Scope:** three derived paths and nothing else — `docs/reference/`,
   `docs/assets/generated/` and `scripts/dev/pytest_shard_weights.json`; a write outside them
   parks every deploy on the box.
