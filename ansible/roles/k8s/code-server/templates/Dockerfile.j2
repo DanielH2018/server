@@ -66,13 +66,13 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 #    dependencies still resolve at build time, which a hashed requirements file would close.
 RUN python3 -m venv $VIRTUAL_ENV \
     && $VIRTUAL_ENV/bin/pip install --no-cache-dir \
-        uv==0.12.19 \
+        uv==0.12.21 \
         pandas==3.0.6 \
         requests==2.34.2 \
-        ruff==0.16.9 \
+        ruff==0.16.10 \
         ty==0.0.84 \
         structlog==26.1.0 \
-        python-dotenv==1.2.3 \
+        python-dotenv==1.2.4 \
     && chown -R {{ puid }}:{{ pgid }} $VIRTUAL_ENV
 
 # 4. Claude Code CLI, pinned to the same release as the Anthropic.claude-code extension in
@@ -80,7 +80,7 @@ RUN python3 -m venv $VIRTUAL_ENV \
 #    tracks the pin on npm (regex manager in renovate.json). npm's download cache is ~96 M that
 #    the running container never reads, so it is dropped in the same layer that creates it — a
 #    later `rm` would not shrink this one.
-RUN npm install -g @anthropic-ai/claude-code@2.1.283 \
+RUN npm install -g @anthropic-ai/claude-code@2.1.287 \
     && npm cache clean --force
 
 # 5. VS Code extensions, downloaded at build time from the exact URL each entry in
