@@ -26,13 +26,10 @@ exist - the same shape as the readonly-SA rollout restart that prints "successfu
 Run: uv run pytest ansible/tests/longhorn/test_seed_volume_backup.py
 """
 
-import re
 from datetime import datetime, timezone
 
-import jinja2
-
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, jinja_env
 
 PLAYBOOK = ANSIBLE / "seed_volume_backup.yml"
 TEXT = PLAYBOOK.read_text()
@@ -79,12 +76,9 @@ def _seed_name(existing):
     template = _named("Name the seed's Snapshot and Backup")[0][
         "ansible.builtin.set_fact"
     ]["seed_name"]
-    env = jinja2.Environment()
-    env.filters["regex_replace"] = lambda value, pattern, repl: re.sub(
-        pattern, repl, value
-    )
     return (
-        env.from_string(template)
+        jinja_env()
+        .from_string(template)
         .render(
             now=lambda utc=False: datetime(2026, 10, 9, 1, 2, 3, tzinfo=timezone.utc),
             seed_pv={"stdout": "pvc-c2ca0afb-74f0-4507-a29a-3cf40aac175d"},
