@@ -11,6 +11,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags.py
 """
 
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -270,12 +271,12 @@ def test_changed_warns_but_still_exits_zero_on_a_docs_only_change(capsys, monkey
 def test_changed_default_ref_is_origin_master():
     parser_ref = []
 
-    def fake_git_diff(ref, cwd=None):
+    def fake_git_diff(ref: str, cwd: Path = deploy_tags.REPO) -> list[str]:
         parser_ref.append(ref)
         return []
 
     orig = deploy_tags._git_diff_paths
-    deploy_tags._git_diff_paths = fake_git_diff
+    deploy_tags._git_diff_paths = fake_git_diff  # ty: ignore[invalid-assignment]  # hand-rolled patch, #3670
     try:
         deploy_tags.main(["changed"])
     finally:

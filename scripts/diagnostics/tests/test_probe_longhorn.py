@@ -6,6 +6,8 @@ credential-handling that keeps it safe to run, and the Class C budget projection
 """
 
 import json
+import subprocess
+from types import SimpleNamespace
 
 from diagnostics.probe_lib import b2_api, longhorn, longhorn_budget, longhorn_cluster
 
@@ -108,7 +110,7 @@ def test_b2_longhorn_lines_reports_pages_plus_the_authorize_as_class_c():
     assert stats == {"class_c": 3, "pages": 2}
 
 
-def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
+def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone(monkeypatch):
     """The regression this rewrite exists for.
 
     A `probe.py b2-longhorn` that shells out to `docker exec kopia rclone ...` dies with
@@ -122,19 +124,10 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
         seen["argv"] = argv
         seen["stdin"] = kwargs.get("input", "")
 
-        class Result:
-            returncode = 0
-            stdout = "{}"
-            stderr = ""
+        return SimpleNamespace(returncode=0, stdout="{}", stderr="")
 
-        return Result()
-
-    real_run = b2_api.subprocess.run
-    b2_api.subprocess.run = fake_run
-    try:
-        b2_api.b2_curl('url = "https://api.example"\n')
-    finally:
-        b2_api.subprocess.run = real_run
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    b2_api.b2_curl('url = "https://api.example"\n')
 
     assert seen["argv"][0] == "curl"
     assert "docker" not in seen["argv"] and "rclone" not in seen["argv"]
@@ -322,13 +315,8 @@ def test_volume_shard_labels_reads_only_the_exact_label_group():
 
 
 def _target_run(returncode, stdout):
-    class Result:
-        pass
-
-    Result.returncode = returncode
-    Result.stdout = stdout
-    Result.stderr = ""
-    return lambda *args: Result()
+    result = SimpleNamespace(returncode=returncode, stdout=stdout, stderr="")
+    return lambda *args: result
 
 
 def test_backup_target_url_reads_the_cr():

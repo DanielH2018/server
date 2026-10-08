@@ -19,7 +19,7 @@ def _armed(cfg, expected=None):
     return replace(cfg, CLOUDFLARE_IPS_EXPECTED=frozenset(expected or PUBLISHED))
 
 
-def _fresh_probe() -> dict:
+def _fresh_probe() -> cf._ProbeCache:
     return {"ts": None, "ok": True, "msg": ""}
 
 

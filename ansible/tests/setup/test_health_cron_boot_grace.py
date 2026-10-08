@@ -81,7 +81,9 @@ def test_grace_is_shorter_than_the_cron_interval():
         "k3s_disk_health_cron_minute",
     ):
         minute = K3S_DEFAULTS[key]
-        step = int(re.fullmatch(r"\*/(\d+)", minute).group(1))
+        every = re.fullmatch(r"\*/(\d+)", minute)
+        assert every, f"{key}={minute} is not a `*/N` cadence"
+        step = int(every.group(1))
         assert GRACE_S < step * 60, (
             f"{key}={minute} is a {step * 60}s interval; a {GRACE_S}s grace can skip two slots"
         )

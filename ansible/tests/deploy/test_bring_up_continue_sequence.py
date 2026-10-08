@@ -51,6 +51,7 @@ def test_k3s_bringup_runs_between_initial_setup_and_the_deploy():
 
 def test_the_cluster_step_is_gated_on_k3s_server_hosts():
     """Ungated it would fail k3s-bringup.yml's own assert on every non-server host."""
+    assert _CONTINUE, "the --continue branch is no longer recognisable in bring-up.sh"
     assert "k3s_server_hosts" in _CONTINUE.group(1)
 
 

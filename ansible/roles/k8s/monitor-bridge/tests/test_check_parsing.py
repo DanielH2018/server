@@ -70,7 +70,9 @@ def test_plain_z_no_fraction():
 
 def test_offset_after_fraction():
     dt = bridge.parsing.parse_rfc3339("2026-06-06T01:00:00.123456789+01:00")
-    assert dt.utcoffset().total_seconds() == 3600
+    offset = dt.utcoffset()
+    assert offset is not None
+    assert offset.total_seconds() == 3600
     assert dt.microsecond == 123456
 
 

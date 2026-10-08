@@ -62,13 +62,13 @@ def test_a_misspelled_field_is_rejected():
     # The half that strict=True buys. The API server ignores an undefined field, so a
     # `readinessProb` typo applies clean and the probe simply never runs.
     err = schema_error(_with_spec(progressDeadlineSecond=600))
-    assert err is not NO_SCHEMA
+    assert isinstance(err, str)
     assert "progressDeadlineSecond" in err
 
 
 def test_a_wrong_type_is_rejected():
     err = schema_error(_with_spec(replicas="three"))
-    assert err is not NO_SCHEMA
+    assert isinstance(err, str)
     assert "spec.replicas" in err
 
 
@@ -81,7 +81,7 @@ def test_a_misspelled_field_deep_in_a_pod_spec_is_rejected():
         "spec": {"containers": [container]},
     }
     err = schema_error(_with_spec(template=template))
-    assert err is not NO_SCHEMA
+    assert isinstance(err, str)
     assert "readinessProb" in err
 
 

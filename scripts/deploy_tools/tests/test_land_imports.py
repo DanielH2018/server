@@ -66,8 +66,10 @@ def _land_lib_imports(path: Path) -> set[str]:
     for node in ast.walk(ast.parse(path.read_text())):
         if isinstance(node, ast.ImportFrom) and node.module == "deploy_tools.land_lib":
             found.update(a.name for a in node.names)
-        elif isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
-            "deploy_tools.land_lib."
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.startswith("deploy_tools.land_lib.")
         ):
             found.add(node.module.rsplit(".", 1)[1])
     return found

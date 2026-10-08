@@ -293,12 +293,12 @@ def test_a_downgrade_on_the_other_image_is_seen_too() -> None:
 
 
 def test_a_malformed_ledger_row_raises_rather_than_being_skipped() -> None:
-    for bad in (
-        "2.37.10\tn8nio/n8n",
-        "stable\tn8nio/n8n\tsha256:" + "a" * 64,
-        "2.37.10\tn8nio/n8n\tsha256:short",
+    for bad, reason in (
+        ("2.37.10\tn8nio/n8n", "expected tab-separated"),
+        ("stable\tn8nio/n8n\tsha256:" + "a" * 64, "not a dotted numeric version"),
+        ("2.37.10\tn8nio/n8n\tsha256:short", "not a sha256 digest"),
     ):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=reason):
             parse_pin_history(bad)
 
 

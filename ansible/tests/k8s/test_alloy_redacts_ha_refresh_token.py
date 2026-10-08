@@ -84,6 +84,8 @@ def test_a_null_refresh_token_is_printed(redact) -> None:
 def test_the_stage_is_scoped_to_home_assistant(alloy_config: str) -> None:
     """Every container's lines pass through loki.process, so the match block is the scope."""
     # `.index` would land in the block comment above the stage, which names it in prose.
-    before = alloy_config[: re.search(r"stage\.replace\s*\{", alloy_config).start()]
+    stage = re.search(r"stage\.replace\s*\{", alloy_config)
+    assert stage, "no stage.replace block in the alloy config"
+    before = alloy_config[: stage.start()]
     enclosing_selector = before[before.rindex("selector =") :].splitlines()[0]
     assert 'container=\\"home-assistant\\"' in enclosing_selector, enclosing_selector

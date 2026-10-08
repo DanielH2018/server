@@ -21,14 +21,15 @@ from test_ui_smoke import McpClient
 
 def client_returning(*replies) -> McpClient:
     """An McpClient whose `call` yields each reply in turn, with no subprocess behind it."""
-    client = object.__new__(McpClient)
-    pending = list(replies)
 
-    def fake_call(method, params=None):
-        return pending.pop(0)
+    class Scripted(McpClient):
+        def __init__(self) -> None:
+            self.pending = list(replies)
 
-    client.call = fake_call
-    return client
+        def call(self, method: str, params: dict | None = None) -> dict:
+            return self.pending.pop(0)
+
+    return Scripted()
 
 
 def echo_only() -> dict:
@@ -128,18 +129,20 @@ def test_close_closes_every_pipe_and_reaps_the_process():
     every `-m ui -k grafana` run.
     """
     client = object.__new__(McpClient)
-    client.proc = subprocess.Popen(
+    proc = subprocess.Popen(
         ["cat"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
+    assert proc.stdin and proc.stdout and proc.stderr
+    client.proc = proc
     client.close()
-    assert client.proc.stdin.closed, "stdin was left open"
-    assert client.proc.stdout.closed, "stdout was left open"
-    assert client.proc.stderr.closed, "stderr was left open"
-    assert client.proc.poll() is not None, "the wrapper process was never reaped"
+    assert proc.stdin.closed, "stdin was left open"
+    assert proc.stdout.closed, "stdout was left open"
+    assert proc.stderr.closed, "stderr was left open"
+    assert proc.poll() is not None, "the wrapper process was never reaped"
 
 
 def _report(service: str, domain: str, path: str, title: str) -> str:

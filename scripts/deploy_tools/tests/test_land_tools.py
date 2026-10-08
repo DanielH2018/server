@@ -348,11 +348,17 @@ def test_a_sigterm_during_the_gate_still_removes_the_worktree(tmp_path):
     """
     repo, first, _second, _lock = _snapshot_repo(tmp_path)
     before = signal.getsignal(signal.SIGTERM)
-    with pytest.raises(KeyboardInterrupt):
+    kept: list[Path] = []
+
+    def snapshot_then_sigterm() -> None:
         with tools.gate_snapshot(repo, first) as snap:
-            kept = snap
+            assert snap is not None
+            kept.append(snap)
             os.kill(os.getpid(), signal.SIGTERM)
-    assert not kept.exists()
+
+    with pytest.raises(KeyboardInterrupt):
+        snapshot_then_sigterm()
+    assert not kept[0].exists()
     assert signal.getsignal(signal.SIGTERM) is before
     listed = run(
         ["git", "worktree", "list"],
@@ -360,7 +366,7 @@ def test_a_sigterm_during_the_gate_still_removes_the_worktree(tmp_path):
         env=git_free_env(),
         check=True,
     ).stdout
-    assert str(kept) not in listed
+    assert str(kept[0]) not in listed
 
 
 def test_the_gate_snapshot_lands_in_the_pinned_root_its_docstring_names(
@@ -381,7 +387,9 @@ def test_the_gate_snapshot_lands_in_the_pinned_root_its_docstring_names(
     with tools.gate_snapshot(repo, first) as snap:
         assert snap is not None
         assert snap.parent.parent == pinned
-    assert f"rm -rf {tools.GATE_TMP_ROOT}/land-gate-*" in tools.gate_snapshot.__doc__
+    assert f"rm -rf {tools.GATE_TMP_ROOT}/land-gate-*" in (
+        tools.gate_snapshot.__doc__ or ""
+    )
 
 
 def test_the_watched_tick_inherits_the_working_directory(monkeypatch):

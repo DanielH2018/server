@@ -154,9 +154,9 @@ def test_an_earlier_verdict_is_overwritten_before_the_checks_run(
 
 def test_the_polkit_rule_admits_exactly_the_unit_names_the_lander_accepts():
     rule = (ROLE / "templates" / "50-renovate-agent-land.rules.j2").read_text()
-    pattern = re.search(
-        r"if \(!/(.+?)/\.test\(action\.lookup\(\"unit\"\)\)\)", rule
-    ).group(1)
+    found = re.search(r"if \(!/(.+?)/\.test\(action\.lookup\(\"unit\"\)\)\)", rule)
+    assert found is not None, "the rule no longer tests the unit name against a regex"
+    pattern = found.group(1)
     for arg in ["3340", "1", "9999999", "0", "-1", "03340", "3340;id", "12345678", "a"]:
         unit = f"renovate-agent-land@{arg}.service"
         assert bool(re.fullmatch(pattern.strip("^$"), unit)) == (

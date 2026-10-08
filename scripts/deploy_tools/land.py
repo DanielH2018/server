@@ -85,6 +85,7 @@ master's after it.
 
 import contextlib
 import functools
+import io
 from collections.abc import Callable
 import dataclasses
 import os
@@ -118,8 +119,9 @@ def _prepare_stdio() -> None:
     for fd in (0, 1, 2):
         with contextlib.suppress(OSError):
             os.set_blocking(fd, True)
-    with contextlib.suppress(AttributeError, OSError, ValueError):
-        sys.stdout.reconfigure(line_buffering=True)
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        with contextlib.suppress(OSError, ValueError):
+            sys.stdout.reconfigure(line_buffering=True)
 
 
 def main(

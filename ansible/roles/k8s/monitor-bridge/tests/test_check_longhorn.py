@@ -117,8 +117,8 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal(cfg):
 
     saved_vector, saved_scalar = bridge.net.prom_vector, bridge.net.prom_scalar
     try:
-        bridge.net.prom_vector = record
-        bridge.net.prom_scalar = lambda *a, **k: 43.0
+        bridge.net.prom_vector = record  # ty: ignore[invalid-assignment]  # hand-rolled patch, #3670
+        bridge.net.prom_scalar = lambda *a, **k: 43.0  # ty: ignore[invalid-assignment]  # #3670
         checks.storage.check_longhorn_volumes(cfg)
     finally:
         bridge.net.prom_vector, bridge.net.prom_scalar = saved_vector, saved_scalar

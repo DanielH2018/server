@@ -112,7 +112,7 @@ def test_a_closed_loopback_port_is_refused_before_any_socket_opens(app, no_socke
 def test_off_zone_targets_are_refused_before_any_socket_opens(
     app, no_socket, host, port
 ):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not a TLS endpoint this homelab routes"):
         app.cert_expiry(host, port)
 
 

@@ -284,7 +284,9 @@ def _shell_template_paths(tree: ast.Module) -> dict[str, str]:
     return bound
 
 
-def _shadowed_params(node: ast.AST) -> set[str]:
+def _shadowed_params(
+    node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda,
+) -> set[str]:
     """The parameter names `node` binds, which shadow any module-level name of the same name."""
     args = node.args
     named = {a.arg for a in (*args.posonlyargs, *args.args, *args.kwonlyargs)}

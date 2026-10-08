@@ -284,10 +284,11 @@ def test_no_module_imports_outside_its_allowed_set():
     )
     for name in sorted(siblings):
         assert name in ALLOWED, f"{name} has no ALLOWED entry"
-        if ALLOWED[name] is None:
+        allowed = ALLOWED[name]
+        if allowed is None:
             continue
         got = _sibling_imports((FILES / f"{name}.py").read_text(), siblings)
-        assert got <= ALLOWED[name], f"{name} imports {sorted(got - ALLOWED[name])}"
+        assert got <= allowed, f"{name} imports {sorted(got - allowed)}"
 
 
 def test_no_leaf_imports_the_entry_module():

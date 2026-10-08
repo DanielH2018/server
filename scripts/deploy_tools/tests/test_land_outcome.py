@@ -9,13 +9,13 @@ from deploy_tools.land_lib import outcome
 
 
 def test_an_exit_75_outcome_must_name_a_verdict():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="must name a verdict"):
         outcome.Outcome(75, "gave up")
     assert outcome.Outcome(75, "gave up", "lock-busy").verdict == "lock-busy"
 
 
 def test_an_unknown_verdict_is_refused():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="unknown verdict"):
         outcome.Outcome(1, "x", "not-a-verdict")
 
 

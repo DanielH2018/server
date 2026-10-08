@@ -193,7 +193,8 @@ def test_coredns_extract_skips_the_upstream_stray_tags() -> None:
     )
     extract = re.compile(_to_python_regex(coredns[0]["extractVersionTemplate"]))
 
-    assert extract.fullmatch("v1.14.7").group("version") == "1.14.7", (
+    tag = extract.fullmatch("v1.14.7")
+    assert tag is not None and tag.group("version") == "1.14.7", (
         "the coredns extractVersionTemplate no longer reads a real release tag — the manager is "
         "inert and the host resolver ages with no signal"
     )

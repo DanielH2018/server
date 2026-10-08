@@ -20,7 +20,7 @@ marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
 import json
 import os
 import pathlib
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from deploy_git import behind_marker
 from deploy_state_alerts import AlertSlotMarkers
@@ -145,7 +145,8 @@ class DeployerState(AlertSlotMarkers, HoldMarkers, K8sLineMarkers):
         Every key the stored receipt carries beyond these survives the merge, for the reason
         `gitops_markers.parse_owed` gives. The marker keeps the newest `RECEIPT_KEEP` lines.
         """
-        lines, obj = [], None
+        lines: list[str] = []
+        obj: dict[str, Any] | None = None
         for line in (self.read("receipts") or "").splitlines():
             try:
                 parsed = json.loads(line)
@@ -157,7 +158,9 @@ class DeployerState(AlertSlotMarkers, HoldMarkers, K8sLineMarkers):
                 lines.append(line)
         obj = obj or {"origin": origin, "base": base}
         for key, new in (("applied", applied or {}), ("manual", manual or {})):
-            held = obj.get(key) if isinstance(obj.get(key), dict) else {}
+            held = obj.get(key)
+            if not isinstance(held, dict):
+                held = {}
             held.update({k: sorted(v or ()) for k, v in new.items()})
             obj[key] = held
         lines.append(json.dumps(obj, sort_keys=True))

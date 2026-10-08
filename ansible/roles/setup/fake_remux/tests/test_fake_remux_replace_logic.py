@@ -392,15 +392,15 @@ def test_summarize_counts_states():
 
 def test_release_search_uses_long_search_timeout():
     # the interactive /release search takes minutes; it must NOT use the 15s HTTP_TIMEOUT
-    s = sh.Sonarr("http://x", "k", 15)
-    s.search_timeout = 999
     seen = {}
 
-    def fake_request(path, method="GET", data=None, timeout=None):
-        seen["timeout"] = timeout
-        return []
+    class RecordingSonarr(sh.Sonarr):
+        def _request(self, path, method="GET", data=None, timeout=None):
+            seen["timeout"] = timeout
+            return []
 
-    s._request = fake_request
+    s = RecordingSonarr("http://x", "k", 15)
+    s.search_timeout = 999
     s.release_search(17666)
     assert seen["timeout"] == 999
 

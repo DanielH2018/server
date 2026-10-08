@@ -273,6 +273,7 @@ def test_the_tile_and_the_unit_share_one_token() -> None:
         monitors_text({TOKEN: SENTINEL, "renovate_agent_enabled": True}),
         re.M,
     )
+    assert body, f"no {TILE} tile in the rendered monitors"
     assert json.loads(body.group(1))["push_token"] == SENTINEL, (
         "the tile must embed the same SOPS var the unit pushes with, or the beat lands on a "
         "monitor that does not exist and the tile sits red"

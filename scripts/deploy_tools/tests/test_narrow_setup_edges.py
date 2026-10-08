@@ -47,7 +47,7 @@ def test_a_template_included_only_by_a_template_no_task_renders_is_flagged(tree)
     tree.write(f"{ROLE}/templates/inner.j2", "x\n")
     old = tree.commit("an unrendered pair")
     tree.write(f"{ROLE}/templates/inner.j2", "y\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match="names outer.j2"):
+    with pytest.raises(narrow_setup.CannotNarrow, match=r"names outer\.j2"):
         narrow(tree, old, tree.commit("edit inner"))
 
 
@@ -72,7 +72,7 @@ def test_a_files_path_narrows_to_the_task_file_naming_it(tree):
 
 def test_a_files_path_no_task_file_names_is_flagged(tree):
     tree.write(f"{ROLE}/files/orphan.sh", "#!/bin/sh\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match="names orphan.sh"):
+    with pytest.raises(narrow_setup.CannotNarrow, match=r"names orphan\.sh"):
         narrow(tree, *_refs(tree))
 
 

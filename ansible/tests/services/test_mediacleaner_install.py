@@ -296,25 +296,36 @@ def test_the_guard_rejects_an_installer_that_stopped_acting_on_a_pin(
 
 
 @pytest.mark.parametrize(
-    ("what", "before", "after"),
+    ("what", "before", "after", "guard"),
     [
-        ("a version suffix naming another ABI", "3.7.0.101109", "3.7.0.101100"),
-        ("a targetAbi naming another asset", "10.11.9.0", "10.11.0.0"),
+        (
+            "a version suffix naming another ABI",
+            "3.7.0.101109",
+            "3.7.0.101100",
+            _assert_pin_agrees,
+        ),
+        (
+            "a targetAbi naming another asset",
+            "10.11.9.0",
+            "10.11.0.0",
+            _assert_pin_agrees,
+        ),
         (
             "a release tag the version does not name",
             "/download/v3.7.0/",
             "/download/v3.2.0/",
+            _assert_release_tag,
         ),
     ],
 )
-def test_the_pin_guards_reject_a_mismatched_defaults_file(what, before, after):
+def test_the_pin_guards_reject_a_mismatched_defaults_file(what, before, after, guard):
     """The red half for the three-way ABI agreement, which is this pin's whole hazard.
 
     Each mutation is a value a careless bump really produces, and each leaves a defaults file
     that installs cleanly and loads nothing.
 
-    It calls the REAL helpers — `_assert_pin_agrees` and `_assert_release_tag` — rather than
-    re-deriving the encoding. A mutation test with its own copy of the formula passes while the
+    It calls the REAL helper named by `guard` — `_assert_pin_agrees` or `_assert_release_tag` —
+    rather than re-deriving the encoding. A mutation test with its own copy of the formula passes while the
     formula under test is broken, because what it proves is that the copy rejects the input.
     """
     text = DEFAULTS.read_text()
@@ -324,8 +335,7 @@ def test_the_pin_guards_reject_a_mismatched_defaults_file(what, before, after):
     mutated = yaml_fast.safe_load(text.replace(before, after))
 
     with pytest.raises(AssertionError):
-        _assert_release_tag(mutated)
-        _assert_pin_agrees(mutated)
+        guard(mutated)
 
 
 # ── Renovate coverage ────────────────────────────────────────────────────────────────────────

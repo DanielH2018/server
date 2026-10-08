@@ -112,7 +112,7 @@ class McpClient:
     """A minimal JSON-RPC-over-stdio MCP client — enough to navigate and read the page."""
 
     def __init__(self, argv: list[str]) -> None:
-        self.proc = subprocess.Popen(
+        proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -120,11 +120,17 @@ class McpClient:
             text=True,
             bufsize=1,
         )
+        # `PIPE` guarantees all three; the asserts narrow `IO[str] | None` once, here.
+        assert proc.stdin and proc.stdout and proc.stderr
+        self.proc = proc
+        self.stdin = proc.stdin
+        self.stdout = proc.stdout
+        self.stderr = proc.stderr
         self._id = 0
 
     def _write(self, payload: dict) -> None:
-        self.proc.stdin.write(json.dumps(payload) + "\n")
-        self.proc.stdin.flush()
+        self.stdin.write(json.dumps(payload) + "\n")
+        self.stdin.flush()
 
     def notify(self, method: str) -> None:
         self._write({"jsonrpc": "2.0", "method": method})
@@ -138,10 +144,10 @@ class McpClient:
         # The server interleaves notifications with replies on one stream, so read until the
         # id matches rather than trusting the next line to be ours.
         while True:
-            line = self.proc.stdout.readline()
+            line = self.stdout.readline()
             if not line:
                 raise AssertionError(
-                    f"{WRAPPER.name} exited during {method}: {self.proc.stderr.read().strip()}"
+                    f"{WRAPPER.name} exited during {method}: {self.stderr.read().strip()}"
                 )
             try:
                 msg = json.loads(line)
@@ -221,6 +227,8 @@ class McpClient:
         run, which reads as that dashboard having failed rather than as a leaked file object.
         """
         for pipe in (self.proc.stdin, self.proc.stdout, self.proc.stderr):
+            if pipe is None:
+                continue
             try:
                 pipe.close()
             except OSError:

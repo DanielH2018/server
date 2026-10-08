@@ -130,12 +130,12 @@ def test_the_parser_accepts_a_clean_allowlist():
 
 
 def test_the_parser_rejects_a_duplicate_path():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="is listed twice"):
         parse_allowlist("scripts/a.py 700\nscripts/a.py 800\n")
 
 
 def test_the_parser_rejects_a_malformed_line():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="expected `<path> <max>`"):
         parse_allowlist("scripts/a.py\n")
 
 

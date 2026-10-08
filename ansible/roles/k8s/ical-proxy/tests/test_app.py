@@ -48,7 +48,9 @@ def _calendar(*todos):
 
 
 def _extract_uid(feed):
-    return re.search(r"^UID:(.+)$", feed, re.MULTILINE).group(1).strip()
+    m = re.search(r"^UID:(.+)$", feed, re.MULTILINE)
+    assert m is not None
+    return m.group(1).strip()
 
 
 def test_adds_url_property_from_description():

@@ -46,7 +46,7 @@ FUSER = """\
 {d}/server-deploy-all.lock: 5000 5001
 {d}/server-deploy-n8n.lock: 5000 5001 5100
 """
-TABLE = {
+TABLE: dict[tuple[str, ...], tuple[str, int | str]] = {
     ("ps", "-eo", "pid=,ppid=,etimes=,args="): (PS, 0),
     ("fuser",): (FUSER, 0),
     (
@@ -189,10 +189,10 @@ def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path, state_dir):
         lock_dir=empty,
         proc_locks=tmp_path / "proc_locks",
     )
-    app = deploy_ui.App(cfg, run=FakeRun(dict(TABLE)))
-    b = body(app.get("/api/inflight"))
+    run = FakeRun(dict(TABLE))
+    b = body(deploy_ui.App(cfg, run=run).get("/api/inflight"))
     assert b["locks_watched"] == []
-    assert not any(c[0] == "fuser" for c in app.run.calls)
+    assert not any(c[0] == "fuser" for c in run.calls)
 
 
 def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(
@@ -261,10 +261,11 @@ def test_prs_are_cached_is_clean(app):
 def test_prs_first_call_after_boot_runs_gh_is_clean(tmp_path, state_dir, monkeypatch):
     """A fresh App's cache sentinel must not read as fresher than an early-boot clock."""
     cfg = _bare_config(tmp_path, state_dir)
-    app = deploy_ui.App(cfg, run=FakeRun(dict(TABLE)))
+    run = FakeRun(dict(TABLE))
+    app = deploy_ui.App(cfg, run=run)
     monkeypatch.setattr(deploy_ui.time, "monotonic", lambda: 5.0)
     body(app.get("/api/prs"))
-    assert sum(1 for c in app.run.calls if c[:2] == ["gh", "pr"]) == 1
+    assert sum(1 for c in run.calls if c[:2] == ["gh", "pr"]) == 1
 
 
 def test_post_without_header_is_flagged(app):

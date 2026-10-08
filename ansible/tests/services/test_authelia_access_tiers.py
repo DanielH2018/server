@@ -95,18 +95,18 @@ def test_a_reordered_list_renders_identically():
 def test_an_entry_without_auth_tier_is_flagged():
     entry = _entry("sonarr")
     del entry["auth_tier"]
-    with pytest.raises(AnsibleFilterError, match="'sonarr'.*no auth_tier"):
+    with pytest.raises(AnsibleFilterError, match=r"'sonarr'.*no auth_tier"):
         authelia_service_rules([entry], DOMAIN, RFC1918)
 
 
 def test_an_unknown_tier_is_flagged():
-    with pytest.raises(AnsibleFilterError, match="'sonarr'.*'bypass'"):
+    with pytest.raises(AnsibleFilterError, match=r"'sonarr'.*'bypass'"):
         authelia_service_rules([_entry("sonarr", auth_tier="bypass")], DOMAIN, RFC1918)
 
 
 def test_a_tier_without_the_middleware_is_flagged():
     """A declared tier on a `use_authelia: false` entry gates nothing; refuse the lie."""
-    with pytest.raises(AnsibleFilterError, match="'jellyfin'.*not use_authelia"):
+    with pytest.raises(AnsibleFilterError, match=r"'jellyfin'.*not use_authelia"):
         authelia_service_rules(
             [_entry("jellyfin", use_authelia=False)], DOMAIN, RFC1918
         )
@@ -115,7 +115,7 @@ def test_a_tier_without_the_middleware_is_flagged():
 def test_an_sso_entry_without_a_hostname_is_flagged():
     entry = _entry("sonarr")
     del entry["hostname"]
-    with pytest.raises(AnsibleFilterError, match="'sonarr'.*no hostname"):
+    with pytest.raises(AnsibleFilterError, match=r"'sonarr'.*no hostname"):
         authelia_service_rules([entry], DOMAIN, RFC1918)
 
 

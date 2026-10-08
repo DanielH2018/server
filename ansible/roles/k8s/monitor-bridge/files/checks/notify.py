@@ -11,6 +11,7 @@ import smtplib
 import ssl
 import time
 import urllib.error
+from typing import TypedDict
 
 from bridge.config import Config
 import bridge.net
@@ -83,7 +84,13 @@ def _smtp_login_ok(cfg: Config) -> tuple[bool, str]:
     return True, "SMTP login ok (%s)" % cfg.SMTP_USER
 
 
-_email_probe = {"ts": 0.0, "ok": True, "msg": "not yet probed"}
+class _EmailProbeCache(TypedDict):
+    ts: float
+    ok: bool
+    msg: str
+
+
+_email_probe: _EmailProbeCache = {"ts": 0.0, "ok": True, "msg": "not yet probed"}
 
 
 def email_backstop(cfg: Config, now: float | None = None) -> tuple[bool, str]:

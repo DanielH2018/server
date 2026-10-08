@@ -7,6 +7,7 @@ enforcement: bridge/config.py's header.
 
 import json
 import time
+from typing import TypedDict
 from datetime import datetime, timedelta, timezone
 
 from bridge.config import Config
@@ -103,7 +104,13 @@ def r2_query_usage(
 # ts=None means never probed. An explicit sentinel rather than 0.0: "0 seconds since the epoch" is
 # indistinguishable from a real timestamp by the arithmetic below, and only the sheer size of a
 # real time.time() keeps that from reading as a fresh cache entry on the first cycle.
-_r2_probe = {"ts": None, "ok": True, "msg": ""}
+class _ProbeCache(TypedDict):
+    ts: float | None
+    ok: bool
+    msg: str
+
+
+_r2_probe: _ProbeCache = {"ts": None, "ok": True, "msg": ""}
 
 
 def r2_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:

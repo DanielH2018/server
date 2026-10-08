@@ -12,6 +12,7 @@ passing probe.
 import json
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from lib.proc_testing import run as launch
 
@@ -80,13 +81,38 @@ def render(stamp_dir: Path) -> str:
     )
 
 
+@dataclass
+class Harness:
+    """`run(argv, env=..., restore=...)` -> CompletedProcess, plus the stamp tree it writes."""
+
+    script: Path
+    fixtures: Path
+    stamp_dir: Path
+
+    def __call__(
+        self,
+        argv: list[str] | None = None,
+        env: dict | None = None,
+        restore: str = "fail",
+    ) -> subprocess.CompletedProcess:
+        child_env = {
+            "PATH": os.environ["PATH"],
+            "K3S_STUB_FIXTURES": str(self.fixtures),
+            "K3S_STUB_RESTORE": restore,
+            "BASH_FUNC_k3s%%": f"() {{ {STUB} }}",
+            "BASH_FUNC_logger%%": "() { :; }",
+            **(env or {}),
+        }
+        return launch(["bash", str(self.script), *(argv or [])], env=child_env)
+
+
 def harness(
     tmp_path: Path,
     pvcs: list[str],
     backed: list[str] | None = None,
     actual_sizes: dict[str, int] | None = None,
     no_pvc: set[str] | None = None,
-):
+) -> Harness:
     """A rendered drill plus a runner: `run(argv, env=..., restore=...)` -> CompletedProcess.
 
     `actual_sizes` overrides a volume's `status.actualSize`, which the empty-content waiver reads
@@ -114,21 +140,7 @@ def harness(
     script = tmp_path / "drill.sh"
     script.write_text(render(stamp_dir))
 
-    def run(
-        argv: list[str] | None = None, env: dict | None = None, restore: str = "fail"
-    ):
-        child_env = {
-            "PATH": os.environ["PATH"],
-            "K3S_STUB_FIXTURES": str(fixtures),
-            "K3S_STUB_RESTORE": restore,
-            "BASH_FUNC_k3s%%": f"() {{ {STUB} }}",
-            "BASH_FUNC_logger%%": "() { :; }",
-            **(env or {}),
-        }
-        return launch(["bash", str(script), *(argv or [])], env=child_env)
-
-    run.stamp_dir = stamp_dir
-    return run
+    return Harness(script, fixtures, stamp_dir)
 
 
 def selected(run, proc: subprocess.CompletedProcess) -> str:

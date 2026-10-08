@@ -234,7 +234,9 @@ def test_a_tick_that_ended_behind_stamps_first_seen_once(gitops_deploy, state_di
     gitops_deploy.STATE.record_behind(
         ORIGIN, behind=True, now=1700000000.0, fast_forwarded=False
     )
-    sha, first_seen = _marker(state_dir, "behind_since").split()
+    behind_since = _marker(state_dir, "behind_since")
+    assert behind_since is not None
+    sha, first_seen = behind_since.split()
     assert sha == ORIGIN
     # A later push to a still-stuck host refreshes the SHA and keeps the clock.
     gitops_deploy.STATE.record_behind(

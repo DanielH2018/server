@@ -29,7 +29,9 @@ def test_the_producer_reads_the_directory_render_record_writes():
 
 
 def _seconds(duration: str) -> int:
-    value, unit = re.fullmatch(r"(\d+)(min|s)", duration).groups()
+    parsed = re.fullmatch(r"(\d+)(min|s)", duration)
+    assert parsed, f"{duration!r} is not <N>min or <N>s"
+    value, unit = parsed.groups()
     return int(value) * (60 if unit == "min" else 1)
 
 

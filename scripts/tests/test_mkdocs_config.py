@@ -156,6 +156,6 @@ def test_an_external_nav_entry_uses_the_sentinel_host():
     baked = [
         u
         for u in external
-        if urlparse(u).hostname.split(".")[-2:] != ["local", "invalid"]
+        if (urlparse(u).hostname or "").split(".")[-2:] != ["local", "invalid"]
     ]
     assert not baked, f"external nav entries with a baked-in domain: {baked}"

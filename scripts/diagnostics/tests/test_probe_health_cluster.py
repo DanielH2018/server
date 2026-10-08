@@ -62,6 +62,7 @@ def test_a_refusal_is_routed_as_a_failure_not_a_skip():
 
     for requested, served in (("stage", "prod"), ("prod", None)):
         message = cluster_refusal(requested, served)
+        assert message is not None
         assert not [
             marker for marker in notify_mod.NOT_APPLICABLE_MARKERS if marker in message
         ], f"a refusal would be reported as `skipped`: {message}"

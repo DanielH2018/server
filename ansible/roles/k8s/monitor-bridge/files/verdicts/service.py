@@ -22,8 +22,8 @@ from bridge.parsing import parse_rfc3339
 
 
 def n8n_update_streaks(
-    workflows_json: dict | None,
-    executions_json: dict | None,
+    workflows_json: dict,
+    executions_json: dict,
     state: dict,
     now: datetime,
     window_s: float,
@@ -140,7 +140,7 @@ SELF_CLEARING_TITLE_HOLDS = (
 
 
 def queue_warnings(
-    queue_json: dict | None,
+    queue_json: dict,
     app_name: str,
     now: datetime | None = None,
     title_hold_grace_h: float = 48.0,

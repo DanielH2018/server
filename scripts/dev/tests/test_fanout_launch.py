@@ -421,7 +421,7 @@ def test_a_save_that_fails_mid_write_leaves_the_previous_manifest_intact(tmp_pat
         raise OSError("disk full")
 
     second = Manifest(first.run_id, "o", [])
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="disk full"):
         save(second, root=tmp_path, replace=boom)
     assert manifest_file.read_text() == before
     assert load(first.run_id, root=tmp_path) == first

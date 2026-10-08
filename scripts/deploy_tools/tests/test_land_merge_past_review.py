@@ -53,7 +53,7 @@ def test_a_pr_waiting_on_a_review_dies_without_await_merge(landing):
     assert exc.value.rc == 1
     assert not [c for c in calls if c[0] == "gh"]
     # --await-merge alone only polls; the direct merge needs arm_merge in the same run (#3625).
-    assert "re-run with both --arm-merge --await-merge" in exc.value.error
+    assert "re-run with both --arm-merge --await-merge" in (exc.value.error or "")
 
 
 def _left_for_a_direct_merge(landing, states, ci, merge_rc=(0,)):

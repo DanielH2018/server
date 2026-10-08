@@ -27,7 +27,7 @@ carries.
 """
 
 from collections.abc import Callable
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from gitops_ledger import (
     OWED_K8S_DEFERRED,
@@ -81,6 +81,13 @@ class K8sLineMarkers:
 
     Mixed into `deploy_state.DeployerState`, which supplies `read` and `write`.
     """
+
+    if TYPE_CHECKING:
+        # Supplied by `deploy_state.DeployerState`; declared so the checker sees the surface
+        # this mixin relies on. Never defined at runtime, so the real methods win.
+        def read(self, marker: str) -> str | None: ...
+
+        def write(self, marker: str, value: str | None) -> None: ...
 
     def owed_pending(self, cls: str) -> list[K8sDeferredEntry]:
         """Every `cls` entry still owed. `k8s_deferred` comes back oldest entry first."""

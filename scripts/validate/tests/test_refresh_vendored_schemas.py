@@ -19,7 +19,7 @@ def test_the_kubernetes_tag_is_the_k3s_version_without_its_suffix():
 
 
 def test_a_defaults_file_with_no_k3s_version_is_refused():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="k3s_version not found"):
         kubernetes_tag("k3s_channel: stable\n")
 
 

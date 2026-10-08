@@ -90,6 +90,7 @@ def test_due_dates_come_from_secret_rotation(tmp_path):
     expected = due_date(
         "arr_autoblock_push_token", {"last_rotated": "2026-08-10", "tier": "auto"}
     )
+    assert expected is not None
     assert rows["arr_autoblock_push_token"]["due"] == expected.isoformat()
 
 

@@ -26,7 +26,7 @@ def test_a_pr_with_no_merge_commit_dies(landing):
     ln, _ = landing(Fakes(gh_views={"mergeCommit": {"mergeCommit": None}}))
     with pytest.raises(Outcome) as exc:
         classify.resolve(ln)
-    assert exc.value.rc == 1 and "no merge commit" in exc.value.error
+    assert exc.value.rc == 1 and "no merge commit" in (exc.value.error or "")
 
 
 def test_the_range_comes_from_the_pull_ref_and_its_merge_base(landing):
@@ -232,7 +232,7 @@ def test_a_truncated_file_list_without_since_is_a_usage_error(landing):
     ln.merge_sha = MERGE_SHA
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
-    assert exc.value.rc == 2 and "--since" in exc.value.error
+    assert exc.value.rc == 2 and "--since" in (exc.value.error or "")
 
 
 def test_a_truncated_file_list_with_since_defers_derivation(landing, capsys):
@@ -287,7 +287,7 @@ def test_a_crashing_classification_helper_dies_named_rather_than_traces(
     ln.classifier = dataclasses.replace(ln.classifier, **{attr: boom})
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
-    assert exc.value.rc == 1 and label in exc.value.error
+    assert exc.value.rc == 1 and label in (exc.value.error or "")
 
 
 def test_remaining_setup_hosts_crashing_dies_named(landing):
@@ -302,9 +302,8 @@ def test_remaining_setup_hosts_crashing_dies_named(landing):
     ln.classifier = dataclasses.replace(ln.classifier, remaining_setup_hosts=boom)
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
-    assert (
-        exc.value.rc == 1
-        and "remaining-setup-hosts classification failed" in exc.value.error
+    assert exc.value.rc == 1 and "remaining-setup-hosts classification failed" in (
+        exc.value.error or ""
     )
 
 

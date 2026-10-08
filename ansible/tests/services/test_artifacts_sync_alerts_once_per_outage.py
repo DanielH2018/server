@@ -19,6 +19,8 @@ function would override an exported stub.
 
 import os
 import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass
 from lib.proc_testing import run as launch
 from pathlib import Path
 
@@ -39,7 +41,25 @@ RSYNC_STUB = '[[ "$(cat "$SYNC_ARTIFACTS_STUB")" == fail ]] && return 1; return 
 LOGGER_STUB = 'printf "%s\\n" "$*" >>"$SYNC_ARTIFACTS_JOURNAL"'
 
 
-def _runner(tmp_path: Path):
+@dataclass
+class _Runner:
+    """`run(outcome)` -> CompletedProcess, plus readers for what the run left behind."""
+
+    execute: Callable[[str], subprocess.CompletedProcess]
+    journal: Path
+    pushes: Path
+
+    def __call__(self, outcome: str) -> subprocess.CompletedProcess:
+        return self.execute(outcome)
+
+    def verdicts(self) -> list[str]:
+        return [line.split("|")[0] for line in self.pushes.read_text().splitlines()]
+
+    def last_push(self) -> str:
+        return self.pushes.read_text().splitlines()[-1]
+
+
+def _runner(tmp_path: Path) -> _Runner:
     """A rendered sync script plus `run(outcome)` -> CompletedProcess."""
     script = tmp_path / "sync-artifacts.sh"
     # The shared accessor renders what the gate lints, with one override: the peer tree has to
@@ -77,12 +97,7 @@ def _runner(tmp_path: Path):
             },
         )
 
-    run.journal = journal
-    run.verdicts = lambda: [
-        line.split("|")[0] for line in pushes.read_text().splitlines()
-    ]
-    run.last_push = lambda: pushes.read_text().splitlines()[-1]
-    return run
+    return _Runner(run, journal, pushes)
 
 
 def test_a_sustained_outage_mails_on_the_threshold_run_alone(tmp_path):

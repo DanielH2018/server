@@ -51,7 +51,7 @@ def test_a_template_change_narrows_to_its_own_task_files_tag(tree):
 
 def test_a_template_no_task_file_names_is_flagged(tree):
     tree.write(f"{ROLE}/templates/orphan.conf.j2", "nothing renders this\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match="names orphan.conf.j2"):
+    with pytest.raises(narrow_setup.CannotNarrow, match=r"names orphan\.conf\.j2"):
         narrow(tree, *_refs(tree))
 
 
@@ -170,7 +170,7 @@ def test_a_common_task_file_narrows_to_the_tags_importing_it(role, tags):
 
 def test_a_shipped_file_no_task_of_the_role_names_is_flagged(ships):
     ships.write(SHIPPED, "VALUE = 2\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match="names shared.py"):
+    with pytest.raises(narrow_setup.CannotNarrow, match=r"names shared\.py"):
         narrow(ships, *_refs(ships))
 
 
@@ -235,7 +235,8 @@ def test_the_real_split_setup_roles_narrow_below_their_role_tag(role, rel):
 def test_the_real_initial_setup_crons_file_narrows_past_its_always_preamble():
     """`crons.yml` keeps its two `always` tasks and still answers its subject tags (#3134)."""
     index = narrow_setup.RoleIndex("initial_setup", "HEAD", str(REPO))
-    assert "always" in index.tags["tasks/crons.yml"]
+    crons_tags = index.tags["tasks/crons.yml"]
+    assert crons_tags is not None and "always" in crons_tags
     tags = index.tags_of("tasks/crons.yml")
     assert "crons" in tags
     assert not tags & {"always", "initial_setup"}

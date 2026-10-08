@@ -208,7 +208,7 @@ def test_duration_seconds_parses_prometheus_durations():
     assert bridge.parsing.duration_seconds("90s") == 90
     assert bridge.parsing.duration_seconds("1d") == 86400
     for bad in ("", "15", "m", "1y", "abc"):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="not a Prometheus duration"):
             bridge.parsing.duration_seconds(bad)
 
 

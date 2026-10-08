@@ -256,17 +256,17 @@ def test_resolve_within_jail_allows_inside(tmp_path):
 
 @pytest.mark.parametrize("rel", ["../etc/passwd", "../../secret", "roles/../../escape"])
 def test_resolve_within_jail_rejects_traversal(tmp_path, rel):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="path escapes the jail"):
         resolve_within_jail(tmp_path, rel)
 
 
 def test_resolve_within_jail_rejects_absolute(tmp_path):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="absolute paths are not allowed"):
         resolve_within_jail(tmp_path, "/etc/passwd")
 
 
 def test_resolve_within_jail_rejects_null_byte(tmp_path):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="path contains null byte"):
         resolve_within_jail(tmp_path, "roles/\x00.yml")
 
 
@@ -276,7 +276,7 @@ def test_resolve_within_jail_rejects_symlink_escape(tmp_path):
     jail = tmp_path / "jail"
     jail.mkdir()
     (jail / "link").symlink_to(outside)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="path escapes the jail"):
         resolve_within_jail(jail, "link")
 
 
@@ -287,7 +287,7 @@ def test_resolve_within_jail_rejects_symlink_to_internal_secret(tmp_path):
     secret = tmp_path / "vars" / "secrets.yml"
     secret.write_text("SOPS ciphertext")
     (tmp_path / "notes.txt").symlink_to(secret)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="path resolves to a denied file"):
         resolve_within_jail(tmp_path, "notes.txt")
 
 

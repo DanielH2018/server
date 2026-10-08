@@ -388,15 +388,15 @@ def test_the_tile_deadline_is_derived_from_the_cron_cadence():
             armed["interval"]
             == NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] * 120
         )
-        moved = json.loads(
-            re.search(
-                rf"^  {re.escape(tile)}: \|\n\s+(\{{.*\}})$",
-                monitors_text(
-                    {gate_var: "x", "nut_host_watchdog_interval_minutes": minutes}
-                ),
-                re.M,
-            ).group(1)
+        rerendered = re.search(
+            rf"^  {re.escape(tile)}: \|\n\s+(\{{.*\}})$",
+            monitors_text(
+                {gate_var: "x", "nut_host_watchdog_interval_minutes": minutes}
+            ),
+            re.M,
         )
+        assert rerendered, f"{tile} is not rendered at a {minutes}-minute cadence"
+        moved = json.loads(rerendered.group(1))
         assert moved["interval"] == minutes * 120, (
             f"{tile}'s deadline does not follow nut_host_watchdog_interval_minutes — a hardcoded "
             "interval survives a schedule change and grants the wrong grace"
