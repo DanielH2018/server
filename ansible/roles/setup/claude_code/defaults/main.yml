@@ -273,9 +273,13 @@ claude_code_lander_checkout: "/home/{{ sys_user }}/server"
 # It must match the fence's exclude (gitops_deploy_fence_ruleset_exclude), the one branch
 # shape the account can push.
 claude_code_lander_branch_prefix: "worktree-{{ claude_code_agent_worktree_prefix }}+"
+# The operator's GitHub login. Its approval of a PR's head SHA lifts the approval-path refusal
+# below, so the agent can land a PR the operator has reviewed. Never the agent's own login.
+claude_code_lander_approver: DanielH2018
 # Paths that widen the agent's own authority. land.sh refuses an agent PR that changes, adds,
-# deletes or renames out of a path under one of these prefixes, and the operator lands it
-# instead. Plain prefixes, so `scripts/deploy_tools/land` covers land.sh, land.py and land_lib/.
+# deletes or renames out of a path under one of these prefixes, unless the approver above has
+# approved its head. Plain prefixes, so `scripts/deploy_tools/land` covers land.sh, land.py and
+# land_lib/.
 # Not covered: the shared modules land.sh imports from scripts/lib/ and elsewhere.
 claude_code_lander_approval_paths:
   # This role, which defines the agent user, its token, this list and the lander itself.

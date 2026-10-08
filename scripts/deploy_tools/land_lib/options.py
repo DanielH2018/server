@@ -28,6 +28,7 @@ REQUIRE_AUTHOR_ENV = "LAND_REQUIRE_AUTHOR"
 # The landing policy a lander unit sets; `policy.py` owns what each means.
 REQUIRE_BRANCH_PREFIX_ENV = "LAND_REQUIRE_BRANCH_PREFIX"
 APPROVAL_PATHS_ENV = "LAND_APPROVAL_PATHS"
+APPROVER_ENV = "LAND_APPROVER"
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
 # landing it was written for.
@@ -37,6 +38,7 @@ ENV_KNOBS = (
     REQUIRE_AUTHOR_ENV,
     REQUIRE_BRANCH_PREFIX_ENV,
     APPROVAL_PATHS_ENV,
+    APPROVER_ENV,
 )
 
 
@@ -81,6 +83,8 @@ class Options:
     # The landing policy (`policy.py`); both "" leave it off.
     require_branch_prefix: str = ""
     approval_paths: str = ""
+    # The login whose approval of the head lifts the approval-path refusal; "" never does.
+    approver: str = ""
     # Where to write PENDING, then the landing's one-line result, for a unit to hand on.
     verdict_file: str = ""
     # Sized for a PR run plus queueing behind other PRs' runs; a PR still open after this is
@@ -184,6 +188,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         # Not lifted by --any-author: the policy is the unit's, not the caller's.
         require_branch_prefix=os.environ.get(REQUIRE_BRANCH_PREFIX_ENV) or "",
         approval_paths=os.environ.get(APPROVAL_PATHS_ENV) or "",
+        approver=os.environ.get(APPROVER_ENV) or "",
         verdict_file=ns.verdict_file,
         merge_poll=_merge_poll_from_env(),
         primary=_primary_from_env(),

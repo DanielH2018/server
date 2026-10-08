@@ -152,6 +152,8 @@ class Fakes:
     pr_files: list[dict[str, Any]] = field(
         default_factory=lambda: [{"filename": "docs/landing.md"}]
     )
+    # What the REST `pulls/<n>/reviews` listing answers, as one page.
+    pr_reviews: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _seq(values: list, calls: list, name: str):
@@ -239,6 +241,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         if args[0] == "api" and args[-1].endswith("/files"):
             calls.append(("gh:files", args, kwargs))
             return [f.pr_files]
+        if args[0] == "api" and args[-1].endswith("/reviews"):
+            calls.append(("gh:reviews", args, kwargs))
+            return [f.pr_reviews]
         return view_seq[args[args.index("--json") + 1]]()
 
     gh_rc = _seq(f.gh_merge_rc, calls, "gh")
