@@ -101,10 +101,14 @@ class Outcome(Exception):
 
     An exit-75 outcome must name a verdict, or the Landings board buckets it as
     `aborted` and it reads as lock contention.
+
+    `error` is the `land: <error>` stderr line, and "" means there is none: `Landing.finish`
+    raises without one. It is a `str` rather than `str | None` so a caller that reads it
+    needs no narrowing.
     """
 
     def __init__(
-        self, rc: int, detail: str, verdict: str | None = None, error: str | None = None
+        self, rc: int, detail: str, verdict: str | None = None, error: str = ""
     ) -> None:
         if verdict is not None and verdict not in VERDICTS:
             raise ValueError(f"unknown verdict {verdict!r}")
