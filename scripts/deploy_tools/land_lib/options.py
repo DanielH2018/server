@@ -29,6 +29,8 @@ REQUIRE_AUTHOR_ENV = "LAND_REQUIRE_AUTHOR"
 REQUIRE_BRANCH_PREFIX_ENV = "LAND_REQUIRE_BRANCH_PREFIX"
 APPROVAL_PATHS_ENV = "LAND_APPROVAL_PATHS"
 APPROVER_ENV = "LAND_APPROVER"
+# A user that cannot land a PR itself hands it to this lander unit (`handoff.py`).
+HANDOFF_ENV = "LAND_HANDOFF_UNIT"
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
 # landing it was written for.
@@ -39,6 +41,7 @@ ENV_KNOBS = (
     REQUIRE_BRANCH_PREFIX_ENV,
     APPROVAL_PATHS_ENV,
     APPROVER_ENV,
+    HANDOFF_ENV,
 )
 
 

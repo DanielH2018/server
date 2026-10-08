@@ -12,3 +12,9 @@ export RUN_HOOK_UV={{ claude_code_agent_user_home }}/.local/bin/uv
 # `worktree-<prefix>+fanout-<batch>` from this, the one shape the agent branch fence lets this
 # user push (#3618). A script that names branches itself never reads the agent's CLAUDE.md.
 export CLAUDE_WORKTREE_PREFIX={{ claude_code_agent_worktree_prefix }}
+{% if claude_code_lander_enabled %}
+# land.sh hands each landing this user starts to claude-land@<n>.service, which lands it as
+# {{ sys_user }} under the landing policy (scripts/deploy_tools/land_lib/handoff.py). This user's
+# token cannot merge and it has no sudo, so a landing of its own would fail at the merge.
+export LAND_HANDOFF_UNIT=claude-land
+{% endif %}

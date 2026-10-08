@@ -33,6 +33,12 @@ does the same, but ``> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1`` is still the who
 ``main`` also line-buffers stdout, so that log fills phase by phase instead of arriving at
 exit -- see ``_prepare_stdio``.
 
+WITH ``LAND_HANDOFF_UNIT`` SET, THIS SCRIPT LANDS NOTHING ITSELF. The ``claude`` agent user's
+profile sets it: that user cannot merge or deploy, so land.sh starts ``<unit>@<pr>.service``,
+which lands the PR as the operator under the landing policy, and reports that landing's verdict
+and exit code as its own. ``--detach && cc-wait land <pr>`` works unchanged; ``--tags``,
+``--since`` and ``--subject`` are refused. The mechanics are ``land_lib/handoff.py``.
+
 WHAT THIS SCRIPT DOES NOT DO. It holds no check of its own: no health logic, no tag
 validation, no staleness logic. deploy.sh owns the lock and the refusals, gitops_tick.sh
 owns the tick, deploy_detach_notify.gate owns the health verdict, await_ci.wait owns the CI
@@ -78,6 +84,8 @@ master's after it.
 """
 
 import contextlib
+import functools
+from collections.abc import Callable
 import dataclasses
 import os
 import sys
@@ -86,10 +94,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
 from lib.exit_codes import LAND_BAD_ARGS
 from lib.git import git
-from deploy_tools.land_lib import detach, pipeline
+from deploy_tools.land_lib import detach, handoff, pipeline
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line
-from deploy_tools.land_lib.options import Options, parse_args
+from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
 from deploy_tools.land_lib.outcome import write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
 
@@ -137,9 +145,31 @@ def main(
         opts = parse_args(argv, __doc__ or "")
     except SystemExit as exc:
         raise SystemExit(LAND_BAD_ARGS if exc.code == 2 else exc.code) from None
+    unit = os.environ.get(HANDOFF_ENV)
+    if unit:
+        return _hand_off(opts, unit, tools)
     if opts.detach:
-        return _detached(_resolve_since(opts), tools, classifier)
+        opts = _resolve_since(opts)
+        return _detached(opts, lambda: _land(opts, tools, classifier))
     return _land(opts, tools, classifier)
+
+
+def _hand_off(opts: Options, unit: str, tools: Tools) -> int:
+    """Land through `<unit>@<pr>.service` (`land_lib/handoff.py`), detached when asked.
+
+    The flags the unit cannot honour are refused here, before any fork, so the caller reads
+    the refusal and its exit code at once rather than from a log.
+    """
+    refused = handoff.refused_flags(opts)
+    if refused:
+        print(
+            f"land: {unit}@.service lands with --arm-merge --await-merge and decides the "
+            f"deploy itself, so it cannot take {', '.join(refused)}; drop them and re-run",
+            file=sys.stderr,
+        )
+        return LAND_BAD_ARGS
+    land = functools.partial(handoff.land_through_unit, opts.pr, unit, tools.systemctl)
+    return _detached(opts, land) if opts.detach else land()
 
 
 def _resolve_since(opts: Options) -> Options:
@@ -168,10 +198,10 @@ def _resolve_since(opts: Options) -> Options:
     return dataclasses.replace(opts, since=head.stdout.strip())
 
 
-def _detached(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
-    """Fork the landing into its own logfile and name the `cc-wait` command that waits on it."""
+def _detached(opts: Options, landing: Callable[[], int]) -> int:
+    """Fork `landing` into its own logfile and name the `cc-wait` command that waits on it."""
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)
-    pid = detach.fork(log, lambda: _land(opts, tools, classifier), f"land{opts.pr}")
+    pid = detach.fork(log, landing, f"land{opts.pr}")
     detach.announce(pid, log, opts.pr)
     return 0
 

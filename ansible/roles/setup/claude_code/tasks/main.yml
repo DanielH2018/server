@@ -490,6 +490,48 @@
   no_log: true
   when: claude_code_agent_user_enabled
 
+- name: Look for the operator's deployed cc-wait
+  tags: [claude_code]
+  ansible.builtin.stat:
+    path: /home/{{ sys_user }}/.local/share/cc-wait/cc_wait
+  register: claude_code_agent_cc_wait
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Create the agent user's cc-wait directory
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_user_home }}/.local/share/cc-wait"
+    state: directory
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Give the agent user the operator's cc-wait
+  tags: [claude_code]
+  # The repo's skills wait with cc-wait, `land.sh ... --detach && cc-wait land <n>` among them,
+  # and the dotfiles repo deploys it under the operator's home only. Copied, as claude_guard is,
+  # so the agent waits with the operator's version. A host without the dotfiles deploy skips
+  # this. `default`: a skipped stat above still sets the register, with no `stat` key in it.
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    remote_src: true
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: preserve
+  loop:
+    - src: /home/{{ sys_user }}/.local/share/cc-wait/cc_wait
+      dest: "{{ claude_code_agent_user_home }}/.local/share/cc-wait/"
+    - src: /home/{{ sys_user }}/.local/bin/cc-wait
+      dest: "{{ claude_code_agent_user_home }}/.local/bin/cc-wait"
+  become: true
+  when:
+    - claude_code_agent_user_enabled
+    - claude_code_agent_cc_wait.stat.exists | default(false)
+
 - name: Give the agent user its GitHub identity
   tags: [claude_code]
   when: claude_code_agent_user_enabled
