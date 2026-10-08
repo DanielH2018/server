@@ -59,7 +59,7 @@ def test_k8s_claims_set_through_include_vars_is_flagged(tree: Tree):
     )
     tree.commit("radarr sets the key at its include")
     tree.write(CLAIM, "{{ manifests_claim.size }}\n")
-    with pytest.raises(narrow_broad.CannotNarrow, match="radarr/tasks/main.yml"):
+    with pytest.raises(narrow_broad.CannotNarrow, match=r"radarr/tasks/main\.yml"):
         tree.narrow(*_refs(tree))
 
 

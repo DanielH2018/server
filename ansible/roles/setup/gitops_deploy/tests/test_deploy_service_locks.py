@@ -124,7 +124,7 @@ def test_an_unavailable_lock_raises_at_once_rather_than_reading_as_busy(
 
     path = deploy_locks.lock_path("sonarr")
     started = time.monotonic()
-    with pytest.raises(OSError) as raised:
+    with pytest.raises(OSError, match="No locks available") as raised:
         deploy_locks._take("sonarr", path, fcntl.LOCK_EX, started + 5, flock=flock)
     assert not isinstance(raised.value, deploy_locks.ServiceLockBusy)
     assert raised.value.errno == errno.ENOLCK
@@ -137,7 +137,7 @@ def test_the_locks_are_released_when_the_body_raises(service_lock_dir):
     A leaked descriptor is invisible until the NEXT deploy of that service queues for the full
     timeout behind a process that is no longer deploying anything.
     """
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="the playbook failed"):
         with deploy_locks.service_locks({"sonarr"}, timeout=1):
             raise ValueError("the playbook failed")
     # Takeable again means released: this would raise if the first hold had leaked.

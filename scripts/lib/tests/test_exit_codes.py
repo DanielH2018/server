@@ -197,6 +197,7 @@ def test_every_contract_row_names_a_constant_that_exists():
 
 def test_describe_renders_the_constant_the_value_and_the_remedy():
     note = ec.describe("scripts/deploy.sh", ec.DEPLOY_STALE)
+    assert note is not None
     assert note.startswith("DEPLOY_STALE (4): ")
     assert "NOTHING was deployed" in note and "Pull first" in note
 

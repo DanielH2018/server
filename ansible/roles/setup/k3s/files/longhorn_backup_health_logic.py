@@ -66,14 +66,16 @@ def first_run_after(from_s: float, hhmm: str | None, dow: str) -> int:
     weekday `dow` (0-6, 0=Sunday) or every day (`dow == "*"`). Returns 0 if it cannot be
     computed — mirrors first_run_after() in longhorn-backup-health.sh.j2 exactly, including its
     8-day search bound. `hhmm=None` (the I/O layer's signal for "the cron spec couldn't be
-    parsed") takes the same 0-returning path as a malformed string: `None.split(":")` raises
-    AttributeError, caught below alongside `ValueError`. A caller passing None gets the grace
-    disabled for that volume rather than an exception, which is the point — see check_tier().
+    parsed") takes the same 0-returning path as a malformed string. A caller passing None gets
+    the grace disabled for that volume rather than an exception, which is the point — see
+    check_tier().
     """
+    if hhmm is None:
+        return 0
     try:
         hh, mm = hhmm.split(":")
         hh, mm = int(hh), int(mm)
-    except ValueError, AttributeError:
+    except ValueError:
         return 0
     for day in range(8):
         try:

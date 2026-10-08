@@ -27,7 +27,7 @@ def test_the_config_is_frozen():
     value, never by writing one back."""
     cfg = deploy_io.load_config({})
     with pytest.raises(dataclasses.FrozenInstanceError):
-        cfg.repo = "/tmp/elsewhere"
+        cfg.repo = "/tmp/elsewhere"  # ty: ignore[invalid-assignment]  # the write IS the test
 
 
 def test_values_are_read_off_the_environment():

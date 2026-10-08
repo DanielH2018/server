@@ -134,6 +134,7 @@ def run_concurrently(repo: Path, count: int, script: str = "scripts/validate/val
             if proc.poll() is None:
                 proc.kill()
                 proc.wait(timeout=DEFAULT_TIMEOUT)
+            assert proc.stderr is not None  # opened with stderr=PIPE above
             proc.stderr.close()
     return results
 

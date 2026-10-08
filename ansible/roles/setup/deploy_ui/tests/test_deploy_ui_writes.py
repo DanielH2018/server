@@ -11,6 +11,12 @@ from deploy_ui_reads import Run
 L = Run(4321, 10, "land", "1543", "", "land.py --pr 1543", (), ())
 
 
+def refused(reason: str | None) -> str:
+    """A guard's refusal text; fails the test when the guard let the request through."""
+    assert reason is not None, "the guard accepted a request it should refuse"
+    return reason
+
+
 def test_write_allowed_header_and_json_is_clean():
     assert (
         w.write_allowed({"X-Deploy-UI": "1", "Content-Type": "application/json"})
@@ -19,12 +25,16 @@ def test_write_allowed_header_and_json_is_clean():
 
 
 def test_write_allowed_missing_header_is_flagged():
-    assert "X-Deploy-UI" in w.write_allowed({"Content-Type": "application/json"})
+    assert "X-Deploy-UI" in refused(
+        w.write_allowed({"Content-Type": "application/json"})
+    )
 
 
 def test_write_allowed_form_body_is_flagged():
-    assert "json" in w.write_allowed(
-        {"X-Deploy-UI": "1", "Content-Type": "application/x-www-form-urlencoded"}
+    assert "json" in refused(
+        w.write_allowed(
+            {"X-Deploy-UI": "1", "Content-Type": "application/x-www-form-urlencoded"}
+        )
     )
 
 
@@ -33,11 +43,11 @@ def test_guard_land_new_pr_is_clean():
 
 
 def test_guard_land_duplicate_pr_is_flagged():
-    assert "1543" in w.guard_land("1543", [L], "")
+    assert "1543" in refused(w.guard_land("1543", [L], ""))
 
 
 def test_guard_land_under_hold_is_flagged():
-    assert "hold" in w.guard_land("1550", [], "deadbeef")
+    assert "hold" in refused(w.guard_land("1550", [], "deadbeef"))
 
 
 def test_guard_deploy_known_tag_is_clean():
@@ -45,7 +55,7 @@ def test_guard_deploy_known_tag_is_clean():
 
 
 def test_guard_deploy_unknown_tag_is_flagged():
-    assert "homepage2" in w.guard_deploy("homepage2", {"homepage"}, "")
+    assert "homepage2" in refused(w.guard_deploy("homepage2", {"homepage"}, ""))
 
 
 def test_service_tags_keeps_a_service_name_is_clean():
@@ -71,12 +81,12 @@ def test_non_service_tags_matches_deploy_tags_own_block_set():
 
 def test_guard_deploy_block_tag_is_flagged():
     """A block tag `deploy.sh --list-services` prints is still refused by this API."""
-    refusal = w.guard_deploy("config", {"homepage"}, "")
+    refusal = refused(w.guard_deploy("config", {"homepage"}, ""))
     assert "config" in refusal and "block tags" in refusal
 
 
 def test_guard_deploy_under_hold_is_flagged():
-    assert "hold" in w.guard_deploy("homepage", {"homepage"}, "deadbeef")
+    assert "hold" in refused(w.guard_deploy("homepage", {"homepage"}, "deadbeef"))
 
 
 def test_guard_cancel_listed_pid_is_clean():
@@ -84,7 +94,7 @@ def test_guard_cancel_listed_pid_is_clean():
 
 
 def test_guard_cancel_unlisted_pid_is_flagged():
-    assert "4321" in w.guard_cancel(4321, {9})
+    assert "4321" in refused(w.guard_cancel(4321, {9}))
 
 
 def _owed_line(cls: str, subject: str) -> str:
@@ -103,7 +113,9 @@ def test_clear_hold_mismatch_touches_nothing_is_flagged(state_dir, tmp_path):
     (state_dir / "hold_sha").write_text("deadbeef\n")
     owed = _owed_line("hold_plane", "k3s")
     (state_dir / "owed.jsonl").write_text(owed)
-    assert "deadbeef" in w.clear_hold(state_dir, "cafef00d", tmp_path / "tree.lock")
+    assert "deadbeef" in refused(
+        w.clear_hold(state_dir, "cafef00d", tmp_path / "tree.lock")
+    )
     assert (state_dir / "owed.jsonl").read_text() == owed
     assert (state_dir / "hold_sha").exists()
 
@@ -135,7 +147,9 @@ def test_clear_hold_under_a_held_tree_lock_refuses_and_keeps_the_hold_is_flagged
     lock = tmp_path / "tree.lock"
     with open(lock, "a") as held:
         fcntl.flock(held, fcntl.LOCK_EX)
-        assert "git-tree lock" in w.clear_hold(state_dir, "deadbeef", lock, wait_s=0.0)
+        assert "git-tree lock" in refused(
+            w.clear_hold(state_dir, "deadbeef", lock, wait_s=0.0)
+        )
     assert (state_dir / "hold_sha").exists()
     assert (state_dir / "owed.jsonl").read_text() == owed
 

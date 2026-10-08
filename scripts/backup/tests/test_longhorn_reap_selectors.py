@@ -84,7 +84,7 @@ def test_migrated_chain_floor_is_flagged_when_the_replacement_has_no_completed_b
     )
     assert [name for name, *_ in chain.stranded] == ["old-0"]
     assert chain.current == []
-    assert "no Completed backup" in chain.refusal
+    assert "no Completed backup" in (chain.refusal or "")
 
 
 def test_migrated_chain_floor_is_clean_when_the_replacement_has_one():
@@ -110,7 +110,7 @@ def test_migrated_chain_refuses_a_volume_list_without_the_claims_own_volume():
         claim="sonarr-config",
         current_volume="pvc-new",
     )
-    assert "does not contain sonarr-config's own volume" in chain.refusal
+    assert "does not contain sonarr-config's own volume" in (chain.refusal or "")
 
 
 def test_migrated_chain_takes_only_this_claims_backups():
@@ -266,7 +266,7 @@ def test_seeds_refuses_an_empty_volume_list():
         [_claimed("seed-pvc-a", "pvc-a", "2026-08-10T00:00:00Z", "", "valheim-config")],
         set(),
     )
-    assert "volume list is empty" in seeds.refusal
+    assert "volume list is empty" in (seeds.refusal or "")
     assert seeds.superseded == []
 
 
@@ -301,7 +301,7 @@ def test_a_claim_no_backup_records_is_refused_not_narrowed_to_nothing():
     ]
     seeds = selectors.select_seeds(backups, {"pvc-a"}, claim="pvc-a")
     assert seeds.superseded == []
-    assert "no Completed backup records the PVC pvc-a" in seeds.refusal
+    assert "no Completed backup records the PVC pvc-a" in (seeds.refusal or "")
 
 
 def test_claim_volume_resolves_the_pvcs_current_volume():

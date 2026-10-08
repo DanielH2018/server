@@ -45,7 +45,7 @@ def targets_verdict(
 
 
 def cadvisor_coverage_shortfall(
-    pod_count: float | None, min_pods: float, what: str
+    pod_count: float, min_pods: float, what: str
 ) -> str | None:
     """Pure: the failure message when a cAdvisor vector is too thin to mean anything, else None.
 

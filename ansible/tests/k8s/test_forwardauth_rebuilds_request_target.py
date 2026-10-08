@@ -100,10 +100,12 @@ def _routers(docs: list[dict], index: dict):
 
 def _chain_problem(ns: str, name: str, members: list[str], index: dict) -> str | None:
     """Why a chain that contains a forwardAuth does not clear the target headers first."""
-    specs = [index.get((ns, m)) for m in members]
-    for member, spec in zip(members, specs, strict=True):
+    specs: list[dict] = []
+    for member in members:
+        spec = index.get((ns, member))
         if spec is None:
             return f"{ns}/{name} names {member}, which nothing renders in {ns}"
+        specs.append(spec)
     if not any("forwardAuth" in s for s in specs):
         return None
     first = specs[0].get("headers", {}).get("customRequestHeaders")

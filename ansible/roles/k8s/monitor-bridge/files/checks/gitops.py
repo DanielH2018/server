@@ -21,6 +21,7 @@ from bridge.config import Config
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     MARKERS,
+    ManualPlaneEntry,
     NO_PLAYBOOK,
     k8s_deferred_deploy_cmd,
     maximal_apply_warning,
@@ -52,7 +53,7 @@ def _apply_and_clear(pending, narrow) -> str:
         entry decides its playbook, matching the age this page fired on.
       narrow: the tags each role needs, by role, from `manual_plane_entries`.
     """
-    oldest: dict[str, object] = {}
+    oldest: dict[str, ManualPlaneEntry] = {}
     for entry in sorted(pending, key=lambda e: e.at):
         oldest.setdefault(entry.role, entry)
     parts = []

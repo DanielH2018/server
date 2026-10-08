@@ -84,7 +84,10 @@ def references(source: str) -> list[tuple[int, str, list[str]]]:
 def _span(node: ast.stmt, lines: list[str]) -> tuple[int, int]:
     """1-based inclusive (start, end) covering the decorators and the comment block above."""
     start = node.lineno
-    if getattr(node, "decorator_list", None):
+    if (
+        isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+        and node.decorator_list
+    ):
         start = min(d.lineno for d in node.decorator_list)
     while start > 1 and lines[start - 2].lstrip().startswith("#"):
         start -= 1

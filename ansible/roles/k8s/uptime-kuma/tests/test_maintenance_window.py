@@ -207,12 +207,14 @@ def test_the_window_is_declared_on_the_reboot_crons_clock():
     declared = ZoneInfo(window_timezone())
     for month in (1, 7):
         offset = datetime(2026, month, 15, tzinfo=declared).utcoffset()
+        assert offset is not None
         assert offset.total_seconds() == 0, (month, offset)
 
 
 def test_the_containers_display_timezone_would_be_caught():
     """The rejecting half: `tz` is what this was written as first, and it is five hours out."""
     chicago = datetime(2026, 7, 15, tzinfo=ZoneInfo("America/Chicago")).utcoffset()
+    assert chicago is not None
     assert chicago.total_seconds() != 0
 
 

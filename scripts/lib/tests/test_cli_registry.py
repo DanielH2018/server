@@ -18,7 +18,7 @@ def test_add_registers_a_lookable_entry():
 def test_add_rejects_a_duplicate_name():
     reg = Registry("t")
     reg.add("disk", lambda: 1)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="duplicate entry"):
         reg.add("disk", lambda: 2)
 
 

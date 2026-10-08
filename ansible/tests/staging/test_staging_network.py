@@ -126,7 +126,10 @@ def test_the_guest_reservation_is_outside_the_dynamic_range():
 def test_the_guest_mac_uses_the_qemu_oui():
     """52:54:00 is QEMU's OUI. A MAC outside it risks colliding with real hardware."""
     root = ET.fromstring(_rendered())
-    mac = root.find("./ip/dhcp/host").get("mac")
+    host = root.find("./ip/dhcp/host")
+    assert host is not None, "no ./ip/dhcp/host element in the rendered network"
+    mac = host.get("mac")
+    assert mac is not None, "the dhcp host entry carries no mac attribute"
     assert mac.lower().startswith("52:54:00:"), (
         f"guest MAC {mac!r} is outside QEMU's 52:54:00 OUI"
     )

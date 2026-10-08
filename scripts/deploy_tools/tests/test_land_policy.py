@@ -126,8 +126,8 @@ def test_a_pr_breaking_one_check_is_refused_before_any_merge(landing, tmp_path, 
     with pytest.raises(Outcome) as exc:
         _arm(landing, tmp_path, _fakes(**fields))
     assert exc.value.rc == 1
-    assert "refused by the landing policy" in exc.value.error
-    assert expected in exc.value.error
+    assert "refused by the landing policy" in (exc.value.error or "")
+    assert expected in (exc.value.error or "")
 
 
 @pytest.mark.parametrize(
@@ -141,7 +141,7 @@ def test_an_unusable_approval_list_refuses_rather_than_approving_everything(
     path = _approval_paths(tmp_path, text) if text else str(tmp_path / "absent")
     with pytest.raises(Outcome) as exc:
         _arm(landing, tmp_path, _fakes(), approval_paths=path)
-    assert expected in exc.value.error
+    assert expected in (exc.value.error or "")
 
 
 def test_the_auto_merge_arm_is_pinned_to_the_checked_head(landing, tmp_path):
@@ -175,7 +175,7 @@ def test_a_head_that_moves_after_the_checks_stops_the_merge(landing):
     ln.direct_merge_subject = "Document the lander"
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
-    assert "head moved from cccccccc to dddddddd" in exc.value.error
+    assert "head moved from cccccccc to dddddddd" in (exc.value.error or "")
     assert not _merge_calls(calls) and not [c for c in calls if c[0] == "await_ci"]
 
 
@@ -248,7 +248,7 @@ def test_without_an_approver_no_review_is_read(landing, tmp_path):
     )
     with pytest.raises(Outcome) as exc:
         merge.arm_merge(ln)
-    assert "need the operator's approval" in exc.value.error
+    assert "need the operator's approval" in (exc.value.error or "")
     assert not [c for c in calls if c[0] == "gh:reviews"]
 
 
@@ -291,8 +291,8 @@ def test_a_review_history_without_a_head_approval_still_refuses(
     reviews, expected = UNAPPROVED[case]
     with pytest.raises(Outcome) as exc:
         _arm_approval_path(landing, tmp_path, reviews, approver=APPROVER)
-    assert "need the operator's approval" in exc.value.error
-    assert expected in exc.value.error
+    assert "need the operator's approval" in (exc.value.error or "")
+    assert expected in (exc.value.error or "")
 
 
 @pytest.mark.parametrize(

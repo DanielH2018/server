@@ -148,9 +148,9 @@ def test_the_logql_alternatives_match_the_live_lines_and_not_a_probe_warning():
     # is checked here against the fixtures the live filter must admit and reject.
     import re
 
-    pattern = re.search(r'\|~ "([^"]+)"', checks.logs.KUMA_NOTIFY_FAILURES_LOGQL).group(
-        1
-    )
+    found = re.search(r'\|~ "([^"]+)"', checks.logs.KUMA_NOTIFY_FAILURES_LOGQL)
+    assert found is not None
+    pattern = found.group(1)
     assert re.search(pattern, _DROPPED)
     assert re.search(pattern, _REASON_429)
     assert not re.search(pattern, _PROBE_WARN)

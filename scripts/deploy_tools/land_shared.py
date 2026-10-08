@@ -135,9 +135,10 @@ def shared_roles(
     roles = set()
     for p in files:
         role = role_for(p)
-        if not role or is_role_test_path(p):
+        at = role_of(p)
+        if not role or at is None or is_role_test_path(p):
             continue
-        if (roles_root / role_of(p).plane / role).is_dir():
+        if (roles_root / at.plane / role).is_dir():
             roles.add(role)
     return sorted(roles - declared)
 

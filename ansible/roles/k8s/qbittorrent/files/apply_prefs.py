@@ -40,6 +40,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping
 
 # Exit codes. 0/1/2 predate this constant and are read by nothing but a human's shell prompt
 # today (verified 2026-08-27: no caller in the repo shells out to this script), so widening the
@@ -58,7 +59,7 @@ EXIT_DRIFT = 3
 # so qBittorrent only ever pairs with peers it dials itself. That single fact is what
 # makes the connection-related values worth raising: reach is bounded by how fast and how
 # widely we dial, not by how many peers find us.
-DESIRED: dict[str, object] = {
+DESIRED: dict[str, bool | int] = {
     # Outbound connection attempts per second. The ramp rate for a dial-only client, and
     # the largest single win here — 30 is the stock value and assumes peers dial back.
     "connection_speed": 100,
@@ -106,7 +107,7 @@ DESIRED: dict[str, object] = {
 
 
 def diff_prefs(
-    current: dict[str, object], desired: dict[str, object]
+    current: Mapping[str, object], desired: Mapping[str, object]
 ) -> dict[str, tuple[object, object]]:
     """Return {key: (current_value, desired_value)} for keys that need changing.
 

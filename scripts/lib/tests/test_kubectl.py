@@ -114,7 +114,8 @@ def test_asking_for_staging_against_a_prod_kubectl_is_flagged():
 
 def test_an_unreadable_node_list_is_flagged():
     """Fails closed: a kubectl that cannot say who its nodes are supports no claim at all."""
-    assert "cannot confirm" in kubectl_lib.cluster_refusal("prod", None)
+    refusal = kubectl_lib.cluster_refusal("prod", None)
+    assert refusal and "cannot confirm" in refusal
 
 
 # ── the runner ──────────────────────────────────────────────────────────────────────────────

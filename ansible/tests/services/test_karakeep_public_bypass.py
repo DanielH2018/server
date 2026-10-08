@@ -113,7 +113,9 @@ def _no_forward_auth_prefixes(*, client_ip_gated: bool) -> dict[str, str]:
                 continue
             if ("ClientIP(" in route["match"]) != client_ip_gated:
                 continue
-            found[doc["metadata"]["name"]] = _PREFIX.search(route["match"]).group(1)
+            prefix = _PREFIX.search(route["match"])
+            assert prefix, f"route {route['match']!r} carries no PathPrefix"
+            found[doc["metadata"]["name"]] = prefix.group(1)
     return found
 
 

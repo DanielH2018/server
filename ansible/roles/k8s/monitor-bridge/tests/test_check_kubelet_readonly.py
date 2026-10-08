@@ -94,7 +94,7 @@ def test_the_query_scopes_to_the_plugins_subtree_and_is_not_origin_pinned(cfg):
 
     saved = bridge.net.prom_vector
     try:
-        bridge.net.prom_vector = record
+        bridge.net.prom_vector = record  # ty: ignore[invalid-assignment]  # hand-rolled patch, #3670
         checks.storage.check_kubelet_plugin_readonly(cfg)
     finally:
         bridge.net.prom_vector = saved

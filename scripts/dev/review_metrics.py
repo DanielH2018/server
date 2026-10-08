@@ -192,7 +192,7 @@ def false_positive_rate(row: dict) -> float | None:
         row.get("low"),
         row.get("refuted"),
     )
-    if None in (high, medium, low, refuted):
+    if high is None or medium is None or low is None or refuted is None:
         return None
     denom = high + medium + low + refuted
     if denom == 0:

@@ -394,8 +394,8 @@ class TestIndexCache:
 
 class TestSafePath:
     def test_resolves_a_real_artifact(self, root):
-        write(root, "daniel-box", "a.html", "x")
-        assert srv.safe_path(root, "daniel-box", "a.html").name == "a.html"
+        path = write(root, "daniel-box", "a.html", "x")
+        assert srv.safe_path(root, "daniel-box", "a.html") == path.resolve()
 
     @pytest.mark.parametrize(
         "host,rel",

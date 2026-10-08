@@ -60,6 +60,7 @@ def test_every_pip_package_is_pinned_exactly() -> None:
 
 def test_mcp_pin_is_on_the_line_renovate_is_capped_to() -> None:
     version = pip_pins(rendered_build_text("homelab-mcp"))["mcp"]
+    assert version, "mcp is not pinned with =="
     assert version.split(".")[0] == "1", (
         f"mcp=={version} crosses the 2.x line that removed mcp.server.fastmcp — port app.py first"
     )

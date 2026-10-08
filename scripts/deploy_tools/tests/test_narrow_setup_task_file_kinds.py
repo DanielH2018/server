@@ -151,7 +151,8 @@ def test_the_loaded_extensions_match_ansibles_own_default():
     ansible_constants = importlib.import_module("ansible.constants")
 
     assert narrow_setup_index._LOADED_EXTENSIONS == (
-        *ansible_constants.YAML_FILENAME_EXTENSIONS,
+        # ansible.constants setattr()s its config-derived names at import, so ty cannot see this one.
+        *ansible_constants.YAML_FILENAME_EXTENSIONS,  # ty: ignore[unresolved-attribute]
         "",
     )
 

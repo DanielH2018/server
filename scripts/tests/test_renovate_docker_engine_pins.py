@@ -93,7 +93,11 @@ def test_managers_name_the_apt_packages_they_pin() -> None:
     )
 
     for mgr in managers:
-        var = re.match(r"(\w+):", mgr["matchStrings"][0]).group(1)
+        match = re.match(r"(\w+):", mgr["matchStrings"][0])
+        assert match, (
+            f"matchStrings[0] does not start with `<var>:` — {mgr['matchStrings'][0]!r}"
+        )
+        var = match.group(1)
         owners = {k for k, v in package_versions.items() if var in v}
         assert mgr["depNameTemplate"] in owners, (
             f"{mgr['depNameTemplate']} is tracked against {var}, but "

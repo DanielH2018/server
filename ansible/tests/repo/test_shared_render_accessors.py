@@ -73,7 +73,7 @@ def test_a_rendered_pi_template_has_its_jinja_expanded() -> None:
 
 
 def test_an_unrendered_pi_template_is_named_rather_than_missed() -> None:
-    with pytest.raises(AssertionError, match="config.river.j2"):
+    with pytest.raises(AssertionError, match=r"config\.river\.j2"):
         rendered_text("alloy", "config.river.j2")
 
 
@@ -121,7 +121,7 @@ def test_a_rendered_dockerfile_has_its_jinja_expanded() -> None:
 
 
 def test_an_unrendered_dockerfile_is_named_rather_than_missed() -> None:
-    with pytest.raises(AssertionError, match="Containerfile.j2"):
+    with pytest.raises(AssertionError, match=r"Containerfile\.j2"):
         rendered_build_text("code-server", "Containerfile.j2")
 
 
@@ -167,7 +167,7 @@ def test_a_rendered_shell_template_has_its_role_defaults_expanded() -> None:
 
 
 def test_an_unrendered_shell_template_is_named_rather_than_missed() -> None:
-    with pytest.raises(AssertionError, match="sync-artifact.sh.j2"):
+    with pytest.raises(AssertionError, match=r"sync-artifact\.sh\.j2"):
         rendered_shell_text("k8s", "artifacts", "sync-artifact.sh.j2")
 
 
@@ -203,7 +203,7 @@ def test_an_override_beats_a_default_the_role_itself_declares() -> None:
 
 
 def test_a_shell_template_that_is_not_in_the_tree_fails_the_caller() -> None:
-    with pytest.raises(AssertionError, match="no-such-script.sh.j2"):
+    with pytest.raises(AssertionError, match=r"no-such-script\.sh\.j2"):
         render_shell_script("k8s", "artifacts", "no-such-script.sh.j2")
 
 

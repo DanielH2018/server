@@ -104,8 +104,8 @@ def test_reaper_aborts_when_ownership_resolves_empty():
     The lookup can break in ways this test cannot anticipate, so the module has to notice the *result* is unusable
     rather than trust that an empty map means "nothing is stranded".
     """
-    assert logic.abort_reason(volume_count=22, owner_count=0) is not None
     reason = logic.abort_reason(volume_count=22, owner_count=0)
+    assert reason is not None
     assert "ABORT" in reason
     assert logic.abort_reason(volume_count=22, owner_count=22) is None
 

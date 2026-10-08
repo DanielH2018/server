@@ -55,5 +55,5 @@ def test_past_what_elision_can_recover_the_cut_carries_a_marker_within_the_limit
 
 
 def test_empty_items_is_refused():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="needs at least one item"):
         msgfmt.format_down("service", "stale", {})

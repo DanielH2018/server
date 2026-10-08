@@ -19,6 +19,7 @@ cycle and clears one cycle after the console is fixed.
 
 from collections.abc import Callable, Sequence
 import time
+from typing import TypedDict
 
 import bridge.net
 from bridge.config import Config
@@ -112,14 +113,20 @@ def healthchecks_verdict(
 
 
 # ts=None means never probed; see checks/r2.py for why not 0.0.
-_probe = {"ts": None, "ok": True, "msg": ""}
+class _ProbeCache(TypedDict):
+    ts: float | None
+    ok: bool
+    msg: str
+
+
+_probe: _ProbeCache = {"ts": None, "ok": True, "msg": ""}
 
 
 def healthchecks_drift(
     cfg: Config,
     now: float | None = None,
     fetch: Callable[[Config], list[dict]] = fetch_checks,
-    probe: dict | None = None,
+    probe: _ProbeCache | None = None,
 ) -> tuple[bool, str]:
     """Throttled console drift check. (ok, msg).
 

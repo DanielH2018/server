@@ -32,7 +32,9 @@ def _route(entrypoints, tls=None):
 
 def test_an_https_route_without_tls_is_flagged():
     """Without `tls:` Traefik never treats the route as a TLS router, so it never matches."""
-    assert "spec.tls" in https_route_without_tls(_route(["https"]))
+    problem = https_route_without_tls(_route(["https"]))
+    assert problem is not None
+    assert "spec.tls" in problem
 
 
 def test_an_https_route_with_tls_is_clean():

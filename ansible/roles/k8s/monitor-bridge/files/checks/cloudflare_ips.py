@@ -24,6 +24,7 @@ beside `cloudflare_ips_drift`, the only code that mutates it.
 from collections.abc import Callable
 import time
 import urllib.request
+from typing import TypedDict
 
 from bridge.common import HTTP_TIMEOUT
 from bridge.config import Config
@@ -77,14 +78,20 @@ def cloudflare_ips_verdict(
 
 
 # ts=None means never probed; see checks/r2.py for why not 0.0.
-_probe = {"ts": None, "ok": True, "msg": ""}
+class _ProbeCache(TypedDict):
+    ts: float | None
+    ok: bool
+    msg: str
+
+
+_probe: _ProbeCache = {"ts": None, "ok": True, "msg": ""}
 
 
 def cloudflare_ips_drift(
     cfg: Config,
     now: float | None = None,
     fetch: Callable[[], list[str]] = fetch_ranges,
-    probe: dict | None = None,
+    probe: _ProbeCache | None = None,
 ) -> tuple[bool, str]:
     """Throttled allowlist drift check. (ok, msg).
 

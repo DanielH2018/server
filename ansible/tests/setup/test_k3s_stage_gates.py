@@ -71,7 +71,9 @@ def test_the_gate_is_a_bare_flag(target, expr):
 
 @pytest.mark.parametrize("target,expr", _gated_imports())
 def test_the_gate_defaults_to_running_the_import(target, expr):
-    flag = BARE_FLAG.fullmatch(expr).group(1)
+    bare = BARE_FLAG.fullmatch(expr)
+    assert bare, f"{target} is gated on {expr!r}, which is not a bare flag"
+    flag = bare.group(1)
     defaults = load_yaml(DEFAULTS)
 
     assert flag in defaults, (

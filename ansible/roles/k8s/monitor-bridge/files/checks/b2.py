@@ -10,6 +10,7 @@ import base64
 import time
 import urllib.error
 import urllib.parse
+from typing import TypedDict
 
 from bridge.config import Config
 import bridge.net
@@ -20,13 +21,26 @@ from verdicts.storage import b2_storage_verdict, b2_sum_versions
 # answer from B2 holds B2_PROBE_INTERVAL_S, a transport failure holds B2_TRANSPORT_RETRY_S. It
 # seeds at 0, meaning "nothing is cached yet, probe now": the first cycle probes regardless,
 # because `ts` is 0 and every real clock is further from it than any interval.
-_b2_probe = {
+class _ProbeCache(TypedDict):
+    ts: float
+    ok: bool
+    msg: str
+    ttl: float
+
+
+class _StorageCache(TypedDict):
+    ts: float
+    ok: bool
+    msg: str
+
+
+_b2_probe: _ProbeCache = {
     "ts": 0.0,
     "ok": True,
     "msg": "not yet probed",
     "ttl": 0.0,
 }
-_b2_storage = {"ts": 0.0, "ok": False, "msg": "not yet probed"}
+_b2_storage: _StorageCache = {"ts": 0.0, "ok": False, "msg": "not yet probed"}
 
 
 def b2_authorize_data(cfg: Config) -> dict:
@@ -65,10 +79,7 @@ def b2_storage_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:
         return True, "B2 storage check disabled (no credentials)"
     now = now if now is not None else time.time()
     if _b2_storage["ok"] and now - _b2_storage["ts"] < cfg.B2_STORAGE_INTERVAL_S:
-        # bool()/str() because the cache is one heterogeneous dict — the tests write into it
-        # directly, so it stays a dict rather than becoming a dataclass, and the coercion is
-        # what tells a reader (and ty) which of its four value types this branch returns.
-        return bool(_b2_storage["ok"]), "%s (checked %.0fh ago)" % (
+        return _b2_storage["ok"], "%s (checked %.0fh ago)" % (
             _b2_storage["msg"],
             (now - _b2_storage["ts"]) / 3600,
         )
@@ -187,8 +198,7 @@ def b2_reachable(cfg: Config, now: float | None = None) -> tuple[bool, str]:
         return True, "B2 reachability check disabled (no credentials)"
     now = now if now is not None else time.time()
     if now - _b2_probe["ts"] < _b2_probe["ttl"]:
-        # Coerced for the same reason as b2_storage_usage's cache read above.
-        return bool(_b2_probe["ok"]), "%s (checked %.0fm ago)" % (
+        return _b2_probe["ok"], "%s (checked %.0fm ago)" % (
             _b2_probe["msg"],
             (now - _b2_probe["ts"]) / 60,
         )

@@ -15,6 +15,7 @@ Stdlib only, plus `deploy_config` for `log`, `deploy_git` for the pure hold deci
 """
 
 import time
+from typing import TYPE_CHECKING
 
 from deploy_config import log
 from deploy_git import HOLD_PLANE_SEP, broad_hold_cleared_by, hold_plane_marker
@@ -34,6 +35,13 @@ class HoldMarkers:
 
     Mixed into `deploy_state.DeployerState`, which supplies `read`, `write` and `hold_sha`.
     """
+
+    if TYPE_CHECKING:
+        # Supplied by `deploy_state.DeployerState`; declared so the checker sees the surface
+        # this mixin relies on. Never defined at runtime, so the real methods win.
+        def read(self, marker: str) -> str | None: ...
+
+        def write(self, marker: str, value: str | None) -> None: ...
 
     @property
     def hold_plane(self) -> str | None:

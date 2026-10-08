@@ -18,7 +18,8 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "requests",                       # community.docker modules
   "docker",                         # community.docker SDK-backed modules
   "flask",                          # ical-proxy ical_proxy.py imports flask at module top (test_app.py)
-  "ruff>=0.10",                     # first-party Python lint gate (prek hook); pinned via uv.lock
+  "ruff>=0.16",                     # first-party Python lint gate (prek hook); pinned via uv.lock.
+  # The floor is the version the [tool.ruff] `*.md` exclusion was written against.
   "shellcheck-py==0.11.0.1",        # validate.shell_templates; pinned to match prek.toml's shellcheck-py rev
   "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
@@ -196,6 +197,15 @@ extend-exclude = [
 #   between them. An unpacked variable nothing reads, an implicit Optional, a mutable class
 #   default, an assert inside `except`, a swallowed exception, an assert on a string literal,
 #   a non-string envvar default and a blanket `type: ignore` are each legal, silent and wrong.
+# - PT011 / PT012 / RUF043: 60 hits on 2026-10-08, every one in a test. Each lets a
+#   `pytest.raises` pass on the wrong failure: a bare `ValueError` with no `match=`, a block whose
+#   earlier statement can raise first, or a `match=` pattern whose unescaped `.` or `(` matches
+#   more than the message it names. That is a test staying green while checking nothing.
+# - PLE / T10 / PIE794 / PIE796 / PIE800 / PIE804 / RUF006 / RUF009 / RUF018 / RUF024 / RUF034:
+#   0 hits on 2026-10-08. Each is a bug class (a pylint error, a leftover breakpoint, a duplicate
+#   class field or enum value, an un-awaited asyncio task, a call evaluated once as a dataclass
+#   default, an assignment inside `assert`, a shared mutable `dict.fromkeys` value, identical
+#   if/else arms), selected so the pattern cannot arrive rather than to clear a backlog.
 #
 # DOCSTRING LAYOUT (D205/D415/D212/D209/D210) IS THE ONE EXCEPTION to "bug-catching rules only",
 # and it is a narrow one. Those five check the SHAPE of a docstring that already exists: a
@@ -217,6 +227,9 @@ select = [
   "DTZ",
   "RUF100", "RUF059", "RUF013", "RUF012",
   "PT017", "S110", "S112", "PLW0129", "PLW1508", "PGH003",
+  "PT011", "PT012", "RUF043",
+  "PLE", "T10", "PIE794", "PIE796", "PIE800", "PIE804",
+  "RUF006", "RUF009", "RUF018", "RUF024", "RUF034",
   "D205", "D415", "D212", "D209", "D210",
 ]
 # Explicit codes above, never the bare `D` prefix: D203/D211 and D212/D213 are mutually
@@ -336,20 +349,24 @@ include = [
 exclude = ["ansible/collections", "site", ".claude/worktrees"]
 
 [tool.ty.rules]
-# Three rules are OFF, each with the count measured when this line was written. They are off
-# because the diagnostics are annotation debt rather than bugs, not because they are hard —
-# turning one on is a PR of its own with its own measurement, which is the point of recording
-# the number here.
+# unresolved-attribute, invalid-assignment and unsupported-operator are errors since
+# 2026-10-08. They were off from 2026-09-02, counted at 32, 10 and 14. While off they grew to 87,
+# 18 and 76, because a rule that is off does not stop new code adding to it. Each of the 181 was
+# fixed at its cause, not exempted. The causes, most common first:
+# - An Optional used unnarrowed: an `re.match`, a `str | None` verdict or a `Path | None`. A
+#   test now asserts the value is present first, so a None fails on the assert and its message.
+# - Module-global cache dicts that inferred a value union; they now carry TypedDicts.
+# - Test doubles bolted onto functions as attributes; they are now small classes.
+# - Mixins calling methods only their host class defines; a TYPE_CHECKING stub declares them.
 #
-# unresolved-attribute (32). Asserting that a `spec_from_file_location` spec and its loader
-#   are present narrows both rules at once.
-# invalid-assignment (10). Monkeypatch doubles, plus three production sites.
-# unsupported-operator (14). Eight are arithmetic on monitor-bridge's `_env` helper, which is
-#   annotated to return a union including `str`; retyping that one helper is the whole fix.
+# Six line suppressions remain, each a `# ty: ignore[<rule>]` with its reason on the line. Four
+# are hand-rolled patches of a `def`, tracked as #3670. One is a test that writes to a frozen
+# dataclass to prove it raises. One reads an attribute ansible's `constants` module sets at
+# import time. The vendored karakeep script is exempted per file in [[tool.ty.overrides]] below.
 #
-# A per-file `ignore` beats a CLI `--error`, so re-measuring any of these needs the
-# [[tool.ty.overrides]] block below removed as well as the rule flipped. There is no per-file
-# exemption for invalid-argument-type — every file in the source roots is gated on it.
+# A per-file `ignore` beats a CLI `--error`, so a per-file exemption from any rule here hides it
+# from a re-measure too. There is no per-file exemption for invalid-argument-type — every file in
+# the source roots is gated on it.
 #
 # invalid-argument-type is at zero. Its diagnostics cluster on three causes: signatures taking
 # `set`/`dict`/`Callable[[Sized], str]` when they only READ the argument, so wanting
@@ -363,9 +380,9 @@ exclude = ["ansible/collections", "site", ".claude/worktrees"]
 # without making anything safer; each is a place a real type would be better if the shape were
 # ever pinned down.
 invalid-argument-type = "error"
-unresolved-attribute = "ignore"
-invalid-assignment = "ignore"
-unsupported-operator = "ignore"
+unresolved-attribute = "error"
+invalid-assignment = "error"
+unsupported-operator = "error"
 # Warning by default; an error here. `import urllib` alone then reaching `urllib.error` resolves
 # only while something else in the process has imported the submodule, which is a dependency on
 # an import in a file you are not reading.
@@ -395,6 +412,16 @@ include = [
 ]
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
+
+[[tool.ty.overrides]]
+# The vendored karakeep script is byte-pinned (ruff's per-file-ignores above has why), so a fix
+# for its four `unresolved-attribute` diagnostics cannot land here. `__init__` sets
+# `self.karakeep = None` and a later method assigns the client before any caller reads it, an
+# ordering ty cannot follow. The
+# override covers that one rule in that one file; ty checks every other rule there.
+include = ["ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py"]
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
 
 [[tool.ty.overrides]]
 # `claude_guard` is a different kind of external import from the block above: not a container

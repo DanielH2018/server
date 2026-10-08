@@ -18,6 +18,8 @@ place.
 Stdlib only, plus `gitops_markers` — the same leaf contract `deploy_state` carries.
 """
 
+from typing import TYPE_CHECKING
+
 from gitops_markers import ALERT_SLOTS, format_alerted, parse_alerted
 
 
@@ -26,6 +28,13 @@ class AlertSlotMarkers:
 
     Mixed into `deploy_state.DeployerState`, which supplies `read`, `write` and `directory`.
     """
+
+    if TYPE_CHECKING:
+        # Supplied by `deploy_state.DeployerState`; declared so the checker sees the surface
+        # this mixin relies on. Never defined at runtime, so the real methods win.
+        def read(self, marker: str) -> str | None: ...
+
+        def write(self, marker: str, value: str | None) -> None: ...
 
     def alerted_sha(self, slot: str) -> str | None:
         """The origin SHA `slot` last paged on, or None when it has paged on nothing.

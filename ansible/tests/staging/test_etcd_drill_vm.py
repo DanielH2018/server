@@ -99,6 +99,13 @@ def _render(name: str) -> str:
     return env.get_template(name).render(**_vars())
 
 
+def _element(parent: ET.Element, path: str) -> ET.Element:
+    """The element at `path`, failing with the missing path rather than a NoneType error."""
+    found = parent.find(path)
+    assert found is not None, f"no {path} element in the rendered XML"
+    return found
+
+
 def _cron_task() -> dict:
     docs = load_yaml(ROLE / "tasks" / "etcd_drill.yml")
     task = next((t for t in docs if t.get("name") == CRON_TASK), None)
@@ -111,7 +118,9 @@ def test_the_drill_guest_renders_as_a_kvm_domain_with_its_own_disks():
     root = ET.fromstring(_render("etcd-drill-vm.xml.j2"))
     assert root.tag == "domain" and root.get("type") == "kvm"
     assert root.findtext("name") == v["hypervisor_etcd_drill_vm_hostname"]
-    sources = {d.find("source").get("file") for d in root.findall("./devices/disk")}
+    sources = {
+        _element(d, "source").get("file") for d in root.findall("./devices/disk")
+    }
     assert sources == {
         v["hypervisor_etcd_drill_vm_disk"],
         v["hypervisor_etcd_drill_vm_seed"],
@@ -124,11 +133,9 @@ def test_the_drill_guest_renders_as_a_kvm_domain_with_its_own_disks():
 
 def test_the_drill_guest_mac_matches_its_dhcp_reservation():
     v = _vars()
-    domain_mac = (
-        ET.fromstring(_render("etcd-drill-vm.xml.j2"))
-        .find("./devices/interface/mac")
-        .get("address")
-    )
+    domain_mac = _element(
+        ET.fromstring(_render("etcd-drill-vm.xml.j2")), "./devices/interface/mac"
+    ).get("address")
     net = ET.fromstring(_render("staging-network.xml.j2"))
     reservations = {h.get("mac"): h.get("ip") for h in net.findall("./ip/dhcp/host")}
     assert reservations.get(domain_mac) == v["hypervisor_etcd_drill_vm_ip"], (
@@ -156,10 +163,13 @@ def test_the_staging_network_pins_its_uuid_and_pushes_reservations_live():
 
 def test_the_drill_guest_attaches_to_the_fenced_staging_network():
     v = _vars()
-    iface = ET.fromstring(_render("etcd-drill-vm.xml.j2")).find("./devices/interface")
-    assert iface.find("source").get("network") == v["hypervisor_staging_net_name"]
+    iface = _element(
+        ET.fromstring(_render("etcd-drill-vm.xml.j2")), "./devices/interface"
+    )
+    assert _element(iface, "source").get("network") == v["hypervisor_staging_net_name"]
     assert (
-        iface.find("filterref").get("filter") == v["hypervisor_staging_nwfilter_name"]
+        _element(iface, "filterref").get("filter")
+        == v["hypervisor_staging_nwfilter_name"]
     ), (
         "the drill guest holds the cluster token and R2 credentials; it must not reach the LAN"
     )

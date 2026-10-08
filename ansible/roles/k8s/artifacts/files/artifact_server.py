@@ -217,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
     """
 
     server_version = "artifacts/1.0"
-    cache: IndexCache = None  # type: ignore[assignment]
+    cache: IndexCache  # assigned in main() before the server starts
 
     # `format` shadows the builtin, and is the parameter name BaseHTTPRequestHandler.log_message
     # declares — renaming it makes this an incompatible override.

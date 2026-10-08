@@ -961,7 +961,7 @@ dev = [
     { name = "python-liquid", specifier = ">=2" },
     { name = "pyyaml" },
     { name = "requests" },
-    { name = "ruff", specifier = ">=0.10" },
+    { name = "ruff", specifier = ">=0.16" },
     { name = "shellcheck-py", specifier = "==0.11.0.1" },
     { name = "ty", specifier = "==0.0.84" },
     { name = "zizmor", specifier = ">=1.0" },

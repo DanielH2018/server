@@ -94,18 +94,18 @@ def plan(
 
 def stream_pipeline(stages):
     """Run argv stages piped together (stdin of the first is closed)."""
-    prev = subprocess.DEVNULL
+    prev_stdout = None
     procs = []
     for i, stage in enumerate(stages):
         last = i == len(stages) - 1
         proc = subprocess.Popen(
             stage,
-            stdin=prev,
+            stdin=prev_stdout if prev_stdout is not None else subprocess.DEVNULL,
             stdout=None if last else subprocess.PIPE,
             stderr=subprocess.DEVNULL if not last else None,
         )
-        if prev not in (subprocess.DEVNULL, None):
-            prev.close()
-        prev = proc.stdout
+        if prev_stdout is not None:
+            prev_stdout.close()
+        prev_stdout = proc.stdout
         procs.append(proc)
     return procs[-1].wait()

@@ -130,7 +130,7 @@ def test_a_group_vars_key_the_play_reads_is_flagged(tree: Tree):
         "ansible/inventory/group_vars/all.yml",
         GROUP_VARS.replace("read-by-the-play", "read-by-the-play-still"),
     )
-    with pytest.raises(narrow_broad.CannotNarrow, match="ansible/deploy.yml"):
+    with pytest.raises(narrow_broad.CannotNarrow, match=r"ansible/deploy\.yml"):
         tree.narrow(*_refs(tree))
 
 
@@ -206,7 +206,7 @@ def test_a_macro_named_by_the_play_itself_is_flagged(tree: Tree):
     tree.write(
         "ansible/templates/container-resources.yml.j2", "{% macro resources(c) %}\n"
     )
-    with pytest.raises(narrow_broad.CannotNarrow, match="ansible/deploy.yml"):
+    with pytest.raises(narrow_broad.CannotNarrow, match=r"ansible/deploy\.yml"):
         tree.narrow(*_refs(tree))
 
 
@@ -217,7 +217,7 @@ def test_a_variable_a_filter_plugin_reads_is_still_flagged(tree: Tree):
     tree.write(
         "ansible/inventory/group_vars/all.yml", GROUP_VARS.replace("nobody", "x")
     )
-    with pytest.raises(narrow_broad.CannotNarrow, match="filter_plugins/toposort.py"):
+    with pytest.raises(narrow_broad.CannotNarrow, match=r"filter_plugins/toposort\.py"):
         tree.narrow(*_refs(tree))
 
 
@@ -236,7 +236,7 @@ def test_a_macro_reaching_an_uncallable_role_names_the_macro(tree: Tree):
     tree.write("ansible/templates/orphan.yml.j2", "{% macro orphan(x) %}\n")
     old, new = _refs(tree)
     lines: list[str] = []
-    with pytest.raises(narrow_broad.CannotNarrow, match="orphan.yml.j2") as exc:
+    with pytest.raises(narrow_broad.CannotNarrow, match=r"orphan\.yml\.j2") as exc:
         narrow_broad.narrow(
             old, new, cwd=tree.root, declared=DECLARED, callers={}, explain=lines.append
         )
@@ -283,13 +283,13 @@ def test_the_real_tree_still_has_macro_importers():
 
 def test_a_play_level_file_is_flagged(tree: Tree):
     tree.write("ansible/deploy.yml", "- hosts: all\n  vars:\n    p: 'x'\n")
-    with pytest.raises(narrow_broad.CannotNarrow, match="ansible/deploy.yml"):
+    with pytest.raises(narrow_broad.CannotNarrow, match=r"ansible/deploy\.yml"):
         tree.narrow(*_refs(tree))
 
 
 def test_hosts_ini_is_flagged(tree: Tree):
     tree.write("ansible/inventory/hosts.ini", "[all]\ndaniel-box\ndaniel-pi\n")
-    with pytest.raises(narrow_broad.CannotNarrow, match="hosts.ini"):
+    with pytest.raises(narrow_broad.CannotNarrow, match=r"hosts\.ini"):
         tree.narrow(*_refs(tree))
 
 

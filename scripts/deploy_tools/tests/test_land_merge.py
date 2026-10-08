@@ -76,7 +76,7 @@ def test_arm_merge_dies_on_a_closed_pr(landing):
     )
     with pytest.raises(Outcome) as exc:
         merge.arm_merge(ln)
-    assert exc.value.rc == 1 and "closed without merging" in exc.value.error
+    assert exc.value.rc == 1 and "closed without merging" in (exc.value.error or "")
 
 
 def _by(login: str) -> dict:
@@ -97,7 +97,9 @@ def test_arm_merge_refuses_another_author_when_one_is_required(landing):
     )
     with pytest.raises(Outcome) as exc:
         merge.arm_merge(ln)
-    assert exc.value.rc == 1 and "DanielH2018, not app/renovate" in exc.value.error
+    assert exc.value.rc == 1 and "DanielH2018, not app/renovate" in (
+        exc.value.error or ""
+    )
     assert not [c for c in calls if c[0] == "gh"]
 
 
@@ -162,7 +164,7 @@ def test_arm_merge_refuses_a_body_that_would_close_an_unfixed_issue(landing):
     )
     with pytest.raises(Outcome) as exc:
         merge.arm_merge(ln)
-    assert exc.value.rc == 1 and "Filed and not fixed: #2509" in exc.value.error
+    assert exc.value.rc == 1 and "Filed and not fixed: #2509" in (exc.value.error or "")
     # The refusal is worth nothing unless it happens BEFORE the merge call: the damage is
     # done at merge time and reopening the issue is a hand step.
     assert not [c for c in calls if c[0] == "gh"]
@@ -184,7 +186,7 @@ def test_arm_merge_refuses_while_the_repo_is_private(landing, review):
     )
     with pytest.raises(Outcome) as exc:
         merge.arm_merge(ln)
-    assert exc.value.rc == 1 and "repo is private" in exc.value.error
+    assert exc.value.rc == 1 and "repo is private" in (exc.value.error or "")
     assert not [c for c in calls if c[0] == "gh"]
     assert not ln.direct_merge_subject
 
@@ -236,7 +238,7 @@ def test_only_a_settled_conflict_ends_the_wait(landing, states, verdict):
     assert exc.value.rc == 1
     assert exc.value.verdict == verdict
     if verdict is None:
-        assert "closed without merging" in exc.value.error
+        assert "closed without merging" in (exc.value.error or "")
 
 
 def test_a_red_pr_ci_ends_the_wait(landing):
@@ -248,7 +250,9 @@ def test_a_red_pr_ci_ends_the_wait(landing):
     )
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
-    assert exc.value.verdict == "pr-ci-red" and "dead1234: CI RED" in exc.value.error
+    assert exc.value.verdict == "pr-ci-red" and "dead1234: CI RED" in (
+        exc.value.error or ""
+    )
 
 
 @pytest.mark.parametrize("ci_rc", [75, 2])
@@ -266,7 +270,9 @@ def test_a_ci_answer_that_is_not_red_keeps_the_wait_going(landing, ci_rc):
     )
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
-    assert exc.value.verdict is None and "closed without merging" in exc.value.error
+    assert exc.value.verdict is None and "closed without merging" in (
+        exc.value.error or ""
+    )
 
 
 def test_the_merge_budget_ends_the_wait_with_its_own_verdict(landing):
@@ -348,7 +354,7 @@ def test_a_dirty_pr_still_dies(landing):
     )
     with pytest.raises(Outcome) as exc:
         merge.arm_merge(ln)
-    assert exc.value.rc == 1 and "mergeStateStatus=DIRTY" in exc.value.error
+    assert exc.value.rc == 1 and "mergeStateStatus=DIRTY" in (exc.value.error or "")
 
 
 def test_a_merge_that_lands_while_arming_reads_as_success(landing):
@@ -405,7 +411,7 @@ def test_an_unarmed_pr_that_is_not_clean_dies_rather_than_merging(landing):
     with pytest.raises(Outcome) as exc:
         merge.arm_merge(ln)
     assert exc.value.rc == 1
-    assert "not armed (mergeStateStatus=BLOCKED)" in exc.value.error
+    assert "not armed (mergeStateStatus=BLOCKED)" in (exc.value.error or "")
     assert len([c for c in calls if c[0] == "gh"]) == 1
 
 

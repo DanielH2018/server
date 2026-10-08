@@ -136,7 +136,7 @@ def test_a_mapping_failure_dies_with_its_own_verdict(landing):
     assert exc.value.verdict == "deploy-failed"
     assert (
         "deploy_tags.py hosts failed before any deploy.sh ran; nothing was touched"
-        in exc.value.error
+        in (exc.value.error or "")
     )
     assert ln.ledger.cause == "host-lookup"
     assert "deploy" not in [c[0] for c in calls]
@@ -245,7 +245,7 @@ def test_a_broad_diff_fallback_is_handed_to_a_hand(landing):
     ln.needs_diff = True
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)
-    assert exc.value.rc == 1 and "deploy it by hand" in exc.value.error
+    assert exc.value.rc == 1 and "deploy it by hand" in (exc.value.error or "")
 
 
 def test_a_stale_tree_waits_on_its_own_merge_commit_before_reticking(landing):

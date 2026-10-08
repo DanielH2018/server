@@ -7,6 +7,8 @@ These tests pin it to the HTTP seam the rest of scripts/ uses.
 Run: uv run pytest scripts/grafana/tests/test_fetch_grafana_dashboards.py
 """
 
+import urllib.request
+
 import fetch_grafana_dashboards as fg
 
 ENDPOINT = ("https://prometheus.example", "prometheus.example:443:10.0.0.240")
@@ -106,7 +108,7 @@ def test_every_vendored_dashboard_pins_a_revision():
         assert isinstance(revision, int), name
 
 
-def test_the_download_url_names_the_pinned_revision_and_never_latest():
+def test_the_download_url_names_the_pinned_revision_and_never_latest(monkeypatch):
     seen = []
 
     class _Response:
@@ -123,12 +125,8 @@ def test_the_download_url_names_the_pinned_revision_and_never_latest():
         seen.append(url)
         return _Response()
 
-    original = fg.urllib.request.urlopen
-    fg.urllib.request.urlopen = urlopen
-    try:
-        fg.fetch(1860, 45)
-    finally:
-        fg.urllib.request.urlopen = original
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    fg.fetch(1860, 45)
     assert seen == ["https://grafana.com/api/dashboards/1860/revisions/45/download"]
     assert "latest" not in seen[0]
 

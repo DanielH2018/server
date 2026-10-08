@@ -57,15 +57,21 @@ def _evaluate(expression, *, inventory_hostname, connection, running_on):
     makes — not a re-implementation of it.
     """
     env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-    env.globals["lookup"] = lambda kind, arg: (
-        running_on
-        if (kind, arg) == ("pipe", "hostname")
-        else pytest.fail(
+
+    def lookup(kind: str, arg: str) -> str:
+        if (kind, arg) == ("pipe", "hostname"):
+            return running_on
+        pytest.fail(
             f"the guard used an unexpected lookup({kind!r}, {arg!r}); this stub only knows "
             f"the hostname pipe, so teach it the new one deliberately."
         )
-    )
-    context = {"inventory_hostname": inventory_hostname}
+
+    # A template variable shadows the environment's `lookup` global exactly as setting the
+    # global would, without writing to a mapping that ty types as the Jinja defaults alone.
+    context: dict[str, object] = {
+        "inventory_hostname": inventory_hostname,
+        "lookup": lookup,
+    }
     if connection is not None:
         context["ansible_connection"] = connection
     return env.compile_expression(expression)(**context)

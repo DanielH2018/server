@@ -45,6 +45,7 @@ from lib.proc_testing import run
 def _plugin_name(installer: str) -> str:
     """The plugin NAME an installer writes, from its rendered `PLUGIN_DIR`."""
     plugin_dir = plugin_constants(installer)["PLUGIN_DIR"]
+    assert isinstance(plugin_dir, str), f"PLUGIN_DIR folded to {plugin_dir!r}"
     return plugin_dir.rsplit("/", 1)[-1].rsplit("_", 1)[0]
 
 

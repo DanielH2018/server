@@ -13,6 +13,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import base64
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import yaml
 import yaml.constructor
@@ -163,7 +164,9 @@ def make_lookup(ctx: dict):
             )
         if kind == "template":
             env = make_env([path.parent])
-            env.globals["lookup"] = lookup
+            # jinja2 leaves `Environment.globals` unannotated, so its type is inferred from
+            # the default namespace's values and rejects any other callable.
+            cast(dict[str, Any], env.globals)["lookup"] = lookup
             env.filters["from_json"] = _from_json
             env.filters["to_json"] = to_json_stub
             return env.get_template(path.name).render(ctx).rstrip("\n")

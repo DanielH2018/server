@@ -117,7 +117,7 @@ def test_dry_run_exits_drift_when_a_preference_has_changed(monkeypatch) -> None:
     # This also covers "--dry-run never writes": set_preferences is not on _StubClient at all,
     # so main() raises AttributeError — not EXIT_DRIFT — if the early return stops gating the
     # write. A separate test asserting the same exit code on the same input added no branch.
-    current = dict(apply_prefs.DESIRED) | {"connection_speed": 30}
+    current: dict[str, object] = {**apply_prefs.DESIRED, "connection_speed": 30}
     exit_code = _run_dry_run(monkeypatch, current)
     assert exit_code == apply_prefs.EXIT_DRIFT
 

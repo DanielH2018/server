@@ -57,7 +57,7 @@ def _armed(cfg):
     return replace(cfg, HEALTHCHECKS_API_KEY="k", HEALTHCHECKS_EXPECTED=EXPECTED)
 
 
-def _fresh_probe() -> dict:
+def _fresh_probe() -> hc._ProbeCache:
     return {"ts": None, "ok": True, "msg": ""}
 
 

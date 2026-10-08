@@ -110,7 +110,10 @@ def _value(node: ast.expr, known: dict[str, object]) -> object:
         case ast.Tuple(elts=elements) | ast.List(elts=elements):
             return tuple(_value(element, known) for element in elements)
         case ast.BinOp(left=left, op=ast.Add(), right=right):
-            return _value(left, known) + _value(right, known)
+            head, tail = _value(left, known), _value(right, known)
+            if not (isinstance(head, str) and isinstance(tail, str)):
+                raise Unevaluable(ast.dump(node))
+            return head + tail
         case ast.BinOp(left=left, op=ast.Div(), right=right):
             return f"{_value(left, known)}/{_value(right, known)}"
         case ast.Call(func=ast.Name(id="Path"), args=[argument]):

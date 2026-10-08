@@ -33,7 +33,7 @@ def test_trailing_window_accepts_a_fractional_span():
 
 @pytest.mark.parametrize("seconds", [0, -1])
 def test_trailing_window_rejects_a_nonpositive_span(seconds):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="window must be positive"):
         obs_api.trailing_window_ns(seconds, NOW)
 
 
