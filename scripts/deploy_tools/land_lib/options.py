@@ -25,10 +25,19 @@ MERGE_POLL_S = 30
 PRIMARY_ENV = "LAND_PRIMARY"
 MERGE_POLL_ENV = "LAND_MERGE_POLL"
 REQUIRE_AUTHOR_ENV = "LAND_REQUIRE_AUTHOR"
+# The landing policy a lander unit sets; `policy.py` owns what each means.
+REQUIRE_BRANCH_PREFIX_ENV = "LAND_REQUIRE_BRANCH_PREFIX"
+APPROVAL_PATHS_ENV = "LAND_APPROVAL_PATHS"
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
 # landing it was written for.
-ENV_KNOBS = (PRIMARY_ENV, MERGE_POLL_ENV, REQUIRE_AUTHOR_ENV)
+ENV_KNOBS = (
+    PRIMARY_ENV,
+    MERGE_POLL_ENV,
+    REQUIRE_AUTHOR_ENV,
+    REQUIRE_BRANCH_PREFIX_ENV,
+    APPROVAL_PATHS_ENV,
+)
 
 
 def _primary_from_env() -> Path:
@@ -44,7 +53,7 @@ def _merge_poll_from_env() -> int:
 def _require_author_from_env() -> str:
     """`LAND_REQUIRE_AUTHOR`: the only PR author `--arm-merge` may merge, or "" for any.
 
-    renovate-agent.service sets it, because that role's contract is "never a PR by another
+    renovate-agent-land@.service sets it, because that role's contract is "never a PR by another
     author" (`ansible/roles/setup/renovate_agent/CLAUDE.md`) and nothing checked it.
     An interactive session leaves it unset, so a person's own PR arms as before; the agent's
     session inherits it from the unit and cannot arm a human's PR without `--any-author`.
@@ -69,6 +78,11 @@ class Options:
     subject: str = ""
     # The PR author `--arm-merge` insists on; "" arms any author's PR.
     require_author: str = ""
+    # The landing policy (`policy.py`); both "" leave it off.
+    require_branch_prefix: str = ""
+    approval_paths: str = ""
+    # Where to write PENDING, then the landing's one-line result, for a unit to hand on.
+    verdict_file: str = ""
     # Sized for a PR run plus queueing behind other PRs' runs; a PR still open after this is
     # not being merged, and the session should look at why.
     merge_timeout: int = 2700
@@ -88,6 +102,11 @@ class Options:
     # outside a Claude session. The fan-out passes its worktree's `.fanout/`, which is where
     # `fanout_lib/status.py` greps for the verdict.
     log_dir: str = ""
+
+    @property
+    def policy_active(self) -> bool:
+        """Whether a lander unit set the landing policy, which also pins the merge."""
+        return bool(self.require_branch_prefix or self.approval_paths)
 
 
 def parse_args(argv: list[str] | None, description: str) -> Options:
@@ -142,6 +161,11 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         default="",
         help="with --detach: where to write the log (default: $CLAUDE_JOB_DIR/tmp)",
     )
+    parser.add_argument(
+        "--verdict-file",
+        default="",
+        help="write PENDING here, then the landing's one-line result",
+    )
     ns = parser.parse_args(argv)
     if ns.await_verdict:
         parser.error(
@@ -157,6 +181,10 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         arm_merge=ns.arm_merge,
         subject=ns.subject,
         require_author="" if ns.any_author else _require_author_from_env(),
+        # Not lifted by --any-author: the policy is the unit's, not the caller's.
+        require_branch_prefix=os.environ.get(REQUIRE_BRANCH_PREFIX_ENV) or "",
+        approval_paths=os.environ.get(APPROVAL_PATHS_ENV) or "",
+        verdict_file=ns.verdict_file,
         merge_poll=_merge_poll_from_env(),
         primary=_primary_from_env(),
         detach=ns.detach,

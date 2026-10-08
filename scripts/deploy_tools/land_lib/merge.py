@@ -43,12 +43,17 @@ without the CI gate: 29 PRs did on 2026-09-21 (#3610). `_refuse_private_repo` ow
 stop an auto-merge armed while the repo was public from firing after a later flip;
 github-ruleset-drift.sh is the cover for that.
 
-`opts.require_author` (from `LAND_REQUIRE_AUTHOR`, which renovate-agent.service sets to
+`opts.require_author` (from `LAND_REQUIRE_AUTHOR`, which renovate-agent-land@.service sets to
 `app/renovate`) makes --arm-merge refuse a PR by anyone else, before any merge call. The
 agent's contract says "never a PR by another author", and this is the check; an
 interactive session leaves the variable unset and is unaffected. The refusal names the hand-off
 rather than the `--any-author` override: only the unattended session ever reads it, and the
 operator chose that a `manual —` bump goes to a person.
+
+When a lander unit sets the landing policy (`policy.py`), --arm-merge runs its checks and pins
+every merge path to the head SHA they read: `--match-head-commit` on both `gh pr merge` calls,
+and `sha=` on the REST merge. --await-merge dies if the head moves before the merge, so a push
+after the checks needs a re-run, which checks it again.
 """
 
 import re
@@ -60,6 +65,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_GREEN, CI_RED
+from deploy_tools.land_lib import policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 
@@ -179,11 +185,18 @@ def _refuse_stray_closing_refs(ln: Landing, body: str) -> None:
     )
 
 
+def _pin(ln: Landing) -> list[str]:
+    """`gh pr merge`'s head pin when the landing policy checked a head; else nothing."""
+    return ["--match-head-commit", ln.pinned_head] if ln.pinned_head else []
+
+
 def _merge_direct(ln: Landing, subject: str) -> None:
     """Squash-merge the PR now, for a PR `--auto` will not or did not arm."""
     say(f"PR #{ln.opts.pr} is CLEAN -- nothing to defer; merging directly")
     try:
-        ln.tools.gh("pr", "merge", ln.opts.pr, "--squash", "--subject", subject)
+        ln.tools.gh(
+            "pr", "merge", ln.opts.pr, "--squash", "--subject", subject, *_pin(ln)
+        )
     except subprocess.CalledProcessError as exc:
         ln.die(
             f"direct gh pr merge --squash failed for PR #{ln.opts.pr}: {exc.stderr.strip()}",
@@ -299,12 +312,16 @@ def arm_merge(ln: Landing) -> None:
     _require_author(ln)
     _refuse_stray_closing_refs(ln, view.get("body") or "")
     _refuse_private_repo(ln)
+    if ln.opts.policy_active:
+        ln.pinned_head = policy.check(ln)
     subject = ln.opts.subject or view.get("title", "")
     if view.get("reviewDecision") == "REVIEW_REQUIRED":
         _leave_for_a_direct_merge(ln, subject)
         return
     try:
-        ln.tools.gh("pr", "merge", pr, "--squash", "--auto", "--subject", subject)
+        ln.tools.gh(
+            "pr", "merge", pr, "--squash", "--auto", "--subject", subject, *_pin(ln)
+        )
     except subprocess.CalledProcessError:
         retry = ln.view("state,mergeStateStatus")
         decision = arm_merge_fallback_decision(
@@ -386,6 +403,12 @@ def await_merge(ln: Landing) -> None:
                 Verdict.MERGE_CONFLICT,
             )
         head = view.get("headRefOid") or ""
+        if ln.pinned_head and head and head != ln.pinned_head:
+            ln.die(
+                f"PR #{o.pr}'s head moved from {ln.pinned_head[:8]} to {head[:8]} after the "
+                "landing policy checked it; re-run so the new head is checked",
+                1,
+            )
         if head:
             rc, line = t.await_ci(head, 0)
             if rc == CI_RED:

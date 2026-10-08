@@ -15,6 +15,7 @@ MODULES = frozenset(
         "ledger",
         "landing",
         "merge",
+        "policy",
         "classify",
         "ci",
         "tick",
@@ -31,7 +32,9 @@ ALLOWED = {
     "ledger": {"outcome"},
     "tools": set(),
     "landing": {"outcome", "options", "tools", "ledger"},
-    "merge": {"landing", "outcome"},
+    # The landing policy's checks run inside --arm-merge, before any merge call.
+    "merge": {"landing", "outcome", "policy"},
+    "policy": {"landing", "outcome"},
     "classify": {"landing", "outcome"},
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},

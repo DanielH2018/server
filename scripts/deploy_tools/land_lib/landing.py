@@ -104,6 +104,9 @@ class Landing:
         # green, because GitHub's auto-merge never applies a bypass. Empty means auto-merge
         # (or nothing) does the merge.
         self.direct_merge_subject = ""
+        # The head SHA the landing policy checked (`policy.check`), which every merge path is
+        # then pinned to. Empty when no policy is set, and the merge takes whatever head it finds.
+        self.pinned_head = ""
 
     @property
     def tags_csv(self) -> str:
