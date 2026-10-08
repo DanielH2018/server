@@ -2,7 +2,7 @@
 # not a pin. `bookworm-slim` moves with every Debian point release and every security refresh, so
 # it drifted the same way. Keep the codename alongside the digest: it is what holds this on
 # bookworm, and a bare digest would let a bump cross into trixie unremarked.
-FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 
 # DECIDED: these apt packages resolve at build time. A `pkg=version` pin 404s the day the
 # archive supersedes it (the pool keeps only the current deb) and nothing bumps it, and a
