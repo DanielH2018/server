@@ -1,0 +1,6 @@
+# Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
+# claude-land@.service refuses an agent PR that changes a path under any prefix below, and the
+# operator lands it instead. Source: claude_code_lander_approval_paths.
+{% for path in claude_code_lander_approval_paths %}
+{{ path }}
+{% endfor %}

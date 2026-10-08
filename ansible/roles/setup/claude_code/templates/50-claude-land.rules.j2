@@ -1,0 +1,22 @@
+// Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
+//
+// Lets the agent user START one landing unit, and nothing else. Its GitHub account cannot
+// merge to master: the review rule wants an approval from someone other than the last pusher.
+// It asks for a landing by starting claude-land@<n>.service, which runs land.sh as the
+// operator under the landing policy. The instance must be a plain PR number, so no other unit
+// name or verb reaches this rule's YES.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return undefined;
+    }
+    if (subject.user !== "{{ claude_code_agent_user }}") {
+        return undefined;
+    }
+    if (!/^claude-land@[1-9][0-9]{0,6}\.service$/.test(action.lookup("unit"))) {
+        return undefined;
+    }
+    if (action.lookup("verb") !== "start") {
+        return undefined;
+    }
+    return polkit.Result.YES;
+});

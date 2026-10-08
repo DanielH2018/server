@@ -253,3 +253,48 @@ claude_code_agent_git_email: >-
 # adds the `.pub` beside it to the account as a Signing Key, never an Authentication Key: the
 # agent pushes over HTTPS with the token, so the key can sign and cannot push.
 claude_code_agent_signing_key: "{{ claude_code_agent_user_home }}/.ssh/git_signing_ed25519"
+
+# ── The agent's lander ──────────────────────────────────────────────────────────────────
+# The agent's account cannot merge its own PRs: "master review gate" wants an approval from
+# someone other than the last pusher. claude-land@<n>.service lands PR <n> as {{ sys_user }},
+# whose admin role the gate lets through, by running land.sh with the landing policy switched
+# on (scripts/deploy_tools/land_lib/policy.py). The agent user may start that unit and do
+# nothing else with it (templates/50-claude-land.rules.j2). It reads the outcome back from
+# /var/lib/claude-land/<n>.verdict.
+#
+# True only in daniel-box's host_vars, and installed only while claude_code_agent_user_enabled
+# is also true. False on either removes the rule, the unit and the approval list; a landing
+# already running finishes.
+claude_code_lander_enabled: false
+# The checkout land.sh runs from: the deployer's primary, which only ever fast-forwards to
+# master, so the lander runs the land.sh that master holds and never a branch's copy.
+claude_code_lander_checkout: "/home/{{ sys_user }}/server"
+# The only branches the lander lands, the shape EnterWorktree gives a `claude/<slug>` worktree.
+# It must match the fence's exclude (gitops_deploy_fence_ruleset_exclude), the one branch
+# shape the account can push.
+claude_code_lander_branch_prefix: "worktree-{{ claude_code_agent_worktree_prefix }}+"
+# Paths that widen the agent's own authority. land.sh refuses an agent PR that changes, adds,
+# deletes or renames out of a path under one of these prefixes, and the operator lands it
+# instead. Plain prefixes, so `scripts/deploy_tools/land` covers land.sh, land.py and land_lib/.
+# Not covered: the shared modules land.sh imports from scripts/lib/ and elsewhere.
+claude_code_lander_approval_paths:
+  # This role, which defines the agent user, its token, this list and the lander itself.
+  - ansible/roles/setup/claude_code/
+  # The unattended agent and its own lander.
+  - ansible/roles/setup/renovate_agent/
+  # The deployer, and the drift check that holds the rulesets to their declared shape.
+  - ansible/roles/setup/gitops_deploy/
+  # What builds an agent user, and the deployer's host helpers.
+  - ansible/roles/setup/common/tasks/agent_user.yml
+  - ansible/roles/setup/common/files/host_lib.py
+  # sudo, ssh and the operator's own login.
+  - ansible/roles/setup/initial_setup/tasks/access.yml
+  # Every switch above lives in host_vars.
+  - ansible/inventory/
+  # The secrets and who can decrypt them.
+  - ansible/.sops.yaml
+  - ansible/vars/secrets.yml
+  # CI, which decides what "green" means for the merge.
+  - .github/
+  # The landing policy and the code that runs it.
+  - scripts/deploy_tools/land

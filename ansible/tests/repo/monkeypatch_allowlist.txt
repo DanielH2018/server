@@ -97,4 +97,4 @@ scripts/infra_map/tests/test_gen_infra_map.py 1
 scripts/infra_map/tests/test_infra_map_live.py 1
 scripts/lib/tests/test_gh.py 4
 scripts/validate/tests/test_validate_k8s_manifests.py 1
-scripts/validate/tests/test_validate_unit_templates.py 4
+scripts/validate/tests/test_validate_unit_templates.py 3

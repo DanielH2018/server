@@ -1,0 +1,39 @@
+[Unit]
+Description=Land the agent user's PR #%i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The operator's user, because land.sh merges past the review rule and deploys: it uses the
+# operator's gh token, decrypts secrets and runs Ansible with become. The agent's sessions run
+# as {{ claude_code_agent_user }} and can only START this unit, through the polkit rule
+# 50-claude-land.rules. The instance name is the only input they give: land.sh reads the PR
+# from GitHub, and the policy below decides whether it lands.
+User={{ sys_user }}
+WorkingDirectory={{ claude_code_lander_checkout }}
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/{{ sys_user }}
+# The checkout is the deployer's, and an untracked __pycache__ there would park it.
+Environment=PYTHONDONTWRITEBYTECODE=1
+# land.sh's landing policy: only the agent's account, only its fenced branches, and no path
+# on the approval list.
+Environment=LAND_REQUIRE_AUTHOR={{ claude_code_agent_github_login }}
+Environment=LAND_REQUIRE_BRANCH_PREFIX={{ claude_code_lander_branch_prefix }}
+Environment=LAND_APPROVAL_PATHS=/etc/claude-land/approval-paths
+# /var/lib/claude-land/<n>.verdict is what the session reads back, so the directory is
+# world-readable and only this unit writes it.
+StateDirectory=claude-land
+StateDirectoryMode=0755
+SyslogLevel=notice
+# Room for the 30-minute lock wait plus one landing: land.sh waits up to 45 minutes for the
+# merge and 15 for master CI, then ticks, deploys and checks health. A landing systemd kills
+# leaves its verdict file reading PENDING, or no file if the kill came during the lock wait,
+# so the session also reads this unit's Result.
+TimeoutStartSec=2h
+# One of the agent's landings at a time, so a second waits for the first's deploy rather than
+# racing it for the same tick. Interactive sessions and renovate-agent's lander do not take
+# this lock; deploy.sh's own locks order the deploys themselves.
+ExecStart=/usr/bin/flock -w 1800 /var/lock/claude-land.lock \
+  {{ claude_code_lander_checkout }}/scripts/deploy_tools/land.sh --pr %i --arm-merge \
+  --await-merge --verdict-file /var/lib/claude-land/%i.verdict
