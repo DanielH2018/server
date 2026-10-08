@@ -153,3 +153,25 @@ def test_the_landing_marker_is_a_line_the_real_daniel_box_brief_carries():
     server = render_brief(issues, "daniel-server", "1", "worktree-orch", [])
     assert _mod.LANDING_MARKER in box
     assert _mod.LANDING_MARKER not in server
+
+
+def test_a_review_phase_may_stop_on_its_json_but_the_same_text_outside_one_is_blocked(
+    tmp_path,
+):
+    """The reviewer's final message is structured JSON with no PR URL to give."""
+    root = _fanout_tree(tmp_path)
+    (root / ".fanout" / "phase").write_text("review\n")
+    assert _stop(root, '{"summary": "sound", "findings": []}') is None
+    assert _stop(_fanout_tree(tmp_path / "other"), '{"findings": []}') is not None
+
+
+def test_a_land_phase_owes_a_verdict_although_its_brief_stops_at_the_pr(tmp_path):
+    issues = [Issue(1, "one", "body")]
+    brief = render_brief(issues, "daniel-box", "1", "worktree-orch", [], review=True)
+    root = _fanout_tree(tmp_path, brief)
+    (root / ".fanout" / "phase").write_text("implement\n")
+    assert _stop(root, FINISHED) is None
+    (root / ".fanout" / "phase").write_text("land\n")
+    reason = _stop(root, FINISHED)
+    assert reason and "no `VERDICT:` line" in reason
+    assert _stop(root, LANDED) is None

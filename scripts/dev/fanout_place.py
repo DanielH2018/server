@@ -7,11 +7,13 @@ on the tighter of the two, picks the host with the most headroom per batch, crea
 worktree there, and starts a headless
 Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
 stop at `gh pr create`. It shipped in commit bd8e62bf8.
+`launch --review` puts a separate review between each batch's PR and its landing; the unit
+runs `fanout_review.py`, and `fanout_lib/review.py` describes the phases.
 
 Usage::
 
     fanout_place.py read
-    fanout_place.py launch --batch 1345,1386 [--batch 1288] [--host daniel-box] --orchestrator-branch <b>
+    fanout_place.py launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--review] --orchestrator-branch <b>
     fanout_place.py launch --repo DanielH2018/dotfiles --batch 763 --orchestrator-branch <b>
     fanout_place.py status <run-id>
     fanout_place.py stop <run-id> [batch]
@@ -257,11 +259,13 @@ def cmd_launch(args, tools: Tools) -> int:
     for batch, host in placed:
         issues = [fetched[n] for n in batches[batch]]
         brief = render_brief(
-            issues, host, batch, args.orchestrator_branch, health, target
+            issues, host, batch, args.orchestrator_branch, health, target, args.review
         )
         try:
             run.batches.append(
-                launch_mod.launch(tools, host, batch, brief, batches[batch], target)
+                launch_mod.launch(
+                    tools, host, batch, brief, batches[batch], target, args.review
+                )
             )
         except launch_mod.LaunchError as exc:
             print(f"{batch} on {host}: {exc}", file=sys.stderr)
@@ -539,6 +543,11 @@ def main(argv=None, tools: Tools | None = None) -> int:
         metavar="PATH",
         help="excuse this one file from the shared-file refusal (its citation is context, "
         "not an edit target); repeatable, and the collision is still printed",
+    )
+    launch_parser.add_argument(
+        "--review",
+        action="store_true",
+        help="review each batch's PR in a separate session before it lands",
     )
     _add_manifest_root(launch_parser)
     launch_parser.set_defaults(fn=cmd_launch)

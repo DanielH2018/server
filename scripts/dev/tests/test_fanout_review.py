@@ -1,0 +1,199 @@
+"""The review pipeline a `launch --review` batch runs: phase order, the filter, disclosure.
+
+Every process goes through one fake runner, which answers `git`, records `gh` and replays a
+scripted report per `claude` call. It also records `.fanout/phase` at each call, since the
+Stop hook reads that file to decide what a session owes.
+
+Run: uv run pytest scripts/dev/tests/test_fanout_review.py
+"""
+
+import json
+import subprocess
+
+from fanout_lib.brief import Issue, render_brief
+from fanout_lib.review import Pipeline, actionable
+from fanout_lib.target import SERVER_TARGET
+
+PR = "https://github.com/DanielH2018/server/pull/4000"
+ISSUES = [Issue(1345, "Traefik startupProbe has no red-proof", "body one")]
+
+
+def _report(result="", session="sid-1", structured=None, is_error=False, cost=1.0):
+    out = {
+        "type": "result",
+        "result": result,
+        "session_id": session,
+        "is_error": is_error,
+        "total_cost_usd": cost,
+    }
+    if structured is not None:
+        out["structured_output"] = structured
+    return out
+
+
+def _finding(title, severity="high", confidence=0.9, category="correctness"):
+    return {
+        "title": title,
+        "file": "scripts/x.py",
+        "line": 3,
+        "severity": severity,
+        "confidence": confidence,
+        "category": category,
+        "detail": "fails on an empty list",
+    }
+
+
+class FakeRunner:
+    def __init__(self, worktree, reports, heads=("aaa", "bbb")):
+        self.worktree = worktree
+        self.reports = list(reports)
+        self.heads = list(heads)
+        self.claude = []  # (argv, stdin, phase file at call time)
+        self.comments = []
+
+    def __call__(self, argv, stdin):
+        if argv[0] == "git":
+            if "merge-base" in argv:
+                out = "base0"
+            else:
+                out = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
+            return subprocess.CompletedProcess(argv, 0, out + "\n", "")
+        if argv[0] == "gh":
+            self.comments.append(stdin)
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        phase = (self.worktree / ".fanout" / "phase").read_text().strip()
+        self.claude.append((argv, stdin, phase))
+        return subprocess.CompletedProcess(argv, 0, json.dumps(self.reports.pop(0)), "")
+
+
+def _pipeline(tmp_path, reports, host="daniel-box", heads=("aaa", "bbb"), clock=None):
+    (tmp_path / ".fanout").mkdir()
+    brief = render_brief(ISSUES, host, "1345", "worktree-orch", [], review=True)
+    run = FakeRunner(tmp_path, reports, heads)
+    pipeline = Pipeline(
+        tmp_path,
+        "1345",
+        host,
+        SERVER_TARGET,
+        brief,
+        run=run,
+        clock=clock or (lambda: 0.0),
+        state_dir=tmp_path / "state",
+    )
+    return pipeline, run
+
+
+def test_an_implementer_with_no_pr_ends_the_run_before_any_review(tmp_path):
+    pipeline, run = _pipeline(tmp_path, [_report("needs input: CI is red")])
+    assert pipeline.run_all()["result"] == "needs input: CI is red"
+    assert [phase for _, _, phase in run.claude] == ["implement"]
+    assert run.comments == []
+
+
+def test_an_actionable_finding_runs_a_fix_a_delta_review_and_the_landing_in_order(
+    tmp_path,
+):
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [_finding("off by one")]}),
+        _report(f"Fixed it. {PR}"),
+        _report(structured={"summary": "resolved", "findings": []}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    final = pipeline.run_all()
+
+    assert final["result"].endswith("VERDICT: settled")
+    assert [phase for _, _, phase in run.claude] == [
+        "implement",
+        "review",
+        "fix",
+        "review",
+        "land",
+    ]
+    reviewer, review_stdin, _ = run.claude[1]
+    assert "--disallowedTools" in reviewer and "--json-schema" in reviewer
+    assert "--resume" not in reviewer
+    # The reviewer learns the issue and the diff range, not the landing instructions.
+    assert "body one" in review_stdin and "git diff base0...aaa" in review_stdin
+    assert "land.sh" not in review_stdin
+    for argv, _, _ in (run.claude[2], run.claude[4]):
+        assert argv[-2:] == ["--resume", "sid-1"]
+    assert "git diff aaa..bbb" in run.claude[3][1]
+    assert "./scripts/deploy_tools/land.sh" in run.claude[4][1]
+    assert "1 findings, 1 actionable" in run.comments[0]
+    assert "0 left after the fix round" in run.comments[0]
+
+
+def test_findings_below_the_bar_skip_the_fix_round_and_a_non_landing_host_stops(
+    tmp_path,
+):
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(
+            structured={
+                "summary": "",
+                "findings": [_finding("nit", "low"), _finding("maybe", "high", 0.3)],
+            }
+        ),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports, host="daniel-server")
+    final = pipeline.run_all()
+    assert final["result"] == f"Opened {PR}"
+    assert [phase for _, _, phase in run.claude] == ["implement", "review"]
+    assert "2 findings, 0 actionable" in run.comments[0]
+
+
+def test_a_security_finding_stays_off_the_public_comment_and_the_tracker(tmp_path):
+    held = _finding("token leaks to the log", category="security")
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [held]}),
+        _report(f"Fixed. {PR}"),
+        _report(structured={"summary": "", "findings": [held]}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    final = pipeline.run_all()
+
+    assert "token leaks" not in run.comments[0]
+    assert "1 security findings are held" in run.comments[0]
+    assert (
+        "token leaks" not in run.claude[4][1]
+    )  # the land prompt files public ones only
+    assert "held off the public tracker" in final["result"]
+    (record,) = (tmp_path / "state").iterdir()
+    assert "token leaks" in record.read_text()
+
+
+def test_a_failed_review_is_said_on_the_pr_and_the_batch_still_lands(tmp_path):
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(is_error=True),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    pipeline.run_all()
+    assert "did not complete" in run.comments[0]
+    assert [phase for _, _, phase in run.claude] == ["implement", "review", "land"]
+    assert "did not complete" in run.claude[2][1]
+
+
+def test_the_landing_is_skipped_when_too_little_run_time_is_left(tmp_path):
+    # The pipeline reads the clock once at start; the landing check reads it past the cap.
+    ticks = iter([0.0, 10**6])
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports, clock=lambda: next(ticks))
+    final = pipeline.run_all()
+    assert final["result"].startswith("needs input:")
+    assert [phase for _, _, phase in run.claude] == ["implement", "review"]
+
+
+def test_actionable_keeps_medium_at_the_confidence_floor_and_drops_the_rest():
+    kept = _finding("kept", "medium", 0.6)
+    assert actionable(
+        [kept, _finding("unsure", "medium", 0.59), _finding("nit", "low")]
+    ) == [kept]
