@@ -27,6 +27,10 @@
 # It refuses a volume that already has a backup, one in no backup tier, and one routed to a
 # disarmed target. None of those is a fault worth spending a transaction on.
 #
+# A volume that has a backup but missed its recurring run can be backed up anyway with
+# `-e seed_allow_existing=true`. A weekly shard runs on one weekday, so a run lost to an outage
+# otherwise leaves the volume, and the backup-health monitor, stale for up to a week.
+#
 # The seed is labelled as the owning recurring job's own, so that job's retain prunes the backup
 # and the snapshot on its normal cadence. Older seeds carry no such label: their
 # backups are the reaper's (`longhorn_reap_orphan_backups.py --mode seeds`), and their snapshots
@@ -42,6 +46,7 @@
   gather_facts: false
   vars:
     seed_namespace: homelab
+    seed_allow_existing: false
     seed_timeout_s: 900
     # Nothing here reads a fact.
     load_secrets_gather_facts: false
@@ -146,13 +151,25 @@
     # The point of this playbook is a FIRST recovery point. A volume that has one is on its
     # recurring job's cadence and needs no help; seeding it again spends a transaction to shorten a
     # gap the schedule already bounds.
+    # `seed_allow_existing` is the one exception: a volume whose recurring run was missed (an
+    # outage, a run that skipped it) and whose next shard run is days away.
     - name: Refuse a volume that already has a backup
       ansible.builtin.assert:
-        that: seed_existing.stdout | int == 0
+        that: seed_existing.stdout | int == 0 or seed_allow_existing | bool
         fail_msg: >-
           {{ seed_claim }} already has {{ seed_existing.stdout }} backup(s); its recurring job
-          covers it. Nothing has been changed.
+          covers it. Pass -e seed_allow_existing=true to back it up anyway. Nothing has been
+          changed.
         quiet: true
+
+    # A first seed keeps the fixed `seed-<uuid>` name. A forced one adds a timestamp, because the
+    # fixed name may already belong to an earlier seed's CRs, and `kubectl apply` would adopt
+    # that Completed Backup and report it as the new recovery point.
+    - name: Name the seed's Snapshot and Backup
+      ansible.builtin.set_fact:
+        seed_name: >-
+          seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}{{
+          ('-' ~ now(utc=true).strftime('%Y%m%d%H%M%S')) if seed_existing.stdout | int > 0 else '' }}
 
     # GROUP -> JOB, read from the RecurringJob CRs rather than assumed from the names: the seven
     # weekly shards name their group after themselves, but the daily tier's group is `default`
@@ -195,7 +212,7 @@
           apiVersion: longhorn.io/v1beta2
           kind: Snapshot
           metadata:
-            name: seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}
+            name: {{ seed_name }}
             namespace: longhorn-system
           spec:
             volume: {{ seed_pv.stdout }}
@@ -210,7 +227,7 @@
     - name: Wait for the snapshot to be ready
       ansible.builtin.command:
         argv: [k3s, kubectl, -n, longhorn-system, get, snapshots.longhorn.io,
-               "seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}",
+               "{{ seed_name }}",
                -o, "jsonpath={.status.readyToUse}"]
       become: true
       register: seed_snapshot_ready
@@ -230,13 +247,13 @@
           apiVersion: longhorn.io/v1beta2
           kind: Backup
           metadata:
-            name: seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}
+            name: {{ seed_name }}
             namespace: longhorn-system
             labels:
               backup-target: {{ seed_target }}
               backup-volume: {{ seed_pv.stdout }}
           spec:
-            snapshotName: seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}
+            snapshotName: {{ seed_name }}
             labels:
               RecurringJob: {{ seed_job }}
               seeded-by: seed_volume_backup.yml
@@ -246,7 +263,7 @@
     - name: Wait for the backup to complete
       ansible.builtin.command:
         argv: [k3s, kubectl, -n, longhorn-system, get, backups.longhorn.io,
-               "seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }}",
+               "{{ seed_name }}",
                -o, "jsonpath={.status.state}|{.status.error}"]
       become: true
       register: seed_backup_state
@@ -263,7 +280,7 @@
         fail_msg: >-
           the seed backup for {{ seed_claim }} ended in state
           '{{ seed_backup_state.stdout.split('|')[0] }}': {{ seed_backup_state.stdout.split('|')[1] }}.
-          The Backup CR seed-{{ seed_pv.stdout | regex_replace('^pvc-', '') }} is still present -
+          The Backup CR {{ seed_name }} is still present -
           delete it before retrying, or the apply will adopt the failed one.
         quiet: true
 

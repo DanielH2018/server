@@ -16,7 +16,8 @@ DISARMED TARGET. A blank backupTargetURL is how this estate disarms a target. A 
 against one cannot complete, and leaves a stuck CR behind.
 
 ALREADY COVERED. A volume with a backup is on its job's cadence. Seeding it again buys nothing the
-schedule does not already bound.
+schedule does not already bound, unless the run was missed: `-e seed_allow_existing=true` lifts
+this one refusal, and the forced seed then needs a CR name no earlier seed holds.
 
 ERROR IS NOT SUCCESS. `kubectl apply` succeeds the moment the CR is accepted; the backup itself can
 still fail minutes later. A play that ends after the apply reports a recovery point that does not
@@ -25,8 +26,10 @@ exist - the same shape as the readonly-SA rollout restart that prints "successfu
 Run: uv run pytest ansible/tests/longhorn/test_seed_volume_backup.py
 """
 
+from datetime import datetime, timezone
+
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, jinja_env
 
 PLAYBOOK = ANSIBLE / "seed_volume_backup.yml"
 TEXT = PLAYBOOK.read_text()
@@ -60,6 +63,40 @@ def test_it_refuses_a_volume_that_already_has_a_backup():
     task = _named("already has a backup")
     assert task, "expected a refusal for an already-covered volume"
     assert "seed_existing" in str(task[0]["ansible.builtin.assert"]["that"])
+
+
+def test_the_override_for_a_covered_volume_is_off_by_default():
+    """Backing up a covered volume spends a transaction, so it must be asked for by name."""
+    assert PLAY["vars"]["seed_allow_existing"] is False
+    task = _named("already has a backup")[0]
+    assert "seed_allow_existing | bool" in str(task["ansible.builtin.assert"]["that"])
+
+
+def _seed_name(existing):
+    template = _named("Name the seed's Snapshot and Backup")[0][
+        "ansible.builtin.set_fact"
+    ]["seed_name"]
+    return (
+        jinja_env()
+        .from_string(template)
+        .render(
+            now=lambda utc=False: datetime(2026, 10, 9, 1, 2, 3, tzinfo=timezone.utc),
+            seed_pv={"stdout": "pvc-c2ca0afb-74f0-4507-a29a-3cf40aac175d"},
+            seed_existing={"stdout": str(existing)},
+        )
+        .strip()
+    )
+
+
+def test_a_first_seed_keeps_the_fixed_name():
+    """The reaper and the docs know a seed by its `seed-<uuid>` name."""
+    assert _seed_name(0) == "seed-c2ca0afb-74f0-4507-a29a-3cf40aac175d"
+
+
+def test_a_forced_seed_gets_a_name_no_earlier_seed_holds():
+    """With the fixed name, `kubectl apply` adopts an earlier seed's Completed Backup and the
+    play reports it as the new recovery point."""
+    assert _seed_name(3) == "seed-c2ca0afb-74f0-4507-a29a-3cf40aac175d-20261009010203"
 
 
 def test_it_waits_for_completion_and_fails_on_error():
