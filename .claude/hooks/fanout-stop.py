@@ -36,6 +36,13 @@ registers it for a batch here. Another repo's batch, such as a dotfiles one, has
 in its worktree, so `launch.py` passes the hook to that `claude -p` through `--settings`
 (`STOP_HOOK_SETTINGS`, #3363).
 
+THE REVIEW PIPELINE. A `launch --review` batch runs several sessions in one worktree
+(`scripts/dev/fanout_lib/review.py`), and the pipeline names the running one in
+`.fanout/phase`. A `review` session never blocks: it is a read-only reviewer whose final
+message is structured JSON, with no PR URL to give. A `land` session owes a `VERDICT:` line
+although its brief stops at the PR, because the pipeline handed it the landing section
+afterwards. With no phase file, the brief alone decides, as before.
+
 THE CAP. A counter in `.fanout/stop-blocks` allows at most `MAX_BLOCKS` blocks per batch.
 After that it lets the session end, and `status` reports the batch `no-pr` rather than `done`.
 Anthropic's Opus 5.5 guide recommends stopping after two or three automatic continuations. A
@@ -57,6 +64,7 @@ from _hook_common import read_payload
 
 MARKER = Path(".fanout") / "brief.md"
 COUNTER = Path(".fanout") / "stop-blocks"
+PHASE = Path(".fanout") / "phase"
 MAX_BLOCKS = 3
 
 # Mirrors `status.PR_URL`, `status.BLOCKER` and `status.VERDICT`.
@@ -136,6 +144,14 @@ def owes_a_landing(root: Path) -> bool:
         return False
 
 
+def phase(root: Path) -> str:
+    """The review pipeline's running phase, or "" for a batch that is not running one."""
+    try:
+        return (root / PHASE).read_text().strip()
+    except OSError:
+        return ""
+
+
 def _blocks_so_far(root: Path) -> int:
     try:
         return int((root / COUNTER).read_text().strip() or 0)
@@ -148,8 +164,13 @@ def decide(payload: dict) -> str | None:
     root = fanout_root(str(payload.get("cwd") or "."))
     if root is None:
         return None
+    running = phase(root)
+    if running == "review":
+        return None
     item = open_item(
-        str(payload.get("last_assistant_message") or ""), root, owes_a_landing(root)
+        str(payload.get("last_assistant_message") or ""),
+        root,
+        owes_a_landing(root) or running == "land",
     )
     if item is None:
         return None

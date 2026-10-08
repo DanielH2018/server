@@ -146,6 +146,17 @@ Narrow the fan-out, do not queue. For the third, `clean <run-id>` the finished r
 uncleaned worktree counts against its host. `--host daniel-box` pins a batch that must land in
 the same run or that only daniel-box can verify.
 
+**`--review` adds a separate review to every batch in the run.** The unit runs
+`scripts/dev/fanout_review.py` in place of one `claude -p`. The agent stops at its PR on every
+host. A fresh reviewer then reads only the issue text and the diff, and returns findings with
+a severity and a confidence. A finding of severity medium or worse, at confidence 0.6 or more,
+resumes the agent for one fix round, and a second reviewer reads only the fix. On daniel-box
+the agent is then resumed to land. The review's counts and costs go on the PR as a comment,
+security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
+`scripts/dev/fanout_lib/review.py` has the phases and the reasons for them. Lint and tests
+stay with the implementer; only the slow model review moves out. The fallback `Agent(...)`
+path below has no review phase.
+
 Each batch's branch is `worktree-fanout-<batch>`, the name used throughout this skill. Run as
 the `claude` agent user, the dispatcher names it `worktree-claude+fanout-<batch>` instead.
 That user's login profile sets `CLAUDE_WORKTREE_PREFIX`, and the agent branch fence lets its

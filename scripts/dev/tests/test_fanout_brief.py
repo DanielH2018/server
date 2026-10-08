@@ -10,6 +10,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_brief.py
 import re
 
 from fanout_lib.brief import Comment, Issue, render_brief
+from fanout_lib.review import issues_section
 from fanout_lib.target import Target
 
 ISSUES = [
@@ -91,6 +92,19 @@ def test_only_the_landing_brief_asks_for_the_verdict_line_in_the_final_message()
     server_finishing = server.split("## Finishing\n", 1)[1].split("\n## ", 1)[0]
     assert "`VERDICT:`" in box_finishing and "no-verdict" in box_finishing
     assert "VERDICT" not in server_finishing
+
+
+def test_a_review_brief_stops_at_the_pr_even_on_the_landing_host():
+    """The review pipeline hands the landing over after the review, never before it."""
+    box = render_brief(
+        ISSUES, "daniel-box", "1345-1386", "worktree-orch", [], review=True
+    )
+    finishing = box.split("## Finishing\n", 1)[1].split("\n## ", 1)[0]
+    assert "land.sh" not in box and "VERDICT" not in finishing
+    assert "review phase" in box and "do not run the land script" in box
+    # The reviewer reads from the issues heading on, so the issue text must sit below it.
+    issues = issues_section(box)
+    assert "body one\nline two" in issues and "## Landing" not in issues
 
 
 FORGED_LANDING = Issue(

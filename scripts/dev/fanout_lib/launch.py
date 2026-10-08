@@ -65,6 +65,13 @@ STOP_HOOK_SETTINGS = {
 # the verdict `status` should print. Five hours covers the longest fan-out session measured
 # (286 minutes; the next longest was 104) and bounds one that waits on something forever.
 RUNTIME_MAX_S = 5 * 3600
+# A `--review` batch runs up to five sessions under one unit (`fanout_lib.review`): the
+# implementer, a review, a fix, a delta review and the landing. The reviews and the fix are far
+# shorter than the implementer, so three hours on top of its five covers them.
+# `review.LAND_MARGIN_S` skips the landing rather than start it too close to this cap.
+REVIEW_RUNTIME_MAX_S = 8 * 3600
+# The interpreter a unit runs repo Python with; `fanout_place.HEALTH_CMD` pins the same one.
+HEADLESS_PYTHON = "3.14.6"
 
 
 # The user manager's PATH lacks ~/.local/bin (claude, uv) and repo hooks need uv. The fnm
@@ -203,12 +210,29 @@ def claude_args(target: Target = SERVER_TARGET) -> str:
     return f"{prefix} --settings {shlex.quote(json.dumps(STOP_HOOK_SETTINGS))}"
 
 
+def review_command(batch: str, target: Target = SERVER_TARGET) -> str:
+    """The unit's command for a `--review` batch: `fanout_review.py` in place of `claude -p`.
+
+    The script runs from this repo's primary checkout for every target, as the dotfiles
+    batch's Stop hook does, so another repo's worktree need not carry it.
+    """
+    return (
+        f"uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
+        f"{REPO}/scripts/dev/fanout_review.py --batch {batch} --repo {target.repo}"
+    )
+
+
 def systemd_run_command(
-    batch: str, target: Target = SERVER_TARGET, home: str | None = None
+    batch: str,
+    target: Target = SERVER_TARGET,
+    home: str | None = None,
+    review: bool = False,
 ) -> str:
     """The `systemd-run` step; `home` defaults to the launching user's own HOME."""
     wt = worktree_path(batch, target)
     home = home or str(_Path.home())
+    command = review_command(batch, target) if review else claude_args(target)
+    runtime = REVIEW_RUNTIME_MAX_S if review else RUNTIME_MAX_S
     return _step(
         (
             f"systemd-run --user --unit {unit_name(batch, target)} "
@@ -217,8 +241,8 @@ def systemd_run_command(
             f"-p StandardOutput=file:{wt}/.fanout/report.json "
             f"-p StandardError=file:{wt}/.fanout/stderr.log "
             f"-p Environment=PATH={unit_path(home)} -p Environment=HOME={home} "
-            f"-p RuntimeMaxSec={RUNTIME_MAX_S} "
-            f"{claude_args(target)}"
+            f"-p RuntimeMaxSec={runtime} "
+            f"{command}"
         ),
         "systemd-run",
     )
@@ -234,7 +258,7 @@ def prepare_command(batch: str, target: Target = SERVER_TARGET) -> str:
     )
 
 
-def launch_command(batch: str) -> str:
+def launch_command(batch: str, review: bool = False) -> str:
     """The one call a batch launch runs: worktree add+lock, brief write, systemd-run.
 
     The brief text is this command's own stdin, consumed by the `cat` in the middle of the
@@ -246,7 +270,7 @@ def launch_command(batch: str) -> str:
         [
             create_worktree_command(batch),
             write_brief_command(batch),
-            systemd_run_command(batch),
+            systemd_run_command(batch, review=review),
         ]
     )
 
@@ -365,6 +389,7 @@ def _launch_elsewhere(
     brief_text: str,
     issues: list[int],
     target: Target,
+    review: bool = False,
 ) -> None:
     """Launch a batch in another repo: prepare the tree, claim, then start the agent.
 
@@ -391,7 +416,11 @@ def _launch_elsewhere(
     # leaves no manifest naming either.
     try:
         proc = _run(
-            tools, host, systemd_run_command(batch, target), None, "systemd-run"
+            tools,
+            host,
+            systemd_run_command(batch, target, review=review),
+            None,
+            "systemd-run",
         )
     except LaunchError as exc:
         raise LaunchError(str(exc) + _release(tools, batch, issues, target)) from None
@@ -434,6 +463,7 @@ def launch(
     brief_text: str,
     issues: list[int],
     target: Target = SERVER_TARGET,
+    review: bool = False,
 ) -> Batch:
     """Create the worktree, write the brief over stdin, then start the agent unit.
 
@@ -466,6 +496,7 @@ def launch(
             failure into the same message. A `fetch`, `brief write` or
             `systemd-run` failure, or one this can't attribute, leaves the worktree as it
             found it instead.
+        review: start `fanout_lib.review`'s pipeline instead of one `claude -p`.
     """
     # DECIDED: no exit or timeout from this call can happen after the unit is live.
     # `systemd-run` (without --wait/--pty/--scope) starts the transient unit and returns
@@ -477,10 +508,12 @@ def launch(
     # `test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run` asserts
     # `"--scope" not in cmd` as the guard.
     if not target.is_server:
-        _launch_elsewhere(tools, host, batch, brief_text, issues, target)
+        _launch_elsewhere(tools, host, batch, brief_text, issues, target, review)
     else:
         try:
-            proc = _run(tools, host, launch_command(batch), brief_text, "launch")
+            proc = _run(
+                tools, host, launch_command(batch, review), brief_text, "launch"
+            )
         except LaunchError as exc:
             message = str(exc) + (_cleanup_worktree(tools, host, batch) or "")
             raise LaunchError(message) from None
