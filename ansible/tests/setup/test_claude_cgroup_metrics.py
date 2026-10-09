@@ -239,6 +239,17 @@ def test_a_watched_uid_running_claude_is_flagged(tmp_path: Path) -> None:
     assert 'claude_uid_processes{uid="1000"} 2' in out, out
 
 
+def test_a_process_exiting_mid_scan_does_not_zero_the_count(tmp_path: Path) -> None:
+    """A status path the glob matched but nothing can open, as when the process exits between
+    the two. gawk aborts on it, which read every other `claude` as 0 on the live host."""
+    procroot = tmp_path / "proc"
+    (procroot / "5").mkdir(parents=True)
+    (procroot / "5" / "status").symlink_to(tmp_path / "gone")
+    _proc(procroot, 10, "claude", 1000)
+    out = _run_watching(tmp_path, procroot, "1000")
+    assert 'claude_uid_processes{uid="1000"} 1' in out, out
+
+
 def test_a_watched_uid_running_no_claude_is_clean_and_still_reported(
     tmp_path: Path,
 ) -> None:
