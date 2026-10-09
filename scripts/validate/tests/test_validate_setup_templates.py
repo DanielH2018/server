@@ -85,6 +85,25 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
     assert v.check_template(tpl, ctx, known) == []
 
 
+def test_a_default_that_will_not_expand_still_counts_as_defined(tmp_path, known):
+    """Both halves: the role's own default is clean, a name nothing defines is still flagged.
+
+    `render_context` leaves out a default whose value names a filter the light environment
+    lacks, so the render reads it as undefined while the role defines it.
+    """
+    role = tmp_path / "roles" / "setup" / "fixture"
+    (role / "defaults").mkdir(parents=True)
+    (role / "templates").mkdir()
+    (role / "defaults" / "main.yml").write_text(
+        'declared: "{{ x | no_such_filter }}"\n'
+    )
+    tpl = role / "templates" / "both.yaml.j2"
+    tpl.write_text('a: "{{ declared }}"\nb: "{{ nothing_declares_this_name }}"\n')
+    problems = v.check_role_template(tpl, known)
+    assert len(problems) == 1
+    assert "nothing_declares_this_name" in problems[0]
+
+
 def test_broken_yaml_is_flagged(tmp_path, ctx, known):
     tpl = tmp_path / "role" / "templates" / "broken.yaml.j2"
     tpl.parent.mkdir(parents=True)
