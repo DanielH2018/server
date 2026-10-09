@@ -125,10 +125,10 @@ Each `/homelab-review` case pins one contract paragraph the skill grew after a r
 paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched
 pair — `001` alone rewards collapsing findings, and only `004` measures the counter-force.
 
-**Two case-authoring rules, both learned the hard way on 2026-08-17.** In a non-hermetic run the
+**Four case-authoring rules.** The first three were learned on 2026-08-17. In a non-hermetic run the
 agent still has tools, so anything that invites it to go *check* something ends the run with a tool
 call and no report — every `must_match` then reads as missing, including trivial ones. That
-signature means "no output", not "wrong answer". Both rules were confirmed by fixing a failing case
+signature means "no output", not "wrong answer". Those three were confirmed by fixing a failing case
 and re-running it, not by reasoning:
 
 1. **Cite paths that exist.** `003` cited `roles/containers/app` (no such role — the Pi has five)
@@ -143,6 +143,18 @@ and re-running it, not by reasoning:
    `skeptic`, whose whole definition tells it to go check git history and open PRs. A trailing
    "(you cannot run further commands)" did not hold; the explicit "You cannot run any commands —
    no bash, no git, no gh, no kubectl, no file reads … do not attempt a tool call" does.
+4. **Keep a case's premise consistent with the agent body, the only context a hermetic run has.**
+   A hermetic run sees the agent's frontmatter-stripped body and the case input, and nothing else:
+   no memory, no repo, no `@` include. A non-hermetic run also had the operator's ambient context,
+   which hid the drift. The first hermetic sweep (2026-10-09, PR #3981, issue #3984) scored 0/3 on
+   six cases whose premise the agent body contradicts or never states. The cicd case presented
+   `:latest` as Watchtower-managed, but the agent body says Watchtower is retired. The network
+   case's Mullvad-exit whitelist was framed as the remote-admin path, where the body names
+   WireGuard. Other cases cited `roles/containers/<svc>` Docker roles for services that run on k3s,
+   a `rate-limit@file` middleware that left with the Docker edge, or an automation stripped of the
+   20s delay that makes it correct. Each was rebuilt from the live file it names. This rule is a
+   diagnosis, not yet a measurement: the sweep deleted its per-run output, so the next hermetic
+   sweep is what confirms it.
 
 **Grade judgment in the rubric, not the regex.** `skeptic/003` first asserted
 `must_not_match: REFUTED`, which fires on "this is *not* refuted" — the assertion rejected correct
@@ -157,7 +169,8 @@ grades the *interpretation* half of the open-PR rule. The half that fails in pra
 look at open branches at all — needs tools, so only the live case exercises it.
 
 Fidelity boundary: hermetic cases run with `--tools ""`, so they grade judgment + output discipline,
-not file navigation or real Task-dispatch. security-review's severity standards live in an
-`@`-included `DETAILED_GUIDE.md` that the engine does not expand — the agent body is passed as a
-literal system prompt and `--tools ""` blocks reading it — so its eval fidelity is reduced versus a
-live run. Add a case by dropping a JSON in `cases/<agent>/`.
+not file navigation or real Task-dispatch. The engine passes the agent body as a literal system
+prompt and expands no `@` include, so a fact an agent needs in a hermetic run belongs in its body.
+`security-review.md` repeats `DETAILED_GUIDE.md`'s severity scale and secrets rule for this reason;
+the per-category detail stays in the guide, so that agent's eval fidelity is still below a live
+run's. Add a case by dropping a JSON in `cases/<agent>/`.
