@@ -290,6 +290,17 @@ claude_code_agent_git_email: >-
 # agent pushes over HTTPS with the token, so the key can sign and cannot push.
 claude_code_agent_signing_key: "{{ claude_code_agent_user_home }}/.ssh/git_signing_ed25519"
 
+# The agent's login for the homelab-ui MCP server (tasks/agent_homelab_ui.yml). The username is
+# the Authelia account the authelia role creates (`authelia_k8s_agent_user`), mirrored here
+# because the two roles cannot read each other's defaults; a test holds the two equal. The
+# password is `authelia_agent_password` in SOPS, which the apply decrypts as {{ sys_user }}.
+# The file also carries `domain`: ui_mcp.sh and ui_login.py read it from SOPS for the operator,
+# and the agent has no age key to do that. The agent can already read the domain, because its
+# read-only kubeconfig covers the traefik.io IngressRoutes that name it, so the file widens
+# nothing. scripts/diagnostics/probe_lib/core.py:AGENT_CREDENTIALS_PATH reads this path.
+claude_code_homelab_ui_username: claude-agent
+claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/homelab-ui/credentials.json"
+
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # The agent's account cannot merge its own PRs: "master review gate" wants an approval from
 # someone other than the last pusher. claude-land@<n>.service lands PR <n> as {{ sys_user }},

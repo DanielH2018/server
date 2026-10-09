@@ -1,0 +1,38 @@
+---
+# The agent user's login for the homelab-ui MCP server: an Authelia account of its own, in a
+# 0600 file only it can read. Imported from main.yml when claude_code_agent_user_enabled, after
+# agent_github.yml has created ~/.config. Ansible decrypts the three SOPS values as the
+# operator and writes them here, so the agent never holds the age key. defaults/main.yml says
+# why the file also carries the domain.
+
+- name: Refuse to give the agent user a homelab-ui login without its password
+  ansible.builtin.assert:
+    that:
+      - authelia_agent_password | default('') | length > 0
+      - domain | default('') | length > 0
+    fail_msg: >-
+      claude_code_agent_user_enabled is true, but authelia_agent_password or domain is not in
+      secrets.yml. Add the password with `sops` first, and deploy the authelia role so the
+      account exists.
+    quiet: true
+  no_log: true
+
+- name: Create the agent user's homelab-ui config directory
+  ansible.builtin.file:
+    path: "{{ claude_code_homelab_ui_credentials | dirname }}"
+    state: directory
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+
+- name: Give the agent user its homelab-ui login
+  ansible.builtin.template:
+    src: agent-homelab-ui-credentials.json.j2
+    dest: "{{ claude_code_homelab_ui_credentials }}"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  diff: false
+  no_log: true

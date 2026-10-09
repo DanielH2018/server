@@ -164,7 +164,35 @@ authelia_k8s_manage_claude_user: true
 authelia_claude_password: ''
 authelia_claude_totp_secret: ''
 
-# Force both users' argon2 digests to be regenerated from the SOPS passwords, discarding
+# The agent user's own identity for the homelab-ui MCP server (docs/claude-agent-user.md,
+# slice 5). The Unix user `claude` logs in to the LAN portal as this account instead of
+# borrowing the operator's login. The username is plaintext on purpose, like the one above, and
+# the claude_code role mirrors it in `claude_code_homelab_ui_username`; a test holds the two
+# equal. Its password, `authelia_agent_password`, is a SOPS value that Ansible decrypts as the
+# operator, so the agent never holds the age key. The role hashes it at deploy time exactly
+# as it hashes the claude-ui one.
+#
+# DECIDED: no groups, unlike claude-ui, which copies the operator's two. The two groups carry
+# privilege in the apps behind the portal: Grafana maps `admins` to its Admin role
+# (observability/templates/grafana.yaml.j2), and Headlamp binds `oidc:admins` to the cluster's
+# read RBAC (headlamp_k8s_oidc_group). claude-ui keeps them because its job is to assert
+# against the same pages the operator sees. This account only has to render a service page, so a
+# group nothing reads costs it nothing. The access_control rules are domain-scoped, never
+# `subject:`-scoped, so groups cannot narrow what it REACHES; it reaches every `one_factor`
+# `*.local.<domain>` route from RFC1918, the set the operator's own UI jar reaches. It has no
+# TOTP registration, so the `two_factor` routes (code-server, n8n, longhorn, deploy-ui) refuse it
+# at the second factor, and it has no public name.
+authelia_k8s_agent_user: claude-agent
+authelia_k8s_agent_groups: []
+
+# Follows claude-ui's switch: a cluster that does not run the headless UI tier (staging) holds
+# neither credential, and a user whose password is the empty string must never be rendered.
+authelia_k8s_manage_agent_user: "{{ authelia_k8s_manage_claude_user }}"
+
+# Empty stand-in, NOT a value, for the reason authelia_claude_password's is.
+authelia_agent_password: ''
+
+# Force every user's argon2 digest to be regenerated from the SOPS passwords, discarding
 # whatever is in the live Secret. False by default, because the read-back exists to stop a
 # fresh random salt rewriting the Secret and rolling the pod on every deploy.
 #

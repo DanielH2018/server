@@ -10,7 +10,9 @@
 #      and works around with `curl --resolve`. Chromium's equivalent is
 #      --host-resolver-rules, which only reaches it through a config file's launchOptions.
 #   2. Auth. Every `*.local.<domain>` route is Authelia one_factor; the browser context
-#      loads the session cookie ui_login.py mints.
+#      loads the session cookie ui_login.py mints. The operator logs in with SOPS values. The
+#      agent user, which has no age key, logs in as its own Authelia account from
+#      ~/.config/homelab-ui/credentials.json (see ui_login.py).
 #   3. The domain is SOPS-encrypted, so neither of the above can be written into
 #      ~/.claude.json. The config is generated at launch into a 0600 file instead.
 #
@@ -70,7 +72,9 @@ else
 
   STATE_PATH="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --path "${TIER_ARGS[@]}")"
 fi
-DOMAIN="$(sops -d --extract '["domain"]' "$REPO_ROOT/ansible/vars/secrets.yml")"
+# From ui_login.py rather than from SOPS directly: the agent user has no age key, and its
+# domain comes from the same credentials file its login does.
+DOMAIN="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --domain)"
 VIP="$(awk -F': *' '/^k3s_metallb_ingress_vip:/ {print $2; exit}' \
   "$REPO_ROOT/ansible/inventory/group_vars/all.yml")"
 
