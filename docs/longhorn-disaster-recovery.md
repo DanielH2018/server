@@ -194,7 +194,8 @@ the per-volume map and each exclusion's rationale:
 ## After a whole-cluster cold start (both nodes down at once)
 
 A whole-cluster cold start fails every replica of every attached volume, and Longhorn
-auto-salvages them. Accepted: no data is lost, and auto-salvage is the designed recovery.
+auto-salvages them. Accepted: auto-salvage is the designed recovery, and on 2026-10-08 every
+salvaged volume returned to `healthy`.
 The hazard that follows is a weekly shard's missed run, which this section covers.
 
 **The 2026-10-08 measurement (#3892).** Both nodes rebooted on 2026-10-05: daniel-box at 23:55:01,
@@ -217,16 +218,29 @@ reports `succeeded=1`. Three weekly volumes were skipped: prowlarr-config (d4), 
 newest backup passes `k3s_longhorn_weekly_backup_max_age_hours` (198 h). For prowlarr that was
 2026-10-09 10:40, 13 h after the skip. A volume in the daily tier recovers on the next night's run.
 
-**What to do after a cold start.** To find the weekly volumes the catch-up Jobs skipped, list
-each weekly volume's newest backup and compare it with the recovery time:
+**What to do after a cold start.** Do not seed every weekly volume whose backup predates the
+recovery. Most of them belong to shards that ran normally before the outage, and seeding them
+spends the day's B2 budget. Seed only the weekly volumes a catch-up Job skipped. The Jobs log
+each skip, so this query names them:
+
+```bash
+uv run python scripts/diagnostics/probe.py loki-query --since 24h \
+  '{namespace="longhorn-system"} |= "Cannot create job for"'
+```
+
+Seed only the names that carry a `recurring-job-group.longhorn.io/weekly-backup-d*` label. A
+daily volume in that list recovers on its own the next night. When Loki does not cover the
+recovery window, a weekly volume whose newest backup is more than 168 h old missed its run:
 
 ```bash
 kubectl get volumes.longhorn.io -n longhorn-system -o json | jq -r '.items[]
   | select(.metadata.labels | keys | any(test("^recurring-job-group.longhorn.io/weekly")))
-  | [.status.lastBackupAt, .status.kubernetesStatus.pvcName] | @tsv' | sort
+  | select((.status.lastBackupAt // "1970-01-01T00:00:00Z") | fromdateiso8601 < now - 168*3600)
+  | [.status.lastBackupAt, .status.kubernetesStatus.pvcName] | @tsv'
 ```
 
-Seed each volume whose `lastBackupAt` predates the recovery, one at a time:
+Seed each one, one at a time. Before you seed more than a few, read the budget line in
+`journalctl -t longhorn-backup-health`, as the playbook's header says:
 
 ```bash
 uv run ansible-playbook ansible/seed_volume_backup.yml -i ansible/inventory/hosts.ini \
