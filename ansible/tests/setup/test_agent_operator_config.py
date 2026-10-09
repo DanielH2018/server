@@ -59,8 +59,9 @@ def test_the_true_arm_installs_the_four_pieces_root_owned_and_without_hooks() ->
     task_list = operator_tasks()
     copy = named(task_list, "Copy the operator's user CLAUDE.md beside the agent's")
     args = copy["ansible.builtin.copy"]
-    assert args["src"].endswith("/CLAUDE.md") and args["remote_src"] is True
-    assert args["dest"].endswith("/.claude/operator/CLAUDE.md")
+    assert copy["loop"] == ["CLAUDE.md"] and args["remote_src"] is True
+    assert args["src"].endswith("/{{ item }}")
+    assert args["dest"].endswith("/.claude/operator/{{ item }}")
     assert (args["owner"], args["group"], args["mode"]) == ("root", "root", "0644")
 
     rsync = named(task_list, "Copy the operator's rules, output styles and skills")
@@ -139,8 +140,10 @@ def test_the_template_imports_the_copied_file_only_while_the_switch_is_true() ->
     )
     claude_md = "{{ claude_code_agent_user_home }}/.claude/CLAUDE.md"
     # Claude Code resolves a relative @import against the importing file's directory.
-    relative = copy["ansible.builtin.copy"]["dest"].removeprefix(
-        claude_md.removesuffix("CLAUDE.md")
+    relative = (
+        copy["ansible.builtin.copy"]["dest"]
+        .replace("{{ item }}", "CLAUDE.md")
+        .removeprefix(claude_md.removesuffix("CLAUDE.md"))
     )
     assert relative == "operator/CLAUDE.md"
 

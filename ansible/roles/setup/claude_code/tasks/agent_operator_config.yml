@@ -61,9 +61,12 @@
 # Claude Code resolves against the importing file. The agent's file is the agent's own and is
 # never overwritten.
 - name: Copy the operator's user CLAUDE.md beside the agent's
+  # A loop item, not a literal: scripts/deploy_tools/tests/test_land_reach.py reads any setup
+  # `src: *.md` as a repo doc this role ships, and this file is the operator's, on the host.
+  loop: [CLAUDE.md]
   ansible.builtin.copy:
-    src: "{{ claude_code_agent_operator_config_src }}/CLAUDE.md"
-    dest: "{{ claude_code_agent_user_home }}/.claude/operator/CLAUDE.md"
+    src: "{{ claude_code_agent_operator_config_src }}/{{ item }}"
+    dest: "{{ claude_code_agent_user_home }}/.claude/operator/{{ item }}"
     remote_src: true
     owner: root
     group: root
