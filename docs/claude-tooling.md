@@ -674,9 +674,11 @@ and timeout-bounded. The banner's problem lines come in three groups, in this or
   the tick merged but deferred, and a k8s change the deployer never applies.
 - **Branch line**: this worktree is behind origin/master, so a deploy from it would be refused.
 
-A failed read usually prints a `⚠ … is broken` line, because an empty list reads the same as
-a clean result. The exception is a failed `hooklib` import: it drops the service lines, and the
-fan-out section below reports the breakage instead.
+A failed import is loud and a failed read is silent. A module the banner cannot import (`lib.git`,
+`lib.deployer_park`, `lib.worktrees`) prints a `⚠ … is broken` line, and a failed `hooklib`
+import is reported in the fan-out section below. A read that fails at run time, such as a
+`git status` timeout or an unreadable marker file, returns no line, so a silent banner is not
+proof of health. The release-staleness check is the one read that reports its own failure.
 
 The dirty checkout and the park stop every deploy in the fleet, and a worktree session cannot
 look at either for itself: the isolation guard refuses a git command targeting the shared
