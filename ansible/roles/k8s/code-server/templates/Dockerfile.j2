@@ -66,7 +66,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 #    dependencies still resolve at build time, which a hashed requirements file would close.
 RUN python3 -m venv $VIRTUAL_ENV \
     && $VIRTUAL_ENV/bin/pip install --no-cache-dir \
-        uv==0.12.21 \
+        uv==0.12.22 \
         pandas==3.0.6 \
         requests==2.34.2 \
         ruff==0.16.10 \
