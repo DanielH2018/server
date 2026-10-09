@@ -3,7 +3,7 @@
 WHY THIS TEST EXISTS. A hand-applied bring-up change gets no receipt, but that cannot make
 land.sh report needs-manual-apply for a change that is already live. The receipt's `applied` half
 is read from exactly two places, `land_lib/deploy.py` and `land_lib/health_verdict.py`, and BOTH sit behind
-`ln.self_applied`. A `_BROAD_MANUAL_PREFIXES` path and a setup role outside `initial_setup.yml` are
+`ln.classification.self_applied`. A `_BROAD_MANUAL_PREFIXES` path and a setup role outside `initial_setup.yml` are
 both `self_applied is False`, so the marker is never their gate: their `needs-manual-apply` comes
 from `plane_note`, which says a HUMAN still owes the apply and is correct at landing time. The
 `reaches no service tag, but is not done` line is `no_tag_outcome`'s `if ln.plane:` branch, which
@@ -24,6 +24,7 @@ import land_tags
 from _land_fakes import MERGE_SHA, RECEIPTS
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.landing import Classification
 
 # The two planes the deployer never applies: a bring-up playbook, and a setup role that
 # `initial_setup.yml` does not include (k3s lives in k3s-bringup.yml).
@@ -38,10 +39,12 @@ def _state_reads(landing, files: list[str]) -> tuple[Outcome, list[str]]:
     """The verdict for a PR with this file list, and every deployer-state key it read."""
     ln, _ = landing(None)
     ln.merge_sha = MERGE_SHA
-    ln.plane = land_tags.plane_note(files)
-    ln.self_applied = land_tags.self_applied(files)
-    ln.self_applied_command = land_tags.self_applied_command(files)
-    ln.remaining_setup = ""
+    ln.classification = Classification(
+        plane=land_tags.plane_note(files),
+        self_applied=land_tags.self_applied(files),
+        self_applied_command=land_tags.self_applied_command(files),
+        remaining_setup="",
+    )
     read: list[str] = []
     original = ln.tools.read_state
 

@@ -10,6 +10,7 @@ import pytest
 from _land_fakes import MERGE_SHA, Fakes, receipt
 from deploy_tools.land_lib import health_verdict
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.landing import Classification
 
 
 # The deployer's record of a broad apply that CONTAINS this PR. A self-applied landing needs
@@ -20,10 +21,12 @@ APPLIED = receipt({"ansible/initial_setup.yml": ["renovate_agent"]})
 def _deployed(landing, fakes=None):
     ln, calls = landing(fakes)
     ln.merge_sha, ln.resolved_tags = MERGE_SHA, ["sonarr"]
-    ln.plane = (fakes or Fakes()).plane
-    ln.self_applied = (fakes or Fakes()).self_applied
-    ln.self_applied_command = (fakes or Fakes()).self_applied_command
-    ln.remaining_setup = (fakes or Fakes()).remaining_setup
+    ln.classification = Classification(
+        plane=(fakes or Fakes()).plane,
+        self_applied=(fakes or Fakes()).self_applied,
+        self_applied_command=(fakes or Fakes()).self_applied_command,
+        remaining_setup=(fakes or Fakes()).remaining_setup,
+    )
     return ln, calls
 
 

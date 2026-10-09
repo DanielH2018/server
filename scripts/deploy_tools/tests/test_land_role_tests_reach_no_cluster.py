@@ -32,6 +32,7 @@ from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 
 from lib.repo_paths import REPO as REPO_ROOT
+from deploy_tools.land_lib.landing import Classification
 
 _ROLE_TESTS = "ansible/roles/k8s/arr-notification/tests/test_seed_arr_notification.py"
 _ROLE_FILES = "ansible/roles/k8s/arr-notification/files/seed_arr_notification.py"
@@ -106,10 +107,12 @@ def _verdict(landing, files: list[str]) -> Outcome:
     ln, _ = landing(None)
     ln.merge_sha = MERGE_SHA
     quiet = land_tags.quiet_paths(files, "")
-    ln.plane = land_tags.plane_note(files, quiet=quiet)
-    ln.self_applied = land_tags.self_applied(files, quiet=quiet)
-    ln.self_applied_command = land_tags.self_applied_command(files, quiet=quiet)
-    ln.remaining_setup = ""
+    ln.classification = Classification(
+        plane=land_tags.plane_note(files, quiet=quiet),
+        self_applied=land_tags.self_applied(files, quiet=quiet),
+        self_applied_command=land_tags.self_applied_command(files, quiet=quiet),
+        remaining_setup="",
+    )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
     return exc.value

@@ -11,6 +11,7 @@ import yaml
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
 from deploy_tools import land_tags
 from deploy_tools.land_lib import classify
+from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome
 
 
@@ -56,7 +57,7 @@ def test_classify_fills_tags_plane_and_self_applied(landing):
     )
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert (ln.tags_csv, ln.plane, ln.self_applied, ln.needs_diff) == (
+    assert (ln.tags_csv, ln.plane, ln.classification.self_applied, ln.needs_diff) == (
         "sonarr,radarr",
         "initial_setup.yml --tags k3s",
         True,
@@ -207,7 +208,7 @@ def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
     )
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert ln.remaining_setup == "`initial_setup` also reaches daniel-pi"
+    assert ln.classification.remaining_setup == "`initial_setup` also reaches daniel-pi"
     # the host the tick ran on, read from the boundary rather than hardcoded
     assert next(c for c in calls if c[0] == "remaining_setup_hosts")[1] == (
         "daniel-box",
@@ -224,7 +225,7 @@ def test_explicit_tags_skip_derivation_but_not_the_self_applied_half(landing):
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.tags_csv == "sonarr"
-    assert ln.self_applied and ln.tick_is_the_apply
+    assert ln.classification.self_applied and ln.tick_is_the_apply
 
 
 def test_a_truncated_file_list_without_since_is_a_usage_error(landing):
@@ -261,7 +262,10 @@ def test_nothing_to_deploy_when_nothing_is_reached(landing):
 )
 def test_any_reach_disables_the_shortcut(landing, attr, value):
     ln, _ = landing()
-    setattr(ln, attr, value)
+    if attr in {f.name for f in dataclasses.fields(Classification)}:
+        ln.classification = Classification(**{attr: value})
+    else:
+        setattr(ln, attr, value)
     classify.shortcut_if_nothing(ln)
 
 

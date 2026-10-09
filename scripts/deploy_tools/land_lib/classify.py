@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib.landing import Landing
+from deploy_tools.land_lib.landing import Classification, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_tags import DeriveSource
 
@@ -66,6 +66,59 @@ def pr_range(ln: Landing) -> str:
     return ""
 
 
+def _owed_to_a_hand(
+    ln: Landing, paths: list[str], recorded: str, quiet: set[str]
+) -> tuple[set[str] | None, list[str], str]:
+    """The tags declared at the merge commit, and the plane note over the paths a hand owes.
+
+    Returns `(declared, plane_paths, plane)`: `declared` is None when the read failed.
+    """
+    # WHICH TAGS EXIST is asked of the MERGE COMMIT, not of a checkout. A PR that adds a role
+    # and its `containers_list` entry together is absent from every tree until the tick
+    # fast-forwards, so a checkout answers "this role is unregistered" — the same thing it says
+    # about a role somebody forgot to register, and `needs-manual-apply` then prints the
+    # expensive remedy (a full `ansible/deploy.yml`) for a role one `--tags` run deploys.
+    # None means the read failed, and every reader
+    # below falls back to its own tree.
+    declared = _classified(
+        ln, "declared-tag read", ln.tools.declared_at, ln.merge_sha, ln.opts.primary
+    )
+    if declared is None:
+        say(
+            f"could not read containers_list at {ln.merge_sha[:8]} — "
+            "classifying against this checkout instead"
+        )
+    # A shared role whose change reaches no rendered manifest is live for the next deploy of
+    # any caller, so no hand applies it: `manifests_rollout_timeout_default` is read as a
+    # `--timeout` while a deploy runs, so a 20-minute
+    # `ansible/deploy.yml` for it would change nothing. Its paths come out of the
+    # list the note is built from; every failure inside returns the list unchanged.
+    plane_paths = _classified(
+        ln,
+        "deploy-time-only shared-role classification",
+        ln.tools.paths_a_hand_must_apply,
+        paths,
+        recorded,
+        ln.opts.primary,
+        declared,
+    )
+    if len(plane_paths) != len(paths):
+        say(
+            "no rendered manifest reads what this PR changed under "
+            f"{','.join(sorted(set(paths) - set(plane_paths)))}, so it takes effect on "
+            "the next deploy rather than needing one"
+        )
+    plane = _classified(
+        ln,
+        "plane classification",
+        ln.classifier.plane_note,
+        plane_paths,
+        declared,
+        quiet=quiet,
+    )
+    return declared, plane_paths, plane
+
+
 def classify(ln: Landing) -> None:
     """Tags, the plane a hand must apply, and whether the tick applies part of this PR.
 
@@ -82,15 +135,14 @@ def classify(ln: Landing) -> None:
     t, c = ln.tools, ln.classifier
     view = ln.view("files,changedFiles")
     paths = [f["path"] for f in view.get("files", [])]
-    ln.pr_paths, ln.pr_range = paths, pr_range(ln)
-    quiet = c.quiet_paths(paths, ln.pr_range)
-    ln.quiet = set(quiet)
-    ln.self_applied = _classified(
+    recorded = pr_range(ln)
+    quiet = c.quiet_paths(paths, recorded)
+    self_applied = _classified(
         ln, "self-applied classification", c.self_applied, paths, quiet=quiet
     )
     # The command a hand runs if the tick turns out NOT to have applied its own half —
     # derived over the same paths `self_applied` reads, so the two cannot name different work.
-    ln.self_applied_command = _classified(
+    self_applied_command = _classified(
         ln,
         "self-applied-command classification",
         c.self_applied_command,
@@ -101,7 +153,7 @@ def classify(ln: Landing) -> None:
     # initial_setup.yml applies to ONE target per run, so a role with no `when:` gate reaches
     # every host the playbook is ever run on, and the tick converging here says nothing about
     # the others.
-    ln.remaining_setup = _classified(
+    remaining_setup = _classified(
         ln,
         "remaining-setup-hosts classification",
         c.remaining_setup_hosts,
@@ -109,14 +161,28 @@ def classify(ln: Landing) -> None:
         t.hostname(),
         quiet=quiet,
     )
-    ln.plane_paths = paths
+    # `--tags` named the services, so the plane is left unread: the operator's list wins over
+    # a derivation, and `plane` is what a HAND applies rather than an input to any wait this
+    # landing takes. Leaving it unread keeps the override's meaning -- deploy exactly these
+    # services -- and the broad half a `--tags` landing must not skip is caught earlier, by
+    # `ci.preflight`'s blockers read over the incoming range.
+    declared, plane_paths, plane = (
+        (None, paths, "")
+        if ln.resolved_tags
+        else _owed_to_a_hand(ln, paths, recorded, quiet)
+    )
+    ln.classification = Classification(
+        pr_paths=tuple(paths),
+        pr_range=recorded,
+        quiet=frozenset(quiet),
+        declared=None if declared is None else frozenset(declared),
+        plane_paths=tuple(plane_paths),
+        plane=plane,
+        self_applied=self_applied,
+        self_applied_command=self_applied_command,
+        remaining_setup=remaining_setup,
+    )
     if ln.resolved_tags:
-        # `--tags` named the services, so nothing below runs: the operator's list wins over a
-        # derivation, and `plane` is what a HAND applies rather than an input to any wait this
-        # landing takes. Leaving it unread keeps the override's meaning -- deploy exactly these
-        # services -- and the broad half a `--tags` landing must not skip is caught earlier, by
-        # `ci.preflight`'s blockers read over the incoming range.
-        #
         # DECIDED: `--tags` leaves `k8s_only` empty, so a two-platform tag such as `wg-easy`
         # routes to every declaring host (#2748). The operator's list carries no provenance,
         # and narrowing it from the PR's paths would second-guess an explicit "deploy exactly
@@ -124,45 +190,6 @@ def classify(ln: Landing) -> None:
         # Narrowing is the direction of issue #929: a tag that reached no host while the
         # landing printed `settled` over a Pi still running the old container.
         return
-    # WHICH TAGS EXIST is asked of the MERGE COMMIT, not of a checkout. A PR that adds a role
-    # and its `containers_list` entry together is absent from every tree until the tick
-    # fast-forwards, so a checkout answers "this role is unregistered" — the same thing it says
-    # about a role somebody forgot to register, and `needs-manual-apply` then prints the
-    # expensive remedy (a full `ansible/deploy.yml`) for a role one `--tags` run deploys.
-    # None means the read failed, and every reader
-    # below falls back to its own tree.
-    declared = _classified(
-        ln, "declared-tag read", t.declared_at, ln.merge_sha, ln.opts.primary
-    )
-    ln.declared = declared
-    if declared is None:
-        say(
-            f"could not read containers_list at {ln.merge_sha[:8]} — "
-            "classifying against this checkout instead"
-        )
-    # A shared role whose change reaches no rendered manifest is live for the next deploy of
-    # any caller, so no hand applies it: `manifests_rollout_timeout_default` is read as a
-    # `--timeout` while a deploy runs, so a 20-minute
-    # `ansible/deploy.yml` for it would change nothing. Its paths come out of the
-    # list the note is built from; every failure inside returns the list unchanged.
-    ln.plane_paths = _classified(
-        ln,
-        "deploy-time-only shared-role classification",
-        t.paths_a_hand_must_apply,
-        paths,
-        ln.pr_range,
-        ln.opts.primary,
-        declared,
-    )
-    if len(ln.plane_paths) != len(paths):
-        say(
-            "no rendered manifest reads what this PR changed under "
-            f"{','.join(sorted(set(paths) - set(ln.plane_paths)))}, so it takes effect on "
-            "the next deploy rather than needing one"
-        )
-    ln.plane = _classified(
-        ln, "plane classification", c.plane_note, ln.plane_paths, declared, quiet=quiet
-    )
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.
     tags, source = _classified(
@@ -185,14 +212,14 @@ def classify(ln: Landing) -> None:
             ln,
             "shared-role caller expansion",
             c.shared_caller_tags,
-            ln.plane_paths,
+            plane_paths,
             declared,
         )
         smoke = _classified(
             ln,
             "shared-role smoke narrowing",
             c.smoke_narrowed_roles,
-            ln.plane_paths,
+            plane_paths,
             declared,
         )
         for role, role_tags in sorted(reached.items()):
@@ -229,28 +256,28 @@ def classify(ln: Landing) -> None:
 
 
 def narrow_plane(ln: Landing, awaited: bool = True) -> None:
-    """Re-render `plane` with the narrow tags this PR's setup-role change needs.
+    """Render the plane note again with the narrow tags this PR's setup-role change needs.
 
-    `plane` is classified in step 1, before the tick has crossed this PR's range, so it names
-    the whole-role tag. After an `awaited` tick this reads the deployer's receipt for the
-    tick that crossed the merge commit (#3391), whose `manual` half holds the narrowest tags
-    each role needs over that tick's range alone. The range contains this PR, so the row is
-    quoted as it stands: before the receipt, `land.sh` read the `manual_plane_tags` sidecar,
-    whose row spans every range that made the role pending, and had to re-derive this PR's
-    own narrowing to prove the row covered it.
+    Step 1 renders the note before the tick has crossed this PR's range, so it names the
+    whole-role tag. The narrow tags are the one input that does not exist yet, and it is
+    passed in explicitly: every other input is the frozen `Classification`, so both renders
+    read the same paths, declared tags and quiet paths. After an `awaited` tick the tags come
+    from the deployer's receipt for the tick that crossed the merge commit (#3391), whose
+    `manual` half holds the narrowest tags each role needs over that tick's range alone. The
+    range contains this PR, so the row is quoted as it stands.
 
     A landing that deploys its own merge commit never awaits the tick (`awaited=False`), so
-    no receipt exists for its range. It prints the PR's own derivation instead, so the note
-    names the narrow tags the change needs rather than the whole-role tag.
+    no receipt exists for its range. It renders the PR's own derivation instead.
 
-    Every failure keeps the note as step 1 wrote it, with the whole-role tag: no receipt (a
-    deployer that has not shipped the writer, or a tick that recorded nothing), a role the
-    receipt could not narrow, no PR range on the fast path, a derivation that refuses or
-    raises. The re-render is INSIDE the try because a raise here, though unlikely (step 1
-    already called `plane_note` on these inputs), would end `land.py` in a traceback instead
-    of a verdict, which is a worse answer than the role tag.
+    Every failure leaves `narrowed_plane` empty, so `Landing.plane` stays step 1's note with
+    the whole-role tag: no receipt (a deployer that has not shipped the writer, or a tick
+    that recorded nothing), a role the receipt could not narrow, no PR range on the fast
+    path, a derivation that refuses or raises. The render is INSIDE the try because a raise
+    here would end `land.py` in a traceback instead of a verdict, which is a worse answer
+    than the role tag.
     """
-    if not ln.plane or (not awaited and not ln.pr_range):
+    cl = ln.classification
+    if not cl.plane or (not awaited and not cl.pr_range):
         return
     try:
         if awaited:
@@ -261,10 +288,15 @@ def narrow_plane(ln: Landing, awaited: bool = True) -> None:
                 if tags
             }
         else:
-            narrow = ln.tools.own_narrowing(ln.pr_paths, ln.pr_range, ln.opts.primary)
+            narrow = ln.tools.own_narrowing(
+                list(cl.pr_paths), cl.pr_range, ln.opts.primary
+            )
         if narrow:
-            ln.plane = ln.classifier.plane_note(
-                ln.plane_paths, ln.declared, quiet=ln.quiet, narrow_tags=narrow
+            ln.narrowed_plane = ln.classifier.plane_note(
+                list(cl.plane_paths),
+                cl.declared_set(),
+                quiet=cl.quiet,
+                narrow_tags=narrow,
             )
     except Exception as exc:
         say(f"narrowing not read ({type(exc).__name__}) — keeping the role tag")
@@ -273,7 +305,9 @@ def narrow_plane(ln: Landing, awaited: bool = True) -> None:
 
 def shortcut_if_nothing(ln: Landing) -> None:
     """A PR reaching no tag, no plane and nothing self-applied has nothing to wait for."""
-    if not (ln.resolved_tags or ln.plane or ln.self_applied or ln.needs_diff):
+    if not (
+        ln.resolved_tags or ln.plane or ln.classification.self_applied or ln.needs_diff
+    ):
         ln.finish(
             Verdict.NOTHING_TO_DEPLOY,
             0,

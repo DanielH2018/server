@@ -17,16 +17,19 @@ import pytest
 from _land_fakes import MERGE_SHA, RECEIPTS, Fakes, receipt
 from deploy_tools.land_lib import deploy, tools
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.landing import Classification
 
 
 def _verdict(landing, state: dict, is_ancestor_rc: int = 0) -> Outcome:
     """The verdict for a deploy-plane PR against a deployer holding `state`."""
     ln, _ = landing(Fakes(state=state, is_ancestor_rc=is_ancestor_rc))
     ln.merge_sha = MERGE_SHA
-    ln.plane = ""
-    ln.self_applied = True
-    ln.self_applied_command = "`ansible-playbook ansible/deploy.yml`"
-    ln.remaining_setup = ""
+    ln.classification = Classification(
+        plane="",
+        self_applied=True,
+        self_applied_command="`ansible-playbook ansible/deploy.yml`",
+        remaining_setup="",
+    )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
     return exc.value

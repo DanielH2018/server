@@ -9,6 +9,7 @@ from _land_fakes import MERGE_SHA, PRIMARY, Fakes, receipt
 from lib.exit_codes import DEPLOY_BROAD, LAND_GAVE_UP
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.landing import Classification
 
 
 # The deployer's record of a broad apply CONTAINING this PR. Converging with origin is not
@@ -210,9 +211,12 @@ def test_a_clean_deploy_returns(landing):
 )
 def test_no_tag_outcomes(landing, fakes, verdict, code):
     ln, _ = _ready(landing, fakes)
-    ln.plane, ln.self_applied = fakes.plane, fakes.self_applied
-    ln.self_applied_command = fakes.self_applied_command
-    ln.remaining_setup = fakes.remaining_setup
+    ln.classification = Classification(
+        plane=fakes.plane,
+        self_applied=fakes.self_applied,
+        self_applied_command=fakes.self_applied_command,
+        remaining_setup=fakes.remaining_setup,
+    )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
     assert (exc.value.rc, exc.value.verdict) == (code, verdict)
@@ -371,7 +375,9 @@ def test_deploy_phase_stamps_the_ledger(landing):
 def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):
     """Finding 13's rejecting half at the phase. `converged` here would print `settled`."""
     ln, _ = _ready(landing, Fakes(self_applied=True))
-    ln.self_applied = True
+    ln.classification = Classification(
+        self_applied=True,
+    )
     ln.tools.read_state = lambda root, name: None
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)

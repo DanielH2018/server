@@ -15,6 +15,7 @@ from _land_fakes import MERGE_SHA, Fakes, receipt
 from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.landing import Classification
 
 
 def _ready(landing, fakes=None, **opts):
@@ -29,7 +30,9 @@ def _broad_fallback(landing, fakes, **opts):
     """A landing on the truncated-file-list path whose `deploy_tags.py changed` refuses."""
     ln, calls = _ready(landing, fakes, since="beefbeef", **opts)
     ln.needs_diff = True
-    ln.self_applied = True
+    ln.classification = Classification(
+        self_applied=True,
+    )
     return ln, calls
 
 
@@ -69,7 +72,9 @@ def test_a_broad_fallback_the_tick_does_not_apply_still_names_a_verdict(landing)
     refuse the derivation for a PR that touched nothing broad. That one is still owed to a
     hand — but with a `VERDICT:` line."""
     ln, _calls = _broad_fallback(landing, Fakes(changed_rc=DEPLOY_BROAD))
-    ln.self_applied = False
+    ln.classification = Classification(
+        self_applied=False,
+    )
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)
     assert (exc.value.verdict, exc.value.rc) == ("needs-manual-apply", 1)

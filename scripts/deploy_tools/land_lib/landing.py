@@ -13,6 +13,7 @@ other.
 
 import subprocess
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import NoReturn
 
@@ -54,6 +55,44 @@ class TickState(StrEnum):
     UNKNOWN = "unknown"
 
 
+@dataclass(frozen=True)
+class Classification:
+    """What `classify.classify` derives from the PR's paths and range, which no phase rewrites.
+
+    Every field is a function of the PR's file list, its recorded range and the tags declared
+    at the merge commit, all read in step 1. The tags are not here: step 5 re-derives them
+    from the diff when `gh` truncated the file list, so they stay a phase output on `Landing`.
+
+    Attributes:
+        pr_paths: the PR's changed paths, as `gh pr view` listed them.
+        pr_range: `<merge-base>..<pr-head>`, or "" when it could not be read.
+        quiet: the broad paths whose diff carries no content change.
+        declared: the tags declared at the merge commit; None when that read failed, and
+            every reader then falls back to its own tree.
+        plane_paths: `pr_paths` less what a shared role changed that moves no rendered
+            manifest. Both renders of the plane note read it.
+        plane: what a hand must apply, as step 1 renders it with whole-role tags; "" for
+            nothing. `Landing.plane` is the note to print.
+        self_applied: whether the tick applies part of this PR itself.
+        self_applied_command: what applies that half by hand if the tick did not.
+        remaining_setup: the hosts a self-applied setup role reaches beyond the tick's own.
+    """
+
+    pr_paths: tuple[str, ...] = ()
+    pr_range: str = ""
+    quiet: frozenset[str] = frozenset()
+    declared: frozenset[str] | None = None
+    plane_paths: tuple[str, ...] = ()
+    plane: str = ""
+    self_applied: bool = False
+    self_applied_command: str = ""
+    remaining_setup: str = ""
+
+    def declared_set(self) -> set[str] | None:
+        """`declared` as the mutable set the classifiers take, or None when the read failed."""
+        return None if self.declared is None else set(self.declared)
+
+
 class Landing:
     """The state of one landing, plus the shared helpers phases call."""
 
@@ -66,20 +105,10 @@ class Landing:
         self.ledger = Ledger(pr=opts.pr, t_start=tools.clock())
         self.merge_sha = ""
         self.resolved_tags = [t for t in opts.tags.split(",") if t]
-        self.plane = ""
-        # What `plane` was classified from, kept so `classify.narrow_plane` can re-render it
-        # once the tick has recorded this PR's range in the deployer's narrowing.
-        self.pr_paths: list[str] = []
-        self.pr_range = ""
-        self.declared: set[str] | None = None
-        # `pr_paths` minus what a shared role changed that moves no rendered manifest.
-        # Both `plane_note` calls read it -- step 1's and `narrow_plane`'s re-render
-        # -- which must not disagree about what is owed to a hand.
-        self.plane_paths: list[str] = []
-        self.quiet: set[str] = set()
-        self.self_applied = False
-        self.self_applied_command = ""
-        self.remaining_setup = ""
+        self.classification = Classification()
+        # The plane note rendered again with the narrow tags the deployer recorded for this
+        # PR's range, by `classify.narrow_plane`; "" until then, or when nothing narrowed.
+        self.narrowed_plane = ""
         self.needs_diff = False
         # The tags in `resolved_tags` this PR PROVES are a k3s change, from two provenances:
         # `shared_caller_tags` reached them by walking the k8s role-caller graph, or
@@ -118,6 +147,11 @@ class Landing:
         self.pinned_head = ""
 
     @property
+    def plane(self) -> str:
+        """What a hand must apply, or "": the narrowed note once there is one, else step 1's."""
+        return self.narrowed_plane or self.classification.plane
+
+    @property
     def tags_csv(self) -> str:
         """`resolved_tags` as the comma string an argv, a label or a message needs."""
         return ",".join(self.resolved_tags)
@@ -144,7 +178,9 @@ class Landing:
         and `deploy.deploy_phase` have to answer it identically -- one awaiting the tick while
         the other deploys `--at` is the mixed state neither path is written for.
         """
-        return self.self_applied or bool(self.remaining_setup)
+        return self.classification.self_applied or bool(
+            self.classification.remaining_setup
+        )
 
     # -- ending the landing -------------------------------------------------------------
 
@@ -335,7 +371,7 @@ class Landing:
         what reports them at an arm that ends above those verdicts.
         """
         return (
-            bool(self.self_applied)
+            bool(self.classification.self_applied)
             and self.tick_state() == TickState.CONVERGED
             and not self.tick_applied(self.merge_sha)
         )
@@ -351,8 +387,8 @@ class Landing:
         if self.tick_watch_abandoned:
             return [ABANDONED_WATCH_NOTE]
         lines = [unrecorded_apply_note(self.state("behind_since"))]
-        if self.self_applied_command:
-            lines.append(f"  Apply it: {self.self_applied_command}")
+        if self.classification.self_applied_command:
+            lines.append(f"  Apply it: {self.classification.self_applied_command}")
         return lines
 
     def tick_half_open_lines(self) -> list[str]:
@@ -371,7 +407,7 @@ class Landing:
         all four states (#2601). For the same reason nothing here sets `ledger.cause`, which
         `outcome.Cause` scopes to a `deploy-failed` verdict.
         """
-        if not self.self_applied:
+        if not self.classification.self_applied:
             return []
         state = self.tick_state()
         if state == TickState.UNKNOWN:
