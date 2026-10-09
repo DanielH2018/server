@@ -86,7 +86,8 @@ containers_list:
     # The engine's (LAPI+AppSec) :6060 carries the LAPI/decision metrics the Grafana CrowdSec
     # boards read. The `metrics` field is documented in ansible/filter_plugins/scrape_jobs.py;
     # observability's prometheus.yaml.j2 renders a plain scrape job from each item, and the
-    # owning role reads the port back with `metrics_port`.
+    # owning role reads the port back with `metrics_port`. The engine binds 6060 from the
+    # image's own config.yaml, so this records that port rather than setting it.
     metrics:
       - job: crowdsec
         port: 6060
@@ -96,6 +97,8 @@ containers_list:
     depends_on: [crowdsec]
     # The k8s edge's traefik_* metrics, through the dedicated traefik-metrics ClusterIP: the
     # internal :8080 entrypoint must not ride the LoadBalancer Service onto the LAN VIP.
+    # 8080 is Traefik's own default for that entrypoint, so this records it rather than
+    # setting it; the Service's targetPort stays the literal.
     metrics:
       - job: traefik-k8s
         service: traefik-metrics
@@ -350,7 +353,8 @@ containers_list:
     # The image serves speedtest_tracker_* natively at `/prometheus` on its UI port (#996).
     # UNVERIFIED until someone flips the app's `prometheus_enabled` Settings toggle by hand: it
     # defaults OFF and lives in the app's own DB, so until then this job reads `up == 0`, not
-    # silently empty. See roles/k8s/speedtest/CLAUDE.md.
+    # silently empty. See roles/k8s/speedtest/CLAUDE.md. The port is the entry's own, which
+    # the image fixes.
     metrics:
       - job: speedtest
         path: /prometheus
@@ -687,7 +691,8 @@ containers_list:
     hostname: "loki-homelab"
     port: 3100
     use_authelia: false
-    # loki_* internals, scraped on the entry's own port.
+    # loki_* internals, scraped on the entry's own port. The configmap's http_listen_port sets
+    # the listener, so the two must change together.
     metrics:
       - job: loki-homelab
         interval: 1m

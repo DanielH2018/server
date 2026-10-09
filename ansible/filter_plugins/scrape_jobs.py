@@ -6,7 +6,13 @@ An exporter's metrics port is declared once, as a `metrics` item on its `contain
 - `scrape_jobs`: observability's `prometheus.yaml.j2` renders one static job per item, so a
   plain exporter needs no hand-copied `<service>.<namespace>.svc:<port>` target.
 - `metrics_port`: the owning role's Service and container read the same port by job name, so
-  the scrape target and the listener cannot drift apart.
+  the scrape target and the Service cannot drift apart.
+
+The item does not always set the port the process listens on. pihole-exporter and game-stats
+pass it to the process as an env var, so their listener follows the item. crowdsec, traefik,
+speedtest and loki-homelab listen on a port their image or their own config fixes, so for
+those the item records that port: changing it moves the Service and the scrape target but not
+the listener, and the job reads `up == 0`. Each of those items says so in a comment.
 
 A `metrics` item is a mapping with these keys:
 

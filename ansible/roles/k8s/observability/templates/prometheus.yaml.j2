@@ -135,9 +135,11 @@ data:
           - targets: ['kube-state-metrics:8080']
       # The plain exporters: a static `<service>.<namespace>.svc:<port>` target with no auth,
       # params or relabeling. Each is a `metrics` item on its containers_list entry, which is
-      # where the port is defined; the owning role reads it back with `metrics_port`, so the
-      # listener and this target cannot drift apart (#3743). The item's comment there says what
-      # the job feeds. A job needing anything more stays hand-written below.
+      # where the port is defined; the owning role reads it back with `metrics_port`, so its
+      # Service and this target cannot drift apart (#3743). Only pihole-exporter and game-stats
+      # also pass it to the process; the others record a port their image or config fixes, as
+      # scrape_jobs.py explains. The item's comment there says what the job feeds. A job needing
+      # anything more stays hand-written below.
       # ansible/filter_plugins/scrape_jobs.py documents the keys.
 {% for job in containers_list | scrape_jobs(k8s_namespace) %}
 {% if job.replicas_var is not defined or lookup('vars', job.replicas_var) | int > 0 %}
