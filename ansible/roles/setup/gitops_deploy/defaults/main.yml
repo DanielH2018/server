@@ -198,8 +198,8 @@ gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylis
 # (the pre-apply snapshot) + the role's OWN in-role waits + manifests_rollout_timeout +
 # k8s_rollout_stabilise_seconds. prowlarr is the worst at 120 + 300 + 780 + 60 = 1260s. The
 # rollout term is counted only for a role that queues one: netpol-baseline has the most in-role
-# waiting in the repo (five probe Jobs at `--timeout=130s`) and passes `manifests_rollout: ""`,
-# so it pays 710s rather than the 1310s its own rollout budget would suggest.
+# waiting in the repo (one probe Job at `--timeout=310s`) and passes `manifests_rollout: ""`,
+# so it pays 370s rather than the 970s its own rollout budget would suggest.
 #
 # On top of the role terms the tick pays two things no role declares:
 #   - the service-lock wait, spent out of this same budget (`deploy_locks.locked_budget`). 90s

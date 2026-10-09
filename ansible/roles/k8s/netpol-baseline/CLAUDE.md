@@ -13,8 +13,10 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
-- **Renders nothing runnable** — NetworkPolicy objects plus five probe Jobs
-  (`netpol-probe*-job.yaml.j2`) that verify the policy actually fenced what it claims to.
+- **Renders nothing runnable** — NetworkPolicy objects plus one probe Job
+  (`netpol-probe-job.yaml.j2`) that verifies the policies actually fence what they claim to.
+  Its legs and its readiness gate both read the target table `netpol_baseline_probe_targets`
+  in `defaults/main.yml`. Add a target as a row there, never as a second Job (#3813).
 - **Auto-deploy-eligible because** an image-only diff touches only the pinned probe image; the policies re-apply unchanged and the role hard-fails
   if the live exempt set has drifted from `netpol_baseline_exempt_workloads`.
 - **`netpol_baseline_scope: namespace`** — the baseline selects every pod in the namespace

@@ -241,7 +241,7 @@ def _rollout_timeout_s(role: str) -> int:
 # than counted: the reader
 # finds its subject by pattern, so a rename or a moved task would otherwise leave the sum
 # quietly smaller and every assertion here still green.
-_IN_ROLE_WAIT_CENSUS = {"prowlarr": 300, "netpol-baseline": 650}
+_IN_ROLE_WAIT_CENSUS = {"prowlarr": 300, "netpol-baseline": 310}
 
 
 def test_the_in_role_wait_census_is_non_vacuous():
@@ -320,7 +320,7 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
 # when `manifests_rollout | default(manifests_service) | length > 0`, so a role passing
 # `manifests_rollout: ""` waits for no rollout however long its own
 # `manifests_rollout_timeout` reads. Counting the term anyway made netpol-baseline look like the
-# worst role in the repo at 1310s when it pays 710s, and `manifests_rollout_timeout_s` cannot
+# worst role in the repo at 970s when it pays 370s, and `manifests_rollout_timeout_s` cannot
 # see the difference: it reads the budget, not whether anything spends it.
 #
 # The forward sum also carries two terms no role declares. Both are allowances rather than
@@ -346,7 +346,7 @@ _FORWARD_OVERHEAD_S = 60
 #   netpol-baseline: the role with the most in-role waiting in the repo and NO rollout to wait
 #                    on. It is here because it is the shape that breaks the derivation, not
 #                    because it is close to the cap.
-_FORWARD_CEILING_CENSUS = {"prowlarr": 1260, "netpol-baseline": 710}
+_FORWARD_CEILING_CENSUS = {"prowlarr": 1260, "netpol-baseline": 370}
 
 
 def _waits_for_a_rollout(role: str) -> bool:

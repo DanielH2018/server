@@ -56,7 +56,7 @@ netpol_baseline_k8s_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e68
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "renders NetworkPolicies plus five probe Jobs, all gated to completion; an _image:-only diff touches only the pinned probe image, the policies re-apply unchanged, and the role hard-fails if the live exempt set has drifted"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "renders NetworkPolicies plus one probe Job, gated to completion; an _image:-only diff touches only the pinned probe image, the policies re-apply unchanged, and the role hard-fails if the live exempt set has drifted"  # noqa var-naming[no-role-prefix]
 
 # The observability namespace fence. It carries its OWN enforcement flag and its
 # OWN node-CIDR list, deliberately: the shared netpol_baseline_node_cidrs is read by the 16
@@ -105,20 +105,74 @@ netpol_baseline_obs_node_cidrs:
   - 10.42.0.0/32    # daniel-box flannel.1 (the observability cron, and the API server's proxy for Headlamp's Prometheus plugin, when prometheus is cross-node)
   - 10.42.1.0/32    # daniel-server flannel.1 (no caller nameable today; deliberate over-inclusion)
 
-# The probe's targets, in one place because THREE things must agree about them: the
-# readiness gate in tasks/main.yml, the assertions in netpol-probe-slice45-job.yaml.j2, and the
-# ports that template hardcodes. Adding an assertion there without adding its target here reopens
-# the silent-green hole the gate exists to close.
+# The probe's target table. ONE list, read by both halves of the probe, so the two cannot
+# disagree: the readiness gate in tasks/main.yml loops it, and netpol-probe-job.yaml.j2 renders
+# one `nc` leg per row that has an `expect`. A row is gated whether or not it is dialled.
 #
-# terraria is ABSENT, and its absence is the whole reason this list exists as a variable. It is
-# scaled to `replicas: 0` and its EndpointSlice is empty, so a probe against it would fail every
-# full `deploy.yml` (a scoped per-service deploy never reaches this role).
-# Its probe leg is gated on this same list, so restoring terraria to a running replica count is a
-# one-line change here and the coverage comes back with it.
-netpol_baseline_slice45_targets:
-  - speedtest
-  - home-assistant
-  - uptime-kuma
-  - loki-homelab
-  - scrutiny
-  - karakeep-meilisearch
+# Columns:
+#   service — the Service name. It is the name the gate reads and the name the leg dials. It is
+#             not always the pod label (scrutiny's pods are `app: scrutiny-web`).
+#   plane   — `homelab` or `observability`. It picks the namespace and the lever: a homelab row
+#             runs only while netpol_baseline_enforced is true, an observability row only while
+#             netpol_baseline_obs_enforced is.
+#   port    — the POD port, from the target's own NetworkPolicy `port:`. Every target here maps
+#             Service port to pod port 1:1.
+#   expect  — `refused` (an inverted leg), `open` (the connection must succeed), or absent (the
+#             gate checks the row, and no leg dials it).
+#   policy  — the policy file that owns the fence, printed in the failure message.
+#
+# A WRONG PORT ON A `refused` ROW FAILS SILENTLY GREEN. A port nothing listens on makes `nc` fail,
+# which is the PASS branch of an inverted leg. The gate proves the Service has a ready backend; it
+# does not prove the port is the one that backend serves. Re-check a port against its source
+# whenever you touch its row.
+#
+# The probe pod is `app: netpol-baseline-probe`. No caller list in the repo names that label, so
+# every `refused` row must refuse it. Its `netpol-probe: control` label admits it to speedtest:80,
+# the sentinel, and to nothing else.
+#
+# terraria is ABSENT while `terraria_k8s_replicas` is 0. Its EndpointSlice is empty then, so its
+# row would fail the gate on every full `deploy.yml`. To restore its open-port leg, add
+# `{service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2}`.
+# `ansible/tests/k8s/test_netpol_probe_targets.py` fails if the row and the replica count disagree.
+netpol_baseline_probe_targets:
+  # The namespace baseline: an app with no in-cluster caller. The probe's HTTPS liveness leg
+  # reaches the same app through traefik, which is the allowed path.
+  - {service: littlelink, plane: homelab, port: 3000, expect: refused, policy: networkpolicy.yaml.j2}
+  # Per-workload caller lists: each admits named callers, and this pod is none of them.
+  - {service: sonarr, plane: homelab, port: 8989, expect: refused, policy: "sonarr's netpol_from (host_vars/daniel-box.yml)"}
+  - {service: radarr, plane: homelab, port: 7878, expect: refused, policy: "radarr's netpol_from (host_vars/daniel-box.yml)"}
+  - {service: prowlarr, plane: homelab, port: 9696, expect: refused, policy: prowlarr/templates/networkpolicy-prowlarr.yaml.j2}
+  - {service: qbittorrent, plane: homelab, port: 8080, expect: refused, policy: qbittorrent/templates/networkpolicy.yaml.j2}
+  # Cross-namespace callers. Ports from observability/templates/prometheus.yaml.j2 and loki.yaml.j2.
+  # grafana and tempo admit only the intra-namespace `podSelector: {}` peer, which a probe in the
+  # homelab namespace cannot exercise. They are gated so the observability plane is proved up.
+  - {service: prometheus, plane: observability, port: 9090, expect: refused, policy: networkpolicy-prometheus.yaml.j2}
+  - {service: loki, plane: observability, port: 3100, expect: refused, policy: networkpolicy-loki.yaml.j2}
+  - {service: grafana, plane: observability}
+  - {service: tempo, plane: observability}
+  # The infra tier.
+  - {service: authelia, plane: homelab, port: 9091, expect: refused, policy: networkpolicy-authelia.yaml.j2}
+  - {service: crowdsec, plane: homelab, port: 8080, expect: refused, policy: networkpolicy-crowdsec.yaml.j2}
+  - {service: nut, plane: homelab, port: 3493, expect: refused, policy: networkpolicy-nut.yaml.j2}
+  - {service: mosquitto, plane: homelab, port: 1883, expect: refused, policy: networkpolicy-mosquitto.yaml.j2}
+  # One target per fencing shape the last rollout slice introduced: a fan-in app
+  # (home-assistant, uptime-kuma), a cross-namespace one (loki-homelab), a sub-workload behind a
+  # parent (karakeep-meilisearch), and one whose Service name differs from its pod label
+  # (scrutiny, pods `app: scrutiny-web`), the mistake most likely to select nothing.
+  - {service: home-assistant, plane: homelab, port: 8123, expect: refused, policy: "home-assistant's netpol_from (host_vars/daniel-box.yml)"}
+  - {service: uptime-kuma, plane: homelab, port: 3001, expect: refused, policy: "uptime-kuma's netpol_from (host_vars/daniel-box.yml)"}
+  - {service: loki-homelab, plane: homelab, port: 3100, expect: refused, policy: networkpolicy-loki-homelab.yaml.j2}
+  - {service: scrutiny, plane: homelab, port: 8080, expect: refused, policy: "scrutiny's netpol_from, pod label scrutiny-web"}
+  - {service: karakeep-meilisearch, plane: homelab, port: 7700, expect: refused, policy: "karakeep's netpol_fences (host_vars/daniel-box.yml)"}
+  # The sentinel. The probe's control leg dials it with a retry, outside the table, so the row
+  # has no `expect`.
+  - {service: speedtest, plane: homelab}
+
+# The rows whose lever is on. The gate loops this and the Job renders from it, so a plane with
+# its lever off is neither gated nor dialled.
+netpol_baseline_probe_active: >-
+  {{ netpol_baseline_probe_targets
+     | selectattr('plane', 'in',
+                  (['homelab'] if netpol_baseline_enforced | bool else [])
+                  + (['observability'] if netpol_baseline_obs_enforced | bool else []))
+     | list }}
