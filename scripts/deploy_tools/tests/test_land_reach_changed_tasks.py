@@ -156,3 +156,55 @@ def test_a_role_gated_off_the_tick_host_is_left_to_the_plane_note():
     files = ["ansible/roles/setup/optimize_pi/tasks/main.yml"]
     assert land_reach.setup_role_hosts("optimize_pi") == {"daniel-pi"}
     assert land_reach.remaining_setup_hosts_note(files, "daniel-box") == ""
+
+
+def _pre_merge_checkout(tmp_path) -> tuple:
+    """A repo whose range edits only a `has_gitops` task, with the checkout left at the start.
+
+    deploy-ui runs `land.sh` from the primary checkout, which holds the pre-merge tree until
+    the tick fast-forwards, so the checkout's task chains carry none of the changed tasks.
+    """
+    repo = tmp_path / "repo"
+    env = {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "HOME": str(tmp_path),
+        "PATH": "/usr/bin:/bin",
+    }
+    run(["git", "init", "-q", "-b", "master", str(repo)], check=True, env=env)
+    tree = {
+        "ansible/initial_setup.yml": yaml.safe_dump(
+            [{"hosts": "all", "roles": ["crony"]}]
+        ),
+        "ansible/inventory/group_vars/all.yml": "has_gitops: false\n",
+        "ansible/inventory/host_vars/daniel-box.yml": "has_gitops: true\n",
+    }
+    old = _commit(repo, _CRONS, tree)
+    new = _commit(repo, _edit(_CRONS, "docs-refresh"))
+    run(["git", "checkout", "-q", old], cwd=repo, check=True, env=env)
+    return repo, old, new
+
+
+def test_the_note_reads_the_merge_commits_tree_not_a_pre_merge_checkout(tmp_path):
+    repo, old, new = _pre_merge_checkout(tmp_path)
+    note = land_reach.remaining_setup_hosts_note(
+        [_TASKS], "daniel-box", pr_range=f"{old}..{new}", ref=new, repo=repo
+    )
+    assert note == ""
+
+
+def test_the_pre_merge_checkouts_own_tree_reads_wide(tmp_path):
+    """The red half: the same range read from the checkout names the two other hosts."""
+    repo, old, new = _pre_merge_checkout(tmp_path)
+    ansible = repo / "ansible"
+    note = land_reach._remaining_note(
+        [_TASKS],
+        "daniel-box",
+        (),
+        ansible / "initial_setup.yml",
+        ansible / "inventory" / "group_vars" / "all.yml",
+        ansible / "inventory" / "host_vars",
+        ansible / "roles" / "setup",
+        pr_range=f"{old}..{new}",
+        repo=repo,
+    )
+    assert "daniel-pi" in note and "daniel-server" in note

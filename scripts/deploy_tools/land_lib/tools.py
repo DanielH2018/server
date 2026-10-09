@@ -504,6 +504,8 @@ class RemainingSetupHosts(Protocol):
         *,
         quiet: Iterable[str] = (),
         pr_range: str = "",
+        ref: str = "",
+        repo: Path = ...,
     ) -> str: ...
 
 

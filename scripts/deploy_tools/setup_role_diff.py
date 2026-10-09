@@ -9,8 +9,13 @@ the asymmetry `setup_role_chains` keeps.
 Split out of `land_reach.py` at the module-length cap.
 """
 
+import contextlib
 import json
+import subprocess
 import sys
+import tarfile
+import tempfile
+from collections.abc import Generator
 from pathlib import Path
 
 import yaml
@@ -141,3 +146,25 @@ def _split_leaves(tasks) -> tuple[list[str], list[str]]:
         else:
             leaves.append(json.dumps(task))
     return leaves, frames
+
+
+@contextlib.contextmanager
+def tree_at(ref: str, repo: Path) -> Generator[Path | None]:
+    """A temporary copy of `ref`'s `ansible/` tree, or None when git cannot write one.
+
+    The checkout `land.sh` runs from can predate the merge: deploy-ui runs it from the primary
+    checkout, which sits at the pre-merge HEAD until the tick fast-forwards. Task chains read
+    from that tree are the old ones, so a changed task is never found there and the note fell
+    back to the whole file's reach, the #3976 symptom. Reading the merge commit's tree is what
+    `classify.adopt_cross_role_tables` does for the cross-role tables.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(tmp) / "ansible.tar"
+        root = Path(tmp) / "tree"
+        try:
+            git("archive", "-o", str(archive), ref, "ansible", cwd=repo)
+            with tarfile.open(archive) as tar:
+                tar.extractall(root, filter="data")
+        except OSError, subprocess.SubprocessError, tarfile.TarError:
+            root = None
+        yield root

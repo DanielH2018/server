@@ -18,6 +18,7 @@ The traversal that reads a role's `tasks/` tree for those gates is `setup_role_c
 this one evaluates the chains it returns.
 """
 
+import contextlib
 import functools
 import json
 import sys
@@ -41,7 +42,7 @@ from deploy_logic import (
 )
 
 from land_changes import changes_for
-from setup_role_diff import deleted_in, task_file_chains
+from setup_role_diff import deleted_in, task_file_chains, tree_at
 from setup_role_chains import (
     SHIPPED_DIRS,
     VARS_DIRS,
@@ -439,11 +440,33 @@ def remaining_setup_hosts_note(
     files,
     local_host: str,
     quiet=(),
+    pr_range: str = "",
+    ref: str = "",
+    repo: Path = REPO,
+) -> str:
+    """`_remaining_note` over `ref`'s `ansible/` tree, or this checkout's without one.
+
+    `ref` is the merge commit: the checkout can predate it (`setup_role_diff.tree_at`), and
+    a ref git cannot archive falls back to the checkout. `repo` holds `ref` and `pr_range`.
+    """
+    paths = (_INITIAL_SETUP_YML, ALL_VARS, HOST_VARS, _SETUP_ROLES_DIR)
+    with tree_at(ref, repo) if ref else contextlib.nullcontext() as root:
+        at = [root / p.relative_to(REPO) for p in paths] if root else list(paths)
+        return _remaining_note(
+            files, local_host, quiet, at[0], at[1], at[2], at[3], pr_range, repo
+        )
+
+
+def _remaining_note(
+    files,
+    local_host: str,
+    quiet=(),
     playbook: Path = _INITIAL_SETUP_YML,
     all_vars: Path = ALL_VARS,
     host_vars_dir: Path = HOST_VARS,
     roles_dir: Path = _SETUP_ROLES_DIR,
     pr_range: str = "",
+    repo: Path = REPO,
 ) -> str:
     """What a self-applied setup-role change still needs beyond `local_host`, or "" if nothing does.
 
@@ -499,7 +522,14 @@ def remaining_setup_hosts_note(
         hosts = frozenset().union(
             *(
                 setup_file_hosts(
-                    role, p, playbook, all_vars, host_vars_dir, roles_dir, pr_range
+                    role,
+                    p,
+                    playbook,
+                    all_vars,
+                    host_vars_dir,
+                    roles_dir,
+                    pr_range,
+                    repo,
                 )
                 for p in own
             ),

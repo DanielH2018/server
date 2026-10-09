@@ -190,6 +190,8 @@ def classify(ln: Landing) -> None:
         t.hostname(),
         quiet=quiet,
         pr_range=recorded,
+        ref=ln.merge_sha,
+        repo=ln.opts.primary,
     )
     # `--tags` named the services, so the plane is left unread: the operator's list wins over
     # a derivation, and `plane` is what a HAND applies rather than an input to any wait this
