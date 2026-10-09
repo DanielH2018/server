@@ -162,12 +162,21 @@ def test_each_alloy_config_emits_only_owner_values(name):
     )
 
 
+def _unemitted(owner_jobs: set[str], configs: dict[str, str]) -> set[str]:
+    emitted = set().union(*(_emitted_jobs(text) for text in configs.values()))
+    return owner_jobs - emitted
+
+
 def test_every_owner_value_is_emitted():
-    emitted = set().union(*(_emitted_jobs(text) for text in _alloy_configs().values()))
-    assert OWNER_JOBS <= emitted, (
+    dead = _unemitted(OWNER_JOBS, _alloy_configs())
+    assert not dead, (
         "loki_streams lists job values no Alloy config emits, so a selector on them matches "
-        f"nothing: {sorted(OWNER_JOBS - emitted)}"
+        f"nothing: {sorted(dead)}"
     )
+
+
+def test_an_owner_value_nothing_emits_is_flagged():
+    assert _unemitted(OWNER_JOBS | {"traefik"}, _alloy_configs()) == {"traefik"}
 
 
 def test_the_consumer_census_finds_its_named_members():

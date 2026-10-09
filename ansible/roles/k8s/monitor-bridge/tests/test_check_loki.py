@@ -1,6 +1,6 @@
 """Loki: the selector roster, the log-error arm, and the ingestion watchdog.
 
-A LogQL selector naming a label promtail does not ship matches no stream and reports "no events"
+A LogQL selector naming a label Alloy does not ship matches no stream and reports "no events"
 forever. HA_BAN_SELECTOR shipped that way with app="home-assistant". A fail-open arm cannot tell
 "nothing to report" from "wrong question", so the selector labels are checked against the
 observed stream vocabulary rather than against the check's own verdict.
@@ -34,7 +34,7 @@ from _helpers import ALL_VARS, load_yaml
 #   2. The vocabulary below came from one k8s pod stream. LOKI_STREAM selects file-tail streams,
 #      which may legitimately carry labels this set does not list. Widen the set against a live
 #      stream if a genuine selector ever fails — do not delete the guard.
-# Promtail's k8s stream vocabulary, read off a live Loki stream. `app` is NOT in it — a
+# The k8s pod stream vocabulary, read off a live Loki stream. `app` is NOT in it — a
 # selector with app="home-assistant" matches no stream and reports "no ip_ban events" forever. A fail-open arm cannot tell "nothing to report" from "wrong question",
 # so the selector label has to be checked by something other than the check's own verdict.
 # Transcribed from a live stream. Kept as a FLOOR rather than the whole answer:
@@ -92,7 +92,7 @@ def _logql_selector_names(cfg):
 
     Derived rather than listed. A hardcoded list would let a later selector, such as
     LOKI_PI_STREAM, join unchecked. A selector this cannot see is a selector that can
-    name a label promtail does not emit and go permanently green, which is the exact failure
+    name a label Alloy does not emit and go permanently green, which is the exact failure
     the test exists for.
 
     Matched on the LEADING `{...}` only, deliberately: a selector may carry line filters
@@ -145,7 +145,7 @@ def test_loki_selectors_use_real_stream_labels(cfg):
         selector = getattr(cfg, name)
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
         assert not unknown, (
-            "%s selects on %s, which promtail does not emit — the query matches no stream and "
+            "%s selects on %s, which Alloy does not emit — the query matches no stream and "
             "the check goes permanently green: %s" % (name, sorted(unknown), selector)
         )
 
@@ -177,7 +177,7 @@ def test_deployed_loki_selectors_use_real_stream_labels():
     for name, selector in _deployed_selector_values().items():
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
         assert not unknown, (
-            "%s deploys as %s, which selects on %s -- promtail does not emit that label, so "
+            "%s deploys as %s, which selects on %s -- Alloy does not emit that label, so "
             "the query matches no stream and the check goes permanently green"
             % (name, selector, sorted(unknown))
         )
