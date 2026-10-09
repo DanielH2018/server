@@ -482,6 +482,11 @@
   when: claude_code_agent_user_enabled
   ansible.builtin.import_tasks: agent_homelab_ui.yml
 
+- name: Give the agent user its homelab-ui browser and MCP registration, or take them back
+  tags: [claude_code]
+  when: claude_code_agent_user_enabled
+  ansible.builtin.import_tasks: agent_browser.yml
+
 - name: Set what the agent reads of the host, and what the operator reads of the agent
   tags: [claude_code]
   when: claude_code_agent_user_enabled

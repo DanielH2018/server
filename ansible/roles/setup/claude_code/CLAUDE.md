@@ -103,7 +103,6 @@ effect at the next start**, so the deploy that changes it drops the RC host's se
 and `claude_code_rc_workdir` follow it. The unit gets `ProtectHome=yes`, `NoNewPrivileges=yes`,
 `PrivateTmp=yes` and `UMask=0027` only when it differs from `sys_user`. The first apply as the
 agent copies the operator's memory store once (`tasks/agent_memory_seed.yml`).
-
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 
 - **Scope:** `rsync --delete` of `claude_code_memory_sync_dir` (follows `claude_code_user`) to

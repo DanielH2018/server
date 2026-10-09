@@ -24,6 +24,7 @@ CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "main.yml"
 # Imported by main.yml under one `when:`, so its tasks carry none and agent_tasks() misses them.
 AGENT_GITHUB = SETUP / "claude_code" / "tasks" / "agent_github.yml"
 AGENT_ACCESS = SETUP / "claude_code" / "tasks" / "agent_access.yml"
+AGENT_BROWSER = SETUP / "claude_code" / "tasks" / "agent_browser.yml"
 # Every role that builds an agent user, with the role variable each contract key must name.
 AGENTS = {
     "renovate_agent": {
@@ -235,13 +236,16 @@ def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent()
     shared = tasks(SHARED)
     claude = agent_tasks(tasks(CLAUDE_TASKS))
     github = tasks(AGENT_GITHUB)
+    browser = tasks(AGENT_BROWSER)
     # The named members, so the census cannot pass on a renamed or vanished task.
     named(shared, "Install the pinned host Python for the agent user")
     named(claude, "Sync the repo's venv in the agent user's clone")
     named(github, "Generate the agent's commit-signing key")
+    named(browser, "Install the agent user's pinned @playwright/mcp")
     assert root_run_writers(shared) == []
     assert root_run_writers(claude) == []
     assert root_run_writers(github) == []
+    assert root_run_writers(browser) == []
 
 
 def test_a_command_run_as_root_on_each_apply_is_flagged() -> None:
