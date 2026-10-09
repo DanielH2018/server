@@ -147,6 +147,57 @@ def test_each_message_renders_a_valid_json_payload() -> None:
         )
 
 
+def service_settings(unit: str) -> dict[str, str]:
+    """The `[Service]` section's `Key=value` lines, comments and continuations skipped."""
+    section = unit.split("[Service]", 1)[1]
+    return dict(
+        line.split("=", 1)
+        for line in section.splitlines()
+        if "=" in line and not line.startswith(("#", " "))
+    )
+
+
+def retries_until_delivered(settings: dict[str, str]) -> bool:
+    """True when systemd re-runs a failed delivery and stops only on curl's HTTP error."""
+    return (
+        settings.get("Restart") == "on-failure"
+        and bool(settings.get("RestartSec"))
+        and settings.get("RestartPreventExitStatus", "").split() == ["22"]
+    )
+
+
+def test_a_failed_delivery_retries_until_the_network_returns() -> None:
+    # curl's own retries span about two minutes; the 2026-10-06 WAN outage lasted 69 hours,
+    # and three pages exited 6 inside it with nothing to try again (#3902).
+    unit = _render(
+        UNIT.read_text(),
+        alert_unit_name="widget",
+        alert_unit_description="Widget",
+        alert_unit_message="widget failed",
+        alert_unit_env_dir="/etc/widget",
+    )
+    settings = service_settings(unit)
+    assert settings.get("Type") == "oneshot", "the [Service] parse found no Type="
+    assert retries_until_delivered(settings), (
+        "a failed page must retry: Restart=on-failure, a RestartSec, and "
+        "RestartPreventExitStatus=22 so only an HTTP rejection is final"
+    )
+
+
+def test_an_alert_that_gives_up_or_retries_a_rejection_is_flagged() -> None:
+    retrying = {
+        "Restart": "on-failure",
+        "RestartSec": "5min",
+        "RestartPreventExitStatus": "22",
+    }
+    assert retries_until_delivered(retrying)
+    assert not retries_until_delivered(
+        {k: v for k, v in retrying.items() if k != "Restart"}
+    )
+    assert not retries_until_delivered({**retrying, "RestartPreventExitStatus": "6 22"})
+    assert not retries_until_delivered({**retrying, "RestartPreventExitStatus": ""})
+
+
 def test_every_notified_handler_exists_in_the_calling_role() -> None:
     # A notify naming no handler fails the play only when the task changes, which is the
     # deploy that edits the alert, not the one that adds the caller.
