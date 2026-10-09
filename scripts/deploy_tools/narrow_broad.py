@@ -2,12 +2,10 @@
 """Which service tags a deploy-plane change actually reaches, or a refusal to guess.
 
 THE PROBLEM. `deploy_changes._BROAD_DEPLOY_PREFIXES` routes any change under
-`ansible/inventory/` or `ansible/templates/` to an unscoped `ansible/deploy.yml`, which is
-~20 minutes under the tree lock across every role. Full-play runs for a change that reaches
-one service dominate the time the lock is busy, and one that fails on a gate belonging to a
-service the change never touched writes `hold_sha` and turns other landings into
-`deploy-failed (tick-held)`. Most of those ranges were one service's `containers_list` entry
-or one variable two roles read.
+`ansible/inventory/`, `ansible/templates/` or `ansible/filter_plugins/` to an unscoped
+`ansible/deploy.yml`: ~20 minutes under the tree lock across every role. A full run that
+fails on a gate of a service the change never touched writes `hold_sha` and turns other
+landings into `deploy-failed (tick-held)`. Most such ranges reached one or two services.
 
 WHAT THIS DERIVES. For each changed deploy-plane path, the services whose rendered output
 can move because of it:
@@ -20,6 +18,9 @@ can move because of it:
     following a macro that another macro imports. `narrow_templates` drops a mention inside a
     Jinja comment, maps the claim template to its `k8s_claims` declarers, and a comment-only
     edit to no tags.
+  - `ansible/filter_plugins/<x>.py`: every role whose files name one of the filters its
+    `FilterModule.filters()` registers (`narrow_filters`, #3843). A caller under the play's
+    own trees refuses, as `toposort.py`'s in `deploy.yml` does.
 
 ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` turns a refusal back into today's
 full run. A missed consumer is a service left silently stale until something unrelated
@@ -30,16 +31,12 @@ redeploys it; a full run is only slow.
 
 `narrow` agrees with `deploy_tags.py changed` wherever both answer: the non-broad half of a
 range goes through the same `services_from_changed_paths` mapper, less the roles the range
-DELETED (`narrow_paths.role_is_gone`). Where `changed` prints a
-tag list PLUS a note about a shared role a human must still apply, `narrow` refuses instead —
-the tick has no human to read the note.
+DELETED (`narrow_paths.role_is_gone`). Where `changed` prints a tag list PLUS a note about a
+shared role a human must still apply, `narrow` refuses: the tick has no human to read it.
 
-`Release Staleness Drift` is the second consumer (`probe_lib/releases.py`). It asks the
-per-path question `broad_path_tags` answers, over `CENSUS_PREFIXES`, for the range from a
-service's release record to `origin/master` — so a merged inventory or macro change that
-reached a service's render is named stale until that service is re-stamped. It does NOT go
-through `narrow`: the fleet-coverage ceiling at the end of `narrow` is lock-time policy (a
-list covering most of the fleet saves none of the twenty minutes), and for a census "most of
+`Release Staleness Drift` (`probe_lib/releases.py`) asks `broad_path_tags` the same per-path
+question over `CENSUS_PREFIXES`, for the range from a release record to `origin/master`. It
+skips `narrow`'s fleet-coverage ceiling, which is lock-time policy: for a census "most of
 the fleet" is the answer, not a refusal.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow.py
@@ -57,24 +54,21 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 from deploy_tools import narrow_containers, narrow_paths, narrow_templates
+from deploy_tools import narrow_filters
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.git import git, git_stdout
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 from lib.render_guard import service_tags_at
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
-# The deployer's own `files/` — `deploy_logic` is imported from there, the same reach across
-# the role boundary `deploy_tags.py` makes and for the same reason: one mapper, not two. Its
-# own insert rather than deploy_tags', so this module resolves however it is reached.
-# `deploy_logic`'s IMPORT stays inside the function that needs it, because only the path entry
-# is free at module import; `deploy_changes` below is the exception — see the note on it.
+# The deployer's own `files/`, reached as `deploy_tags.py` reaches it so there is one mapper,
+# not two. `deploy_logic`'s IMPORT stays inside the function that needs it, because only the
+# path entry is free at module import; `deploy_changes` below is the exception.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-# Both halves of the deploy plane come from the deployer's side rather than being restated
-# here: `_BROAD_PLAY_PREFIXES` is derived there as `_BROAD_DEPLOY_PREFIXES` minus the
-# census two, so a prefix added to one cannot go missing from the other. At module import
-# rather than inside a function, unlike `deploy_logic` below, because `deploy_changes` is
-# stdlib-only and imports nothing from this tree — one module's parse, and no cycle to open.
+# Both halves of the deploy plane come from the deployer, where `_BROAD_PLAY_PREFIXES` is
+# derived as `_BROAD_DEPLOY_PREFIXES` minus the census two. Imported at module level because
+# `deploy_changes` is stdlib-only and imports nothing from this tree, so no cycle opens.
 from deploy_changes import _BROAD_CENSUS_PREFIXES, _BROAD_PLAY_PREFIXES, role_of
 
 # Paths whose content every play reads, so no `--tags` value scopes a change to them: the play
@@ -87,17 +81,10 @@ PLAY_PREFIXES = _BROAD_PLAY_PREFIXES
 ROLE_TREES = ("ansible/roles/k8s", "ansible/roles/containers")
 SHARED_TEMPLATES = "ansible/templates/"
 INVENTORY = "ansible/inventory/"
-# The two broad-deploy trees a per-path rule exists for. `broad_path_tags` refuses a
-# `PLAY_PREFIXES` path outright, and a census counting one would mark every service stale for
-# a change to how a deploy RUNS.
+# The two broad-deploy trees a census reads. `broad_path_tags` refuses a `PLAY_PREFIXES` path
+# other than a filter plugin, and a census counting one would mark every service stale for a
+# change to how a deploy RUNS.
 CENSUS_PREFIXES = _BROAD_CENSUS_PREFIXES
-# Python under the play's own tree cannot import a Jinja macro, so a macro NAME found there is
-# a string, not a consumer: `filter_plugins/toposort.py` carries `ingressroute.yml.j2` as the
-# marker it greps role templates for. Treating that hit as consumption would refuse every
-# change to that macro (23 of 24 sampled deploy-plane ranges), and the same refusal would mark
-# every service on a record stale and page. A variable is different: a filter plugin can read
-# one, so the variable scan keeps refusing.
-_FILTER_PLUGINS = "ansible/filter_plugins/"
 # The one directory under the role trees that is not a service: `common`, the shared Docker
 # deploy path. Every grep here reads the TREE at `ctx.ref`, so no `archive` entry is needed.
 # `land_tags._NOT_SERVICES` still carries one because it reads DIFF paths, and a range
@@ -203,16 +190,16 @@ def _sort_hits(
     An inventory hit that is not `key`'s own definition refuses: see `_defines_only`. A
     `_`-prefixed inventory file is exempt on both sides — `_inventory_tags` skips it as a
     file no host loads, so its commented-out examples are not consumers either. A macro
-    scan (`key is None`) drops a `.py` under `_FILTER_PLUGINS`, which can name a macro but
-    never render it; a play-level hit anywhere else, and every play-level hit for a
-    variable, still refuses.
+    scan (`key is None`) drops a filter plugin, which can name a macro but never render
+    it: `toposort.py` names `ingressroute.yml.j2`, and counting that refused 23 of 24
+    sampled ranges. Every other play-level hit, and every one for a variable, refuses.
     """
     roles: set[str] = set()
     templates: set[str] = set()
     for path in hits:
         if path.endswith(".md"):
             continue
-        if key is None and path.startswith(_FILTER_PLUGINS) and path.endswith(".py"):
+        if key is None and narrow_filters.is_plugin(path):
             continue
         if path.startswith(INVENTORY):
             if path.split("/")[-1].startswith("_"):
@@ -393,6 +380,8 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     """
     if narrow_paths.is_prose(path):  # a doc no playbook applies
         return set()
+    if narrow_filters.is_plugin(path):
+        return _filter_tags(path, old_ref, ctx)
     if any(path.startswith(p) for p in PLAY_PREFIXES):
         raise CannotNarrow(f"{path} is read by every deploy")
     after = show_at(ctx.ref, path, ctx.cwd)
@@ -431,6 +420,26 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     if path.startswith(INVENTORY):
         return _inventory_tags(path, show_at(old_ref, path, ctx.cwd), after, ctx)
     raise CannotNarrow(f"{path} is a broad path no narrowing rule reads")
+
+
+def _filter_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
+    """The tags a filter plugin reaches: the roles whose files name one of its filters.
+
+    `_grep` reads no `roles/setup/` tree, so a setup role calling the filter goes uncounted,
+    as it does under the full `deploy.yml` a refusal falls back to. A shared-template hit
+    follows that template's importers.
+    """
+    roles: set[str] = set()
+    for name in sorted(narrow_filters.plugin_names(path, old_ref, ctx.ref, ctx.cwd)):
+        hits = _grep(ctx, name, word=True, inventory=True)
+        found = narrow_filters.callers(hits, name, ctx.ref, ctx.cwd)
+        sorted_hits = _sort_hits(found, f"the filter {name}", ctx, name)
+        roles |= sorted_hits.roles
+        for macro in sorted(sorted_hits.templates):
+            roles |= template_importers(macro, ctx.ref, ctx.cwd, {macro}, ctx.explain)
+    tags = _role_tags(roles, ctx)
+    ctx.explain(f"narrow: {path} -> {','.join(sorted(tags)) or '(nothing)'}")
+    return tags
 
 
 def _changed_half(paths: list[str], ctx: Context) -> set[str]:
@@ -498,13 +507,8 @@ def narrow(
     # Through the deployer's own index, the way `_changed_half` reaches its mapper.
     from deploy_logic import _BROAD_DEPLOY_PREFIXES as broad_prefixes
 
-    paths = [
-        p
-        for p in git_stdout(
-            "diff", "--name-only", f"{old_ref}..{new_ref}", cwd=cwd
-        ).splitlines()
-        if p
-    ]
+    diff = git_stdout("diff", "--name-only", f"{old_ref}..{new_ref}", cwd=cwd)
+    paths = [p for p in diff.splitlines() if p]
     broad = [p for p in paths if any(p.startswith(x) for x in broad_prefixes)]
     tags = _changed_half([p for p in paths if p not in set(broad)], ctx)
     for path in broad:
@@ -531,12 +535,8 @@ def context_for(
 ) -> Context:
     """A `Context` for reading `ref` from `cwd`, with the two derived fields filled in.
 
-    Args:
-        ref: the commit the rules read consumers at — the NEW end of a range.
-        cwd: the checkout to read it from.
-        declared: the tags that exist; read at `ref` when omitted.
-        callers: the k8s role-caller graph; walked from `cwd`'s working tree when omitted.
-        explain: called with one derivation line per key.
+    The arguments are `narrow`'s, with `ref` the commit the rules read consumers at: the
+    NEW end of a range.
 
     Raises:
         subprocess.CalledProcessError: `ref` carries no host_vars, so `declared` cannot be

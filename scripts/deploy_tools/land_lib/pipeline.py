@@ -11,22 +11,23 @@ which makes the count true by construction. `== arm` and `== 0/M` stay outside t
 because they are conditional on `--arm-merge` and `--await-merge`; a landing without them
 still runs steps 1 to M.
 
-WHAT EACH PHASE READS AND WRITES on the shared `Landing`. The state is mutable and threaded
-through every phase, so this table is the contract no signature states:
+WHAT EACH PHASE READS AND WRITES on the shared `Landing`. The state is threaded through every
+phase, so this table is the contract no signature states. `classification` is written once
+and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 
 | Phase | Reads | Writes |
 |---|---|---|
 | `merge.arm_merge` | `opts.subject`, `opts.require_author` | -- |
 | `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll` | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.t_merged`, `ledger.merge_sha` |
-| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `resolved_tags`, `plane`, `self_applied`, `remaining_setup`, `needs_diff`, `pr_paths`, `pr_range`, `declared`, `quiet`, `plane_paths`, `k8s_only` |
-| `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `self_applied`, `needs_diff` | -- |
+| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `classification` (frozen: the plane note, the self-applied half and their inputs), `resolved_tags`, `needs_diff`, `k8s_only` |
+| `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `classification`, `needs_diff` | -- |
 | `ci.preflight` | `opts.primary` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `tick.run_tick` | `opts.lock_retries`, `opts.lock_backoff` | `ledger.lock_waited`, `ledger.lock_holder`, `ledger.t_tick`, `tick_watch_abandoned` |
-| `classify.narrow_plane` (after an awaited tick only) | `plane`, `plane_paths`, `merge_sha`, the `receipts` marker, `declared`, `quiet` | `plane` |
-| `deploy.deploy_phase` | `resolved_tags`, `k8s_only`, `needs_diff`, `declared`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `k8s_only`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
-| `health_verdict.health` | `resolved_tags`, `deployed_at`, `plane`, `self_applied`, `remaining_setup`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
+| `classify.narrow_plane` (after step 4's tick, or in its place on the fast path) | `classification`, `merge_sha`, the `receipts` marker | `narrowed_plane` |
+| `deploy.deploy_phase` | `resolved_tags`, `k8s_only`, `needs_diff`, `classification`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `k8s_only`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
+| `health_verdict.health` | `resolved_tags`, `deployed_at`, `plane`, `classification`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
 
 Every phase may end the landing by raising an `Outcome`, and the last one always does.
 """

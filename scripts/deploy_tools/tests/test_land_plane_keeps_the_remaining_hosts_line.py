@@ -12,6 +12,7 @@ import pytest
 from _land_fakes import MERGE_SHA, Fakes, receipt
 from deploy_tools.land_lib import deploy, health_verdict
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.landing import Classification
 
 
 _PLANE = "`ansible-playbook ansible/k3s-bringup.yml --tags backup-health`"
@@ -27,10 +28,12 @@ _APPLIED = receipt({"ansible/initial_setup.yml": ["initial_setup"]})
 def _landing_at(landing, fakes):
     ln, _ = landing(fakes)
     ln.merge_sha, ln.resolved_tags = MERGE_SHA, ["sonarr"]
-    ln.plane = fakes.plane
-    ln.self_applied = fakes.self_applied
-    ln.self_applied_command = fakes.self_applied_command
-    ln.remaining_setup = fakes.remaining_setup
+    ln.classification = Classification(
+        plane=fakes.plane,
+        self_applied=fakes.self_applied,
+        self_applied_command=fakes.self_applied_command,
+        remaining_setup=fakes.remaining_setup,
+    )
     return ln
 
 

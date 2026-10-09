@@ -28,6 +28,7 @@ from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 
 from lib.repo_paths import REPO as REPO_ROOT
+from deploy_tools.land_lib.landing import Classification
 
 _ROLE = "hypervisor"
 _SHIPPED = "scripts/backup/etcd_restore_drill.sh"
@@ -148,15 +149,19 @@ def test_a_repo_file_only_pr_ends_needs_manual_apply(landing):
     """The verify-by: the LANDING names it.
 
     `no_tag_outcome` read `self_applied` and ended at `nothing-to-deploy` with
-    `ln.remaining_setup` populated and never printed.
+    `ln.classification.remaining_setup` populated and never printed.
     """
     ln, _ = landing(None)
     ln.merge_sha = MERGE_SHA
-    ln.plane = land_tags.plane_note([_SHIPPED])
-    ln.self_applied = land_tags.self_applied([_SHIPPED])
-    ln.self_applied_command = land_tags.self_applied_command([_SHIPPED])
-    ln.remaining_setup = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-box")
-    assert (ln.plane, ln.self_applied) == ("", False), "the premise of #2798 moved"
+    ln.classification = Classification(
+        plane=land_tags.plane_note([_SHIPPED]),
+        self_applied=land_tags.self_applied([_SHIPPED]),
+        self_applied_command=land_tags.self_applied_command([_SHIPPED]),
+        remaining_setup=land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-box"),
+    )
+    assert (ln.plane, ln.classification.self_applied) == ("", False), (
+        "the premise of #2798 moved"
+    )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
     assert (exc.value.verdict, exc.value.rc) == ("needs-manual-apply", 1)

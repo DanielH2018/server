@@ -127,9 +127,8 @@ def tag_for(path: str, declared: set[str] | None = None) -> str | None:
     A role's own `tests/` maps to no tag. Dropping it only from `shared_roles` would leave
     land.sh DEPLOYING it: a tests-only PR to a declared
     role would cost a rollout, a restart window and a health gate for pytest guards nothing
-    stages to the cluster. The deployer's own `_is_test_only_path` in `deploy_changes.py`
-    already drops every test path before it maps changes to services, so this is the two
-    mappers agreeing rather than a new rule.
+    stages to the cluster. `is_role_test_path` is the deployer's own test-path rule, called
+    rather than copied.
     """
     role = role_for(path)
     # DECIDED: the tag is dropped, not only the shared-role note. The tick re-asserts a role's

@@ -25,6 +25,7 @@ import pytest
 from _land_fakes import MERGE_SHA, Fakes
 from deploy_tools.land_lib import deploy, health_verdict, tick
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.landing import Classification
 
 _BEHIND = {"behind_since": "93eda4d2 1789043217.0696108"}
 _NEXT_TICK = "the next tick crosses it"
@@ -67,7 +68,10 @@ def test_a_later_tick_that_finished_clears_an_earlier_abandoned_watch(landing):
 
 def _self_applied(landing, fakes):
     ln, _ = landing(fakes)
-    ln.merge_sha, ln.self_applied = MERGE_SHA, True
+    ln.merge_sha = MERGE_SHA
+    ln.classification = Classification(
+        self_applied=True,
+    )
     return ln
 
 
@@ -108,7 +112,10 @@ def test_a_readable_hold_still_wins_over_an_abandoned_watch(landing):
 
 def _deployed(landing, fakes):
     ln, _ = landing(fakes)
-    ln.merge_sha, ln.resolved_tags, ln.self_applied = MERGE_SHA, ["sonarr"], True
+    ln.merge_sha, ln.resolved_tags = MERGE_SHA, ["sonarr"]
+    ln.classification = Classification(
+        self_applied=True,
+    )
     return ln
 
 

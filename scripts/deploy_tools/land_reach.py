@@ -32,7 +32,7 @@ from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import setup_role_playbook, setup_role_tag
+from deploy_logic import _is_test_only_path, setup_role_playbook, setup_role_tag
 
 from land_changes import changes_for
 from setup_role_chains import (
@@ -266,16 +266,15 @@ def setup_file_hosts(
         # Docs ship nowhere: no task under roles/setup/*/tasks names a .md file, and the
         # deployer's k8s branch already reads *.md as docs.
         return frozenset()
-    parts = Path(path).parts
-    if parts[4:5] == ("tests",):
-        # A role's own pytest guards ship nowhere either: nothing stages a `tests/` file
+    if _is_test_only_path(path):
+        # A role's own pytest guards ship nowhere either: nothing stages a test file
         # (the `no-role-ships-a-test-file` row of
         # `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide), so
-        # no host runs the old copy. `land_tags.is_role_test_path` is the same predicate,
-        # inlined because land_tags imports this module. Without it a `tests/` path falls
-        # through to the ROLE-level reach, and the union over a PR's files widens a
-        # box-only `files/` change back out to every host.
+        # no host runs the old copy. The deployer's own predicate, as `land_tags` calls it.
+        # Without it a `tests/` path falls through to the ROLE-level reach, and the union
+        # over a PR's files widens a box-only `files/` change back out to every host.
         return frozenset()
+    parts = Path(path).parts
     prefix = ("ansible", "roles", "setup", role)
     if not role_hosts or parts[: len(prefix)] != prefix or len(parts) < 6:
         return role_hosts

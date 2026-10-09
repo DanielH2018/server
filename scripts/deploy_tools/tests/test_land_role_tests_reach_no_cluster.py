@@ -32,6 +32,7 @@ from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 
 from lib.repo_paths import REPO as REPO_ROOT
+from deploy_tools.land_lib.landing import Classification
 
 _ROLE_TESTS = "ansible/roles/k8s/arr-notification/tests/test_seed_arr_notification.py"
 _ROLE_FILES = "ansible/roles/k8s/arr-notification/files/seed_arr_notification.py"
@@ -58,6 +59,19 @@ def test_a_role_test_file_is_clean():
     assert land_tags.shared_roles([_ROLE_TESTS]) == []
     assert land_tags.plane_note([_ROLE_TESTS]) == ""
     assert land_tags.shared_caller_tags([_ROLE_TESTS]) == {}
+
+
+def test_a_test_module_beside_a_roles_code_maps_to_no_tag_on_either_side():
+    """The landing calls the deployer's test-path rule instead of copying it (#3660), so a
+    `test_*.py` outside the role's `tests/` drops on both sides; the copy deployed it."""
+    from deploy_logic import services_from_changed_paths
+
+    test_module = "ansible/roles/k8s/sonarr/files/test_probe.py"
+    assert land_tags.tag_for(test_module, {"sonarr"}) is None
+    assert "sonarr" not in services_from_changed_paths([test_module]).k8s
+    code = "ansible/roles/k8s/sonarr/files/probe.py"
+    assert land_tags.tag_for(code, {"sonarr"}) == "sonarr"
+    assert "sonarr" in services_from_changed_paths([code]).k8s
 
 
 def test_a_role_task_file_is_flagged():
@@ -106,10 +120,12 @@ def _verdict(landing, files: list[str]) -> Outcome:
     ln, _ = landing(None)
     ln.merge_sha = MERGE_SHA
     quiet = land_tags.quiet_paths(files, "")
-    ln.plane = land_tags.plane_note(files, quiet=quiet)
-    ln.self_applied = land_tags.self_applied(files, quiet=quiet)
-    ln.self_applied_command = land_tags.self_applied_command(files, quiet=quiet)
-    ln.remaining_setup = ""
+    ln.classification = Classification(
+        plane=land_tags.plane_note(files, quiet=quiet),
+        self_applied=land_tags.self_applied(files, quiet=quiet),
+        self_applied_command=land_tags.self_applied_command(files, quiet=quiet),
+        remaining_setup="",
+    )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
     return exc.value

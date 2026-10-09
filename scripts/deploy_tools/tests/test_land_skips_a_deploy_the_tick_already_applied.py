@@ -17,6 +17,7 @@ from _land_fakes import MERGE_SHA, PRIMARY, Fakes, receipt
 from deploy_tools.land_lib import deploy
 
 from lib.repo_paths import REPO as _REPO
+from deploy_tools.land_lib.landing import Classification
 
 _DEPLOY_NARROW = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_narrow.py"
 
@@ -115,7 +116,9 @@ def test_the_skip_holds_across_the_whole_deploy_phase(landing):
     ln, calls = landing(_fakes(WHOLE_PLAY, self_applied=True))
     ln.merge_sha = MERGE_SHA
     ln.resolved_tags = ["sonarr"]
-    ln.self_applied = True
+    ln.classification = Classification(
+        self_applied=True,
+    )
     ln.ledger.t_ci = 2.0
     ln.ledger.t_tick = 3.0
     deploy.deploy_phase(ln)

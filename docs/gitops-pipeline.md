@@ -193,6 +193,17 @@ comment-only edit to the retired `pvc()` macro deployed its 14 importers, and on
 `container-resources.yml.j2` refused as most of the fleet.
 `scripts/deploy_tools/narrow_templates.py` holds all three rules.
 
+A filter plugin maps to the roles that call its filters (#3843). `ansible/filter_plugins/` is a
+play-level prefix, so every change under it used to refuse, though `py_table.py` reaches only
+monitor-bridge and uptime-kuma. The rule reads the names the plugin's `FilterModule.filters()`
+returns, at both refs, and greps the role trees, the shared templates and the play's own trees
+for each one. A call from `deploy.yml`, `pre_tasks/`, `tasks/` or `post_tasks/` still refuses,
+which is the outcome for `toposort.py` and `k8s_retire.py`. So does an inventory value that
+calls the filter, a `filters()` that is not a literal dict, a deleted plugin and a plugin
+another plugin imports. A setup role that calls a filter is not counted, and neither the
+narrowed run nor the full `deploy.yml` applies it. `scripts/deploy_tools/narrow_filters.py`
+holds the rule.
+
 **Every deploy-plane tick also logs a render-digest shadow line** (#3045), one
 `narrow shadow:` line beside the outcome above. It names the services whose applied digests
 differ from a render record of the commit being applied, counts the ones that match, and

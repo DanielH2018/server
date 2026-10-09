@@ -113,8 +113,8 @@ def health(ln: Landing) -> NoReturn:
         print(f"  STILL UNAPPLIED, and no deploy tag covers it: {ln.plane}")
         # Both remediations, because this arm ends the landing and the one at the foot of
         # this function never runs.
-        if ln.remaining_setup:
-            print(remaining_hosts_note(ln.remaining_setup))
+        if ln.classification.remaining_setup:
+            print(remaining_hosts_note(ln.classification.remaining_setup))
         # The tick's own half too: a PR carrying BOTH ends here without ever reading the
         # deployer's state, so every tick state went unreported. Reported,
         # not re-verdicted — `Landing.tick_half_open_lines` carries why.
@@ -127,11 +127,13 @@ def health(ln: Landing) -> NoReturn:
             Verdict.NEEDS_MANUAL_APPLY,
             1,
             f"PR #{pr}, {sha} — services deployed, the plane above not"
-            + (", nor the hosts beside it" if ln.remaining_setup else ""),
+            + (
+                ", nor the hosts beside it" if ln.classification.remaining_setup else ""
+            ),
         )
     # Only when the tick applies part of this PR itself does its state speak to THIS
     # landing; for an ordinary service PR, behind_since is somebody else's merge.
-    if ln.self_applied:
+    if ln.classification.self_applied:
         state = ln.tick_state()
         if state == TickState.UNKNOWN:
             print(
@@ -201,13 +203,13 @@ def health(ln: Landing) -> NoReturn:
                 1,
                 f"PR #{pr}, {sha}, tags: {tags} — the tick converged without applying this PR",
             )
-    if ln.remaining_setup:
+    if ln.classification.remaining_setup:
         local = ln.tools.hostname()
         # The note says which hosts and why for each role it names, including the repo-file
         # case where the tick applied the role on NO host -- so this line states what
         # was deployed and hands the rest to the note, rather than asserting a self-apply on
         # `local` that a repo-file-only role never had.
-        note = remaining_hosts_note(ln.remaining_setup).lstrip()
+        note = remaining_hosts_note(ln.classification.remaining_setup).lstrip()
         print(f"  services deployed, and {note}")
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,

@@ -19,6 +19,7 @@ import land_tags
 from _land_fakes import MERGE_SHA
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.landing import Classification
 
 _DOC = "ansible/roles/k8s/manifests/CLAUDE.md"
 _TASKS = "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -79,10 +80,12 @@ def _verdict(landing, files: list[str]) -> Outcome:
     ln, _ = landing(None)
     ln.merge_sha = MERGE_SHA
     quiet = land_tags.quiet_paths(files, "")
-    ln.plane = land_tags.plane_note(files, quiet=quiet)
-    ln.self_applied = land_tags.self_applied(files, quiet=quiet)
-    ln.self_applied_command = land_tags.self_applied_command(files, quiet=quiet)
-    ln.remaining_setup = ""
+    ln.classification = Classification(
+        plane=land_tags.plane_note(files, quiet=quiet),
+        self_applied=land_tags.self_applied(files, quiet=quiet),
+        self_applied_command=land_tags.self_applied_command(files, quiet=quiet),
+        remaining_setup="",
+    )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
     return exc.value

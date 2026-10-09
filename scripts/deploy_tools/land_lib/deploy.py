@@ -84,7 +84,7 @@ def derive_from_diff(ln: Landing) -> None:
         # PR: another session's broad merge inside it can refuse the derivation for a PR that
         # touched nothing broad itself, and `no_tag_outcome` would grade that as
         # `nothing-to-deploy` over undeployed services.
-        if ln.self_applied or ln.plane:
+        if ln.classification.self_applied or ln.plane:
             say(
                 "no tag list scopes this diff; grading the landing from the deployer's own "
                 "markers instead of asking for a hand"
@@ -135,7 +135,7 @@ def record_k8s_only(ln: Landing) -> None:
         return
     paths = [p for p in r.stdout.splitlines() if p.strip()]
     try:
-        proved = ln.classifier.k8s_only_tags(paths, ln.declared)
+        proved = ln.classifier.k8s_only_tags(paths, ln.classification.declared_set())
     except Exception as exc:
         say(f"platform not proved ({type(exc).__name__}) — routing to both platforms")
         return
@@ -160,8 +160,8 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
         print(f"  it needs applying by hand: {ln.plane}")
         # Both remediations, because this arm ends the landing and the one at the foot of
         # this function never runs.
-        if ln.remaining_setup:
-            print(remaining_hosts_note(ln.remaining_setup))
+        if ln.classification.remaining_setup:
+            print(remaining_hosts_note(ln.classification.remaining_setup))
         # The tick's own half too: a PR carrying BOTH ends here without ever reading the
         # deployer's state, so every tick state would go unreported. Reported,
         # not re-verdicted — `Landing.tick_half_open_lines` carries why.
@@ -172,15 +172,15 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
             1,
             f"PR #{pr} reaches {scope}, but is not done",
         )
-    if not ln.self_applied:
-        if ln.remaining_setup:
+    if not ln.classification.self_applied:
+        if ln.classification.remaining_setup:
             # No plane, no tag, and nothing the tick applies -- and still a host owes a hand.
             # A PR whose only loud path is a repo file a setup role ships out of the checkout
             # (`scripts/deploy_tools/staging_gate_remote.sh` -> `/usr/local/bin/staging-gate-run`)
             # puts no role in the change set, so `self_applied` is False and this arm would
             # end the landing at `nothing-to-deploy` with the remediation computed and never
             # printed.
-            print(remaining_hosts_note(ln.remaining_setup))
+            print(remaining_hosts_note(ln.classification.remaining_setup))
             ln.finish(
                 Verdict.NEEDS_MANUAL_APPLY,
                 1,
@@ -251,9 +251,11 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
             1,
             f"PR #{pr}, {sha} — the tick converged without recording an apply of this PR",
         )
-    if ln.remaining_setup:
+    if ln.classification.remaining_setup:
         local = ln.tools.hostname()
-        print(f"  applied on {local} only; it also reaches: {ln.remaining_setup}")
+        print(
+            f"  applied on {local} only; it also reaches: {ln.classification.remaining_setup}"
+        )
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,
             1,
