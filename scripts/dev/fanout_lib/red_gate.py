@@ -209,10 +209,12 @@ _BARE_GIT = (
 
 
 # Settings in the worktree's own git config that would run a command, move where a reset
-# writes, or keep an edit through `reset --hard`, each overridden for every call below.
-# `post-index-change` fires on any index write and `reference-transaction` on a HEAD update;
-# a sparse checkout re-sets the skip-worktree bits `unhide_index` clears; an edit of the same
-# size with its mtime restored is stat-clean unless ctime counts.
+# writes, or keep an edit through `reset --hard`, each pinned to git's Linux default for
+# every call below. `post-index-change` fires on any index write and `reference-transaction`
+# on a HEAD update; a sparse checkout re-sets the skip-worktree bits `unhide_index` clears;
+# an edit of the same size with its mtime restored is stat-clean unless ctime counts; with
+# `fileMode` off a cleared exec bit is no change; `autocrlf` and `symlinks` change the bytes
+# or the kind of file a checkout writes.
 _PINNED = (
     ("core.hooksPath", "/dev/null"),
     ("core.fsmonitor", "false"),
@@ -220,6 +222,10 @@ _PINNED = (
     ("core.attributesFile", "/dev/null"),
     ("core.trustctime", "true"),
     ("core.checkStat", "default"),
+    ("core.fileMode", "true"),
+    ("core.autocrlf", "false"),
+    ("core.symlinks", "true"),
+    ("core.untrackedCache", "false"),
 )
 # Blanking all three disables a driver; `process` wins over `smudge` when both are set.
 _FILTER_KEYS = (("smudge", ""), ("clean", ""), ("process", ""), ("required", "false"))
@@ -233,9 +239,10 @@ def _hardened(run: Runner, worktree: Path) -> list[str]:
     `info/attributes` and its replace refs, and the reset that clears the red phase would
     otherwise run through all of them. No git switch skips the repository's config file, but
     `GIT_CONFIG_COUNT` settings outrank every file, so each setting these commands consult
-    is pinned, and every filter driver the config names is blanked: a planted
-    `info/attributes` line can still name one. `GIT_WORK_TREE` overrides `core.worktree`.
-    `GIT_NO_REPLACE_OBJECTS` stops a replace ref swapping the commit being reset to.
+    is pinned, and every filter driver the config names is blanked. `GIT_WORK_TREE`
+    overrides `core.worktree`. `GIT_NO_REPLACE_OBJECTS` stops a replace ref swapping the
+    commit being reset to. No setting turns `info/attributes` off, so `reset_worktree`
+    refuses a repo that has one.
 
     DECIDED: pin settings rather than snapshot and restore the config file. Every worktree
     shares the one in the common git dir and writes `branch.*` keys into it, so a restore
@@ -373,8 +380,16 @@ def reset_worktree(run: Runner, worktree: Path, sha: str) -> None:
     in it would run in every later pytest. Every step runs under `_hardened`.
 
     Raises:
-        ResetFailed: a git step exited non-zero.
+        ResetFailed: a git step exited non-zero, or the repo has an `info/attributes`.
     """
+    # A `working-tree-encoding` or `eol` line there makes the reset itself write other bytes
+    # than the commit holds, and no config setting outranks it. This repo has none.
+    attributes = (
+        worktree
+        / _must(run, worktree, "rev-parse", "--git-path", "info/attributes").strip()
+    )
+    if attributes.is_file() and attributes.stat().st_size:
+        raise ResetFailed(f"{attributes} would rewrite what the reset checks out")
     unhide_index(run, worktree)
     _must(run, worktree, "reset", "--quiet", "--hard", sha)
     kept = [arg for name in FANOUT_KEPT for arg in ("-e", f"/.fanout/{name}")]

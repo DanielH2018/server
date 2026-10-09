@@ -298,27 +298,39 @@ def test_reset_worktree_runs_no_hook_filter_or_replace_ref_the_red_author_plante
     tmp_path,
 ):
     """Each would otherwise change what the reset does, or run a command (#3871)."""
-    repo, _, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
+    repo, _, _ = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
+    script = write_exec(repo / "run.sh", "true\n")
+    target = commit(repo, "script")
     fake = commit(repo, "fake", **{"mod.py": FIXED})
-    git_out(repo, "reset", "--quiet", "--hard", red)
-    git_out(repo, "replace", red, fake)
+    git_out(repo, "reset", "--quiet", "--hard", target)
+    git_out(repo, "replace", target, fake)
+    git_out(repo, "config", "core.fileMode", "false")
     fired = tmp_path / "fired"
     write_exec(repo / ".git" / "hooks" / "post-index-change", f"echo hook >> {fired}\n")
-    (repo / ".git" / "info" / "attributes").write_text("*.py filter=planted\n")
     git_out(
         repo, "config", "filter.planted.smudge", f"sh -c 'echo filter >> {fired}; cat'"
     )
 
     def planted_reset(reset):
+        (repo / ".git" / "info" / "attributes").write_text("*.py filter=planted\n")
         (repo / "mod.py").write_text("planted\n")
+        script.chmod(0o644)
         reset()
         ran = fired.read_text() if fired.exists() else ""
-        return (repo / "mod.py").read_text(), ran
+        return (repo / "mod.py").read_text(), ran, bool(script.stat().st_mode & 0o100)
 
-    assert planted_reset(lambda: reset_worktree(run, repo, red)) == (CODE, "")
-    # The control: plain git runs the hook and the filter, and checks out the replacement.
-    plain = planted_reset(lambda: git(repo, "reset", "--quiet", "--hard", red))
-    assert plain == (FIXED, "filter\nhook\n")
+    with pytest.raises(ResetFailed, match="info/attributes"):
+        planted_reset(lambda: reset_worktree(run, repo, target))
+    (repo / ".git" / "info" / "attributes").write_text("")
+    (repo / "mod.py").write_text("planted\n")
+    script.chmod(0o644)
+    reset_worktree(run, repo, target)
+    assert ((repo / "mod.py").read_text(), fired.exists()) == (CODE, False)
+    assert script.stat().st_mode & 0o100
+    # The control: plain git runs the hook and the filter, checks out the replacement, and
+    # keeps the exec bit `fileMode=false` hides.
+    plain = planted_reset(lambda: git(repo, "reset", "--quiet", "--hard", target))
+    assert plain == (FIXED, "filter\nhook\n", False)
 
 
 def test_reset_worktree_raises_when_a_git_step_fails(tmp_path):

@@ -59,7 +59,7 @@ class FakeRunner:
             self.git.append(argv[3:])
             if "merge-base" in argv:
                 out = "base0"
-            elif "rev-parse" in argv:
+            elif argv[-2:] == ["rev-parse", "HEAD"]:
                 out = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
             else:
                 out = ""
