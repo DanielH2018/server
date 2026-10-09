@@ -89,15 +89,18 @@ def parse_down_line(line):
 # Prometheus `monitor_status` by construction.
 #
 # daniel-pi is visible here only because each Pi cron appends an rsyslog-shaped line to
-# /var/log/pi-health/ and the Pi's promtail tails it as the `pi-health` job under
-# `job="syslog"`. Two facts make that necessary:
+# /var/log/pi-health/, and the Pi's Grafana Alloy tails it through its `pi_health` source
+# (ansible/roles/containers/alloy/templates/config.alloy.j2). That stream carries
+# `job="syslog"` and `machine="daniel-pi"`, rendered from `loki_streams.pi_health` in
+# ansible/inventory/group_vars/all.yml. Two facts make that necessary:
 #   1. The Pi's two crons end at `kuma_push`, and kuma-push-lib.sh calls `logger` only when
 #      the PUSH fails. The server crons that ARE visible log their verdict themselves
 #      (longhorn-backup-health, manifest-prune-check: `logger -t <tag>
 #      "status=${STATUS} ${MSG}"`).
 #   2. The Pi has no journal path to Loki: rsyslog is not installed and optimize_pi masks it
-#      deliberately, and that image's promtail is a stub for journal support (the arm64
-#      binary carries "not compiled into this build", no `sd_journal_open`, no libsystemd).
+#      deliberately, and the Pi's Alloy does not ship the journal. Alloy can read it; the
+#      container's memory is the reason it does not, as
+#      ansible/roles/containers/alloy/CLAUDE.md records (#1922).
 #
 # THE TIMESTAMP FORMAT IS LOAD-BEARING. `_SYSLOG_LINE_RE` below wants exactly two
 # whitespace-free tokens before the tag, which is what rsyslog's own prefix gives. The Pi
