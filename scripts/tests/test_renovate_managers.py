@@ -377,7 +377,9 @@ def test_no_literal_image_lines_in_k8s_templates() -> None:
 @pytest.mark.parametrize(
     ("dep_name", "rel_path", "datasource"),
     [
-        ("prek", ".github/workflows/ci.yml", "pypi"),
+        ("prek", ".github/actions/setup/action.yml", "pypi"),
+        ("python", ".github/actions/setup/action.yml", "python-version"),
+        ("node", ".github/actions/setup/action.yml", "node-version"),
         ("vale-cli/vale", ".github/workflows/ci.yml", "github-releases"),
         ("vale-cli/Google", ".vale.ini", "github-releases"),
     ],
@@ -388,8 +390,8 @@ def test_ci_toolchain_pins_have_their_own_group(
     """A CI toolchain pin must resolve to its own group, never the container-images catch-all.
 
     The 'container images (non-major)' packageRule has no `matchFileNames`, so it matches
-    every custom.regex dep by default — including the prek and Vale pins in ci.yml/.vale.ini,
-    none of which is a container image. Renovate reuses a group's branch across whichever deps
+    every custom.regex dep by default — including the prek, Python and Node pins in the CI
+    setup action and the Vale pins in ci.yml/.vale.ini, none of which is a container image. Renovate reuses a group's branch across whichever deps
     land in it, so a title generated for one dep can survive a force-push that swaps in
     another dep's diff. Each of these pins gets its own `{{depName}}` group instead, so its
     branch and title always name itself.
