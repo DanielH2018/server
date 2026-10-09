@@ -146,6 +146,9 @@ pythonpath = [
   # failing for the directly-invoked script that is how both actually run in production.
   "scripts",
   "scripts/backup",
+  # its tests' `_reap_entrypoint_harness.py` holds the Longhorn CR builders that
+  # ansible/tests/longhorn/test_longhorn_reap_guard.py imports too
+  "scripts/backup/tests",
   "scripts/deploy_tools",
   # its tests share _land_fakes.py the way ansible/tests share _helpers.py
   "scripts/deploy_tools/tests",
@@ -330,6 +333,7 @@ extra-paths = [
   "ansible/roles/setup/renovate_notify/files",
   "ansible/roles/setup/renovate_agent/files",
   "ansible/roles/k8s/home-assistant/files",
+  "scripts/backup/tests",
   "scripts/deploy_tools/tests",
   "scripts/docs/tests",
 ]

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The subprocess harness the reap-orphan entry-point suites share.
 
-Not a test module — a helper the three suites import. It puts a stub `k3s` on PATH in place of
+Not a test module — a helper the entry-point suites import. It puts a stub `k3s` on PATH in place of
 the real binary and runs an entry point from scripts/backup/ against fixture JSON while
 recording every `kubectl delete` argv the stub receives.
 
@@ -11,7 +11,11 @@ inherit pytest's pythonpath, so the entry point's own sys.path bootstrap is the 
 makes `host_lib` (ansible/roles/setup/common/files/) and `longhorn_reap_logic` importable.
 
 Consumers: `test_longhorn_reap_entrypoints.py`, `test_longhorn_reap_backups_cli.py`,
-`test_longhorn_reap_snapshots_cli.py`.
+`test_longhorn_reap_backups_modes_cli.py`, `test_longhorn_reap_snapshots_cli.py`. The `_volume`,
+`_backup` and `_snapshot` builders are also the only copies the in-process suites use:
+`test_longhorn_reap_logic.py`, `test_longhorn_reap_selectors.py` and
+`ansible/tests/longhorn/test_longhorn_reap_guard.py`, which reaches this module through
+`pyproject.toml`'s `pythonpath`.
 """
 
 import json
@@ -75,14 +79,11 @@ sys.exit(0)
 """
 
 
-def _volume(name, group, state="attached"):
-    return {
-        "metadata": {
-            "name": name,
-            "labels": {"recurring-job-group.longhorn.io/%s" % group: "enabled"},
-        },
-        "status": {"state": state},
-    }
+def _volume(name, group=None, state="attached"):
+    labels = {}
+    if group is not None:
+        labels["recurring-job-group.longhorn.io/%s" % group] = "enabled"
+    return {"metadata": {"name": name, "labels": labels}, "status": {"state": state}}
 
 
 def _backup(name, vol, created, job, state="Completed", pvc=None):
@@ -111,10 +112,12 @@ def _pvc(name, volume):
     }
 
 
-def _snapshot(name, vol, created, job=None):
+def _snapshot(name, vol, created, job=None, removed=None):
     status = {"creationTime": created}
     if job is not None:
         status["labels"] = {"RecurringJob": job}
+    if removed is not None:
+        status["markRemoved"] = removed
     return {"metadata": {"name": name}, "spec": {"volume": vol}, "status": status}
 
 
