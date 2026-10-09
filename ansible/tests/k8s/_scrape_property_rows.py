@@ -9,7 +9,7 @@ from functools import cache
 
 from lib import yaml_fast
 
-from _helpers import ALL_VARS, load_yaml
+from _helpers import HOST_VARS, load_yaml
 from _k8s_render import pod_spec
 from _property_table import Property
 
@@ -86,7 +86,10 @@ def _seconds(duration: str) -> float:
 
 @cache
 def pi_ip() -> str:
-    return load_yaml(ALL_VARS)["k8s_pi_client_ip"]
+    # The Pi's own literal, not the k8s_pi_client_ip that all.yml derives from it through
+    # hostvars (#3719). Reading the derived value would compare the render against itself, and
+    # a derivation that resolved to None would still match.
+    return load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
 
 
 def _scrape_jobs(role: str, tpl: str, doc: dict):

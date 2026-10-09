@@ -1,5 +1,8 @@
 ---
 server_ip: 10.0.0.139
+# The Pi's one address literal (#3719). Ansible SSHes to it, and group_vars' k8s_pi_client_ip
+# reads it through hostvars, so hosts.ini carries no ansible_host for this host.
+ansible_host: "{{ server_ip }}"
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # `domain` is inherited from SOPS (secrets.yml → daniel-hunter.com), exactly like
 # daniel-server — the Pi carries no host-specific override. The only domain consumer

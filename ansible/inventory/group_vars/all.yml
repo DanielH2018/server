@@ -586,16 +586,17 @@ k8s_tls_cert_resolver: cloudflare
 # A literal rather than hostvars['daniel-server'].server_ip: the k8s play runs against
 # daniel-box, and daniel-server is not necessarily in its play's hostvars.
 k8s_bridge_client_ip: 10.0.0.161
-# daniel-pi's address as the cluster sees it. A literal for exactly the reason above: the k8s
-# play runs against daniel-box, and daniel-pi is not in that play's hostvars — `hostvars` is also
-# undefined in the manifest-render test harness, so a hostvars lookup here renders fine under
-# Ansible and fails the repo's own guards.
+# daniel-pi's address as the cluster sees it, derived from the Pi's one literal (#3719).
+# `hostvars` holds every host in hosts.ini whatever the play targets, so the k8s play on
+# daniel-box resolves it; uptime-kuma, pihole and monitor-bridge index it the same way. The
+# manifest-render harness lays down each host's `server_ip` as `hostvars` for this
+# (scripts/lib/render_context.py).
 #
-# Two consumers: loki-homelab's push-only IngressRoute (ClientIP allowlist) and the Pi's two
+# Two consumers: loki-homelab's push-only IngressRoute (ClientIP allowlist) and the Pi's
 # static Prometheus scrape jobs.
-k8s_pi_client_ip: 10.0.0.139
-# daniel-box's own LAN address, as a POD sees it. A literal for the same reason as the two
-# above, and needed for the same reason despite daniel-box being the host the k8s play runs
+k8s_pi_client_ip: "{{ hostvars['daniel-pi'].server_ip }}"
+# daniel-box's own LAN address, as a POD sees it. A literal for the same reason as
+# k8s_bridge_client_ip above, and needed for the same reason despite daniel-box being the host the k8s play runs
 # on: `server_ip` is a host_var, so a manifest that used it would render correctly under
 # Ansible and blow up in the manifest-render test harness, which has no host_vars either.
 #
