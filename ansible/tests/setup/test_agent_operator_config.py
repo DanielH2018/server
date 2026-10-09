@@ -173,6 +173,7 @@ def agent_style(
         SWITCH: switch,
         "claude_code_login_caps_enabled": caps,
         "claude_code_rc_pytest_workers": 4,
+        "claude_code_agent_user": "claude",
         "claude_code_operator_settings": content(operator),
         "claude_code_agent_settings": content(agent),
     }
@@ -240,6 +241,26 @@ def test_the_true_arm_copies_the_operators_env_but_its_home_bound_keys() -> None
         # The artifacts role mounts the agent's tree under this name.
         "CLAUDE_ARTIFACTS_HOST": "daniel-box-claude",
     }
+
+
+TELEMETRY = {"env": {"CLAUDE_CODE_ENABLE_TELEMETRY": "1"}}
+
+
+def test_the_agents_telemetry_is_labelled_with_its_user() -> None:
+    wanted = agent_style(True, TELEMETRY, {})["wanted"]
+    assert wanted["env"]["OTEL_RESOURCE_ATTRIBUTES"] == "process.owner=claude"
+    # An attribute the operator already sets is kept, with the owner appended.
+    operator = {"env": TELEMETRY["env"] | {"OTEL_RESOURCE_ATTRIBUTES": "team=a"}}
+    wanted = agent_style(True, operator, {})["wanted"]
+    assert wanted["env"]["OTEL_RESOURCE_ATTRIBUTES"] == "team=a,process.owner=claude"
+
+
+def test_no_owner_label_without_the_operators_telemetry() -> None:
+    wanted = agent_style(True, {"env": {"EDITOR": "vim"}}, {})["wanted"]
+    assert "OTEL_RESOURCE_ATTRIBUTES" not in wanted["env"]
+    # The false arm takes the label back with the rest of the copy.
+    labelled = {"env": {"OTEL_RESOURCE_ATTRIBUTES": "process.owner=claude"}}
+    assert agent_style(False, TELEMETRY, labelled)["wanted"] == {}
 
 
 def test_the_false_arm_removes_the_operators_env_only_where_it_still_matches() -> None:
