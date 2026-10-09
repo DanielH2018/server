@@ -1,18 +1,14 @@
-"""B2's native API: the authorized calls, the Longhorn listing they page, and its parser.
+"""The Longhorn listing from B2 and its parser.
 
 Split out of probe_lib/longhorn.py, which had grown to 630 lines. Everything here is about
-Backblaze rather than about Longhorn's cluster state: building a `curl --config -` body,
-paging `b2_list_file_names` under a prefix, and turning that listing into per-volume block
-and metadata counts.
+Backblaze rather than about Longhorn's cluster state: paging `b2_list_file_names` under a
+prefix through `lib.b2.B2Session`, and turning that listing into per-volume block and metadata
+counts.
 
 longhorn.py keeps the `b2-longhorn` and `b2-budget` subcommands that drive this.
 `longhorn_budget.py` prices a retention prune from the same listing and `longhorn_cluster.py`
 reads the live Volume/Backup/PV objects.
 """
-
-import json
-import subprocess
-from urllib.parse import urlencode
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
@@ -24,75 +20,22 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.core import DEFAULT_TIMEOUT
 
+# Re-exported only: longhorn.py prints it in the `--dry-run` description of both subcommands.
+from lib.b2 import AUTHORIZE_URL as B2_AUTHORIZE_URL  # noqa: F401
+from lib.b2 import B2Error, B2Session, http_json
+
 LONGHORN_PREFIX = "longhorn"
-B2_API_VERSION = "v3"
-B2_AUTHORIZE_URL = (
-    f"https://api.backblazeb2.com/b2api/{B2_API_VERSION}/b2_authorize_account"
-)
-
-
-# B2's native API needs no SigV4 signing, so plain curl is the only dependency: no Docker
-# and no rclone.
-def b2_curl(config_body, timeout=DEFAULT_TIMEOUT):
-    """One B2 API call, with url and credentials fed through curl's stdin config.
-
-    Same guard as the HA and *arr helpers above: neither the application key nor the
-    session token may appear in argv, where `ps` would expose them to any local user.
-    """
-    out = subprocess.run(
-        ["curl", "-sS", "--max-time", str(timeout), "--config", "-"],
-        input=config_body,
-        capture_output=True,
-        text=True,
-    )
-    if out.returncode != 0:
-        raise SystemExit("B2 request failed: " + out.stderr.strip()[:400])
-    try:
-        return json.loads(out.stdout)
-    except json.JSONDecodeError:
-        # B2 reports a refused transaction cap as a JSON error, so a non-JSON body here
-        # is a different problem (proxy, DNS, truncation) and is worth showing verbatim.
-        # `from None`: the decode error's offset says nothing the body above doesn't.
-        raise SystemExit(
-            "B2 returned a non-JSON body: " + out.stdout.strip()[:200]
-        ) from None
-
-
-def b2_authorize_config(key_id, app_key):
-    return f'url = "{B2_AUTHORIZE_URL}"\nuser = "{key_id}:{app_key}"\n'
 
 
 # DECIDED: b2_list_file_names is never a billable-bytes source; it sums current objects and
 # under-reports what the cap measures. docs/observability-dashboards.md has the trap.
-def b2_list_files_config(api_url, token, bucket_id, prefix, start=None):
-    """Build the `curl --config -` body (via stdin) for one B2 `b2_list_file_names` page.
-
-    Args:
-        api_url: The B2 API base URL from the authorize response.
-        token: The B2 auth token.
-        bucket_id: The bucket to list.
-        prefix: The file-name prefix to list under.
-        start: The `startFileName` cursor to resume a truncated listing, if any.
-    """
-    query = {
-        "bucketId": bucket_id,
-        "prefix": prefix.rstrip("/") + "/",
-        "maxFileCount": "1000",
-    }
-    if start:
-        query["startFileName"] = start
-    url = f"{api_url}/b2api/{B2_API_VERSION}/b2_list_file_names?{urlencode(query)}"
-    return f'url = "{url}"\nheader = "Authorization: {token}"\n'
-
-
-def b2_list_buckets_config(api_url, token, account_id, bucket_name):
-    query = {"accountId": account_id, "bucketName": bucket_name}
-    url = f"{api_url}/b2api/{B2_API_VERSION}/b2_list_buckets?{urlencode(query)}"
-    return f'url = "{url}"\nheader = "Authorization: {token}"\n'
-
-
 def b2_longhorn_lines(
-    key_id, app_key, bucket, prefix=LONGHORN_PREFIX, _call=b2_curl, _stats=None
+    key_id,
+    app_key,
+    bucket,
+    prefix=LONGHORN_PREFIX,
+    _transport=http_json,
+    _stats=None,
 ):
     """List the Longhorn prefix, returning `path;size` lines.
 
@@ -100,45 +43,37 @@ def b2_longhorn_lines(
     relative to the prefix the same way rclone's did — so parse_longhorn_listing below is
     unchanged and its tests still describe the real input. Leaving the paths absolute would
     match none of its patterns and report a healthy bucket as "no Longhorn backup objects".
+
+    A B2 error on any call exits with B2's message rather than returning what was listed so
+    far: a listing cut short by `transaction_cap_exceeded` would otherwise read as a store
+    holding fewer blocks than it does.
     """
-    auth = _call(b2_authorize_config(key_id, app_key))
-    storage = auth.get("apiInfo", {}).get("storageApi", {})
-    api_url, token = storage.get("apiUrl"), auth.get("authorizationToken")
-    if not api_url or not token:
-        raise SystemExit("B2 authorize returned no apiUrl/authorizationToken")
-
-    # A bucket-scoped application key already names its bucket; an account-wide one does not
-    # and has to be looked up.
-    bucket_id = storage.get("bucketId")
-    if not bucket_id:
-        listed = _call(
-            b2_list_buckets_config(api_url, token, auth.get("accountId", ""), bucket)
-        )
-        buckets = listed.get("buckets", [])
-        if not buckets:
-            raise SystemExit(f"B2 has no bucket named {bucket}")
-        bucket_id = buckets[0]["bucketId"]
-
     strip = prefix.rstrip("/") + "/"
-    lines, start = [], None
-    pages = 0
-    while True:
-        page = _call(b2_list_files_config(api_url, token, bucket_id, prefix, start))
-        pages += 1
-        for entry in page.get("files", []):
-            name = entry.get("fileName", "")
-            if name.startswith(strip):
-                name = name[len(strip) :]
-            lines.append(f"{name};{entry.get('contentLength', 0)}")
-        start = page.get("nextFileName")
-        if not start:
-            # Each page is one b2_list_file_names, and the authorize that preceded them is
-            # itself billable — both Class C. Reported through an out-param so the existing
-            # callers and their tests keep the plain list return.
-            if _stats is not None:
-                _stats["class_c"] = pages + 1
-                _stats["pages"] = pages
-            return lines
+    try:
+        session = B2Session(
+            key_id, app_key, timeout=DEFAULT_TIMEOUT, transport=_transport
+        )
+        # A bucket-scoped application key already names its bucket; an account-wide one does
+        # not and has to be looked up.
+        if not session.bucket_id:
+            session.lookup_bucket(bucket)
+        files = session.list_files(strip)
+    except B2Error as exc:
+        raise SystemExit(f"B2 request failed: {exc}") from None
+
+    lines = []
+    for entry in files:
+        name = entry.get("fileName", "")
+        if name.startswith(strip):
+            name = name[len(strip) :]
+        lines.append(f"{name};{entry.get('contentLength', 0)}")
+    # Each page is one b2_list_file_names, and the authorize that preceded them is itself
+    # billable — both Class C. Reported through an out-param so the existing callers and their
+    # tests keep the plain list return.
+    if _stats is not None:
+        _stats["class_c"] = session.class_c
+        _stats["pages"] = session.list_calls
+    return lines
 
 
 def parse_longhorn_listing(lines):
