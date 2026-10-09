@@ -25,7 +25,8 @@ Every fact comes from a reader that already exists; this module only joins them:
   only on the deployer's host.
 - **Last verdict.** The newest `land*.log` in `land_lib.detach.default_log_dir()`, as this
   process sees it: `$CLAUDE_JOB_DIR/tmp` when that variable is set, otherwise
-  `/tmp/homelab-landings-<user>`.
+  `/tmp/homelab-landings-<user>`. A log with no `VERDICT:` line reports its last `land:`
+  line, which is where a landing-policy refusal writes its reason.
 - **Worktrees and claims.** `git worktree list` and `findings.py claims --json`. A claim
   joins a worktree on its branch, or on the issue numbers a fan-out batch worktree's name
   carries (`fanout_lib.launch.worktree_path`: `fanout-<n>-<n>`), because a fan-out batch's
@@ -64,7 +65,7 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
-from land_lib.detach import _VERDICT_LINE, default_log_dir, verdict_in
+from land_lib.detach import _VERDICT_LINE, default_log_dir, error_in, verdict_in
 from lib import deployer_park
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO, ROLES
 
@@ -252,12 +253,16 @@ def _run(argv: list[str]) -> str:
     ).stdout
 
 
-def _last_verdict() -> dict | None:
-    """The newest `land*.log` in this session's landing-log directory, with its verdict."""
-    logs = sorted(default_log_dir().glob("land*.log"), key=lambda p: p.stat().st_mtime)
+def _last_verdict(log_dir: _Path | None = None) -> dict | None:
+    """The newest `land*.log` in this session's landing-log directory, with its verdict.
+
+    A stop that names no verdict (a landing-policy refusal) reports its `land:` line instead.
+    """
+    base = log_dir or default_log_dir()
+    logs = sorted(base.glob("land*.log"), key=lambda p: p.stat().st_mtime)
     if not logs:
         return None
-    return {"log": str(logs[-1]), "verdict": verdict_in(logs[-1])}
+    return {"log": str(logs[-1]), "verdict": verdict_in(logs[-1]) or error_in(logs[-1])}
 
 
 def collect(

@@ -51,13 +51,13 @@ def test_a_refusal_without_a_verdict_reports_its_land_line(tmp_path):
     log = landing(
         tmp_path,
         "land: warning the landing carried on past\n"
-        "land: PR #939 — the body closes #12, an issue it does not fix\n",
+        "land: the body closes #12, an issue it does not fix\n",
         rc=1,
     )
     state = land_probe.read(log)
     assert state["state"] == "failed"
     assert state["detail"].startswith(
-        "land: PR #939 — the body closes #12, an issue it does not fix"
+        "land: the body closes #12, an issue it does not fix; read "
     )
 
 

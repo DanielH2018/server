@@ -36,7 +36,8 @@ leaves its landing running to its verdict. The log's first line names the scope 
 THE LANDING'S EXIT CODE IS THE AUTHORITY, NEVER THE GREP. A grandchild cannot be reaped by the
 waiter, so the landing records its own exit code in `<log stem>.rc` after flushing its last line.
 `land_probe.py` reads that file first and the log second. A landing can exit with no `VERDICT:`
-line at all (`tests/test_land_broad_fallback_verdict.py` covers a truncated file list), and a
+line at all (`tests/test_land_broad_fallback_verdict.py` covers a truncated file list; a
+landing-policy refusal leaves only its `land:` line, which `error_in` reads), and a
 waiter that ended on the grep alone would either race the last flush or wait out its whole budget
 on a run that had already finished. A landing that dies without writing the file -- SIGKILL, OOM
 -- is reported as exactly that, through the pid `fork` records in `<log stem>.pid`.
