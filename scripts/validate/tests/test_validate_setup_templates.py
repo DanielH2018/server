@@ -37,7 +37,7 @@ def known():
 
 @pytest.fixture(scope="module")
 def ctx():
-    return {**v.BASE_CONTEXT, **v.ANSIBLE_RUNTIME_CONTEXT, **v.load_yaml(v.ALL_VARS)}
+    return v.render_context(v.SETUP / "common", overrides=v.ANSIBLE_RUNTIME_CONTEXT)
 
 
 def _rel(path):
@@ -51,12 +51,11 @@ def test_the_census_finds_the_named_setup_templates():
     assert len(found) >= 70
 
 
-def test_every_real_setup_template_renders_with_no_unresolved_variable(ctx, known):
+def test_every_real_setup_template_renders_with_no_unresolved_variable(known):
     """The regression guard: the whole setup plane renders clean against the real tree."""
     bad = {}
     for tpl in v.discover_templates():
-        role_ctx = {**ctx, **v.load_yaml(tpl.parents[1] / "defaults" / "main.yml")}
-        problems = v.check_template(tpl, role_ctx, known)
+        problems = v.check_role_template(tpl, known)
         if problems:
             bad[_rel(tpl)] = problems
     assert not bad, f"setup templates failed to render clean: {bad}"
@@ -84,6 +83,25 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
         'required: "{{ ups_secondary_push_token | mandatory }}"\n'  # the Ansible filter
     )
     assert v.check_template(tpl, ctx, known) == []
+
+
+def test_a_default_that_will_not_expand_still_counts_as_defined(tmp_path, known):
+    """Both halves: the role's own default is clean, a name nothing defines is still flagged.
+
+    `render_context` leaves out a default whose value names a filter the light environment
+    lacks, so the render reads it as undefined while the role defines it.
+    """
+    role = tmp_path / "roles" / "setup" / "fixture"
+    (role / "defaults").mkdir(parents=True)
+    (role / "templates").mkdir()
+    (role / "defaults" / "main.yml").write_text(
+        'declared: "{{ x | no_such_filter }}"\n'
+    )
+    tpl = role / "templates" / "both.yaml.j2"
+    tpl.write_text('a: "{{ declared }}"\nb: "{{ nothing_declares_this_name }}"\n')
+    problems = v.check_role_template(tpl, known)
+    assert len(problems) == 1
+    assert "nothing_declares_this_name" in problems[0]
 
 
 def test_broken_yaml_is_flagged(tmp_path, ctx, known):

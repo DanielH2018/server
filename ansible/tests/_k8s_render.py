@@ -10,6 +10,7 @@ what a test considers a manifest cannot drift from what that validator does.
 
 from lib import yaml_fast
 from _role_census import role_dirs
+from lib.render_context import render_context
 from lib.repo_paths import HOST_VARS as HOST_VARS_DIR
 from validate.k8s_manifests import (
     ALL_VARS,
@@ -64,22 +65,21 @@ def _render_texts(overrides: dict | None = None):
     does not hold. Raises on a render failure rather than skipping it — a template that
     stopped rendering would otherwise quietly drop out of every guard built on this.
     """
-    # The overrides go in BEFORE anything resolves, and on top again after: an inventory value
-    # or role default aliasing an overridden secret (`x: "{{ some_secret }}"`) would otherwise
-    # resolve to the secret's STUB before the override is ever laid on.
-    base = _inventory_base(overrides)
+    # The context the validator renders with. `render_context` lays the overrides in before
+    # anything resolves and on top again after: an inventory value or role default aliasing an
+    # overridden secret (`x: "{{ some_secret }}"`) would otherwise resolve to the secret's STUB
+    # before the override is ever laid on.
     entries = k8s_entries()
 
     for role_dir in role_dirs():
         role = role_dir.name
         if role in SKIP_ROLES or role not in entries:
             continue
-        ctx = {
-            **base,
-            **role_defaults(role, base),
-            "container_item": entries[role],
-            **(overrides or {}),
-        }
+        ctx = render_context(
+            role_dir,
+            overrides={"container_item": entries[role], **(overrides or {})},
+            strict=True,
+        )
         env = _role_env(role_dir, ctx)
 
         # The shared defaults come with the role's own templates: `k8s/manifests` renders a
@@ -194,12 +194,10 @@ def render_role_template(
     `k8s/image-builder` renders here too, with the variables its caller hands over passed as
     `overrides`.
 
-    # DECIDED: role defaults go under the inventory here, which is Ansible's own precedence
-    # and the reverse of `_render_all`'s. `_render_all` copies the validator, which puts the
-    # defaults on top and holds that harmless with `colliding_default_keys` — but that guard
-    # runs against daniel-box only, and daniel-stage overrides `traefik_k8s_manage_crowdsec`
-    # on purpose, so a staging render with defaults on top would render the value the deploy
-    # never uses. For daniel-box the guard makes the two orders render the same text.
+    Role defaults go under the inventory, which is Ansible's own precedence and the order
+    `lib.render_context` gives `_render_all` and the validator. It matters here because
+    daniel-stage overrides `traefik_k8s_manage_crowdsec` on purpose, so a staging render with
+    defaults on top would render the value the deploy never uses.
     """
     base = host_context(host)
     # A default rather than a raise: `k8s/image-builder` is included by caller roles and is not
@@ -267,18 +265,16 @@ _BUILD_TEXTS: tuple[tuple[str, str, str], ...] | None = None
 
 def _render_build_files(overrides: dict | None = None):
     # Overrides before resolution and on top again after, for the reason `_render_texts` gives.
-    base = _inventory_base(overrides)
     entries = k8s_entries()
     for role_dir in role_dirs():
         role = role_dir.name
         if role in SKIP_ROLES or role not in entries:
             continue
-        ctx = {
-            **base,
-            **role_defaults(role, base),
-            "container_item": entries[role],
-            **(overrides or {}),
-        }
+        ctx = render_context(
+            role_dir,
+            overrides={"container_item": entries[role], **(overrides or {})},
+            strict=True,
+        )
         env = _role_env(role_dir, ctx)
         for tpl in sorted(role_dir.glob(f"templates/{BUILD_TEMPLATE_GLOB}")):
             rendered, err = render_or_error(env, tpl.name, ctx)

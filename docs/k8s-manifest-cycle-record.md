@@ -325,9 +325,10 @@ The offline harness cannot supply that render. Measured on 2026-09-25 against th
 records, `scripts/validate/k8s_manifests.py` reproduced every recorded file checksum for 9
 services and mismatched at least one file for 48. It stubs SOPS values, which reach 49 of the 300
 rendered manifests as the literal `STUB`. It supplies its own placeholder `domain`
-(`example.com`, from `scripts/lib/render_guard.py`), which every `ingressroute.yaml` embeds. Its
-role defaults also outrank the inventory, a deliberate inversion its own `DECIDED` marker
-explains.
+(`example.com`, from `scripts/lib/render_guard.py`), which every `ingressroute.yaml` embeds.
+Its role defaults outranked the inventory at the time of that measurement. Since #3692 it layers
+them in Ansible's order through `scripts/lib/render_context.py`, which rendered every
+manifest byte-identical because no key collided.
 
 A dry run on the deploy host can (#2574). With `-e manifests_render_record=true`,
 `ansible/roles/k8s/manifests/tasks/render_record.yml` digests the throwaway render and writes

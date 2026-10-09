@@ -196,25 +196,3 @@ def test_an_override_beats_the_role_default():
     path = v.ROLES / "k8s" / "artifacts" / "templates" / "sync-artifacts.sh.j2"
     ctx = v.template_context(path, overrides={"artifacts_peer_dir": "/tmp/peer"})
     assert ctx["artifacts_peer_dir"] == "/tmp/peer"
-
-
-def test_an_inventory_value_beats_a_role_default_of_the_same_name():
-    # Ansible's own precedence: role defaults are the weakest layer, so a gate that let one
-    # win would lint a value no deploy produces.
-    path = v.ROLES / "k8s" / "artifacts" / "templates" / "sync-artifacts.sh.j2"
-    ctx = v.template_context(path, base={"artifacts_sync_alert_after_failures": 99})
-    assert ctx["artifacts_sync_alert_after_failures"] == 99
-
-
-def test_a_default_that_cannot_be_resolved_is_dropped_rather_than_passed_through():
-    # gitops_deploy's denylist default derives its value through a filter plugin resolve_vars'
-    # light-tier environment does not register. The key is dropped, so it renders as STUB;
-    # passing it through would put literal braces in a rendered script.
-    resolved = v._resolved_defaults(
-        {
-            "good": "{{ sys_user }}/artifacts",
-            "bad": "{{ playbook_dir | no_such_filter }}",
-        },
-        {"sys_user": "ubuntu", "playbook_dir": "/tmp"},
-    )
-    assert resolved == {"good": "ubuntu/artifacts"}

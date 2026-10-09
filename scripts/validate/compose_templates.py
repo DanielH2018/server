@@ -32,10 +32,9 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
 from lib.ansible_inventory import containers_entries_in
+from lib.render_context import render_context
 from lib.render_guard import (
-    ALL_VARS,
     ANSIBLE,
-    BASE_CONTEXT,
     HOST_VARS,
     dump_numbered,
     load_yaml,
@@ -228,8 +227,8 @@ def find_missing_no_new_privileges(docs, exempt=frozenset()) -> list:
     return missing
 
 
-def check_container(host_ctx: dict, ci: dict) -> str | None:
-    """Render one container template; return an error string or None on success."""
+def check_container(host: str, ci: dict) -> str | None:
+    """Render one container template for `host`; return an error string or None on success."""
     name = ci.get("name")
     if not name:
         return None
@@ -248,7 +247,10 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
         )
 
     env = template_env(ROLES / name / "templates")
-    ctx = {**host_ctx, "container_item": ci}
+    ctx = render_context(tpl, host=host, overrides={"container_item": ci})
+    # A template reads its OWN entry through `container_item`; leaving the list in would let
+    # one render against another service's entry.
+    ctx.pop("containers_list", None)
     rendered, err = render_or_error(env, "docker-compose.yml.j2", ctx)
     if rendered is None:
         return err
@@ -309,7 +311,6 @@ def main() -> int:
         0 if every template rendered and parsed as YAML, 1 if any failed or no host_vars
         were found.
     """
-    all_vars = load_yaml(ALL_VARS)
     host_files = sorted(HOST_VARS.glob("*.yml"))
     if not host_files:
         print(f"No host_vars found under {HOST_VARS}", file=sys.stderr)
@@ -320,9 +321,6 @@ def main() -> int:
     for host_file in host_files:
         host_vars = load_yaml(host_file)
         containers = containers_entries_in(host_vars)
-        # host scalars (domain, server_ip, kuma_docker_host, ...) override the base.
-        host_ctx = {**BASE_CONTEXT, **all_vars, **host_vars}
-        host_ctx.pop("containers_list", None)
 
         # k8s entries render manifests, not compose — validate/k8s_manifests.py owns them.
         # Excluding them here is what lets a *Docker* entry with no template be an error
@@ -330,7 +328,7 @@ def main() -> int:
         docker = [ci for ci in containers if ci.get("platform") != "k8s"]
         print(f"== {host_file.name} ({len(docker)} Docker services) ==")
         for ci in docker:
-            err = check_container(host_ctx, ci)
+            err = check_container(host_file.stem, ci)
             checked += 1
             name = ci["name"]
             if err:

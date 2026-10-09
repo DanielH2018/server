@@ -3,13 +3,12 @@
 
 `resolve_vars` expands `{{ ... }}` inside a variable's VALUE the way Ansible does before
 templating; getting that wrong leaves literal braces in a manifest, which reads as "invalid
-YAML" pointing at a perfectly good template. `colliding_default_keys` asserts the render
-context's inverted precedence stays harmless.
+YAML" pointing at a perfectly good template.
 
 Run: uv run pytest scripts/lib/tests/test_k8s_context.py
 """
 
-from lib.k8s_context import colliding_default_keys, resolve_vars
+from lib.k8s_context import resolve_vars
 
 
 # --- resolve_vars: values nested inside lists and dicts ---
@@ -80,30 +79,6 @@ def test_resolve_vars_a_partial_value_still_renders_to_a_string():
     """
     resolved = resolve_vars({"url": "https://{{ host }}/x"}, {"host": ["a", "b"]})
     assert resolved["url"] == "https://['a', 'b']/x"
-
-
-# ── role defaults must not shadow the inventory ───────────────────────────────────────────────
-
-
-def test_a_role_default_that_shadows_an_inventory_key_is_flagged():
-    """The rejecting half.
-
-    `{**base, **role_defaults(...)}` ranks role defaults ABOVE the group_vars and host_vars in
-    `base`, which is the reverse of Ansible's own precedence — so a shared key renders a value no
-    deploy would produce, while staying valid YAML and passing the schema check.
-    """
-    assert colliding_default_keys(
-        {"crowdsec_k8s_image": "role-value", "own_key": 1},
-        {"crowdsec_k8s_image": "inventory-value", "other": 2},
-    ) == {"crowdsec_k8s_image"}
-
-
-def test_a_role_default_with_its_own_key_space_is_clean():
-    """The accepting half — a rule that flagged everything would pass the test above too."""
-    assert (
-        colliding_default_keys({"sonarr_port": 8989}, {"domain": "example.com"})
-        == set()
-    )
 
 
 # --- resolve_vars: the `bool` filter a variable value reaches for ---

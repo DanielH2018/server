@@ -76,12 +76,13 @@ _RENDER_CONTEXT = None
 
 
 def _render_context():
-    """(validator module, base var context, containers_list entries), built once per process.
+    """(validator module, containers_list entries), built once per process.
 
     The import is deferred because it pulls in ansible-core, PyYAML and jsonschema,
     and twelve of probe.py's thirteen subcommands never need any of it. Measured on daniel-box:
-    0.41s to import, 0.03s to build the context, 0.02s median to render one role and 0.22s for
-    the slowest (home-assistant) — against the 30s `PROBE_TIMEOUT_S` the notifier allows.
+    0.41s to import, ~5 ms to build one role's context (2026-10-09), 0.02s median to render
+    one role and 0.22s for the slowest (home-assistant) — against the 30s `PROBE_TIMEOUT_S`
+    the notifier allows.
     """
     global _RENDER_CONTEXT
     if _RENDER_CONTEXT is None:
@@ -94,17 +95,7 @@ def _render_context():
         _sys.path.insert(0, str(REPO / "scripts"))
         from validate import k8s_manifests as validator
 
-        base = {
-            **validator.BASE_CONTEXT,
-            **validator.load_yaml(validator.ALL_VARS),
-            **validator.load_yaml(validator.HOST_VARS),
-            "playbook_dir": str(validator.ANSIBLE),
-        }
-        _RENDER_CONTEXT = (
-            validator,
-            validator.resolve_vars(base, base),
-            validator.k8s_entries(),
-        )
+        _RENDER_CONTEXT = (validator, validator.k8s_entries())
     return _RENDER_CONTEXT
 
 
@@ -134,7 +125,7 @@ def _role_kind_targets(role, default_namespace, kinds):
     if not role_dir.is_dir():
         return None
 
-    validator, base, entries = _render_context()
+    validator, entries = _render_context()
     if role in validator.SKIP_ROLES or role not in entries:
         return None
 
@@ -143,11 +134,9 @@ def _role_kind_targets(role, default_namespace, kinds):
         for p in (role_dir / "templates").glob("*.j2")
         if validator.is_manifest_template(p)
     )
-    ctx = {
-        **base,
-        **validator.role_defaults(role, base),
-        "container_item": entries[role],
-    }
+    ctx = validator.render_context(
+        role_dir, overrides={"container_item": entries[role]}, strict=True
+    )
     targets = set()
     for tpl in templates:
         err, docs = validator.check_template(role, tpl, ctx)

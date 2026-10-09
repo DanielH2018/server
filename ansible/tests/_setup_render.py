@@ -7,13 +7,10 @@ required member — could only scan template SOURCE, and a source scan cannot fo
 a template that reads the secret through a second variable holds it while the scan sees
 nothing (#3183).
 
-Each template renders from its OWN role's context, the layering
-`validate/setup_templates.py:main` gives it: base stubs and Ansible's runtime names,
-`group_vars/all.yml`, then the role's defaults. Two things differ from that gate, both so a
-caller can see what a variable expands to. Values are resolved the way Ansible resolves them
-(`lib.k8s_context.resolve_vars`), so a default of `"{{ some_secret }}"` reaches the render as
-the secret's value rather than as literal braces. And `overrides` go on top, so a guard can set
-a secret to a sentinel and look for it.
+Each template renders from its OWN role's context, the one `validate/setup_templates.py:main`
+gives it: `lib.render_context` with Ansible's runtime names on top. `overrides` go on top as
+well, so a guard can set a secret to a sentinel and look for it, and a default of
+`"{{ some_secret }}"` carries the sentinel rather than the secret's stub.
 
 Secret values a caller does not override render as `STUB` (the `DECIDED:` rule in
 `lib/render_guard.py`).
@@ -21,11 +18,9 @@ Secret values a caller does not override render as `STUB` (the `DECIDED:` rule i
 
 from pathlib import Path
 
-from jinja2 import TemplateError
-
 from lib.ansible_jinja_env import template_env
-from lib.k8s_context import resolve_vars
-from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml, render_or_error
+from lib.render_context import render_context
+from lib.render_guard import render_or_error
 from validate.setup_templates import (
     ANSIBLE_RUNTIME_CONTEXT,
     SETUP,
@@ -36,27 +31,13 @@ from validate.setup_templates import (
 def role_context(role_dir: Path, overrides: dict | None = None) -> dict:
     """The resolved context one setup role's templates render with, `overrides` on top.
 
-    Resolved one key at a time, and a key that will not resolve keeps its raw value. Some setup
-    defaults call a repo filter plugin `resolve_vars` does not carry —
-    `gitops_deploy_k8s_autodeploy_denylist` pipes `playbook_dir` through
-    `k8s_autodeploy_denylist` — and resolving the whole context at once would let that one key
-    fail every role's render. The raw value is what `validate/setup_templates.py` renders with
-    for every key, so a key left raw here is no worse covered than by that gate.
+    A default that will not expand is left out, so it renders as `STUB`: three setup defaults
+    call a filter `lib.render_context`'s light environment does not carry, which `_resolve`
+    there names.
     """
-    ctx = {
-        **BASE_CONTEXT,
-        **ANSIBLE_RUNTIME_CONTEXT,
-        **load_yaml(ALL_VARS),
-        **load_yaml(role_dir / "defaults" / "main.yml"),
-        **(overrides or {}),
-    }
-    resolved = {}
-    for key, value in ctx.items():
-        try:
-            resolved[key] = resolve_vars({key: value}, ctx)[key]
-        except TemplateError:
-            resolved[key] = value
-    return resolved
+    return render_context(
+        role_dir, overrides={**ANSIBLE_RUNTIME_CONTEXT, **(overrides or {})}
+    )
 
 
 def render_setup_texts(

@@ -24,7 +24,10 @@ Undefined and then judges each name it collected. A name is allowed to be undefi
   - a SOPS secret, by name, from the plaintext registry `ansible/secret_rotation.yml`;
   - runtime-supplied by a setup-plane task — a `set_fact` key, a task-level `vars:` key, or a
     `register:` name, derived from the tasks themselves (`runtime_vars`), never listed;
-  - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file.
+  - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
+  - declared in the template's own role defaults. `lib.render_context` leaves out a default
+    whose value will not expand (it names a filter the light environment lacks), so the key
+    reads as undefined in the render while the role still defines it.
 
 Everything else is a failure naming the template and the variable. That is the shape a rename
 takes: the producer moves and the consumer keeps the old name, which then matches none of the
@@ -54,10 +57,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
+from lib.render_context import render_context
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
-    BASE_CONTEXT,
     dump_numbered,
     host_files,
     load_yaml,
@@ -243,23 +246,30 @@ def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:
     return problems
 
 
+def check_role_template(tpl: Path, known: frozenset[str]) -> list[str]:
+    """`check_template` under the context a deploy renders `tpl` with.
+
+    The owning role's defaults under the inventory, as Ansible layers them, minus the secrets
+    and runtime facts `known` covers. The role's default names join `known`, because a default
+    whose value will not expand is left out of the context and still counts as defined.
+    """
+    ctx = render_context(tpl, overrides=ANSIBLE_RUNTIME_CONTEXT)
+    defaults = frozenset(load_yaml(tpl.parents[1] / "defaults" / "main.yml"))
+    return check_template(tpl, ctx, known | defaults)
+
+
 def main() -> int:
     """Render every setup-plane template and report unresolved variables and bad YAML.
 
     Returns:
         0 if every template rendered clean, 1 if any failed.
     """
-    base = {**BASE_CONTEXT, **ANSIBLE_RUNTIME_CONTEXT, **load_yaml(ALL_VARS)}
     known = secret_names() | runtime_vars() | inventory_names()
     templates = discover_templates()
     failures = 0
     for tpl in templates:
-        # The owning role's defaults, layered over the inventory — the same context Ansible
-        # gives the task that renders it, minus the secrets and runtime facts `known` covers.
-        role = tpl.parents[1]
-        ctx = {**base, **load_yaml(role / "defaults" / "main.yml")}
         rel = str(tpl.relative_to(ANSIBLE))
-        problems = check_template(tpl, ctx, known)
+        problems = check_role_template(tpl, known)
         if problems:
             failures += 1
             for problem in problems:
