@@ -1,0 +1,69 @@
+"""Tests for the shared Backup CR reader and the backup group names (#3735, #3737)."""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
+import longhorn_backups as backups
+
+ROLE = Path(__file__).resolve().parents[1]
+
+
+def _item(**status):
+    return {"metadata": {"name": "backup-1"}, "status": status}
+
+
+def test_from_item_reads_every_status_field():
+    backup = backups.from_item(
+        _item(
+            volumeName="pvc-a",
+            snapshotCreatedAt="2026-10-01T03:30:00Z",
+            state="Completed",
+            size="1048576",
+            labels={"RecurringJob": "daily-backup"},
+        )
+    )
+    assert backup == backups.Backup(
+        name="backup-1",
+        volume="pvc-a",
+        created="2026-10-01T03:30:00Z",
+        state="Completed",
+        job="daily-backup",
+        size="1048576",
+    )
+
+
+def test_from_item_reads_a_missing_field_as_empty_not_none():
+    """A jsonpath read printed "" for a field Longhorn has not written; the records match it."""
+    backup = backups.from_item({"status": {"labels": None}})
+    assert (backup.name, backup.volume, backup.created, backup.job) == ("", "", "", "")
+
+
+def test_created_epoch_parses_fractional_seconds():
+    """The stamp that once parsed in one module and returned None in another (#3735)."""
+    stamp = backups.from_item(_item(snapshotCreatedAt="2026-10-01T03:30:00.123456Z"))
+    assert stamp.created_epoch == 1790825400.0
+    assert backups.from_item(_item(snapshotCreatedAt="")).created_epoch is None
+
+
+def test_completed_keeps_only_completed_backups():
+    items = [_item(state="Completed"), _item(state="Error"), _item(state="InProgress")]
+    assert [b.state for b in backups.completed(backups.from_items(items))] == [
+        "Completed"
+    ]
+
+
+def test_the_names_are_the_labels_the_role_writes():
+    """The Ansible side still spells the labels out; a renamed constant must fail here."""
+    shard_tasks = (ROLE / "tasks" / "longhorn-weekly-shard.yml").read_text()
+    tasks = (ROLE / "tasks" / "longhorn.yml").read_text()
+    nobackup_class = (
+        ROLE / "files" / "longhorn-storageclass-nobackup.yaml"
+    ).read_text()
+    shard_label = backups.group_label(backups.weekly_shard_group(0))
+    assert backups.group_label(backups.DEFAULT_GROUP) + "=enabled" in shard_tasks
+    assert shard_label[:-1] + "{{ shard }}=enabled" in shard_tasks
+    assert f"% {backups.WEEKLY_SHARDS} }}}}" in shard_tasks
+    assert backups.group_label(backups.NO_BACKUP_GROUP) + "=enabled" in tasks
+    assert backups.group_label(backups.WEEKLY_LEGACY_GROUP) + "=enabled" in tasks
+    assert f'"name":"{backups.NO_BACKUP_GROUP}","isGroup":true' in nobackup_class

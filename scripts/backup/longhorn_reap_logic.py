@@ -32,18 +32,22 @@ from dataclasses import dataclass, field
 # ansible/roles/setup/common/files/. Each importer carries its own insert rather than relying on
 # the entry point's having run first.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
-from lib.repo_paths import HOST_LIB_FILES
+from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
 
 sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
 
-RECURRING_JOB_GROUP_PREFIX = "recurring-job-group.longhorn.io/"
+# The Backup CR reader and the group names, shared with the backup-health cron (#3735, #3737).
+sys.path.insert(0, str(K3S_FILES))
+import longhorn_backups
+
+RECURRING_JOB_GROUP_PREFIX = longhorn_backups.GROUP_LABEL_PREFIX
 
 # Groups that name no RecurringJob CR by design, hardcoded because this module reads no file.
 # The sentinel's angle brackets cannot collide with a DNS-1123 RecurringJob name, nor
 # prefix-match a snapshot's truncated `RecurringJob` label. ENFORCED:
 # ansible/tests/longhorn/test_longhorn_reap_opt_out_groups.py::test_every_jobless_storageclass_group_is_a_known_opt_out
-OPT_OUT_GROUPS = frozenset({"no-backup"})
+OPT_OUT_GROUPS = frozenset({longhorn_backups.NO_BACKUP_GROUP})
 OWNER_NO_JOB_BY_DESIGN = "<no job by design>"
 
 
@@ -323,13 +327,9 @@ class BackupClassification:
 
 
 def backup_fields(b: dict) -> tuple[str, str, str, str, str]:
-    name = (b.get("metadata") or {}).get("name", "")
-    status = b.get("status") or {}
-    vol = status.get("volumeName", "")
-    created = status.get("snapshotCreatedAt", "")
-    job = (status.get("labels") or {}).get("RecurringJob", "")
-    state = status.get("state", "")
-    return name, vol, created, job, state
+    """(name, volume, snapshotCreatedAt, RecurringJob, state) of one Backup CR item."""
+    backup = longhorn_backups.from_item(b)
+    return backup.name, backup.volume, backup.created, backup.job, backup.state
 
 
 def classify_backups(
@@ -354,7 +354,7 @@ def classify_backups(
         backup list only after its own `abort_reason` call.
     """
     valid = [f for f in (backup_fields(b) for b in backups) if f[0] and f[1]]
-    completed = [f for f in valid if f[4] == "Completed"]
+    completed = [f for f in valid if f[4] == longhorn_backups.COMPLETED]
     labelled = [f for f in completed if f[3]]
 
     # `labelled` is the set at risk: the orphan loop below iterates it and nothing else. Only

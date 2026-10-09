@@ -141,6 +141,7 @@
   loop:
     - longhorn_backup_health.py
     - longhorn_backup_health_logic.py
+    - longhorn_backups.py
     - longhorn_cron_evidence_logic.py
     - longhorn_restore_drill_stamps.py
   become: true
@@ -183,6 +184,8 @@
         src: ansible/roles/setup/k3s/files/longhorn_backup_health.py
       - live: /opt/longhorn-backup-health/longhorn_backup_health_logic.py
         src: ansible/roles/setup/k3s/files/longhorn_backup_health_logic.py
+      - live: /opt/longhorn-backup-health/longhorn_backups.py
+        src: ansible/roles/setup/k3s/files/longhorn_backups.py
       - live: /opt/longhorn-backup-health/longhorn_cron_evidence_logic.py
         src: ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py
       - live: /opt/longhorn-backup-health/longhorn_restore_drill_stamps.py

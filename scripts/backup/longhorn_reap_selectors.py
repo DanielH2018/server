@@ -81,7 +81,7 @@ def completed_backup_records(backups: list[dict]) -> list[dict]:
     records = []
     for b in backups:
         name, vol, created, job, state = logic.backup_fields(b)
-        if not name or not vol or state != "Completed":
+        if not name or not vol or state != logic.longhorn_backups.COMPLETED:
             continue
         records.append(
             {

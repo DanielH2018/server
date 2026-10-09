@@ -10,6 +10,7 @@ because both suites need them and pytest names test modules by basename repo-wid
 Consumers: `test_longhorn_backup_health_reader.py`, `test_longhorn_backup_grace_cron.py`.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -122,12 +123,28 @@ def _rfc3339(epoch: float) -> str:
     )
 
 
+def _backup_list_body(volume: str, snapshot_ts: str, job: str) -> str:
+    """`kubectl get backups.longhorn.io -o json` holding one Completed backup of `volume`."""
+    item = {
+        "metadata": {"name": f"backup-{volume}"},
+        "status": {
+            "volumeName": volume,
+            "snapshotCreatedAt": snapshot_ts,
+            "state": "Completed",
+            "size": "1048576",
+            "labels": {"RecurringJob": job},
+        },
+    }
+    return json.dumps({"items": [item]})
+
+
 def _green_path_stub_kubectl(tmp_path, snapshot_ts: str) -> Path:
     """A stub kubectl answering every query the reader's green path issues, from fixtures.
 
     Dispatches on argv (after stripping the `-n <namespace>` host_lib.kubectl_runner inserts),
     not on raw text matching, so it stays exact even though several distinct queries all target
-    `backups.longhorn.io`/`volumes.longhorn.io` with different -o jsonpath shapes. One volume,
+    `volumes.longhorn.io` with different -o jsonpath shapes. The backup list is one `-o json`
+    fetch (#3735); any other backup query is an UNEXPECTED ARGS failure. One volume,
     `pvc-web-data`, is backed up by the "daily" tier only — every other tier's label selector
     matches nothing, which is the ordinary (and simplest-to-fixture) shape for a fleet where only
     one recurring job is armed.
@@ -143,27 +160,19 @@ import os
 import sys
 
 SNAPSHOT_TS = "__SNAPSHOT_TS__"
+BACKUP_LIST = __BACKUP_LIST__
 
 args = sys.argv[1:]
 if "-n" in args:
     i = args.index("-n")
     args = args[:i] + args[i + 2:]
-joined = " ".join(args)
 
 if args[:2] == ["get", "backuptarget"]:
     branch, body = "target-" + args[2], "true"
-elif args[:2] == ["get", "backups.longhorn.io"] and args[-1] == "json":
-    branch, body = "errored-backups", '{"items": []}'
+elif args == ["get", "backups.longhorn.io", "-o", "json"]:
+    branch, body = "backups", BACKUP_LIST
 elif args[:2] == ["get", "jobs.batch"] and args[-1] == "json":
     branch, body = "failed-jobs", '{"items": []}'
-elif args[:2] == ["get", "backups.longhorn.io"] and "|" in joined:
-    branch = "coverage"
-    body = "pvc-web-data|%s|daily-backup\n" % SNAPSHOT_TS
-elif args[:2] == ["get", "backups.longhorn.io"] and "size" in joined:
-    branch = "recent"
-    body = "pvc-web-data %s 1048576\n" % SNAPSHOT_TS
-elif args[:2] == ["get", "backups.longhorn.io"] and "snapshotCreatedAt" in joined:
-    branch, body = "freshness", "%s\n" % SNAPSHOT_TS
 elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
     sel = args[args.index("-l") + 1]
     branch = "tier-" + sel.split("/")[-1].split("=")[0]
@@ -184,7 +193,10 @@ if branch == os.environ.get("STUB_NULL_BRANCH"):
     body = "null"
 
 sys.stdout.write(body)
-""".replace("__SNAPSHOT_TS__", snapshot_ts)
+""".replace("__SNAPSHOT_TS__", snapshot_ts).replace(
+        "__BACKUP_LIST__",
+        repr(_backup_list_body("pvc-web-data", snapshot_ts, "daily-backup")),
+    )
     return write_exec(stub, script)
 
 
@@ -220,6 +232,7 @@ def _grace_pair_stub_kubectl(tmp_path, created_ts: str, old_backup_ts: str) -> P
     LONGHORN_BACKUP_CRON parses.
     """
     stub = tmp_path / "stub-kubectl-grace"
+    backup_list = _backup_list_body("pvc-old", old_backup_ts, "daily-backup")
     script = f"""#!/usr/bin/env python3
 import sys
 
@@ -227,7 +240,6 @@ args = sys.argv[1:]
 if "-n" in args:
     i = args.index("-n")
     args = args[:i] + args[i + 2:]
-joined = " ".join(args)
 
 
 def emit(text, rc=0):
@@ -237,16 +249,10 @@ def emit(text, rc=0):
 
 if args[:3] == ["get", "backuptarget", "default"]:
     emit("true")
-elif args[:2] == ["get", "backups.longhorn.io"] and args[-1] == "json":
-    emit('{{"items": []}}')
+elif args == ["get", "backups.longhorn.io", "-o", "json"]:
+    emit({backup_list!r})
 elif args[:2] == ["get", "jobs.batch"] and args[-1] == "json":
     emit('{{"items": []}}')
-elif args[:2] == ["get", "backups.longhorn.io"] and "|" in joined:
-    emit("pvc-old|{old_backup_ts}|daily-backup\\n")
-elif args[:2] == ["get", "backups.longhorn.io"] and "size" in joined:
-    emit("pvc-old {old_backup_ts} 1048576\\n")
-elif args[:2] == ["get", "backups.longhorn.io"] and "snapshotCreatedAt" in joined:
-    emit("{old_backup_ts}\\n")
 elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
     sel = args[args.index("-l") + 1]
     if sel == "recurring-job-group.longhorn.io/default=enabled":

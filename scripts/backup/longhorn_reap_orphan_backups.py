@@ -168,7 +168,7 @@ def _delete_backup(name: str) -> tuple[int, str]:
     )
     return kubectl(
         "delete",
-        "backups.longhorn.io",
+        logic.longhorn_backups.RESOURCE,
         name,
         "--ignore-not-found",
         "--timeout=%ds" % DELETE_TIMEOUT_S,
@@ -423,7 +423,7 @@ def main(argv: list[str]) -> int:
         print(abort, file=sys.stderr)
         return 1
 
-    bkp_rc, bkp_out = kubectl("get", "backups.longhorn.io", "-o", "json")
+    bkp_rc, bkp_out = kubectl(*logic.longhorn_backups.LIST_ARGS)
     if bkp_rc != 0:
         print(
             "ABORT: could not read backups: %s" % bkp_out.strip()[:200], file=sys.stderr
