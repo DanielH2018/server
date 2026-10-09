@@ -7,14 +7,16 @@ pipeline reads the files once at start with `read_hooks`, rewrites a copy outsid
 before every phase with `write_hooks`, and hands a resumed phase the start-time settings with
 every hook command pointed at that copy (`pointed_settings`).
 
-DECIDED: only the phases that resume the implementer's session (fix, land, file) of this repo's
-batch run with `--setting-sources user`. Another repo's batch keeps its project settings: the
-pipeline holds no copy of that repo's hooks, so dropping the source would drop its guards. A probe on 2026-10-09 showed that the flag also drops the project
-`CLAUDE.md` and the project skills from a fresh session. A resumed session already holds
-`CLAUDE.md` in its transcript, and the land text carries the whole `land.sh` command, so only
-those phases lose the source at no cost. The implement phase starts from the tree `worktree add`
-checked out. The review phase starts after the implementer and still loads the worktree's
-settings (#3825).
+DECIDED: in this repo's batch, every phase that starts after the implementer ran (review, fix,
+review-delta, land, file) runs with `--setting-sources user`. Another repo's batch keeps its
+project settings: the pipeline holds no copy of that repo's hooks, so dropping the source would
+drop its guards. A probe on 2026-10-09 showed that the flag also drops the project `CLAUDE.md`
+and the project skills from a fresh session. A resumed session already holds `CLAUDE.md` in its
+transcript, and the land text carries the whole `land.sh` command. The reviewer is a fresh
+session, so the pipeline appends the `CLAUDE.md` it read at start to the review prompt
+(#3825). The reviewer loses the project skills and `.claude/rules/`; it reads files rather
+than following a procedure, and its prompt names the role `CLAUDE.md` files to check. The
+implement phase starts from the tree `worktree add` checked out, and keeps the source.
 
 `block-protected-bash` derives its secret-bearing host paths from the session's cwd, which is
 the worktree. The pipeline derives the set at start and ships it beside the held hooks as

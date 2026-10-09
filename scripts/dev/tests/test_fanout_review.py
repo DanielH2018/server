@@ -231,7 +231,9 @@ def test_the_reviewer_prompt_is_the_text_read_before_the_implementer_ran(tmp_pat
     pipeline.run_all()
     reviewer = run.claude[1][0]
     assert "--append-system-prompt-file" not in reviewer
-    assert reviewer[reviewer.index("--append-system-prompt") + 1] == "PROMPT AT START"
+    assert reviewer[reviewer.index("--append-system-prompt") + 1].startswith(
+        "PROMPT AT START"
+    )
     assert Pipeline(tmp_path, "1", "h", SERVER_TARGET, "").review_prompt == (
         PROMPT_FILE.read_text()
     )
@@ -316,12 +318,45 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
     assert json.loads((hooks / "secret_bearing_host_paths.json").read_text()) == {
         "/usr/local/bin/a.sh": ["one_token", "two_token"]
     }
-    # The implement and review phases keep the project source: dropping it drops CLAUDE.md.
+    # The implement phase keeps the project source: dropping it drops CLAUDE.md.
     assert "--setting-sources" not in run.claude[0][0]
-    assert "--setting-sources" not in run.claude[1][0]
 
 
-def test_another_repos_resumed_phase_keeps_its_own_project_settings(tmp_path):
+def test_the_reviewers_load_no_settings_file_and_get_claude_md_read_at_start(tmp_path):
+    """The reviewer starts after the implementer could edit the settings, the guard hooks
+    and `CLAUDE.md`, and it has Bash (#3825)."""
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [_finding("off by one")]}),
+        _report(f"Fixed it. {PR}"),
+        _report(structured={"summary": "resolved", "findings": []}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    assert pipeline.project_claude_md.startswith("# Server Homelab")
+    pipeline.project_claude_md = "CLAUDE.MD AT START"
+    held = json.loads(pipeline.project_settings)
+    pipeline.run_all()
+
+    hooks = pipeline.hook_root / ".claude" / "hooks"
+    for argv in (run.claude[1][0], run.claude[3][0]):
+        assert argv[argv.index("--setting-sources") + 1] == "user"
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        assert settings["permissions"] == held["permissions"]
+        commands = [
+            h["command"]
+            for groups in settings["hooks"].values()
+            for group in groups
+            for h in group["hooks"]
+        ]
+        assert commands and all(c.startswith(f"{hooks}/run-hook.sh ") for c in commands)
+        prompt = argv[argv.index("--append-system-prompt") + 1]
+        assert prompt.startswith(pipeline.review_prompt)
+        assert prompt.endswith("CLAUDE.MD AT START")
+        assert "--disallowedTools" in argv
+
+
+def test_another_repos_later_phases_keep_its_own_project_settings(tmp_path):
     """The pipeline holds no copy of another repo's hooks, so dropping its source drops them."""
     dotfiles = Target("DanielH2018/dotfiles", str(tmp_path), "origin/main")
     pipeline, _ = _pipeline(tmp_path, [], target=dotfiles)
@@ -330,6 +365,11 @@ def test_another_repos_resumed_phase_keeps_its_own_project_settings(tmp_path):
     assert "--setting-sources" not in argv
     settings = json.loads(argv[argv.index("--settings") + 1])
     assert list(settings["hooks"]) == ["Stop"]
+    reviewer = pipeline._reviewer()
+    assert "--setting-sources" not in reviewer
+    assert reviewer[reviewer.index("--append-system-prompt") + 1] == (
+        pipeline.review_prompt
+    )
 
 
 def _red_report(behaviours=1):

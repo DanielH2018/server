@@ -23,10 +23,13 @@ THE GREEN GATE runs after the implementer and again after every fix round. The w
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
 would otherwise pass a gate the pushed head fails (#3821). The red files, every pytest config
 file and the `leakguard` plugin must be unchanged since `red`, no untracked config file may
-exist, and every red node must pass in a fresh export of HEAD. The export is what makes the
+exist, and every red node must pass in a fresh clone of HEAD. The clone is what makes the
 verdict HEAD's: the implementer controls the worktree's index and git config, so a
 skip-worktree entry, an `info/exclude` line or `status.showUntrackedFiles=no` each hides an
-edit from `git status`.
+edit from `git status`. The clone reads none of that repo's config or `info/attributes`, so a
+smudge filter cannot rewrite a test on checkout either, and it is a repository, so a red test
+that runs `git ls-files` passes there as it would in CI (#3837). It shares the worktree's
+object store, which the agent can also write; CI's run is the backstop there too.
 
 Both gates run pytest with `-c pyproject.toml`, so the root configuration decides every run.
 Every process here runs as the agent's own user, so a determined agent can still edit the
@@ -186,6 +189,16 @@ def _pytest(worktree: Path, *args: str) -> list[str]:
     ]  # fmt: skip
 
 
+# git with no configuration the implementer can write: no global or system file, which a
+# clone's own fresh config leaves as the only other sources, and no user attributes file. The
+# green gate checks HEAD out this way, so no filter, `info/attributes` line or config value
+# from the worktree's repo can rewrite a file on its way to pytest (#3837).
+_BARE_GIT = (
+    "env", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+    "git", "-c", "core.attributesFile=/dev/null",
+)  # fmt: skip
+
+
 def _git(run: Runner, worktree: Path, *args: str) -> subprocess.CompletedProcess:
     return run(["git", "-C", str(worktree), *args], None)
 
@@ -278,16 +291,23 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
     stray = stray_config(run, worktree)
     if stray:
         return f"untracked pytest configuration: {', '.join(stray)}"
+    head = _git(run, worktree, "rev-parse", "HEAD").stdout.strip()
     with tempfile.TemporaryDirectory(prefix="green-gate-") as tmp:
-        archive, tree = Path(tmp) / "head.tar", Path(tmp) / "head"
-        tree.mkdir()
-        exported = _git(run, worktree, "archive", "-o", str(archive), "HEAD")
-        if exported.returncode == 0:
-            exported = run(["tar", "-xf", str(archive), "-C", str(tree)], None)
-        if exported.returncode:
-            return (
-                f"could not export HEAD to run the red tests: {exported.stderr.strip()}"
+        tree = Path(tmp) / "head"
+        cloned = run(
+            [
+                *_BARE_GIT, "clone", "--quiet", "--shared", "--no-checkout",
+                "--template=", str(worktree), str(tree),
+            ],
+            None,
+        )  # fmt: skip
+        if cloned.returncode == 0:
+            cloned = run(
+                [*_BARE_GIT, "-C", str(tree), "checkout", "--quiet", "--detach", head],
+                None,
             )
+        if cloned.returncode:
+            return f"could not check HEAD out to run the red tests: {cloned.stderr.strip()}"
         proc = run(_pytest(tree, "-q", "-rA", "--tb=no", *gate.nodes), None)
     return judge_green(proc.returncode, proc.stdout, gate.nodes)
 
