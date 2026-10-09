@@ -45,7 +45,21 @@ _b2_storage: _StorageCache = {"ts": 0.0, "ok": False, "msg": "not yet probed"}
 
 
 def b2_authorize_data(cfg: Config) -> JsonObject:
-    """The parsed b2_authorize_account response. Raises on any transport/HTTP failure."""
+    """The parsed b2_authorize_account response. Raises on any transport/HTTP failure.
+
+    The bridge's only authorize call: `b2_authorize` (the gate) and `b2_storage_usage` both
+    reach B2 through it.
+
+    DECIDED: the bridge keeps this client rather than using scripts/lib/b2.py's `B2Session`
+    (#3766). `b2_reachable` picks its cache TTL from the exception type: `bridge.net._get_json`
+    re-raises an HTTPError untouched (B2 answered, so the call was billed) and wraps a
+    transport failure as RuntimeError (nothing billed). `lib.b2.http_json` folds both into one
+    `B2Error`, which would bring back the 2026-08-30 gate that held a recovery DOWN for 25
+    minutes. `B2Session` also authorizes against a fixed `AUTHORIZE_URL`, where
+    `cfg.B2_PROBE_URL` is kept swappable to a Class C call (bridge/config_io.py). The pod
+    cannot import scripts/lib either, since `files/` ships as a ConfigMap; shipping the module
+    in would roll the bridge, the alert pipeline itself, on every edit to it.
+    """
     token = base64.b64encode(
         ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
     ).decode()
@@ -154,20 +168,12 @@ def check_b2_storage(cfg: Config) -> tuple[bool, str]:
 def b2_authorize(cfg: Config) -> tuple[bool, str]:
     """Authenticate against B2. (ok, msg) — the msg carries B2's own error text on failure.
 
-    Basic auth with the key id + application key is the whole protocol for b2_authorize_account.
-    _get_json re-raises HTTPError with the response body appended, so a cap breach arrives here as
+    Basic auth with the key id + application key is the whole protocol for b2_authorize_account,
+    sent by b2_authorize_data. _get_json re-raises HTTPError with the response body appended, so a cap breach arrives here as
     "HTTP Error 403: ... transaction_cap_exceeded ..." and that string is what reaches Kuma and
     Discord — the named cause G3 asked for.
     """
-    token = base64.b64encode(
-        ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
-    ).decode()
-    data = as_object(
-        bridge.net._get_json(
-            cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
-        ),
-        "b2_authorize_account response",
-    )
+    data = b2_authorize_data(cfg)
     # A 200 from something that isn't B2 must not read as healthy. Accept EITHER field rather than
     # pinning the response shape: Backblaze publishes a body example for v4 (accountId top-level)
     # but not for v3, whose documented change was to group endpoint info under `apiInfo`. Both
