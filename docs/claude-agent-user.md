@@ -19,7 +19,7 @@ operator decided this on 2026-10-09 (#3685). See
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
 | 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check passed 2026-10-09, after #3999 fixed the approved-PR merge. Done. |
 | 4 | The phone host `claude-rc.service` runs as `claude` | 4a to 4c deployed 2026-10-09 (#4035, #4030, #4036, #4039, #4044). 4d (#4054) switched the host over on 2026-10-09. The check passed the same day. Done. |
-| 5 | Peer users, and the tools that decrypt SOPS | The homelab-ui login deployed 2026-10-09 (#4051). Peer users dropped. The agent cannot yet drive homelab-ui (#4058). |
+| 5 | Peer users, and the tools that decrypt SOPS | The homelab-ui login deployed 2026-10-09 (#4051). Peer users dropped. The agent's own browser and MCP registration are built and await an apply (#4058). |
 | 6 | Retire Claude sessions as `ubuntu` | New sessions start as `claude` since 2026-10-09; caps render for both users. The uid 1000 metric and alert, and dropping uid 1000, wait for the operator. |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
 
@@ -429,16 +429,29 @@ stay operator-run.
   `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`, then apply
   `claude_code` to rewrite the file.
 
-**Not built, so the check below cannot pass from this slice alone.** `agent_user.yml` installs
-no Node, `playwright-mcp` or Chromium for `claude`. The agent also has no homelab-ui MCP
-registration: the operator's is user-scope in `~/.claude.json`, which
-`agent_operator_config.yml` does not copy.
+**Built, not yet applied: the agent's own browser (#4058).** The operator's Node,
+`playwright-mcp` and Chromium sit under `/home/ubuntu`, which `claude` cannot read, and the
+operator's homelab-ui registration is user-scope in their own `~/.claude.json`.
+`claude_code_agent_homelab_ui_enabled` (true in daniel-box's host_vars) has the `claude_code`
+role give the agent its own copies, in `tasks/agent_browser.yml`:
 
-**Check:** homelab-ui renders a service page as `claude`. Until the gap above closes, check the
-login half as `claude` with
-`uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage`.
+- The role installs a pinned Node tarball under `~/.local/share/node`, `@playwright/mcp` at the
+  operator's release, and the Chromium that release's playwright pins. Each install runs as
+  `claude`.
+- The role registers `homelab-ui` at user scope in the agent's `~/.claude.json`. The entry
+  launches `~/server/scripts/diagnostics/ui_mcp.sh` with `NODE_BIN` set to the agent's Node.
+  The registration is not in the repo's `.mcp.json`: a project-scope server waits for an
+  approval a phone session cannot give, and it would start a second Chromium in every
+  operator session.
+- To switch it off, set the switch false. The role then removes the registration, the Node
+  tree and `~/.cache/ms-playwright`.
 
-**Rollback:** switch the agent user off and delete the `claude-agent` block.
+**Check:** homelab-ui renders a service page as `claude`. To check the login half alone, run
+`uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage`
+as `claude`.
+
+**Rollback:** set `claude_code_agent_homelab_ui_enabled: false`, then switch the agent user off
+and delete the `claude-agent` block.
 
 ## Slice 6: retire Claude sessions as `ubuntu` (planned)
 

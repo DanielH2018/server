@@ -1,0 +1,288 @@
+---
+# The agent user's own homelab-ui MCP server: Node, @playwright/mcp and Chromium in its home,
+# and a user-scope `homelab-ui` entry in its ~/.claude.json that launches its clone's
+# scripts/diagnostics/ui_mcp.sh (#4058). agent_homelab_ui.yml gives it the login that wrapper
+# reads; this file gives it the browser. Imported from main.yml when
+# claude_code_agent_user_enabled. claude_code_agent_homelab_ui_enabled picks the arm, and
+# defaults/main.yml says why the registration is user-scope rather than the repo's .mcp.json.
+#
+# Every task that reads, writes or removes a path in the agent's home runs as the agent through
+# `runuser`. The agent owns that home, so a root-run module would act on whatever the agent
+# left at a path, symlinks included. Root touches only the tarball, in a root-owned directory
+# outside the home. ansible/tests/setup/test_agent_browser.py holds the file to that.
+# `runuser` resets PATH, so each command that needs Node names its PATH through `env`.
+
+- name: Create the root-owned download directory for the agent user's Node
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_node_download_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: claude_code_agent_homelab_ui_enabled
+
+- name: Download the agent user's pinned Node
+  ansible.builtin.get_url:
+    url: "{{ claude_code_agent_node_url }}"
+    dest: "{{ claude_code_agent_node_download_dir }}/{{ claude_code_agent_node_url | basename }}"
+    checksum: "sha256:{{ claude_code_agent_node_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: claude_code_agent_homelab_ui_enabled
+
+- name: Create the agent user's Node directory
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - mkdir
+      - -p
+      - "{{ claude_code_agent_node_dir }}"
+    creates: "{{ claude_code_agent_node_dir }}"
+  become: true
+  when: claude_code_agent_homelab_ui_enabled
+
+- name: Unpack the agent user's Node
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - tar
+      - -xJf
+      - "{{ claude_code_agent_node_download_dir }}/{{ claude_code_agent_node_url | basename }}"
+      - -C
+      - "{{ claude_code_agent_node_dir }}"
+    creates: >-
+      {{ claude_code_agent_node_dir }}/node-v{{ claude_code_agent_node_version }}-linux-x64/bin/node
+  become: true
+  when: claude_code_agent_homelab_ui_enabled
+
+- name: Read where the agent user's current Node points
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - readlink
+      - "{{ claude_code_agent_node_dir }}/current"
+  register: claude_code_agent_node_current
+  changed_when: false
+  # Absent on the first apply: the link task below reads that as pointing nowhere.
+  failed_when: false
+  become: true
+  when: claude_code_agent_homelab_ui_enabled
+
+- name: Point the agent user's current Node at the pinned release
+  # NODE_BIN in the registration names `current`, so a Node bump moves this link and leaves the
+  # registration alone. The bump installs @playwright/mcp afresh, because npm's global prefix
+  # is the Node tree and the new tree has none.
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - ln
+      - -sfn
+      - node-v{{ claude_code_agent_node_version }}-linux-x64
+      - "{{ claude_code_agent_node_dir }}/current"
+  changed_when: true
+  become: true
+  when:
+    - claude_code_agent_homelab_ui_enabled
+    - >-
+      claude_code_agent_node_current.stdout | default('')
+      != 'node-v' ~ claude_code_agent_node_version ~ '-linux-x64'
+
+- name: Read the agent user's installed @playwright/mcp version
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - cat
+      - "{{ claude_code_agent_node_dir }}/current/lib/node_modules/@playwright/mcp/package.json"
+  register: claude_code_agent_playwright_mcp_installed
+  changed_when: false
+  # A read of state that exists independently of this play, so --check runs it too.
+  check_mode: false
+  # Absent on the first apply and after a Node bump: the install below reads that as no version.
+  failed_when: false
+  become: true
+  when: claude_code_agent_homelab_ui_enabled
+
+- name: Install the agent user's pinned @playwright/mcp
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - env
+      - PATH={{ claude_code_agent_node_bin }}:/usr/bin:/bin
+      - "{{ claude_code_agent_node_bin }}/npm"
+      - install
+      - --global
+      - --no-fund
+      - --no-audit
+      - "@playwright/mcp@{{ claude_code_agent_playwright_mcp_version }}"
+    chdir: "{{ claude_code_agent_user_home }}"
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+  # It runs only when the pin differs from what is installed, so every run is a change.
+  changed_when: true
+  become: true
+  when:
+    - claude_code_agent_homelab_ui_enabled
+    - >-
+      (((claude_code_agent_playwright_mcp_installed.stdout
+      if claude_code_agent_playwright_mcp_installed.rc | default(1) == 0 else '{}')
+      | from_json).version | default('')) != claude_code_agent_playwright_mcp_version
+
+- name: Install the Chromium the agent user's @playwright/mcp pins
+  # The playwright CLI nested under @playwright/mcp, so the browser revision is the one that
+  # package's playwright-core drives, as for the operator. It skips a revision already in
+  # ~/.cache/ms-playwright and prints nothing, so a re-apply downloads nothing.
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - env
+      - PATH={{ claude_code_agent_node_bin }}:/usr/bin:/bin
+      - "{{ claude_code_agent_node_bin }}/node"
+      - "{{ claude_code_agent_node_dir }}/current/lib/node_modules/@playwright/mcp/node_modules/playwright/cli.js"
+      - install
+      - chromium
+    chdir: "{{ claude_code_agent_user_home }}"
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+  register: claude_code_agent_chromium
+  changed_when: "'downloaded to' in claude_code_agent_chromium.stdout"
+  become: true
+  when: claude_code_agent_homelab_ui_enabled
+
+# ── The registration ────────────────────────────────────────────────────────────────────
+# Read from ~/.claude.json rather than with `claude mcp get`, which launches the server to
+# report its status: a Chromium and an Authelia login on every apply. Claude Code rewrites the
+# file itself, so the role edits only this one entry, through `claude mcp`.
+
+- name: Read the agent user's Claude config
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - cat
+      - "{{ claude_code_agent_user_home }}/.claude.json"
+  register: claude_code_agent_claude_json_content
+  changed_when: false
+  # A read of state that exists independently of this play, so --check runs it too.
+  check_mode: false
+  # Absent before the agent's first session: the comparison reads that as no registration.
+  failed_when: false
+  become: true
+  # The file names the account the agent logged in as. The registration is all this reads.
+  no_log: true
+
+- name: Compare the agent user's homelab-ui registration with the one it should have
+  ansible.builtin.set_fact:
+    claude_code_agent_homelab_ui_mcp_live: >-
+      {{ (((claude_code_agent_claude_json_content.stdout
+      if claude_code_agent_claude_json_content.rc | default(1) == 0 else '{}')
+      | from_json).mcpServers | default({}))['homelab-ui'] | default(none) }}
+    claude_code_agent_homelab_ui_mcp:
+      type: stdio
+      command: "{{ claude_code_agent_user_clone_dir }}/scripts/diagnostics/ui_mcp.sh"
+      args: []
+      env:
+        NODE_BIN: "{{ claude_code_agent_node_bin }}"
+  no_log: true
+
+- name: Remove the agent user's homelab-ui registration when it is stale or switched off
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - "{{ claude_code_agent_user_home }}/.local/bin/claude"
+      - mcp
+      - remove
+      - --scope
+      - user
+      - homelab-ui
+    chdir: "{{ claude_code_agent_user_home }}"
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+  changed_when: true
+  become: true
+  when:
+    - claude_code_agent_homelab_ui_mcp_live is not none
+    - >-
+      not claude_code_agent_homelab_ui_enabled
+      or claude_code_agent_homelab_ui_mcp_live.command != claude_code_agent_homelab_ui_mcp.command
+      or claude_code_agent_homelab_ui_mcp_live.env | default({}) != claude_code_agent_homelab_ui_mcp.env
+
+- name: Register the homelab-ui MCP server for the agent user
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - "{{ claude_code_agent_user_home }}/.local/bin/claude"
+      - mcp
+      - add-json
+      - --scope
+      - user
+      - homelab-ui
+      - "{{ claude_code_agent_homelab_ui_mcp | to_json }}"
+    chdir: "{{ claude_code_agent_user_home }}"
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+  changed_when: true
+  become: true
+  when:
+    - claude_code_agent_homelab_ui_enabled
+    - >-
+      claude_code_agent_homelab_ui_mcp_live is none
+      or claude_code_agent_homelab_ui_mcp_live.command != claude_code_agent_homelab_ui_mcp.command
+      or claude_code_agent_homelab_ui_mcp_live.env | default({}) != claude_code_agent_homelab_ui_mcp.env
+
+# The way out: the registration above, then the toolchain. The login in agent_homelab_ui.yml
+# stays, because it is the agent user's switch and not this one.
+- name: Remove the agent user's browser toolchain when homelab-ui is switched off
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - rm
+      - -rf
+      - "{{ item }}"
+    removes: "{{ item }}"
+  loop:
+    - "{{ claude_code_agent_node_dir }}"
+    - "{{ claude_code_agent_user_home }}/.cache/ms-playwright"
+  become: true
+  when: not claude_code_agent_homelab_ui_enabled
+
+- name: Remove the agent user's Node download when homelab-ui is switched off
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_node_download_dir }}"
+    state: absent
+  become: true
+  when: not claude_code_agent_homelab_ui_enabled

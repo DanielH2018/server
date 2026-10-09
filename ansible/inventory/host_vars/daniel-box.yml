@@ -910,6 +910,9 @@ claude_code_user: "{{ claude_code_agent_user }}"
 # claude-land@<n>.service: the agent user starts it to land its own PR as the operator, under
 # land.sh's landing policy. False removes the unit, its polkit rule and its approval list.
 claude_code_lander_enabled: true
+# The agent user's own Node, @playwright/mcp, Chromium and homelab-ui MCP registration, so a
+# phone session can check that a UI renders (#4058). False removes all four.
+claude_code_agent_homelab_ui_enabled: true
 # `has_igpu` is deliberately unset. It means "pass /dev/dri through" (README §7) and is the
 # Docker-side switch; for the k8s workloads render_gid below supersedes it, because in the
 # cluster a container reaches the render node through the device plugin plus group

@@ -311,7 +311,10 @@ The agent user `claude` has no age key, so it cannot read those SOPS values. It 
 `~/.config/homelab-ui/credentials.json`, which the `claude_code` role renders for the
 `claude-agent` Authelia account (no groups, no TOTP). `ui_login.py` reads the file when it exists
 and SOPS otherwise, so the operator is unchanged. `docs/claude-agent-user.md` (slice 5) has the
-account's reach and what is still missing before the agent can launch the server.
+account's reach. The agent's own Node, `playwright-mcp`, Chromium and user-scope `homelab-ui`
+registration come from `ansible/roles/setup/claude_code/tasks/agent_browser.yml`, behind
+`claude_code_agent_homelab_ui_enabled`. That registration passes `NODE_BIN`, because the
+wrapper's default is a Node path in the operator's home.
 
 `ui_login.py --verify <svc>` proves the cookie reaches the backend without involving the browser,
 and it reads a portal 302 as a failure rather than as a reachable service.

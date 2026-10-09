@@ -335,6 +335,44 @@ claude_code_agent_signing_key: "{{ claude_code_agent_user_home }}/.ssh/git_signi
 claude_code_homelab_ui_username: claude-agent
 claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/homelab-ui/credentials.json"
 
+# Whether the agent user can launch the homelab-ui MCP server itself (tasks/agent_browser.yml):
+# its own Node, @playwright/mcp and Chromium, plus a user-scope `homelab-ui` registration in its
+# ~/.claude.json pointing at its clone's scripts/diagnostics/ui_mcp.sh (#4058). The operator's
+# toolchain sits under the 0750 /home/{{ sys_user }}, which this user cannot read, and the
+# operator's registration is user-scope in the operator's own ~/.claude.json. Not the repo's
+# .mcp.json: a project-scope server waits for a per-user approval a phone session cannot give,
+# and it would start a second Chromium in every operator session.
+#
+# True only in daniel-box's host_vars, and installed only while claude_code_agent_user_enabled
+# is also true. False removes the registration, the Node tree, its download and the browser
+# cache. Chromium's shared libraries come from the host: the operator's own Chromium already
+# runs there, so this installs no apt packages.
+claude_code_agent_homelab_ui_enabled: false
+# A Node release tarball rather than fnm: the agent needs one fixed Node, and the operator's
+# fnm lives in their home. The sha256 is the tarball's, from the release's SHASUMS256.txt; a
+# bump finishes with `uv run python scripts/validate/asset_pins.py --refresh node`. x64 is
+# literal because asset_pins.py renders the URL from this file alone, and every
+# has_claude_code host is x86_64.
+# renovate: datasource=node-version depName=node
+claude_code_agent_node_version: "24.21.0"
+claude_code_agent_node_url: >-
+  https://nodejs.org/dist/v{{ claude_code_agent_node_version
+  }}/node-v{{ claude_code_agent_node_version }}-linux-x64.tar.xz
+claude_code_agent_node_sha256: fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
+# The release the operator's homelab-ui runs on daniel-box (0.0.79, measured 2026-10-09), so
+# the agent's browser behaves as the operator's does. Chromium is the revision this package's
+# own playwright pins, installed with that playwright's CLI.
+# renovate: datasource=npm depName=@playwright/mcp
+claude_code_agent_playwright_mcp_version: "0.0.79"
+# Node unpacks to node-v<version>-linux-x64 under this directory, and `current` links to it, so
+# the registration's NODE_BIN survives a Node bump. npm's global prefix is that Node tree, so
+# playwright-mcp lands in the same bin directory.
+claude_code_agent_node_dir: "{{ claude_code_agent_user_home }}/.local/share/node"
+claude_code_agent_node_bin: "{{ claude_code_agent_node_dir }}/current/bin"
+# Root downloads and verifies the tarball here, outside the agent's home, and the agent
+# unpacks it from here.
+claude_code_agent_node_download_dir: /var/cache/claude-agent-node
+
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # The agent's account cannot merge its own PRs: "master review gate" wants an approval from
 # someone other than the last pusher. claude-land@<n>.service lands PR <n> as {{ sys_user }},

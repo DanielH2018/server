@@ -10,6 +10,8 @@ more reach than the design gives it.
 Run: uv run pytest ansible/tests/setup/test_agent_user.py
 """
 
+import re
+
 import pytest
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
@@ -22,6 +24,7 @@ CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "main.yml"
 # Imported by main.yml under one `when:`, so its tasks carry none and agent_tasks() misses them.
 AGENT_GITHUB = SETUP / "claude_code" / "tasks" / "agent_github.yml"
 AGENT_ACCESS = SETUP / "claude_code" / "tasks" / "agent_access.yml"
+AGENT_BROWSER = SETUP / "claude_code" / "tasks" / "agent_browser.yml"
 # Every role that builds an agent user, with the role variable each contract key must name.
 AGENTS = {
     "renovate_agent": {
@@ -233,13 +236,16 @@ def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent()
     shared = tasks(SHARED)
     claude = agent_tasks(tasks(CLAUDE_TASKS))
     github = tasks(AGENT_GITHUB)
+    browser = tasks(AGENT_BROWSER)
     # The named members, so the census cannot pass on a renamed or vanished task.
     named(shared, "Install the pinned host Python for the agent user")
     named(claude, "Sync the repo's venv in the agent user's clone")
     named(github, "Generate the agent's commit-signing key")
+    named(browser, "Install the agent user's pinned @playwright/mcp")
     assert root_run_writers(shared) == []
     assert root_run_writers(claude) == []
     assert root_run_writers(github) == []
+    assert root_run_writers(browser) == []
 
 
 def test_a_command_run_as_root_on_each_apply_is_flagged() -> None:
@@ -348,7 +354,10 @@ def test_every_directory_the_agent_writes_into_is_the_agents_from_its_first_appl
 ):
     shared = tasks(SHARED)
     github = tasks(AGENT_GITHUB)
-    named(shared, "Create the agent user's bin and claude-guard directories")
+    named(
+        shared,
+        "Create the agent user's bin, claude-guard and claude-worktree directories",
+    )
     named(github, "Create the agent user's ssh and git config directories")
     assert dirs_not_owned_like_the_chown(shared) == []
     # claude_code names the agent by its own variable, which its import maps to agent_user_name.
@@ -394,3 +403,52 @@ def test_a_chmod_after_the_acl_is_flagged() -> None:
     acl = {"name": "Grant", "ansible.posix.acl": {"path": "/x"}}
     chmod = {"name": "Reset", "ansible.builtin.file": {"path": "/x", "mode": "0700"}}
     assert chmods_after_the_acl([acl, chmod]) == ["Reset"]
+
+
+WORKTREE_BOOTSTRAP = ANSIBLE.parent / "scripts" / "lib" / "_claude_worktree.py"
+WORKTREE_COPY = "Give the agent user the operator's claude_worktree module"
+
+
+def worktree_lookup_dir() -> str:
+    """The home-relative directory `_claude_worktree.py` imports the module from."""
+    found = re.search(
+        r'"CLAUDE_WORKTREE_HOME", "~(/[^"]+)"', WORKTREE_BOOTSTRAP.read_text()
+    )
+    assert found, "the bootstrap no longer names its claude_worktree directory"
+    return found.group(1)
+
+
+def worktree_copy_problems(task_list: list[dict], rel: str) -> list[str]:
+    """Where the claude_worktree copy misses the directory the bootstrap reads."""
+    copy = named(task_list, WORKTREE_COPY)["ansible.builtin.copy"]
+    want = "{{ agent_user_home }}" + rel + "/claude_worktree.py"
+    problems = [] if copy["dest"] == want else [f"dest {copy['dest']}"]
+    if copy["src"] != "/home/{{ sys_user }}" + rel + "/claude_worktree.py":
+        problems.append(f"src {copy['src']}")
+    return problems
+
+
+def test_the_agent_gets_claude_worktree_where_the_bootstrap_looks_for_it() -> None:
+    """Without the module lib.worktrees raises, and findings.py fails for the agent (#4033)."""
+    rel = worktree_lookup_dir()
+    assert rel == "/.local/share/claude-worktree"
+    shared = tasks(SHARED)
+    assert worktree_copy_problems(shared, rel) == []
+    dirs = named(
+        shared,
+        "Create the agent user's bin, claude-guard and claude-worktree directories",
+    )
+    assert "{{ agent_user_home }}" + rel in dirs["loop"]
+
+
+def test_a_claude_worktree_copy_to_another_directory_is_flagged() -> None:
+    task = {
+        "name": WORKTREE_COPY,
+        "ansible.builtin.copy": {
+            "src": "/home/{{ sys_user }}/.local/share/claude-worktree/claude_worktree.py",
+            "dest": "{{ agent_user_home }}/.local/share/claude-guard/claude_worktree.py",
+        },
+    }
+    assert worktree_copy_problems([task], "/.local/share/claude-worktree") == [
+        "dest {{ agent_user_home }}/.local/share/claude-guard/claude_worktree.py"
+    ]
