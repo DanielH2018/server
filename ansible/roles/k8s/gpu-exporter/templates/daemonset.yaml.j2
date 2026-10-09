@@ -45,7 +45,7 @@ spec:
             - python
             - /opt/gpu-exporter/gpu_exporter.py
             - --port
-            - "{{ gpu_exporter_k8s_port }}"
+            - "{{ containers_list | entry_port('gpu-exporter') }}"
             - --sysfs-root
             - /host/sys
           env:
@@ -61,20 +61,20 @@ spec:
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534, run_as_group=65534) }}
           ports:
             - name: metrics
-              containerPort: {{ gpu_exporter_k8s_port }}
+              containerPort: {{ containers_list | entry_port('gpu-exporter') }}
           # tcpSocket, not httpGet on /metrics: a kubelet probe against a metrics route is the
           # shape ansible/tests/k8s/_scrape_property_rows.py refuses below a 300s
           # period, after node-exporter's probes produced 97% of this namespace's Loki ingest.
           # Whether a GPU is present is `homelab_gpu_info`'s job to report, not a restart cause.
           livenessProbe:
             tcpSocket:
-              port: {{ gpu_exporter_k8s_port }}
+              port: {{ containers_list | entry_port('gpu-exporter') }}
             initialDelaySeconds: 10
             periodSeconds: 30
             failureThreshold: 3
           readinessProbe:
             tcpSocket:
-              port: {{ gpu_exporter_k8s_port }}
+              port: {{ containers_list | entry_port('gpu-exporter') }}
             initialDelaySeconds: 3
             periodSeconds: 10
 {{ container_resources(cpu_limit=gpu_exporter_k8s_cpu_limit, mem_limit=gpu_exporter_k8s_mem_limit, cpu_request=gpu_exporter_k8s_cpu_request, mem_request=gpu_exporter_k8s_mem_request) }}

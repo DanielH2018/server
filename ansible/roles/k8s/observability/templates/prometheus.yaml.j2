@@ -215,7 +215,7 @@ data:
             regex: gpu-exporter
           - source_labels: [__meta_kubernetes_pod_container_port_number]
             action: keep
-            regex: "9101"
+            regex: "{{ containers_list | entry_port('gpu-exporter') }}"
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: origin
           - source_labels: [__meta_kubernetes_pod_node_name]

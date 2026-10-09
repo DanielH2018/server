@@ -1,6 +1,7 @@
 # gpu-exporter — GPU utilization per node, read from DRM sysfs
 
-A DaemonSet serving `homelab_gpu_*` on `:9101`, one pod per node. It reads
+A DaemonSet serving `homelab_gpu_*` on `:9101`, one pod per node. The port is the `port` on
+its `containers_list` entry, which the `gpu` scrape job's pod filter reads too. It reads
 `/sys/class/drm/card*` and turns what the kernel exposes into series. No Service, no route, no
 secret, no volume. See repo-root `CLAUDE.md` for shared conventions.
 
