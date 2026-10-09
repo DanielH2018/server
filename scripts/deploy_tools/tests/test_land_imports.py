@@ -24,6 +24,7 @@ MODULES = frozenset(
         "pipeline",
         "detach",
         "handoff",
+        "pr_json",
     }
 )
 ALLOWED = {
@@ -32,10 +33,12 @@ ALLOWED = {
     # `cause`'s vocabulary lives beside `verdict`'s, and the Ledger validates against it.
     "ledger": {"outcome"},
     "tools": set(),
-    "landing": {"outcome", "options", "tools", "ledger"},
+    # The PR JSON types are a leaf: `Landing.view` returns them and the policy reads them.
+    "pr_json": set(),
+    "landing": {"outcome", "options", "tools", "ledger", "pr_json"},
     # The landing policy's checks run inside --arm-merge, before any merge call.
     "merge": {"landing", "outcome", "policy"},
-    "policy": {"landing", "outcome"},
+    "policy": {"landing", "outcome", "pr_json"},
     "classify": {"landing", "outcome"},
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},

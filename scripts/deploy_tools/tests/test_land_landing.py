@@ -60,6 +60,14 @@ def test_view_dies_when_gh_answers_with_something_that_is_not_json(landing):
     assert exc.value.rc == 1 and "unparseable gh output" in exc.value.error
 
 
+def test_view_dies_when_a_field_has_the_wrong_type(landing):
+    ln, _ = landing()
+    ln.tools.gh_json = lambda *a, **k: {"headRefOid": ["not", "a", "sha"]}
+    with pytest.raises(Outcome) as exc:
+        ln.view("headRefOid")
+    assert exc.value.rc == 1 and "unparseable gh output" in exc.value.error
+
+
 def test_git_runs_in_the_primary_checkout_without_raising(landing):
     ln, calls = landing(Fakes(fetch_rc=1))
     assert ln.git("fetch", "-q", "origin", "master").returncode == 1

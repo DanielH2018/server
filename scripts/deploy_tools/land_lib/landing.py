@@ -14,7 +14,7 @@ other.
 import subprocess
 from collections.abc import Callable
 from enum import StrEnum
-from typing import Any, NoReturn
+from typing import NoReturn
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -28,6 +28,7 @@ from deploy_tools.land_lib.outcome import (
     say,
     unrecorded_apply_note,
 )
+from deploy_tools.land_lib.pr_json import PrView, parse_view
 from deploy_tools.land_lib.tools import Classifier, Tools
 from lib.json_types import as_object
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -150,19 +151,23 @@ class Landing:
 
     # -- shared reads -------------------------------------------------------------------
 
-    def view(self, fields: str) -> dict[str, Any]:
+    def view(self, fields: str) -> PrView:
         """`gh pr view --json <fields>` for this PR, or die.
 
         Three ways the read fails, each named rather than escaping as a traceback: gh
         exiting non-zero, gh not answering inside its timeout, and gh answering with
-        something that is not JSON (an auth prompt or a proxy error page). The last two
+        something that is not JSON (an auth prompt or a proxy error page) or JSON of the wrong
+        shape. The last two
         would otherwise propagate out of the phase and annotate as `aborted` with no line
         saying which PR read failed.
         """
         try:
-            return as_object(
-                self.tools.gh_json("pr", "view", self.opts.pr, "--json", fields) or {},
-                "gh pr view",
+            return parse_view(
+                as_object(
+                    self.tools.gh_json("pr", "view", self.opts.pr, "--json", fields)
+                    or {},
+                    "gh pr view",
+                )
             )
         except subprocess.CalledProcessError as exc:
             self.die(f"could not read PR #{self.opts.pr}: {exc.stderr.strip()}", 1)
