@@ -111,7 +111,7 @@ def format_health(data, container, declared=False):
     if not data:
         if declared:
             return (
-                f"{container}: MISSING — daniel-pi's inventory declares this service and the "
+                f"{container}: MISSING — {PI_HOST}'s inventory declares this service and the "
                 "host has no such container, so the deploy did not create it",
                 1,
             )

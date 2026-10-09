@@ -181,7 +181,7 @@ heading and no apply, leaves the pending apply in prose only, which nothing trac
     return f"""## Landing
 This host is {host}, not the deploy host. Open the PR with `gh pr create` and STOP there:
 **do not merge**, do not deploy, do not run the land script. Print the PR URL as the last line
-of your final message. A daniel-box session lands it and closes the issue.
+of your final message. A {LANDS} session lands it and closes the issue.
 """
 
 
