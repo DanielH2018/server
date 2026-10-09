@@ -1,1 +1,362 @@
-{}
+{
+  "ha-review/001-single-writer-bypass": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "ha-review/002-al-startup-handled": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0,
+      "passes": 0,
+      "status": "FAIL",
+      "thresholdMet": false,
+      "ts": 1791559695
+    }
+  ],
+  "ha-review/003-stop-readonly": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-backup-observability-reviewer/001-stateful-unmonitored": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0,
+      "passes": 0,
+      "status": "FAIL",
+      "thresholdMet": false,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-backup-observability-reviewer/002-kuma-push-no-retries": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-cicd-reviewer/001-config-not-registered": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-cicd-reviewer/002-frozenset-latest-accepted": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0,
+      "passes": 0,
+      "status": "FAIL",
+      "thresholdMet": false,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-cicd-reviewer/003-output-format": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 5,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 5,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-container-reviewer/001-named-volume-unbacked": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-container-reviewer/002-named-volume-accepted": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-network-diagnostician/001-router-missing-ratelimit": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0,
+      "passes": 0,
+      "status": "FAIL",
+      "thresholdMet": false,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-network-diagnostician/002-crowdsec-mullvad-whitelist": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0,
+      "passes": 0,
+      "status": "FAIL",
+      "thresholdMet": false,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/001-dedup": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/002-drop-settled": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/003-stop-readonly": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/004-anti-merge": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/005-verdict-manifest": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/006-fixed-unmerged-branch": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0.3333333333333333,
+      "passes": 1,
+      "status": "FAIL",
+      "thresholdMet": false,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/007-ha-out-of-scope": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/008-recurrence-not-discovery": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0.3333333333333333,
+      "passes": 1,
+      "status": "FAIL",
+      "thresholdMet": false,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/009-collection-manifest": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/011-skeptic-sizing": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/012-seam-surfaces": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/013-standing-list-foldback": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "homelab-review/014-barred-fix-is-not-a-settled-finding": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "security-review/001-hardcoded-secret": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0,
+      "passes": 0,
+      "status": "FAIL",
+      "thresholdMet": false,
+      "ts": 1791559695
+    }
+  ],
+  "security-review/002-readonly-tmpfs-accepted": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "skeptic/001-refuted-with-evidence": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "skeptic/002-falsify-the-defense": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ],
+  "skeptic/003-no-evidence-is-not-refutation": [
+    {
+      "epoch": "cc-2.1.295",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1791559695
+    }
+  ]
+}
