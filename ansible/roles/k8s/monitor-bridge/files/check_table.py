@@ -19,7 +19,8 @@ without running it. That is why every field but `fn` is a literal, and why this 
 only check bodies.
 
 Adding a check takes one row here, one `check_*` body, and its push-token secret
-(`/add-secret`, which also runs `secret_rotation.py sync`).
+(`/add-secret`, which also runs `secret_rotation.py sync`). The `regen-doc-fragments` prek hook
+rewrites the secret-tiers fragment that sync moves, in the same commit.
 
 DECIDED: `token` is spelled out on every row rather than derived from `name`.
 scripts/secrets_mgmt/consumers.py finds who to redeploy after a rotation by grepping each
