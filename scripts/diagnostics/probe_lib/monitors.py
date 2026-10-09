@@ -422,11 +422,15 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None, *, cre
 
     PENDING applies only to a monitor Kuma holds, since the exporter cannot tell "never
     created" from "not yet due" (`kuma_live` has why). A declared name absent from `created`
-    is missing at any pod age. When `created` is unreadable, the tile stays pending and a
-    separate line says that its existence went unverified.
+    is missing once Kuma has been up past `kuma_live.census_settle_seconds()`; before that a
+    new tile is legitimately absent. An unreadable `created` keeps a tile pending and adds a
+    line saying its existence went unverified.
     """
     gate_states = gate_states or {}
     unreadable = created if isinstance(created, str) else None
+    settled = kuma_age_seconds is None or (
+        kuma_age_seconds >= kuma_live.census_settle_seconds()
+    )
     missing, pending, gated, unverified = [], [], [], []
     for name, spec in sorted(declared.items()):
         if name in live:
@@ -440,7 +444,7 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None, *, cre
             )
         elif spec["gated"] and state is False:
             gated.append(name)
-        elif unreadable is None and name not in created:
+        elif settled and unreadable is None and name not in created:
             missing.append(
                 f"  {name}: declared, absent from Kuma's status page (never created, "
                 "or added since kuma-status-page-sync last succeeded)"

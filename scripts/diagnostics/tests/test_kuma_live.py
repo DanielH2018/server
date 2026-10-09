@@ -34,6 +34,16 @@ def test_kuma_drift_keeps_a_created_long_interval_tile_pending_is_clean():
     assert "Homelab Evals: no beat due yet (626400s interval)" in text
 
 
+def test_kuma_drift_keeps_a_tile_added_by_the_last_deploy_pending_is_clean():
+    # A deploy that adds a tile restarts Kuma, and the sync places the tile up to one period
+    # plus its deadline later. Absent from the page before then is expected, not drift.
+    declared = monitors.parse_declared_monitors(LONG_INTERVAL_SAMPLE)
+    young = kuma_live.census_settle_seconds() - 1
+    text, code = monitors.format_kuma_drift(declared, set(), young, created=set())
+    assert code == 0, text
+    assert "Homelab Evals: no beat due yet" in text
+
+
 def test_kuma_drift_says_existence_is_unverified_when_the_census_is_unreadable():
     # An unreadable census must not read like a verified pending tile, nor turn every pending
     # tile into drift.

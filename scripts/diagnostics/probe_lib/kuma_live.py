@@ -20,11 +20,12 @@ Kuma's schema declares `monitor_group.monitor_id` ON DELETE CASCADE, so a monito
 deletes leaves the page as well. A monitor Kuma never created was never placed.
 
 Absence is all it can report, not its cause. A new tile is absent until the quarter-hourly sync
-places it. The sync fails while any declared tile is missing from Kuma
+places it, so absence counts only once Kuma has been up past `census_settle_seconds`. The sync fails while any declared tile is missing from Kuma
 (`render_status_page.build_group_list`), so one refused tile keeps every tile added after it off
 the page too. The sync's own push tile reports a sync that has stopped.
 """
 
+import functools
 import json
 from datetime import datetime, timezone
 
@@ -47,6 +48,34 @@ from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 _DEFAULTS_PATH = K8S_ROLES / "uptime-kuma" / "defaults" / "main.yml"
 
 
+@functools.cache
+def _role_defaults():
+    with open(_DEFAULTS_PATH) as f:
+        return yaml_fast.safe_load(f)
+
+
+def census_settle_seconds():
+    """Kuma uptime after which the page can be trusted to hold every tile Kuma holds.
+
+    A deploy that adds or renames a tile changes `static-monitors.yaml`, a rendered manifest,
+    so the central rollout restarts Kuma. The new tile reaches the page on the first sync run
+    that succeeds after that. The bound is one cron period plus the job's deadline, read from
+    the same two defaults the CronJob renders from. Before it, absence from the page is
+    expected and proves nothing.
+
+    Raises:
+        ValueError: the schedule is not the `*/N * * * *` shape this reads.
+    """
+    defaults = _role_defaults()
+    minute = defaults["uptime_kuma_k8s_status_page_sync_schedule"].split()[0]
+    if not minute.startswith("*/"):
+        raise ValueError(
+            f"unreadable status-page sync schedule minute field {minute!r}"
+        )
+    period = int(minute.removeprefix("*/")) * 60
+    return period + int(defaults["uptime_kuma_k8s_status_page_sync_deadline_seconds"])
+
+
 def status_page_url():
     """(url, curl --resolve pin) for the page `kuma-status-page-sync` maintains.
 
@@ -54,8 +83,7 @@ def status_page_url():
     reading a 404 as "every pending tile never created".
     """
     base, pin = core.k8s_endpoint("uptime-kuma")
-    with open(_DEFAULTS_PATH) as f:
-        slug = yaml_fast.safe_load(f)["uptime_kuma_k8s_status_page_slug"]
+    slug = _role_defaults()["uptime_kuma_k8s_status_page_slug"]
     return f"{base}/api/status-page/{slug}", pin
 
 

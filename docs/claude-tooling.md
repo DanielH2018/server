@@ -117,7 +117,9 @@ could only ever read as missing (#2019).
 
 Pending applies only to a monitor Kuma holds. `kuma-drift` reads which monitors exist from Kuma's
 public status page, which `kuma-status-page-sync` keeps listing every declared monitor. A
-declared name absent from that page is missing at any pod age (#4005). Without the page, a
+declared name absent from that page is missing once Kuma has been up for one sync period plus
+the sync job's deadline, 1700s, whatever the tile's interval (#4005). A deploy that adds a tile
+restarts Kuma, so before that bound a new tile is absent from the page legitimately. Without the page, a
 weekly tile AutoKuma refused stayed pending forever, because the weekly reboot restarts Kuma
 before the tile's interval elapses. Absent from the page means never created, or added since the
 sync last succeeded. The sync runs every 15 minutes, and it fails while any declared tile is
