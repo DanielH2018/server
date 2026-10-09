@@ -48,8 +48,8 @@
 # stay plain `get_url` tasks in their own roles. #3728 classified every one of them and found
 # none that fits here. This marker says nothing about how each download is verified. Most
 # carry a `checksum:`, but the Azlux key in optimize_pi relies on a fingerprint check in the
-# task after it, and the two claude.ai/install.sh fetches (claude_code, agent_user.yml) are
-# unverified (#3979).
+# task after it, and the two claude.ai/install.sh fetches (claude_code, agent_user.yml) carry
+# no checksum, for the reason the decision marker at each of those tasks gives.
 #
 # Callers pass:
 #   release_bin_group      a filename-safe group id, unique across roles (e.g. k3s-backup-health)

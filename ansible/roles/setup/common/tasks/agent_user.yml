@@ -134,6 +134,9 @@
   become: true
 
 - name: Download the Claude Code installer for the agent's user
+  # DECIDED: no `checksum:` on install.sh, for the reason the marker on the claude_code role's
+  # own download gives (setup/claude_code/tasks/main.yml): the binary updates itself from the
+  # same origin, so a pin on the bootstrap script controls nothing that runs (#3979).
   ansible.builtin.get_url:
     url: https://claude.ai/install.sh
     dest: "{{ agent_user_home }}/claude-install.sh"
