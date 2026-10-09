@@ -606,9 +606,13 @@ containers_list:
 
   # GPU utilization per node, from DRM sysfs. A DaemonSet with no Service and no IngressRoute —
   # Prometheus discovers its pods individually — so no ordering edge derives from its templates
-  # and none is needed: it reads the kernel, not another workload.
+  # and none is needed: it reads the kernel, not another workload. `port` is the exporter's
+  # listener, which its DaemonSet and observability's `gpu` scrape job both read through
+  # `entry_port` (#3868). 9101 is one past node-exporter's 9100. They do not collide, since
+  # this pod is not hostNetwork, but a distinct number keeps `ss -ltnp` on a node unambiguous.
   - name: gpu-exporter
     platform: k8s
+    port: 9101
 
   - name: ical-proxy
     platform: k8s

@@ -11,11 +11,6 @@ gpu_exporter_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d3713
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "read-only sysfs poller with a tcpSocket readinessProbe; no workload reads it, so a bad image bump costs the GPU dashboards rather than transcoding itself"  # noqa var-naming[no-role-prefix]
 
-# 9101, one past node-exporter's 9100. They do not actually collide — this pod is NOT
-# hostNetwork, unlike node-exporter — but a distinct number keeps `ss -ltnp` on a node
-# unambiguous.
-gpu_exporter_k8s_port: 9101
-
 # Reading four small sysfs files per scrape. The floor here is the Python interpreter, not the
 # work.
 gpu_exporter_k8s_cpu_limit: "100m"

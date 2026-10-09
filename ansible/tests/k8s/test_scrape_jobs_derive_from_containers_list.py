@@ -145,6 +145,32 @@ def test_kumas_listener_and_callers_follow_the_entry_port(template):
         assert {"name": "UPTIME_KUMA_PORT", "value": "9999"} in kuma["env"]
 
 
+def test_the_gpu_jobs_pod_filter_and_the_exporters_listener_read_one_port():
+    """The gpu job discovers pods, so its port lives in a relabel regex, not in a target (#3868)."""
+    entries = copy.deepcopy(host_context()["containers_list"])
+    entry = next(e for e in entries if e["name"] == "gpu-exporter")
+    assert entry["port"] != 9999
+    entry["port"] = 9999
+    overrides = {"containers_list": entries}
+    prometheus = render_role_template("observability", "prometheus.yaml.j2", overrides)
+    (port_filter,) = [
+        rule
+        for rule in _scrape_configs(prometheus)["gpu"]["relabel_configs"]
+        if rule["source_labels"] == ["__meta_kubernetes_pod_container_port_number"]
+    ]
+    assert port_filter["regex"] == "9999"
+    assert "9101" not in prometheus
+    daemonset = render_role_template("gpu-exporter", "daemonset.yaml.j2", overrides)
+    (exporter,) = next(
+        doc
+        for doc in yaml_fast.safe_load_all(daemonset)
+        if doc and doc.get("kind") == "DaemonSet"
+    )["spec"]["template"]["spec"]["containers"]
+    assert exporter["command"][2:4] == ["--port", "9999"]
+    assert [p["containerPort"] for p in exporter["ports"]] == [9999]
+    assert exporter["readinessProbe"]["tcpSocket"]["port"] == 9999
+
+
 def test_a_metrics_item_defaults_to_the_entry_name_and_port():
     entries = [{"name": "speedtest", "port": 80, "metrics": [{"job": "speedtest"}]}]
     assert scrape_jobs(entries, "ns") == [
