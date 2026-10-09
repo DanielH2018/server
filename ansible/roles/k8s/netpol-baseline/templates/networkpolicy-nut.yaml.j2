@@ -49,12 +49,12 @@ spec:
     # so it arrives as a node address, not a pod. nut is permanently pinned to daniel-server
     # (nodeSelector in nut/templates/deployment.yaml.j2 -- the UPS is USB-attached there and
     # this never unwinds), so this is not about the pod moving.
-    # The two cni0 entries (10.42.0.1/32, 10.42.1.1/32) duplicate netpol_baseline_node_cidrs
+    # The two cni0 entries (`k3s_cni0_gateways`) duplicate netpol_baseline_node_cidrs
     # ONLY ONCE nut carries `netpol-baseline: enforced` and the baseline selects it. During the
     # deploy step that applies this policy the label is not on the pod yet, so in that window
     # they are the only admission a host-side caller has. Do not delete them as "redundant with
     # the baseline" without first confirming the label has landed.
-    # The two flannel.1 entries (10.42.0.0/32, 10.42.1.0/32) are NOT in
+    # The two flannel.1 entries (`k3s_flannel_node_ips`) are NOT in
     # netpol_baseline_node_cidrs and are load-bearing at all times: a cross-node host->pod
     # packet arrives as the SENDING node's flannel.1 address, so daniel-box host processes
     # reaching the pinned pod on daniel-server show up as daniel-box's flannel.1, not its cni0.
@@ -75,10 +75,10 @@ spec:
         - ipBlock:
             cidr: {{ cidr }}
 {% endfor %}
+{% for cidr in k3s_flannel_node_ips %}
         - ipBlock:
-            cidr: 10.42.0.0/32
-        - ipBlock:
-            cidr: 10.42.1.0/32
+            cidr: {{ cidr }}
+{% endfor %}
       ports:
         - port: 3493
           protocol: TCP

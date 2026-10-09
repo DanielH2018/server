@@ -7,8 +7,8 @@ is not a trusted proxy. With the pod CIDR alone it took the edge, so `ip_ban` co
 Cloudflare edge and lock out every client routed through it.
 
 `files/configuration.yaml` ships verbatim through `lookup('file')`, so it cannot template
-`cloudflare_ips` from `group_vars/all.yml` and carries the ranges literally. This guard keeps the
-two lists equal. When monitor-bridge's `cloudflare_ips_drift` tile reports new published ranges
+`cloudflare_ips` or `k3s_pod_cidr` from `group_vars/all.yml` and carries both literally. This
+guard keeps the file equal to both variables. When monitor-bridge's `cloudflare_ips_drift` tile reports new published ranges
 and `all.yml` is updated, this test goes red until HA's list follows. It also checks each entry
 is a strict network, because nothing else validates the CIDRs before HA reads them and a
 malformed entry can crash-loop HA.
@@ -21,9 +21,10 @@ from _helpers import ALL_VARS, REPO, load_yaml
 
 HA_CONFIG = REPO / "ansible/roles/k8s/home-assistant/files/configuration.yaml"
 
-# The k3s pod CIDR. Traefik reaches HA from a pod IP in it; see the `DECIDED: the whole pod
-# CIDR` comment in configuration.yaml for why it is not narrowed to Traefik.
-POD_CIDR = "10.42.0.0/16"
+# The k3s pod CIDR, read from group_vars so a CIDR change turns this test red until HA's list
+# follows. Traefik reaches HA from a pod IP in it; see the `DECIDED: the whole pod CIDR` comment
+# in configuration.yaml for why it is not narrowed to Traefik.
+POD_CIDR = load_yaml(ALL_VARS)["k3s_pod_cidr"]
 
 
 def _ha_trusted_proxies() -> list[str]:
