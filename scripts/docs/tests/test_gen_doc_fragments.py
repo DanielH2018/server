@@ -99,6 +99,21 @@ def test_registry_counts_cover_every_registered_secret():
     assert "auto" in counts
 
 
+def test_registry_record_keys_reads_the_source_field():
+    keys = readers.registry_record_keys(g.SECRET_REGISTRY)
+    assert "authelia_password" in keys
+    assert keys == sorted(keys)
+
+
+def test_every_record_key_has_a_mechanism_bullet_and_no_other_key_does():
+    # The fragment lists the keys; the bullets under it are hand-written, one per key. A key
+    # marked `source: record` with no bullet, or a bullet for a key no longer marked, is drift.
+    page = (DOCS / "secret-rotation.md").read_text()
+    section = page.split("### Record keys", 1)[1].split("\n## ", 1)[0]
+    bullets = re.findall(r"^- `(\w+)` —", section, re.MULTILINE)
+    assert bullets == readers.registry_record_keys(g.SECRET_REGISTRY)
+
+
 # --- renderers: pure, and they can go red ----------------------------------------------------
 
 _DEFAULTS = {
@@ -183,6 +198,12 @@ def test_secret_tiers_renders_cadence_and_count_per_tier():
     assert "| `ignore` | — | 0 |" in out
     assert "3 secrets are registered" in out
     assert "`ROTATE_LEAD_DAYS` = 8" in out
+
+
+def test_record_keys_names_each_key_and_the_count():
+    out = renderers.render_record_keys(["a_password", "b_api_key"])
+    assert "2 keys `source: record`: `a_password`, `b_api_key`." in out
+    assert "1 key `source" in renderers.render_record_keys(["a_password"])
 
 
 # --- write policy ----------------------------------------------------------------------------

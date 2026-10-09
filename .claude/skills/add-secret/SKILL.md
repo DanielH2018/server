@@ -61,7 +61,10 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
 
 6. **Register for rotation tracking:** `uv run python scripts/secrets_mgmt/secret_rotation.py sync` — this
    reconciles `ansible/secret_rotation.yml` (plaintext registry: names/tiers/dates, no values)
-   with the live secret names and assigns a tier + staggered due-date. Then
+   with the live secret names and assigns a tier + staggered due-date. `sync` knows only
+   `*_push_token` (`auto`) and `*_user`/`*_username` (`ignore`); every other name lands in
+   `assisted`. **If step 2 classified the key `external` or `pinned`, edit its `tier` in the
+   registry now** — `sync` preserves the edit. Then
    `uv run python scripts/secrets_mgmt/secret_rotation.py audit` to confirm it registered cleanly.
 
 7. **Commit** — stage the plaintext registry change, the (still-encrypted) secrets file, and

@@ -70,6 +70,12 @@ def registry_counts(path: _Path) -> dict[str, int]:
     return counts
 
 
+def registry_record_keys(path: _Path) -> list[str]:
+    """The registered secrets marked `source: record`, sorted by name."""
+    entries = yaml_fast.safe_load(path.read_text())["entries"]
+    return sorted(n for n, e in entries.items() if e.get("source") == "record")
+
+
 def parse_jails(conf: str) -> list[dict[str, str]]:
     """Every enabled jail with its effective maxretry, findtime and bantime.
 
