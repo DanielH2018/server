@@ -44,7 +44,8 @@ instance at deploy time is ansible/tests/services/test_pihole_redundancy.py.
 Run: uv run pytest ansible/tests/k8s/test_self_rollouts_follow_the_apply.py
 """
 
-from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named, walk_tasks
+from _helpers import load_tasks, load_yaml, render_expr, task_named, walk_tasks
+from lib.repo_paths import ALL_VARS
 from _release_expectation import (
     OBSERVABILITY,
     FACT_EXPR,
@@ -221,10 +222,9 @@ def test_observability_declares_the_namespace_the_fingerprints_must_read():
     declared = observability_self_rollouts()
     assert declared, "the declaration rendered empty"
     assert {e["namespace"] for e in declared} == {OBSERVABILITY_NAMESPACE}, declared
-    assert (
-        OBSERVABILITY_NAMESPACE
-        != load_yaml(ANSIBLE / "inventory/group_vars/all.yml")["k8s_namespace"]
-    ), "the trap this test guards no longer exists"
+    assert OBSERVABILITY_NAMESPACE != load_yaml(ALL_VARS)["k8s_namespace"], (
+        "the trap this test guards no longer exists"
+    )
     private = _observability_private_restart()["ansible.builtin.command"]["cmd"]
     assert "-n {{ k8s_observability_namespace }}" in private, private
 

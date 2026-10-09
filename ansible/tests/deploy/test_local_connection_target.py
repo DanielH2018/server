@@ -22,10 +22,10 @@ import pytest
 from lib import yaml_fast
 
 from _helpers import ANSIBLE
+from lib.repo_paths import HOSTS_INI
 from lib.ansible_jinja_env import make_ansible_env
 
 PREAMBLE = ANSIBLE / "pre_tasks" / "load_secrets.yml"
-INVENTORY = ANSIBLE / "inventory" / "hosts.ini"
 
 CONTROLLER = "daniel-box"
 LOCAL_PEER = "daniel-server"
@@ -162,10 +162,10 @@ def test_the_inventory_still_pins_both_cluster_nodes_local():
     It is not an argument for changing the inventory — `local` is correct for a node running
     its own plays. It is what makes the guard necessary.
     """
-    inventory = INVENTORY.read_text()
+    inventory = HOSTS_INI.read_text()
     for host in (CONTROLLER, LOCAL_PEER):
         assert f"{host}  ansible_connection=local" in inventory.replace("\t", " "), (
-            f"{host} is no longer pinned `ansible_connection=local` in {INVENTORY}. If the "
+            f"{host} is no longer pinned `ansible_connection=local` in {HOSTS_INI}. If the "
             f"inventory changed deliberately, re-derive whether this guard still has a job."
         )
 

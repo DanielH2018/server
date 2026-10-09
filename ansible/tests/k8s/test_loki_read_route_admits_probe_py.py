@@ -15,7 +15,7 @@ Run: uv run pytest ansible/tests/k8s/test_loki_read_route_admits_probe_py.py
 """
 
 from lib import yaml_fast
-from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render, _role_context
+from _manifest_guards import ALL_VARS_VALUES, K8S, _k8s_entries, _render, _role_context
 
 ROLE = "loki-homelab"
 # The route object this guard is about, named rather than globbed: the role renders a second
@@ -46,7 +46,9 @@ def _unadmitted(cidrs) -> list[str]:
 
 
 def test_the_route_admits_both_host_source_families_is_clean():
-    wanted = ALL_VARS["k3s_cni0_gateways"] + ALL_VARS["k3s_flannel_node_ips"]
+    wanted = (
+        ALL_VARS_VALUES["k3s_cni0_gateways"] + ALL_VARS_VALUES["k3s_flannel_node_ips"]
+    )
     assert not _unadmitted(wanted), (
         f"the loki read route does not admit {_unadmitted(wanted)}. probe.py runs from a node "
         "shell and arrives as one of these four addresses depending on which node the traefik "
@@ -62,7 +64,9 @@ def test_the_cni0_pair_alone_is_flagged():
     dropped from the inventory this test would still pass while the one above stopped checking
     the thing it names.
     """
-    assert ALL_VARS["k3s_flannel_node_ips"], "k3s_flannel_node_ips is empty or missing"
+    assert ALL_VARS_VALUES["k3s_flannel_node_ips"], (
+        "k3s_flannel_node_ips is empty or missing"
+    )
     assert _unadmitted(["10.42.0.0/16"]), (
         "the route admits the whole pod CIDR again — the DECIDED 2026-08-24 marker in the "
         "template says why that gave every pod the full Loki API of an auth_enabled:false "

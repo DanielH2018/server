@@ -13,10 +13,9 @@ Run: uv run pytest ansible/tests/setup/test_etcd_quota_and_its_monitor_agree.py
 
 import re
 
-from _helpers import REPO
+from lib.repo_paths import K3S_DEFAULTS
 from _k8s_render import rendered_k8s_text
 
-K3S_DEFAULTS = REPO / "ansible/roles/setup/k3s/defaults/main.yml"
 
 # etcd's own default, and the only value that is correct while k3s overrides nothing.
 # <https://etcd.io/docs/v3.5/dev-guide/limit/#storage-size-limit>

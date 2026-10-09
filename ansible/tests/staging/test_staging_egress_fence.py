@@ -42,10 +42,10 @@ from _fence_probe import (
     rendered_orchestrator,
 )
 from _helpers import ALL_VARS, HOST_VARS, ROLES
+from lib.repo_paths import K3S_DEFAULTS
 from _setup_render import rendered_setup_text
 
 HYPERVISOR = ROLES / "setup" / "hypervisor"
-K3S_DEFAULTS = ROLES / "setup" / "k3s" / "defaults" / "main.yml"
 NWFILTER_TEMPLATE = HYPERVISOR / "templates" / "staging-nwfilter.xml.j2"
 NETWORK_TEMPLATE = HYPERVISOR / "templates" / "staging-network.xml.j2"
 DOMAIN_TEMPLATE = HYPERVISOR / "templates" / "etcd-drill-vm.xml.j2"

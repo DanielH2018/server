@@ -28,7 +28,7 @@ does not give you.
 Run: uv run pytest ansible/tests/services/test_pi_publishing_containers.py
 """
 
-from _helpers import ANSIBLE
+from _helpers import HOST_VARS
 from _k8s_render import render_role_template
 from lib import yaml_fast
 from validate.k8s_manifests import load_yaml
@@ -36,7 +36,6 @@ from validate.k8s_manifests import load_yaml
 ROLE = "monitor-bridge"
 ENV_SECRET = "env-secret.yaml.j2"
 ENV_VAR = "PI_PUBLISHED_PORTS"
-HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 # The bridge reads the Pi's address from `hostvars` too, and the k8s roles' own variables
 # resolve against daniel-box, so all three hosts go in rather than the Pi alone.
 HOSTS = ("daniel-pi", "daniel-box", "daniel-server")

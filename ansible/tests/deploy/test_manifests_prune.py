@@ -25,7 +25,6 @@ import sys
 import pytest
 from _role_census import role_dirs
 from _helpers import (
-    ANSIBLE,
     REPO,
     ROLES,
     jinja_env,
@@ -34,6 +33,7 @@ from _helpers import (
     task_named,
     walk_tasks,
 )
+from lib.repo_paths import ALL_VARS
 from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
 from lib.k8s_roles import declared_manifest_files, manifest_template
@@ -483,7 +483,7 @@ def test_the_foreign_namespace_check_finds_headlamps_deferred_rbac() -> None:
 
 
 def _group_vars() -> dict:
-    return yaml_fast.safe_load((ANSIBLE / "inventory/group_vars/all.yml").read_text())
+    return yaml_fast.safe_load(ALL_VARS.read_text())
 
 
 def load_yaml_namespace() -> str:

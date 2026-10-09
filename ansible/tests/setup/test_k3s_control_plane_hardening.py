@@ -30,14 +30,13 @@ import re
 import jinja2
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
-from _helpers import ANSIBLE
+from _helpers import ALL_VARS, ANSIBLE
 from _helpers import load_yaml, load_defaults
 from _k8s_render import render_role_template, rendered_k8s_text
 from _setup_render import rendered_setup_text, role_context
 
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
-ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 
 
 def _all_vars() -> dict:

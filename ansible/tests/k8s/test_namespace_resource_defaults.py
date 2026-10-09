@@ -29,17 +29,15 @@ from lib.proc_testing import run
 from lib import yaml_fast
 from _k8s_render import deploy_play, pod_spec, rendered_build_job_text, rendered_docs
 from _helpers import REPO as _REPO
-from _helpers import jinja_env, load_yaml
+from _helpers import ALL_VARS, jinja_env, load_yaml
 
-
-_ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 
 _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "Job", "CronJob"}
 _LIMITRANGE_NAME = "default-container-limits"
 
 
 def _all_vars() -> dict:
-    return load_yaml(_ALL_VARS)
+    return load_yaml(ALL_VARS)
 
 
 def _pod_specs():

@@ -55,7 +55,8 @@ excludes an inline `rollout status` gate, which waits for a rollout the drain al
 """
 
 from lib import yaml_fast
-from _helpers import REPO as _REPO, manifests_rollout_timeout_s
+from _helpers import ALL_VARS, manifests_rollout_timeout_s
+from _helpers import REPO as _REPO
 from _role_tasks import in_role_wait_s
 
 
@@ -125,9 +126,6 @@ def test_rollback_timeout_covers_the_worst_case_revert_with_realistic_overhead_m
     )
 
 
-_ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
-
-
 def _rollout_timeout_s(role: str) -> int:
     # Shared with the gitops_deploy budget test and the inline-gate census, because a literal
     # read returns the 300s default for a role that names its budget in a variable (sonarr) —
@@ -169,7 +167,7 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
         (_K8S_ROLES / "volume-snapshot/defaults/main.yml").read_text()
     )
     gitops_defaults = yaml_fast.safe_load(_GITOPS_DEPLOY_DEFAULTS.read_text())
-    all_vars = yaml_fast.safe_load(_ALL_VARS.read_text())
+    all_vars = yaml_fast.safe_load(ALL_VARS.read_text())
 
     state_timeout = int(revert_defaults["volume_revert_state_timeout"])
     api_timeout = int(revert_defaults["volume_revert_api_timeout"])

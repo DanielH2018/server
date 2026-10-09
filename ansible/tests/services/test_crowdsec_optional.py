@@ -29,12 +29,12 @@ import pytest
 from lib import yaml_fast
 
 from validate.k8s_manifests import (
-    ANSIBLE,
     K8S_ROLES,
     load_yaml,
 )
 
 from _k8s_render import host_context, render_role_template, traefik_static_config
+from lib.repo_paths import HOST_VARS
 
 _FLAGS = {
     "traefik": "traefik_k8s_manage_crowdsec",
@@ -315,7 +315,7 @@ def _host_render(host: str, template: str, overrides: dict | None = None) -> str
 
 def _hosts_running_traefik() -> list[str]:
     out = []
-    for host_vars in sorted((ANSIBLE / "inventory" / "host_vars").glob("*.yml")):
+    for host_vars in sorted(HOST_VARS.glob("*.yml")):
         entries = load_yaml(host_vars).get("containers_list") or []
         if any(c.get("name") == "traefik" for c in entries):
             out.append(host_vars.stem)

@@ -40,6 +40,7 @@ from pathlib import Path
 import pytest
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from lib.repo_paths import ALL_VARS, HOST_VARS
 
 
 # The k3s-bringup.yml play asserts `inventory_hostname == 'daniel-box'`, so the
@@ -106,7 +107,7 @@ def test_has_docker_defaults_false_fleet_wide():
     remembering the override. The teardown arm the false default selects is a no-op on a host
     that never had Docker.
     """
-    all_vars = _load(ANSIBLE / "inventory" / "group_vars" / "all.yml")
+    all_vars = _load(ALL_VARS)
     assert all_vars.get("has_docker") is False, (
         "has_docker must default false in group_vars/all.yml — daniel-pi is the only "
         "Docker host, and it opts in."
@@ -115,7 +116,7 @@ def test_has_docker_defaults_false_fleet_wide():
 
 def test_daniel_pi_opts_in_to_docker():
     """The one host the containers_list plane still runs on says so itself."""
-    host_vars = _load(ANSIBLE / "inventory" / "host_vars" / "daniel-pi.yml")
+    host_vars = _load(HOST_VARS / "daniel-pi.yml")
     assert host_vars.get("has_docker") is True, (
         "daniel-pi runs every remaining Compose service and must set `has_docker: true` "
         "now that the fleet default is false."
@@ -125,7 +126,7 @@ def test_daniel_pi_opts_in_to_docker():
 @pytest.mark.parametrize("host", K3S_HOSTS)
 def test_k3s_host_opts_out_of_docker(host):
     """The k3s node must set has_docker false."""
-    host_vars = _load(ANSIBLE / "inventory" / "host_vars" / f"{host}.yml")
+    host_vars = _load(HOST_VARS / f"{host}.yml")
     assert host_vars.get("has_docker") is False, (
         f"{host} runs k3s and must set `has_docker: false`. k3s brings its own "
         "containerd; Docker's iptables rules must not land alongside it."
@@ -146,9 +147,7 @@ def _docker_entries(containers_list) -> list[str]:
 def test_k3s_host_declares_no_docker_service(host):
     """A `platform: docker` entry on a k3s node names a service the Docker play would try to
     deploy on a host with no Docker."""
-    containers_list = _load(ANSIBLE / "inventory" / "host_vars" / f"{host}.yml").get(
-        "containers_list"
-    )
+    containers_list = _load(HOST_VARS / f"{host}.yml").get("containers_list")
     assert _docker_entries(containers_list) == [], (
         f"{host} has no Docker; move these entries to daniel-pi or to platform: k8s"
     )

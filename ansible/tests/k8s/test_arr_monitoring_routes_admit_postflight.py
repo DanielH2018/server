@@ -27,7 +27,7 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 from lib.repo_paths import SHARED_TPL
 from _manifest_guards import (
-    ALL_VARS,
+    ALL_VARS_VALUES,
     K8S,
     _k8s_entries,
     _render,
@@ -118,14 +118,14 @@ def test_every_arr_route_admits_the_nodes_own_host_traffic_is_clean():
     Host traffic to the ingress VIP SNATs to the gateway, so a `k8s_node_client_ip`
     (10.0.0.215) grant matches nothing.
     """
-    gateways = ALL_VARS["k3s_cni0_gateways"]
+    gateways = ALL_VARS_VALUES["k3s_cni0_gateways"]
     assert not _cidr_mismatches(gateways), (
         f"monitoring route(s) do not admit the nodes' own host traffic ({gateways}), which is "
         f"what postflight is: {_cidr_mismatches(gateways)}. §9.3 is then SKIP whenever the pod "
         "is on the other node (#1642)."
     )
     # The LAN address is the wrong grant and must not be what makes the assertion above pass.
-    assert _cidr_mismatches([f"{ALL_VARS['k8s_node_client_ip']}/32"])
+    assert _cidr_mismatches([f"{ALL_VARS_VALUES['k8s_node_client_ip']}/32"])
 
 
 def test_every_arr_route_admits_the_overlay_addresses_too_is_clean():
@@ -138,7 +138,7 @@ def test_every_arr_route_admits_the_overlay_addresses_too_is_clean():
     nodeSelector to these routes, and moving the pod would make postflight arrive as 10.42.0.0
     and match no clause, returning §9.3 to the SKIP.
     """
-    overlay = ALL_VARS["k3s_flannel_node_ips"]
+    overlay = ALL_VARS_VALUES["k3s_flannel_node_ips"]
     assert not _cidr_mismatches(overlay), (
         f"monitoring route(s) do not admit the nodes' flannel.1 addresses ({overlay}), so §9.3 "
         f"is SKIP for any node not running the traefik pod: {_cidr_mismatches(overlay)}"
@@ -156,7 +156,7 @@ def test_no_arr_route_grants_the_dead_bridge_address():
     a rendered-match check is the only thing that can see.
     """
     assert sorted(
-        _cidr_mismatches([f"{ALL_VARS['k8s_bridge_client_ip']}/32"])
+        _cidr_mismatches([f"{ALL_VARS_VALUES['k8s_bridge_client_ip']}/32"])
     ) == sorted(ARR_APPS), (
         "an *arr monitoring route still grants k8s_bridge_client_ip, which no measured caller "
         "arrives as — `include_bridge_ip=false` was dropped from its monitoring_route() call"

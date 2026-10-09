@@ -21,10 +21,9 @@ import pytest
 from lib import yaml_fast
 
 from _helpers import ANSIBLE
+from lib.repo_paths import ALL_VARS, HOSTS_INI
 
 BRINGUP = ANSIBLE / "k3s-bringup.yml"
-ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
-HOSTS_INI = ANSIBLE / "inventory" / "hosts.ini"
 
 # The agent node. Named rather than derived: this is the specific host the assert exists to
 # keep out, and deriving it from the same inventory the test checks would be circular.

@@ -42,7 +42,7 @@ import pytest
 from lib import yaml_fast
 
 from _autodeploy import _denylist
-from _helpers import REPO
+from _helpers import ALL_VARS, REPO
 from _role_census import role_dirs
 
 _RENOVATE = REPO / "renovate.json"
@@ -72,8 +72,7 @@ FIRST_PER_PACKAGE_MANUAL_GROUP_PREFIX = "crowdsec bouncer plugin (manual"
 
 # The one manual path that is not a denied role's defaults. Fixed here rather than tolerated
 # as "any extra": a second path added by hand has to be argued for the way this one was.
-GROUP_VARS = "ansible/inventory/group_vars/all.yml"
-_GROUP_VARS_PATH = REPO / GROUP_VARS
+ALL_VARS_REL = ALL_VARS.relative_to(REPO).as_posix()
 _K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 
 # The pin the census must find, so a group_vars with no `_image:` key (renamed, moved back to
@@ -92,7 +91,7 @@ _LOAD_BEARING = frozenset({"traefik", "authelia", "code-server"})
 
 def expected_match_file_names(denylist: set[str]) -> list[str]:
     """The denylist as Renovate must spell it: group_vars, then one `defaults/main.yml` per denied role."""
-    return [GROUP_VARS] + [
+    return [ALL_VARS_REL] + [
         f"ansible/roles/k8s/{role}/defaults/main.yml" for role in sorted(denylist)
     ]
 
@@ -128,14 +127,14 @@ def group_vars_pin_problems(
     for pin, readers in sorted(readers_by_pin.items()):
         if not readers:
             problems.append(
-                f"{pin} in {GROUP_VARS} is read by no k8s role — an unmappable pin cannot be "
+                f"{pin} in {ALL_VARS_REL} is read by no k8s role — an unmappable pin cannot be "
                 "argued as denied; find its reader or move it"
             )
             continue
         eligible = sorted(readers - denylist)
         if eligible:
             problems.append(
-                f"{pin} in {GROUP_VARS} is read by auto-deployable role(s) {eligible}, so the "
+                f"{pin} in {ALL_VARS_REL} is read by auto-deployable role(s) {eligible}, so the "
                 "manual rule's group_vars entry would hold an eligible bump too — move the pin "
                 "into the role's defaults or deny the role"
             )
@@ -279,7 +278,7 @@ def test_the_manual_rule_sits_between_the_automerge_rules_and_the_per_package_ma
 
 
 def test_every_group_vars_image_pin_belongs_to_denied_roles() -> None:
-    pins = group_vars_image_pins(_GROUP_VARS_PATH.read_text())
+    pins = group_vars_image_pins(ALL_VARS.read_text())
     assert KNOWN_GROUP_VARS_PINS <= pins, sorted(KNOWN_GROUP_VARS_PINS - pins)
     problems = group_vars_pin_problems({p: roles_reading(p) for p in pins}, _denylist())
     assert not problems, "\n".join(problems)

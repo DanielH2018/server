@@ -17,6 +17,7 @@ Run: uv run pytest ansible/tests/setup/test_claude_memory_sync.py
 import re
 
 from _helpers import ANSIBLE, load_yaml
+from lib.repo_paths import HOST_VARS
 from _setup_render import render_setup_text, role_context
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
@@ -89,8 +90,8 @@ def test_an_empty_source_never_reaches_delete():
 
 def test_armed_only_on_daniel_box_and_disarming_removes_the_units():
     assert DEFAULTS["claude_code_memory_sync_enabled"] is False
-    box = load_yaml(ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml")
-    server = load_yaml(ANSIBLE / "inventory" / "host_vars" / "daniel-server.yml")
+    box = load_yaml(HOST_VARS / "daniel-box.yml")
+    server = load_yaml(HOST_VARS / "daniel-server.yml")
     assert box.get("claude_code_memory_sync_enabled") is True
     assert not server.get("claude_code_memory_sync_enabled", False), (
         "daniel-server must never push: it would overwrite the store sessions write"

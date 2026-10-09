@@ -8,6 +8,7 @@ must switch DHCPv4 off rather than run it alongside (the template says why).
 """
 
 from _helpers import ANSIBLE
+from lib.repo_paths import ALL_VARS, HOST_VARS
 from lib import yaml_fast
 from _setup_render import render_setup_text
 
@@ -45,15 +46,11 @@ def static_address_problems(
 
 
 def _host_vars(host: str) -> dict:
-    return yaml_fast.safe_load(
-        (ANSIBLE / "inventory" / "host_vars" / f"{host}.yml").read_text()
-    )
+    return yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text())
 
 
 def test_the_server_node_renders_its_own_address_pinned() -> None:
-    router = yaml_fast.safe_load(
-        (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
-    )["lan_router_ip"]
+    router = yaml_fast.safe_load(ALL_VARS.read_text())["lan_router_ip"]
     for host in _NODES:
         hv = _host_vars(host)
         link = hv.get("k3s_node_static_link")

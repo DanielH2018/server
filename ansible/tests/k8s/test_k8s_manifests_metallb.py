@@ -9,7 +9,7 @@ read the `metallb.io` Service annotations, which the
 
 from lib import yaml_fast
 
-from _manifest_guards import ALL_VARS, K3S, K3S_DEFAULTS, _render
+from _manifest_guards import ALL_VARS_VALUES, K3S, K3S_DEFAULT_VALUES, _render
 
 
 def _ip_to_int(addr: str) -> int:
@@ -21,7 +21,7 @@ def _pool_docs() -> list[dict]:
     """IPAddressPool documents in FILE order — the order kubectl applies them in."""
     rendered = _render(
         K3S / "templates" / "metallb-pool.yaml.j2",
-        k3s_metallb_ingress_vip=ALL_VARS["k3s_metallb_ingress_vip"],
+        k3s_metallb_ingress_vip=ALL_VARS_VALUES["k3s_metallb_ingress_vip"],
         k3s_metallb_pool=yaml_fast.safe_load(
             (K3S / "defaults" / "main.yml").read_text()
         )["k3s_metallb_pool"],
@@ -42,13 +42,15 @@ def test_ingress_pool_is_a_single_address_that_is_never_auto_assigned():
     """
     ingress = _pools()["ingress-pool"]
     assert ingress["spec"]["autoAssign"] is False
-    assert ingress["spec"]["addresses"] == [f"{ALL_VARS['k3s_metallb_ingress_vip']}/32"]
+    assert ingress["spec"]["addresses"] == [
+        f"{ALL_VARS_VALUES['k3s_metallb_ingress_vip']}/32"
+    ]
 
 
 def test_general_pool_does_not_contain_the_ingress_vip():
     """A /32 reservation means nothing if the auto-assigning pool still covers the address."""
     start, end = _pools()["homelab-pool"]["spec"]["addresses"][0].split("-")
-    vip = _ip_to_int(ALL_VARS["k3s_metallb_ingress_vip"])
+    vip = _ip_to_int(ALL_VARS_VALUES["k3s_metallb_ingress_vip"])
     assert not (_ip_to_int(start) <= vip <= _ip_to_int(end))
 
 
@@ -74,7 +76,7 @@ def test_metallb_version_still_supports_the_metallb_io_annotations():
     A downgrade past that would make every pinned address silently fall back to the auto-assign
     pool, so tie the annotation row to the version pin rather than leaving the two to drift apart.
     """
-    pin = K3S_DEFAULTS["k3s_metallb_version"].lstrip("v")
+    pin = K3S_DEFAULT_VALUES["k3s_metallb_version"].lstrip("v")
     major, minor = (int(p) for p in pin.split(".")[:2])
     assert (major, minor) >= (0, 15), (
         f"k3s_metallb_version is {pin}, which predates the metallb.io/ Service annotations "

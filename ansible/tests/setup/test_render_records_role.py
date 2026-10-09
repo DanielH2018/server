@@ -10,11 +10,10 @@ Run: uv run pytest ansible/tests/setup/test_render_records_role.py
 import re
 
 from lib import yaml_fast
-from _helpers import REPO
+from _helpers import ALL_VARS, REPO
 
 ROLE = REPO / "ansible/roles/setup/render_records"
 MANIFESTS_DEFAULTS = REPO / "ansible/roles/k8s/manifests/defaults/main.yml"
-ALL_VARS = REPO / "ansible/inventory/group_vars/all.yml"
 
 
 def _load(path):

@@ -18,22 +18,26 @@ from typing import Iterator
 
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, path_with, run
-from lib.repo_paths import REPO
+
+# `lib.repo_paths` owns the anchors. The `X as X` names are re-exports for the guards that
+# import them from here; redefining one in a guard is what #3912 removed.
+from lib.repo_paths import (
+    ALL_VARS as ALL_VARS,
+    ANSIBLE,
+    HOST_VARS as HOST_VARS,
+    INVENTORY as INVENTORY,
+    K8S_ROLES,
+    REPO,
+    ROLES,
+)
 from ansible.plugins.filter.core import FilterModule
 from ansible.plugins.filter.mathstuff import FilterModule as _MathFilters
 from ansible.plugins.test.core import TestModule as _AnsibleTests
 from jinja2 import FileSystemLoader
 from jinja2.nativetypes import NativeEnvironment
 
-ANSIBLE = REPO / "ansible"
-ROLES = ANSIBLE / "roles"
-K8S_ROLES = ROLES / "k8s"
 SETUP_ROLES = ROLES / "setup"
 CONTAINER_ROLES = ROLES / "containers"
-INVENTORY = ANSIBLE / "inventory"
-HOST_VARS = INVENTORY / "host_vars"
-GROUP_VARS = INVENTORY / "group_vars"
-ALL_VARS = GROUP_VARS / "all.yml"
 DEPLOY_PLAYBOOK = ANSIBLE / "deploy.yml"
 
 _MODULE_KEYS = ("ansible.builtin.command", "ansible.builtin.shell")

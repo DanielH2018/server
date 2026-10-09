@@ -31,10 +31,10 @@ import re
 import pytest
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from lib.repo_paths import K3S_DEFAULTS
 from _k8s_render import rendered_docs
 
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
-K3S_DEFAULTS = ANSIBLE / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
 
 UNITS = {"Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "Ti": 1024**4}
 SIZE_RE = re.compile(r"^(\d+)(Ki|Mi|Gi|Ti)$")

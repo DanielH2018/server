@@ -7,6 +7,7 @@ fake registers, one append per loop target, exactly as the play accumulates it.
 """
 
 from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named, walk_tasks
+from lib.repo_paths import ALL_VARS
 
 MANIFESTS_TASKS = ANSIBLE / "roles/k8s/manifests/tasks"
 STAMP = load_tasks(MANIFESTS_TASKS / "release_stamp.yml")
@@ -69,9 +70,7 @@ def include_role_vars(role_dir):
     raise AssertionError(f"{role_dir.name} does not include k8s/manifests")
 
 
-OBSERVABILITY_NAMESPACE = load_yaml(ANSIBLE / "inventory/group_vars/all.yml")[
-    "k8s_observability_namespace"
-]
+OBSERVABILITY_NAMESPACE = load_yaml(ALL_VARS)["k8s_observability_namespace"]
 
 
 def observability_self_rollouts():

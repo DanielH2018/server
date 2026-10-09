@@ -16,11 +16,9 @@ and the monitor cannot say WHY the target is down. This test can.
 """
 
 from lib import yaml_fast
-from _helpers import ROLES as _ROLES
+from lib.repo_paths import ALL_VARS, K3S_DEFAULTS
 from _k8s_render import rendered_k8s_text
 
-_GROUP_VARS = _ROLES.parent / "inventory/group_vars/all.yml"
-_K3S_DEFAULTS = _ROLES / "setup/k3s/defaults/main.yml"
 
 _SCRAPER_VAR = "k8s_node_dns_metrics_port"
 _PUBLISHER_VAR = "k3s_host_dns_metrics_port"
@@ -37,8 +35,8 @@ def ports_disagree(publisher: int, scraper: int) -> str | None:
 
 
 def test_the_live_ports_agree() -> None:
-    publisher = yaml_fast.safe_load(_K3S_DEFAULTS.read_text())[_PUBLISHER_VAR]
-    scraper = yaml_fast.safe_load(_GROUP_VARS.read_text())[_SCRAPER_VAR]
+    publisher = yaml_fast.safe_load(K3S_DEFAULTS.read_text())[_PUBLISHER_VAR]
+    scraper = yaml_fast.safe_load(ALL_VARS.read_text())[_SCRAPER_VAR]
     problem = ports_disagree(publisher, scraper)
     assert problem is None, problem
 
@@ -63,7 +61,7 @@ def test_the_scrape_job_reads_the_group_var_rather_than_a_literal() -> None:
     `{{ k8s_node_dns_metrics_port }}` matches nothing the moment the expression is spelled any
     other way, and a pattern that matches nothing passes (#3202).
     """
-    group_vars = yaml_fast.safe_load(_GROUP_VARS.read_text())
+    group_vars = yaml_fast.safe_load(ALL_VARS.read_text())
     target = f"{group_vars['k8s_node_client_ip']}:{group_vars[_SCRAPER_VAR]}"
     rendered = rendered_k8s_text("observability", "prometheus.yaml.j2")
     assert target in rendered, (

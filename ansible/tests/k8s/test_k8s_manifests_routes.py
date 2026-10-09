@@ -14,7 +14,7 @@ import re
 
 from lib import yaml_fast
 from _manifest_guards import (
-    ALL_VARS,
+    ALL_VARS_VALUES,
     BOX_VARS,
     K8S,
     _k8s_entries,
@@ -44,7 +44,7 @@ def _k8s_authelia_config() -> dict:
         authelia_oidc_hmac_secret="stub",
         authelia_oidc_rsa_key_content="STUBKEY",
         authelia_client_password_hash="stub",
-        **ALL_VARS,
+        **ALL_VARS_VALUES,
         **defaults,
     )
     doc = yaml_fast.safe_load(rendered)
@@ -76,7 +76,7 @@ def test_k8s_authelia_database_is_on_its_own_volume():
             K8S / "authelia" / "templates" / "deployment.yaml.j2",
             container_item=next(c for c in _k8s_entries() if c["name"] == "authelia"),
             containers_list=_k8s_entries(),
-            **ALL_VARS,
+            **ALL_VARS_VALUES,
             **yaml_fast.safe_load(
                 (K8S / "authelia" / "defaults" / "main.yml").read_text()
             ),
@@ -204,7 +204,7 @@ def test_the_lapi_route_never_gains_a_public_host_rule():
     entry = next(c for c in _k8s_entries() if c["name"] == "crowdsec")
     route_tpl = K8S / "crowdsec" / "templates" / "ingressroute.yaml.j2"
     rendered = _render(
-        route_tpl, container_item=entry, domain="example.com", **ALL_VARS
+        route_tpl, container_item=entry, domain="example.com", **ALL_VARS_VALUES
     )
     for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
         if doc["metadata"]["name"] != "crowdsec":
@@ -246,7 +246,7 @@ def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
                 match = route["match"]
                 hosts = re.findall(r"Host\(`([^`]+)`\)", match)
                 public = [h for h in hosts if not h.endswith(f".local.{domain}")]
-                if not public or ALL_VARS["k8s_public_route"]:
+                if not public or ALL_VARS_VALUES["k8s_public_route"]:
                     continue
                 assert "ClientIP(" in match, (
                     f"{doc['metadata']['name']} matches {public} on the public domain with "
@@ -258,7 +258,7 @@ def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
 def _tlsoption_names() -> set:
     rendered = _render(
         K8S / "traefik" / "templates" / "dynamic.yaml.j2",
-        **ALL_VARS,
+        **ALL_VARS_VALUES,
         **yaml_fast.safe_load((K8S / "traefik" / "defaults" / "main.yml").read_text()),
     )
     return {
@@ -350,7 +350,7 @@ def _dashboard_route_match() -> str:
     rendered = _render(
         K8S / "traefik" / "templates" / "dashboard-ingressroute.yaml.j2",
         domain="example.com",
-        **ALL_VARS,
+        **ALL_VARS_VALUES,
     )
     doc = yaml_fast.safe_load(rendered)
     return doc["spec"]["routes"][0]["match"]

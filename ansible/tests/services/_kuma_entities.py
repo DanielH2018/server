@@ -38,6 +38,7 @@ from py_table import py_table
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env, register_ansible_filters
 from _helpers import ANSIBLE
+from lib.repo_paths import HOST_VARS
 from _k8s_render import host_context
 from lib.render_context import render_context
 from validate.k8s_manifests import (
@@ -123,7 +124,7 @@ def _hostvars() -> dict[str, dict]:
     tiles carry a stub where an address belongs.
     """
     return {
-        host: load_yaml(ANSIBLE / "inventory/host_vars" / f"{host}.yml")
+        host: load_yaml(HOST_VARS / f"{host}.yml")
         for host in ("daniel-pi", "daniel-box", "daniel-server")
     }
 
