@@ -78,11 +78,19 @@ monitor_bridge_modules:
 # role's files for the secret's name, so a derived name would drop monitor-bridge from that
 # census and leave the pod pushing a revoked token.
 #
-# Adding a check: a `check_*` body, its `Check` row in registry.py, a row here, the SOPS secret
-# (`/add-secret`, then `secret_rotation.py sync`), and its tile in
-# k8s/uptime-kuma/templates/static-monitors.yaml.j2. ENFORCED by
-# tests/test_push_check_table.py, which holds this table equal to the registry plus the four
-# gates and each row's secret to a push tile.
+# Adding a check still takes these hand edits:
+# - a `check_*` body;
+# - its `Check` row in registry.py;
+# - a row here;
+# - the SOPS secret (`/add-secret`, then `secret_rotation.py sync`);
+# - its tile in k8s/uptime-kuma/templates/static-monitors.yaml.j2 (#3781 would derive the tile);
+# - for a gated check, its gate set in gates.py. For PROM_DEPENDENT that also means the
+#   enumeration in this role's CLAUDE.md, which
+#   tests/test_claude_md_prom_dependent_enumeration.py pins.
+# This table cut only the env-secret entry and the KUMA_PUSH_* spelling (#3659).
+# tests/test_push_check_table.py holds the table equal to the registry plus the four gates, and
+# each row's token to a declared SOPS secret.
+# ansible/tests/services/test_kuma_static_monitors.py joins each rendered token to a push tile.
 monitor_bridge_push_checks:
   - {name: disk, token: monitor_bridge_disk_push_token}
   - {name: cert, token: monitor_bridge_cert_push_token}
