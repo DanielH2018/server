@@ -6,6 +6,7 @@ without them.
 """
 
 import importlib
+import os
 
 from dataclasses import replace
 
@@ -21,29 +22,28 @@ from bridge.types import Check
 from gates import Gates
 
 
-def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
-    """Stub the heartbeat and STATE the registry, so main() runs one cycle touching nothing live.
+def _silence(pushes, ran, names=("disk",), probe_prometheus=None, **env):
+    """STATE the registry, the I/O and the environment, so main() runs touching nothing live.
 
     Returns the `checks=` / `gate_config=` / `sources=` / `sink=` / `env=` keyword arguments to hand
     `cli.main`, which is how a test says which checks exist and what they read without mutating
-    a module. `env` is the rendered
-    env-secret, the environment the pod's `main()` reads.
+    a module. `env` is the rendered env-secret, the environment the pod's `main()` reads, with
+    `HEARTBEAT_FILE` pointed at the null device so a cycle's heartbeat writes nowhere.
 
     Args:
-      monkeypatch: The fixture, for the heartbeat stub, which is not a parameter.
       pushes: Collects every (token, ok, msg) the cycle would have pushed, through the sink.
       ran: Collects the name of every check body that ran.
       names: The registry to run — one `Check` per name, each recording into `ran`.
       probe_prometheus: A replacement Prometheus gate body. Only
         `test_check_flag_unions_in_the_gate_a_named_check_depends_on` passes one, to watch that
         gate actually run; the default reports the gate up without recording.
+      **env: Overrides laid on the rendered env, as `bridge_env` takes them.
     """
     sink = FakeSink()
     sink.pushes = pushes
-    monkeypatch.setattr(bridge.common, "touch_heartbeat", lambda path: None)
 
     return {
-        "env": bridge_env(),
+        "env": bridge_env(HEARTBEAT_FILE=os.devnull, **env),
         "checks": [Check(n, "tok_%s" % n, mk(ran, n)) for n in names],
         # No exporter is down, so the exporter probe suppresses nothing.
         "sources": FakeSources(prom_vector=lambda q: []),
@@ -57,7 +57,7 @@ def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
     }
 
 
-def test_no_arguments_means_loop_forever_and_push(monkeypatch, cfg):
+def test_no_arguments_means_loop_forever_and_push(cfg):
     """The pod's own invocation: --once is off, --dry-run is off, so it loops and pushes.
 
     The Deployment runs `python /app/cli.py` with no arguments, so "keeps looping" is the one
@@ -71,7 +71,7 @@ def test_no_arguments_means_loop_forever_and_push(monkeypatch, cfg):
     assert args.checks == []
 
     pushes, ran = [], []
-    wired = _silence(monkeypatch, pushes, ran)
+    wired = _silence(pushes, ran)
 
     class _Slept(Exception):
         pass
@@ -80,14 +80,13 @@ def test_no_arguments_means_loop_forever_and_push(monkeypatch, cfg):
         assert seconds == cfg.INTERVAL
         raise _Slept
 
-    monkeypatch.setattr(cli.time, "sleep", _sleep)
     with pytest.raises(_Slept):
-        cli.main([], **wired)
+        cli.main([], sleep=_sleep, **wired)
     assert ran == ["disk"]
     assert ("tok_disk", True, "disk ok") in pushes
 
 
-def test_every_cycle_reads_the_one_state_main_built(monkeypatch):
+def test_every_cycle_reads_the_one_state_main_built():
     """Streaks and probe caches live on `src.state`, so main() must hand every cycle ONE `Sources`.
 
     A `Sources` rebuilt per cycle would zero every hysteresis counter each INTERVAL, and no check
@@ -95,9 +94,8 @@ def test_every_cycle_reads_the_one_state_main_built(monkeypatch):
     `--check counter` keeps the gates and the exporter probe from sending a live query. The
     second cycle stops the loop with a BaseException, which `_evaluate` does not catch.
     """
-    wired = _silence(monkeypatch, [], [])
+    wired = _silence([], [], INTERVAL="0")
     del wired["sources"]
-    wired["env"] = bridge_env(INTERVAL="0")
     seen = []
 
     class _Stop(BaseException):
@@ -117,25 +115,27 @@ def test_every_cycle_reads_the_one_state_main_built(monkeypatch):
     assert seen[1].down_streaks["counter"] == 2
 
 
-def test_once_runs_exactly_one_cycle_and_returns_zero(monkeypatch):
+def test_once_runs_exactly_one_cycle_and_returns_zero():
     pushes, ran = [], []
-    wired = _silence(monkeypatch, pushes, ran)
-    monkeypatch.setattr(
-        cli.time, "sleep", lambda s: pytest.fail("--once must not sleep")
+    wired = _silence(pushes, ran)
+    assert (
+        cli.main(
+            ["--once"], sleep=lambda s: pytest.fail("--once must not sleep"), **wired
+        )
+        == 0
     )
-    assert cli.main(["--once"], **wired) == 0
     assert ran == ["disk"]
     assert ("tok_disk", True, "disk ok") in pushes
 
 
-def test_dry_run_evaluates_every_check_and_pushes_nothing(monkeypatch):
+def test_dry_run_evaluates_every_check_and_pushes_nothing():
     """The rejecting half of the test above: same cycle, zero pushes.
 
     A --dry-run that still pushed would overwrite a real monitor's state from a hand-run
     terminal, which is exactly what the flag exists to make safe.
     """
     pushes, ran = [], []
-    wired = _silence(monkeypatch, pushes, ran)
+    wired = _silence(pushes, ran)
     assert cli.main(["--once", "--dry-run"], **wired) == 0
     assert ran == ["disk"]
     assert pushes == []
@@ -152,14 +152,13 @@ def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypat
     naming the gate and `--check` unions it in.
     """
     pushes, ran = [], []
-    wired = _silence(monkeypatch, pushes, ran)
+    wired = _silence(pushes, ran, KUMA_PUSH_DISK="from_the_argument")
     monkeypatch.setenv("KUMA_PUSH_DISK", "from_os_environ")
-    env = bridge_env(KUMA_PUSH_DISK="from_the_argument")
     argv = ["--once", "--check", "disk"]
     assert (
         cli.main(
             argv,
-            env=env,
+            env=wired["env"],
             checks=None,
             gate_config=wired["gate_config"],
             sources=wired["sources"],
@@ -172,12 +171,12 @@ def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypat
     assert "from_os_environ" not in tokens, tokens
 
 
-def test_check_flag_is_repeatable_and_filters_like_checks_only(monkeypatch, cfg):
+def test_check_flag_is_repeatable_and_filters_like_checks_only(cfg):
     pushes, ran = [], []
     # The unnamed third entry is what makes this test discriminating. With only the two named
     # checks registered, a --check that was parsed and then never threaded into run_once()
     # produces exactly the same `ran` list, because an empty CHECKS_ONLY enables everything.
-    wired = _silence(monkeypatch, pushes, ran, names=("disk", "memory", "host_temp"))
+    wired = _silence(pushes, ran, names=("disk", "memory", "host_temp"))
     cfg = replace(cfg, CHECKS_ONLY=frozenset(), CHECKS_SKIP=frozenset())
     # No need to also name `prometheus`: disk and memory are PROM_DEPENDENT, and
     # expand_gates_for_cli unions their gate in automatically (see the dedicated test below for
@@ -188,7 +187,7 @@ def test_check_flag_is_repeatable_and_filters_like_checks_only(monkeypatch, cfg)
     assert "host_temp" not in ran
 
 
-def test_check_flag_unions_in_the_gate_a_named_check_depends_on(monkeypatch, cfg):
+def test_check_flag_unions_in_the_gate_a_named_check_depends_on(cfg):
     """`--check disk` alone must not trip the "gate disabled under its dependents" refusal.
 
     disk is PROM_DEPENDENT. `--check` unions in the gate a named check depends on
@@ -198,7 +197,6 @@ def test_check_flag_unions_in_the_gate_a_named_check_depends_on(monkeypatch, cfg
     """
     pushes, ran = [], []
     wired = _silence(
-        monkeypatch,
         pushes,
         ran,
         names=("disk", "memory"),
@@ -209,7 +207,7 @@ def test_check_flag_unions_in_the_gate_a_named_check_depends_on(monkeypatch, cfg
     assert "memory" not in ran
 
 
-def test_checks_only_env_keeps_the_strict_gate_contract(monkeypatch):
+def test_checks_only_env_keeps_the_strict_gate_contract():
     """CHECKS_ONLY (env) is NOT auto-unioned — only the `--check` CLI flag is.
 
     An operator setting CHECKS_ONLY by hand is expected to spell the gate out themselves, same
@@ -219,27 +217,26 @@ def test_checks_only_env_keeps_the_strict_gate_contract(monkeypatch):
     where `load_config` runs — narrowing a Config the test built would not reach it.
     """
     pushes, ran = [], []
-    wired = _silence(monkeypatch, pushes, ran)
-    wired["env"] = bridge_env(CHECKS_ONLY="disk")
+    wired = _silence(pushes, ran, CHECKS_ONLY="disk")
     assert cli.main(["--once"], **wired) == 2
     assert ran == []
 
 
-def test_an_unknown_check_name_exits_two_without_running_anything(monkeypatch):
+def test_an_unknown_check_name_exits_two_without_running_anything():
     pushes, ran = [], []
-    wired = _silence(monkeypatch, pushes, ran)
+    wired = _silence(pushes, ran)
     assert cli.main(["--once", "--check", "no_such_check"], **wired) == 2
     assert ran == []
 
 
-def test_a_gate_disabled_under_its_dependents_exits_two(monkeypatch):
+def test_a_gate_disabled_under_its_dependents_exits_two():
     """--check is validated exactly like CHECKS_ONLY, including the gate rule.
 
     Enabling a gated check without its gate reintroduces the alert storm the gate prevents, and
     is refused at startup rather than discovered during an outage.
     """
     pushes, ran = [], []
-    wired = _silence(monkeypatch, pushes, ran)
+    wired = _silence(pushes, ran)
     assert cli.main(["--once", "--check", "loki_ingestion"], **wired) == 2
     assert ran == []
 
@@ -301,14 +298,9 @@ def test_a_malformed_http_timeout_reaches_the_same_report(monkeypatch):
         importlib.reload(bridge.common)
 
 
-def test_main_reports_config_problems_and_exits_two(monkeypatch):
+def test_main_reports_config_problems_and_exits_two(capsys):
     pushes, ran = [], []
-    wired = _silence(monkeypatch, pushes, ran)
-    logged = []
-    monkeypatch.setattr(
-        bridge.common, "log", lambda *a: logged.append(" ".join(map(str, a)))
-    )
-    wired["env"] = bridge_env(DISK_MAX_PCT="ninety")
+    wired = _silence(pushes, ran, DISK_MAX_PCT="ninety")
     assert cli.main(["--once"], **wired) == 2
     assert ran == []
-    assert any("DISK_MAX_PCT" in line for line in logged)
+    assert "DISK_MAX_PCT" in capsys.readouterr().out

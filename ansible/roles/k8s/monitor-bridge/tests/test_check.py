@@ -17,13 +17,15 @@ import checks.storage
 import check
 import gates
 import registry
+from _check_gate_helpers import mk
 from _fake_sources import FakeSink, FakeSources
+from gates import Gates
 
 
 # ── loop heartbeat (container healthcheck reads this file's mtime) ─────────────
 
 
-def test_touch_heartbeat_writes_and_refreshes(tmp_path, monkeypatch, cfg):
+def test_touch_heartbeat_writes_and_refreshes(tmp_path, cfg):
     hb = tmp_path / "heartbeat"
     cfg = replace(cfg, HEARTBEAT_FILE=str(hb))
     bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
@@ -34,7 +36,7 @@ def test_touch_heartbeat_writes_and_refreshes(tmp_path, monkeypatch, cfg):
     assert hb.stat().st_mtime > first - 100
 
 
-def test_touch_heartbeat_never_raises(monkeypatch, cfg):
+def test_touch_heartbeat_never_raises(cfg):
     # Best-effort like push(): a heartbeat failure must not kill the loop.
     cfg = replace(cfg, HEARTBEAT_FILE="/nonexistent-dir/heartbeat")
     bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
@@ -101,23 +103,24 @@ def test_subset_names_are_real_checks():
     assert SUBSET_ONLY <= names
 
 
-def test_run_once_with_only_filter_touches_no_gate(monkeypatch, cfg):
+def test_run_once_with_only_filter_touches_no_gate(cfg):
     # With a CHECKS_ONLY filter active, run_once must evaluate exactly that set — no
     # gate probe, no metric check, no push for anything else.
     cfg = replace(cfg, CHECKS_ONLY=SUBSET_ONLY, CHECKS_SKIP=frozenset())
     evaluated = []
-    # The one spy this file keeps: `_evaluate` is the single funnel every gate and every check
-    # body goes through, so recording there is what proves NOTHING outside the filter was
-    # evaluated. Stating a registry would only show which of the checks handed in ran.
-    monkeypatch.setattr(
-        gates,
-        "_evaluate",
-        lambda _cfg, _src, name, fn: (evaluated.append(name), (True, "ok"))[1],
+    # Every body `_evaluate` can reach is a recorder: each registry entry and each of the four
+    # gate probes. That covers the whole registry, so a body outside the filter that ran
+    # would be recorded, which stating a registry of only the subset could not show.
+    checks = [replace(c, fn=mk(evaluated, c.name)) for c in registry.build_checks()]
+    probes = Gates(
+        probe_prometheus=mk(evaluated, "prometheus"),
+        probe_loki=mk(evaluated, "loki_reachable"),
+        probe_b2=mk(evaluated, "b2_reachable"),
+        probe_wan=mk(evaluated, "wan_reachable"),
     )
     sink = FakeSink()
-    # The exporter probe still runs when the Prometheus gate is in the filter; no job is down.
-    src = FakeSources(prom_vector=lambda q: [])
-    check.run_once(cfg, src, registry.build_checks(), gates.Gates(), sink)
+    # No answers: the Prometheus gate is outside the filter, so the exporter probe sends nothing.
+    check.run_once(cfg, FakeSources(), checks, probes, sink)
     assert set(evaluated) == SUBSET_ONLY
     assert len(sink.pushes) == len(SUBSET_ONLY)
 

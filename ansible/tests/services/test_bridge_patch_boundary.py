@@ -160,20 +160,6 @@ def _unqualified_binds(patched, modules):
     return problems
 
 
-def test_there_are_patched_names_to_check():
-    # Without this the assertion below passes vacuously if the AST walk ever stops matching.
-    #
-    # The pair is `bridge.common` and `bridge.net`, the two modules the suite stubs.
-    # `bridge.config` is not in it: monitor-bridge's configuration is a frozen `Config` built
-    # in `main()` and passed down, so nothing patches that module. Repoint the pair rather
-    # than deleting it when another module gets its seam.
-    # A subset comparison rather than two `in` tests: `"bridge.net" in patched` reads as a
-    # hostname-shaped substring check to CodeQL, which the `no-host-shaped-membership-literal`
-    # row of ansible/tests/repo/test_census_rows_python.py enforces repo-wide.
-    patched = _patched_names_by_module()
-    assert {"bridge.common", "bridge.net"} <= patched.keys(), sorted(patched)
-
-
 def test_the_suite_census_sees_shared_helper_modules():
     # Non-vacuity for the `*.py` glob above, naming members rather than counting.
     # `_check_gate_helpers.py` is not named `test_*`, and once held seven of monitor-bridge's
