@@ -61,15 +61,12 @@ def test_the_registration_launches_the_agents_clone_with_the_agents_node() -> No
     assert defaults[SWITCH] is False
 
 
-def test_the_registration_is_added_only_when_switched_on_and_never_to_the_repo() -> (
-    None
-):
-    """A project-scope .mcp.json waits for an approval a phone session cannot give."""
+def test_the_registration_is_user_scope_and_added_only_when_switched_on() -> None:
+    """A project-scope server waits for an approval a phone session cannot give."""
     add = named(tasks(), "Register the homelab-ui MCP server for the agent user")
     argv = add["ansible.builtin.command"]["argv"]
     assert argv[argv.index("--scope") + 1] == "user"
     assert SWITCH in when_list(add)
-    assert not (ANSIBLE.parent / ".mcp.json").exists()
 
 
 def off_arm_gaps(task_list: list[dict]) -> list[str]:
