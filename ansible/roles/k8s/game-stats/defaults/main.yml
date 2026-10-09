@@ -1,7 +1,7 @@
 ---
 # Stock image, not an image-builder build: both stats scripts and stats_lib.py are pure stdlib,
 # mounted from a ConfigMap, so a build would add a layer and change nothing that runs.
-game_stats_k8s_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
+game_stats_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Games: companion stats exporters for the hand-operated terraria and valheim servers — grouped
