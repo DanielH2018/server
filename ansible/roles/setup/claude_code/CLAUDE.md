@@ -4,8 +4,8 @@ Three things live here: the **install** (native installer, per-user, auto-updati
 **`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone, and
 **`claude-memory-sync.timer`**, which copies daniel-box's Claude memory store to daniel-server.
 
-Runs on every host with `has_claude_code: true` — daniel-box and daniel-server, each carrying its own
-cap numbers in its own host_vars. The unit is enabled only where `claude_code_rc_enabled` is also
+Runs on every host with `has_claude_code: true` — daniel-box and daniel-server, each with its own
+cap numbers in host_vars. The unit is enabled only where `claude_code_rc_enabled` is also
 true (daniel-box). Invoked from `initial_setup.yml`, **not** `deploy.yml` — the role is not in
 `containers_list`, so `./scripts/deploy.sh --tags claude_code` exits 2 on an unmatched tag:
 
@@ -40,8 +40,8 @@ One prerequisite Ansible cannot check: a phone-created session reaches a prompt 
 worktree with no workspace-trust dialog. **Re-run that check after a Claude Code upgrade or a
 spawn-mode change.**
 
-**Stop any hand-run host before deploying** — the service and a manual `claude rc` compete for the
-same account and directory.
+**Stop any hand-run host before deploying** — the service and a manual `claude rc` compete for one
+account and directory.
 
 ## What monitoring does and does not cover
 
@@ -111,4 +111,4 @@ effect at the next start**, so the deploy that changes it drops the RC host's se
 - **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.
 - **Evidence:** `journalctl -u claude-memory-sync` lists each file a run changed or deleted;
   a failure pages Discord.
-<!-- e2e approval-path landing check -->
+<!-- e2e -->
