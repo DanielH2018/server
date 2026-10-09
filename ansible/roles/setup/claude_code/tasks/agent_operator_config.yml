@@ -132,9 +132,9 @@
     - claude_code_operator_copied.stat.exists
 
 # ~/.claude/settings.json is Claude Code's file for this user, not the role's: it writes there
-# when a session changes a setting. So the role reads it, changes only `outputStyle`, and
-# leaves the owner the agent. The output style takes effect only through that key. The value
-# comes from the operator's own settings.json, never from a literal here. A file that is not
+# when a session changes a setting. So the role reads it, changes only `outputStyle` and one
+# `env` key, and leaves the owner the agent. The output style takes effect only through its
+# key, and its value comes from the operator's own settings.json, never from a literal here. A file that is not
 # JSON fails the apply rather than being replaced.
 - name: Read the operator's output style
   ansible.builtin.slurp:
@@ -162,7 +162,13 @@
 # True arm: set the operator's style. False arm: drop the key only while it still holds the
 # operator's style, so a style the agent chose itself stays. Written only when the result
 # differs, so an apply that changes nothing leaves the file Claude Code last wrote untouched.
-- name: Set the agent's output style to the operator's, or remove it
+#
+# The same write carries the pytest worker cap into `env`, from the variable the RC unit
+# reads. login_caps.yml's environment.d file reaches only services the user manager starts,
+# not a login shell or a `machinectl shell` session, so a `claude agents` session gets the cap
+# from here or not at all. With the login caps off, the key goes only while it holds the cap.
+# One task, not two: a second would compare against the slurp this one has made stale.
+- name: Set the agent's output style and pytest worker cap
   vars:
     _style: >-
       {{ (claude_code_operator_settings.content | b64decode | from_json).outputStyle | default('')
@@ -173,11 +179,22 @@
          else {} }}
     _kept: >-
       {{ _current | dict2items | rejectattr('key', 'eq', 'outputStyle') | list | items2dict }}
-    _wanted: >-
+    _styled: >-
       {{ (_current | combine({'outputStyle': _style}) if _style | length > 0 else _current)
          if claude_code_agent_operator_config
          else (_kept if _style | length > 0 and _current.outputStyle | default('') == _style
                else _current) }}
+    _cap: "{{ claude_code_rc_pytest_workers | string }}"
+    _env: "{{ _styled.env | default({}) }}"
+    _env_wanted: >-
+      {{ _env | combine({'PYTEST_XDIST_AUTO_NUM_WORKERS': _cap})
+         if claude_code_login_caps_enabled
+         else (_env | dict2items | rejectattr('key', 'eq', 'PYTEST_XDIST_AUTO_NUM_WORKERS')
+               | list | items2dict
+               if _env.PYTEST_XDIST_AUTO_NUM_WORKERS | default('') == _cap else _env) }}
+    _wanted: >-
+      {{ _styled | combine({'env': _env_wanted}) if _env_wanted | length > 0
+         else _styled | dict2items | rejectattr('key', 'eq', 'env') | list | items2dict }}
   ansible.builtin.copy:
     content: "{{ _wanted | to_nice_json(indent=2, sort_keys=False, ensure_ascii=False) }}\n"
     dest: "{{ claude_code_agent_user_home }}/.claude/settings.json"

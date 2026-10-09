@@ -3,7 +3,7 @@
 
 `roles/setup/claude_code/tasks/agent_operator_config.yml` copies the operator's user
 CLAUDE.md, rules, output styles and skills to `claude`, root-owned and with no hooks, and sets
-`outputStyle` in the agent's own settings.json. `claude_code_agent_operator_config` drives it
+`outputStyle` and the pytest worker cap in the agent's own settings.json. `claude_code_agent_operator_config` drives it
 both ways. A leg that slips fails no deploy: the agent still runs, with the wrong instructions
 or with a style Claude Code cannot load.
 
@@ -153,7 +153,12 @@ def test_the_template_imports_the_copied_file_only_while_the_switch_is_true() ->
     assert "operator/CLAUDE.md" not in off and not re.search(r"^@", off, re.M)
 
 
-def agent_style(switch: bool, operator: dict | None, agent: dict | None) -> dict:
+SETTINGS_TASK = "Set the agent's output style and pytest worker cap"
+
+
+def agent_style(
+    switch: bool, operator: dict | None, agent: dict | None, caps: bool = False
+) -> dict:
     """What the settings task writes (its `_wanted`) given each side's settings.json."""
 
     def content(data: dict | None):
@@ -163,11 +168,11 @@ def agent_style(switch: bool, operator: dict | None, agent: dict | None) -> dict
             else {"content": base64.b64encode(json.dumps(data).encode()).decode()}
         )
 
-    task = named(
-        operator_tasks(), "Set the agent's output style to the operator's, or remove it"
-    )
+    task = named(operator_tasks(), SETTINGS_TASK)
     variables = {
         SWITCH: switch,
+        "claude_code_login_caps_enabled": caps,
+        "claude_code_rc_pytest_workers": 4,
         "claude_code_operator_settings": content(operator),
         "claude_code_agent_settings": content(agent),
     }
@@ -216,10 +221,30 @@ def test_the_false_arm_removes_the_style_only_while_it_is_the_operators() -> Non
     assert theirs["wanted"] == theirs["current"] == {"outputStyle": "mine"}
 
 
+def test_the_caps_arm_sets_the_pytest_cap_and_keeps_the_other_env_keys() -> None:
+    agent = {"env": {"OTHER": "x"}, "theme": "dark"}
+    wanted = agent_style(False, STYLE, agent, caps=True)["wanted"]
+    assert wanted == {
+        "env": {"OTHER": "x", "PYTEST_XDIST_AUTO_NUM_WORKERS": "4"},
+        "theme": "dark",
+    }
+    # No env block yet: one is created holding only the cap.
+    assert agent_style(False, STYLE, {}, caps=True)["wanted"] == {
+        "env": {"PYTEST_XDIST_AUTO_NUM_WORKERS": "4"}
+    }
+
+
+def test_caps_off_removes_the_pytest_cap_only_while_it_is_the_roles() -> None:
+    ours = agent_style(False, STYLE, {"env": {"PYTEST_XDIST_AUTO_NUM_WORKERS": "4"}})
+    assert ours["wanted"] == {}
+    kept = {"env": {"PYTEST_XDIST_AUTO_NUM_WORKERS": "4", "OTHER": "x"}}
+    assert agent_style(False, STYLE, kept)["wanted"] == {"env": {"OTHER": "x"}}
+    theirs = agent_style(False, STYLE, {"env": {"PYTEST_XDIST_AUTO_NUM_WORKERS": "2"}})
+    assert theirs["wanted"] == theirs["current"]
+
+
 def test_settings_json_stays_the_agents_and_is_written_only_on_a_change() -> None:
-    task = named(
-        operator_tasks(), "Set the agent's output style to the operator's, or remove it"
-    )
+    task = named(operator_tasks(), SETTINGS_TASK)
     args = task["ansible.builtin.copy"]
     assert args["owner"] == "{{ claude_code_agent_user }}"
     assert task["when"] == "_wanted != _current"
