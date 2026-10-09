@@ -77,6 +77,8 @@ def test_the_true_arm_installs_the_four_pieces_root_owned_and_without_hooks() ->
     assert "--chown=root:root" in argv and "--chmod=D0755,F0644,Fa+X" in argv
     # -L dereferences the symlinks chezmoi leaves; trailing slashes copy contents, not the dir.
     assert re.fullmatch(r"-r\w*L\w*", argv[1])
+    # rsync applies --chown to an existing directory only when it also preserves owner and group.
+    assert "o" in argv[1] and "g" in argv[1]
     assert argv[-2:] == [
         "/home/ubuntu/.claude/skills/",
         "/var/lib/claude/.claude/skills/",
@@ -114,15 +116,21 @@ def test_the_false_arm_removes_what_root_installed_and_only_that() -> None:
     for switch, expected in ((True, "directory"), (False, "absent")):
         assert evaluate(state, {SWITCH: switch}) == expected
 
-    look = named(task_list, "Look for the trees a previous apply copied")
-    assert look["loop"] == TREES and look["when"] == f"not {SWITCH}"
+    marker = named(
+        task_list, "Look for a copy of the operator's config from an earlier apply"
+    )
+    assert marker["ansible.builtin.stat"]["path"].endswith("/operator/CLAUDE.md")
     remove = named(
         task_list, "Remove the operator's config from the agent when it is switched off"
     )
     assert remove["ansible.builtin.file"]["state"] == "absent"
-    # A tree the agent replaced is its own: only a path root owns goes.
-    assert f"not {SWITCH}" in remove["when"]
-    assert "item.stat.pw_name == 'root'" in remove["when"]
+    assert remove["loop"] == TREES
+    # Ownership cannot mark the copy: agent_user.yml hands root-owned home paths to the agent.
+    assert remove["when"] == [
+        f"not {SWITCH}",
+        "claude_code_operator_copied.stat.exists",
+    ]
+    assert "pw_name" not in json.dumps(remove)
 
 
 def test_the_template_imports_the_copied_file_only_while_the_switch_is_true() -> None:
