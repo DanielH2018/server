@@ -156,7 +156,12 @@ and re-running it, not by reasoning:
    the image pin and the automation). The other three are fixtures for a new role, so each now
    names a `roles/k8s/` path marked "(a new role, not yet merged)". This rule is a
    diagnosis, not yet a measurement: the sweep deleted its per-run output, so the next hermetic
-   sweep is what confirms it.
+   sweep is what confirms it. Of the sweep's two 1/3 cases, `008` was missing the `findings.py
+   list` output its skill's priming step asks for, and now carries it. `006` is unchanged. It
+   cites `roles/k8s/traefik/templates/middleware.yaml.j2`, which does not exist, but each live
+   file tried in its place makes finding 2 false: compression is attached entrypoint-wide in
+   `dynamic.yaml.j2`. One pass in three also fits ordinary variance, so the next sweep decides
+   whether `006` needs a rebuild (#4020 tracks the path).
 
 **Grade judgment in the rubric, not the regex.** `skeptic/003` first asserted
 `must_not_match: REFUTED`, which fires on "this is *not* refuted" — the assertion rejected correct
