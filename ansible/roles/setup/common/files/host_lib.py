@@ -45,8 +45,8 @@ DISCORD_TRUNCATED = "\n…(truncated)"
 
 # discord_post's opt-in spool (#3905). A daily script spools one message a day, so 50 holds an
 # outage far longer than the three days of #3882, and a revoked webhook cannot grow it without
-# bound. Four flushed plus the new post is five, the size of Discord's per-webhook burst, so a
-# flush after an outage does not 429 itself.
+# bound. A flush posts at most four, so a backlog drains over several calls instead of in one
+# burst; a 429 from a burst only re-queues the message anyway.
 DISCORD_SPOOL_MAX = 50
 DISCORD_SPOOL_FLUSH_MAX = 4
 
@@ -286,8 +286,9 @@ def discord_post(
     ignores the return value, so before #3905 a post sent while the host could not reach Discord
     was lost. With ``spool_dir`` set, a post that fails for a reason another attempt can fix
     (no network, a 5xx, a 429) is queued as a file there. The next call with the same
-    ``spool_dir`` first posts what is queued, oldest first, each ending in a ``(delayed: first
-    attempt <UTC time>)`` line. While the queue cannot be delivered, a new message joins it
+    ``spool_dir`` first posts up to ``DISCORD_SPOOL_FLUSH_MAX`` queued messages, oldest first,
+    each ending in a ``(delayed: first attempt <UTC time>)`` line. Any beyond that wait for a
+    later call, so a long backlog can arrive after the new post. While the queue cannot be delivered, a new message joins it
     without its own attempt. A caller that gates a marker on the return value must NOT pass
     ``spool_dir``, since its next run re-sends the message and the spool would post it twice.
     The return value is unchanged: False means "not delivered yet", queued or not.
