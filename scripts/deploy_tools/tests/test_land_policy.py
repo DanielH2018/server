@@ -175,6 +175,18 @@ def test_an_approved_pr_merges_directly_at_the_checked_head(landing, tmp_path):
     assert f"sha={HEAD}" in call[1]
 
 
+def test_the_auto_merge_arm_is_pinned_to_the_checked_head(landing, tmp_path):
+    """A PR with no review decision takes the auto-merge path, which must carry the pin too.
+
+    An empty decision is the only one left on that path: REVIEW_REQUIRED and APPROVED merge
+    directly, and CHANGES_REQUESTED is refused.
+    """
+    _, calls = _arm(landing, tmp_path, _fakes(arm={**_ARM, "reviewDecision": ""}))
+    (call,) = _merge_calls(calls)
+    assert "--auto" in call[1]
+    assert call[1][-2:] == ("--match-head-commit", HEAD)
+
+
 def test_a_head_that_moves_after_the_checks_stops_the_merge(landing):
     """The push lands after arm_merge read the head; await_merge must not merge it."""
     ln, calls = landing(
