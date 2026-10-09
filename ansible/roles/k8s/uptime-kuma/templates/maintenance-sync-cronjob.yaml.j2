@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 {#
   Keeps ONE Kuma maintenance window — the weekly reboot's — matching the schedule
   group_vars/all.yml declares. Six stages, because only kuma-cli can talk to Kuma, only
@@ -98,26 +100,14 @@ spec:
                     secretKeyRef:
                       name: autokuma-credentials
                       key: username
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: maintenance-sync-work
                   mountPath: /work
                 - name: maintenance-sync-credentials
                   mountPath: /etc/kuma
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_maintenance_sync_cpu_limit, mem_limit=uptime_kuma_k8s_maintenance_sync_mem_limit, cpu_request=uptime_kuma_k8s_maintenance_sync_cpu_request, mem_request=uptime_kuma_k8s_maintenance_sync_mem_request) }}
 {# Never fails the pod: an unreadable /metrics writes `null`, and the render stage then declares
    every monitor, which is the window as it was before #3506. Kuma's Service was reachable a
    moment ago, so this stage carries no retry loop of its own. #}
@@ -130,13 +120,7 @@ spec:
                 - --metrics-url=http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}/metrics
                 - --api-key-file=/etc/kuma/metrics_api_key
                 - --out=/work/down.json
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: maintenance-sync-work
                   mountPath: /work
@@ -146,13 +130,7 @@ spec:
                 - name: maintenance-sync-credentials
                   mountPath: /etc/kuma
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_maintenance_sync_cpu_limit, mem_limit=uptime_kuma_k8s_maintenance_sync_mem_limit, cpu_request=uptime_kuma_k8s_maintenance_sync_cpu_request, mem_request=uptime_kuma_k8s_maintenance_sync_mem_request) }}
             - name: select
               image: {{ uptime_kuma_k8s_status_page_sync_image }}
               command:
@@ -162,26 +140,14 @@ spec:
                 - --window=/config/window.json
                 - --maintenances=/work/maintenances.json
                 - --out=/work/live-id.txt
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: maintenance-sync-work
                   mountPath: /work
                 - name: maintenance-sync-config
                   mountPath: /config
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_maintenance_sync_cpu_limit, mem_limit=uptime_kuma_k8s_maintenance_sync_mem_limit, cpu_request=uptime_kuma_k8s_maintenance_sync_cpu_request, mem_request=uptime_kuma_k8s_maintenance_sync_mem_request) }}
 {# `maintenance list` carries the schedule and NOT the monitors: Kuma's getMaintenanceList emits
    toPublicJSON(), and only getMaintenance fills in monitors and statusPages (server/model/
    maintenance.js, 2.5.5). Membership is the field that decays, so the detail read is the one
@@ -209,26 +175,14 @@ spec:
                     secretKeyRef:
                       name: autokuma-credentials
                       key: username
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: maintenance-sync-work
                   mountPath: /work
                 - name: maintenance-sync-credentials
                   mountPath: /etc/kuma
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_maintenance_sync_cpu_limit, mem_limit=uptime_kuma_k8s_maintenance_sync_mem_limit, cpu_request=uptime_kuma_k8s_maintenance_sync_cpu_request, mem_request=uptime_kuma_k8s_maintenance_sync_mem_request) }}
             - name: render
               image: {{ uptime_kuma_k8s_status_page_sync_image }}
               command:
@@ -242,26 +196,14 @@ spec:
                 - --down=/work/down.json
                 - --out=/work/desired.json
                 - --mode-out=/work/mode
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: maintenance-sync-work
                   mountPath: /work
                 - name: maintenance-sync-config
                   mountPath: /config
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_maintenance_sync_cpu_limit, mem_limit=uptime_kuma_k8s_maintenance_sync_mem_limit, cpu_request=uptime_kuma_k8s_maintenance_sync_cpu_request, mem_request=uptime_kuma_k8s_maintenance_sync_mem_request) }}
           containers:
 {# No desired.json means the live window already says what the reboot schedule implies, which
    is the steady state. Kuma's editMaintenance rewrites the row AND deletes and reinserts every
@@ -288,26 +230,14 @@ spec:
                     secretKeyRef:
                       name: autokuma-credentials
                       key: username
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: maintenance-sync-work
                   mountPath: /work
                 - name: maintenance-sync-credentials
                   mountPath: /etc/kuma
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_maintenance_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_maintenance_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_maintenance_sync_cpu_limit, mem_limit=uptime_kuma_k8s_maintenance_sync_mem_limit, cpu_request=uptime_kuma_k8s_maintenance_sync_cpu_request, mem_request=uptime_kuma_k8s_maintenance_sync_mem_request) }}
           volumes:
             - name: maintenance-sync-work
               emptyDir: {}

@@ -69,7 +69,9 @@ through the macro's `run_as_user`/`fs_group`/`non_root` arguments — a pod that
 or supplementalGroups writes the whole block itself and passes none of them. ENFORCED by
 `ansible/tests/k8s/test_workload_shell_uses_the_macros.py`, which refuses an owned field
 written out by hand. The container-level `securityContext` is `hardened_security_context`
-from `security-context.yml.j2`, as before.
+from `security-context.yml.j2`, as before. A CronJob's containers sit one level deeper, under
+`jobTemplate`, and take the 14-space twins `job_hardened_security_context` and
+`job_container_resources` instead.
 
 **Name every `volumes[].name` for the workload or component that owns it** — `sonarr-config`,
 never `config` — so a mount reads unambiguously in a diff or a `kubectl describe`. ENFORCED by

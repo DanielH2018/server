@@ -7,10 +7,13 @@
   Role's `rules[].resources`, which is a list of API resource names. Both sit at a different
   depth and neither has cpu/memory under it.
 
-  Indentation is fixed at 10 spaces, the container-list depth in a Deployment, DaemonSet,
-  StatefulSet or CronJob pod template here — 106 of the fleet's 108 container blocks. The two
-  nested deeper (a CronJob's `jobTemplate`) stay inline, for the same reason the securityContext
-  macro leaves its two: a macro that can emit at two depths can emit at the wrong one.
+  Indentation is fixed at 10 spaces, the container-list depth in a Deployment, DaemonSet or
+  StatefulSet pod template. A CronJob's containers sit one level further in, under
+  `jobTemplate`, and take `job_container_resources()`: the same arguments and body, fixed at 14
+  spaces. Each macro emits at one depth, so neither takes an indent argument. Calling the
+  10-space one at CronJob depth puts `resources:` on the pod spec and leaves the container with
+  none, which ansible/tests/k8s/test_namespace_resource_defaults.py's
+  test_every_rendered_container_sets_requests_and_limits reports.
 
   image-builder's build Job is outside `_k8s_render.rendered_docs()`, being caller-rendered.
   test_namespace_resource_defaults.py's
@@ -46,4 +49,9 @@
 {% if extra %}
               {{ extra }}: 1
 {% endif %}
+{%- endmacro %}
+
+{# The same block at CronJob `jobTemplate` depth (14 spaces) — see "Indentation" above. #}
+{% macro job_container_resources(cpu_limit, mem_limit, cpu_request, mem_request, extra=none) %}
+{{ container_resources(cpu_limit=cpu_limit, mem_limit=mem_limit, cpu_request=cpu_request, mem_request=mem_request, extra=extra) | indent(4, first=true) }}
 {%- endmacro %}

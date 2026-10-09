@@ -119,6 +119,13 @@ def _kuma_dials(subject: Subject) -> list[tuple[int, str]]:
 _LSIO_LITERAL = re.compile(r"^\s*- name: (PUID|PGID)\s*$", re.MULTILINE)
 _LSIO_CALL = "{{ lsio_env() }}"
 
+# ── A CronJob container takes its resources from job_container_resources() ────────────────
+
+_JOB_RESOURCES_LITERAL = re.compile(
+    r"^ {14}resources:\n {16}(limits|requests):", re.MULTILINE
+)
+_JOB_RESOURCES_CALL = "{{ job_container_resources("
+
 
 ROWS = (
     Census(
@@ -355,6 +362,51 @@ ROWS = (
                 "ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2",
                 "ansible/roles/k8s/home-assistant/templates/deployment.yaml.j2",
                 "ansible/templates/arr-deployment.yml.j2",
+            }
+        ),
+    ),
+    Census(
+        name="cronjob-container-resources-is-the-macro",
+        reason=(
+            "A CronJob's containers sit under `jobTemplate`, 14 spaces in, and take their "
+            "requests and limits from `job_container_resources()` in "
+            "ansible/templates/container-resources.yml.j2 (#3721). The 10-space "
+            "`container_resources()` left that depth out, and 12 CronJob containers there had "
+            "become hand-written copies. A copy is where a request loses its limit and is "
+            "refused at admission against the namespace default."
+        ),
+        files=lambda: tracked("ansible/roles/k8s/*/templates/*.j2"),
+        offence=lambda s: [
+            f"`resources.{m.group(1)}` written out instead of job_container_resources()"
+            for m in _JOB_RESOURCES_LITERAL.finditer(s.text)
+        ],
+        count=lambda s: s.text.count(_JOB_RESOURCES_CALL),
+        red=(
+            Subject(
+                "cronjob.yaml.j2",
+                "              resources:\n                limits:\n"
+                '                  cpu: "100m"\n',
+            ),
+        ),
+        green=(
+            Subject(
+                "cronjob.yaml.j2",
+                f'{_JOB_RESOURCES_CALL}cpu_limit="1", mem_limit="1Gi", '
+                'cpu_request="1", mem_request="1Gi") }}\n',
+            ),
+            # Pod-template depth belongs to container_resources(), not to this row.
+            Subject(
+                "deployment.yaml.j2", "          resources:\n            limits:\n"
+            ),
+        ),
+        # 12 calls across 4 templates when the row landed (2026-10-09).
+        min_matches=12,
+        must_find=frozenset(
+            {
+                "ansible/roles/k8s/configarr/templates/cronjob.yaml.j2",
+                "ansible/roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2",
+                "ansible/roles/k8s/uptime-kuma/templates/maintenance-sync-cronjob.yaml.j2",
+                "ansible/roles/k8s/uptime-kuma/templates/status-page-sync-cronjob.yaml.j2",
             }
         ),
     ),
