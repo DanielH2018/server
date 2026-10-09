@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from diagnostics.probe_lib import landing
+from diagnostics.probe_lib import landing_blockers as landing
 from lib.repo_paths import REPO
 
 PORCELAIN = """worktree /home/ubuntu/server
@@ -109,9 +109,38 @@ def test_an_owed_manual_plane_on_the_deployer_host_is_a_blocker():
         }
     )
     snap = landing.collect(lambda: ("", owed), fake_deploy_ui(CLEAR), fake_run(GREEN))
-    assert len(snap["manual_planes"]) == 1
-    assert len(snap["blockers"]) == 1
-    assert "`k3s` setup role" in snap["blockers"][0]
+    assert snap["manual_planes"][0]["role"] == "k3s"
+    assert "k3s-bringup.yml" in snap["manual_planes"][0]["line"]
+    # No age in the blocker: the mod puts it in the system prompt, read every minute.
+    assert snap["blockers"] == [
+        "the `k3s` setup role is merged and unapplied; `probe.py landing` names the apply"
+    ]
+
+
+def test_a_run_verdict_comes_from_deploy_ui_when_its_log_is_not_on_this_host():
+    def get_json(path):
+        if path == "/api/state":
+            return CLEAR
+        return {"runs": [{"kind": "land", "pr": "7", "log": "/nowhere/land7.log"}]}
+
+    def get_text(path):
+        assert path == "/api/log?path=/nowhere/land7.log"
+        return "merging\nVERDICT: landed (pr=7)\n"
+
+    snap = landing.collect(lambda: None, get_json, fake_run(GREEN), get_text)
+    assert snap["runs"][0]["verdict"] == "VERDICT: landed (pr=7)"
+
+
+def test_a_run_with_no_verdict_line_yet_has_none():
+    def get_json(path):
+        if path == "/api/state":
+            return CLEAR
+        return {"runs": [{"kind": "land", "pr": "7", "log": "/nowhere/land7.log"}]}
+
+    snap = landing.collect(
+        lambda: None, get_json, fake_run(GREEN), lambda path: "merging\n"
+    )
+    assert snap["runs"][0]["verdict"] is None
 
 
 def test_a_failing_source_is_named_and_leaves_the_others_read():
@@ -148,15 +177,21 @@ def _deck_snapshot_fields(dts: str) -> set[str]:
     return set(re.findall(r"^\s+(\w+):", body.group(1), re.M))
 
 
+DECK_TYPES = REPO / ".claude/plugins/deck/types/index.d.ts"
+
+
+def _drift(snap: dict, dts: str) -> set[str]:
+    """The keys the snapshot and the mod's `DeckSnapshot` type do not share."""
+    return set(snap) ^ _deck_snapshot_fields(dts)
+
+
 def test_the_snapshot_carries_exactly_the_fields_the_deck_mod_types():
-    dts = (REPO / ".claude/plugins/deck/types/index.d.ts").read_text()
-    typed = _deck_snapshot_fields(dts)
-    assert {"hold", "blockers", "worktrees"} <= typed
+    dts = DECK_TYPES.read_text()
+    assert {"hold", "blockers", "worktrees"} <= _deck_snapshot_fields(dts)
     snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
-    assert set(snap) == typed
+    assert _drift(snap, dts) == set()
 
 
 def test_a_field_the_mod_does_not_type_is_caught():
-    dts = "export type DeckSnapshot = {\n  hold: string\n  blockers: string[]\n}\n"
-    assert _deck_snapshot_fields(dts) == {"hold", "blockers"}
-    assert _deck_snapshot_fields(dts) != {"hold", "blockers", "extra"}
+    snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
+    assert _drift({**snap, "extra": 1}, DECK_TYPES.read_text()) == {"extra"}

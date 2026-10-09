@@ -38,7 +38,7 @@ EXPECTED_MODULES = frozenset(
         "b2_ledger",
         "ha",
         "health",
-        "landing",
+        "landing_blockers",
         "longhorn",
         "metrics",
         "monitors",

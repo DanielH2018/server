@@ -659,6 +659,11 @@ jobs:
   # pins the CLI to the version whose API the mod was written and type-checked against, so a
   # bump is a deliberate change that re-runs this job. `--ignore-scripts` is safe: the package
   # ships the native binary in its platform dependency, and the postinstall only relinks it.
+  #
+  # On a push to master the steps below skip and the job passes, as renovate-config skips its
+  # push run. The PR run already checked the mod, and an npm outage on a master push would turn
+  # the required context red and park every landing behind a check of a file the push did not
+  # change. A dispatch still runs it, as every job here does.
   deck_mod:
     name: deck mod (claude plugin validate + test)
     runs-on: ubuntu-26.04
@@ -682,18 +687,18 @@ jobs:
             fetch --no-tags origin "$BASE_REF"
           if git diff --quiet "origin/$BASE_REF...HEAD" -- .claude/plugins/ .github/claude-cli/ .github/workflows/ci.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "The deck mod is untouched by this PR; it is checked on the merge to master."
+            echo "The deck mod is untouched by this PR, so there is nothing to check."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         with:
           node-version: "24.21.0"
 
       - name: Validate and test the deck mod
-        if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
           set -euo pipefail
           npm ci --ignore-scripts --prefix .github/claude-cli

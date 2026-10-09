@@ -32,8 +32,11 @@ export function blockedSection(blockers: readonly string[]): string {
   return [
     '# Landing is blocked',
     '',
-    "CLAUDE.md's *When to wait* applies: do not merge, land or deploy until these clear.",
-    'The deck mod read them from `probe.py landing` within the last minute.',
+    "CLAUDE.md's *When to wait* applies to landing or deploying a change of your own: name the",
+    'blocker below that applies, then stop. Each blocker names its own way out, and taking it',
+    '(applying an owed plane, fixing a red master) is not blocked.',
+    'The deck mod read these from `probe.py landing`. Run it for the current state and the',
+    'apply commands.',
     '',
     ...blockers.map(b => `- ${b}`),
   ].join('\n')
@@ -41,7 +44,21 @@ export function blockedSection(blockers: readonly string[]): string {
 
 // Module variables: a hot reload starts them over, which costs one extra probe run.
 let inFlight: Promise<void> | undefined
-let root: string | undefined
+let root = ''
+
+/**
+ * Finds the checkout the session runs in and whether it carries the probe. A session outside
+ * the server repo answers false, and the mod then starts no timer there.
+ */
+async function findProbe($: EngineInterface): Promise<boolean> {
+  const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'])
+  if (top.exitCode !== 0) {
+    return false
+  }
+  root = top.stdout.trim()
+  const probe = await $.process.run(['test', '-f', `${root}/scripts/diagnostics/probe.py`])
+  return probe.exitCode === 0
+}
 
 /** Runs the probe once and stores its snapshot; a call made while one runs joins it. */
 function refresh($: EngineInterface): Promise<void> {
@@ -53,10 +70,6 @@ function refresh($: EngineInterface): Promise<void> {
 
 async function readProbe($: EngineInterface): Promise<void> {
   try {
-    if (root === undefined) {
-      const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'])
-      root = top.exitCode === 0 ? top.stdout.trim() : ''
-    }
     const ran = await $.process.run(PROBE, {
       cwd: root || undefined,
       timeoutMs: PROBE_TIMEOUT_MS,
@@ -97,8 +110,10 @@ export const register: Register = on => {
     if ((await $.store.get(STORE_PANE)) === true) {
       void $.ui.open({ id: PANE, title: 'Deck' })
     }
-    void refresh($)
-    $.clock.every(REFRESH_MS, () => refresh($))
+    if (await findProbe($)) {
+      void refresh($)
+      $.clock.every(REFRESH_MS, () => refresh($))
+    }
 
     return next(e)
   })
@@ -197,6 +212,9 @@ export const register: Register = on => {
       const owed =
         snap.manual_planes === null ? 'unknown here' : String(snap.manual_planes.length)
       add(`hold: ${hold}   master CI: ${ci}   manual planes: ${owed}`, undefined, true)
+      for (const plane of snap.manual_planes ?? []) {
+        add(`  owed: ${plane.line}`, 'yellow')
+      }
       add('')
       add('In flight')
       if (snap.runs === null) {

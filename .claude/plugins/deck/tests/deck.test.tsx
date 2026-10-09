@@ -91,6 +91,9 @@ function world(on: On, answer: { snap: DeckSnapshot | 'fail' }) {
     if (e.argv[0] === 'git') {
       return ran(0, '/repo\n')
     }
+    if (e.argv[0] === 'test') {
+      return ran(0, '')
+    }
     if (answer.snap === 'fail') {
       return ran(2, '')
     }
@@ -198,4 +201,24 @@ test('/deck opens the pane and the same command closes it', async ($, on) => {
   expect((await deck($, '')).text).toBe('Deck pane opened.')
   expect((await deck($, '')).text).toBe('Deck pane closed.')
   expect((await deck($, 'band maybe')).text).toContain('Usage')
+})
+
+test('a session in a checkout without probe.py runs no probe', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const probeRuns: string[] = []
+  on('process.run', (_$, e) => {
+    if (e.argv[0] === 'test') {
+      return { value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    if (e.argv[0] === 'uv') {
+      probeRuns.push(e.argv.join(' '))
+    }
+    return { value: { exitCode: 0, stdout: '/elsewhere\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start(START)
+  await clock.advance(180_000)
+  expect(probeRuns).toEqual([])
 })

@@ -1,4 +1,4 @@
-// The document `probe.py landing --json` prints. `scripts/diagnostics/probe_lib/landing.py`
+// The document `probe.py landing --json` prints. `scripts/diagnostics/probe_lib/landing_blockers.py`
 // owns the shape; a field is null when its source could not be read.
 export type DeckRun = {
   kind: string
@@ -23,7 +23,7 @@ export type DeckSnapshot = {
   host: string
   read_at: number
   hold: { sha: string; planes: string[] } | null
-  manual_planes: string[] | null
+  manual_planes: { role: string; line: string }[] | null
   ci: { state: string; sha: string; url: string } | null
   runs: DeckRun[] | null
   last_verdict: { log: string; verdict: string | null } | null

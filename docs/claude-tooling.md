@@ -236,7 +236,11 @@ agrees. Each fact comes from a reader that already exists:
 - Master CI is the newest `ci.yml` run on master. A run in progress is pending, and a
   conclusion in `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict. Neither counts as red.
 - deploy-ui's `/api/inflight` lists the runs in flight. A run's `VERDICT:` line is read with
-  `land_lib.detach.verdict_in` where its log is readable on this host.
+  `land_lib.detach.verdict_in` where its log is readable on this host. Elsewhere it comes from
+  deploy-ui's `/api/log`, which serves only the logs of runs deploy-ui started. So off
+  daniel-box, a terminal run shows no verdict.
+- A blocker line carries no age. The mod puts the blockers in the system prompt, and a line
+  that changed each minute would rewrite the prompt on every turn.
 - `findings.py claims --json` gives the claims, joined to `git worktree list` by branch.
 
 A source that fails is named in `errors`, and its field stays `null`. One read takes about 3 s
@@ -463,7 +467,8 @@ Its three parts:
   restores it.
 
 The mod keeps each toggle in `$.store`, so a toggle survives into the next session. A timer runs
-`probe.py landing --json` every 60 s. `/deck refresh` runs it at once.
+`probe.py landing --json` every 60 s. `/deck refresh` runs it at once. In a checkout without
+`scripts/diagnostics/probe.py`, the mod starts no timer.
 
 To load it for one session, start Claude Code with `claude --plugin-dir .claude/plugins/deck`.
 A project's settings cannot name a plugin folder. To load it in every session, set
@@ -472,7 +477,9 @@ repo owns.
 
 To check a change to the mod, run `claude plugin validate .claude/plugins/deck` and
 `claude plugin test .claude/plugins/deck`. CI's `deck_mod` job runs both with the CLI version
-that `.github/claude-cli/package-lock.json` pins, and the `prek` gate requires it. The test file mocks the probe and runs each drawing on
+that `.github/claude-cli/package-lock.json` pins, and the `prek` gate requires it. The job
+checks the mod on a pull request that touches it and on a dispatch, and passes without checking
+on a push to master. The test file mocks the probe and runs each drawing on
 the `terminal` and `desktop` surfaces. `scripts/diagnostics/tests/test_probe_landing.py` holds
 the probe's JSON keys equal to the `DeckSnapshot` fields in `types/index.d.ts`.
 

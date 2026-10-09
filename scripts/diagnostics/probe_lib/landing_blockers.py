@@ -12,21 +12,26 @@ Every fact comes from a reader that already exists; this module only joins them:
 - **Manual planes.** Read from the ledger through `gitops_ledger.manual_plane_entries`, and
   worded by `deployer_park.manual_plane_lines`, the banner's renderer. deploy-ui does not serve
   this class, so off the deployer's host it is `null` (unknown), never `[]`. An empty list
-  would read as "nothing owed" when the truth is "not readable from here".
+  would read as "nothing owed" when the truth is "not readable from here" (#3761).
 - **Master CI.** The newest `ci.yml` run on master, through `gh`. A conclusion in
   `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict and a run in progress is pending.
   Neither is red, per `docs/landing.md`.
 - **Runs in flight.** deploy-ui's `/api/inflight`: every `land.sh` and `deploy.sh` family on
   the deployer's host. A run's `VERDICT:` line comes from `land_lib.detach.verdict_in` where
-  its log is readable on this host.
-- **Last verdict.** The newest `land*.log` in `land_lib.detach.default_log_dir()`, which is
-  this session's own `$CLAUDE_JOB_DIR/tmp` when one is set.
+  its log is readable on this host, and from deploy-ui's `/api/log` tail elsewhere. That
+  endpoint serves only the logs of runs deploy-ui started, so a terminal run's verdict shows
+  only on the deployer's host.
+- **Last verdict.** The newest `land*.log` in `land_lib.detach.default_log_dir()`, as this
+  process sees it: `$CLAUDE_JOB_DIR/tmp` when that variable is set, otherwise
+  `/tmp/homelab-landings-<user>`.
 - **Worktrees and claims.** `git worktree list` and `findings.py claims --json`, joined on
   the branch name.
 
 `blockers` is the list a landing would stop on: a non-empty hold, a red master CI, or an owed
 manual plane. It is computed here rather than in the mod so that the band, the model's
-system-prompt section and this command's text view cannot disagree. A source that fails is
+system-prompt section and this command's text view cannot disagree. A blocker line carries no
+age or other value that moves each minute: the mod puts the list in the system prompt, and a
+line that changed every read would rewrite the prompt on every turn. A source that fails is
 named in `errors` and leaves its own field `null`; it never fails the whole read.
 
 Exit code: 0 when nothing blocks a landing, 1 when something does.
@@ -46,18 +51,19 @@ import os
 import socket
 import subprocess
 import time
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
-from land_lib.detach import default_log_dir, verdict_in
+from land_lib.detach import _VERDICT_LINE, default_log_dir, verdict_in
 from lib import deployer_park
-from lib.repo_paths import REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
-# `deployer_park` has put the deployer's `files/` on sys.path, so these resolve to the
-# deployer's own modules rather than a copy of their rules.
+# The deployer's own modules, so the CI and ledger rules are its rules and not a copy.
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deploy_git import _CI_NO_VERDICT_CONCLUSIONS
-from gitops_ledger import held_planes
+from gitops_ledger import held_planes, manual_plane_entries
 from gitops_markers import MARKERS
 
 # deploy-ui's daemon on the deployer's host: `deploy_ui_port` in
@@ -123,9 +129,26 @@ def blockers(snap: dict) -> list[str]:
         )
     if (snap.get("ci") or {}).get("state") == "red":
         out.append(f"master CI is red: {snap['ci'].get('url', '')}".rstrip(": "))
-    for line in snap.get("manual_planes") or []:
-        out.append(line.strip().removeprefix("✗ ").strip())
+    for owed in snap.get("manual_planes") or []:
+        out.append(
+            f"the `{owed['role']}` setup role is merged and unapplied; "
+            "`probe.py landing` names the apply"
+        )
     return out
+
+
+def manual_plane_rows(owed: str | None, now: float) -> list[dict]:
+    """Each owed `manual_plane` role with the banner's line for it, oldest first.
+
+    The line comes from `deployer_park.manual_plane_lines`, which walks the same entries in the
+    same order, so the two zip. The line carries the role's age and its way out.
+    """
+    entries, _ = manual_plane_entries(owed)
+    lines = deployer_park.manual_plane_lines(owed, now)
+    return [
+        {"role": e.role, "line": line.strip().removeprefix("✗ ").strip()}
+        for e, line in zip(entries, lines, strict=True)
+    ]
 
 
 def _owed_locally() -> tuple[str | None, str | None] | None:
@@ -139,9 +162,13 @@ def _owed_locally() -> tuple[str | None, str | None] | None:
     )
 
 
-def _get_json(path: str) -> dict:
+def _get_text(path: str) -> str:
     with urllib.request.urlopen(DEPLOY_UI_URL + path, timeout=HTTP_TIMEOUT_S) as resp:
-        return json.load(resp)
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def _get_json(path: str) -> dict:
+    return json.loads(_get_text(path))
 
 
 def _run(argv: list[str]) -> str:
@@ -167,13 +194,15 @@ def collect(
     owed_locally: Callable[[], tuple[str | None, str | None] | None] = _owed_locally,
     get_json: Callable[[str], dict] = _get_json,
     run: Callable[[list[str]], str] = _run,
+    get_text: Callable[[str], str] = _get_text,
 ) -> dict:
     """Read every source once. A source that fails is named in `errors`, its field `null`.
 
     Args:
         owed_locally: reads this host's deployer markers, or answers None off that host.
-        get_json: GETs one deploy-ui API path.
+        get_json: GETs one deploy-ui API path and parses it.
         run: runs an argv in the repo and answers its stdout.
+        get_text: GETs one deploy-ui API path as text, for `/api/log`.
     """
     snap: dict = {
         "host": socket.gethostname(),
@@ -200,7 +229,7 @@ def collect(
         if local is not None:
             sha, owed = local
             snap["hold"] = {"sha": sha or "", "planes": held_planes(owed)}
-            snap["manual_planes"] = deployer_park.manual_plane_lines(owed, time.time())
+            snap["manual_planes"] = manual_plane_rows(owed, time.time())
             return
         state = get_json("/api/state")
         snap["hold"] = {
@@ -233,6 +262,18 @@ def collect(
             "url": (newest or {}).get("url", ""),
         }
 
+    def verdict_of(log: str) -> str | None:
+        if not log:
+            return None
+        if Path(log).exists():
+            return verdict_in(Path(log))
+        try:
+            tail = get_text("/api/log?path=" + urllib.parse.quote(log))
+        except OSError:
+            return None
+        match = _VERDICT_LINE.search(tail)
+        return match.group(0) if match else None
+
     def read_runs():
         rows = get_json("/api/inflight").get("runs", [])
         snap["runs"] = [
@@ -241,7 +282,7 @@ def collect(
                 "pr": r.get("pr", ""),
                 "tag": r.get("tag", ""),
                 "elapsed_s": r.get("elapsed_s", 0),
-                "verdict": verdict_in(Path(r["log"])) if r.get("log") else None,
+                "verdict": verdict_of(r.get("log", "")),
             }
             for r in rows
         ]
@@ -294,6 +335,8 @@ def format_text(snap: dict) -> str:
             lines.append(
                 f"  {r['kind']} {what} {r['elapsed_s']}s  {r['verdict'] or ''}".rstrip()
             )
+    for owed in snap["manual_planes"] or []:
+        lines.append(f"  owed: {owed['line']}")
     if snap["last_verdict"]:
         lines.append(
             f"Last landing: {snap['last_verdict']['verdict'] or 'no VERDICT line'}"

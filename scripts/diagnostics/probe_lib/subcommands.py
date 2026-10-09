@@ -33,7 +33,7 @@ from diagnostics.probe_lib.b2_ledger import (
     run_b2_spend,
 )
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
-from diagnostics.probe_lib.landing import run_landing
+from diagnostics.probe_lib.landing_blockers import run_landing
 from diagnostics.probe_lib.health import run_health
 from diagnostics.probe_lib.longhorn import (
     run_b2_budget,
@@ -153,7 +153,7 @@ SUBCOMMANDS = [
         "landing",
         "what would stop a landing now, the runs in flight and the worktrees with their "
         "claims (exit 1 when something blocks)",
-        "landing",
+        "landing_blockers",
         run_landing,
     ),
 ]
