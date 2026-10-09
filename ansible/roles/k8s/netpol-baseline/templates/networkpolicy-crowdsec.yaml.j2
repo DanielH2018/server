@@ -51,7 +51,8 @@ spec:
         - port: 8080
           protocol: TCP
     # Metrics, cross-namespace to observability -- siblings in one from item, see the traefik
-    # policy's comment for why that distinction is load-bearing.
+    # policy's comment for why that distinction is load-bearing. The port is the `crowdsec`
+    # metrics item on crowdsec's containers_list entry, the one Prometheus scrapes.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -60,7 +61,7 @@ spec:
             matchLabels:
               app: prometheus
       ports:
-        - port: 6060
+        - port: {{ containers_list | metrics_port('crowdsec') }}
           protocol: TCP
 {% else %}
     # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
