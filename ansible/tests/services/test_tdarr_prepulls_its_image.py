@@ -13,7 +13,7 @@ play host; the second test holds that coupling.
 Run: uv run pytest ansible/tests/services/test_tdarr_prepulls_its_image.py
 """
 
-import yaml
+from lib import yaml_fast
 from _helpers import K8S_ROLES, load_defaults, load_tasks
 from _k8s_render import render_role_template
 
@@ -57,7 +57,7 @@ def test_the_local_pull_lands_on_the_node_the_media_volume_pins() -> None:
     # the local PV to the same `inventory_hostname`, on the claim tdarr mounts.
     # Rendered at a sentinel host, so a PV pinned to a literal name or to any other variable
     # renders something other than the sentinel and fails here.
-    pv = yaml.safe_load(
+    pv = yaml_fast.safe_load(
         render_role_template(
             "media-volume", "pv.yaml.j2", {"inventory_hostname": "sentinel-node"}
         )
