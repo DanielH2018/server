@@ -59,14 +59,11 @@ trust in Authelia (`roles/setup/k3s`), the Authelia client, and these defaults.
 - **A wrong value fails silently.** A bad issuer leaves the API server up and rejecting only
   OIDC logins, since the root kubeconfig and every ServiceAccount authenticate by other means.
   Verify a change here by logging in, not by a healthy pod.
-- **Three values must agree across three places**, and none of the disagreements produces an
-  error: the client id (here, Authelia's client, and the `audiences` of each issuer in the API
-  server's authentication config), the issuer URL (here, and one of that config's `jwt`
-  issuers), and the group (`headlamp_k8s_oidc_group`, and that config's groups prefix plus the
-  Authelia group). Each stays a literal in its own role, because a shared variable would put
-  the k3s role in every change and that role is applied by hand. A test ties each pair instead;
-  the client id's is
-  `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py::test_headlamp_client_id_agrees_across_authelia_headlamp_and_k3s`.
+- **Three values must agree across three places**, and no disagreement errors: the client id
+  (here, Authelia's client, and each issuer's `audiences` in the API server's auth
+  config), the issuer URL (here, and one of that config's `jwt` issuers), and the group
+  (`headlamp_k8s_oidc_group`, and that config's groups prefix plus the Authelia group).
+  ENFORCED: `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py`.
 - **The issuer is the PUBLIC name**, `auth.<domain>`, and one value serves both hostnames:
   Headlamp builds one provider at server start while Authelia's `iss` follows the request host.
   The API server trusts both Authelia issuers (`k3s_oidc_issuer_urls`), so the choice is not a
