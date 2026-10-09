@@ -1108,33 +1108,36 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   `CLUSTER_DEPENDENT`**, because it reads `CLUSTER_PROM_URL`.)
 - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` via
   its in-cluster Service, `down`
-  if ANY arm is silent — a silently dead Alloy→Loki pipeline (docker-proxy break,
-  positions-file corruption, relabel regression) that Loki's `/ready` Kuma probe stays green
-  through. **Arm 1 — file-tail union** `sum(count_over_time({job=~"authlog|syslog"}[3h]))`:
-  (`check.py`'s in-code default also lists `traefik`, but `LOKI_STREAM` in
-  `templates/env-secret.yaml.j2` overrides it and does not — the deployed selector is the two
-  named here, so traefik's freshness is NOT covered by this arm.)
-  counts the file-tailed streams — not one, so if Alloy dies they ALL fall silent together
-  while syslog's routine volume keeps a quiet night alive (no single low-volume file trips it) —
-  over a TOLERANT window. It deliberately EXCLUDES the `docker_sd` stream: Alloy stamps that
-  stream `job: docker` (so a bare `{job=~".+"}` would swallow it), and it dwarfs the file-tail
-  streams (~all 44 containers' stdout), so including it let a healthy container stream mask a
-  total file-tail outage — arm 1 could then only reach zero if Alloy was *totally* dead, which
-  arm 2 already catches (the 2026-07-07 blind-spot review re-scoped it to file-tail-only). The
-  window is wider than arm 2's because file-tail volume is low and dips overnight (a lone
-  `{job="syslog"}` over 10m false-paged 2026-06-23 — a 15m35s idle gap was observed). **Arm 2 —
-  docker stream** `sum(count_over_time({container=~".+"}[30m]))` (`LOKI_DOCKER_STREAM`): the
-  `docker_sd` stream carries a `container` label, no `job`, so it's exactly the one arm 1 excludes;
-  a docker_sd-specific break (docker-proxy down, the docker relabel regressing) silences every
-  container log while the file-tail streams keep flowing, and a tight window catches a total
-  Alloy death fast. **Arm 3 — daniel-pi** `sum(count_over_time({job="pi"}[3h]))`
+  if ANY arm is silent — a silently dead Alloy→Loki pipeline (a relabel regression,
+  positions-file corruption, a stale `/var/log` mount) that Loki's `/ready` Kuma probe stays
+  green through. Every selector is rendered in `templates/env-secret.yaml.j2` from the
+  `loki_streams` label owner in `group_vars/all.yml` (#3740). **Arm 1 — cluster file-tail
+  union** `sum(count_over_time({job=~"authlog|syslog", machine!="daniel-pi"}[3h]))`
+  (`LOKI_STREAM`): counts the cluster hosts' file-tailed streams — not one, so if Alloy's file
+  sources die they fall silent together while syslog's routine volume keeps a quiet night alive
+  (no single low-volume file trips it) — over a TOLERANT window. It EXCLUDES the pod streams:
+  they dwarf the file-tail streams, so including them let a healthy pod stream mask a total
+  file-tail outage (the 2026-07-07 blind-spot review re-scoped it to file-tail-only). It also
+  EXCLUDES `machine="daniel-pi"`: the Pi's health crons ship under the same `job="syslog"`,
+  ~72 lines per 3h measured 2026-10-09, so without the filter a total cluster file-tail outage
+  never reaches zero. The deployed selector lacked that filter from 2026-08-29, when the Pi
+  source was added, until #3739; the filter lived only in a Python default the template
+  already overrode. The window is wider than arm 2's because file-tail volume is low and dips
+  overnight (a lone `{job="syslog"}` over 10m false-paged 2026-06-23 — a 15m35s idle gap was
+  observed). **Arm 2 — cluster pod streams** `sum(count_over_time({job="k8s"}[30m]))`
+  (`LOKI_DOCKER_STREAM`): every pod's stdout, the stream arm 1 excludes. A pod-source break
+  silences every container log while the file-tail streams keep flowing, and a tight window
+  catches a total Alloy death fast. Until #3739 this arm counted `{container=~".+"}`, which
+  also matched the Pi's container streams (~1,940 lines per 30m measured 2026-10-09), so the
+  Pi alone kept it non-zero. **Arm 3 — daniel-pi** `sum(count_over_time({job="pi"}[3h]))`
   (`LOKI_PI_STREAM`, added 2026-08-25 review M-11): arms 1 and 2 only count CLUSTER streams, so
   the Pi's own Alloy could die with every cluster stream still flowing and both arms green —
   the Pi's logs simply stop arriving and nothing said so. Runs on the TOLERANT window
   (`LOKI_FILETAIL_WINDOW`, same as arm 1), for a stronger reason than arm 1's: the Pi is a
   Zero 2 W running five LAN-only containers, so its log volume is genuinely low and bursty, not
   just quiet overnight. Selectors/windows tunable via
-  `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`/`LOKI_PI_STREAM`. Pure
+  `LOKI_STREAM`/`LOKI_FILETAIL_WINDOW`/`LOKI_DOCKER_STREAM`/`LOKI_WINDOW`/`LOKI_PI_STREAM`.
+  `test_cluster_arm_counts_no_pi_stream` holds arms 1 and 2 off every Pi stream. Pure
   `loki_ingestion_fresh()` + `loki_count()` are unit-tested. A freshness watchdog in the same
   idiom as the SMART/restore-drill checks.)
 - **Log Shipper Dropped Entries** (three arms. Two log-pipe arms, `down` on whichever counted MORE — added

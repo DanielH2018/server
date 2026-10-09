@@ -314,6 +314,38 @@ k3s_server_hosts:
 setup_drift_check_hosts:
   - daniel-server
 
+# The label values loki-homelab's streams carry, one entry per stream role (#3740). Both Alloy
+# configs stamp their streams from this map: roles/k8s/loki-homelab for the cluster nodes and
+# roles/containers/alloy for daniel-pi. monitor-bridge's LogQL selectors in env-secret.yaml.j2
+# are rendered from it too.
+#
+# A consumer that cannot render a var is compared against it instead: the Grafana dashboards,
+# the observability deploy-annotation expr, probe.py's alert reconstruction and monitor-bridge's
+# Python constants. ansible/tests/services/test_loki_stream_labels.py holds both directions:
+# every value here is emitted, and every `job` value a consumer selects is one listed here.
+#
+# Only daniel-pi's streams name a `machine`. A cluster stream's machine is the node's HOSTNAME,
+# which Alloy reads at runtime, so no inventory value can own it.
+#
+# Two roles share `job: syslog`. That is deliberate: one parser and one board read every
+# host's verdict lines. It is also why monitor-bridge's file-tail arm must exclude
+# pi_health's machine (#3739).
+loki_streams:
+  cluster_pods:
+    job: k8s
+  host_syslog:
+    job: syslog
+  host_authlog:
+    job: authlog
+  k8s_audit:
+    job: k8s-audit
+  pi_containers:
+    job: pi
+    machine: daniel-pi
+  pi_health:
+    job: syslog
+    machine: daniel-pi
+
 # Hosts that witness the Loki read route, one Kuma monitor each. That route's only
 # caller is `probe.py loki-labels` / `loki-query` running as a HOST process, and its guard is a
 # ClientIP set of node-owned addresses — so a pod cannot witness it, and a single host cannot

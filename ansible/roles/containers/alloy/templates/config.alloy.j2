@@ -101,11 +101,11 @@ discovery.relabel "pi" {
   // query can span the estate and `machine` still tells the sources apart.
   rule {
     target_label = "job"
-    replacement  = "pi"
+    replacement  = "{{ loki_streams.pi_containers.job }}"
   }
   rule {
     target_label = "machine"
-    replacement  = "daniel-pi"
+    replacement  = "{{ loki_streams.pi_containers.machine }}"
   }
   rule {
     source_labels = ["__meta_docker_container_log_stream"]
@@ -132,7 +132,7 @@ loki.source.docker "pi" {
 // because a Pi-shipped stream under the same `job` would otherwise stop a total cluster
 // file-tail outage from ever reaching the zero-entry threshold that check alerts on.
 local.file_match "pi_health" {
-  path_targets = [{"__path__" = "/var/log/pi-health/*.log", "job" = "syslog", "machine" = "daniel-pi"}]
+  path_targets = [{"__path__" = "/var/log/pi-health/*.log", "job" = "{{ loki_streams.pi_health.job }}", "machine" = "{{ loki_streams.pi_health.machine }}"}]
 }
 
 loki.source.file "pi_health" {
