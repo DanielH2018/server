@@ -55,6 +55,14 @@ class FakeRunner:
                 out = "base0"
             elif "rev-parse" in argv:
                 out = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
+            elif "--ignored" in argv:
+                # Every file under `.claude/` in the scratch worktree reads as ignored.
+                claude = self.worktree / ".claude"
+                out = "\n".join(
+                    str(p.relative_to(self.worktree))
+                    for p in claude.rglob("*")
+                    if p.is_file()
+                )
             else:
                 out = ""
             return subprocess.CompletedProcess(argv, 0, out + "\n", "")
