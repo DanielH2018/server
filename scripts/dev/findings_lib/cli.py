@@ -166,6 +166,11 @@ def _parser(description: str) -> argparse.ArgumentParser:
     _add_dry_run(cs, suppress=True)
     _add_repo(cs)
     cs.add_argument("--json", action="store_true")
+    cs.add_argument(
+        "--worktree",
+        help="only the claims this branch holds, plus those held by the batch branches "
+        "its `fanout_place.py launch` runs started in this register",
+    )
 
     rp = sub.add_parser("reap", help="release every stale claim")
     _add_dry_run(rp, suppress=True)

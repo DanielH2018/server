@@ -47,6 +47,7 @@ from dev.findings_lib.plans import (
     plan_sync_labels,
 )
 from dev.findings_lib.boundaries import FindingsTools
+from dev.fanout_lib.target import SERVER
 
 
 def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
@@ -225,14 +226,38 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 
 def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Prints every open claim: issue, worktree, live or stale, and why."""
+    """Prints every open claim: issue, worktree, live or stale, and why.
+
+    `--worktree` narrows the rows to one orchestrator's own: the claims its branch holds, and
+    those held by the batch branches its `fanout_place.py launch` runs started. A batch in
+    this repo is claimed under the orchestrator's branch, so the branch alone covers it; a
+    batch in another register is claimed under its own branch, which only the run manifest
+    ties back to the orchestrator. The rows it drops are counted, never hidden silently:
+    an empty filtered view must not read as "nothing is claimed anywhere".
+    """
     trees, dirty, merged, ok = tools.worktree_facts()
     if not ok:
         # `reap` refuses instead; a read can render, but must say staleness is a guess.
         sys.stderr.write("warning: worktree read failed; STALE below is unverified\n")
     states = claim_states(load_issues("open", tools), trees, dirty, merged)
+    others = 0
+    if args.worktree:
+        mine = {args.worktree} | tools.launched_branches(
+            args.worktree, tools.repo or SERVER
+        )
+        others = sum(s.worktree not in mine for s in states)
+        states = [s for s in states if s.worktree in mine]
+    # Under `--json` the note goes to stderr so the array stays the filtered rows alone.
+    note = (
+        f"{others} claim(s) held by other worktrees; `claims` without --worktree "
+        "lists them"
+        if others
+        else ""
+    )
     if args.json:
         print(json.dumps([vars(s) for s in states], indent=2))
+        if note:
+            sys.stderr.write(note + "\n")
         return 0
     for s in states:
         age = f"{s.age_days}d" if s.age_days is not None else "?"
@@ -241,7 +266,13 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
             f"{s.worktree:<40} {s.reason}"
         )
     if not states:
-        print("no open claims")
+        print(
+            f"no open claims held by `{args.worktree}` or the batches it launched"
+            if args.worktree
+            else "no open claims"
+        )
+    if note:
+        print(note)
     return 0
 
 

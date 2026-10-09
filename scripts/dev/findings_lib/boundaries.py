@@ -12,6 +12,9 @@ a finding, and `findings.py verify` prints it rather than running it.
 carried 8 `monkeypatch.setattr` calls across two test modules, every one of them standing in
 for this missing field. A patch pins the module a test imported it from, so `cmd_claims` and
 `cmd_next` could only be driven from a module attribute; injecting the read here retires all 8.
+
+`launched_branches` reads the fan-out run manifests under `~/.claude/fanout`. It is a file
+read, not a command, and a field for the same reason `worktree_facts` is one.
 """
 
 import dataclasses
@@ -27,6 +30,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from dev.fanout_lib.manifest import branches_launched_by
 from lib.worktrees import worktree_facts as read_worktree_facts
 from lib.gh import gh, gh_json
 from lib.json_types import JsonValue
@@ -60,6 +64,10 @@ class FindingsTools:
     # `gh_calls.run` and the create path, which append it to each write, so a `--dry-run`
     # prints the repo it would write to. `aimed` sets it and wraps the reads to match.
     repo: str | None = None
+    # `(orchestrator_branch, repo) -> batch branches` from the fan-out run manifests, which
+    # `claims --worktree` adds to the branches it keeps. A field so a test never reads the
+    # real `~/.claude/fanout`.
+    launched_branches: Callable[[str, str], set[str]] = branches_launched_by
 
 
 def aimed(tools: FindingsTools, repo: str | None) -> FindingsTools:
