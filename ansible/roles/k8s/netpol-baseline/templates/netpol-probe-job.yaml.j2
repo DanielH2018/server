@@ -123,22 +123,23 @@ spec:
 {% for t in netpol_baseline_probe_active if t.expect is defined %}
 {%   set host = t.service if t.plane == 'homelab' else t.service ~ '.' ~ k8s_observability_namespace %}
 {%   set lever = 'netpol_baseline_enforced' if t.plane == 'homelab' else 'netpol_baseline_obs_enforced' %}
+{%   set port = t.port if t.port is defined else containers_list | entry_port(t.service) %}
 {%   if t.expect == 'refused' %}
-              if nc -w 5 -z {{ host }} {{ t.port }}; then
-                echo "POLICY NOT ENFORCED: reached {{ host }}:{{ t.port }} from a pod on no caller list."
+              if nc -w 5 -z {{ host }} {{ port }}; then
+                echo "POLICY NOT ENFORCED: reached {{ host }}:{{ port }} from a pod on no caller list."
                 echo "Either {{ lever }} is false, the netpol-baseline label is missing from the"
                 echo "target's POD TEMPLATE (spec.template.metadata.labels), or {{ t.policy }}"
                 echo "admits too much."
                 exit 1
               fi
-              echo "isolated: {{ host }}:{{ t.port }} unreachable from an unlisted caller"
+              echo "isolated: {{ host }}:{{ port }} unreachable from an unlisted caller"
 {%   elif t.expect == 'open' %}
-              if ! nc -w 5 -z {{ host }} {{ t.port }}; then
-                echo "OPEN PORT FAILED: {{ host }}:{{ t.port }} refused a connection {{ t.policy }}"
+              if ! nc -w 5 -z {{ host }} {{ port }}; then
+                echo "OPEN PORT FAILED: {{ host }}:{{ port }} refused a connection {{ t.policy }}"
                 echo "leaves open to every source."
                 exit 1
               fi
-              echo "open port ok: {{ host }}:{{ t.port }} reachable from an unlisted caller, as designed"
+              echo "open port ok: {{ host }}:{{ port }} reachable from an unlisted caller, as designed"
 {%   endif %}
 {% endfor %}
 {% if homelab %}

@@ -470,3 +470,17 @@ def test_the_real_template_declares_every_bridge_tile_ungated():
     assert len(bridge) >= 44 and "Traefik 421" in bridge
     assert all(d is not None and d["gated"] is False for d in bridge.values()), bridge
     assert not [name for name in declared if "{" in name]
+
+
+def test_the_real_template_declares_every_ingress_tile_ungated():
+    """#3690 moved the ingress tiles into a loop over containers_list; kuma-drift must list each."""
+    declared = monitors.parse_declared_monitors(
+        Path(monitors.STATIC_MONITORS_PATH).read_text()
+    )
+    for name in ("k3s Grafana", "k3s Authelia Portal", "k3s littlelink"):
+        assert declared.get(name) == {
+            "type": "http",
+            "interval": 60,
+            "gated": False,
+            "gate": None,
+        }, name

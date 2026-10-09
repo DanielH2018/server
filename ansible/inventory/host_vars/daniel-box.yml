@@ -79,6 +79,8 @@ containers_list:
     # keys, so use_authelia false is load-bearing. hostname also feeds the Pi-hole
     # per-service DNS override.
     hostname: "crowdsec-lapi"
+    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: the crowdsec-* allowlist and AppSec tiles.
+    kuma: false
     port: 8080
     use_authelia: false
     # crowdsec-db is in k3s_longhorn_nobackup_volumes: decisions re-derive from logs.
@@ -110,6 +112,7 @@ containers_list:
     platform: k8s
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
+    kuma: {id: auth, name: k3s Authelia Portal}
     port: 9091
     use_authelia: false
     tier: home-edge
@@ -127,6 +130,7 @@ containers_list:
     # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
     # *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
     hostname: "bento-pdf"
+    kuma: {name: k3s Ingress (bento-pdf)}
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -134,6 +138,8 @@ containers_list:
     platform: k8s
     # Single label, for the same wildcard-cert reason as bento-pdf above.
     hostname: "texbrain"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -143,6 +149,7 @@ containers_list:
   - name: headlamp
     platform: k8s
     hostname: "headlamp"
+    kuma: {name: k3s Headlamp}
     port: 4466
     use_authelia: true
     auth_tier: one_factor
@@ -153,6 +160,8 @@ containers_list:
   - name: deploy-ui
     platform: k8s
     hostname: "deploy"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 8790
     use_authelia: true
     auth_tier: two_factor
@@ -165,6 +174,8 @@ containers_list:
   - name: longhorn-ui
     platform: k8s
     hostname: "longhorn"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 80
     use_authelia: true
     auth_tier: two_factor
@@ -189,6 +200,8 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "sonarr"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 8989
     use_authelia: true
     auth_tier: one_factor
@@ -217,6 +230,8 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "qbittorrent"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -234,6 +249,8 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "radarr"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 7878
     use_authelia: true
     auth_tier: one_factor
@@ -262,6 +279,8 @@ containers_list:
   - name: prowlarr
     platform: k8s
     hostname: "prowlarr"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 9696
     use_authelia: true
     auth_tier: one_factor
@@ -285,6 +304,8 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "bazarr"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 6767
     use_authelia: true
     auth_tier: one_factor
@@ -295,6 +316,8 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "jellyfin"
+    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: jellyfin-lan-vip, a port check on the LAN VIP.
+    kuma: false
     port: 8096
     use_authelia: false
 
@@ -305,6 +328,8 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "tdarr"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 8265
     use_authelia: true
     auth_tier: one_factor
@@ -328,6 +353,7 @@ containers_list:
     # so `otelq`, which hardcodes 127.0.0.1, can read them from the host. Content logging is
     # on, so none of them gets an ingress route.
     hostname: "grafana"
+    kuma: {id: grafana, name: k3s Grafana}
     port: 3000
     use_authelia: true
     auth_tier: one_factor
@@ -373,6 +399,7 @@ containers_list:
   - name: freshrss
     platform: k8s
     hostname: "freshrss"
+    kuma: {name: k3s FreshRSS}
     port: 80
     use_authelia: true
     auth_tier: one_factor
@@ -394,6 +421,8 @@ containers_list:
   - name: navidrome
     platform: k8s
     hostname: "navidrome"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 4533
     use_authelia: true
     auth_tier: one_factor
@@ -404,6 +433,8 @@ containers_list:
   - name: livesync
     platform: k8s
     hostname: "livesync"
+    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: livesync-k8s, which expects CouchDB's 401.
+    kuma: false
     port: 5984
     use_authelia: false
     # NO IngressRoute at all, and that is load-bearing rather than an omission. Its names
@@ -439,6 +470,8 @@ containers_list:
   - name: artifacts
     platform: k8s
     hostname: "artifacts"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -449,6 +482,8 @@ containers_list:
   - name: docs
     platform: k8s
     hostname: "docs"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -521,6 +556,8 @@ containers_list:
   - name: n8n
     platform: k8s
     hostname: "n8n"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 5678
     use_authelia: true
     auth_tier: two_factor
@@ -545,6 +582,7 @@ containers_list:
     platform: k8s
     depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
+    kuma: {name: k3s Zigbee2MQTT}
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -558,6 +596,7 @@ containers_list:
   - name: home-assistant
     platform: k8s
     hostname: "home-assistant"
+    kuma: {name: k3s Home Assistant}
     # Records HA's own listener rather than setting it: HA binds 8123 by default, and
     # files/configuration.yaml ships verbatim, so no template can move it. Changing this moves
     # the Service, the route and the prometheus scrape target, but not the listener.
@@ -580,6 +619,8 @@ containers_list:
   - name: pihole
     platform: k8s
     hostname: "pihole"
+    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: pihole-k8s-dns, a DNS query against the VIP.
+    kuma: false
     port: 80
     use_authelia: true
     auth_tier: one_factor
@@ -617,6 +658,8 @@ containers_list:
   - name: ical-proxy
     platform: k8s
     hostname: "ical-proxy"
+    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: ical-proxy-k8s, which probes a calendar over the ClusterIP.
+    kuma: false
     port: 5000
     use_authelia: false
     # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
@@ -641,6 +684,8 @@ containers_list:
     platform: k8s
     tier: platform
     hostname: "wg-easy"
+    # No ingress tile yet (#3886).
+    kuma: false
     port: 51821
     udp_port: 51820
     use_authelia: true
@@ -650,11 +695,15 @@ containers_list:
   - name: uptime-kuma
     platform: k8s
     hostname: "uptime-kuma"
+    # No tile on itself: Kuma cannot page that Kuma is down.
+    kuma: false
     port: 3001
     use_authelia: true
     auth_tier: one_factor
     # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
-    # Everything that pushes a heartbeat dials :3001 directly rather than through traefik.
+    # Everything that pushes a heartbeat dials `port` directly rather than through traefik,
+    # and reads it from this entry through `entry_port('uptime-kuma')`, so changing it moves
+    # every caller below with the listener.
     # Host crons arrive with a node address and are covered by the baseline's cni0 /32s, and
     # browsers arrive through traefik. The `autokuma` sidecar needs no entry: it reaches Kuma
     # over pod-local loopback, which no NetworkPolicy evaluates.
@@ -696,6 +745,8 @@ containers_list:
   - name: loki-homelab
     platform: k8s
     hostname: "loki-homelab"
+    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: loki, which probes /ready over the ClusterIP.
+    kuma: false
     port: 3100
     use_authelia: false
     # loki_* internals, scraped on the entry's own port. The configmap's http_listen_port sets
@@ -769,6 +820,8 @@ containers_list:
   - name: scrutiny
     platform: k8s
     hostname: "scrutiny"
+    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: scrutiny-k8s, which probes /api/health through the LAN bypass.
+    kuma: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
