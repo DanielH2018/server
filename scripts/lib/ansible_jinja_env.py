@@ -14,12 +14,14 @@ identity rather than by a shim's fidelity. ``to_json`` is ``k8s_yaml.to_json_stu
 ansible-core's raises on the ``StubUndefined`` a guard renders secrets as, which would abort
 the render this module exists to complete.
 
-Importing ``ansible.plugins.filter.core`` costs ~190 ms, so this module is NOT the one a
-latency-sensitive reader imports. ``lib.ansible_jinja_compat`` is that tier — hand-written
-``bool`` and ``search`` shims, pinned to the real filters by
-``validate/tests/test_validate_shell_templates.py``. ``lib.k8s_context`` uses it, for the
-reason its own ``DECIDED:`` marker gives: ``probe_lib/monitors.py`` reaches that module and
-``probe.py monitors`` loads no ansible-core today.
+Importing ``ansible.plugins.filter.core`` costs ~190 ms on an idle host and 365 ms on a loaded
+one (``python -X importtime``, 2026-09-18 and 2026-10-09), so the module has two tiers. Its TOP LEVEL is the
+light tier: it loads no ansible-core, and carries ``ansible_bool``, a copy of ``to_bool`` for
+``lib.k8s_context``. That module cannot pay the import, for the reason its own ``DECIDED:``
+marker gives: ``probe_lib/monitors.py`` reaches it and ``probe.py monitors`` loads no
+ansible-core. ``register_ansible_filters`` is the heavy tier, and imports ansible-core and the
+repo's filter plugins when it is first called. ``test_the_light_tier_loads_no_ansible_core``
+pins the split.
 
 Imported as ``from lib.ansible_jinja_env import ...`` after the caller's own ``sys.path``
 bootstrap puts ``scripts/`` on the path (``.claude/rules/python-layout.md``).
@@ -43,26 +45,56 @@ from lib.render_guard import (
     render_or_error,
 )
 
-_sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
-from authelia_access import authelia_service_rules
-from service_tier import in_service_tier, tier_priority_class
-from toposort import filter_by_platform
-
-from ansible.plugins.filter.core import (
-    comment,
-    get_hash,
-    mandatory,
-    to_bool,
-    to_uuid,
-)
-from ansible.plugins.test.core import search
-
 __all__ = [
+    "BOOLEANS_FALSE",
+    "BOOLEANS_TRUE",
+    "ansible_bool",
     "make_ansible_env",
     "register_ansible_filters",
     "render_template",
     "template_env",
 ]
+
+
+# `ansible.plugins.filter.core._valid_bool_true` / `_valid_bool_false`, copied rather than
+# imported so the light tier loads no ansible-core.
+# `test_ansible_bool_agrees_with_ansible_core_to_bool` pins the copy.
+BOOLEANS_TRUE = frozenset({"yes", "true", "1", "on"})
+BOOLEANS_FALSE = frozenset({"no", "false", "0", "off"})
+
+
+def ansible_bool(value) -> bool:
+    """Mirror Ansible's `bool` Jinja filter, `ansible.plugins.filter.core.to_bool`.
+
+    The light-tier copy, for ``lib.k8s_context`` only; every render guard gets the real
+    ``to_bool`` from ``register_ansible_filters``. Faithfulness matters more than convenience:
+    the reason templates use `| bool` at all is that `-e var=false` arrives as the STRING
+    "false", which plain Jinja truthiness reads as True. A stub that just called Python's
+    bool() would agree with Ansible on real booleans and disagree on exactly the inputs the
+    filter exists for, so the test would pass while production took the other branch.
+
+    The filter is `to_bool`, NOT `module_utils.parsing.convert_bool.boolean` — that one serves
+    module argument parsing and accepts `t`, `y`, `f`, `n` and any non-zero int. Mirroring
+    `boolean` would render `'t'`, `'y'`, `2`, `-1` and `' True '` as True under the guard and
+    False in production. `to_bool` lowercases without stripping, stringifies
+    ints (so `bool` lands in the tables), and coerces anything outside the tables with
+    `value == 1` — a fallback it deprecates for removal in ansible-core 2.23. This mirrors the
+    pinned filter's control flow, fallback included; the parity test flags the removal.
+    """
+    if isinstance(value, str):
+        check = value.lower()
+    elif isinstance(value, int):  # bool is an int
+        check = str(value).lower()
+    else:
+        check = value
+    try:
+        if check in BOOLEANS_TRUE:
+            return True
+        if check in BOOLEANS_FALSE:
+            return False
+        return bool(check == 1)
+    except TypeError:  # unhashable, e.g. a list or dict
+        return False
 
 
 def register_ansible_filters(env: Environment) -> Environment:
@@ -91,6 +123,23 @@ def register_ansible_filters(env: Environment) -> Environment:
     Returns:
         ``env``, so a caller can build and register in one expression.
     """
+    # The heavy tier: imported here rather than at the top so the light tier above stays
+    # free of ansible-core (see the module docstring).
+    if str(ANSIBLE / "filter_plugins") not in _sys.path:
+        _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
+    from authelia_access import authelia_service_rules
+    from service_tier import in_service_tier, tier_priority_class
+    from toposort import filter_by_platform
+
+    from ansible.plugins.filter.core import (
+        comment,
+        get_hash,
+        mandatory,
+        to_bool,
+        to_uuid,
+    )
+    from ansible.plugins.test.core import search
+
     env.filters["bool"] = to_bool
     env.filters["comment"] = comment
     env.filters["hash"] = get_hash

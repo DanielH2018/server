@@ -97,18 +97,107 @@ def test_render_template_stubs_an_undefined_variable(tmp_path):
     assert aje.render_template(tpl, {}) == "value=STUB\n"
 
 
+# The inputs `to_bool`'s tables name, the inputs `convert_bool.boolean` accepts and `to_bool`
+# does not, and the fallback and unhashable shapes outside both.
+_BOOL_INPUTS = [
+    True,
+    False,
+    1,
+    0,
+    "true",
+    "false",
+    "TRUE",
+    "Off",
+    "yes",
+    "no",
+    "on",
+    "off",
+    "1",
+    "0",
+    "",
+    "maybe",
+    "t",
+    "y",
+    "f",
+    "n",
+    2,
+    -1,
+    " True ",
+    1.0,
+    2.0,
+    0.0,
+    None,
+    [],
+    {},
+]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (True, True),
+        (False, False),
+        ("true", True),
+        ("false", False),
+        ("yes", True),
+        ("no", False),
+        ("on", True),
+        ("off", False),
+        ("1", True),
+        ("0", False),
+        (1, True),
+        (0, False),
+        ("", False),
+        # `to_bool` returns False for anything outside its tables rather than raising — the
+        # branch that matters, since plain Jinja would call a non-empty string True.
+        ("maybe", False),
+        # The rejecting half: `convert_bool.boolean` accepts these, the `bool` FILTER does
+        # not, and the shim must mirror the filter.
+        ("t", False),
+        ("y", False),
+        (2, False),
+        (-1, False),
+        (" True ", False),
+    ],
+)
+def test_ansible_bool_filter_mirrors_ansible_semantics(value, expected: bool):
+    assert aje.ansible_bool(value) is expected
+
+
+def test_ansible_bool_tables_are_to_bool_tables():
+    """The shim copies the tables rather than importing them (the import-cost `DECIDED:` in
+    `lib/k8s_context.py`), so this is the pin that fails when ansible-core moves them."""
+    from ansible.plugins.filter import core
+
+    assert aje.BOOLEANS_TRUE == core._valid_bool_true
+    assert aje.BOOLEANS_FALSE == core._valid_bool_false
+
+
+@pytest.mark.parametrize("value", _BOOL_INPUTS, ids=repr)
+def test_ansible_bool_agrees_with_ansible_core_to_bool(value):
+    """The real filter is the oracle — a hand-written expected table restates the shim.
+
+    Fails on the day ansible-core 2.23 removes the `== 1` fallback, which is the signal to
+    drop the shim's copy of it."""
+    from ansible.plugins.filter.core import to_bool
+
+    assert aje.ansible_bool(value) is to_bool(value)
+
+
 def test_the_light_tier_loads_no_ansible_core():
-    """`lib.k8s_context`'s `DECIDED:` marker costs ~190 ms if this module leaks into it.
+    """`lib.k8s_context`'s `DECIDED:` marker costs ~190 ms if ansible-core leaks into it.
 
     `probe_lib/monitors.py` imports `k8s_context`, and `probe.py monitors` loads no
-    ansible-core today. A subprocess rather than `sys.modules` in-process, because pytest has
+    ansible-core today. `k8s_context` takes `ansible_bool` from this module, so importing
+    `lib.ansible_jinja_env` must load none either: ansible-core waits for the first
+    `register_ansible_filters` call. A subprocess rather than `sys.modules` in-process, because pytest has
     already imported ansible-core by the time this test runs.
     """
     proc = run(
         [
             sys.executable,
             "-c",
-            "import sys; sys.path.insert(0, 'scripts'); import lib.k8s_context, lib.render_guard, lib.k8s_yaml; print([m for m in sys.modules if m.startswith('ansible')])",
+            "import sys; sys.path.insert(0, 'scripts'); import lib.k8s_context, lib.ansible_jinja_env, lib.render_guard, lib.k8s_yaml; print([m for m in sys.modules if m.startswith('ansible')])",
         ],
         cwd=REPO,
         check=False,

@@ -23,7 +23,7 @@ non-zero if any template fails to render, fails `bash -n`, fails shellcheck, or 
 itself isn't available (a missing linter degrades the gate silently otherwise — fail loud
 instead of falling back to bash -n alone).
 
-This module is the entry point. `ansible_jinja_compat` in `scripts/lib/` supplies Ansible's
+This module is the entry point. `ansible_jinja_env` in `scripts/lib/` supplies Ansible's
 `search` test and `bool` filter, which vanilla Jinja2 lacks. The pieces only this validator
 imports live in `validate_lib/`: `shell_lint` (render, then `bash -n` and shellcheck),
 `cron_targets` (which templates a cron `job:` actually schedules) and `cron_checks` (the PATH

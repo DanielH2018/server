@@ -828,7 +828,6 @@
  "scripts/lib/tests/test_jinja_comments.py": 0.1,
  "scripts/lib/tests/test_jinja_defaults.py": 0.0,
  "scripts/lib/tests/test_k8s_context.py": 0.0,
- "scripts/lib/tests/test_k8s_pvc.py": 0.0,
  "scripts/lib/tests/test_k8s_role_callers.py": 0.03,
  "scripts/lib/tests/test_k8s_roles_manifest_files.py": 0.0,
  "scripts/lib/tests/test_k8s_yaml.py": 0.0,

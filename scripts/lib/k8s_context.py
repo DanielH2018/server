@@ -4,8 +4,8 @@
 These are the pieces that decide what a manifest renders WITH — the recursive expansion Ansible
 does on a variable's value, a role's resolved defaults, and the precedence collision the
 validator asserts is empty. The `bool` filter that expansion registers is
-`lib.ansible_jinja_compat.ansible_bool`, the light-tier shim, rather than the real filters
-`lib.ansible_jinja_env` gives every render guard.
+`lib.ansible_jinja_env.ansible_bool`, that module's light-tier copy, rather than the real
+filters its `register_ansible_filters` gives every render guard.
 """
 
 import sys as _sys
@@ -15,7 +15,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import re
 
-from lib.ansible_jinja_compat import ansible_bool
+from lib.ansible_jinja_env import ansible_bool
 from lib.render_guard import SHARED_TPL, load_yaml, make_env
 from lib.repo_paths import K8S_ROLES
 
@@ -48,9 +48,9 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
     # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
     # here as "No filter named 'bool'" — a render failure pointing at a variable that is
     # perfectly valid under Ansible. Every render guard registers the real filter through
-    # `lib.ansible_jinja_env`; this module is the one caller that cannot, for the reason below.
+    # `register_ansible_filters`; this module is the one caller that cannot, for the reason below.
     #
-    # DECIDED: the shim is `ansible_jinja_compat.ansible_bool`, not ansible-core's `to_bool`
+    # DECIDED: the shim is `ansible_jinja_env.ansible_bool`, not ansible-core's `to_bool`
     # that `lib.ansible_jinja_env.register_ansible_filters` binds for every render guard.
     # `to_bool` would make the two paths agree by identity, but importing
     # `ansible.plugins.filter.core` costs ~190 ms and `probe_lib/monitors.py` imports this
