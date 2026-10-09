@@ -73,7 +73,7 @@ OWED_MANUAL_PLANE = "manual_plane"
 OWED_K8S_DEFERRED = "k8s_deferred"
 
 # A broad apply that failed and holds the deployer. The subject is the whole entry text
-# `deploy_git.hold_plane_marker` writes, `<playbook> <tags>`, rather than the playbook alone:
+# `gitops_hold.hold_plane_marker` writes, `<playbook> <tags>`, rather than the playbook alone:
 # two failed applies of one playbook with different tags are two entries, and each clears
 # on its own apply. Keyed on the playbook, `drop_owed` would erase both on the first apply,
 # which is #878's erasure over again. `hold_sha` still decides whether anything pages; this

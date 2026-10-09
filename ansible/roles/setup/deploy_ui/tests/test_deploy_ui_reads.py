@@ -258,18 +258,6 @@ def test_k8s_deferred_rows_skips_a_garbled_line_is_flagged():
     assert reads.k8s_deferred_rows("garbage\ndeadbeef sonarr not-a-time") == []
 
 
-def test_hold_plane_sep_matches_the_deployers_own_separator():
-    """The oracle for the literal in `deploy_ui_reads`.
-
-    The daemon runs outside the repo venv and cannot import `deploy_git`, so the separator is
-    copied here. pytest CAN import both: a change to how the deployer joins planes fails here
-    rather than leaving the page printing them two ways.
-    """
-    import deploy_git
-
-    assert reads.HOLD_PLANE_SEP == deploy_git.HOLD_PLANE_SEP
-
-
 def test_parse_stale_lines_is_clean():
     text = "homepage: roles/k8s/homepage changed in 5aab47af\nn8n: no release record"
     assert reads.parse_stale(text) == [

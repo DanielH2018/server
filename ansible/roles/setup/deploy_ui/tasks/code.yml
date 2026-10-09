@@ -14,6 +14,7 @@
     # this role as well (#3306).
     - "{{ role_path }}/../gitops_deploy/files/gitops_markers.py"
     - "{{ role_path }}/../gitops_deploy/files/gitops_ledger.py"
+    - "{{ role_path }}/../gitops_deploy/files/gitops_hold.py"
     - deploy_ui.html
   become: true
   notify: Restart deploy-ui
@@ -34,5 +35,7 @@
         src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
       - live: "{{ deploy_ui_dir }}/gitops_ledger.py"
         src: ansible/roles/setup/gitops_deploy/files/gitops_ledger.py
+      - live: "{{ deploy_ui_dir }}/gitops_hold.py"
+        src: ansible/roles/setup/gitops_deploy/files/gitops_hold.py
       - live: "{{ deploy_ui_dir }}/deploy_ui.html"
         src: ansible/roles/setup/deploy_ui/files/deploy_ui.html

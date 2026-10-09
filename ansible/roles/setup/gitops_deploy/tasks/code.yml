@@ -20,6 +20,7 @@
     - deploy_state_alerts.py
     - gitops_markers.py
     - gitops_ledger.py
+    - gitops_hold.py
     - deploy_failtext.py
     - deploy_alerts.py
     - deploy_alert_text.py
@@ -78,6 +79,8 @@
         src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
       - live: /opt/gitops-deploy/gitops_ledger.py
         src: ansible/roles/setup/gitops_deploy/files/gitops_ledger.py
+      - live: /opt/gitops-deploy/gitops_hold.py
+        src: ansible/roles/setup/gitops_deploy/files/gitops_hold.py
       - live: /opt/gitops-deploy/deploy_failtext.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_failtext.py
       - live: /opt/gitops-deploy/deploy_alerts.py
