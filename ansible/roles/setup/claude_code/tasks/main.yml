@@ -393,6 +393,8 @@
     chdir: "{{ claude_code_agent_user_clone_dir }}"
   environment:
     HOME: "{{ claude_code_agent_user_home }}"
+    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
+    TMPDIR: /tmp
   register: claude_code_agent_user_sync
   changed_when: >-
     claude_code_agent_user_sync.stderr is search('^(Installed|Uninstalled) ', multiline=True)

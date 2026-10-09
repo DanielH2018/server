@@ -113,6 +113,7 @@ def test_claude_code_installs_into_the_agents_home_under_become() -> None:
     task = named(tasks(SHARED), "Install Claude Code for the agent's user")
     assert task["environment"] == {
         "HOME": "{{ agent_user_home }}",
+        "TMPDIR": "/tmp",
         "CLAUDE_INSTALL_ALLOW_SUDO": "1",
     }
 
@@ -331,7 +332,10 @@ def test_the_agents_clone_gets_a_venv_its_hooks_can_import_from() -> None:
     cmd = task["ansible.builtin.command"]
     assert cmd["argv"][-2:] == ["sync", "--frozen"]
     assert cmd["chdir"] == "{{ claude_code_agent_user_clone_dir }}"
-    assert task["environment"] == {"HOME": "{{ claude_code_agent_user_home }}"}
+    assert task["environment"] == {
+        "HOME": "{{ claude_code_agent_user_home }}",
+        "TMPDIR": "/tmp",
+    }
 
 
 def dirs_not_owned_like_the_chown(task_list: list[dict]) -> list[str]:

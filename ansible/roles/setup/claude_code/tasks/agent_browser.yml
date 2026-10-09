@@ -11,6 +11,7 @@
 # left at a path, symlinks included. Root touches only the tarball, in a root-owned directory
 # outside the home. ansible/tests/setup/test_agent_browser.py holds the file to that.
 # `runuser` resets PATH, so each command that needs Node names its PATH through `env`.
+# `runuser` keeps root's TMPDIR, so each of those commands names TMPDIR there too.
 
 - name: Create the root-owned download directory for the agent user's Node
   ansible.builtin.file:
@@ -129,6 +130,10 @@
       - --
       - env
       - PATH={{ claude_code_agent_node_bin }}:/usr/bin:/bin
+      # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
+      # /tmp is sticky and world-writable, and mkdtemp makes each temp dir 0700, so no
+      # per-agent directory needs creating first.
+      - TMPDIR=/tmp
       - "{{ claude_code_agent_node_bin }}/npm"
       - install
       - --global
@@ -160,6 +165,10 @@
       - --
       - env
       - PATH={{ claude_code_agent_node_bin }}:/usr/bin:/bin
+      # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
+      # /tmp is sticky and world-writable, and mkdtemp makes each temp dir 0700, so no
+      # per-agent directory needs creating first.
+      - TMPDIR=/tmp
       - "{{ claude_code_agent_node_bin }}/node"
       - "{{ claude_code_agent_node_dir }}/current/lib/node_modules/@playwright/mcp/node_modules/playwright/cli.js"
       - install
@@ -226,6 +235,8 @@
     chdir: "{{ claude_code_agent_user_home }}"
   environment:
     HOME: "{{ claude_code_agent_user_home }}"
+    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
+    TMPDIR: /tmp
   changed_when: true
   become: true
   when:
@@ -252,6 +263,8 @@
     chdir: "{{ claude_code_agent_user_home }}"
   environment:
     HOME: "{{ claude_code_agent_user_home }}"
+    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
+    TMPDIR: /tmp
   changed_when: true
   become: true
   when:

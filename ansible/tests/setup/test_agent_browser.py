@@ -172,3 +172,33 @@ def test_a_root_run_module_on_an_agent_path_is_flagged() -> None:
         },
     }
     assert root_modules_on_agent_paths([task, as_agent]) == ["Create it"]
+
+
+def env_commands_without_tmpdir(task_list: list[dict]) -> tuple[list[str], list[str]]:
+    """Every `runuser ... -- env ...` command, and those of them that set no TMPDIR.
+
+    `runuser` keeps the caller's environment, so without its own TMPDIR the agent inherits
+    root's per-user /tmp/user/0 and cannot create a temp file: the Chromium download failed
+    there with EACCES on mkdtemp. CI sets no per-user TMPDIR, so only the host shows it.
+    """
+    checked, missing = [], []
+    for t in task_list:
+        argv = (t.get("ansible.builtin.command") or {}).get("argv") or []
+        if not argv or argv[0] != "runuser" or "env" not in argv:
+            continue
+        name = str(t.get("name"))
+        checked.append(name)
+        env_args = argv[argv.index("env") + 1 :]
+        if not any(str(a).startswith("TMPDIR=") for a in env_args):
+            missing.append(name)
+    return checked, missing
+
+
+def test_every_runuser_env_command_gives_the_agent_its_own_tmpdir() -> None:
+    checked, missing = env_commands_without_tmpdir(tasks())
+    for name in (
+        "Install the agent user's pinned @playwright/mcp",
+        "Install the Chromium the agent user's @playwright/mcp pins",
+    ):
+        assert name in checked, f"{name!r} is no longer a runuser env command"
+    assert missing == []

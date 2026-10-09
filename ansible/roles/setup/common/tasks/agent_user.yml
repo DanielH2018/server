@@ -150,6 +150,8 @@
     chdir: "{{ agent_user_home }}"
   environment:
     HOME: "{{ agent_user_home }}"
+    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
+    TMPDIR: /tmp
   register: common_agent_user_python
   changed_when: >-
     'Installed' in (common_agent_user_python.stderr | default(''))
@@ -180,6 +182,8 @@
     creates: "{{ agent_user_home }}/.local/bin/claude"
   environment:
     HOME: "{{ agent_user_home }}"
+    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
+    TMPDIR: /tmp
     # The installer exits 1 under sudo (it checks SUDO_USER, which become sets and runuser
     # keeps), to stop an install landing in /root. HOME above already points it at the agent's
     # home, and runuser makes the files the agent's, so this is the override it documents.
