@@ -68,7 +68,7 @@ drives.
 
 The `claude` agent user's login profile exports `RUN_HOOK_PROJECT_DIR` as its own clone, and
 `scripts/dev/fanout_lib/target.py` reads it into `SERVER_CHECKOUT` at import. The fan-out tests
-assert the operator's `/home/ubuntu/server`, so run as the agent user they went red while CI
+assert the primary checkout, so run as the agent user they went red while CI
 stayed green (#3629). A fixture cannot help, because the constant is computed at collection,
 before any fixture runs. `AGENT_PROFILE_VARS` is the set, stripped at load with the git hook
 variables, so every test reads the operator's defaults whichever user runs the suite. A test

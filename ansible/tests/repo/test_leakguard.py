@@ -422,18 +422,20 @@ _READS_SERVER_CHECKOUT = f"""
 import sys
 
 sys.path.insert(0, {str(REPO / "scripts" / "dev")!r})
+sys.path.insert(0, {str(REPO / "scripts")!r})
 from fanout_lib.target import SERVER_CHECKOUT
+from lib.repo_paths import PRIMARY_CHECKOUT
 
 
-def test_the_server_checkout_is_the_operators():
-    assert SERVER_CHECKOUT == "/home/ubuntu/server"
+def test_the_server_checkout_is_the_primary_one_not_the_profiles():
+    assert SERVER_CHECKOUT == str(PRIMARY_CHECKOUT)
 """
 
 
 def test_the_plugin_strips_the_agent_profile_variables_before_collection(
     tmp_path: Path,
 ) -> None:
-    """The agent user's suite asserts the operator's paths, as CI's does (#3629)."""
+    """The agent user's suite asserts the primary checkout, as CI's does (#3629)."""
     proc = _run_child(tmp_path, _READS_SERVER_CHECKOUT, extra_env=_PROFILE_ENV)
     assert proc.returncode == 0, proc.stdout + proc.stderr
 

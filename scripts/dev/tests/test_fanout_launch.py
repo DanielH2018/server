@@ -29,7 +29,7 @@ from fanout_lib.launch import (
 )
 from fanout_lib.manifest import Batch, Manifest, load, new_run_id, save
 from fanout_lib.transport import REPO
-from _fanout_fakes import fake_tools, ok
+from _fanout_fakes import as_operator, fake_tools, ok
 
 from lib.repo_paths import REPO as REPO_ROOT
 
@@ -99,7 +99,7 @@ def test_run_command_hands_the_pinned_bus_to_the_local_child(monkeypatch):
 
 def test_worktree_and_unit_names_derive_from_the_batch():
     assert (
-        worktree_path("1345-1386")
+        as_operator(worktree_path("1345-1386"))
         == "/home/ubuntu/server/.claude/worktrees/fanout-1345-1386"
     )
     assert unit_name("1345-1386") == "fanout-1345-1386"
@@ -107,11 +107,11 @@ def test_worktree_and_unit_names_derive_from_the_batch():
 
 def test_the_existence_check_is_the_first_step_of_the_launch_command():
     """Before `fetch`, so a relaunch never reaches the `worktree add` whose cleanup deletes."""
-    cmd = launch_command("b")
+    cmd = as_operator(launch_command("b"))
     assert cmd.index("fanout-step: exists") < cmd.index(
         "git -C /home/ubuntu/server fetch origin"
     )
-    assert cmd.startswith(f"test ! -e {worktree_path('b')} && ")
+    assert cmd.startswith(f"test ! -e {as_operator(worktree_path('b'))} && ")
     assert "! git -C /home/ubuntu/server show-ref --verify --quiet " in cmd
     assert "refs/heads/worktree-fanout-b" in cmd
 
@@ -135,21 +135,21 @@ def test_an_existing_worktree_or_branch_is_refused_without_removing_anything():
 
 
 def test_the_worktree_command_fetches_before_adding_from_origin_master():
-    cmd = create_worktree_command("b")
+    cmd = as_operator(create_worktree_command("b"))
     assert cmd.index("git -C /home/ubuntu/server fetch origin") < cmd.index(
         "worktree add"
     )
     assert "-b worktree-fanout-b" in cmd and "origin/master" in cmd
     # The lock follows the add so a merged-worktree prune never sees the tree unlocked.
     assert cmd.index("worktree add") < cmd.index("worktree lock")
-    assert f"worktree lock --reason fanout-b {worktree_path('b')}" in cmd
+    assert f"worktree lock --reason fanout-b {as_operator(worktree_path('b'))}" in cmd
     # Each step is sentinel-wrapped so a failure can be attributed to it (launch.py's
     # `_step`); the lock step, being last, ends the whole command.
     assert cmd.rstrip().endswith('fanout-step: worktree lock" >&2; exit 1; }')
 
 
 def test_the_systemd_run_command_is_a_transient_user_service_reading_the_brief():
-    cmd = systemd_run_command("b")
+    cmd = as_operator(systemd_run_command("b"))
     assert cmd.startswith("systemd-run --user --unit fanout-b ")
     assert "--scope" not in cmd  # a scope would tie the agent to the launching ssh
     assert "-p WorkingDirectory=/home/ubuntu/server/.claude/worktrees/fanout-b" in cmd
