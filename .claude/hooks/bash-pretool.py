@@ -19,11 +19,13 @@ The fifth arm, `auto-approve-readonly`, moved into the dotfiles `claude_guard` p
 (`claude_guard/readonly.py`, dotfiles #628), whose user-level PreToolUse hook allows a
 provably read-only command in every trusted checkout. No arm here returns `allow` since.
 
-`uv-python` is the fifth arm since #3286, and the only one that rewrites rather than judges.
-It runs LAST, so every decision arm reads the command the session typed — which is what the
-two separate hooks did, `bash-pretool.sh` at order 10 and `uv-python.sh` at order 20. Its own
-docstring owns the rewrite rules and what the harness does with an `updatedInput` that arrives
-beside a `deny` or an `ask`.
+Two arms rewrite rather than judge, and they run LAST, so every decision arm reads the command
+the session typed. `uv-python` (#3286) routes bare python/pytest/ansible through `uv run`, which
+is what the two separate hooks did, `bash-pretool.sh` at order 10 and `uv-python.sh` at order 20.
+Its own docstring owns the rewrite rules and what the harness does with an `updatedInput` that
+arrives beside a `deny` or an `ask`. `strip-cd-cwd` (#3957) runs before it and drops a leading
+`cd <dir> &&` when `<dir>` is the session's cwd, so the auto-mode classifier reads one command
+rather than a compound. Each rewrite arm reads the text the one before it produced.
 
 THE MERGE is the one Claude Code performs across separate hooks, read from the 2.1.267
 bundle: `deny` is sticky, `defer` outranks `ask`, `ask` outranks `allow`, and `allow` only
@@ -70,9 +72,10 @@ _DECISION_ARMS = (
 )
 _CONTEXT_ARM = ("inject-nested-docs", "inject_nested_docs")
 
-# The one arm that rewrites rather than judges. Asked last, so every decision above read the
-# command as typed.
-_REWRITE_ARM = ("uv-python", "uv_python")
+# The arms that rewrite rather than judge, in the order they apply. Asked last, so every
+# decision above read the command as typed. `strip-cd-cwd` goes first so that `cd <cwd> &&
+# pytest` reaches `uv-python` as `pytest` and leaves as `uv run pytest`.
+_REWRITE_ARMS = (("strip-cd-cwd", "strip_cd_cwd"), ("uv-python", "uv_python"))
 
 # Highest first. `defer` is in the table because the harness ranks it between deny and ask; no
 # arm returns one today, and leaving it out would silently demote an arm that grew one.
@@ -117,7 +120,7 @@ def collect(
     arms=_DECISION_ARMS,
     context_arm=_CONTEXT_ARM,
     load=load_arm,
-    rewrite_arm=_REWRITE_ARM,
+    rewrite_arms=_REWRITE_ARMS,
 ):
     """Every arm's output for `payload`: the verdicts, the context text and the rewrite.
 
@@ -132,8 +135,13 @@ def collect(
         load: how to turn a pair into a module. The tests hand one that raises, or one that
             returns a real arm with its temp paths redirected, because each arm is loaded
             fresh here and so cannot be monkeypatched from outside.
-        rewrite_arm: the one pair asked for a rewritten command. Asked after the decision arms
-            so they judge the command as typed.
+        rewrite_arms: the pairs asked for a rewritten command, in order. Each reads the text
+            the previous one produced, and an arm that raises or returns None leaves that text
+            as it was. Asked after the decision arms so they judge the command as typed.
+
+    Returns:
+        `(verdicts, context, command)`, where `command` is None when no rewrite arm changed
+        the text.
     """
     verdicts = []
     for filename, module_name in arms:
@@ -151,10 +159,20 @@ def collect(
     except Exception as exc:
         _report(context_arm[0], exc)
     command = None
-    try:
-        command = load(*rewrite_arm).rewrite(payload)
-    except Exception as exc:
-        _report(rewrite_arm[0], exc)
+    for filename, module_name in rewrite_arms:
+        current = payload
+        if command is not None:
+            current = {
+                **payload,
+                "tool_input": {**(payload.get("tool_input") or {}), "command": command},
+            }
+        try:
+            rewritten = load(filename, module_name).rewrite(current)
+        except Exception as exc:
+            _report(filename, exc)
+            continue
+        if rewritten is not None:
+            command = rewritten
     return verdicts, context, command
 
 

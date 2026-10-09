@@ -96,7 +96,9 @@ def dispatch(command, load, monkeypatch, capsys, cwd=_REPO, **tool_input):
 def test_the_arm_census_is_the_hooks_that_were_merged():
     names = tuple(name for name, _ in _mod._DECISION_ARMS) + (_mod._CONTEXT_ARM[0],)
     assert names == EXPECTED_ARMS
-    for name in names:
+    rewrites = tuple(name for name, _ in _mod._REWRITE_ARMS)
+    assert rewrites == ("strip-cd-cwd", "uv-python")
+    for name in names + rewrites:
         assert os.path.exists(os.path.join(_HOOKS, f"{name}.py")), name
 
 
@@ -208,6 +210,29 @@ def test_accept_a_rewrite_keeps_the_rest_of_the_tool_input(
         "timeout": 600000,
         "description": "Print the pytest version",
     }
+
+
+def test_accept_a_cd_into_the_cwd_reaches_uv_python_without_the_cd(
+    sandbox, monkeypatch, capsys
+):
+    """The two rewrites chain: the stripped text is what `uv-python` routes (#3957)."""
+    out = dispatch(
+        f"cd {_REPO} && pytest --version",
+        sandbox,
+        monkeypatch,
+        capsys,
+        run_in_background=True,
+    )
+    assert out["updatedInput"] == {
+        "command": "uv run pytest --version",
+        "run_in_background": True,
+    }
+
+
+def test_reject_a_cd_out_of_the_cwd_is_not_stripped(sandbox, monkeypatch, capsys):
+    other = os.path.dirname(_REPO)
+    out = dispatch(f"cd {other} && git status", sandbox, monkeypatch, capsys)
+    assert out is None or "updatedInput" not in out
 
 
 # ── one arm failing ──────────────────────────────────────────────────────────────────

@@ -558,8 +558,8 @@ the six per-hook `.sh` shims #3304 deleted.
 
 ### `bash-pretool` (PreToolUse, Bash)
 
-It *decides nothing itself*. It is the one process that runs the four Bash arms —
-`block-protected-bash`, `block-footguns`, `inject-nested-docs` and `uv-python` — each of which used to be its own hook with its own `uv run` start. A fifth arm,
+It *decides nothing itself*. It is the one process that runs the Bash arms —
+`block-protected-bash`, `block-footguns`, `inject-nested-docs` and `uv-python`, each of which used to be its own hook with its own `uv run` start, and `strip-cd-cwd` (#3957). A sixth arm,
 `auto-approve-readonly`, moved into the dotfiles `claude_guard` package as `readonly.py`
 (dotfiles #628). When #2394 merged them, all five imported `_hook_common` and
 `claude_guard.segment`, so four of those five interpreter starts bought nothing: measured on daniel-server, five sequential shims took a median 233 ms against
@@ -572,11 +572,17 @@ one `hookSpecificOutput` carrying both that decision and `inject-nested-docs`'s
 `additionalContext`. An arm that raises loses its own verdict, keeps the others, and says so
 on stderr naming itself.
 
-`uv-python` is the fifth arm since #3286, and the only one that rewrites rather than judges.
-It runs LAST, so every decision arm still reads the command the session typed — which is what
-the two separate hooks did, `bash-pretool.sh` at order 10 and `uv-python.sh` at order 20. It
-was 269 lines of shell, justified by "the interpreter start is the whole cost"; #2394
+`uv-python` is an arm since #3286, and one of the two that rewrite rather than judge. The
+rewrite arms run LAST, so every decision arm still reads the command the session typed — which
+is what the two separate hooks did, `bash-pretool.sh` at order 10 and `uv-python.sh` at order
+20. It was 269 lines of shell, justified by "the interpreter start is the whole cost"; #2394
 already pays that start on every Bash call, so a second process bought nothing.
+
+`strip-cd-cwd` is the other rewrite arm, and it runs before `uv-python`. It drops a leading
+`cd <dir> &&` when `<dir>` resolves to the session's own cwd, read from the payload rather than
+the hook's own directory. The auto-mode classifier refuses a compound command it would pass
+alone, and a `cd` into the directory the shell is already in makes any command compound while
+changing nothing it does (#3957). Any other `cd` stands.
 
 The rewrite rides in the same `hookSpecificOutput` as the verdict. Read from the 2.1.267
 bundle: a `deny` drops the `updatedInput` and the call keeps the text as typed, an `ask`
