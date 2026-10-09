@@ -89,6 +89,12 @@ def off_arm_gaps(task_list: list[dict]) -> list[str]:
     ):
         if path not in paths:
             gaps.append(path)
+    download = named(
+        task_list,
+        "Remove the agent user's Node download when homelab-ui is switched off",
+    )
+    if f"not {SWITCH}" not in when_list(download):
+        gaps.append("download")
     return gaps
 
 
@@ -108,3 +114,61 @@ def test_an_off_arm_that_keeps_the_browser_cache_is_flagged() -> None:
     assert off_arm_gaps(live) == [
         "{{ claude_code_agent_user_home }}/.cache/ms-playwright"
     ]
+
+
+# Variables that name a path inside the agent's home, which the agent owns.
+AGENT_PATH_VARS = ("claude_code_agent_user_home", "claude_code_agent_node_dir")
+
+
+def root_modules_on_agent_paths(task_list: list[dict]) -> list[str]:
+    """Every task that touches an agent-owned path with a module other than `runuser`.
+
+    A root-run module acts on whatever the agent left at the path, a symlink to a system
+    directory included. Only a command whose argv starts with `runuser` is exempt.
+    """
+    flagged = []
+    for t in task_list:
+        for key, args in t.items():
+            if not key.startswith("ansible.builtin.") or not isinstance(args, dict):
+                continue
+            if (
+                key == "ansible.builtin.command"
+                and (args.get("argv") or [None])[0] == "runuser"
+            ):
+                continue
+            if key == "ansible.builtin.set_fact":
+                continue
+            text = json.dumps(args)
+            if any(var in text for var in AGENT_PATH_VARS):
+                flagged.append(str(t.get("name")))
+    return flagged
+
+
+def test_root_never_runs_a_module_on_a_path_the_agent_owns() -> None:
+    task_list = tasks()
+    named(task_list, "Unpack the agent user's Node")
+    assert root_modules_on_agent_paths(task_list) == []
+
+
+def test_a_root_run_module_on_an_agent_path_is_flagged() -> None:
+    task = {
+        "name": "Create it",
+        "ansible.builtin.file": {
+            "path": "{{ claude_code_agent_node_dir }}",
+            "state": "directory",
+        },
+    }
+    as_agent = {
+        "name": "Create it as the agent",
+        "ansible.builtin.command": {
+            "argv": [
+                "runuser",
+                "-u",
+                "claude",
+                "--",
+                "mkdir",
+                "{{ claude_code_agent_node_dir }}",
+            ]
+        },
+    }
+    assert root_modules_on_agent_paths([task, as_agent]) == ["Create it"]

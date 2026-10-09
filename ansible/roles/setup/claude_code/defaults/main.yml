@@ -344,9 +344,9 @@ claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/h
 # and it would start a second Chromium in every operator session.
 #
 # True only in daniel-box's host_vars, and installed only while claude_code_agent_user_enabled
-# is also true. False removes the registration, the Node tree and the browser cache. Chromium's
-# shared libraries come from the host: the operator's own Chromium already runs there, so this
-# installs no apt packages.
+# is also true. False removes the registration, the Node tree, its download and the browser
+# cache. Chromium's shared libraries come from the host: the operator's own Chromium already
+# runs there, so this installs no apt packages.
 claude_code_agent_homelab_ui_enabled: false
 # A Node release tarball rather than fnm: the agent needs one fixed Node, and the operator's
 # fnm lives in their home. The sha256 is the tarball's, from the release's SHASUMS256.txt; a
@@ -369,6 +369,9 @@ claude_code_agent_playwright_mcp_version: "0.0.79"
 # playwright-mcp lands in the same bin directory.
 claude_code_agent_node_dir: "{{ claude_code_agent_user_home }}/.local/share/node"
 claude_code_agent_node_bin: "{{ claude_code_agent_node_dir }}/current/bin"
+# Root downloads and verifies the tarball here, outside the agent's home, and the agent
+# unpacks it from here.
+claude_code_agent_node_download_dir: /var/cache/claude-agent-node
 
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # The agent's account cannot merge its own PRs: "master review gate" wants an approval from
