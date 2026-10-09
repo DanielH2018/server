@@ -21,6 +21,7 @@ SHARED_IMPORT = "{{ role_path }}/../common/tasks/agent_user.yml"
 CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "main.yml"
 # Imported by main.yml under one `when:`, so its tasks carry none and agent_tasks() misses them.
 AGENT_GITHUB = SETUP / "claude_code" / "tasks" / "agent_github.yml"
+AGENT_ACCESS = SETUP / "claude_code" / "tasks" / "agent_access.yml"
 # Every role that builds an agent user, with the role variable each contract key must name.
 AGENTS = {
     "renovate_agent": {
@@ -76,6 +77,25 @@ def test_the_agent_user_joins_no_group() -> None:
     """No group: `ubuntu` reads /etc/rancher/k3s/*.env, and `sudo` is root."""
     assert group_grants(tasks(SHARED)) == []
     assert group_grants(tasks(CLAUDE_TASKS)) == []
+    assert group_grants(tasks(AGENT_GITHUB)) == []
+
+
+def test_the_claude_agents_only_group_is_the_journal_and_it_switches_off() -> None:
+    """The operator granted systemd-journal on 2026-10-09, and nothing else.
+
+    `append: false` makes the list exact, so the switch's false arm removes the group and an
+    added group would have to be written into this one list.
+    """
+    access = tasks(AGENT_ACCESS)
+    assert group_grants(access) == [
+        "Set the agent user's journal access: groups",
+        "Set the agent user's journal access: append",
+    ]
+    user = named(access, "Set the agent user's journal access")["ansible.builtin.user"]
+    assert user["groups"] == (
+        "{{ ['systemd-journal'] if claude_code_agent_journal_access else [] }}"
+    )
+    assert user["append"] is False
 
 
 def test_a_user_task_granting_a_group_is_flagged() -> None:
@@ -275,3 +295,30 @@ def test_a_root_owned_directory_is_flagged() -> None:
         "ansible.builtin.file": {"path": "/srv/agent/.local/bin", "state": "directory"},
     }
     assert dirs_not_owned_like_the_chown([root_dir, chown]) == ["Create bin"]
+
+
+def chmods_after_the_acl(task_list: list[dict]) -> list[str]:
+    """Each file task that sets a mode after the first ACL task, which would reset its mask."""
+    acl_at = next(
+        (i for i, t in enumerate(task_list) if "ansible.posix.acl" in t), len(task_list)
+    )
+    return [
+        t.get("name", "")
+        for t in task_list[acl_at:]
+        if "mode" in (t.get("ansible.builtin.file") or {})
+    ]
+
+
+def test_the_operator_read_acl_runs_after_every_mode_it_depends_on() -> None:
+    """A later chmod rewrites the ACL mask, and a mask of --- disables the operator's entry."""
+    access = tasks(AGENT_ACCESS)
+    named(access, "Give files the agent writes there the operator's read")
+    assert chmods_after_the_acl(access) == []
+    main = [t.get("ansible.builtin.import_tasks") for t in tasks(CLAUDE_TASKS)]
+    assert main.index("agent_github.yml") < main.index("agent_access.yml")
+
+
+def test_a_chmod_after_the_acl_is_flagged() -> None:
+    acl = {"name": "Grant", "ansible.posix.acl": {"path": "/x"}}
+    chmod = {"name": "Reset", "ansible.builtin.file": {"path": "/x", "mode": "0700"}}
+    assert chmods_after_the_acl([acl, chmod]) == ["Reset"]

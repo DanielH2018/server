@@ -533,6 +533,11 @@
   when: claude_code_agent_user_enabled
   ansible.builtin.import_tasks: agent_github.yml
 
+- name: Set what the agent reads of the host, and what the operator reads of the agent
+  tags: [claude_code]
+  when: claude_code_agent_user_enabled
+  ansible.builtin.import_tasks: agent_access.yml
+
 # The token is the one credential in the home that works off this host, so switching the user
 # off removes it. The signing key stays: it can only sign, and a new one would need adding to
 # the account again. Revoking the token on GitHub is the operator's half of this.
