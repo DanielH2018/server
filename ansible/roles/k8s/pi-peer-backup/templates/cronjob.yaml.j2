@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -53,13 +55,7 @@ spec:
                 # ssh insists on resolving HOME even with every path given explicitly.
                 - name: HOME
                   value: /tmp
-              securityContext:
-                runAsNonRoot: true
-                readOnlyRootFilesystem: true
-                allowPrivilegeEscalation: false
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: pi-peer-backup-data
                   mountPath: /data
@@ -68,13 +64,7 @@ spec:
                   readOnly: true
                 - name: pi-peer-backup-tmp
                   mountPath: /tmp
-              resources:
-                limits:
-                  cpu: "500m"
-                  memory: 128Mi
-                requests:
-                  cpu: "10m"
-                  memory: 16Mi
+{{ job_container_resources(cpu_limit="500m", mem_limit="128Mi", cpu_request="10m", mem_request="16Mi") }}
           volumes:
             - name: pi-peer-backup-data
               persistentVolumeClaim:

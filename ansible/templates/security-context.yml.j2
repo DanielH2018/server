@@ -10,11 +10,15 @@
   container-level block only; a pod-level `securityContext` (fsGroup, supplementalGroups,
   sysctls) stays written out at its call site.
 
-  Indentation is fixed at 10 spaces, which is the container-list depth in a Deployment,
-  DaemonSet, StatefulSet or CronJob pod template here (100 of the fleet's 102 blocks). The two
-  that sit deeper — a CronJob's `jobTemplate` nests one level further — are deliberately NOT
-  converted rather than given an indent argument, because a macro that can emit at two depths
-  is one that can emit at the wrong one.
+  Indentation is fixed at 10 spaces, the container-list depth in a Deployment, DaemonSet or
+  StatefulSet pod template. A CronJob's containers sit one level further in, under
+  `jobTemplate`, and take `job_hardened_security_context()` instead: the same arguments and the
+  same body, fixed at 14 spaces. Each macro emits at one depth, so neither takes an indent
+  argument. Calling the 10-space one at CronJob depth puts a second pod-level `securityContext:`
+  in the pod spec and leaves the container with none, which
+  ansible/tests/k8s/test_container_security_context.py's
+  test_every_container_drops_all_capabilities reports, because it reads the rendered CronJob
+  containers.
 
   NOT FOR `runAsUser: 0`. A root container that drops ALL and adds no DAC capability is weaker
   than the pod's own uid, because it can no longer read another uid's files — so every root site
@@ -68,4 +72,9 @@
 {% endif %}
               drop:
                 - ALL
+{%- endmacro %}
+
+{# The same block at CronJob `jobTemplate` depth (14 spaces) — see "Indentation" above. #}
+{% macro job_hardened_security_context(read_only=false, non_root=false, run_as_user=none, run_as_group=none, add=[]) %}
+{{ hardened_security_context(read_only=read_only, non_root=non_root, run_as_user=run_as_user, run_as_group=run_as_group, add=add) | indent(4, first=true) }}
 {%- endmacro %}

@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -49,11 +51,7 @@ spec:
               image: {{ configarr_k8s_image }}
               # Read-only root since 2026-09-28: configarr writes its guide clones to
               # /app/repos, and /tmp is the one other path Node or git may touch.
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                capabilities:
-                  drop: [ALL]
+{{ job_hardened_security_context(read_only=true) }}
               volumeMounts:
                 - name: configarr-tmp
                   mountPath: /tmp
@@ -64,13 +62,7 @@ spec:
                   readOnly: true
                 - name: configarr-repos
                   mountPath: /app/repos
-              resources:
-                limits:
-                  cpu: "{{ configarr_k8s_cpu_limit }}"
-                  memory: {{ configarr_k8s_mem_limit }}
-                requests:
-                  cpu: "{{ configarr_k8s_cpu_request }}"
-                  memory: {{ configarr_k8s_mem_request }}
+{{ job_container_resources(cpu_limit=configarr_k8s_cpu_limit, mem_limit=configarr_k8s_mem_limit, cpu_request=configarr_k8s_cpu_request, mem_request=configarr_k8s_mem_request) }}
           volumes:
             - name: configarr-config
               secret:

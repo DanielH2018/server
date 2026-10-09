@@ -1,4 +1,4 @@
-"""A container-level securityContext at pod-template depth comes from the shared macro.
+"""A container-level securityContext comes from the shared macro, at both container depths.
 
 `ansible/templates/security-context.yml.j2` carries the `allowPrivilegeEscalation: false` +
 `capabilities.drop: [ALL]` body that ~100 container specs share. A
@@ -7,16 +7,16 @@ hand-written copy is where the body drifts: a `drop: [ALL]` that becomes `drop: 
 checks the RENDERED result drops capabilities, so it cannot tell a macro call from a copy that
 still happens to match.
 
-Two exemptions, both the macro's own docstring's, both structural rather than named:
+One exemption, the macro's own docstring's: a block carrying `runAsUser: 0`. The macro refuses
+uid 0 so each root site keeps the comment saying which uid owns the files and why root is
+needed, which a macro call has nowhere to put.
 
-- a block carrying `runAsUser: 0`. The macro refuses uid 0 so each root site keeps the comment
-  saying which uid owns the files and why root is needed, which a macro call has nowhere to put.
-- a block nested deeper than 10 spaces. A CronJob's `jobTemplate` puts its containers one
-  level further in, and the macro emits at one fixed depth by design.
-
-So the rule is textual: a literal `allowPrivilegeEscalation:` line at exactly 12 spaces (the
-key depth under a 10-space `securityContext:`) must sit in a block that also sets
-`runAsUser: 0`. Seven such blocks exist and every one is root.
+The rule is textual. A literal `allowPrivilegeEscalation:` line must sit in a block that also
+sets `runAsUser: 0`. The rule reads the line at 12 spaces, the key depth under
+`hardened_security_context()`'s 10-space `securityContext:`. It also reads the line at 16
+spaces, the key depth under `job_hardened_security_context()`, which a CronJob's `jobTemplate`
+needs one level further in (#3721). Before #3721 the deeper depth was exempt, and 12 CronJob
+containers had drifted into hand-written copies there.
 
 Run: uv run pytest ansible/tests/k8s/test_container_security_context_uses_the_macro.py
 """
@@ -25,8 +25,9 @@ import re
 
 from _helpers import K8S_ROLES
 
-LITERAL_KEY = re.compile(r"^ {12}allowPrivilegeEscalation:", re.MULTILINE)
-ROOT = re.compile(r"^ {12}runAsUser: 0\s*$", re.MULTILINE)
+# Pod-template depth, then CronJob `jobTemplate` depth.
+LITERAL_KEY = re.compile(r"^( {12}| {16})allowPrivilegeEscalation:", re.MULTILINE)
+ROOT = re.compile(r"^( {12}| {16})runAsUser: 0\s*$", re.MULTILINE)
 
 # The macro's two documented root call sites, so the census proves it can still find a block.
 KNOWN_ROOT_BLOCKS = frozenset(
@@ -35,21 +36,22 @@ KNOWN_ROOT_BLOCKS = frozenset(
 
 
 def hand_written_blocks(text: str) -> list[str]:
-    """Each literal 12-space `allowPrivilegeEscalation:` block that does NOT set uid 0.
+    """Each literal `allowPrivilegeEscalation:` block that does NOT set uid 0.
 
-    A block is the run of 12-space-or-deeper lines around the key; the next line indented
-    10 spaces or less ends it in either direction.
+    A block is the run of lines around the key indented at least as deep as the key; the
+    next line at the `securityContext:` depth or shallower ends it in either direction.
     """
     lines = text.splitlines()
     offenders = []
     for i, line in enumerate(lines):
-        if not LITERAL_KEY.match(line):
+        if not (key := LITERAL_KEY.match(line)):
             continue
+        depth = len(key.group(1))
         start = i
-        while start > 0 and _deeper_than_ten(lines[start - 1]):
+        while start > 0 and _inside(lines[start - 1], depth):
             start -= 1
         end = i + 1
-        while end < len(lines) and _deeper_than_ten(lines[end]):
+        while end < len(lines) and _inside(lines[end], depth):
             end += 1
         block = "\n".join(lines[start:end])
         if not ROOT.search(block):
@@ -57,8 +59,8 @@ def hand_written_blocks(text: str) -> list[str]:
     return offenders
 
 
-def _deeper_than_ten(line: str) -> bool:
-    return line.startswith(" " * 11) or not line.strip()
+def _inside(line: str, depth: int) -> bool:
+    return line.startswith(" " * (depth - 1)) or not line.strip()
 
 
 def test_every_hand_written_block_is_a_root_block():
@@ -97,11 +99,14 @@ _COPIED_BLOCK = """
           volumeMounts:
 """
 
-_CRONJOB_DEPTH_BLOCK = _COPIED_BLOCK.replace("\n ", "\n     ")
+
+def _at_cronjob_depth(block: str) -> str:
+    return block.replace("\n ", "\n     ")
 
 
-def test_a_copied_non_root_block_is_flagged_and_the_two_exemptions_pass():
+def test_a_copied_non_root_block_is_flagged_at_both_depths_and_root_passes():
     assert hand_written_blocks(_ROOT_BLOCK) == []
-    assert hand_written_blocks(_CRONJOB_DEPTH_BLOCK) == []
+    assert hand_written_blocks(_at_cronjob_depth(_ROOT_BLOCK)) == []
     assert len(hand_written_blocks(_COPIED_BLOCK)) == 1
+    assert len(hand_written_blocks(_at_cronjob_depth(_COPIED_BLOCK))) == 1
     assert len(hand_written_blocks(_ROOT_BLOCK + _COPIED_BLOCK)) == 1

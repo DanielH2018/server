@@ -1,3 +1,5 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 {#
   Keeps the status page's group list matching the AutoKuma declarations. Four stages, in order,
   because only kuma-cli can talk to Kuma and only python can decide what to say:
@@ -89,26 +91,14 @@ spec:
                     secretKeyRef:
                       name: autokuma-credentials
                       key: username
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: status-page-sync-work
                   mountPath: /work
                 - name: status-page-sync-credentials
                   mountPath: /etc/kuma
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_status_page_sync_cpu_limit, mem_limit=uptime_kuma_k8s_status_page_sync_mem_limit, cpu_request=uptime_kuma_k8s_status_page_sync_cpu_request, mem_request=uptime_kuma_k8s_status_page_sync_mem_request) }}
             - name: render
               image: {{ uptime_kuma_k8s_status_page_sync_image }}
               command:
@@ -119,26 +109,14 @@ spec:
                 - --index=/config/index.json
                 - --rules=/config/rules.json
                 - --out=/work/desired.json
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: status-page-sync-work
                   mountPath: /work
                 - name: status-page-sync-config
                   mountPath: /config
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_status_page_sync_cpu_limit, mem_limit=uptime_kuma_k8s_status_page_sync_mem_limit, cpu_request=uptime_kuma_k8s_status_page_sync_cpu_request, mem_request=uptime_kuma_k8s_status_page_sync_mem_request) }}
 {# No desired.json means the render stage found the page already grouped as declared, which is
    the steady state. Writing it anyway would be a saveStatusPage into Kuma's SQLite on every
    run. #}
@@ -163,26 +141,14 @@ spec:
                     secretKeyRef:
                       name: autokuma-credentials
                       key: username
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: status-page-sync-work
                   mountPath: /work
                 - name: status-page-sync-credentials
                   mountPath: /etc/kuma
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_status_page_sync_cpu_limit, mem_limit=uptime_kuma_k8s_status_page_sync_mem_limit, cpu_request=uptime_kuma_k8s_status_page_sync_cpu_request, mem_request=uptime_kuma_k8s_status_page_sync_mem_request) }}
           containers:
             - name: beat
               image: {{ uptime_kuma_k8s_status_page_sync_image }}
@@ -195,24 +161,12 @@ spec:
                     secretKeyRef:
                       name: autokuma-credentials
                       key: status_page_sync_push_token
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                runAsNonRoot: true
-                capabilities:
-                  drop:
-                    - ALL
+{{ job_hardened_security_context(read_only=true, non_root=true) }}
               volumeMounts:
                 - name: status-page-sync-config
                   mountPath: /config
                   readOnly: true
-              resources:
-                limits:
-                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_limit }}"
-                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_limit }}
-                requests:
-                  cpu: "{{ uptime_kuma_k8s_status_page_sync_cpu_request }}"
-                  memory: {{ uptime_kuma_k8s_status_page_sync_mem_request }}
+{{ job_container_resources(cpu_limit=uptime_kuma_k8s_status_page_sync_cpu_limit, mem_limit=uptime_kuma_k8s_status_page_sync_mem_limit, cpu_request=uptime_kuma_k8s_status_page_sync_cpu_request, mem_request=uptime_kuma_k8s_status_page_sync_mem_request) }}
           volumes:
             - name: status-page-sync-work
               emptyDir: {}
