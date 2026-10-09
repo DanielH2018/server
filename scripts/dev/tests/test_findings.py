@@ -188,11 +188,12 @@ def test_list_marks_neither_on_an_ordinary_issue(capsys, issue, make_tools):
     assert "[claimed:" not in out
 
 
-def test_list_passes_the_state_filter_to_gh(make_tools):
+def test_list_reads_only_the_open_register(make_tools):
+    """`--state closed` was retired: past findings are `history`'s search, not this read."""
     tools, calls = make_tools()
-    findings.main(["list", "--state", "closed"], tools)
+    findings.main(["list"], tools)
     argv = calls.gh_json[0]
-    assert argv[argv.index("--state") + 1] == "closed"
+    assert argv[argv.index("--state") + 1] == "open"
     assert argv[argv.index("--label") + 1] == "claude"
 
 

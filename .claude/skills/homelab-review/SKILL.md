@@ -118,6 +118,9 @@ the first-seen date and the re-observation count. A finding a reviewer surfaces 
 open issue is a **recurrence**: record it with `findings.py touch <n> --source review-<date>`
 (the third sighting adds `escalated`), never as a new row or a new issue. The list is only as
 fresh as the last close, so still confirm each item at a cited `file:line` before reporting it.
+To check whether a finding was settled before, run `findings.py history <terms>` or
+`findings.py history --file <path>`. It searches closed findings too and prints how each one
+closed; `findings.py show <n>` prints one finding's whole thread.
 
 **When the standing list and a dated ledger disagree, the ledger wins** and the standing list is
 stale — say so in the report so the next distillation fixes it.

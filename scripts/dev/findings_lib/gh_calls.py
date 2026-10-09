@@ -64,8 +64,9 @@ def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
 #
 # Nothing fetches the whole register any more, so no live caller is near this: every
 # `findings.py` subcommand reads `--state open`, `open` asks gh's search index for one
-# fingerprint, and the backlog cron reads the three narrow slices `load_backlog_issues`
-# names. The largest of those is 49 issues.
+# fingerprint, `history` and `show` ask it for one topic or one issue, and the backlog cron
+# reads the three narrow slices `load_backlog_issues` names. The largest of those is 49
+# issues.
 ISSUE_LIST_CAP = 1000
 
 # `lib.gh.gh`'s default timeout is 60s, which a whole-register `--state all` fetch outgrows:
@@ -116,7 +117,8 @@ def load_issues(
     if len(issues) >= ISSUE_LIST_CAP:
         sys.stderr.write(
             f"warning: gh returned {ISSUE_LIST_CAP} issues for --state {state}, its list "
-            "cap -- the register past it is missing, not empty\n"
+            "cap -- the register past it is missing, not empty; `findings.py history` "
+            "searches past findings without the cap\n"
         )
     return _warn_at_the_comment_cap(issues)
 
@@ -203,6 +205,39 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
             "owns it -- the owning issue may be past the page, so check before filing\n"
         )
     return found
+
+
+# What `history` and `show` read: the register's fields plus the two that say how an issue
+# closed. Kept apart from `_LIST_FIELDS`, which the claim fold and the backlog cron share and
+# which needs neither.
+HISTORY_FIELDS = f"{_LIST_FIELDS},stateReason,closedByPullRequestsReferences"
+
+
+def search_register(query: str, tools: FindingsTools, *, limit: int) -> list[dict]:
+    """The `claude` issues in any state that gh's search index matches ``query`` against.
+
+    Measured 2026-10-09: a topic search returning two issues took 0.6-0.9s, where the
+    `--state all` register read it replaces took 58.4s and stopped at 1000 issues. The
+    cost is the search index's lag — an issue filed seconds ago may not match yet, which
+    `fingerprint_match`'s DECIDED marker weighs for `open`.
+    """
+    return as_object_list(
+        tools.gh_json(
+            "issue",
+            "list",
+            "--label",
+            "claude",
+            "--state",
+            "all",
+            "--limit",
+            str(limit),
+            "--search",
+            query,
+            "--json",
+            HISTORY_FIELDS,
+        ),
+        "gh issue list --search",
+    )
 
 
 def open_pr_refs(tools: FindingsTools) -> set[int]:
