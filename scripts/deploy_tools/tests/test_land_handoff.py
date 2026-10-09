@@ -16,7 +16,7 @@ import land
 from deploy_tools.land_lib import handoff
 from deploy_tools.land_lib.options import HANDOFF_ENV, PRIMARY_ENV
 from deploy_tools.land_lib.tools import Tools
-from lib.exit_codes import LAND_BAD_ARGS
+from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 
 UNIT = "claude-land"
 PR = "3633"
@@ -70,7 +70,7 @@ def test_the_exit_code_is_the_one_the_unit_recorded(tmp_path):
         line="VERDICT: tick-timeout (PR #3633)",
         status={"Result": "exit-code", "ExecMainStatus": "75"},
     )
-    assert rc == 75
+    assert rc == LAND_GAVE_UP
 
 
 def test_a_landing_that_stopped_without_a_verdict_reports_why(tmp_path, capsys):
@@ -134,7 +134,7 @@ def test_a_code_land_sh_never_exits_with_is_reported_as_1(tmp_path):
 
 def test_a_start_that_outlasts_the_wait_asks_for_a_re_run(tmp_path):
     rc, _ = _hand_off(tmp_path, raises=subprocess.TimeoutExpired("systemctl", 1))
-    assert rc == 75
+    assert rc == LAND_GAVE_UP
 
 
 @pytest.mark.parametrize(

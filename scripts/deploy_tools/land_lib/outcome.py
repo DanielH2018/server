@@ -16,6 +16,18 @@ import sys
 from enum import StrEnum
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from lib.exit_codes import (
+    DEPLOY_BAD_FLAGS,
+    DEPLOY_BROAD,
+    DEPLOY_LOCK_PLAN_FAILED,
+    DEPLOY_LOCK_UNAVAILABLE,
+    DEPLOY_NO_HOSTS,
+    DEPLOY_STALE,
+    FAILED,
+    LAND_GAVE_UP,
+)
+
 
 class Verdict(StrEnum):
     """How a landing ended, as printed on the `VERDICT:` line."""
@@ -81,13 +93,13 @@ CAUSES = frozenset(Cause)
 # that runs the wrapper without going through a landing. Anything outside the contract
 # buckets as `deploy-exit-other` rather than inventing a label the board would group on.
 _DEPLOY_EXIT_CAUSES = {
-    1: Cause.DEPLOY_EXIT_CD_FAILED,
-    3: Cause.DEPLOY_EXIT_BROAD,
-    4: Cause.DEPLOY_EXIT_STALE,
-    64: Cause.DEPLOY_EXIT_BAD_FLAGS,
-    76: Cause.DEPLOY_EXIT_LOCK_UNAVAILABLE,
-    78: Cause.DEPLOY_EXIT_NO_HOSTS,
-    79: Cause.DEPLOY_EXIT_LOCK_PLAN_FAILED,
+    FAILED: Cause.DEPLOY_EXIT_CD_FAILED,
+    DEPLOY_BROAD: Cause.DEPLOY_EXIT_BROAD,
+    DEPLOY_STALE: Cause.DEPLOY_EXIT_STALE,
+    DEPLOY_BAD_FLAGS: Cause.DEPLOY_EXIT_BAD_FLAGS,
+    DEPLOY_LOCK_UNAVAILABLE: Cause.DEPLOY_EXIT_LOCK_UNAVAILABLE,
+    DEPLOY_NO_HOSTS: Cause.DEPLOY_EXIT_NO_HOSTS,
+    DEPLOY_LOCK_PLAN_FAILED: Cause.DEPLOY_EXIT_LOCK_PLAN_FAILED,
 }
 
 
@@ -112,7 +124,7 @@ class Outcome(Exception):
     ) -> None:
         if verdict is not None and verdict not in VERDICTS:
             raise ValueError(f"unknown verdict {verdict!r}")
-        if rc == 75 and verdict is None:
+        if rc == LAND_GAVE_UP and verdict is None:
             raise ValueError("an exit-75 outcome must name a verdict")
         super().__init__(detail)
         self.rc = rc
