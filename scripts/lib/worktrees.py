@@ -209,6 +209,12 @@ def processes_using(path: str) -> list[tuple[int, str]]:
         try:
             environ = (entry / "environ").read_bytes().split(b"\0")
         except OSError:
+            # DECIDED: another uid's unreadable process is skipped, not counted (#3994). The
+            # `ubuntu` prune of /home/ubuntu/server cannot miss a `claude` session: /home/ubuntu
+            # is 0750 ubuntu:ubuntu and `claude` is in no `ubuntu` group, so no `claude`
+            # process can hold a cwd there. Counting a process whose uid can traverse to the
+            # tree fails the other way: the agent clone is 2770 claude:ubuntu, so every
+            # `ubuntu` process could reach it and a `claude`-run removal would refuse every tree.
             continue
         for var in environ:
             if var.startswith(b"CLAUDE_PROJECT_DIR="):
