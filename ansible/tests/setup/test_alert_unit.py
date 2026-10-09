@@ -136,15 +136,26 @@ def test_each_message_renders_a_valid_json_payload() -> None:
             claude_code_memory_sync_target="daniel-server",
         )
         unit = _render(template, **{**variables, "alert_unit_message": message})
-        payload = re.search(r"-d '([^']*)'", unit)
-        assert payload, f"{name}: no single-quoted -d payload in ExecStart"
-        assert json.loads(payload.group(1)) == {"content": message}, (
-            f"{name}: the message does not survive as the JSON payload's content"
-        )
+        assert "{{" not in message, f"{name}: curl's --expand-data would expand {{{{"
+        payload = expanded_payload(unit, "2026-10-08 11:04 UTC")
+        assert payload is not None, f"{name}: no single-quoted payload in ExecStart"
+        assert json.loads(payload) == {
+            "content": f"{message} Failed at 2026-10-08 11:04 UTC."
+        }, f"{name}: the message does not survive as the JSON payload's content"
         assert (
             f"EnvironmentFile={variables['alert_unit_env_dir']}/alert-webhook.env"
             in unit
         )
+
+
+def expanded_payload(unit: str, failed_at: str) -> str | None:
+    """The `--expand-data` body as curl sends it, with the recorded failure time filled in."""
+    found = re.search(r"--expand-data '([^']*)'", unit)
+    if not found:
+        return None
+    return found.group(1).replace(
+        "{{failed_at:trim:json}}", json.dumps(failed_at)[1:-1]
+    )
 
 
 def service_settings(unit: str) -> dict[str, str]:
@@ -203,6 +214,54 @@ def test_an_alert_that_gives_up_or_retries_a_rejection_is_flagged() -> None:
     assert not retries_until_delivered({**retrying, "RestartPreventExitStatus": ""})
 
 
+def records_the_first_failure_time(unit: str, name: str) -> bool:
+    """True when the first attempt writes the time, retries keep it, and curl posts it.
+
+    The file must outlive a Restart= re-run (RuntimeDirectoryPreserve=restart) and must not be
+    overwritten by one (`test -s ... ||`), or a late page names the retry's time.
+    """
+    settings = service_settings(unit)
+    stamp = f"%t/{name}-alert/failed-at"
+    return (
+        settings.get("RuntimeDirectory") == f"{name}-alert"
+        and settings.get("RuntimeDirectoryPreserve") == "restart"
+        and settings.get("ExecStartPre", "").startswith(
+            f"/bin/sh -c 'test -s {stamp} || "
+        )
+        and settings.get("ExecStartPre", "").endswith(f"> {stamp}'")
+        and f"--variable 'failed_at@{stamp}'" in unit
+    )
+
+
+def test_a_late_page_names_the_time_its_parent_failed() -> None:
+    # The alert retries for as long as the outage lasts, so a page can arrive days after the
+    # failure and read as a fresh one (#3906).
+    unit = _render(
+        UNIT.read_text(),
+        alert_unit_name="widget",
+        alert_unit_description="Widget",
+        alert_unit_message="widget failed.",
+        alert_unit_env_dir="/etc/widget",
+    )
+    assert records_the_first_failure_time(unit, "widget")
+
+
+def test_a_stamp_a_retry_drops_or_overwrites_is_flagged() -> None:
+    unit = _render(
+        UNIT.read_text(),
+        alert_unit_name="widget",
+        alert_unit_description="Widget",
+        alert_unit_message="widget failed.",
+        alert_unit_env_dir="/etc/widget",
+    )
+    assert not records_the_first_failure_time(
+        unit.replace("RuntimeDirectoryPreserve=restart\n", ""), "widget"
+    )
+    assert not records_the_first_failure_time(
+        unit.replace("test -s %t/widget-alert/failed-at || ", ""), "widget"
+    )
+
+
 def test_every_notified_handler_exists_in_the_calling_role() -> None:
     # A notify naming no handler fails the play only when the task changes, which is the
     # deploy that edits the alert, not the one that adds the caller.
@@ -223,10 +282,10 @@ def test_a_quote_in_the_message_breaks_the_payload() -> None:
         alert_unit_message='widget "failed"',
         alert_unit_env_dir="/etc/widget",
     )
-    payload = re.search(r"-d '([^']*)'", unit)
+    payload = expanded_payload(unit, "2026-10-08 11:04 UTC")
     assert payload
     try:
-        json.loads(payload.group(1))
+        json.loads(payload)
     except json.JSONDecodeError:
         return
     raise AssertionError(

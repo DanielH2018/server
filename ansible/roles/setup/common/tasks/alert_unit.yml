@@ -24,8 +24,10 @@
 #   alert_unit_name         unit prefix: renders /etc/systemd/system/<name>-alert.service
 #   alert_unit_description  the unit's Description=
 #   alert_unit_message      the Discord message text. It sits inside a single-quoted JSON string
-#                           in ExecStart, so it must hold no `'`, `"` or `\`. Jinja in it, such
-#                           as {{ inventory_hostname }}, resolves at render time.
+#                           in ExecStart, so it must hold no `'`, `"` or `\`, and curl's
+#                           --expand-data reads it, so no `{{` once rendered. Jinja in it, such as
+#                           {{ inventory_hostname }}, resolves at render time. The unit appends
+#                           ` Failed at <UTC time>.`, so end the message with a full stop.
 #   alert_unit_env_dir      the existing directory the webhook file goes in (the service's /etc
 #                           directory); the caller creates it
 #   alert_unit_notify       optional list of the caller's own handler names to notify beside

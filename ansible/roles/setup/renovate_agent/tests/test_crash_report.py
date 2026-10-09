@@ -27,6 +27,7 @@ class _Recorder:
     def __init__(self) -> None:
         self.curls: list[tuple[list[str], str | None]] = []
         self.posts: list[str] = []
+        self.spools: list[str | None] = []
 
     def tools(self) -> renovate_agent.AgentTools:
         return renovate_agent.AgentTools(
@@ -37,8 +38,9 @@ class _Recorder:
         self.curls.append((argv, stdin_text))
         return 0, ""
 
-    def _post(self, webhook, body, user_agent, log=None):
+    def _post(self, webhook, body, user_agent, log=None, spool_dir=None):
         self.posts.append(body)
+        self.spools.append(spool_dir)
         return True
 
 
@@ -68,6 +70,8 @@ def test_a_crash_pushes_a_down_carrying_the_exception_text(tmp_path):
     assert stdin_text == f'url = "{PUSH_URL}?status=down"\n'
     assert argv[argv.index("-K") + 1] == "-"
     assert rec.posts and "CRASHED" in rec.posts[0] and "already exists" in rec.posts[0]
+    # A crash inside an outage is the post the spool exists for (#3905).
+    assert rec.spools == [str(tmp_path / "discord-spool")]
     (line,) = (tmp_path / renovate_agent.RUNS_FILE).read_text().splitlines()
     assert '"result": "crashed"' in line and "already exists" in line
 

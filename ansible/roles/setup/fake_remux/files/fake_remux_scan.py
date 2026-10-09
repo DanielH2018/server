@@ -30,13 +30,27 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fake_remux_logic as frl
-from host_lib import atomic_write, discord_post, parse_env_file
+from host_lib import atomic_write, discord_post, flush_discord_spool, parse_env_file
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-fake-remux"
+# Where a post the host could not deliver waits for the next run of any of the three crons
+# (#3905). They hold fake_remux_lock while they run, so they never flush it at the same time.
+DISCORD_SPOOL_DIR = "/var/lib/autofix-fake-remux/discord-spool"
 DISCORD_MARKER = (
     "📼 fake-remux:"  # self-identifying prefix on posts (the UA is header-only)
 )
+
+
+def flush_queued_posts(cfg: dict) -> None:
+    """Post what an outage queued in DISCORD_SPOOL_DIR, whether or not this run had news.
+
+    Each cron posts only when it acts, so without this a queued post waited for the next
+    replacement or repair, which can be weeks away (#3905).
+    """
+    flush_discord_spool(
+        DISCORD_SPOOL_DIR, cfg.get("ARR_DISCORD_WEBHOOK_URL", ""), USER_AGENT, log=log
+    )
 
 
 def load_config(path: str = CONFIG_PATH) -> dict:
@@ -309,12 +323,26 @@ def scan(cfg):
             len(new_fakes),
             max_per_scan,
         )
-        discord_post(webhook, summary, USER_AGENT, log=log, marker=DISCORD_MARKER)
+        discord_post(
+            webhook,
+            summary,
+            USER_AGENT,
+            log=log,
+            marker=DISCORD_MARKER,
+            spool_dir=DISCORD_SPOOL_DIR,
+        )
     else:
         for f in new_fakes:
             line = frl.format_fake_line("Seeded for replacement", f)
             log(line)
-            discord_post(webhook, line, USER_AGENT, log=log, marker=DISCORD_MARKER)
+            discord_post(
+                webhook,
+                line,
+                USER_AGENT,
+                log=log,
+                marker=DISCORD_MARKER,
+                spool_dir=DISCORD_SPOOL_DIR,
+            )
         ok = True
         summary = (
             "seeded %d fake(s) for replacement" % len(new_fakes)
@@ -345,6 +373,7 @@ def main() -> int:
         ok, msg = False, "fake-remux scan error: %s" % e
     log("OK  " if ok else "DOWN", msg)
     write_state(state_file, ok, msg)
+    flush_queued_posts(cfg)
     return 0
 
 

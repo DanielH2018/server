@@ -412,7 +412,12 @@ def _alert_transitions(cfg, before_states, ledger):
         )
         log(line)
         discord_post(
-            webhook, line, scan.USER_AGENT, log=log, marker=scan.DISCORD_MARKER
+            webhook,
+            line,
+            scan.USER_AGENT,
+            log=log,
+            marker=scan.DISCORD_MARKER,
+            spool_dir=scan.DISCORD_SPOOL_DIR,
         )
 
 
@@ -533,6 +538,7 @@ def main() -> int:
         ok, msg = False, "fake-remux reconcile error: %s" % e
     log("OK  " if ok else "DOWN", msg)
     scan.write_state(state_file, ok, msg)
+    scan.flush_queued_posts(cfg)
     return 0
 
 

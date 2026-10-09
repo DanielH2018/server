@@ -34,7 +34,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mkv_attachment_logic as mal
-from fake_remux_scan import load_config, log
+from fake_remux_scan import DISCORD_SPOOL_DIR, flush_queued_posts, load_config, log
 from host_lib import atomic_write, discord_post
 
 USER_AGENT = "autofix-mkv-attachments"
@@ -133,7 +133,14 @@ def sweep(cfg, roots, apply_changes: bool):
             f.name,
             len(renames),
         )
-        discord_post(webhook, line, USER_AGENT, log=log, marker=DISCORD_MARKER)
+        discord_post(
+            webhook,
+            line,
+            USER_AGENT,
+            log=log,
+            marker=DISCORD_MARKER,
+            spool_dir=DISCORD_SPOOL_DIR,
+        )
 
     return mal.verdict(scanned, repaired, failures)
 
@@ -181,6 +188,7 @@ def main(argv=None) -> int:
     log("OK  " if ok else "DOWN", msg)
     if not args.dry_run:
         write_state(state_file, ok, msg)
+        flush_queued_posts(cfg)
     # 0 even on a DOWN verdict, matching fake_remux_scan.py: the state file is the signal, and the
     # cron's `|| logger` arm is for a wrapper that could not run at all. A DOWN is data to report.
     return 0

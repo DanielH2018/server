@@ -43,6 +43,13 @@ KUBECTL_UNRUNNABLE_RC = 125
 DISCORD_MAX = 1900
 DISCORD_TRUNCATED = "\n…(truncated)"
 
+# discord_post's opt-in spool (#3905). A daily script spools one message a day, so 50 holds an
+# outage far longer than the three days of #3882, and a revoked webhook cannot grow it without
+# bound. A flush posts at most four, so a backlog drains over several calls instead of in one
+# burst; a 429 from a burst only re-queues the message anyway.
+DISCORD_SPOOL_MAX = 50
+DISCORD_SPOOL_FLUSH_MAX = 4
+
 # kuma-push-lib.sh's contract for the shell crons. That file's header has the measurements
 # behind each number (#1010, #2013). 900 keeps the msg inside Discord's 1024-character embed
 # field once Kuma adds its own text.
@@ -139,8 +146,130 @@ def clamp_discord(content: str, limit: int = DISCORD_MAX) -> str:
     return content[: limit - len(DISCORD_TRUNCATED)].rstrip() + DISCORD_TRUNCATED
 
 
+def _discord_send(webhook: str, content: str, user_agent: str, log=None) -> int | None:
+    """POST one already-clamped message; the HTTP status, or None when nothing answered."""
+    # The Cloudflare-1010 rationale in discord_post's docstring is duplicated in monitor-bridge's
+    # bridge/net.py `_get_json`, which sets the same header for its Discord webhook GETs. The two
+    # programs ship by different mechanisms and cannot share a module, so edit both together.
+    data = json.dumps({"content": content}).encode()
+    req = urllib.request.Request(
+        webhook,
+        data=data,
+        headers={"Content-Type": "application/json", "User-Agent": user_agent},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status
+    except urllib.error.HTTPError as e:
+        e.close()  # the error carries the open response
+        if log:
+            log("discord post failed: %s" % e)
+        return e.code
+    except Exception as e:  # alerting must never crash the caller
+        if log:
+            log("discord post failed: %s" % e)
+        return None
+
+
+def _discord_rejected(status: int | None) -> bool:
+    """True for an answer another attempt cannot change: a 4xx other than a 429.
+
+    A 400 is a payload Discord refuses and a 401/404 a revoked webhook. A spooled message that
+    gets one is dropped rather than kept, or it would block every message queued behind it.
+    """
+    return status is not None and 400 <= status < 500 and status != 429
+
+
+def _spool_message(spool_dir: str, message: str, log=None) -> None:
+    """Queue ``message`` for a later post, keeping at most ``DISCORD_SPOOL_MAX`` files."""
+    entry = {"queued_at": time.time(), "content": message}
+    # Nanoseconds first, so a name sort is a queue-order sort; the pid separates two scripts
+    # sharing one spool.
+    name = "%d-%d.json" % (time.time_ns(), os.getpid())
+    try:
+        atomic_write(os.path.join(spool_dir, name), json.dumps(entry))
+        queued = sorted(n for n in os.listdir(spool_dir) if n.endswith(".json"))
+        for stale in queued[: max(0, len(queued) - DISCORD_SPOOL_MAX)]:
+            os.remove(os.path.join(spool_dir, stale))
+            if log:
+                log("discord spool full; dropped %s" % stale)
+    except OSError as e:
+        if log:
+            log("discord spool write failed: %s" % e)
+        return
+    if log:
+        log("discord post queued in %s" % spool_dir)
+
+
+def _delayed_note(queued_at: float) -> str:
+    when = _dt.datetime.fromtimestamp(queued_at, _dt.timezone.utc)
+    return "\n(delayed: first attempt %s)" % when.strftime("%Y-%m-%d %H:%M UTC")
+
+
+def flush_discord_spool(
+    spool_dir: str, webhook: str, user_agent: str, log=None
+) -> bool:
+    """Post up to ``DISCORD_SPOOL_FLUSH_MAX`` messages queued in ``spool_dir``, oldest first.
+
+    A ``discord_post(spool_dir=...)`` caller runs this once per run, news or not, so a queued
+    post goes out within one run of the network returning. An absent spool costs one listing
+    and no request. False when the webhook is empty, or a delivery failed for a reason another
+    attempt can fix (no network, a 5xx, a 429); that message and the rest stay queued.
+    """
+    if not webhook:
+        return False
+    try:
+        queued = sorted(n for n in os.listdir(spool_dir) if n.endswith(".json"))
+    except OSError:
+        return True  # nothing has been queued yet
+    for name in queued[:DISCORD_SPOOL_FLUSH_MAX]:
+        path = os.path.join(spool_dir, name)
+        try:
+            with open(path) as fh:
+                entry = json.load(fh)
+            message, queued_at = str(entry["content"]), float(entry["queued_at"])
+        except FileNotFoundError:
+            continue  # another script sharing the spool already delivered it
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            if log:
+                log("discord spool: dropping unreadable %s: %s" % (name, e))
+            _remove_quietly(path)
+            continue
+        note = _delayed_note(queued_at)
+        status = _discord_send(
+            webhook,
+            clamp_discord(message, DISCORD_MAX - len(note)) + note,
+            user_agent,
+            log,
+        )
+        if status is not None and 200 <= status < 300:
+            _remove_quietly(path)
+        elif _discord_rejected(status):
+            if log:
+                log(
+                    "discord spool: Discord rejected %s with %s; dropped"
+                    % (name, status)
+                )
+            _remove_quietly(path)
+        else:
+            return False
+    return True
+
+
+def _remove_quietly(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def discord_post(
-    webhook: str, content: str, user_agent: str, log=None, marker: str = ""
+    webhook: str,
+    content: str,
+    user_agent: str,
+    log=None,
+    marker: str = "",
+    spool_dir: str | None = None,
 ) -> bool:
     """POST ``content`` to a Discord ``webhook``.
 
@@ -158,28 +287,29 @@ def discord_post(
 
     The posted message, ``marker`` included, goes through ``clamp_discord``, so an over-long
     message arrives cut to ``DISCORD_MAX`` and ending in the truncation marker.
+
+    ``spool_dir`` (optional) is for a caller that never retries a post itself. A post that
+    fails for a reason another attempt can fix (no network, a 5xx, a 429) is queued there, and
+    ``flush_discord_spool`` later sends it with a ``(delayed: first attempt <UTC time>)`` line.
+    This call runs that flush first; while the flush fails, the new post joins the queue without
+    an attempt of its own. Such a caller also runs the flush once per run (#3905). A caller
+    that gates a marker on the return value must NOT pass it: its next run re-sends the post,
+    so it would arrive twice. The return value is unchanged.
     """
-    # The Cloudflare-1010 rationale above is duplicated in monitor-bridge's
-    # bridge/net.py `_get_json`, which sets the same header for its Discord webhook GETs. The two
-    # programs ship by different mechanisms and cannot share a module, so edit both together.
     if not webhook:
         if log:
             log("no Discord webhook set; skipping post")
         return False
     message = f"{marker} {content}" if marker else content
-    data = json.dumps({"content": clamp_discord(message)}).encode()
-    req = urllib.request.Request(
-        webhook,
-        data=data,
-        headers={"Content-Type": "application/json", "User-Agent": user_agent},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return 200 <= resp.status < 300
-    except Exception as e:  # alerting must never crash the caller
-        if log:
-            log("discord post failed: %s" % e)
+    if spool_dir and not flush_discord_spool(spool_dir, webhook, user_agent, log):
+        _spool_message(spool_dir, message, log)
         return False
+    status = _discord_send(webhook, clamp_discord(message), user_agent, log)
+    if status is not None and 200 <= status < 300:
+        return True
+    if spool_dir and not _discord_rejected(status):
+        _spool_message(spool_dir, message, log)
+    return False
 
 
 def cap_kuma_msg(msg: str, limit: int = KUMA_PUSH_MSG_MAX) -> str:

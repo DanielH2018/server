@@ -23,7 +23,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from host_lib import discord_post
+from host_lib import discord_post, flush_discord_spool
 
 
 def log(msg: str) -> None:
@@ -70,7 +70,7 @@ def run(
 
 @dataclass(frozen=True)
 class AgentTools:
-    """The four boundaries the worktree, census and crash-report paths cross.
+    """The five boundaries the worktree, census, crash-report and spool-flush paths cross.
 
     The defaults are production, so `main()` passes nothing.
 
@@ -81,6 +81,7 @@ class AgentTools:
 
     run: Callable[..., tuple[int, str]] = run
     discord_post: Callable[..., bool] = discord_post
+    flush_discord_spool: Callable[..., bool] = flush_discord_spool
     rmtree: Callable[..., None] = shutil.rmtree
     read_file: Callable[[str], str] = read_file
 

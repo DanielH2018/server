@@ -61,6 +61,15 @@ HOLD_FILE = os.path.join(STATE_DIR, MARKERS["hold"])
 OWED_FILE = os.path.join(STATE_DIR, MARKERS["owed"])
 
 
+def discord_spool(state_dir: str) -> str:
+    """Where a post the host could not deliver waits for the next tick's post (#3905).
+
+    Every post here is fire-and-forget, so without the spool a digest sent while the host
+    could not reach Discord was lost: 2026-10-08 11:04 UTC, inside the outage of #3882.
+    """
+    return os.path.join(state_dir, "discord-spool")
+
+
 def held_plane_text(tools: AgentTools) -> str:
     """Every plane a hold waits on, `; `-joined, for the skip reason `decide` writes.
 
@@ -213,6 +222,10 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         repo_dir, ".claude", "worktrees", cfg.get("WORKTREE", "renovate-auto")
     )
     log_path = os.path.join(state_dir, "last_session.json")
+    spool = discord_spool(state_dir)
+    # Every tick, before anything can fail or take the quiet skip: a crash report queued during
+    # an outage would otherwise wait for a day that has PRs to digest (#3905).
+    tools.flush_discord_spool(spool, webhook, USER_AGENT, log=log)
 
     before = open_prs(cfg["REPO"], tools)
     gate = decide(before, tools.read_file(HOLD_FILE), held_plane_text(tools))
@@ -220,7 +233,9 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         log(f"skipping: {gate.reason}")
         record_run(state_dir, run_record(int(time.time()), "skipped", gate.reason))
         if not gate.quiet:
-            tools.discord_post(webhook, render_skip(gate, host), USER_AGENT, log=log)
+            tools.discord_post(
+                webhook, render_skip(gate, host), USER_AGENT, log=log, spool_dir=spool
+            )
         return 0
 
     reusable, why = worktree_is_reusable(repo_dir, path, branch, tools, cfg["REPO"])
@@ -232,7 +247,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         # by that same beat, so the exit code carries it: no beat, and OnFailure pages.
         msg = f"renovate-agent: skipped on {host} — {why}. Clear it, then the next tick runs."
         log(msg)
-        tools.discord_post(webhook, msg, USER_AGENT, log=log)
+        tools.discord_post(webhook, msg, USER_AGENT, log=log, spool_dir=spool)
         record_run(state_dir, run_record(int(time.time()), "blocked", why))
         return EXIT_WORKTREE_BLOCKED
 
@@ -250,7 +265,11 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         f"ok={outcome.ok}"
     )
     tools.discord_post(
-        webhook, render_digest(outcome, moved, host, log_path), USER_AGENT, log=log
+        webhook,
+        render_digest(outcome, moved, host, log_path),
+        USER_AGENT,
+        log=log,
+        spool_dir=spool,
     )
 
     now = int(time.time())
@@ -282,10 +301,8 @@ def report_crash(
         cfg = parse_env_file(config_path)
     except OSError:
         cfg = {}
-    record_run(
-        cfg.get("STATE_DIR", "/var/lib/renovate-agent"),
-        run_record(int(time.time()), "crashed", text[:200]),
-    )
+    state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent")
+    record_run(state_dir, run_record(int(time.time()), "crashed", text[:200]))
     push_url = cfg.get("KUMA_PUSH_URL", "")
     if push_url:
         sep = "&" if "?" in push_url else "?"
@@ -314,6 +331,7 @@ def report_crash(
         f"🚨 renovate-agent: CRASHED on {os.uname().nodename} — {text[:400]}",
         USER_AGENT,
         log=log,
+        spool_dir=discord_spool(state_dir),
     )
 
 
