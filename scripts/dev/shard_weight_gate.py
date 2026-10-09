@@ -17,7 +17,7 @@ import re
 # up to the first pair of colons, is the test file this weight belongs to.
 _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
 
-# What an unweighted module may measure on the CI runner before the shard gate rejects it.
+# What an unweighted module may measure on the CI runner before the shard gate annotates it.
 #
 # WHY A CI MEASUREMENT AND NOT A STATIC ARM. A neighbour heuristic sees an
 # unweighted file only where a recorded pole already sits in its directory. A heavy module
@@ -41,9 +41,10 @@ RUNNER_HEAVY_SECONDS = 10.0
 # for a module near it: `scripts/dev/tests/test_fanout_red_gate.py` measured 12.4s on one PR run
 # and 11.2s on its rerun, and the step failed 6 branches in 10 runs that way (#4010). A module in
 # that band skews a ~40s shard by a quarter at most, and the docs-refresh cron records it
-# unattended within a day, so the band annotates and only a module past it fails. 15s sits
-# above the variance seen near the bound and still well under the ~30s module that motivated
-# the gate.
+# unattended within a day, so the band annotates and only a module past it fails. The band
+# narrows the flake rather than removing it: #3604 saw one module measure 8s and 15.6s on two
+# runs of the same code, so a module near 15s can still land either side of it. 15s is still
+# well under the ~30s module that motivated the gate.
 RUNNER_HEAVY_FAIL_SECONDS = 15.0
 
 # How many times its measured runner seconds a RECORDED weight may claim before the shard gate
