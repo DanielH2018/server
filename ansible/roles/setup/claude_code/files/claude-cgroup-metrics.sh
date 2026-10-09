@@ -111,16 +111,20 @@ trap 'rm -f "$TMP"' EXIT
   # Slice 6 of docs/claude-agent-user.md: a uid listed in CLAUDE_WATCH_UIDS (the unit sets it
   # from claude_code_watch_uids) must run no Claude Code. Each one gets an explicit series, 0
   # included, so a quiet uid reads as checked rather than as absent. The real uid and the exact
-  # process name come from /proc/<pid>/status; a process that exits mid-scan is skipped.
+  # process name come from /proc/<pid>/status.
+  #
+  # cat reads the files, not awk: a process that exits between the glob and the read leaves a
+  # path that cannot be opened, and gawk treats that as fatal, so the whole count came back
+  # empty and the series read a false 0 on some runs (2026-10-09). cat skips the file and goes
+  # on. Name: is the first line of every status file, so it resets the record without FNR.
   if [[ -n "${CLAUDE_WATCH_UIDS:-}" ]]; then
     printf '# HELP claude_uid_processes Processes named claude whose real uid is this watched uid.\n'
     printf '# TYPE claude_uid_processes gauge\n'
-    counts=$(awk '
-      FNR == 1 { name = "" }
+    counts=$(cat "$PROCROOT"/[0-9]*/status 2>/dev/null | awk '
       $1 == "Name:" { name = $2 }
       $1 == "Uid:" && name == "claude" { n[$2]++ }
       END { for (u in n) print u, n[u] }
-    ' "$PROCROOT"/[0-9]*/status 2>/dev/null)
+    ')
     for uid in $CLAUDE_WATCH_UIDS; do
       n=$(awk -v u="$uid" '$1 == u { print $2 }' <<< "$counts")
       printf 'claude_uid_processes{uid="%s"} %s\n' "$uid" "${n:-0}"
