@@ -432,12 +432,13 @@ stringData:
   # retried, and a `critical` row carries the severity tag and pages email too.
   # `probe.py kuma-drift` reads this loop from the same table, so its census still lists every
   # bridge tile. The tokens are bare lookups, so a row whose secret is missing fails the
-  # render rather than dropping its tile (#1632).
+  # render rather than dropping its tile (#1632). `ensure_ascii=False` keeps an em dash a literal
+  # character, the bytes the hand-written tiles carried, so AutoKuma sees no change.
 {% for check in lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') %}
 {%   set tags = ([{'name': 'tag-severity', 'value': 'critical'}] if check.critical | default(false) else [])
               + ([{'name': 'tag-runbook', 'value': 'https://docs.local.' ~ domain ~ '/' ~ check.runbook ~ '/'}] if check.runbook | default(none) else []) %}
   {{ check.kuma_id }}.json: |
-    {"type": "push", "name": {{ check.display | to_json }}, "description": {{ check.description | to_json }}, "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ lookup('vars', check.token) }}"{% if tags %}, "tag_names": {{ tags | to_json }}{% endif %}, "notification_name_list": {{ ([kuma_notification_id] + (['email'] if check.critical | default(false) else [])) | to_json }}}
+    {"type": "push", "name": {{ check.display | to_json(ensure_ascii=False) }}, "description": {{ check.description | to_json(ensure_ascii=False) }}, "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ lookup('vars', check.token) }}"{% if tags %}, "tag_names": {{ tags | to_json }}{% endif %}, "notification_name_list": {{ ([kuma_notification_id] + (['email'] if check.critical | default(false) else [])) | to_json }}}
 {% endfor %}
   # Host flip 1 (2026-08-14): pushed once nightly by the k8s/pi-peer-backup CronJob
   # (23:30), not every bridge cycle — the window is 2.5 days (two missed runs + slack,
