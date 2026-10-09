@@ -20,11 +20,11 @@ import json
 import pytest
 
 from _helpers import ANSIBLE
+from lib.repo_paths import K3S_DEFAULTS
 from _helpers import load_yaml
 
 
 TASKS = ANSIBLE / "roles" / "setup" / "k3s" / "tasks" / "longhorn.yml"
-DEFAULTS = ANSIBLE / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
 TASK_NAME = "Set the Longhorn snapshot data-integrity mode"
 CRON_TASK_NAME = "Set the Longhorn snapshot data-integrity cron schedule"
 
@@ -99,7 +99,7 @@ def test_a_bare_string_value_is_flagged() -> None:
 def test_the_mode_comes_from_a_default_rather_than_a_literal() -> None:
     """A literal in the task would make the revert-after-measurement a code edit, not a var flip."""
     assert "k3s_longhorn_snapshot_data_integrity" in _task()["vars"]["integrity_mode"]
-    defaults = load_yaml(DEFAULTS)
+    defaults = load_yaml(K3S_DEFAULTS)
     assert defaults["k3s_longhorn_snapshot_data_integrity"] in (
         "enabled",
         "fast-check",
@@ -111,7 +111,7 @@ def test_the_schedule_comes_from_a_default_and_is_a_five_field_cron() -> None:
     """The schedule is a variable so `-e` can fire a check early without a code edit."""
     expr = _task(CRON_TASK_NAME)["vars"]["integrity_cron"]
     assert "k3s_longhorn_snapshot_data_integrity_cronjob" in expr
-    schedule = load_yaml(DEFAULTS)["k3s_longhorn_snapshot_data_integrity_cronjob"]
+    schedule = load_yaml(K3S_DEFAULTS)["k3s_longhorn_snapshot_data_integrity_cronjob"]
     assert len(schedule.split()) == 5, (
         f"Longhorn takes a five-field cron; got {schedule!r}"
     )

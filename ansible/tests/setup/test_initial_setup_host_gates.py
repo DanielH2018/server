@@ -25,13 +25,12 @@ Run: uv run pytest ansible/tests/setup/test_initial_setup_host_gates.py
 
 import re
 
-from _helpers import ALL_VARS, ANSIBLE
+from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
 from _role_census import role_task_files
 from land_reach import _eval_when
 from lib import yaml_fast
 
 TASKS = ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks"
-HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 _HOST_LITERAL = re.compile(r"inventory_hostname\s*[!=]=\s*['\"]")
 
 HOSTS = ("daniel-box", "daniel-pi", "daniel-server")

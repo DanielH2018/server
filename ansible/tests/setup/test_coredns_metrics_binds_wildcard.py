@@ -18,7 +18,8 @@ The exposure argument is settled elsewhere: UFW's INPUT is default-deny, and
 
 import re
 
-from _helpers import ROLES as _ROLES, load_yaml
+from _helpers import load_yaml
+from lib.repo_paths import K3S_DEFAULTS
 from _setup_render import rendered_setup_text
 
 _COREFILE = "host-corefile.j2"
@@ -35,7 +36,7 @@ def expected_port() -> int:
     template INTERPOLATES the variable, and against a literal expectation a template that
     hardcoded the same number would pass.
     """
-    return load_yaml(_ROLES / "setup/k3s/defaults/main.yml")[_PORT_VAR]
+    return load_yaml(K3S_DEFAULTS)[_PORT_VAR]
 
 
 def metrics_bind_problem(corefile: str, port: int) -> str | None:

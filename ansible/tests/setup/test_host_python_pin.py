@@ -17,15 +17,15 @@ already couples it to the CI pin in .github/actions/setup/action.yml.
 import re
 
 from lib import yaml_fast
+from _helpers import ALL_VARS
 from _helpers import REPO as _REPO
 
 
-_ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _PYTHON_VERSION = _REPO / ".python-version"
 
 
 def _pin() -> str:
-    return yaml_fast.safe_load(_ALL_VARS.read_text())["host_python_version"]
+    return yaml_fast.safe_load(ALL_VARS.read_text())["host_python_version"]
 
 
 def test_host_python_version_is_pinned_to_an_exact_patch():

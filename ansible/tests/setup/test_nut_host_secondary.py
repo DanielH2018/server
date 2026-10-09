@@ -23,7 +23,7 @@ Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 """
 
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
 import json
 import re
 
@@ -35,9 +35,8 @@ from lib.proc_testing import run
 
 ROLE = ANSIBLE / "roles" / "setup" / "nut_host"
 TASKS = (ROLE / "tasks" / "main.yml").read_text()
-GROUP_VARS = (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
+ALL_VARS_TEXT = ALL_VARS.read_text()
 SETUP = (ANSIBLE / "initial_setup.yml").read_text()
-HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 NUT_DEFAULTS = ANSIBLE / "roles" / "k8s" / "nut" / "defaults" / "main.yml"
 
 # Measured on daniel-server, `upsc apc-ups@127.0.0.1`: battery.runtime 987 at
@@ -55,7 +54,7 @@ BLIP_RIDE_OUT_S = 300
 
 def test_secondary_is_disarmed_by_default():
     """Arming powers a machine off; it must be an explicit, per-host decision."""
-    assert "nut_host_secondary_armed: false" in GROUP_VARS, (
+    assert "nut_host_secondary_armed: false" in ALL_VARS_TEXT, (
         "the cross-node secondary must default to disarmed — a wrong SHUTDOWNCMD or an "
         "unreachable upsd looks exactly like a working one until mains power fails"
     )
@@ -172,7 +171,7 @@ def onbatt_delay_verdict(delay: int, armed_beyond_ups_host: bool) -> str | None:
 
 
 def _armed_hosts_beyond_ups_host() -> list[str]:
-    ups_host = yaml_fast.safe_load(GROUP_VARS)["ups_host"]
+    ups_host = yaml_fast.safe_load(ALL_VARS_TEXT)["ups_host"]
     armed = []
     for path in sorted(HOST_VARS.glob("*.yml")):
         host = path.stem

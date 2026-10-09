@@ -20,6 +20,7 @@ simply never ran:
 """
 
 from lib import yaml_fast
+from _helpers import ALL_VARS
 from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks
 from _helpers import command_of as _cmd
@@ -33,7 +34,6 @@ _DRAIN = _REPO / "ansible/roles/k8s/manifests/tasks/drain.yml"
 _CONFIGARR = _REPO / "ansible/roles/k8s/configarr/tasks/main.yml"
 _GATE = _REPO / "ansible/post_tasks/k8s_stabilise_gate.yml"
 _BATCH = _REPO / "ansible/tasks/k8s_batch.yml"
-_ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 
 
 def test_manifests_queues_the_rollout_instead_of_waiting() -> None:
@@ -222,7 +222,7 @@ def test_batch_drains_after_applying() -> None:
 
 
 def test_batch_width_is_declared_and_conservative() -> None:
-    width = yaml_fast.safe_load(_ALL_VARS.read_text())["k8s_rollout_batch_width"]
+    width = yaml_fast.safe_load(ALL_VARS.read_text())["k8s_rollout_batch_width"]
     assert isinstance(width, int) and width >= 1
     assert width <= 10, (
         f"k8s_rollout_batch_width={width} rolls that many workloads at once. 37 of the 50 "

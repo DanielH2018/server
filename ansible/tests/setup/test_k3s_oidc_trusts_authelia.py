@@ -28,6 +28,7 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ANSIBLE, load_defaults
+from lib.repo_paths import ALL_VARS
 from _k8s_render import rendered_docs
 from _setup_render import render_setup_text
 
@@ -64,9 +65,7 @@ MUTUALLY_EXCLUSIVE_FLAGS = frozenset(
 
 
 def _all_vars() -> dict:
-    return yaml_fast.safe_load(
-        (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
-    )
+    return yaml_fast.safe_load(ALL_VARS.read_text())
 
 
 def _env() -> jinja2.Environment:

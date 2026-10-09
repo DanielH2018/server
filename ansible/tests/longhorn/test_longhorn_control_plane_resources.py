@@ -21,10 +21,11 @@ import pytest
 from lib import yaml_fast
 
 from _helpers import SETUP_ROLES, load_tasks
+from lib.repo_paths import K3S_DEFAULTS
 
 K3S = SETUP_ROLES / "k3s"
 LONGHORN_TASKS = K3S / "tasks" / "longhorn.yml"
-K3S_DEFAULTS = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
+K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
 
 CSI_SIDECARS = ("csi-attacher", "csi-provisioner", "csi-resizer", "csi-snapshotter")
 
@@ -111,13 +112,13 @@ def test_manager_patch_sets_a_request_and_no_limit():
     patch = _render_patch(
         task["vars"]["manager_patch"],
         k3s_longhorn_manager_memory_request=str(
-            K3S_DEFAULTS["k3s_longhorn_manager_memory_request"]
+            K3S_DEFAULT_VALUES["k3s_longhorn_manager_memory_request"]
         ),
     )
     resources = _container_resources(patch)
     _assert_request_only(resources)
     assert resources["requests"]["memory"] == str(
-        K3S_DEFAULTS["k3s_longhorn_manager_memory_request"]
+        K3S_DEFAULT_VALUES["k3s_longhorn_manager_memory_request"]
     )
 
 
@@ -140,7 +141,7 @@ def test_csi_sidecar_patch_sets_a_request_and_no_limit(sidecar):
         task["vars"]["sidecar_patch"],
         item=sidecar,
         k3s_longhorn_csi_sidecar_memory_request=str(
-            K3S_DEFAULTS["k3s_longhorn_csi_sidecar_memory_request"]
+            K3S_DEFAULT_VALUES["k3s_longhorn_csi_sidecar_memory_request"]
         ),
     )
     containers = patch["spec"]["template"]["spec"]["containers"]

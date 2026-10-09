@@ -24,11 +24,10 @@ Run: uv run pytest ansible/tests/deploy/test_containers_list_roles_exist.py
 from pathlib import Path
 
 import pytest
-from _helpers import ANSIBLE, load_yaml
+from _helpers import ANSIBLE, HOST_VARS, load_yaml
 from _role_census import role_dirs
 
 
-HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 DOCKER_ROLES = ANSIBLE / "roles" / "containers"
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
 

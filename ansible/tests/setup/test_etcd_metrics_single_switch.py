@@ -29,11 +29,10 @@ is a legitimate operator choice; what must not happen is the two halves divergin
 import re
 
 from _helpers import REPO
+from lib.repo_paths import ALL_VARS, K3S_DEFAULTS
 from _k8s_render import render_role_template
 
 _REPO = REPO
-_ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
-_K3S_DEFAULTS = _REPO / "ansible/roles/setup/k3s/defaults/main.yml"
 
 _SWITCH = "k3s_etcd_expose_metrics"
 _JOB = "- job_name: etcd"
@@ -52,11 +51,11 @@ def test_the_switch_is_defined_once_in_group_vars():
     A role-local default would let the other role fall through to its own `| default(false)`
     and read the opposite value, which is precisely the drift this file exists to stop.
     """
-    assert re.search(rf"^{_SWITCH}:", _ALL_VARS.read_text(), re.M), (
+    assert re.search(rf"^{_SWITCH}:", ALL_VARS.read_text(), re.M), (
         f"{_SWITCH} must be defined in group_vars/all.yml — two roles read it"
     )
 
-    for role_defaults in (_K3S_DEFAULTS,):
+    for role_defaults in (K3S_DEFAULTS,):
         assert not re.search(rf"^{_SWITCH}:", role_defaults.read_text(), re.M), (
             f"{_SWITCH} must NOT be redefined in {role_defaults.relative_to(_REPO)}; "
             "a role-local default shadows the shared one and lets the halves drift"
@@ -65,7 +64,7 @@ def test_the_switch_is_defined_once_in_group_vars():
 
 def test_the_k3s_flag_is_gated_on_the_switch():
     """--etcd-expose-metrics appears only inside a conditional on the switch."""
-    text = _K3S_DEFAULTS.read_text()
+    text = K3S_DEFAULTS.read_text()
     flag_lines = [ln for ln in text.splitlines() if "--etcd-expose-metrics" in ln]
 
     assert flag_lines, "setup/k3s must offer --etcd-expose-metrics in k3s_server_args"

@@ -17,7 +17,7 @@ Run: uv run pytest ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinn
 """
 
 from lib import yaml_fast
-from _manifest_guards import ALL_VARS, K8S, _render, _role_context
+from _manifest_guards import ALL_VARS_VALUES, K8S, _render, _role_context
 
 ROLE = "registry"
 # The order both address lists are written in, stated here so an inventory reordering fails a
@@ -26,8 +26,8 @@ ROLE = "registry"
 PROD_NODES = ("daniel-box", "daniel-server")
 
 DEFAULTS = _role_context(ROLE)
-CNI0 = ALL_VARS["k3s_cni0_gateways"]
-FLANNEL = ALL_VARS["k3s_flannel_node_ips"]
+CNI0 = ALL_VARS_VALUES["k3s_cni0_gateways"]
+FLANNEL = ALL_VARS_VALUES["k3s_flannel_node_ips"]
 
 
 def _slash24(cidr: str) -> str:
@@ -57,7 +57,9 @@ def test_the_two_address_lists_are_indexed_by_the_same_node():
         CNI0,
         FLANNEL,
     )
-    assert ALL_VARS["k8s_primary_node"] == PROD_NODES[0], ALL_VARS["k8s_primary_node"]
+    assert ALL_VARS_VALUES["k8s_primary_node"] == PROD_NODES[0], ALL_VARS_VALUES[
+        "k8s_primary_node"
+    ]
 
 
 def test_the_grants_match_the_pinned_node_is_clean():

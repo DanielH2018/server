@@ -19,10 +19,10 @@ Run: uv run pytest ansible/tests/services/test_strangler_bridge.py
 from lib import yaml_fast
 from jinja2 import ChainableUndefined
 from lib.ansible_jinja_env import template_env
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, HOST_VARS
+from lib.repo_paths import ALL_VARS
 
 
-HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 TRAEFIK = ANSIBLE / "roles" / "containers" / "traefik" / "templates"
 GATE = (
     ANSIBLE / "roles" / "k8s" / "traefik" / "templates" / "livesync-gate-secret.yaml.j2"
@@ -186,7 +186,7 @@ def test_dual_hostname_machinery_stays_retired():
         assert not (entry.get("hostname") or "").endswith("-k8s"), (
             f"{entry['name']}: the -k8s hostname suffix is retired"
         )
-    all_vars = (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
+    all_vars = ALL_VARS.read_text()
     assert "\nk8s_hostname_suffix:" not in all_vars
     macro = (ANSIBLE / "templates" / "ingressroute.yml.j2").read_text()
     assert "unsuffixed_hostname" not in macro

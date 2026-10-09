@@ -22,15 +22,13 @@ Run: uv run pytest ansible/tests/setup/test_loki_route_witness.py
 import os
 
 from lib.proc_testing import fake_bin, path_with, run, write_exec
-from _helpers import ANSIBLE
+from _helpers import ALL_VARS, ANSIBLE
 from _kuma_monitors import entity, tile_is_gated_on
 from _setup_render import render_setup_text
 from _shell_render import render_shell_script, rendered_shell_text
 from lib import yaml_fast
 
-GROUP_VARS = yaml_fast.safe_load(
-    (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
-)
+ALL_VARS_VALUES = yaml_fast.safe_load(ALL_VARS.read_text())
 CRONS = (
     ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks" / "crons.yml"
 ).read_text()
@@ -82,7 +80,10 @@ def _flatten(tasks):
 
 def test_both_cluster_nodes_witness_and_nothing_else_does():
     """Non-vacuity, and the reason there are two: one host cannot see a route that is dead only from the other."""
-    assert GROUP_VARS["loki_route_witness_hosts"] == ["daniel-box", "daniel-server"], (
+    assert ALL_VARS_VALUES["loki_route_witness_hosts"] == [
+        "daniel-box",
+        "daniel-server",
+    ], (
         "both prod cluster nodes witness the route from different source addresses; "
         "daniel-pi is not in its ClientIP set and daniel-stage is a different cluster"
     )
@@ -241,4 +242,4 @@ def test_the_verdict_reads_the_body_rather_than_the_exit_code():
 
 def test_the_boot_grace_is_shorter_than_the_cron_period():
     """kuma-push-lib's contract: at most one slot may ever be skipped."""
-    assert GROUP_VARS["loki_route_witness_boot_grace_s"] < HOURLY_S
+    assert ALL_VARS_VALUES["loki_route_witness_boot_grace_s"] < HOURLY_S

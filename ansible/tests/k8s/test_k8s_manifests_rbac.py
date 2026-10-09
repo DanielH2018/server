@@ -11,9 +11,9 @@ from deploy_tools import k3s_etcd_restore_gates
 from lib import yaml_fast
 from _k8s_render import rendered_docs
 from _manifest_guards import (
-    ALL_VARS,
+    ALL_VARS_VALUES,
     K3S,
-    K3S_DEFAULTS,
+    K3S_DEFAULT_VALUES,
     K8S,
     _k8s_entries,
     _render,
@@ -27,10 +27,10 @@ READ_VERBS = {"get", "list", "watch"}
 def _readonly_rbac_docs() -> list[dict]:
     rendered = _render(
         K3S / "templates" / "readonly-rbac.yaml.j2",
-        sys_user=ALL_VARS["sys_user"],
-        k3s_readonly_sa_name=K3S_DEFAULTS["k3s_readonly_sa_name"],
-        k3s_readonly_sa_namespace=K3S_DEFAULTS["k3s_readonly_sa_namespace"],
-        k3s_readonly_crd_api_groups=K3S_DEFAULTS["k3s_readonly_crd_api_groups"],
+        sys_user=ALL_VARS_VALUES["sys_user"],
+        k3s_readonly_sa_name=K3S_DEFAULT_VALUES["k3s_readonly_sa_name"],
+        k3s_readonly_sa_namespace=K3S_DEFAULT_VALUES["k3s_readonly_sa_namespace"],
+        k3s_readonly_crd_api_groups=K3S_DEFAULT_VALUES["k3s_readonly_crd_api_groups"],
     )
     return [d for d in yaml_fast.safe_load_all(rendered) if d]
 
@@ -98,7 +98,7 @@ def test_the_read_only_check_rejects_a_widened_role():
 def test_readonly_bindings_never_reference_a_writing_clusterrole():
     """The additive ClusterRole is audited by the tests above; a roleRef pointing somewhere
     else routes around all of them. Only `view` and this role's own name are permitted."""
-    allowed = {"view", K3S_DEFAULTS["k3s_readonly_sa_name"]}
+    allowed = {"view", K3S_DEFAULT_VALUES["k3s_readonly_sa_name"]}
     bindings = [d for d in _readonly_rbac_docs() if d["kind"] == "ClusterRoleBinding"]
     assert bindings, "no ClusterRoleBinding rendered"
     for binding in bindings:
@@ -343,7 +343,7 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     """`view` covers no CRDs and nothing aggregates into it, so a group missing from the
     list degrades silently: the kubeconfig still works, that one `kubectl get` says
     Forbidden, and the caller falls back to sudo."""
-    groups = set(K3S_DEFAULTS["k3s_readonly_crd_api_groups"])
+    groups = set(K3S_DEFAULT_VALUES["k3s_readonly_crd_api_groups"])
     # The group every rendered IngressRoute and Middleware is actually applied under, read off
     # the parsed apiVersion rather than off the macro's text, where `traefik.io` also appears
     # in comments and annotation keys.

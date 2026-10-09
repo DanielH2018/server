@@ -20,15 +20,14 @@ import re
 
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from lib.repo_paths import K3S_DEFAULTS
 from _shell_render import rendered_names_for, rendered_shell_text
 from lib.proc_testing import run
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
-K3S_DEFAULTS = yaml_fast.safe_load(
-    (ANSIBLE / "roles/setup/k3s/defaults/main.yml").read_text()
-)
+K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
 
-GRACE_S = K3S_DEFAULTS["k3s_health_cron_boot_grace_s"]
+GRACE_S = K3S_DEFAULT_VALUES["k3s_health_cron_boot_grace_s"]
 
 # The */10 crons the grace is derived against, and the daily ones it deliberately does not cover.
 FREQUENT_SCRIPTS = ("longhorn-backup-health.sh.j2", "disk-health.sh.j2")
@@ -80,7 +79,7 @@ def test_grace_is_shorter_than_the_cron_interval():
         "k3s_longhorn_backup_health_cron_minute",
         "k3s_disk_health_cron_minute",
     ):
-        minute = K3S_DEFAULTS[key]
+        minute = K3S_DEFAULT_VALUES[key]
         every = re.fullmatch(r"\*/(\d+)", minute)
         assert every, f"{key}={minute} is not a `*/N` cadence"
         step = int(every.group(1))

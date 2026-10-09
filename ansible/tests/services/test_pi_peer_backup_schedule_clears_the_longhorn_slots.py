@@ -14,12 +14,10 @@ clear in December unless both are.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from _helpers import ROLES
+from lib.repo_paths import ALL_VARS, K3S_DEFAULTS, ROLES
 from _helpers import load_yaml
 
 PI_PEER_DEFAULTS = ROLES / "k8s/pi-peer-backup/defaults/main.yml"
-K3S_DEFAULTS = ROLES / "setup/k3s/defaults/main.yml"
-ALL_VARS = ROLES.parent / "inventory/group_vars/all.yml"
 
 # One date under each offset America/Chicago uses.
 CDT_DAY = datetime(2026, 9, 19, tzinfo=ZoneInfo("UTC"))

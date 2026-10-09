@@ -27,9 +27,8 @@ import re
 
 import pytest
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ALL_VARS, ANSIBLE
 
-GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 ACCESS_TASKS = ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks" / "access.yml"
 
 VAR = "unattended_upgrades_origins_patterns"
@@ -54,13 +53,13 @@ MATCHERS = {
 
 
 def patterns() -> list[str]:
-    value = yaml_fast.safe_load(GROUP_VARS.read_text())[VAR]
+    value = yaml_fast.safe_load(ALL_VARS.read_text())[VAR]
     assert isinstance(value, list), f"{VAR} must be a list, got {type(value).__name__}"
     return value
 
 
 def test_var_is_defined():
-    assert VAR in yaml_fast.safe_load(GROUP_VARS.read_text()), (
+    assert VAR in yaml_fast.safe_load(ALL_VARS.read_text()), (
         f"{VAR} is missing from group_vars/all.yml; access.yml renders it unconditionally "
         f"and a tag-scoped run would die on the undefined var."
     )

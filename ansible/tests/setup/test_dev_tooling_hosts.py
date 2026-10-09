@@ -17,15 +17,13 @@ so KNOWN_TOOLING_TASKS names the members it must find.
 Run: uv run pytest ansible/tests/setup/test_dev_tooling_hosts.py
 """
 
-from _helpers import ANSIBLE, HOST_VARS
+from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
 from _role_census import role_task_files
 from lib import yaml_fast
 
 VAR = "dev_tooling_hosts"
 
-GROUP_VARS = yaml_fast.safe_load(
-    (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
-)
+ALL_VARS_VALUES = yaml_fast.safe_load(ALL_VARS.read_text())
 TASKS_DIR = ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks"
 GATE = f"inventory_hostname in {VAR}"
 
@@ -69,8 +67,8 @@ def _gated_on_the_allowlist(when: object) -> bool:
 
 
 def test_the_allowlist_names_the_two_hosts_somebody_commits_from():
-    assert GROUP_VARS[VAR] == ["daniel-box", "daniel-server"], (
-        f"{VAR} is {GROUP_VARS[VAR]!r}. The two members are the hosts somebody commits from. "
+    assert ALL_VARS_VALUES[VAR] == ["daniel-box", "daniel-server"], (
+        f"{VAR} is {ALL_VARS_VALUES[VAR]!r}. The two members are the hosts somebody commits from. "
         "Adding one provisions uv, a pinned Python 3.14 and Vale there on the next "
         "`initial_setup --tags tooling` run."
     )
@@ -80,7 +78,7 @@ def test_daniel_pi_is_excluded():
     """The rejecting half. The operator excluded the Pi: it holds a checkout but is driven
     remotely over ssh and nobody commits from it, so provisioning a pinned Python 3.14 on a
     512 MB Zero 2 W was rejected in favour of narrowing the gate."""
-    assert "daniel-pi" not in GROUP_VARS[VAR], (
+    assert "daniel-pi" not in ALL_VARS_VALUES[VAR], (
         "daniel-pi is back in the allowlist. Re-adding it provisions the Pi, which is the "
         "outcome issue #1726 rejected — the Pi's `has_repo_checkout: true` is a proxy for "
         "'somebody commits here', which is not true of it."
@@ -91,15 +89,15 @@ def test_daniel_stage_is_excluded():
     """`initial_setup.yml` has never completed against the staging guest at all — its git-hooks
     task stopped the play there (docs/archive/staging-cluster.md). The list says so rather than leaving
     a future reader to wonder whether the guest was considered."""
-    assert "daniel-stage" not in GROUP_VARS[VAR]
+    assert "daniel-stage" not in ALL_VARS_VALUES[VAR]
 
 
 def test_every_member_is_a_real_host():
     """A typo would exclude the host it meant to admit, silently — `inventory_hostname in` never
     errors on a name nothing matches."""
     known = {path.stem for path in HOST_VARS.glob("*.yml")} - {"_example"}
-    assert set(GROUP_VARS[VAR]) <= known, (
-        f"{VAR} names hosts with no host_vars file: {sorted(set(GROUP_VARS[VAR]) - known)}"
+    assert set(ALL_VARS_VALUES[VAR]) <= known, (
+        f"{VAR} names hosts with no host_vars file: {sorted(set(ALL_VARS_VALUES[VAR]) - known)}"
     )
 
 
@@ -109,7 +107,7 @@ def test_every_member_holds_a_repo_checkout():
     and nothing else would notice if one did."""
     without = [
         host
-        for host in GROUP_VARS[VAR]
+        for host in ALL_VARS_VALUES[VAR]
         if yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()).get(
             "has_repo_checkout", True
         )

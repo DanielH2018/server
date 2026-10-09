@@ -13,7 +13,7 @@ arm from one that fires on nothing.
 from pathlib import Path
 
 from lib import yaml_fast
-from _helpers import REPO
+from _helpers import ALL_VARS, REPO
 from _k8s_render import render_role_template
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
@@ -21,7 +21,6 @@ from lib.proc_testing import run
 _REPO = REPO
 _LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
 _CRONS = _REPO / "ansible/roles/setup/initial_setup/tasks/crons.yml"
-_GROUP_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _CONSUMERS = _REPO / "scripts/secrets_mgmt/consumers.py"
 
 
@@ -325,7 +324,7 @@ def test_the_reader_is_armed_where_no_manifest_prune_check_runs():
     daniel-server must be in the allowlist, and daniel-box must not be — it already has
     manifest-prune-check, and a second reader there would page twice for one drift.
     """
-    gv = yaml_fast.safe_load(_GROUP_VARS.read_text())
+    gv = yaml_fast.safe_load(ALL_VARS.read_text())
     hosts = gv["setup_drift_check_hosts"]
     assert "daniel-server" in hosts, (
         "daniel-server renders roles/setup/nut_host — the UPS shutdown chain — and is the host the "

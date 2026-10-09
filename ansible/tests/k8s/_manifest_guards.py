@@ -15,19 +15,16 @@ from jinja2 import Undefined
 from lib.k8s_roles import manifest_template
 from validate.k8s_manifests import make_lookup
 from _helpers import ANSIBLE
+from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_DEFAULTS
 
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 
 K8S = ANSIBLE / "roles" / "k8s"
 
-ALL_VARS = yaml_fast.safe_load(
-    (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
-)
+ALL_VARS_VALUES = yaml_fast.safe_load(ALL_VARS.read_text())
 
-BOX_VARS = yaml_fast.safe_load(
-    (ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml").read_text()
-)
+BOX_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())
 
 
 def _render(path: Path, **ctx) -> str:
@@ -87,4 +84,4 @@ def _role_context(role: str, **overrides) -> dict:
     return render_context(K8S / role, overrides=overrides, strict=True)
 
 
-K3S_DEFAULTS = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
+K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_DEFAULTS.read_text())

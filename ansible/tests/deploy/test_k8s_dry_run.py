@@ -30,7 +30,7 @@ import re
 from pathlib import Path
 
 from lib import yaml_fast
-from _helpers import REPO, load_tasks
+from _helpers import ALL_VARS, REPO, load_tasks
 from _role_census import role_dirs, role_task_files
 
 # The `when:`-coverage scanners, shared with test_k8s_dry_run_host_writes.py beside this file.
@@ -44,7 +44,6 @@ from _k8s_render import deploy_play
 
 _REPO = REPO
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
-_ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
 
 _REAL_DIR = "/etc/rancher/k3s/manifests"
@@ -200,7 +199,7 @@ def test_namespace_apply_is_guarded() -> None:
 
 
 def _all_vars() -> dict:
-    return yaml_fast.safe_load(_ALL_VARS.read_text()) or {}
+    return yaml_fast.safe_load(ALL_VARS.read_text()) or {}
 
 
 def test_dry_run_defaults_off() -> None:

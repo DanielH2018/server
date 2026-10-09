@@ -23,14 +23,13 @@ import xml.etree.ElementTree as ET
 from lib import yaml_fast
 from jinja2 import Undefined
 from lib.ansible_jinja_env import make_ansible_env, template_env
-from _helpers import ANSIBLE, load_yaml
+from _helpers import ALL_VARS, ANSIBLE, load_yaml
 from _k8s_render import render_role_template
 from _setup_render import rendered_setup_text
 from _shell_render import rendered_shell_text
 
 
 ROLE = ANSIBLE / "roles" / "setup" / "hypervisor"
-GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 CRON_TASK = "Schedule the full etcd restore drill"
 STUB_SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI0000000000000000000000000000 stub"
 # The two tiles this drill pushes, by their AutoKuma entity id (the Secret key minus `.json`).
@@ -69,7 +68,7 @@ def _kuma_tiles() -> dict[str, dict]:
 
 
 def _group_vars() -> dict:
-    return yaml_fast.safe_load(GROUP_VARS.read_text())
+    return yaml_fast.safe_load(ALL_VARS.read_text())
 
 
 def _vars() -> dict:

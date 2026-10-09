@@ -15,12 +15,11 @@ Run: uv run pytest ansible/tests/setup/test_network_invariant.py
 
 from lib import yaml_fast
 from _helpers import ANSIBLE as _ANSIBLE
+from lib.repo_paths import ALL_VARS, HOST_VARS
 
 
 def _created_networks() -> set[str]:
-    all_vars = yaml_fast.safe_load(
-        (_ANSIBLE / "inventory/group_vars/all.yml").read_text()
-    )
+    all_vars = yaml_fast.safe_load(ALL_VARS.read_text())
     docker_network = all_vars["docker_network"]
     tasks = yaml_fast.safe_load(
         (_ANSIBLE / "roles/setup/docker_install/tasks/install.yml").read_text()
@@ -35,7 +34,7 @@ def _created_networks() -> set[str]:
 
 def _referenced_networks() -> dict[str, str]:
     refs: dict[str, str] = {}  # network -> first "host/service" that references it
-    for host_file in (_ANSIBLE / "inventory/host_vars").glob("*.yml"):
+    for host_file in HOST_VARS.glob("*.yml"):
         host_vars = yaml_fast.safe_load(host_file.read_text()) or {}
         for svc in host_vars.get("containers_list") or []:
             for net in svc.get("networks") or []:

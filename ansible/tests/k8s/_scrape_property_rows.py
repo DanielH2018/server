@@ -9,7 +9,7 @@ from functools import cache
 
 from lib import yaml_fast
 
-from _helpers import GROUP_VARS, load_yaml
+from _helpers import ALL_VARS, load_yaml
 from _k8s_render import pod_spec
 from _property_table import Property
 
@@ -86,7 +86,7 @@ def _seconds(duration: str) -> float:
 
 @cache
 def pi_ip() -> str:
-    return load_yaml(GROUP_VARS / "all.yml")["k8s_pi_client_ip"]
+    return load_yaml(ALL_VARS)["k8s_pi_client_ip"]
 
 
 def _scrape_jobs(role: str, tpl: str, doc: dict):

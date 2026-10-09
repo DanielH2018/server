@@ -51,8 +51,8 @@ from pathlib import Path
 
 import pytest
 from _helpers import REPO, load_yaml
+from lib.repo_paths import K3S_DEFAULTS
 
-K3S_DEFAULTS = REPO / "ansible/roles/setup/k3s/defaults/main.yml"
 GITOPS_DEFAULTS = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 PROBE_HEALTH = REPO / "scripts/diagnostics/probe_lib/health_rollout.py"
 SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
