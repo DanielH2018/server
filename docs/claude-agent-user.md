@@ -246,9 +246,9 @@ update `claude_code_memory_sync_dir` and `artifacts_host_dir`.
 **Read grant:** `ubuntu` reads the agent's artifacts and memory through one grant in the role.
 `claude-memory-sync` runs as `sys_user`, and the artifacts tree is the operator's to read, so
 both need it. The artifacts pod may not need it. Its template sets no `securityContext`, so the
-pod runs as root with the default capability set of the container runtime, and those include `CAP_DAC_OVERRIDE`.
-The slice 4 check tests that read anyway, because a later hardening of the pod would drop the
-capability.
+pod runs as root with the default capability set of the container runtime, which includes
+`CAP_DAC_OVERRIDE`. The slice 4 check tests that read anyway, because a later hardening of the
+pod would drop the capability.
 
 - The `~/.claude` item in `agent_github.yml` changes from `0700` to `0710`. Group `ubuntu`
   gets traverse but not list, and `.credentials.json` stays `0600`.
