@@ -282,7 +282,7 @@
  "ansible/tests/k8s/test_netpol_baseline_labels.py": 0.0,
  "ansible/tests/k8s/test_netpol_from.py": 0.0,
  "ansible/tests/k8s/test_netpol_probe_race.py": 0.0,
- "ansible/tests/k8s/test_netpol_slice45_targets.py": 0.0,
+ "ansible/tests/k8s/test_netpol_probe_targets.py": 0.0,
  "ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py": 0.11,
  "ansible/tests/k8s/test_pod_template_hygiene.py": 0.0,
  "ansible/tests/k8s/test_priority_class_is_derived_from_tier.py": 0.15,
