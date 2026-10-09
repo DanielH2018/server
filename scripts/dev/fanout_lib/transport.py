@@ -335,8 +335,9 @@ def read_host(tools: Tools, host: str) -> HostReading | str:
         proc = tools.run(host, HOST_READ_COMMAND, READ_TIMEOUT_S, None)
     except subprocess.TimeoutExpired:
         return "%s: headroom read timed out" % host
-    # The signing-key read runs last, so the exit status is its `cat`'s: 0 for a key file, 1
-    # for a missing one, which the parse refuses on the empty line rather than here.
+    # The signing-key read runs last and always exits 0, so a non-zero status is the
+    # transport's own: ssh's 255 for a host this user cannot reach. A missing or unreadable
+    # key prints an empty line, which the parse refuses rather than this check.
     if proc.returncode not in (0, 1):
         return "%s: headroom read failed (%d): %s" % (
             host,

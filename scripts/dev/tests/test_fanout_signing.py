@@ -3,6 +3,8 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_signing.py
 """
 
+import subprocess
+
 import pytest
 
 from fanout_lib.signing import (
@@ -11,6 +13,7 @@ from fanout_lib.signing import (
     signing_key_read_command,
     unverified_reason,
 )
+from lib.git_testing import scrubbed_env
 
 # daniel-server's real signing key. Used here as a syntactically real key the gate accepts
 # when the registered set holds it — nothing in the gate compares against a constant, so
@@ -86,6 +89,56 @@ def test_the_key_read_command_is_one_read_only_line_naming_the_repo():
     assert "git -C /home/ubuntu/server config --get user.signingkey" in command
     for verb in ("rm", "systemctl", ">", "sudo", "kill"):
         assert verb not in command
+
+
+def _run_key_read(tmp_path, signingkey: str) -> str:
+    """Run the real key read in bash with `user.signingkey` set through the environment.
+
+    The value goes in through GIT_CONFIG_* rather than `git config`: a hook-run git honours
+    GIT_DIR over `-C`, and a fixture that wrote config that way once rewrote the shared
+    .git/config.
+    """
+    env = scrubbed_env(
+        HOME=str(tmp_path),
+        GIT_CONFIG_COUNT="1",
+        GIT_CONFIG_KEY_0="user.signingkey",
+        GIT_CONFIG_VALUE_0=signingkey,
+    )
+    proc = subprocess.run(
+        ["bash", "-c", signing_key_read_command(str(tmp_path))],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        timeout=10,
+    )
+    assert proc.returncode == 0
+    return proc.stdout
+
+
+def test_a_private_key_path_reads_the_public_key_beside_it(tmp_path):
+    """The `claude` agent user's shape (#4098): the read printed the private key's 13 lines."""
+    private = tmp_path / "git_signing_ed25519"
+    private.write_text(PRIVATE_KEY_TEXT)
+    (tmp_path / "git_signing_ed25519.pub").write_text(
+        f"{SERVER_KEY} claude@daniel-box\n"
+    )
+    out = _run_key_read(tmp_path, str(private))
+    assert normalize_key(out) == SERVER_KEY
+    assert PRIVATE_BODY not in out
+
+
+def test_a_private_key_path_with_no_public_key_beside_it_prints_nothing(tmp_path):
+    private = tmp_path / "git_signing_ed25519"
+    private.write_text(PRIVATE_KEY_TEXT)
+    assert _run_key_read(tmp_path, str(private)) == ""
+
+
+def test_a_public_key_path_and_a_literal_key_still_read(tmp_path):
+    public = tmp_path / "key.pub"
+    public.write_text(f"{SERVER_KEY} ubuntu@daniel-server\n")
+    assert normalize_key(_run_key_read(tmp_path, "~/key.pub")) == SERVER_KEY
+    assert normalize_key(_run_key_read(tmp_path, SERVER_KEY)) == SERVER_KEY
 
 
 @pytest.mark.parametrize(
