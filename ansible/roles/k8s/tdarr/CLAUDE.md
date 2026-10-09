@@ -40,4 +40,10 @@ shared conventions.
   image took 25m37s on 2026-10-08 and failed the old 300s gate (#3689).
   `tdarr_k8s_rollout_timeout` sets the drain's wait, the `verify.yml` gate and the template's
   `progressDeadlineSeconds`. The deadline has to move with the wait, or `rollout status` fails
-  at the 600s default anyway. `Recreate` means tdarr is down for the whole pull.
+  at the 600s default anyway.
+- **`tasks/main.yml` pulls the image onto the node before the apply (#3875).** `Recreate` stops
+  the old pod first, so without the pre-pull tdarr is down for the whole 25-minute pull. The pull
+  runs locally with `k3s crictl`, which reaches the right node only because the `media-data` PV
+  pins tdarr to `inventory_hostname`; the role asserts that pin before it pulls. The 3000s budget
+  stays: it bounds the pre-pull task, and it is the rollout's backstop if the kubelet's image
+  garbage collection removes the image before the new pod starts.

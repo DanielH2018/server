@@ -2,6 +2,65 @@
 # tdarr holds the GPU for minutes at a time on real files and rewrites the library IN PLACE, so
 # it is the one media service where a wrong mount does lasting damage rather than a failed request.
 
+# ── pre-pull, so the Recreate pays only the container start (#3875) ────────────────────────
+# The Deployment is `Recreate`: the apply below stops the old pod before the kubelet pulls the
+# new image, and the 1432 MiB pull took 25m37s on 2026-10-08 (#3689). Pulling it here first
+# keeps the old pod serving through the pull.
+#
+# A local `crictl pull` reaches the right node because the pod has exactly one node it can run
+# on. media-data is a local PV pinned to one hostname, and the pull runs on the machine Ansible
+# runs on, which pre_tasks/load_secrets.yml asserts is `inventory_hostname`. The first two tasks
+# check that the pin and the play host agree, so a pull that would land on the wrong node fails
+# the deploy instead of passing while saving nothing.
+#
+# Guarded on k8s_no_mutate: a dry run must not spend 25 minutes pulling an image.
+- name: Find the node the media volume pins tdarr to
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl get pv -o
+      jsonpath='{.items[?(@.spec.claimRef.name=="{{ tdarr_k8s_media_claim }}")].spec.nodeAffinity.required.nodeSelectorTerms[*].matchExpressions[*].values[*]}'
+  become: true
+  changed_when: false
+  register: tdarr_k8s_media_node
+  when: not k8s_no_mutate
+
+- name: Refuse a pre-pull onto a node tdarr cannot run on
+  tags: [deploy]
+  ansible.builtin.assert:
+    that: tdarr_k8s_media_node.stdout.split() == [inventory_hostname]
+    fail_msg: >-
+      The {{ tdarr_k8s_media_claim }} volume pins tdarr to '{{ tdarr_k8s_media_node.stdout }}',
+      but this play pulls onto {{ inventory_hostname }}. The pre-pull would not shorten the
+      Recreate's downtime.
+  when: not k8s_no_mutate
+
+# `inspecti` first, so an unchanged image costs no registry round trip and a ghcr.io outage
+# cannot fail a deploy that pulls nothing. A digest ref resolves locally the way the kubelet's
+# IfNotPresent check does.
+- name: Check whether the tdarr image is already on the node
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: k3s crictl inspecti -q {{ tdarr_k8s_image }}
+  become: true
+  changed_when: false
+  failed_when: false
+  register: tdarr_k8s_image_present
+  when: not k8s_no_mutate
+
+# crictl's --pull-timeout defaults to 0s, meaning no limit (crictl 1.37). The task `timeout`
+# bounds it with the rollout budget, the time a cold pull is already allowed to take.
+- name: Pull the tdarr image before the Recreate stops the old pod
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: k3s crictl pull {{ tdarr_k8s_image }}
+  become: true
+  changed_when: true
+  timeout: "{{ tdarr_k8s_rollout_timeout[:-1] | int }}"
+  when:
+    - not k8s_no_mutate
+    - tdarr_k8s_image_present.rc != 0
+
 # Both claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
 # ahead of the workload (#3387).
 - name: Deploy tdarr to the cluster
