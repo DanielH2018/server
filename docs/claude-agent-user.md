@@ -18,8 +18,8 @@ operator decided this on 2026-10-09 (#3685). See
 | 1 | A read-only `claude` user an operator can open a session as | Done 2026-10-04 (#3504, #3505) |
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
 | 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check passed 2026-10-09, after #3999 fixed the approved-PR merge. Done. |
-| 4 | The phone host `claude-rc.service` runs as `claude` | Planned. The operator took its decisions on 2026-10-09; 4a to 4c build next, and 4d waits for a quiet window. |
-| 5 | Peer users, and the tools that decrypt SOPS | Planned |
+| 4 | The phone host `claude-rc.service` runs as `claude` | 4a to 4c deployed 2026-10-09 (#4035, #4030, #4036, #4039, #4044). 4d is draft PR #4054 and waits for the operator's switch-over window. |
+| 5 | Peer users, and the tools that decrypt SOPS | The homelab-ui login deployed 2026-10-09 (#4051). Peer users dropped. The agent cannot yet drive homelab-ui (#4058). |
 | 6 | Retire Claude sessions as `ubuntu` | Planned |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
 
@@ -331,12 +331,19 @@ reads that artifact and a memory file the session wrote, after a `claude_code` a
 **Rollback:** `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live
 sessions.
 
-## Slice 5: peers, and the tools that decrypt SOPS (homelab-ui login built; peers planned)
+## Slice 5: peers, and the tools that decrypt SOPS (homelab-ui login built; peers dropped)
 
-**Build:** create a no-sudo `claude` user on daniel-server and daniel-pi for `probe.py`'s ssh
-paths, with a key per host. `scripts/z2m/set_device_option.sh` and
-`ansible/roles/k8s/qbittorrent/files/apply_prefs.py` stay operator-run, or each gets a
-lander-style oneshot unit.
+**Peer users: dropped (operator decision, 2026-10-09).** The plan was a no-sudo `claude` user
+on daniel-server and daniel-pi for `probe.py`'s ssh paths. #4057 built it, and the build
+showed the premise does not hold. `probe.py` has one ssh path, a Docker inspection on the
+Pi. That path needs the `docker` group, which is root-equivalent, and it returns every
+container's environment, secrets included. A no-sudo peer user would add an ssh login on two
+hosts and unlock nothing, so #4057 was closed without a merge. The Pi container checks stay
+operator-run. Peer users return only with a concrete need, such as a read-only container
+listing that strips the environment.
+
+`scripts/z2m/set_device_option.sh` and `ansible/roles/k8s/qbittorrent/files/apply_prefs.py`
+stay operator-run.
 
 **Built, 2026-10-09: the homelab-ui login.** The MCP server logs in as its own Authelia user,
 `claude-agent`, instead of the operator.
@@ -372,13 +379,11 @@ no Node, `playwright-mcp` or Chromium for `claude`. The agent also has no homela
 registration: the operator's is user-scope in `~/.claude.json`, which
 `agent_operator_config.yml` does not copy.
 
-**Check:** a `probe.py` Pi-plane subcommand works as `claude`, and homelab-ui renders a service
-page. Until the gap above closes, check the login half as `claude`, after both the `authelia`
-and `claude_code` applies, with
+**Check:** homelab-ui renders a service page as `claude`. Until the gap above closes, check the
+login half as `claude` with
 `uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage`.
 
-**Rollback:** remove the peer users. For the login, switch the agent user off and delete the
-`claude-agent` block.
+**Rollback:** switch the agent user off and delete the `claude-agent` block.
 
 ## Slice 6: retire Claude sessions as `ubuntu` (planned)
 
@@ -415,7 +420,7 @@ the dry-run path's kubectl calls can run without `become`.
 | `deploy.sh`, `--check` and `--dry-run` before a merge | All three decrypt SOPS, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
 | `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
-| ssh as `ubuntu` to the peers | That shell has sudo | A no-sudo `claude` user per peer (slice 5) |
+| ssh as `ubuntu` to the peers | That shell has sudo | The operator. Peer users were dropped from slice 5, because the one `probe.py` ssh path needs the Pi's `docker` group. |
 | The system journal, until slice 4 | No `adm` or `systemd-journal` membership | Its own units only. Verdict files from the lander replace the journal for landing. Slice 4 adds `systemd-journal`. |
 | Edits to `.github/workflows/` | The token has no `workflow` scope | The operator, or Renovate's own app |
 
