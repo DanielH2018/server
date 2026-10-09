@@ -35,7 +35,9 @@ SCOPED_STEPS = frozenset(
         "Lint the changed ansible files",
     }
 )
-KNOWN_JOBS = frozenset({"hooks", "ansible_lint", "pytest", "prek", "renovate-config"})
+KNOWN_JOBS = frozenset(
+    {"hooks", "ansible_lint", "pytest", "deck_mod", "prek", "renovate-config"}
+)
 
 _EVENT_TERM = re.compile(r"github\.event_name\s*(==|!=)\s*'([a-z_]+)'")
 

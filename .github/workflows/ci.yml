@@ -652,6 +652,56 @@ jobs:
           uv run python scripts/dev/pytest_shard.py "${mode[@]}" \
             --check-durations "$RUNNER_TEMP/durations.log"
 
+  # The deck mod (`.claude/plugins/deck/`, #3676) is a Claude Code plugin of function hooks,
+  # an early-access API that changes between releases. `claude plugin validate` reads the
+  # module the way the engine will, and `claude plugin test` runs its tests against the engine
+  # with the probe call mocked. Neither needs credentials. `.github/claude-cli/package-lock.json`
+  # pins the CLI to the version whose API the mod was written and type-checked against, so a
+  # bump is a deliberate change that re-runs this job. `--ignore-scripts` is safe: the package
+  # ships the native binary in its platform dependency, and the postinstall only relinks it.
+  deck_mod:
+    name: deck mod (claude plugin validate + test)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0  # the merge-base diff below needs history
+          persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
+
+      - name: Check whether this PR touches the deck mod
+        id: scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own
+        run: |
+          set -euo pipefail
+          # The token rides in a one-shot header, as in renovate-config below.
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
+            fetch --no-tags origin "$BASE_REF"
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- .claude/plugins/ .github/claude-cli/ .github/workflows/ci.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "The deck mod is untouched by this PR; it is checked on the merge to master."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'
+        with:
+          node-version: "24.21.0"
+
+      - name: Validate and test the deck mod
+        if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --prefix .github/claude-cli
+          claude=.github/claude-cli/node_modules/.bin/claude
+          "$claude" --version
+          "$claude" plugin validate .claude/plugins/deck
+          "$claude" plugin test .claude/plugins/deck
+
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
   # lives on this gate rather than on either half above. `if: always()` because a job with
@@ -661,20 +711,22 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [hooks, pytest, ansible_lint]
+    needs: [hooks, pytest, ansible_lint, deck_mod]
     if: always()
     steps:
       # Every dependency must be named in an expression here, not merely in `needs` above: a
       # `needs` entry this step does not read is WAITED for and never CHECKED, so the required
       # context would pass green with that job red. `test_every_ci_job_is_gated.py` enforces it.
-      - name: Require all three halves to have succeeded
+      - name: Require all four halves to have succeeded
         env:
           HOOKS: ${{ needs.hooks.result }}
           PYTEST: ${{ needs.pytest.result }}
           ANSIBLE_LINT: ${{ needs.ansible_lint.result }}
+          DECK_MOD: ${{ needs.deck_mod.result }}
         run: |
-          echo "hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT"
-          [ "$HOOKS" = success ] && [ "$PYTEST" = success ] && [ "$ANSIBLE_LINT" = success ]
+          echo "hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT deck-mod=$DECK_MOD"
+          [ "$HOOKS" = success ] && [ "$PYTEST" = success ] && [ "$ANSIBLE_LINT" = success ] \
+            && [ "$DECK_MOD" = success ]
 
   renovate-config:
     name: renovate config validator

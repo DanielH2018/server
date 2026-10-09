@@ -5,11 +5,13 @@ Every source is handed to `collect` as a callable, so no test reaches deploy-ui,
 
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import landing
+from lib.repo_paths import REPO
 
 PORCELAIN = """worktree /home/ubuntu/server
 HEAD aaa
@@ -137,3 +139,24 @@ def test_worktrees_carry_their_claims_and_the_primary_checkout_is_left_out():
             "claims": [],
         },
     ]
+
+
+def _deck_snapshot_fields(dts: str) -> set[str]:
+    """The field names of `DeckSnapshot` in the deck mod's type contract."""
+    body = re.search(r"export type DeckSnapshot = \{(.*?)\n\}", dts, re.S)
+    assert body, "DeckSnapshot is gone from the deck mod's types/index.d.ts"
+    return set(re.findall(r"^\s+(\w+):", body.group(1), re.M))
+
+
+def test_the_snapshot_carries_exactly_the_fields_the_deck_mod_types():
+    dts = (REPO / ".claude/plugins/deck/types/index.d.ts").read_text()
+    typed = _deck_snapshot_fields(dts)
+    assert {"hold", "blockers", "worktrees"} <= typed
+    snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
+    assert set(snap) == typed
+
+
+def test_a_field_the_mod_does_not_type_is_caught():
+    dts = "export type DeckSnapshot = {\n  hold: string\n  blockers: string[]\n}\n"
+    assert _deck_snapshot_fields(dts) == {"hold", "blockers"}
+    assert _deck_snapshot_fields(dts) != {"hold", "blockers", "extra"}

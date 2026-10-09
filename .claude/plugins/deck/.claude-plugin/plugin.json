@@ -1,0 +1,6 @@
+{
+  "name": "deck",
+  "version": "0.1.0",
+  "description": "Landing blockers, runs in flight and other worktrees, live from probe.py landing",
+  "types": "./types/index.d.ts"
+}

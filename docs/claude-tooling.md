@@ -216,6 +216,32 @@ more than twice its interval old. Any other schedule shape fails closed rather t
 interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
 reports "declares no rollout-checkable workload," which the deploy notifier skips.
 
+### `landing [--json]`
+
+`landing` answers CLAUDE.md's *When to wait* list from a running session. It prints three
+things: what would stop a landing now, the `land.sh` and `deploy.sh` runs in flight, and the
+worktrees with the issues each has claimed. Exit 1 means something blocks. `--json` prints one
+document, which the [deck mod](#the-deck-mod-claudepluginsdeck) reads every minute.
+
+A blocker is one of three states: a non-empty `hold_sha`, a red master CI run, or an owed
+`manual_plane` role. The command computes that list itself, so every surface that shows it
+agrees. Each fact comes from a reader that already exists:
+
+- On daniel-box, `hold_sha` and the `owed` ledger are read from the deployer's state directory
+  through `gitops_ledger` and `deployer_park`. Elsewhere, deploy-ui's `/api/state` serves the
+  hold.
+- deploy-ui does not serve the `manual_plane` class, so off daniel-box that field is `null`.
+  A `null` field means the source was not readable, not that nothing is owed. It adds no
+  blocker.
+- Master CI is the newest `ci.yml` run on master. A run in progress is pending, and a
+  conclusion in `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict. Neither counts as red.
+- deploy-ui's `/api/inflight` lists the runs in flight. A run's `VERDICT:` line is read with
+  `land_lib.detach.verdict_in` where its log is readable on this host.
+- `findings.py claims --json` gives the claims, joined to `git worktree list` by branch.
+
+A source that fails is named in `errors`, and its field stays `null`. One read takes about 3 s
+on daniel-server: one `gh` call, two deploy-ui GETs and one `findings.py` run.
+
 ### `ha …`
 
 Reads live Home Assistant state, authed with the SOPS `claude_ha_token`. `ha automation
@@ -417,6 +443,38 @@ has drifted from Authelia's own row.
 The two_factor session also gets its own state file and is never a fallback for the default one:
 `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as the repo user
 (code-server) and volume deletion (longhorn) behind every page load.
+
+## The deck mod (`.claude/plugins/deck/`)
+
+The deck is a Claude Code mod: a plugin of function hooks, which needs Claude Code 2.1.287 or
+newer. It shows the `probe.py landing` snapshot live during a session, where the SessionStart
+banner shows that state only once. It reads and gates nothing. A failed read shows in the pane,
+and the band and the system-prompt section keep the last good snapshot.
+
+Its three parts:
+
+- **Pane.** `/deck` opens the pane, and `/deck` again closes it. The pane lists the blockers,
+  the hold, master CI, the runs in flight, the last landing's `VERDICT:` line, and the
+  worktrees with their claims.
+- **Band.** A row above the prompt appears only while a landing is blocked. Its Hide button
+  turns it off, and `/deck band on` turns it back on.
+- **Model context.** While a landing is blocked, a `prompt.compose` hook adds a system-prompt
+  section that lists the blockers. `/deck context off` stops it, and `/deck context on`
+  restores it.
+
+The mod keeps each toggle in `$.store`, so a toggle survives into the next session. A timer runs
+`probe.py landing --json` every 60 s. `/deck refresh` runs it at once.
+
+To load it for one session, start Claude Code with `claude --plugin-dir .claude/plugins/deck`.
+A project's settings cannot name a plugin folder. To load it in every session, set
+`CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `~/.claude/settings.json`, which the dotfiles
+repo owns.
+
+To check a change to the mod, run `claude plugin validate .claude/plugins/deck` and
+`claude plugin test .claude/plugins/deck`. CI's `deck_mod` job runs both with the CLI version
+that `.github/claude-cli/package-lock.json` pins, and the `prek` gate requires it. The test file mocks the probe and runs each drawing on
+the `terminal` and `desktop` surfaces. `scripts/diagnostics/tests/test_probe_landing.py` holds
+the probe's JSON keys equal to the `DeckSnapshot` fields in `types/index.d.ts`.
 
 ## Hooks
 
