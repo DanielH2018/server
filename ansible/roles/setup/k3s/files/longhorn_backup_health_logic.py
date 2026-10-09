@@ -47,6 +47,7 @@ import re
 # (/opt/longhorn-backup-health/, health-crons.yml) and, for the test suite, via the
 # `ansible/roles/setup/common/files` pythonpath entry in pyproject.toml.
 import host_lib
+import longhorn_backups
 
 # 6h slack after a volume's first scheduled run before it is called uncovered. Hardcoded in the
 # original script too (`GRACE_SLACK_S=$(( 6 * 3600 ))`), not templated.
@@ -119,8 +120,8 @@ def check_freshness(
 ) -> tuple[tuple[int, str] | None, float]:
     """Whether the newest backup is fresh enough, as (problem_or_None, age_s).
 
-    `newest_ts` is the lexicographically-newest snapshotCreatedAt across every Backup (mirrors
-    `sort -r | head -1` on RFC3339 strings).
+    `newest_ts` is the snapshotCreatedAt of `longhorn_backups.newest` across every Backup:
+    the latest instant, not the last string, so mixed offsets cannot pick an older one.
     """
     if not newest_ts:
         return (1, "no backups exist"), 0
@@ -142,7 +143,7 @@ def check_freshness(
 def check_errored_backups(
     backup_items: list[dict], cutoff_s: float, error_max_age_hours: int
 ) -> tuple[int, str] | None:
-    """`backup_items` is `.items` from `kubectl get backups.longhorn.io -o json`."""
+    """`backup_items` is `.items` of the backup list (`longhorn_backups.LIST_ARGS`)."""
     names = []
     for item in backup_items:
         status = item.get("status") or {}
@@ -206,7 +207,7 @@ def check_tier(
     for vol, created, claim, target in rows:
         if not vol:
             continue
-        target = target or "default"
+        target = target or longhorn_backups.B2_TARGET
         if target in disarmed_targets:
             result.suppressed += 1
             continue
@@ -214,7 +215,11 @@ def check_tier(
         latest_candidates = [
             ts for (v, ts, j) in coverage_rows if v == vol and ts and j == job
         ]
-        latest = max(latest_candidates) if latest_candidates else None
+        latest = (
+            max(latest_candidates, key=longhorn_backups.stamp_order)
+            if latest_candidates
+            else None
+        )
 
         if latest is None:
             created_s = rfc3339_to_epoch(created) or 0

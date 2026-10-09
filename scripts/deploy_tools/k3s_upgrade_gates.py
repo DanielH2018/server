@@ -53,21 +53,26 @@ from deploy_tools.runbook_gates import (
     unsafe_volumes,
 )
 from lib.kubectl import CLUSTER_NODES, DEFAULT_TOOLS, Tools
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, K3S_FILES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from gitops_ledger import held_planes
 from gitops_markers import MARKERS, STATE_DIR
 
+# The Backup CR reader the backup-health cron ships (#3735); it imports host_lib.
+sys.path.insert(0, str(HOST_LIB_FILES))
+sys.path.insert(0, str(K3S_FILES))
+import longhorn_backups
+
 CLUSTER = "prod"
 RUNBOOK = "docs/k3s-upgrade.md"
 
 # Backup states a restart cannot abort. `New`, `Pending` and `InProgress` are in flight; the
 # empty string is a Backup CR the controller has not picked up yet.
-SETTLED_BACKUP = frozenset({"Completed", "Error", "Unknown"})
+SETTLED_BACKUP = frozenset({longhorn_backups.COMPLETED, "Error", "Unknown"})
 
-BACKUPS_ARGS = ("-n", LONGHORN_NS, "get", "backups.longhorn.io", "-o", "json")
+BACKUPS_ARGS = ("-n", LONGHORN_NS, *longhorn_backups.LIST_ARGS)
 NODES_ARGS = ("get", "nodes", "-o", "json")
 
 # Re-exported for the test module and for anyone reading this script as the runbook's API.
@@ -85,12 +90,11 @@ __all__ = ["EX_UNAVAILABLE", "Unreadable", "unsafe_volumes"]
 def in_flight_backups(doc) -> list[str]:
     """`name (state)` for every backup whose state is not in `SETTLED_BACKUP`."""
     if doc is None:
-        return ["<could not list backups.longhorn.io>"]
+        return [f"<could not list {longhorn_backups.RESOURCE}>"]
     found = []
-    for item in _items(doc):
-        state = str((item.get("status") or {}).get("state", ""))
-        if state not in SETTLED_BACKUP:
-            found.append(f"{_name(item)} ({state or 'no state yet'})")
+    for backup in longhorn_backups.from_items(_items(doc)):
+        if backup.state not in SETTLED_BACKUP:
+            found.append(f"{backup.name} ({backup.state or 'no state yet'})")
     return found
 
 

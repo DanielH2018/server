@@ -3,10 +3,24 @@
 Split out of probe_lib/longhorn.py, which had grown to 630 lines. Pure: both functions take
 the `path;size` listing `b2_api.b2_longhorn_lines` returns plus the cluster facts
 `longhorn_cluster.py` reads, and return text and an exit code. Nothing here runs a command or
-imports a sibling, so every budget verdict can be asserted without B2 or a cluster.
+imports a sibling, so every budget verdict can be asserted without B2 or a cluster. The one
+import is the backup group names from `longhorn_backups`, which runs nothing either.
 
 longhorn.py keeps the `b2-budget` subcommand that drives this.
 """
+
+import sys as _sys
+from pathlib import Path as _Path
+
+# `probe_lib` is a namespace package under `scripts/`, so reaching `lib` needs `scripts/` on
+# sys.path. `longhorn_backups` imports host_lib, so both directories go on it too.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
+
+_sys.path.insert(0, str(HOST_LIB_FILES))
+_sys.path.insert(0, str(K3S_FILES))
+import longhorn_backups
 
 # B2's free tier allows 2,500 Class C transactions a day. Longhorn's retention delete is the
 # thing that spends them: DeleteDeltaBlockBackup walks the volume's whole block tree with one
@@ -66,9 +80,9 @@ def format_backup_budget(vols, shards, names=None, retain=2, owners=None):
     byshard, idle, daily = {}, [], []
     for vol, v in vols.items():
         shard = shards.get(vol)
-        if shard and shard.startswith("weekly-backup-"):
+        if shard and shard.startswith(longhorn_backups.WEEKLY_SHARD_PREFIX):
             byshard.setdefault(shard, []).append((vol, v))
-        elif shard in (None, "no-backup"):
+        elif shard in (None, longhorn_backups.NO_BACKUP_GROUP):
             idle.append(vol)
         else:
             # A PVC provisioned from the `longhorn` StorageClass lands in `default` — the DAILY

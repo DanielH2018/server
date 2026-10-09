@@ -24,6 +24,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import host_lib
 import longhorn_backup_health_logic as logic
+import longhorn_backups as backups
 import longhorn_cron_evidence_logic as cron_evidence
 import longhorn_restore_drill_stamps as drill_stamps
 from longhorn_restore_drill_stamps import read_stamp as _read_stamp
@@ -159,30 +160,6 @@ def _parse_volume_rows(raw: str) -> list[tuple[str, str, str, str]]:
     return rows
 
 
-def _parse_pipe_rows(raw: str) -> list[tuple[str, str, str]]:
-    """(volumeName, snapshotCreatedAt, RecurringJob) per non-blank `|`-delimited line."""
-    rows = []
-    for line in raw.splitlines():
-        if not line.strip():
-            continue
-        parts = line.split("|", 2)
-        parts += [""] * (3 - len(parts))
-        rows.append((parts[0], parts[1], parts[2]))
-    return rows
-
-
-def _parse_space_rows(raw: str) -> list[tuple[str, str, str]]:
-    """(volumeName, snapshotCreatedAt, size) per non-blank space-delimited line."""
-    rows = []
-    for line in raw.splitlines():
-        if not line.strip():
-            continue
-        parts = line.split(None, 2)
-        parts += [""] * (3 - len(parts))
-        rows.append((parts[0], parts[1], parts[2]))
-    return rows
-
-
 def _fetch_target(name: str) -> dict:
     """{"raw": <.status.available, incl. any error text>, "reason": <conditions[0].message>}."""
     # Mirrors `AVAILABLE=$(... 2>&1)`: the raw text is used whatever the exit code, since a
@@ -257,9 +234,8 @@ def _fetch_items(
 
 
 def _fetch_backups_json(problems: list[tuple[int, str]]) -> list[dict] | None:
-    return _fetch_items(
-        problems, "errored-backups", "get", "backups.longhorn.io", "-o", "json"
-    )
+    """The backup list, fetched once a run; checks 2 to 5 all read it (#3735)."""
+    return _fetch_items(problems, "backup list", *backups.LIST_ARGS)
 
 
 def _fetch_jobs_json(problems: list[tuple[int, str]]) -> list[dict] | None:
@@ -273,7 +249,8 @@ def _fetch_r2_volumes(problems: list[tuple[int, str]]) -> set[str] | None:
         "get",
         "volumes.longhorn.io",
         "-o",
-        """jsonpath={range .items[?(@.spec.backupTargetName=="r2")]}{.metadata.name}{" "}{end}""",
+        'jsonpath={range .items[?(@.spec.backupTargetName=="%s")]}{.metadata.name}'
+        '{" "}{end}' % backups.R2_TARGET,
     )
     if out is None:
         return None
@@ -331,13 +308,18 @@ def main(now: float | None = None) -> int:
     # ── targets (armed only) and disarmed set — same order Jinja renders BACKUP_TARGETS in.
     backup_targets: list[str] = []
     disarmed_targets: list[str] = []
-    (backup_targets if BACKUP_ARMED else disarmed_targets).append("default")
-    (backup_targets if R2_ARMED else disarmed_targets).append("r2")
+    (backup_targets if BACKUP_ARMED else disarmed_targets).append(backups.B2_TARGET)
+    (backup_targets if R2_ARMED else disarmed_targets).append(backups.R2_TARGET)
 
     problems: list[tuple[int, str]] = []
     problems += logic.check_target_availability(
         {name: _fetch_target(name) for name in backup_targets}
     )
+
+    # One fetch feeds checks 2 to 5. On a failed fetch each of them is skipped rather than fed
+    # an empty list, so the one fetch problem is the one thing reported.
+    backup_items = _fetch_backups_json(problems)
+    backup_list = backups.from_items(backup_items) if backup_items is not None else None
 
     # ── check 2: freshness ────────────────────────────────────────────────────────────────
     # On a failed fetch, check_freshness is skipped rather than fed a None newest_ts: that path
@@ -345,25 +327,16 @@ def main(now: float | None = None) -> int:
     # stays 0 and is never read — the fetch problem already forces build_verdict's DOWN branch,
     # and only the green summary prints an age.
     age_s = 0.0
-    backups_jsonpath = _fetch_text(
-        problems,
-        "backup freshness",
-        "get",
-        "backups.longhorn.io",
-        "-o",
-        'jsonpath={range .items[*]}{.status.snapshotCreatedAt}{"\\n"}{end}',
-    )
-    if backups_jsonpath is not None:
-        stamps = [line for line in backups_jsonpath.splitlines() if line.strip()]
+    if backup_list is not None:
+        newest = backups.newest(backup_list)
         fresh_problem, age_s = logic.check_freshness(
-            max(stamps) if stamps else None, now_s, MAX_AGE_S, MAX_AGE_HOURS
+            newest.created if newest else None, now_s, MAX_AGE_S, MAX_AGE_HOURS
         )
         if fresh_problem:
             problems.append(fresh_problem)
 
     # ── check 3: errored backups ──────────────────────────────────────────────────────────
     error_cutoff_s = now_s - ERROR_MAX_AGE_HOURS * 3600
-    backup_items = _fetch_backups_json(problems)
     if backup_items is not None:
         errored_problem = logic.check_errored_backups(
             backup_items, error_cutoff_s, ERROR_MAX_AGE_HOURS
@@ -372,21 +345,11 @@ def main(now: float | None = None) -> int:
             problems.append(errored_problem)
 
     # ── check 4: per-tier coverage ────────────────────────────────────────────────────────
-    coverage_raw = _fetch_text(
-        problems,
-        "backup coverage",
-        "get",
-        "backups.longhorn.io",
-        "-o",
-        'jsonpath={range .items[*]}{.status.volumeName}{"|"}{.status.snapshotCreatedAt}'
-        '{"|"}{.status.labels.RecurringJob}{"\\n"}{end}',
-    )
-
     disarmed_set = set(disarmed_targets)
     result = logic.TierResult()
     tiers = [
         (
-            "recurring-job-group.longhorn.io/default=enabled",
+            backups.group_label(backups.DEFAULT_GROUP) + "=enabled",
             MAX_AGE_S,
             "daily",
             "daily-backup",
@@ -395,17 +358,17 @@ def main(now: float | None = None) -> int:
         ),
         *[
             (
-                f"recurring-job-group.longhorn.io/weekly-backup-d{shard}=enabled",
+                backups.group_label(backups.weekly_shard_group(shard)) + "=enabled",
                 WEEKLY_MAX_AGE_S,
                 f"weekly-d{shard}",
-                f"weekly-backup-d{shard}",
+                backups.weekly_shard_group(shard),
                 weekly_run_hhmm,
                 str(shard),
             )
-            for shard in range(7)
+            for shard in range(backups.WEEKLY_SHARDS)
         ],
         (
-            "recurring-job-group.longhorn.io/weekly-backup=enabled",
+            backups.group_label(backups.WEEKLY_LEGACY_GROUP) + "=enabled",
             WEEKLY_MAX_AGE_S,
             "weekly-legacy",
             "__no_job__",
@@ -413,12 +376,12 @@ def main(now: float | None = None) -> int:
             "*",
         ),
     ]
-    # The whole loop is skipped when the coverage fetch failed: every tier is matched against
-    # those rows, so feeding it an empty list would report all nine tiers' volumes as uncovered
-    # over one unread fetch. The coverage fetch's own problem is already in `problems`.
-    coverage_rows = _parse_pipe_rows(coverage_raw) if coverage_raw is not None else []
+    # The whole loop is skipped when the backup list fetch failed: every tier is matched
+    # against those rows, so feeding it an empty list would report all nine tiers' volumes as
+    # uncovered over one unread fetch. The fetch's own problem is already in `problems`.
+    coverage_rows = [(b.volume, b.created, b.job) for b in backup_list or []]
     for selector, max_age_s, tier, job, run_hhmm, dow in (
-        tiers if coverage_raw is not None else []
+        tiers if backup_list is not None else []
     ):
         rows_raw = _fetch_text(
             problems,
@@ -453,22 +416,13 @@ def main(now: float | None = None) -> int:
 
     # ── check 5: recent-backup budget ─────────────────────────────────────────────────────
     day_ago_s = now_s - 86400
-    recent_raw = _fetch_text(
-        problems,
-        "recent backups",
-        "get",
-        "backups.longhorn.io",
-        "-o",
-        'jsonpath={range .items[*]}{.status.volumeName}{" "}{.status.snapshotCreatedAt}'
-        '{" "}{.status.size}{"\\n"}{end}',
-    )
     r2_volumes = _fetch_r2_volumes(problems)
     # recent_n reaches build_verdict, which prints it only on the green summary — a failed fetch
     # here has already put its own problem in the list, so the 0 is never reported as a count.
     recent_n = 0
-    if recent_raw is not None and r2_volumes is not None:
+    if backup_list is not None and r2_volumes is not None:
         recent_n, recent_bytes = logic.compute_recent_backups(
-            _parse_space_rows(recent_raw), r2_volumes, day_ago_s
+            [(b.volume, b.created, b.size) for b in backup_list], r2_volumes, day_ago_s
         )
         budget_problem = logic.check_recent_budget(
             recent_n, recent_bytes, DAILY_BACKUP_BUDGET

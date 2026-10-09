@@ -50,13 +50,13 @@
 # actual (newer) setting. Nothing here catches that case; it is a property of which commit is on
 # the host, not something this script can detect from the outside.
 #
-# The reader issues up to 19 kubectl calls across its first eight checks (2 armed targets x up to
-# 2 calls, +1 freshness, +1 errored-backups, +1 coverage +9 per-tier, +1 recent-budget +1 r2-set,
-# +1 failed-jobs), each with a 30s timeout, plus check 9's two journalctl reads at 10s each — a
-# 590s worst case against this script's 600s cron period. Left as-is: `k3s kubectl` calls against
-# the local API server return in well under a second in practice, and 30s is a timeout for a
-# wedged cluster, not an expected duration. The margin is now 10s, so a NEW kubectl call needs
-# either a shorter deadline or a longer cron period.
+# The reader issues up to 16 kubectl calls across its first eight checks (2 armed targets x up to
+# 2 calls, +1 backup list that checks 2 to 5 share, +9 per-tier, +1 r2-set, +1 failed-jobs), each
+# with a 30s timeout, plus check 9's two journalctl reads at 10s each — a 500s worst case against
+# this script's 600s cron period. Left as-is: `k3s kubectl` calls against the local API server
+# return in well under a second in practice, and 30s is a timeout for a wedged cluster, not an
+# expected duration. The margin is 100s, so up to three more kubectl calls fit before one needs
+# a shorter deadline or a longer cron period.
 set -uo pipefail
 
 # shellcheck source=/dev/null

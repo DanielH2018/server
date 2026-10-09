@@ -188,7 +188,7 @@ def test_reader_green_path_pins_the_transport(tmp_path):
 
     The red-path test above stubs kubectl to fail every call, which exercises the shell-out and
     the down<TAB>msg contract but never the eight checks' happy path — the jsonpath literals,
-    the three row parsers, or the up<TAB>msg contract the shim's success branch depends on. This
+    the backup and volume row readers, or the up<TAB>msg contract the shim's success branch depends on. This
     runs the reader against fixtures shaped to leave every one of the eight checks clean.
     """
     now = NOW
@@ -294,11 +294,8 @@ def test_reader_argv_hands_now_to_main(tmp_path):
 @pytest.mark.parametrize(
     ("branch", "named"),
     [
-        ("freshness", "backup freshness fetch failed (rc=124)"),
-        ("errored-backups", "errored-backups fetch failed (rc=124)"),
-        ("coverage", "backup coverage fetch failed (rc=124)"),
+        ("backups", "backup list fetch failed (rc=124)"),
         ("tier-default", "daily tier volumes fetch failed (rc=124)"),
-        ("recent", "recent backups fetch failed (rc=124)"),
         ("r2", "r2 volume set fetch failed (rc=124)"),
         ("failed-jobs", "failed-jobs fetch failed (rc=124)"),
     ],
@@ -306,7 +303,7 @@ def test_reader_argv_hands_now_to_main(tmp_path):
 def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, named):
     """rc 124 is host_lib's timeout code — the case that must not read as an empty result.
 
-    None of these seven fetches may turn a nonzero rc into `[]`/`set()`: a check that reads
+    None of these five fetches may turn a nonzero rc into `[]`/`set()`: a check that reads
     empty as clean ("nothing errored", "no failed jobs", or a tier silently dropped from the
     coverage count) would leave the whole verdict UP with a quietly smaller number in it after
     a 30s API-server timeout on one call.
@@ -323,7 +320,7 @@ def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, na
 @pytest.mark.parametrize(
     ("branch", "named"),
     [
-        ("errored-backups", "errored-backups fetch returned an unparseable body"),
+        ("backups", "backup list fetch returned an unparseable body"),
         ("failed-jobs", "failed-jobs fetch returned an unparseable body"),
     ],
 )
@@ -334,7 +331,7 @@ def test_an_unparseable_json_body_is_flagged_by_name(
 
     `json.loads("null")` returns None rather than raising, so the reader's old `except ValueError`
     never saw this one: it reached `.get("items")` as an AttributeError. Only the two `-o json`
-    fetches are covered — for the five jsonpath fetches a garbage body is indistinguishable from
+    fetches are covered — for the jsonpath fetches a garbage body is indistinguishable from
     data, and a malformed jsonpath makes kubectl exit nonzero, which the rc pair above covers.
     """
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
@@ -346,21 +343,21 @@ def test_an_unparseable_json_body_is_flagged_by_name(
     assert named in logged, logged
 
 
-def test_a_failed_coverage_fetch_does_not_cascade_into_the_tier_loop(
+def test_a_failed_backup_list_fetch_does_not_cascade_into_the_tier_loop(
     tmp_path, logger_calls
 ):
     """One unread fetch reports one problem, not ten.
 
     Every tier is matched against the coverage rows, so passing the loop an empty list on a
-    failed coverage fetch would report all nine tiers' volumes as stale or missing — burying the
+    failed backup list fetch would report all nine tiers' volumes as stale or missing — burying the
     one thing that actually happened under nine consequences of it.
     """
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
-    proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH="coverage")
+    proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH="backups")
 
     assert proc.stdout.startswith("down\t"), proc.stdout
     logged = logger_calls.read_text()
-    assert "backup coverage fetch failed" in logged, logged
+    assert "backup list fetch failed" in logged, logged
     assert "tier volumes fetch failed" not in logged, logged
     assert "stale or missing" not in logged, logged
 

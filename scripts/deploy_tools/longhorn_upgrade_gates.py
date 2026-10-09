@@ -63,7 +63,12 @@ from deploy_tools.runbook_gates import (
 )
 from lib import yaml_fast
 from lib.kubectl import DEFAULT_TOOLS, Tools
-from lib.repo_paths import K3S_DEFAULTS
+from lib.repo_paths import HOST_LIB_FILES, K3S_DEFAULTS, K3S_FILES
+
+# The backup target names, shared with the backup-health cron (#3737); it imports host_lib.
+sys.path.insert(0, str(HOST_LIB_FILES))
+sys.path.insert(0, str(K3S_FILES))
+import longhorn_backups
 
 CLUSTER = "prod"
 RUNBOOK = "docs/longhorn-upgrade.md"
@@ -73,7 +78,7 @@ DRILL_STAMP = "last-success"
 MAX_AGE_KEY = "k3s_longhorn_restore_drill_max_age_days"
 
 # The target the runbook's own block names. Others (`r2`) are checked when armed.
-REQUIRED_TARGETS = ("default",)
+REQUIRED_TARGETS = (longhorn_backups.B2_TARGET,)
 
 # A volume is settled in exactly these two states; `attaching`, `detaching`, `creating` and
 # `deleting` are all mid-flight.
