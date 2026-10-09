@@ -19,6 +19,7 @@ import pytest
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "block-footguns.py"
 )
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(_HOOK)))
 sys.path.insert(0, os.path.dirname(_HOOK))
 _spec = importlib.util.spec_from_file_location("block_footguns", _HOOK)
 assert _spec and _spec.loader, "spec_from_file_location found no loader"
@@ -61,6 +62,23 @@ def test_remote_git_with_cd_is_clean():
 
 def test_remote_git_with_dash_C_is_clean():
     assert _mod.problem("ssh daniel-server 'git -C /home/ubuntu/server status'") is None
+
+
+def test_the_ssh_hosts_match_the_inventory_host_vars():
+    # Compared against host_vars rather than hosts.ini, so a broken import (which the hook
+    # swallows into no hosts) or a reintroduced literal goes red here (#3705).
+    host_vars = os.path.join(_REPO, "ansible", "inventory", "host_vars")
+    expected = {
+        name.removesuffix(".yml")
+        for name in os.listdir(host_vars)
+        if name.endswith(".yml") and name != "_example.yml"
+    }
+    assert "daniel-server" in expected
+    assert set(_mod._ssh_hosts()) == expected
+
+
+def test_remote_git_to_a_retired_host_is_clean():
+    assert _mod.problem("ssh daniel-stage 'git status'") is None
 
 
 def test_a_remote_non_git_command_is_clean():
