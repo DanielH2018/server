@@ -471,3 +471,10 @@ def test_a_manifest_written_before_repo_existed_loads_as_this_repo(tmp_path):
     assert (
         load("20260101T000000Z", root=tmp_path).batches[0].repo == "DanielH2018/server"
     )
+
+
+def test_only_a_red_green_review_unit_runs_the_pipeline_with_its_red_phase():
+    assert "--repo DanielH2018/server --red-green " in systemd_run_command(
+        "b", review=True, red_green=True
+    )
+    assert "--red-green" not in systemd_run_command("b", review=True)
