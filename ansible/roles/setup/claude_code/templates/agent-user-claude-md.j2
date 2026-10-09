@@ -48,3 +48,14 @@ leave the PR open, tell the operator it needs their review, and stop. Once they 
 head commit on GitHub, run the same command again. A push after their approval needs a new
 approval.
 {% endif %}
+{% if claude_code_agent_operator_config %}
+
+## The operator's own instructions
+
+The operator's user-level instructions are imported below from `operator/CLAUDE.md`, beside
+this file. This file wins where they conflict. You run none of the operator's hooks and have
+no sudo, so a line that names a hook, a `sudo` step or a tool in the operator's home does not
+apply to you.
+
+@operator/CLAUDE.md
+{% endif %}
