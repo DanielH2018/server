@@ -13,7 +13,7 @@ What's specific to this cron, and what this file guards:
 - Its `job:` sets PATH and HOME explicitly, since cron inherits neither and node (via fnm),
   uv, git and gh all have to resolve without a login shell.
 - The script self-gates on an empty anthropic_api_key, and the Kuma monitor self-gates on an
-  empty homelab_eval_push_token -- no such SOPS secret exists yet, so both must install
+  empty homelab_eval_push_token -- a host without those SOPS secrets must install both
   disarmed rather than red or silently non-hermetic.
 """
 

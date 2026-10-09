@@ -5,11 +5,9 @@
 # DISARMED UNTIL A SOPS anthropic_api_key SECRET EXISTS. Hermetic grading (evals/README.md
 # "Auth & fidelity") needs ANTHROPIC_API_KEY; without it the chezmoi engine falls back to a
 # non-hermetic subscription run whose numbers are noise, and evals/trend.py refuses to trend
-# a subscription report at all. No such secret exists in ansible/vars/secrets.yml today (see
-# ansible/secret_rotation.yml) and this script cannot mint one -- see the repo's
-# add-secret skill. So this installs and runs on schedule from day one, self-gates on the
-# empty key below, and reports UP with the reason logged: the cron, the wrapper and the Kuma
-# monitor are all in place for review, and adding the secret is the only step left to arm it.
+# a subscription report at all. This script cannot mint the key -- see the repo's add-secret
+# skill. So it self-gates on an empty key below and reports UP with the reason logged, and a
+# host whose secrets.yml lacks anthropic_api_key runs the cron disarmed rather than red.
 #
 # WHY GRADING RUNS BEFORE THE GIT-TREE LOCK, unlike docs-refresh.sh's generator. Every case
 # embeds its own input inline (evals/README.md) and hermetic mode strips tools (`--tools ""`),
