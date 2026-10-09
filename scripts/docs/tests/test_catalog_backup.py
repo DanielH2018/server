@@ -211,6 +211,23 @@ def test_backup_tier_backup_class_off_every_list_is_not_no_backup(tmp_path):
     assert not tier.startswith("no backup")
 
 
+def test_backup_tier_reads_a_group_vars_override_of_a_tier_list(tmp_path):
+    # #3918: an all.yml override reaches Ansible, so it must reach the catalogue too.
+    paths = make_repo(tmp_path)
+    pvc = _pvc_block("jellyfin-config", "longhorn")
+    assert _jellyfin_tier(paths, pvc).startswith("weekly")
+    write(
+        paths["all_vars"],
+        """\
+        k8s_namespace: homelab
+        k3s_longhorn_weekly_volumes: []
+        k3s_longhorn_r2_volumes:
+          - homelab/jellyfin-config
+        """,
+    )
+    assert _jellyfin_tier(paths, pvc) == "daily -> R2"
+
+
 def test_backup_tier_nobackup_list_overrides_a_backup_class(tmp_path):
     # uptime-kuma's shape: `longhorn` by class, excluded by the list — the list wins, as
     # longhorn.yml's reconciliation applies it.

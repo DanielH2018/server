@@ -221,7 +221,7 @@ def glance_lines(
     claims = claim_tiers(
         role_dir,
         k8s_namespace=group_vars.get("k8s_namespace", "homelab"),
-        tiers=load_longhorn_tier_lists(k3s_defaults),
+        tiers=load_longhorn_tier_lists(k3s_defaults, group_vars),
         k8s_roles=k8s_roles,
         claim_classes=claim_classes,
     )

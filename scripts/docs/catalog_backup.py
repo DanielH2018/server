@@ -21,7 +21,7 @@ from typing import Any
 from catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
 from lib.jinja_comments import strip_jinja_comments
 from lib.k8s_roles import role_dirs
-from lib.estate import Estate, role_defaults
+from lib.estate import Estate, inventory_layers, role_defaults
 from lib.render_guard import load_yaml as _load_yaml
 from lib.repo_paths import SHARED_TPL
 from lib.service_tiers import resolved_tier_lists
@@ -305,9 +305,22 @@ def claim_names(role_dir: Path, k8s_roles: Path = K8S_ROLES) -> list[str]:
     return [claim.name for claim in _role_claims(role_dir, k8s_roles)]
 
 
-def load_longhorn_tier_lists(k3s_defaults: Path = K3S_DEFAULTS) -> LonghornTiers:
-    """The R2, weekly and no-backup volume lists from the k3s role's defaults."""
-    data = resolved_tier_lists(_load_yaml(k3s_defaults))
+def load_longhorn_tier_lists(
+    k3s_defaults: Path = K3S_DEFAULTS, group_vars: dict | None = None
+) -> LonghornTiers:
+    """The R2, weekly and no-backup volume lists as a deploy of the k3s role sees them.
+
+    The role's defaults sit under `group_vars`, the way `Estate.role_vars` layers a setup
+    role, so a `group_vars/all.yml` override of a tier list reaches the catalogue and the
+    glance blocks as it reaches Ansible (#3918). `group_vars` defaults to the repo's own;
+    `k3s_defaults` stays a file path so a test or `service_catalog --k3s-defaults` can
+    inject one.
+    """
+    if group_vars is None:
+        group_vars = Estate().group_vars
+    data = resolved_tier_lists(
+        inventory_layers(_load_yaml(k3s_defaults), group_vars, {})
+    )
     return LonghornTiers(
         r2=frozenset(data.get("k3s_longhorn_r2_volumes") or []),
         weekly=frozenset(data.get("k3s_longhorn_weekly_volumes") or []),
