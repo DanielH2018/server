@@ -10,16 +10,15 @@ metadata:
   namespace: {{ k8s_namespace }}
 binaryData:
 {# ONLY the icons a tile actually references — every name here is base64'd into the object,
-   so an unused one is dead weight. limitless, LoLalytics, opgg and tftacademy stay in files/
-   unreferenced; reviving one is adding its name back to this list. A name listed here and
-   missing from files/ fails the RENDER, not the deploy.
+   so an unused one is dead weight. limitless, LoLalytics, metatft, opgg and tftacademy stay
+   in files/ unreferenced; reviving one is adding its name back to this list. A name listed
+   here and missing from files/ fails the RENDER, not the deploy.
 
-   These four are here because dashboard-icons has no icon for them: anilist and metatft
-   answer 404 at the CDN under every name tried, and monarch and tacticstools likewise. The
-   two logos come from the sites themselves — metatft's only as a
-   256x256 PNG embedded in /myicon3.ico, since that site serves its SPA shell at every
-   ordinary icon path. Anything the CDN does serve (github, google-maps, gmail, …) is
+   These three are here because dashboard-icons has no icon for them: anilist, monarch and
+   tacticstools answer 404 at the CDN under every name tried. metatft's logo in files/ came
+   from a 256x256 PNG embedded in its /myicon3.ico, since that site serves its SPA shell at
+   every ordinary icon path. Anything the CDN does serve (github, google-maps, gmail, …) is
    referenced by bare name in services.yaml.j2 and must NOT be added here. #}
-{% for icon in ['anilist.png', 'metatft.png', 'monarch.png', 'tacticstools.png'] %}
+{% for icon in ['anilist.png', 'monarch.png', 'tacticstools.png'] %}
   {{ icon }}: {{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir ~ '/roles/k8s/homepage/files/' ~ icon) }}
 {% endfor %}

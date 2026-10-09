@@ -297,15 +297,12 @@
         # THE ORDER HERE IS THE ORDER ON THE PAGE, and it is the operator's, not alphabetical
         # or grouped by theme. homepage renders a group's tiles in file order, so moving a tile
         # means moving its block. Set 2026-09-10: everyday accounts first, then the two code and
-        # money links, then the three gaming and anime ones.
+        # money links, then the three gaming and anime ones. Changed 2026-10-09: Jellyfin
+        # replaced MetaTFT and sits after Twitter, and Google Maps moved to after GitHub.
         - Gmail:
             icon: gmail.png
             href: https://mail.google.com/mail/u/0/#inbox
             description: mail.google.com
-        - Google Maps:
-            icon: google-maps.png
-            href: https://www.google.com/maps
-            description: maps.google.com
         - YouTube:
             icon: youtube.png
             href: https://www.youtube.com
@@ -318,10 +315,22 @@
             icon: twitter.png
             href: https://twitter.com/home
             description: twitter.com
+        - Jellyfin:
+            # Link-only: no `widget:`, so none of the media-widget rules apply. A widget added
+            # here later needs `version: 2` (docs/homepage-widgets-and-layout.md).
+            icon: jellyfin.png
+            href: https://jellyfin.{{ domain }}/
+            # Not the bare domain like its neighbours: jellyfin.<domain> would overrun the 165px
+            # tile that the Monarch note below measures.
+            description: Media server
         - GitHub:
             icon: github.png
             href: https://github.com/
             description: github.com
+        - Google Maps:
+            icon: google-maps.png
+            href: https://www.google.com/maps
+            description: maps.google.com
         - Monarch:
             # /icons/ is the homepage-icons ConfigMap, not the bundled dashboard-icons set —
             # see templates/icons-configmap.yaml.j2, which must carry any file named this way.
@@ -332,8 +341,8 @@
             # it instead, but wrapping costs the whole row 16px of height.
             description: monarch.com
         - AniList:
-            # /icons/ for the same reason as metatft below — no dashboard-icons entry. Fetched
-            # from anilist.co's own android-chrome-192x192.png.
+            # /icons/, not the CDN: dashboard-icons has no entry for it. Fetched from
+            # anilist.co's own android-chrome-192x192.png.
             icon: /icons/anilist.png
             href: https://anilist.co/
             description: anilist.co
@@ -343,13 +352,6 @@
             icon: /icons/tacticstools.png
             href: https://tactics.tools/
             description: tactics.tools
-        - MetaTFT:
-            # /icons/, not the CDN: dashboard-icons answers 404 for metatft under every name
-            # tried. The logo came from the site's own /myicon3.ico, which is where it keeps
-            # it — every ordinary icon path there returns the SPA shell as HTML instead.
-            icon: /icons/metatft.png
-            href: https://www.metatft.com/
-            description: metatft.com
 
 # `Admin & Tools` IS A LINK-ONLY GROUP, and the absence of `widget:` blocks is the point. It was
 # two groups of four until 2026-09-10 and is now one of eight, which still divides by four into
