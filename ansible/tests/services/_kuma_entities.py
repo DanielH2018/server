@@ -2,7 +2,7 @@
 
 Every monitor, notification and tag reaches the pod as one key of the `static-monitors` Secret
 that `static-monitors.yaml.j2` renders. The render here starts from the same resolved inventory a
-deploy of daniel-box starts from — `_k8s_render.host_context()` plus the role's defaults — so a
+deploy of daniel-box starts from — `lib.render_context`, role defaults under the inventory — so a
 guard asserting on a VIP, a hostname or a runbook URL states what the cluster gets rather than
 what a stub dict said. A hand-written stub set had drifted from the inventory it stood in for:
 `slzb_ip` was pinned at an address the coordinator had moved off, and the jellyfin LAN-VIP tile
@@ -39,13 +39,13 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env, register_ansible_filters
 from _helpers import ANSIBLE
 from _k8s_render import host_context
+from lib.render_context import render_context
 from validate.k8s_manifests import (
     K8S_ROLES,
     SHARED_TPL,
     k8s_entries,
     load_yaml,
     make_lookup,
-    role_defaults,
 )
 
 # Still exported as a path, for the two guards that assert on the template's BYTES rather than on
@@ -131,20 +131,21 @@ def _hostvars() -> dict[str, dict]:
 def _render(role: str, template: str, overrides: dict | None = None) -> str:
     """One of the two templates, rendered from daniel-box's resolved inventory.
 
-    Role defaults go UNDER the inventory, which is Ansible's own precedence, and `overrides` goes
-    over both the way `-e` does — a guard that needs to see what MOVES when a variable moves
-    passes it here.
+    `lib.render_context` lays role defaults UNDER the inventory, which is Ansible's own
+    precedence, and `overrides` over both the way `-e` does — a guard that needs to see what
+    MOVES when a variable moves passes it here.
     """
-    base = host_context(_HOST)
-    ctx: dict = {
-        **role_defaults(role, base),
-        **base,
-        "container_item": k8s_entries()[role],
-        "playbook_dir": str(ANSIBLE),
-        "hostvars": _hostvars(),
-        **_token_seed(),
-        **(overrides or {}),
-    }
+    ctx = render_context(
+        K8S_ROLES / role,
+        host=_HOST,
+        overrides={
+            "container_item": k8s_entries()[role],
+            "hostvars": _hostvars(),
+            **_token_seed(),
+            **(overrides or {}),
+        },
+        strict=True,
+    )
     env = make_ansible_env(
         [K8S_ROLES / role / "templates", SHARED_TPL], undefined_cls=NamedStub
     )

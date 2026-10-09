@@ -15,20 +15,15 @@ test_traefik_http_entrypoint_crowdsec.py, whose `_context` shape this file reuse
 import pytest
 
 from lib import yaml_fast
+from lib.render_context import render_context
 
 from validate.k8s_manifests import (
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
     K8S_ROLES,
     SHARED_TPL,
-    load_yaml,
     make_env,
     make_lookup,
     register_ansible_filters,
     render_or_error,
-    resolve_vars,
-    role_defaults,
 )
 
 _ROLE = "traefik"
@@ -36,12 +31,11 @@ _HOST = "daniel-box"
 
 
 def _context(host: str) -> dict:
-    host_vars = ANSIBLE / "inventory" / "host_vars" / f"{host}.yml"
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **load_yaml(host_vars)}
-    base["playbook_dir"] = str(ANSIBLE)
-    base = resolve_vars(base, base)
-    entry = next(c for c in base["containers_list"] if c["name"] == _ROLE)
-    return {**role_defaults(_ROLE, base), **base, "container_item": entry}
+    entries = render_context(K8S_ROLES, host=host, strict=True)["containers_list"]
+    entry = next(c for c in entries if c["name"] == _ROLE)
+    return render_context(
+        K8S_ROLES / _ROLE, host=host, overrides={"container_item": entry}, strict=True
+    )
 
 
 def _bouncer_config(host: str) -> dict:

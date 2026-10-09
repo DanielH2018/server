@@ -13,10 +13,11 @@ import re
 
 import pytest
 from lib import yaml_fast
-from lib.k8s_context import resolve_vars, role_defaults
+from lib.k8s_context import resolve_vars
+from lib.render_context import render_context
 from lib.proc_testing import fake_bin, path_with, run
-from _helpers import ROLES, stub_logger_on_path
-from _k8s_render import host_context, rendered_docs
+from _helpers import K8S_ROLES, ROLES, stub_logger_on_path
+from _k8s_render import rendered_docs
 
 ROLE = ROLES / "k8s/pi-peer-backup"
 WRAPPER = ROLE / "files/pi-peer-backup-shell.sh"
@@ -111,10 +112,9 @@ def test_the_key_is_pinned_to_the_wrapper_installed_one_task_earlier():
     authorize = tasks[names.index("Authorize the pull key on daniel-pi")]
     assert names.index(install["name"]) < names.index(authorize["name"])
     dest = install["ansible.builtin.copy"]["dest"]
-    base = host_context()
     options = resolve_vars(
         {"key_options": authorize["ansible.posix.authorized_key"]["key_options"]},
-        {**base, **role_defaults("pi-peer-backup", base)},
+        render_context(K8S_ROLES / "pi-peer-backup", strict=True),
     )["key_options"]
     assert options.startswith("restrict,")
     pinned = re.fullmatch(rf'restrict,command="{re.escape(dest)} (\S+)"', options)

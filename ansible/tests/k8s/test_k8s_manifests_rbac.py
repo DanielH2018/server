@@ -17,7 +17,7 @@ from _manifest_guards import (
     K8S,
     _k8s_entries,
     _render,
-    _role_defaults,
+    _role_context,
 )
 
 
@@ -111,7 +111,7 @@ def _headlamp_rbac_docs() -> list[dict]:
     docs = []
     for name in ("rbac.yaml.j2", "rbac-observability.yaml.j2"):
         rendered = _render(
-            K8S / "headlamp" / "templates" / name, **_role_defaults("headlamp")
+            K8S / "headlamp" / "templates" / name, **_role_context("headlamp")
         )
         docs += [d for d in yaml_fast.safe_load_all(rendered) if d]
     return docs
@@ -226,7 +226,7 @@ def test_headlamp_oidc_group_is_bound_wherever_the_serviceaccount_is():
     an empty cluster, with a successful login in front of it and nothing in any log.
     """
     docs = _headlamp_rbac_docs()
-    group = _role_defaults("headlamp")["headlamp_k8s_oidc_group"]
+    group = _role_context("headlamp")["headlamp_k8s_oidc_group"]
     bound = {
         doc["metadata"]["name"]
         for doc in docs
@@ -243,7 +243,7 @@ def test_the_oidc_group_check_rejects_a_binding_that_drops_the_group():
     all — every binding trivially satisfies "has the SA and the Group" once nothing has either.
     """
     docs = copy.deepcopy(_headlamp_rbac_docs())
-    group = _role_defaults("headlamp")["headlamp_k8s_oidc_group"]
+    group = _role_context("headlamp")["headlamp_k8s_oidc_group"]
     victim = next(d for d in docs if d["metadata"]["name"] == "headlamp-view")
     victim["subjects"] = [s for s in victim["subjects"] if s.get("kind") != "Group"]
     assert _bindings_missing_the_oidc_group(docs, group) == ["headlamp-view"]
@@ -271,7 +271,7 @@ def test_headlamp_oidc_group_carries_the_apiserver_prefix():
     `system:` group. A bare `admins` here means either the prefix was dropped from the API
     server (a collision class reopened) or the two spellings drifted (an empty dashboard).
     """
-    group = _role_defaults("headlamp")["headlamp_k8s_oidc_group"]
+    group = _role_context("headlamp")["headlamp_k8s_oidc_group"]
     assert ":" in group, f"{group!r} carries no groups prefix"
     assert not group.startswith("system:"), f"{group!r} impersonates a built-in group"
 
@@ -309,8 +309,12 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
     deployment = yaml_fast.safe_load(
         _render(
             role / "templates" / "deployment.yaml.j2",
-            container_item=next(c for c in _k8s_entries() if c["name"] == "homepage"),
-            **_role_defaults("homepage"),
+            **_role_context(
+                "homepage",
+                container_item=next(
+                    c for c in _k8s_entries() if c["name"] == "homepage"
+                ),
+            ),
         )
     )
     assert deployment["spec"]["template"]["spec"]["serviceAccountName"] == "homepage"
@@ -318,7 +322,7 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
     rbac = [
         d
         for d in yaml_fast.safe_load_all(
-            _render(role / "templates" / "rbac.yaml.j2", **_role_defaults("homepage"))
+            _render(role / "templates" / "rbac.yaml.j2", **_role_context("homepage"))
         )
         if d
     ]

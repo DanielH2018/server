@@ -16,12 +16,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import re
 
 from lib.ansible_jinja_env import ansible_bool
-from lib.render_guard import SHARED_TPL, load_yaml, make_env
-from lib.repo_paths import K8S_ROLES
+from lib.render_guard import SHARED_TPL, make_env
 
 __all__ = [
     "resolve_vars",
-    "role_defaults",
 ]
 
 
@@ -97,7 +95,3 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
         for key, value in pending.items():
             resolved[key] = expand(value, {**context, **resolved})
     return resolved
-
-
-def role_defaults(role: str, base: dict) -> dict:
-    return resolve_vars(load_yaml(K8S_ROLES / role / "defaults" / "main.yml"), base)

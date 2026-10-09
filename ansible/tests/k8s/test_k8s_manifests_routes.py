@@ -19,7 +19,7 @@ from _manifest_guards import (
     K8S,
     _k8s_entries,
     _render,
-    _role_defaults,
+    _role_context,
     _route_template,
     _route_templates,
 )
@@ -147,9 +147,7 @@ def test_every_authed_service_carries_forward_auth_and_rate_limit():
             continue
         rendered = _render(
             route_tpl,
-            container_item=entry,
-            domain="example.com",
-            **_role_defaults(entry["name"]),
+            **_role_context(entry["name"], container_item=entry, domain="example.com"),
         )
         for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
             name = doc["metadata"]["name"]
@@ -186,9 +184,9 @@ def test_every_https_route_carries_tls():
         for route_tpl in _route_templates(entry["name"]):
             rendered = _render(
                 route_tpl,
-                container_item=entry,
-                domain="example.com",
-                **_role_defaults(entry["name"]),
+                **_role_context(
+                    entry["name"], container_item=entry, domain="example.com"
+                ),
             )
             for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
                 if "https" not in doc["spec"].get("entryPoints", []):
@@ -241,9 +239,7 @@ def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
             continue
         rendered = _render(
             route_tpl,
-            container_item=entry,
-            domain=domain,
-            **_role_defaults(entry["name"]),
+            **_role_context(entry["name"], container_item=entry, domain=domain),
         )
         for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
             for route in doc["spec"]["routes"]:
@@ -293,7 +289,7 @@ def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
         tpl = _route_template(entry["name"])
         if tpl is None:
             continue
-        rendered = _render(tpl, container_item=entry, **_role_defaults(entry["name"]))
+        rendered = _render(tpl, **_role_context(entry["name"], container_item=entry))
         # Every document: a role may ship more than one IngressRoute, and a second one naming
         # a TLSOption that does not exist fails exactly as loudly as the first would.
         for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
@@ -329,9 +325,9 @@ def test_no_monitoring_route_serves_a_bare_path_prefix():
         for route_tpl in _route_templates(entry["name"]):
             rendered = _render(
                 route_tpl,
-                container_item=entry,
-                domain="example.com",
-                **_role_defaults(entry["name"]),
+                **_role_context(
+                    entry["name"], container_item=entry, domain="example.com"
+                ),
             )
             for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
                 name = doc["metadata"]["name"]

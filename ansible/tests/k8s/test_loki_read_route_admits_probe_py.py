@@ -15,7 +15,7 @@ Run: uv run pytest ansible/tests/k8s/test_loki_read_route_admits_probe_py.py
 """
 
 from lib import yaml_fast
-from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render, _role_defaults
+from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render, _role_context
 
 ROLE = "loki-homelab"
 # The route object this guard is about, named rather than globbed: the role renders a second
@@ -28,9 +28,7 @@ def _read_route_match() -> str:
     entry = next(c for c in _k8s_entries() if c["name"] == ROLE)
     rendered = _render(
         K8S / ROLE / "templates" / "ingressroute.yaml.j2",
-        container_item=entry,
-        domain="example.com",
-        **_role_defaults(ROLE),
+        **_role_context(ROLE, container_item=entry, domain="example.com"),
     )
     docs = [d for d in yaml_fast.safe_load_all(rendered) if d]
     named = {d["metadata"]["name"]: d for d in docs}

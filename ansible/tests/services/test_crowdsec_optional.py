@@ -32,7 +32,6 @@ from validate.k8s_manifests import (
     ANSIBLE,
     K8S_ROLES,
     load_yaml,
-    role_defaults,
 )
 
 from _k8s_render import host_context, render_role_template, traefik_static_config
@@ -75,7 +74,7 @@ def test_nothing_names_crowdsec_once_the_flag_is_off(role: str) -> None:
     the flag retires it by dropping it from manifests_secret_files, not by gating its body.
     """
     sentinel = "SURVIVING-CROWDSEC-REFERENCE"
-    role_vars = role_defaults(role, {})
+    role_vars = load_yaml(K8S_ROLES / role / "defaults" / "main.yml")
     crowdsec_vars = {
         name: sentinel
         for name in list(role_vars) + ["crowdsec_k8s_image", "crowdsec_k8s_lapi_port"]
