@@ -4,23 +4,30 @@
 comparisons and the patch counter — and its docstring is where the model and the heuristic's
 blind spots are written down. `ansible/tests/_ratchet_census.py` holds the two ratchets and
 the census of the tree that feeds them, so the `--tighten` writer can import the same census
-this module asserts on. What is left here is the reads of `origin/master`, and the tests for
-all three.
+this module asserts on. What is left here is the reads of the base, and the tests for all
+three.
 
-The comparison against `origin/master` needs that ref. It skips, naming which reason, when the
-ref is not fetched or when a list is not on master yet; a `git show` that fails for a path
-master does track is a failure, not a skip. Locally the ref is only as fresh as the last
-`git fetch`, so a stale one compares against older numbers — which can only make the check
-lenient, never wrong in the failing direction.
+The base is `git merge-base HEAD origin/master`, never the live `origin/master` tip. CI tests a
+PR's merge ref, whose first parent is the master commit the ref was built on, and
+`tighten-ratchet-allowlists` lowers entries on master many times an hour. Against the live tip,
+every entry master lowered after the ref was built reads as one this PR raised (#4009). The
+merge base is that first parent on a merge ref, the fork point on a local branch, and HEAD
+itself on master, where the PR already ran the comparison.
+
+The comparison skips, naming which reason, when there is no base or when a list is not on the
+base yet; a `git show` that fails for a path the base does track is a failure, not a skip.
 
 Run: uv run pytest ansible/tests/repo/test_module_length_ratchet.py
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from functools import cache
+from subprocess import CompletedProcess
 
 import pytest
 
 from _helpers import REPO
+from lib.git_testing import commit, git, init_repo
 from _ratchet_census import (
     LENGTHS,
     PATCHES,
@@ -78,36 +85,51 @@ CAP_DECIDER = "is_test_file"
 GUARD_SOURCES = (*WHOLE_FILE_GUARDS, HELPERS)
 
 
-def master_is_fetched() -> bool:
-    return run_git("rev-parse", "--verify", "origin/master").returncode == 0
+def base_of(run: Callable[..., CompletedProcess[str]]) -> str | None:
+    """The commit the allowlists are compared against, or None when `origin/master` is absent."""
+    found = run("merge-base", "HEAD", "origin/master")
+    return found.stdout.strip() if found.returncode == 0 else None
 
 
-def tracked_on_master(rel: str) -> bool:
-    return run_git("cat-file", "-e", f"origin/master:{rel}").returncode == 0
+@cache
+def base() -> str | None:
+    return base_of(run_git)
 
 
-def text_on_master(rel: str) -> str:
-    """The file's content on `origin/master`. Raises when git cannot produce it."""
-    shown = run_git("show", f"origin/master:{rel}")
+def _base_ref() -> str:
+    """`base()` for a reader the caller has already skipped when there is none."""
+    ref = base()
+    if ref is None:
+        raise RuntimeError("no merge base with origin/master in this checkout")
+    return ref
+
+
+def tracked_on_base(rel: str) -> bool:
+    return run_git("cat-file", "-e", f"{_base_ref()}:{rel}").returncode == 0
+
+
+def text_on_base(rel: str) -> str:
+    """The file's content on the base. Raises when git cannot produce it."""
+    shown = run_git("show", f"{_base_ref()}:{rel}")
     if shown.returncode:
         raise RuntimeError(
-            f"git show origin/master:{rel} failed: {shown.stderr.strip()}"
+            f"git show {_base_ref()}:{rel} failed: {shown.stderr.strip()}"
         )
     return shown.stdout
 
 
-def differs_from_master(rel: str) -> bool:
-    return run_git("diff", "--quiet", "origin/master", "--", rel).returncode != 0
+def differs_from_base(rel: str) -> bool:
+    return run_git("diff", "--quiet", _base_ref(), "--", rel).returncode != 0
 
 
-def guard_differs_from_master() -> bool:
+def guard_differs_from_base() -> bool:
     """Whether this branch changes the rules, which is what lets it add a path to a list."""
-    if any(differs_from_master(rel) for rel in WHOLE_FILE_GUARDS):
+    if any(differs_from_base(rel) for rel in WHOLE_FILE_GUARDS):
         return True
-    if not tracked_on_master(HELPERS):
+    if not tracked_on_base(HELPERS):
         return True
     return function_differs(
-        text_on_master(HELPERS), (REPO / HELPERS).read_text(), CAP_DECIDER
+        text_on_base(HELPERS), (REPO / HELPERS).read_text(), CAP_DECIDER
     )
 
 
@@ -297,7 +319,7 @@ def _missing_sources(paths: Iterable[str]) -> list[str]:
 
 
 def test_every_guard_source_exists_at_the_path_named():
-    """`differs_from_master` answers False for a path absent on both sides.
+    """`differs_from_base` answers False for a path absent on both sides.
 
     A renamed guard source would therefore read as unchanged, and the exemption that lets a
     widened rule add entries would be off with nothing saying so.
@@ -305,7 +327,7 @@ def test_every_guard_source_exists_at_the_path_named():
     assert _missing_sources(GUARD_SOURCES) == []
     assert function_source((REPO / HELPERS).read_text(), CAP_DECIDER), (
         f"{HELPERS} no longer defines {CAP_DECIDER}, so comparing that function against "
-        f"origin/master compares None with None and the exemption never fires."
+        f"the base compares None with None and the exemption never fires."
     )
 
 
@@ -313,43 +335,70 @@ def test_a_guard_source_that_does_not_exist_is_flagged():
     assert _missing_sources(("no/such.py",)) == ["no/such.py"]
 
 
-def test_the_master_read_returns_content_for_a_path_master_tracks():
-    """The comparison below skips until the lists reach master; this keeps the read proved."""
-    if not master_is_fetched():
+def test_the_base_read_returns_content_for_a_path_the_base_tracks():
+    """The comparison below skips until the lists reach the base; this keeps the read proved."""
+    if base() is None:
         pytest.skip("origin/master is not fetched in this checkout")
-    assert tracked_on_master("ansible/tests/_helpers.py")
-    assert text_on_master("ansible/tests/_helpers.py").startswith('"""')
-    assert not tracked_on_master("ansible/tests/no_such_file.py")
+    assert tracked_on_base("ansible/tests/_helpers.py")
+    assert text_on_base("ansible/tests/_helpers.py").startswith('"""')
+    assert not tracked_on_base("ansible/tests/no_such_file.py")
 
 
-def test_the_master_read_raises_rather_than_returning_empty_for_an_unknown_path():
+def test_the_base_read_raises_rather_than_returning_empty_for_an_unknown_path():
     """A failed read must fail the comparison, not quietly look like an empty allowlist."""
-    if not master_is_fetched():
+    if base() is None:
         pytest.skip("origin/master is not fetched in this checkout")
     with pytest.raises(RuntimeError):
-        text_on_master("ansible/tests/no_such_file.py")
+        text_on_base("ansible/tests/no_such_file.py")
+
+
+def test_an_entry_master_lowered_after_the_merge_ref_was_built_is_not_flagged(tmp_path):
+    """The #4009 race: CI's merge ref is built, then master lowers an entry the PR never touched.
+
+    The live tip flags the untouched entry as raised, which is the red half. The base resolves
+    to the merge ref's first parent, where the entry still has the PR's number.
+    """
+    repo = init_repo(tmp_path)
+    built_on = commit(repo, "base", **{"list.txt": "scripts/a.py 626\n"})
+    git(repo, "checkout", "-q", "-b", "pr")
+    commit(repo, "the PR", **{"other.py": "x\n"})
+    git(repo, "checkout", "-q", "--detach", built_on)
+    git(repo, "merge", "-q", "--no-ff", "--no-gpg-sign", "-m", "merge ref", "pr")
+    merge_ref = git(repo, "rev-parse", "HEAD").stdout.strip()
+    git(repo, "checkout", "-q", "-b", "later", built_on)
+    tip = commit(repo, "tighten", **{"list.txt": "scripts/a.py 613\n"})
+    git(repo, "update-ref", "refs/remotes/origin/master", tip)
+    git(repo, "checkout", "-q", "--detach", merge_ref)
+
+    def read(ref: str) -> dict[str, int]:
+        return parse_allowlist(git(repo, "show", f"{ref}:list.txt").stdout)
+
+    head = read("HEAD")
+    assert raised_entries(read("origin/master"), head, "list.txt")
+    assert base_of(lambda *a: git(repo, *a, check=False)) == built_on
+    assert raised_entries(read(built_on), head, "list.txt") == []
 
 
 @pytest.mark.parametrize("ratchet", [LENGTHS, PATCHES], ids=lambda r: r.path.name)
-def test_no_allowlist_entry_rose_against_origin_master(ratchet: Ratchet):
+def test_no_allowlist_entry_rose_against_the_merge_base(ratchet: Ratchet):
     """A commit's own counts cannot see a diff that grows a file and its entry together."""
     rel = ratchet.path.relative_to(REPO).as_posix()
-    if not master_is_fetched():
+    if base() is None:
         pytest.skip(
-            "origin/master is not fetched — a shallow CI checkout. `prek run --all-files` "
-            "runs this locally, where the ref exists."
+            "origin/master is not fetched, so there is no merge base to compare against. "
+            "`prek run --all-files` runs this locally, where the ref exists."
         )
-    if not tracked_on_master(rel):
+    if not tracked_on_base(rel):
         pytest.skip(
-            f"{rel} is not on origin/master yet, so there is nothing to compare"
+            f"{rel} is not on the merge base yet, so there is nothing to compare"
         )
     new = ratchet.allowlist()
     offenders = raised_entries(
-        parse_allowlist(text_on_master(rel)),
+        parse_allowlist(text_on_base(rel)),
         new,
         ratchet.path.name,
-        untracked_on_master=[p for p in new if not tracked_on_master(p)],
-        guard_changed=guard_differs_from_master(),
+        untracked_on_master=[p for p in new if not tracked_on_base(p)],
+        guard_changed=guard_differs_from_base(),
     )
     assert not offenders, "\n".join(offenders)
 

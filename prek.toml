@@ -479,27 +479,32 @@ language = "system"
 pass_filenames = false
 files = "(^|/)CLAUDE\\.md$"
 
-# Four static test modules that turned more PRs red than any other test the author's own code
-# did not break: 24 of 154 failed CI runs from 2026-08-30 to 2026-10-05 (#3605). Each failure
-# names its own one-command repair, so finding it at commit time saves a CI round trip and a
-# fix commit. They run in 3.4s on daniel-box and 7.5s on daniel-server; the whole suite left
-# prek on 2026-10-02 because it cost 89-235s, and still runs only in CI and the two crons.
+# Eight static test modules that turned more PRs red than any other test the author's own code
+# did not break. The first four were 24 of 154 failed CI runs from 2026-08-30 to 2026-10-05
+# (#3605). The role CLAUDE.md size check and the three census-row modules failed 6 PRs between
+# them after that, to 2026-10-09 (#4008). Each failure names its own repair, so finding it at
+# commit time saves a CI round trip and a fix commit. The first four ran in 3.4s on daniel-box
+# and 7.5s on daniel-server; all eight measured 10.7-12.6s on daniel-server against 8.1-8.8s
+# for the four, back to back on 2026-10-09. The whole suite left prek on 2026-10-02 because it
+# cost 89-235s, and still runs only in CI and the two crons.
 #
 # It sits after `tighten-ratchet-allowlists` and `facts-reverify-changed` because the ratchet
 # and facts tests read the files those two rewrite. `files` is wider than `.py`: a `moved`
 # facts atom is often a YAML key or a `DECIDED:` marker in a template, and the doc fragments
 # read role defaults, inventory and the fail2ban template. The shard partition test reads
-# ci.yml and pyproject.toml's `testpaths`.
+# ci.yml and pyproject.toml's `testpaths`. The census rows read tracked `.py` files, and
+# test_role_claude_md reads every role's CLAUDE.md beside its tasks and templates.
 #
-# CI skips it on both `prek run` steps: its `pytest` job runs the same four files, and the
-# shallow checkout there skips the ratchet's origin/master comparison anyway. docs-refresh
+# CI skips it on both `prek run` steps, because its `pytest` job runs the same eight files.
+# That job's checkout is not shallow (`fetch-depth: 0`), so the ratchet's allowlist comparison
+# runs there too, against the merge base with origin/master (#4009). docs-refresh
 # stages scripts/dev/pytest_shard_weights.json, so this fires on that cron's commit, which
 # runs the whole suite green first. eval-run stages nothing this matches, and secret-rotate
 # commits with --no-verify. To commit past it, `SKIP=static-ratchet-tests git commit`.
 [[repos.hooks]]
 id = "static-ratchet-tests"
-name = "Static ratchet tests (module length, facts.lock, shard partition, doc fragments)"
-entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_facts_lock_matches_tree.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py"
+name = "Static ratchet tests (module length, facts.lock, shard partition, doc fragments, role CLAUDE.md, census rows)"
+entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_facts_lock_matches_tree.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py ansible/tests/repo/test_role_claude_md.py ansible/tests/repo/test_census_rows_python.py scripts/tests/test_census_rows_test_modules.py scripts/tests/test_census_rows_test_renders.py"
 language = "system"
 pass_filenames = false
 files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock$|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/ci\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$)"

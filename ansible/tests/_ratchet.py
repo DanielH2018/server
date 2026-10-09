@@ -2,7 +2,7 @@
 
 Everything here is a function over mappings and strings, with one exception:
 `Ratchet.allowlist()` reads the list file the dataclass points at. The census of the tree is
-`ansible/tests/_ratchet_census.py` and the reads of `origin/master` are in
+`ansible/tests/_ratchet_census.py` and the reads of the merge base are in
 `ansible/tests/repo/test_module_length_ratchet.py`, which also holds the tests for all three.
 
 Module length and `monkeypatch` on a first-party module are ratcheted the same way. A cap says
@@ -20,13 +20,13 @@ module's name into a test, so a module carrying any has not got a seam yet, and
 the shape that replaces one.
 
 Two things enforce "only falls". A count over its own entry fails (`Ratchet.violations`).
-Beyond that, `raised_entries` diffs the lists as the working tree has them against
-`origin/master`, or a branch could grow a file and raise its own line in the same diff. An
-added path fails there — a split that produced another oversized module has not finished —
-and so does a raised entry, with two exemptions, both passed in as plain values by the caller
-that reads git:
+Beyond that, `raised_entries` diffs the lists as the working tree has them against their
+merge base with `origin/master`, or a branch could grow a file and raise its own line in the
+same diff. An added path fails there — a split that produced another oversized module has not
+finished — and so does a raised entry, with two exemptions, both passed in as plain values by
+the caller that reads git:
 
-- A path `origin/master` does not track may be added. That is a new or renamed file, and a
+- A path the merge base does not track may be added. That is a new or renamed file, and a
   rename would otherwise read as a deletion plus a forbidden addition.
 - A changed guard lets any path be added AND lets an entry rise. Widening the heuristic (as
   the `importlib` fix did) finds patches that were always there, in files that already have an
@@ -204,11 +204,11 @@ def raised_entries(
     """Every way `new` is a looser allowlist than `old`, as sentences naming the fix.
 
     Args:
-        old: the list as `origin/master` has it.
+        old: the list as the merge base with `origin/master` has it.
         new: the list as the working tree has it.
         name: the allowlist's filename, for the message.
-        untracked_on_master: paths `origin/master` does not track, which may be added.
-        guard_changed: whether the guard differs from `origin/master`, which may add any path
+        untracked_on_master: paths the merge base does not track, which may be added.
+        guard_changed: whether the guard differs from the merge base, which may add any path
             and may raise any entry.
     """
     found = []
@@ -223,13 +223,14 @@ def raised_entries(
             # guard diff is in the same PR a reviewer reads.
             if limit > old[path] and not guard_changed:
                 found.append(
-                    f"{path}: {name} says {limit}, up from {old[path]} on origin/master. "
+                    f"{path}: {name} says {limit}, up from {old[path]} on the merge base "
+                    f"with origin/master. "
                     f"An entry only ever falls: lower the file, not the bar."
                 )
         elif not guard_changed and path not in untracked_on_master:
             found.append(
-                f"{path}: added to {name} at {limit}, though origin/master already tracks "
-                f"the file and the guard is unchanged against origin/master. A file that was "
+                f"{path}: added to {name} at {limit}, though the merge base already tracks "
+                f"the file and the guard is unchanged against it. A file that was "
                 f"already there has to meet the cap — split it rather than listing it."
             )
     return found

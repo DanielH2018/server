@@ -7,7 +7,7 @@ pure module rather than inside the test module so the `--tighten` writer
 (`scripts/dev/tighten_ratchets.py`) imports the SAME census the ratchet asserts on.
 Importing a `test_*.py` from a script would work under pytest and nowhere else.
 
-The reads of `origin/master`, and the tests for all of this, stay in
+The reads of the merge base with `origin/master`, and the tests for all of this, stay in
 `ansible/tests/repo/test_module_length_ratchet.py`.
 """
 

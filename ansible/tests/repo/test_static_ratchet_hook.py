@@ -1,10 +1,10 @@
-"""The `static-ratchet-tests` prek hook runs the four tests that turned PRs red, and CI skips it.
+"""The `static-ratchet-tests` prek hook runs the eight tests that turned PRs red, and CI skips it.
 
-Four static test modules caused most of the PR reds that the author's own code did not (#3605).
-The hook runs them at commit time so the failure and its one-command repair arrive before CI.
-This guard holds three things a later edit could quietly lose: every module the hook names
-still exists, its `files` gate matches the edits those tests react to, and CI's two `prek run`
-steps skip it, because the `pytest` job runs the same modules.
+Eight static test modules caused most of the PR reds that the author's own code did not (#3605,
+#4008). The hook runs them at commit time so the failure and its repair arrive before CI. This
+guard holds three things a later edit could quietly lose: every module the hook names still
+exists, its `files` gate matches the edits those tests react to, and CI's two `prek run` steps
+skip it, because the `pytest` job runs the same modules.
 
 Run: uv run pytest ansible/tests/repo/test_static_ratchet_hook.py
 """
@@ -19,12 +19,17 @@ from _helpers import REPO
 HOOK_ID = "static-ratchet-tests"
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
-# The four modules #3605 measured. A module dropped from the entry fails here by name.
+# The four modules #3605 measured and the four #4008 added. A module dropped from the entry
+# fails here by name.
 EXPECTED_MODULES = {
     "ansible/tests/repo/test_module_length_ratchet.py",
     "ansible/tests/repo/test_facts_lock_matches_tree.py",
     "ansible/tests/repo/test_pytest_shards_partition_the_suite.py",
     "scripts/docs/tests/test_gen_doc_fragments.py",
+    "ansible/tests/repo/test_role_claude_md.py",
+    "ansible/tests/repo/test_census_rows_python.py",
+    "scripts/tests/test_census_rows_test_modules.py",
+    "scripts/tests/test_census_rows_test_renders.py",
 }
 
 
