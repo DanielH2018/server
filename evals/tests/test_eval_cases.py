@@ -21,6 +21,17 @@ PI_HOST_VARS = REPO / "ansible/inventory/host_vars/daniel-pi.yml"
 _CONTAINER_ROLE_RE = re.compile(
     r"(?<![\w-])(?:ansible/)?roles/containers/([a-z0-9][a-z0-9_-]*)"
 )
+# Any role path, cited bare, under `ansible/` or under `$HOME/server/`. The path ends on a name
+# character, so a `:14` line suffix, trailing punctuation and a `roles/containers/**` glob stay
+# out of it. Group 1 is the `<tree>/<role>` pair; group 2 is the marker, when it follows the
+# path (after an optional `:N` or `:N-M`).
+NEW_ROLE_MARKER = "(a new role, not yet merged)"
+_ROLE_PATH_RE = re.compile(
+    r"(?<![\w-])(?:ansible/)?roles/((?:k8s|setup|containers)/[a-z0-9][a-z0-9_-]*)"
+    r"(?:/[A-Za-z0-9_.-]*[A-Za-z0-9_-])*(?::\d+(?:-\d+)?)?( "
+    + re.escape(NEW_ROLE_MARKER)
+    + r")?"
+)
 REQUIRED = ("id", "agent", "input", "assert", "rubric", "k", "threshold")
 _THRESHOLD_RE = re.compile(r"^(all|rate>=\d+/\d+)$")
 
@@ -102,6 +113,41 @@ def retired_container_roles(obj: dict) -> set[str]:
     `(a new role, not yet merged)`, because no new service lands on Docker.
     """
     return cited_container_roles(obj) - live_pi_roles()
+
+
+def cited_role_paths(obj: dict) -> tuple[set[str], set[str]]:
+    """Every `ansible/roles/...` path a case cites, and the roles it marks as new.
+
+    A role counts as marked when any one citation under it carries the marker, so a case need
+    not repeat the marker on every line that names the same fixture.
+    """
+    paths: set[str] = set()
+    marked: set[str] = set()
+    for text in _strings(obj):
+        for m in _ROLE_PATH_RE.finditer(text):
+            path = re.sub(
+                r":\d+(?:-\d+)?$", "", m.group(0).removesuffix(m.group(2) or "")
+            )
+            paths.add("ansible/" + path[path.index("roles/") :])
+            if m.group(2):
+                marked.add(m.group(1))
+    return paths, marked
+
+
+def missing_role_paths(obj: dict, root: Path = REPO) -> set[str]:
+    """README rule 1: a cited `ansible/roles/...` path must exist under `root`.
+
+    The one exemption is a fixture for a role that does not exist yet: the case marks the role
+    `(a new role, not yet merged)` and `ansible/roles/<tree>/<role>` is absent. A marker on a
+    role that does exist is a stale fixture, so it exempts nothing.
+    """
+    paths, marked = cited_role_paths(obj)
+    new_roles = {r for r in marked if not (root / "ansible/roles" / r).exists()}
+    return {
+        p
+        for p in paths
+        if not (root / p).exists() and "/".join(p.split("/")[2:4]) not in new_roles
+    }
 
 
 def test_validate_case_accepts_a_good_case():
@@ -233,4 +279,56 @@ def test_no_case_cites_a_retired_container_role():
         f"cases cite roles/containers/ roles that are not live on daniel-pi ({sorted(live)}): {stale}. "
         "Rebuild the case from a live file, or move a new-service fixture under roles/k8s/ "
         "marked '(a new role, not yet merged)' (evals/README.md, rule 1)."
+    )
+
+
+def test_missing_role_path_is_flagged():
+    case = {
+        "input": "# ansible/roles/k8s/grafana/defaults/main.yml:12",
+        "rubric": "see $HOME/server/ansible/roles/k8s/homepage/templates/configmap.yaml.j2.",
+    }
+    assert missing_role_paths(case) == {
+        "ansible/roles/k8s/grafana/defaults/main.yml",
+        "ansible/roles/k8s/homepage/templates/configmap.yaml.j2",
+    }
+
+
+def test_marked_path_under_an_absent_role_is_not_flagged():
+    case = {
+        "input": "# ansible/roles/k8s/ledger/templates/deployment.yaml.j2:14 (a new role, not yet merged)",
+        "rubric": "ansible/roles/k8s/ledger/defaults/main.yml has no backup tier.",
+    }
+    assert missing_role_paths(case) == set()
+
+
+def test_marker_on_a_role_that_exists_exempts_nothing():
+    case = {
+        "input": "# ansible/roles/k8s/homepage/templates/configmap.yaml.j2 (a new role, not yet merged)"
+    }
+    assert missing_role_paths(case) == {
+        "ansible/roles/k8s/homepage/templates/configmap.yaml.j2"
+    }
+
+
+def test_no_case_cites_a_missing_role_path():
+    cited = {f: json.loads(f.read_text()) for f in _all_case_files()}
+    # A scan that matches nothing would pass vacuously. skeptic/001 quotes a live wg-easy file,
+    # and homelab-container-reviewer/001 marks notesdb as a new role.
+    paths, _ = cited_role_paths(
+        cited[CASES_DIR / "skeptic/001-refuted-with-evidence.json"]
+    )
+    assert "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2" in paths
+    _, marked = cited_role_paths(
+        cited[CASES_DIR / "homelab-container-reviewer/001-named-volume-unbacked.json"]
+    )
+    assert "k8s/notesdb" in marked
+    missing = {
+        str(f.relative_to(CASES_DIR)): sorted(missing_role_paths(obj))
+        for f, obj in cited.items()
+        if missing_role_paths(obj)
+    }
+    assert not missing, (
+        f"cases cite ansible/roles/ paths that do not exist: {missing}. Rebuild the case from the "
+        "live file (evals/README.md, rule 4), or, for a fixture of a role that does not exist "
+        f"yet, follow one citation of it with '{NEW_ROLE_MARKER}' (rule 1)."
     )
