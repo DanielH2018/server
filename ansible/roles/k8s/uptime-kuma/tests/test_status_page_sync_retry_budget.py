@@ -43,6 +43,8 @@ def render(**overrides):
         "tz": "America/Chicago",
         "puid": 1000,
         "pgid": 1000,
+        # The CronJob reads Kuma's port from its entry (#3816).
+        "containers_list": [{"name": "uptime-kuma", "port": 3001}],
         **DEFAULTS,
         **overrides,
     }

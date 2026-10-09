@@ -558,6 +558,9 @@ containers_list:
   - name: home-assistant
     platform: k8s
     hostname: "home-assistant"
+    # Records HA's own listener rather than setting it: HA binds 8123 by default, and
+    # files/configuration.yaml ships verbatim, so no template can move it. Changing this moves
+    # the Service, the route and the prometheus scrape target, but not the listener.
     port: 8123
     use_authelia: false
     # Named Service port, which the shared default Service renders on request.
@@ -734,6 +737,23 @@ containers_list:
   # exporter bump. No port and no route derive — it is a scrape target only.
   - name: nut-exporter
     platform: k8s
+    # upsd's own variables: battery charge and runtime, load, input voltage, and ups.status as
+    # a per-flag 0/1. Before this job, UPS state reached Grafana only as `hass_*` series from
+    # the home-assistant job, which routes a power-loss signal through a workload the UPS
+    # itself protects. These series do not depend on HA being up.
+    #
+    # `/ups_metrics`, not `/metrics`: the latter is the exporter's own process registry and
+    # carries no UPS reading. The `ups` param matters even with one UPS attached, because the
+    # exporter fails the scrape if it discovers several and was not told which. The value is
+    # the expression nut/templates/config-secret.yaml.j2 uses for the ups.conf section, so the
+    # two cannot drift apart. The port reaches the listener through `--web.listen-address`.
+    metrics:
+      - job: nut
+        port: 9199
+        path: /ups_metrics
+        interval: 1m
+        params:
+          ups: ["{{ nut_ups_name | default('apc-ups') }}"]
   # Nightly CronJob: the Pi's WireGuard peer keys land on a Longhorn PVC the WEEKLY tier
   # carries to B2 on its Saturday shard (`k3s_longhorn_weekly_volumes`, `# Sat`), and the job
   # pushes the "WG Pi Peer Backup" monitor directly. The job is nightly; the OFF-SITE copy is

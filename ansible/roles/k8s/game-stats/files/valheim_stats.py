@@ -33,6 +33,7 @@ so every pattern is SEARCHED, never anchored at ^. (Terraria's parser anchors be
 its image logs bare lines. Anchoring here would match nothing.)
 """
 
+import os
 import re
 
 import stats_lib
@@ -47,7 +48,6 @@ LOKI_URL = _env("LOKI_URL", "http://loki-homelab:3100").rstrip("/")
 LOKI_QUERY = _env("LOKI_QUERY", '{container="valheim"}')
 POLL_INTERVAL = int(_env("POLL_INTERVAL", "20"))
 HTTP_TIMEOUT = int(_env("HTTP_TIMEOUT", "10"))
-METRICS_PORT = int(_env("METRICS_PORT", "9420"))
 DB_PATH = _env("DB_PATH", "/data/stats.db")
 # Same ceiling as terraria-stats: stay under Loki's max_query_length (~721h) or the
 # first-run query 400s. Valheim has no history to backfill (it was archived long before
@@ -441,7 +441,9 @@ def main():
             backfill_days=BACKFILL_DAYS,
             page_limit=LOKI_PAGE_LIMIT,
             poll_interval=POLL_INTERVAL,
-            metrics_port=METRICS_PORT,
+            # No default: the port is the `valheim-stats` metrics item on the containers_list
+            # entry, and the Deployment passes it in. A default here would be a second copy.
+            metrics_port=int(os.environ["METRICS_PORT"]),
             health_max_age=HEALTH_MAX_AGE,
         ),
         Store(DB_PATH),

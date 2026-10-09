@@ -42,14 +42,14 @@ spec:
             - --nut.server=nut.{{ k8s_namespace }}.svc.cluster.local
             - --nut.serverport=3493
             - --nut.vars_enable={{ nut_exporter_k8s_variables | join(',') }}
-            - --web.listen-address=:{{ nut_exporter_k8s_port }}
+            - --web.listen-address=:{{ containers_list | metrics_port('nut') }}
 {{ hardened_security_context(read_only=true, non_root=true) }}
           env:
             - name: TZ
               value: "{{ tz }}"
           ports:
             - name: metrics
-              containerPort: {{ nut_exporter_k8s_port }}
+              containerPort: {{ containers_list | metrics_port('nut') }}
           # tcpSocket, not httpGet, on both counts.
           #
           # Not /ups_metrics: that request fails whenever upsd is unreachable, so probing it
@@ -64,13 +64,13 @@ spec:
           # nothing, which is all a probe needs here.
           livenessProbe:
             tcpSocket:
-              port: {{ nut_exporter_k8s_port }}
+              port: {{ containers_list | metrics_port('nut') }}
             initialDelaySeconds: 10
             periodSeconds: 30
             failureThreshold: 3
           readinessProbe:
             tcpSocket:
-              port: {{ nut_exporter_k8s_port }}
+              port: {{ containers_list | metrics_port('nut') }}
             initialDelaySeconds: 3
             periodSeconds: 10
 {{ container_resources(cpu_limit=nut_exporter_k8s_cpu_limit, mem_limit=nut_exporter_k8s_mem_limit, cpu_request=nut_exporter_k8s_cpu_request, mem_request=nut_exporter_k8s_mem_request) }}

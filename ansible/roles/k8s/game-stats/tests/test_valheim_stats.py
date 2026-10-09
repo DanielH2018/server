@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 
 sys.path.insert(
@@ -240,3 +241,17 @@ def test_a_disconnect_after_a_restart_of_this_service_still_resolves(tmp_path):
     revived.apply("disconnect", "111", 200.0)
     assert revived.players["Bob"]["sessions"] == 1
     assert revived.players["Bob"]["total_playtime"] == 100.0
+
+
+def test_main_requires_the_metrics_port_from_the_deployment():
+    """The port is the containers_list metrics item's, passed in by the Deployment (#3816)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("METRICS_PORT", "DB_PATH")}
+    result = subprocess.run(
+        [sys.executable, stats.__file__],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert "KeyError: 'METRICS_PORT'" in result.stderr
