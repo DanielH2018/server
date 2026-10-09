@@ -35,7 +35,10 @@ Every fact comes from a reader that already exists; this module only joins them:
 manual plane. It is computed here rather than in the mod so that the band, the model's
 system-prompt section and this command's text view cannot disagree. A blocker line carries no
 age or other value that moves each minute: the mod puts the list in the system prompt, and a
-line that changed every read would rewrite the prompt on every turn. A source that fails is
+line that changed every read would rewrite the prompt on every turn. Because that prompt is
+every session's, a line interpolates only a value with a closed shape, such as a hex SHA or a
+setup role this checkout has. The held planes are free text from deploy-ui, so the line counts
+them and the text view lists them. A source that fails is
 named in `errors` and leaves its own field `null`; it never fails the whole read.
 
 Exit code: 0 when nothing blocks a landing, 1 when something does.
@@ -63,7 +66,7 @@ from pathlib import Path
 
 from land_lib.detach import _VERDICT_LINE, default_log_dir, verdict_in
 from lib import deployer_park
-from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO, ROLES
 
 # The deployer's own modules, so the CI and ledger rules are its rules and not a copy.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -133,26 +136,65 @@ def parse_worktrees(porcelain: str) -> list[dict]:
     return trees
 
 
-def blockers(snap: dict) -> list[str]:
+# The blocker lines go into every deck session's system prompt (#3793), and off the deployer's
+# host the hold and the owed roles come from deploy-ui's `/api/state`. So a line interpolates
+# only a value checked against a closed shape: a hex SHA, a setup role this checkout has, a
+# GitHub Actions run URL. A free-text field, such as a held plane's tags, is counted instead.
+_HEX_SHA = re.compile(r"[0-9a-f]{1,8}")
+_RUN_URL = re.compile(
+    r"https://github\.com/[\w.-]{1,100}/[\w.-]{1,100}/actions/runs/\d{1,20}"
+    r"(/attempts/\d{1,5})?",
+    re.ASCII,
+)
+UNSAFE_TOKEN = "<entry not shown>"
+
+
+def setup_roles() -> frozenset[str]:
+    """The setup roles this checkout carries: every directory under `ansible/roles/setup/`."""
+    return frozenset(p.name for p in (ROLES / "setup").iterdir() if p.is_dir())
+
+
+def _checked(value, shape: Callable[[str], object]) -> str:
+    """`value` where it is a string `shape` returns a truthy result for, else `UNSAFE_TOKEN`."""
+    return value if isinstance(value, str) and shape(value) else UNSAFE_TOKEN
+
+
+def blockers(snap: dict, roles: frozenset[str] | None = None) -> list[str]:
     """One line per condition in CLAUDE.md's *When to wait* that this snapshot shows.
 
     A field that is `null` (unread) adds nothing: the mod gates nothing, and a band that cried
     "blocked" every time a source timed out would be read past.
+
+    Args:
+        snap: the snapshot `collect` builds.
+        roles: the setup role names a manual-plane role must be one of. Defaults to
+          `setup_roles()`.
     """
+    roles = setup_roles() if roles is None else roles
     out = []
     hold = snap.get("hold")
     if hold and hold.get("sha"):
-        planes = hold.get("planes") or []
+        count = len(hold.get("planes") or [])
         out.append(
-            f"hold_sha is set ({hold['sha'][:8]})"
-            + (f", waiting on {', '.join(planes)}" if planes else "")
+            f"hold_sha is set ({_checked(hold['sha'][:8], _HEX_SHA.fullmatch)})"
+            + (
+                f", waiting on {count} plane{'s' if count != 1 else ''}; "
+                "`probe.py landing` names them"
+                if count
+                else ""
+            )
         )
     if (snap.get("ci") or {}).get("state") == "red":
-        out.append(f"master CI is red: {snap['ci'].get('url', '')}".rstrip(": "))
+        url = snap["ci"].get("url", "")
+        out.append(
+            f"master CI is red: {_checked(url, _RUN_URL.fullmatch) if url else ''}".rstrip(
+                ": "
+            )
+        )
     for owed in snap.get("manual_planes") or []:
         out.append(
-            f"the `{owed['role']}` setup role is merged and unapplied; "
-            "`probe.py landing` names the apply"
+            f"the `{_checked(owed['role'], roles.__contains__)}` setup role is merged and "
+            "unapplied; `probe.py landing` names the apply"
         )
     return out
 
@@ -367,6 +409,8 @@ def format_text(snap: dict) -> str:
         + "   manual planes: "
         + known(snap["manual_planes"], lambda m: str(len(m)))
     )
+    if snap["hold"] and snap["hold"]["planes"]:
+        lines.append("held planes: " + "; ".join(map(str, snap["hold"]["planes"])))
     if snap["runs"]:
         lines.append("In flight:")
         for r in snap["runs"]:
