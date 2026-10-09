@@ -47,6 +47,9 @@
 # names the primary checkout: it supplies the `.venv` `uv run` uses, which a fresh worktree has
 # not built yet.
 # `uv` itself missing still exits non-zero with its own stderr line.
+#
+# This file cannot report its own absence. When the session's `$CLAUDE_PROJECT_DIR` is deleted,
+# the `--ask-on-cd` registrations deny through `gen_hook_settings.py`'s `GUARD_SUFFIX` (#3887).
 
 set -u
 

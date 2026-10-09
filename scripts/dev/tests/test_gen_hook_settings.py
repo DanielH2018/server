@@ -99,9 +99,9 @@ def test_a_py_registration_renders_through_the_runner_with_its_args_as_flags():
         "#   timeout: 5\n#   order: 10\n#   args: --ask-on-cd=a,b\n"
     )
     [r] = g.parse_hook_file("guard.py", text).registrations
-    assert (
-        r.command
-        == '"$CLAUDE_PROJECT_DIR"/.claude/hooks/run-hook.sh guard --ask-on-cd=a,b'
+    assert r.command == (
+        '"$CLAUDE_PROJECT_DIR"/.claude/hooks/run-hook.sh guard --ask-on-cd=a,b'
+        + g.GUARD_SUFFIX.format(name="guard", guards="a,b")
     )
     [bare] = g.parse_hook_file(
         "quiet.py", text.replace("#   args: --ask-on-cd=a,b\n", "")

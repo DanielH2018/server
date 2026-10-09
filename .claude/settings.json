@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh bash-pretool --ask-on-cd=block-protected-bash,block-footguns",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh bash-pretool --ask-on-cd=block-protected-bash,block-footguns || { rc=$?; [ -x \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh ] && exit $rc; echo \"run-hook.sh bash-pretool: $CLAUDE_PROJECT_DIR/.claude/hooks/run-hook.sh is missing or not executable (exit $rc), so this call was checked by none of: block-protected-bash,block-footguns. The checkout this session started in is gone; restart the session from a live checkout.\" >&2; exit 2; }",
             "timeout": 15
           }
         ]
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh block-protected-edits --ask-on-cd",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh block-protected-edits --ask-on-cd || { rc=$?; [ -x \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh ] && exit $rc; echo \"run-hook.sh block-protected-edits: $CLAUDE_PROJECT_DIR/.claude/hooks/run-hook.sh is missing or not executable (exit $rc), so this call was checked by none of: block-protected-edits. The checkout this session started in is gone; restart the session from a live checkout.\" >&2; exit 2; }",
             "timeout": 10
           }
         ]
