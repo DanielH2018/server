@@ -83,10 +83,27 @@ containers_list:
     use_authelia: false
     # crowdsec-db is in k3s_longhorn_nobackup_volumes: decisions re-derive from logs.
     tier: home-edge
+    # The engine's (LAPI+AppSec) :6060 carries the LAPI/decision metrics the Grafana CrowdSec
+    # boards read. The `metrics` field is documented in ansible/filter_plugins/scrape_jobs.py;
+    # observability's prometheus.yaml.j2 renders a plain scrape job from each item, and the
+    # owning role reads the port back with `metrics_port`. The engine binds 6060 from the
+    # image's own config.yaml, so this records that port rather than setting it.
+    metrics:
+      - job: crowdsec
+        port: 6060
   - name: traefik
     platform: k8s
     port: 8080
     depends_on: [crowdsec]
+    # The k8s edge's traefik_* metrics, through the dedicated traefik-metrics ClusterIP: the
+    # internal :8080 entrypoint must not ride the LoadBalancer Service onto the LAN VIP.
+    # 8080 is Traefik's own default for that entrypoint, so this records it rather than
+    # setting it; the Service's targetPort stays the literal.
+    metrics:
+      - job: traefik-k8s
+        service: traefik-metrics
+        port: 8080
+        interval: 1m
     tier: home-edge
     backup_claims: [traefik-acme]
   - name: authelia
@@ -333,6 +350,14 @@ containers_list:
     port: 80
     use_authelia: true
     auth_tier: one_factor
+    # The image serves speedtest_tracker_* natively at `/prometheus` on its UI port (#996).
+    # UNVERIFIED until someone flips the app's `prometheus_enabled` Settings toggle by hand: it
+    # defaults OFF and lives in the app's own DB, so until then this job reads `up == 0`, not
+    # silently empty. See roles/k8s/speedtest/CLAUDE.md. The port is the entry's own, which
+    # the image fixes.
+    metrics:
+      - job: speedtest
+        path: /prometheus
     # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
     # Browsers arrive through traefik and prometheus scrapes `/prometheus` on this port; the
     # baseline already admits both on every port. The baseline's node CIDRs are two /32 cni0
@@ -567,6 +592,14 @@ containers_list:
     platform: k8s
     port: 80
     depends_on: [pihole]
+    # One exporter, BOTH FTL instances, every series labelled `hostname`: a panel must sum
+    # across them, or it reports about half the real volume. 1m rather than the global 15s:
+    # these are cumulative daily counters, and each scrape costs the exporter an authenticated
+    # round trip to each Pi-hole.
+    metrics:
+      - job: pihole
+        port: 9617
+        interval: 1m
 
   # GPU utilization per node, from DRM sysfs. A DaemonSet with no Service and no IngressRoute —
   # Prometheus discovers its pods individually — so no ordering edge derives from its templates
@@ -658,12 +691,27 @@ containers_list:
     hostname: "loki-homelab"
     port: 3100
     use_authelia: false
+    # loki_* internals, scraped on the entry's own port. The configmap's http_listen_port sets
+    # the listener, so the two must change together.
+    metrics:
+      - job: loki-homelab
+        interval: 1m
   # MUST follow loki-homelab: both exporters tail their game pod's console lines from that
-  # Loki. No web UI — each :9420 exporter is scraped in-cluster (observability prometheus jobs
-  # terraria-stats and valheim-stats), so no port/route derives.
+  # Loki. No web UI and no route; each exporter's Service is scraped in-cluster.
   - name: game-stats
     platform: k8s
     depends_on: [loki-homelab]
+    # One job per game, each a single replica behind its own Service. terraria-stats runs as
+    # many pods as the server, so its job is dropped at `terraria_k8s_replicas: 0`: a Service
+    # with no endpoint reads `up == 0` and pages the scrape-target check (#2877).
+    metrics:
+      - job: terraria-stats
+        service: terraria-stats
+        port: 9420
+        replicas_var: terraria_k8s_replicas
+      - job: valheim-stats
+        service: valheim-stats
+        port: 9420
   # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
   # every metric/API check; autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge

@@ -7,7 +7,6 @@
 # crowdsec_k8s_image / crowdsec_k8s_agent_username / crowdsec_k8s_lapi_port /
 # crowdsec_k8s_appsec_port live in group_vars/all.yml — the traefik role's sidecar and
 # bouncer middleware consume them too, and role defaults are invisible across roles.
-crowdsec_k8s_metrics_port: 6060
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Platform: the in-cluster LAPI + AppSec + decision engine every bouncer (including traefik's

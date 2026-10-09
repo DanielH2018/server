@@ -99,7 +99,9 @@ nothing.
 Four CrowdSec containers run here and one job in
 `roles/k8s/observability/templates/prometheus.yaml.j2` covers each: `crowdsec` (the engine pod, LAPI
 plus AppSec), `crowdsec-node-agents` (the DaemonSet), `crowdsec-traefik-agent` and
-`crowdsec-authelia-agent` (the two sidecars).
+`crowdsec-authelia-agent` (the two sidecars). The `crowdsec` job renders from the `metrics`
+item on this role's `containers_list` entry, which is also where the engine's `:6060` is
+defined; the other three are hand-written in the template.
 
 Read the job before writing a CrowdSec query: `node` is not a CrowdSec label and only the
 DaemonSet job attaches one, so a per-node selector on an engine or sidecar metric matches nothing

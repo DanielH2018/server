@@ -25,8 +25,6 @@ pihole_exporter_k8s_targets:
   - "pihole.{{ k8s_namespace }}.svc.cluster.local"
   - "pihole-2-web.{{ k8s_namespace }}.svc.cluster.local"
 
-pihole_exporter_k8s_port: 9617
-
 pihole_exporter_k8s_cpu_limit: "200m"
 pihole_exporter_k8s_mem_limit: 64Mi
 pihole_exporter_k8s_cpu_request: "10m"

@@ -57,10 +57,10 @@ spec:
             - name: PIHOLE_PROTOCOL
               value: http
             - name: PORT
-              value: "{{ pihole_exporter_k8s_port }}"
+              value: "{{ containers_list | metrics_port('pihole') }}"
           ports:
             - name: metrics
-              containerPort: {{ pihole_exporter_k8s_port }}
+              containerPort: {{ containers_list | metrics_port('pihole') }}
           # tcpSocket rather than httpGet on /metrics: a kubelet probe against a metrics route is
           # the shape ansible/tests/k8s/_scrape_property_rows.py refuses below a 300s
           # period, after node-exporter's probes produced 97% of this namespace's Loki ingest.
@@ -68,13 +68,13 @@ spec:
           # reachable is Prometheus's `up` to report, not a reason to restart this pod.
           livenessProbe:
             tcpSocket:
-              port: {{ pihole_exporter_k8s_port }}
+              port: {{ containers_list | metrics_port('pihole') }}
             initialDelaySeconds: 10
             periodSeconds: 30
             failureThreshold: 3
           readinessProbe:
             tcpSocket:
-              port: {{ pihole_exporter_k8s_port }}
+              port: {{ containers_list | metrics_port('pihole') }}
             initialDelaySeconds: 3
             periodSeconds: 10
 {{ container_resources(cpu_limit=pihole_exporter_k8s_cpu_limit, mem_limit=pihole_exporter_k8s_mem_limit, cpu_request=pihole_exporter_k8s_cpu_request, mem_request=pihole_exporter_k8s_mem_request) }}

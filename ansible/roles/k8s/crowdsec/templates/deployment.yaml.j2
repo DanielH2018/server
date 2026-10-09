@@ -59,7 +59,7 @@ spec:
             - name: appsec
               containerPort: {{ crowdsec_k8s_appsec_port }}
             - name: metrics
-              containerPort: {{ crowdsec_k8s_metrics_port }}
+              containerPort: {{ containers_list | metrics_port('crowdsec') }}
           env:
             - name: TZ
               value: "{{ tz }}"

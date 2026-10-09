@@ -1,5 +1,5 @@
 {% from 'service.yml.j2' import service with context %}
 ---
-# Scraped in-cluster by observability's prometheus (job_name: valheim-stats). No route and
-# no port in containers_list: there is no web UI, only the exporter.
-{{ service('valheim-stats', 9420, port_name='metrics') -}}
+# Scraped in-cluster by observability's prometheus (job_name: valheim-stats), from the
+# `metrics` item on game-stats' containers_list entry. There is no web UI, only the exporter.
+{{ service('valheim-stats', (containers_list | metrics_port('valheim-stats')), port_name='metrics') -}}

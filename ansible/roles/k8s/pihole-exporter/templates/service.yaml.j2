@@ -2,4 +2,4 @@
 ---
 # Scrape target only — no IngressRoute. The exporter's page is unauthenticated and carries
 # nothing a human reads; the DNS board in Grafana is the operator surface.
-{{ service('pihole-exporter', pihole_exporter_k8s_port, port_name='metrics') -}}
+{{ service('pihole-exporter', (containers_list | metrics_port('pihole')), port_name='metrics') -}}
