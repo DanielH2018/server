@@ -44,7 +44,8 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
      `openssl rand -hex 16 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`
    - **Any other generated value (auto tier):** generate and set without echoing the value:
      `openssl rand -base64 32 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`
-     (the value is never printed). `Bash(openssl rand *)` and `Bash(sops set *)` are allow-listed.
+     (the value is never printed). Neither settings file allow-lists these commands, so expect
+     a permission prompt.
    - **User-provided value via sops set:** only if the user explicitly accepts that the value
      will appear in the command — warn them first.
 
@@ -68,7 +69,7 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
    trailer. Do **not** deploy unless the user asks (the `/deploy` skill handles that).
 
 ## Done when
-- The key decrypts from `secrets.yml`, the on-disk file is ciphertext, `secret_rotation.py audit`
+- Step 4's `grep -c '^<name>: ENC\['` prints `1`, `secret_rotation.py audit`
   shows it registered, and the change is committed. Report which template now references it and
   which deploy tag would apply it.
 
