@@ -183,6 +183,8 @@ advertisements alone. DNS never came from the lease, because this role renders
 `/etc/resolv.conf`. The template says why DHCPv4 is off rather than running alongside. The
 gateway must keep the address out of its DHCP pool, since with DHCPv4 off nothing renews a
 lease on it. To apply it, run `k3s-bringup.yml --tags node-address` on daniel-box.
+To back the pin out, empty `k3s_node_static_link` and run the same tag. That run removes the
+file and re-applies netplan, so the link returns to the installer's DHCP.
 
 daniel-server is still on DHCP. The agent play reaches it over SSH through a dynamic
 `include_role`, which `--tags node-address` cannot select, and a `netplan apply` there would

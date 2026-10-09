@@ -91,3 +91,30 @@ def test_an_address_left_on_dhcp_is_flagged() -> None:
 def test_an_address_other_than_server_ip_is_flagged() -> None:
     problems = static_address_problems(_PINNED, "eno1", "10.0.0.216", "10.0.0.1")
     assert problems == ["addresses are ['10.0.0.215/24'], not 10.0.0.216"]
+
+
+def test_emptying_the_link_removes_the_pin_and_reapplies() -> None:
+    """The way back: an emptied variable must not leave DHCPv4 off on the link."""
+    tasks = yaml_fast.safe_load(
+        (
+            ANSIBLE / "roles" / "setup" / "k3s" / "tasks" / "static-address.yml"
+        ).read_text()
+    )
+    dest = "/etc/netplan/90-homelab-static-address.yaml"
+    removal = [
+        t
+        for t in tasks
+        if t.get("ansible.builtin.file", {}).get("path") == dest
+        and t["ansible.builtin.file"].get("state") == "absent"
+    ]
+    assert len(removal) == 1, (
+        "no task removes the pin when k3s_node_static_link is empty"
+    )
+    assert removal[0]["when"] == "k3s_node_static_link | length == 0"
+    flag = f"{removal[0]['register']}.changed"
+    commands = [t for t in tasks if "ansible.builtin.command" in t]
+    assert {t["ansible.builtin.command"]["cmd"] for t in commands} == {
+        "netplan generate",
+        "netplan apply",
+    }
+    assert all(flag in t["when"] for t in commands), "removal does not trigger netplan"
