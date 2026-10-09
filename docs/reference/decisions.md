@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-09 00:17 UTC
-generated_sha: c071becad
+generated_at: 2026-10-09 00:26 UTC
+generated_sha: 08857c42a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: c071becad
 
 # Decisions
 
-570 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+571 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -541,7 +541,8 @@ generated_sha: c071becad
 | no fourth rule for Popen` marker says why a `wait`/`communicate` rule cannot | `scripts/lib/proc_testing.py:37` | 2026-10-01 |
 | secret values render as stubs, so a rendered-manifest guard must key on field names and assert a non-empty denominator, never on credential-shaped values. | `scripts/lib/render_guard.py:112` | 2026-09-30 |
 | land.sh never deploys to daniel-stage, and the entry stays after #2941 retired that guest. The guest sat on daniel-server's libvirt NAT network, which daniel-box cannot route to, so landing any of the six staging-subset tags (traefik, authelia, node-exporter, ...) ran ``deploy.sh -e target=daniel-stage`` from daniel-box after the box's own deploy had succeeded, and the unreachable host turned a good landing into ``deploy-failed``. The host declares no tag now, so the filter is inert against the live inventory — it is kept because what it names is "a host land.sh must not deploy to", the retired guest is still the worked example of one, and it is what gives both reads (``deploy_tags.landing_hosts`` over the working tree and ``land_tags.landing_hosts_at`` over a merge commit) a shared answer. #935 is about those two disagreeing. The operator ruled on 2026-09-30 (#2944) that a staging cluster may come back, so the entry stays rather than being re-derived later. | `scripts/lib/render_guard.py:362` | 2026-09-29 |
-| an insert whose argument is a name (`GITOPS_DEPLOY_FILES`, `HOST_LIB_FILES`, `FILTER_PLUGINS`) is skipped rather than evaluated. Every such insert in the tree points outside `scripts/`, or at `scripts/` itself, which `_roots` already covers. An import only such an insert explains resolves outside the tree, so it credits nothing here (#3038). | `scripts/lib/script_imports.py:100` | 2026-09-30 |
+| a separate module despite one production importer (`lib.script_classify`). Its interface is two functions over ~200 lines of import resolution, so it is deep rather than a pass-through seam, and folding it in would push `script_classify` past 650 lines. Weighed and kept in the #3667 deep-modules pass. | `scripts/lib/script_imports.py:13` | 2026-10-09 |
+| an insert whose argument is a name (`GITOPS_DEPLOY_FILES`, `HOST_LIB_FILES`, `FILTER_PLUGINS`) is skipped rather than evaluated. Every such insert in the tree points outside `scripts/`, or at `scripts/` itself, which `_roots` already covers. An import only such an insert explains resolves outside the tree, so it credits nothing here (#3038). | `scripts/lib/script_imports.py:105` | 2026-09-30 |
 | ` in | `scripts/lib/tests/test_ansible_jinja_env.py:168` | 2026-10-09 |
 | ` marker costs ~190 ms if ansible-core leaks into it. | `scripts/lib/tests/test_ansible_jinja_env.py:188` | 2026-10-09 |
 | marker in " | `scripts/lib/tests/test_ansible_jinja_env.py:207` | 2026-09-24 |

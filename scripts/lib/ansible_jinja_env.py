@@ -14,8 +14,8 @@ identity rather than by a shim's fidelity. ``to_json`` is ``k8s_yaml.to_json_stu
 ansible-core's raises on the ``StubUndefined`` a guard renders secrets as, which would abort
 the render this module exists to complete.
 
-Importing ``ansible.plugins.filter.core`` costs ~190 ms on an idle host and 365 ms on a loaded
-one (``python -X importtime``, 2026-09-18 and 2026-10-09), so the module has two tiers. Its TOP LEVEL is the
+Importing ``ansible.plugins.filter.core`` costs 100-365 ms (``python -X importtime``, warm
+and cold runs on 2026-10-09), so the module has two tiers. Its TOP LEVEL is the
 light tier: it loads no ansible-core, and carries ``ansible_bool``, a copy of ``to_bool`` for
 ``lib.k8s_context``. That module cannot pay the import, for the reason its own ``DECIDED:``
 marker gives: ``probe_lib/monitors.py`` reaches it and ``probe.py monitors`` loads no
