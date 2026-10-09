@@ -17,19 +17,20 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from lib.repo_paths import PRIMARY_CHECKOUT
 
 SERVER = "DanielH2018/server"
-# The operator's checkout. The agent user cannot read /home/ubuntu, and its login profile
+# The agent user cannot read /home/ubuntu, and its login profile
 # (roles/setup/claude_code/templates/agent-user-profile.j2) points RUN_HOOK_PROJECT_DIR at its
 # own clone instead (#3627). The repo's hook shim, .claude/hooks/run-hook.sh, reads the same
-# variable with the same default.
-OPERATOR_CHECKOUT = "/home/ubuntu/server"
+# variable. Unset, the checkout is the primary one this module lives under, which is the
+# operator's /home/ubuntu/server for `ubuntu`.
 PROJECT_DIR_ENV = "RUN_HOOK_PROJECT_DIR"
 
 
 def server_checkout(env: Mapping[str, str] = os.environ) -> str:
     """This repo's primary checkout for the running user: its own clone, or the operator's."""
-    return env.get(PROJECT_DIR_ENV) or OPERATOR_CHECKOUT
+    return env.get(PROJECT_DIR_ENV) or str(PRIMARY_CHECKOUT)
 
 
 SERVER_CHECKOUT = server_checkout()

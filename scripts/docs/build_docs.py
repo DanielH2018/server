@@ -368,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--site-dir",
-        default="/home/ubuntu/docs-site",
+        default=str(Path.home() / "docs-site"),
         help="where mkdocs writes the built site (the hostPath the docs pod serves)",
     )
     parser.add_argument(

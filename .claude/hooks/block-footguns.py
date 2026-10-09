@@ -68,6 +68,8 @@ from _hook_common import (
 )
 
 _SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
+# The checkout on the REMOTE host: the guard fires on `ssh daniel-<host> git ...`, and each
+# `ansible_connection=local` host keeps its own operator checkout at this path.
 _REPO_PATH = "/home/ubuntu/server"
 
 # Load generators, by the name you type. A single `curl` is deliberately absent: one request to

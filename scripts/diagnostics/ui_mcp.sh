@@ -28,7 +28,7 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 
-NODE_BIN="${NODE_BIN:-/home/ubuntu/.local/share/fnm/aliases/default/bin}"
+NODE_BIN="${NODE_BIN:-$HOME/.local/share/fnm/aliases/default/bin}"
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/claude-ui-mcp"
 CONFIG_PATH="$RUNTIME_DIR/playwright-mcp.json"

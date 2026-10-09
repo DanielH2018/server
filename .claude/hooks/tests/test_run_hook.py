@@ -40,12 +40,13 @@ VARIANTS = {
     "ask": ["--project", "--ask-on-cd"],
 }
 
-# The host facts run-hook.sh hard-codes. A GitHub runner has none of them: no primary checkout,
-# no uv at this install path, and setup-python's patch release rather than the hosts' pin, which
-# `--no-python-downloads` will not fetch. The quiet variant sends uv's stderr to /dev/null, so a
-# missing one reads as a hook that printed nothing rather than as an error.
-_PROJECT_DIR = "/home/ubuntu/server"
-_UV = "/home/ubuntu/.local/bin/uv"
+# The host facts run-hook.sh defaults to, as it spells them. A GitHub runner has none of them: no
+# primary checkout under $HOME, no uv at this install path, and setup-python's patch release
+# rather than the hosts' pin, which `--no-python-downloads` will not fetch. The quiet variant
+# sends uv's stderr to /dev/null, so a missing one reads as a hook that printed nothing rather
+# than as an error.
+_PROJECT_DIR = "$home/server"
+_UV = "$home/.local/bin/uv"
 _PIN = re.compile(r"--python [0-9][0-9.]*")
 
 
@@ -66,6 +67,7 @@ def _variant_runner(tmp_path: Path, cd_target: str) -> Path:
     ):
         assert host_fact in text, f"run-hook.sh no longer holds {host_fact!r}"
     # Checked before the swap, because the runner-side values can live under /home/ubuntu too.
+    # The runner derives both defaults from $HOME, so no operator path may remain beside them.
     unswapped = text.replace(_PROJECT_DIR, "").replace(_UV, "")
     assert "/home/ubuntu" not in unswapped, (
         "run-hook.sh has a host path this copy keeps"
@@ -271,6 +273,28 @@ def test_accept_the_project_dir_override_moves_the_cd(tmp_path):
     proc = _run(runner, "probe", "--project", env={"RUN_HOOK_PROJECT_DIR": str(target)})
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == str(target)
+
+
+def test_accept_the_default_checkout_is_the_running_users_home(tmp_path):
+    """With no override the `cd` target is `$HOME/server`, so the `claude` user's clone and the
+    operator's checkout both resolve without the runner naming either user."""
+    (tmp_path / "probe.py").write_text(
+        "import os\nprint(os.getcwd())\n", encoding="utf-8"
+    )
+    text = RUNNER.read_text(encoding="utf-8")
+    text, pins = _PIN.subn(f"--python {sys.executable}", text)
+    assert pins == 1
+    runner = tmp_path / "run-hook.sh"
+    runner.write_text(text, encoding="utf-8")
+    home = tmp_path / "home"
+    (home / "server").mkdir(parents=True)
+    uv = shutil.which("uv")
+    assert uv, "uv is not on PATH"
+    proc = _run(
+        runner, "probe", "--project", env={"HOME": str(home), "RUN_HOOK_UV": uv}
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(home / "server")
 
 
 def test_reject_an_override_outside_the_path_charset_is_ignored(tmp_path):

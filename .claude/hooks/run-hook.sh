@@ -120,14 +120,18 @@ did_not_run() {
 }
 
 # The checkout whose `.venv` `uv run --no-sync` uses, and the uv that runs it. Both default to
-# the operator's. The unattended Renovate agent runs as its own user, which cannot read the
-# operator's home, so its unit points both at its own run worktree and its own uv. An override
-# outside the path charset is ignored rather than trusted, because the directory reaches the
-# `ask` reason, which is a JSON string.
-project_dir=${RUN_HOOK_PROJECT_DIR:-/home/ubuntu/server}
-uv=${RUN_HOOK_UV:-/home/ubuntu/.local/bin/uv}
-[[ "$project_dir" =~ ^/[A-Za-z0-9_./-]+$ ]] || project_dir=/home/ubuntu/server
-[[ "$uv" =~ ^/[A-Za-z0-9_./-]+$ ]] || uv=/home/ubuntu/.local/bin/uv
+# the running user's own: `$HOME/server` and `$HOME/.local/bin/uv`, which are the operator's
+# checkout and uv for `ubuntu`. The unattended Renovate agent runs as its own user, which
+# cannot read the operator's home, so its unit points both at its own run worktree and its own
+# uv. An override outside the path charset is ignored rather than trusted, because the
+# directory reaches the `ask` reason, which is a JSON string. A `$HOME` outside it is dropped
+# for the same reason, which leaves `/server`: the `cd` fails and the guard asks.
+home=${HOME:-}
+[[ "$home" =~ ^/[A-Za-z0-9_./-]+$ ]] || home=
+project_dir=${RUN_HOOK_PROJECT_DIR:-$home/server}
+uv=${RUN_HOOK_UV:-$home/.local/bin/uv}
+[[ "$project_dir" =~ ^/[A-Za-z0-9_./-]+$ ]] || project_dir=$home/server
+[[ "$uv" =~ ^/[A-Za-z0-9_./-]+$ ]] || uv=$home/.local/bin/uv
 
 if [[ -n "$project" ]]; then
     cd "$project_dir" || {
