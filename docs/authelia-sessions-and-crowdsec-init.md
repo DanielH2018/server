@@ -184,6 +184,10 @@ alone. Read the audit line before concluding that a registry date means a key is
 
 ### The `crowdsec-agent` sidecar is seeded by an init container, not by its entrypoint
 
+The traefik pod carries the same sidecar and the same three init containers. Both pods render
+them from `ansible/templates/crowdsec-agent.yml.j2`, so the order and the tolerances below hold
+for both, and a change to one is a change to both (#3741).
+
 The CrowdSec image entrypoint opens with a "Populating configuration directory" step — an
 `rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec` — that runs under `set -e`
 and only while `/etc/crowdsec/config.yaml` is absent. About twenty staged files are root-only

@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+{% from 'crowdsec-agent.yml.j2' import crowdsec_agent_init_containers, crowdsec_agent_sidecar, crowdsec_agent_volumes with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -65,166 +66,7 @@ spec:
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {% endif %}
 {% if traefik_k8s_manage_crowdsec %}
-        # FIRST, before crowdsec-config-install's rsync, and the order is the whole point.
-        # The image's staged hub tree is root-only, so that rsync — which runs as the pod's
-        # own uid — never copies it; that is part of the exit 23 it tolerates. It does copy
-        # the parser CONFIGS, which are symlinks into that tree, so
-        # /etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml resolved to a hub file that was
-        # never staged and the agent dropped the parser: `Ignoring file … lstat
-        # /etc/crowdsec/hub/parsers/s02-enrich/crowdsecurity/geoip-enrich.yaml: no such file
-        # or directory`, once per parser-load pass. GeoIP enrichment stayed dead even after
-        # the datafiles were installed, on BOTH pods carrying the sidecar (#1211).
-        #
-        # Running this AFTER the rsync was tried and is wrong: rsync recurses from the parent
-        # listing, so it creates /etc/crowdsec/hub owned by the pod uid before it fails to
-        # read into it, and root with ALL dropped cannot write into another uid's directory —
-        # DAC_READ_SEARCH is the READ half of the override, DAC_OVERRIDE is the write half.
-        # The copy would fail, `exit 0` would swallow it, and the pod would come up 2/2 with
-        # the warning intact. Going first, this creates the directory root-owned and
-        # world-readable, and the rsync's own `--ignore-existing` then leaves the files alone.
-        #
-        # ROOT-OWNED is the half that keeps it readable, not just a consequence of needing
-        # DAC_READ_SEARCH. rsync gives an existing destination directory the SOURCE's mode.
-        # Measured both ways against a same-uid destination: a 000 source chmodded `hub/` to
-        # 000 (exit 23, it never recursed), a 0755 source left 0755 (exit 0), and in both the
-        # already-staged file kept its content and mode — `--ignore-existing` is what protects
-        # the files. Here the directory is root-owned and the rsync runs as the pod uid, so
-        # that chmod is refused whatever the source mode, and a refusal is one more error under
-        # the exit 23 the config install already tolerates. Create this directory as the pod
-        # uid and its mode goes back under rsync's control, which a root-only source would then
-        # take away again — silently, behind a green render and a healthy pod.
-        - name: crowdsec-hub-install
-          image: {{ crowdsec_k8s_image }}
-          command:
-            - /bin/sh
-            - -c
-            # `cp -a` keeps the tree's own symlinks as symlinks and keeps root ownership, so
-            # the chown hands the tree to the pod uid. The agent's entrypoint WRITES here on
-            # every start: `cscli parsers install` for the env-listed parsers and the `cscli hub
-            # update` it retries with both create files under /etc/crowdsec/hub, and a
-            # root-owned tree the agent can only read fails that with `permission denied` and
-            # exits the sidecar. That took the edge down for the whole homelab on 2026-09-05
-            # (16:59 UTC, the first deploy of this container). The chmod keeps the copied modes
-            # readable; the hub holds public hub content only — the LAPI and online credentials
-            # sit beside it in /etc/crowdsec, not in it. Ends in `exit 0` for the same reason
-            # crowdsec-data-install does: traefik rolls under Recreate, so a non-zero init
-            # container takes the edge down (the #986 outage) rather than costing one parser.
-            - >-
-              mkdir -p /etc/crowdsec/hub &&
-              cp -a /staging/etc/crowdsec/hub/. /etc/crowdsec/hub/ &&
-              chown -R {{ traefik_k8s_uid }}:{{ traefik_k8s_uid }} /etc/crowdsec/hub &&
-              chmod -R a+rX,u+w /etc/crowdsec/hub ||
-              echo "hub stage incomplete" >&2;
-              exit 0
-          # Root, written out rather than built through hardened_security_context() — the macro
-          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
-          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
-          # permission-bit override, which is what reaches the root-only staged hub tree. CHOWN
-          # is what lets root give the copy away: with ALL dropped, root cannot chown even its
-          # own files. No write capability is needed because this runs first: /etc/crowdsec is
-          # the emptyDir root, root-owned and empty until this container writes to it.
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsUser: 0
-            capabilities:
-              add:
-                - CHOWN
-                - DAC_READ_SEARCH
-              drop:
-                - ALL
-          volumeMounts:
-            - name: crowdsec-etc
-              mountPath: /etc/crowdsec
-{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
-        # Seeds the agent sidecar's /etc/crowdsec before its entrypoint fills in defaults —
-        # acquis pointing at the shared access log, and the same whitelist parsers as the
-        # Docker edge (from the traefik-crowdsec Secret). Root like the sidecar itself.
-        - name: crowdsec-config-install
-          image: {{ crowdsec_k8s_image }}
-          command:
-            - /bin/sh
-            - -c
-            - >-
-              (rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec
-              || [ "$?" -eq 23 ]) &&
-              install -m 644 /seed/acquis.yaml /etc/crowdsec/ &&
-              install -d /etc/crowdsec/parsers/s02-enrich &&
-              install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
-              /etc/crowdsec/parsers/s02-enrich/ &&
-              install -m 640 /dev/null /var/log/traefik/access.log
-          # The rsync is the image entrypoint's own "Populating configuration directory"
-          # step (build/docker/docker_start.sh at v1.7.8), which runs under `set -e` and
-          # only while /etc/crowdsec/config.yaml is absent. Run here so the sidecar never
-          # runs it: about twenty staged files are root-only (the LAPI/online credentials
-          # and the bundled hub tree), so a non-root rsync exits 23 (partial transfer) and
-          # set -e killed the sidecar's first start on every cold boot (#976). The kubelet's
-          # restart then found config.yaml, skipped the block, and worked — this seeds the
-          # same state up front. Exit 23 is the only status tolerated: the files it skips are
-          # the LAPI and online credentials, which the agent regenerates (`cscli lapi
-          # register`) on start regardless. It also skips the bundled hub tree, which is NOT
-          # re-downloaded in time for the parser load — crowdsec-hub-install above stages that
-          # explicitly (#1211). Runs before the installs so the seeds win.
-          # Pod default uid, not root: it creates the access log traefik must then write,
-          # and root-with-ALL-caps-dropped cannot chown it back (measured on the authelia
-          # pod). Creating the file as that user sidesteps the capability; the agent reads
-          # it as root regardless.
-{{ hardened_security_context(non_root=true) }}
-          volumeMounts:
-            - name: crowdsec-secret
-              mountPath: /seed
-              readOnly: true
-            - name: crowdsec-etc
-              mountPath: /etc/crowdsec
-            # Pre-create the access log: pod containers start in parallel and crowdsec's
-            # file acquisition does not retry a missing file — it logs one error and drops
-            # the datasource for the container's lifetime, leaving a healthy-looking pod
-            # with no detection. The agent only won this race here because it crash-looped
-            # on its first rollout; the authelia pod lost it outright.
-            - name: traefik-logs
-              mountPath: /var/log/traefik
-{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
-        # The image ships its datafiles at /staging/var/lib/crowdsec/data mode 0600 root:root
-        # (measured on the v1.7.8 image), and the entrypoint SYMLINKS them into the data volume
-        # rather than copying. The non-root agent then cannot read through the link, so GeoIP
-        # never initialises — `unable to open GeoLite2-City.mmdb: permission denied`, and the
-        # geoip-enrich parser is dead in a pod that otherwise reads healthy (#990). Copying them
-        # in world-readable defeats the symlink: the entrypoint's `[ ! -e ]` guard skips a name
-        # that already exists, so the agent reads these copies instead.
-        - name: crowdsec-data-install
-          image: {{ crowdsec_k8s_image }}
-          command:
-            - /bin/sh
-            - -c
-            # Per file, not `cp -r`: `trace/` is a 0700 directory and the db is the entrypoint's
-            # own documented skip. A file that cannot be read is left to the symlink path — the
-            # status quo for that name — rather than failing the pod, because traefik rolls
-            # under Recreate and an init container that exits non-zero takes the edge down (the
-            # #986 outage). `ls` succeeds because the directory itself is 0755.
-            - >-
-              for f in /staging/var/lib/crowdsec/data/*; do
-              [ -f "$f" ] || continue;
-              case "${f##*/}" in crowdsec.db*) continue ;; esac;
-              install -m 644 "$f" /var/lib/crowdsec/data/ ||
-              echo "skipped ${f##*/}" >&2;
-              done; exit 0
-          # Root, written out rather than built through hardened_security_context() — the macro
-          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
-          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
-          # permission-bit override: it covers the 0600 sources however the image later owns
-          # them. Writing needs no DAC_OVERRIDE, since the emptyDir is root-owned and empty
-          # until this container runs.
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsUser: 0
-            capabilities:
-              add:
-                - DAC_READ_SEARCH
-              drop:
-                - ALL
-          volumeMounts:
-            - name: crowdsec-data
-              mountPath: /var/lib/crowdsec/data
-{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+{{ crowdsec_agent_init_containers('traefik', log_volume='traefik-logs', log_dir='/var/log/traefik', log_file='access.log', uid=traefik_k8s_uid, gid=traefik_k8s_uid) }}
 {% endif %}
       containers:
         - name: traefik
@@ -357,65 +199,9 @@ spec:
             periodSeconds: 30
 {{ container_resources(cpu_limit=traefik_k8s_cpu_limit, mem_limit=traefik_k8s_mem_limit, cpu_request=traefik_k8s_cpu_request, mem_request=traefik_k8s_mem_request) }}
 {% if traefik_k8s_manage_crowdsec %}
-        # Slice-6 B1 (D1/D2): log-parsing agent, LAPI-less — it tails this pod's access log
-        # and ships signals to the in-cluster engine. Runs as the pod's uid (65532), NOT
-        # root: root with ALL caps dropped has no DAC_OVERRIDE, so it cannot write the
-        # /etc/crowdsec tree the init container owns and `cscli parsers install` dies on
-        # mkdir (measured on the authelia pod, which has the same shape). The agent needs
-        # no privilege — it reads a file and posts to the LAPI.
-        #
-        # Deliberately NO readinessProbe: sidecar readiness gates the whole pod's Service
-        # endpoints, and a hub download hiccup must not pull the EDGE out of rotation. The
-        # bouncer middleware already fails open per its own config; a dead agent costs
-        # detection, not serving. Lenient liveness restarts a truly wedged agent.
-        - name: crowdsec-agent
-          image: {{ crowdsec_k8s_image }}
-          env:
-            - name: TZ
-              value: "{{ tz }}"
-            - name: DISABLE_LOCAL_API
-              value: "true"
-            - name: LOCAL_API_URL
-              value: "http://crowdsec:{{ crowdsec_k8s_lapi_port }}"
-            - name: AGENT_USERNAME
-              value: "{{ crowdsec_k8s_agent_username }}"
-            - name: AGENT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: traefik-crowdsec
-                  key: AGENT_PASSWORD
-            - name: COLLECTIONS
-              value: "{{ traefik_k8s_agent_collections }}"
-{{ hardened_security_context(non_root=true) }}
-          # Declared so Prometheus can find it: pod-role SD emits a target per DECLARED
-          # containerPort, so the `crowdsec-traefik-agent` job's keep on port 6060
-          # (observability/templates/prometheus.yaml.j2) matches nothing without this. The
-          # agent binds it either way — this changes discovery, not the listener (#1694).
-          ports:
-            - name: cs-metrics
-              containerPort: 6060
-          volumeMounts:
-            - name: crowdsec-etc
-              mountPath: /etc/crowdsec
-            # The entrypoint refuses to start without a volume here (it holds the hub's
-            # downloaded datafiles; the sqlite DB lives only in the LAPI pod). emptyDir is
-            # right: everything in it re-downloads from the hub on start.
-            - name: crowdsec-data
-              mountPath: /var/lib/crowdsec/data
-            - name: traefik-logs
-              mountPath: /var/log/traefik
-              readOnly: true
-            - name: crowdsec-agent-tmp
-              mountPath: /tmp
-          livenessProbe:
-            # Round-trips the LAPI with the agent's own credentials — alive means "parsing
-            # and able to deliver", the only two things this container is for.
-            exec:
-              command: ["cscli", "lapi", "status"]
-            initialDelaySeconds: 120
-            periodSeconds: 60
-            timeoutSeconds: 10
-{{ container_resources(cpu_limit=traefik_k8s_agent_cpu_limit, mem_limit=traefik_k8s_agent_mem_limit, cpu_request=traefik_k8s_agent_cpu_request, mem_request=traefik_k8s_agent_mem_request) }}
+        # Tails this pod's access log into the in-cluster LAPI. The bouncer middleware fails
+        # open per its own config, so a dead agent costs detection, not serving.
+{{ crowdsec_agent_sidecar('traefik', collections=traefik_k8s_agent_collections, log_volume='traefik-logs', log_dir='/var/log/traefik', cpu_limit=traefik_k8s_agent_cpu_limit, mem_limit=traefik_k8s_agent_mem_limit, cpu_request=traefik_k8s_agent_cpu_request, mem_request=traefik_k8s_agent_mem_request) }}
 {% endif %}
         # Ships the access log to Loki (tails it to stdout, which promtail's k8s-pods job
         # auto-discovers by container name — no scrape-config change needed) and keeps the
@@ -552,14 +338,9 @@ spec:
         - name: traefik-tmp
           emptyDir: {}
 {% if traefik_k8s_manage_crowdsec %}
-        - name: crowdsec-secret
-          secret:
-            secretName: traefik-crowdsec
-            # Group-readable for the same kubelet root:fsGroup reason as the cloudflare
-            # Secret above — 0400 would leave the traefik user unable to read lapi_key.
-            defaultMode: 0440
-        # The traefik container gets ONLY the key file; the full Secret (agent password,
-        # acquis, whitelists) is projected separately for the sidecar's initContainer.
+{{ crowdsec_agent_volumes('traefik') }}
+        # The traefik container gets ONLY the key file from traefik-crowdsec; the whole Secret
+        # (agent password, acquis, whitelists) is projected for the sidecar's seed above.
         - name: crowdsec-key
           secret:
             secretName: traefik-crowdsec
@@ -567,10 +348,6 @@ spec:
             items:
               - key: lapi_key
                 path: lapi_key
-        - name: crowdsec-etc
-          emptyDir: {}
-        - name: crowdsec-data
-          emptyDir: {}
         # Projects the plugin into the GOPATH layout Traefik reads. The manifest's ConfigMap key
         # is `traefik-plugin.yml` and only the projected name carries the leading dot.
         - name: cloudflare-realip-plugin
@@ -584,10 +361,6 @@ spec:
 {% endif %}
         - name: traefik-plugins-storage
           emptyDir: {}
-{% if traefik_k8s_manage_crowdsec %}
-        - name: crowdsec-agent-tmp
-          emptyDir: {}
-{% endif %}
         # sizeLimit is a BACKSTOP against pod eviction, not the rotation mechanism — the
         # access-log-rotate sidecar copytruncates the log well before this is reached (see
         # traefik_k8s_access_log_rotate_mb / _keep in defaults/main.yml). Hitting this cap would

@@ -75,13 +75,16 @@ def test_nothing_names_crowdsec_once_the_flag_is_off(role: str) -> None:
     """
     sentinel = "SURVIVING-CROWDSEC-REFERENCE"
     role_vars = load_yaml(K8S_ROLES / role / "defaults" / "main.yml")
-    crowdsec_vars = {
+    crowdsec_vars: dict[str, object] = {
         name: sentinel
         for name in list(role_vars) + ["crowdsec_k8s_image", "crowdsec_k8s_lapi_port"]
         # The flag's own name matches, and a sentinel STRING is truthy — setting it here
         # would silently switch the subsystem back on and the check would pass vacuously.
         if ("crowdsec" in name or "bouncer" in name) and name != _FLAGS[role]
     }
+    # The map the shared macro indexes by app, so its sentinel has to be a map too: a string
+    # would fail the lookup rather than render the sentinel.
+    crowdsec_vars["crowdsec_k8s_sidecar_agents"] = {role: sentinel}
     assert crowdsec_vars, (
         f"{role} names no CrowdSec variable — the sentinel proves nothing"
     )

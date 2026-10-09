@@ -14,14 +14,14 @@ than synthetic ones:
   * `code-server/templates/deployment.yaml.j2`, init container `seed-workspace-claim`, adds
     CHOWN + DAC_OVERRIDE + FOWNER — a fresh claim's root is root:root while the files being
     copied belong to the pod uid.
-  * The other four are the CrowdSec seeding init containers, one pair in each of
-    `authelia/templates/deployment.yaml.j2` and `traefik/templates/deployment.yaml.j2`.
-    `crowdsec-hub-install` adds CHOWN + DAC_READ_SEARCH: it reads the image's root-only staged
+  * The other four are the CrowdSec seeding init containers, one pair rendered into each of
+    `authelia/templates/deployment.yaml.j2` and `traefik/templates/deployment.yaml.j2` from the
+    shared `ansible/templates/crowdsec-agent.yml.j2`. `crowdsec-hub-install` adds CHOWN + DAC_READ_SEARCH: it reads the image's root-only staged
     hub tree and hands the copy to the pod uid. `crowdsec-data-install` adds DAC_READ_SEARCH
     alone, to read the 0600 data sources into a root-owned emptyDir it can already write.
 
-Authelia's third seeding container, `crowdsec-config-install`, runs as the pod's uid 1000 and so
-is not a root site.
+The third seeding container, `crowdsec-config-install`, runs as the pod's uid and so is not a
+root site.
 
 The hazard is the COMBINATION, never root by itself.
 

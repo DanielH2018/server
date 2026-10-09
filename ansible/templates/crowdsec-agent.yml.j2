@@ -1,0 +1,308 @@
+{#
+  The CrowdSec log-parsing agent that rides inside an application pod — traefik's (the edge
+  access log) and authelia's (the portal's auth log) — as three macros over one shape.
+
+  Three macros rather than one, because the agent touches three separate lists of the pod spec:
+  the three seeding init containers, the sidecar itself, and the volumes those four share. A
+  caller places each call inside its own `manage_crowdsec` gate, at the position that list
+  needs. The `initContainers:` key stays with the caller too, since a pod can have init
+  containers of its own (traefik's fix-acme-permissions, authelia's wait-for-redis).
+
+  Until #3741 these were two hand-kept copies of about 120 lines each, and they had drifted:
+  the scratch volume carried a different name in each pod, and a comment in one described a
+  container as root that runs as the pod uid. One body stops that drift.
+
+  WHAT ADDING A THIRD PROTECTED APP TAKES. An entry in `crowdsec_k8s_sidecar_agents`
+  (group_vars/all.yml), which is the machine name; the crowdsec role's LAPI registration loop
+  and the observability role's `crowdsec-<app>-agent` scrape job both derive from that map. The
+  three calls here. A `<app>-crowdsec` Secret carrying `AGENT_PASSWORD`, `acquis.yaml` and the
+  two whitelist parsers. A prometheus `from` item of the app's own in its baseline
+  NetworkPolicy, because the sidecar carries the HOST pod's labels: Prometheus reaches it as
+  `app=<app>`, which is also why the scrape job keeps on the app label plus port 6060.
+  `ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds the job, the port and the
+  grant together.
+
+  The root seeding containers are written out in full rather than built through
+  hardened_security_context(), which refuses uid 0 by convention: each one's comment says which
+  uid owns the files and why root is reached for.
+  ansible/tests/k8s/test_root_security_context_is_written_out_in_full.py scans this file for
+  that.
+
+  Arguments:
+    app         the host workload's name. It names the `<app>-crowdsec` Secret and selects the
+                agent's machine from `crowdsec_k8s_sidecar_agents`.
+    log_volume  the emptyDir the app writes its log into and the agent tails.
+    log_dir     where both containers mount it.
+    log_file    the file name under log_dir that `acquis.yaml` names. The config seed creates
+                it, owned by the pod uid, so the app can write it.
+    uid, gid    the pod uid and gid. crowdsec-hub-install hands the staged hub tree to them,
+                because the agent's entrypoint writes into it.
+    collections the hub collections the agent installs (its COLLECTIONS env).
+    cpu_limit, mem_limit, cpu_request, mem_request
+                the agent sidecar's resources. The three init containers share one fixed size.
+#}
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% macro crowdsec_agent_init_containers(app, log_volume, log_dir, log_file, uid, gid) %}
+        # FIRST, before crowdsec-config-install's rsync, and the order is the whole point.
+        # The image's staged hub tree is root-only, so that rsync — which runs as the pod's
+        # own uid — never copies it; that is part of the exit 23 it tolerates. It does copy
+        # the parser CONFIGS, which are symlinks into that tree, so
+        # /etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml resolved to a hub file that was
+        # never staged and the agent dropped the parser: `Ignoring file … lstat
+        # /etc/crowdsec/hub/parsers/s02-enrich/crowdsecurity/geoip-enrich.yaml: no such file
+        # or directory`, once per parser-load pass. GeoIP enrichment stayed dead even after
+        # the datafiles were installed, on BOTH pods carrying the sidecar (#1211).
+        #
+        # Running this AFTER the rsync was tried and is wrong: rsync recurses from the parent
+        # listing, so it creates /etc/crowdsec/hub owned by the pod uid before it fails to
+        # read into it, and root with ALL dropped cannot write into another uid's directory —
+        # DAC_READ_SEARCH is the READ half of the override, DAC_OVERRIDE is the write half.
+        # The copy would fail, `exit 0` would swallow it, and the pod would come up with the
+        # warning intact. Going first, this creates the directory root-owned and
+        # world-readable, and the rsync's own `--ignore-existing` then leaves the files alone.
+        #
+        # ROOT-OWNED is the half that keeps it readable, not just a consequence of needing
+        # DAC_READ_SEARCH. rsync gives an existing destination directory the SOURCE's mode.
+        # Measured both ways against a same-uid destination: a 000 source chmodded `hub/` to
+        # 000 (exit 23, it never recursed), a 0755 source left 0755 (exit 0), and in both the
+        # already-staged file kept its content and mode — `--ignore-existing` is what protects
+        # the files. Here the directory is root-owned and the rsync runs as the pod uid, so
+        # that chmod is refused whatever the source mode, and a refusal is one more error under
+        # the exit 23 the marker below already tolerates. Create this directory as the pod uid
+        # and its mode goes back under rsync's control, which a root-only source would then
+        # take away again — silently, behind a green render and a healthy pod.
+        - name: crowdsec-hub-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            # `cp -a` keeps the tree's own symlinks as symlinks and keeps root ownership, so
+            # the chown hands the tree to the pod uid. The agent's entrypoint WRITES here on
+            # every start: `cscli parsers install` for the env-listed parsers and the `cscli hub
+            # update` it retries with both create files under /etc/crowdsec/hub, and a
+            # root-owned tree the agent can only read fails that with `permission denied` and
+            # exits the sidecar. That took both the edge and SSO down for the whole homelab on
+            # 2026-09-05 (16:59 UTC, the first deploy of this container). The chmod keeps the
+            # copied modes readable; the hub holds public hub content only — the LAPI and online
+            # credentials sit beside it in /etc/crowdsec, not in it. Ends in `exit 0` for the
+            # same reason crowdsec-data-install does: both host pods roll under Recreate, so the
+            # old pod is already gone and a non-zero init container takes the edge or SSO down
+            # (the #986 outage) rather than costing one parser.
+            - >-
+              mkdir -p /etc/crowdsec/hub &&
+              cp -a /staging/etc/crowdsec/hub/. /etc/crowdsec/hub/ &&
+              chown -R {{ uid }}:{{ gid }} /etc/crowdsec/hub &&
+              chmod -R a+rX,u+w /etc/crowdsec/hub ||
+              echo "hub stage incomplete" >&2;
+              exit 0
+          # Root, written out rather than built through hardened_security_context() — the macro
+          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
+          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
+          # permission-bit override, which is what reaches the root-only staged hub tree. CHOWN
+          # is what lets root give the copy away: with ALL dropped, root cannot chown even its
+          # own files. No write capability is needed because this runs first: /etc/crowdsec is
+          # the emptyDir root, root-owned and empty until this container writes to it.
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+            capabilities:
+              add:
+                - CHOWN
+                - DAC_READ_SEARCH
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # Seeds the agent sidecar's /etc/crowdsec so its entrypoint never has to: the image's
+        # own staged tree first (see the rsync note below), then acquisition pointing at this
+        # pod's log, plus the whitelist parsers every agent here uses (from the {{ app }}-crowdsec
+        # Secret). The seeds are installed AFTER the rsync so they win over the staged copies
+        # of the same names.
+        #
+        # Runs as the pod uid, NOT root: it creates the log file the app must then write, and
+        # root-with-ALL-caps-dropped cannot chown — the same trap slice 5 hit on Home
+        # Assistant's config seed. Owning the file by creating it sidesteps the capability.
+        - name: crowdsec-config-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - >-
+              (rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec
+              || [ "$?" -eq 23 ]) &&
+              install -m 644 /seed/acquis.yaml /etc/crowdsec/ &&
+              install -d /etc/crowdsec/parsers/s02-enrich &&
+              install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
+              /etc/crowdsec/parsers/s02-enrich/ &&
+              install -m 640 /dev/null {{ log_dir }}/{{ log_file }}
+          # The rsync is the image entrypoint's own "Populating configuration directory" step
+          # (build/docker/docker_start.sh at v1.7.8), run here so the sidecar never runs it. It
+          # only runs while /etc/crowdsec/config.yaml is absent, and it runs under `set -e`:
+          # about twenty staged files are root-only (the LAPI/online credentials and the
+          # bundled hub tree), so a non-root rsync exits 23 (partial transfer) and killed the
+          # sidecar's FIRST start on every pod start — on traefik's every cold boot (#976), and
+          # on authelia as `crowdsec-agent restarts=1 last=Error 23`, which
+          # `probe.py health authelia` fails closed on inside its 180s window, so every
+          # authelia deploy read `VERDICT: unhealthy` (#1173). The kubelet's restart then
+          # found config.yaml and skipped the block; this seeds the same state up front.
+          #
+          # DECIDED: tolerate exit 23 only, never `|| true`. This moves the failure from a
+          # sidecar restart to a failed init container, and both host pods roll under
+          # Recreate — the old pod is already gone, so a non-23 rsync failure takes the edge or
+          # SSO down rather than costing one restart. Exit 23 alone is safe because the files
+          # it skips are the LAPI and online credentials, which the agent regenerates (`cscli
+          # lapi register`) on start regardless; any OTHER rsync status is a real seed failure
+          # and must fail the pod rather than start an agent with a half-populated config.
+          #
+          # AMENDED 2026-09-05 (#1211): the marker also claimed the skipped HUB tree is
+          # re-downloaded (`cscli hub update`) on start. It is not, or not before the parser
+          # load — both pods logged `Ignoring file … geoip-enrich.yaml: lstat
+          # /etc/crowdsec/hub/…: no such file or directory` once per parser-load pass. The
+          # decision against `|| true` is unchanged and still stands; what changed is that the
+          # hub tree is now staged explicitly by crowdsec-hub-install above rather than assumed
+          # to arrive on its own.
+{{ hardened_security_context(non_root=true) }}
+          volumeMounts:
+            - name: crowdsec-secret
+              mountPath: /seed
+              readOnly: true
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+            # The log file must EXIST before the agent starts. Pod containers start in
+            # parallel, and crowdsec's file acquisition does not retry a missing file — it
+            # logs one error and drops that datasource for the life of the container, so a
+            # lost race leaves a healthy-looking pod with no detection at all (measured on
+            # authelia's first rollout; traefik's agent only won the race because it
+            # crash-looped on its own first rollout).
+            - name: {{ log_volume }}
+              mountPath: {{ log_dir }}
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # The image ships its datafiles at /staging/var/lib/crowdsec/data mode 0600 root:root
+        # (measured on the v1.7.8 image), and the entrypoint SYMLINKS them into the data volume
+        # rather than copying. The non-root agent then cannot read through the link, so GeoIP
+        # never initialises — `unable to open GeoLite2-City.mmdb: permission denied`, and the
+        # geoip-enrich parser is dead in a pod that otherwise reads healthy (traefik #990,
+        # authelia #1177). Copying them in world-readable defeats the symlink: the
+        # entrypoint's `[ ! -e ]` guard skips a name that already exists, so the agent reads
+        # these copies instead.
+        - name: crowdsec-data-install
+          image: {{ crowdsec_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            # Per file, not `cp -r`: `trace/` is a 0700 directory and the db is the entrypoint's
+            # own documented skip. A file that cannot be read is left to the symlink path — the
+            # status quo for that name — rather than failing the pod, because both host pods
+            # roll under Recreate: the old pod is already gone, so an init container that exits
+            # non-zero takes the edge or SSO down for the whole homelab (the #986 outage) rather
+            # than costing one parser. `ls` succeeds because the directory itself is 0755.
+            - >-
+              for f in /staging/var/lib/crowdsec/data/*; do
+              [ -f "$f" ] || continue;
+              case "${f##*/}" in crowdsec.db*) continue ;; esac;
+              install -m 644 "$f" /var/lib/crowdsec/data/ ||
+              echo "skipped ${f##*/}" >&2;
+              done; exit 0
+          # Root, written out rather than built through hardened_security_context() — the macro
+          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
+          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
+          # permission-bit override: it covers the 0600 sources however the image later owns
+          # them. Writing needs no DAC_OVERRIDE, since the emptyDir is root-owned and empty
+          # until this container runs.
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+            capabilities:
+              add:
+                - DAC_READ_SEARCH
+              drop:
+                - ALL
+          volumeMounts:
+            - name: crowdsec-data
+              mountPath: /var/lib/crowdsec/data
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+{%- endmacro %}
+{% macro crowdsec_agent_sidecar(app, collections, log_volume, log_dir, cpu_limit, mem_limit, cpu_request, mem_request) %}
+        # Log-parsing agent, LAPI-less: it tails this pod's log and ships signals to the
+        # in-cluster engine, so the scenarios its collections install cover this app. Runs as
+        # the pod's uid, NOT root: root with ALL caps dropped has no DAC_OVERRIDE, so it cannot
+        # write the /etc/crowdsec tree the init containers hand to the pod uid, and `cscli
+        # parsers install` dies on mkdir. The agent needs no privilege — it reads a file and
+        # posts to the LAPI.
+        #
+        # Deliberately NO readinessProbe: sidecar readiness gates the whole pod's Service
+        # endpoints, and a hub download hiccup must not pull the edge or SSO out of rotation.
+        # A dead agent costs detection, not serving. Lenient liveness restarts a truly wedged
+        # agent.
+        - name: crowdsec-agent
+          image: {{ crowdsec_k8s_image }}
+          env:
+            - name: TZ
+              value: "{{ tz }}"
+            - name: DISABLE_LOCAL_API
+              value: "true"
+            - name: LOCAL_API_URL
+              value: "http://crowdsec:{{ crowdsec_k8s_lapi_port }}"
+            # The crowdsec role registers this machine on the LAPI from the same map.
+            - name: AGENT_USERNAME
+              value: "{{ crowdsec_k8s_sidecar_agents[app] }}"
+            - name: AGENT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ app }}-crowdsec
+                  key: AGENT_PASSWORD
+            - name: COLLECTIONS
+              value: "{{ collections }}"
+{{ hardened_security_context(non_root=true) }}
+          # Declared so Prometheus can find it: pod-role SD emits a target per DECLARED
+          # containerPort, so the `crowdsec-{{ app }}-agent` job's keep on port 6060
+          # (observability/templates/prometheus.yaml.j2) matches nothing without this. The
+          # agent binds it either way — this changes discovery, not the listener (#1694, #1706).
+          ports:
+            - name: cs-metrics
+              containerPort: 6060
+          volumeMounts:
+            - name: crowdsec-etc
+              mountPath: /etc/crowdsec
+            # The entrypoint refuses to start without a volume here (it holds the hub's
+            # downloaded datafiles; the sqlite DB lives only in the LAPI pod). emptyDir is
+            # right: everything in it re-downloads from the hub on start.
+            - name: crowdsec-data
+              mountPath: /var/lib/crowdsec/data
+            - name: {{ log_volume }}
+              mountPath: {{ log_dir }}
+              readOnly: true
+            - name: crowdsec-agent-tmp
+              mountPath: /tmp
+          livenessProbe:
+            # Round-trips the LAPI with the agent's own credentials — alive means "parsing
+            # and able to deliver", the only two things this container is for.
+            exec:
+              command: ["cscli", "lapi", "status"]
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 10
+{{ container_resources(cpu_limit=cpu_limit, mem_limit=mem_limit, cpu_request=cpu_request, mem_request=mem_request) }}
+{%- endmacro %}
+{% macro crowdsec_agent_volumes(app) %}
+        # The whole {{ app }}-crowdsec Secret, for crowdsec-config-install's seeds. 0440, not
+        # 0400: the kubelet owns secret files as root:fsGroup, so the pod uid reads them through
+        # the GROUP bit.
+        - name: crowdsec-secret
+          secret:
+            secretName: {{ app }}-crowdsec
+            defaultMode: 0440
+        - name: crowdsec-etc
+          emptyDir: {}
+        - name: crowdsec-data
+          emptyDir: {}
+        # DECIDED: `crowdsec-agent-tmp` in every host pod (#3741). Authelia's copy called it
+        # `crowdsec-tmp`; the longer name says which container mounts it, in a pod where the
+        # app has a /tmp volume of its own, and it stays distinct from the node-agent
+        # DaemonSet's `crowdsec-tmp`.
+        - name: crowdsec-agent-tmp
+          emptyDir: {}
+{%- endmacro %}

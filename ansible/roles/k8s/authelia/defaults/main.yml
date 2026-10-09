@@ -110,7 +110,7 @@ authelia_k8s_log_level: info
 
 # The CrowdSec agent sidecar that parses this portal's auth log.
 # Collections are the authelia-specific subset (the traefik/http ones belong to the agents
-# reading those logs). The machine NAME is crowdsec_k8s_authelia_agent_machine in group_vars —
+# reading those logs). The machine NAME is crowdsec_k8s_sidecar_agents.authelia in group_vars —
 # the k8s/crowdsec role registers it, and only group_vars crosses that role boundary.
 authelia_k8s_agent_collections: LePresidente/authelia
 authelia_k8s_agent_cpu_limit: "0.5"

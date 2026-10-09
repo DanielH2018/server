@@ -237,10 +237,15 @@ terraria_k8s_replicas: 0
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.
 crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.1@sha256:0f2523fa61ef507f15d953045cface490cc880670c62f2755ced17524107f71a
-crowdsec_k8s_agent_username: k8s-traefik-agent
-# The authelia pod's agent sidecar. Here, not in the authelia role's defaults, because the
-# k8s/crowdsec role registers the machine and only group_vars crosses that boundary.
-crowdsec_k8s_authelia_agent_machine: k8s-authelia-agent
+# Every app pod that carries a CrowdSec agent sidecar (ansible/templates/crowdsec-agent.yml.j2),
+# keyed by the app, to the LAPI machine name that agent logs in as. Three readers derive from
+# this map: the sidecar's AGENT_USERNAME, the k8s/crowdsec role's machine registration loop and
+# observability's `crowdsec-<app>-agent` scrape jobs. Here, not in the app roles' defaults,
+# because those three roles cannot see each other's defaults. An entry whose app sets its
+# `<app>_k8s_manage_crowdsec` false only leaves a registered machine that never logs in.
+crowdsec_k8s_sidecar_agents:
+  traefik: k8s-traefik-agent
+  authelia: k8s-authelia-agent
 crowdsec_k8s_lapi_port: 8080
 crowdsec_k8s_appsec_port: 7422
 # SLZB-06M Zigbee coordinator (network-attached) + pinned Zigbee PAN identity. pan_id and

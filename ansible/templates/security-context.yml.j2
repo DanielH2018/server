@@ -22,8 +22,8 @@
   for at all. A one-line macro call has nowhere to put that, and the capabilities stay written
   literally so a grep for `DAC_OVERRIDE` finds every container granted it. code-server's
   deployment.yaml.j2, loki-homelab's alloy-daemonset.yaml.j2 and the CrowdSec seeding init
-  containers in authelia's and traefik's deployment.yaml.j2 are the `runAsUser: 0` sites in this
-  family and stay written out in full.
+  containers in crowdsec-agent.yml.j2 (rendered into authelia's and traefik's pods) are the
+  `runAsUser: 0` sites in this family and stay written out in full.
   ansible/tests/k8s/test_root_security_context_is_written_out_in_full.py refuses a macro call
   that passes `run_as_user=0`, and
   ansible/tests/k8s/test_root_needs_dac_capability.py's
