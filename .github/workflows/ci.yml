@@ -572,7 +572,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0  # the merge-base diff below needs history
-          persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
+          persist-credentials: false  # nothing here pushes; pr_changed_files.sh's fetch carries its own token
 
       - name: Check whether this PR touches the deck mod
         id: scope
@@ -582,9 +582,9 @@ jobs:
           FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own
         run: |
           set -euo pipefail
-          # The token rides in a one-shot header, as in renovate-config below.
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
-            fetch --no-tags origin "$BASE_REF"
+          # pr_changed_files.sh fetches the base with the token. Its file lists go unused, because
+          # one `git diff --quiet` over three paths answers this step's question.
+          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
           if git diff --quiet "origin/$BASE_REF...HEAD" -- .claude/plugins/ .github/claude-cli/ .github/workflows/ci.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "The deck mod is untouched by this PR, so there is nothing to check."
