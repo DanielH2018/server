@@ -19,6 +19,7 @@ truth itself shows this node running no manager pod right now — never when the
 test merely disagrees with that ground truth, which is a real failure, not a reason to skip.
 """
 
+import json
 import os
 import shutil
 import socket
@@ -34,6 +35,7 @@ from _helpers import K8S_ROLES
 from _helpers import REPO as _REPO_ROOT
 from _helpers import load_tasks as _tasks
 from _helpers import task_named
+from longhorn_manager import ready_manager_ip
 
 _ROLE = K8S_ROLES / "longhorn-api"
 _RESOLVE = _ROLE / "tasks/resolve.yml"
@@ -58,26 +60,27 @@ def test_the_resolve_selects_this_nodes_own_manager_pod() -> None:
     # including the live one, which happily returns the other node's pod IP. Node-locality is the entire reason this role exists, so it gets a pinned assert.
     assert "spec.nodeName={{ ansible_hostname }}" in argv
     assert not any("longhorn-backend" in str(t) for t in argv)
-    # `[*]`, not `[0]`. Reverting to `{.items[0].status.podIP}` makes kubectl error out (rc=1,
-    # "array index out of bounds") on a zero-match query instead of returning rc=0 with empty
-    # stdout — which aborts the play before "Fail when this node runs no longhorn-manager" ever
-    # runs. The live test below CANNOT catch this regression: it skips whenever this node has
-    # no manager pod, which is the only state where `[0]` and `[*]` behave differently, so the
-    # skip fires before the command under test would ever expose the difference. This static
-    # assert is the only thing pinning it.
-    assert "jsonpath={.items[*].status.podIP}" in argv
+    # The whole pod list as JSON, so the readiness rule can read containerStatuses (#3736).
+    assert argv[-2:] == ["-o", "json"]
+
+
+def test_the_resolve_picks_a_ready_pod_through_the_shared_rule() -> None:
+    """The jsonpath this replaced returned every pod on the node, ready or not (#3736)."""
+    pick = _named(_RESOLVE, "Pick this node's ready longhorn-manager pod")
+    assert pick["ansible.builtin.set_fact"]["longhorn_api_ip"] == (
+        "{{ (longhorn_api_pod.stdout | from_json)['items'] | "
+        "ready_manager_ip(ansible_hostname) }}"
+    )
 
 
 def test_the_failure_guard_covers_an_empty_result() -> None:
     """A node with no local manager pod (unscheduled, mid-eviction) must fail loudly rather
     than hand back an empty `longhorn_api` a caller would happily template into a broken URL —
     unless the caller opted into soft mode, which the next test covers."""
-    guard = _named(_RESOLVE, "Fail when this node runs no longhorn-manager")
+    guard = _named(_RESOLVE, "Fail when this node runs no ready longhorn-manager")
     when = guard["when"]
     assert isinstance(when, list)
-    assert any(
-        "longhorn_api_pod.stdout" in str(c) and "length == 0" in str(c) for c in when
-    )
+    assert "longhorn_api_ip | length == 0" in when
     assert "longhorn_api_required | bool" in when
 
 
@@ -88,7 +91,9 @@ def test_soft_mode_records_the_miss_instead_of_failing() -> None:
     `test_longhorn_api_soft_mode_survives_no_manager` below, which proves the mechanism rather than
     the YAML shape.
     """
-    task = _named(_RESOLVE, "Record that no longhorn-manager pod exists on this node")
+    task = _named(
+        _RESOLVE, "Record that no ready longhorn-manager pod exists on this node"
+    )
     when = task["when"]
     assert "not (longhorn_api_required | bool)" in when
     assert any("length == 0" in str(c) for c in when)
@@ -100,16 +105,14 @@ def test_the_success_path_also_records_resolved_true() -> None:
     only sets `longhorn_api`/`longhorn_api_node` would leave `longhorn_api_resolved` undefined
     on the path that actually worked."""
     task = _named(_RESOLVE, "Record the API base")
-    assert task["when"] == "(longhorn_api_pod.stdout | trim) | length > 0"
+    assert task["when"] == "longhorn_api_ip | length > 0"
     assert task["ansible.builtin.set_fact"]["longhorn_api_resolved"] is True
 
 
 def test_the_recorded_facts_are_the_documented_interface() -> None:
     """Tasks 2 and 5 consume exactly these two facts — a rename here breaks both silently."""
     record = _named(_RESOLVE, "Record the API base")["ansible.builtin.set_fact"]
-    assert record["longhorn_api"] == (
-        "http://{{ (longhorn_api_pod.stdout | trim).split(' ')[0] }}:9500"
-    )
+    assert record["longhorn_api"] == "http://{{ longhorn_api_ip }}:9500"
     assert record["longhorn_api_node"] == "{{ ansible_hostname }}"
 
 
@@ -122,13 +125,15 @@ _UNREACHABLE_TOKENS = (
 
 
 def _ground_truth_manager_ips() -> dict[str, str] | None:
-    """An UNFILTERED listing of every longhorn-manager pod's node and IP, read with the
-    correct, un-mutated label — independent of the role's own argv under test. `None` means
+    """Every READY longhorn-manager pod's node and IP, read with the correct, un-mutated
+    label — independent of the role's own argv under test and of the filter it calls. Ready
+    is decided here from a jsonpath read of the phase and the container readiness flags,
+    not by `ready_manager_ip`, so a bug in that function cannot agree with itself. `None` means
     the cluster itself is unreachable; the caller distinguishes that from "this node has none"
     using this result, not from kubectl's stderr on the (possibly broken) command under test —
     which is the discrimination the field-selector-typo mutation above exposed as missing:
-    with `[*]` in place, a broken label and a genuinely absent node-local pod both produce rc=0
-    and empty stdout on the command under test, so they cannot be told apart from that alone.
+    a broken label and a genuinely absent node-local pod both produce rc=0 and an empty item
+    list on the command under test, so they cannot be told apart from that alone.
     """
     result = subprocess.run(
         [
@@ -140,7 +145,8 @@ def _ground_truth_manager_ips() -> dict[str, str] | None:
             "-l",
             "app=longhorn-manager",
             "-o",
-            'jsonpath={range .items[*]}{.spec.nodeName}{"="}{.status.podIP}{"\\n"}{end}',
+            'jsonpath={range .items[*]}{.spec.nodeName}{"="}{.status.podIP}{"="}'
+            '{.status.phase}{"="}{.status.containerStatuses[*].ready}{"\\n"}{end}',
         ],
         capture_output=True,
         text=True,
@@ -149,14 +155,15 @@ def _ground_truth_manager_ips() -> dict[str, str] | None:
     )
     if result.returncode != 0 or any(t in result.stderr for t in _UNREACHABLE_TOKENS):
         return None
-    # First match wins on a duplicate node, matching resolve.yml's `.split(' ')[0]` exactly —
-    # if a node ever runs two manager pods, the role and this ground truth must agree on which
+    # First ready match wins on a duplicate node, as `ready_manager_ip` takes the first — if a
+    # node ever runs two ready manager pods, the role and this ground truth must agree on which
     # one is "the" answer, or a real multi-pod state fails this test on a disagreement that is
     # not a bug.
     ips: dict[str, str] = {}
     for line in result.stdout.strip().splitlines():
-        node, _, ip = line.partition("=")
-        if node and ip and node not in ips:
+        node, ip, phase, readies = (line.split("=", 3) + ["", "", ""])[:4]
+        ready = phase == "Running" and readies and set(readies.split()) == {"true"}
+        if node and ip and ready and node not in ips:
             ips[node] = ip
     return ips
 
@@ -178,7 +185,7 @@ def test_the_resolve_returns_a_pod_ip_on_this_node() -> None:
         pytest.skip("no reachable cluster")
     this_node = socket.gethostname()
     if this_node not in ground_truth:
-        pytest.skip(f"no longhorn-manager pod on {this_node} right now")
+        pytest.skip(f"no ready longhorn-manager pod on {this_node} right now")
     expected_ip = ground_truth[this_node]
 
     argv = _named(_RESOLVE, "Resolve this node's own longhorn-manager pod IP")[
@@ -195,7 +202,7 @@ def test_the_resolve_returns_a_pod_ip_on_this_node() -> None:
         f"ground truth found a longhorn-manager pod on {this_node}, but the role's own "
         f"command failed: {result.stderr.strip()}"
     )
-    pod_ip = result.stdout.strip().split(" ")[0]
+    pod_ip = ready_manager_ip(json.loads(result.stdout)["items"], this_node)
     assert pod_ip == expected_ip, (
         f"the role's command returned {pod_ip!r}, but the independent listing says "
         f"{this_node}'s manager pod is at {expected_ip!r} — the field selector or label "
@@ -219,8 +226,19 @@ def test_the_resolve_returns_a_pod_ip_on_this_node() -> None:
 # is nothing here that needs root, and the test sandbox has no passwordless sudo to use.
 
 
+def _manager_pod(*, ready: bool) -> dict:
+    return {
+        "spec": {"nodeName": "testnode"},
+        "status": {
+            "phase": "Running",
+            "podIP": "10.42.0.7",
+            "containerStatuses": [{"ready": ready}],
+        },
+    }
+
+
 def _run_longhorn_api_scratch_play(
-    *, required: bool
+    *, required: bool, pods: tuple[dict, ...] = ()
 ) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -230,7 +248,7 @@ def _run_longhorn_api_scratch_play(
         # needs `become: true` to not block on a password prompt this sandbox cannot answer.
         bin_dir = fake_bin(
             tmp_path / "bin",
-            k3s="#!/bin/sh\nexit 0\n",
+            k3s="#!/bin/sh\ncat <<'EOF'\n%s\nEOF\n" % json.dumps({"items": list(pods)}),
             fake_become=(
                 "#!/bin/sh\n"
                 'last=""\n'
@@ -259,13 +277,17 @@ def _run_longhorn_api_scratch_play(
             f"      vars:{required_var}\n"
             "    - name: Prove we are still alive\n"
             "      ansible.builtin.debug:\n"
-            "        msg: \"SURVIVED longhorn_api_resolved={{ longhorn_api_resolved | default('undef') }}\"\n"
+            "        msg: \"SURVIVED longhorn_api_resolved={{ longhorn_api_resolved | default('undef') }}"
+            " api={{ longhorn_api | default('undef') }}\"\n"
         )
 
         env = dict(os.environ)
         env["PATH"] = path_with(bin_dir, env=env)
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"
+        # The real playbooks find `filter_plugins/` beside them in `ansible/`; this one is in a
+        # temp dir, and resolve.yml calls `ready_manager_ip`.
+        env["ANSIBLE_FILTER_PLUGINS"] = str(_REPO_ROOT / "ansible" / "filter_plugins")
         # Pin the interpreter to the suite's own, so the play's modules import from the venv
         # the test runs in rather than whatever discovery finds first on PATH.
         env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
@@ -312,5 +334,31 @@ def test_longhorn_api_hard_mode_still_fails_by_default() -> None:
     """
     result = _run_longhorn_api_scratch_play(required=True)
     assert result.returncode != 0
-    assert "No longhorn-manager pod" in result.stdout
+    assert "No ready longhorn-manager pod" in result.stdout
     assert "SURVIVED" not in result.stdout
+
+
+@pytest.mark.skipif(
+    shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
+)
+def test_longhorn_api_refuses_a_manager_that_is_not_ready() -> None:
+    """A manager whose container is not ready is no API to send a revert to (#3736)."""
+    result = _run_longhorn_api_scratch_play(
+        required=True, pods=(_manager_pod(ready=False),)
+    )
+    assert result.returncode != 0
+    assert "No ready longhorn-manager pod" in result.stdout
+
+
+@pytest.mark.skipif(
+    shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
+)
+def test_longhorn_api_resolves_a_ready_manager() -> None:
+    """The accepting half: the same pod, ready, becomes the API base."""
+    result = _run_longhorn_api_scratch_play(
+        required=True, pods=(_manager_pod(ready=True),)
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        "SURVIVED longhorn_api_resolved=True api=http://10.42.0.7:9500" in result.stdout
+    )

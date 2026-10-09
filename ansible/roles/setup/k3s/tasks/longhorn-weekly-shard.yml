@@ -13,7 +13,7 @@
       - get
       - volumes.longhorn.io
       - -l
-      - recurring-job-group.longhorn.io/weekly-backup-d{{ shard }}=enabled
+      - "{{ shard | weekly_backup_group | backup_group_label }}=enabled"
       - -o
       - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
   become: true
@@ -28,8 +28,8 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
-      recurring-job-group.longhorn.io/default=enabled
-      recurring-job-group.longhorn.io/weekly-backup-d{{ shard }}- --overwrite
+      {{ 'default' | backup_group_label }}=enabled
+      {{ shard | weekly_backup_group | backup_group_label }}- --overwrite
   loop: "{{ k3s_longhorn_shard_labelled.stdout_lines }}"
   when: item.split(' ')[1] not in k3s_longhorn_weekly_volumes
   become: true
@@ -39,11 +39,11 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
-      recurring-job-group.longhorn.io/weekly-backup-d{{ k3s_longhorn_weekly_volumes.index(item.split(' ')[1]) % 7 }}=enabled
-      recurring-job-group.longhorn.io/weekly-backup-d{{ shard }}- --overwrite
+      {{ item.split(' ')[1] | weekly_backup_shard(k3s_longhorn_weekly_volumes) | weekly_backup_group | backup_group_label }}=enabled
+      {{ shard | weekly_backup_group | backup_group_label }}- --overwrite
   loop: "{{ k3s_longhorn_shard_labelled.stdout_lines }}"
   when:
     - item.split(' ')[1] in k3s_longhorn_weekly_volumes
-    - (k3s_longhorn_weekly_volumes.index(item.split(' ')[1]) % 7) != shard
+    - (item.split(' ')[1] | weekly_backup_shard(k3s_longhorn_weekly_volumes)) != shard
   become: true
   changed_when: true

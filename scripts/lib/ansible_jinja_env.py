@@ -122,7 +122,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     which raises on an entry name it cannot find. uptime-kuma's ingress tiles derive from
     ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key.
     ``py_table`` reads monitor-bridge's check table out of its Python source, for the
-    env-secret and the Kuma tiles. Registering the real ones makes those failures reach the guard.
+    env-secret and the Kuma tiles. The k3s RecurringJob template names each weekly shard
+    through ``weekly_backup_group``, which raises on a shard outside 0-6. Registering the real ones makes those failures reach the guard.
 
     Args:
         env: The environment to register on, modified in place.
@@ -136,6 +137,11 @@ def register_ansible_filters(env: Environment) -> Environment:
         _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
     from authelia_access import authelia_service_rules
     from kuma_monitors import kuma_ingress_monitors
+    from longhorn_groups import (
+        backup_group_label,
+        weekly_backup_group,
+        weekly_backup_shard,
+    )
     from py_table import py_table
     from scrape_jobs import entry_port, metrics_port, scrape_jobs
     from service_tier import in_service_tier, tier_priority_class
@@ -165,6 +171,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["entry_port"] = entry_port
     env.filters["py_table"] = py_table
     env.filters["kuma_ingress_monitors"] = kuma_ingress_monitors
+    env.filters["backup_group_label"] = backup_group_label
+    env.filters["weekly_backup_group"] = weekly_backup_group
+    env.filters["weekly_backup_shard"] = weekly_backup_shard
     env.tests["search"] = search
     return env
 

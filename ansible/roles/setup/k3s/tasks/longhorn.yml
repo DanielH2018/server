@@ -400,7 +400,7 @@
       - get
       - volumes.longhorn.io
       - -l
-      - recurring-job-group.longhorn.io/default=enabled
+      - "{{ 'default' | backup_group_label }}=enabled"
       - -o
       - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
   become: true
@@ -418,8 +418,8 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
-      recurring-job-group.longhorn.io/no-backup=enabled
-      recurring-job-group.longhorn.io/default- --overwrite
+      {{ 'no-backup' | backup_group_label }}=enabled
+      {{ 'default' | backup_group_label }}- --overwrite
   loop: "{{ k3s_longhorn_backed_up.stdout_lines }}"
   when: item.split(' ')[1] in k3s_longhorn_nobackup_volumes
   become: true
@@ -466,7 +466,7 @@
       - get
       - volumes.longhorn.io
       - -l
-      - recurring-job-group.longhorn.io/no-backup=enabled
+      - "{{ 'no-backup' | backup_group_label }}=enabled"
       - -o
       - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
   become: true
@@ -484,8 +484,8 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
-      recurring-job-group.longhorn.io/default=enabled
-      recurring-job-group.longhorn.io/no-backup- --overwrite
+      {{ 'default' | backup_group_label }}=enabled
+      {{ 'no-backup' | backup_group_label }}- --overwrite
   loop: "{{ k3s_longhorn_excluded.stdout_lines }}"
   when:
     - item.split(' ')[1] in k3s_longhorn_backup_class_pvcs.stdout_lines
@@ -504,8 +504,8 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
-      recurring-job-group.longhorn.io/weekly-backup-d{{ k3s_longhorn_weekly_volumes.index(item.split(' ')[1]) % 7 }}=enabled
-      recurring-job-group.longhorn.io/default- --overwrite
+      {{ item.split(' ')[1] | weekly_backup_shard(k3s_longhorn_weekly_volumes) | weekly_backup_group | backup_group_label }}=enabled
+      {{ 'default' | backup_group_label }}- --overwrite
   loop: "{{ k3s_longhorn_backed_up.stdout_lines }}"
   when: item.split(' ')[1] in k3s_longhorn_weekly_volumes
   become: true
@@ -525,7 +525,7 @@
       - get
       - volumes.longhorn.io
       - -l
-      - recurring-job-group.longhorn.io/weekly-backup=enabled
+      - "{{ 'weekly-backup' | backup_group_label }}=enabled"
       - -o
       - 'jsonpath={range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}{"\n"}{end}'
   become: true
@@ -541,8 +541,8 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
-      recurring-job-group.longhorn.io/weekly-backup-d{{ k3s_longhorn_weekly_volumes.index(item.split(' ')[1]) % 7 }}=enabled
-      recurring-job-group.longhorn.io/weekly-backup- --overwrite
+      {{ item.split(' ')[1] | weekly_backup_shard(k3s_longhorn_weekly_volumes) | weekly_backup_group | backup_group_label }}=enabled
+      {{ 'weekly-backup' | backup_group_label }}- --overwrite
   loop: "{{ k3s_longhorn_weekly_labelled.stdout_lines }}"
   when: item.split(' ')[1] in k3s_longhorn_weekly_volumes
   become: true
@@ -553,8 +553,8 @@
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n longhorn-system label volumes.longhorn.io {{ item.split(' ')[0] }}
-      recurring-job-group.longhorn.io/default=enabled
-      recurring-job-group.longhorn.io/weekly-backup- --overwrite
+      {{ 'default' | backup_group_label }}=enabled
+      {{ 'weekly-backup' | backup_group_label }}- --overwrite
   loop: "{{ k3s_longhorn_weekly_labelled.stdout_lines }}"
   when: item.split(' ')[1] not in k3s_longhorn_weekly_volumes
   become: true

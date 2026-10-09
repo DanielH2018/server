@@ -99,6 +99,7 @@ _FILTER_CALLERS_EXEMPT = {
 KNOWN_FILTER_CALLERS = {
     "ansible/filter_plugins/service_tier.py": {"k3s"},
     "ansible/filter_plugins/k8s_autodeploy.py": {"gitops_deploy"},
+    "ansible/filter_plugins/longhorn_groups.py": {"k3s"},
 }
 _COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
 KNOWN_K8S_EDGES = {

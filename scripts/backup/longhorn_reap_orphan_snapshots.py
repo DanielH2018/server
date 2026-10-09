@@ -60,6 +60,10 @@ from lib.repo_paths import HOST_LIB_FILES
 
 sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
+from lib.repo_paths import FILTER_PLUGINS
+
+sys.path.insert(0, str(FILTER_PLUGINS))
+from longhorn_manager import ready_manager_ip
 from lib.cli_help import answer_help
 import longhorn_reap_logic as logic
 
@@ -131,6 +135,9 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
     only reach its own node's pod CIDR, and kube-proxy's per-connection pick over the Service
     fails whenever it lands on the other node's manager (measured 2026-08-16: 27 of 37 calls).
 
+    The ready-pod rule is `longhorn_manager.ready_manager_ip`, shared with `k8s/longhorn-api`
+    and the trim cron (#3736).
+
     Returns the number of volumes left unpurged, so 0 means every POST was accepted. A path
     that never reaches the POST loop at all -- no readable pod list, no ready manager pod --
     counts every volume as unpurged, and at least one, because a run that purged nothing is
@@ -150,23 +157,7 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
         print("WARNING: %s; nothing purged" % err, file=sys.stderr)
         return nothing_purged
 
-    backend = ""
-    for pod in pods:
-        spec = pod.get("spec") or {}
-        status = pod.get("status") or {}
-        if spec.get("nodeName") != node or status.get("phase") != "Running":
-            continue
-        statuses = status.get("containerStatuses") or []
-        # A pod reporting NO containerStatuses is NOT ready. Bash agreed, though not the way an
-        # earlier comment here claimed: its `select([.status.containerStatuses[].ready] | all)`
-        # never reached the vacuously-true `all` on such a pod, because `.[]` over a null field
-        # raises "Cannot iterate over null" and jq exits nonzero -- so bash took its "no ready
-        # manager pod" branch. Counting the empty list as ready aims the purge POST at a pod
-        # whose containers have not started, and the refused connection surfaces only as a
-        # purge failure well after the snapshots are already marked removed.
-        if statuses and all(cs.get("ready") for cs in statuses):
-            backend = status.get("podIP", "")
-            break
+    backend = ready_manager_ip(pods, node)
 
     if not backend:
         print(

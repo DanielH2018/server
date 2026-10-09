@@ -42,14 +42,14 @@ spec:
 apiVersion: longhorn.io/v1beta2
 kind: RecurringJob
 metadata:
-  name: weekly-backup-d{{ shard }}
+  name: {{ shard | weekly_backup_group }}
   namespace: longhorn-system
 spec:
-  name: weekly-backup-d{{ shard }}
+  name: {{ shard | weekly_backup_group }}
   cron: "{{ k3s_longhorn_weekly_backup_minute_hour }} * * {{ shard }}"
   task: backup
   groups:
-    - weekly-backup-d{{ shard }}
+    - {{ shard | weekly_backup_group }}
   retain: {{ k3s_longhorn_weekly_backup_retain }}
   concurrency: 1
 {% endfor %}

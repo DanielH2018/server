@@ -80,6 +80,7 @@ K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
 # `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
 SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
     "ansible/filter_plugins/k8s_autodeploy.py": frozenset({"gitops_deploy"}),
+    "ansible/filter_plugins/longhorn_groups.py": frozenset({"k3s"}),
     "ansible/filter_plugins/service_tier.py": frozenset({"k3s"}),
 }
 

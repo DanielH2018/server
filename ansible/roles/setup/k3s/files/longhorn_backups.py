@@ -11,8 +11,8 @@ WHY THE NAMES LIVE HERE TOO (#3737). The RecurringJob group labels and the Backu
 are a contract with the cluster: `tasks/longhorn.yml` labels each volume with a group, and the
 readers select on it. Renaming a live group label drops its volumes out of their RecurringJob
 with nothing failing, so the Python readers take each name from here rather than retyping it.
-The Ansible tasks and the static StorageClass file still spell the labels out; issue #3737's
-follow-up covers that half.
+The Ansible tasks take them from here too, through `ansible/filter_plugins/longhorn_groups.py`
+(#3946). The static StorageClass file cannot call a filter and still spells `no-backup` out.
 
 WHERE IT RUNS. The health cron imports it as a sibling in /opt/longhorn-backup-health/, so it
 is copied there beside `host_lib.py` (`tasks/health-crons.yml`). The reapers and probe.py run

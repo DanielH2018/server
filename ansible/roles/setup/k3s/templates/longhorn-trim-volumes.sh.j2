@@ -55,11 +55,17 @@ KUBECTL="k3s kubectl -n longhorn-system"
 # the service: daniel-box's manager pod answers 200, daniel-server's times out from the same
 # shell. Nothing retries its way out of that, so resolve the local endpoint and use it.
 NODE=$(hostname)
+# The ready-pod rule is `ansible/filter_plugins/longhorn_manager.py:ready_manager_ip`, which
+# k8s/longhorn-api and the snapshot reaper call. This host has no repo checkout, so the rule is
+# spelled again in jq; a parity test runs both over the same pods (#3736). A pod with no
+# containerStatuses is not ready: `// []` keeps jq from exiting on it, which would also have
+# dropped a ready pod listed after it.
 BACKEND=$($KUBECTL get pods -l app=longhorn-manager -o json 2>/dev/null \
   | jq -r --arg node "$NODE" '.items[]
       | select(.spec.nodeName == $node)
       | select(.status.phase == "Running")
-      | select([.status.containerStatuses[].ready] | all)
+      | select((.status.containerStatuses // []) as $cs
+          | ($cs | length) > 0 and ([$cs[].ready] | all))
       | .status.podIP' | head -1)
 if [[ -z "$BACKEND" ]]; then
   echo "ABORT: no ready longhorn-manager pod on ${NODE}; nothing local to send trims to." >&2
