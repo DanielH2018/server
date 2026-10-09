@@ -33,13 +33,12 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-import yaml
-
 # `core.<name>` so a test's monkeypatch of core reaches the call.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.health_kubectl import k8s_pods_args
 from diagnostics.probe_lib.health_rollout import seconds_since
 from lib.json_types import as_object, as_object_list
+from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
 from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 
@@ -54,7 +53,7 @@ def status_page_url():
     """
     base, pin = core.k8s_endpoint("uptime-kuma")
     with open(_DEFAULTS_PATH) as f:
-        slug = yaml.safe_load(f)["uptime_kuma_k8s_status_page_slug"]
+        slug = yaml_fast.safe_load(f)["uptime_kuma_k8s_status_page_slug"]
     return f"{base}/api/status-page/{slug}", pin
 
 
