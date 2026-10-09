@@ -321,19 +321,25 @@ def primary_checkout(start: str = HOOKS_DIR) -> str | None:
 
 
 # A test points the instructions log at a scratch file through this variable rather than by
-# patching a module attribute; nothing on a host sets it. It is honoured only for a path under
-# the temp dir, where pytest's tmp_path lives, because the appender writes to and eventually
-# renames whatever file it names: a value leaked into a real session must not reach a state
-# file or another log (#3805).
+# patching a module attribute; nothing on a host sets it. The appender writes to and
+# eventually renames whatever file it names, so a value leaked into a real session must not
+# reach a state file or another log (#3805). The override is honoured only for a file named
+# `instructions.log` under the temp dir, where pytest's tmp_path lives. The name matters as
+# much as the directory: the temp dir also holds this module's own `claude-<name>-<sid>`
+# state files.
 INSTRUCTIONS_LOG_ENV = "CLAUDE_INSTRUCTIONS_LOG"
 INSTRUCTIONS_LOG_MAX_BYTES = 256 * 1024
+_INSTRUCTIONS_LOG_NAME = "instructions.log"
 
 
-def _under_temp_dir(path: str) -> bool:
-    """Whether `path` resolves, symlinks followed, strictly below the temp dir."""
+def _is_scratch_instructions_log(path: str) -> bool:
+    """Whether `path` resolves to a file named `instructions.log` below the temp dir."""
     root = os.path.realpath(tempfile.gettempdir())
     resolved = os.path.realpath(path)
-    return resolved != root and os.path.commonpath([resolved, root]) == root
+    return (
+        os.path.basename(resolved) == _INSTRUCTIONS_LOG_NAME
+        and os.path.commonpath([resolved, root]) == root
+    )
 
 
 def instructions_log_path(start: str = HOOKS_DIR) -> str:
@@ -349,7 +355,7 @@ def instructions_log_path(start: str = HOOKS_DIR) -> str:
     the path only when a command names a path under a doc it might inject.
     """
     override = os.environ.get(INSTRUCTIONS_LOG_ENV)
-    if override and _under_temp_dir(override):
+    if override and _is_scratch_instructions_log(override):
         return override
     primary = primary_checkout(start)
     if primary is None:

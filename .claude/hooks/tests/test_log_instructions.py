@@ -12,6 +12,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 from lib.git_testing import git, init_repo
 
 _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -51,19 +53,26 @@ def test_a_directory_outside_git_falls_back_beside_the_hook_is_clean(
 
 def test_the_environment_variable_redirects_the_log(tmp_path, monkeypatch):
     # The seam every hook test uses to keep its rows out of the real primary log.
-    scratch = str(tmp_path / "scratch.log")
+    scratch = str(tmp_path / "instructions.log")
     monkeypatch.setenv(INSTRUCTIONS_LOG_ENV, scratch)
     assert instructions_log_path(str(tmp_path)) == scratch
 
 
-def test_an_override_outside_the_temp_dir_is_neither_written_nor_rotated_is_flagged(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize(
+    "target",
+    [
+        "outside/instructions.log",  # the right name outside the temp dir
+        "tmp/claude-nested-docs-s1",  # a hook state file inside it
+    ],
+)
+def test_an_override_naming_another_file_is_neither_written_nor_rotated_is_flagged(
+    tmp_path, monkeypatch, target
 ):
     # A leaked value naming a large state file must not reach it: the appender would add a
     # row and then rename the file aside (#3805). The row lands in the normal log instead.
     monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path / "tmp"))
     primary = init_repo(tmp_path / "primary", initial_commit="init")
-    outside = tmp_path / "state" / "big.log"
+    outside = tmp_path / target
     outside.parent.mkdir()
     content = b"x" * (INSTRUCTIONS_LOG_MAX_BYTES + 1)
     outside.write_bytes(content)
