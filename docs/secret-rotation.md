@@ -67,8 +67,10 @@ fails on the undefined variable.
 - `pinned` — **must not be naively swapped**. The special procedure, below.
 - `ignore` — not a secret: the domain, usernames, static addresses.
 
-Classification is by name in `scripts/secrets_mgmt/secret_classify.py`; override per-secret by editing
-its `tier` in the registry (`sync` preserves overrides).
+`sync` gives a newly registered key its tier from two name rules in
+`scripts/secrets_mgmt/secret_classify.py`: `*_push_token` is `auto`, `*_user` and `*_username`
+are `ignore`, and every other key is `assisted`. An `external` or `pinned` key gets its tier
+by an edit to its `tier` in the registry after that `sync`, and `sync` preserves the edit.
 
 ## `auto` — automated
 
@@ -162,7 +164,10 @@ not rotated again by the weekly cron. Examples:
 
 ### Record keys — `source: record` in the registry
 
-For three keys SOPS holds a **copy** of a credential the app owns. Nothing in the tree writes
+<!-- The key list is generated from `source: record` in the registry; edit that. -->
+--8<-- "assets/generated/fragments/record-keys.md"
+
+For each of these keys SOPS holds a **copy** of a credential the app owns. Nothing in the tree writes
 the value to the app, so `sops set` plus a deploy rotates nothing: the recap says `changed`, the
 pod rolls, and the old credential still works. The registry marks them `source: record`, and
 `secret_rotation.py rotate` refuses them in both of its paths (`--name`, and the unattended
@@ -175,8 +180,6 @@ survives it. Each has a different mechanism:
   makes a changed `authelia_password` inert. The one path that applies a new value is
   `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`
   (`roles/k8s/authelia/defaults/main.yml` documents the flag).
-- `healthchecks_password` — fed the self-hosted Healthchecks superuser, which retired in #2806.
-  Nothing in the tree reads it; it stays in SOPS until the key is removed.
 - `bazarr_api_key` — the only reference in the tree is a reader,
   `roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`. Regenerate it in Bazarr's
   Settings → General, `sops set` the new value, then redeploy monitor-bridge; setting SOPS
@@ -186,7 +189,8 @@ Verify against the app, not the deploy: a login, an API call, a monitor past its
 `audit` cannot tell the cases apart — it derives `last_rotated` from the git history of
 `secrets.yml`, so committing the copy advances the date either way. Before calling any
 rotation done, grep the key across `ansible/` and ask whether a hit *writes* it to the app or
-only reads it; a single reader means SOPS is a record, and the key belongs in this list.
+only reads it; a single reader means SOPS is a record. Mark that key `source: record` in the
+registry and add its mechanism bullet above.
 
 ## `external` — provider consoles (audit-only)
 

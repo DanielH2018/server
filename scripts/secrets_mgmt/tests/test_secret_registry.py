@@ -14,7 +14,6 @@ from pathlib import Path
 
 from lib import yaml_fast
 
-from secrets_mgmt.secret_classify import classify
 from secrets_mgmt.secret_registry import (
     audit,
     due_date,
@@ -48,13 +47,13 @@ def test_seed_is_deterministic():
 
 def test_seed_never_immediately_overdue_and_within_window():
     today = dt.date(2026, 6, 11)
-    for name in (
-        "a_push_token",
-        "b_push_token",
-        "grafana_admin_password",
-        "cloudflare_dns_token",
+    # Explicit tiers: `external` is set by a registry edit, never by `classify` (#3749).
+    for name, tier in (
+        ("a_push_token", "auto"),
+        ("b_push_token", "auto"),
+        ("grafana_admin_password", "assisted"),
+        ("cloudflare_dns_token", "external"),
     ):
-        tier = classify(name)
         seeded, cadence = (
             seed_last_rotated(name, tier, today),
             DEFAULT_TIER_DAYS[tier],

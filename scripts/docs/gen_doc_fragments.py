@@ -68,6 +68,7 @@ from fragment_readers import (
     module_constant,
     parse_jails,
     registry_counts,
+    registry_record_keys,
     role_defaults,
 )
 from fragment_renderers import (
@@ -78,6 +79,7 @@ from fragment_renderers import (
     render_fail2ban_jails,
     render_gitops_prefixes,
     render_lan_addresses,
+    render_record_keys,
     render_longhorn_tiers,
     render_secret_tiers,
     render_traefik_ports,
@@ -221,6 +223,12 @@ def _secrets() -> tuple[str, list[str]]:
     ), ["scripts/secrets_mgmt/secret_rotation.py", "ansible/secret_rotation.yml"]
 
 
+def _record_keys() -> tuple[str, list[str]]:
+    return render_record_keys(registry_record_keys(SECRET_REGISTRY)), [
+        "ansible/secret_rotation.yml"
+    ]
+
+
 # name -> () -> (body, sources). The name is the file stem a page includes.
 FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
     "longhorn-tiers": _longhorn,
@@ -230,6 +238,7 @@ FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
     "etcd-offbox-retention": _etcd_offbox_retention,
     "traefik-ports": _traefik_ports,
     "secret-tiers": _secrets,
+    "record-keys": _record_keys,
     "deadman-cadences": _deadman,
     "fail2ban-jails": _fail2ban,
     "lan-addresses": _lan,

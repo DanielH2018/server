@@ -151,6 +151,18 @@ def render_secret_tiers(tier_days: dict, lead_days: int, counts: dict[str, int])
     return "\n".join(lines) + "\n"
 
 
+def render_record_keys(keys: list[str]) -> str:
+    """Renders the sentence naming every `source: record` key in the rotation registry.
+
+    Args:
+        keys: the record keys, in the order to list them.
+    """
+    noun = "key" if len(keys) == 1 else "keys"
+    return (
+        f"The registry marks {len(keys)} {noun} `source: record`: {_code_list(keys)}.\n"
+    )
+
+
 def deadman_crons(
     k3s: dict,
     pi_peer: dict,
