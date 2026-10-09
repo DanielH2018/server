@@ -6,12 +6,19 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_red_green.py
 """
 
 import json
+import os
+import subprocess
+from pathlib import Path
 
 import pytest
 
-from _review_fakes import PR, _finding, _pipeline, _report
-from fanout_lib.brief import ISSUES_HEADING
+from _review_fakes import ISSUES, PR, _finding, _pipeline, _report
+from fanout_lib.brief import ISSUES_HEADING, render_brief
 from fanout_lib.red_gate import Gate, Gates
+from fanout_lib.review import Pipeline
+from fanout_lib.target import SERVER_TARGET
+from lib.proc_testing import DEFAULT_TIMEOUT
+from lib.git_testing import commit, git, git_out, init_repo
 
 
 def _red_report(behaviours=1):
@@ -80,7 +87,7 @@ def test_a_refused_red_commit_is_reset_away_and_the_implementer_runs_without_it(
     )
     pipeline.run_all()
 
-    assert ["reset", "--hard", "base"] in run.git
+    assert ["reset", "--quiet", "--hard", "base"] in run.git
     assert "## Red tests" not in run.claude[1][1]
     assert pipeline.record.red_gate.startswith("these new tests did not fail")
     assert "Red gate refused the test author's commit" in run.comments[0]
@@ -137,49 +144,125 @@ def test_a_red_batchs_implementer_loads_no_settings_file_the_red_author_could_wr
     assert resumed[resumed.index("--append-system-prompt") + 1] == prompt
 
 
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 @pytest.mark.parametrize("passed", [True, False], ids=["passed", "refused"])
-def test_an_ignored_claude_file_the_red_phase_wrote_is_gone_before_the_implementer(
+def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
     tmp_path, passed
 ):
-    """No gate sees an ignored `.claude/settings.local.json`, so the pipeline deletes it (#3838)."""
-    claude = tmp_path / ".claude"
-    claude.mkdir()
-    (claude / "kept.json").write_text("{}")
-    planted = claude / "settings.local.json"
+    """A skip-worktree edit, an ignored overwrite, an untracked root file and a background
+    process (#3852). A process the implementer leaves is not the red phase's, and survives:
+    the land phase's `land.sh --detach` depends on that."""
+    repo = init_repo(tmp_path / "repo")
+    files = {"land.sh": "real\n", ".gitignore": "/*.local.md\n.claude/*.local.json\n"}
+    commit(repo, "base", **files)
+    (repo / ".claude").mkdir()
+    (repo / ".claude" / "settings.local.json").write_text("{}")
+    (repo / ".fanout").mkdir()
 
-    def red_gate(run, wt, base, head):
-        planted.write_text('{"permissions": {"allow": ["Bash(*)"]}}')
-        return Gate(files=["t.py"], nodes=["t.py::a"]) if passed else Gate("refused")
+    def orphan():
+        """Start a `setsid` process whose parent exits at once, and return its pid."""
+        script = "(setsid sleep 60 >/dev/null 2>&1 </dev/null & echo $!)"
+        started = subprocess.run(
+            ["sh", "-c", script], capture_output=True, timeout=DEFAULT_TIMEOUT
+        )
+        return int(started.stdout)
 
+    def red_author():
+        orphans.append(orphan())
+        red = commit(repo, "red", **{"tests/test_x.py": "def test_x():\n    pass\n"})
+        git(repo, "update-index", "--skip-worktree", "land.sh")
+        (repo / "land.sh").write_text("planted\n")
+        (repo / ".claude" / "settings.local.json").write_text('{"allow": ["Bash(*)"]}')
+        (repo / "CLAUDE.local.md").write_text("planted\n")
+        return red
+
+    seen = []
+    orphans = []
     reports = [
         _red_report(),
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": []}),
     ]
-    pipeline, run = _pipeline(
-        tmp_path,
-        reports,
-        host="daniel-server",
-        heads=("base", "red1", "red1"),
-        gates=Gates(red=red_gate, green=lambda run, wt, sha, gate: ""),
+
+    def runner(argv, stdin):
+        if argv[0] == "git":
+            return git(repo, *argv[3:], check=False)
+        if argv[0] in ("gh", "uv"):
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        phase = (repo / ".fanout" / "phase").read_text().strip()
+        if phase == "red":
+            red_author()
+        if phase == "implement":
+            seen.append(
+                {
+                    "red_orphan": _alive(orphans[0]),
+                    "land.sh": (repo / "land.sh").read_text(),
+                    "settings": (repo / ".claude" / "settings.local.json").exists(),
+                    "local_md": (repo / "CLAUDE.local.md").exists(),
+                    "head": git_out(repo, "log", "-1", "--format=%s"),
+                }
+            )
+            orphans.append(orphan())
+        return subprocess.CompletedProcess(argv, 0, json.dumps(reports.pop(0)), "")
+
+    gate = Gate(files=["tests/test_x.py"], nodes=["t"]) if passed else Gate("no")
+    pipeline = Pipeline(
+        repo,
+        "1345",
+        "daniel-server",
+        SERVER_TARGET,
+        render_brief(ISSUES, "daniel-server", "1345", "w", [], review=True),
+        run=runner,
+        clock=lambda: 0.0,
+        state_dir=tmp_path / "state",
+        red_green=True,
+        gates=Gates(red=lambda *_: gate, green=lambda *_: ""),
     )
-    seen = []
-
-    def recording(argv, stdin):
-        result = run(argv, stdin)
-        if (
-            run.claude
-            and run.claude[-1][0] is argv
-            and run.claude[-1][2] == "implement"
-        ):
-            seen.append(planted.exists())
-        return result
-
-    pipeline.run = recording
     pipeline.run_all()
+    try:
+        assert _alive(orphans[1])
+        # A subreaper flag left set would have made this process its parent.
+        stat = Path(f"/proc/{orphans[1]}/stat").read_text()
+        assert stat.rpartition(")")[2].split()[1] != str(os.getpid())
+    finally:
+        os.kill(orphans[1], 9)
 
-    assert seen == [False]
-    assert (claude / "kept.json").exists()
+    assert seen == [
+        {
+            "red_orphan": False,
+            "land.sh": "real\n",
+            "settings": False,
+            "local_md": False,
+            "head": "red" if passed else "base",
+        }
+    ]
+
+
+def test_a_failed_reset_fails_the_batch_before_the_implementer_runs(tmp_path):
+    """The worktree may still hold the red phase's edits or the refused commit."""
+    gates = _gates(Gate("refused"))
+    pipeline, run = _pipeline(
+        tmp_path, [_red_report()], heads=("base", "red1"), gates=gates
+    )
+
+    def locked(argv, stdin):
+        if argv[0] == "git" and "reset" in argv:
+            return subprocess.CompletedProcess(argv, 128, "", "index.lock: File exists")
+        return run(argv, stdin)
+
+    pipeline.run = locked
+    report = pipeline.run_all()
+
+    assert [phase for _, _, phase in run.claude] == ["red"]
+    assert report["is_error"] and report["result"].startswith("failed: `git reset")
+    assert pipeline.record.red_gate.startswith("reset failed:")
 
 
 def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path):

@@ -43,7 +43,10 @@ system prompt, this repo's `.claude/settings.json` and every hook once, at start
 the worktree that is rewritten before every call. In this repo's batch, every phase after the
 implementer also loads no settings file from the worktree, and the reviewer gets the start-time
 `CLAUDE.md` as text; `held_hooks` says why. A red batch's implement phase runs the same way,
-because the red author had the worktree before it (#3846).
+because the red author had the worktree before it (#3846). After the red gate, the pipeline
+also resets the worktree to the commit the implementer starts from and deletes every untracked
+and ignored file outside `.fanout/` (#3852), after killing whatever the red phase left
+running (`processes.reaping`).
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -87,14 +90,16 @@ from fanout_lib.red_gate import (
     GREEN_FILE,
     RED_SCHEMA,
     Gate,
+    ResetFailed,
     Gates,
     anti_patterns,
     green_finding,
-    ignored_claude_files,
     red_prompt,
     red_section,
-    stray_config,
+    reset_worktree,
+    unhide_index,
 )
+from fanout_lib.processes import reaping, run_process
 from fanout_lib.launch import (
     BUDGET_USD,
     REVIEW_RUNTIME_MAX_S,
@@ -126,12 +131,6 @@ STATE_DIR = Path.home() / ".local" / "state" / "fanout-review"
 
 # One process boundary for claude, git and gh: argv and stdin in, the finished process out.
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
-
-
-def run_process(argv: list[str], stdin: str | None) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        argv, input=stdin, capture_output=True, text=True, check=False
-    )
 
 
 @dataclass
@@ -379,12 +378,9 @@ class Pipeline:
     def _first_implementer(self) -> list[str]:
         """The implement phase's argv: on held settings when a red phase ran before it.
 
-        The red author could leave an ignored `.claude/settings.local.json`, a hook edit that
-        `update-index --skip-worktree` hides from `git status`, or a planted `.pyc` beside a
-        hook, and none of these is a change in the range the red gate reads (#3846). A
-        refused red commit is reset with `git clean -fd`, which keeps ignored files, so the
-        refused path is exposed too. Held settings drop the project `CLAUDE.md` from this
-        fresh session, so it gets the copy read at start as text, as the reviewer does.
+        The red author could leave an ignored settings file or a skip-worktree hook edit,
+        neither in the range the red gate reads (#3846). `reset_worktree` removes them; held
+        settings are the second layer, and drop `CLAUDE.md`, so it comes as text.
         """
         if not self.red_green:
             return self._implementer()
@@ -414,23 +410,28 @@ class Pipeline:
     def _red(self, issues: str) -> tuple[str, Gate] | None:
         """Run the test author and the red gate: the red SHA and its verdict, or None.
 
-        A refused commit is reset away, so the implementer starts from the base as usual.
-        Either way, an ignored file the red phase left under `.claude/` is deleted (#3838).
+        Either way the worktree is reset to the commit the implementer starts from, the base
+        on a refusal, with every untracked, ignored and index-hidden change the red phase left
+        removed (#3852). Anything the red session or its tests left running is killed first.
+        A failed reset raises `ResetFailed`, which `run_all` turns into a failed batch.
         """
         base = self._git("rev-parse", "HEAD")
-        kept = ignored_claude_files(self.run, self.worktree)
-        phase = self._claude(
-            "red", self._red_author(), red_prompt(issues, self.anti_patterns)
-        )
-        red = self._git("rev-parse", "HEAD")
-        if phase.failed:
-            gate = Gate(
-                f"the test author's session failed ({phase.report.get('subtype') or 'error'})"
+        with reaping():
+            phase = self._claude(
+                "red", self._red_author(), red_prompt(issues, self.anti_patterns)
             )
-        else:
-            gate = self.gates.red(self.run, self.worktree, base, red)
-        for planted in ignored_claude_files(self.run, self.worktree) - kept:
-            (self.worktree / planted).unlink(missing_ok=True)
+            red = self._git("rev-parse", "HEAD")
+            # A skip-worktree edit to the code would make the red tests fail for a reason no
+            # diff shows; with the bit cleared, the gate's dirty-tree check refuses it.
+            unhide_index(self.run, self.worktree)
+            if phase.failed:
+                gate = Gate(
+                    f"the test author's session failed ({phase.report.get('subtype') or 'error'})"
+                )
+            else:
+                # The gate runs the red author's tests, which could start processes too.
+                gate = self.gates.red(self.run, self.worktree, base, red)
+        reset_worktree(self.run, self.worktree, red if gate.passed else base)
         out = phase.report.get("structured_output")
         behaviours = out.get("behaviours") if isinstance(out, dict) else None
         self.record.red_behaviours = (
@@ -438,14 +439,7 @@ class Pipeline:
         )
         self.record.red_tests = len(gate.nodes)
         self.record.red_gate = "passed" if gate.passed else gate.reason
-        if gate.passed:
-            return red, gate
-        self._git("reset", "--hard", base)
-        self._git("clean", "-fd")
-        # `clean` without `-x` keeps ignored files, and a root conftest.py is one.
-        for stray in stray_config(self.run, self.worktree):
-            (self.worktree / stray).unlink(missing_ok=True)
-        return None
+        return (red, gate) if gate.passed else None
 
     def _green(self, red: tuple[str, Gate] | None) -> str:
         """Run the green gate on HEAD and record it; "" when it passed or there is no red."""
@@ -490,7 +484,12 @@ class Pipeline:
         issues = issues_section(self.brief)
         if self.project_settings:
             self.hooks.update(held_secret_paths(self.run, SOURCE_ROOT))
-        red = self._red(issues) if self.red_green else None
+        try:
+            red = self._red(issues) if self.red_green else None
+        except ResetFailed as exc:
+            self.record.red_gate = f"reset failed: {exc}"
+            self._save()
+            return {"type": "result", "is_error": True, "result": f"failed: {exc}"}
         brief = self.brief
         if red is not None:
             brief = brief.replace(ISSUES_HEADING, red_section(*red) + ISSUES_HEADING, 1)

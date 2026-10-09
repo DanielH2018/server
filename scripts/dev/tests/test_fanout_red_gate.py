@@ -10,15 +10,20 @@ Run: uv run pytest scripts/dev/tests/test_fanout_red_gate.py
 import subprocess
 import sys
 
+import pytest
+
 from lib.proc_testing import DEFAULT_TIMEOUT
 
 from fanout_lib.brief import Issue
 from fanout_lib.red_gate import (
     RED_GREEN_LABEL,
+    ResetFailed,
     anti_patterns,
     green_gate,
     red_gate,
+    reset_worktree,
     review_flags,
+    unhide_index,
 )
 from lib.git_testing import commit, git_out, init_repo, scrubbed_env
 
@@ -254,6 +259,55 @@ def test_an_ignored_root_conftest_is_refused_by_both_gates(tmp_path):
     assert (
         green_gate(run, repo, red, gate)
         == "untracked pytest configuration: conftest.py"
+    )
+
+
+def _planted(tmp_path):
+    """A repo at `red` whose tracked `land.sh` carries a skip-worktree edit."""
+    repo, _, _ = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
+    commit(repo, "ignore", **{".gitignore": "/*.local.md\n", "land.sh": "real\n"})
+    git_out(repo, "update-index", "--skip-worktree", "land.sh")
+    (repo / "land.sh").write_text("planted\n")
+    return repo
+
+
+def test_reset_worktree_leaves_the_commits_tree_and_fanout_only(tmp_path):
+    """Every change the red phase could hide from the gates is gone, `.fanout/` stays (#3852)."""
+    repo = _planted(tmp_path)
+    git_out(repo, "update-index", "--assume-unchanged", "mod.py")
+    (repo / "mod.py").write_text(FIXED)
+    (repo / "CLAUDE.local.md").write_text("ignored\n")
+    (repo / ".mcp.json").write_text("{}\n")
+    (repo / ".fanout").mkdir()
+    (repo / ".fanout" / "brief.md").write_text("brief\n")
+    head = git_out(repo, "rev-parse", "HEAD")
+
+    reset_worktree(run, repo, head)
+
+    assert (repo / "land.sh").read_text() == "real\n"
+    assert (repo / "mod.py").read_text() == CODE
+    assert git_out(repo, "ls-files", "-v", "land.sh", "mod.py") == "H land.sh\nH mod.py"
+    assert not (repo / "CLAUDE.local.md").exists()
+    assert not (repo / ".mcp.json").exists()
+    assert (repo / ".fanout" / "brief.md").read_text() == "brief\n"
+
+
+def test_reset_worktree_raises_when_a_git_step_fails(tmp_path):
+    """While an `index.lock` exists every index write fails, and `git clean` still exits 0."""
+    repo = _planted(tmp_path)
+    (repo / ".git" / "index.lock").write_text("")
+    with pytest.raises(ResetFailed, match="update-index"):
+        reset_worktree(run, repo, git_out(repo, "rev-parse", "HEAD"))
+
+
+def test_a_skip_worktree_edit_to_the_code_is_refused_once_unhidden(tmp_path):
+    """Hidden, it would make the red tests fail for a reason no diff shows."""
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
+    git_out(repo, "update-index", "--skip-worktree", "mod.py")
+    (repo / "mod.py").write_text("def double(x):\n    return -1\n")
+    assert unhide_index(run, repo) == ["mod.py"]
+    assert red_gate(run, repo, base, red).reason == (
+        "the test author left uncommitted changes: M mod.py"
     )
 
 
