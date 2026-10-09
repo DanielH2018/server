@@ -6,9 +6,10 @@ allowed-tools: Bash, Read, Grep, Glob, Agent
 
 # Fanning out on the backlog
 
-Five steps, in order: triage, claim, spawn, land, report. Claiming happens **before** any
-agent starts, under the orchestrator's own worktree name — that ordering is what makes the
-fan-out race-free, and the rest of this skill exists to keep it that way.
+Five steps, in order: triage, claim, spawn, land, report. Every issue is claimed **before**
+its agent starts, under the orchestrator's own worktree name. That ordering makes the fan-out
+race-free, and `fanout_place.py launch` takes the claims itself, so steps 2 and 3 are one
+command.
 
 ## 1. Triage
 
@@ -84,29 +85,11 @@ approved the grouping.
 
 ## 2. Claim before spawning, under the orchestrator's own worktree name
 
-Read the orchestrator's own branch name first, as its own command, and in this spelling:
-
-```bash
-git rev-parse --abbrev-ref HEAD
-```
-
-**`rev-parse` is the form that auto-approves; `git branch --show-current` is not.**
-The dotfiles `claude_guard` hook's read-only classifier (`claude_guard/readonly.py`) allows
-`git rev-parse` and deliberately omits `git branch`, because the bare form lists while
-`git branch <name>` and `-D` mutate. Measured 2026-09-06 against the server copy it was
-ported from (dotfiles #628), and re-checked 2026-09-24 through `guard-pre-tool-use.sh`.
-
-Keep the name on its own line rather than substituting it into the `claim` call. Two separate
-mechanisms punish substitution, and neither is the read-only hook: the auto-mode classifier
-rejects `$(…)`, backticks and `${…}` outright, and the read-only hook returns no verdict at
-all for a command containing them. The `claim` call does not auto-approve either way, so
-substituting buys nothing and costs the rejection.
-
-Paste that name into a `claim` call per batch, run serially, before spawning anything:
-
-```bash
-uv run python scripts/dev/findings.py claim <n> <n> <n> --worktree <branch>
-```
+Run `launch` (step 3) from the orchestrator's own worktree. It reads that worktree's branch
+from HEAD and claims each batch's issues under it, one claim per issue, after
+every placement gate has passed and before that batch's agent starts. It refuses a detached
+HEAD or `master` before reading any host, because neither names a worktree a claim can live
+under.
 
 **Why the orchestrator's name, not the agent's.** A fanned-out agent cannot own a worktree the
 orchestrator names — `EnterWorktree` with `name:` is refused from a subagent with a cwd
@@ -116,12 +99,14 @@ worktree name before spawning it either. Claiming under a name that doesn't exis
 read as stale immediately. The orchestrator's own worktree is live for the whole fan-out, so a
 claim under it stays live for the whole fan-out.
 
-Exit 3 means at least one issue in that call was refused — closed, `manual`, deferred to a
-later date, held by another worktree, or lost a race. Drop the refused issue from its batch and say so; the rest of the
-batch is still claimed.
+A refused claim — the issue is closed, `manual`, deferred, held by another worktree, or lost a
+race — drops that issue from its batch, and `launch` prints `<batch>: dropped #<n>: claim
+refused …`. The batch is renamed from the issues it kept, and a batch that kept none is not
+launched. `launch` then exits 3 even though the other batches started; name every dropped
+issue out loud. A batch whose launch fails releases the claims it took.
 
-Done when: every issue that will be spawned has a live claim under the orchestrator's
-worktree, and every refusal is named out loud, not silently dropped.
+Done when: `launch` printed `claims held under <branch>`, and every `dropped` line is named
+in the report.
 
 ## 3. Spawn
 
@@ -129,16 +114,16 @@ One batch per `--batch`, every batch in ONE call so the placement can spend a re
 batch across both hosts:
 
 ```bash
-git rev-parse --abbrev-ref HEAD
-uv run python scripts/dev/fanout_place.py launch --batch 1345,1386 --batch 1288 --orchestrator-branch <that branch>
+uv run python scripts/dev/fanout_place.py launch --batch 1345,1386 --batch 1288
 ```
 
-The dispatcher writes the brief (issue bodies verbatim, the claim note, the first-act comment,
+The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim note, the first-act comment,
 the landing path or the stop-at-PR rule, and the session-health output of every host a batch
 was actually placed on) and starts a headless Opus agent as a transient user
 service in a fresh worktree on whichever host has the
-most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means one of
-three things: neither host has a reservation's worth of headroom; the placement would put more
+most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means a dropped
+claim (step 2) or one of three placement refusals, which claim nothing: neither host has a
+reservation's worth of headroom; the placement would put more
 than three batches on one remote host in this run (the ssh budget); or it would leave a host
 holding more than three LIVE batches counting every earlier run not yet cleaned (the memory
 cap — a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
@@ -310,6 +295,16 @@ The worktree is auto-named `agent-<hash>` and cannot be named otherwise — see 
 subagent cannot own a named worktree* in `docs/issue-claiming-and-fanout.md`. That is why the
 claim stays under the orchestrator's name and why the brief's first act below exists.
 
+No `launch` runs on this path, so take the claims before spawning anything, from the
+orchestrator's worktree:
+
+```bash
+uv run python scripts/dev/fanout_place.py claim --batch 1345,1386 --batch 1288
+```
+
+It claims under HEAD as `launch` does, prints `#<n> claimed by <branch>` per issue, and exits
+3 naming each refusal on stderr. Drop a refused issue from its batch before spawning.
+
 Each agent starts with none of this conversation's context, so its brief must carry, in full:
 
 - The **issue bodies verbatim** — not a paraphrase, not a summary — **fenced**, under a
@@ -327,14 +322,11 @@ Each agent starts with none of this conversation's context, so its brief must ca
   had replaced. `transport.operator_comments` selects them for `fanout_place.py launch`.
 - That the issues are **already claimed** under the orchestrator's worktree, and it must not
   claim them again.
-- That its **first act** is to post a plain comment naming its own worktree, so the thread
+- That its **first act** is to post a plain comment naming its own branch, so the thread
   records which agent actually took the work — `findings.py` never learns this name, because
-  the claim stays under the orchestrator's:
-
-  ```bash
-  git rev-parse --abbrev-ref HEAD
-  gh issue comment <n> --body "Worked by \`<its own branch>\`"
-  ```
+  the claim stays under the orchestrator's. Give it the comment's exact shape,
+  `gh issue comment <n> --body 'Worked by \`<its own branch>\`'`, in single quotes so the
+  shell does not run the backticks; `brief.py` renders the dispatcher's copy.
 
 - That `land.sh` (the `land-after-merge` skill) is the landing path, and that hand-polling CI
   is not.
@@ -415,10 +407,11 @@ listing them:
 uv run python scripts/dev/findings.py claims --worktree <orchestrator-branch>
 ```
 
-Before this report goes out, release any issue it lists that no agent finished:
+Before this report goes out, release any issue it lists that no agent finished, under the
+branch `launch` printed as `claims held under <branch>`:
 
 ```bash
-uv run python scripts/dev/findings.py release <n> --worktree <orchestrator-branch> --reason "..."
+uv run python scripts/dev/findings.py release <n> --worktree <branch> --reason "..."
 ```
 
 Anything left claimed past this point sits until the next fan-out's triage step reaps it —
@@ -446,7 +439,7 @@ a. **Triage** with `reap --repo DanielH2018/dotfiles`, then `next --json --repo 
    The grouping rules are section 1's. The dotfiles repo has no Ansible roles, so group by cited
    file alone.
 b. **Skip section 2: `launch` takes the claim itself.** Run
-   `fanout_place.py launch --repo DanielH2018/dotfiles --batch <n>,<n> … --orchestrator-branch <b>`.
+   `fanout_place.py launch --repo DanielH2018/dotfiles --batch <n>,<n> …`.
    For each batch it creates and locks `.claude/worktrees/fanout-<batch>` in the chezmoi
    checkout from `origin/main`, claims the batch under `worktree-fanout-<batch>`, and only then
    starts the agent. A claim under the orchestrator's branch would be stale at birth, because

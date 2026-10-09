@@ -290,6 +290,18 @@ def default_ref(checkout: str) -> str | None:
     return read(checkout)
 
 
+def head_branch() -> str:
+    """The branch checked out in the process's cwd, or `HEAD` when it is detached.
+
+    `launch` and `claim` take the orchestrator's branch from here rather than from a flag:
+    the orchestrator runs the dispatcher from its own worktree, and pasting the name by hand
+    was the step the issue-fanout skill spent a page on (#3695).
+    """
+    from lib.git import git_stdout
+
+    return git_stdout("rev-parse", "--abbrev-ref", "HEAD", timeout=10.0)
+
+
 @dataclass(frozen=True)
 class Tools:
     """Every process boundary the dispatcher crosses.
@@ -301,6 +313,7 @@ class Tools:
         merged_pr: the URL of a merged PR for a branch in a repo, or "".
         findings: run `findings.py` with an argv, for the claim `launch` takes itself.
         default_ref: read a checkout's remote default branch, for `target.resolve`.
+        head_branch: read the orchestrator's own branch, which holds this repo's claims.
     """
 
     run: Callable[..., subprocess.CompletedProcess] = run_command
@@ -309,6 +322,7 @@ class Tools:
     merged_pr: Callable[[str, str], str] = merged_pr_url
     findings: Callable[[list[str]], subprocess.CompletedProcess] = run_findings
     default_ref: Callable[[str], str | None] = default_ref
+    head_branch: Callable[[], str] = head_branch
 
 
 def read_host(tools: Tools, host: str) -> HostReading | str:

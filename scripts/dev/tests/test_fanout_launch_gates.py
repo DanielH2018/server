@@ -25,8 +25,6 @@ def _launch(tools, tmp_path, *args):
         [
             "launch",
             *args,
-            "--orchestrator-branch",
-            "o",
             "--manifest-root",
             str(tmp_path),
         ],
@@ -59,7 +57,7 @@ def test_a_cleaned_batch_does_not_count_against_the_cap(tmp_path):
     save(Manifest("20260101T000010Z", "o", earlier), root=tmp_path)
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1,2") == 0
-    assert len(run.calls) == 3  # headroom read, health read, one launch
+    assert len(run.host_calls) == 3  # headroom read, health read, one launch
 
 
 def _another_host() -> str:
