@@ -306,7 +306,9 @@ def claim_names(role_dir: Path, k8s_roles: Path = K8S_ROLES) -> list[str]:
 
 
 def load_longhorn_tier_lists(
-    k3s_defaults: Path = K3S_DEFAULTS, group_vars: dict | None = None
+    k3s_defaults: Path = K3S_DEFAULTS,
+    group_vars: dict | None = None,
+    entries: list[dict] | None = None,
 ) -> LonghornTiers:
     """The R2, weekly and no-backup volume lists as a deploy of the k3s role sees them.
 
@@ -314,12 +316,14 @@ def load_longhorn_tier_lists(
     role, so a `group_vars/all.yml` override of a tier list reaches the catalogue and the
     glance blocks as it reaches Ansible (#3918). `group_vars` defaults to the repo's own;
     `k3s_defaults` stays a file path so a test or `service_catalog --k3s-defaults` can
-    inject one.
+    inject one. `entries` is the `containers_list` the role's R2 expression derives from;
+    a caller reading an injected inventory passes its k8s entries, or the R2 set is the
+    repo's (#3947).
     """
     if group_vars is None:
         group_vars = Estate().group_vars
     data = resolved_tier_lists(
-        inventory_layers(_load_yaml(k3s_defaults), group_vars, {})
+        inventory_layers(_load_yaml(k3s_defaults), group_vars, {}), entries
     )
     return LonghornTiers(
         r2=frozenset(data.get("k3s_longhorn_r2_volumes") or []),
