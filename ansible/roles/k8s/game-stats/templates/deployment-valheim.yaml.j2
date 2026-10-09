@@ -56,7 +56,7 @@ spec:
             - name: POLL_INTERVAL
               value: "20"
             - name: METRICS_PORT
-              value: "9420"
+              value: "{{ containers_list | metrics_port('valheim-stats') }}"
             - name: DB_PATH
               value: /data/stats.db
             # Keeps the first-run query under Loki's ~30d max_query_length. There is no
@@ -65,21 +65,21 @@ spec:
             - name: BACKFILL_DAYS
               value: "28"
           ports:
-            - containerPort: 9420
+            - containerPort: {{ containers_list | metrics_port('valheim-stats') }}
           # /healthz is 503 until the first successful poll and whenever the last one is
           # older than HEALTH_MAX_AGE; a failing liveness recreates the pod (and feeds the
           # crash-loop alert arm).
           livenessProbe:
             httpGet:
               path: /healthz
-              port: 9420
+              port: {{ containers_list | metrics_port('valheim-stats') }}
             initialDelaySeconds: 45
             periodSeconds: 30
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /healthz
-              port: 9420
+              port: {{ containers_list | metrics_port('valheim-stats') }}
             initialDelaySeconds: 5
             periodSeconds: 10
           volumeMounts:

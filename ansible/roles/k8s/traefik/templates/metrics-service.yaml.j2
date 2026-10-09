@@ -4,7 +4,9 @@
 # Traefik creates the default one). A SEPARATE Service on purpose: adding 8080 to the main
 # LoadBalancer Service would publish the metrics (and the api@internal dashboard surface)
 # on the LAN VIP. Scraped by the cluster prometheus's `traefik-k8s` job (Phase D dashboard
-# triage, PG2 — Networking/traefik-custom.json's cluster-side feed).
+# triage, PG2 — Networking/traefik-custom.json's cluster-side feed). The Service port is the
+# `traefik-k8s` metrics item on traefik's containers_list entry; targetPort is Traefik's own
+# default for that entrypoint, which no setting here changes.
 apiVersion: v1
 kind: Service
 metadata:
@@ -15,5 +17,5 @@ spec:
     app: traefik
   ports:
     - name: metrics
-      port: 8080
+      port: {{ containers_list | metrics_port('traefik-k8s') }}
       targetPort: 8080

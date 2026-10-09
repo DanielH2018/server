@@ -12,39 +12,14 @@ observability's scrape-target check pages on. Scaling the exporter without gatin
 a pointless pod for a permanent page.
 """
 
-from _helpers import ANSIBLE
+from _k8s_render import render_role_template
 from lib import yaml_fast
 
 
-from validate.k8s_manifests import (
-    ALL_VARS,
-    BASE_CONTEXT,
-    SHARED_TPL,
-    k8s_entries,
-    load_yaml,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-    resolve_vars,
-    role_defaults,
-)
-
-K8S = ANSIBLE / "roles" / "k8s"
-
-
 def _render(role: str, template: str, replicas: int) -> str:
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
-    base = resolve_vars(base, base)
-    ctx = {
-        **base,
-        **role_defaults(role, base),
-        "container_item": k8s_entries()[role],
-        "terraria_k8s_replicas": replicas,
-    }
-    env = make_env([K8S / role / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    return env.get_template(template).render(**ctx)
+    # daniel-box's whole context, containers_list included: the scrape job renders from the
+    # game-stats entry's `metrics` item, and the exporter reads its port from the same item.
+    return render_role_template(role, template, {"terraria_k8s_replicas": replicas})
 
 
 def _replicas(role: str, template: str, replicas: int) -> int:
