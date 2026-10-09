@@ -90,8 +90,11 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
   open of another user's file in sticky `/run/lock`, and the old lock there belongs to the
   operator.
 - **Deployer holds.** An ACL gives the agent read on `/var/lib/gitops-deploy`, where the wrapper
-  reads the hold markers. `agent_toolbox.read_file` returns `""` on any read error, so a lost ACL
-  reads as no hold at all. `land.sh`, run by the lander as the operator, still refuses on a hold.
+  reads the hold markers through `gitops_hold.DeployerSnapshot`. A marker it cannot read fails
+  the run with `EXIT_STATE_UNREADABLE` (3) and a Discord post naming the ACL, because an
+  unreadable hold is not "no hold" (#3703). Until then `agent_toolbox.read_file` returned `""`
+  on a read error, so a lost ACL read as no hold at all. `land.sh`, run by the lander as the
+  operator, still refuses on a hold.
 
 ENFORCED: `ansible/tests/setup/test_renovate_agent_identity.py`, which also runs the prompt's
 `systemctl` commands through the repo's own PreToolUse:Bash dispatcher.
@@ -251,8 +254,9 @@ exited 0, so the tile reports silence and the `OnFailure` alert reports failure.
 which runs after ANY exit 0 — a `down` pushed from inside the wrapper on a `return 0` path is
 overwritten by the `up` that follows it. So that skip returns `EXIT_WORKTREE_BLOCKED` instead: no
 beat, `OnFailure` pages, and the tile expires by deadman if nobody clears the tree. Until
-2026-09-18 that path returned 0, and the tile stayed green through five daily skips (#2014). The
-two other skips still exit 0: the quiet no-open-PRs skip is the healthy steady state, and the
+2026-09-18 that path returned 0, and the tile stayed green through five daily skips (#2014). A
+deployer state the agent cannot read exits `EXIT_STATE_UNREADABLE` for the same reason (#3703).
+The two other skips still exit 0: the quiet no-open-PRs skip is the healthy steady state, and the
 GitOps-hold skip is alarmed by the deployer's own `GitOps Status` tile, which this one need not
 duplicate. `test_agent_logic.py::TestSkipExitCodes` pins the blocked and the quiet case.
 

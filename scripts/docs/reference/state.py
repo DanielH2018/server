@@ -121,7 +121,7 @@ def gitops_deploy_run(state_dir: Path = Path(STATE_DIR)) -> LoopRun:
         snap = DeployerSnapshot.load(state_dir)
     except OSError, UnicodeDecodeError:
         return LoopRun(
-            base.last_run, "hold marker not readable from here", unreadable=True
+            base.last_run, "deployer state not readable from here", unreadable=True
         )
     if not snap.hold:
         return base

@@ -41,7 +41,7 @@
   # already carries `user:<agent>:r--` from the default entry. A recursive `rX` over them only
   # recomputed the mask to r-x, and reported `changed` on every apply. A marker that predates
   # the default entry on a fresh host stays unreadable until the deployer rewrites it. A
-  # marker the agent cannot read skips the run with a Discord post naming the ACL (#3703),
+  # marker the agent cannot read fails the run with a Discord post naming the ACL (#3703),
   # because an unreadable hold is not "no hold".
   ansible.posix.acl:
     path: /var/lib/gitops-deploy

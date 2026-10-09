@@ -35,6 +35,7 @@ from agent_logic import (
     run_record,
 )
 from agent_toolbox import TOOLS, AgentTools, log, read_file
+from gitops_markers import STATE_DIR
 from host_lib import atomic_write, parse_env_file
 from run_worktree import prepare_worktree, worktree_is_reusable
 
@@ -45,6 +46,8 @@ CONFIG = os.environ.get("RENOVATE_AGENT_CONFIG", "/etc/renovate-agent/config.env
 USER_AGENT = "renovate-agent"
 # Distinct from the 1 a failed session returns, so the OnFailure page reads which it was.
 EXIT_WORKTREE_BLOCKED = 2
+# The deployer's state could not be read, so a hold cannot be ruled out (#3703).
+EXIT_STATE_UNREADABLE = 3
 # The login gh reports for Renovate's PRs. The unit's LAND_REQUIRE_AUTHOR must match it, and
 # test_renovate_agent_unit.py reads it from here.
 RENOVATE_AUTHOR = "app/renovate"
@@ -211,10 +214,18 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     try:
         snap = tools.deployer_state()
     except (OSError, UnicodeDecodeError) as exc:
-        log(f"cannot read the GitOps deployer's state: {exc}")
-        gate = decide(before, None, "")
-    else:
-        gate = decide(before, snap.hold or "", "; ".join(snap.held_planes))
+        # An unreadable hold is not "no hold". A lost ACL does not clear by itself, and no
+        # other tile pages on it, so this is a unit failure for the reason the worktree block
+        # below gives: no beat, and OnFailure pages.
+        why = f"cannot read the GitOps deployer's state ({exc}), so a hold cannot be ruled out"
+        msg = (
+            f"renovate-agent: skipped on {host} — {why}. Check the ACL on {STATE_DIR}."
+        )
+        log(msg)
+        tools.discord_post(webhook, msg, USER_AGENT, log=log)
+        record_run(state_dir, run_record(int(time.time()), "blocked", why))
+        return EXIT_STATE_UNREADABLE
+    gate = decide(before, snap.hold or "", "; ".join(snap.held_planes))
     if not gate.run:
         log(f"skipping: {gate.reason}")
         record_run(state_dir, run_record(int(time.time()), "skipped", gate.reason))

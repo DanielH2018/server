@@ -240,7 +240,7 @@ A blocker is one of three states: a non-empty `hold_sha`, a red master CI run, o
 agrees. Each fact comes from a reader that already exists:
 
 - Where the running user can read the deployer's state directory, `hold_sha` and the `owed`
-  ledger are read from it through `gitops_ledger` and `deployer_park`. The directory is 0750
+  ledger are read from it through `gitops_hold.DeployerSnapshot`. The directory is 0750
   and owned by the deploy user. So off daniel-box, and for the `claude` user on it, deploy-ui's
   `/api/state` serves the hold and the `manual_plane` ledger lines instead.
 - A deploy-ui older than the `manual_plane_owed` key leaves the manual planes `null`. A `null`

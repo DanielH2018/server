@@ -64,12 +64,6 @@ class TestDecide:
         gate = al.decide([_pr(1)], "deadbeefcafe", "k3s-bringup.yml")
         assert "k3s-bringup.yml" in gate.reason
 
-    def test_an_unreadable_hold_is_flagged_loudly(self) -> None:
-        """None is a state nobody could read, which is not "no hold" (#3703)."""
-        gate = al.decide([], None, "")
-        assert not gate.run
-        assert not gate.quiet
-
 
 class TestParseRun:
     def test_a_clean_result_object_is_clean(self) -> None:
@@ -322,12 +316,12 @@ def _held_state(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 class TestHoldGate:
-    """`main()` reads the hold through `DeployerSnapshot`, and an unreadable state skips."""
+    """`main()` reads the hold through `DeployerSnapshot`, and an unreadable state fails."""
 
     def _cfg(self, tmp_path) -> str:
         cfg = tmp_path / "config.env"
         cfg.write_text(
-            f"REPO=o/r\nREPO_DIR=/repo\nPROMPT_FILE=/p.txt\nSTATE_DIR={tmp_path}\n"
+            f"REPO=o/r\nREPO_DIR=/repo\nPROMPT_FILE=/p.txt\nSTATE_DIR={tmp_path}/state\n"
         )
         return str(cfg)
 
@@ -342,16 +336,21 @@ class TestHoldGate:
         assert "ansible/deploy.yml sonarr; ansible/initial_setup.yml k3s" in post
         assert "torn" not in post
 
-    def test_an_unreadable_state_skips_loudly(self, tmp_path) -> None:
+    def test_an_unreadable_state_is_a_unit_failure(self, tmp_path) -> None:
+        """An unreadable hold is not "no hold", and no other tile pages on it (#3703)."""
+
         def unreadable() -> DeployerSnapshot:
             raise PermissionError(13, "Permission denied")
 
         host = _FakeHost(prs=[1])
         tools = replace(_tools(host), deployer_state=unreadable)
 
-        assert renovate_agent.main(tools, self._cfg(tmp_path)) == 0
+        rc = renovate_agent.main(tools, self._cfg(tmp_path))
+
+        assert rc == renovate_agent.EXIT_STATE_UNREADABLE != 0
         (post,) = host.posts
         assert "a hold cannot be ruled out" in post
+        assert _records(tmp_path)[-1]["result"] == "blocked"
 
 
 class TestPrStates:

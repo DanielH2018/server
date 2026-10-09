@@ -22,8 +22,8 @@ monitor-bridge carries a generated copy (`scripts/dev/gen_gitops_markers.py`). C
 from the checkout imports it through the `GITOPS_DEPLOY_FILES` path insert. `gitops_ledger`
 must never import this module: the ledger is the lower layer, and this one imports it.
 
-`Hold` reads and writes the two files itself rather than through `DeployerState`, for the
-same reason. It writes the way `host_lib.atomic_write` does (temp file, then `os.replace`), and
+`Hold` reads and writes the two files itself rather than through `DeployerState`, because
+deploy-ui can import nothing beyond these three modules. It writes the way `host_lib.atomic_write` does (temp file, then `os.replace`), and
 decodes with `surrogateescape` so a torn byte in another class's ledger line survives a
 rewrite unchanged.
 """
