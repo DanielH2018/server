@@ -12,10 +12,9 @@ not `--tags longhorn-api`, and MUST pass `tasks_from: resolve.yml` — a bare in
 undefined. `k8s/volume-revert` is the only caller.
 
 ## At a glance
-- **`longhorn_api_required`** (default `true`): whether a missing ready manager pod on this node
-  is fatal. `volume-revert` leaves it at the default (a rollback with no API has no fallback).
-  No caller sets it `false`: `volume-snapshot`'s detached-volume path used soft mode until #2740
-  retired that path.
+- **A missing ready manager pod on this node is always fatal.** `volume-revert` has no fallback
+  for a rollback with no API. The role's opt-out soft mode was retired with its
+  last caller, `volume-snapshot`'s detached-volume path (#2740, #3997).
 - **Ready means Running with every container ready.** The rule is
   `ansible/filter_plugins/longhorn_manager.py:ready_manager_ip`, which the snapshot reaper calls
   too; the trim cron spells it in jq. During a Longhorn upgrade the manager restarts, so a revert
@@ -25,7 +24,7 @@ undefined. `k8s/volume-revert` is the only caller.
 
 ## Notable
 - `ignore_errors` on the include does **not** make a missing manager non-fatal — it suppresses
-  only a failure of the include statement, not the `fail()` this role raises. The
-  `longhorn_api_required` flag is the only way to make that soft.
+  only a failure of the include statement, not the `fail()` this role raises. A future caller
+  with a fallback needs a flag that `tasks/resolve.yml` reads, not an `ignore_errors`.
 - A mid-eviction list can carry two pods for one node. The readiness rule drops the terminating
   one once its container stops, and the first ready pod wins.

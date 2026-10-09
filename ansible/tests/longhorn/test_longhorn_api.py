@@ -75,38 +75,9 @@ def test_the_resolve_picks_a_ready_pod_through_the_shared_rule() -> None:
 
 def test_the_failure_guard_covers_an_empty_result() -> None:
     """A node with no local manager pod (unscheduled, mid-eviction) must fail loudly rather
-    than hand back an empty `longhorn_api` a caller would happily template into a broken URL —
-    unless the caller opted into soft mode, which the next test covers."""
+    than hand back an empty `longhorn_api` a caller would happily template into a broken URL."""
     guard = _named(_RESOLVE, "Fail when this node runs no ready longhorn-manager")
-    when = guard["when"]
-    assert isinstance(when, list)
-    assert "longhorn_api_ip | length == 0" in when
-    assert "longhorn_api_required | bool" in when
-
-
-def test_soft_mode_records_the_miss_instead_of_failing() -> None:
-    """`longhorn_api_required: false` is the ONLY supported way to make an absent manager non-fatal.
-
-    `ignore_errors` on the include does not work — see
-    `test_longhorn_api_soft_mode_survives_no_manager` below, which proves the mechanism rather than
-    the YAML shape.
-    """
-    task = _named(
-        _RESOLVE, "Record that no ready longhorn-manager pod exists on this node"
-    )
-    when = task["when"]
-    assert "not (longhorn_api_required | bool)" in when
-    assert any("length == 0" in str(c) for c in when)
-    assert task["ansible.builtin.set_fact"]["longhorn_api_resolved"] is False
-
-
-def test_the_success_path_also_records_resolved_true() -> None:
-    """A caller in soft mode needs one fact to branch on regardless of outcome — a success that
-    only sets `longhorn_api`/`longhorn_api_node` would leave `longhorn_api_resolved` undefined
-    on the path that actually worked."""
-    task = _named(_RESOLVE, "Record the API base")
-    assert task["when"] == "longhorn_api_ip | length > 0"
-    assert task["ansible.builtin.set_fact"]["longhorn_api_resolved"] is True
+    assert guard["when"] == "longhorn_api_ip | length == 0"
 
 
 def test_the_recorded_facts_are_the_documented_interface() -> None:
@@ -210,20 +181,10 @@ def test_the_resolve_returns_a_pod_ip_on_this_node() -> None:
     )
 
 
-#
-# `ignore_errors: true` on a dynamic `include_role` does not catch a failure of a task the
-# include pulls in — only a failure of the include statement itself. That is documented Ansible
-# behaviour, and k8s/volume-snapshot's first cut of the detached-volume attach shipped exactly
-# that mistake: `ignore_errors` on the `include_role: {name: k8s/longhorn-api, ...}` task, which
-# a reviewer proved does nothing by running the REAL, unmodified role through a scratch play
-# with `k3s` stubbed to report no manager pod — the play still aborted at "Fail when this node
-# runs no longhorn-manager", the include's `ignore_errors` notwithstanding.
-#
-# These two tests run that same proof against the actual fix: `longhorn_api_required: false`,
-# read INSIDE resolve.yml, so the role itself chooses not to raise rather than asking a caller's
-# `ignore_errors` to catch something it structurally cannot. `become: true` on the pod-IP read
-# is satisfied by a passthrough `sudo` replacement rather than real privilege escalation — there
-# is nothing here that needs root, and the test sandbox has no passwordless sudo to use.
+# The tests below run the REAL, unmodified role through a scratch play with `k3s` stubbed to
+# return a chosen pod list. `become: true` on the pod-IP read is satisfied by a passthrough
+# `sudo` replacement rather than real privilege escalation — there is nothing here that needs
+# root, and the test sandbox has no passwordless sudo to use.
 
 
 def _manager_pod(*, ready: bool) -> dict:
@@ -238,7 +199,7 @@ def _manager_pod(*, ready: bool) -> dict:
 
 
 def _run_longhorn_api_scratch_play(
-    *, required: bool, pods: tuple[dict, ...] = ()
+    *, pods: tuple[dict, ...] = ()
 ) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -260,7 +221,6 @@ def _run_longhorn_api_scratch_play(
         )
         fake_become = bin_dir / "fake_become"
 
-        required_var = "" if required else "\n          longhorn_api_required: false"
         playbook = tmp_path / "play.yml"
         playbook.write_text(
             "- hosts: localhost\n"
@@ -274,11 +234,9 @@ def _run_longhorn_api_scratch_play(
             "      ansible.builtin.include_role:\n"
             "        name: k8s/longhorn-api\n"
             "        tasks_from: resolve.yml\n"
-            f"      vars:{required_var}\n"
             "    - name: Prove we are still alive\n"
             "      ansible.builtin.debug:\n"
-            "        msg: \"SURVIVED longhorn_api_resolved={{ longhorn_api_resolved | default('undef') }}"
-            " api={{ longhorn_api | default('undef') }}\"\n"
+            "        msg: \"SURVIVED api={{ longhorn_api | default('undef') }}\"\n"
         )
 
         env = dict(os.environ)
@@ -306,33 +264,9 @@ def _run_longhorn_api_scratch_play(
 @pytest.mark.skipif(
     shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
 )
-def test_longhorn_api_soft_mode_survives_no_manager() -> None:
-    """The fix: soft mode works because resolve.yml skips its own `fail()`.
-
-    `longhorn_api_required: false` makes an absent manager pod non-fatal because resolve.yml itself
-    skips its own `fail()`, not because a caller's `ignore_errors` catches it. If this regresses
-    back to relying on `ignore_errors` at the call site, this test goes red — it runs the real role,
-    not a rendered expression.
-    """
-    result = _run_longhorn_api_scratch_play(required=False)
-    assert result.returncode == 0, (
-        f"soft mode must not abort the play when no longhorn-manager pod exists.\n"
-        f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-    )
-    assert "SURVIVED longhorn_api_resolved=False" in result.stdout
-
-
-@pytest.mark.skipif(
-    shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
-)
-def test_longhorn_api_hard_mode_still_fails_by_default() -> None:
-    """The control for the test above: hard mode still fails by default.
-
-    k8s/volume-revert never sets `longhorn_api_required`, so it must keep getting today's hard
-    failure. Without this, a bug that made soft mode the DEFAULT would pass the test above and
-    silently defang volume-revert's fail-fast guarantee.
-    """
-    result = _run_longhorn_api_scratch_play(required=True)
+def test_longhorn_api_fails_with_no_manager() -> None:
+    """k8s/volume-revert has no fallback for a rollback with no API, so it must stop the play."""
+    result = _run_longhorn_api_scratch_play()
     assert result.returncode != 0
     assert "No ready longhorn-manager pod" in result.stdout
     assert "SURVIVED" not in result.stdout
@@ -343,9 +277,7 @@ def test_longhorn_api_hard_mode_still_fails_by_default() -> None:
 )
 def test_longhorn_api_refuses_a_manager_that_is_not_ready() -> None:
     """A manager whose container is not ready is no API to send a revert to (#3736)."""
-    result = _run_longhorn_api_scratch_play(
-        required=True, pods=(_manager_pod(ready=False),)
-    )
+    result = _run_longhorn_api_scratch_play(pods=(_manager_pod(ready=False),))
     assert result.returncode != 0
     assert "No ready longhorn-manager pod" in result.stdout
 
@@ -355,10 +287,6 @@ def test_longhorn_api_refuses_a_manager_that_is_not_ready() -> None:
 )
 def test_longhorn_api_resolves_a_ready_manager() -> None:
     """The accepting half: the same pod, ready, becomes the API base."""
-    result = _run_longhorn_api_scratch_play(
-        required=True, pods=(_manager_pod(ready=True),)
-    )
+    result = _run_longhorn_api_scratch_play(pods=(_manager_pod(ready=True),))
     assert result.returncode == 0, result.stdout + result.stderr
-    assert (
-        "SURVIVED longhorn_api_resolved=True api=http://10.42.0.7:9500" in result.stdout
-    )
+    assert "SURVIVED api=http://10.42.0.7:9500" in result.stdout

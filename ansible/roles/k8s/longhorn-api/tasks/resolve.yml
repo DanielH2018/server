@@ -46,15 +46,12 @@
   ansible.builtin.set_fact:
     longhorn_api_ip: "{{ (longhorn_api_pod.stdout | from_json)['items'] | ready_manager_ip(ansible_hostname) }}"
 
-# `longhorn_api_required` (default true, see defaults/main.yml) decides whether an empty result
-# is fatal. A caller that needs the API — k8s/volume-revert, which has no fallback for a failed
-# rollback — leaves it at the default and gets this hard failure.
+# A missing ready manager is always fatal: the one caller, k8s/volume-revert, has no fallback
+# for a rollback with no API. #2740 retired the only caller that had one, and soft mode with it.
 #
-# THIS IS THE ONLY WAY TO MAKE THIS NON-FATAL FOR A CALLER. `ignore_errors: true` on the
-# `include_role` that pulls this file in does NOT work: it suppresses a failure of the include
-# STATEMENT, not a fatal `fail()` raised by a task the include pulls in — this is documented
-# Ansible behaviour, not a version quirk (see `test_longhorn_api_soft_mode_survives_no_manager` in
-# test_longhorn_api.py, which runs this file for real through a scratch play to prove it).
+# `ignore_errors: true` on the `include_role` that pulls this file in does NOT make this
+# non-fatal: it suppresses a failure of the include STATEMENT, not a `fail()` raised by a task
+# the include pulls in. A future caller with a fallback needs a flag read here, in this role.
 - name: Fail when this node runs no ready longhorn-manager
   tags: [deploy]
   ansible.builtin.fail:
@@ -62,28 +59,10 @@
       No ready longhorn-manager pod on {{ ansible_hostname }}, so the Longhorn API is unreachable
       from here. The ClusterIP is not a fallback — it load-balances to the cross-node manager, which
       the NetworkPolicy refuses for host-originated traffic.
-  when:
-    - longhorn_api_required | bool
-    - longhorn_api_ip | length == 0
+  when: longhorn_api_ip | length == 0
 
-# The soft-mode half of the same decision: a caller that set `longhorn_api_required: false`
-# reads `longhorn_api_resolved` instead of the play aborting. `longhorn_api`/`longhorn_api_node`
-# stay undefined in this branch — there is no pod to build a URL from.
-- name: Record that no ready longhorn-manager pod exists on this node
-  tags: [deploy]
-  when:
-    - not (longhorn_api_required | bool)
-    - longhorn_api_ip | length == 0
-  ansible.builtin.set_fact:
-    longhorn_api_resolved: false
-
-# Guarded on a non-empty result: with `longhorn_api_required: false` and no manager pod, this
-# must not run at all — there is no IP to build a URL from, and `longhorn_api_resolved` above is
-# the only fact that branch gets.
 - name: Record the API base
   tags: [deploy]
-  when: longhorn_api_ip | length > 0
   ansible.builtin.set_fact:
     longhorn_api: "http://{{ longhorn_api_ip }}:9500"
     longhorn_api_node: "{{ ansible_hostname }}"
-    longhorn_api_resolved: true
