@@ -81,7 +81,14 @@ def read(log: Path) -> dict:
                     f"read {log}",
                 }
     if code is not None:
-        verdict = detach.verdict_in(log) or f"no VERDICT line; read {log}"
+        # A refusal that names no verdict (`Landing.die` from the landing policy) leaves its
+        # reason only on the `land:` line, so that line is the detail before the bare fallback.
+        error = detach.error_in(log)
+        verdict = (
+            detach.verdict_in(log)
+            or (error and f"{error}; read {log}")
+            or f"no VERDICT line; read {log}"
+        )
         state = _STATE_BY_RC.get(code, "failed")
         detail = verdict if code in _STATE_BY_RC else f"exit code {code}: {verdict}"
         return {"state": state, "detail": detail}

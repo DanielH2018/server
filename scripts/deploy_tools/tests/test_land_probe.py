@@ -46,6 +46,26 @@ def test_a_landing_that_gave_up_ends_the_wait_with_3_not_75(tmp_path):
     assert land_probe.TERMINAL["gave-up"] == 3
 
 
+def test_a_refusal_without_a_verdict_reports_its_land_line(tmp_path):
+    """A landing-policy `die()` writes no VERDICT line; its reason is the last `land:` line."""
+    log = landing(
+        tmp_path,
+        "land: warning the landing carried on past\n"
+        "land: PR #939 — the body closes #12, an issue it does not fix\n",
+        rc=1,
+    )
+    state = land_probe.read(log)
+    assert state["state"] == "failed"
+    assert state["detail"].startswith(
+        "land: PR #939 — the body closes #12, an issue it does not fix"
+    )
+
+
+def test_a_landing_with_neither_line_says_so(tmp_path):
+    log = landing(tmp_path, "== 0/6  waiting\n", rc=1)
+    assert land_probe.read(log)["detail"] == f"no VERDICT line; read {log}"
+
+
 def test_a_running_landing_reports_its_newest_phase(tmp_path):
     log = landing(
         tmp_path, "== arm  arming\n== 0/6  waiting for PR #939 to merge\n  merged\n"

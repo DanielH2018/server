@@ -68,6 +68,8 @@ LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
 
 _VERDICT_LINE = re.compile(r"^VERDICT:.*$", re.MULTILINE)
+# `Landing.die` without a verdict (a landing-policy refusal) writes only this stderr line.
+_ERROR_LINE = re.compile(r"^land: .*$", re.MULTILINE)
 
 
 def log_path(pr: str, log_dir: Path | None = None) -> Path:
@@ -98,6 +100,20 @@ def verdict_in(log: Path) -> str | None:
     except OSError:
         return None
     return match.group(0) if match else None
+
+
+def error_in(log: Path) -> str | None:
+    """The landing's last `land: <why>` stderr line from `log`, or None when it has none.
+
+    A stop that names no verdict leaves this as the only reason in the log, so a waiter
+    reports it rather than a bare "no VERDICT line". The last one is the stop: earlier
+    `land:` lines are warnings the landing carried on past.
+    """
+    try:
+        matches = _ERROR_LINE.findall(log.read_text(errors="replace"))
+    except OSError:
+        return None
+    return matches[-1] if matches else None
 
 
 def rc_path(log: Path) -> Path:
