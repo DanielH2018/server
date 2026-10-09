@@ -98,8 +98,8 @@ def format_monitor_status(data, declared_total=None):
 # it validates the declaration file against itself and never asks what is live.
 #
 # Declared names are read straight out of the template rather than rendered through Jinja: every
-# `"name"` in it is a literal, or a field of a row in the one table loop `kuma_table_loop`
-# reads, and parsing beats standing up a Jinja environment with a stub for every push token
+# `"name"` in it is a literal, or a field of a row in one of the two table loops
+# `kuma_table_loop` reads, and parsing beats standing up a Jinja environment with a stub for every push token
 # just to recover strings that were never templated.
 STATIC_MONITORS_PATH = os.path.join(
     REPO,
@@ -470,7 +470,8 @@ def monitor_keys(text):
     The key is the file-like name Ansible templates ("daniel-pi-host.json"), which encodes
     which host/role owns the monitor even though the JSON body doesn't carry that. Used to
     scope `kuma-drift --pi` to daniel-pi's own monitors without hand-listing their display
-    names.
+    names. It reads literal keys only, so the table loops' tiles are absent; neither loop
+    renders a Pi tile.
     """
     keys, pending = {}, None
     for line in text.splitlines():

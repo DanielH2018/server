@@ -20,7 +20,7 @@ and contract unchanged.
 - **Host:** daniel-box — pinned by `nodeSelector`, so a daniel-server drain or cold boot
   cannot take the remediation loop down with it
 - **Reaches:** `sonarr:8989` and `radarr:7878` (queue read, blocklist and search writes),
-  `uptime-kuma:3001` (push), and the *arr Discord webhook
+  uptime-kuma at its entry's `port` (push), and the *arr Discord webhook
 - **Depends on:** sonarr, radarr and uptime-kuma, at runtime
 
 ## Autonomous-role contract (it changes state with no human in the loop)

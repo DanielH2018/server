@@ -27,7 +27,8 @@ from bridge.common import HTTP_TIMEOUT, _env, cap_push_msg, clamp_discord, sanit
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
-KUMA_URL = _env("KUMA_URL", "http://uptime-kuma:3001").rstrip("/")
+# No default: the env-secret renders it from the uptime-kuma entry's port, the only source.
+KUMA_URL = _env("KUMA_URL", "").rstrip("/")
 KUMA_PUSH = _env("KUMA_PUSH_ARR_AUTOBLOCK", "")
 
 SONARR_URL = _env("SONARR_URL", "http://sonarr:8989").rstrip("/")
@@ -222,7 +223,7 @@ def post_discord(msg):
 def push(ok, msg):
     """Pushes an up/down heartbeat plus message to the Kuma push monitor.
 
-    A no-op, logged, when KUMA_PUSH is unset. Best-effort: an unreachable Kuma is logged
+    A no-op, logged, when KUMA_URL or KUMA_PUSH is unset. Best-effort: an unreachable Kuma is logged
     and swallowed rather than raised, so it never crashes the poll loop. `msg` is capped by
     `cap_push_msg` first, the same boundary monitor-bridge's push applies, so a long report
     cannot get the DOWN alert rejected by Discord.
@@ -231,8 +232,8 @@ def push(ok, msg):
         ok: Whether the cycle succeeded (pushed as status "up") or not ("down").
         msg: The status message to attach to the push.
     """
-    if not KUMA_PUSH:
-        bridge.common.log("WARN: no push token set; skipping push:", msg)
+    if not KUMA_URL or not KUMA_PUSH:
+        bridge.common.log("WARN: no Kuma URL or push token set; skipping push:", msg)
         return
     msg = cap_push_msg(msg)
     qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})

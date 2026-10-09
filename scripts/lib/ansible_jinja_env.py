@@ -119,7 +119,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     Prometheus config renders its plain scrape jobs through ``scrape_jobs``, and each owning
     role reads its exporter's port through ``metrics_port``; both raise on a malformed
     ``metrics`` item. Its hand-written jobs read their entry's own port through ``entry_port``,
-    which raises on an entry name it cannot find.
+    which raises on an entry name it cannot find. uptime-kuma's ingress tiles derive from
+    ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key.
     ``py_table`` reads monitor-bridge's check table out of its Python source, for the
     env-secret and the Kuma tiles. Registering the real ones makes those failures reach the guard.
 
@@ -134,6 +135,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     if str(ANSIBLE / "filter_plugins") not in _sys.path:
         _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
     from authelia_access import authelia_service_rules
+    from kuma_monitors import kuma_ingress_monitors
     from py_table import py_table
     from scrape_jobs import entry_port, metrics_port, scrape_jobs
     from service_tier import in_service_tier, tier_priority_class
@@ -162,6 +164,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["metrics_port"] = metrics_port
     env.filters["entry_port"] = entry_port
     env.filters["py_table"] = py_table
+    env.filters["kuma_ingress_monitors"] = kuma_ingress_monitors
     env.tests["search"] = search
     return env
 

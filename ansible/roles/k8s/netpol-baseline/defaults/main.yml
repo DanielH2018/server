@@ -116,7 +116,11 @@ netpol_baseline_obs_node_cidrs:
 #             runs only while netpol_baseline_enforced is true, an observability row only while
 #             netpol_baseline_obs_enforced is.
 #   port    — the POD port, from the target's own NetworkPolicy `port:`. Every target here maps
-#             Service port to pod port 1:1.
+#             Service port to pod port 1:1. A dialled row may omit it when `service` names a
+#             containers_list entry; the Job then reads the entry's `port` through `entry_port`,
+#             so the row follows the entry rather than copying it (uptime-kuma's, #3867). The
+#             lookup sits in the template because role defaults resolve without this repo's
+#             filter plugins in the render guards.
 #   expect  — `refused` (an inverted leg), `open` (the connection must succeed), or absent (the
 #             gate checks the row, and no leg dials it).
 #   policy  — the policy file that owns the fence, printed in the failure message.
@@ -167,7 +171,7 @@ netpol_baseline_probe_targets:
   # parent (karakeep-meilisearch), and one whose Service name differs from its pod label
   # (scrutiny, pods `app: scrutiny-web`), the mistake most likely to select nothing.
   - {service: home-assistant, plane: homelab, port: 8123, expect: refused, policy: "home-assistant's netpol_from (host_vars/daniel-box.yml)"}
-  - {service: uptime-kuma, plane: homelab, port: 3001, expect: refused, policy: "uptime-kuma's netpol_from (host_vars/daniel-box.yml)"}
+  - {service: uptime-kuma, plane: homelab, expect: refused, policy: "uptime-kuma's netpol_from (host_vars/daniel-box.yml)"}
   - {service: loki-homelab, plane: homelab, port: 3100, expect: refused, policy: networkpolicy-loki-homelab.yaml.j2}
   - {service: scrutiny, plane: homelab, port: 8080, expect: refused, policy: "scrutiny's netpol_from, pod label scrutiny-web"}
   - {service: karakeep-meilisearch, plane: homelab, port: 7700, expect: refused, policy: "karakeep's netpol_fences (host_vars/daniel-box.yml)"}

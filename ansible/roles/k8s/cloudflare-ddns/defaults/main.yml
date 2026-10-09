@@ -13,4 +13,5 @@ cloudflare_ddns_k8s_cpu_request: "50m"
 cloudflare_ddns_k8s_mem_request: 16Mi
 
 # The Kuma heartbeat needs no vars: Kuma runs in this namespace, so the deployments push to
-# the Service URL `http://uptime-kuma:3001` directly.
+# the Service URL `http://uptime-kuma:<port>` directly, the port read from uptime-kuma's
+# containers_list entry.

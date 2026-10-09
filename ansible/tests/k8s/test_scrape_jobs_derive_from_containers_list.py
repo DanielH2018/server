@@ -119,19 +119,26 @@ def test_a_hand_written_job_reads_its_target_port_from_the_entry(entry_name):
 
 
 @pytest.mark.parametrize(
-    "template",
+    ("role", "template"),
     [
-        "deployment.yaml.j2",
-        "maintenance-sync-cronjob.yaml.j2",
-        "status-page-sync-cronjob.yaml.j2",
+        ("uptime-kuma", "deployment.yaml.j2"),
+        ("uptime-kuma", "maintenance-sync-cronjob.yaml.j2"),
+        ("uptime-kuma", "status-page-sync-cronjob.yaml.j2"),
+        # The callers outside the role, the ones the entry's `netpol_from` lists (#3867).
+        ("monitor-bridge", "env-secret.yaml.j2"),
+        ("autofix-bridge", "env-secret.yaml.j2"),
+        ("cloudflare-ddns", "deployment-direct.yaml.j2"),
+        ("cloudflare-ddns", "deployment-proxied.yaml.j2"),
+        ("pi-peer-backup", "secret.yaml.j2"),
+        ("netpol-baseline", "netpol-probe-job.yaml.j2"),
     ],
 )
-def test_kumas_listener_and_callers_follow_the_entry_port(template):
-    """Kuma's own role reads the port the scrape target reads, so the two cannot disagree."""
+def test_kumas_listener_and_callers_follow_the_entry_port(role, template):
+    """Kuma and every caller read the port the scrape target reads, so none can disagree."""
     entries = copy.deepcopy(host_context()["containers_list"])
     entry = next(e for e in entries if e["name"] == "uptime-kuma")
     entry["port"] = 9999
-    text = render_role_template("uptime-kuma", template, {"containers_list": entries})
+    text = render_role_template(role, template, {"containers_list": entries})
     assert "3001" not in text
     assert ":9999" in text or "port: 9999" in text
     if template == "deployment.yaml.j2":

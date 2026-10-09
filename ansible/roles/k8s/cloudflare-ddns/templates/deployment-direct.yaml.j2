@@ -56,7 +56,7 @@ spec:
               # neither leaves the cluster nor depends on edge routing. The old hostAliases
               # pin to daniel-server died with the slice-7 bridge teardown (the Docker
               # edge's forward-bridge router was the path it relied on).
-              value: "http://uptime-kuma:3001/api/push/$(KUMA_PUSH_TOKEN)"
+              value: "http://uptime-kuma:{{ containers_list | entry_port('uptime-kuma') }}/api/push/$(KUMA_PUSH_TOKEN)"
           volumeMounts:
             # /etc, not /run/secrets: this image (scratch-based) lacks the /var/run
             # symlink so the old path happened to work, but the convention guard bans the

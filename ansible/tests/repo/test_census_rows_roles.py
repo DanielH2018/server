@@ -96,6 +96,24 @@ def _home_relative_paths(subject: Subject) -> list[str]:
     return hits
 
 
+# ── No caller outside uptime-kuma spells Kuma's port ──────────────────────────────────
+
+# A dial of the Kuma Service, short or fully qualified, and the port that follows it: digits
+# for a literal, `{{` for one read from the entry.
+_KUMA_DIAL = re.compile(
+    r"\buptime-kuma(?:\.\{\{ ?k8s_namespace ?\}\}\.svc\.cluster\.local)?:(\d+|\{\{)"
+)
+
+
+def _kuma_dials(subject: Subject) -> list[tuple[int, str]]:
+    """(line, port) for every line of `subject` that dials the Kuma Service."""
+    return [
+        (n, match.group(1))
+        for n, line in enumerate(subject.text.splitlines(), 1)
+        for match in _KUMA_DIAL.finditer(line)
+    ]
+
+
 ROWS = (
     Census(
         name="no-role-ships-a-test-file",
@@ -238,6 +256,54 @@ ROWS = (
             {
                 "ansible/roles/k8s/netpol-baseline/templates/networkpolicy-traefik.yaml.j2",
                 "ansible/roles/k8s/netpol-baseline/templates/networkpolicy-loki.yaml.j2",
+            }
+        ),
+    ),
+    Census(
+        name="kuma-callers-read-the-entry-port",
+        reason=(
+            "uptime-kuma's listener, Service and scrape target all follow the `port` on its "
+            "containers_list entry (#3863). A caller in another role that spells the port "
+            "keeps dialling the old one when the entry changes, and its heartbeat tile goes "
+            "DOWN at its deadline (#3867). Read it with `containers_list | "
+            "entry_port('uptime-kuma')`, and leave a Python default empty so the env var is "
+            "the only source."
+        ),
+        files=lambda: [
+            rel
+            for rel in _role_files("templates", "defaults", "files")
+            if not rel.startswith("ansible/roles/k8s/uptime-kuma/")
+        ],
+        offence=lambda s: [
+            f"line {n} dials uptime-kuma at a literal :{port}"
+            for n, port in _kuma_dials(s)
+            if port.isdigit()
+        ],
+        count=lambda s: len(_kuma_dials(s)),
+        red=(
+            Subject(
+                "env-secret.yaml.j2",
+                "  KUMA_URL: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001\n",
+            ),
+            Subject(
+                "autofix.py", 'KUMA_URL = _env("KUMA_URL", "http://uptime-kuma:3001")\n'
+            ),
+        ),
+        green=(
+            Subject(
+                "env-secret.yaml.j2",
+                "  KUMA_URL: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:"
+                "{{ containers_list | entry_port('uptime-kuma') }}\n",
+            ),
+        ),
+        # Five dials across five files when the row landed (2026-10-09). netpol-baseline's
+        # probe row names the port in a table, not a dial; the entry-port render test covers it.
+        min_matches=5,
+        must_find=frozenset(
+            {
+                "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2",
+                "ansible/roles/k8s/cloudflare-ddns/templates/deployment-direct.yaml.j2",
+                "ansible/roles/k8s/pi-peer-backup/templates/secret.yaml.j2",
             }
         ),
     ),

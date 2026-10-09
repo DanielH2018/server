@@ -386,6 +386,7 @@ def _wired_autofix(monkeypatch):
     """A fresh autofix module whose Discord webhook and Kuma push are set, plus what it sends."""
     monkeypatch.setenv("ARR_DISCORD_WEBHOOK_URL", "https://discord.example/webhook")
     monkeypatch.setenv("KUMA_PUSH_ARR_AUTOBLOCK", "tok")
+    monkeypatch.setenv("KUMA_URL", "http://uptime-kuma.example:3001")
     assert _SPEC and _SPEC.loader
     module = importlib.util.module_from_spec(_SPEC)
     _SPEC.loader.exec_module(module)
