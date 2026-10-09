@@ -67,7 +67,7 @@ def _ha_payload(age_s):
     return _ha_state(lc)
 
 
-def _ha_cycle(cfg, age_s=600, raises=False, banned=0):
+def _ha_cycle(cfg, state, age_s=600, raises=False, banned=0):
     cfg = replace(cfg, HA_URL="http://home-assistant:8123", HA_TOKEN="tok")
 
     # The ip_ban arm queries Loki via loki_count. Answer it explicitly rather than letting it
@@ -79,41 +79,41 @@ def _ha_cycle(cfg, age_s=600, raises=False, banned=0):
             raise OSError("connection refused")
         return _ha_payload(age_s)
 
-    src = FakeSources(loki_count=lambda *a, **k: banned, get_json=get_json)
+    src = FakeSources(state=state, loki_count=lambda *a, **k: banned, get_json=get_json)
     return checks.service.check_ha_heartbeat(cfg, src, now=HB_NOW)
 
 
-def test_ha_heartbeat_single_stale_cycle_is_suppressed(cfg):
+def test_ha_heartbeat_single_stale_cycle_is_suppressed(cfg, state):
     # One stale cycle (a deploy mid-recreate) must NOT page — pushes up with a streak msg.
-    ok, msg = _ha_cycle(cfg, age_s=600)
+    ok, msg = _ha_cycle(cfg, state, age_s=600)
     assert ok
     assert "1/2" in msg  # streak progress vs default HA_CONSECUTIVE=2
 
 
-def test_ha_heartbeat_two_consecutive_stale_cycles_alert(cfg):
+def test_ha_heartbeat_two_consecutive_stale_cycles_alert(cfg, state):
     # Default HA_CONSECUTIVE=2: the 2nd straight stale cycle is a genuinely wedged HA -> down.
-    ok, _ = _ha_cycle(cfg, age_s=600)
+    ok, _ = _ha_cycle(cfg, state, age_s=600)
     assert ok
-    ok, msg = _ha_cycle(cfg, age_s=600)
+    ok, msg = _ha_cycle(cfg, state, age_s=600)
     assert not ok
     assert "stale" in msg
 
 
-def test_ha_heartbeat_fresh_read_resets_streak(cfg):
+def test_ha_heartbeat_fresh_read_resets_streak(cfg, state):
     # stale, then fresh -> never down (a recovered deploy clears the streak).
-    assert _ha_cycle(cfg, age_s=600)[0]
-    ok, msg = _ha_cycle(cfg, age_s=60)  # scheduler resumed, heartbeat fresh
+    assert _ha_cycle(cfg, state, age_s=600)[0]
+    ok, msg = _ha_cycle(cfg, state, age_s=60)  # scheduler resumed, heartbeat fresh
     assert ok
     assert "fresh" in msg
     # the next stale cycle starts a NEW streak, so it's suppressed again
-    ok, msg = _ha_cycle(cfg, age_s=600)
+    ok, msg = _ha_cycle(cfg, state, age_s=600)
     assert ok
     assert "1/2" in msg
 
 
-def test_ha_heartbeat_unreachable_api_rides_grace(cfg):
+def test_ha_heartbeat_unreachable_api_rides_grace(cfg, state):
     # The recreate-window connection error must ride the SAME grace, not page immediately.
-    ok, msg = _ha_cycle(cfg, raises=True)
+    ok, msg = _ha_cycle(cfg, state, raises=True)
     assert ok
     assert "1/2" in msg
 
@@ -139,19 +139,19 @@ def test_ha_ban_event_is_down():
     assert "ip_bans.yaml" in msg
 
 
-def test_ha_ban_wins_the_message_over_a_healthy_heartbeat(cfg):
+def test_ha_ban_wins_the_message_over_a_healthy_heartbeat(cfg, state):
     # A ban pages even while the heartbeat itself is fresh — the two arms are independent, and
     # the ban text leads because it names the actionable fault.
-    ok, msg = _ha_cycle(cfg, age_s=60, banned=3)
+    ok, msg = _ha_cycle(cfg, state, age_s=60, banned=3)
     assert not ok
     assert msg.startswith("HA ip_ban fired 3 time(s)")
     assert "fresh" in msg  # the heartbeat's own verdict is preserved, not dropped
 
 
-def test_ha_ban_skips_the_deploy_grace(cfg):
+def test_ha_ban_skips_the_deploy_grace(cfg, state):
     # down_streak exists for transients. A ban persists in /config/ip_bans.yaml until a human
     # clears it, so it must page on the FIRST cycle rather than ride the 2-cycle grace.
-    ok, _ = _ha_cycle(cfg, age_s=60, banned=1)
+    ok, _ = _ha_cycle(cfg, state, age_s=60, banned=1)
     assert not ok
 
 

@@ -6,9 +6,9 @@ module's 600-line cap with the busy-lock arm (issue #1847), the same split idiom
 `checks/host_edge.py`.
 
 Slice 7 of the check.py split. Reads config as `cfg.X`, queries through its `src` argument
-(`bridge.sources.Sources`, which a test replaces with a fake) and reads the shared streak counter
-as `bridge.streaks.X`, so the tests' patches on that module reach it; the verdicts it
-from-imports from verdicts.service are patched on THIS module, where they are bound. `_n8n_streaks` lives here beside `check_n8n`, the only code that mutates it. Rule
+(`bridge.sources.Sources`, which a test replaces with a fake) and reads its streak counters as
+`src.state` (`bridge.streaks.State`), which every fake carries zeroed; the verdicts it
+from-imports from verdicts.service are patched on THIS module, where they are bound. Rule
 and enforcement: bridge/config.py's header.
 """
 
@@ -32,11 +32,6 @@ from verdicts.service import (
 )
 
 
-# Per-check mutable state. The thresholds these pair with moved to bridge/config.py; the
-# counters stay beside the code that mutates them.
-_n8n_streaks = {}
-
-
 # checks: each returns (ok, msg)
 
 
@@ -46,8 +41,8 @@ def check_n8n(
     """Consecutive failures of active ("Prod") n8n workflows (streak accumulated across cycles).
 
     Polls the n8n public API on the internal network (X-N8N-API-KEY header, no Authelia). n8n
-    doesn't save successful executions, so the per-workflow failure streak lives in the
-    module-global _n8n_streaks and is advanced by n8n_update_streaks each cycle; n8n_verdict
+    doesn't save successful executions, so the per-workflow failure streak lives in
+    src.state.n8n_streaks and is advanced by n8n_update_streaks each cycle; n8n_verdict
     turns it into the page decision. Empty N8N_API_KEY -> disabled (stays up) so it never
     false-pages before the operator sets the key. An unreachable/erroring API raises -> the loop
     renders it down with the error, like check_targets_down (a dead API surfaces, not silent-green).
@@ -70,7 +65,7 @@ def check_n8n(
     streaks = n8n_update_streaks(
         workflows,
         executions,
-        _n8n_streaks,
+        src.state.n8n_streaks,
         now if now is not None else datetime.now(timezone.utc),
         parse_duration(cfg.N8N_FAIL_WINDOW),
     )
@@ -132,12 +127,12 @@ def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
         except Exception as e:
             # The FETCH rides a streak; the queue verdict below does not. See the docstring.
             count, held, note = bridge.streaks.down_streak(
-                bridge.streaks._down_streaks.get("arr_queue_fetch", 0),
+                src.state.down_streaks.get("arr_queue_fetch", 0),
                 cfg.ARR_FETCH_CONSECUTIVE,
                 "%s unreachable: %s" % (app_name, e),
                 "rollout",
             )
-            bridge.streaks._down_streaks["arr_queue_fetch"] = count
+            src.state.down_streaks["arr_queue_fetch"] = count
             return held, note
         offenders.extend(
             queue_warnings(
@@ -147,7 +142,7 @@ def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
                 cfg.ARR_TITLE_HOLD_GRACE_H,
             )
         )
-    bridge.streaks._down_streaks["arr_queue_fetch"] = 0
+    src.state.down_streaks["arr_queue_fetch"] = 0
     if offenders:
         desc = "; ".join(
             "[%s] %s — %s" % (app, sanitize(title), sanitize(reason))
@@ -404,10 +399,10 @@ def check_ha_heartbeat(
     ) as e:  # unreachable/auth -> route through the streak, don't page yet
         ok, msg = False, "HA API unreachable: %s" % e
     if ok:
-        bridge.streaks._down_streaks["ha"] = 0
+        src.state.down_streaks["ha"] = 0
         return with_ha_ban(cfg, src, True, msg)
-    bridge.streaks._down_streaks["ha"], ok, msg = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("ha", 0),
+    src.state.down_streaks["ha"], ok, msg = bridge.streaks.down_streak(
+        src.state.down_streaks.get("ha", 0),
         cfg.HA_CONSECUTIVE,
         msg,
         "deploy/restart grace",

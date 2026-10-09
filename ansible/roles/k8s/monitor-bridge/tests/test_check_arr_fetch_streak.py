@@ -41,11 +41,10 @@ def test_arr_queue_holds_a_single_unreachable_cycle(cfg):
 def test_the_third_straight_unreachable_cycle_pages(cfg):
     # The red proof: the streak delays a fetch failure, it does not swallow one.
     cfg = replace(cfg, RADARR_API_KEY="x")
+    src = FakeSources(get_json=_unreachable)
     for _ in range(2):
-        assert checks.service.check_arr_queue(cfg, FakeSources(get_json=_unreachable))[
-            0
-        ]
-    ok, msg = checks.service.check_arr_queue(cfg, FakeSources(get_json=_unreachable))
+        assert checks.service.check_arr_queue(cfg, src)[0]
+    ok, msg = checks.service.check_arr_queue(cfg, src)
     assert not ok
     assert "Radarr unreachable" in msg
     assert "Errno 111" in msg

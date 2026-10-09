@@ -1,9 +1,9 @@
 """Notification-path checks for monitor-bridge — Discord webhook delivery and the SMTP backstop.
 
 Slice 7 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
-(`bridge.sources.Sources`) and the shared streak counter as `bridge.streaks.X`, so a test hands
-in a fake `src` and clears the streak dict; `discord_webhook_ok` is from-imported and patched on THIS module, where it is bound.
-`_email_probe` lives here beside `email_backstop`, the only code that mutates it. Rule and
+(`bridge.sources.Sources`) and its streak counters as `src.state` (`bridge.streaks.State`), so a
+test hands in a fake `src` and gets zeroed streaks with it; `discord_webhook_ok` is from-imported and patched on THIS module, where it is bound.
+`email_backstop` takes its cache as an argument, `src.state.email_probe` in production. Rule and
 enforcement: bridge/config.py's header.
 """
 
@@ -11,11 +11,11 @@ import smtplib
 import ssl
 import time
 import urllib.error
-from typing import TypedDict
 
 from bridge.config import Config
 from bridge.sources import Sources
 import bridge.streaks
+from bridge.streaks import StampedCache
 from bridge.common import HTTP_TIMEOUT
 from bridge.types import as_object
 from verdicts.notify import discord_webhook_ok
@@ -85,30 +85,23 @@ def _smtp_login_ok(cfg: Config) -> tuple[bool, str]:
     return True, "SMTP login ok (%s)" % cfg.SMTP_USER
 
 
-class _EmailProbeCache(TypedDict):
-    ts: float
-    ok: bool
-    msg: str
-
-
-_email_probe: _EmailProbeCache = {"ts": 0.0, "ok": True, "msg": "not yet probed"}
-
-
-def email_backstop(cfg: Config, now: float | None = None) -> tuple[bool, str]:
+def email_backstop(
+    cfg: Config, probe: StampedCache, now: float | None = None
+) -> tuple[bool, str]:
     """Throttled deliverability probe for the alert-email 2nd channel. (ok, msg).
 
     Empty SMTP_PASSWORD -> disabled (stays up). A SUCCESS is cached for EMAIL_PROBE_INTERVAL_S (so
     Gmail doesn't see an AUTH every cycle); a FAILURE isn't cached, so it re-probes every cycle until
     it recovers — and check_discord's DISCORD_CONSECUTIVE streak rides out a transient blip before
-    paging. Module-global cache, reset on container restart, like the streak counters — no persistent
-    state needed.
+    paging. `probe` is the cache, `src.state.email_probe` in production, reset on container restart
+    like the streak counters — no persistent state needed.
     """
     if not cfg.SMTP_PASSWORD:
         return True, "email backstop disabled (no SMTP password)"
     now = now if now is not None else time.time()
-    if _email_probe["ok"] and now - _email_probe["ts"] < cfg.EMAIL_PROBE_INTERVAL_S:
+    if probe["ok"] and now - probe["ts"] < cfg.EMAIL_PROBE_INTERVAL_S:
         return True, "email backstop ok (verified %.1fh ago)" % (
-            (now - _email_probe["ts"]) / 3600
+            (now - probe["ts"]) / 3600
         )
     try:
         ok, msg = _smtp_login_ok(cfg)
@@ -117,9 +110,9 @@ def email_backstop(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     ) as e:  # revoked password / SMTP unreachable -> ride the check_discord streak
         ok, msg = False, "email backstop SMTP login FAILED: %s" % e
     if ok:
-        _email_probe["ts"] = now
-    _email_probe["ok"] = ok
-    _email_probe["msg"] = msg
+        probe["ts"] = now
+    probe["ok"] = ok
+    probe["msg"] = msg
     return ok, msg
 
 
@@ -165,16 +158,16 @@ def check_discord(cfg: Config, src: Sources) -> tuple[bool, str]:
             break
         valid.append(label)
     if ok:
-        e_ok, e_msg = email_backstop(cfg)
+        e_ok, e_msg = email_backstop(cfg, src.state.email_probe)
         if e_ok:
             valid.append("email")
         else:
             ok, msg = False, e_msg
     if ok:
-        bridge.streaks._down_streaks["discord"] = 0
+        src.state.down_streaks["discord"] = 0
         return True, "delivery channels valid (%s)" % ", ".join(valid)
-    bridge.streaks._down_streaks["discord"], ok, msg = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("discord", 0),
+    src.state.down_streaks["discord"], ok, msg = bridge.streaks.down_streak(
+        src.state.down_streaks.get("discord", 0),
         cfg.DISCORD_CONSECUTIVE,
         msg,
         "transient grace",

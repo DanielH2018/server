@@ -12,7 +12,9 @@ rather than reading an empty answer as a healthy estate. `FakeSources()` with no
 therefore the fake for a check that must do no I/O at all.
 
 `calls` records every query in order as `(method, args)`, for a test that asserts on the
-PromQL or URL a check sent. `log_error_counts` is inherited from `Sources`, so it reaches the
+PromQL or URL a check sent. `state` is a fresh `bridge.streaks.State`, so a test seeds or reads a
+streak or probe cache as `src.state.<field>` rather than through a module global. A test whose
+cycles need different answers builds a second fake with `FakeSources(state=first.state, ...)`. `log_error_counts` is inherited from `Sources`, so it reaches the
 `loki_vector` and `loki_count` answers with the real query shape.
 
 A module with a leading underscore rather than a `conftest.py` fixture, for the reason
@@ -22,6 +24,7 @@ A module with a leading underscore rather than a `conftest.py` fixture, for the 
 from collections.abc import Callable
 
 from bridge.sources import Sources
+from bridge.streaks import State
 
 _METHODS = (
     "prom_scalar",
@@ -41,7 +44,9 @@ class FakeSources(Sources):
       calls: `(method, args)` for every query, in the order the check sent them.
     """
 
-    def __init__(self, **answers: Callable[..., object]) -> None:
+    def __init__(
+        self, state: State | None = None, **answers: Callable[..., object]
+    ) -> None:
         unknown = set(answers) - set(_METHODS)
         if unknown:
             raise TypeError("FakeSources has no method %s" % ", ".join(sorted(unknown)))
@@ -49,6 +54,10 @@ class FakeSources(Sources):
         # argument, never through the sources.
         self._answers = answers
         self.calls: list[tuple[str, tuple]] = []
+        # A zeroed `State` per fake, as the live `Sources` builds one per process: a test that
+        # runs a check twice on one fake sees its streak advance, and the next test starts at 0.
+        # A test whose two cycles need different answers passes the first fake's `state` on.
+        self.state = State() if state is None else state
 
     def _answer(self, method: str, *args: object, **kwargs: object):
         self.calls.append((method, args))

@@ -9,7 +9,7 @@ and a cold start, and neither takes ten minutes.
 Its own module for the same reason `cluster_rollout.py` is one: `checks/cluster.py` sits at
 the 600-line cap the module-length ratchet enforces. Same layering — config as `cfg.X`, the
 queries through the `src` argument (`bridge.sources.Sources`) `check_k8s_workloads` passes to its
-other arms, the shared streak counter as `bridge.streaks.X`.
+other arms, and the down-streak table it passes in as `streaks` (`src.state.down_streaks`).
 """
 
 from bridge.config import Config
@@ -47,7 +47,7 @@ def zero_available_offenders(cfg: Config, src: Sources) -> list[tuple[dict, floa
 
 
 def held_zero_available_offenders(
-    cfg: Config, offenders: list[tuple[dict, float]]
+    cfg: Config, streaks: dict[str, int], offenders: list[tuple[dict, float]]
 ) -> tuple[list[tuple[dict, float]], str]:
     """Hold zero-available offenders back until they persist K8S_ZERO_AVAILABLE_CONSECUTIVE cycles.
 
@@ -58,15 +58,15 @@ def held_zero_available_offenders(
     are what this grace exists for.
     """
     if not offenders:
-        bridge.streaks._down_streaks["k8s_zero_available"] = 0
+        streaks["k8s_zero_available"] = 0
         return offenders, ""
     count, held, note = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("k8s_zero_available", 0),
+        streaks.get("k8s_zero_available", 0),
         cfg.K8S_ZERO_AVAILABLE_CONSECUTIVE,
         "no available replicas: %s" % stalled_rollout_names(offenders),
         "cold start",
     )
-    bridge.streaks._down_streaks["k8s_zero_available"] = count
+    streaks["k8s_zero_available"] = count
     if held:
         return [], note
     return offenders, ""

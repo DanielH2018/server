@@ -188,6 +188,7 @@ def test_hysteresis_holds_the_first_cycle_then_pages(armed):
 def test_a_clean_cycle_resets_the_streak(armed):
     breaching = _sources([(RC, 55.0)], [])
     quiet = _sources([(RC, 0.1)], [])
+    quiet.state = breaching.state  # two fakes, one process
     assert checks.host.check_mem(armed, breaching)[0] is True
     assert checks.host.check_mem(armed, quiet)[0] is True
     assert checks.host.check_mem(armed, breaching)[0] is True

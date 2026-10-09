@@ -35,8 +35,8 @@ an absent key records a problem the same way a malformed one does. A default sur
 key the template does not render. `tests/test_config_reads_the_rendered_env.py` holds both
 directions.
 
-Constants only. The mutable per-check state (`_n8n_streaks`, `_cadvisor_streaks`,
-`_host_origin_streaks`, `_down_streaks`) stays with the code that mutates it.
+Constants only. The mutable per-check state (the streak counters and probe caches) is
+`bridge.streaks.State`, which a check reads as `src.state` (#3866).
 """
 
 from collections.abc import Mapping

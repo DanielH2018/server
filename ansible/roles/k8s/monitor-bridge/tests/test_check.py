@@ -128,8 +128,8 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch, cfg):
 
 # ── check_pvc_fullness ──────────────────────────────────────────────────────
 #
-# conftest.py's autouse _down_streaks reset is directory-wide, so these fixtures behave the same
-# here as beside check_longhorn_volumes in test_check_longhorn.py.
+# Each `_arm_pvc` call builds a fresh `FakeSources` and so a zeroed `src.state`; a test whose
+# cycles span two calls hands the first fake's state to the second.
 
 
 def _pvc_series(pvc, pct, namespace="homelab"):
@@ -245,11 +245,13 @@ def test_pvc_breach_outranks_a_coverage_shortfall(cfg):
 
 
 def test_pvc_recovery_resets_the_census_streak(cfg):
-    cfg, src = _arm_pvc(cfg, [_pvc_series("uptime-kuma-data", 38.6)], claims=27.0)
-    checks.storage.check_pvc_fullness(cfg, src)
+    cfg, short = _arm_pvc(cfg, [_pvc_series("uptime-kuma-data", 38.6)], claims=27.0)
+    checks.storage.check_pvc_fullness(cfg, short)
+    assert short.state.down_streaks["pvc_fullness"] == 1
     cfg, src = _arm_pvc(cfg, [_pvc_series("uptime-kuma-data", 38.6)])
+    src.state = short.state
     assert checks.storage.check_pvc_fullness(cfg, src)[0]
-    assert bridge.streaks._down_streaks.get("pvc_fullness", 0) == 0
+    assert src.state.down_streaks["pvc_fullness"] == 0
 
 
 def test_pvc_fullness_is_gated_by_the_prometheus_gate():

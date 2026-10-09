@@ -55,12 +55,15 @@ def vectors():
 
 
 @pytest.fixture
-def run(vectors):
+def run(vectors, state):
     """Call the check against a `FakeSources` answering from the two tables."""
 
     def _run(kcfg, counts=HEALTHY_COUNTS):
+        # One `state` across every call: each call is one cycle of the same process.
         src = FakeSources(
-            prom_vector=partial(_vector, vectors), prom_scalar=partial(_scalar, counts)
+            state=state,
+            prom_vector=partial(_vector, vectors),
+            prom_scalar=partial(_scalar, counts),
         )
         return check_k8s_workloads(kcfg, src)
 

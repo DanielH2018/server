@@ -18,22 +18,21 @@ from _fake_sources import FakeSources
 # HEALTHY answer and an empty query is indistinguishable from it. Each pair below is one input the floor must accept and one it must reject.
 
 
-def _blind():
+def _blind(state=None):
     """Sources whose every vector query answers empty: cAdvisor scraped by nobody."""
-    return FakeSources(prom_vector=lambda *a, **k: [])
+    return FakeSources(state=state, prom_vector=lambda *a, **k: [])
 
 
-def _covered():
+def _covered(state=None):
     """Sources answering 40 pods at zero offenders: a healthy, fully covered cycle."""
     return FakeSources(
-        prom_vector=lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)]
+        state=state,
+        prom_vector=lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
     )
 
 
-def _reset_cadvisor(cfg, monkeypatch, min_pods=20, consecutive=2):
-    cfg = replace(cfg, CADVISOR_PODS_MIN=min_pods, CADVISOR_CONSECUTIVE=consecutive)
-    monkeypatch.setattr(checks.cluster, "_cadvisor_streaks", {})
-    return cfg
+def _floor(cfg, min_pods=20, consecutive=2):
+    return replace(cfg, CADVISOR_PODS_MIN=min_pods, CADVISOR_CONSECUTIVE=consecutive)
 
 
 def test_cadvisor_coverage_above_the_floor_is_clean():
@@ -54,62 +53,65 @@ def test_cadvisor_empty_vector_is_flagged():
     assert "matching nothing" in msg
 
 
-def test_a_covered_vector_with_zero_offenders_still_reads_clean(monkeypatch, cfg):
+def test_a_covered_vector_with_zero_offenders_still_reads_clean(cfg):
     # The inversion this floor could most easily introduce: "no OOM kills" is the common case and
     # must stay green. Without this the floor would page on every healthy cycle.
-    cfg = _reset_cadvisor(cfg, monkeypatch)
+    cfg = _floor(cfg)
     ok, msg = checks.cluster.check_oom(cfg, _covered())
     assert ok is True
     assert "no OOM kills" in msg
 
 
-def test_check_oom_reads_unknown_not_green_when_blind(monkeypatch, cfg):
-    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=1)
+def test_check_oom_reads_unknown_not_green_when_blind(cfg):
+    cfg = _floor(cfg, consecutive=1)
     ok, msg = checks.cluster.check_oom(cfg, _blind())
     assert ok is False
     assert "UNKNOWN" in msg
 
 
-def test_check_restarts_reads_unknown_not_green_when_blind(monkeypatch, cfg):
-    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=1)
+def test_check_restarts_reads_unknown_not_green_when_blind(cfg):
+    cfg = _floor(cfg, consecutive=1)
     ok, msg = checks.cluster.check_restarts(cfg, _blind())
     assert ok is False
     assert "UNKNOWN" in msg
 
 
-def test_check_cpu_throttle_reads_unknown_not_green_when_blind(monkeypatch, cfg):
-    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=1)
+def test_check_cpu_throttle_reads_unknown_not_green_when_blind(cfg):
+    cfg = _floor(cfg, consecutive=1)
     ok, msg = checks.cluster.check_cpu_throttle(cfg, _blind())
     assert ok is False
     assert "UNKNOWN" in msg
 
 
-def test_the_floor_holds_up_for_one_cycle_before_paging(monkeypatch, cfg):
+def test_the_floor_holds_up_for_one_cycle_before_paging(cfg):
     # A kubelet restart briefly empties cAdvisor; three monitors going red together on one
     # transient is the storm the gates exist to prevent.
-    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=2)
-    ok, msg = checks.cluster.check_oom(cfg, _blind())
+    cfg = _floor(cfg, consecutive=2)
+    src = _blind()
+    ok, msg = checks.cluster.check_oom(cfg, src)
     assert ok is True
     assert "cAdvisor coverage shortfall 1/2" in msg
-    ok, _ = checks.cluster.check_oom(cfg, _blind())
+    ok, _ = checks.cluster.check_oom(cfg, src)
     assert ok is False
 
 
-def test_each_check_ages_its_shortfall_independently(monkeypatch, cfg):
+def test_each_check_ages_its_shortfall_independently(cfg):
     # A single shared counter would take three increments per cycle — all three checks run in the
     # same run_once pass — and blow through CADVISOR_CONSECUTIVE inside the first one.
-    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=2)
-    assert checks.cluster.check_oom(cfg, _blind())[0] is True
-    assert checks.cluster.check_restarts(cfg, _blind())[0] is True
-    assert checks.cluster.check_cpu_throttle(cfg, _blind())[0] is True
-    assert checks.cluster._cadvisor_streaks == {"oom": 1, "restarts": 1, "cpu": 1}
+    cfg = _floor(cfg, consecutive=2)
+    src = _blind()
+    assert checks.cluster.check_oom(cfg, src)[0] is True
+    assert checks.cluster.check_restarts(cfg, src)[0] is True
+    assert checks.cluster.check_cpu_throttle(cfg, src)[0] is True
+    assert src.state.cadvisor_streaks == {"oom": 1, "restarts": 1, "cpu": 1}
 
 
-def test_a_covered_cycle_resets_the_streak(monkeypatch, cfg):
-    cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=2)
-    checks.cluster.check_oom(cfg, _blind())
-    assert checks.cluster.check_oom(cfg, _covered())[0] is True
-    assert checks.cluster._cadvisor_streaks["oom"] == 0
+def test_a_covered_cycle_resets_the_streak(cfg):
+    cfg = _floor(cfg, consecutive=2)
+    blind = _blind()
+    checks.cluster.check_oom(cfg, blind)
+    assert checks.cluster.check_oom(cfg, _covered(blind.state))[0] is True
+    assert blind.state.cadvisor_streaks["oom"] == 0
 
 
 def test_cadvisor_floor_is_overridable_from_the_env_secret():

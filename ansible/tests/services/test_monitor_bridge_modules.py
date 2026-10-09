@@ -158,7 +158,7 @@ def _patched_pairs(test_files=None, module_names=None):
                     target, attr = node.args[0], node.args[1]
                     if isinstance(attr, ast.Constant) and isinstance(attr.value, str):
                         _add(target, attr.value)
-                # module.NAME.mutate(...) — conftest's check._down_streaks.clear()
+                # module.NAME.mutate(...) — e.g. a test's checks.host.SOME_DICT.clear()
                 if isinstance(fn, ast.Attribute) and isinstance(
                     fn.value, ast.Attribute
                 ):

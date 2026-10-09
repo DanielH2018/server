@@ -12,7 +12,6 @@ with an `up` vector rather than patching the module bridge.net.
 
 from dataclasses import replace
 
-import bridge.streaks
 import pytest
 from checks.cluster import check_cluster_targets
 from _fake_sources import FakeSources
@@ -63,10 +62,16 @@ def test_the_third_straight_down_cycle_pages(ccfg):
 def test_one_ok_cycle_resets_the_streak(ccfg):
     # Without the reset a check that flickers down-up-down-up over hours would accumulate to the
     # threshold and page, which is the opposite of what the gate is for.
-    check_cluster_targets(ccfg, up_vector(1, 1, 1, 0))
-    check_cluster_targets(ccfg, up_vector(1, 1, 1, 1))
-    assert bridge.streaks._down_streaks["cluster_targets"] == 0
-    ok, msg = check_cluster_targets(ccfg, up_vector(1, 1, 1, 0))
+    down, up, down_again = (
+        up_vector(1, 1, 1, 0),
+        up_vector(1, 1, 1, 1),
+        up_vector(1, 1, 1, 0),
+    )
+    up.state = down_again.state = down.state  # one process, three cycles
+    check_cluster_targets(ccfg, down)
+    check_cluster_targets(ccfg, up)
+    assert down.state.down_streaks["cluster_targets"] == 0
+    ok, msg = check_cluster_targets(ccfg, down_again)
     assert ok, msg
     assert "down streak 1/3" in msg
 
