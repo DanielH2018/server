@@ -280,7 +280,9 @@ claude_code_lander_approver: DanielH2018
 # deletes or renames out of a path under one of these prefixes, unless the approver above has
 # approved its head. Plain prefixes, so `scripts/deploy_tools/land` covers land.sh, land.py and
 # land_lib/.
-# Not covered: the shared modules land.sh imports from scripts/lib/ and elsewhere.
+# The modules the landing process imports from scripts/lib/ and elsewhere are not listed here.
+# The policy derives them at landing time from what it has loaded (land_lib/policy.py,
+# gate_hits), so this list holds only what no import walk can see.
 claude_code_lander_approval_paths:
   # This role, which defines the agent user, its token, this list and the lander itself.
   - ansible/roles/setup/claude_code/
@@ -302,3 +304,9 @@ claude_code_lander_approval_paths:
   - .github/
   # The landing policy and the code that runs it.
   - scripts/deploy_tools/land
+  # The interpreter and packages `uv run` syncs before land.py starts. A package can run code
+  # at interpreter start through a .pth file, before any policy check.
+  - pyproject.toml
+  - uv.lock
+  - uv.toml
+  - .python-version

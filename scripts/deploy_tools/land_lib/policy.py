@@ -9,7 +9,9 @@ which is every interactive session and renovate-agent's lander:
   the agent.
 - `LAND_APPROVAL_PATHS`: a file of path prefixes, one per line. A PR changing a path under one
   of them is refused. Those are the paths that widen the agent's own authority: its roles, its
-  credentials, the rulesets' drift checks and this code.
+  credentials, the rulesets' drift checks and this code. A PR changing a module this landing
+  process has imported is refused the same way, and so is a new file that would shadow one;
+  see `gate_hits`.
 - `LAND_APPROVER`: a GitHub login. A PR the approval list refuses lands anyway when this
   login's latest review is an approval of the head SHA the checks read. A later
   changes-requested or a dismissal undoes it, and so does a push: the approval then names an
@@ -27,8 +29,9 @@ approval as well.
 
 import subprocess
 import sys as _sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path as _Path
+from types import ModuleType
 from typing import NoReturn
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
@@ -49,6 +52,10 @@ FILE_CAP = 3000
 # The review states that change whether a PR is approved. A COMMENTED review after an
 # approval leaves it approved, as it does for GitHub's own review rule.
 VERDICT_STATES = ("APPROVED", "CHANGES_REQUESTED", "DISMISSED")
+# The checkout this process runs from: the lander's, which only fast-forwards to master.
+CHECKOUT = _Path(__file__).resolve().parents[3]
+# The site module imports these from any directory on sys.path when the interpreter starts.
+STARTUP_MODULES = frozenset({"sitecustomize", "usercustomize"})
 
 
 def read_approval_paths(path: str) -> list[str]:
@@ -95,6 +102,60 @@ def approval_hits(files: list[PrFile], prefixes: list[str]) -> list[str]:
             if name and name not in hits and name.startswith(tuple(prefixes)):
                 hits.append(name)
     return hits
+
+
+def gate_hits(
+    files: list[PrFile],
+    checkout: _Path,
+    modules: Mapping[str, ModuleType | None],
+    search_dirs: Iterable[str],
+) -> list[str]:
+    """Each changed path that would change the code running this landing, in order.
+
+    `modules` and `search_dirs` are `sys.modules` and `sys.path` when the policy runs. By then
+    land.py has imported every module the checks use, so the loaded set is the gate's own
+    import closure, with no hand-kept list to drift (#3888). A path is a hit when it is the
+    source of a loaded module, or when it would import under a name already loaded from a
+    directory on `sys.path`. The second form catches a new `scripts/json.py` or
+    `scripts/lib/__init__.py`, which would shadow `json` or turn the `lib` namespace package
+    into code. A module first imported after the checks cannot change their verdict.
+    """
+    loaded: set[str] = set()
+    for module in modules.values():
+        source = getattr(module, "__file__", None)
+        if not source:
+            continue
+        path = _Path(source).resolve()
+        if path.is_relative_to(checkout):
+            loaded.add(path.relative_to(checkout).as_posix())
+    names = set(modules) | STARTUP_MODULES
+    dirs = []
+    for entry in search_dirs:
+        path = _Path(entry or ".").resolve()
+        if path.is_relative_to(checkout):
+            prefix = path.relative_to(checkout).as_posix()
+            dirs.append("" if prefix == "." else f"{prefix}/")
+    hits: list[str] = []
+    for entry in files:
+        for name in (entry.get("filename"), entry.get("previous_filename")):
+            if name and name not in hits and _runs_in_gate(name, loaded, names, dirs):
+                hits.append(name)
+    return hits
+
+
+def _runs_in_gate(
+    path: str, loaded: set[str], names: set[str], dirs: list[str]
+) -> bool:
+    if path in loaded:
+        return True
+    if not path.endswith(".py"):
+        return False
+    for prefix in dirs:
+        if path.startswith(prefix):
+            dotted = path[len(prefix) : -len(".py")].replace("/", ".")
+            if dotted.removesuffix(".__init__") in names:
+                return True
+    return False
 
 
 def approval_problem(reviews: list[PrReview], approver: str, head: str) -> str:
@@ -188,6 +249,11 @@ def check(ln: Landing) -> str:
         if len(files) >= FILE_CAP:
             _refuse(ln, f"it changes {len(files)} files, at GitHub's listing cap")
         hits = approval_hits(files, prefixes)
+        hits += [
+            path
+            for path in gate_hits(files, CHECKOUT, _sys.modules, _sys.path)
+            if path not in hits
+        ]
         if hits:
             why = (
                 f"it changes paths that need the operator's approval: {', '.join(hits)}"
