@@ -79,17 +79,17 @@ def completed_backup_records(backups: list[dict]) -> list[dict]:
     reaper's own path, not a mode's.
     """
     records = []
-    for b in backups:
-        name, vol, created, job, state = logic.backup_fields(b)
-        if not name or not vol or state != logic.longhorn_backups.COMPLETED:
+    for item in backups:
+        backup = logic.longhorn_backups.from_item(item)
+        if not backup.name or not backup.volume or not backup.is_completed:
             continue
         records.append(
             {
-                "name": name,
-                "vol": vol,
-                "created": created,
-                "job": job,
-                "claim": backup_claim(b),
+                "name": backup.name,
+                "vol": backup.volume,
+                "created": backup.created,
+                "job": backup.job,
+                "claim": backup_claim(item),
             }
         )
     return records

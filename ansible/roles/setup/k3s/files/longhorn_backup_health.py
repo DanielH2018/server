@@ -328,9 +328,9 @@ def main(now: float | None = None) -> int:
     # and only the green summary prints an age.
     age_s = 0.0
     if backup_list is not None:
-        stamps = [b.created for b in backup_list if b.created.strip()]
+        newest = backups.newest(backup_list)
         fresh_problem, age_s = logic.check_freshness(
-            max(stamps) if stamps else None, now_s, MAX_AGE_S, MAX_AGE_HOURS
+            newest.created if newest else None, now_s, MAX_AGE_S, MAX_AGE_HOURS
         )
         if fresh_problem:
             problems.append(fresh_problem)

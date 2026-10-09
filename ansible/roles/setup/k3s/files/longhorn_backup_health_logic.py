@@ -120,8 +120,8 @@ def check_freshness(
 ) -> tuple[tuple[int, str] | None, float]:
     """Whether the newest backup is fresh enough, as (problem_or_None, age_s).
 
-    `newest_ts` is the lexicographically-newest snapshotCreatedAt across every Backup (mirrors
-    `sort -r | head -1` on RFC3339 strings).
+    `newest_ts` is the snapshotCreatedAt of `longhorn_backups.newest` across every Backup:
+    the latest instant, not the last string, so mixed offsets cannot pick an older one.
     """
     if not newest_ts:
         return (1, "no backups exist"), 0
@@ -215,7 +215,11 @@ def check_tier(
         latest_candidates = [
             ts for (v, ts, j) in coverage_rows if v == vol and ts and j == job
         ]
-        latest = max(latest_candidates) if latest_candidates else None
+        latest = (
+            max(latest_candidates, key=longhorn_backups.stamp_order)
+            if latest_candidates
+            else None
+        )
 
         if latest is None:
             created_s = rfc3339_to_epoch(created) or 0

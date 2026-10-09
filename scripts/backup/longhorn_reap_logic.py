@@ -277,6 +277,10 @@ def newest_first(
 ) -> list[dict]:
     """Sort by volume ascending, then creation time descending, then name ascending.
 
+    Time is `longhorn_backups.stamp_order`, the instant a stamp names rather than its text,
+    so a mixed-offset stamp cannot jump the newest-first order. A stamp that does not parse
+    sorts as the oldest.
+
     Three stable sorts, least-significant first: `sort -t'|' -k2,2 -k3,3r` only pins volume
     ascending and time descending explicitly; GNU sort breaks a remaining tie (same volume,
     same creation time) by falling back to whole-line comparison, and since both fields already
@@ -285,7 +289,11 @@ def newest_first(
     that priority order without a composite key.
     """
     by_name = sorted(records, key=lambda r: r[name_key])
-    by_time = sorted(by_name, key=lambda r: r[created_key], reverse=True)
+    by_time = sorted(
+        by_name,
+        key=lambda r: longhorn_backups.stamp_order(r[created_key]),
+        reverse=True,
+    )
     return sorted(by_time, key=lambda r: r[vol_key])
 
 
@@ -326,12 +334,6 @@ class BackupClassification:
     orphaned: list[tuple[str, str, str, str]] = field(default_factory=list)
 
 
-def backup_fields(b: dict) -> tuple[str, str, str, str, str]:
-    """(name, volume, snapshotCreatedAt, RecurringJob, state) of one Backup CR item."""
-    backup = longhorn_backups.from_item(b)
-    return backup.name, backup.volume, backup.created, backup.job, backup.state
-
-
 def classify_backups(
     backups: list[dict], owner: dict[str, str], existing_volumes: set[str]
 ) -> BackupClassification:
@@ -353,9 +355,8 @@ def classify_backups(
         rule 2, checked here rather than in the entry point because the entry point reads the
         backup list only after its own `abort_reason` call.
     """
-    valid = [f for f in (backup_fields(b) for b in backups) if f[0] and f[1]]
-    completed = [f for f in valid if f[4] == longhorn_backups.COMPLETED]
-    labelled = [f for f in completed if f[3]]
+    valid = [b for b in longhorn_backups.from_items(backups) if b.name and b.volume]
+    labelled = [b for b in longhorn_backups.completed(valid) if b.job]
 
     # `labelled` is the set at risk: the orphan loop below iterates it and nothing else. Only
     # rule 2 is asked -- the entry point already checked ownership against the real volume list,
@@ -365,15 +366,17 @@ def classify_backups(
         raise ReapAbort(abort)
 
     current_tier_count: dict[str, int] = {}
-    for _name, vol, _created, job, _state in labelled:
-        if job == owner.get(vol, ""):
-            current_tier_count[vol] = current_tier_count.get(vol, 0) + 1
+    for backup in labelled:
+        if backup.job == owner.get(backup.volume, ""):
+            current_tier_count[backup.volume] = (
+                current_tier_count.get(backup.volume, 0) + 1
+            )
 
     result = BackupClassification()
     seen_floor: set[str] = set()
     records = [
-        {"name": n, "vol": v, "created": c, "job": j, "state": s}
-        for n, v, c, j, s in labelled
+        {"name": b.name, "vol": b.volume, "created": b.created, "job": b.job}
+        for b in labelled
     ]
     for b in newest_first(records, "vol", "created"):
         name, vol, created, job = b["name"], b["vol"], b["created"], b["job"]
@@ -389,14 +392,12 @@ def classify_backups(
             result.kept.append((name, vol, "current tier has produced no backup"))
             continue
 
-        if not created:
-            # `newest_first` sorts `created` as a raw string, and "" sorts as the OLDEST value
-            # in a descending sort -- an empty `status.snapshotCreatedAt` therefore sorts LAST
-            # within its volume's group and can never win the FLOOR 2 newest-stray slot above,
-            # leaving it to fall through to `.candidates` and be deleted on the strength of an
-            # unknown age. Longhorn populates this field on completion, so this is unreached in
-            # practice; parity with bash's `sort -k3,3r` is what asks for it anyway. Keep it
-            # rather than guess.
+        if parse_rfc3339_epoch(created) is None:
+            # `newest_first` sorts a stamp that does not parse -- "" included -- as the OLDEST,
+            # so it sorts LAST within its volume's group and can never win the FLOOR 2
+            # newest-stray slot below, leaving it to fall through to `.candidates` and be
+            # deleted on the strength of an unknown age. Longhorn populates this field on
+            # completion, so this is unreached in practice. Keep it rather than guess.
             result.kept.append((name, vol, "unparseable snapshotCreatedAt"))
             continue
 

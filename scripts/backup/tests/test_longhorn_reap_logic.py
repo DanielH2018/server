@@ -340,8 +340,8 @@ def test_classify_backups_is_clean_when_an_empty_volume_list_has_no_backups_to_l
 
 
 def test_a_stray_with_an_empty_snapshotcreatedat_is_kept_not_reaped():
-    # `newest_first` sorts `created` as a raw string; "" sorts as the OLDEST value in a
-    # descending sort, so a stray with an empty timestamp would lose the FLOOR 2 newest-stray
+    # `newest_first` sorts a stamp that does not parse, "" included, as the OLDEST, so a
+    # stray with an empty timestamp would lose the FLOOR 2 newest-stray
     # slot to a real-timestamped sibling and fall through to `.candidates` on the strength of an
     # unknown age. Parity with bash's `sort -k3,3r`. classify_backups keeps it outright.
     owner = {"vol-a": "weekly-backup-d3"}
@@ -362,15 +362,15 @@ def test_creation_order_decides_the_floor_not_listing_order():
     owner = {"vol-a": "weekly-backup-d3"}
     backups = [
         _backup("current-1", "vol-a", "2026-08-20T00:00:00Z", "weekly-backup-d3"),
-        _backup("stray-1", "vol-a", "2026-08-16T00:00:00Z", "daily-backup"),
-        _backup("stray-2", "vol-a", "2026-08-17T00:00:00Z", "daily-backup"),
+        _backup("stray-1", "vol-a", "2026-08-16T23:00:00Z", "daily-backup"),
+        _backup("stray-2", "vol-a", "2026-08-16T22:30:00-02:00", "daily-backup"),
     ]
     forward = logic.classify_backups(backups, owner, existing_volumes={"vol-a"})
     backward = logic.classify_backups(
         list(reversed(backups)), owner, existing_volumes={"vol-a"}
     )
-    # stray-2 (08-17) is the newer stray, so it is kept as the FLOOR 2 floor and stray-1
-    # (08-16) is the sole candidate — regardless of the order the two arrived in.
+    # stray-2 (00:30Z on 08-17) is the newer stray though its text sorts first, so it is the
+    # FLOOR 2 floor and stray-1 the sole candidate, whatever order the two arrived in.
     assert (
         {n for n, *_ in forward.kept} == {n for n, *_ in backward.kept} == {"stray-2"}
     )

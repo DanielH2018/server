@@ -39,11 +39,17 @@ def test_from_item_reads_a_missing_field_as_empty_not_none():
     assert (backup.name, backup.volume, backup.created, backup.job) == ("", "", "", "")
 
 
-def test_created_epoch_parses_fractional_seconds():
-    """The stamp that once parsed in one module and returned None in another (#3735)."""
-    stamp = backups.from_item(_item(snapshotCreatedAt="2026-10-01T03:30:00.123456Z"))
-    assert stamp.created_epoch == 1790825400.0
-    assert backups.from_item(_item(snapshotCreatedAt="")).created_epoch is None
+def test_newest_is_the_latest_instant_not_the_last_string():
+    """`04:30+01:00` is 03:30Z: text comparison picks it over 03:45Z, time does not (#3735)."""
+    items = [
+        _item(snapshotCreatedAt="2026-10-01T04:30:00+01:00"),
+        _item(snapshotCreatedAt="2026-10-01T03:45:00.123456Z"),
+        _item(snapshotCreatedAt="not a stamp"),
+        _item(snapshotCreatedAt=""),
+    ]
+    newest = backups.newest(backups.from_items(items))
+    assert newest is not None and newest.created == "2026-10-01T03:45:00.123456Z"
+    assert backups.newest(backups.from_items([_item(snapshotCreatedAt="")])) is None
 
 
 def test_completed_keeps_only_completed_backups():

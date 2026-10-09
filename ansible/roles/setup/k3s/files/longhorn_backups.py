@@ -78,7 +78,7 @@ class Backup:
         name: `.metadata.name`.
         volume: `.status.volumeName`.
         created: `.status.snapshotCreatedAt`, raw. Longhorn writes it with no format
-            guarantee, so `created_epoch` is the parsed form and this is what a sort sees.
+            guarantee, so order stamps with `stamp_order`, never by comparing the text.
         state: `.status.state`, such as `Completed`, `InProgress` or `Error`.
         job: `.status.labels.RecurringJob`, the job that produced it; empty for a manual one.
         size: `.status.size`, a decimal byte count as a string.
@@ -92,9 +92,9 @@ class Backup:
     size: str
 
     @property
-    def created_epoch(self) -> float | None:
-        """`created` in seconds since the epoch, or None when it does not parse."""
-        return host_lib.rfc3339_to_epoch(self.created)
+    def is_completed(self) -> bool:
+        """Whether Longhorn finished it, which a restore needs."""
+        return self.state == COMPLETED
 
 
 def from_item(item: dict) -> Backup:
@@ -117,4 +117,24 @@ def from_items(items: list[dict]) -> list[Backup]:
 
 def completed(backups: list[Backup]) -> list[Backup]:
     """The backups Longhorn finished, which are the only ones a restore can use."""
-    return [b for b in backups if b.state == COMPLETED]
+    return [b for b in backups if b.is_completed]
+
+
+def stamp_order(stamp: str) -> tuple[bool, float, str]:
+    """A sort key that orders RFC3339 stamps by the time they name, latest last.
+
+    Comparing the text is wrong once the formats mix: `04:30:00+01:00` sorts after
+    `03:45:00Z` although it is the earlier instant. A stamp that does not parse sorts before
+    every one that does, so it never wins a "newest" pick. Ties within one second fall back to
+    the text, because the parser drops fractional seconds.
+    """
+    epoch = host_lib.rfc3339_to_epoch(stamp)
+    return (epoch is not None, epoch or 0.0, stamp)
+
+
+def newest(backups: list[Backup]) -> Backup | None:
+    """The backup with the latest `created` time, or None when none carries a stamp."""
+    stamped = [b for b in backups if b.created.strip()]
+    if not stamped:
+        return None
+    return max(stamped, key=lambda b: stamp_order(b.created))
