@@ -730,7 +730,8 @@
 
 - name: Create the eval-run state directory (box only)
   tags: [crons, evals]
-  # eval-run keeps a failed commit's log here, and the sweep it could not publish beside it.
+  # eval-run keeps a failed commit's log here, the sweep it could not publish beside it, and
+  # the per-run reports of its last few sweeps under sweeps/ (#4019).
   # Outside the checkout for the same reason as the docs-refresh directory above: a file written
   # under /home/{{ sys_user }}/server would be untracked dirt, parking gitops-deploy exactly as
   # the dirt it records does. Owned by the cron user because that cron runs without become.

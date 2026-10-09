@@ -31,7 +31,7 @@ CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 
 # The functions this module sources. Named rather than globbed: a rename would otherwise leave
 # every test below sourcing an empty string and passing on nothing at all.
-SOURCED = ("say_failure", "keep_failure_log", "restore_history")
+SOURCED = ("say_failure", "keep_failure_log", "keep_sweep_output", "restore_history")
 
 # A bare `git reset` body, kept as a fixture so the tests that accept the real one can be shown to
 # reject something. Without it every assertion below would pass on a `git reset` that never
@@ -85,6 +85,8 @@ def _bash(
         "STAMP_DIR": str(stamp_dir),
         "COMMIT_FAILED_LOG": str(stamp_dir / "last-commit-failure.log"),
         "UNPUBLISHED_HISTORY": str(stamp_dir / "unpublished-history.json"),
+        "SWEEP_ARCHIVE": str(stamp_dir / "sweeps"),
+        "SWEEPS_KEPT": "8",
     }
     return run(
         ["bash", "-uo", "pipefail", "-c", f"{prelude}\n{script}"], cwd=cwd, env=env
@@ -344,3 +346,63 @@ def test_the_state_directory_is_created_outside_the_checkout():
         "and cannot create it itself"
     )
     assert 'STAMP_DIR="/var/lib/homelab/eval-run.d"' in SCRIPT
+
+
+def _sweep(tmp_path: Path, n: int) -> tuple[Path, Path]:
+    """A finished sweep's temp output: two agents' --json reports and the console log."""
+    reports, log = tmp_path / f"reports{n}", tmp_path / f"console{n}.log"
+    reports.mkdir()
+    (reports / "deploy.json").write_text(
+        f'[{{"case": "c{n}", "reason": "judge said no"}}]\n'
+    )
+    (reports / "review.json").write_text("[]\n")
+    log.write_text(f"FAIL deploy/c{n}: assertion failed\n")
+    return reports, log
+
+
+def _keep(tmp_path: Path, n: int, archive: Path) -> None:
+    reports, log = _sweep(tmp_path, n)
+    # `date` is pinned per sweep so the archive names are distinct and ordered, as a week apart.
+    _bash(
+        f"logger() {{ :; }}; date() {{ printf '20261{n:03d}T020000Z'; }}; "
+        f"REPORT_DIR={reports}; LOG={log}; keep_sweep_output",
+        tmp_path,
+        archive.parent,
+    ).check_returncode()
+
+
+def test_a_sweep_keeps_its_per_run_reports_and_console_log(tmp_path):
+    """ACCEPT: the reports and the log naming each failing run survive the temp dirs (#4019)."""
+    stamp = tmp_path / "stamp"
+    _keep(tmp_path, 1, stamp / "sweeps")
+    (kept,) = (stamp / "sweeps").iterdir()
+    assert "judge said no" in (kept / "deploy.json").read_text()
+    assert (kept / "review.json").exists()
+    assert "FAIL deploy/c1" in (kept / "console.log").read_text()
+
+
+def test_the_sweep_archive_keeps_only_the_newest_sweeps(tmp_path):
+    """REJECT: the oldest sweeps are pruned, so the archive cannot grow without bound."""
+    stamp = tmp_path / "stamp"
+    for n in range(1, 11):
+        _keep(tmp_path, n, stamp / "sweeps")
+    kept = sorted(p.name for p in (stamp / "sweeps").iterdir())
+    assert len(kept) == 8, kept
+    assert kept[0] == "20261003T020000Z", (
+        "the two oldest sweeps should be the ones pruned"
+    )
+
+
+def test_the_sweep_is_kept_before_anything_overwrites_its_console_log():
+    """The suite and the commit both write `>"$LOG"`, so a keep at exit holds no sweep lines.
+
+    The call must sit after the agent loop and before the first command that truncates $LOG.
+    """
+    call = SCRIPT.index("\nkeep_sweep_output\n")
+    assert SCRIPT.index('--json "$REPORT_DIR/$agent.json"') < call, (
+        "keep_sweep_output runs before the sweep has written anything"
+    )
+    first_truncate = re.search(r'[^>]>"\$LOG"', SCRIPT)
+    assert first_truncate and call < first_truncate.start(), (
+        "keep_sweep_output runs after $LOG was overwritten; it keeps no sweep output"
+    )

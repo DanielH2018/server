@@ -232,7 +232,8 @@
     # one level above playbook_dir (ansible/) — a `{{ playbook_dir }}/.git/...`
     # path never exists, so prek install would re-run on every play. prek installs only the
     # pre-commit shim: prek.toml has no pre-push hook since the `pytest` one was removed
-    # (2026-10-02). A pre-push shim left from before runs no hooks.
+    # (2026-10-02). A pre-push shim left from before runs no hooks, because prek.toml pins
+    # every hook to the pre-commit stage (#4018).
     creates: "{{ playbook_dir }}/../.git/hooks/pre-commit"
   # Run as the connecting user (not the play's become: true) so the hooks are owned
   # by the repo owner, and pick up the user's uv-managed ~/.local/bin where prek lives.
