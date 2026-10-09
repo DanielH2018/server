@@ -1,6 +1,6 @@
 """The fields the lander reads from a PR's JSON, typed once where `gh_json` returns them.
 
-WHY. `gh_json` returns a `JsonValue`, and the lander read it as `dict[str, Any]`, so ty checked
+WHY. `gh_json` returns a `JsonValue`, and the lander read it as a dict of `Any`, so ty checked
 nothing about a `.get` chain on it (#3704). Each reader here narrows one shape at the boundary:
 
 - `parse_view`: `gh pr view --json <fields>`, which `Landing.view` returns.
