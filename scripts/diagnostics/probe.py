@@ -85,39 +85,19 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
 
-# The per-subcommand modules. Each `run_*` is imported here because the `handlers` table in
-# `main()` is what actually dispatches to it. `subcommands.REGISTRY` carries the same set as
-# metadata, for `--list` and for the completeness guard in
-# `scripts/diagnostics/tests/test_probe_registry.py`; it does not replace `handlers`, so
-# argparse and dispatch stay exactly as they were.
-from diagnostics.probe_lib.alerts import run_alerts
-from diagnostics.probe_lib.arr import run_arr
-from diagnostics.probe_lib.b2_ledger import (
-    run_b2_deletions,
-    run_b2_spend,
-)
 from diagnostics.probe_lib.cli_parser import _build_parser
-from diagnostics.probe_lib.ha import run_ha, run_ha_state
+from diagnostics.probe_lib.curl_pipeline import plan, stream_pipeline
 from diagnostics.probe_lib.health import (
     inspect_argv,
     k8s_deploy_args,
     k8s_pods_args,
     resolve_ip,
-    run_health,
 )
-from diagnostics.probe_lib.longhorn import (
-    run_b2_budget,
-    run_b2_longhorn,
-)
-from diagnostics.probe_lib.metrics import run_query
-from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
-from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
-from diagnostics.probe_lib.curl_pipeline import plan, stream_pipeline
-from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
-from diagnostics.probe_lib.releases import run_releases
-from diagnostics.probe_lib.shed_set import run_shed_set
+
+# Every subcommand's `run_*` callable comes from here rather than from its module: `main()`
+# builds its `handlers` table from the entries flagged "handler", and reaches the four
+# `subcommands.ROUTED_IN_MAIN` ones by name.
 from diagnostics.probe_lib.subcommands import REGISTRY
-from diagnostics.probe_lib.vip_placement import run_vip_placement
 
 from lib.kubectl import WrongCluster, kubectl_argv, nodes_args
 
@@ -128,9 +108,8 @@ def main(argv=None):
     `health` and the handler-table subcommands answer directly from an API or from
     `docker inspect`/kubectl. `metric`/`loki-query` without `--json`/`--dry-run` use the
     formatted view; every other subcommand falls through to the streaming `curl` pipeline
-    built by `plan()`. `targets --pi` and `pi` are checked ahead of that fallback: plain
-    `targets` still streams, and `pi` has no streaming form, so only these need a real
-    handler.
+    built by `plan()`. `targets --pi` is checked ahead of that fallback, because plain
+    `targets` still streams.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
     # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are
@@ -163,32 +142,14 @@ def main(argv=None):
                 )
                 print(" ".join(kubectl_argv(*k8s_pods_args(ns.container, ns_name))))
             return 0
+        run_health = REGISTRY.get("health").func
         return run_health(ns.container, docker=ns.docker, cluster=ns.cluster)
     if ns.cmd == "targets" and ns.pi:
-        return run_pi_targets(ns)
-    if ns.cmd == "pi":
-        return run_pi_containers(ns)
+        return REGISTRY.get("targets").func(ns)
     # Subcommands that answer from an API rather than streaming a shell pipeline. Each one is
-    # `run_X(ns) -> int`, so the table is the whole dispatch — adding a subcommand is a parser
-    # entry plus a row here. The run_* callables are top-level imports, so the table could sit at
-    # module level; it stays inside main() to keep the dispatch beside the parse it follows.
-    handlers = {
-        # `ha` resolves a token + talks to the HA REST API.
-        "ha": run_ha,
-        "arr": run_arr,
-        "alerts": run_alerts,
-        "b2-longhorn": run_b2_longhorn,
-        "b2-budget": run_b2_budget,
-        "b2-spend": run_b2_spend,
-        "readonly-rbac": run_readonly_rbac,
-        "vip-placement": run_vip_placement,
-        "shed-set": run_shed_set,
-        "b2-deletions": run_b2_deletions,
-        "ha-state": run_ha_state,
-        "monitors": run_monitors,
-        "kuma-drift": run_kuma_drift,
-        "releases": run_releases,
-    }
+    # `run_X(ns) -> int`, so the table is the whole dispatch: adding one is a row in
+    # `probe_lib/subcommands.py` plus its parser entry.
+    handlers = {e.name: e.func for e in REGISTRY if "handler" in e.flags}
     if ns.cmd in handlers:
         try:
             return handlers[ns.cmd](ns)
@@ -201,7 +162,7 @@ def main(argv=None):
     # metric / loki-query default to a formatted view; --json and --dry-run fall
     # through to the raw streaming path below.
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:
-        return run_query(ns)
+        return REGISTRY.get(ns.cmd).func(ns)
     stages = plan(argv, resolve_ip)
     if ns.dry_run:
         for stage in stages:

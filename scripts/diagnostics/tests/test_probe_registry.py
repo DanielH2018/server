@@ -1,4 +1,4 @@
-"""probe's REGISTRY: --list rendering and the completeness guard, as red-proof pairs.
+"""probe's REGISTRY: --list, dispatch, parser agreement and the completeness guard, as red-proof pairs.
 
 The guard asserts every `probe_lib` module that defines a `run_*`/`main` entry point is
 covered by some REGISTRY entry's `module=`. It is deliberately checked against the literal
@@ -8,6 +8,7 @@ today" — see CLAUDE.md's "Python & Tests" on non-vacuity.
 Run: uv run pytest scripts/diagnostics/tests/test_probe_registry.py
 """
 
+import argparse
 import os
 import sys
 
@@ -22,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import probe
 from diagnostics import probe_lib
 from diagnostics.probe_lib import subcommands
+from diagnostics.probe_lib.cli_parser import _build_parser
 from lib.cli_registry import Registry, package_entry_points
 
 # The thirteen probe_lib modules that define a run_*/main entry point (core.py doesn't — it's
@@ -73,3 +75,44 @@ def test_list_flag_prints_every_subcommand_with_a_description(capsys):
             name,
             description,
         )
+
+
+def _subcommand_names(parser):
+    """The top-level subcommand names an argparse parser accepts."""
+    (action,) = [
+        a for a in parser._actions if isinstance(a, argparse._SubParsersAction)
+    ]
+    return set(action.choices)
+
+
+def test_parser_subcommands_equal_the_registry_names():
+    names = _subcommand_names(_build_parser())
+    assert "ha-state" in names  # a named member, so an empty parse cannot pass
+    assert names == set(subcommands.REGISTRY.names())
+
+
+def test_parser_registry_comparison_catches_an_unregistered_subcommand():
+    parser = _build_parser()
+    (action,) = [
+        a for a in parser._actions if isinstance(a, argparse._SubParsersAction)
+    ]
+    action.add_parser("unregistered")
+    assert _subcommand_names(parser) != set(subcommands.REGISTRY.names())
+
+
+def test_main_dispatches_a_handler_subcommand_through_the_registry(monkeypatch):
+    calls = []
+    entry = subcommands.REGISTRY.get("shed-set")
+    assert "handler" in entry.flags
+    monkeypatch.setattr(entry, "func", lambda ns: calls.append(ns.cmd) or 7)
+    assert probe.main(["shed-set"]) == 7
+    assert calls == ["shed-set"]
+
+
+def test_only_routed_subcommands_with_a_callable_lack_the_handler_flag():
+    unflagged = {
+        e.name
+        for e in subcommands.REGISTRY
+        if e.func is not None and "handler" not in e.flags
+    }
+    assert unflagged == subcommands.ROUTED_IN_MAIN

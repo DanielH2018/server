@@ -1,12 +1,16 @@
-"""The `SUBCOMMANDS` table and the `REGISTRY` built from it, for `probe.py --list`.
+"""The `SUBCOMMANDS` table and the `REGISTRY` built from it: probe.py's dispatch and `--list`.
 
 Split out of probe.py, which had grown to 697 lines. `cli_parser.py` holds argparse and
 `curl_pipeline.py` the streaming `curl` path; what lives here is metadata only.
 
-The registry carries names, descriptions and each subcommand's backing `probe_lib` module. It
-does NOT dispatch: `plan()` in `curl_pipeline.py` and the `handlers` table in `probe.py`'s `main()`
-still own that, unchanged. `scripts/diagnostics/tests/test_probe_registry.py` is the
-completeness guard that reads it.
+The registry carries names, descriptions, each subcommand's backing `probe_lib` module and its
+`run_*` callable. `probe.py`'s `main()` builds its `handlers` table from the entries flagged
+`"handler"`, so a `run_X(ns) -> int` subcommand is one row here plus its argparse entry in
+`cli_parser.py`. Argparse stays in `cli_parser.py`: each subcommand's arguments differ too much
+(`ha` alone nests five subparsers) for a row to describe them. A row with no callable streams a
+`curl` pipeline through `plan()` in `curl_pipeline.py`.
+`scripts/diagnostics/tests/test_probe_registry.py` checks that the registry, the parser and
+the `probe_lib` modules agree.
 
 This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`
 still reports the same thirteen subcommand backends — the `run_*` names below are imported, and
@@ -45,9 +49,7 @@ from lib.cli_registry import Registry
 
 # name, one-line description (matches the subparser's `help=`), backing `probe_lib` module
 # (None for a subcommand that only ever streams a curl pipeline through `plan()`), backing
-# `run_*` callable (None likewise). `REGISTRY` below is built from this and exists for
-# `--list` and the completeness guard — see this module's docstring for what it is NOT:
-# dispatch stays in `plan()`/`handlers` in `main()`, untouched.
+# `run_*` callable (None likewise).
 SUBCOMMANDS = [
     ("metric", "Prometheus instant query", "metrics", run_query),
     (
@@ -148,6 +150,14 @@ SUBCOMMANDS = [
     ),
 ]
 
+# The subcommands with a callable that `main()` routes by hand instead of through `handlers`,
+# because the callable answers only some invocations: `health` takes the container rather than
+# the namespace and prints its own `--dry-run`; `targets` calls `run_pi_targets` only with `--pi`;
+# `metric`/`loki-query` call `run_query` only without `--json`/`--dry-run`. Every other
+# invocation of them streams through `plan()`.
+ROUTED_IN_MAIN = frozenset({"health", "targets", "metric", "loki-query"})
+
 REGISTRY = Registry("probe")
 for _name, _description, _module, _func in SUBCOMMANDS:
-    REGISTRY.add(_name, _func, _description, module=_module)
+    _flags = ("handler",) if _func is not None and _name not in ROUTED_IN_MAIN else ()
+    REGISTRY.add(_name, _func, _description, module=_module, flags=_flags)

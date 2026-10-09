@@ -3,7 +3,7 @@
 Split out of probe.py, which had grown to 697 lines. `plan()` turns parsed arguments into the
 command pipeline a streaming subcommand runs, and `stream_pipeline()` runs one. The
 subcommands that answer from an API instead never reach here — `probe.py`'s `main()` dispatches
-those through its own `handlers` table.
+those through the `handlers` table it builds from `probe_lib/subcommands.py`.
 
 The runner is named `stream_pipeline`, not `run_pipeline` as it was in probe.py. Inside
 `probe_lib/` a module-level `run_*` means "this module backs a subcommand":

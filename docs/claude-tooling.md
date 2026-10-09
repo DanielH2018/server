@@ -9,22 +9,22 @@ and a hook that denies prints its reason.
 ## `scripts/diagnostics/probe.py`
 
 Read-only homelab diagnostics, allow-listed (no prompt). It resolves the live container IP via
-`docker inspect`, so prefer it over curling bridge IPs, which change on recreate:
+`docker inspect`, so prefer it over curling bridge IPs, which change on recreate.
 
-```
-uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
-  alerts | monitors | kuma-drift | releases | scrutiny | pi containers | cert <host> | health <svc> |
-  ha <state|automation|get> … | b2-spend | vip-placement | readonly-rbac | shed-set>
-```
+To see every subcommand with a one-line description, run
+`uv run python scripts/diagnostics/probe.py --list`. The list comes from `SUBCOMMANDS`/`REGISTRY`
+in `probe_lib/subcommands.py`, built on the shared `scripts/lib/cli_registry.py` (the same
+named-entry shape monitor-bridge's check registry uses, in that role's `files/registry.py`).
 
-`uv run python scripts/diagnostics/probe.py --list` prints every subcommand with a one-line
-description, sourced from `SUBCOMMANDS`/`REGISTRY` in `probe_lib/subcommands.py` (built on the
-shared `scripts/lib/cli_registry.py`, the same named-entry shape monitor-bridge's check
-registry uses — see that role's `files/registry.py`). The probe registry is metadata only: `--list` and a completeness
-guard (`scripts/diagnostics/tests/test_probe_registry.py`, asserting every `probe_lib` module
-with a `run_*`/`main` entry point is covered). Running a subcommand is owned elsewhere and is
-unchanged: argparse in `probe_lib/cli_parser.py`, `plan()` in `probe_lib/curl_pipeline.py`, and
-the `handlers` table in `probe.py`'s `main()`.
+The registry also drives dispatch. `probe.py`'s `main()` builds its `handlers` table from the
+entries flagged `"handler"`. Four subcommands with a callable (`health`, `targets`, `metric`,
+`loki-query`) answer from it only for some flags, so `main()` routes them by hand
+(`subcommands.ROUTED_IN_MAIN`). A subcommand with no callable streams through `plan()` in
+`probe_lib/curl_pipeline.py`. The argument parsing stays in `probe_lib/cli_parser.py`, because each
+subcommand's arguments differ too much for a registry row to describe.
+`scripts/diagnostics/tests/test_probe_registry.py` checks that the subcommands `cli_parser.py`
+accepts equal the registry's names, and that every `probe_lib` module with a `run_*`/`main` entry point is
+registered.
 
 ### Measurements and invariant checks: `b2-spend`, `vip-placement`, `readonly-rbac`, `shed-set`
 
