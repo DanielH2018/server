@@ -149,7 +149,9 @@ the same run or that only daniel-box can verify.
 **`--review` adds a separate review to every batch in the run.** The unit runs
 `scripts/dev/fanout_review.py` in place of one `claude -p`, the batch worktree's copy, so a host
 whose primary checkout lags `origin/master` still runs the current one. Another repo's batch
-runs this repo's primary checkout's copy, and `launch` refuses it when that copy is missing.
+runs the copy in its own snapshot of this repo's `origin/master`, which `launch` archives into
+the batch's `.fanout/server`. The snapshot also supplies that batch's system prompt and
+`fanout-stop` hook.
 The agent stops at its PR on every host. A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, at confidence 0.6 or more,
 resumes the agent for one fix round, and a second reviewer reads only the fix. On daniel-box

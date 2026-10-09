@@ -367,7 +367,7 @@ class Pipeline:
         return self.run(["git", "-C", str(self.worktree), *args], None).stdout.strip()
 
     def _implementer(self) -> list[str]:
-        return shlex.split(claude_args(self.target))
+        return shlex.split(claude_args(self.target, str(self.worktree)))
 
     def _resume(self) -> list[str]:
         return [*self._implementer(), "--resume", self.session]
