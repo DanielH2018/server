@@ -1280,15 +1280,15 @@ what it recorded.
   `land_shared.shared_roles` applies the same rule on the landing side. An empty or unreadable
   listing drops nothing.
 - A line an earlier tick wrote before a later range deleted its role is dropped on the next
-  tick by `deploy_phases.drop_deleted_k8s_unapplied` (#3569), which `main()` runs right after
-  `deploy_defer.discharge_k8s_unapplied`. It asks the same helper `plan_tick` uses,
-  `deploy_phases.k8s_roles_deleted_at`, at `HEAD` instead of at origin.
+  tick by `deploy_k8s_owed.drop_deleted_k8s_unapplied` (#3569), which `reconcile` runs right
+  after `deploy_k8s_owed.discharge_k8s_unapplied`. It asks the same helper `plan_tick` uses,
+  `deploy_k8s_owed.k8s_roles_deleted_at`, at `HEAD` instead of at origin.
 - The demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
   `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm after
   it resets the tree. A contention arm takes the line back with the `manual_plane` lines beside
   it. A failed broad apply keeps it, because that arm leaves the range merged.
 - Every tick DISCHARGES a `k8s_unapplied` line whose service has since been deployed
-  (`deploy_defer.discharge_k8s_unapplied`), from the service's release record and one `git
+  (`deploy_k8s_owed.discharge_k8s_unapplied`), from the service's release record and one `git
   merge-base --is-ancestor`. That is what drops the line for an operator's own `deploy.sh`,
   which the deployer cannot see; without it the marker would hold a permanent line per routine
   landing. A record that is absent or carries no date KEEPS the line. A shared role
@@ -1300,7 +1300,7 @@ what it recorded.
   line's matches its applied digests (`deploy_release.render_proof`, #3057). The render need
   not be of origin/master's tip, only of a commit holding the change, so the hourly producer
   answers within about an hour of a merge. Every other shared role acts outside the digest,
-  and `deploy_defer.DIGEST_PROVABLE_ROLES` carries the `# DECIDED:` that says how each one does.
+  and `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` carries the `# DECIDED:` that says how each one does.
 - A service's OWN line takes the same render proof when its role acts only through the bytes
   the digest covers (#3110). `scripts/deploy_tools/digest_provable.py` derives that per role,
   fail-closed: every task is a `k8s/manifests` include, a pure fact or check module, or an
@@ -1313,7 +1313,7 @@ what it recorded.
   deploys its PR's commit, so a line at a later, unrelated tip could never discharge by
   ancestry. On 2026-10-01 that left eight media-role lines for a hand to clear.
 - Any tick that deploys the service clears its `k8s_deferred` line
-  (`deploy_defer.clear_applied_k8s_deferred`, called from both k8s deploy paths and from the
+  (`deploy_k8s_owed.clear_applied_k8s_deferred`, called from both k8s deploy paths and from the
   plane-covered set). An operator's own `deploy.sh` is invisible to the deployer, so it clears
   with `gitops_state.py clear-owed k8s_deferred <svc>`.
 - `gitops_state.py clear-owed k8s_unapplied <svc>` is the hand clear for `k8s_unapplied`, needed
@@ -1913,6 +1913,7 @@ is decided by what it touches.
 | transport leaves | `gitops_markers`, `gitops_hold`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_state_hold`, `deploy_failtext` | the marker table, its parsers and line rewrites, the hold's owner and its clear rule, the config file, the state directory, the two k8s marker families and the hold, each a mixin class, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s` | `assess` and `plan_tick`; one `handle_*` per terminal branch |
+| the k8s changes owed | `deploy_k8s_owed` | the one reader and writer of the `k8s_deferred` and `k8s_unapplied` ledger classes: record, discharge, the tick-start `reconcile` (#3669) |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` and `entrypoint()` |
 
 - **`main()` sequences, it does not decide.** `assess()` returns a frozen `TickTarget`,

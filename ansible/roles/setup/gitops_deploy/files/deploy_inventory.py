@@ -23,7 +23,7 @@ _ENTRY_PLATFORM = re.compile(r"^    platform:\s*(\S+)", re.MULTILINE)
 def declared_k8s_services(hostvars_text: str) -> set[str]:
     """The `platform: k8s` service names declared in a host's containers_list.
 
-    `deploy_defer.alert_and_record_deferred` reads it to name the k8s roles a tick merged
+    `deploy_k8s_owed.alert_and_record_deferred` reads it to name the k8s roles a tick merged
     and will not apply. An entry with no `platform:` key is Docker, and is not returned.
     """
     out: set[str] = set()

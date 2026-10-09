@@ -26,6 +26,7 @@
     - deploy_alert_text.py
     - deploy_changes.py
     - deploy_defer.py
+    - deploy_k8s_owed.py
     - deploy_release.py
     - deploy_remediation.py
     - deploy_git.py
@@ -111,6 +112,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_handlers.py
       - live: /opt/gitops-deploy/deploy_defer.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_defer.py
+      - live: /opt/gitops-deploy/deploy_k8s_owed.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_k8s_owed.py
       - live: /opt/gitops-deploy/deploy_release.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_release.py
       - live: /opt/gitops-deploy/deploy_broad_k8s.py

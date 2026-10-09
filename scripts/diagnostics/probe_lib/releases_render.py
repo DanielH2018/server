@@ -63,7 +63,7 @@ RENDER_DIR = Path("/var/lib/homelab/k8s-renders.d")
 PATH_HIT_PREFIX = "changed since applied: "
 
 # The shared roles whose whole effect is bytes `manifests_digest` covers, so a matching digest
-# proves their change applied. Mirrors `deploy_defer.DIGEST_PROVABLE_ROLES`, whose DECIDED
+# proves their change applied. Mirrors `deploy_k8s_owed.DIGEST_PROVABLE_ROLES`, whose DECIDED
 # marker says what each other shared role does outside the digest; a test pins the two equal.
 DIGEST_PROVABLE_ROLES = frozenset({"manifests"})
 

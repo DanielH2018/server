@@ -11,7 +11,7 @@ shared role's callers instead of reporting `needs-manual-apply`. The deployer ru
 `main` as a SUBPROCESS through `deploy_narrow.shared_role_callers`, because this parses YAML
 and the unit runs under `uv run --no-project` — the boundary `narrow_setup.py` sits behind for
 the same reason. It prints one JSON object, role to sorted `caller_tags`, and
-`deploy_defer.discharge_k8s_unapplied` drops a shared role's `k8s_unapplied` line once every
+`deploy_k8s_owed.discharge_k8s_unapplied` drops a shared role's `k8s_unapplied` line once every
 one of those tags carries the change. How a tag proves that, by its release record or
 by a matching render, is the deployer's question; this module only names the tags.
 
@@ -72,7 +72,7 @@ def caller_tags(
 
 
 # The shared roles whose whole effect on a caller is the manifests it renders, so one caller
-# can smoke-test a change to how it renders them. `deploy_defer.DIGEST_PROVABLE_ROLES` draws
+# can smoke-test a change to how it renders them. `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` draws
 # the same line for the same reason and names only `manifests` too — the two are pinned
 # together by `tests/test_shared_role_smoke_caller.py`, so neither can widen alone.
 #
@@ -100,13 +100,13 @@ SMOKE_TESTABLE_SHARED_ROLES = frozenset({"manifests"})
 # WHY ONE IS ENOUGH. `manifests` acts through the bytes it renders, so the other 56 callers
 # re-read the new task logic on their own next deploy with nothing left behind — and the
 # deployer's `k8s_unapplied` line for `manifests` discharges on a render-digest match without
-# any deploy at all (`deploy_defer.DIGEST_PROVABLE_ROLES`, #3057). That marker already accepts
+# any deploy at all (`deploy_k8s_owed.DIGEST_PROVABLE_ROLES`, #3057). That marker already accepts
 # the one gap this shares: a change to HOW `manifests` applies can leave live state different
 # from what the change would produce while no digest moves.
 #
 # THE ASYMMETRY IS DELIBERATE. `expand_shared_tags` — the hand-typed `deploy.sh --tags
 # manifests` — still deploys every caller, because there the operator asked for the fleet
-# (#2717), and `deploy_defer.discharge_k8s_unapplied` still reads every caller, because its
+# (#2717), and `deploy_k8s_owed.discharge_k8s_unapplied` still reads every caller, because its
 # question is whether the change is applied everywhere rather than whether it runs.
 #
 # WHY THE COST KEY IS A PROXY AND STAYS ONE (#3149). Hosts, then rendered templates, counts

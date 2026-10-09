@@ -5,7 +5,7 @@
 its applied manifests — after EVERY real apply, including one an operator ran by hand. That
 last part is the whole reason this module exists: an operator's `./scripts/deploy.sh` is
 invisible to the deployer, and the record is the only evidence of it this host holds.
-`deploy_defer.discharge_k8s_unapplied` is the reader, and its docstring carries the design.
+`deploy_k8s_owed.discharge_k8s_unapplied` is the reader, and its docstring carries the design.
 
 The render records (`roles/k8s/manifests/tasks/render_record.yml`) come from the hourly
 `render_records` producer. `render_proof` lets a render stand in for a deploy of a shared role
@@ -33,7 +33,7 @@ def release_commit(service: str, release_dir: str = K8S_RELEASE_DIR) -> str | No
     """The commit that produced `service`'s applied manifests, or None.
 
     `roles/k8s/manifests/tasks/release_stamp.yml` writes the record after every real apply,
-    including one an operator ran by hand — which is why `deploy_defer.discharge_k8s_unapplied`
+    including one an operator ran by hand — which is why `deploy_k8s_owed.discharge_k8s_unapplied`
     reads it. None for a record that is absent, unreadable, unparseable or missing the field;
     that docstring says why every caller treats None as "no evidence of a deploy".
     """
