@@ -73,7 +73,7 @@ CHECKS: tuple[PushCheck, ...] = (
     PushCheck(
         name="memory", fn=host.check_mem, token="monitor_bridge_mem_push_token",
         kuma_id="monitor-bridge-mem", display="Memory", status_group="Hosts & Power", gate="prometheus",
-        description="node-exporter via monitor-bridge: host memory pressure on a cluster node, a Claude Code cgroup stalling or OOM-killing, or one node missing from the census. The message names host and cgroup.",
+        description="node-exporter via monitor-bridge: host memory pressure on a cluster node, a Claude Code cgroup stalling or OOM-killing, Claude Code running as a uid the host retired (start sessions with claude-agents), or one node missing from the census. The message names host and cgroup.",
     ),
     # restarts, oom and cpu re-armed 2026-08-14 (Phase G) against kubernetes-cadvisor, grouped by
     # pod, on their Docker-era tokens. They add OOM and throttle depth to k8s_workloads' crashloops.

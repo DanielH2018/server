@@ -457,7 +457,7 @@ as `claude`.
 **Rollback:** set `claude_code_agent_homelab_ui_enabled: false`, then switch the agent user off
 and delete the `claude-agent` block.
 
-## Slice 6: retire Claude sessions as `ubuntu` (planned)
+## Slice 6: retire Claude sessions as `ubuntu` (built; the inventory is still to publish)
 
 **Decision, 2026-10-09:** new interactive sessions start as `claude` through the dotfiles
 function `claude-agents`, which runs
@@ -475,12 +475,16 @@ the fleet bound on `user.slice`. An ID that leaves the list has its slice drop-i
 `environment.d` file removed on the next apply, and `claude_code_login_caps_enabled: false`
 removes every one.
 
-**Still to build, once the operator says the `ubuntu` sessions are gone:**
+**Built when the operator retired the `ubuntu` sessions (2026-10-09):**
 
-- Extend `claude-cgroup-metrics.sh` to report any `claude` process running as uid 1000, and the
-  alert on it. Until then no metric or alert watches uid 1000.
-- Drop `claude_code_login_uid` from `claude_code_login_uids`, which removes the caps from
-  `user-1000.slice`.
+- `claude-cgroup-metrics.sh` writes `claude_uid_processes{uid}` for each uid in
+  `claude_code_watch_uids`, an explicit 0 included. It counts processes named `claude` by their
+  real uid in `/proc/<pid>/status`. daniel-box watches uid 1000. The list defaults to empty, so
+  daniel-server, where sessions still run as `ubuntu`, writes no series.
+- monitor-bridge's Memory tile pages while any watched uid runs `claude`, after the cgroup
+  arm's two-cycle streak. The message names the host and the uid.
+- daniel-box sets `claude_code_login_uids: []`, which removes the caps from `user-1000.slice`.
+  The fleet bound on `user.slice` still covers it.
 
 A root-owned `/etc/claude-code/managed-settings.json` is deferred (operator decision,
 2026-10-09). It binds every user on the host, `renovate-agent` included. Slice 4 already makes
@@ -494,7 +498,8 @@ the inventory describes history.
 **Check:** starting `claude` as `ubuntu` shows up in the metric within one 30-second timer
 interval.
 
-**Rollback:** `claude_code_login_caps_enabled` and the metric are both variables.
+**Rollback:** delete the two lines in daniel-box's host_vars. `claude_code_login_uids` returns
+to uid 1000, and an empty `claude_code_watch_uids` stops the series and the page with it.
 
 ## Slice 7: a pre-merge dry run without secrets (optional)
 

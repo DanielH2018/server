@@ -925,6 +925,12 @@ claude_code_lander_enabled: true
 # The agent user's own Node, @playwright/mcp, Chromium and homelab-ui MCP registration, so a
 # phone session can check that a UI renders (#4058). False removes all four.
 claude_code_agent_homelab_ui_enabled: true
+# Slice 6 (docs/claude-agent-user.md): no Claude session runs as ubuntu here since the operator
+# said so on 2026-10-09. The login caps leave user-1000.slice, and claude-cgroup-metrics.sh
+# counts any `claude` process uid 1000 still runs, which the Memory tile pages on. Rollback:
+# delete both lines.
+claude_code_login_uids: []
+claude_code_watch_uids: ["{{ claude_code_login_uid }}"]
 # `has_igpu` is deliberately unset. It means "pass /dev/dri through" (README §7) and is the
 # Docker-side switch; for the k8s workloads render_gid below supersedes it, because in the
 # cluster a container reaches the render node through the device plugin plus group

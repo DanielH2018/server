@@ -28,6 +28,7 @@ from verdicts.host_cgroups import claude_cgroup_verdict
 
 STALL_METRIC = "claude_cgroup_memory_pressure_stalled_usec_total"
 EVENT_METRIC = "claude_cgroup_memory_events_total"
+UID_METRIC = "claude_uid_processes"
 
 CHECKS = Path(__file__).resolve().parents[1] / "files" / "checks"
 
@@ -49,7 +50,7 @@ def armed(cfg):
     return replace(cfg, CLAUDE_CGROUPS=("claude-rc",))
 
 
-def _sources(stalls, events):
+def _sources(stalls, events, uids=()):
     """A `FakeSources` answering each of the arm's two queries separately.
 
     Handed to `check_mem` as its `src` rather than patched onto `bridge.net`, so nothing here
@@ -68,6 +69,8 @@ def _sources(stalls, events):
             return stalls
         if EVENT_METRIC in promql:
             return events
+        if UID_METRIC in promql:
+            return list(uids)
         return HEALTHY_MEMORY
 
     return FakeSources(prom_vector=fake_vector)
@@ -244,3 +247,47 @@ def test_the_queries_group_by_origin():
     src = (CHECKS / "host.py").read_text()
     assert "max by (origin, cgroup)" in src
     assert "sum by (origin, cgroup, event)" in src
+
+
+# ── slice 6: a retired uid running Claude Code ──────────────────────────────────────────────
+
+BOX_1000 = {"origin": "daniel-box", "uid": "1000"}
+
+
+def test_a_retired_uid_running_no_claude_is_clean():
+    ok, msg = claude_cgroup_verdict(
+        [(RC, 0.0)], [], ["claude-rc"], 10, "5m", "10m", [(BOX_1000, 0.0)]
+    )
+    assert ok, msg
+
+
+def test_a_retired_uid_running_claude_is_flagged():
+    ok, msg = claude_cgroup_verdict(
+        [(RC, 0.0)], [], ["claude-rc"], 10, "5m", "10m", [(BOX_1000, 2.0)]
+    )
+    assert not ok
+    assert "daniel-box/uid 1000: 2" in msg
+    assert "claude-agents" in msg
+
+
+def test_a_memory_event_outranks_a_retired_uid():
+    ok, msg = claude_cgroup_verdict(
+        [(RC, 0.0)],
+        [(RC | {"event": "oom_kill"}, 1.0)],
+        ["claude-rc"],
+        10,
+        "5m",
+        "10m",
+        [(BOX_1000, 1.0)],
+    )
+    assert not ok
+    assert msg.startswith("claude cgroup memory events")
+
+
+def test_check_mem_pages_on_a_retired_uid(armed):
+    armed = replace(armed, CLAUDE_CGROUP_CONSECUTIVE=1)
+    src = _sources([(RC, 0.0)], [], [(BOX_1000, 1.0)])
+    ok, msg = checks.host.check_mem(armed, src)
+    assert not ok
+    assert msg.startswith("claude running as a retired uid")
+    assert any(UID_METRIC in q for q in src.queries("prom_vector"))
