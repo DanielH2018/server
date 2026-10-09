@@ -1,4 +1,4 @@
-"""clean removes only a done batch whose PR merged, by prune_worktrees' content check — spec §4.
+"""clean removes only a done batch whose PR merged, by lib.worktrees' content check — spec §4.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_clean.py
 """
@@ -14,7 +14,7 @@ from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
 from fanout_lib.target import Target
 from fanout_lib.transport import Tools
 from fanout_place import cmd_clean_one, main
-from prune_worktrees import Worktree
+from lib.worktrees import Worktree
 from _fanout_fakes import fake_tools, ok
 
 B = Batch(
@@ -91,7 +91,7 @@ def test_an_unmerged_tree_is_kept_and_named():
 
 def test_a_dirty_tree_is_kept_even_when_merged():
     # classify's own reason text is "uncommitted changes", not "dirty" — read from
-    # prune_worktrees.classify (scripts/dev/prune_worktrees.py:145) rather than the
+    # lib.worktrees.classify rather than the
     # word the brief guessed at.
     state, why = clean_one(
         "/r",

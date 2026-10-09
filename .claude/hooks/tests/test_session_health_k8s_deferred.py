@@ -26,10 +26,8 @@ assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-_WORKTREES = """worktree /home/ubuntu/server
-HEAD abc1230000000000000000000000000000000000
-branch refs/heads/master
-"""
+# The primary checkout the dirty-primary read is pointed at.
+_PRIMARY = "/home/ubuntu/server"
 
 _SHA = "abc1230000000000000000000000000000000000"
 
@@ -46,7 +44,7 @@ _SONARR = _deferred("sonarr", 1000)
 
 def _problems(k8s_deferred=None, now=1000.0):
     return _mod.parked_deployer_problems(
-        list_worktrees=lambda: _WORKTREES,
+        primary=lambda: _PRIMARY,
         status=lambda path: "",
         read_marker=lambda: None,
         now=now,
@@ -97,7 +95,7 @@ def test_a_raising_deferred_read_keeps_the_lines_gathered_before_it():
         raise OSError("state dir unreadable")
 
     lines = _mod.parked_deployer_problems(
-        list_worktrees=lambda: _WORKTREES,
+        primary=lambda: _PRIMARY,
         status=lambda path: " M CLAUDE.md\n",
         read_marker=lambda: None,
         now=1.0,

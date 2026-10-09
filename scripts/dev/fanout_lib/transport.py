@@ -285,7 +285,7 @@ def run_findings(argv: list[str]) -> subprocess.CompletedProcess:
 
 def default_ref(checkout: str) -> str | None:
     """`checkout`'s remote default branch, such as `origin/main`, or None when it has none."""
-    from prune_worktrees import default_ref as read
+    from lib.worktrees import default_ref as read
 
     return read(checkout)
 

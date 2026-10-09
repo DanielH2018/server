@@ -54,7 +54,13 @@ import sys
 import time
 from pathlib import PurePosixPath
 
-from _hook_common import emit_pretooluse_context, read_payload, session_state_path
+from _hook_common import (
+    append_instructions_row,
+    emit_pretooluse_context,
+    instructions_log_path,
+    read_payload,
+    session_state_path,
+)
 
 # Under both harness caps with headroom for the wrapper text: local persist at 10,000 chars,
 # remote truncation at 8,000 chars / 200 lines. Pinned by `test_inject_nested_docs.py`.
@@ -99,25 +105,6 @@ _STATE_TTL_S = 24 * 3600
 _SEPARATORS = re.compile(r"[\s;|&<>()`]+")
 _QUOTES = "\"'"
 _TRAILING_PUNCT = ",:."
-
-
-def _load_logger():
-    """The log-instructions.py module, loaded by path.
-
-    The filename is hyphenated, so it is not importable by name — and one appender serves
-    both the InstructionsLoaded event and this hook, so the log keeps one row format.
-    """
-    here = os.path.dirname(os.path.abspath(__file__))
-    spec = importlib.util.spec_from_file_location(
-        "log_instructions", os.path.join(here, "log-instructions.py")
-    )
-    assert spec and spec.loader, "spec_from_file_location found no loader"
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_logger = _load_logger()
 
 
 def _load_written_paths():
@@ -330,7 +317,7 @@ def loaded_by_harness(session_id, doc, log_path=None, agent_id=None):
     if not sid or agent_id:
         return False
     marker = f"[{sid:8}]"
-    log = log_path or _logger.LOG
+    log = log_path or instructions_log_path()
     for path in (log, log + ".1"):
         try:
             with open(path, encoding="utf-8", errors="replace") as fh:
@@ -560,7 +547,7 @@ def context(payload):
         return None
     tag = f" {AGENT_FIELD}{agent_id}" if agent_id else ""
     for doc, trigger in chosen:
-        _logger.append_row(
+        append_instructions_row(
             REASON, "Project", doc, session_id, " trigger=" + trigger + tag
         )
     return text

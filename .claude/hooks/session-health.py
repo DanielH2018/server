@@ -48,11 +48,16 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # module scope may be able to stop the banner.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hook_common import read_payload
+    from _hook_common import primary_checkout, read_payload
 except ImportError, SyntaxError:
     # Without the payload the banner cannot tell a compaction from an open, so it prints on
     # both. One repeat banner is the cost; a hook that printed none would hide this failure.
     def read_payload():
+        return None
+
+    # Without the primary checkout the dirty-primary line has no tree to read, so it is
+    # skipped; the park lines that follow it do not need one.
+    def primary_checkout():
         return None
 
 
@@ -143,21 +148,6 @@ PRIMARY_DIRTY_LIMIT = 8
 PRIMARY_STATUS_ARGV = ("--no-optional-locks", "status", "--porcelain")
 
 
-def primary_worktree_path(porcelain):
-    """The main checkout's path from `git worktree list --porcelain`, or None.
-
-    git prints the main worktree first and every entry opens with a `worktree <path>` line, so
-    the first such line is the primary checkout. Parsed here rather than through
-    `prune_worktrees.parse_worktree_list` because this needs one field and must not inherit that
-    module's import risk — `other_live_sessions` already carries a `⚠` line for the day that
-    import breaks.
-    """
-    for line in porcelain.splitlines():
-        if line.startswith("worktree "):
-            return line[len("worktree ") :].strip() or None
-    return None
-
-
 def dirty_primary_lines(porcelain, path):
     """One banner line naming what makes the primary checkout dirty, or [].
 
@@ -222,7 +212,7 @@ def behind_park_lines(marker, now):
 
 
 def parked_deployer_problems(
-    list_worktrees=None,
+    primary=None,
     status=None,
     read_marker=None,
     now=None,
@@ -250,12 +240,9 @@ def parked_deployer_problems(
 
     # `lib.git.git` strips every `GIT_*` variable, so `cwd` alone decides which tree is read —
     # neither `git -C` nor a `cwd=` overrides an inherited `GIT_DIR`.
-    if list_worktrees is None:
-
-        def list_worktrees():
-            return git(
-                "worktree", "list", "--porcelain", cwd=REPO, check=False, timeout=5
-            ).stdout
+    # The primary checkout is `_hook_common`'s one answer, shared with the instructions log.
+    if primary is None:
+        primary = primary_checkout
 
     if status is None:
 
@@ -294,16 +281,16 @@ def parked_deployer_problems(
 
     lines = []
     if DEPLOYER_PARK_IMPORT_ERROR:
-        # Added BEFORE the reads below rather than after them, so a `list_worktrees` that raises
+        # Added BEFORE the reads below rather than after them, so a `primary` that raises
         # cannot swallow it: an empty list is indistinguishable from "nothing to report", and
         # that is what hid a whole banner section for a month.
         lines.append(
             f"  ⚠ parked-deployer detection is broken: {DEPLOYER_PARK_IMPORT_ERROR}"
         )
     try:
-        primary = primary_worktree_path(list_worktrees())
-        if primary:
-            lines += dirty_primary_lines(status(primary), primary)
+        path = primary()
+        if path:
+            lines += dirty_primary_lines(status(path), path)
         if DEPLOYER_PARK_IMPORT_ERROR:
             # The dirty-primary half still answered and is kept; only the park half is
             # unanswerable, and `park_age` raises if it is asked.
@@ -409,13 +396,12 @@ def other_live_sessions(cwd):
     go stale when a session forgets to announce itself or dies without cleaning up. Knowing
     another session is already in a role is what stops two of them editing it at once.
     """
-    # scripts/dev/, not scripts/ — the module lives in a subdirectory grouped by what each
-    # script acts on. A stale insert would fail silently: the except below returns an empty
-    # list, and an empty list is indistinguishable from "no other sessions are running".
-    sys.path.insert(0, os.path.join(REPO, "scripts", "dev"))
+    # scripts/, which holds `lib/`. A stale insert would fail silently: the except below
+    # returns an empty list, and an empty list is indistinguishable from "no other sessions
+    # are running".
     sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
-        from prune_worktrees import parse_worktree_list, session_is_alive
+        from lib.worktrees import parse_worktree_list, session_is_alive
         from lib.git import git_dirty
     except ImportError as exc:
         # Fail open, because a SessionStart banner must never block a session from starting —

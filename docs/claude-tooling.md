@@ -589,8 +589,9 @@ auto mode instructs — loads neither, and 74 of 113 Bash-only session×role pai
 role doc (measured 2026-09-19, #2125). `.claude/hooks/inject-nested-docs.py` reads the paths a
 command names, returns each ancestor `CLAUDE.md` and matching rule as `additionalContext` once
 per session, and logs the row to `.claude/logs/instructions.log` as `bash_path_match` so the
-same log grades it. Every checkout writes that log in the primary checkout, which `log_path`
-in `.claude/hooks/log-instructions.py` finds through `git rev-parse --git-common-dir`. Each
+same log grades it. Every checkout writes that log in the primary checkout, which
+`instructions_log_path` in `.claude/hooks/_hook_common.py` finds through `primary_checkout`,
+the parent of `git rev-parse --git-common-dir`. Each
 session runs its own checkout's hooks (#3394), and a log in a worktree is deleted with the
 worktree. A doc the hook cannot fit arrives as its HEAD up to the budget, then the
 headings of the sections the head cut off, then a read pointer: the harness persists a longer

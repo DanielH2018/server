@@ -2,8 +2,8 @@
 """Whether a claim on an issue is still live, decided from the worktree that holds it.
 
 A claim names a worktree. The question "is this claim still live" is therefore the question
-"is this worktree still doing the work", which `prune_worktrees.py` already answers for a
-different caller — so this module reuses its judgment rather than adding a second one.
+"is this worktree still doing the work", which `lib.worktrees.classify` already answers for
+`prune_worktrees.py` — so this module reuses its judgment rather than adding a second one.
 
 WHY NOT A HEARTBEAT, AND WHY NOT A TTL. Both key on the CLAIMING PROCESS. A container restart
 kills the agents mid-work while every worktree keeps its uncommitted edits, so each session
@@ -33,7 +33,7 @@ from dev.findings_lib.issue_model import (
     label_names,
     ordered_comments,
 )
-from dev.prune_worktrees import REMOVABLE, Worktree, classify
+from lib.worktrees import REMOVABLE, Worktree, classify
 
 # What a worktree read raises when the directory behind a registered worktree is gone.
 # `lib.git.git_dirty` runs git with `check=True`, so a missing cwd surfaces as OSError from
@@ -72,7 +72,7 @@ def claim_is_live(
 
     Args:
         worktree_name: the branch name recorded in the claim comment.
-        trees: every registered worktree, from `prune_worktrees.parse_worktree_list`.
+        trees: every registered worktree, from `lib.worktrees.parse_worktree_list`.
         dirty: takes a worktree path, returns whether it has uncommitted changes.
         merged: takes a Worktree, returns whether it is merged into origin/master. It
             takes the TREE and not the branch name because `is_merged` keys on the head SHA;
@@ -116,7 +116,7 @@ def claim_is_live(
 def another_claim_blocks(issue: dict, worktree: str) -> bool:
     """Whether a claim by someone else is the only thing standing in ``worktree``'s way.
 
-    Cheap and pure, so `cmd_claim` reads it before paying for `_worktree_facts` — several git
+    Cheap and pure, so `cmd_claim` reads it before paying for `worktree_facts` — several git
     calls per registered worktree, on a batch where most issues are unclaimed.
 
     An issue `plan_claim` would refuse anyway answers False even when a claim sits on it:
@@ -144,7 +144,7 @@ def stale_holder(
     """(holder, why) when this issue's claim is STALE, else None.
 
     What `cmd_claim` reaps before taking an issue. Takes the same three facts
-    `claim_states` does rather than `_worktree_facts`'s 4-tuple, so the caller keeps the
+    `claim_states` does rather than `worktree_facts`'s 4-tuple, so the caller keeps the
     decision about what a FAILED git read means — `cmd_claim` leaves the claim standing,
     `cmd_reap` refuses outright, and neither reads a git error as "every worktree is gone".
     """

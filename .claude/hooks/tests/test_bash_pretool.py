@@ -62,16 +62,15 @@ def sandbox(tmp_path, monkeypatch):
 
     Every arm reads the same stdlib `tempfile`, so one patch on the singleton redirects all of
     them — and it goes through `monkeypatch` because a plain assignment would leave every later
-    `gettempdir()` in this xdist worker pointing at a torn-down `tmp_path`. `_logger` IS
-    per-arm, since `load_arm` execs a fresh `log_instructions` for each call.
+    `gettempdir()` in this xdist worker pointing at a torn-down `tmp_path`. The instructions
+    log is `_hook_common`'s, read from the environment at each append, so one `setenv`
+    redirects it for every arm too.
     """
     monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setenv("CLAUDE_INSTRUCTIONS_LOG", str(tmp_path / "instructions.log"))
 
     def load(filename, module_name):
-        module = _mod.load_arm(filename, module_name)
-        if hasattr(module, "_logger"):
-            module._logger.LOG = str(tmp_path / "instructions.log")
-        return module
+        return _mod.load_arm(filename, module_name)
 
     return load
 

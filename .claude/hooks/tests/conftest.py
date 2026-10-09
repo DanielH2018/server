@@ -1,6 +1,6 @@
 """Shared fixtures for the SessionStart hook tests.
 
-`test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess` runs session-health.py as
+`test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess` runs session-health.py as
 a real subprocess (deliberately -- see that test's own docstring), which means `main()` runs
 for real and reaches whatever it reaches: `gh pr list` once per stale worktree candidate (an
 authenticated GitHub API call), `sops -d` to decrypt `ansible/vars/secrets.yml` for the

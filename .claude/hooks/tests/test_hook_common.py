@@ -27,10 +27,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import (
     Unsplittable,
     gh_repo,
+    primary_checkout,
     read_payload,
     session_state_path,
     split_stages,
 )
+from lib.git_testing import git, init_repo
 
 
 def test_the_deployed_segmenter_is_present():
@@ -207,3 +209,41 @@ def test_a_payload_that_is_not_a_json_object_reads_as_none(text):
 
 def test_a_json_object_payload_is_returned():
     assert read_payload(io.StringIO('{"session_id": "s"}')) == {"session_id": "s"}
+
+
+# Two ways to name the primary checkout were in use, and they disagree exactly where the git
+# dir has no checkout beside it. The tests below pin which one is right.
+
+
+def test_primary_checkout_is_the_same_from_the_primary_and_a_linked_worktree(tmp_path):
+    primary = init_repo(tmp_path / "primary", initial_commit="init")
+    worktree = tmp_path / "wt"
+    git(primary, "worktree", "add", "-q", "-b", "wt", str(worktree))
+
+    expected = os.path.realpath(primary)
+    assert os.path.realpath(primary_checkout(str(primary)) or "") == expected
+    assert os.path.realpath(primary_checkout(str(worktree)) or "") == expected
+
+
+def test_primary_checkout_is_none_for_a_separated_git_dir(tmp_path):
+    # `git worktree list --porcelain` names the git dir itself as the main worktree here, so
+    # a dirty check run on its first entry would read a directory that is not a checkout.
+    checkout = tmp_path / "checkout"
+    git_dir = tmp_path / "separate"
+    git(tmp_path, "init", "-q", f"--separate-git-dir={git_dir}", str(checkout))
+    listed = git(checkout, "worktree", "list", "--porcelain").stdout.splitlines()[0]
+    assert listed == f"worktree {git_dir}"
+    assert primary_checkout(str(checkout)) is None
+
+
+def test_primary_checkout_is_none_for_a_bare_repo_worktree(tmp_path):
+    bare = init_repo(tmp_path / "bare", bare=True)
+    seed = init_repo(tmp_path / "seed", initial_commit="init")
+    git(seed, "push", "-q", str(bare), "master")
+    worktree = tmp_path / "wt"
+    git(bare, "worktree", "add", "-q", str(worktree), "master")
+    assert primary_checkout(str(worktree)) is None
+
+
+def test_primary_checkout_is_none_outside_git(tmp_path):
+    assert primary_checkout(str(tmp_path)) is None

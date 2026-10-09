@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 
 from dev.findings_lib.issue_model import LABELS
 from dev.findings_lib.boundaries import FindingsTools
-from dev.prune_worktrees import Worktree
+from lib.worktrees import Worktree
 
 CREATED_URL = "https://github.com/o/r/issues/42"
 

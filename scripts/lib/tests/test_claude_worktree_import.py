@@ -1,11 +1,12 @@
 """Tests for `_claude_worktree.py`, the bootstrap onto the deployed `claude_worktree` module.
 
-`prune_worktrees.py` imports its readers through it. What has to hold: a missing
+`lib.worktrees` imports its readers through it, and `prune_worktrees.py` imports
+`lib.worktrees`. What has to hold: a missing
 deploy raises, and removes nothing, rather than falling back to a stale copy; and the env
 var names the copy that gets imported. CI links a pinned dotfiles checkout into the deployed
 path, so every test here runs there too.
 
-Run: uv run pytest scripts/dev/tests/test_claude_worktree_import.py
+Run: uv run pytest scripts/lib/tests/test_claude_worktree_import.py
 """
 
 import os
@@ -14,13 +15,13 @@ from pathlib import Path
 
 # The bootstrap, imported rather than read out of sys.modules, so a host or runner with no
 # deploy fails collection here with the bootstrap's own message.
-import _claude_worktree  # noqa: F401
+from lib import _claude_worktree  # noqa: F401
 import claude_worktree
 from lib.proc_testing import run
 
-SCRIPTS_DEV = Path(__file__).resolve().parents[1]
-REPO = SCRIPTS_DEV.parents[1]
-PRUNER = SCRIPTS_DEV / "prune_worktrees.py"
+SCRIPTS = Path(__file__).resolve().parents[2]
+REPO = SCRIPTS.parent
+PRUNER = SCRIPTS / "dev" / "prune_worktrees.py"
 # Wherever the bootstrap found it: the deploy, or what CLAUDE_WORKTREE_HOME named.
 DEPLOYED = Path(claude_worktree.__file__ or "")
 
@@ -40,8 +41,8 @@ def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path):
     `claude_worktree`, and the env var is read once at import.
     """
     proc = run(
-        [sys.executable, "-c", "import _claude_worktree"],
-        cwd=SCRIPTS_DEV,
+        [sys.executable, "-c", "import lib._claude_worktree"],
+        cwd=SCRIPTS,
         env=_without_deploy(tmp_path),
         check=False,
     )
@@ -56,9 +57,9 @@ def test_bootstrap_imports_the_module_the_env_var_names(tmp_path):
         [
             sys.executable,
             "-c",
-            "import _claude_worktree, claude_worktree; print(claude_worktree.__file__)",
+            "import lib._claude_worktree, claude_worktree; print(claude_worktree.__file__)",
         ],
-        cwd=SCRIPTS_DEV,
+        cwd=SCRIPTS,
         env={**_without_deploy(tmp_path), "CLAUDE_WORKTREE_HOME": str(DEPLOYED.parent)},
         check=False,
     )
@@ -102,19 +103,16 @@ def test_gc_fails_loudly_rather_than_repairing_without_the_deploy(tmp_path):
     assert "chezmoi apply" in proc.stderr
 
 
-def test_the_pruner_imports_as_a_library_with_only_scripts_on_the_path(tmp_path):
-    """`backlog.py` and `findings_lib` load the pruner as `dev.prune_worktrees`.
+def test_the_worktree_library_imports_with_only_scripts_on_the_path(tmp_path):
+    """`backlog.py` and `findings_lib` load the library as `lib.worktrees`.
 
-    That puts `scripts/` on `sys.path` but not `scripts/dev/`, so a bare sibling import that
-    works when the pruner runs directly raises here instead. A bare `from foreign_owned
-    import` does exactly that, and the docs-refresh cron's `backlog.py` generator would fail
-    on every run unless it is spelled `dev.foreign_owned`.
+    That puts `scripts/` on `sys.path` but not `scripts/lib/`, so a bare sibling import that
+    works when the module's own directory is on the path raises here instead. A bare `import
+    _claude_worktree` does exactly that, and the docs-refresh cron's `backlog.py` generator
+    would fail on every run unless it is spelled `from lib import _claude_worktree`.
     """
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     env["CLAUDE_WORKTREE_HOME"] = str(DEPLOYED.parent)
-    code = (
-        f"import sys; sys.path.insert(0, {str(SCRIPTS_DEV.parent)!r}); "
-        "import dev.prune_worktrees"
-    )
+    code = f"import sys; sys.path.insert(0, {str(SCRIPTS)!r}); import lib.worktrees"
     done = run([sys.executable, "-c", code], cwd=tmp_path, env=env)
     assert done.returncode == 0, done.stderr

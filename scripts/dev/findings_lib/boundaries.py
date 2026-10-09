@@ -27,11 +27,11 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.prune_worktrees import _worktree_facts
+from lib.worktrees import worktree_facts as read_worktree_facts
 from lib.gh import gh, gh_json
 from lib.json_types import JsonValue
 
-# (worktrees, dirty, merged, ok) — `prune_worktrees._worktree_facts`'s own return, named here
+# (worktrees, dirty, merged, ok) — `lib.worktrees.worktree_facts`'s own return, named here
 # so the field below reads as one thing rather than a four-element tuple spelled out.
 WorktreeFacts = tuple[list[Any], Callable[[str], bool], Callable[[Any], bool], bool]
 
@@ -55,7 +55,7 @@ class FindingsTools:
 
     gh_json: Callable[..., JsonValue] = gh_json
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
-    worktree_facts: Callable[..., WorktreeFacts] = _worktree_facts
+    worktree_facts: Callable[..., WorktreeFacts] = read_worktree_facts
     # The register every gh call names with `--repo`, or None for this repo. Read by
     # `gh_calls.run` and the create path, which append it to each write, so a `--dry-run`
     # prints the repo it would write to. `aimed` sets it and wraps the reads to match.

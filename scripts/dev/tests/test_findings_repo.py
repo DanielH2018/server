@@ -14,7 +14,7 @@ from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 from dev.findings import main
 from dev.findings_lib.boundaries import REGISTER_CHECKOUTS
 from dev.findings_lib.issue_model import claim_comment
-from dev.prune_worktrees import _worktree_facts, is_merged
+from lib.worktrees import worktree_facts, is_merged
 
 WT = "worktree-fanout-750"
 DOTFILES = "DanielH2018/dotfiles"
@@ -104,27 +104,27 @@ def _repo_on_main(tmp_path: Path, *, symref: bool) -> Path:
     return repo
 
 
-def test_worktree_facts_for_a_checkout_merges_against_its_default_branch(
+def testworktree_facts_for_a_checkout_merges_against_its_default_branch(
     tmp_path, monkeypatch
 ):
     """Judged against origin/master, a landed tree in the dotfiles checkout would never
     read merged, and no claim on its register could go stale."""
     scrub_process_git_env(monkeypatch)
     repo = _repo_on_main(tmp_path, symref=True)
-    trees, _dirty, merged, ok = _worktree_facts(str(repo))
+    trees, _dirty, merged, ok = worktree_facts(str(repo))
     assert ok is True
     tree = next(t for t in trees if t.branch == "worktree-landed")
     assert merged(tree) is True
     assert is_merged(str(repo), tree.head, "", base="origin/master") is False
 
 
-def test_worktree_facts_for_a_checkout_with_no_default_branch_is_a_failed_read(
+def testworktree_facts_for_a_checkout_with_no_default_branch_is_a_failed_read(
     tmp_path, monkeypatch
 ):
     """The rejecting half: with no merge target nothing can be shown landed, and `reap` must
     refuse rather than judge every claim on that register."""
     scrub_process_git_env(monkeypatch)
     repo = _repo_on_main(tmp_path, symref=False)
-    trees, _dirty, _merged, ok = _worktree_facts(str(repo))
+    trees, _dirty, _merged, ok = worktree_facts(str(repo))
     assert ok is False
     assert trees == []

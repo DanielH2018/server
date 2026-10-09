@@ -28,6 +28,8 @@ _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)  # inject-nested-docs.py imports _hook_common
 
+from _hook_common import INSTRUCTIONS_LOG_ENV, instructions_log_path  # noqa: E402
+
 
 def _load(name):
     spec = importlib.util.spec_from_file_location(
@@ -61,7 +63,7 @@ def repo(tmp_path, monkeypatch):
     (root / ".claude" / "rules").mkdir(parents=True)
     (root / ".claude" / "rules" / "ansible.md").write_text(RULE)
     monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
-    monkeypatch.setattr(_mod._logger, "LOG", str(tmp_path / "instructions.log"))
+    monkeypatch.setenv(INSTRUCTIONS_LOG_ENV, str(tmp_path / "instructions.log"))
     return root
 
 
@@ -270,7 +272,7 @@ def test_a_subagents_log_row_does_not_suppress_the_parent(repo, tmp_path, monkey
         "memory_type": "Project",
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(loaded)))
-    _mod._logger.main()
+    _load("log-instructions").main()
     rows = (tmp_path / "instructions.log").read_text().splitlines()
     assert len(rows) == 2 and all("agent=a1b2c3" in r for r in rows), rows
     _, chosen = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
@@ -416,8 +418,8 @@ def test_the_shim_injects_on_the_real_hook_path():
     byte on stdout before the JSON — a uv reconcile line, an import-time print — makes the
     harness read the whole output as plain text and inject nothing. The runner's own
     `readlink -f "$0"` keeps it on this checkout's `.py`, and the row it appends lands in
-    the primary checkout's gitignored `.claude/logs/instructions.log`, the path the
-    logger module resolves.
+    the primary checkout's gitignored `.claude/logs/instructions.log`, the path
+    `_hook_common.instructions_log_path` resolves.
 
     The hook is the dispatcher, so the object also carries whatever the decision arms
     said about the same command. `sed -n` on a file is a read, which none of the arms
@@ -447,7 +449,7 @@ def test_the_shim_injects_on_the_real_hook_path():
     assert out["hookEventName"] == "PreToolUse"
     assert "permissionDecision" not in out
     assert f"{KNOWN_ROLE}/CLAUDE.md" in out["additionalContext"]
-    with open(_mod._logger.LOG, encoding="utf-8") as fh:
+    with open(instructions_log_path(), encoding="utf-8") as fh:
         rows = fh.read().splitlines()
     assert any(f"[{session[:8]}]" in r and "bash_path_match" in r for r in rows), rows[
         -3:

@@ -458,16 +458,16 @@ unresolved-import = "ignore"
 
 [[tool.ty.overrides]]
 # `claude_worktree` is the same kind of import as `claude_guard` above: the dotfiles repo
-# deploys it to `~/.local/share/claude-worktree`, and `scripts/dev/_claude_worktree.py`
+# deploys it to `~/.local/share/claude-worktree`, and `scripts/lib/_claude_worktree.py`
 # bootstraps it at runtime. ty cannot read its signatures, because CI checks out the dotfiles
-# repo rather than carrying an in-tree copy. The pruner's reader calls lose their type check
-# with it, and the import test loses the check on `import _claude_worktree`.
-# `test_claude_worktree_import.py` and `test_prune_worktrees.py` run against the real module
-# in CI and on every host, and that is what catches a renamed reader.
+# repo rather than carrying an in-tree copy. `lib.worktrees`' reader calls lose their type
+# check with it, and the import test loses the check on `import claude_worktree`.
+# `test_claude_worktree_import.py` and `test_worktrees.py` run against the real module in CI
+# and on every host, and that is what catches a renamed reader.
 include = [
-  "scripts/dev/_claude_worktree.py",
-  "scripts/dev/prune_worktrees.py",
-  "scripts/dev/tests/test_claude_worktree_import.py",
+  "scripts/lib/_claude_worktree.py",
+  "scripts/lib/worktrees.py",
+  "scripts/lib/tests/test_claude_worktree_import.py",
 ]
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
