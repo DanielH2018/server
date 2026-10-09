@@ -34,7 +34,8 @@ payload's `cwd`. That is the marker `launch.py` writes and the dotfiles `worktre
 already keys on. Everywhere else the hook prints nothing. This repo's `.claude/settings.json`
 registers it for a batch here. Another repo's batch, such as a dotfiles one, has no such file
 in its worktree, so `launch.py` passes the hook to that `claude -p` through `--settings`
-(`STOP_HOOK_SETTINGS`, #3363).
+(`stop_hook_settings`, #3363). That registration names the copy in the batch's own snapshot of
+this repo's `origin/master` (`launch.snapshot_command`), not the host's primary checkout.
 
 THE REVIEW PIPELINE. A `launch --review` batch runs several sessions in one worktree
 (`scripts/dev/fanout_lib/review.py`), and the pipeline names the running one in

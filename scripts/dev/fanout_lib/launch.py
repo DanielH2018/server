@@ -36,6 +36,8 @@ CLAUDE_ARGS_PREFIX = (
 # reports as `failed`.
 BUDGET_USD = 40
 CLAUDE_ARGS = CLAUDE_ARGS_PREFIX.format(budget=BUDGET_USD, prompt=SYSTEM_PROMPT_FILE)
+
+
 # The `fanout-stop` Stop hook, registered for another repo's batch through `--settings`.
 # Claude Code loads project settings from the session's cwd, so a batch in this repo's
 # worktree gets the hook from `.claude/settings.json`, and a batch in the dotfiles worktree,
@@ -43,22 +45,15 @@ CLAUDE_ARGS = CLAUDE_ARGS_PREFIX.format(budget=BUDGET_USD, prompt=SYSTEM_PROMPT_
 # too would run it twice per stop and spend the hook's block cap at double speed. A probe on
 # 2026-10-03 confirmed a `--settings` Stop hook fires under `claude -p`. The hook command
 # names this repo's primary checkout by absolute path, where `.claude/settings.json` uses
-# `$CLAUDE_PROJECT_DIR`: that would name the dotfiles worktree, which carries no such hook.
-STOP_HOOK_SETTINGS = {
-    "hooks": {
-        "Stop": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": f"{REPO}/.claude/hooks/run-hook.sh fanout-stop",
-                        "timeout": 10,
-                    }
-                ]
-            }
-        ]
-    }
-}
+# `$CLAUDE_PROJECT_DIR`: the hook's cwd follows the agent's `cd`, so the command names the
+# batch's own snapshot of this repo by absolute path instead; see `snapshot_root`.
+def stop_hook_settings(root: str) -> dict:
+    """The `--settings` value registering `fanout-stop` from the snapshot at `root`."""
+    command = f"{root}/.claude/hooks/run-hook.sh fanout-stop"
+    hook = {"type": "command", "command": command, "timeout": 10}
+    return {"hooks": {"Stop": [{"hooks": [hook]}]}}
+
+
 # DECIDED: `RuntimeMaxSec=` here, where `claude-rc-restart.service.j2` rejects it for
 # claude-rc.service. systemd records its expiry as a failure (`Result=timeout`); for a
 # long-lived service host that is a false alarm, and for a batch that ran out of time it is
@@ -74,6 +69,14 @@ REVIEW_RUNTIME_MAX_S = 8 * 3600
 HEADLESS_PYTHON = "3.14.6"
 # The script a `--review` unit runs, relative to a checkout of this repo; see `review_script`.
 REVIEW_SCRIPT = "scripts/dev/fanout_review.py"
+# Another repo's batch runs this repo's code from a snapshot of `origin/master` inside its own
+# worktree, never from the host's primary checkout, which can lag it (#3684, #3762). The
+# snapshot holds what such a batch reads: the review pipeline and everything it imports under
+# `scripts/`, the headless system prompt beside it, and the `fanout-stop` hook. It lives under
+# `.fanout/`, which `exclude_fanout_command` keeps out of git, so `clean` reads the tree as
+# clean and removes the snapshot with the tree.
+SNAPSHOT_DIR = ".fanout/server"
+SNAPSHOT_PATHS = ("scripts", ".claude/hooks")
 
 
 # The user manager's PATH lacks ~/.local/bin (claude, uv) and repo hooks need uv. The fnm
@@ -190,29 +193,55 @@ def remove_worktree_command(batch: str, target: Target = SERVER_TARGET) -> str:
     )
 
 
+def snapshot_root(worktree: str) -> str:
+    """Where another repo's batch in `worktree` holds its snapshot of this repo."""
+    return f"{worktree}/{SNAPSHOT_DIR}"
+
+
+def snapshot_command(batch: str, target: Target, server: str = REPO) -> str:
+    """Archive `origin/master`'s `SNAPSHOT_PATHS` from `server` into the batch's snapshot.
+
+    The fetch comes first, so the snapshot is master as GitHub holds it, however far the
+    checkout's own branch lags. `git archive` reads the object store, never the work tree, so
+    the checkout is left exactly as it was.
+    """
+    root = snapshot_root(worktree_path(batch, target))
+    tar = f"{root}.tar"
+    base = SERVER_TARGET.base
+    return _step(
+        f"git -C {server} fetch --quiet origin {SERVER_TARGET.base_branch} && "
+        f"mkdir -p {root} && "
+        f"git -C {server} archive -o {tar} {base} {' '.join(SNAPSHOT_PATHS)} && "
+        f"tar -xf {tar} -C {root} && rm {tar}",
+        _SNAPSHOT_STEP,
+    )
+
+
 def write_brief_command(batch: str, target: Target = SERVER_TARGET) -> str:
     wt = worktree_path(batch, target)
     return _step(f"mkdir -p {wt}/.fanout && cat > {wt}/.fanout/brief.md", "brief write")
 
 
-def claude_args(target: Target = SERVER_TARGET) -> str:
-    """The `claude -p` command line a batch in `target` runs.
+def claude_args(target: Target, worktree: str) -> str:
+    """The `claude -p` command line a batch in `target`, working in `worktree`, runs.
 
     The system prompt file is relative to the worktree for this repo, whose worktree always
-    carries it. Another repo's worktree does not, so there it is read from this repo's primary
-    checkout on the same host, and a missing file would end the session before its first turn.
-    Another repo's batch also gets the `fanout-stop` hook through `--settings`, because its
-    worktree carries no `.claude/settings.json` to register it.
+    carries it. Another repo's worktree does not, so there it is read from the batch's
+    snapshot of this repo (`snapshot_root`). Another repo's batch also gets the `fanout-stop`
+    hook through `--settings`, because its worktree carries no `.claude/settings.json` to
+    register it.
     """
     if target.is_server:
         return CLAUDE_ARGS
+    root = snapshot_root(worktree)
     prefix = CLAUDE_ARGS_PREFIX.format(
-        budget=BUDGET_USD, prompt=f"{REPO}/{SYSTEM_PROMPT_FILE}"
+        budget=BUDGET_USD, prompt=f"{root}/{SYSTEM_PROMPT_FILE}"
     )
-    return f"{prefix} --settings {shlex.quote(json.dumps(STOP_HOOK_SETTINGS))}"
+    settings = json.dumps(stop_hook_settings(root))
+    return f"{prefix} --settings {shlex.quote(settings)}"
 
 
-def review_script(target: Target = SERVER_TARGET) -> str:
+def review_script(batch: str, target: Target = SERVER_TARGET) -> str:
     """The `fanout_review.py` path a `--review` unit in `target` runs.
 
     This repo's batch runs the worktree's copy, relative to the unit's WorkingDirectory.
@@ -220,31 +249,19 @@ def review_script(target: Target = SERVER_TARGET) -> str:
     current, and it imports `fanout_lib` from the same tree. The host's primary checkout
     can lag `origin/master`: on 2026-10-09 daniel-server's was 85 commits behind, predated
     the script, and every review unit placed there failed to spawn (#3684). Another repo's
-    worktree does not carry the script, so its batch runs the primary checkout's copy, and
-    `review_script_check_command` refuses the launch when that copy is missing.
+    worktree does not carry the script, so its batch runs the copy in its snapshot of
+    `origin/master` (`snapshot_command`), which is current for the same reason.
     """
     if target.is_server:
         return REVIEW_SCRIPT
-    return f"{REPO}/{REVIEW_SCRIPT}"
-
-
-def review_script_check_command(target: Target) -> str:
-    """Refuse a `--review` batch whose host checkout lacks `fanout_review.py`, or "".
-
-    Only another repo's batch reads the script from this repo's primary checkout, so only its
-    chain carries the check. It runs first, before `exists`, so a refusal leaves no tree and
-    no branch, and `_launch_elsewhere` has not taken the claim yet.
-    """
-    if target.is_server:
-        return ""
-    return _step(f"test -f {review_script(target)}", _REVIEW_SCRIPT_STEP)
+    return f"{snapshot_root(worktree_path(batch, target))}/{REVIEW_SCRIPT}"
 
 
 def review_command(batch: str, target: Target = SERVER_TARGET) -> str:
     """The unit's command for a `--review` batch: `fanout_review.py` in place of `claude -p`."""
     return (
         f"uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
-        f"{review_script(target)} --batch {batch} --repo {target.repo}"
+        f"{review_script(batch, target)} --batch {batch} --repo {target.repo}"
     )
 
 
@@ -257,7 +274,7 @@ def systemd_run_command(
     """The `systemd-run` step; `home` defaults to the launching user's own HOME."""
     wt = worktree_path(batch, target)
     home = home or str(_Path.home())
-    command = review_command(batch, target) if review else claude_args(target)
+    command = review_command(batch, target) if review else claude_args(target, wt)
     runtime = REVIEW_RUNTIME_MAX_S if review else RUNTIME_MAX_S
     return _step(
         (
@@ -274,16 +291,15 @@ def systemd_run_command(
     )
 
 
-def prepare_command(
-    batch: str, target: Target = SERVER_TARGET, review: bool = False
-) -> str:
-    """Worktree add+lock and the brief write, without starting the agent."""
-    steps = [
-        review_script_check_command(target) if review else "",
-        create_worktree_command(batch, target),
-        write_brief_command(batch, target),
-    ]
-    return " && ".join(s for s in steps if s)
+def prepare_command(batch: str, target: Target) -> str:
+    """Another repo's worktree add+lock, its snapshot and the brief write, without the agent."""
+    return " && ".join(
+        [
+            create_worktree_command(batch, target),
+            snapshot_command(batch, target),
+            write_brief_command(batch, target),
+        ]
+    )
 
 
 def launch_command(batch: str, review: bool = False) -> str:
@@ -311,11 +327,12 @@ _STEP_SENTINEL_RE = re.compile(r"^fanout-step: (.+)$", re.MULTILINE)
 # confusing "not a working tree"); `brief write`/`systemd-run` come after the tree already exists and
 # leave it in place for inspection instead. `exists` is the one that must never be here: it
 # fails BECAUSE a tree is there, and that tree belongs to an earlier batch, not this launch.
-_CLEANUP_STEPS = frozenset({"worktree add", "worktree lock"})
+# The snapshot step runs inside a tree this launch just made, before the claim, so a failed
+# fetch or archive removes that tree too: nothing has started in it.
+_SNAPSHOT_STEP = "server snapshot"
+_CLEANUP_STEPS = frozenset({"worktree add", "worktree lock", _SNAPSHOT_STEP})
 
 _EXISTS_STEP = "exists"
-# Precedes `exists`, so like it, it created nothing and is not in `_CLEANUP_STEPS`.
-_REVIEW_SCRIPT_STEP = "review script"
 
 
 def _attribute_failure(stderr: str) -> str | None:
@@ -431,9 +448,7 @@ def _launch_elsewhere(
         LaunchError: as `launch` documents, plus a refused claim, which removes the tree.
     """
     try:
-        proc = _run(
-            tools, host, prepare_command(batch, target, review), brief_text, "launch"
-        )
+        proc = _run(tools, host, prepare_command(batch, target), brief_text, "launch")
     except LaunchError as exc:
         message = str(exc) + (_cleanup_worktree(tools, host, batch, target) or "")
         raise LaunchError(message) from None
@@ -479,11 +494,6 @@ def _raise_failure(
             f"{branch_name(batch)} on {host} — run `clean <run-id>` first, or remove "
             "the tree by hand if you are abandoning its work; relaunching over it "
             "would delete that branch"
-        )
-    if step == _REVIEW_SCRIPT_STEP:
-        raise LaunchError(
-            f"{host}: {review_script(target)} is missing, and a {target.repo} --review "
-            f"unit runs it — fast-forward {REPO} to origin/master, then relaunch"
         )
     message = (
         f"{step or 'launch command'} failed ({proc.returncode}): {proc.stderr.strip()}"
