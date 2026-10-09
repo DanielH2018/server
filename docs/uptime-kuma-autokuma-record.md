@@ -282,6 +282,15 @@ cluster still shows the monitor somewhere, and
 `test_every_declared_monitor_lands_in_a_named_group` keeps it empty in the repo by failing until
 one of the group rules matches the new id.
 
+A push tile's token must be exactly 32 letters and digits. AutoKuma refuses any other shape with
+one WARN per sync in the AutoKuma sidecar's log and never creates the monitor, so the pusher gets
+HTTP 404 and nothing pages (#3985). `probe.py kuma-drift` cannot see it either: it reports the
+tile as "no beat due yet" until the tile's interval has passed since Kuma started, which for a
+weekly tile is never (#4005). `secret_rotation.py rotate` mints `token_hex(16)`; a token added by
+hand needs the same shape. The deploy asserts the format over every rendered push tile through
+the `kuma_malformed_push_tokens` filter and names each refused id. ENFORCED:
+`ansible/tests/services/test_kuma_push_token_format.py::test_one_base64_token_is_flagged`.
+
 ## The status page sync, in detail
 
 `kuma-status-page-sync` (`templates/status-page-sync-cronjob.yaml.j2`, every 15 min) owns the group
