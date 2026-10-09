@@ -17,17 +17,17 @@ rather than at the next day's slot. Same idiom as `checks/r2.py`; the rationale 
 idioms is in bridge/config_io.py's header.
 
 Reads config as `cfg.X`. The fetch and the cache are parameters of `cloudflare_ips_drift`, so
-a test hands in a canned fetch and a fresh dict rather than patching this module. `_probe` lives
-beside `cloudflare_ips_drift`, the only code that mutates it.
+a test hands in a canned fetch and a fresh dict rather than patching this module. The production
+cache is `src.state.cloudflare_ips_probe` (`bridge.streaks.State`).
 """
 
 from collections.abc import Callable
 import time
 import urllib.request
-from typing import TypedDict
 
 from bridge.common import HTTP_TIMEOUT
 from bridge.config import Config
+from bridge.streaks import ProbeCache
 from bridge.sources import Sources
 from bridge.parsing import describe_fetch_failure
 
@@ -78,21 +78,12 @@ def cloudflare_ips_verdict(
     )
 
 
-# ts=None means never probed; see checks/r2.py for why not 0.0.
-class _ProbeCache(TypedDict):
-    ts: float | None
-    ok: bool
-    msg: str
-
-
-_probe: _ProbeCache = {"ts": None, "ok": True, "msg": ""}
-
-
 def cloudflare_ips_drift(
     cfg: Config,
     now: float | None = None,
     fetch: Callable[[], list[str]] = fetch_ranges,
-    probe: _ProbeCache | None = None,
+    *,
+    probe: ProbeCache,
 ) -> tuple[bool, str]:
     """Throttled allowlist drift check. (ok, msg).
 
@@ -105,7 +96,6 @@ def cloudflare_ips_drift(
     rather than patching this module, which the repo's monkeypatch ratchet does not allow a
     new test module to do.
     """
-    probe = _probe if probe is None else probe
     if not cfg.CLOUDFLARE_IPS_EXPECTED:
         return True, "cloudflare_ips drift check disabled (no expected list)"
     now = now if now is not None else time.time()
@@ -134,4 +124,4 @@ def cloudflare_ips_drift(
 
 
 def check_cloudflare_ips_drift(cfg: Config, src: Sources) -> tuple[bool, str]:
-    return cloudflare_ips_drift(cfg)
+    return cloudflare_ips_drift(cfg, probe=src.state.cloudflare_ips_probe)

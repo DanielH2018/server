@@ -7,10 +7,10 @@ speedtest.
 `check_mem` also carries the Claude Code cgroup arm (`with_claude_cgroups`, issue #1258).
 
 Slice 5 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
-(`bridge.sources.Sources`) and the shared streak counter as `bridge.streaks.X`, so a test hands
-in a fake `src` and clears the streak dict; `claude_cgroup_verdict` is from-imported from verdicts.host_cgroups and is therefore patched on
-THIS module, where it is bound. `_host_origin_streaks` lives here beside
-`_host_origin_shortfall`, the only code that mutates it — `checks.host_thermal` reads the floor
+(`bridge.sources.Sources`) and its streak counters as `src.state` (`bridge.streaks.State`), so a
+test hands in a fake `src` and gets zeroed streaks with it; `claude_cgroup_verdict` is from-imported from verdicts.host_cgroups and is therefore patched on
+THIS module, where it is bound. `_host_origin_shortfall` is the only code that advances
+`src.state.host_origin_streaks` — `checks.host_thermal` reads the floor
 qualified, off this module, rather than from-importing it. Rule and enforcement:
 bridge/config.py's header.
 """
@@ -22,11 +22,9 @@ import bridge.streaks
 from verdicts.host_cgroups import claude_cgroup_verdict
 
 
-_host_origin_streaks: dict[str, int] = {}
-
-
 def _host_origin_shortfall(
     cfg: Config,
+    src: Sources,
     key: str,
     vec: list[tuple[dict, float]],
     what: str,
@@ -50,10 +48,10 @@ def _host_origin_shortfall(
     grace = cfg.HOST_ORIGINS_CONSECUTIVE if consecutive is None else consecutive
     origins = {bridge.net._origin_name(labels) for labels, _ in vec}
     if len(origins) >= floor:
-        _host_origin_streaks[key] = 0
+        src.state.host_origin_streaks[key] = 0
         return None
-    streak = _host_origin_streaks.get(key, 0) + 1
-    _host_origin_streaks[key] = streak
+    streak = src.state.host_origin_streaks.get(key, 0) + 1
+    src.state.host_origin_streaks[key] = streak
     seen = ", ".join(sorted(origins)) or "none"
     if streak < grace:
         return (
@@ -106,7 +104,7 @@ def check_disk(cfg: Config, src: Sources) -> tuple[bool, str]:
         # host's disk-full page is never replaced by a coverage complaint.
         # Collected, not returned, so a host that IS reporting and IS full still pages ahead of
         # the coverage complaint — a real breach on the survivor outranks the absent host.
-        short = _host_origin_shortfall(cfg, "disk:%s" % mp, vec, "disk %s" % mp)
+        short = _host_origin_shortfall(cfg, src, "disk:%s" % mp, vec, "disk %s" % mp)
         if short is not None:
             shortfalls.append(short)
         for labels, used_pct in vec:
@@ -176,7 +174,7 @@ def check_mem(cfg: Config, src: Sources) -> tuple[bool, str]:
     # that is actually out of memory outranks a complaint about the absent one. The comment used
     # to say "evaluated after", describing a line position this call has never had (2026-08-23b
     # review L9); what is deferred is the return, not the evaluation.
-    short = _host_origin_shortfall(cfg, "mem", vec, "memory")
+    short = _host_origin_shortfall(cfg, src, "mem", vec, "memory")
     breaching = [
         "%s %.0f%%" % (bridge.net._origin_name(labels), pct)
         for labels, pct in vec
@@ -252,11 +250,11 @@ def with_claude_cgroups(
         cfg.CLAUDE_CGROUP_EVENT_WINDOW,
     )
     if arm_ok:
-        bridge.streaks._down_streaks["claude_cgroups"] = 0
+        src.state.down_streaks["claude_cgroups"] = 0
         return ok, "%s, %s" % (msg, arm_msg)
-    bridge.streaks._down_streaks["claude_cgroups"], arm_ok, arm_msg = (
+    src.state.down_streaks["claude_cgroups"], arm_ok, arm_msg = (
         bridge.streaks.down_streak(
-            bridge.streaks._down_streaks.get("claude_cgroups", 0),
+            src.state.down_streaks.get("claude_cgroups", 0),
             cfg.CLAUDE_CGROUP_CONSECUTIVE,
             arm_msg,
             "burst/cgroup-recreate grace",

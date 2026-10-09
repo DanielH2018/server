@@ -197,12 +197,7 @@ def test_cert_without_a_cn_label_reports_the_breach_rather_than_crashing(cfg):
 # ── scrutiny SMART-data freshness (collector runs daily; web API holds last report) ──
 
 
-def _reset_origin_streaks():
-    checks.host._host_origin_streaks.clear()
-
-
 def test_mem_pages_when_a_host_stops_reporting(cfg):
-    _reset_origin_streaks()
     cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=1)
     src = FakeSources(prom_vector=lambda q: [({"origin": "daniel-server"}, 21.0)])
     ok, msg = checks.host.check_mem(cfg, src)
@@ -212,7 +207,6 @@ def test_mem_pages_when_a_host_stops_reporting(cfg):
 
 
 def test_disk_pages_when_a_host_stops_reporting(cfg):
-    _reset_origin_streaks()
     cfg = replace(cfg, DISK_MOUNTPOINTS=["/"], HOST_ORIGINS_CONSECUTIVE=1)
     src = FakeSources(prom_vector=lambda q: [({"origin": "daniel-server"}, 30.0)])
     ok, msg = checks.host.check_disk(cfg, src)
@@ -223,7 +217,6 @@ def test_disk_pages_when_a_host_stops_reporting(cfg):
 def test_a_reboot_length_shortfall_does_not_page(cfg):
     """The weekly reboot removes a node's node-exporter for minutes against a 5m check loop, so a
     bare floor would page every Sunday. Only the HOST_ORIGINS_CONSECUTIVE'th cycle fails."""
-    _reset_origin_streaks()
     # CLAUDE_CGROUPS off: the deployed value arms check_mem's cgroup arm, which would read the
     # single memory vector this stub returns as a stall rate.
     cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=3, CLAUDE_CGROUPS=())
@@ -234,15 +227,23 @@ def test_a_reboot_length_shortfall_does_not_page(cfg):
 
 
 def test_full_coverage_resets_the_shortfall_streak(cfg):
-    _reset_origin_streaks()
     cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=2, CLAUDE_CGROUPS=())
     one = [({"origin": "daniel-server"}, 21.0)]
     both = [({"origin": "daniel-server"}, 21.0), ({"origin": "daniel-box"}, 30.0)]
-    assert checks.host.check_mem(cfg, FakeSources(prom_vector=lambda q: one))[0] is True
+    first = FakeSources(prom_vector=lambda q: one)
+    assert checks.host.check_mem(cfg, first)[0] is True
     assert (
-        checks.host.check_mem(cfg, FakeSources(prom_vector=lambda q: both))[0] is True
+        checks.host.check_mem(
+            cfg, FakeSources(state=first.state, prom_vector=lambda q: both)
+        )[0]
+        is True
     )
-    assert checks.host.check_mem(cfg, FakeSources(prom_vector=lambda q: one))[0] is True
+    assert (
+        checks.host.check_mem(
+            cfg, FakeSources(state=first.state, prom_vector=lambda q: one)
+        )[0]
+        is True
+    )
 
 
 def test_a_breaching_present_host_outranks_the_coverage_complaint(cfg):
@@ -251,14 +252,12 @@ def test_a_breaching_present_host_outranks_the_coverage_complaint(cfg):
     Ordering the floor ahead of the breach scan would have replaced a real disk-full alert with
     'only 1 of 2 hosts reporting'.
     """
-    _reset_origin_streaks()
     cfg = replace(cfg, DISK_MOUNTPOINTS=["/"], HOST_ORIGINS_CONSECUTIVE=1)
     src = FakeSources(prom_vector=lambda q: [({"origin": "daniel-server"}, 97.0)])
     ok, msg = checks.host.check_disk(cfg, src)
     assert not ok
     assert "97" in msg
 
-    _reset_origin_streaks()
     src = FakeSources(prom_vector=lambda q: [({"origin": "daniel-server"}, 99.0)])
     ok, msg = checks.host.check_mem(cfg, src)
     assert not ok

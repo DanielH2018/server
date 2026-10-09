@@ -3,7 +3,7 @@
 Its own module rather than more functions in `checks/cluster.py`, which sits at the 600-line
 cap the module-length ratchet enforces. Same layering as its neighbours: reads config as `cfg.X`,
 every query through the `src` argument (`bridge.sources.Sources`) `check_k8s_workloads` passes
-to its other arms, and the shared streak counter as `bridge.streaks.X`.
+to its other arms, and the down-streak table it passes in as `streaks` (`src.state.down_streaks`).
 
 Rule and enforcement: bridge/config.py's header.
 """
@@ -43,7 +43,7 @@ def stalled_rollout_offenders(cfg: Config, src: Sources) -> list[tuple[dict, flo
 
 
 def held_replica_offenders(
-    cfg: Config, offenders: list[tuple[dict, float]]
+    cfg: Config, streaks: dict[str, int], offenders: list[tuple[dict, float]]
 ) -> tuple[list[tuple[dict, float]], str]:
     """Hold unavailable-replica offenders back until they persist K8S_WORKLOADS_CONSECUTIVE cycles.
 
@@ -61,22 +61,22 @@ def held_replica_offenders(
     the check is blind, which delaying helps nobody.
     """
     if not offenders:
-        bridge.streaks._down_streaks["k8s_workload_replicas"] = 0
+        streaks["k8s_workload_replicas"] = 0
         return offenders, ""
     count, held, note = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("k8s_workload_replicas", 0),
+        streaks.get("k8s_workload_replicas", 0),
         cfg.K8S_WORKLOADS_CONSECUTIVE,
         "unavailable replicas: %s" % replica_offender_names(offenders),
         "rollout",
     )
-    bridge.streaks._down_streaks["k8s_workload_replicas"] = count
+    streaks["k8s_workload_replicas"] = count
     if held:
         return [], note
     return offenders, ""
 
 
 def held_stalled_offenders(
-    cfg: Config, offenders: list[tuple[dict, float]]
+    cfg: Config, streaks: dict[str, int], offenders: list[tuple[dict, float]]
 ) -> tuple[list[tuple[dict, float]], str]:
     """Hold stalled-rollout offenders back until they persist K8S_ROLLOUT_STALL_CONSECUTIVE cycles.
 
@@ -86,15 +86,15 @@ def held_stalled_offenders(
     playbook's own `rollout status` waits.
     """
     if not offenders:
-        bridge.streaks._down_streaks["k8s_rollout_stall"] = 0
+        streaks["k8s_rollout_stall"] = 0
         return offenders, ""
     count, held, note = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("k8s_rollout_stall", 0),
+        streaks.get("k8s_rollout_stall", 0),
         cfg.K8S_ROLLOUT_STALL_CONSECUTIVE,
         "rollout not updating: %s" % stalled_rollout_names(offenders),
         "rollout stall",
     )
-    bridge.streaks._down_streaks["k8s_rollout_stall"] = count
+    streaks["k8s_rollout_stall"] = count
     if held:
         return [], note
     return offenders, ""

@@ -13,8 +13,6 @@ from dataclasses import replace
 
 import pytest
 
-import bridge.config
-import bridge.streaks
 import checks.host_thermal
 import verdicts.host_power
 from _fake_sources import FakeSources
@@ -130,7 +128,7 @@ def test_check_ups_all_absent_but_nut_scraping_pages(cfg):
     assert ok1 and "streak 1/2" in msg1
     ok2, msg2 = checks.host_thermal.check_ups(cfg, src)
     assert not ok2 and "absent" in msg2
-    assert bridge.streaks._down_streaks.get("ups", 0) == 2
+    assert src.state.down_streaks.get("ups", 0) == 2
 
 
 def test_check_ups_all_absent_nut_scrape_down_still_defers(cfg):
@@ -145,7 +143,7 @@ def test_check_ups_all_absent_nut_scrape_down_still_defers(cfg):
     src = _ups_scalars(cfg, None, None, replace=None, source_up=0.0, on_battery=None)
     ok, msg = checks.host_thermal.check_ups(cfg, src)
     assert ok and "no UPS data" in msg
-    assert bridge.streaks._down_streaks.get("ups", 0) == 0
+    assert src.state.down_streaks.get("ups", 0) == 0
 
 
 def test_check_ups_replace_battery_pages(cfg):
@@ -194,10 +192,13 @@ def test_check_ups_single_low_runtime_is_suppressed_then_pages(cfg):
 def test_check_ups_recovery_resets_streak(cfg):
     src = _ups_scalars(cfg, 100, 60)
     checks.host_thermal.check_ups(cfg, src)  # streak advances to 1
+    assert src.state.down_streaks["ups"] == 1
+    state = src.state
     src = _ups_scalars(cfg, 100, 900)  # healthy again
+    src.state = state
     ok, _ = checks.host_thermal.check_ups(cfg, src)
     assert ok
-    assert bridge.streaks._down_streaks.get("ups", 0) == 0
+    assert src.state.down_streaks.get("ups", 0) == 0
 
 
 def test_check_ups_disabled_when_no_queries(cfg):
@@ -259,17 +260,20 @@ def test_the_on_battery_arm_holds_its_own_streak(cfg):
     low-runway cycle sharing one counter would page at half the intended grace."""
     src = _ups_scalars(cfg, 100, 60, on_battery=1.0)
     checks.host_thermal.check_ups(cfg, src)
-    assert bridge.streaks._down_streaks.get("ups_on_battery", 0) == 1
-    assert bridge.streaks._down_streaks.get("ups", 0) == 0
+    assert src.state.down_streaks.get("ups_on_battery", 0) == 1
+    assert src.state.down_streaks.get("ups", 0) == 0
 
 
 def test_restored_mains_clears_the_on_battery_streak(cfg):
     src = _ups_scalars(cfg, 100, 900, on_battery=1.0)
     checks.host_thermal.check_ups(cfg, src)
+    assert src.state.down_streaks["ups_on_battery"] == 1
+    state = src.state
     src = _ups_scalars(cfg, 100, 900, on_battery=0.0)
+    src.state = state
     ok, _ = checks.host_thermal.check_ups(cfg, src)
     assert ok
-    assert bridge.streaks._down_streaks.get("ups_on_battery", 0) == 0
+    assert src.state.down_streaks.get("ups_on_battery", 0) == 0
 
 
 def test_the_on_battery_series_going_missing_alone_pages(cfg):

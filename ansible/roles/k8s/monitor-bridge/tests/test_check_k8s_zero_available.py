@@ -12,7 +12,6 @@ from dataclasses import replace
 from functools import partial
 
 import pytest
-import bridge.streaks
 from checks.cluster import check_k8s_workloads
 from _fake_sources import FakeSources
 
@@ -55,17 +54,12 @@ def _vector(answers, promql, **_kw):
     return []
 
 
-@pytest.fixture(autouse=True)
-def _clear_streaks():
-    bridge.streaks._down_streaks.clear()
-    yield
-    bridge.streaks._down_streaks.clear()
-
-
 @pytest.fixture
-def run():
+def run(state):
     def _run(kcfg, vectors):
+        # One `state` across every call: each call is one cycle of the same process.
         src = FakeSources(
+            state=state,
             prom_vector=partial(_vector, vectors),
             prom_scalar=partial(_scalar, HEALTHY_COUNTS),
         )

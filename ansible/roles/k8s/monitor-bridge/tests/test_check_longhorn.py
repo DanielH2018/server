@@ -7,8 +7,6 @@ kube-state-metrics is not reporting at all.
 
 from dataclasses import replace
 
-import bridge.config
-import bridge.streaks
 import checks.storage
 import checks.cluster
 from _fake_sources import FakeSources
@@ -54,8 +52,11 @@ def test_longhorn_degraded_holds_up_until_the_threshold_then_pages(cfg):
 def test_longhorn_recovery_resets_the_streak(cfg):
     cfg, src = _arm_longhorn(cfg, [_longhorn_series("freshrss-config", "degraded")])
     checks.storage.check_longhorn_volumes(cfg, src)
-    assert checks.storage.check_longhorn_volumes(cfg, _longhorn_sources([]))[0]
-    assert bridge.streaks._down_streaks.get("longhorn", 0) == 0
+    assert src.state.down_streaks["longhorn"] == 1
+    healthy = _longhorn_sources([])
+    healthy.state = src.state
+    assert checks.storage.check_longhorn_volumes(cfg, healthy)[0]
+    assert src.state.down_streaks["longhorn"] == 0
 
 
 def test_longhorn_absent_metric_is_not_green(cfg):

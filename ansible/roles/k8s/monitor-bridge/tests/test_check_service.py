@@ -133,10 +133,9 @@ def test_n8n_disabled_without_key(cfg):
     assert "disabled" in msg.lower()
 
 
-def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq, cfg):
+def test_n8n_check_down_after_consecutive_failures(seq, cfg, state):
     # a workflow pages only once its streak reaches N8N_CONSECUTIVE_MAX (3) distinct failures
     cfg = replace(cfg, N8N_API_KEY="x")
-    monkeypatch.setattr(checks.service, "_n8n_streaks", {})
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
 
     def cycle(eid):
@@ -146,7 +145,7 @@ def test_n8n_check_down_after_consecutive_failures(monkeypatch, seq, cfg):
             ]
         }
         return checks.service.check_n8n(
-            cfg, FakeSources(get_json=seq(wf, ex)), now=N8N_NOW
+            cfg, FakeSources(state=state, get_json=seq(wf, ex)), now=N8N_NOW
         )
 
     assert cycle("e1")[0]  # streak 1 -> up
@@ -167,10 +166,9 @@ def test_n8n_check_ok_when_no_failures(seq, cfg):
     assert "no active-workflow failures" in msg
 
 
-def test_n8n_check_single_failure_does_not_page(monkeypatch, seq, cfg):
+def test_n8n_check_single_failure_does_not_page(seq, cfg):
     # one failure -> streak 1 < N8N_CONSECUTIVE_MAX -> stays up (the one-transient grace)
     cfg = replace(cfg, N8N_API_KEY="x")
-    monkeypatch.setattr(checks.service, "_n8n_streaks", {})
     wf = {"data": [{"id": "1", "name": "Prod Flow", "active": True}]}
     ex = {
         "data": [

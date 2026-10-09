@@ -12,8 +12,6 @@ from dataclasses import replace
 
 import pytest
 
-import bridge.config
-import bridge.streaks
 import checks.host_edge
 from _fake_sources import FakeSources
 
@@ -241,14 +239,15 @@ def _arm_ports(cfg, open_ports, streak=0, host="10.0.0.139"):
         PI_PUBLISHED_PORTS=PUBLISHED,
         PI_PORTS_CONSECUTIVE=2,
     )
-    bridge.streaks._down_streaks["pi_ports"] = streak
     probed = []
 
     def tcp_open(host, port, timeout):
         probed.append((host, port))
         return port in open_ports
 
-    return cfg, probed, tcp_open, _prom()
+    src = _prom()
+    src.state.down_streaks["pi_ports"] = streak
+    return cfg, probed, tcp_open, src
 
 
 def test_pi_check_arm_disabled_when_no_ports_configured(cfg):
@@ -303,4 +302,4 @@ def test_pi_check_resets_the_streak_once_ports_return(cfg):
     cfg, _probed, tcp_open, src = _arm_ports(cfg, all_ports, streak=1)
     ok, _ = checks.host_edge.check_pi_pressure(cfg, src, tcp_open=tcp_open)
     assert ok
-    assert bridge.streaks._down_streaks["pi_ports"] == 0
+    assert src.state.down_streaks["pi_ports"] == 0

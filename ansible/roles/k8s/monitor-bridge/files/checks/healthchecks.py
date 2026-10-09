@@ -19,10 +19,10 @@ cycle and clears one cycle after the console is fixed.
 
 from collections.abc import Sequence
 import time
-from typing import TypedDict
 
 from bridge.config import Config
 from bridge.sources import Sources
+from bridge.streaks import ProbeCache
 from bridge.types import JsonObject, as_object_list
 
 
@@ -113,28 +113,19 @@ def healthchecks_verdict(
     )
 
 
-# ts=None means never probed; see checks/r2.py for why not 0.0.
-class _ProbeCache(TypedDict):
-    ts: float | None
-    ok: bool
-    msg: str
-
-
-_probe: _ProbeCache = {"ts": None, "ok": True, "msg": ""}
-
-
 def healthchecks_drift(
     cfg: Config,
     src: Sources,
     now: float | None = None,
-    probe: _ProbeCache | None = None,
+    probe: ProbeCache | None = None,
 ) -> tuple[bool, str]:
     """Throttled console drift check. (ok, msg).
 
     The console is read through `src` (`bridge.sources.Sources`) and `probe` is the cache: a
-    test hands in a fake `src` and a fresh cache dict rather than patching this module.
+    test hands in a fake `src` and a fresh cache dict rather than patching this module. None reads
+    `src.state.healthchecks_probe`, the per-process cache the pod uses.
     """
-    probe = _probe if probe is None else probe
+    probe = src.state.healthchecks_probe if probe is None else probe
     if not cfg.HEALTHCHECKS_API_KEY or not cfg.HEALTHCHECKS_EXPECTED:
         return (
             True,

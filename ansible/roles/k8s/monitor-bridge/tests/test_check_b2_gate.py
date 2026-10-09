@@ -26,22 +26,14 @@ from bridge.types import Check
 from gates import Gates
 
 
-def _reset_b2_probe(
-    cfg, monkeypatch, key_id="kid", app_key="akey", interval=1800, transport_retry=300
-):
-    cfg = replace(
+def _arm_b2(cfg, key_id="kid", app_key="akey", interval=1800, transport_retry=300):
+    return replace(
         cfg,
         B2_PROBE_KEY_ID=key_id,
         B2_PROBE_APPLICATION_KEY=app_key,
         B2_PROBE_INTERVAL_S=interval,
         B2_TRANSPORT_RETRY_S=transport_retry,
     )
-    monkeypatch.setattr(
-        checks.b2,
-        "_b2_probe",
-        {"ts": 0.0, "ok": True, "msg": "not yet probed", "ttl": interval},
-    )
-    return cfg
 
 
 def _cap_denial(cfg):
@@ -65,8 +57,8 @@ def _cap_denial(cfg):
     return err
 
 
-def test_b2_reachable_disabled_without_credentials(monkeypatch, cfg):
-    cfg = _reset_b2_probe(cfg, monkeypatch, key_id="", app_key="")
+def test_b2_reachable_disabled_without_credentials(cfg):
+    cfg = _arm_b2(cfg, key_id="", app_key="")
     ok, msg = checks.b2.b2_reachable(cfg, FakeSources(), now=10_000)
     assert ok is True and "disabled" in msg
 
@@ -99,10 +91,10 @@ def test_b2_authorize(response, ok, must_contain, cfg):
         assert s in msg
 
 
-def test_b2_reachable_surfaces_the_cap_error_text(monkeypatch, cfg):
+def test_b2_reachable_surfaces_the_cap_error_text(cfg):
     # G3: the alert must name the CAUSE. B2 answers a cap breach with transaction_cap_exceeded,
     # and _get_json appends the response body to the HTTPError, so it has to reach the message.
-    cfg = _reset_b2_probe(cfg, monkeypatch)
+    cfg = _arm_b2(cfg)
 
     def _boom(url, headers=None):
         raise _cap_denial(cfg)
@@ -112,10 +104,10 @@ def test_b2_reachable_surfaces_the_cap_error_text(monkeypatch, cfg):
     assert ok is False and "transaction_cap_exceeded" in msg
 
 
-def test_b2_reachable_caches_failure_and_does_not_reprobe(monkeypatch, cfg):
+def test_b2_reachable_caches_failure_and_does_not_reprobe(cfg):
     # THE cost-critical property. The fault being detected is a transaction cap, so a failure must
     # NOT re-probe every cycle the way email_backstop does — that would spend the exhausted budget.
-    cfg = _reset_b2_probe(cfg, monkeypatch)
+    cfg = _arm_b2(cfg)
     calls = []
 
     def _boom(url, headers=None):
@@ -135,12 +127,12 @@ def test_b2_reachable_caches_failure_and_does_not_reprobe(monkeypatch, cfg):
     assert len(calls) == 1, "a cached failure must not re-probe: %d calls" % len(calls)
 
 
-def test_b2_reachable_reprobes_a_transport_failure_next_cycle(monkeypatch, cfg):
+def test_b2_reachable_reprobes_a_transport_failure_next_cycle(cfg):
     # The REJECT half of the caching pair above. A failure that never reached B2 was billed
     # nothing, so the cost argument that justifies the 30-minute cache does not apply to it, and
     # holding it would pin the gate DOWN after the outage ends, because the cache would hold back
     # the RECOVERY as well as the retry.
-    cfg = _reset_b2_probe(cfg, monkeypatch, interval=1800, transport_retry=300)
+    cfg = _arm_b2(cfg, interval=1800, transport_retry=300)
     calls = []
     # _get_json wraps DNS/connect/timeout failures as RuntimeError; only these take the short TTL.
     outcomes = [RuntimeError("b2 api: Temporary failure in name resolution")]
@@ -167,8 +159,8 @@ def test_b2_transport_retry_is_shorter_than_the_probe_interval(cfg):
     assert cfg.B2_TRANSPORT_RETRY_S < cfg.B2_PROBE_INTERVAL_S
 
 
-def test_b2_reachable_reprobes_after_the_interval(monkeypatch, cfg):
-    cfg = _reset_b2_probe(cfg, monkeypatch, interval=1800)
+def test_b2_reachable_reprobes_after_the_interval(cfg):
+    cfg = _arm_b2(cfg, interval=1800)
     calls = []
 
     def _ok(url, headers=None):

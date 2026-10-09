@@ -9,8 +9,6 @@ matters most: it is the only test that can fail when a future edit narrows cover
 
 from pathlib import Path
 
-import bridge.streaks
-import bridge.config_host
 import checks.host
 import checks.host_thermal
 import pytest
@@ -333,7 +331,6 @@ def test_no_sensors_scraped_pages_rather_than_passing():
 
 def test_a_single_spike_is_held_and_sustained_heat_pages(cfg):
     """Hysteresis, both halves: one hot cycle must not page, the Nth must."""
-    bridge.streaks._down_streaks.pop("host_temp", None)
     src = _stub_prom([_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 99.0)])
     cycles = cfg.HWMON_TEMP_CONSECUTIVE
     results = [checks.host_thermal.check_host_temp(cfg, src) for _ in range(cycles)]
@@ -349,7 +346,6 @@ def test_the_check_fetches_the_names_it_reports(cfg):
     The two name metrics are separate queries, so a wiring that forgets them still passes every
     verdict test above and ships the sysfs path to the Kuma tile.
     """
-    bridge.streaks._down_streaks.pop("host_temp", None)
     src = _stub_prom(
         [_temp("daniel-box", "pci0000:00_0000:00:18_3", "temp1", 92.6)],
         chip_names=[_chip_name("daniel-box", "pci0000:00_0000:00:18_3", "k10temp")],
@@ -360,9 +356,6 @@ def test_the_check_fetches_the_names_it_reports(cfg):
     for _ in range(cfg.HWMON_TEMP_CONSECUTIVE):
         _ok, msg = checks.host_thermal.check_host_temp(cfg, src)
     assert "daniel-box k10temp/Tctl" in msg, msg
-    # A single-host estate also advances the module-global coverage-shortfall streak, which
-    # would otherwise make a later test's clean cycle page.
-    checks.host._host_origin_streaks.clear()
 
 
 def test_the_check_fetches_the_crit_series_it_prefers(cfg):
@@ -372,7 +365,6 @@ def test_the_check_fetches_the_crit_series_it_prefers(cfg):
     metric is a separate query, so a wiring that forgets it still passes every pure
     hwmon_temp_limits test above while the live check silently never sees a crit-only sensor.
     """
-    bridge.streaks._down_streaks.pop("host_temp", None)
     src = _stub_prom(
         [_temp("daniel-server", "platform_coretemp_0", "temp1", 88.0)],
         crits=[_temp("daniel-server", "platform_coretemp_0", "temp1", 90.0)],
@@ -384,16 +376,14 @@ def test_the_check_fetches_the_crit_series_it_prefers(cfg):
         "the coverage tally must count this sensor as declared, not fallback — a wiring that "
         "forgets to fetch crits would count it 0 by declared, 1 by fallback instead"
     )
-    # Single-host estate advances the coverage-shortfall streak; same cleanup as above.
-    checks.host._host_origin_streaks.clear()
 
 
 def test_a_clean_cycle_clears_the_streak(cfg):
-    bridge.streaks._down_streaks["host_temp"] = 2
     src = _stub_prom([_temp("daniel-pi", "thermal_thermal_zone0", "temp0", 40.0)])
+    src.state.down_streaks["host_temp"] = 2
     ok, _msg = checks.host_thermal.check_host_temp(cfg, src)
     assert ok
-    assert bridge.streaks._down_streaks["host_temp"] == 0, (
+    assert src.state.down_streaks["host_temp"] == 0, (
         "a clean cycle must reset the hysteresis"
     )
 
@@ -439,13 +429,7 @@ def _cool_estate(origins):
     ]
 
 
-def _reset():
-    checks.host._host_origin_streaks.clear()
-    bridge.streaks._down_streaks.pop("host_temp", None)
-
-
 def test_full_coverage_is_clean(cfg):
-    _reset()
     src = _stub_prom(_cool_estate(ALL_THREE))
     ok, msg = checks.host_thermal.check_host_temp(cfg, src)
     assert ok
@@ -456,7 +440,6 @@ def test_full_coverage_is_clean(cfg):
 
 def test_a_missing_host_pages_once_the_grace_expires(cfg):
     """The rejecting half. Two of three hosts is exactly the state the shared floor of 2 met."""
-    _reset()
     src = _stub_prom(_cool_estate(("daniel-server", "daniel-box")))
     results = [
         checks.host_thermal.check_host_temp(cfg, src)
@@ -473,7 +456,6 @@ def test_a_short_coverage_gap_is_held(cfg):
     The Pi's hwmon series goes absent for about 20 minutes at a time, so a floor with no grace
     would page on a healthy estate.
     """
-    _reset()
     src = _stub_prom(_cool_estate(("daniel-server", "daniel-box")))
     held = [
         checks.host_thermal.check_host_temp(cfg, src)
@@ -484,13 +466,14 @@ def test_a_short_coverage_gap_is_held(cfg):
 
 
 def test_full_coverage_clears_the_shortfall_streak(cfg):
-    _reset()
-    src = _stub_prom(_cool_estate(("daniel-server", "daniel-box")))
-    checks.host_thermal.check_host_temp(cfg, src)
+    short = _stub_prom(_cool_estate(("daniel-server", "daniel-box")))
+    checks.host_thermal.check_host_temp(cfg, short)
+    assert short.state.host_origin_streaks["host_temp"] == 1
     src = _stub_prom(_cool_estate(ALL_THREE))
+    src.state = short.state
     ok, _msg = checks.host_thermal.check_host_temp(cfg, src)
     assert ok
-    assert checks.host._host_origin_streaks["host_temp"] == 0, (
+    assert src.state.host_origin_streaks["host_temp"] == 0, (
         "a full-coverage cycle must reset the shortfall streak"
     )
 
@@ -501,7 +484,6 @@ def test_a_hot_sensor_outranks_a_coverage_shortfall(cfg):
     A host that IS reporting and IS too hot pages ahead of a complaint about the absent one.
     Reporting the shortfall first would bury a real breach.
     """
-    _reset()
     src = _stub_prom(
         [
             _origin_temp("daniel-server", "thermal_thermal_zone0", "temp0", 99.0),
@@ -524,7 +506,6 @@ def test_the_two_graces_are_not_compounded(cfg):
     as well would take a missing host from 25 minutes to 75 before anything fired, which is the
     kind of delay that reads as coverage right up until it matters.
     """
-    _reset()
     src = _stub_prom(_cool_estate(("daniel-server", "daniel-box")))
     fired = None
     for i in range(1, cfg.HWMON_TEMP_ORIGINS_CONSECUTIVE * 3 + 1):
@@ -542,7 +523,6 @@ def test_a_host_whose_only_sensors_are_excluded_does_not_count(cfg):
     check does not cover — counting it toward the floor would satisfy the coverage requirement with
     a host nothing is watching.
     """
-    _reset()
     src = _stub_prom(
         _cool_estate(("daniel-server", "daniel-box"))
         + [_origin_temp("daniel-pi", "nvme_nvme0", "temp1", 40.0)],

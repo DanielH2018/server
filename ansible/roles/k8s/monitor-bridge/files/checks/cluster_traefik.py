@@ -3,7 +3,7 @@
 Its own module for the reason `cluster_etcd.py` is one: `checks/cluster.py` sits at the
 600-line cap the module-length ratchet enforces, beside the three Traefik checks this one
 complements. Config as `cfg.X`, the query through the `src` argument (`bridge.sources.Sources`), the
-streak through `bridge.streaks`, the same layering as its neighbours.
+streak in `src.state` (`bridge.streaks.State`), the same layering as its neighbours.
 """
 
 from bridge.config import Config
@@ -45,7 +45,7 @@ def check_traefik_421(cfg: Config, src: Sources) -> tuple[bool, str]:
         key=lambda rv: -rv[1],
     )
     if not rates:
-        bridge.streaks._down_streaks[key] = 0
+        src.state.down_streaks[key] = 0
         return True, "421 ok: no router above %.2f rps" % cfg.TRAEFIK_421_RPS
     msg = (
         "%d router(s) serving 421 above %.2f rps: %s — a client is wedged on a connection "
@@ -56,8 +56,8 @@ def check_traefik_421(cfg: Config, src: Sources) -> tuple[bool, str]:
             ", ".join("%s %.2f rps" % rv for rv in rates),
         )
     )
-    bridge.streaks._down_streaks[key], ok, msg = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get(key, 0),
+    src.state.down_streaks[key], ok, msg = bridge.streaks.down_streak(
+        src.state.down_streaks.get(key, 0),
         cfg.TRAEFIK_421_CONSECUTIVE,
         msg,
         "a one-shot handshake mismatch clears within two cycles",

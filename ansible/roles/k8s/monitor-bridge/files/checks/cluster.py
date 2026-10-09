@@ -4,10 +4,9 @@ Covers the cAdvisor trio (restarts, OOM, CPU throttle), the Prometheus gates, sc
 targets, Traefik 5xx and latency, and k3s workload health.
 
 Slice 6 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
-(`bridge.sources.Sources`), the shared streak counter as `bridge.streaks.X` and the Loki arm as
+(`bridge.sources.Sources`), its streak counters as `src.state` (`bridge.streaks.State`) and the Loki arm as
 `checks.logs.with_log_errors`, so a test hands in a fake `src` and patches those modules; the verdicts
 it from-imports from verdicts.cluster are patched on THIS module, where they are bound.
-`_cadvisor_streaks` and `_cpu_breach_streak` live here beside the code that mutates them.
 Rule and enforcement: bridge/config.py's header.
 """
 
@@ -30,12 +29,6 @@ from verdicts.cluster import (
 )
 
 
-# Keyed per check, exactly like _host_origin_streaks. NOT one shared counter: all three checks run
-# in the same cycle, so a single counter would take three increments per cycle and blow through
-# CADVISOR_CONSECUTIVE inside the first one — hysteresis that silently does nothing.
-_cadvisor_streaks: dict[str, int] = {}
-
-
 def _top_offenders(
     vector: list[tuple[dict, float]], label: str, predicate: Callable[[float], bool]
 ) -> list[tuple[str, float]]:
@@ -46,7 +39,7 @@ def _top_offenders(
 
 
 def _cadvisor_blind(
-    cfg: Config, key: str, vec: list[tuple[dict, float]], what: str
+    cfg: Config, src: Sources, key: str, vec: list[tuple[dict, float]], what: str
 ) -> tuple[bool, str] | None:
     """(ok, msg) when `vec` covers too few pods for an offender filter to mean anything, else None.
 
@@ -56,10 +49,10 @@ def _cadvisor_blind(
     """
     msg = cadvisor_coverage_shortfall(len(vec), cfg.CADVISOR_PODS_MIN, what)
     if msg is None:
-        _cadvisor_streaks[key] = 0
+        src.state.cadvisor_streaks[key] = 0
         return None
-    _cadvisor_streaks[key], ok, out = bridge.streaks.down_streak(
-        _cadvisor_streaks.get(key, 0),
+    src.state.cadvisor_streaks[key], ok, out = bridge.streaks.down_streak(
+        src.state.cadvisor_streaks.get(key, 0),
         cfg.CADVISOR_CONSECUTIVE,
         msg,
         "kubelet restart grace",
@@ -80,7 +73,7 @@ def check_restarts(cfg: Config, src: Sources) -> tuple[bool, str]:
             cfg.RESTART_WINDOW,
         ),
     )
-    blind = _cadvisor_blind(cfg, "restarts", vec, "restart loops")
+    blind = _cadvisor_blind(cfg, src, "restarts", vec, "restart loops")
     if blind is not None:
         return blind
     offenders = _top_offenders(vec, "pod", lambda v: v > cfg.RESTART_MAX)
@@ -109,7 +102,7 @@ def check_oom(cfg: Config, src: Sources) -> tuple[bool, str]:
             cfg.OOM_WINDOW,
         ),
     )
-    blind = _cadvisor_blind(cfg, "oom", vec, "OOM kills")
+    blind = _cadvisor_blind(cfg, src, "oom", vec, "OOM kills")
     if blind is not None:
         return blind
     offenders = _top_offenders(vec, "pod", lambda v: v > 0)
@@ -121,12 +114,6 @@ def check_oom(cfg: Config, src: Sources) -> tuple[bool, str]:
             desc,
         )
     return True, "no OOM kills in %s" % cfg.OOM_WINDOW
-
-
-# Kept as its own module int rather than folded into _down_streaks below: its down branch
-# is bespoke (the page message embeds the throttle thresholds), unlike the other four
-# checks, which all call the shared down_streak() helper. See down_streak()'s docstring.
-_cpu_breach_streak = 0
 
 
 def check_cpu_throttle(cfg: Config, src: Sources) -> tuple[bool, str]:
@@ -157,16 +144,15 @@ def check_cpu_throttle(cfg: Config, src: Sources) -> tuple[bool, str]:
     briefly hugging the cores floor — push `up` with the offender named in the msg, so
     the evidence stays in the bridge log without paging. A clean cycle resets the streak.
     """
-    global _cpu_breach_streak
     sel = bridge.net.cadvisor_sel('container!=""', 'container!="POD"')
     ratio_vec = src.prom_vector(
         "sum(rate(container_cpu_cfs_throttled_periods_total%s[%s])) by (pod) "
         "/ sum(rate(container_cpu_cfs_periods_total%s[%s])) by (pod)"
         % (sel, cfg.CPU_WINDOW, sel, cfg.CPU_WINDOW),
     )
-    blind = _cadvisor_blind(cfg, "cpu", ratio_vec, "CPU throttling")
+    blind = _cadvisor_blind(cfg, src, "cpu", ratio_vec, "CPU throttling")
     if blind is not None:
-        _cpu_breach_streak = 0
+        src.state.cpu_breach_streak = 0
         return blind
     lost_cores = dict(
         (m.get("pod", "?"), v)
@@ -184,15 +170,15 @@ def check_cpu_throttle(cfg: Config, src: Sources) -> tuple[bool, str]:
             offenders.append((name, ratio, lost))
     offenders.sort(key=lambda nrl: -nrl[1])
     if not offenders:
-        _cpu_breach_streak = 0
+        src.state.cpu_breach_streak = 0
         return True, "no sustained CPU throttling in %s" % cfg.CPU_WINDOW
-    _cpu_breach_streak += 1
+    src.state.cpu_breach_streak += 1
     desc = ", ".join(
         "%s (%.0f%%, %.2f cores)" % (n, r * 100, lc) for n, r, lc in offenders[:5]
     )
-    if _cpu_breach_streak < cfg.CPU_CONSECUTIVE:
+    if src.state.cpu_breach_streak < cfg.CPU_CONSECUTIVE:
         return True, "throttling streak %d/%d (not alerting yet): %s" % (
-            _cpu_breach_streak,
+            src.state.cpu_breach_streak,
             cfg.CPU_CONSECUTIVE,
             desc,
         )
@@ -203,7 +189,7 @@ def check_cpu_throttle(cfg: Config, src: Sources) -> tuple[bool, str]:
             len(offenders),
             cfg.CPU_THROTTLE_PCT,
             cfg.CPU_MIN_THROTTLED_CORES,
-            _cpu_breach_streak,
+            src.state.cpu_breach_streak,
             desc,
         ),
     )
@@ -413,13 +399,17 @@ def check_k8s_workloads(cfg: Config, src: Sources) -> tuple[bool, str]:
     ds_total = src.prom_scalar("count(kube_daemonset_status_number_unavailable)")
     ds_offenders = src.prom_vector("kube_daemonset_status_number_unavailable > 0")
     stalled_offenders, stall_note = checks.cluster_rollout.held_stalled_offenders(
-        cfg, checks.cluster_rollout.stalled_rollout_offenders(cfg, src)
+        cfg,
+        src.state.down_streaks,
+        checks.cluster_rollout.stalled_rollout_offenders(cfg, src),
     )
     zero_offenders, zero_note = checks.cluster_zero.held_zero_available_offenders(
-        cfg, checks.cluster_zero.zero_available_offenders(cfg, src)
+        cfg,
+        src.state.down_streaks,
+        checks.cluster_zero.zero_available_offenders(cfg, src),
     )
     offenders, replica_note = checks.cluster_rollout.held_replica_offenders(
-        cfg, offenders
+        cfg, src.state.down_streaks, offenders
     )
     ok, msg = k8s_workloads_verdict(
         total,
@@ -485,14 +475,12 @@ def check_cluster_targets(cfg: Config, src: Sources) -> tuple[bool, str]:
     # this check cannot tell that from an exporter that died. Same shape as check_longhorn_volumes
     # and its siblings; CLUSTER_TARGETS_CONSECUTIVE carries the measurement that motivated it.
     if ok:
-        bridge.streaks._down_streaks["cluster_targets"] = 0
+        src.state.down_streaks["cluster_targets"] = 0
         return ok, msg
-    bridge.streaks._down_streaks["cluster_targets"], ok, msg = (
-        bridge.streaks.down_streak(
-            bridge.streaks._down_streaks.get("cluster_targets", 0),
-            cfg.CLUSTER_TARGETS_CONSECUTIVE,
-            msg,
-            "rollout scrape gap",
-        )
+    src.state.down_streaks["cluster_targets"], ok, msg = bridge.streaks.down_streak(
+        src.state.down_streaks.get("cluster_targets", 0),
+        cfg.CLUSTER_TARGETS_CONSECUTIVE,
+        msg,
+        "rollout scrape gap",
     )
     return ok, msg
