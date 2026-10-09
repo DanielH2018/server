@@ -58,6 +58,14 @@ can do from inside a worktree makes the pruner collect it.
 `git worktree remove` refuses outright while a worktree is locked, and unlocking is a separate
 step — without it the command reports success having removed nothing.
 
+**Live processes.** A lock is not the only sign of use: a session can run from a tree whose
+lock names a dead pid, and deleting its `$CLAUDE_PROJECT_DIR` breaks every repo hook it runs
+(#3887). `lib.worktrees.remove`, which both the pruner and `fanout_place.py clean` call,
+refuses a tree that any live process has as its cwd or its `CLAUDE_PROJECT_DIR`. The refusal
+reads `could not remove <tree>: in use by a live process: pid N (...)`. Find that session and
+end it rather than deleting the directory by hand. The check sees only processes of the uid
+running the removal.
+
 ## Deleting the branch afterwards
 
 **Try `git branch -d` first, whatever you expect it to say.** It refuses a branch not merged into
