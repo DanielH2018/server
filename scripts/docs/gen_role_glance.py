@@ -58,11 +58,20 @@ the line names. The Pi's compose pins are moved by hand (Renovate's built-in com
 manager does not read a `.j2`), so the rule costs nothing there and is kept for one shape
 of image line across every plane.
 
-NOT RUN BY THE DOCS-REFRESH CRON. That cron stages `docs/reference` and
-`docs/assets/generated` only, and a generator writing under `ansible/roles/` would leave the
-primary checkout dirty, which parks the GitOps deployer. Run it by hand after changing a
-role's defaults, templates, tasks, playbook entry or `containers_list` entry, and commit the
-result in the same PR; `scripts/docs/tests/test_gen_role_glance.py` fails CI until you do.
+RUN AT COMMIT TIME, NOT BY THE DOCS-REFRESH CRON. The `regen-role-glance` prek hook runs
+`--fix` on every commit that touches a source this generator reads (#3698). It rewrites a
+stale block and exits 1 like a formatter, so the author stages the rewritten doc and commits
+again. The block therefore lands in the same commit as the change that moved it, with no
+hand step. The cron stages `docs/reference` and `docs/assets/generated` only, and a write
+under `ansible/roles/` would leave the primary checkout dirty, which parks the GitOps
+deployer. `scripts/docs/tests/test_gen_role_glance.py` stays as the CI backstop for a
+commit that skipped prek.
+
+DECIDED: the hook regenerates at commit time rather than `inject-nested-docs` generating
+the block when a doc is read (#3698). The harness loads a role doc natively on Read, Edit
+and Write, and the hook skips any doc the harness already loaded, so a block that exists
+only at injection time is absent from most sessions. It would also be absent on GitHub, in
+an editor, on the MkDocs site and in a PR diff, where a reviewer sees a route or claim move.
 
 STATIC PARSING ONLY, like every generator here: role defaults, tasks and playbooks through
 `yaml.safe_load`, templates through regexes, nothing imported from the deployer. Jinja in a
@@ -73,11 +82,13 @@ Usage::
 
     uv run python scripts/docs/gen_role_glance.py          # write every stale block
     uv run python scripts/docs/gen_role_glance.py --check  # list stale docs, write nothing
+    uv run python scripts/docs/gen_role_glance.py --fix    # write, exit 1 if any was stale
 """
 
 import argparse
 import sys as _sys
 import textwrap
+from collections.abc import Callable
 from pathlib import Path as _Path
 
 
@@ -430,24 +441,52 @@ def stale_docs(*, write: bool) -> list[str]:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--check",
-        action="store_true",
-        help="exit 1 naming every stale doc; write nothing",
-    )
-    args = parser.parse_args(argv)
-    stale = stale_docs(write=not args.check)
-    if args.check:
+def report(stale: list[str], *, check: bool, fix: bool) -> int:
+    """Print the outcome of a run over `stale` and return the exit code.
+
+    `--check` and `--fix` both exit 1 when a doc was stale: `--check` wrote nothing, and
+    `--fix` wrote the docs and fails like a formatter so the commit stops for a re-stage.
+    A plain run always exits 0.
+    """
+    if check:
         if stale:
             print(f"gen_role_glance: stale At a glance block in: {', '.join(stale)}")
             print(f"  regenerate with: uv run python {SELF}")
             return 1
         print("gen_role_glance: every At a glance block matches the tree")
         return 0
+    if fix and stale:
+        print(f"gen_role_glance: rewrote the At a glance block in: {', '.join(stale)}")
+        print("  stage the rewritten docs and commit again")
+        return 1
     print(f"gen_role_glance: {len(stale)} doc(s) written")
     return 0
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    find_stale: Callable[..., list[str]] = stale_docs,
+) -> int:
+    """Run the CLI over `find_stale`, which takes `write=` and returns the stale docs.
+
+    `find_stale` is the seam a test uses to point a real run at fixture roles.
+    """
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 1 naming every stale doc; write nothing",
+    )
+    mode.add_argument(
+        "--fix",
+        action="store_true",
+        help="write every stale doc, then exit 1 naming them (the prek hook's mode)",
+    )
+    args = parser.parse_args(argv)
+    stale = find_stale(write=not args.check)
+    return report(stale, check=args.check, fix=args.fix)
 
 
 if __name__ == "__main__":

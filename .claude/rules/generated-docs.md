@@ -22,10 +22,13 @@ repositories, route, claims with the Longhorn backup tier of each, and auto-depl
 setup role's applying playbook and tag, crons and timers; a Pi compose role's deploy tag,
 image repositories, `containers_list` facts and `common_config_changed` wiring. The prose below the markers stays hand-written. Changing a
 role's defaults, templates, tasks, playbook entry or `containers_list` entry — or, for a
-claim's tier, its StorageClass or the k3s role's `k3s_longhorn_*_volumes` lists — fails
-`scripts/docs/tests/test_gen_role_glance.py` until you re-run the generator and commit the
-block. The docs-refresh cron does not run it: a write under `ansible/roles/` is outside the
-paths the cron stages, so it would leave the primary checkout dirty.
+claim's tier, its StorageClass or the k3s role's `k3s_longhorn_*_volumes` lists — moves the
+block. The `regen-role-glance` prek hook runs `gen_role_glance.py --fix` on that commit. It
+rewrites the block and fails once like a formatter, so stage the rewritten doc and commit
+again. `scripts/docs/tests/test_gen_role_glance.py` is the CI backstop for a commit that
+skipped the hook. The docs-refresh cron does not run the generator: a write under
+`ansible/roles/` is outside the paths the cron stages, so it would leave the primary checkout
+dirty.
 
 **What the cron DOES stage is a closed list, and a generator outside it dirties the tree.**
 Three paths: `docs/reference/`, `docs/assets/generated/`, and `scripts/dev/pytest_shard_weights.json`
