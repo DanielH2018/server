@@ -83,8 +83,8 @@ _BASE_CONTEXT = {
 
 
 def test_prune_flags_are_absent_when_not_armed() -> None:
-    """The default (manifests_prune unset) must never prune."""
-    rendered = _render(_BASE_CONTEXT)
+    """A role that opts out with `manifests_prune: false` must never prune."""
+    rendered = _render({**_BASE_CONTEXT, "manifests_prune": False})
     assert "--prune" not in rendered
 
 
@@ -195,12 +195,13 @@ def _manifests_includes() -> dict[str, list[dict]]:
 
 
 def _armed_roles() -> dict[str, dict]:
-    """Each armed role and the `vars:` of the include that arms it."""
+    """Each armed role and its include's `vars:`; an include omitting the flag takes the default."""
+    default = _defaults()["manifests_prune"]
     return {
         role: vars_
         for role, blocks in _manifests_includes().items()
         for vars_ in blocks
-        if vars_.get("manifests_prune") is True
+        if vars_.get("manifests_prune", default) is True
     }
 
 
@@ -228,8 +229,8 @@ def test_every_caller_arms_the_prune_but_the_decided_exclusions() -> None:
     assert {"registry", "observability"} <= _ARMED_ROLES
     assert callers - _ARMED_ROLES == _UNARMED_ROLES, (
         f"unarmed callers {sorted(callers - _ARMED_ROLES)} differ from the decided exclusions "
-        f"{sorted(_UNARMED_ROLES)}. Arm a new caller with `manifests_prune: true`; excluding one "
-        "needs an operator decision and a DECIDED marker at its include."
+        f"{sorted(_UNARMED_ROLES)}. A caller is armed unless it passes `manifests_prune: false`; "
+        "excluding one needs an operator decision and a DECIDED marker at its include."
     )
 
 
@@ -490,9 +491,9 @@ def load_yaml_namespace() -> str:
     return _group_vars()["k8s_namespace"]
 
 
-def test_manifests_prune_defaults_off() -> None:
-    all_vars = _defaults()
-    assert all_vars["manifests_prune"] is False, (
-        "manifests_prune must default false — every role that does not explicitly arm it must "
-        "keep behaving exactly as before."
+def test_manifests_prune_defaults_on() -> None:
+    """The operator flipped the default on 2026-10-09 (#3662); an exclusion is an explicit false."""
+    assert _defaults()["manifests_prune"] is True, (
+        "manifests_prune must default true. A role that must not prune passes "
+        "`manifests_prune: false` at its include, behind a DECIDED marker."
     )

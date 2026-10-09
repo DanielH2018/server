@@ -59,8 +59,8 @@ reading a Deployment's `jsonpath` off a DaemonSet — `0 == 0`, passing vacuousl
 
 ## Retirement, the prune, and the directory's ownership
 
-**Dropping a name from `manifests_files` is only half a retirement, for the ~63 roles that have
-not armed `manifests_prune`.** `kubectl apply -f <dir>/` sweeps the whole directory, so the role
+**Dropping a name from `manifests_files` is only half a retirement, for a role that opts out of
+`manifests_prune`** (authelia and nut). `kubectl apply -f <dir>/` sweeps the whole directory, so the role
 deletes the staged file for you — but the **live object keeps serving**. It needs one hand
 `kubectl delete`, which the `manifest-prune-check.sh` host cron flags. Bit for real on
 2026-08-13: a retired IngressRoute deleted live at 18:51 was re-created by the 18:53 deploy from
@@ -80,8 +80,9 @@ refuses a `manifests_service` that claims a reserved sibling name. `observabilit
 dashboard ConfigMaps out for the same reason and carries an explicit `state: absent` for the
 copies it left behind.
 
-**`manifests_prune` (#1076, #3388) removes the live object too, armed per role.** Set
-`manifests_prune: true` on the `include_role` call and the apply gains `--prune -l
+**`manifests_prune` (#1076, #3388) removes the live object too, armed by default since #3662.**
+A role opts out with `manifests_prune: false` on the `include_role` call. An armed role's apply
+gains `--prune -l
 homelab/role=<service>`, one `--prune-allowlist=<kind>` per entry of the fixed
 `manifests_prune_allowlist`, and `-n <manifests_prune_namespace>`. That namespace is
 `k8s_namespace` unless the role passes the one other namespace all its documents live in, as
@@ -100,7 +101,7 @@ nothing deletes everything the role has live. Both refusals run before the apply
 
 `Secret` and `PersistentVolumeClaim` are labelled so they are applied, and are never in the
 allowlist, so they are never pruned (guarded by `ansible/tests/deploy/test_manifests_prune.py`).
-registry, bazarr, littlelink and texbrain are armed. An orphan whose staged file was deleted
+Every caller but authelia and nut is armed. An orphan whose staged file was deleted
 BEFORE its role was armed — including the claude-otel-ingest IngressRoute #1076 names — never
 receives the label and stays invisible to the selector; it still needs one manual
 `kubectl delete`. Arming a role with such an orphan is safe, because the prune cannot see it.

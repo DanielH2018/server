@@ -23,7 +23,8 @@
     # DECIDED: nut stays off `manifests_prune` (#3388, operator decision 2026-10-05). Arming it
     # adds the role label to this Deployment and restarts the UPS monitor once, which leaves
     # about a minute without power-cut shutdown coverage. #3388 counts nut as deliberately
-    # excluded.
+    # excluded. The prune is armed by default since #3662, so this line is the opt-out.
+    manifests_prune: false
     manifests_rollout: nut
     manifests_files:
       - deployment.yaml
