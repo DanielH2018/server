@@ -28,7 +28,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Generator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
@@ -237,7 +237,7 @@ def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProce
 
 
 @contextlib.contextmanager
-def _dies_on_a_signal() -> Iterator[None]:
+def _dies_on_a_signal() -> Generator[None]:
     """SIGTERM and SIGINT raise inside the block, so an enclosing `finally` still runs.
 
     Default SIGTERM disposition terminates the interpreter outright, skipping every `finally`
@@ -263,7 +263,7 @@ def _dies_on_a_signal() -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def gate_snapshot(primary: Path, sha: str) -> Iterator[Path | None]:
+def gate_snapshot(primary: Path, sha: str) -> Generator[Path | None]:
     """A detached worktree of `sha` for the health gate to render from; None when there is none.
 
     WHY. `probe.py health <tag>` renders the role's manifests to enumerate the workloads it

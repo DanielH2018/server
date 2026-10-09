@@ -20,7 +20,7 @@ import ctypes
 import os
 import signal
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -70,7 +70,7 @@ def _reap_descendants() -> None:
 
 
 @contextmanager
-def reaping() -> Iterator[None]:
+def reaping() -> Generator[None]:
     """Kill every process started inside the block once it exits, orphans included.
 
     The caller must start no process inside the block that should outlive it. On exit this
