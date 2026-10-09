@@ -57,6 +57,40 @@ def test_the_override_keeps_a_hand_picked_id_and_name():
     assert tile["name"] == "k3s Authelia Portal"
 
 
+# Every ingress id that existed when the tiles became derived (#3690). AutoKuma runs
+# ON_DELETE=delete (#2076), so an id that stops rendering deletes the monitor and its history.
+# Most of these ids derive from the entry's `name`, so renaming an entry would do exactly that.
+_PINNED_IDS = frozenset(
+    {
+        "auth-k8s",
+        "bento-pdf-k8s",
+        "littlelink-k8s",
+        "speedtest-k8s",
+        "freshrss-k8s",
+        "headlamp-k8s",
+        "zigbee2mqtt-k8s",
+        "homepage-k8s",
+        "peanut-k8s",
+        "grafana-k8s",
+        "home-assistant-k8s",
+        "karakeep-k8s",
+        "code-server-k8s",
+    }
+)
+
+
+def test_every_pinned_ingress_id_still_renders():
+    generated = {
+        t["id"] for t in kuma_ingress_monitors(host_context()["containers_list"])
+    }
+    lost = sorted(_PINNED_IDS - generated)
+    assert not lost, (
+        f"{lost} no longer render, and AutoKuma would delete each monitor with its history. "
+        "If an entry was renamed, give it `kuma: {id: <old stem>}`; drop an id here only when "
+        "its service is retired"
+    )
+
+
 def test_no_generated_id_collides_with_a_hand_written_one():
     """A duplicate Secret key renders as valid YAML, and the later tile silently replaces the earlier."""
     rendered = render_role_template("uptime-kuma", "static-monitors.yaml.j2")
