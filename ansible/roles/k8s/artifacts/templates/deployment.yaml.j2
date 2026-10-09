@@ -69,6 +69,11 @@ spec:
             - name: artifacts-{{ artifacts_k8s_node }}
               mountPath: /srv/artifacts/{{ artifacts_k8s_node }}
               readOnly: true
+{% if artifacts_agent_dir | length > 0 %}
+            - name: artifacts-agent
+              mountPath: /srv/artifacts/{{ artifacts_k8s_node }}-claude
+              readOnly: true
+{% endif %}
 {% for peer in artifacts_peer_sources %}
             - name: artifacts-{{ peer.name }}
               mountPath: /srv/artifacts/{{ peer.name }}
@@ -86,6 +91,18 @@ spec:
           hostPath:
             path: {{ artifacts_host_dir }}
             type: Directory
+{% if artifacts_agent_dir | length > 0 %}
+        # type: Directory, not DirectoryOrCreate — kubelet would create a missing path as
+        # root inside the agent's home, where the agent could not write and roles/setup/
+        # claude_code would then fight it. With Directory a missing path leaves the new pod in
+        # ContainerCreating, and the RollingUpdate keeps the old pod serving, so the failure
+        # is visible on the rollout rather than an empty index. roles/setup/claude_code
+        # creates the directory (2750 claude:ubuntu); this role must not.
+        - name: artifacts-agent
+          hostPath:
+            path: {{ artifacts_agent_dir }}
+            type: Directory
+{% endif %}
 {% for peer in artifacts_peer_sources %}
         - name: artifacts-{{ peer.name }}
           hostPath:

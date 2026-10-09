@@ -21,6 +21,15 @@ else in the tree documents.
   (`~/.claude/artifacts`, daniel-box's own) and `artifacts_peer_dir`
   (`~/.claude/artifacts-peer`, everything pulled from peers). Stdlib only — no build, no
   extra deps.
+- **The agent user's tree is a third source.** `artifacts_agent_dir`
+  (`/var/lib/claude/.claude/artifacts`, set only while `claude_code_agent_user_enabled` is true)
+  mounts read-only at `/srv/artifacts/daniel-box-claude`, so the index lists it as the host
+  `daniel-box-claude` beside the operator's `daniel-box`. An empty value removes the volume and
+  the mount. The hostPath is `type: Directory`, never `DirectoryOrCreate`: a missing directory
+  holds the new pod in ContainerCreating while the old one keeps serving, where kubelet would
+  create it root-owned in the agent's home. `roles/setup/claude_code` creates the directory
+  (`2750 claude:ubuntu`, default ACL `g:ubuntu:rX`). The pod runs as `puid:pgid`, not root, so
+  it reads that tree through the `ubuntu` group grant.
 
 ## The peer sync is a pull, and the direction is not arbitrary
 `tasks/main.yml` installs `/usr/local/bin/sync-artifacts.sh` and a cron

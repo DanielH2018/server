@@ -33,6 +33,15 @@ artifacts_k8s_node: "{{ k8s_primary_node }}"
 
 # The tree Claude Code's artifact-design skill writes to on each host.
 artifacts_host_dir: /home/ubuntu/.claude/artifacts
+# The agent user's tree (docs/claude-agent-user.md, slice 4): where sessions that run as
+# `claude` write. Empty means "no agent tree" and the mount, the volume and the index source
+# all disappear. It defaults on only where the agent user is enabled, so a host without one
+# does not mount a path that is not there. The index lists it as the host
+# `<artifacts_k8s_node>-claude`, beside the operator's `<artifacts_k8s_node>`.
+# The pod is not root: it runs as puid:pgid (the operator), so it reads this tree through the
+# group grant on the directory (2750 claude:ubuntu, default ACL g:ubuntu:rX), not through
+# DAC_OVERRIDE. This role does not create the directory; roles/setup/claude_code does.
+artifacts_agent_dir: "{{ '/var/lib/claude/.claude/artifacts' if (claude_code_agent_user_enabled | default(false) | bool) else '' }}"
 # Where daniel-box holds the other hosts' copies: one subdirectory per host, which becomes
 # the /a/<host>/ path segment the index and the GUI filter on.
 artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
