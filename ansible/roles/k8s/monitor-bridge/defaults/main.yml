@@ -22,6 +22,7 @@ monitor_bridge_modules:
   - registry.py
   - gitops_markers.py
   - gitops_ledger.py
+  - longhorn_robustness.py
   - gates.py
   - bridge/types.py
   - bridge/config.py

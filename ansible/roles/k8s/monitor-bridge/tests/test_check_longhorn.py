@@ -105,10 +105,39 @@ def test_longhorn_faulted_outranks_degraded_for_the_same_volume(monkeypatch, cfg
     assert "degraded" not in msg
 
 
+def test_longhorn_ignores_healthy_and_detached_volumes_in_the_live_state_vector(
+    monkeypatch, cfg
+):
+    # The vector carries every volume's live state since #3668, so the healthy and detached
+    # rows reach longhorn_offenders and must be filtered there rather than by the selector.
+    cfg = _arm_longhorn(
+        cfg,
+        monkeypatch,
+        [
+            _longhorn_series("jellyfin-config", "healthy"),
+            _longhorn_series("terraria-data", "unknown"),
+        ],
+        consecutive=1,
+    )
+    ok, msg = checks.storage.check_longhorn_volumes(cfg)
+    assert ok, msg
+
+
+def test_longhorn_pages_on_a_state_it_has_never_heard_of(monkeypatch, cfg):
+    # The `degraded|faulted` selector this replaced read a renamed or new Longhorn state as
+    # green, while the runbook gates refused the same volume (#3668).
+    cfg = _arm_longhorn(
+        cfg, monkeypatch, [_longhorn_series("n8n-data", "rebuilding")], consecutive=1
+    )
+    ok, msg = checks.storage.check_longhorn_volumes(cfg)
+    assert not ok
+    assert "n8n-data=rebuilding" in msg
+
+
 def test_longhorn_selects_on_the_state_label_not_a_value_ordinal(cfg):
     # longhorn_volume_robustness is ONE-HOT over `state` with value 0/1. An earlier proposal
     # for this arm compared the value to 2 ("degraded"), which no series ever equals. Pin the
-    # label-based selector so that mistake cannot come back.
+    # `== 1` selector, which keeps each volume's live state and reads it off the label.
     queries = []
 
     def record(_cfg, promql, *a, **k):
@@ -120,8 +149,7 @@ def test_longhorn_selects_on_the_state_label_not_a_value_ordinal(cfg):
     )
 
     assert len(queries) == 1
-    assert 'state=~"degraded|faulted"' in queries[0]
-    assert "== 2" not in queries[0]
+    assert queries[0] == "longhorn_volume_robustness == 1"
 
 
 #

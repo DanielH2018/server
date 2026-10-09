@@ -15,6 +15,8 @@ tunable.
 
 from datetime import datetime, timezone
 
+from longhorn_robustness import unsafe_volumes
+
 # Cloudflare's published Class A operations — the expensive, 1M/month arm. From the R2 pricing
 # page; an actionType in NEITHER list is counted here too, deliberately (see
 # r2_classify_operations).
@@ -230,20 +232,24 @@ def r2_usage_verdict(
 
 
 def longhorn_offenders(rows: list[tuple[dict, float]]) -> dict[str, str]:
-    """Volume name -> worst reported robustness state, from a degraded|faulted vector.
+    """Volume name -> worst reported robustness state, for each volume that lost redundancy.
+
+    `rows` is the `longhorn_volume_robustness == 1` vector: one row per volume per reporting
+    manager, carrying the state that volume is in. `longhorn_robustness.unsafe_volumes` decides
+    which states are lost redundancy, the same allow-list the runbook gates apply to the CRs
+    (#3668), so a state Longhorn adds or renames pages here rather than reading green.
 
     The two longhorn-manager pods report DISJOINT volume subsets (43 volumes total across both,
     not 43 each), so offenders are deduped by name rather than counted — a raw count would change
-    meaning the moment a volume moved between managers. `faulted` outranks `degraded` if both ever
-    report for one volume.
+    meaning the moment a volume moved between managers.
     """
-    worst: dict[str, str] = {}
-    for labels, _value in rows:
-        name = labels.get("pvc") or labels.get("volume", "?")
-        state = labels.get("state", "?")
-        if worst.get(name) != "faulted":
-            worst[name] = state
-    return worst
+    return unsafe_volumes(
+        (labels.get("pvc") or labels.get("volume", "?"), labels.get("state", ""))
+        for labels, _value in rows
+    )
+
+
+_NAMED = frozenset({"faulted", "degraded"})
 
 
 def longhorn_redundancy_verdict(
@@ -262,7 +268,7 @@ def longhorn_redundancy_verdict(
 
     Args:
       volumes: `count(longhorn_volume_robustness{state="healthy"})`, None or 0 when no series.
-      offenders: The `longhorn_offenders` map of volume name to degraded/faulted.
+      offenders: The `longhorn_offenders` map of volume name to its unsafe state.
     """
     if not volumes:
         return (
@@ -278,13 +284,21 @@ def longhorn_redundancy_verdict(
             "",
         )
     faulted = sorted(n for n, s in offenders.items() if s == "faulted")
-    degraded = sorted(n for n, s in offenders.items() if s != "faulted")
+    degraded = sorted(n for n, s in offenders.items() if s == "degraded")
+    other = sorted(
+        "%s=%s" % (n, s or "none") for n, s in offenders.items() if s not in _NAMED
+    )
     parts = []
     if faulted:
         parts.append("%d faulted (%s)" % (len(faulted), ", ".join(faulted[:5])))
     if degraded:
         parts.append(
             "%d degraded, single-copy (%s)" % (len(degraded), ", ".join(degraded[:5]))
+        )
+    if other:
+        parts.append(
+            "%d in a state this check does not know (%s)"
+            % (len(other), ", ".join(other[:5]))
         )
     return (
         False,
