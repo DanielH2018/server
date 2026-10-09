@@ -13,8 +13,11 @@ Run: uv run pytest scripts/lib/tests/test_worktrees.py
 import os
 import shutil
 import subprocess
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+
+import pytest
 
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 from lib.worktrees import (
@@ -23,6 +26,7 @@ from lib.worktrees import (
     Worktree,
     classify,
     primary_checkout,
+    processes_using,
     remove,
     worktree_facts,
 )
@@ -271,6 +275,71 @@ def test_remove_still_deregisters_a_deleted_tree_a_session_names_is_clean(
 
     assert ok, err
     assert str(wt) not in git(repo, "worktree", "list", "--porcelain").stdout
+
+
+FOREIGN_UID = 4242
+
+
+def _fake_proc(
+    root: Path, pid: int, uid: int, gid: int, cgroup: str = "/user.slice"
+) -> Path:
+    """A procfs with one process whose `cwd` and `environ` are absent, as another uid's read."""
+    entry = root / str(pid)
+    entry.mkdir(parents=True)
+    ids = f"{uid}\t{uid}\t{uid}\t{uid}"
+    gids = f"{gid}\t{gid}\t{gid}\t{gid}"
+    (entry / "status").write_text(
+        f"Name:\tsleep\nUid:\t{ids}\nGid:\t{gids}\nGroups:\t{gid} \n"
+    )
+    (entry / "cgroup").write_text(f"0::{cgroup}\n")
+    return root
+
+
+@contextmanager
+def _tree_dir(mode: int):
+    # Under /tmp, not tmp_path: pytest's base directory is 0700, which no foreign uid can
+    # traverse, so every case would pass for that reason alone.
+    path = Path(tempfile.mkdtemp(dir="/tmp"))
+    path.chmod(mode)
+    try:
+        yield path
+    finally:
+        path.chmod(0o700)
+        shutil.rmtree(path)
+
+
+def test_an_unreadable_foreign_process_that_can_reach_the_tree_blocks_it_is_flagged(
+    tmp_path,
+):
+    # #3994: the weekly prune runs as `ubuntu`, and a `claude`-uid session's cwd is unreadable
+    # to it. The fake process shares this uid's group, and the tree grants that group search.
+    proc = _fake_proc(tmp_path / "proc", 7001, FOREIGN_UID, os.getegid())
+    with _tree_dir(0o750) as tree:
+        found = processes_using(str(tree), proc=proc)
+    assert [pid for pid, _ in found] == [7001], found
+    assert f"uid {FOREIGN_UID}" in found[0][1], found
+
+
+def test_a_foreign_process_that_cannot_traverse_to_the_tree_is_clean(tmp_path):
+    # The daniel-box shape: `claude` is in no `ubuntu` group and `/home/ubuntu` is 0750.
+    proc = _fake_proc(tmp_path / "proc", 7001, FOREIGN_UID, os.getegid())
+    with _tree_dir(0o700) as tree:
+        assert processes_using(str(tree), proc=proc) == []
+
+
+@pytest.mark.parametrize(
+    "uid, cgroup",
+    [
+        (0, "/system.slice"),
+        (os.geteuid(), "/user.slice"),
+        (FOREIGN_UID, "/kubepods.slice/kubepods-burstable.slice/pod1.slice"),
+    ],
+    ids=["root", "own-uid-zombie", "pod"],
+)
+def test_root_own_and_pod_processes_are_never_counted_is_clean(tmp_path, uid, cgroup):
+    proc = _fake_proc(tmp_path / "proc", 7001, uid, os.getegid(), cgroup)
+    with _tree_dir(0o755) as tree:
+        assert processes_using(str(tree), proc=proc) == []
 
 
 def test_removable_reason_names_the_dead_lock_owner_not_unlocked():

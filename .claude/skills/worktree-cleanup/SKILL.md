@@ -63,8 +63,10 @@ lock names a dead pid, and deleting its `$CLAUDE_PROJECT_DIR` breaks every repo 
 (#3887). `lib.worktrees.remove`, which both the pruner and `fanout_place.py clean` call,
 refuses a tree that any live process has as its cwd or its `CLAUDE_PROJECT_DIR`. The refusal
 reads `could not remove <tree>: in use by a live process: pid N (...)`. Find that session and
-end it rather than deleting the directory by hand. The check sees only processes of the uid
-running the removal.
+end it rather than deleting the directory by hand. Another user's process cannot be read, so
+the remover also refuses for one whose uid can traverse to the tree, such as a `claude`-uid
+session (#3994). That refusal reads `pid N (uid U (name) can reach it; cwd unreadable)`; check
+that session's cwd as its own user. Root's and pods' processes are skipped.
 
 ## Deleting the branch afterwards
 
