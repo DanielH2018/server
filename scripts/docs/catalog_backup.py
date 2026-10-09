@@ -21,6 +21,7 @@ from typing import Any
 from catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
 from lib.jinja_comments import strip_jinja_comments
 from lib.k8s_roles import role_dirs
+from lib.estate import role_defaults
 from lib.render_guard import load_yaml as _load_yaml
 from lib.repo_paths import SHARED_TPL
 from lib.service_tiers import resolved_tier_lists
@@ -134,7 +135,7 @@ def _resolve_expr(expr: str, role_dir: Path) -> str | None:
     if not match:
         return None
     var = match.group(1)
-    defaults = _load_yaml(role_dir / "defaults" / "main.yml")
+    defaults = role_defaults(role_dir)
     value = defaults.get(var)
     if isinstance(value, str) and "{{" not in value:
         return value
@@ -171,7 +172,7 @@ def _template_declarations(role_dir: Path) -> list[ClaimDecl]:
 
 def _k8s_claims_entries(role_dir: Path) -> list[ClaimDecl]:
     """Shape 2: every `k8s_claims` entry in the role's defaults, name and class as written."""
-    claims = _load_yaml(role_dir / "defaults" / "main.yml").get("k8s_claims") or []
+    claims = role_defaults(role_dir).get("k8s_claims") or []
     return [
         _decl(
             claim["name"],
@@ -455,7 +456,7 @@ def autodeploy_stance(role_dir: Path) -> tuple[bool | None, str]:
     `stance` is True (eligible), False (denylisted) or None (undeclared). `reason` is the
     role's own `k8s_autodeploy_reason` for a denylisted role, stripped, and "" otherwise.
     """
-    defaults = _load_yaml(role_dir / "defaults" / "main.yml")
+    defaults = role_defaults(role_dir)
     if "k8s_autodeploy" not in defaults:
         return None, ""
     if defaults["k8s_autodeploy"] is True:

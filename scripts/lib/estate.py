@@ -21,8 +21,8 @@ points one at a ``tmp_path`` tree; nothing here reads a module constant past it.
 Typical usage example:
 
     estate = Estate()
-    estate.vars("daniel-pi")["has_docker"]
-    estate.source("daniel-pi", "has_docker")  # "group"
+    estate.vars("daniel-pi")["has_docker"]  # True
+    estate.source("daniel-pi", "has_docker")  # "host": daniel-pi's own file declares it
 """
 
 import sys as _sys
