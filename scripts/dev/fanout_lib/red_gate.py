@@ -183,6 +183,13 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str) -> Gate:
     """
     if base == red:
         return Gate("the test author committed nothing")
+    # An uncommitted edit to the code would make the tests fail for a reason the range
+    # never shows, and a rewritten base would carry other history onto the PR branch.
+    dirty = _git(run, worktree, "status", "--porcelain").stdout.strip()
+    if dirty:
+        return Gate(f"the test author left uncommitted changes: {dirty}")
+    if _git(run, worktree, "merge-base", "--is-ancestor", base, red).returncode:
+        return Gate(f"the red commits do not descend from the base {base}")
     diff = _git(run, worktree, "diff", "--name-only", "--no-renames", base, red)
     files = [f for f in diff.stdout.splitlines() if f]
     others = [f for f in files if not is_test_path(f)]
@@ -223,7 +230,24 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
     return judge_green(proc.returncode, proc.stdout, gate.nodes)
 
 
-def red_prompt(issues: str) -> str:
+# The `test-scenario-hygiene` skill is user-level, not in this repo, so the red brief carries
+# its Anti-patterns section rather than a path the test author may not have.
+HYGIENE_SKILL = (
+    Path.home() / ".claude" / "skills" / "test-scenario-hygiene" / "SKILL.md"
+)
+
+
+def anti_patterns(skill: Path = HYGIENE_SKILL) -> str:
+    """The skill's `## Anti-patterns` section, or "" when the skill is not installed."""
+    try:
+        text = skill.read_text()
+    except OSError:
+        return ""
+    _, sep, rest = text.partition("## Anti-patterns\n")
+    return (sep + rest.split("\n## ", 1)[0]).strip() if sep else ""
+
+
+def red_prompt(issues: str, anti: str = "") -> str:
     return f"""Write the failing tests for the issues below, before anyone fixes them.
 
 Write one pytest test per behaviour the issues state, in the `tests/` directory beside the code
@@ -234,13 +258,13 @@ reports FAILED. A test that errors, skips or xfails proves nothing, and neither 
 collection error. Where the fix will add a module or a function that does not exist yet,
 import it inside the test body, never at module level.
 
-Read the *Anti-patterns* section of `.claude/skills/test-scenario-hygiene/SKILL.md` first. A
-test that asserts on a stub, on source text or on a mock's calls says nothing about the
-behaviour.
+A test that asserts on a stub, on source text or on a mock's calls says nothing about the
+behaviour. {anti or "Load the `test-scenario-hygiene` skill and read its Anti-patterns first."}
 
 Change only test files: `test_*.py` files and data files under a `tests/` directory. The gate
 refuses a commit that touches code, a `conftest.py` or `pyproject.toml`. Do not fix the issue.
-Commit the tests with `git commit`. Do not push, open a PR or comment on the issues.
+Commit the tests with `git commit` and leave nothing uncommitted: the gate refuses a dirty
+tree. Do not push, open a PR or comment on the issues.
 
 Report each stated behaviour and the node ids of the tests that check it.
 
@@ -265,15 +289,19 @@ the PR body instead. The red nodes:
 """
 
 
-def green_finding(reason: str) -> dict:
-    """The green gate's failure as a finding the fix round acts on."""
+def green_finding(reason: str, red: str, gate: Gate) -> dict:
+    """The green gate's failure as a finding the fix round acts on, with how to undo it."""
+    restore = f"git checkout {red} -- {' '.join(gate.files)}"
     return {
         "title": "The PR fails the red/green gate",
         "file": GREEN_FILE,
         "severity": "high",
         "confidence": 1.0,
         "category": "test",
-        "detail": reason,
+        "detail": (
+            f"{reason}. The red tests are the ones committed at {red}; restore an edited "
+            f"one with `{restore}` and make the code pass them instead."
+        ),
     }
 
 

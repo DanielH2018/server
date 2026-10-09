@@ -293,6 +293,7 @@ def test_a_red_green_batch_hands_the_implementer_the_red_commit_it_must_not_edit
     pipeline, run = _pipeline(
         tmp_path, reports, heads=("base", "red1", "red1"), gates=gates
     )
+    pipeline.anti_patterns = "ANTI-PATTERNS READ AT START"
     pipeline.run_all()
 
     assert [phase for _, _, phase in run.claude] == [
@@ -304,6 +305,7 @@ def test_a_red_green_batch_hands_the_implementer_the_red_commit_it_must_not_edit
     red_argv, red_stdin, _ = run.claude[0]
     assert "--resume" not in red_argv and "--json-schema" in red_argv
     assert "body one" in red_stdin and "land.sh" not in red_stdin
+    assert "ANTI-PATTERNS READ AT START" in red_stdin
     brief = run.claude[1][1]
     assert brief.index("## Red tests") < brief.index(ISSUES_HEADING)
     assert "red1" in brief and "t.py::test_a" in brief
@@ -361,5 +363,6 @@ def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path)
         "review",
     ]
     assert edited in run.claude[3][1]
+    assert "git checkout red1 -- t.py" in run.claude[3][1]
     assert final["result"].startswith("needs input: the PR fails the green gate")
     assert final["result"].endswith(PR)

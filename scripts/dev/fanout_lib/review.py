@@ -79,6 +79,7 @@ from fanout_lib.red_gate import (
     RED_SCHEMA,
     Gate,
     Gates,
+    anti_patterns,
     green_finding,
     red_prompt,
     red_section,
@@ -316,6 +317,7 @@ class Pipeline:
         self.state_dir = state_dir
         self.red_green = red_green
         self.gates = gates
+        self.anti_patterns = anti_patterns() if red_green else ""
         self.record = Record(batch)
         self.session = ""
         # Read now, before the implementer runs. A server unit imports this module from the
@@ -405,7 +407,9 @@ class Pipeline:
         A refused commit is reset away, so the implementer starts from the base as usual.
         """
         base = self._git("rev-parse", "HEAD")
-        phase = self._claude("red", self._red_author(), red_prompt(issues))
+        phase = self._claude(
+            "red", self._red_author(), red_prompt(issues, self.anti_patterns)
+        )
         red = self._git("rev-parse", "HEAD")
         if phase.failed:
             gate = Gate(
@@ -482,8 +486,8 @@ class Pipeline:
         self.record.review_error = error
         self.record.findings = found or []
         green = self._green(red)
-        if green:
-            self.record.findings.append(green_finding(green))
+        if green and red is not None:
+            self.record.findings.append(green_finding(green, *red))
         self.record.actionable = actionable(self.record.findings)
         last = impl
         if self.record.actionable and self.session:

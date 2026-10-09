@@ -10,9 +10,12 @@ Run: uv run pytest scripts/dev/tests/test_fanout_red_gate.py
 import subprocess
 import sys
 
+from lib.proc_testing import DEFAULT_TIMEOUT
+
 from fanout_lib.brief import Issue
 from fanout_lib.red_gate import (
     RED_GREEN_LABEL,
+    anti_patterns,
     green_gate,
     red_gate,
     review_flags,
@@ -32,10 +35,20 @@ def run(argv, stdin):
         tree = argv[3]
         argv = [sys.executable, "-m", "pytest", *argv[5:]]
         return subprocess.run(
-            argv, cwd=tree, capture_output=True, text=True, check=False
+            argv,
+            cwd=tree,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=DEFAULT_TIMEOUT,
         )
     return subprocess.run(
-        argv, input=stdin, capture_output=True, text=True, env=scrubbed_env()
+        argv,
+        input=stdin,
+        capture_output=True,
+        text=True,
+        env=scrubbed_env(),
+        timeout=DEFAULT_TIMEOUT,
     )
 
 
@@ -99,6 +112,27 @@ def test_a_red_commit_that_touches_a_conftest_is_refused(tmp_path):
     )
     gate = red_gate(run, repo, base, red)
     assert gate.reason.endswith("tests/conftest.py")
+
+
+def test_an_uncommitted_edit_that_breaks_the_code_is_refused(tmp_path):
+    """Base already doubles, so the new test passes there; only the dirty edit fails it."""
+    repo = init_repo(tmp_path / "repo")
+    base = commit(repo, "base", **{"mod.py": FIXED, "tests/test_mod.py": OLD_TEST})
+    red = commit(repo, "red", **{"tests/test_new.py": NEW_TEST})
+    (repo / "mod.py").write_text(CODE)
+    gate = red_gate(run, repo, base, red)
+    assert gate.reason.startswith("the test author left uncommitted changes: M mod.py")
+
+
+def test_the_red_brief_carries_the_skills_anti_patterns_section_and_nothing_after(
+    tmp_path,
+):
+    skill = tmp_path / "SKILL.md"
+    skill.write_text(
+        "# Skill\n\n## Anti-patterns\n\n- Assert the effect.\n\n## Next\n\nx\n"
+    )
+    assert anti_patterns(skill) == "## Anti-patterns\n\n- Assert the effect."
+    assert anti_patterns(tmp_path / "missing.md") == ""
 
 
 def test_the_green_gate_passes_a_fix_and_refuses_an_edited_red_test(tmp_path):
