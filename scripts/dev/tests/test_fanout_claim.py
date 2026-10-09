@@ -104,3 +104,11 @@ def test_claim_takes_every_batch_and_exits_3_naming_a_refusal(capsys):
     assert "#1 claimed by `worktree-orch`" in out.out
     assert "#3: claim refused (3)" in out.err
     assert [host for host, _, _ in run.calls] == ["findings"] * 3
+
+
+def test_a_placement_refusal_claims_nothing(tmp_path):
+    """Four batches on one host is over the ssh budget: exit 3 before any launch."""
+    issues = [Issue(n, str(n), "b", ("claude",)) for n in (1, 2, 3, 4)]
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
+    assert _launch(tools, tmp_path, "1", "2", "3", "4") == 3
+    assert _findings(run) == []
