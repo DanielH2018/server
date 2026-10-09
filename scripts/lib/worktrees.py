@@ -15,10 +15,12 @@ deploy raises rather than falls back.
 The policy on top of them is this repo's own and stays here rather than in that package:
 `is_merged` runs its four layers against `lib.git`, which strips every inherited `GIT_*`
 variable, and `classify` encodes which condition keeps a tree. The dotfiles hook makes its
-own call on both.
+own call on both. `remove` adds one refusal `classify` cannot make in advance: a live
+process using the tree at the moment of removal (`processes_using`).
 """
 
 import functools
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -55,6 +57,7 @@ __all__ = [
     "merge_tree_says_contained",
     "parse_worktree_list",
     "primary_checkout",
+    "processes_using",
     "remove",
     "session_is_alive",
     "worktree_facts",
@@ -166,16 +169,75 @@ def is_dirty(path: str) -> bool:
     return git_dirty(path, include_untracked=True)
 
 
+def _inside(held: str, tree: Path) -> bool:
+    """Whether the path `held` is `tree` or somewhere below it."""
+    path = Path(held).resolve()
+    return path == tree or tree in path.parents
+
+
+def processes_using(path: str) -> list[tuple[int, str]]:
+    """(pid, how) for every live process whose cwd, or `CLAUDE_PROJECT_DIR`, is inside `path`.
+
+    A Claude session whose project dir is deleted loses every repo hook (#3887), and its
+    worktree lock is no proof it is gone: the session can run from a tree it never locked,
+    and a lock's owner pid says nothing about a shell or hook that `cd`'d in. So the removal
+    asks the kernel which processes still use the directory.
+
+    `CLAUDE_PROJECT_DIR` is read from every process, not only from `claude` ones: the
+    binary's command name is its version string (`2.1.295`), so a name match finds nothing,
+    and a hook or tool shell a session spawned carries the variable too.
+
+    Only processes this uid may inspect are seen. `/proc/<pid>/cwd` and `environ` refuse
+    another user's process, and those are skipped rather than counted as holders, because
+    root's daemons are always unreadable and counting them would refuse every removal.
+    """
+    tree = Path(path).resolve()
+    found = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        try:
+            cwd = os.readlink(entry / "cwd")
+        except OSError:
+            cwd = ""
+        # A cwd whose directory was deleted reads back as "<path> (deleted)", which never
+        # resolves inside an existing tree.
+        if cwd and _inside(cwd, tree):
+            found.append((pid, f"cwd {cwd}"))
+            continue
+        try:
+            environ = (entry / "environ").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        for var in environ:
+            if var.startswith(b"CLAUDE_PROJECT_DIR="):
+                held = var.partition(b"=")[2].decode(errors="replace")
+                if held and _inside(held, tree):
+                    found.append((pid, f"CLAUDE_PROJECT_DIR={held}"))
+                break
+    return found
+
+
 def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
-    """Unlock if needed, then remove.
+    """Refuse while a process uses the tree; otherwise unlock if needed, then remove.
+
+    The process check runs first, before the unlock, so a refusal leaves the lock exactly
+    as it was. It is skipped when the directory is already gone: deregistering a deleted
+    tree cannot break the session still pointing at it, which #3887's hook deny covers.
+    The refusal names each pid, so the operator can find the session.
 
     Never --force: git's own refusal on a tree with uncommitted or untracked files is the backstop
     that makes auto-unlock safe here — classify() only marks a locked tree REMOVABLE once
     session_is_alive() has confirmed the owner is dead, so this never releases a lock a live session
     still holds. Without the unlock, `git worktree remove` fails outright on a locked tree ("cannot
-    remove a locked working tree") and the whole prune silently no-ops while reporting the tree as
-    removed.
+    remove a locked working tree") and the caller would report success while removing nothing.
     """
+    if Path(tree.path).exists():
+        users = processes_using(tree.path)
+        if users:
+            named = "; ".join(f"pid {pid} ({how})" for pid, how in users)
+            return False, f"in use by a live process: {named}"
     if tree.locked:
         git("worktree", "unlock", tree.path, cwd=repo, check=False)
     result = git("worktree", "remove", tree.path, cwd=repo, check=False)

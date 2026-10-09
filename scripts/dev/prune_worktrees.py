@@ -5,6 +5,9 @@ Several Claude sessions work this repo at once, each in its own worktree.
 
 A worktree is removable only when all three hold: its branch is merged into
 origin/master, it has no uncommitted changes, and no live session holds its lock.
+The removal itself then refuses a tree that a live process still uses as its cwd or its
+`CLAUDE_PROJECT_DIR`, naming the pid, so the report can say `removable` for a tree that
+`--prune` then keeps. See lib.worktrees.processes_using.
 
 It also sweeps the BRANCHES those worktrees leave behind. See orphan_branches.
 
