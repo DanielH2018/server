@@ -15,7 +15,15 @@ import subprocess
 from pathlib import Path
 
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
-from lib.worktrees import KEEP, REMOVABLE, Worktree, classify, remove, worktree_facts
+from lib.worktrees import (
+    KEEP,
+    REMOVABLE,
+    Worktree,
+    classify,
+    primary_checkout,
+    remove,
+    worktree_facts,
+)
 
 
 LIVE_LOCK = "claude session mine (pid {pid} start {start})"
@@ -195,3 +203,26 @@ def test_worktree_facts_ok_is_true_when_git_succeeds_with_no_worktrees(monkeypat
     trees, _dirty, _merged, ok = worktree_facts()
     assert ok is True
     assert trees == []
+
+
+def test_primary_checkout_from_a_linked_worktree_is_the_primary_is_clean(tmp_path):
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    wt = tmp_path / "wt"
+    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
+    assert primary_checkout(str(wt)) == str(repo.resolve())
+
+
+def test_primary_checkout_of_a_separated_git_dir_is_flagged_as_none(tmp_path):
+    # The common dir's parent is the directory holding the git dir, which is not a checkout:
+    # the orphan scan would read `<that>/.claude/worktrees/` and `worktree_facts` would list
+    # worktrees from a directory git does not consider a repo.
+    checkout = tmp_path / "checkout"
+    git(
+        tmp_path,
+        "init",
+        "-q",
+        f"--separate-git-dir={tmp_path / 'store'}",
+        str(checkout),
+    )
+    assert primary_checkout(str(checkout)) is None

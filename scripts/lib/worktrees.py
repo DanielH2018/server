@@ -182,17 +182,30 @@ def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
     return result.returncode == 0, result.stderr.strip()
 
 
-def primary_checkout() -> str | None:
-    """The checkout the worktrees hang off, or None when we are not in a git repo.
+def primary_checkout(start: str | None = None) -> str | None:
+    """The checkout the worktrees hang off, or None when there is no checkout to name.
 
     Not the current one: worktrees live under the primary's .claude/worktrees/, and
     --show-toplevel run from inside a worktree returns the worktree itself, which made the
     orphan scan look in a directory that doesn't exist.
+
+    The primary is the parent of the common git dir only when that dir is named `.git`. A
+    separated git dir or a bare repo has no checkout beside it, so either answers None, the
+    same rule as the hooks' `_hook_common.primary_checkout`.
+
+    Args:
+        start: the directory to ask from; the process cwd when None.
     """
     common_dir = git_stdout(
-        "rev-parse", "--path-format=absolute", "--git-common-dir", check=False
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+        cwd=start,
+        check=False,
     )
-    return str(Path(common_dir).parent) if common_dir else None
+    if not common_dir or Path(common_dir).name != ".git":
+        return None
+    return str(Path(common_dir).parent)
 
 
 def memoised_merged(
