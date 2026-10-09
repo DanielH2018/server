@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-10-09 06:17 UTC
-generated_sha: ecfcba8b9
+generated_at: 2026-10-09 18:17 UTC
+generated_sha: fcb47a0a0
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: ecfcba8b9
 
 # Secrets
 
-181 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+184 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -34,7 +34,9 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | Secret | Last rotated | Due | Days left |
 |---|---|---|---|
 | `alloy_pi_http_password` | 2026-04-25 | 2027-04-17 | 190 |
+| `anthropic_api_key` | 2026-09-23 | 2027-08-28 | 323 |
 | `arr_discord_webhook_url` | 2026-09-07 | 2027-08-30 | 325 |
+| `authelia_agent_password` | 2026-08-27 | 2027-08-18 | 313 |
 | `authelia_claude_password` | 2026-01-05 | 2026-12-19 | 71 |
 | `authelia_claude_totp_secret` | 2026-02-03 | 2027-01-26 | 109 |
 | `authelia_client_password_hash` | 2025-10-08 | 2026-09-15 | -24 |
@@ -144,6 +146,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `etcd_drill_fence_push_token` | 2026-07-26 | 2027-01-19 | 102 |
 | `etcd_drill_full_push_token` | 2026-07-21 | 2027-01-13 | 96 |
 | `etcd_snapshot_push_token` | 2026-08-28 | 2027-02-22 | 136 |
+| `homelab_eval_push_token` | 2026-10-09 | 2027-04-01 | 174 |
 | `interaction_limit_push_token` | 2026-05-15 | 2026-10-30 | 21 |
 | `kuma_status_page_sync_push_token` | 2026-07-08 | 2026-12-28 | 80 |
 | `live_drift_push_token` | 2026-08-15 | 2027-02-03 | 117 |
