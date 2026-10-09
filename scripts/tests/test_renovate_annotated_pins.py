@@ -1,7 +1,7 @@
 """Guards on the `# renovate:` annotated pins and the one packageRule that finishes them.
 
 A pinned artifact is declared to Renovate by one annotation above its `_version:` line
-(lib/renovate_annotations.py). Three things can still let one age silently or land unfinished:
+(lib/renovate_annotations.py). Four things can still let one age silently or land unfinished:
 
 - An annotation the manager's regex does not read: keys out of order, or a blank line before
   the pin. Renovate reports nothing; the pin is simply untracked.
@@ -10,6 +10,8 @@ A pinned artifact is declared to Renovate by one annotation above its `_version:
 - The annotated-pin packageRule sitting after a per-package rule it should yield to, which
   strips `k8s_autodeploy: false` from the crowdsec bouncer plugin's title so the unattended
   agent lands a traefik redeploy.
+- The Pi's node_exporter pin and the cluster image splitting into two PRs. A test holds the
+  two equal, so each PR would stay red until the other merged.
 
 Run: uv run pytest scripts/tests/test_renovate_annotated_pins.py
 """
