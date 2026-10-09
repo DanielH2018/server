@@ -195,7 +195,8 @@ def test_detach_takes_its_service_locks_before_it_forks_the_playbook():
         "deploy_detach.run must take its service locks, then fork the playbook child through "
         "lib/detach_fork.fork_detached; it forks first, or forks some other way"
     )
-    assert "run_playbook" in _call_order(functions["child"])
+    assert "deploy_and_gate" in _call_order(functions["child"])
+    assert "run_playbook" in _call_order(functions["deploy_and_gate"])
 
 
 def test_a_playbook_before_its_locks_is_flagged():
