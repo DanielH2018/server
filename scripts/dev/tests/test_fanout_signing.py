@@ -3,7 +3,6 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_signing.py
 """
 
-import os
 import subprocess
 
 import pytest
@@ -14,6 +13,7 @@ from fanout_lib.signing import (
     signing_key_read_command,
     unverified_reason,
 )
+from lib.git_testing import scrubbed_env
 
 # daniel-server's real signing key. Used here as a syntactically real key the gate accepts
 # when the registered set holds it — nothing in the gate compares against a constant, so
@@ -94,18 +94,16 @@ def test_the_key_read_command_is_one_read_only_line_naming_the_repo():
 def _run_key_read(tmp_path, signingkey: str) -> str:
     """Run the real key read in bash with `user.signingkey` set through the environment.
 
-    The value goes in through GIT_CONFIG_* rather than `git config`, and every inherited
-    GIT_* variable is dropped: a hook-run git honours GIT_DIR over `-C`, and a fixture that
-    wrote config that way once rewrote the shared .git/config.
+    The value goes in through GIT_CONFIG_* rather than `git config`: a hook-run git honours
+    GIT_DIR over `-C`, and a fixture that wrote config that way once rewrote the shared
+    .git/config.
     """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env |= {
-        "HOME": str(tmp_path),
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_COUNT": "1",
-        "GIT_CONFIG_KEY_0": "user.signingkey",
-        "GIT_CONFIG_VALUE_0": signingkey,
-    }
+    env = scrubbed_env(
+        HOME=str(tmp_path),
+        GIT_CONFIG_COUNT="1",
+        GIT_CONFIG_KEY_0="user.signingkey",
+        GIT_CONFIG_VALUE_0=signingkey,
+    )
     proc = subprocess.run(
         ["bash", "-c", signing_key_read_command(str(tmp_path))],
         capture_output=True,
