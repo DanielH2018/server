@@ -13,15 +13,21 @@ and a red phase before a `red-green` batch's implementer. `fanout_lib/review.py`
 Usage::
 
     fanout_place.py read
-    fanout_place.py launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--review] --orchestrator-branch <b>
-    fanout_place.py launch --repo DanielH2018/dotfiles --batch 763 --orchestrator-branch <b>
+    fanout_place.py launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--review]
+    fanout_place.py launch --repo DanielH2018/dotfiles --batch 763
+    fanout_place.py claim --batch 1345,1386 [--batch 1288]
     fanout_place.py status <run-id>
     fanout_place.py stop <run-id> [batch]
     fanout_place.py clean <run-id>
 
+`launch` claims this repo's issues itself, under the branch checked out where it runs, just
+before each batch's agent starts; `claim` takes the same claims and launches nothing.
+`fanout_lib/claims.py` has the rules.
+
 Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a refusal from
 `fanout_lib.launch_gates` — too many batches on one remote host for its ssh budget, or too
-many live batches on one host across runs for its memory cap · 4 no host readable
+many live batches on one host across runs for its memory cap — or at least one issue whose
+claim was refused (`launch` still starts every batch that kept an issue) · 4 no host readable
 · 5 a batch reports failed (`status` only) · 6 no candidate host signs commits GitHub
 verifies, or the account's registered signing keys could not be read.
 
@@ -49,7 +55,6 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 
 import argparse
 import dataclasses
-import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -59,6 +64,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fanout_lib import claims as claims_mod
 from fanout_lib import launch as launch_mod
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
@@ -85,7 +91,6 @@ from fanout_lib.transport import (
     verified_hosts,
 )
 
-BATCH_RE = re.compile(r"^\d+(,\d+)*$")
 # The SessionStart hook reads `payload["source"]` from stdin, so it needs a JSON payload
 # rather than `</dev/null`; --no-python-downloads/--python match the version run-hook.sh
 # pins for session-health so this reading is taken by the same interpreter a real session would use.
@@ -124,48 +129,6 @@ def cmd_read(args, tools: Tools) -> int:
     return 0 if good else 4
 
 
-def _parse_batches(specs: list[str]) -> dict[str, list[int]] | None:
-    """Map each `--batch` spec to its issue numbers, or None when a spec is unusable.
-
-    An identical spec given twice is placed once and reported; the same issue number in two
-    different specs is refused — launching it twice means two agents in two worktrees on one
-    issue, which the claim in the brief cannot undo.
-    """
-    batches: dict[str, list[int]] = {}
-    seen: dict[int, str] = {}
-    for spec in specs:
-        if not BATCH_RE.match(spec):
-            print(
-                f"launch: --batch takes issue numbers joined by commas, got {spec!r}",
-                file=sys.stderr,
-            )
-            return None
-        key = spec.replace(",", "-")
-        if key in batches:
-            print(
-                f"launch: --batch {spec} given twice; placing it once", file=sys.stderr
-            )
-            continue
-        numbers = [int(n) for n in spec.split(",")]
-        for n in numbers:
-            if n in seen and seen[n] == spec:
-                print(
-                    f"launch: issue {n} is listed twice in --batch {spec}",
-                    file=sys.stderr,
-                )
-                return None
-            if n in seen:
-                print(
-                    f"launch: issue {n} appears in more than one --batch "
-                    f"({seen[n]}, {spec}); refusing to launch it twice",
-                    file=sys.stderr,
-                )
-                return None
-            seen[n] = spec
-        batches[key] = numbers
-    return batches
-
-
 def _fetch_issues(
     tools: Tools, batches: dict[str, list[int]], repo: str = SERVER
 ) -> dict[int, Issue] | None:
@@ -197,8 +160,16 @@ def _fetch_issues(
     return None if unlabelled else fetched
 
 
+def cmd_claim(args, tools: Tools) -> int:
+    """Claim every batch's issues under the orchestrator's branch, launching nothing."""
+    batches = claims_mod.parse_batches(args.batch)
+    if batches is None:
+        return 1
+    return claims_mod.claim_all(tools, batches, resolve(SERVER, tools.default_ref))
+
+
 def cmd_launch(args, tools: Tools) -> int:
-    batches = _parse_batches(args.batch)
+    batches = claims_mod.parse_batches(args.batch)
     if batches is None:
         return 1
     try:
@@ -207,6 +178,9 @@ def cmd_launch(args, tools: Tools) -> int:
         )
     except ValueError as exc:
         print(f"launch: {exc}", file=sys.stderr)
+        return 1
+    holder = claims_mod.orchestrator_branch(tools, target, "launch")
+    if holder is None:
         return 1
     if live_elsewhere(batches, args.manifest_root, target.repo):
         return 1
@@ -253,23 +227,33 @@ def cmd_launch(args, tools: Tools) -> int:
         for host in sorted({host for _, host in placed})
         for ln in _health_lines(tools, host)
     ]
-    run = manifest_mod.Manifest(
-        manifest_mod.new_run_id(datetime.now(UTC)), args.orchestrator_branch, []
-    )
+    run = manifest_mod.Manifest(manifest_mod.new_run_id(datetime.now(UTC)), holder, [])
+    refused = False
     for batch, host in placed:
-        issues = [fetched[n] for n in batches[batch]]
+        numbers = batches[batch]
+        if target.is_server:
+            # Claimed here, after every gate, so a refusal above leaves nothing claimed,
+            # and per batch, so a failed launch below leaves no later batch claimed.
+            batch, numbers, dropped = claims_mod.claim_batch(
+                tools, batch, numbers, holder
+            )
+            refused = refused or dropped
+            if not numbers:
+                continue
+        issues = [fetched[n] for n in numbers]
         flags = review_flags(batch, issues, args.review, target.is_server)
-        brief = render_brief(
-            issues, host, batch, args.orchestrator_branch, health, target, args.review
-        )
+        brief = render_brief(issues, host, batch, holder, health, target, args.review)
         try:
             run.batches.append(
-                launch_mod.launch(
-                    tools, host, batch, brief, batches[batch], target, *flags
-                )
+                launch_mod.launch(tools, host, batch, brief, numbers, target, *flags)
             )
         except launch_mod.LaunchError as exc:
-            print(f"{batch} on {host}: {exc}", file=sys.stderr)
+            released = (
+                claims_mod.release_for_orchestrator(tools, numbers, holder)
+                if target.is_server
+                else ""
+            )
+            print(f"{batch} on {host}: {exc}{released}", file=sys.stderr)
             # The refusal is per batch, after placement, so earlier batches are already
             # running. Name them and the run-id: the manifest is what `status` and `clean`
             # read, and the `clean <run-id>` an `exists` refusal asks for needs the id. A
@@ -286,9 +270,15 @@ def cmd_launch(args, tools: Tools) -> int:
             )
             return 1
         print(f"{batch} -> {host} ({launch_mod.unit_name(batch, target)})")
+    if not run.batches:
+        print("launched nothing: every issue's claim was refused", file=sys.stderr)
+        return 3
     path = manifest_mod.save(run, root=args.manifest_root)
     print(f"run {run.run_id} recorded at {path}")
-    return 0
+    if target.is_server:
+        # `findings.py release` names the holder, so print it where the orchestrator reads.
+        print(f"claims held under `{holder}`")
+    return 3 if refused else 0
 
 
 def _health_lines(tools: Tools, host: str) -> list[str]:
@@ -528,9 +518,6 @@ def main(argv=None, tools: Tools | None = None) -> int:
         help="pin every batch to this host; omit it to let placement choose per batch",
     )
     launch_parser.add_argument(
-        "--orchestrator-branch", required=True, help="the branch holding the claims"
-    )
-    launch_parser.add_argument(
         "--repo",
         choices=registered_repos(),
         default=SERVER,
@@ -552,6 +539,14 @@ def main(argv=None, tools: Tools | None = None) -> int:
     )
     _add_manifest_root(launch_parser)
     launch_parser.set_defaults(fn=cmd_launch)
+    claim_parser = sub.add_parser("claim")
+    claim_parser.add_argument(
+        "--batch",
+        action="append",
+        required=True,
+        help="issue numbers joined by commas; repeatable",
+    )
+    claim_parser.set_defaults(fn=cmd_claim)
     status_parser = sub.add_parser("status")
     status_parser.add_argument("run_id")
     _add_manifest_root(status_parser)

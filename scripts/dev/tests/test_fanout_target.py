@@ -156,7 +156,7 @@ def test_a_failed_systemd_run_after_the_claim_gives_the_claim_back():
         [], 1, stdout="", stderr="Failed to start\nfanout-step: systemd-run\n"
     )
     tools, run = fake_tools({"daniel-box": ok("")})
-    run.answers_by_call = [ok(""), ok(""), failed]
+    run.answers_by_call = [ok(""), failed]
     with pytest.raises(LaunchError, match="systemd-run failed"):
         launch(tools, "daniel-box", "763", "BRIEF", [763], DOTFILES)
     assert [host for host, _, _ in run.calls] == [

@@ -92,8 +92,8 @@ settles which one holds the issue. Two sessions editing a body race, and the los
 disappears with no trace.
 
 **Why no compare-and-swap.** GitHub offers none, and the fan-out does not need one: the
-orchestrator claims every issue in every batch *before* it spawns a single agent, so a fan-out
-has no internal race. The only residual race is between independent ad-hoc sessions, where the
+orchestrator claims every issue of a batch *before* that batch's agent starts, so a fan-out has
+no internal race. `fanout_place.py launch` takes those claims itself. The only residual race is between independent ad-hoc sessions, where the
 cost of losing is a duplicated triage rather than corruption. The read-back handles it —
 the session whose claim comment sorts first holds the issue, and the loser releases.
 
@@ -290,11 +290,15 @@ what exit 6 would refuse without spending an agent.
    service parks every other batch's landing). The skill's triage step has the measured cases.
    Present the grouping and **stop for approval**: spawning N Opus agents is not a routine
    action.
-2. **Claim, then spawn.** Claim every issue in every batch serially, before spawning anything.
-   This is what removes the race from the fan-out. The claim goes under the **orchestrator's**
-   worktree name, because a subagent's worktree name is auto-generated and unknown until it
-   starts — and a claim naming a worktree that does not exist yet would read as stale
+2. **Claim, then spawn.** Every issue of a batch is claimed before that batch's agent starts.
+   This is what removes the race from the fan-out. `launch` takes the claims itself, one
+   `findings.py claim` per issue, after every placement gate has passed: a refused issue is
+   dropped from its batch, and a failed launch releases what it took. The claim goes under the
+   **orchestrator's** worktree name, which `launch` reads from HEAD and refuses when HEAD is
+   detached or is `master`. A subagent's worktree name is auto-generated and unknown until it
+   starts, and a claim naming a worktree that does not exist yet would read as stale
    immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
+   The Agent-tool fallback takes the same claims with `fanout_place.py claim --batch …`.
 3. **Spawn.** `uv run python scripts/dev/fanout_place.py launch --batch … ` places one Opus
    agent per batch across both hosts and writes each brief itself — see *Placement across
    hosts* above. The Agent tool is the fallback, not the default: the skill's *When the

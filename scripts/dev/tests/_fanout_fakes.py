@@ -21,8 +21,8 @@ class FakeRun:
 
     Attributes:
         answers: per-host answer, used once `answers_by_call` is exhausted.
-        answers_by_call: per-call answers, consumed in call order before falling back to
-            `answers`. An entry that is a `BaseException` instance is raised instead of
+        answers_by_call: per-call answers, consumed in host-call order before falling back to
+            `answers`. A `findings` call is not a host call and takes no entry. An entry that is a `BaseException` instance is raised instead of
             returned, so a test can script a `subprocess.TimeoutExpired` on a given call.
         calls: every call made, in order.
         issue_fetches: every `(number, repo)` issue fetch `fake_tools` answered.
@@ -35,9 +35,14 @@ class FakeRun:
     calls: list[tuple[str, str, str | None]] = field(default_factory=list)
     issue_fetches: list[tuple[int, str]] = field(default_factory=list)
 
+    @property
+    def host_calls(self) -> list[tuple[str, str, str | None]]:
+        """`calls` without the `findings` ones, for a test that counts ssh and local calls."""
+        return [call for call in self.calls if call[0] != "findings"]
+
     def __call__(self, host, command, timeout, stdin=None):
         self.calls.append((host, command, stdin))
-        call_index = len(self.calls) - 1
+        call_index = len(self.host_calls) - 1
         if call_index < len(self.answers_by_call):
             answer = self.answers_by_call[call_index]
             if isinstance(answer, BaseException):
@@ -58,6 +63,8 @@ def fake_tools(
     signing_error=None,
     merged_prs=None,
     findings_exit=0,
+    refused_claims=(),
+    head="worktree-orch",
 ) -> tuple[Tools, FakeRun]:
     """Build a Tools whose boundaries answer from tables, plus the FakeRun behind it.
 
@@ -74,6 +81,8 @@ def fake_tools(
             reads as in the real thing.
         findings_exit: the exit status every `findings.py` call returns. Each call is recorded
             in the FakeRun's `calls` under the pseudo-host `findings`.
+        refused_claims: issue numbers whose `claim` exits 3 instead, refused.
+        head: what `head_branch` answers, or an exception it raises instead.
 
     Returns:
         The Tools and the FakeRun it holds, so a test can script and read the calls.
@@ -102,7 +111,16 @@ def fake_tools(
         # Recorded among the host calls, under the pseudo-host `findings`, so a test reads
         # where the claim fell relative to the tree and the agent from one list.
         run.calls.append(("findings", " ".join(argv), None))
+        if argv[0] == "claim" and any(str(n) in argv[1:] for n in refused_claims):
+            return subprocess.CompletedProcess(
+                argv, 3, stdout=f"#{argv[1]} refused: held by `other`\n", stderr=""
+            )
         return subprocess.CompletedProcess(argv, findings_exit, stdout="", stderr="")
+
+    def head_branch() -> str:
+        if isinstance(head, BaseException):
+            raise head
+        return head
 
     def default_ref(checkout: str) -> str:
         return "origin/main"
@@ -114,6 +132,7 @@ def fake_tools(
         merged_pr=merged_pr,
         findings=findings,
         default_ref=default_ref,
+        head_branch=head_branch,
     ), run
 
 

@@ -33,8 +33,6 @@ def _launch(tools, tmp_path, *args):
         [
             "launch",
             *args,
-            "--orchestrator-branch",
-            "o",
             "--manifest-root",
             str(tmp_path),
         ],
@@ -59,7 +57,7 @@ def test_a_failed_second_worktree_add_still_records_the_batch_already_launched(
         _launch(tools, tmp_path, "--batch", "1", "--batch", "2", "--host", "daniel-box")
         == 1
     )
-    assert len(run.calls) == 5
+    assert len(run.host_calls) == 5
     written = json.loads(next(iter(tmp_path.glob("*.json"))).read_text())
     assert [b["batch"] for b in written["batches"]] == ["1"]
 
@@ -82,7 +80,7 @@ def test_a_batch_whose_worktree_exists_is_refused_and_the_run_id_is_named(
         == 1
     )
     # Four calls, not five: an `exists` refusal runs no cleanup.
-    assert len(run.calls) == 4
+    assert len(run.host_calls) == 4
     err = capsys.readouterr().err
     run_id = next(iter(tmp_path.glob("*.json"))).stem
     assert "clean <run-id>" in err
@@ -95,9 +93,9 @@ def test_pinning_daniel_server_sends_every_call_there_and_none_to_daniel_box(tmp
         issues=CLAIMED,
     )
     assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 0
-    assert {c[0] for c in run.calls} == {"daniel-server"}
+    assert {c[0] for c in run.host_calls} == {"daniel-server"}
     # headroom read, health read, one launch call for the one batch.
-    assert len(run.calls) == 3
+    assert len(run.host_calls) == 3
 
 
 def test_two_batches_pinned_to_one_host_cost_exactly_four_calls_there(tmp_path):
@@ -110,7 +108,7 @@ def test_two_batches_pinned_to_one_host_cost_exactly_four_calls_there(tmp_path):
         tools, tmp_path, "--batch", "1", "--batch", "2", "--host", "daniel-server"
     )
     assert code == 0
-    assert [c[0] for c in run.calls] == ["daniel-server"] * 4
+    assert [c[0] for c in run.host_calls] == ["daniel-server"] * 4
 
 
 def test_an_unpinned_launch_reads_both_hosts_and_places_on_the_emptier_one(tmp_path):
@@ -126,8 +124,8 @@ def test_an_unpinned_launch_reads_both_hosts_and_places_on_the_emptier_one(tmp_p
         issues=[CLAIMED[0]],
     )
     assert _launch(tools, tmp_path, "--batch", "1") == 0
-    assert {c[0] for c in run.calls} == {"daniel-box", "daniel-server"}
-    launched = [c for c in run.calls if "worktree add" in c[1]]
+    assert {c[0] for c in run.host_calls} == {"daniel-box", "daniel-server"}
+    launched = [c for c in run.host_calls if "worktree add" in c[1]]
     assert len(launched) == 1 and launched[0][0] == "daniel-server"
 
 
@@ -147,7 +145,7 @@ def test_three_batches_pinned_to_one_host_cost_exactly_five_calls_there(tmp_path
         "daniel-server",
     )
     assert code == 0
-    assert [c[0] for c in run.calls] == ["daniel-server"] * 5
+    assert [c[0] for c in run.host_calls] == ["daniel-server"] * 5
 
 
 def test_four_batches_pinned_to_one_host_is_refused_before_any_launch(tmp_path, capsys):
@@ -171,7 +169,7 @@ def test_four_batches_pinned_to_one_host_is_refused_before_any_launch(tmp_path, 
         "daniel-server",
     )
     assert code == 3
-    assert not any("worktree add" in c[1] for c in run.calls)
+    assert not any("worktree add" in c[1] for c in run.host_calls)
     assert "split the fan-out" in capsys.readouterr().err
 
 
@@ -190,7 +188,7 @@ def test_stop_stops_the_unit_and_names_clean_as_the_next_step(tmp_path, capsys):
     tools, run = fake_tools(answers={"daniel-box": ok("")})
     code = main(["stop", manifest.run_id, "--manifest-root", str(tmp_path)], tools)
     assert code == 0
-    assert [c[1] for c in run.calls] == ["systemctl --user stop fanout-1"]
+    assert [c[1] for c in run.host_calls] == ["systemctl --user stop fanout-1"]
     out = capsys.readouterr().out
     assert "1 on daniel-box: stopped" in out
     assert f"clean {manifest.run_id}" in out
@@ -215,7 +213,7 @@ def test_stop_makes_no_call_for_a_batch_clean_already_took(tmp_path, capsys):
     save(manifest, root=tmp_path)
     tools, run = fake_tools(answers={"daniel-box": ok("")})
     assert main(["stop", manifest.run_id, "--manifest-root", str(tmp_path)], tools) == 0
-    assert [c[0] for c in run.calls] == ["daniel-box"]
+    assert [c[0] for c in run.host_calls] == ["daniel-box"]
     out = capsys.readouterr().out
     assert "1 on daniel-server: cleaned (2026-09-10T12:00:00+00:00)" in out
     assert "2 on daniel-box: stopped" in out
@@ -232,7 +230,7 @@ def test_a_failed_issue_fetch_launches_nothing_and_writes_no_manifest(tmp_path, 
             issue_errors={2: error},
         )
         assert _launch(tools, tmp_path, "--batch", "1", "--batch", "2") == 1
-        assert not run.calls  # the fetch fails before any host is touched
+        assert not run.host_calls  # the fetch fails before any host is touched
         assert not list(tmp_path.glob("*.json"))
         assert "could not fetch issue 2" in capsys.readouterr().err
 
@@ -242,7 +240,7 @@ def test_an_unlabelled_issue_is_refused_and_a_labelled_one_launches(tmp_path, ca
         answers={"daniel-box": ok(HEADROOM)}, issues=[Issue(3, "t", "b", ("bug",))]
     )
     assert _launch(tools, tmp_path, "--batch", "3") == 1
-    assert not run.calls  # refused before the first ssh, so nothing was created
+    assert not run.host_calls  # refused before the first ssh, so nothing was created
     assert "issue 3 does not carry the `claude` label" in capsys.readouterr().err
 
     tools, run = fake_tools(
@@ -251,14 +249,14 @@ def test_an_unlabelled_issue_is_refused_and_a_labelled_one_launches(tmp_path, ca
     )
     assert _launch(tools, tmp_path, "--batch", "3", "--host", "daniel-box") == 0
     # headroom read, health read, one launch call for the one batch.
-    assert len(run.calls) == 3
+    assert len(run.host_calls) == 3
 
 
 def test_a_host_whose_signing_key_github_verifies_is_placed_on(tmp_path):
     """The accept half of the signing gate: HOST_KEY is in the fake's registered set."""
     tools, run = fake_tools(answers={"daniel-server": ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 0
-    assert [c for c in run.calls if "worktree add" in c[1]]
+    assert [c for c in run.host_calls if "worktree add" in c[1]]
 
 
 def test_a_host_whose_signing_key_github_does_not_verify_is_not_placed_on(
@@ -271,7 +269,7 @@ def test_a_host_whose_signing_key_github_does_not_verify_is_not_placed_on(
         signing_keys=frozenset({"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIZZZZ"}),
     )
     assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 6
-    assert not [c for c in run.calls if "worktree add" in c[1]]
+    assert not [c for c in run.host_calls if "worktree add" in c[1]]
     err = capsys.readouterr().err
     assert "daniel-server: its commit-signing key" in err and "SHA256:" in err
     assert not list(tmp_path.glob("*.json"))
@@ -287,7 +285,7 @@ def test_a_launch_is_refused_when_the_registered_keys_cannot_be_read(tmp_path, c
         ),
     )
     assert _launch(tools, tmp_path, "--batch", "1", "--host", "daniel-server") == 6
-    assert not run.calls
+    assert not run.host_calls
     assert "registered signing keys" in capsys.readouterr().err
 
 
@@ -305,13 +303,13 @@ def test_an_unpinned_launch_places_on_the_only_host_github_verifies(tmp_path):
         issues=[CLAIMED[0]],
     )
     assert _launch(tools, tmp_path, "--batch", "1") == 0
-    launched = [c for c in run.calls if "worktree add" in c[1]]
+    launched = [c for c in run.host_calls if "worktree add" in c[1]]
     assert len(launched) == 1 and launched[0][0] == "daniel-server"
 
 
 def _health_calls(run):
     """Every session-health read the launch made, as the hosts it made them against."""
-    return [c[0] for c in run.calls if "session-health.py" in c[1]]
+    return [c[0] for c in run.host_calls if "session-health.py" in c[1]]
 
 
 def test_no_session_health_is_read_from_a_host_the_signing_gate_dropped(tmp_path):
@@ -340,7 +338,7 @@ def test_every_host_a_batch_landed_on_is_read_for_session_health(tmp_path):
         issues=CLAIMED,
     )
     assert _launch(tools, tmp_path, "--batch", "1", "--batch", "2") == 0
-    placed = {c[0] for c in run.calls if "worktree add" in c[1]}
+    placed = {c[0] for c in run.host_calls if "worktree add" in c[1]}
     assert placed == {"daniel-box", "daniel-server"}
     assert sorted(_health_calls(run)) == ["daniel-box", "daniel-server"]
 
@@ -375,7 +373,7 @@ def test_one_issue_in_two_batches_is_refused_and_a_repeated_batch_is_placed_once
 ):
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--batch", "1,2", "--batch", "2") == 1
-    assert not run.calls
+    assert not run.host_calls
     assert "issue 2 appears in more than one --batch" in capsys.readouterr().err
 
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
@@ -386,14 +384,14 @@ def test_one_issue_in_two_batches_is_refused_and_a_repeated_batch_is_placed_once
         == 0
     )
     # headroom read, health read, one launch call for the one placed batch.
-    assert len(run.calls) == 3
+    assert len(run.host_calls) == 3
     assert "--batch 1,2 given twice; placing it once" in capsys.readouterr().err
 
 
 def test_a_within_spec_duplicate_issue_gets_its_own_message(tmp_path, capsys):
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--batch", "1,1") == 1
-    assert not run.calls  # refused before the first ssh
+    assert not run.host_calls  # refused before the first ssh
     assert "issue 1 is listed twice in --batch 1,1" in capsys.readouterr().err
 
 
@@ -419,7 +417,7 @@ def test_a_batch_still_live_in_a_manifest_is_refused_before_any_host_is_read(
     save(Manifest("20260101T000010Z", "o", [live]), root=tmp_path)
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--batch", "1,2") == 1
-    assert not run.calls  # refused before the headroom read, so it costs no ssh
+    assert not run.host_calls  # refused before the headroom read, so it costs no ssh
     err = capsys.readouterr().err
     assert "batch 1-2 shares #1, #2 with batch 1-2, live in run" in err
     assert "20260101T000010Z on daniel-server" in err
@@ -433,7 +431,7 @@ def test_a_reordered_or_narrowed_spec_cannot_slip_past_the_live_guard(tmp_path, 
     for spec, shared in (("1386,1345", "#1345, #1386"), ("1345", "#1345")):
         tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
         assert _launch(tools, tmp_path, "--batch", spec) == 1
-        assert not run.calls
+        assert not run.host_calls
         err = capsys.readouterr().err
         assert f"shares {shared} with batch 1345-1386" in err
         assert "on daniel-server" in err
@@ -471,4 +469,4 @@ def test_a_batch_already_cleaned_in_an_old_run_launches_again(tmp_path):
     save(Manifest("20260101T000010Z", "o", [cleaned]), root=tmp_path)
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--batch", "1,2", "--host", "daniel-box") == 0
-    assert len(run.calls) == 3
+    assert len(run.host_calls) == 3
