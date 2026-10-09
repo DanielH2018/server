@@ -1,10 +1,12 @@
-"""What the review pipeline asks its reviewer and its fixer, and the schema a reviewer answers in.
+"""What the review pipeline asks each phase it resumes or starts, and the reviewer's schema.
 
 `fanout_lib.review` runs the phases; this module is the text they read. Every payload a model
-wrote goes in through `_as_data`, fenced and labelled as data.
+wrote goes in through `_as_data`, fenced and labelled as data. `is_held` decides which findings
+stay off the public PR and tracker.
 """
 
 import json
+from typing import TYPE_CHECKING
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -14,6 +16,9 @@ from pathlib import Path
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import _fence
+
+if TYPE_CHECKING:
+    from fanout_lib.review import Record
 
 FINDINGS_SCHEMA = {
     "type": "object",
@@ -110,6 +115,44 @@ Do not describe a finding of category `security` in a commit message or the PR b
 naming the file: the repo is public.
 {rule}
 {_as_data("The findings", found)}
+
+End your final message with the PR URL.
+"""
+
+
+def is_held(finding: dict) -> bool:
+    """Whether a finding stays off the public PR and tracker for disclosure reasons."""
+    return finding.get("category") == "security"
+
+
+def land_prompt(record: "Record", landing: str) -> str:
+    public = [f for f in record.remaining if not is_held(f)]
+    if record.review_error:
+        state = f"The review did not complete: {record.review_error}. Land without it, and say so."
+    elif public:
+        state = (
+            "These findings were not resolved. File each with `findings.py open` before you "
+            "land, and name it in the PR body as `Filed for later: #N`.\n\n"
+            + _as_data("The unresolved findings", public)
+        )
+    else:
+        state = "No finding is left to file."
+    return f"""The review of {record.pr} is finished. {state}
+
+Now land the PR. Your brief's own Landing section said to stop at the PR; this replaces it:
+
+{landing}
+End your final message with the PR URL and quote `land.sh`'s `VERDICT:` line.
+"""
+
+
+def file_prompt(record: "Record") -> str:
+    public = [f for f in record.remaining if not is_held(f)]
+    return f"""The review of {record.pr} is finished. These findings were not resolved. File
+each with `findings.py open`, and add `Filed for later: #N` to the PR body with `gh pr edit`.
+Do not merge or land.
+
+{_as_data("The unresolved findings", public)}
 
 End your final message with the PR URL.
 """

@@ -15,8 +15,16 @@ and the project skills from a fresh session. A resumed session already holds `CL
 transcript, and the land text carries the whole `land.sh` command. The reviewer is a fresh
 session, so the pipeline appends the `CLAUDE.md` it read at start to the review prompt
 (#3825). The reviewer loses the project skills and `.claude/rules/`; it reads files rather
-than following a procedure, and its prompt names the role `CLAUDE.md` files to check. The
-implement phase starts from the tree `worktree add` checked out, and keeps the source.
+than following a procedure, and its prompt names the role `CLAUDE.md` files to check.
+
+DECIDED: the implement phase keeps the project source only when no red phase ran before it.
+Without one it starts from the tree `worktree add` checked out, which no agent has written,
+and a fresh implementer needs the project skills and `.claude/rules/`. After a red phase the
+red author has had the worktree, and the red gate reads only the tracked range `base..red`. An
+ignored `.claude/settings.local.json`, a hook edit hidden with `--skip-worktree` or a planted
+`.pyc` is outside that range (#3846). That implement phase therefore runs on the held settings
+and gets the start-time `CLAUDE.md` as text. Like the reviewer, it loses the project skills and
+rules.
 
 `block-protected-bash` derives its secret-bearing host paths from the session's cwd, which is
 the worktree. The pipeline derives the set at start and ships it beside the held hooks as
