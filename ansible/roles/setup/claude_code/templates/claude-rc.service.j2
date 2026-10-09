@@ -8,10 +8,20 @@ OnFailure=claude-rc-alert.service
 
 [Service]
 Type=simple
-User={{ sys_user }}
-Group={{ sys_user }}
+User={{ claude_code_user }}
+Group={{ claude_code_user }}
 WorkingDirectory={{ claude_code_rc_workdir }}
 
+{% if claude_code_user != sys_user %}
+# DECIDED: hardening only for a non-operator user. ProtectHome=yes hides /home, which holds
+# the operator's own home, so the operator's unit would lose its own files. NoNewPrivileges=yes
+# blocks setuid, which the operator's phone sessions need for sudo. The agent's home sits
+# under /var/lib and stays visible. Slice 4 of docs/claude-agent-user.md.
+ProtectHome=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+{% endif %}
 {% if claude_code_fleet_caps_enabled %}
 # DECIDED: this unit lives in {{ claude_code_fleet_slice }}, not the default system.slice, so
 # that it shares ONE parent cgroup with the other half of the Claude fleet — the login-session
@@ -31,7 +41,7 @@ WorkingDirectory={{ claude_code_rc_workdir }}
 # the slice — the RC host would die with the last SSH session and Restart=always would not
 # bring back a dependency-stopped unit. user.slice measures StopWhenUnneeded=no, and
 # systemd.special(7) describes it as holding "all user processes and services started on behalf
-# of the user", which is what this unit is: User={{ sys_user }}, HOME below, a per-user install
+# of the user", which is what this unit is: User={{ claude_code_user }}, HOME below, a per-user install
 # reading that user's own OAuth token.
 #
 # Changing Slice= does not migrate a running unit — it takes effect at the next start, so the
@@ -43,14 +53,14 @@ Slice={{ claude_code_fleet_slice }}
 # at ~/.local/bin/claude) and reads its OAuth token from ~/.claude/.credentials.json, so
 # HOME must be the real user's home and not systemd's default. Same reasoning the role's
 # tasks give for become: false — running any of this as root would read /root/.claude.
-Environment=HOME=/home/{{ sys_user }}
+Environment=HOME={{ claude_code_user_home }}
 
 # systemd supplies a minimal PATH, exactly as cron does, and this is the same trap already
 # recorded for the host crons: without /usr/local/bin a spawned session loses kubectl and
 # uv, then reports an EMPTY CLUSTER rather than failing. The failure is silent in precisely
 # the direction that reads like a working session.
-Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
-Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
+Environment=PATH={{ claude_code_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=KUBECONFIG={{ claude_code_user_home }}/.kube/config
 
 {% if claude_code_rc_disable_bg_shell_pressure_reap %}
 # DECIDED: the background-shell pressure reaper is turned OFF here. Claude Code registers
@@ -90,7 +100,7 @@ Environment=PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}
 # process.stdin.isTTY). Under systemd there is no stdin to answer, so the host would sit
 # there having never connected — a hang, not an error. ENFORCED by
 # ansible/tests/setup/test_claude_rc_unit.py.
-ExecStart=/home/{{ sys_user }}/.local/bin/claude rc \
+ExecStart={{ claude_code_user_home }}/.local/bin/claude rc \
   --spawn={{ claude_code_rc_spawn_mode }} \
   --permission-mode {{ claude_code_rc_permission_mode }} \
   --capacity {{ claude_code_rc_capacity }}

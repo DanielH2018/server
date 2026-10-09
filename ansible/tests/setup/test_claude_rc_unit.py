@@ -37,7 +37,7 @@ import re
 
 import pytest
 from _helpers import ANSIBLE, load_yaml
-from _setup_render import render_setup_text
+from _setup_render import render_setup_text, role_context
 
 ROLE = "claude_code"
 ROLE_DIR = ANSIBLE / "roles" / "setup" / ROLE
@@ -288,4 +288,45 @@ def test_enable_flag_also_turns_the_host_off() -> None:
         assert "if claude_code_rc_enabled else 'stopped'" in body, (
             f"{unit_name} must be STOPPED when claude_code_rc_enabled is false, not merely "
             "left disabled — otherwise the flag has no rollback."
+        )
+
+
+HARDENING = ("ProtectHome", "NoNewPrivileges", "PrivateTmp")
+
+
+def test_default_user_is_the_operator_and_the_unit_is_not_hardened(unit: str) -> None:
+    """As the operator the hardening lines would hide the unit's own home and break sudo.
+
+    `ProtectHome=yes` hides /home, where the operator's home is, and `NoNewPrivileges=yes`
+    blocks the sudo a phone session uses. The three lines belong to a non-operator user only,
+    so the default render carries none of them.
+    """
+    sys_user = role_context(ROLE_DIR, {})["sys_user"]
+    assert directive(unit, "User") == [sys_user]
+    assert directive(unit, "Group") == [sys_user]
+    for key in HARDENING:
+        assert not directive(unit, key), (
+            f"{key}= rendered for the operator; it must appear only when "
+            "claude_code_user differs from sys_user"
+        )
+
+
+def test_agent_user_runs_from_its_own_home_with_hardening() -> None:
+    """The rejecting half of the pair above: setting the var must move the unit and harden it."""
+    ctx = role_context(ROLE_DIR, {"claude_code_user": "claude"})
+    home = ctx["claude_code_agent_user_home"]
+    moved = render(UNIT, claude_code_user=ctx["claude_code_agent_user"])
+    assert directive(moved, "User") == ["claude"]
+    assert directive(moved, "Group") == ["claude"]
+    assert directive(moved, "WorkingDirectory") == [f"{home}/server"]
+    env = directive(moved, "Environment")
+    assert f"HOME={home}" in env
+    assert f"KUBECONFIG={home}/.kube/config" in env
+    assert [v for v in env if v.startswith("PATH=")][-1].startswith(
+        f"PATH={home}/.local/bin:"
+    )
+    assert directive(moved, "ExecStart")[0].startswith(f"{home}/.local/bin/claude rc")
+    for key in HARDENING:
+        assert directive(moved, key) == ["yes"], (
+            f"{key}=yes must render for the agent user"
         )

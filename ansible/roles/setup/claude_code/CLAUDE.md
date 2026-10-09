@@ -13,8 +13,7 @@ true (daniel-box). Invoked from `initial_setup.yml`, **not** `deploy.yml` — th
 uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 ```
 
-`docs/claude-code-rc-caps.md` holds the record behind the rules below: the memory incidents,
-the fleet bound, the phone check, the webhook, the restart design and cgroupfs checks.
+`docs/claude-code-rc-caps.md` holds the record behind the rules below.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -28,13 +27,12 @@ the fleet bound, the phone check, the webhook, the restart design and cgroupfs c
 
 `/remote-control` **inside a running session** publishes that one session to the phone. `claude rc`
 **from a shell** is a persistent server that spawns sessions **on demand** up to `--capacity`; only
-it lets the phone create a session, and Claude Code ships no always-on host, so systemd runs one.
+it lets the phone create a session, so systemd runs one.
 
 ## Activating it
 
 `claude_code_rc_enabled: true` enables and starts the host; back to `false` stops **and** disables
-it and its restart timer, which is the rollback. `ansible/tests/setup/test_claude_rc_unit.py` pins
-that both directions stay wired.
+it and its restart timer, which is the rollback. `ansible/tests/setup/test_claude_rc_unit.py` pins both directions.
 
 One prerequisite Ansible cannot check: a phone-created session reaches a prompt in a fresh
 worktree with no workspace-trust dialog. **Re-run that check after a Claude Code upgrade or a
@@ -46,12 +44,12 @@ account and directory.
 ## What monitoring does and does not cover
 
 `OnFailure=claude-rc-alert.service` pages Discord when the host **crashes**, reusing the shared
-`gitops_deploy_discord_webhook` like `gitops-deploy-alert` and `renovate-notify-alert`.
+`gitops_deploy_discord_webhook`.
 
 - **That value reaches the alert unit through an `EnvironmentFile=`, never the unit body.**
   `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py` holds the whole repo to
-  that shape. `no_log: true` sits on the rendering task only and also hides an undefined-variable
-  failure — check `gitops_deploy_discord_webhook` is in scope if that task fails opaquely.
+  that shape. `no_log: true` also hides an undefined-variable failure; if the rendering task
+  fails opaquely, check `gitops_deploy_discord_webhook` is in scope.
 - **It cannot catch an expired login.** The host keeps reporting `active` while every session
   fails, so no `OnFailure=` fires. Closing it needs a check that the host is *registered*, not
   just up — **not yet built**.
@@ -100,6 +98,10 @@ effect at the next start**, so the deploy that changes it drops the RC host's se
 `ansible/roles/setup/common/tasks/agent_user.yml`. No unit runs as it. It lands a PR by starting
 `claude-land@<n>.service`, which runs `land.sh` as the operator under the landing policy.
 `defaults/main.yml` covers login, the GitHub account, the lander and switching each off.
+
+`claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as, and its home
+and `claude_code_rc_workdir` follow it. The unit gets `ProtectHome=yes`, `NoNewPrivileges=yes` and
+`PrivateTmp=yes` only when it differs from `sys_user`.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 
