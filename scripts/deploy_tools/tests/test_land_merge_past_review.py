@@ -1,9 +1,9 @@
-"""--arm-merge and --await-merge on a PR that waits on a review only a ruleset bypass clears.
+"""--arm-merge and --await-merge on a PR that can merge only through a ruleset bypass.
 
 GitHub's auto-merge does not apply a ruleset bypass (github/docs#45265), so an armed PR in
 that state sits BLOCKED until merge-timeout. arm_merge therefore leaves it unarmed, and
 await_merge merges it through the REST endpoint once await_ci reads its head green. Each
-behaviour is tested against its counterpart: a review-bound PR against an ordinary armed one,
+behaviour is tested against its counterpart: a bypass-only PR against an ordinary armed one,
 a green head against a pending one, and a merge GitHub accepts against one it refuses.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_merge_past_review.py
