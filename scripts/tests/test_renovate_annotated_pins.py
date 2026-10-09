@@ -1,7 +1,7 @@
 """Guards on the `# renovate:` annotated pins and the one packageRule that finishes them.
 
 A pinned artifact is declared to Renovate by one annotation above its `_version:` line
-(lib/renovate_annotations.py). Three things can still let one age silently or land unfinished:
+(lib/renovate_annotations.py). Four things can still let one age silently or land unfinished:
 
 - An annotation the manager's regex does not read: keys out of order, or a blank line before
   the pin. Renovate reports nothing; the pin is simply untracked.
@@ -10,6 +10,8 @@ A pinned artifact is declared to Renovate by one annotation above its `_version:
 - The annotated-pin packageRule sitting after a per-package rule it should yield to, which
   strips `k8s_autodeploy: false` from the crowdsec bouncer plugin's title so the unattended
   agent lands a traefik redeploy.
+- The Pi's node_exporter pin and the cluster image splitting into two PRs. A test holds the
+  two equal, so each PR would stay red until the other merged.
 
 Run: uv run pytest scripts/tests/test_renovate_annotated_pins.py
 """
@@ -43,19 +45,19 @@ KNOWN_ANNOTATED = frozenset(
         "docker-ce",
         "maxlerebourg/crowdsec-bouncer-traefik-plugin",
         "node",
+        "prometheus/node_exporter",
     }
 )
 
 # Version keys a pin's URL renders from that no manager tracks, on purpose.
-UNTRACKED_BY_DECISION = {
-    "optimize_pi_node_exporter_version": "bumped by hand alongside the cluster's "
-    "node-exporter image, per the comment above it in optimize_pi's defaults",
-}
+UNTRACKED_BY_DECISION: dict[str, str] = {}
 
 _ANNOTATION_LINE = re.compile(r"^\s*#\s*renovate:", re.MULTILINE)
 
 SOPS_DEFAULTS = "ansible/roles/setup/sops_setup/defaults/main.yml"
 TRAEFIK_DEFAULTS = "ansible/roles/k8s/traefik/defaults/main.yml"
+PI_DEFAULTS = "ansible/roles/setup/optimize_pi/defaults/main.yml"
+NODE_EXPORTER_DEFAULTS = "ansible/roles/k8s/node-exporter/defaults/main.yml"
 CROWDSEC_PLUGIN = "maxlerebourg/crowdsec-bouncer-traefik-plugin"
 DENYLIST_MARKER = "k8s_autodeploy: false"
 
@@ -236,3 +238,57 @@ def test_the_annotated_pin_rule_moved_last_would_strip_the_marker():
         dep_type=DEP_TYPE,
     )
     assert group is not None and DENYLIST_MARKER not in group, group
+
+
+# ── the two node_exporter pins move in one PR ─────────────────────────────────────────────
+
+# The cluster image and the Pi's annotated tarball pin, which
+# ansible/tests/setup/test_pi_node_exporter_host_unit.py holds equal.
+NODE_EXPORTER_TWINS = (
+    ("prom/node-exporter", NODE_EXPORTER_DEFAULTS, "docker", None),
+    ("prometheus/node_exporter", PI_DEFAULTS, "github-releases", DEP_TYPE),
+)
+
+
+def _twin_groups(rules: list[dict] = _PACKAGE_RULES) -> set[str | None]:
+    return {
+        _resolve_group_name(dep, path, "minor", ds, rules=rules, dep_type=dt)
+        for dep, path, ds, dt in NODE_EXPORTER_TWINS
+    }
+
+
+def test_the_node_exporter_twins_share_one_manual_group():
+    groups = _twin_groups()
+    assert len(groups) == 1 and None not in groups, (
+        f"the two node_exporter pins resolve to {groups}; split PRs each go red on the "
+        "equality test until the other merges"
+    )
+    assert "asset_pins.py --refresh prometheus/node_exporter" in str(groups.pop())
+    for dep, path, ds, dt in NODE_EXPORTER_TWINS:
+        automerge = _resolve_setting("automerge", dep, path, "minor", ds, dep_type=dt)
+        assert automerge is False, f"{dep} automerges a version bump: {automerge}"
+
+
+def test_the_twin_rule_moved_before_the_annotated_pin_rule_splits_them():
+    """The red half: the annotated-pin rule then overrides the Pi pin's groupName."""
+    at = next(
+        i for i, r in enumerate(_PACKAGE_RULES) if r.get("matchDepTypes") == [DEP_TYPE]
+    )
+    twin = next(
+        i
+        for i, r in enumerate(_PACKAGE_RULES)
+        if "prometheus/node_exporter" in r.get("matchPackageNames", [])
+    )
+    rules = [r for i, r in enumerate(_PACKAGE_RULES) if i != twin]
+    rules.insert(at, _PACKAGE_RULES[twin])
+    assert len(_twin_groups(rules)) == 2
+
+
+def test_a_node_exporter_image_digest_still_automerges():
+    automerge = _resolve_setting(
+        "automerge", "prom/node-exporter", NODE_EXPORTER_DEFAULTS, "digest", "docker"
+    )
+    assert automerge is True, (
+        "a digest re-push moves no version, so the Pi has nothing to follow; the lockstep "
+        "rule must leave it to the k8s digest automerge"
+    )
