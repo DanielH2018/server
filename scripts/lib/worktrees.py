@@ -19,11 +19,8 @@ own call on both. `remove` adds one refusal `classify` cannot make in advance: a
 process using the tree at the moment of removal (`processes_using`).
 """
 
-import errno
 import functools
 import os
-import pwd
-import stat
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -178,82 +175,8 @@ def _inside(held: str, tree: Path) -> bool:
     return path == tree or tree in path.parents
 
 
-def _foreign_identity(entry: Path) -> tuple[int, set[int]] | None:
-    """(fsuid, gids) of a process another user owns, or None when it cannot hold a tree.
-
-    `/proc/<pid>/status` and `cgroup` stay readable for every uid, unlike `cwd` and
-    `environ`. None covers four cases: the process exited mid-scan; it runs as root, whose
-    daemons are always unreadable; it runs as this uid, so an unreadable entry is a zombie or
-    an exiting process with no cwd; or it runs in a pod. A pod has its own mount namespace,
-    so a host worktree path never appears in its cwd. On daniel-box the renovate-agent pod's
-    redis runs as uid 999 with gid 1000, which is `ubuntu`'s group.
-    """
-    try:
-        status = (entry / "status").read_text()
-        cgroup = (entry / "cgroup").read_text()
-    except OSError:
-        return None
-    fields = dict(line.split(":", 1) for line in status.splitlines() if ":" in line)
-    try:
-        # Uid and Gid list real, effective, saved and filesystem ids; the kernel checks
-        # path access against the filesystem one, the fourth.
-        uid = int(fields["Uid"].split()[3])
-        gids = {int(fields["Gid"].split()[3])}
-        gids.update(int(g) for g in fields.get("Groups", "").split())
-    except KeyError, IndexError, ValueError:
-        return None
-    if uid in (0, os.geteuid()) or "/kubepods" in cgroup:
-        return None
-    return uid, gids
-
-
-def _user(uid: int) -> str:
-    try:
-        return f"uid {uid} ({pwd.getpwuid(uid).pw_name})"
-    except KeyError:
-        return f"uid {uid}"
-
-
-def _has_acl(path: Path) -> bool:
-    try:
-        os.getxattr(path, "system.posix_acl_access")
-    except OSError as exc:
-        # ENODATA is "no ACL". Anything else, such as a filesystem without xattrs, is an
-        # unknown, and an unknown counts as an ACL so the caller fails closed.
-        return exc.errno != errno.ENODATA
-    return True
-
-
-def _can_reach(tree: Path, uid: int, gids: set[int]) -> bool:
-    """Whether `uid` with `gids` may search every directory from `/` down to `tree`.
-
-    A process cannot hold a cwd inside a tree it cannot traverse to. On daniel-box the
-    `claude` user cannot enter `/home/ubuntu` (0750 ubuntu:ubuntu, and `claude` is in no
-    `ubuntu` group), so its sessions do not block a removal there. A directory with an ACL
-    counts as passable rather than parsed: wrongly passable only costs a refusal.
-    """
-    for directory in [*reversed(tree.parents), tree]:
-        try:
-            st = directory.stat()
-        except OSError:
-            return True
-        if _has_acl(directory):
-            continue
-        if st.st_uid == uid:
-            bit = stat.S_IXUSR
-        elif st.st_gid in gids:
-            bit = stat.S_IXGRP
-        else:
-            bit = stat.S_IXOTH
-        if not st.st_mode & bit:
-            return False
-    return True
-
-
-def processes_using(path: str, proc: Path = Path("/proc")) -> list[tuple[int, str]]:
-    """(pid, how) for every live process that uses `path`, or that might and cannot be read.
-
-    A process uses the tree when its cwd, or its `CLAUDE_PROJECT_DIR`, is inside `path`.
+def processes_using(path: str) -> list[tuple[int, str]]:
+    """(pid, how) for every live process whose cwd, or `CLAUDE_PROJECT_DIR`, is inside `path`.
 
     A Claude session whose project dir is deleted loses every repo hook (#3887), and its
     worktree lock is no proof it is gone: the session can run from a tree it never locked,
@@ -264,20 +187,13 @@ def processes_using(path: str, proc: Path = Path("/proc")) -> list[tuple[int, st
     binary's command name is its version string (`2.1.295`), so a name match finds nothing,
     and a hook or tool shell a session spawned carries the variable too.
 
-    `/proc/<pid>/cwd` and `environ` refuse another user's process. Such a process counts as
-    a holder when its uid could reach the tree (#3994): the weekly prune runs as `ubuntu`,
-    and a session of the `claude` UNIX user is otherwise invisible to it. Root's processes,
-    pods' processes and processes that cannot traverse to the tree are still skipped, because
-    those are always present and would refuse every removal. `_foreign_identity` and
-    `_can_reach` say which is which.
-
-    Args:
-        path: the worktree to check.
-        proc: the procfs root; a test points it at a fake one.
+    Only processes this uid may inspect are seen. `/proc/<pid>/cwd` and `environ` refuse
+    another user's process, and those are skipped rather than counted as holders, because
+    root's daemons are always unreadable and counting them would refuse every removal.
     """
     tree = Path(path).resolve()
     found = []
-    for entry in proc.iterdir():
+    for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():
             continue
         pid = int(entry.name)
@@ -293,11 +209,12 @@ def processes_using(path: str, proc: Path = Path("/proc")) -> list[tuple[int, st
         try:
             environ = (entry / "environ").read_bytes().split(b"\0")
         except OSError:
-            identity = None if cwd else _foreign_identity(entry)
-            if identity and _can_reach(tree, *identity):
-                found.append(
-                    (pid, f"{_user(identity[0])} can reach it; cwd unreadable")
-                )
+            # DECIDED: another uid's unreadable process is skipped, not counted (#3994). The
+            # `ubuntu` prune of /home/ubuntu/server cannot miss a `claude` session: /home/ubuntu
+            # is 0750 ubuntu:ubuntu and `claude` is in no `ubuntu` group, so no `claude`
+            # process can hold a cwd there. Counting a process whose uid can traverse to the
+            # tree fails the other way: the agent clone is 2770 claude:ubuntu, so every
+            # `ubuntu` process could reach it and a `claude`-run removal would refuse every tree.
             continue
         for var in environ:
             if var.startswith(b"CLAUDE_PROJECT_DIR="):
