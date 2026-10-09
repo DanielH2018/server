@@ -111,6 +111,21 @@ def test_allow_shared_file_excuses_the_named_file_only(tmp_path, capsys):
     assert [c for c in run.calls if "worktree add" in c[1]]
 
 
+def test_launch_refuses_a_batch_holding_a_fanout_tooling_issue_before_any_ssh(
+    tmp_path, capsys
+):
+    issues = [
+        *ISSUES,
+        Issue(3959, "tooling", "`fanout_place.py launch` refuses", ("claude",)),
+    ]
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
+    assert _launch(tools, tmp_path, "--batch", "1784,3959") == 1
+    assert not run.calls
+    err = capsys.readouterr().err
+    assert "batch 1784-3959: #3959 cites the fan-out tooling (fanout_place.py)" in err
+    assert not list(tmp_path.glob("*.json"))
+
+
 def test_the_triage_step_names_the_file_level_collision_check():
     """The rule lives in the skill the orchestrator reads, so its triage step has to name
     the field the check reads and the flag that overrides it, or the check is skipped."""

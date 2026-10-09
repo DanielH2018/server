@@ -70,7 +70,7 @@ from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
-from fanout_lib.collisions import refuse_shared_files
+from fanout_lib.collisions import refuse_shared_files, refuse_solo_only
 from fanout_lib.red_gate import review_flags
 from fanout_lib.launch_gates import (
     live_elsewhere,
@@ -186,6 +186,8 @@ def cmd_launch(args, tools: Tools) -> int:
         return 1
     fetched = _fetch_issues(tools, batches, target.repo)
     if fetched is None:
+        return 1
+    if refuse_solo_only(batches, fetched):
         return 1
     if refuse_shared_files(batches, fetched, args.allow_shared_file):
         return 1
