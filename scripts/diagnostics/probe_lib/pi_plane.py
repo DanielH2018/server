@@ -42,7 +42,10 @@ PROMETHEUS_TEMPLATE_PATH = (
     / "prometheus.yaml.j2"
 )
 
-PI_ORIGIN_LABEL = "daniel-pi"
+# prometheus.yaml.j2 writes `origin: daniel-pi` as a literal on each Pi job rather than deriving
+# it from the inventory hostname, so the label equals the host name by convention, not by
+# construction.
+PI_ORIGIN_LABEL = PI_HOST
 
 _JOB_NAME_RE = re.compile(r"^\s*-\s*job_name:\s*(\S+)")
 
@@ -106,7 +109,7 @@ def format_pi_targets(declared, active_targets):
         name for name, t in live.items() if name in declared and t.get("health") != "up"
     ]
     up = len(declared) - len(missing) - len(down)
-    head = f"{up}/{len(declared)} daniel-pi targets up"
+    head = f"{up}/{len(declared)} {PI_HOST} targets up"
     text = "\n".join([head, *lines])
     return text, 1 if missing or down else 0
 
@@ -156,7 +159,7 @@ def format_pi_containers(containers):
     exit code on ANY non-running container would make this red on a normal day and get ignored.
     """
     if not containers:
-        return "no containers on daniel-pi (docker ps -a returned nothing)", 1
+        return f"no containers on {PI_HOST} (docker ps -a returned nothing)", 1
     flagged, lines = [], []
     for c in sorted(containers, key=lambda c: c.get("Name") or ""):
         name = (c.get("Name") or "?").lstrip("/")

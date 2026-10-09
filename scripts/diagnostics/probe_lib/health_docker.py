@@ -24,11 +24,11 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 
-from lib.ansible_inventory import containers_entries_in
+from lib.ansible_inventory import PI_HOST, containers_entries_in
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
 from lib.repo_paths import HOST_VARS
 
-PI_HOST_VARS = HOST_VARS / "daniel-pi.yml"
+PI_HOST_VARS = HOST_VARS / f"{PI_HOST}.yml"
 
 
 def inspect_ip_argv(container):
@@ -111,7 +111,7 @@ def format_health(data, container, declared=False):
     if not data:
         if declared:
             return (
-                f"{container}: MISSING — daniel-pi's inventory declares this service and the "
+                f"{container}: MISSING — {PI_HOST}'s inventory declares this service and the "
                 "host has no such container, so the deploy did not create it",
                 1,
             )
