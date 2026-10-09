@@ -39,6 +39,11 @@ def _finding(title, severity="high", confidence=0.9, category="correctness"):
     }
 
 
+def unprefixed(argv):
+    """`argv` from its `git`, past the `env` settings `red_gate._hardened` puts before it."""
+    return argv[argv.index("git") :] if argv[0] == "env" else argv
+
+
 class FakeRunner:
     def __init__(self, worktree, reports, heads=("aaa", "bbb")):
         self.worktree = worktree
@@ -49,11 +54,12 @@ class FakeRunner:
         self.git = []
 
     def __call__(self, argv, stdin):
+        argv = unprefixed(argv)
         if argv[0] == "git":
             self.git.append(argv[3:])
             if "merge-base" in argv:
                 out = "base0"
-            elif "rev-parse" in argv:
+            elif argv[-2:] == ["rev-parse", "HEAD"]:
                 out = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
             else:
                 out = ""

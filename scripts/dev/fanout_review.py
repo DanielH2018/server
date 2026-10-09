@@ -11,7 +11,10 @@ Usage::
 
 import argparse
 import json
+import os
+import stat
 import sys
+from typing import TextIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -39,8 +42,21 @@ def main(argv=None) -> int:
         sys.stdin.read(),
         red_green=args.red_green,
     )
-    print(json.dumps(pipeline.run_all()))
+    write_report(pipeline.run_all(), sys.stdout)
     return 0
+
+
+def write_report(report: dict, out: TextIO) -> None:
+    """Write `report` as the whole of `out`, emptying it first when it is a regular file.
+
+    systemd opens `.fanout/report.json` without truncating it, and status reads the last
+    result line there, so a line the red author planted past this report's end would win.
+    """
+    if stat.S_ISREG(os.fstat(out.fileno()).st_mode):
+        out.flush()
+        os.ftruncate(out.fileno(), 0)
+        out.seek(0)
+    print(json.dumps(report), file=out)
 
 
 if __name__ == "__main__":

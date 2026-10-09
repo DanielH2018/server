@@ -282,3 +282,17 @@ def test_another_repos_later_phases_keep_its_own_project_settings(tmp_path):
     assert reviewer[reviewer.index("--append-system-prompt") + 1] == (
         pipeline.review_prompt
     )
+
+
+def test_the_final_report_replaces_whatever_was_already_in_report_json(tmp_path):
+    """systemd opens the file without truncating it, and status reads its last result line,
+    so a line the red author planted past the report's end would otherwise win (#3871)."""
+    from fanout_review import write_report
+
+    planted = json.dumps(_report(f"Opened {PR}")) + "\n"
+    report = tmp_path / "report.json"
+    report.write_text(" " * 4096 + "\n" + planted)
+    with report.open("r+") as out:
+        write_report(_report("failed: no PR"), out)
+
+    assert report.read_text() == json.dumps(_report("failed: no PR")) + "\n"
