@@ -25,20 +25,15 @@ from pathlib import Path
 from typing import Any
 
 from lib import yaml_fast
-from lib.ansible_inventory import PI_HOST
+from lib.ansible_inventory import PI_HOST, PI_HOST_VARS
 from lib.json_types import JsonObject, JsonValue, as_object
 from lib.render_guard import containers_entries, entry_tags
 from lib.jinja_comments import strip_jinja_comments
 from lib.jinja_defaults import resolve
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, REPO, ROLES
+from lib.k8s_roles import role_dirs
+from lib.repo_paths import ANSIBLE, ROLES
 from reference.crons import schedule_text
 
-_sys.path.insert(0, str(FILTER_PLUGINS))
-
-from k8s_autodeploy import is_leftover_dir
-
-# The one host that still runs Docker.
-PI_HOST_VARS = REPO / f"ansible/inventory/host_vars/{PI_HOST}.yml"
 SETUP_ROLES = ROLES / "setup"
 CONTAINERS_ROLES = ROLES / "containers"
 # The playbooks that apply setup roles. `deploy.yml` applies none of them.
@@ -87,20 +82,14 @@ def image_repository(ref: str) -> str:
 def setup_role_dirs(setup_roles: Path = SETUP_ROLES) -> list[Path]:
     """Every setup role directory the generator writes a block for, sorted.
 
-    `is_leftover_dir` skips a retired role's debris: the deployer's fast-forward removes the
-    role's tracked files, and a gitignored `__pycache__/` keeps its directory on disk.
-    Without it the generator would write a block for a role that no longer exists in git,
-    and the staleness gate would raise on its missing `CLAUDE.md`. Same predicate, same
-    reasoning, as `catalog_backup.role_dirs`.
+    `role_dirs` skips a retired role's debris, which would otherwise get a block for a role
+    no longer in git, and the staleness gate would raise on its missing `CLAUDE.md`.
     """
-    return sorted(
+    return [
         d
-        for d in setup_roles.iterdir()
-        if d.is_dir()
-        and not d.name.startswith(".")
-        and d.name not in SETUP_ROLES_OUT_OF_SUBJECT
-        and not is_leftover_dir(str(d))
-    )
+        for d in role_dirs(setup_roles, exclude=SETUP_ROLES_OUT_OF_SUBJECT)
+        if not d.name.startswith(".")
+    ]
 
 
 def load_yaml_list(path: Path) -> list:

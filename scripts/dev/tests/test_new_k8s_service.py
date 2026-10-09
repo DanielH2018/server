@@ -22,7 +22,7 @@ from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
-    HOST_VARS,
+    K8S_HOST_VARS,
     load_yaml,
     make_lookup,
     register_ansible_filters,
@@ -63,7 +63,7 @@ def _render(tmp_path, text: str, name: str, port: int, defaults=None) -> list[di
     base = {
         **BASE_CONTEXT,
         **load_yaml(ALL_VARS),
-        **load_yaml(HOST_VARS),
+        **load_yaml(K8S_HOST_VARS),
         "playbook_dir": str(ANSIBLE),
     }
     ctx = resolve_vars(base, base)

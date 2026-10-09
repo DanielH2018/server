@@ -52,7 +52,7 @@ RELEASE_DIR = Path("/var/lib/homelab/k8s-releases.d")
 
 from lib.git import git as _lib_git  # noqa: E402
 from lib.repo_paths import GITOPS_DEPLOY_FILES  # noqa: E402
-from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402
+from lib.repo_paths import K8S_ROLES, REPO as REPO_ROOT  # noqa: E402
 
 # The deployer's test-path rule, called rather than restated (#3660). Stdlib-only, so cheap.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -175,7 +175,7 @@ def shared_k8s_roles(k8s_roles_dir=None, host_vars=None):
     widening can see it.
     """
     deploy_tags = _deploy_tags()
-    k8s_roles_dir = k8s_roles_dir or (REPO_ROOT / "ansible/roles/k8s")
+    k8s_roles_dir = k8s_roles_dir or K8S_ROLES
     host_vars = host_vars or deploy_tags.HOST_VARS
     all_dirs = role_dir_names(k8s_roles_dir)
     _, shared = deploy_tags.split_shared_roles(all_dirs, host_vars)

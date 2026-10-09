@@ -10,6 +10,7 @@ from pathlib import Path
 
 from lib.ansible_inventory import (
     GITOPS_HOST,
+    K8S_HOST,
     PI_HOST,
     containers_entries_in,
     host_names,
@@ -84,6 +85,35 @@ def test_role_host_constants_name_the_host_the_inventory_arms():
     """The literals stand in for an inventory read; this keeps them equal to it."""
     assert hosts_arming("has_gitops") == (GITOPS_HOST,)
     assert hosts_arming("has_docker") == (PI_HOST,)
+
+
+def hosts_declaring_k8s(
+    ini: Path = HOSTS_INI, host_vars: Path = HOST_VARS
+) -> tuple[str, ...]:
+    """The inventory hosts whose host_vars carry a ``platform: k8s`` entry."""
+    k8s = re.compile(r"^\s*platform:\s*k8s\b", re.MULTILINE)
+    return tuple(
+        name
+        for name in host_names(ini)
+        if (host_vars / f"{name}.yml").is_file()
+        and k8s.search((host_vars / f"{name}.yml").read_text())
+    )
+
+
+def test_k8s_host_names_the_one_host_declaring_k8s_entries():
+    assert hosts_declaring_k8s() == (K8S_HOST,)
+
+
+def test_a_second_host_declaring_k8s_entries_breaks_the_pin(tmp_path):
+    ini = tmp_path / "hosts.ini"
+    ini.write_text("[all]\ndaniel-box\ndaniel-pi\n")
+    (tmp_path / "daniel-box.yml").write_text(
+        "containers_list:\n  - name: a\n    platform: k8s\n"
+    )
+    (tmp_path / "daniel-pi.yml").write_text(
+        "containers_list:\n  - name: b\n    platform: k8s\n"
+    )
+    assert hosts_declaring_k8s(ini, tmp_path) == ("daniel-box", "daniel-pi")
 
 
 def test_a_second_armed_host_breaks_the_pin(tmp_path):

@@ -43,11 +43,8 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO
-
-# The one host declaring k8s services. `lib.k8s_roles` names the same file; this script writes
-# it rather than reading it, so it takes the directory anchor and appends the leaf itself.
-BOX_VARS = HOST_VARS / "daniel-box.yml"
+from lib.ansible_inventory import K8S_HOST_VARS as BOX_VARS
+from lib.repo_paths import K8S_ROLES, REPO
 
 AUTH_TIERS = ("one_factor", "two_factor")
 STRATEGIES = ("RollingUpdate", "Recreate")

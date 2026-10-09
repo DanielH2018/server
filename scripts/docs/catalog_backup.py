@@ -20,13 +20,10 @@ from typing import Any
 
 from catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
 from lib.jinja_comments import strip_jinja_comments
+from lib.k8s_roles import role_dirs
 from lib.render_guard import load_yaml as _load_yaml
-from lib.repo_paths import FILTER_PLUGINS, SHARED_TPL
+from lib.repo_paths import SHARED_TPL
 from lib.service_tiers import resolved_tier_lists
-
-_sys.path.insert(0, str(FILTER_PLUGINS))
-
-from k8s_autodeploy import is_leftover_dir
 
 __all__ = [
     "ClaimDecl",
@@ -276,18 +273,6 @@ def _role_claims(role_dir: Path, k8s_roles: Path) -> list[ClaimDecl]:
         if claim.name not in {c.name for c in seen}:
             seen.append(by_name.get(claim.name, claim))
     return seen
-
-
-def role_dirs(k8s_roles: Path) -> list[Path]:
-    """Every role directory under `k8s_roles`, sorted, a retired role's debris excluded.
-
-    A retired role's gitignored `__pycache__/` keeps its directory on disk after the
-    deployer's fast-forward removes the tracked files. That shell declares no claims, so
-    walking it is harmless today, but it is not a role.
-    """
-    return sorted(
-        p for p in k8s_roles.iterdir() if p.is_dir() and not is_leftover_dir(str(p))
-    )
 
 
 def claim_index(k8s_roles: Path = K8S_ROLES) -> dict[str, str | None]:

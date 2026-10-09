@@ -44,6 +44,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import answer_help
+from lib.repo_paths import K3S_DEFAULTS
 
 # datreeio/CRDs-catalog publishes one JSON Schema per CRD kind, laid out by API group. It is the
 # schema source kubeconform's own docs point at, so the layout is a de-facto convention rather
@@ -51,15 +52,6 @@ from lib.cli_help import answer_help
 CATALOG = "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main"
 
 SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
-K3S_DEFAULTS = (
-    Path(__file__).resolve().parents[2]
-    / "ansible"
-    / "roles"
-    / "setup"
-    / "k3s"
-    / "defaults"
-    / "main.yml"
-)
 KUBERNETES_OPENAPI = "https://raw.githubusercontent.com/kubernetes/kubernetes/{tag}/api/openapi-spec/v3/{name}"
 
 # The apiVersions this repo renders, as upstream names their files. Kept in step with the tree by

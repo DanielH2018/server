@@ -13,7 +13,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from dataclasses import dataclass
 
-from lib.repo_paths import REPO
+from lib.repo_paths import K3S_DEFAULTS, K8S_ROLES
 
 __all__ = [
     "K3S_DEFAULTS",
@@ -22,9 +22,6 @@ __all__ = [
     "ServiceRow",
 ]
 
-
-K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
-K3S_DEFAULTS = REPO / "ansible" / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
 
 UNKNOWN = "unknown"
 

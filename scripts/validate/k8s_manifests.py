@@ -46,11 +46,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import FILTER_PLUGINS
-
-_sys.path.insert(0, str(FILTER_PLUGINS))
-
-from k8s_autodeploy import is_leftover_dir
+from lib.ansible_inventory import K8S_HOST_VARS
 from lib.k8s_context import resolve_vars
 from lib.render_context import UnresolvedVarsError, render_context
 from validate.validate_lib.k8s_net_rules import (
@@ -64,7 +60,6 @@ from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     claim_contexts,
     CALLER_RENDERED_ROLES,
-    HOST_VARS,
     K8S_ROLES,
     NO_MANIFEST_ROLES,
     SHARED_MANIFEST_DEFAULTS,
@@ -73,6 +68,7 @@ from lib.k8s_roles import (
     k8s_entries,
     misplaced_template_lookups,
     non_manifest_documents,
+    role_dirs,
     shared_default_templates,
 )
 from validate.validate_lib.k8s_schema import (
@@ -112,8 +108,8 @@ __all__ = [
     "ANSIBLE",
     "BASE_CONTEXT",
     "CALLER_RENDERED_ROLES",
-    "HOST_VARS",
     "HTTPS_ENTRYPOINT",
+    "K8S_HOST_VARS",
     "K8S_ROLES",
     "K8S_SCHEMA_VERSION",
     "NO_MANIFEST_ROLES",
@@ -173,17 +169,8 @@ def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
 
 
 def role_names(k8s_roles: Path) -> list[str]:
-    """Every role under `k8s_roles` this validator renders, sorted.
-
-    A retired role's gitignored `__pycache__/` keeps its directory on disk after the
-    deployer's fast-forward removes the tracked files. `is_leftover_dir` drops that shell,
-    which would otherwise render as a role with no templates and prove nothing.
-    """
-    return sorted(
-        d.name
-        for d in k8s_roles.iterdir()
-        if d.is_dir() and d.name not in SKIP_ROLES and not is_leftover_dir(str(d))
-    )
+    """Every role under `k8s_roles` this validator renders, sorted: all but `SKIP_ROLES`."""
+    return [d.name for d in role_dirs(k8s_roles, exclude=SKIP_ROLES)]
 
 
 def main() -> int:
@@ -238,7 +225,7 @@ def main() -> int:
         # quietly pass, so treat the mismatch as the failure it is.
         if role not in entries:
             print(
-                f"  [FAIL] {role}: no platform: k8s entry in {HOST_VARS.name}",
+                f"  [FAIL] {role}: no platform: k8s entry in {K8S_HOST_VARS.name}",
                 file=sys.stderr,
             )
             failures += 1

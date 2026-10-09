@@ -11,6 +11,13 @@ Every `manifests_service` is a declared deploy tag, so a record whose service no
 removing the file from the host is housekeeping, not a requirement.
 """
 
+# `probe_lib` is a namespace package under `scripts/`, so reaching `lib.k8s_roles` by package
+# name needs `scripts/` on sys.path, as in releases_consumers.py.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 
 def drop_retired(records, declared):
     """`records` minus those whose service is not in `declared`.
@@ -19,30 +26,6 @@ def drop_retired(records, declared):
     is kept for the caller to report rather than silently dropped.
     """
     return [r for r in records if "error" in r or r.get("service") in declared]
-
-
-def _is_leftover_dir(role_dir):
-    """Whether `role_dir` is a retired role's debris rather than a role.
-
-    Retiring a role removes its tracked files; a gitignored `__pycache__/` left by a pytest
-    run keeps the directory itself on disk. Such a shell has no `containers_list` entry, so
-    `split_shared_roles` would classify it SHARED and widen every service's staleness paths
-    by a role that no longer exists.
-
-    `ansible/filter_plugins/k8s_autodeploy.py:is_leftover_dir` is the authoritative copy of
-    this predicate -- it is the one that gates the deployer's config write. This is a second
-    derivation rather than an import because that module imports `ansible.errors`, which
-    `probe.py` must not need. Keep the two in step; an empty directory is deliberately NOT
-    leftover in either.
-    """
-    found_debris = False
-    for path in role_dir.rglob("*"):
-        if path.is_dir():
-            continue
-        if path.suffix != ".pyc" and "__pycache__" not in path.parts:
-            return False
-        found_debris = True
-    return found_debris
 
 
 def role_dir_names(k8s_roles_dir):
@@ -55,8 +38,8 @@ def role_dir_names(k8s_roles_dir):
     """
     if not k8s_roles_dir.is_dir():
         return set()
-    return {
-        p.name
-        for p in k8s_roles_dir.iterdir()
-        if p.is_dir() and not _is_leftover_dir(p)
-    }
+    # Deferred: `lib.k8s_roles` costs PyYAML, Jinja2 and, once it walks, `ansible.errors`,
+    # which only the staleness check pays, not every `probe.py` subcommand.
+    from lib.k8s_roles import role_dirs
+
+    return {p.name for p in role_dirs(k8s_roles_dir)}

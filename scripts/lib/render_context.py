@@ -30,7 +30,7 @@ from pathlib import Path
 
 from lib.k8s_context import resolve_vars
 from lib.render_guard import ALL_VARS, ANSIBLE, BASE_CONTEXT, HOST_VARS, load_yaml
-from lib.k8s_roles import HOST_VARS as K8S_HOST_VARS
+from lib.ansible_inventory import K8S_HOST
 
 __all__ = [
     "PLANE_HOSTS",
@@ -45,7 +45,7 @@ __all__ = [
 # A setup role runs on several hosts and a Pi compose role on the host that lists it, so
 # neither plane has one host: a setup template renders with the group layer the hosts share,
 # and the compose validator passes each host it renders for.
-PLANE_HOSTS = {"k8s": K8S_HOST_VARS.stem}
+PLANE_HOSTS = {"k8s": K8S_HOST}
 
 
 @dataclass(frozen=True)

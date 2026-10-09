@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Which roles under ``ansible/roles/k8s/`` the manifest validator renders, and which it skips.
+"""Which roles exist under ``ansible/roles/k8s/``, and which of them each reader skips.
 
-The two exemption sets and ``is_manifest_template`` are the half other guards ask about
+``role_dirs`` is the one census of a role tree for code under ``scripts/``: every reader
+that lists the roles calls it and passes the names it skips as ``exclude``. The two
+exemption sets and ``is_manifest_template`` are the half other guards ask about
 (``scripts/validate/tests/test_skip_roles_classes_hold.py``,
 ``scripts/diagnostics/probe_lib/health.py``), which is why they are their own module rather
 than private to the validator.
@@ -15,25 +17,26 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import re
+from collections.abc import Collection
 from pathlib import Path
 
 import yaml
 
 from lib import yaml_fast
-from lib.ansible_inventory import containers_entries_in
+from lib.ansible_inventory import K8S_HOST_VARS, containers_entries_in
 from lib.jinja_comments import strip_jinja_comments
-from lib.render_guard import HOST_VARS as HOST_VARS_DIR, load_yaml
-from lib.repo_paths import K8S_ROLES, REPO, SHARED_TPL
+from lib.render_guard import load_yaml
+from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES, REPO, SHARED_TPL
 
 __all__ = [
     "CALLER_RENDERED_ROLES",
     "CLAIM_TEMPLATE",
-    "HOST_VARS",
     "K8S_ROLES",
     "NO_MANIFEST_ROLES",
     "SHARED_MANIFEST_DEFAULTS",
     "SKIP_ROLES",
     "claim_contexts",
+    "is_leftover_dir",
     "is_manifest_template",
     "manifest_template",
     "shared_default_templates",
@@ -41,11 +44,45 @@ __all__ = [
     "misplaced_template_lookups",
     "non_manifest_documents",
     "role_callers",
+    "role_dirs",
 ]
 
-# The one host that declares k8s services, so this is a single file where the other inventory
-# readers walk the whole directory.
-HOST_VARS = HOST_VARS_DIR / "daniel-box.yml"
+
+def is_leftover_dir(path: Path | str) -> bool:
+    """Whether `path` is a retired role's debris: no file left but compiled Python.
+
+    The deployer's fast-forward removes a retired role's tracked files, but a gitignored
+    `__pycache__/` left by a pytest run keeps `roles/<plane>/<role>/` on disk. A walker that
+    read that shell as a role would render it, census it or credit it.
+
+    The rule itself lives in `ansible/filter_plugins/k8s_autodeploy.py`, because it gates the
+    deployer's config write and a filter plugin cannot import from `scripts/` at deploy time.
+    Its docstring has why an empty directory is NOT debris. The import is deferred because
+    that module imports `ansible.errors`, about 35 ms that a reader which never walks a role
+    tree should not pay.
+    """
+    if str(FILTER_PLUGINS) not in _sys.path:
+        _sys.path.insert(0, str(FILTER_PLUGINS))
+    from k8s_autodeploy import is_leftover_dir as rule
+
+    return rule(str(path))
+
+
+def role_dirs(roles_dir: Path = K8S_ROLES, exclude: Collection[str] = ()) -> list[Path]:
+    """Every real role directory under `roles_dir`, sorted, minus the names in `exclude`.
+
+    A retired role's debris is always dropped (`is_leftover_dir`). `exclude` is how a reader
+    states the roles it skips on purpose: the validator passes `SKIP_ROLES`, the auto-deploy
+    count passes the filter plugin's `SHARED_ROLES`. `roles_dir` may be any plane's tree, so
+    the setup-role readers walk through here too.
+    """
+    return sorted(
+        d
+        for d in roles_dir.iterdir()
+        if d.is_dir() and d.name not in exclude and not is_leftover_dir(d)
+    )
+
+
 # Helper roles, included by service roles rather than deployed on their own. They have no
 # containers_list entry because they are not services, so the platform check below would always
 # fail for them.
@@ -146,9 +183,9 @@ def non_manifest_documents(docs) -> list:
     ]
 
 
-def k8s_entries() -> dict[str, dict]:
-    """containers_list entries for the k8s platform, keyed by service name."""
-    entries = containers_entries_in(load_yaml(HOST_VARS))
+def k8s_entries(host_vars: Path = K8S_HOST_VARS) -> dict[str, dict]:
+    """containers_list entries for the k8s platform in `host_vars`, keyed by service name."""
+    entries = containers_entries_in(load_yaml(host_vars))
     return {c["name"]: c for c in entries if c.get("platform") == "k8s"}
 
 

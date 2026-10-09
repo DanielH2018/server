@@ -292,9 +292,9 @@ def test_every_deployed_role_block_matches_what_the_generator_writes_now():
 
 
 def test_the_gate_covers_the_known_services():
-    # `k8s_service_entries` filters `containers_list` by platform; a filter that stopped
+    # `k8s_entries` filters `containers_list` by platform; a filter that stopped
     # matching would make the gate above pass on nothing.
-    names = {e["name"] for e in g.k8s_service_entries()}
+    names = {e["name"] for e in g.k8s_entries().values()}
     assert KNOWN_SERVICES <= names, sorted(KNOWN_SERVICES - names)
 
 
@@ -351,7 +351,7 @@ def _copy_role(name: str, roles: Path) -> Path:
 
 def test_a_hand_edited_block_is_flagged(tmp_path):
     """The gate's rejecting half: a copy of sonarr is clean, and one changed value makes it stale."""
-    entry = next(e for e in g.k8s_service_entries() if e["name"] == "sonarr")
+    entry = next(e for e in g.k8s_entries().values() if e["name"] == "sonarr")
     dst = _copy_role("sonarr", tmp_path / "roles")
     # sonarr's claims resolve through two other roles: volume-claim's default StorageClass
     # names `sonarr-config`'s class, and media-volume declares the `media-data` it mounts.
