@@ -148,6 +148,28 @@ def test_main_is_flagged_when_the_parked_deployer_probe_reports(monkeypatch, cap
     assert "primary checkout" in capsys.readouterr().out
 
 
+def test_a_deployer_only_banner_names_probe_landing(monkeypatch, capsys):
+    """A banner whose only line is the deployer's prints `probe.py landing` in full (#3936)."""
+    run_main = _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        parked=["  ✗ the GitOps deployer has not fast-forwarded for 40 min ..."],
+    )
+    assert run_main() == 0
+    triage = capsys.readouterr().out.splitlines()[-1]
+    assert "`uv run python scripts/diagnostics/probe.py landing`" in triage
+
+
+def test_a_target_only_banner_omits_landing_and_joins_commands_with_or():
+    triage = _mod.format_banner(["  ✗ target x [y] down"]).splitlines()[-1]
+    assert "landing" not in triage
+    assert "|" not in triage
+    assert (
+        "`uv run python scripts/diagnostics/probe.py targets` or "
+        "`uv run python scripts/diagnostics/probe.py health <svc>`"
+    ) in triage
+
+
 def test_main_survives_a_broken_session_scan(monkeypatch, capsys):
     # the scan shells out to git in other checkouts; it must never block session start
     def boom(cwd):
