@@ -34,6 +34,9 @@ from host_lib import atomic_write, discord_post, parse_env_file
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-fake-remux"
+# Where a post the host could not deliver waits for the next post from any of the three crons
+# (#3905). They hold fake_remux_lock while they run, so they never flush it at the same time.
+DISCORD_SPOOL_DIR = "/var/lib/autofix-fake-remux/discord-spool"
 DISCORD_MARKER = (
     "📼 fake-remux:"  # self-identifying prefix on posts (the UA is header-only)
 )
@@ -309,12 +312,26 @@ def scan(cfg):
             len(new_fakes),
             max_per_scan,
         )
-        discord_post(webhook, summary, USER_AGENT, log=log, marker=DISCORD_MARKER)
+        discord_post(
+            webhook,
+            summary,
+            USER_AGENT,
+            log=log,
+            marker=DISCORD_MARKER,
+            spool_dir=DISCORD_SPOOL_DIR,
+        )
     else:
         for f in new_fakes:
             line = frl.format_fake_line("Seeded for replacement", f)
             log(line)
-            discord_post(webhook, line, USER_AGENT, log=log, marker=DISCORD_MARKER)
+            discord_post(
+                webhook,
+                line,
+                USER_AGENT,
+                log=log,
+                marker=DISCORD_MARKER,
+                spool_dir=DISCORD_SPOOL_DIR,
+            )
         ok = True
         summary = (
             "seeded %d fake(s) for replacement" % len(new_fakes)

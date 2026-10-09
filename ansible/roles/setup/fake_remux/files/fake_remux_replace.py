@@ -412,7 +412,12 @@ def _alert_transitions(cfg, before_states, ledger):
         )
         log(line)
         discord_post(
-            webhook, line, scan.USER_AGENT, log=log, marker=scan.DISCORD_MARKER
+            webhook,
+            line,
+            scan.USER_AGENT,
+            log=log,
+            marker=scan.DISCORD_MARKER,
+            spool_dir=scan.DISCORD_SPOOL_DIR,
         )
 
 

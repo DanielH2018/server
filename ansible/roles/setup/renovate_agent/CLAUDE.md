@@ -96,5 +96,7 @@ the caps or the schedule cannot quietly widen it.
   `Renovate Agent — Alive` push tile, beaten only on exit 0. `docs/renovate-agent-bounds-and-digest.md`
   has the full delta vocabulary, the crash path, and why a `permission denials:` line is the one
   to act on.
+  A digest the host could not deliver waits in `<STATE_DIR>/discord-spool/` and goes out,
+  marked as delayed, with the next tick's post (#3905).
 - **Next-run review:** before raising a cap or widening the prompt, read the last week's
   digests for what the sessions actually resolved and what they timed out on.

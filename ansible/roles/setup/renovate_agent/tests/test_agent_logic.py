@@ -238,6 +238,7 @@ class _FakeHost:
         self.ahead = ahead
         self.contained = contained
         self.posts: list[str] = []
+        self.spools: set[str | None] = set()
 
     def run(self, argv, cwd=None, timeout=120):
         if argv[0] == "gh" and "merged" in argv:
@@ -271,8 +272,9 @@ class _FakeHost:
             f"main() reached a process this test does not answer: {argv}"
         )
 
-    def discord_post(self, webhook, text, ua, log=None):
+    def discord_post(self, webhook, text, ua, log=None, spool_dir=None):
         self.posts.append(text)
+        self.spools.add(spool_dir)
         return True
 
 
@@ -435,6 +437,7 @@ class TestSkipExitCodes:
 
         assert rc == renovate_agent.EXIT_WORKTREE_BLOCKED != 0
         assert any("holds 1 commit(s) not on origin/master" in p for p in host.posts)
+        assert host.spools == {f"{tmp_path}/state/discord-spool"}  # #3905
         assert _records(tmp_path)[-1]["result"] == "blocked"
 
     def test_an_empty_backlog_skip_is_clean(self, tmp_path) -> None:

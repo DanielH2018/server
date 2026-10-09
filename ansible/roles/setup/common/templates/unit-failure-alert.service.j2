@@ -46,8 +46,28 @@ EnvironmentFile={{ alert_unit_env_dir }}/alert-webhook.env
 Restart=on-failure
 RestartSec=5min
 RestartPreventExitStatus=3
+# A page that arrives hours late must say when the failure happened, or it reads as a fresh
+# failure (#3906). The first attempt writes the time to failed-at, and every retry posts that
+# same time. systemd keeps a RuntimeDirectory across an automatic restart only with
+# RuntimeDirectoryPreserve=restart, and removes it when the unit stops for good: after a
+# delivery, a `systemctl stop`, or the final exit 3. The next failure therefore records a
+# fresh time. Measured on systemd 255 with this template rendered as a user unit behind an
+# OnFailure= parent: three attempts posted one timestamp, and the directory was gone after the
+# third was delivered, and after a `systemctl stop` while a retry was pending. A transient unit
+# from systemd-run left the directory behind, so test this with a unit file. A parent failure
+# while a retry is pending keeps the first time, which is the oldest failure not yet paged.
+#
+# The ExecStartPre `sh -c` carries no payload, so the no-wrapper reason below does not apply to
+# it. curl builds the payload itself: --variable reads the file and {{ '{{' }}failed_at:trim:json}}
+# expands it JSON-escaped. curl exits 26 when the file is missing, and Restart= would retry that
+# forever. The file cannot be missing when ExecStart runs: systemd creates the directory before
+# ExecStartPre, and a failed ExecStartPre ends the attempt before ExecStart.
+RuntimeDirectory={{ alert_unit_name }}-alert
+RuntimeDirectoryPreserve=restart
+ExecStartPre=/bin/sh -c 'test -s %t/{{ alert_unit_name }}-alert/failed-at || date --utc "+%%Y-%%m-%%d %%H:%%M UTC" > %t/{{ alert_unit_name }}-alert/failed-at'
 ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors -H "Content-Type: application/json" \
-  -d '{"content":"{{ alert_unit_message }}"}' \
+  --variable 'failed_at@%t/{{ alert_unit_name }}-alert/failed-at' \
+  --expand-data '{"content":"{{ alert_unit_message }} Failed at {% raw %}{{failed_at:trim:json}}{% endraw %}."}' \
   "${ALERT_WEBHOOK}"
 # A delivered page left NO on-host record: `curl -fsS` is silent on success, and systemd's own
 # Starting/Finished lines are info-level, which journald drops here (MaxLevelStore=notice). So
