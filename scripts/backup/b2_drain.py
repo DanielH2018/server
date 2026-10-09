@@ -37,6 +37,7 @@ import argparse
 import os
 import sys
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path as _Path
 
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
@@ -147,13 +148,18 @@ def read_live_volumes(path: str) -> set[str]:
         raise DrainError(f"cannot read the live-volume list at {path}: {exc}") from exc
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    open_session: Callable[[str, str], B2Session] = B2Session,
+) -> int:
     """Parse args, drain the requested volumes' B2 prefixes, and report the result.
 
     Without ``--apply`` this only reports what a drain would delete. Exits 2 on a
     missing credential, an unreadable input file, no volumes named, or a ``DrainError``
     (including a failed post-delete verification) or a B2 API failure; exits 1 if any
-    requested volume was refused (e.g. still live); exits 0 otherwise.
+    requested volume was refused (e.g. still live); exits 0 otherwise. ``open_session``
+    builds the authorized session from the key id and application key; tests pass one bound
+    to a fake transport.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live-volumes-file", required=True)
@@ -198,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         live = read_live_volumes(args.live_volumes_file)
-        b2 = B2Session(key_id, app_key)
+        b2 = open_session(key_id, app_key)
         if not b2.bucket_id:
             raise DrainError(
                 "the application key is not bucket-scoped, so there is no bucket to drain"
