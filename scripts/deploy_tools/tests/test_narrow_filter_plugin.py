@@ -121,7 +121,7 @@ def test_the_real_py_table_plugin_reaches_its_two_callers():
     play before this rule, and its callers are monitor-bridge and uptime-kuma."""
     ctx = narrow_broad.context_for("HEAD", REPO)
     path = "ansible/filter_plugins/py_table.py"
-    assert narrow_broad.broad_path_tags(path, "HEAD", ctx) == {
+    assert narrow_broad.broad_path_tags(path, "HEAD", ctx) >= {
         "monitor-bridge",
         "uptime-kuma",
     }

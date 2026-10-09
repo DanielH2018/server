@@ -107,8 +107,8 @@ class Landing:
         self.resolved_tags = [t for t in opts.tags.split(",") if t]
         self.classification = Classification()
         # The plane note rendered again with the narrow tags the deployer recorded for this
-        # PR's range, by `classify.narrow_plane`; "" until then, or when nothing narrowed.
-        self.narrowed_plane = ""
+        # PR's range, by `classify.narrow_plane`; None until then, or when nothing narrowed.
+        self.narrowed_plane: str | None = None
         self.needs_diff = False
         # The tags in `resolved_tags` this PR PROVES are a k3s change, from two provenances:
         # `shared_caller_tags` reached them by walking the k8s role-caller graph, or
@@ -149,7 +149,9 @@ class Landing:
     @property
     def plane(self) -> str:
         """What a hand must apply, or "": the narrowed note once there is one, else step 1's."""
-        return self.narrowed_plane or self.classification.plane
+        if self.narrowed_plane is None:
+            return self.classification.plane
+        return self.narrowed_plane
 
     @property
     def tags_csv(self) -> str:

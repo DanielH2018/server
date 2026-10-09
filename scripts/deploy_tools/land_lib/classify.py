@@ -269,7 +269,7 @@ def narrow_plane(ln: Landing, awaited: bool = True) -> None:
     A landing that deploys its own merge commit never awaits the tick (`awaited=False`), so
     no receipt exists for its range. It renders the PR's own derivation instead.
 
-    Every failure leaves `narrowed_plane` empty, so `Landing.plane` stays step 1's note with
+    Every failure leaves `narrowed_plane` None, so `Landing.plane` stays step 1's note with
     the whole-role tag: no receipt (a deployer that has not shipped the writer, or a tick
     that recorded nothing), a role the receipt could not narrow, no PR range on the fast
     path, a derivation that refuses or raises. The render is INSIDE the try because a raise

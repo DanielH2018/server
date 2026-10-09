@@ -80,9 +80,7 @@ def is_role_test_path(path: str) -> bool:
     only asked of a path `role_for` has already named a role for, where it answers for the
     role's own `tests/` and for a `test_*.py` or `conftest.py` anywhere in the role. Nothing
     stages those: the `no-role-ships-a-test-file` row of
-    `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide, and
-    `_is_real_change` in `scripts/diagnostics/probe_lib/releases.py` drops them for the same
-    reason. `shared_roles` and `tag_for` are the callers, and both drop such a path, the same
+    `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide. `shared_roles` and `tag_for` are the callers, and both drop such a path, the same
     class as the `.md` rule in `role_for`.
 
     `tasks/` is NOT dropped, for three reasons. A role
