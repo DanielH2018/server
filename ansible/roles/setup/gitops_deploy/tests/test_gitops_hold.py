@@ -8,7 +8,13 @@ import pathlib
 
 import pytest
 
-from gitops_hold import Hold, broad_hold_cleared_by, held_tag, hold_plane_marker
+from gitops_hold import (
+    DeployerSnapshot,
+    Hold,
+    broad_hold_cleared_by,
+    held_tag,
+    hold_plane_marker,
+)
 from gitops_ledger import OWED_HOLD_PLANE, owed_line
 from gitops_markers import MARKERS
 
@@ -175,3 +181,37 @@ def test_clear_drops_a_torn_plane_line_too(hold: Hold):
     assert hold.clear(SHA) is None
     assert hold.held_subjects() == []
     assert hold.current() is None
+
+
+# ── DeployerSnapshot, the one read view for readers outside the deployer (#3703) ──────────────
+def test_a_snapshot_of_an_empty_state_dir_reads_every_marker_absent(tmp_path):
+    (tmp_path / MARKERS["hold"]).write_text("\n")
+    assert DeployerSnapshot.load(tmp_path) == DeployerSnapshot(
+        None, None, None, None, None
+    )
+
+
+def test_a_snapshot_reads_each_marker_and_the_planes_a_hold_waits_on(tmp_path):
+    (tmp_path / MARKERS["hold"]).write_text(SHA + "\n")
+    (tmp_path / MARKERS["behind"]).write_text("bbb 100\n")
+    (tmp_path / MARKERS["contention"]).write_text("ccc lock 1 2 3\n")
+    (tmp_path / MARKERS["diverged"]).write_text("ddd\n")
+    torn = b'{"class": "hold_plane", "subject": "torn\xff", "origin": "a", "at": 2}'
+    line = owed_line(OWED_HOLD_PLANE, "ansible/deploy.yml sonarr", SHA, 1.0)
+    (tmp_path / MARKERS["owed"]).write_bytes(line.encode() + b"\n" + torn)
+    snap = DeployerSnapshot.load(tmp_path)
+    assert (snap.hold, snap.behind, snap.contention, snap.diverged) == (
+        SHA,
+        "bbb 100",
+        "ccc lock 1 2 3",
+        "ddd",
+    )
+    assert snap.owed == line
+    assert snap.held_planes == ["ansible/deploy.yml sonarr"]
+
+
+def test_a_snapshot_raises_on_a_marker_it_cannot_read(tmp_path):
+    """An unreadable `hold_sha` is not "no hold": the caller decides what it means."""
+    (tmp_path / MARKERS["hold"]).mkdir()
+    with pytest.raises(IsADirectoryError):
+        DeployerSnapshot.load(tmp_path)

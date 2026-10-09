@@ -49,7 +49,9 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py": frozenset(
         {"deploy_ui", "renovate_agent"}
     ),
-    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset({"deploy_ui"}),
+    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset(
+        {"deploy_ui", "renovate_agent"}
+    ),
 }
 
 

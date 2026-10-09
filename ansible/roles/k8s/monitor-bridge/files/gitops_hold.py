@@ -1,4 +1,7 @@
-# ansible/roles/setup/gitops_deploy/files/gitops_hold.py
+# ansible/roles/k8s/monitor-bridge/files/gitops_hold.py
+# generated_from: ansible/roles/setup/gitops_deploy/files/gitops_hold.py -- do not edit.
+# A verbatim copy written by scripts/dev/gen_gitops_markers.py; edit the source, run it, and
+# commit every copy in the same PR.
 """The deployer's hold: `hold_sha`, the planes it waits on, and the rule that clears it (#3658).
 
 A failed broad apply holds its SHA and records the plane it failed in as an `owed` ledger
@@ -45,11 +48,6 @@ from gitops_markers import MARKERS
 
 # Between the held planes on one line. Not a newline: every reader prints them on one line.
 HOLD_PLANE_SEP = "; "
-
-# What an operator runs, with the full held SHA, to clear the hold from a shell once every
-# plane it waits on is applied (#3930). It is `Hold.clear`, the deploy UI's Clear, under the
-# git-tree lock. One string so every surface that names the way out prints the same command.
-HOLD_CLEAR_CMD = "uv run python scripts/deploy_tools/gitops_state.py clear-hold"
 
 # Between a role tag and one of its block tags in a held tag (#3138). No Ansible tag in
 # `initial_setup.yml` or under `roles/setup/` contains one, so a held tag splits unambiguously.

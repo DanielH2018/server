@@ -9,11 +9,15 @@ Run: uv run pytest ansible/roles/setup/renovate_agent/tests/test_agent_logic.py
 import json
 import pathlib
 import sys
+from dataclasses import replace
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import agent_logic as al
 import pytest
 import renovate_agent
+from gitops_hold import DeployerSnapshot
+
+CLEAR = DeployerSnapshot(None, None, None, None, None)
 
 
 def _pr(number: int) -> al.OpenPR:
@@ -59,6 +63,12 @@ class TestDecide:
     def test_a_hold_plane_names_the_playbook(self) -> None:
         gate = al.decide([_pr(1)], "deadbeefcafe", "k3s-bringup.yml")
         assert "k3s-bringup.yml" in gate.reason
+
+    def test_an_unreadable_hold_is_flagged_loudly(self) -> None:
+        """None is a state nobody could read, which is not "no hold" (#3703)."""
+        gate = al.decide([], None, "")
+        assert not gate.run
+        assert not gate.quiet
 
 
 class TestParseRun:
@@ -289,39 +299,59 @@ def _tools(host: _FakeHost) -> renovate_agent.AgentTools:
         discord_post=host.discord_post,
         flush_discord_spool=host.flush_discord_spool,
         read_file=lambda path: "",
+        deployer_state=lambda: CLEAR,
     )
 
 
-def test_held_plane_text_names_the_ledgers_hold_plane_entries_oldest_first() -> None:
-    """The skip reason names a ledger plane, unknown key and all, and drops a torn line (#3392)."""
-    files = {
-        renovate_agent.OWED_FILE: "\n".join(
-            [
-                json.dumps(
-                    {
-                        "class": "hold_plane",
-                        "subject": "ansible/deploy.yml sonarr",
-                        "origin": "abc",
-                        "at": 0,
-                    }
-                ),
-                json.dumps(
-                    {
-                        "class": "hold_plane",
-                        "subject": "ansible/initial_setup.yml k3s",
-                        "origin": "abc",
-                        "at": 1,
-                        "added_by_a_newer_writer": 1,
-                    }
-                ),
-                '{"class": "hold_plane", "subject": "torn\ufffd", "origin": "a", "at": 2}',
-            ]
-        ),
-    }
-    tools = renovate_agent.AgentTools(read_file=lambda path: files.get(path, ""))
-    assert renovate_agent.held_plane_text(tools) == (
-        "ansible/deploy.yml sonarr; ansible/initial_setup.yml k3s"
-    )
+def _held_state(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A state directory holding `deadbeefcafe` on two ledger planes and one torn line."""
+    tmp_path.mkdir()
+    (tmp_path / "hold_sha").write_text("deadbeefcafe\n")
+    lines = [
+        json.dumps(
+            {"class": "hold_plane", "subject": s, "origin": "abc", "at": at, **extra}
+        )
+        for s, at, extra in [
+            ("ansible/deploy.yml sonarr", 0, {}),
+            ("ansible/initial_setup.yml k3s", 1, {"added_by_a_newer_writer": 1}),
+        ]
+    ]
+    torn = b'{"class": "hold_plane", "subject": "torn\xff", "origin": "a", "at": 2}'
+    (tmp_path / "owed.jsonl").write_bytes("\n".join(lines).encode() + b"\n" + torn)
+    return tmp_path
+
+
+class TestHoldGate:
+    """`main()` reads the hold through `DeployerSnapshot`, and an unreadable state skips."""
+
+    def _cfg(self, tmp_path) -> str:
+        cfg = tmp_path / "config.env"
+        cfg.write_text(
+            f"REPO=o/r\nREPO_DIR=/repo\nPROMPT_FILE=/p.txt\nSTATE_DIR={tmp_path}\n"
+        )
+        return str(cfg)
+
+    def test_a_held_state_skips_naming_every_readable_plane(self, tmp_path) -> None:
+        state = DeployerSnapshot.load(_held_state(tmp_path / "gitops"))
+        host = _FakeHost(prs=[1])
+        tools = replace(_tools(host), deployer_state=lambda: state)
+
+        assert renovate_agent.main(tools, self._cfg(tmp_path)) == 0
+        (post,) = host.posts
+        assert "deadbeef" in post
+        assert "ansible/deploy.yml sonarr; ansible/initial_setup.yml k3s" in post
+        assert "torn" not in post
+
+    def test_an_unreadable_state_skips_loudly(self, tmp_path) -> None:
+        def unreadable() -> DeployerSnapshot:
+            raise PermissionError(13, "Permission denied")
+
+        host = _FakeHost(prs=[1])
+        tools = replace(_tools(host), deployer_state=unreadable)
+
+        assert renovate_agent.main(tools, self._cfg(tmp_path)) == 0
+        (post,) = host.posts
+        assert "a hold cannot be ruled out" in post
 
 
 class TestPrStates:

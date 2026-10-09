@@ -57,8 +57,8 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, K3S_FILES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_ledger import held_planes
-from gitops_markers import MARKERS, STATE_DIR
+from gitops_hold import DeployerSnapshot
+from gitops_markers import STATE_DIR
 
 # The Backup CR reader the backup-health cron ships (#3735); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
@@ -99,14 +99,16 @@ def in_flight_backups(doc) -> list[str]:
 
 
 def held_sha(state_dir: str | os.PathLike) -> list[str]:
-    """The held SHA (with the planes it waits on), or the reason the marker could not be read.
+    """The held SHA (with the planes it waits on), or the reason the state could not be read.
 
-    The planes are `gitops_ledger.held_planes`, the `owed` ledger's `hold_plane` class
+    The planes are `DeployerSnapshot.held_planes`, the `owed` ledger's `hold_plane` class
     (#3392).
 
     An absent or empty `hold_sha` is a cleared hold — that is how the deployer clears it. An
     absent state DIRECTORY is not: it means this is not the deploy host, and reading that as
-    "no hold" is exactly the vacuous pass the gate exists to refuse.
+    "no hold" is exactly the vacuous pass the gate exists to refuse. A marker that exists and
+    cannot be read refuses too, the `owed` ledger included, because the snapshot reads them
+    together.
     """
     state_dir = _Path(state_dir)
     if not state_dir.is_dir():
@@ -114,27 +116,13 @@ def held_sha(state_dir: str | os.PathLike) -> list[str]:
             f"<{state_dir} is not a directory — run this on the host that runs the tick>"
         ]
     try:
-        sha = (state_dir / MARKERS["hold"]).read_text().strip()
-    except FileNotFoundError:
+        snap = DeployerSnapshot.load(state_dir)
+    except (OSError, UnicodeDecodeError) as exc:
+        return [f"<cannot read the deployer's state under {state_dir}: {exc}>"]
+    if not snap.hold:
         return []
-    except OSError as exc:
-        return [f"<cannot read {state_dir / MARKERS['hold']}: {exc}>"]
-    if not sha:
-        return []
-    plane = "; ".join(held_planes(_read_or_empty(state_dir / MARKERS["owed"])))
-    return [f"{sha} ({plane})" if plane else sha]
-
-
-def _read_or_empty(path: _Path) -> str:
-    """`path`'s text, or '' where it cannot be read. Only `held_sha`'s detail reads this.
-
-    The planes only annotate a hold `hold_sha` already proved, so an unreadable marker costs
-    the annotation and never the refusal. An undecodable byte reads as U+FFFD.
-    """
-    try:
-        return path.read_text(errors="replace")
-    except OSError:
-        return ""
+    plane = "; ".join(snap.held_planes)
+    return [f"{snap.hold} ({plane})" if plane else snap.hold]
 
 
 def nodes_not_ready(doc, expected=CLUSTER_NODES[CLUSTER]) -> list[str]:

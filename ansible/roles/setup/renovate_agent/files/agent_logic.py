@@ -86,13 +86,22 @@ class Delta:
     touched: tuple[int, ...] = ()
 
 
-def decide(open_prs: list[OpenPR], hold_sha: str, hold_plane: str) -> Gate:
+def decide(open_prs: list[OpenPR], hold_sha: str | None, hold_plane: str) -> Gate:
     """Whether to spend a session this tick.
 
     Skips on a GitOps hold because a session could only reach `CLAUDE.md` → *When to wait* and
     stop: a held host means an earlier SHA failed its health gate, so landing anything on top
     of it is the state the hold exists to prevent.
+
+    `hold_sha` is None when the deployer's state could not be read. That skips too, and not
+    quietly: a hold nobody can read is not "no hold" (#3703).
     """
+    if hold_sha is None:
+        return Gate(
+            run=False,
+            reason="the GitOps deployer's state could not be read, so a hold cannot be "
+            "ruled out — check the ACL on /var/lib/gitops-deploy",
+        )
     # DECIDED: `k8s_deferred` is NOT a second gate here (#2522). The marker names ONE service
     # whose merged image bump is still unapplied, and this function returns one run/skip for
     # the whole session — there is no per-PR verdict for it to reach. A bump deferred on

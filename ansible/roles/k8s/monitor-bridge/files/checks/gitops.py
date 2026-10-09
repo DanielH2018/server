@@ -2,8 +2,9 @@
 
 Both read the deployer's state directory off a hostPath the pod is pinned to; the basenames
 and the line parsers come from `gitops_markers`, the deployer's own module copied into this
-`files/` (its header says how it is kept fresh), and the `owed` ledger's reader comes from
-the `gitops_ledger` copy beside it. `gitops_status` is a
+`files/` (its header says how it is kept fresh), the `owed` ledger's reader comes from
+the `gitops_ledger` copy beside it, and Status reads every marker it judges through the
+`gitops_hold.DeployerSnapshot` copy. `gitops_status` is a
 verdict that reads `cfg` itself — its thresholds default to `None` and resolve inside the
 body, because a default argument is evaluated at import and there is no `Config` then — so it
 lives here beside its only caller rather than in `verdicts/service.py`, where `gitops_alive`
@@ -37,6 +38,7 @@ from gitops_ledger import (
     k8s_deferred_entries,
     manual_plane_entries,
 )
+from gitops_hold import DeployerSnapshot
 from verdicts.service import gitops_alive
 
 
@@ -268,45 +270,21 @@ def check_gitops_alive(
     )
 
 
-def _read_gitops_marker(cfg: Config, name: str) -> str | None:
-    """One marker's text, or None when it is absent.
-
-    Any other failure to read it raises, and `gates._evaluate` reports DOWN "check error". A
-    `hold_sha` the check cannot read is NOT "no hold" — the rule
-    `deploy_state.py` states for an unreadable state directory.
-    """
-    try:
-        with open(os.path.join(cfg.GITOPS_STATE_DIR, name)) as fh:
-            return fh.read().strip() or None
-    except FileNotFoundError:
-        return None
-
-
-def _read_decodable_lines(cfg: Config, name: str) -> str | None:
-    """A marker's text with every line that does not decode dropped, or None when absent.
-
-    The `owed` ledger tolerates a decode error. It holds a class nothing pages on beside
-    `manual_plane`, and one torn byte in a line about either must not blank the whole check.
-    Raising on it turned `gitops_status` into DOWN "check error" every cycle, masking the hold,
-    diverged, behind and contention arms this monitor exists to raise (#2371). The skip is per
-    line, as in every parser in `gitops_markers`: a torn tag would still read as a word, and
-    printing it would select nothing.
-    """
-    try:
-        with open(os.path.join(cfg.GITOPS_STATE_DIR, name), errors="replace") as fh:
-            text = fh.read()
-    except FileNotFoundError:
-        return None
-    kept = [line for line in text.splitlines() if "�" not in line]
-    return "\n".join(kept).strip() or None
-
-
 def check_gitops_status(cfg: Config, src: Sources) -> tuple[bool, str]:
+    """Read the deployer's markers through `gitops_hold.DeployerSnapshot` and judge them.
+
+    An absent marker is None. Any other failure to read one raises, and `gates._evaluate`
+    reports DOWN "check error": a `hold_sha` the check cannot read is NOT "no hold". The
+    snapshot drops each `owed` ledger line that does not decode, so one torn byte cannot turn
+    this into "check error" every cycle and mask the hold, diverged, behind and contention
+    arms (#2371).
+    """
+    snap = DeployerSnapshot.load(cfg.GITOPS_STATE_DIR)
     return gitops_status(
         cfg,
-        _read_gitops_marker(cfg, MARKERS["hold"]),
-        _read_gitops_marker(cfg, MARKERS["diverged"]),
-        _read_gitops_marker(cfg, MARKERS["behind"]),
-        contention_since=_read_gitops_marker(cfg, MARKERS["contention"]),
-        owed=_read_decodable_lines(cfg, MARKERS["owed"]),
+        snap.hold,
+        snap.diverged,
+        snap.behind,
+        contention_since=snap.contention,
+        owed=snap.owed,
     )

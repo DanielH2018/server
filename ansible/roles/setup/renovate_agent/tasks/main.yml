@@ -40,8 +40,9 @@
   # Not recursive (#3607). The deployer rewrites its markers on every tick, and each new file
   # already carries `user:<agent>:r--` from the default entry. A recursive `rX` over them only
   # recomputed the mask to r-x, and reported `changed` on every apply. A marker that predates
-  # the default entry on a fresh host stays unreadable until the deployer rewrites it, and a
-  # marker the agent cannot read reads as no hold. land.sh still refuses to land on a hold.
+  # the default entry on a fresh host stays unreadable until the deployer rewrites it. A
+  # marker the agent cannot read skips the run with a Discord post naming the ACL (#3703),
+  # because an unreadable hold is not "no hold".
   ansible.posix.acl:
     path: /var/lib/gitops-deploy
     entity: "{{ renovate_agent_user }}"

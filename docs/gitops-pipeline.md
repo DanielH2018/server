@@ -1252,7 +1252,9 @@ dated and attributed from the older line.
 (#3538) and read the class together with the legacy `; `-joined `hold_plane` line marker.
 Every reader calls `gitops_ledger.held_planes`, which returns each `hold_plane` ledger
 subject once, oldest first. The readers are monitor-bridge's Status check, the `deploy_ui` panel,
-`renovate_agent`'s skip reason, `k3s_upgrade_gates.held_sha` and the scheduled-jobs page. A
+`renovate_agent`'s skip reason, `k3s_upgrade_gates.held_sha` and the scheduled-jobs page.
+All but the `deploy_ui` panel reach it through `gitops_hold.DeployerSnapshot` (#3703), which
+reads `hold_sha` and the ledger together and raises on a marker it cannot read. A
 ledger line's subject is the whole entry, `<playbook> <tags>`, so two failed applies of one
 playbook stay two entries. `DeployerState.hold_failed_apply`, `clear_broad_hold` and
 `clear_service_hold` now record and drop the class, and the hold-clear rule is a query over
@@ -1260,8 +1262,8 @@ it (#3540). Its first hold or clear folded any legacy marker entry into the ledg
 daniel-box held no legacy file, the line-marker half of `held_planes`, the fold and
 `MARKERS["hold_plane"]` were deleted, and `tasks/install.yml` reaps the basename.
 The `deploy_ui` Clear drops the class's ledger lines under the git-tree lock, so a cleared
-hold cannot replay them into the next one. `renovate_agent` installs `gitops_ledger.py` for
-its skip reason.
+hold cannot replay them into the next one. `renovate_agent` installs `gitops_ledger.py` and
+`gitops_hold.py` for its skip reason.
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
@@ -1425,9 +1427,9 @@ Checkout code (`scripts/lib/deployer_park.py`, `gitops_state.py`) imports it thr
 `sys.path` insert. `deploy-ui` and `renovate-agent` install it into their `/opt` directories
 with a `src:` naming this role's `files/`, and
 `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to it to both roles, so
-their hosts receive it in the same tick (#3306). Both install `gitops_ledger.py` the same
-way. monitor-bridge ships its own `files/` into a
-pod, so `scripts/dev/gen_gitops_markers.py` writes a verbatim copy there under a
+their hosts receive it in the same tick (#3306). Both install `gitops_ledger.py` and
+`gitops_hold.py` the same way. monitor-bridge ships its own `files/` into a
+pod, so `scripts/dev/gen_gitops_markers.py` writes a verbatim copy of all three there under a
 `generated_from:` header. `ansible/tests/deploy/test_gitops_markers_copies.py` fails when that
 copy differs from what the generator writes, when a consumer's ship list lacks the module, or
 when the source grows an import (it runs in a pod, a hook and three `/opt` directories, so

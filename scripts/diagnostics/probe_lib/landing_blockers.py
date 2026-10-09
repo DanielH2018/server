@@ -71,8 +71,8 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO, ROLES
 # The deployer's own modules, so the CI and ledger rules are its rules and not a copy.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deploy_git import _CI_NO_VERDICT_CONCLUSIONS
+from gitops_hold import DeployerSnapshot
 from gitops_ledger import held_planes, manual_plane_entries
-from gitops_markers import MARKERS
 
 # deploy-ui's daemon on the deployer's host: `deploy_ui_port` in
 # `ansible/roles/setup/deploy_ui/defaults/main.yml`. Its ufw rule admits every node IP, which
@@ -219,19 +219,17 @@ def _owed_locally(
     """`(hold_sha, owed ledger text)` from the deployer's state dir, or None if unreadable.
 
     The directory is 0750 and owned by the deploy user, so another user on the deployer's host
-    (the `claude` agent user) sees it exist and still cannot read a marker. `deployer_park`'s
-    readers turn that EACCES into "absent", which would read as no hold and nothing owed. None
-    sends the caller to deploy-ui instead.
+    (the `claude` agent user) sees it exist and still cannot read a marker. `DeployerSnapshot`
+    raises on that EACCES rather than reading it as no hold and nothing owed, and None sends
+    the caller to deploy-ui instead.
     """
-    if not os.path.isdir(state_dir) or not os.access(state_dir, os.R_OK | os.X_OK):
+    if not os.path.isdir(state_dir):
         return None
-    markers = [Path(state_dir) / MARKERS[name] for name in ("hold", "owed")]
-    if any(m.exists() and not os.access(m, os.R_OK) for m in markers):
+    try:
+        snap = DeployerSnapshot.load(state_dir)
+    except OSError, UnicodeDecodeError:
         return None
-    return (
-        deployer_park._read(state_dir, MARKERS["hold"]),
-        deployer_park.read_manual_plane_marker(state_dir),
-    )
+    return snap.hold, snap.owed
 
 
 def _get_text(path: str) -> str:
