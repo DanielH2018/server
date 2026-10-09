@@ -89,6 +89,11 @@ def _reader_env(tmp_path, **overrides) -> dict:
                 _touch_cron(tmp_path, "b2-deletion-accounting")
             ),
             "LONGHORN_B2_DELETIONS_CRON_EXPECTED": "True",
+            # No fire stamps: neither cron has fired, so the install-time grace above decides.
+            "LONGHORN_TRIM_CRON_FIRED_STAMP": str(tmp_path / "fired" / "longhorn-trim"),
+            "LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP": str(
+                tmp_path / "fired" / "b2-deletion-accounting"
+            ),
         }
     )
     env.update(overrides)

@@ -200,6 +200,18 @@
     cron_file: longhorn-backup-health
   become: true
 
+- name: Create the directory the cron fire stamps live in
+  tags: [backup-health]
+  # Check 10 of longhorn-backup-health reads these stamps; the defaults entry for
+  # k3s_cron_fired_stamp_dir says why the /etc/cron.d stat cannot stand in for them (#3677).
+  ansible.builtin.file:
+    path: "{{ k3s_cron_fired_stamp_dir }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
 - name: Schedule the Longhorn filesystem-trim sweep
   tags: [backup-health]
   # After BOTH backup windows (03:30 daily, 04:30 weekly) and clear of the 05:15 manifest-prune
@@ -220,6 +232,9 @@
     hour: "{{ k3s_longhorn_trim_cron_hour }}"
     minute: "{{ k3s_longhorn_trim_cron_minute }}"
     user: "{{ sys_user }}"
+    # Check 10's fire stamp is the script's first act rather than a `touch` on this line: the
+    # cron-target resolver in scripts/validate/validate_lib/cron_targets.py accepts only the
+    # bare script path here, and a prefix would take the trim out of every cron rule it checks.
     job: "/usr/local/bin/longhorn-trim-volumes.sh 2>&1 | logger -t longhorn-trim-cron"
     cron_file: longhorn-trim
   become: true
@@ -250,7 +265,11 @@
     # evidence: an UNPRICED deletion means transactions were spent that no later run can price,
     # and cron discards both the exit code and stdout. The ledger carries the same fact as a
     # zero line with UNPRICED in its note, so the two surfaces agree.
+    #
+    # The leading touch is check 10's fire stamp, written whether or not the run then completes.
+    # `;`, not `&&`: a stamp that cannot be written must not stop the accounting.
     job: >-
+      touch {{ k3s_cron_fired_stamp_dir }}/b2-deletion-accounting;
       cd /home/{{ sys_user }}/server &&
       PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config
       /home/{{ sys_user }}/.local/bin/uv run --quiet python

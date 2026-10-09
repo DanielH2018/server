@@ -480,6 +480,12 @@ k3s_longhorn_restore_drill_image: busybox:stable@sha256:73aaf090f3d85aa34ee19985
 # past ~3900s the two windows collide and the cron must move first.
 k3s_longhorn_restore_drill_timeout_s: 2700
 k3s_longhorn_restore_drill_stamp_dir: /var/lib/longhorn-restore-drill
+
+# Where the trim script and the B2-accounting cron line touch a stamp before their work runs, owned by
+# sys_user so those crons can write it and longhorn-backup-health can read it. Check 10 reads
+# the stamps to tell "the cron fired and its run failed" from "the cron stopped firing",
+# which the /etc/cron.d stat cannot: initial_setup hardens that directory to 0700 root (#3677).
+k3s_cron_fired_stamp_dir: /var/lib/longhorn-cron-fired
 # 04:10 nightly: after the daily tier's 03:30 run and clear of every weekly shard's 04:30, so the
 # drill never contends with a backup in flight. Also clear of the 05:15 manifest-prune window,
 # which would otherwise see the drill's transient restore-drill-* objects.
@@ -1097,6 +1103,12 @@ k3s_host_dns_probe_name: github.com
 # left alone so the override cannot outlive the interface it names.
 k3s_node_dns_dhcp_links:
   - eno1
+
+# The link that carries server_ip, which tasks/static-address.yml pins statically on the
+# server node so k3s can start while the gateway's DHCP server is down (#3882). Empty removes
+# the pin and re-applies netplan. Set it in host_vars only once the gateway keeps server_ip
+# out of its DHCP pool.
+k3s_node_static_link: ""
 
 # ── Cluster DNS (tasks/coredns.yml) ─────────────────────────────────────────────────────
 # What CoreDNS forwards to, in order. This is deliberately NOT the node's resolv.conf that

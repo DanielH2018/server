@@ -1,0 +1,51 @@
+---
+# Pin the node's LAN address statically, so k3s does not depend on the gateway's DHCP server
+# to start. Imported by main.yml, so it runs on the server node only: the agent play reaches
+# daniel-server through a dynamic include_role over SSH, where `--tags node-address` cannot
+# select it and `netplan apply` would reconfigure the link the session rides on.
+# templates/netplan-static-address.yaml.j2 has the incident (#3882) and why DHCPv4 is switched
+# off rather than kept alongside.
+#
+# Set `k3s_node_static_link` in host_vars to the link that carries server_ip, and only after
+# the gateway reserves that address (the template names why). Emptying it is the way back:
+# the file is removed and netplan re-applied, which returns the link to the installer's DHCP.
+
+- name: Pin the node's LAN address in netplan
+  tags: [node-address]
+  ansible.builtin.template:
+    src: netplan-static-address.yaml.j2
+    dest: /etc/netplan/90-homelab-static-address.yaml
+    mode: "0600"
+    owner: root
+    group: root
+  become: true
+  when: k3s_node_static_link | length > 0
+  register: k3s_node_static_netplan
+
+- name: Remove the pinned address when no link is named
+  tags: [node-address]
+  ansible.builtin.file:
+    path: /etc/netplan/90-homelab-static-address.yaml
+    state: absent
+  become: true
+  when: k3s_node_static_link | length == 0
+  register: k3s_node_static_netplan_removed
+
+# Split from the apply for the reason node.yml splits the DNS override's: `generate` parses
+# and merges every /etc/netplan/*.yaml and fails without touching the running configuration,
+# so a bad merge stops here rather than reconfiguring the node's only uplink.
+- name: Validate the merged netplan configuration with the pinned address # noqa no-handler
+  tags: [node-address]
+  ansible.builtin.command:
+    cmd: netplan generate
+  become: true
+  changed_when: false
+  when: k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed
+
+- name: Apply the pinned address, or its removal # noqa no-handler
+  tags: [node-address]
+  ansible.builtin.command:
+    cmd: netplan apply
+  become: true
+  changed_when: true
+  when: k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed

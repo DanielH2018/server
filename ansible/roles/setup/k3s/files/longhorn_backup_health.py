@@ -114,7 +114,7 @@ DRILL_COVERAGE_SLACK_DAYS = _require_int_env(
     "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS"
 )
 CRON_EVIDENCE_WINDOW_HOURS = _require_int_env("LONGHORN_CRON_EVIDENCE_WINDOW_HOURS")
-# Check 10's two crons. Both the path and the expected flag are shim-exported for the reason
+# Check 10's two crons. The path, the fire stamp and the expected flag are shim-exported for the reason
 # the transport settings are: a value only the shim knows must not sit here as a default a
 # wrong export would shadow. The flag differs per cron — the B2-accounting task is gated on
 # `has_repo_checkout`, the trim task is not.
@@ -122,11 +122,13 @@ TRIM_CRON = cron_evidence.cron_state(
     "longhorn-trim",
     _require_env("LONGHORN_TRIM_CRON_FILE"),
     _require_bool_env("LONGHORN_TRIM_CRON_EXPECTED"),
+    _require_env("LONGHORN_TRIM_CRON_FIRED_STAMP"),
 )
 B2_DELETIONS_CRON = cron_evidence.cron_state(
     "b2-deletions",
     _require_env("LONGHORN_B2_DELETIONS_CRON_FILE"),
     _require_bool_env("LONGHORN_B2_DELETIONS_CRON_EXPECTED"),
+    _require_env("LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP"),
 )
 
 # Check 9's transport. Its own deadline rather than TIMEOUT: journalctl answers from a local

@@ -147,6 +147,12 @@ class CronState(NamedTuple):
         expected: whether this host installs the cron at all. The B2-accounting cron is gated
             on `has_repo_checkout` and a host without a checkout never gets one; the trim cron
             carries no such gate.
+        fired_stamp: the file the cron line itself touches before it runs its job.
+            `/etc/cron.d` is 0700 root on these hosts (initial_setup's CIS hardening), so the
+            sys_user this check runs as can never stat `path`. The stamp is the reader that
+            needs no root: it says the cron FIRED, which is the half of "installed and
+            firing" that matters (#3677).
+        fired_at: the stamp's mtime, or None when it does not exist or could not be read.
     """
 
     tag: str
@@ -154,6 +160,8 @@ class CronState(NamedTuple):
     installed_at: float | None
     unreadable: bool
     expected: bool
+    fired_stamp: str = ""
+    fired_at: float | None = None
 
 
 def deletions_have_spoken(lines: list[str]) -> bool:
@@ -199,11 +207,26 @@ def _liveness_problem(
         # Check 9 already reports the failed journal read, and it is the same fault. A second
         # problem off one unreadable journal would double-count it into the push slot.
         return None
-    if cron.unreadable:
+    window_s = window_hours * 3600
+    if cron.fired_at is not None and now_s - cron.fired_at < window_s:
+        # Cron ran it and it wrote no line a COMPLETED run writes: the job failed or was cut
+        # short. Its entry is plainly still installed, so neither message below applies.
+        fired_h = int((now_s - cron.fired_at) / 3600)
         return (
             4,
-            f"could not stat {cron.path} — whether the {cron.tag} cron is still "
-            "installed has no reader",
+            f"{cron.tag} fired {fired_h}h ago but logged no completed run in the last "
+            f"{window_hours}h — see journalctl -t {cron.tag}",
+        )
+    if cron.unreadable:
+        stamp = (
+            f"its fire stamp {cron.fired_stamp} is older than that or missing"
+            if cron.fired_stamp
+            else "it has no fire stamp"
+        )
+        return (
+            4,
+            f"{cron.tag} has not fired in the last {window_hours}h ({stamp}); could not "
+            f"stat {cron.path}, so whether its entry is still installed needs root to check",
         )
     if cron.installed_at is None:
         return (
@@ -211,7 +234,7 @@ def _liveness_problem(
             f"the {cron.tag} cron is not installed ({cron.path}) and nothing ran it in "
             f"the last {window_hours}h",
         )
-    if now_s - cron.installed_at < window_hours * 3600:
+    if now_s - cron.installed_at < window_s:
         # A freshly provisioned host, or one whose cron Ansible has just rewritten. It has not
         # had a full window to fire in, so its silence proves nothing. The window is the grace
         # because the window is already one period plus slack — no second tunable.
@@ -274,10 +297,17 @@ def check_cron_liveness(
     return problems
 
 
-def cron_state(tag: str, path: str, expected: bool) -> CronState:
-    """`CronState` for the cron installed at `path`, reading its install time off the file."""
+def cron_state(tag: str, path: str, expected: bool, fired_stamp: str) -> CronState:
+    """`CronState` for the cron installed at `path`, reading its install and fire times.
+
+    An unreadable stamp reads as no stamp: the fallback below it is the `/etc/cron.d` stat,
+    which names its own blindness.
+    """
     installed_at, unreadable = host_lib.file_mtime(path)
-    return CronState(tag, path, installed_at, unreadable, expected)
+    fired_at, _ = host_lib.file_mtime(fired_stamp)
+    return CronState(
+        tag, path, installed_at, unreadable, expected, fired_stamp, fired_at
+    )
 
 
 def check(

@@ -520,6 +520,12 @@ def build_verdict(
         )
         return "up", msg, msg
 
+    # One line per problem, whatever the check put in it. A kubectl error carries its own
+    # newlines, and the wrapper reads the verdict off ONE stdout line: an embedded newline left
+    # the `(+N more ...)` tail as the last line, which the wrapper rejected as an unrecognized
+    # status, so for 70 hours of a dead k3s API the tile named neither the API nor the check
+    # (#3883).
+    problems = [(rank, " ".join(text.split())) for rank, text in problems]
     msg = "; ".join(text for _, text in problems)
     ranked = sorted(problems, key=lambda p: p[0])
     top = ranked[0][1]

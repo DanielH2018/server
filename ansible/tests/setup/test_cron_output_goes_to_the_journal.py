@@ -165,8 +165,9 @@ _ROUTED_STAGE = re.compile(
 )
 
 # Commands that print nothing unless they fail. `logger` covers the fallback stage of
-# `... >/dev/null 2>&1 || logger -t tag 'msg'`.
-_SILENT_COMMANDS = frozenset({"cd", "logger"})
+# `... >/dev/null 2>&1 || logger -t tag 'msg'`; `touch` is the b2-deletion-accounting fire
+# stamp longhorn-backup-health's check 10 reads.
+_SILENT_COMMANDS = frozenset({"cd", "logger", "touch"})
 
 
 def _stages(job: str) -> list[str]:
