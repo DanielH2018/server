@@ -6,9 +6,9 @@ the decisions taken along the way, and what each slice still owes. It replaces t
 `claude-unix-user-plan_2026-10-04.html` artifact as the durable copy, because
 `prune-artifacts.sh` deletes an artifact 30 days after its last update (#3657).
 
-One part of the plan stays out of this page. The repo is public, and the capability inventory
-of what a session reaches as `ubuntu`, with the threat model built on it, is held back until the
-operator decides whether it is published (#3685). See
+One part of the plan stays out of this page. The repo is public, and the per-path inventory of
+what a session reaches as `ubuntu` stays private until slice 6 retires those sessions. The
+operator decided this on 2026-10-09 (#3685). See
 [What this page leaves out](#what-this-page-leaves-out).
 
 ## Status
@@ -24,6 +24,42 @@ operator decides whether it is published (#3685). See
 | 7 | A pre-merge dry run without secrets | Optional, planned |
 
 Each slice ends in a check that can be run and a variable that turns it back off.
+
+## Why a separate user
+
+A Claude session acts on text it reads: issues, PR comments, web pages, logs and tool output.
+Any of that text can carry an injected instruction. The plan assumes that some session
+follows one, and limits what that session can do without leaving a record.
+
+A session that runs as `ubuntu` has every right the operator's uid has. The split removes
+three kinds of reach:
+
+- **The operator's credentials and personal data.** Every file the operator's uid can read is
+  readable by the session, and a session can send what it reads off the host.
+- **The privilege the operator's session holds.** That includes sudo, so a session can reach
+  root without a commit.
+- **Code execution in the deployer.** The deployer runs from a git directory that `ubuntu`
+  owns, and a session as `ubuntu` can change its `.git/config`. See the rules below.
+
+Each of these lets an injected session take data or reach root and leave no commit behind.
+[What the `claude` user cannot do](#what-the-claude-user-cannot-do) lists what replaces each
+right the agent gives up.
+
+### What the split cannot close
+
+**A merged deployable change reaches root, whatever the agent's uid.** The GitOps deployer
+applies the setup plane with `become`. Ansible applies k8s manifests with cluster-admin rights,
+and a manifest can schedule a privileged pod that mounts the host's filesystem. An agent whose
+change merges and deploys therefore runs code as root on the nodes.
+
+Only a human approval on every merge closes that path. The operator rejected that gate on
+2026-10-04, for the reasons in
+[The decision: a visible trail, not a merge gate](#the-decision-a-visible-trail-not-a-merge-gate).
+The split makes the path visible instead. Every change that reaches root needs a signed commit by
+`DanielClaudeBot`, a CI run and a lander record.
+
+The slice 3 gate has limits of its own. It requires the operator's approval only for the paths
+on its list, and #3888 tracks the code the gate imports from outside that list.
 
 ## The template: `renovate-agent`
 
@@ -235,6 +271,10 @@ report any `claude` process running as uid 1000. Optionally ship a root-owned
 included, so it is written for both agents and ships only once no Claude session runs as
 `ubuntu`.
 
+Once the slice lands, publish the per-path inventory from the operator's break-glass kit in
+this page, and delete [What this page leaves out](#what-this-page-leaves-out). From then on
+the inventory describes history.
+
 **Check:** starting `claude` as `ubuntu` shows up in the metric within one 30-second timer
 interval.
 
@@ -288,9 +328,15 @@ key, because SOPS holds the become password, and never gives it the operator's `
 
 ## What this page leaves out
 
-The plan artifact also holds an inventory of what a session reaches as `ubuntu` and the threat
-model that motivates the split, including the limits of the slice 3 gate. The repo is public,
-and the operator chose on 2026-10-04 not to publish that material in an issue. Whether it goes
-into this page or an ADR is the operator's call, and #3685 tracks it. Until then the only full
-copy is `~/.claude/artifacts/pinned/claude-unix-user-plan_2026-10-04.html` on daniel-box.
-`prune-artifacts.sh` skips `pinned/`, but the copy is in neither git nor the break-glass bundle.
+The plan artifact also holds a per-path inventory of what a session reaches as `ubuntu`. This
+page publishes the reasoning built on it, in [Why a separate user](#why-a-separate-user). The
+inventory stays private, because the repo is public and the inventory stays accurate until
+slice 6 retires Claude sessions as `ubuntu`. The operator decided this split on 2026-10-09
+(#3685).
+
+The durable home of the inventory is the operator's offline break-glass kit. The operator
+copies `~/.claude/artifacts/pinned/claude-unix-user-plan_2026-10-04.html` there. The pinned
+copy on daniel-box is a convenience only: `prune-artifacts.sh` skips `pinned/`, but nothing
+backs it up.
+
+Slice 6 publishes the inventory in this page, once it describes history.
