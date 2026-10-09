@@ -120,6 +120,10 @@ netpol_baseline_obs_node_cidrs:
 #   expect  — `refused` (an inverted leg), `open` (the connection must succeed), or absent (the
 #             gate checks the row, and no leg dials it).
 #   policy  — the policy file that owns the fence, printed in the failure message.
+#   replicas — optional. The target's replica count, templated from the variable that sets it.
+#             A row whose count is 0 is dropped from netpol_baseline_probe_active, so it is
+#             neither gated nor dialled. A scaled-to-zero Service has an empty EndpointSlice,
+#             and gating it would fail every full `deploy.yml`.
 #
 # A WRONG PORT ON A `refused` ROW FAILS SILENTLY GREEN. A port nothing listens on makes `nc` fail,
 # which is the PASS branch of an inverted leg. The gate proves the Service has a ready backend; it
@@ -130,10 +134,6 @@ netpol_baseline_obs_node_cidrs:
 # every `refused` row must refuse it. Its `netpol-probe: control` label admits it to speedtest:80,
 # the sentinel, and to nothing else.
 #
-# terraria is ABSENT while `terraria_k8s_replicas` is 0. Its EndpointSlice is empty then, so its
-# row would fail the gate on every full `deploy.yml`. To restore its open-port leg, add
-# `{service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2}`.
-# `ansible/tests/k8s/test_netpol_probe_targets.py` fails if the row and the replica count disagree.
 netpol_baseline_probe_targets:
   # The namespace baseline: an app with no in-cluster caller. The probe's HTTPS liveness leg
   # reaches the same app through traefik, which is the allowed path.
@@ -164,14 +164,20 @@ netpol_baseline_probe_targets:
   - {service: loki-homelab, plane: homelab, port: 3100, expect: refused, policy: networkpolicy-loki-homelab.yaml.j2}
   - {service: scrutiny, plane: homelab, port: 8080, expect: refused, policy: "scrutiny's netpol_from, pod label scrutiny-web"}
   - {service: karakeep-meilisearch, plane: homelab, port: 7700, expect: refused, policy: "karakeep's netpol_fences (host_vars/daniel-box.yml)"}
+  # terraria follows `terraria_k8s_replicas` (group_vars/all.yml) through its `replicas` column:
+  # scaling the server back up restores this open-port leg and its gate with no edit here.
+  - {service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2, replicas: "{{ terraria_k8s_replicas | int }}"}
   # The sentinel. The probe's control leg dials it with a retry, outside the table, so the row
   # has no `expect`.
   - {service: speedtest, plane: homelab}
 
-# The rows whose lever is on. The gate loops this and the Job renders from it, so a plane with
-# its lever off is neither gated nor dialled.
+# The rows whose lever is on and whose target is scaled above zero. The gate loops this and the
+# Job renders from it, so a plane with its lever off, or a row at `replicas: 0`, is neither gated
+# nor dialled. A row with a `replicas` column sorts after the rows without one.
 netpol_baseline_probe_active: >-
-  {{ netpol_baseline_probe_targets
+  {{ (netpol_baseline_probe_targets | rejectattr('replicas', 'defined') | list
+      + netpol_baseline_probe_targets | selectattr('replicas', 'defined')
+        | selectattr('replicas', 'gt', 0) | list)
      | selectattr('plane', 'in',
                   (['homelab'] if netpol_baseline_enforced | bool else [])
                   + (['observability'] if netpol_baseline_obs_enforced | bool else []))
