@@ -189,10 +189,32 @@
   # at run time and reported `changed` on every apply (#3607): gh writes .local/state/gh, whose
   # parent carries no setgid bit, so it takes the agent's own group. That state is the agent's,
   # and the operator has no need to read it.
+  #
+  # The `-prune` clause skips the trees claude_code's agent_operator_config.yml installs
+  # root-owned on purpose: a copy of the operator's Claude config the agent must not edit in
+  # place. Without it this task hands the copy to the agent at the start of every apply and the
+  # copy tasks hand it back, so both report `changed` each time. It is a no-op for any other
+  # agent (renovate_agent has none of these paths), and skills/synced is not named: it is the
+  # agent's own, and the prune of skills/ passes over it either way.
   ansible.builtin.command:
     argv:
       - find
       - "{{ agent_user_home }}"
+      - (
+      - -path
+      - "{{ agent_user_home }}/.claude/operator"
+      - -o
+      - -path
+      - "{{ agent_user_home }}/.claude/rules"
+      - -o
+      - -path
+      - "{{ agent_user_home }}/.claude/output-styles"
+      - -o
+      - -path
+      - "{{ agent_user_home }}/.claude/skills"
+      - )
+      - -prune
+      - -o
       - -user
       - root
       - -print

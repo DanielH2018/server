@@ -168,7 +168,29 @@ def test_switching_the_agent_user_off_expires_it_and_on_lifts_the_expiry() -> No
 
 def reowns_only_roots_files(argv: list[str]) -> bool:
     """Whether a command is `find <dir> -user root ... -exec chown`, the closing handover."""
-    return argv[:1] == ["find"] and argv[2:4] == ["-user", "root"] and "chown" in argv
+    return (
+        argv[:1] == ["find"]
+        and any(argv[i : i + 2] == ["-user", "root"] for i in range(len(argv)))
+        and "chown" in argv
+    )
+
+
+# The trees claude_code's agent_operator_config.yml keeps root-owned inside the agent's home.
+ROOT_OWNED_COPY = (
+    ".claude/operator",
+    ".claude/rules",
+    ".claude/output-styles",
+    ".claude/skills",
+)
+
+
+def prunes_the_root_owned_copy(argv: list[str]) -> bool:
+    """Whether the handover's `find` prunes exactly the root-owned config copy, before -user."""
+    head = argv[: argv.index("-user")] if "-user" in argv else argv
+    pruned = [a for i, a in enumerate(head[1:], 1) if head[i - 1] == "-path"]
+    return "-prune" in head and sorted(p.split("}}/", 1)[-1] for p in pruned) == sorted(
+        ROOT_OWNED_COPY
+    )
 
 
 def chown_owner_group(task_list: list[dict]) -> tuple[str, str]:
@@ -237,6 +259,56 @@ def test_the_handover_reowns_only_roots_files() -> None:
     task = named(tasks(SHARED), "Hand the agent's home to its own user")
     assert reowns_only_roots_files(task["ansible.builtin.command"]["argv"])
     assert task["changed_when"] == "common_agent_user_home_handover.stdout | length > 0"
+
+
+def test_the_handover_leaves_the_root_owned_config_copy_alone() -> None:
+    """The copy is root's by design; handing it to the agent would undo it every apply."""
+    argv = named(tasks(SHARED), "Hand the agent's home to its own user")[
+        "ansible.builtin.command"
+    ]["argv"]
+    assert prunes_the_root_owned_copy(argv)
+    # skills/synced is the agent's own, so it is not named.
+    assert not any("synced" in a for a in argv)
+    # The pruned names are the ones the copy tasks install.
+    copy = tasks(AGENT_GITHUB.with_name("agent_operator_config.yml"))
+    rsync = named(copy, "Copy the operator's rules, output styles and skills")
+    assert sorted(ROOT_OWNED_COPY) == sorted(
+        [".claude/operator"] + [f".claude/{tree}" for tree in rsync["loop"]]
+    )
+
+
+def test_a_handover_that_would_reown_the_config_copy_is_flagged() -> None:
+    unexempt = [
+        "find",
+        "/srv/agent",
+        "-user",
+        "root",
+        "-exec",
+        "chown",
+        "a:b",
+        "{}",
+        "+",
+    ]
+    assert reowns_only_roots_files(unexempt)
+    assert not prunes_the_root_owned_copy(unexempt)
+    partial = [
+        "find",
+        "/srv/agent",
+        "(",
+        "-path",
+        "/srv/agent/.claude/skills",
+        ")",
+        "-prune",
+        "-o",
+        "-user",
+        "root",
+        "-exec",
+        "chown",
+        "a:b",
+        "{}",
+        "+",
+    ]
+    assert not prunes_the_root_owned_copy(partial)
 
 
 def test_a_chown_of_every_file_is_not_the_handover() -> None:

@@ -15,10 +15,9 @@
 # sessions follow; the next apply restores the copy. Closing it needs the home split from
 # Claude Code's writable state, which slice 4 does not do.
 #
-# KNOWN CONFLICT: the shared agent_user.yml ends with `find <home> -user root ... chown`, which
-# hands the copy back to the agent at the start of every apply. The tasks below put root back,
-# so an apply ends right and reports both as changed. Exempting this copy from that chown is a
-# change to roles/setup/common/tasks/agent_user.yml.
+# The shared agent_user.yml ends with `find <home> -user root ... chown`, which would hand this
+# copy to the agent on every apply. Its `-prune` clause names the four paths below, so a change
+# to them here is a change to the pruned list there (test_agent_user.py holds the two equal).
 
 - name: Look for a copy of the operator's config from an earlier apply
   ansible.builtin.stat:
