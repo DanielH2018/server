@@ -11,6 +11,9 @@
     manifests_service: tdarr
     # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
     manifests_prune: true
+    # A cold pull of the 1.4 GiB image outlasts the shared default; the measurement is in
+    # defaults/main.yml because the template's progressDeadlineSeconds reads it too.
+    manifests_rollout_timeout: "{{ tdarr_k8s_rollout_timeout }}"
     manifests_files:
       - deployment.yaml
       - service.yaml

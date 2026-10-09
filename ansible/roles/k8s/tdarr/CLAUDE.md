@@ -36,3 +36,8 @@ shared conventions.
   here is single-replica with `maxUnavailable: 0`, so the OLD pod satisfies readiness
   through the whole rollout and a readiness-based check would silently verify the pod
   being replaced.
+- **Every rollout waits 2400s, four times the shared default.** A cold pull of the 1432 MiB
+  image took 25m37s on 2026-10-08 and failed the old 300s gate (#3689).
+  `tdarr_k8s_rollout_timeout` sets the drain's wait, the `verify.yml` gate and the template's
+  `progressDeadlineSeconds`. The deadline has to move with the wait, or `rollout status` fails
+  at the 600s default anyway. `Recreate` means tdarr is down for the whole pull.
