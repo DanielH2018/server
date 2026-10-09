@@ -206,6 +206,11 @@ def test_privileged_uses_the_k3s_kubeconfig_and_an_unprivileged_identity_read(cl
     ]
 
 
+def test_json_is_none_when_the_top_level_is_not_an_object(cluster):
+    cluster.returncode, cluster.stdout = 0, "[1, 2]"
+    assert cluster.kubectl_json("prod", "get", "pods") is None
+
+
 def test_json_is_none_on_a_failed_or_unparseable_call(cluster):
     cluster.returncode = 1
     assert cluster.kubectl_json("prod", "get", "pods") is None

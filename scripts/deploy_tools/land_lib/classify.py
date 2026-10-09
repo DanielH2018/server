@@ -8,7 +8,6 @@ the merge commit is the deployer's gate, not this landing's.
 import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
-from typing import Any
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Landing
@@ -16,9 +15,9 @@ from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_tags import DeriveSource
 
 
-def _classified(
-    ln: Landing, label: str, fn: Callable[..., Any], *args: Any, **kwargs: Any
-) -> Any:
+def _classified[**P, R](
+    ln: Landing, label: str, fn: Callable[P, R], *args: P.args, **kwargs: P.kwargs
+) -> R:
     """Run one classification helper bash ran as a subprocess, guarded the way it was.
 
     bash: `X=$(... land_tags.py ...) || die "<label> failed" 1`. In-process, an unhandled

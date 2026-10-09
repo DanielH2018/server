@@ -31,6 +31,7 @@ from dev.findings_lib.issue_model import (
 )
 from dev.findings_lib.plans import is_project_failure, without_project
 from dev.findings_lib.boundaries import FindingsTools
+from lib.json_types import JsonObject, as_object, as_object_list
 
 
 def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
@@ -102,13 +103,16 @@ def load_issues(
     for label in labels:
         argv += ["--label", label]
     argv += ["--state", state, "--limit"]
-    issues = (tools or FindingsTools()).gh_json(
-        *argv,
-        str(ISSUE_LIST_CAP),
-        "--json",
-        _LIST_FIELDS,
-        timeout=REGISTER_FETCH_TIMEOUT,
-    ) or []
+    issues = as_object_list(
+        (tools or FindingsTools()).gh_json(
+            *argv,
+            str(ISSUE_LIST_CAP),
+            "--json",
+            _LIST_FIELDS,
+            timeout=REGISTER_FETCH_TIMEOUT,
+        ),
+        "gh issue list",
+    )
     if len(issues) >= ISSUE_LIST_CAP:
         sys.stderr.write(
             f"warning: gh returned {ISSUE_LIST_CAP} issues for --state {state}, its list "
@@ -172,7 +176,7 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
     only — so a comment or a PR body quoting a fingerprint is dropped here rather than
     dedup-matching an unrelated issue.
     """
-    hits = (
+    hits = as_object_list(
         tools.gh_json(
             "issue",
             "list",
@@ -186,8 +190,8 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
             fp,
             "--json",
             _LIST_FIELDS,
-        )
-        or []
+        ),
+        "gh issue list --search",
     )
     found = find_by_fingerprint(_warn_at_the_comment_cap(hits), fp)
     if found is None and len(hits) >= FINGERPRINT_SEARCH_LIMIT:
@@ -203,19 +207,28 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
 
 def open_pr_refs(tools: FindingsTools) -> set[int]:
     """Issue numbers the open PRs say they close, for `next` to withhold."""
-    prs = tools.gh_json(
-        "pr", "list", "--state", "open", "--limit", "200", "--json", "body"
+    prs = as_object_list(
+        tools.gh_json(
+            "pr", "list", "--state", "open", "--limit", "200", "--json", "body"
+        ),
+        "gh pr list",
     )
-    return pr_refs([pr.get("body") or "" for pr in prs or []])
+    return pr_refs([str(pr.get("body") or "") for pr in prs])
 
 
 def _existing_labels(tools: FindingsTools) -> set[str]:
-    labels = tools.gh_json("label", "list", "--limit", "200", "--json", "name")
-    return {lab["name"] for lab in labels or []}
+    labels = as_object_list(
+        tools.gh_json("label", "list", "--limit", "200", "--json", "name"),
+        "gh label list",
+    )
+    return {str(lab["name"]) for lab in labels}
 
 
-def _load_issue(number: int, tools: FindingsTools) -> dict:
-    issue = tools.gh_json("issue", "view", str(number), "--json", _LIST_FIELDS)
+def _load_issue(number: int, tools: FindingsTools) -> JsonObject:
+    issue = as_object(
+        tools.gh_json("issue", "view", str(number), "--json", _LIST_FIELDS),
+        "gh issue view",
+    )
     _warn_at_the_comment_cap([issue] if issue else [])
     return issue
 

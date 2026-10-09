@@ -8,7 +8,6 @@ The other view modules read from here; this one reads from none of them.
 """
 
 import html
-from typing import Any
 
 STYLE = """
 :root {
@@ -135,6 +134,6 @@ STATUS_LABELS = {
 }
 
 
-def e(value: Any) -> str:
+def e(value: object) -> str:
     """Escape a value for HTML text content."""
     return html.escape("" if value is None else str(value))

@@ -20,7 +20,6 @@ read `cfg.PROM_ORIGIN`, and the gates test renders them to prove where the origi
 from collections.abc import Callable
 import json
 import time
-from typing import Any
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -32,6 +31,7 @@ import bridge.common
 from bridge.common import HTTP_TIMEOUT, PUSH_MSG_MAX, cap_push_msg  # noqa: F401
 from bridge.config import Config
 from bridge.parsing import FETCH_BODY_MAX, describe_fetch_failure, endpoint_label
+from bridge.types import JsonObject, JsonValue, as_list, as_object, as_object_list
 
 
 def origin_sel(cfg: Config, *matchers: str) -> str:
@@ -110,7 +110,7 @@ def _origin_name(labels: dict) -> str:
 # HTTP / parsing helpers (pure-ish, unit-tested)
 
 
-def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
+def _get_json(url: str, headers: dict[str, str] | None = None) -> JsonValue:
     # The explicit User-Agent is REQUIRED, not decoration. Discord sits behind Cloudflare, which
     # 403s the default python-urllib UA with error 1010 — so `check_discord`'s webhook GETs would
     # read as revoked webhooks on every cycle without it. host_lib.discord_post carries the same
@@ -145,7 +145,9 @@ def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
         raise RuntimeError(describe_fetch_failure(url, e)) from e
 
 
-def _post_json(url: str, payload: dict, headers: dict[str, str] | None = None) -> Any:
+def _post_json(
+    url: str, payload: dict, headers: dict[str, str] | None = None
+) -> JsonValue:
     """POST a JSON body and return the parsed JSON response. Same failure contract as _get_json.
 
     Only the Cloudflare GraphQL endpoint needs this — every other source here is a GET.
@@ -172,7 +174,38 @@ def _post_json(url: str, payload: dict, headers: dict[str, str] | None = None) -
         raise RuntimeError(describe_fetch_failure(url, e)) from e
 
 
-def _instant_query(base_url: str, path: str, query: str, source: str) -> list[dict]:
+def _query_result(body: JsonValue, source: str, what: str = "query") -> list[JsonValue]:
+    """The `data.result` list of a Prometheus/Loki response, or `RuntimeError`.
+
+    Both share the {status, data.result} envelope. A non-success status, or a body that is not
+    that envelope, raises with `source` ('prometheus'/'loki') in the message; `what` names the
+    request ('query', 'labels') in the status message.
+    """
+    envelope = as_object(body, "%s response" % source)
+    if envelope.get("status") != "success":
+        raise RuntimeError("%s %s status=%s" % (source, what, envelope.get("status")))
+    data = as_object(envelope.get("data", {}), "%s data" % source)
+    return as_list(data.get("result", []), "%s result" % source)
+
+
+def _sample_value(series: JsonObject) -> float:
+    """The number in an instant-vector series' `value: [timestamp, "number"]` pair."""
+    pair = as_list(series["value"], "series value")
+    raw = pair[1]
+    if not isinstance(raw, (str, int, float)):
+        raise RuntimeError("series value is %s, not a number" % type(raw).__name__)
+    return float(raw)
+
+
+def _labels(series: JsonObject) -> dict[str, str]:
+    """A series' `metric` label set; Prometheus and Loki label values are always strings."""
+    metric = as_object(series.get("metric", {}), "series metric")
+    return {k: v for k, v in metric.items() if isinstance(v, str)}
+
+
+def _instant_query(
+    base_url: str, path: str, query: str, source: str
+) -> list[JsonObject]:
     """Runs an instant query against `base_url + path` and returns the result list.
 
     Prometheus and Loki share the same /query?query= shape and {status, data.result}
@@ -180,10 +213,7 @@ def _instant_query(base_url: str, path: str, query: str, source: str) -> list[di
     labels the error ('prometheus'/'loki').
     """
     url = base_url + path + "?" + urllib.parse.urlencode({"query": query})
-    data = _get_json(url)
-    if data.get("status") != "success":
-        raise RuntimeError("%s query status=%s" % (source, data.get("status")))
-    return data.get("data", {}).get("result", [])
+    return as_object_list(_query_result(_get_json(url), source), "%s result" % source)
 
 
 def prom_scalar(
@@ -200,19 +230,19 @@ def prom_scalar(
     result = _instant_query(base or cfg.PROM_URL, "/api/v1/query", promql, source)
     if not result:
         return None
-    return float(result[0]["value"][1])
+    return _sample_value(result[0])
 
 
 def prom_vector(
     cfg: Config, promql: str, base: str | None = None, source: str = "prometheus"
-) -> list[tuple[dict, float]]:
+) -> list[tuple[dict[str, str], float]]:
     """Run an instant query; return [(labels: dict, value: float), ...] (empty if none).
 
     Unlike prom_scalar this keeps each series' labels, so checks can name *which*
     container / target / route is failing.
     """
     return [
-        (series.get("metric", {}), float(series["value"][1]))
+        (_labels(series), _sample_value(series))
         for series in _instant_query(
             base or cfg.PROM_URL, "/api/v1/query", promql, source
         )
@@ -230,17 +260,17 @@ def loki_count(cfg: Config, selector: str, window: str) -> float | None:
     result = _instant_query(cfg.LOKI_URL, "/loki/api/v1/query", query, "loki")
     if not result:
         return None
-    return float(result[0]["value"][1])
+    return _sample_value(result[0])
 
 
-def loki_vector(cfg: Config, query: str) -> list[tuple[dict, float]]:
+def loki_vector(cfg: Config, query: str) -> list[tuple[dict[str, str], float]]:
     """Instant LogQL query keeping each series' labels — the loki_count peer of prom_vector.
 
     Not prom_vector(base=LOKI_URL): Loki's instant endpoint is /loki/api/v1/query, and
     prom_vector hardcodes /api/v1/query. Same envelope, different path.
     """
     return [
-        (series.get("metric", {}), float(series["value"][1]))
+        (_labels(series), _sample_value(series))
         for series in _instant_query(cfg.LOKI_URL, "/loki/api/v1/query", query, "loki")
     ]
 
@@ -269,14 +299,14 @@ def loki_lines(
         "direction": "forward",
     }
     url = cfg.LOKI_URL + "/loki/api/v1/query_range?" + urllib.parse.urlencode(params)
-    data = _get_json(url)
-    if data.get("status") != "success":
-        raise RuntimeError("loki query status=%s" % data.get("status"))
-    lines = [
-        (int(ts), line)
-        for stream in data.get("data", {}).get("result", [])
-        for ts, line in stream.get("values", [])
-    ]
+    streams = as_object_list(_query_result(_get_json(url), "loki"), "loki result")
+    lines: list[tuple[int, str]] = []
+    for stream in streams:
+        for entry in as_list(stream.get("values", []), "loki stream values"):
+            ts, line = as_list(entry, "loki stream entry")
+            if not isinstance(ts, (str, int)) or not isinstance(line, str):
+                raise RuntimeError("loki stream entry is not [timestamp, line]")
+            lines.append((int(ts), line))
     lines.sort()
     return lines
 
@@ -287,7 +317,7 @@ def log_error_counts(
     pattern: str,
     window: str,
     by_label: str = "container",
-) -> tuple[list[tuple[dict, float]], float | None]:
+) -> tuple[list[tuple[dict[str, str], float]], float | None]:
     """(matches, total) — per-container counts of `pattern`, and the selector's total volume.
 
     `total` is what keeps this arm honest. The whole arm fails OPEN (see with_log_errors), so a
@@ -313,9 +343,11 @@ def loki_reachable(cfg: Config) -> bool:
     from 'Loki is up but promtail stopped shipping' (Loki Log Ingestion, which still evaluates
     whenever Loki is reachable). Raising -> _evaluate renders the Loki Reachable monitor down.
     """
-    data = _get_json(cfg.LOKI_URL + "/loki/api/v1/labels")
-    if data.get("status") != "success":
-        raise RuntimeError("loki labels status=%s" % data.get("status"))
+    envelope = as_object(
+        _get_json(cfg.LOKI_URL + "/loki/api/v1/labels"), "loki response"
+    )
+    if envelope.get("status") != "success":
+        raise RuntimeError("loki labels status=%s" % envelope.get("status"))
     return True
 
 
@@ -324,7 +356,7 @@ def push(
     token: str,
     ok: bool,
     msg: str,
-    fetch: Callable[[str], Any] | None = None,
+    fetch: Callable[[str], JsonValue] | None = None,
 ) -> None:
     """Pushes an up/down heartbeat plus message to the Kuma push monitor for `token`.
 

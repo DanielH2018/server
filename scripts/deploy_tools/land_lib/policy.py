@@ -33,6 +33,7 @@ from typing import Any, NoReturn
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import say
+from lib.json_types import JsonObject, as_list, as_object_list
 
 # GitHub's REST files endpoint returns at most 3000 files, so a PR at the cap may hide a path
 # the list names.
@@ -114,22 +115,30 @@ def _refuse(ln: Landing, why: str) -> NoReturn:
     ln.die(f"refused by the landing policy: {why}", 1)
 
 
-def _list(ln: Landing, what: str) -> list[dict[str, Any]]:
+def _list(ln: Landing, what: str) -> list[JsonObject]:
     """Every entry of the PR's REST `what` listing (`files`, `reviews`), across all pages."""
     try:
-        pages = ln.tools.gh_json(
-            "api",
-            "--paginate",
-            "--slurp",
-            f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/{what}",
+        pages = as_list(
+            ln.tools.gh_json(
+                "api",
+                "--paginate",
+                "--slurp",
+                f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/{what}",
+            )
+            or [],
+            f"gh api pulls/{what}",
         )
+        return [
+            entry
+            for page in pages
+            for entry in as_object_list(page, f"gh api pulls/{what} page")
+        ]
     except subprocess.CalledProcessError as exc:
         _refuse(ln, f"could not list the PR's {what}: {exc.stderr.strip()}")
     except subprocess.TimeoutExpired:
         _refuse(ln, f"could not list the PR's {what}: gh timed out")
     except ValueError:
         _refuse(ln, f"could not list the PR's {what}: unparseable gh output")
-    return [entry for page in pages or [] for entry in page]
 
 
 def check(ln: Landing) -> str:

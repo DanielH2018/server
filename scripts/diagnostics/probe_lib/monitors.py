@@ -34,6 +34,7 @@ import yaml
 from jinja2 import StrictUndefined, TemplateError
 
 from lib import yaml_fast
+from lib.json_types import as_object, as_object_list
 from lib.k8s_context import resolve_vars, role_defaults
 from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 from lib.k8s_roles import HOST_VARS
@@ -541,12 +542,12 @@ def kuma_pod_age_seconds(cluster=DEFAULT_CLUSTER):
     )
     if pods_doc is None:
         return None
-    pods = pods_doc.get("items", [])
     starts = [
         seconds_since(
-            (p.get("status") or {}).get("startTime"), datetime.now(timezone.utc)
+            as_object(p.get("status") or {}, "pod status").get("startTime"),
+            datetime.now(timezone.utc),
         )
-        for p in pods
+        for p in as_object_list(pods_doc.get("items", []), "kubectl pods items")
     ]
     starts = [s for s in starts if s is not None]
     return min(starts) if starts else None

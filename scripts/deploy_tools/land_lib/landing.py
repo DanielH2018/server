@@ -29,6 +29,7 @@ from deploy_tools.land_lib.outcome import (
     unrecorded_apply_note,
 )
 from deploy_tools.land_lib.tools import Classifier, Tools
+from lib.json_types import as_object
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -159,8 +160,9 @@ class Landing:
         saying which PR read failed.
         """
         try:
-            return (
-                self.tools.gh_json("pr", "view", self.opts.pr, "--json", fields) or {}
+            return as_object(
+                self.tools.gh_json("pr", "view", self.opts.pr, "--json", fields) or {},
+                "gh pr view",
             )
         except subprocess.CalledProcessError as exc:
             self.die(f"could not read PR #{self.opts.pr}: {exc.stderr.strip()}", 1)

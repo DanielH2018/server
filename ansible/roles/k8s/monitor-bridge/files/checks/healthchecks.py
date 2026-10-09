@@ -23,9 +23,10 @@ from typing import TypedDict
 
 import bridge.net
 from bridge.config import Config
+from bridge.types import JsonObject, as_object_list
 
 
-def fetch_checks(cfg: Config) -> list[dict]:
+def fetch_checks(cfg: Config) -> list[JsonObject]:
     """The project's checks as the v3 API returns them. Raises on any transport or HTTP error.
 
     A read-only key gets the same fields a read-write key does minus the ping and management
@@ -37,7 +38,7 @@ def fetch_checks(cfg: Config) -> list[dict]:
     checks = body.get("checks") if isinstance(body, dict) else None
     if not isinstance(checks, list):
         raise RuntimeError("response carries no `checks` list")
-    return checks
+    return as_object_list(checks, "healthchecks checks")
 
 
 def _describe(check: dict) -> str:

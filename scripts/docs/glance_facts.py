@@ -12,6 +12,7 @@ overrides it (`lib.jinja_defaults`), and is printed as written everywhere else.
 """
 
 import re
+from collections.abc import Iterator
 import sys as _sys
 from pathlib import Path as _Path
 
@@ -24,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from lib import yaml_fast
+from lib.json_types import JsonObject, JsonValue, as_object
 from lib.render_guard import containers_entries, entry_tags
 from lib.jinja_comments import strip_jinja_comments
 from lib.jinja_defaults import resolve
@@ -113,15 +115,24 @@ def load_yaml_list(path: Path) -> list:
     return loaded if isinstance(loaded, list) else []
 
 
-def _when_text(when: Any) -> str:
+def _when_text(when: JsonValue) -> str:
     if isinstance(when, list):
         return " and ".join(str(w) for w in when)
     return str(when) if when is not None else ""
 
 
-def _walk_tasks(tasks: Any):
+def _tag_values(tags: JsonValue) -> list[JsonValue]:
+    """The tag names a ``tags:`` value declares, or ``[""]`` when it declares none."""
+    if isinstance(tags, str):
+        return [tags]
+    return tags if isinstance(tags, list) and tags else [""]
+
+
+def _walk_tasks(tasks: JsonValue) -> Iterator[JsonObject]:
     """Every task in a tasks list, descending into `block:`/`rescue:`/`always:` wrappers."""
-    for task in tasks or []:
+    if not isinstance(tasks, list):
+        return
+    for task in tasks:
         if not isinstance(task, dict):
             continue
         yield task
@@ -176,8 +187,7 @@ def setup_appliers(
                             break
                     if not isinstance(spec, dict) or str(spec.get("name")) != role:
                         continue
-                    tags = task.get("tags") or []
-                    for tag in [tags] if isinstance(tags, str) else tags or [""]:
+                    for tag in _tag_values(task.get("tags")):
                         found.append((playbook, str(tag), _when_text(task.get("when"))))
     return sorted(set(found))
 
@@ -224,7 +234,7 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
                 "common/tasks/kuma_check_timer.yml"
             ):
                 continue
-            variables = task.get("vars") or {}
+            variables = as_object(task.get("vars") or {}, f"{tasks_file.name} vars")
             if variables.get("kuma_check_state") == "absent":
                 continue  # a teardown arm removes the timer; it installs nothing
             name = variables.get("kuma_check_name", "unnamed")

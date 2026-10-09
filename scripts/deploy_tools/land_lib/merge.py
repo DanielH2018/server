@@ -65,6 +65,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_GREEN, CI_RED
+from lib.json_types import as_object
 from deploy_tools.land_lib import policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
@@ -283,7 +284,9 @@ def _refuse_private_repo(ln: Landing) -> None:
     and the cost is one landing to re-run.
     """
     try:
-        repo = ln.tools.gh_json("api", "repos/{owner}/{repo}") or {}
+        repo = as_object(
+            ln.tools.gh_json("api", "repos/{owner}/{repo}") or {}, "gh api repos"
+        )
     except subprocess.CalledProcessError as exc:
         ln.die(f"could not read the repo's visibility: {exc.stderr.strip()}", 1)
     except subprocess.TimeoutExpired:

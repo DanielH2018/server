@@ -29,6 +29,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.prune_worktrees import _worktree_facts
 from lib.gh import gh, gh_json
+from lib.json_types import JsonValue
 
 # (worktrees, dirty, merged, ok) — `prune_worktrees._worktree_facts`'s own return, named here
 # so the field below reads as one thing rather than a four-element tuple spelled out.
@@ -52,7 +53,7 @@ class FindingsTools:
     or `next` against invented worktree state without patching a module attribute.
     """
 
-    gh_json: Callable[..., Any] = gh_json
+    gh_json: Callable[..., JsonValue] = gh_json
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
     worktree_facts: Callable[..., WorktreeFacts] = _worktree_facts
     # The register every gh call names with `--repo`, or None for this repo. Read by

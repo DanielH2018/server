@@ -108,7 +108,7 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
     )
 
 
-def resolve_vars(value: Any, variables: dict[str, Any], _depth: int = 0) -> Any:
+def resolve_vars[T](value: T, variables: dict[str, Any], _depth: int = 0) -> T | str:
     """Substitute simple ``{{ name }}`` references from *variables*.
 
     Only bare-variable interpolation is supported — that is all the inventory

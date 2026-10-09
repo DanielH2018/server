@@ -206,6 +206,12 @@ extend-exclude = [
 #   class field or enum value, an un-awaited asyncio task, a call evaluated once as a dataclass
 #   default, an assignment inside `assert`, a shared mutable `dict.fromkeys` value, identical
 #   if/else arms), selected so the pattern cannot arrive rather than to clear a backlog.
+# - ANN401: 14 hits on 2026-10-08, all in signatures. `json.loads` and `yaml.safe_load` return
+#   `Any`, and a helper that annotates its return `Any` hands that to every caller: `ty` then
+#   checks nothing the caller reads from the parsed JSON, so a response of the wrong shape
+#   indexes, iterates and compares without a diagnostic. That is legal, silent and wrong.
+#   The fix is a return type that is true (`lib.json_types.JsonValue`) and a narrowing step at
+#   the caller, never an ignore.
 #
 # DOCSTRING LAYOUT (D205/D415/D212/D209/D210) IS THE ONE EXCEPTION to "bug-catching rules only",
 # and it is a narrow one. Those five check the SHAPE of a docstring that already exists: a
@@ -230,6 +236,7 @@ select = [
   "PT011", "PT012", "RUF043",
   "PLE", "T10", "PIE794", "PIE796", "PIE800", "PIE804",
   "RUF006", "RUF009", "RUF018", "RUF024", "RUF034",
+  "ANN401",
   "D205", "D415", "D212", "D209", "D210",
 ]
 # Explicit codes above, never the bare `D` prefix: D203/D211 and D212/D213 are mutually

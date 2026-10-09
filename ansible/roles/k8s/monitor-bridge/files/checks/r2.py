@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from bridge.config import Config
 import bridge.net
 from bridge.parsing import FETCH_BODY_MAX
+from bridge.types import JsonValue, as_list, as_object, as_object_list
 from verdicts.storage import (
     r2_classify_operations,
     r2_month_start,
@@ -43,6 +44,17 @@ R2_QUERY = """query {
 }"""
 
 
+def _count(value: JsonValue) -> float:
+    """A GraphQL numeric field; null reads as 0, any other non-number raises."""
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise RuntimeError(
+            "Cloudflare field is %s, not a number" % type(value).__name__
+        )
+    return value
+
+
 def r2_query_usage(
     cfg: Config, now: float
 ) -> tuple[float, float, float, float, list[str]]:
@@ -68,10 +80,13 @@ def r2_query_usage(
             )
         ),
     }
-    data = bridge.net._post_json(
-        cfg.CF_GRAPHQL_URL,
-        {"query": query},
-        headers={"Authorization": "Bearer %s" % cfg.CF_ANALYTICS_TOKEN},
+    data = as_object(
+        bridge.net._post_json(
+            cfg.CF_GRAPHQL_URL,
+            {"query": query},
+            headers={"Authorization": "Bearer %s" % cfg.CF_ANALYTICS_TOKEN},
+        ),
+        "Cloudflare GraphQL response",
     )
     # Cloudflare answers 200 with a populated `errors` on a bad query or an under-scoped token, so
     # this is the only place a wrong token surfaces. Left unchecked it would read as a zero-usage
@@ -80,24 +95,36 @@ def r2_query_usage(
     if errors:
         raise RuntimeError(
             "Cloudflare GraphQL: %s"
-            % "; ".join(str(e.get("message", e)) for e in errors)[:FETCH_BODY_MAX]
+            % "; ".join(
+                str(e.get("message", e)) if isinstance(e, dict) else str(e)
+                for e in as_list(errors, "Cloudflare GraphQL errors")
+            )[:FETCH_BODY_MAX]
         )
-    accounts = ((data.get("data") or {}).get("viewer") or {}).get("accounts") or []
+    viewer = as_object(
+        as_object(data.get("data") or {}, "Cloudflare GraphQL data").get("viewer")
+        or {},
+        "Cloudflare GraphQL viewer",
+    )
+    accounts = as_object_list(viewer.get("accounts") or [], "Cloudflare accounts")
     if not accounts:
         raise RuntimeError(
             "Cloudflare GraphQL returned no account for accountTag — wrong CF_ACCOUNT_ID, "
             "or the token is not scoped to this account"
         )
     account = accounts[0]
-    storage_rows = account.get("storage") or []
+    storage_rows = as_object_list(account.get("storage") or [], "Cloudflare storage")
     if storage_rows:
-        peak = storage_rows[0].get("max") or {}
-        storage_bytes = (peak.get("payloadSize") or 0) + (peak.get("metadataSize") or 0)
-        uploads = peak.get("uploadCount") or 0
+        peak = as_object(storage_rows[0].get("max") or {}, "Cloudflare storage max")
+        storage_bytes = _count(peak.get("payloadSize")) + _count(
+            peak.get("metadataSize")
+        )
+        uploads = _count(peak.get("uploadCount"))
     else:
         # An empty bucket genuinely reports no storage rows; that is 0 bytes, not a fault.
         storage_bytes = uploads = 0
-    class_a, class_b, unknown = r2_classify_operations(account.get("operations") or [])
+    class_a, class_b, unknown = r2_classify_operations(
+        as_object_list(account.get("operations") or [], "Cloudflare operations")
+    )
     return storage_bytes, uploads, class_a, class_b, unknown
 
 

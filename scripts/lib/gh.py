@@ -11,11 +11,17 @@ This is for the authenticated CLI on this machine. It does not take a token: `gh
 `~/.config/gh/hosts.yml` for the invoking user, which is how every cron here already works.
 """
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+
+from lib.json_types import JsonValue
 
 
 def gh(
@@ -43,7 +49,16 @@ def gh(
     )
 
 
-def gh_json(*args: str, **kwargs: Any) -> Any:
-    """``gh(...)`` with stdout parsed as JSON; ``None`` for empty output."""
-    out = gh(*args, **kwargs).stdout.strip()
+def gh_json(
+    *args: str,
+    check: bool = True,
+    timeout: float | None = 60.0,
+    cwd: str | Path | None = None,
+) -> JsonValue:
+    """``gh(...)`` with stdout parsed as JSON; ``None`` for empty output.
+
+    The top level is an array for ``issue list`` and an object for ``pr view``, so the caller
+    narrows it (``lib.json_types.as_list`` / ``as_object``) before reading.
+    """
+    out = gh(*args, check=check, timeout=timeout, cwd=cwd).stdout.strip()
     return json.loads(out) if out else None

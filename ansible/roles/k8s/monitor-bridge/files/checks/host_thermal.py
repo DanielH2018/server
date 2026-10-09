@@ -16,6 +16,7 @@ from bridge.config import Config
 import bridge.net
 import bridge.streaks
 import checks.host
+from bridge.types import as_object, optional_object
 from verdicts.host import (
     hwmon_included_series,
     hwmon_name_maps,
@@ -161,14 +162,18 @@ def scrutiny_wear_devices(
     """
     devices = []
     for wwn, entry in (summary or {}).items():
-        dev = entry.get("device") or {}
+        dev = as_object(
+            as_object(entry, "scrutiny summary entry").get("device") or {},
+            "scrutiny device",
+        )
         if dev.get("archived"):
             continue
-        name = dev.get("device_name") or wwn
+        name = str(dev.get("device_name") or wwn)
         model = dev.get("model_name")
         label = "%s (%s)" % (name, model) if model else name
-        details = bridge.net._get_json(
-            "%s/api/device/%s/details" % (cfg.SCRUTINY_URL, wwn)
+        details = optional_object(
+            bridge.net._get_json("%s/api/device/%s/details" % (cfg.SCRUTINY_URL, wwn)),
+            "scrutiny device details",
         )
         devices.append((label, scrutiny_device_wear(details)))
     return devices
@@ -180,8 +185,13 @@ def check_scrutiny(cfg: Config) -> tuple[bool, str]:
     Fetches /api/summary once; per-device wear details are fetched only when freshness and
     health both pass and cfg.SCRUTINY_WEAR_MAX is set. Returns (ok, msg).
     """
-    data = bridge.net._get_json(cfg.SCRUTINY_URL + "/api/summary")
-    summary = (data.get("data") or {}).get("summary")
+    data = as_object(
+        bridge.net._get_json(cfg.SCRUTINY_URL + "/api/summary"), "scrutiny summary"
+    )
+    summary = optional_object(
+        as_object(data.get("data") or {}, "scrutiny data").get("summary"),
+        "scrutiny summary",
+    )
     fresh_ok, fresh_msg = scrutiny_freshness(summary, cfg.SCRUTINY_MAX_AGE_H)
     if not fresh_ok:
         return False, fresh_msg
