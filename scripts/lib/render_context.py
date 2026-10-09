@@ -37,7 +37,7 @@ from lib.estate import (
     role_defaults,
 )
 from lib.k8s_context import resolve_vars
-from lib.render_guard import ANSIBLE, BASE_CONTEXT, load_yaml
+from lib.render_guard import ANSIBLE, BASE_CONTEXT, host_files, load_yaml
 
 __all__ = [
     "PLANE_HOSTS",
@@ -108,6 +108,7 @@ def render_context(
             _host_layer(inventory, host) if host_vars is None else host_vars,
         ),
         "playbook_dir": str(ANSIBLE),
+        "hostvars": _hostvars(inventory),
         **overrides,
     }
     resolved, dropped = _resolve(raw)
@@ -125,6 +126,22 @@ def render_context(
 
 def _host_layer(inventory: Inventory, host: str | None) -> dict:
     return load_yaml(inventory.host_vars / f"{host}.yml") if host else {}
+
+
+def _hostvars(inventory: Inventory) -> dict[str, dict]:
+    """Each host's literal ``server_ip``, as Ansible's ``hostvars`` exposes it in every play.
+
+    ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way (#3719), so a strict
+    render needs it. Only ``server_ip`` goes in: every other host_var would resolve here
+    against the rendered host's context, so the Pi's ``ansible_host: "{{ server_ip }}"`` would
+    come out as daniel-box's address. A caller needing more passes its own ``hostvars``.
+    """
+    found = {}
+    for path in host_files(inventory.host_vars):
+        ip = load_yaml(path).get("server_ip")
+        if ip is not None:
+            found[path.stem] = {"server_ip": ip}
+    return found
 
 
 def _resolve(raw: dict) -> tuple[dict, dict[str, str]]:

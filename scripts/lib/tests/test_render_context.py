@@ -131,3 +131,43 @@ def test_a_strict_context_raises_naming_the_value_that_will_not_expand(tree):
     with pytest.raises(rc.UnresolvedVarsError) as exc:
         rc.render_context(template, strict=True, inventory=inv)
     assert set(exc.value.keys) == {"bad"}
+
+
+def test_a_group_var_reads_another_hosts_server_ip_through_hostvars(tree):
+    # all.yml's k8s_pi_client_ip is this shape (#3719). A strict render raises only when
+    # `hostvars` is absent. A `hostvars` missing the Pi's entry resolves to None without
+    # raising, so the rows in _scrape_property_rows.py and _edge_property_rows.py compare each
+    # consumer against the Pi's literal.
+    template, inv = tree(
+        {},
+        group={"pi_ip": "{{ hostvars['pi'].server_ip }}"},
+        hosts={"box": {"server_ip": "10.0.0.1"}, "pi": {"server_ip": "10.0.0.2"}},
+        plane="k8s",
+    )
+    assert (
+        rc.render_context(template, strict=True, inventory=inv)["pi_ip"] == "10.0.0.2"
+    )
+
+
+def test_hostvars_carries_no_value_that_would_resolve_against_the_wrong_host(tree):
+    # The Pi's `ansible_host: "{{ server_ip }}"` would resolve against the rendered host's
+    # server_ip here, which no deploy does, so the layer holds the literal server_ip only.
+    template, inv = tree(
+        {},
+        hosts={
+            "box": {"server_ip": "10.0.0.1"},
+            "pi": {"server_ip": "10.0.0.2", "ansible_host": "{{ server_ip }}"},
+        },
+        plane="k8s",
+    )
+    hostvars = rc.render_context(template, inventory=inv)["hostvars"]
+    assert hostvars == {
+        "box": {"server_ip": "10.0.0.1"},
+        "pi": {"server_ip": "10.0.0.2"},
+    }
+
+
+def test_a_callers_hostvars_replaces_the_inventory_layer(tree):
+    template, inv = tree({}, hosts={"box": {"server_ip": "10.0.0.1"}}, plane="k8s")
+    ctx = rc.render_context(template, inventory=inv, overrides={"hostvars": {"x": {}}})
+    assert ctx["hostvars"] == {"x": {}}
