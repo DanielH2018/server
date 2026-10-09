@@ -2,7 +2,7 @@
 """Place issue-fanout batches on the session host with the most memory headroom.
 
 Reads memory.current against MemoryHigh for BOTH cgroups an agent lives in — user.slice (the
-fleet) and user-1000.slice (the login plane) — on daniel-box and daniel-server, scores each host
+fleet) and the running user's user-<uid>.slice (the login plane) — on daniel-box and daniel-server, scores each host
 on the tighter of the two, picks the host with the most headroom per batch, creates a fresh
 worktree there, and starts a headless
 Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents

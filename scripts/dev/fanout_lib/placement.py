@@ -13,9 +13,9 @@ from dataclasses import dataclass
 # against claude_cgroup_memory_current_bytes / claude_cgroup_pids_current before raising.
 RESERVATION_BYTES = 2_684_354_560
 
-# SIX lines, in this fixed order: user.slice's memory.current and memory.high, then
-# user-1000.slice's memory.current and memory.high, then the count of live `claude` processes
-# for uid 1000, then the host's commit-signing key. Either memory.high is an integer, or
+# SIX lines, in this fixed order: user.slice's memory.current and memory.high, then the
+# reading user's user-<uid>.slice memory.current and memory.high, then the count of live
+# `claude` processes for that uid, then the host's commit-signing key. Either memory.high is an integer, or
 # `max` when no drop-in caps it. `pgrep -c` exits 1 on a zero count, which is why the count
 # is read from stdout rather than from an exit status.
 #
@@ -27,16 +27,21 @@ RESERVATION_BYTES = 2_684_354_560
 # read as one of them.
 #
 # Both slices are read because an agent is throttled by both. A launch starts a transient
-# user service, which systemd places in user-1000.slice (the login plane, capped by
-# claude_code_rc_memory_high), nested under user.slice (the fleet, capped by
+# user service, which systemd places in the launching user's user-<uid>.slice (the login
+# plane, capped by claude_code_rc_memory_high), nested under user.slice (the fleet, capped by
 # claude_code_fleet_memory_high). Reading the fleet alone picks a host whose fleet cap has
 # room while the login-plane cap that actually binds the agent is full (daniel-box's login
 # slice has peaked at 8.58 GB against an 8G cap).
+#
+# The uid is the reading user's own, never a constant. The `claude` agent user (uid 996 on
+# daniel-box) launches into its own slice, and a read pinned to uid 1000 scored the
+# operator's login plane for it (#4098).
 READ_COMMAND = (
+    "u=$(id -u); "
     "cat /sys/fs/cgroup/user.slice/memory.current /sys/fs/cgroup/user.slice/memory.high "
-    "/sys/fs/cgroup/user.slice/user-1000.slice/memory.current "
-    "/sys/fs/cgroup/user.slice/user-1000.slice/memory.high; "
-    "pgrep -c -x claude -u 1000"
+    "/sys/fs/cgroup/user.slice/user-$u.slice/memory.current "
+    "/sys/fs/cgroup/user.slice/user-$u.slice/memory.high; "
+    "pgrep -c -x claude -u $u"
 )
 
 
@@ -48,11 +53,11 @@ class HostReading:
         host: the host the reading came from.
         cap_bytes: the fleet cap — user.slice memory.high, or None when no drop-in caps it.
         current_bytes: user.slice memory.current.
-        plane_cap_bytes: the login-plane cap — user-1000.slice memory.high, or None when no
-            drop-in caps it. An agent runs as a transient user service inside that slice, so
-            this bounds it as surely as the fleet cap above does.
-        plane_current_bytes: user-1000.slice memory.current.
-        live_agents: how many `claude` processes uid 1000 is running. Read and reported —
+        plane_cap_bytes: the login-plane cap — the reading user's user-<uid>.slice
+            memory.high, or None when no drop-in caps it. An agent runs as a transient user
+            service inside that slice, so this bounds it as surely as the fleet cap above does.
+        plane_current_bytes: user-<uid>.slice memory.current.
+        live_agents: how many `claude` processes the reading user is running. Read and reported —
             `read` prints it and NoHeadroom names it — but never scored: placement decides
             on headroom alone (spec §2), because a host's agents are already priced into
             the memory the reading measures.
@@ -91,7 +96,7 @@ def parse_reading(host: str, stdout: str) -> HostReading:
     Args:
         host: the host the reading came from.
         stdout: the command's stdout — user.slice's memory.current and memory.high (or
-            `max`), user-1000.slice's memory.current and memory.high (or `max`), the
+            `max`), user-<uid>.slice's memory.current and memory.high (or `max`), the
             live-agent count, then the host's signing key, one per line.
 
     Returns:
@@ -137,7 +142,7 @@ def headroom(reading: HostReading, reservation: int = RESERVATION_BYTES) -> int 
     """Bytes free under the TIGHTER of the two caps after one reservation, or None.
 
     An agent is throttled by whichever of the fleet cap (user.slice) and the login-plane cap
-    (user-1000.slice) it reaches first, so the smaller headroom is the host's real headroom.
+    (user-<uid>.slice) it reaches first, so the smaller headroom is the host's real headroom.
     One reservation, not two: the agent's memory counts against both cgroups at once, since
     one is the other's parent. A cap read as `max` does not bound that side and drops out of
     the comparison; when neither side is capped the host is uncapped and returns None, which

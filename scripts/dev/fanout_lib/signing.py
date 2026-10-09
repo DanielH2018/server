@@ -47,14 +47,19 @@ def signing_key_read_command(repo: str) -> str:
 
     Resolves `user.signingkey` the way git does for a commit made in `repo`: a literal
     `ssh-…` value is printed as-is, anything else is treated as a file path with a leading
-    `~` expanded. An unset or unreadable value prints nothing, which the caller's parse
-    refuses — the gate fails closed rather than guessing.
+    `~` expanded. Git also accepts the PRIVATE key's path there, which is how the `claude`
+    agent user is configured (#4098), so the read takes the `.pub` file beside it when one
+    exists. Either way it prints only the first public-key line, so a private key file's
+    contents never leave the host. An unset or unreadable value prints nothing, which the
+    caller's parse refuses: the gate fails closed rather than guessing.
     """
     return (
         f"v=$(git -C {repo} config --get user.signingkey); "
         'case "$v" in '
         'ssh-*) printf "%s\\n" "$v" ;; '
-        '*) cat "$(printf "%s" "$v" | sed "s|^~|$HOME|")" ;; '
+        '*) f=$(printf "%s" "$v" | sed "s|^~|$HOME|"); '
+        '[ -f "$f.pub" ] && f="$f.pub"; '
+        "awk '/^(ssh|ecdsa|sk)-/ {print; exit}' \"$f\" || true ;; "
         "esac"
     )
 

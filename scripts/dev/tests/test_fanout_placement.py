@@ -208,8 +208,15 @@ def test_the_read_command_is_one_read_only_string():
 def test_the_read_command_reads_both_cgroups_an_agent_lives_in():
     """The login plane is where a transient user service actually lands."""
     assert "/sys/fs/cgroup/user.slice/memory.high" in READ_COMMAND
-    assert "/sys/fs/cgroup/user.slice/user-1000.slice/memory.high" in READ_COMMAND
-    assert "/sys/fs/cgroup/user.slice/user-1000.slice/memory.current" in READ_COMMAND
+    assert "/sys/fs/cgroup/user.slice/user-$u.slice/memory.high" in READ_COMMAND
+    assert "/sys/fs/cgroup/user.slice/user-$u.slice/memory.current" in READ_COMMAND
+
+
+def test_the_read_command_reads_the_running_users_own_login_plane():
+    """The `claude` agent user launches into its own slice, not uid 1000's (#4098)."""
+    assert READ_COMMAND.startswith("u=$(id -u); ")
+    assert "pgrep -c -x claude -u $u" in READ_COMMAND
+    assert "1000" not in READ_COMMAND
 
 
 def test_read_host_goes_over_ssh_only_for_the_other_host():

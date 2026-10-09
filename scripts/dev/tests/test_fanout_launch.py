@@ -176,7 +176,7 @@ def test_the_unit_is_bounded_by_a_runtime_cap_and_a_budget():
     """Nothing bounded a headless batch's wall clock or its spend."""
     cmd = systemd_run_command("b")
     assert f"-p RuntimeMaxSec={RUNTIME_MAX_S} " in cmd
-    assert cmd.index("RuntimeMaxSec") < cmd.index("claude -p")
+    assert cmd.index("RuntimeMaxSec") < cmd.index(" claude -p")
     assert f"--max-budget-usd {BUDGET_USD}" in cmd
 
 
@@ -185,8 +185,8 @@ def test_a_review_unit_runs_the_pipeline_under_the_longer_cap_and_a_plain_one_do
     plain = systemd_run_command("b")
     assert f"-p RuntimeMaxSec={REVIEW_RUNTIME_MAX_S} " in review
     assert "fanout_review.py --batch b --repo DanielH2018/server" in review
-    assert "claude -p" not in review
-    assert "fanout_review.py" not in plain and "claude -p" in plain
+    assert " claude -p" not in review
+    assert "fanout_review.py" not in plain and " claude -p" in plain
     assert (REPO_ROOT / "scripts/dev/fanout_review.py").is_file()
 
 
