@@ -190,7 +190,11 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         paths, local_host, quiet=(), pr_range="", ref="", repo=None
     ):
         # local_host is recorded: the phase must pass `tools.hostname()`, not a constant.
-        record.append(("remaining_setup_hosts", (local_host,), {}))
+        # ref and repo are recorded: without them the note reads this checkout's own tree,
+        # the pre-merge-checkout bug #4080 fixed.
+        record.append(
+            ("remaining_setup_hosts", (local_host,), {"ref": ref, "repo": repo})
+        )
         return f.remaining_setup
 
     def k8s_only_tags(paths, declared=None):
