@@ -22,7 +22,7 @@ from pathlib import PurePosixPath
 
 import pytest
 
-from lib.repo_paths import ALL_VARS
+from lib.repo_paths import ALL_VARS, K3S_DEFAULTS, REPO
 from _renovate import (
     _CONFIG_MANAGERS,
     _MANAGERS,
@@ -133,7 +133,8 @@ def test_group_vars_images_are_tracked() -> None:
     )
 
 
-_CONTROL_PLANE_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
+# Repo-relative, because the managerFilePatterns it is matched against are.
+_CONTROL_PLANE_DEFAULTS = K3S_DEFAULTS.relative_to(REPO).as_posix()
 
 
 def test_control_plane_version_pins_are_tracked() -> None:
@@ -148,7 +149,7 @@ def test_control_plane_version_pins_are_tracked() -> None:
     component pinned here later (cilium, cert-manager, a k3s addon) fails this test until it is
     tracked, instead of quietly repeating the same escape.
     """
-    text = (_REPO / _CONTROL_PLANE_DEFAULTS).read_text()
+    text = K3S_DEFAULTS.read_text()
     pins = re.findall(r"^([a-z0-9_]*_version):\s*\"?(v[^\"\s]+)", text, re.MULTILINE)
     assert pins, (
         f"no `<name>_version: vX.Y.Z` pins found in {_CONTROL_PLANE_DEFAULTS} — either they "
