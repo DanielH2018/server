@@ -18,7 +18,7 @@ observability_k8s_prometheus_image: prom/prometheus:v3.15.0@sha256:efd719c99d83b
 # dashboards and datasources are provisioned from git.
 # Grafana's schema migrations are one-way, which is tolerable because of that: the DB holds
 # only preferences, version history and annotations. Recovery is deleting the PVC.
-observability_k8s_grafana_image: grafana/grafana:13.2.2
+observability_k8s_grafana_image: grafana/grafana:13.2.3@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
 # Distinct from the metrics-server k3s already bundles: that serves the
 # resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
 # kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
