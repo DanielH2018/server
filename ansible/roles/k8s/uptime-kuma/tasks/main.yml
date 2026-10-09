@@ -36,8 +36,10 @@
 
 # AutoKuma refuses a push token that is not 32 letters and digits with one WARN per sync and
 # never creates the monitor, so its pusher gets 404 and nothing pages (#3985). A token added by
-# hand through sops is checked by nothing else. The filter returns ids only, so this task can
-# print its message without no_log.
+# hand through sops is checked by nothing else.
+#
+# DECIDED: no no_log on this assert, though it reads kuma_declarations. The filter returns
+# AutoKuma ids only, never a token, and no_log would hide the ids its message exists to name.
 - name: Check every push token is in the format AutoKuma accepts
   tags: [deploy]
   ansible.builtin.assert:

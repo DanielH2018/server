@@ -56,7 +56,6 @@ def test_hex_tokens_on_every_push_tile_are_clean():
 
 
 def test_one_base64_token_is_flagged():
-    # fact: ansible/roles/k8s/uptime-kuma/CLAUDE.md#Traps
     # The shape a base64 mint produces: 44 characters, padded with `=`.
     base64_token = "QUJD" * 10 + "QQ+="
 
