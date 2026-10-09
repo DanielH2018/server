@@ -63,7 +63,10 @@ trust in Authelia (`roles/setup/k3s`), the Authelia client, and these defaults.
   error: the client id (here, Authelia's client, and the `audiences` of each issuer in the API
   server's authentication config), the issuer URL (here, and one of that config's `jwt`
   issuers), and the group (`headlamp_k8s_oidc_group`, and that config's groups prefix plus the
-  Authelia group).
+  Authelia group). Each stays a literal in its own role, because a shared variable would put
+  the k3s role in every change and that role is applied by hand. A test ties each pair instead;
+  the client id's is
+  `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py::test_headlamp_client_id_agrees_across_authelia_headlamp_and_k3s`.
 - **The issuer is the PUBLIC name**, `auth.<domain>`, and one value serves both hostnames:
   Headlamp builds one provider at server start while Authelia's `iss` follows the request host.
   The API server trusts both Authelia issuers (`k3s_oidc_issuer_urls`), so the choice is not a
