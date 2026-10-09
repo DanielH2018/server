@@ -209,8 +209,9 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
 ## The generated-docs refresh cron, in detail
 
 - **Why it weights test modules at all (#2274).** CI's `pytest_shard.py --check-durations` step
-  rejects the PR that introduces an unweighted module costing `RUNNER_HEAVY_SECONDS` or more and
-  leaves the repair to a human. It says nothing about a lighter one, and an unweighted file is
+  rejects the PR that introduces an unweighted module costing `RUNNER_HEAVY_FAIL_SECONDS` or
+  more and leaves the repair to a human. One costing `RUNNER_HEAVY_SECONDS` up to that bound
+  only annotates the run (#4010). It says nothing about a lighter one, and an unweighted file is
   packed at the suite median of 0.0s — so without the cron the split is un-skewed rather than
   measured. `--record-missing`, never `--record`: it measures only the files the table lacks,
   and writes the same bytes back when there are none, so an ordinary run leaves no diff.

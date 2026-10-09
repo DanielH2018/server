@@ -1,8 +1,9 @@
 """docs-refresh records a weight for every new test module, unattended.
 
 CI's measured gate (`pytest_shard.py --check-durations`) rejects the PR that introduces an
-unweighted module costing `RUNNER_HEAVY_SECONDS` or more and hands the repair to a human. It
-says nothing about a lighter one, and an unweighted file is packed at the suite median of 0.0s
+unweighted module costing `RUNNER_HEAVY_FAIL_SECONDS` or more and hands the repair to a human.
+One costing `RUNNER_HEAVY_SECONDS` up to that bound only annotates the run. It says nothing
+about a lighter one, and an unweighted file is packed at the suite median of 0.0s
 — so the split stays un-skewed rather than measured. The twice-daily cron closes that: it holds
 the git-tree lock already and already publishes through a PR.
 

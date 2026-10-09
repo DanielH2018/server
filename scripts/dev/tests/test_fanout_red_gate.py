@@ -321,13 +321,20 @@ def test_reset_worktree_runs_no_hook_filter_or_replace_ref_the_red_author_plante
         return (repo / "mod.py").read_text(), ran, bool(script.stat().st_mode & 0o100)
 
     assert planted_reset(lambda: reset_worktree(run, repo, target)) == (CODE, "", True)
-    # The control: plain git runs the hook and the filter, checks out the replacement, and
-    # keeps the exec bit `fileMode=false` hides.
+    # The control: plain git runs the hook and the filter, and checks out the replacement.
     plain = planted_reset(
         lambda: git(repo, "reset", "--quiet", "--hard", target, check=False)
     )
     assert plain[0] == FIXED and "process" in plain[1] and "hook" in plain[1]
-    assert not plain[2]
+    # And `fileMode=false` reads a cleared exec bit as no change, which `fileMode=true` does
+    # not. The control reads that diff rather than the bit plain git's reset leaves: whether the
+    # reset rewrites run.sh anyway turns on its stat cache, and on CI it once did (#3992).
+    script.chmod(0o644)
+    assert git_out(repo, "diff", "--name-only", "--", "run.sh") == ""
+    assert (
+        git_out(repo, "-c", "core.fileMode=true", "diff", "--name-only", "--", "run.sh")
+        == "run.sh"
+    )
 
 
 def test_reset_worktree_refuses_a_repo_with_info_attributes(tmp_path):
