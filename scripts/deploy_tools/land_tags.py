@@ -46,6 +46,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
+import deploy_cross_role
 from deploy_logic import (
     broad_remediation,
     k8s_remediation,
@@ -140,9 +141,17 @@ def tag_for(path: str, declared: set[str] | None = None) -> str | None:
 
 
 def derived_tags(files, declared: set[str] | None = None) -> set[str]:
-    """The tags this PR's own file list maps to by path, before any shared-role expansion."""
+    """The tags this PR's own file list maps to, before any shared-role expansion.
+
+    A changed path maps to its role's tag, and also to the tag of every role that `lookup()`s
+    it from another role's tree. uptime-kuma renders a tile per row of monitor-bridge's
+    `files/check_table.py`, so a new check landed as `--tags monitor-bridge` alone would ship
+    the check and leave its tile undeployed (#3781).
+    """
     declared = declared_tags() if declared is None else declared
-    return {t for p in files if (t := tag_for(p, declared))}
+    files = list(files)
+    readers = deploy_cross_role.k8s_lookup_readers(files, REPO)
+    return {t for p in files if (t := tag_for(p, declared))} | (readers & declared)
 
 
 def own_narrow_tags(files, pr_range: str, repo) -> dict[str, frozenset[str]]:

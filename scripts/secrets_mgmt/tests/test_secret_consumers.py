@@ -11,6 +11,8 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_consumers.py
 
 from pathlib import Path
 
+from py_table import py_table
+
 from secrets_mgmt.consumers import (
     CROSS_HOST_PUSH_TOKENS,
     UPTIME_KUMA_TAG,
@@ -37,7 +39,8 @@ def test_consumer_tags_non_push_prefixed_token_gets_no_tile():
 
     It is the ONE token that resolves a consumer and has no tile, so it is the reject half of
     the `_push_token` discriminator: adding uptime-kuma here would deploy a role that renders
-    this name nowhere, which `test_every_consumer_tag_names_a_role_that_renders_the_token`
+    this name nowhere, which
+    `ansible/tests/k8s/test_secret_consumer_census.py::test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret`
     would then fail on.
     """
     assert consumer_tags("monitor_bridge_ha_token") == ("monitor-bridge",)
@@ -144,6 +147,9 @@ def test_no_cross_host_token_is_badly_overdue():
 # the prefix is a Kuma monitor-history artefact, kept so renaming the monitor would not lose
 # its history. For those, `rotate --deploy` would write a new value, deploy a role that renders
 # the token nowhere, leave the real pusher on the old one, and stamp `last_rotated` green.
+# `ansible/tests/k8s/test_secret_consumer_census.py` proves each tag's role references the
+# token, measured by `tree_consumers`, which also credits a role that renders it out of another
+# role's file (#3781).
 _SKIP_TAGS = ("ignore", "pinned", "external")
 
 
@@ -153,28 +159,6 @@ def _consumer_tags():
         for tag in consumer_tags(name):
             if tag not in _SKIP_TAGS:
                 yield name, tag
-
-
-def test_every_consumer_tag_names_a_role_that_renders_the_token():
-    roles = Path(REPO) / "ansible/roles"
-    mismatched = []
-    for name, tag in _consumer_tags():
-        candidates = [p for p in roles.glob("*/" + tag) if p.is_dir()]
-        if not candidates:
-            mismatched.append("%s -> %s (no such role directory)" % (name, tag))
-            continue
-        renders = any(
-            name in f.read_text(errors="ignore")
-            for role in candidates
-            for f in role.rglob("*")
-            if f.is_file() and f.suffix in (".j2", ".yml", ".yaml", ".sh", ".py")
-        )
-        if not renders:
-            mismatched.append("%s -> %s (role renders it nowhere)" % (name, tag))
-    assert not mismatched, (
-        "consumer_tag names a role that does not render the token, so `rotate --deploy` "
-        "deploys the wrong thing and stamps the rotation green anyway: %s" % mismatched
-    )
 
 
 def test_every_consumer_tag_is_a_real_deploy_tag():
@@ -217,13 +201,25 @@ def test_uptime_kuma_is_a_consumer_iff_a_tile_exists():
     tile = (
         Path(REPO) / "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
     ).read_text()
+    # The bridge's tiles render from one loop over its check table (#3781), so their tokens
+    # are the table's rather than literals in the template.
+    bridge_tokens = {
+        row["token"]
+        for row in py_table(
+            (
+                Path(REPO) / "ansible/roles/k8s/monitor-bridge/files/check_table.py"
+            ).read_text(),
+            "CHECKS",
+        )
+    }
+    assert "monitor_bridge_traefik_421_push_token" in bridge_tokens
     reg = load_registry()
     wrong = []
     for name in reg["entries"]:
         tags = consumer_tags(name)
         if not tags:
             continue  # manual: this test says nothing about tokens with no consumer at all
-        has_tile = ("{{ %s }}" % name) in tile
+        has_tile = ("{{ %s }}" % name) in tile or name in bridge_tokens
         claims_kuma = UPTIME_KUMA_TAG in tags
         if has_tile != claims_kuma:
             wrong.append("%s: tile=%s but consumer_tags=%s" % (name, has_tile, tags))

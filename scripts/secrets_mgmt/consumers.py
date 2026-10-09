@@ -21,6 +21,11 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from secrets_mgmt.rotation_tools import REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+
+from deploy_cross_role import k8s_lookup_map
 
 # Push tokens whose pusher and AutoKuma `push_token` label live on DIFFERENT hosts, or which
 # reference the rotation tool itself — one redeploy cannot update both halves atomically, so these
@@ -242,6 +247,7 @@ def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
     """
     corpus: list[tuple[str, str, str]] = []
     ansible_dir = os.path.join(repo, "ansible")
+    lookups = k8s_lookup_map(repo)
     for dirpath, dirnames, filenames in os.walk(ansible_dir):
         rel = os.path.relpath(dirpath, ansible_dir)
         if any(skip in rel for skip in _CENSUS_SKIP):
@@ -267,6 +273,12 @@ def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
                 # census on one unreadable file would make the tool useless in a worktree.
                 continue
             corpus.append((text, role, plane))
+            # A k8s role that `lookup()`s this file from another role renders what it holds,
+            # so it is a consumer too: uptime-kuma renders every bridge push token out of
+            # monitor-bridge's files/check_table.py (#3781).
+            rel = os.path.relpath(os.path.join(dirpath, filename), ansible_dir)
+            for reader in sorted(lookups.get(rel, ())):
+                corpus.append((text, reader, _ROLE_PLANES["k8s"]))
     return tuple(corpus)
 
 

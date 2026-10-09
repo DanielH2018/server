@@ -406,7 +406,7 @@ def test_a_clean_cycle_clears_the_streak(monkeypatch, cfg):
 
 def test_registered_and_prom_suppressed():
     """Registration and suppression are one unit. The token and its tile are every check's
-    pair, held by tests/test_push_check_table.py and test_kuma_static_monitors.py (#3659)."""
+    pair, held by tests/test_check_table.py and test_kuma_static_monitors.py (#3659)."""
     names = {c.name for c in registry.build_checks()}
     assert "host_temp" in names, (
         "an unregistered check never runs; it would be dead code"

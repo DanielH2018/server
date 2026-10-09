@@ -1,13 +1,19 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py
-"""The setup files other roles ship or import by path, and the roles a change to one reaches.
+"""The files other roles ship, import or read by path, and the roles a change to one reaches.
 
-`deploy_changes.services_from_changed_paths` and `setup_roles_for` read these tables to
+`deploy_changes.services_from_changed_paths` and `setup_roles_for` read the setup tables below to
 re-apply, or defer-and-alert, every role holding a copy of a changed file. They are static
 because every caller passes paths alone, and
 `ansible/tests/setup/test_setup_cross_role_files.py` holds each one to the tree.
+
+The k8s plane needs no table: `k8s_lookup_readers` derives its readers from the templates and
+tasks that name another role's file in a `lookup()`.
 """
 
 from __future__ import annotations
+
+import re
+from pathlib import Path
 
 # A file one setup role installs from another's `files/`, or imports from another's `tasks/`,
 # mapped to those roles, so a change to it re-applies them beside the owner (#3306, #3317).
@@ -102,3 +108,62 @@ def use_tables(tables: dict[str, object]) -> None:
     one. A name bound by `from deploy_cross_role import` keeps the old.
     """
     globals().update({name: tables[name] for name in TABLE_NAMES})
+
+
+# A `lookup('file' | 'template', playbook_dir ~ '/roles/k8s/<role>/<path>')` naming one file,
+# with `+` or `~` as the join. Group 1 is the path from `roles/`. A lookup that builds its path
+# from a variable (`'/roles/k8s/x/files/' + name`) names a directory, never a file, and every
+# such lookup in the tree reads its own role.
+_K8S_LOOKUP_RE = re.compile(
+    r"lookup\(\s*'(?:ansible\.builtin\.)?(?:file|template)'\s*,\s*playbook_dir\s*[+~]\s*"
+    r"'/(roles/k8s/[^']+)'\s*\)"
+)
+
+
+def k8s_lookup_map(repo_root) -> dict[str, set[str]]:
+    """Every k8s file another role `lookup()`s, from `roles/`, mapped to the roles reading it.
+
+    A role reading its own file is left out. `k8s_lookup_readers` asks this of a change, and
+    `scripts/secrets_mgmt/consumers.py` asks it of the whole tree, so a secret a reader renders
+    out of another role's file credits that reader too.
+    """
+    k8s = Path(repo_root) / "ansible" / "roles" / "k8s"
+    found: dict[str, set[str]] = {}
+    if not k8s.is_dir():
+        return found
+    for role in sorted(k8s.iterdir()):
+        for src in [*role.glob("templates/**/*.j2"), *role.glob("tasks/*.yml")]:
+            try:
+                text = src.read_text(errors="ignore")
+            except OSError:
+                continue
+            for target in _K8S_LOOKUP_RE.findall(text):
+                if target.split("/")[2] != role.name:
+                    found.setdefault(target, set()).add(role.name)
+    return found
+
+
+def k8s_lookup_readers(paths, repo_root) -> set[str]:
+    """k8s roles whose templates or tasks `lookup()` a changed file owned by a DIFFERENT role.
+
+    A k8s role's change deploys that role, which is wrong for a file another role renders
+    too. uptime-kuma renders a push tile for every row of monitor-bridge's
+    `files/check_table.py` (#3781), and authelia and traefik embed crowdsec's allowlist files,
+    so a change there must reach the readers as well as the owner. Derived by reading the
+    lookups rather than listing the pairs, so a new reader is found the day it is written.
+    The `import` form of the same question is `deploy_changes.shared_module_consumers`.
+
+    Args:
+        paths: The changed repo paths.
+        repo_root: The checkout whose role trees are read.
+
+    Returns:
+        Only the EXTRA roles; a reader that is also the file's owner is left out.
+    """
+    changed = {
+        p.removeprefix("ansible/") for p in paths if p.startswith("ansible/roles/k8s/")
+    }
+    if not changed:
+        return set()
+    lookups = k8s_lookup_map(repo_root)
+    return {reader for target in changed for reader in lookups.get(target, ())}

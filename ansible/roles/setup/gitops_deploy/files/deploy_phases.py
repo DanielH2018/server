@@ -249,7 +249,9 @@ def plan_tick(
             "nothing left to apply, so no k8s_unapplied line"
         )
     cs.k8s -= deleted
-    cs.k8s_consumers = shared_module_consumers(paths, config.repo)
+    # Roles holding a copy of a changed file another role owns, by import or by lookup().
+    readers = deploy_cross_role.k8s_lookup_readers(paths, config.repo)
+    cs.k8s_consumers = shared_module_consumers(paths, config.repo) | readers
     hostvars = deploy_io.host_vars_text(config.repo, config.hostname)
     k8s_services = declared_k8s_services(hostvars) if hostvars is not None else set()
     cs = _promote_k8s_auto_deploys(tools, state, config, cs, paths, target)
