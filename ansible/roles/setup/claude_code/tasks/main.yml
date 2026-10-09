@@ -561,6 +561,16 @@
   when: claude_code_agent_user_enabled
   ansible.builtin.import_tasks: agent_operator_config.yml
 
+# Once, when the phone host moves to the agent: its sessions would otherwise start with an
+# empty memory store. Guarded again inside by the agent's own MEMORY.md.
+- name: Copy the operator's memory store into the agent's, the first time the agent is the host's user
+  tags: [claude_code]
+  when:
+    - claude_code_agent_user_enabled
+    - claude_code_user == claude_code_agent_user
+    - claude_code_agent_memory_seed
+  ansible.builtin.import_tasks: agent_memory_seed.yml
+
 # The token is the one credential in the home that works off this host, so switching the user
 # off removes it. The signing key stays: it can only sign, and a new one would need adding to
 # the account again. Revoking the token on GitHub is the operator's half of this.

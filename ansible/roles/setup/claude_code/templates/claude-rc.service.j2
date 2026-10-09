@@ -21,6 +21,18 @@ ProtectHome=yes
 NoNewPrivileges=yes
 PrivateTmp=yes
 
+# DECIDED: UMask=0027, for a non-operator user only. The unit set no UMask=, so a session
+# inherited systemd's default 0022 (`systemctl show -p UMask` on daniel-box). That
+# already leaves the group read bit on a file created 0666, so the value is not what lets the
+# operator read the agent's files. The operator reads them through group sys_user: the
+# claude-memory-sync timer, the artifact browser and the operator's own sessions. 0027 pins
+# that group read bit against a change of the systemd default, and it removes the other
+# bits on everything a session creates, which the agent's home and the ACL'd directories
+# (tasks/agent_access.yml) never needed to grant. A umask only clears bits, so a file Claude
+# Code creates with an explicit 0600 stays 0600. The slice 4 check therefore reads a
+# session-written memory file as the operator rather than trusting this line.
+UMask=0027
+
 {% endif %}
 {% if claude_code_fleet_caps_enabled %}
 # DECIDED: this unit lives in {{ claude_code_fleet_slice }}, not the default system.slice, so

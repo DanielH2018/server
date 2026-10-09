@@ -208,9 +208,25 @@ claude_code_memory_sync_enabled: false
 # The ssh destination the store is copied to, as this host's user resolves it.
 claude_code_memory_sync_target: daniel-server
 
-# The store's directory, the same path on both hosts. Claude Code keys a project's store by
-# its working directory with every `/` turned into `-`, so it derives from the checkout.
+# The store's directory on THIS host, the source of the copy. Claude Code keys a project's
+# store by its working directory with every `/` turned into `-`, so it derives from the
+# checkout. It follows claude_code_user (slice 4 of docs/claude-agent-user.md).
 claude_code_memory_sync_dir: "{{ claude_code_user_home }}/.claude/projects/{{ claude_code_rc_workdir | replace('/', '-') }}/memory"
+
+# The operator's checkout and its memory store. Sessions on claude_code_memory_sync_target run
+# as {{ sys_user }} in that checkout, so they read this store whichever user this host's
+# sessions run as.
+claude_code_operator_checkout: "/home/{{ sys_user }}/server"
+claude_code_operator_memory_dir: >-
+  /home/{{ sys_user }}/.claude/projects/{{
+  claude_code_operator_checkout | replace('/', '-') }}/memory
+
+# DECIDED: the target path is its own variable, not "the same path" as the source. Once
+# claude_code_user is the agent, the source is under claude_code_agent_user_home, a path that
+# does not exist on claude_code_memory_sync_target, where sessions read the operator's store.
+# For the default claude_code_user the two paths are the same string, so the unit renders
+# byte for byte as it did before this variable existed.
+claude_code_memory_sync_target_dir: "{{ claude_code_operator_memory_dir }}"
 
 # How often the copy runs, as a systemd time span. A memory written here reaches the other
 # host's next session within this interval.
@@ -254,6 +270,14 @@ claude_code_agent_operator_read: true
 claude_code_agent_memory_dir: >-
   {{ claude_code_agent_user_home }}/.claude/projects/{{
   claude_code_agent_user_clone_dir | replace('/', '-') }}/memory
+# Whether the first apply with claude_code_user set to the agent copies the operator's memory
+# store into the agent's (tasks/agent_memory_seed.yml). The copy runs only while the agent's
+# MEMORY.md does not exist, so a later apply never overwrites what the agent wrote. False skips
+# it and removes nothing already copied.
+claude_code_agent_memory_seed: true
+# The prefix the copy strips from the copied .md files, so `/home/ubuntu/server/docs/x.md`
+# becomes the repo-relative `docs/x.md`, which resolves in any clone on any host.
+claude_code_agent_memory_seed_strip: "{{ claude_code_operator_checkout }}/"
 
 # Whether the agent user gets a subset of the operator's user-level Claude config: the user
 # CLAUDE.md, rules/, output-styles/ and skills/, and the operator's `outputStyle`. It gets no

@@ -902,6 +902,11 @@ claude_code_memory_sync_enabled: true
 # /home/ubuntu. Nothing runs as it yet. It needs one interactive `claude` login as that user,
 # like has_claude_code above. False expires the account and keeps its home.
 claude_code_agent_user_enabled: true
+# The account claude-rc.service runs as: the phone's sessions run as the agent user. The first
+# apply after this lands restarts the host and drops live sessions, copies the operator's memory
+# store into the agent's once, and needs one interactive `/login` as `claude` afterwards
+# (docs/claude-agent-user.md, slice 4). Rollback: `{{ sys_user }}`, or delete this line.
+claude_code_user: "{{ claude_code_agent_user }}"
 # claude-land@<n>.service: the agent user starts it to land its own PR as the operator, under
 # land.sh's landing policy. False removes the unit, its polkit rule and its approval list.
 claude_code_lander_enabled: true

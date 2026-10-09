@@ -18,4 +18,4 @@ ExecCondition=/usr/bin/test -s {{ claude_code_memory_sync_dir }}/MEMORY.md
 ExecStart=/usr/bin/rsync -a --delete --mkpath --itemize-changes \
   -e "ssh -o BatchMode=yes -o ConnectTimeout=20" \
   {{ claude_code_memory_sync_dir }}/ \
-  {{ claude_code_memory_sync_target }}:{{ claude_code_memory_sync_dir }}/
+  {{ claude_code_memory_sync_target }}:{{ claude_code_memory_sync_target_dir }}/

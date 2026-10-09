@@ -78,6 +78,34 @@ def test_copy_target_follows_the_variable():
     assert " other:/home/ubuntu/" in cmd and "daniel-server" not in cmd
 
 
+OPERATOR_STORE = "/home/ubuntu/.claude/projects/-home-ubuntu-server/memory"
+AGENT_STORE = "/var/lib/claude/.claude/projects/-var-lib-claude-server/memory"
+
+
+def test_the_source_follows_the_user_and_the_target_stays_the_operators_store():
+    """Sessions on the target run as the operator, so the agent's path means nothing there."""
+    rendered = _render(claude_code_user="claude")
+    cmd = _exec_start(rendered)
+    assert cmd.endswith(f" {AGENT_STORE}/ daniel-server:{OPERATOR_STORE}/"), (
+        f"the source must be the agent's store and the target the operator's; got {cmd}"
+    )
+    assert f"ExecCondition=/usr/bin/test -s {AGENT_STORE}/MEMORY.md" in rendered, (
+        "the empty-source guard must read the store the copy reads"
+    )
+
+
+def test_the_default_user_copies_the_operators_store_to_the_same_path():
+    assert _var("claude_code_memory_sync_dir") == OPERATOR_STORE
+    assert _var("claude_code_memory_sync_target_dir") == OPERATOR_STORE
+
+
+def test_the_target_path_follows_its_own_variable():
+    cmd = _exec_start(_render(claude_code_memory_sync_target_dir="/srv/elsewhere"))
+    assert cmd.endswith(f" {OPERATOR_STORE}/ daniel-server:/srv/elsewhere/"), (
+        "a hardcoded target would ignore claude_code_memory_sync_target_dir"
+    )
+
+
 def test_an_empty_source_never_reaches_delete():
     rendered = _render()
     store = "/home/ubuntu/.claude/projects/-home-ubuntu-server/memory"
