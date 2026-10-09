@@ -381,7 +381,9 @@ def main(now: float | None = None) -> int:
     # against those rows, so feeding it an empty list would report all nine tiers' volumes as
     # uncovered over one unread fetch. The fetch's own problem is already in `problems`.
     coverage_rows = [(b.volume, b.created, b.job) for b in backup_list or []]
-    # Check 11's scope: the weekly-shard volumes on an armed target, as volume -> claim.
+    # Check 11's scope: the weekly-shard volumes on an armed target, as volume -> claim. The
+    # daily tier is left out on purpose: `DECIDED: only weekly-tier volumes are checked` in
+    # longhorn_skipped_volumes_logic.py.
     weekly_watched: dict[str, str] = {}
     for selector, max_age_s, tier, job, run_hhmm, dow in (
         tiers if backup_list is not None else []
@@ -494,8 +496,10 @@ def main(now: float | None = None) -> int:
     # run's skips until the next run replaces it. `--tail=-1` because kubectl's default with a
     # selector is the last 10 lines, and the skips are written at the top of a run.
     # `--ignore-errors` because a pod whose container is still starting answers with an error,
-    # and failing the whole read on it would page DOWN at random on a run's first seconds; an
-    # unreachable API still exits nonzero and is reported. Skipped with the backup list, like
+    # and failing the whole read on it would page DOWN at random on a run's first seconds. That
+    # narrows `DECIDED: a kubectl fetch that fails is a DOWN with a reason` above for one pod's
+    # log only, whose skips go unseen for that tick with check 4 still behind them; a failed
+    # call as a whole still exits nonzero and is reported. Skipped with the backup list, like
     # check 4, since `weekly_watched` and the coverage rows come from it.
     if backup_list is not None:
         skip_log = _fetch_text(

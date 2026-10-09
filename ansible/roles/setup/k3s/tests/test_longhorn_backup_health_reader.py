@@ -432,3 +432,22 @@ def test_reader_pages_naming_a_weekly_volume_its_job_skipped(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("down\t"), proc.stdout
     assert "default/weekly-data (weekly-backup-d4" in proc.stdout, proc.stdout
+
+
+def test_reader_ignores_a_daily_volume_its_job_skipped(tmp_path):
+    """The reader builds check 11's scope from the weekly shards only, so a daily skip stays UP.
+
+    The next night's run closes a daily skip; see `DECIDED: only weekly-tier volumes are
+    checked` in longhorn_skipped_volumes_logic.py.
+    """
+    skip = (
+        "[pod/daily-backup-1-abcde/daily-backup] "
+        f'time="{_rfc3339(NOW - 30)}" level=warning '
+        'msg="Cannot create job for pvc-web-data volume in state attached"\n'
+    )
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(stub, tmp_path, STUB_POD_LOGS=skip)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout

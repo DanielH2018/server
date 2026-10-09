@@ -55,10 +55,13 @@ def test_skipped_weekly_volume_is_cleared_by_a_seed_from_another_job():
     )
 
 
-def test_skipped_volume_outside_the_weekly_tier_is_ignored():
+def test_skipped_volume_outside_the_watched_set_is_ignored():
+    """A deleted or disarmed volume, or one in the daily tier, is not in `watched`."""
     assert (
         logic.check_skipped_weekly_volumes(
-            logic.parse_skipped_volumes(SKIP_LINE), {}, []
+            logic.parse_skipped_volumes(SKIP_LINE),
+            {"pvc-other": "default/other"},
+            [],
         )
         is None
     )

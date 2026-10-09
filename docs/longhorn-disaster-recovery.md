@@ -228,9 +228,11 @@ because the next night's run closes them.
 
 **What to do after a cold start.** Do not seed every weekly volume whose backup predates the
 recovery. Most of them belong to shards that ran normally before the outage, and seeding them
-spends the day's B2 budget. Seed only the weekly volumes a catch-up Job skipped. The tile names
-them as `weekly volume(s) a RecurringJob skipped`. The Jobs log each skip, so this query also
-names them, including skips in the daily tier and skips whose pod has since been replaced:
+spends the day's B2 budget. Seed only the weekly volumes a catch-up Job skipped. Check 11 names
+them as `weekly volume(s) a RecurringJob skipped`. The tile shows only the top-ranked problem,
+and after a cold start another problem usually outranks this one, so read the full list with
+`journalctl -t longhorn-backup-health`. The Jobs log each skip, so this query also names them,
+including skips in the daily tier and skips whose pod has since been replaced:
 
 ```bash
 uv run python scripts/diagnostics/probe.py loki-query --since 24h \
