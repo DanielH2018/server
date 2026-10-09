@@ -18,7 +18,7 @@ operator decided this on 2026-10-09 (#3685). See
 | 1 | A read-only `claude` user an operator can open a session as | Done 2026-10-04 (#3504, #3505) |
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
 | 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check passed 2026-10-09, after #3999 fixed the approved-PR merge. Done. |
-| 4 | The phone host `claude-rc.service` runs as `claude` | Planned. Waits on the operator's slice 4 decisions. |
+| 4 | The phone host `claude-rc.service` runs as `claude` | Planned. The operator took its decisions on 2026-10-09; 4a to 4c build next, and 4d waits for a quiet window. |
 | 5 | Peer users, and the tools that decrypt SOPS | Planned |
 | 6 | Retire Claude sessions as `ubuntu` | Planned |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
@@ -83,8 +83,8 @@ agent gets a lander of the same shape.
   the `setgid` bit do not pass that check, and a shared `.git/config` lets either user run code as the
   other.
 - **The agent belongs to none of `ubuntu`, `sudo`, `adm`, `docker`, `lxd` or `kvm`.** Without
-  `adm` or `systemd-journal`, `journalctl` shows the agent only its own units. Granting
-  `systemd-journal` is a separate decision for the operator, because logs can carry secrets.
+  `adm` or `systemd-journal`, `journalctl` shows the agent only its own units. The operator
+  granted `systemd-journal` on 2026-10-09, after a secrets scan of the journal. Slice 4 adds it.
 - **The agent has its own GitHub identity and signing key.** A PR author cannot approve their
   own PR, so any approval gate needs a second identity.
 - **Remote Control needs one interactive step.** It requires a claude.ai `/login`, and without a
@@ -251,13 +251,36 @@ still opens PRs, and the operator lands them.
 
 ## Slice 4: the phone host runs as `claude` (planned)
 
-**Build:** add `claude_code_user` (default `sys_user`) and route `claude-rc.service`'s `User=`,
-`Group=`, `HOME`, `PATH`, `KUBECONFIG`, `ExecStart` and `WorkingDirectory` through it. Set it to
-`claude` on daniel-box, and set `claude_code_login_uid` to `claude`'s uid. Add
-`ProtectHome=yes`, `NoNewPrivileges=yes` and `PrivateTmp=yes`. The agent's home sits under
-`/var/lib`, so `ProtectHome` hides every human home without hiding the agent's. Move the memory
-store to the agent's project key, rewrite `MEMORY.md`'s `/home/ubuntu/server/...` links, and
-update `claude_code_memory_sync_dir` and `artifacts_host_dir`.
+**Decisions (operator, 2026-10-09):**
+
+- **The agent gets a subset of the operator's user-level config.** That subset is the user
+  `CLAUDE.md`, the output style, the rules and the skills. It gets no user hooks until each one
+  is free of `/home/ubuntu` and `SUDO_ASKPASS`. The role installs the subset root-owned and
+  read-only to `claude`, copied from the operator's rendered `~/.claude` on each apply. Root
+  ownership stops an injected session from rewriting the instructions later sessions follow.
+- **The memory store is copied once, at the switch-over.** The copy rewrites the
+  `/home/ubuntu/server/...` links in `MEMORY.md`. The `ubuntu` store stays in place.
+- **`claude` joins `systemd-journal`.** Before the grant, a `gitleaks` scan of a recent journal
+  export looks for secrets. Any it finds are fixed at their source first. Read-only `kubectl`
+  already exposes pod logs, so the grant adds no new kind of exposure.
+- **The switch-over runs in a quiet window,** with no live phone sessions and the operator at
+  a terminal for the `/login` and the one-time workspace trust.
+
+**Build, in four PRs:**
+
+- **4a** replaces the `/home/ubuntu` literals in repo tooling with the checkout root or
+  `$HOME`. Nothing changes on the host.
+- **4b** adds `claude_code_user` (default `sys_user`) and routes `claude-rc.service`'s `User=`,
+  `Group=`, `HOME`, `PATH`, `KUBECONFIG`, `ExecStart` and `WorkingDirectory` through it, with
+  `claude_code_memory_sync_dir`. `ProtectHome=yes`, `NoNewPrivileges=yes` and `PrivateTmp=yes`
+  render only when `claude_code_user` is not `sys_user`. As `ubuntu`, `ProtectHome` would hide
+  the unit's own home and checkout, and `NoNewPrivileges` would stop sudo in phone sessions.
+  The agent's home sits under `/var/lib`, so after the switch-over `ProtectHome` hides every
+  human home without hiding the agent's. `claude_code_login_uid` stays at 1000 until slice 6,
+  so interactive sessions as `ubuntu` keep their caps.
+- **4c** adds the read grant below, the second artifacts bind mount, the config subset and
+  the `systemd-journal` membership.
+- **4d** sets `claude_code_user: claude` in daniel-box's host_vars and copies the memory store.
 
 **Read grant:** `ubuntu` reads the agent's artifacts and memory through one grant in the role.
 `claude-memory-sync` runs as `sys_user`, and the artifacts tree is the operator's to read, so
@@ -305,7 +328,9 @@ sessions.
 
 **Build:** create a no-sudo `claude` user on daniel-server and daniel-pi for `probe.py`'s ssh
 paths, with a key per host. Give the homelab-ui MCP server a dedicated low-privilege Authelia
-user whose credential lives in the agent's home rather than SOPS.
+user. Its password stays in SOPS, so `secret_rotation.yml` tracks it, and the role renders it
+into a `0600` file in the agent's home (operator decision, 2026-10-09). Ansible decrypts it as
+the operator, so the agent still never holds the age key.
 `scripts/z2m/set_device_option.sh` and `ansible/roles/k8s/qbittorrent/files/apply_prefs.py` stay operator-run, or
 each gets a lander-style oneshot unit.
 
@@ -317,10 +342,12 @@ page.
 ## Slice 6: retire Claude sessions as `ubuntu` (planned)
 
 **Build:** move the login-slice caps off `user-1000.slice`. Extend `claude-cgroup-metrics.sh` to
-report any `claude` process running as uid 1000. Optionally ship a root-owned
-`/etc/claude-code/managed-settings.json`. It binds every user on the host, `renovate-agent`
-included, so it is written for both agents and ships only once no Claude session runs as
-`ubuntu`.
+report any `claude` process running as uid 1000. Point `claude_code_login_uid` at the agent.
+
+A root-owned `/etc/claude-code/managed-settings.json` is deferred (operator decision,
+2026-10-09). It binds every user on the host, `renovate-agent` included. Slice 4 already makes
+the agent's user-level config root-owned, so revisit it after the switch-over, and only for
+settings that should bind both agents.
 
 Once the slice lands, publish the per-path inventory from the operator's break-glass kit in
 this page, and delete [What this page leaves out](#what-this-page-leaves-out). From then on
@@ -348,7 +375,7 @@ the dry-run path's kubectl calls can run without `become`.
 | `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
 | ssh as `ubuntu` to the peers | That shell has sudo | A no-sudo `claude` user per peer (slice 5) |
-| The system journal | No `adm` membership | Its own units only. Verdict files from the lander replace the journal for landing. |
+| The system journal, until slice 4 | No `adm` or `systemd-journal` membership | Its own units only. Verdict files from the lander replace the journal for landing. Slice 4 adds `systemd-journal`. |
 | Edits to `.github/workflows/` | The token has no `workflow` scope | The operator, or Renovate's own app |
 
 ## The decision: a visible trail, not a merge gate
