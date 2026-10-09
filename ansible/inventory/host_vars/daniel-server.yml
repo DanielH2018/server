@@ -31,6 +31,14 @@ has_hypervisor: true
 # PR, because the k8s play, the connection=local pin and the per-host lock keep deploys there.
 has_claude_code: true
 claude_code_rc_enabled: false
+# The `claude` agent user, so a fan-out launched as `claude` on daniel-box can place a batch
+# here (docs/claude-agent-user.md, slice 5). Its batches stop at the PR as before. It needs one
+# interactive `/login` as `claude` here, and its signing key registered on the agent's GitHub
+# account, after the first apply. False expires the account and keeps its home.
+claude_code_agent_user_enabled: true
+# daniel-box's agent logs in here as `claude` with the key agent_peers.yml generates there.
+# False removes the key and the ssh-users membership.
+claude_agent_ssh_login_enabled: true
 
 # DECIDED: 13G fleet cap, derived the way defaults/main.yml derives daniel-box's 14G.
 # Measured on daniel-server 2026-09-09. Re-derive all of it if you change this:

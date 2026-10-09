@@ -99,6 +99,9 @@ effect at the next start**, so the deploy that changes it drops the RC host's se
 `claude-land@<n>.service`, which runs `land.sh` as the operator under the landing policy.
 `defaults/main.yml` covers login, the GitHub account, the lander and each switch.
 
+daniel-server has one too, for fan-out. **Apply daniel-box first**: daniel-server's apply reads
+the agent's peer key from there. `docs/claude-agent-user.md` (slice 5) has the rest.
+
 `claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as, and its home
 and `claude_code_rc_workdir` follow it. The unit gets `ProtectHome=yes`, `NoNewPrivileges=yes`,
 `PrivateTmp=yes` and `UMask=0027` only when it differs from `sys_user`. The first apply as the

@@ -390,7 +390,7 @@ and Claude Code created that file `-rw-r----- claude:ubuntu`, so `ubuntu` read i
 **Rollback:** `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live
 sessions.
 
-## Slice 5: peers, and the tools that decrypt SOPS (homelab-ui login built; peers dropped)
+## Slice 5: peers, and the tools that decrypt SOPS (homelab-ui login built; daniel-server agent built for fan-out)
 
 **Peer users: dropped (operator decision, 2026-10-09).** The plan was a no-sudo `claude` user
 on daniel-server and daniel-pi for `probe.py`'s ssh paths. #4057 built it, and the build
@@ -400,6 +400,44 @@ container's environment, secrets included. A no-sudo peer user would add an ssh 
 hosts and unlock nothing, so #4057 was closed without a merge. The Pi container checks stay
 operator-run. Peer users return only with a concrete need, such as a read-only container
 listing that strips the environment.
+
+**Built, 2026-10-09: an agent user on daniel-server, for fan-out placement (#4098).** Fan-out
+is the concrete need. Run as `claude`, `scripts/dev/fanout_place.py` could place batches on
+daniel-box only, because it had no login on daniel-server. The operator chose this over an ssh
+login as `ubuntu`, whose shell has sudo. #4057's bare login does not serve fan-out: a batch
+needs a clone, `uv`, Claude Code, a GitHub identity and a signing key. So daniel-server gets
+the full agent user, and ssh access is added to it.
+
+- **daniel-server.** `claude_code_agent_user_enabled: true` builds `claude` as on daniel-box,
+  minus the lander, `claude-rc.service`, the memory copy and the homelab-ui browser and login.
+  `claude_agent_ssh_login_enabled: true` adds `ssh-users` to the agent's exact group list
+  (`agent_access.yml`) and writes a root-owned `authorized_keys` holding daniel-box's agent key
+  with `restrict` (`agent_ssh_login.yml`). The play reads that key over ssh as the operator.
+- **daniel-box.** `agent_peers.yml` generates the agent's peer key once, as the agent, at
+  `claude_agent_ssh_key_path`, and renders `~/.ssh/config` with one stanza per peer whose
+  switch is on: `User claude`, the peer's `server_ip`, `IdentitiesOnly yes` and
+  `StrictHostKeyChecking accept-new`. Both PRs carry that `accept-new` decision.
+- **Both hosts.** The agent user lingers, so a batch started with `systemd-run --user` over
+  ssh outlives the call that started it.
+- **The Pi** gets nothing. The `docker`-group reasoning above still holds for it.
+
+The apply is the operator's, in this order:
+
+1. On daniel-box, `uv run ansible-playbook ansible/initial_setup.yml --tags claude_code`. This
+   generates the peer key.
+2. On daniel-server, the same command. This builds the agent user and reads the key.
+3. On daniel-server, one interactive `/login` as `claude`
+   (`sudo machinectl shell claude@ /bin/bash -l`, then `claude`).
+4. Register daniel-server's `~claude/.ssh/git_signing_ed25519.pub` on the agent's GitHub
+   account as a Signing Key. `fanout_place.py launch` refuses a host whose key is not
+   registered.
+
+**Check:** as `claude` on daniel-box, `uv run python scripts/dev/fanout_place.py read` prints a
+reading for both hosts, each with `signing=ok`.
+
+**Rollback:** `claude_agent_ssh_login_enabled: false` in daniel-server's host_vars removes the
+key and the group. `claude_code_agent_user_enabled: false` there also expires the account and
+stops its linger.
 
 `scripts/z2m/set_device_option.sh` and `ansible/roles/k8s/qbittorrent/files/apply_prefs.py`
 stay operator-run.
@@ -522,7 +560,7 @@ the dry-run path's kubectl calls can run without `become`.
 | `deploy.sh`, `--check` and `--dry-run` before a merge | All three decrypt SOPS, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
 | `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
-| ssh as `ubuntu` to the peers | That shell has sudo | The operator. Peer users were dropped from slice 5, because the one `probe.py` ssh path needs the Pi's `docker` group. |
+| ssh as `ubuntu` to the peers | That shell has sudo | The operator. The agent reaches daniel-server as its own `claude` agent user, for fan-out only (slice 5). The Pi has no agent login, because the one `probe.py` ssh path needs its `docker` group. |
 | The system journal, until slice 4 | No `adm` or `systemd-journal` membership | Its own units only. Verdict files from the lander replace the journal for landing. Slice 4 adds `systemd-journal`. |
 | Edits to `.github/workflows/` | The token has no `workflow` scope | The operator, or Renovate's own app |
 
