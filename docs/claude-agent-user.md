@@ -251,11 +251,14 @@ pod runs as root with the default capability set of the container runtime, which
 pod would drop the capability.
 
 - The `~/.claude` item in `agent_github.yml` changes from `0700` to `0710`. Group `ubuntu`
-  gets traverse but not list, and `.credentials.json` stays `0600`.
+  gets traverse but not list. The grant relies on `.credentials.json` staying `0600`.
+- `~/.claude/projects` and `~/.claude/projects/<key>` get group `ubuntu` and `0710` too.
+  Claude Code creates them at a mode nobody has checked, and the memory directory sits
+  under both.
 - A task creates `~/.claude/artifacts` and the memory directory as the agent, `setgid`, with
   group `ubuntu`. It gives each a default ACL of `g:ubuntu:rX`, so files Claude Code writes
   later inherit the read.
-- The ACL task runs after every `file:` task that names those paths. A `mode:` there runs
+- The ACL task runs after every `file:` task that names those paths or their parents. A `mode:` there runs
   `chmod`, and `chmod` rewrites the ACL mask from the group bits. `0700` sets the mask to
   `---`, which disables every named entry while `getfacl` still lists it.
 - A default ACL cannot widen a file's create mode. A file Claude Code creates `0600` gets
