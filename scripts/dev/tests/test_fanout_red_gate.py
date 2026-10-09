@@ -300,37 +300,47 @@ def test_reset_worktree_runs_no_hook_filter_or_replace_ref_the_red_author_plante
     """Each would otherwise change what the reset does, or run a command (#3871)."""
     repo, _, _ = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
     script = write_exec(repo / "run.sh", "true\n")
-    target = commit(repo, "script")
+    # A tracked line names the driver, so only blanking it in config keeps it from running.
+    target = commit(repo, "script", **{".gitattributes": "*.py filter=planted\n"})
     fake = commit(repo, "fake", **{"mod.py": FIXED})
     git_out(repo, "reset", "--quiet", "--hard", target)
     git_out(repo, "replace", target, fake)
     git_out(repo, "config", "core.fileMode", "false")
     fired = tmp_path / "fired"
     write_exec(repo / ".git" / "hooks" / "post-index-change", f"echo hook >> {fired}\n")
-    git_out(
-        repo, "config", "filter.planted.smudge", f"sh -c 'echo filter >> {fired}; cat'"
-    )
+    # `process` takes precedence over `smudge`, so the driver runs only if both survive.
+    for key in ("smudge", "process"):
+        command = f"sh -c 'echo {key} >> {fired}; cat'"
+        git_out(repo, "config", f"filter.planted.{key}", command)
 
     def planted_reset(reset):
-        (repo / ".git" / "info" / "attributes").write_text("*.py filter=planted\n")
         (repo / "mod.py").write_text("planted\n")
         script.chmod(0o644)
         reset()
         ran = fired.read_text() if fired.exists() else ""
         return (repo / "mod.py").read_text(), ran, bool(script.stat().st_mode & 0o100)
 
-    with pytest.raises(ResetFailed, match="info/attributes"):
-        planted_reset(lambda: reset_worktree(run, repo, target))
-    (repo / ".git" / "info" / "attributes").write_text("")
-    (repo / "mod.py").write_text("planted\n")
-    script.chmod(0o644)
-    reset_worktree(run, repo, target)
-    assert ((repo / "mod.py").read_text(), fired.exists()) == (CODE, False)
-    assert script.stat().st_mode & 0o100
+    assert planted_reset(lambda: reset_worktree(run, repo, target)) == (CODE, "", True)
     # The control: plain git runs the hook and the filter, checks out the replacement, and
     # keeps the exec bit `fileMode=false` hides.
-    plain = planted_reset(lambda: git(repo, "reset", "--quiet", "--hard", target))
-    assert plain == (FIXED, "filter\nhook\n", False)
+    plain = planted_reset(
+        lambda: git(repo, "reset", "--quiet", "--hard", target, check=False)
+    )
+    assert plain[0] == FIXED and "process" in plain[1] and "hook" in plain[1]
+    assert not plain[2]
+
+
+def test_reset_worktree_refuses_a_repo_with_info_attributes(tmp_path):
+    """A `working-tree-encoding` line there rewrites what the reset checks out (#3871)."""
+    repo, _, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
+    (repo / ".git" / "info" / "attributes").write_text(
+        "mod.py working-tree-encoding=UTF-16\n"
+    )
+    with pytest.raises(ResetFailed, match="info/attributes"):
+        reset_worktree(run, repo, red)
+    (repo / ".git" / "info" / "attributes").write_text("")
+    reset_worktree(run, repo, red)
+    assert (repo / "mod.py").read_text() == CODE
 
 
 def test_reset_worktree_raises_when_a_git_step_fails(tmp_path):
