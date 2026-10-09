@@ -127,7 +127,7 @@ def _runtime_module_names():
 
 
 def _patched_pairs(test_files=None, module_names=None):
-    """Map each runtime module to the attributes the suite assigns, patches, or mutates in place.
+    """Map each runtime module to the attributes the suite assigns or patches.
 
     Returns `{module: {name}}`.
     """
@@ -159,11 +159,11 @@ def _patched_pairs(test_files=None, module_names=None):
                     target, attr = node.args[0], node.args[1]
                     if isinstance(attr, ast.Constant) and isinstance(attr.value, str):
                         _add(target, attr.value)
-                # module.NAME.mutate(...) — e.g. a test's checks.host.SOME_DICT.clear()
-                if isinstance(fn, ast.Attribute) and isinstance(
-                    fn.value, ast.Attribute
-                ):
-                    _add(fn.value.value, fn.value.attr)
+                # DECIDED: a method call on `module.NAME` is not a patch. On an unbound name,
+                # `mod.gone.clear()` raises AttributeError, so the test fails loudly and this
+                # guard has nothing to catch. Counting the shape also counted every read, such
+                # as `gates.STARTUP_GRACE.isdisjoint(...)` (#4007). The boundary census in
+                # test_bridge_patch_boundary.py omits it for the same reason.
             targets = []
             if isinstance(node, ast.Assign):
                 targets = node.targets
@@ -254,6 +254,19 @@ def test_the_patch_census_resolves_every_spelling_of_a_packaged_module(tmp_path)
     assert _patched_pairs([test], ids) == {
         "bridge.config": {"A"},
         "bridge.io": {"B"},
-        "bridge.streaks": {"C", "_state"},
+        "bridge.streaks": {"C"},
         "checks.b2": {"D"},
     }
+
+
+def test_the_patch_census_skips_method_calls_on_a_module_attribute(tmp_path):
+    """Red/green for #4007: an assignment counts, a mutating or a reading method call does not."""
+    test = tmp_path / "test_calls.py"
+    test.write_text(
+        "import mod\n\n"
+        "def test_x():\n"
+        "    mod.X = 1\n"
+        "    mod.Y.clear()\n"
+        "    mod.Z.values()\n"
+    )
+    assert _patched_pairs([test], {"mod"}) == {"mod": {"X"}}
