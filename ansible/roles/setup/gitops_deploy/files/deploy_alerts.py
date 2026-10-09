@@ -20,6 +20,7 @@ see `deploy_io.py`'s docstring for why.
 """
 
 import json
+import os
 
 import deploy_alert_text
 from deploy_changes import ChangeSet
@@ -122,6 +123,26 @@ def drain_pending(tools: DeployTools, state: DeployerState, config: Config) -> N
     updated = apply_drain_result(pending, delivered)
     if updated != pending:
         write_pending(state.path("pending_alerts"), updated)
+
+
+# The queue `deploy --detach`'s notifier spools an undelivered verdict into, under the state
+# directory. `scripts/deploy_tools/deploy_detach_notify.py:DETACH_SPOOL_DIR` names the same
+# directory, and its test holds the two equal.
+DETACH_SPOOL = "detach_spool"
+
+
+def flush_detach_spool(
+    tools: DeployTools, state: DeployerState, config: Config
+) -> None:
+    """Send the `deploy --detach` verdicts that notifier could not deliver (#3987).
+
+    The notifier runs once per detached deploy, so it never retries a post itself. It queues a
+    failed post in `DETACH_SPOOL` instead, and this tick is the regular run that empties the
+    queue. It runs beside `drain_pending`, ahead of every short-circuit, for the same reason.
+    """
+    tools.flush_discord_spool(
+        os.path.join(state.directory, DETACH_SPOOL), config.discord_webhook
+    )
 
 
 def alert_once(

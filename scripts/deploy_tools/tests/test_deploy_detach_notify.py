@@ -6,8 +6,9 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify.py
 
 import types
 
-
+import deploy_alerts  # the deployer's half; pyproject's `pythonpath` lists it
 import deploy_detach_notify as notify_mod
+from gitops_markers import STATE_DIR
 
 
 def _result(returncode, stdout="", stderr=""):
@@ -313,8 +314,7 @@ def test_notify_skips_silently_without_webhook_config(monkeypatch, capsys):
         notify_mod, "HOST_LIB_PATH", notify_mod.REPO / "nonexistent-host-lib.py"
     )
     notify_mod.notify("some content")
-    out = capsys.readouterr().out
-    assert "skipping Discord notify" in out
+    assert "skipping Discord notify" in capsys.readouterr().out
 
 
 def test_notify_never_raises_on_a_broken_host_lib(monkeypatch, tmp_path, capsys):
@@ -333,8 +333,7 @@ def test_notify_never_raises_on_a_broken_host_lib(monkeypatch, tmp_path, capsys)
     monkeypatch.delitem(notify_mod.sys.modules, "host_lib", raising=False)
     before = list(notify_mod.sys.path)
     notify_mod.notify("some content")  # must not raise
-    out = capsys.readouterr().out
-    assert "notify failed" in out
+    assert "notify failed" in capsys.readouterr().out
     # notify() puts HOST_LIB_PATH's directory on sys.path to do that bare-name import. Left
     # there, this tmp_path -- holding a host_lib.py that raises -- serves every later
     # bare-name `import host_lib` in the process, which is how a passing test here failed
@@ -353,10 +352,11 @@ def test_notify_leaves_sys_path_as_it_found_it_when_the_post_succeeds(
     """
     host_lib = tmp_path / "host_lib.py"
     host_lib.write_text(
+        "spools = []\n"
         "def parse_env_file(path):\n"
         "    return {'DISCORD_WEBHOOK': 'https://example.invalid/hook'}\n"
-        "def discord_post(webhook, content, tag, marker=''):\n"
-        "    return True\n"
+        "def discord_post(webhook, content, tag, log=None, marker='', spool_dir=None):\n"
+        "    return not spools.append(spool_dir)\n"
     )
     config = tmp_path / "config.env"
     config.write_text("DISCORD_WEBHOOK=https://example.invalid/hook\n")
@@ -365,13 +365,13 @@ def test_notify_leaves_sys_path_as_it_found_it_when_the_post_succeeds(
     monkeypatch.delitem(notify_mod.sys.modules, "host_lib", raising=False)
     before = list(notify_mod.sys.path)
     notify_mod.notify("some content")
-    # This one imported cleanly, so it stays in sys.modules. Evict it rather than serve the
-    # stub to the next `import host_lib` in this interpreter. A plain pop, not
-    # monkeypatch.delitem: delitem puts the key BACK at teardown, so the eviction would be
-    # undone before the next module runs.
-    notify_mod.sys.modules.pop("host_lib", None)
+    # Imported cleanly, so evict it rather than serve the stub to the next `import host_lib`.
+    # A plain pop: monkeypatch.delitem puts the key BACK at teardown, undoing the eviction.
+    stub = notify_mod.sys.modules.pop("host_lib")
     assert capsys.readouterr().out == ""  # posted; nothing to report
     assert notify_mod.sys.path == before
+    # The spool the deployer's tick flushes: the notifier never runs again to retry (#3987).
+    assert stub.spools == [str(notify_mod.Path(STATE_DIR, deploy_alerts.DETACH_SPOOL))]
 
 
 def _gate(settled, lines):

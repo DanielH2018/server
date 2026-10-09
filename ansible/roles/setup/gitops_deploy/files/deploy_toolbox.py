@@ -40,7 +40,7 @@ import deploy_narrow
 import deploy_release
 from deploy_config import Config, log
 from deploy_git import ci_verdict
-from host_lib import discord_post, github_get, github_token
+from host_lib import discord_post, flush_discord_spool, github_get, github_token
 
 
 def post(webhook: str, content: str, log_fn=log) -> bool:
@@ -57,6 +57,16 @@ def post(webhook: str, content: str, log_fn=log) -> bool:
     what removes it.
     """
     return discord_post(webhook, content, "gitops-deploy", log=log_fn)
+
+
+def flush_spool(spool_dir: str, webhook: str, log_fn=log) -> bool:
+    """Send what another program queued in `spool_dir`, via the shared host_lib flush.
+
+    `deploy_alerts.flush_detach_spool` is the caller, and the queue is `deploy --detach`'s,
+    whose notifier has no next run of its own. Each queued message already carries the
+    notifier's `deploy --detach:` marker; the user agent is the deployer's, which sends it.
+    """
+    return flush_discord_spool(spool_dir, webhook, "gitops-deploy", log=log_fn)
 
 
 def fetch_ci_verdict(
@@ -157,6 +167,7 @@ class DeployTools:
     # Production default, unlike `fetch_ci_verdict` above: this one needs no `Config`.
     github_authenticated: Callable[[], bool] = github_authenticated
     discord_post: Callable[[str, str], bool] = post
+    flush_discord_spool: Callable[[str, str], bool] = flush_spool
     # The deploy-plane narrowing, which is a subprocess because the derivation parses YAML
     # and this unit runs under `uv run --no-project`. A field rather than a qualified call,
     # so the broad arm's tests script an exit code instead of a process.

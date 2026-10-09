@@ -229,6 +229,9 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
     # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
     # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
     deploy_alerts.drain_pending(tools, state, config)
+    # And the verdicts `deploy --detach` queued, for the same reason: its notifier runs once
+    # per deploy and never again, so this tick is the only retry they get (#3987).
+    deploy_alerts.flush_detach_spool(tools, state, config)
     # Disk-only too, and likewise ahead of every branch that can return. A role in the
     # `manual_plane` marker is owed to a hand on EVERY later tick, and the tick that recorded
     # it fast-forwarded — so from the next tick on this deployer is converged and re-enters

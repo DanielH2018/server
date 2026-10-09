@@ -270,6 +270,10 @@ class ScriptedTick:
         self.log.append(("post", content))
         return self.discord_ok
 
+    def flush_discord_spool(self, spool_dir: str, _webhook: str) -> bool:
+        self.log.append(("flush", spool_dir))
+        return True
+
     # ── what main() did ───────────────────────────────────────────────────────────────────────
     @property
     def git(self) -> list[list[str]]:
@@ -323,6 +327,7 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         fetch_ci_verdict=scripted.fetch_ci_verdict,
         github_authenticated=lambda: scripted.authenticated,
         discord_post=scripted.discord_post,
+        flush_discord_spool=scripted.flush_discord_spool,
         narrow_deploy_plane=scripted.narrow_deploy_plane,
         narrow_setup_role=scripted.narrow_setup_role,
         # The host's render records, read for a log line alone, so no tick test reads them.

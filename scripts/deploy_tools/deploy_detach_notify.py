@@ -16,6 +16,10 @@ Degrades to a log-only note, never a crash, when:
   - the gitops-deploy webhook config isn't present on this host -- deploy.sh normally runs on
     daniel-box, where it is; anywhere else this just prints and returns
 
+A post that fails because the host cannot reach Discord is queued in `DETACH_SPOOL_DIR`, and the
+gitops-deploy tick flushes that queue every ten minutes (#3987). This notifier runs once per
+detached deploy, so it has no next run of its own to retry from.
+
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify.py
 """
 
@@ -46,6 +50,12 @@ HOST_VARS_REL = HOST_VARS.relative_to(REPO)
 
 HOST_LIB_PATH = Path("/opt/gitops-deploy/host_lib.py")
 CONFIG_ENV_PATH = Path("/etc/gitops-deploy/config.env")
+# Under the deployer's state directory, because the deployer's tick is the one regular poster
+# on this host that holds the same webhook: `deploy_alerts.flush_detach_spool` sends what this
+# notifier could not. The tick runs only on the `has_gitops` host, and teardown removes this
+# directory with the config everywhere else, so a verdict is never queued where nothing
+# flushes it. `test_deploy_detach_notify.py` holds this path equal to the deployer's.
+DETACH_SPOOL_DIR = Path("/var/lib/gitops-deploy/detach_spool")
 PROBE_TIMEOUT_S = 30
 
 # Emitted by probe.py's health command when a tag names nothing health-checkable -- a block tag
@@ -251,11 +261,17 @@ def notify(content: str) -> None:
         cfg = parse_env_file(str(CONFIG_ENV_PATH))
         webhook = cfg.get("DISCORD_WEBHOOK", "")
         posted = discord_post(
-            webhook, content, "deploy-detach", marker="deploy --detach:"
+            webhook,
+            content,
+            "deploy-detach",
+            log=print,
+            marker="deploy --detach:",
+            spool_dir=str(DETACH_SPOOL_DIR),
         )
         if not posted:
             print(
-                "deploy --detach: Discord post failed or webhook unset -- see log above."
+                "deploy --detach: Discord post failed or webhook unset -- a failure "
+                "another attempt can fix is queued for the gitops-deploy tick."
             )
     except Exception as exc:  # notifying must never crash the backgrounded run
         print(
