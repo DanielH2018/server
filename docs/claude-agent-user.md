@@ -18,7 +18,7 @@ operator decided this on 2026-10-09 (#3685). See
 | 1 | A read-only `claude` user an operator can open a session as | Done 2026-10-04 (#3504, #3505) |
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
 | 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check passed 2026-10-09, after #3999 fixed the approved-PR merge. Done. |
-| 4 | The phone host `claude-rc.service` runs as `claude` | 4a to 4c deployed 2026-10-09 (#4035, #4030, #4036, #4039, #4044). 4d (#4054) switched the host over on 2026-10-09, and it spawned its first phone session as `claude` at 19:06 UTC. The rest of the slice 4 check is owed. |
+| 4 | The phone host `claude-rc.service` runs as `claude` | 4a to 4c deployed 2026-10-09 (#4035, #4030, #4036, #4039, #4044). 4d (#4054) switched the host over on 2026-10-09. The check passed the same day. Done. |
 | 5 | Peer users, and the tools that decrypt SOPS | The homelab-ui login deployed 2026-10-09 (#4051). Peer users dropped. The agent cannot yet drive homelab-ui (#4058). |
 | 6 | Retire Claude sessions as `ubuntu` | Planned |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
@@ -249,7 +249,7 @@ Only the operator can log in as `claude`, so only the operator can run this chec
 **Rollback:** `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude`
 still opens PRs, and the operator lands them.
 
-## Slice 4: the phone host runs as `claude` (planned)
+## Slice 4: the phone host runs as `claude` (done 2026-10-09)
 
 **Decisions (operator, 2026-10-09):**
 
@@ -374,6 +374,11 @@ memory file means Claude Code created it `0600`, which `UMask=0027` cannot widen
 `claude-memory-sync` cannot read it either, so file a finding with `findings.py open`. Last,
 `journalctl -u claude-memory-sync` must show a run that copied to daniel-server, and the new
 file must appear in `/home/ubuntu/.claude/projects/-home-ubuntu-server/memory/` there.
+
+**Passed 2026-10-09.** A phone session printed `claude` for `id` and named the copied
+`MEMORY.md` entries. Its artifact rendered at `/a/daniel-box-claude/`. It saved `rc-check.md`,
+and Claude Code created that file `-rw-r----- claude:ubuntu`, so `ubuntu` read it. The 19:18 UTC
+`claude-memory-sync` run copied the file and the new `MEMORY.md` line to daniel-server.
 
 **Rollback:** `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live
 sessions.
