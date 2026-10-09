@@ -1258,7 +1258,10 @@ reads `hold_sha` and the ledger together and raises on a marker it cannot read. 
 partial: `land.sh` still reads `hold_sha` by basename through `land_lib.tools.read_state`,
 which returns None on an unreadable marker and so already fails closed. `deployer_park` reads
 `behind_since`, the ledger and `contention_since` the same raw way. #3972 tracks moving
-both, along with `gitops_state.py` and deploy-ui's `read_state`. A
+both, along with `gitops_state.py` and deploy-ui's `read_state`. `probe.py gitops-state`
+(`probe_lib/gitops_view.py`) also reads each marker raw. It reports every marker as set,
+absent or unreadable and keeps going, where the snapshot raises on the first one it cannot
+read and does not read `last_run`. A
 ledger line's subject is the whole entry, `<playbook> <tags>`, so two failed applies of one
 playbook stay two entries. `DeployerState.hold_failed_apply`, `clear_broad_hold` and
 `clear_service_hold` now record and drop the class, and the hold-clear rule is a query over
