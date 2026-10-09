@@ -6,11 +6,13 @@
 # 2 of 8 measured GETs succeeded. `ansible/seed_volume_backup.yml:14-17` records
 # the same finding from the other direction and chose CRs instead.
 #
-# `[*]`, NOT `[0]`. Measured: `{.items[0].status.podIP}` against a zero-match query
-# returns rc=1 with "array index out of bounds: index 0, length 0" — a kubectl internals error,
-# not the empty stdout the guard task below expects, so Ansible aborts here and the guard never
-# runs. `{.items[*].status.podIP}` returns rc=0 with genuinely empty stdout on the same
-# zero-match query, which is what makes the guard reachable.
+# `-o json` and the `ready_manager_ip` filter, not a jsonpath of `.status.podIP`: the jsonpath
+# returned every pod on the node, ready or not, so a revert could aim at a manager that was
+# still starting. The filter (`ansible/filter_plugins/longhorn_manager.py`) is the one rule the
+# trim cron and the snapshot reaper use too: Running, and every container ready (#3736). During a
+# Longhorn upgrade the manager restarts, and this read then finds no ready pod. volume-revert
+# resolves once, before it touches any claim, so the revert fails there with nothing moved,
+# rather than partway through at an API call to a manager that is not serving.
 #
 # `check_mode: false` because this is a read whose value the two tasks below depend on. A
 # command task is SKIPPED under --check by default, and a skipped read does not fail — it fails
@@ -33,11 +35,16 @@
       - --field-selector
       - spec.nodeName={{ ansible_hostname }}
       - -o
-      - jsonpath={.items[*].status.podIP}
+      - json
   become: true
   changed_when: false
   check_mode: false
   register: longhorn_api_pod
+
+- name: Pick this node's ready longhorn-manager pod
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    longhorn_api_ip: "{{ (longhorn_api_pod.stdout | from_json)['items'] | ready_manager_ip(ansible_hostname) }}"
 
 # `longhorn_api_required` (default true, see defaults/main.yml) decides whether an empty result
 # is fatal. A caller that needs the API — k8s/volume-revert, which has no fallback for a failed
@@ -48,47 +55,35 @@
 # STATEMENT, not a fatal `fail()` raised by a task the include pulls in — this is documented
 # Ansible behaviour, not a version quirk (see k8s/volume-snapshot's CLAUDE.md and `test_longhorn_api_soft_mode_survives_no_manager` in
 # test_longhorn_api.py, which runs this file for real through a scratch play to prove it).
-- name: Fail when this node runs no longhorn-manager
+- name: Fail when this node runs no ready longhorn-manager
   tags: [deploy]
   ansible.builtin.fail:
     msg: >-
-      No longhorn-manager pod on {{ ansible_hostname }}, so the Longhorn API is unreachable from
-      here. The ClusterIP is not a fallback — it load-balances to the cross-node manager, which
+      No ready longhorn-manager pod on {{ ansible_hostname }}, so the Longhorn API is unreachable
+      from here. The ClusterIP is not a fallback — it load-balances to the cross-node manager, which
       the NetworkPolicy refuses for host-originated traffic.
   when:
     - longhorn_api_required | bool
-    - (longhorn_api_pod.stdout | trim) | length == 0
+    - longhorn_api_ip | length == 0
 
 # The soft-mode half of the same decision: a caller that set `longhorn_api_required: false`
 # reads `longhorn_api_resolved` instead of the play aborting. `longhorn_api`/`longhorn_api_node`
 # stay undefined in this branch — there is no pod to build a URL from.
-- name: Record that no longhorn-manager pod exists on this node
+- name: Record that no ready longhorn-manager pod exists on this node
   tags: [deploy]
   when:
     - not (longhorn_api_required | bool)
-    - (longhorn_api_pod.stdout | trim) | length == 0
+    - longhorn_api_ip | length == 0
   ansible.builtin.set_fact:
     longhorn_api_resolved: false
 
-# `.split(' ')[0]`, not the raw trimmed stdout: the wildcard above returns space-separated IPs
-# for every matching pod, and this DaemonSet's own rollout is NOT what would put two pods on one
-# node at once — its updateStrategy is `{"rollingUpdate":{"maxSurge":0,
-# "maxUnavailable":"100%"},"type":"RollingUpdate"}`, and `maxSurge: 0` is delete-then-create
-# specifically to rule out a surge replacement coexisting with the pod it replaces. What this
-# still guards against is narrower: a terminating pod's object can outlive its container for the
-# grace period, still carrying its last-known podIP in `.status`, so a `get` mid-eviction can
-# transiently list it alongside its replacement. Concatenating both untouched would silently
-# produce a garbage URL; taking the first picks one reachable manager instead.
-# `_ground_truth_manager_ips()` in test_longhorn_api.py must resolve a duplicate node the same
-# way — see the comment there.
-#
 # Guarded on a non-empty result: with `longhorn_api_required: false` and no manager pod, this
 # must not run at all — there is no IP to build a URL from, and `longhorn_api_resolved` above is
 # the only fact that branch gets.
 - name: Record the API base
   tags: [deploy]
-  when: (longhorn_api_pod.stdout | trim) | length > 0
+  when: longhorn_api_ip | length > 0
   ansible.builtin.set_fact:
-    longhorn_api: "http://{{ (longhorn_api_pod.stdout | trim).split(' ')[0] }}:9500"
+    longhorn_api: "http://{{ longhorn_api_ip }}:9500"
     longhorn_api_node: "{{ ansible_hostname }}"
     longhorn_api_resolved: true
