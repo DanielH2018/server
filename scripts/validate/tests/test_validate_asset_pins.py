@@ -264,4 +264,26 @@ def test_main_refresh_selects_pins_by_depname(tmp_path):
 
 
 def test_an_unknown_refresh_name_is_a_usage_error():
-    assert _main(["--refresh", "vendor/nope"], [_pin()])[0] == 64
+    code = asset_pins.main(
+        ["--refresh", "vendor/nope"],
+        fetcher=_fetcher(),
+        out=io.StringIO(),
+        discover=lambda: ([_pin()], []),
+        known=frozenset({"x"}),
+        annotated=lambda: {"vendor/digestless"},
+    )
+    assert code == 64
+
+
+def test_an_annotated_depname_with_no_digest_has_nothing_to_refresh():
+    out = io.StringIO()
+    code = asset_pins.main(
+        ["--refresh", "vendor/digestless"],
+        fetcher=_fetcher(),
+        out=out,
+        discover=lambda: ([_pin()], []),
+        known=frozenset({"x"}),
+        annotated=lambda: {"vendor/digestless"},
+    )
+    assert code == 0
+    assert "nothing to refresh: vendor/digestless pins no digest" in out.getvalue()

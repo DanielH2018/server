@@ -239,6 +239,19 @@ def annotated_versions(text: str, managers: list[dict]) -> dict[str, str]:
     }
 
 
+def annotated_dep_names(
+    roles: _Path = ROLES, managers: list[dict] | None = None
+) -> set[str]:
+    """Every depName annotated in `<roles>/*/*/defaults/main.yml`, with or without a digest."""
+    if managers is None:
+        managers = annotation_managers()
+    return {
+        dep
+        for defaults_file in roles.glob("*/*/defaults/main.yml")
+        for dep in annotated_versions(defaults_file.read_text(), managers).values()
+    }
+
+
 def discover_pins(
     roles: _Path = ROLES, managers: list[dict] | None = None
 ) -> tuple[list[Pin], list[str]]:
@@ -427,8 +440,12 @@ def main(
     discover: Callable[[], tuple[list[Pin], list[str]]] = discover_pins,
     known: frozenset[str] = KNOWN_PINS,
     root: _Path = REPO,
+    annotated: Callable[[], set[str]] = annotated_dep_names,
 ) -> int:
-    """The CLI. `fetcher`, `discover`, `known` and `root` are the seams a test hands fakes to."""
+    """The CLI.
+
+    `fetcher`, `discover`, `known`, `root` and `annotated` are the seams a test hands fakes to.
+    """
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.refresh and (args.only or args.skip or args.list):
@@ -445,7 +462,15 @@ def main(
         return 1
     if args.refresh:
         wanted = _name_set(args.refresh)
-        unknown = wanted - names - {dep for pin in pins for dep in pin.dep_names}
+        pinned_deps = {dep for pin in pins for dep in pin.dep_names}
+        unknown = wanted - names - pinned_deps
+        if unknown:
+            # An annotated version with no digest beside it is a valid name with no work: the
+            # annotated-pin packageRule names this command on every annotated PR.
+            digestless = unknown & annotated()
+            for dep in sorted(digestless):
+                print(f"nothing to refresh: {dep} pins no digest", file=out)
+            unknown -= digestless
         if unknown:
             print(
                 f"unknown pin or depName(s): {sorted(unknown)}; --list prints the census "
