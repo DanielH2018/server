@@ -206,6 +206,17 @@ def test_a_run_with_no_verdict_line_yet_has_none():
     assert snap["runs"][0]["verdict"] is None
 
 
+def test_the_last_verdict_of_a_refused_landing_is_its_land_line(tmp_path):
+    """A landing-policy refusal writes no VERDICT line; its reason is the `land:` line."""
+    (tmp_path / "land939-20261009-120000.log").write_text(
+        "== arm  arming\nland: the body closes #12, an issue it does not fix\n"
+    )
+    assert landing._last_verdict(tmp_path) == {
+        "log": str(tmp_path / "land939-20261009-120000.log"),
+        "verdict": "land: the body closes #12, an issue it does not fix",
+    }
+
+
 def test_a_failing_source_is_named_and_leaves_the_others_read():
     def down(path):
         raise OSError("connection refused")
