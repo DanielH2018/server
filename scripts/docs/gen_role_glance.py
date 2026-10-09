@@ -88,6 +88,7 @@ Usage::
 import argparse
 import sys as _sys
 import textwrap
+from collections.abc import Callable
 from pathlib import Path as _Path
 
 
@@ -462,7 +463,15 @@ def report(stale: list[str], *, check: bool, fix: bool) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    find_stale: Callable[..., list[str]] = stale_docs,
+) -> int:
+    """Run the CLI over `find_stale`, which takes `write=` and returns the stale docs.
+
+    `find_stale` is the seam a test uses to point a real run at fixture roles.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -476,7 +485,7 @@ def main(argv: list[str] | None = None) -> int:
         help="write every stale doc, then exit 1 naming them (the prek hook's mode)",
     )
     args = parser.parse_args(argv)
-    stale = stale_docs(write=not args.check)
+    stale = find_stale(write=not args.check)
     return report(stale, check=args.check, fix=args.fix)
 
 

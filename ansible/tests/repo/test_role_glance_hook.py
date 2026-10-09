@@ -4,16 +4,21 @@ Editing a role's defaults, templates, tasks, playbook entry or `containers_list`
 fail CI until someone ran `scripts/docs/gen_role_glance.py` by hand. The hook runs it in
 `--fix` mode on the commit instead. This guard holds the two things a later edit could
 quietly lose: the hook's `files` gate matches every class of source the generator reads and
-none of the docs-refresh cron's staged paths, and `--fix` exits 1 when it wrote a doc, which
-is what stops the commit for a re-stage.
+none of the docs-refresh cron's staged paths, and `main(["--fix"])` over a stale fixture role
+rewrites the doc and exits 1, which is what stops the commit for a re-stage.
 
 Run: uv run pytest ansible/tests/repo/test_role_glance_hook.py
 """
 
+import functools
 import re
+import shutil
 import tomllib
+from collections.abc import Callable
+from pathlib import Path
 
 import pytest
+import yaml
 from _helpers import REPO
 
 import gen_role_glance as g
@@ -73,10 +78,35 @@ def test_the_gate_skips_a_path_the_generator_does_not_read(path):
     assert not re.search(_hook()["files"], path)
 
 
-def test_fix_mode_fails_after_rewriting_a_stale_doc(capsys):
-    assert g.report(["k8s/sonarr"], check=False, fix=True) == 1
+def _stale_sonarr_fixture(tmp_path: Path) -> tuple[Path, Callable[..., list[str]]]:
+    """A copy of sonarr with a hand-edited block, and a `find_stale` scoped to it.
+
+    sonarr's `media-data` claim is declared by media-volume, so that role is copied too.
+    """
+    roles = tmp_path / "roles"
+    for name in ("sonarr", "media-volume"):
+        shutil.copytree(g.K8S_ROLES / name, roles / name)
+    entry = next(e for e in g.k8s_service_entries() if e["name"] == "sonarr")
+    host_vars = tmp_path / "daniel-box.yml"
+    host_vars.write_text(yaml.safe_dump({"containers_list": [entry]}))
+    doc = roles / "sonarr" / "CLAUDE.md"
+    text = doc.read_text()
+    assert '`--tags "sonarr"`' in text
+    doc.write_text(text.replace('`--tags "sonarr"`', '`--tags "sonar"`', 1))
+    return doc, functools.partial(
+        g.stale_k8s_docs, host_vars=host_vars, k8s_roles=roles
+    )
+
+
+def test_fix_mode_rewrites_a_stale_doc_and_fails(tmp_path, capsys):
+    doc, find_stale = _stale_sonarr_fixture(tmp_path)
+    assert g.main(["--fix"], find_stale=find_stale) == 1
     assert "k8s/sonarr" in capsys.readouterr().out
+    assert '`--tags "sonarr"`' in doc.read_text()
+    assert find_stale(write=False) == []
 
 
-def test_fix_mode_passes_when_nothing_was_stale():
-    assert g.report([], check=False, fix=True) == 0
+def test_fix_mode_passes_once_the_doc_is_fresh(tmp_path):
+    _, find_stale = _stale_sonarr_fixture(tmp_path)
+    g.main(["--fix"], find_stale=find_stale)
+    assert g.main(["--fix"], find_stale=find_stale) == 0
