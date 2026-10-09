@@ -92,9 +92,8 @@ Each arm is a rule and the function that holds it. The record page has the incid
 an apply covering it (`clear_broad_hold` / `clear_service_hold`). `files/gitops_hold.py`'s `Hold`
 owns that rule for every writer, the deploy UI's Clear included (#3658). `docs/gitops-pipeline.md`'s
 *Which apply clears a hold* has the coverage rule for each shape — including a narrowed setup
-apply's `<role>:<block>` form (#3138) — the operator's clear, and the incident that made a hand
-`rm` of `hold_sha` look sufficient when it was not. The operator's clear is the deploy UI's
-Clear or `scripts/deploy_tools/gitops_state.py:clear_hold`; both run `Hold.clear`.
+apply's `<role>:<block>` form (#3138) — the operator's clear (`gitops_state.py clear-hold`), and
+why a hand `rm` of `hold_sha` is not one.
 
 ## Traps
 

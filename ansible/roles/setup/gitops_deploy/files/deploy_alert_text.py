@@ -17,7 +17,6 @@ see `deploy_io.py`'s docstring for why.
 
 from deploy_failtext import TimedOutWithOutput, failing_task, head, tail
 from deploy_remediation import k8s_remediation
-from gitops_hold import HOLD_CLEAR_CMD
 
 # Per-alert budget for an embedded error string. host_lib.discord_post cuts a post at
 # `message[:1900]`, keeping the HEAD — so an unbounded error string does not truncate itself, it
@@ -78,12 +77,11 @@ def bad_config_alert(hostname: str, config_path: str, exc: BaseException) -> str
 
 # How a hand clears a hold once every held plane is applied. The planes are lines of the
 # `owed` ledger (#3392), so removing `hold_sha` by hand would leave them behind to re-hold
-# the next failure. The deploy UI's Clear and `gitops_state.py clear-hold` both remove
-# `hold_sha` and every held plane together, under the git-tree lock (`gitops_hold.Hold.clear`).
+# the next failure. The deploy UI's Clear removes `hold_sha` and every held plane together,
+# under the git-tree lock (`deploy_ui_writes.clear_hold`).
 HOLD_CLEAR_NOTE = (
     "Once every held plane is applied, clear the hold with **Clear** in the deploy UI "
-    f"(deploy.local) or `{HOLD_CLEAR_CMD} <hold_sha>` on the deployer's host; a hand `rm` "
-    "of the hold leaves its planes in `owed.jsonl`."
+    "(deploy.local); a hand `rm` of the hold leaves its planes in `owed.jsonl`."
 )
 
 

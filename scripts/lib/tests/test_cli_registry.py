@@ -63,6 +63,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "alerts",
         "arr",
         "b2_ledger",
+        "gitops_view",
         "ha",
         "health",
         "landing_blockers",
