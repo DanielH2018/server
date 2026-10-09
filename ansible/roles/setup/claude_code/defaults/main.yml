@@ -255,6 +255,16 @@ claude_code_agent_memory_dir: >-
   {{ claude_code_agent_user_home }}/.claude/projects/{{
   claude_code_agent_user_clone_dir | replace('/', '-') }}/memory
 
+# Whether the agent user gets a subset of the operator's user-level Claude config: the user
+# CLAUDE.md, rules/, output-styles/ and skills/, and the operator's `outputStyle`. It gets no
+# hooks. The operator decided on 2026-10-09 to copy the subset from the deployed
+# /home/{{ sys_user }}/.claude rather than from chezmoi's source (docs/claude-agent-user.md,
+# slice 4); tasks/agent_operator_config.yml has how, and the limit of the root ownership. False
+# removes the copied trees, the import line in the agent's CLAUDE.md, and the `outputStyle` it
+# set.
+claude_code_agent_operator_config: true
+claude_code_agent_operator_config_src: /home/{{ sys_user }}/.claude
+
 # The agent user's GitHub machine account, created 2026-10-05 (tasks/agent_github.yml). It is a
 # write collaborator and a bypass actor on no ruleset. "agent branch fence" lets it create,
 # update and delete only refs/heads/worktree-claude+**, the branch EnterWorktree gives a

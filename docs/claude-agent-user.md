@@ -257,7 +257,13 @@ still opens PRs, and the operator lands them.
   `CLAUDE.md`, the output style, the rules and the skills. It gets no user hooks until each one
   is free of `/home/ubuntu` and `SUDO_ASKPASS`. The role installs the subset root-owned and
   read-only to `claude`, copied from the operator's rendered `~/.claude` on each apply. Root
-  ownership stops an injected session from rewriting the instructions later sessions follow.
+  ownership stops an injected session from editing those files in place. It does not stop the
+  session from replacing them: `claude` owns `~/.claude`, so it can rename a root-owned
+  directory and put its own in the place. The next apply restores the copy, and closing the
+  gap would need Claude Code's writable state split from the home, which slice 4 does not do.
+  The user `CLAUDE.md` is installed as `~/.claude/operator/CLAUDE.md` and imported by the
+  agent's own `CLAUDE.md`. `claude_code_agent_operator_config` switches the subset off, and
+  `tasks/agent_operator_config.yml` has the mechanics.
 - **The memory store is copied once, at the switch-over.** The copy rewrites the
   `/home/ubuntu/server/...` links in `MEMORY.md`. The `ubuntu` store stays in place.
 - **`claude` joins `systemd-journal`.** Before the grant, a `gitleaks` scan of a recent journal

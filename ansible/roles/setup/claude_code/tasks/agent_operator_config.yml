@@ -1,0 +1,190 @@
+---
+# A subset of the operator's user-level Claude config for the agent user: the user CLAUDE.md,
+# rules/, output-styles/ and skills/, and the operator's `outputStyle`. No hooks: they name
+# /home/{{ sys_user }} paths and SUDO_ASKPASS, which this user has neither of. Imported from
+# main.yml when claude_code_agent_user_enabled, after agent_github.yml, which creates ~/.claude
+# and renders the agent's own CLAUDE.md. defaults/main.yml has the switch;
+# docs/claude-agent-user.md (slice 4) has the decision.
+#
+# Copied from the DEPLOYED /home/{{ sys_user }}/.claude on each apply, never from chezmoi's
+# source, so the agent gets what the operator's sessions run on. Everything is owned by root.
+#
+# KNOWN LIMIT: root ownership stops an in-place edit of these files, and nothing more. The agent
+# owns ~/.claude itself, so it can rename a root-owned subdirectory, put its own in the place,
+# and the next session reads that. An injected session can therefore still rewrite what later
+# sessions follow; the next apply restores the copy. Closing it needs the home split from
+# Claude Code's writable state, which slice 4 does not do.
+#
+# The shared agent_user.yml ends with `find <home> -user root ... chown`, which would hand this
+# copy to the agent on every apply. Its `-prune` clause names the four paths below, so a change
+# to them here is a change to the pruned list there (test_agent_user.py holds the two equal).
+
+- name: Look for a copy of the operator's config from an earlier apply
+  ansible.builtin.stat:
+    path: "{{ claude_code_agent_user_home }}/.claude/operator/CLAUDE.md"
+  register: claude_code_operator_copied
+  become: true
+
+- name: Look for the operator's config to copy
+  ansible.builtin.stat:
+    path: "{{ claude_code_agent_operator_config_src }}/{{ item }}"
+  loop: [CLAUDE.md, rules, output-styles, skills]
+  register: claude_code_operator_config_src
+  when: claude_code_agent_operator_config
+
+# rsync --delete from a missing source tree fails, and from an emptied one empties the agent's
+# copy, so a host with no deployed operator config stops here rather than copying nothing.
+- name: Refuse to copy an operator config that is not deployed
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: >-
+      claude_code_agent_operator_config is true, but {{ item.stat.path | default(item.item) }}
+      does not exist. Deploy the operator's dotfiles first, or set the switch to false.
+    quiet: true
+  loop: "{{ claude_code_operator_config_src.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: claude_code_agent_operator_config
+
+- name: Create the directory holding the operator's CLAUDE.md
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_user_home }}/.claude/operator"
+    state: "{{ 'directory' if claude_code_agent_operator_config else 'absent' }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  register: claude_code_operator_dir
+
+# The agent's own CLAUDE.md (agent_github.yml) imports this with `@operator/CLAUDE.md`, which
+# Claude Code resolves against the importing file. The agent's file is the agent's own and is
+# never overwritten.
+- name: Copy the operator's user CLAUDE.md beside the agent's
+  # A loop item, not a literal: scripts/deploy_tools/tests/test_land_reach.py reads any setup
+  # `src: *.md` as a repo doc this role ships, and this file is the operator's, on the host.
+  loop: [CLAUDE.md]
+  ansible.builtin.copy:
+    src: "{{ claude_code_agent_operator_config_src }}/{{ item }}"
+    dest: "{{ claude_code_agent_user_home }}/.claude/operator/{{ item }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  # Check mode does not create the directory above, and copy refuses a missing one.
+  when:
+    - claude_code_agent_operator_config
+    - not (ansible_check_mode and claude_code_operator_dir is changed)
+
+# rules/, output-styles/ and skills/ load only from ~/.claude/<name>/, so they cannot sit in
+# operator/. rsync -L copies what a symlink points at, and --delete drops what the operator
+# removed (and anything the agent put there: this task owns these paths while the switch is
+# true). --chmod keeps a script's execute bit and gives every other file 0644. -o and -g make
+# rsync apply --chown to a directory that already exists, which Claude Code may have created as
+# the agent. -t makes the next run's quick check find the file unchanged, and -O keeps a
+# directory's mtime out of the itemised output, so any output line is a real change.
+#
+# skills/synced/ is where Claude Code keeps the skills it syncs for the logged-in claude.ai
+# account, so it is the agent's own: --exclude keeps both the copy and the delete away from it.
+# It is created for the agent below, because Claude Code could not create it in a root-owned
+# skills/. --dry-run in check mode makes the itemised output a faithful "would change".
+- name: Copy the operator's rules, output styles and skills
+  ansible.builtin.command:
+    argv: >-
+      {{ ['rsync', '-rLptogO', '--delete', '--itemize-changes',
+          '--chown=root:root', '--chmod=D0755,F0644,Fa+X']
+         + (['--dry-run'] if ansible_check_mode else [])
+         + (['--exclude=/synced/'] if item == 'skills' else [])
+         + [claude_code_agent_operator_config_src ~ '/' ~ item ~ '/',
+            claude_code_agent_user_home ~ '/.claude/' ~ item ~ '/'] }}
+  loop: [rules, output-styles, skills]
+  register: claude_code_operator_config_rsync
+  changed_when: claude_code_operator_config_rsync.stdout | trim | length > 0
+  # Read-only under --dry-run, so check mode may run it.
+  check_mode: false
+  become: true
+  when: claude_code_agent_operator_config
+
+- name: Give the agent a skills/synced of its own
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_user_home }}/.claude/skills/synced"
+    state: directory
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  become: true
+  when: claude_code_agent_operator_config and not ansible_check_mode
+
+# The way out. operator/CLAUDE.md exists only because an earlier apply copied the subset, so
+# it says the three trees at these paths are that copy. Ownership cannot say so: the shared
+# agent_user.yml ends by handing every root-owned path in the home to the agent, so the copy
+# reads as the agent's by the time the next apply runs. A skills/ the copy owned takes its
+# synced/ with it, which Claude Code fills again.
+- name: Remove the operator's config from the agent when it is switched off
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_user_home }}/.claude/{{ item }}"
+    state: absent
+  loop: [rules, output-styles, skills]
+  become: true
+  when:
+    - not claude_code_agent_operator_config
+    - claude_code_operator_copied.stat.exists
+
+# ~/.claude/settings.json is Claude Code's file for this user, not the role's: it writes there
+# when a session changes a setting. So the role reads it, changes only `outputStyle`, and
+# leaves the owner the agent. The output style takes effect only through that key. The value
+# comes from the operator's own settings.json, never from a literal here. A file that is not
+# JSON fails the apply rather than being replaced.
+- name: Read the operator's output style
+  ansible.builtin.slurp:
+    src: "{{ claude_code_agent_operator_config_src }}/settings.json"
+  register: claude_code_operator_settings
+  # The operator may have no settings.json: the style is then empty and nothing is set.
+  failed_when: false
+  # The file holds an env block; -v would print it base64-encoded.
+  no_log: true
+
+- name: Look for the agent's settings.json
+  ansible.builtin.stat:
+    path: "{{ claude_code_agent_user_home }}/.claude/settings.json"
+  register: claude_code_agent_settings_stat
+  become: true
+
+- name: Read the agent's settings.json
+  ansible.builtin.slurp:
+    src: "{{ claude_code_agent_user_home }}/.claude/settings.json"
+  register: claude_code_agent_settings
+  become: true
+  no_log: true
+  when: claude_code_agent_settings_stat.stat.exists
+
+# True arm: set the operator's style. False arm: drop the key only while it still holds the
+# operator's style, so a style the agent chose itself stays. Written only when the result
+# differs, so an apply that changes nothing leaves the file Claude Code last wrote untouched.
+- name: Set the agent's output style to the operator's, or remove it
+  vars:
+    _style: >-
+      {{ (claude_code_operator_settings.content | b64decode | from_json).outputStyle | default('')
+         if claude_code_operator_settings.content is defined else '' }}
+    _current: >-
+      {{ (claude_code_agent_settings.content | b64decode | from_json)
+         if (claude_code_agent_settings.content | default('') | b64decode | trim | length) > 0
+         else {} }}
+    _kept: >-
+      {{ _current | dict2items | rejectattr('key', 'eq', 'outputStyle') | list | items2dict }}
+    _wanted: >-
+      {{ (_current | combine({'outputStyle': _style}) if _style | length > 0 else _current)
+         if claude_code_agent_operator_config
+         else (_kept if _style | length > 0 and _current.outputStyle | default('') == _style
+               else _current) }}
+  ansible.builtin.copy:
+    content: "{{ _wanted | to_nice_json(indent=2, sort_keys=False, ensure_ascii=False) }}\n"
+    dest: "{{ claude_code_agent_user_home }}/.claude/settings.json"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  diff: false
+  no_log: true
+  when: _wanted != _current
