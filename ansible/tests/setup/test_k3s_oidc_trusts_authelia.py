@@ -329,15 +329,23 @@ def _headlamp_client_id_arg() -> str | None:
 
 
 def _client_id_disagreements(
-    headlamp_id: str | None, authelia_ids: set[str], audiences: list[list[str]]
+    headlamp_id: str,
+    enabled: bool,
+    deployment_arg: str | None,
+    authelia_ids: set[str],
+    audiences: list[list[str]],
 ) -> list[str]:
     """Every place the headlamp client id is missing or different. Empty means they agree.
 
+    `headlamp_id` is `headlamp_k8s_oidc_client_id` and `enabled` is
+    `headlamp_k8s_oidc_enabled`. `deployment_arg` is what the rendered Deployment passes, which
+    is None when the switch is off: that is the documented rollback, under which the Authelia
+    client still renders and is still compared.
     `audiences` is one list per trusted issuer, because each `jwt` entry carries its own.
     """
-    if not headlamp_id:
-        return ["the Headlamp Deployment passes no -oidc-client-id"]
     problems = []
+    if enabled and deployment_arg != headlamp_id:
+        problems.append(f"the Deployment passes -oidc-client-id={deployment_arg}")
     if headlamp_id not in authelia_ids:
         problems.append(
             f"Authelia has no client {headlamp_id!r}: {sorted(authelia_ids)}"
@@ -360,29 +368,38 @@ def test_headlamp_client_id_agrees_across_authelia_headlamp_and_k3s():
     `roles/setup/k3s` is applied by hand and restarts the control plane; this test is the
     tie between them (#3751).
     """
-    # fact: ansible/roles/k8s/headlamp/CLAUDE.md#OIDC login (on)
     audiences = [e["issuer"]["audiences"] for e in _rendered_auth_config()["jwt"]]
     assert audiences, "the authentication config trusts no issuer; nothing was compared"
-    assert (
-        _client_id_disagreements(
-            _headlamp_client_id_arg(), _authelia_client_ids(), audiences
-        )
-        == []
+    headlamp = load_defaults(HEADLAMP)
+    problems = _client_id_disagreements(
+        headlamp["headlamp_k8s_oidc_client_id"],
+        headlamp["headlamp_k8s_oidc_enabled"],
+        _headlamp_client_id_arg(),
+        _authelia_client_ids(),
+        audiences,
     )
+    assert problems == []
 
 
 def test_the_client_id_check_flags_each_copy_that_drifts():
-    """The rejecting half: renaming any one of the three copies is flagged.
+    """The rejecting half: renaming any one of the copies is flagged.
 
     Without it the test above passes on a check that returns `[]` for everything, and it
     passes too once `_authelia_client_ids` stops finding the client list.
     """
     assert "headlamp" in _authelia_client_ids()
-    agree = ("headlamp", {"grafana", "headlamp"}, [["headlamp"], ["headlamp"]])
-    assert _client_id_disagreements(*agree) == []
-    assert len(_client_id_disagreements("dashboard", *agree[1:])) == 3
-    assert len(_client_id_disagreements("headlamp", {"grafana"}, agree[2])) == 1
+    ids = {"grafana", "headlamp"}
+    both = [["headlamp"], ["headlamp"]]
+    assert _client_id_disagreements("headlamp", True, "headlamp", ids, both) == []
+    assert len(_client_id_disagreements("dashboard", True, "dashboard", ids, both)) == 3
+    assert len(_client_id_disagreements("headlamp", True, "dashboard", ids, both)) == 1
+    assert len(_client_id_disagreements("headlamp", True, None, ids, both)) == 1
     assert (
-        len(_client_id_disagreements("headlamp", agree[1], [["headlamp"], ["x"]])) == 1
+        len(_client_id_disagreements("headlamp", True, "headlamp", {"grafana"}, both))
+        == 1
     )
-    assert _client_id_disagreements(None, *agree[1:]) != []
+    assert _client_id_disagreements("headlamp", False, None, ids, both) == []
+    one_off = [["headlamp"], ["x"]]
+    assert (
+        len(_client_id_disagreements("headlamp", True, "headlamp", ids, one_off)) == 1
+    )
