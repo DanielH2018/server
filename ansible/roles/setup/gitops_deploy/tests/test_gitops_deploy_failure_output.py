@@ -12,6 +12,7 @@ import pytest
 
 import deploy_alert_text
 import deploy_io
+from gitops_markers import HOLD_CLEAR_CMD
 
 FATAL = 'fatal: [daniel-box]: FAILED! => {"msg": "the task that broke"}'
 
@@ -255,9 +256,12 @@ def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
     assert FATAL in message
     assert "--tags `k3s`" in message
     assert "not deployed" not in message, "a range with no bump names none"
-    assert message.endswith(deploy_alert_text.HOLD_CLEAR_NOTE), (
+    assert message.endswith(deploy_alert_text.hold_clear_note("2d25ced3" * 5)), (
         "the held planes are ledger lines, so the post names the Clear that drops them "
         "with the hold rather than an rm that leaves them behind"
+    )
+    assert f"`{HOLD_CLEAR_CMD} {'2d25ced3' * 5}`" in message, (
+        "the shell clear takes the full held SHA and refuses any other"
     )
     assert "`rm /" not in message
 
@@ -283,6 +287,7 @@ def test_the_broad_k8s_alert_fits_the_head_slice_and_names_the_services_once(
     )
     assert len(message) <= 1900
     assert "Nothing was rolled back" in message
+    assert message.endswith(deploy_alert_text.hold_clear_note("2d25ced3" * 5))
     assert message.count(",".join(sorted(NINE_BUMPS))) == 1
     assert message.count("bentopdf") == 1
 

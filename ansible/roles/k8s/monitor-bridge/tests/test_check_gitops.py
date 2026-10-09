@@ -200,29 +200,6 @@ def test_a_plane_hold_names_the_playbook_instead(cfg):
     assert "revert the offending PR" not in msg
 
 
-def test_a_hold_on_several_planes_counts_each_entry_the_clear_waits_for(cfg):
-    """The `hold_plane` class holds one ledger line per failed apply, each cleared on its own.
-
-    The SHA is the newest failure's, not each entry's. A Clear after re-running only the
-    newest plane would erase an earlier one still unapplied, so the page counts what is owed.
-    It names the deploy UI's Clear, not an rm: the planes are `owed` ledger lines (#3392),
-    and an rm of `hold_sha` would leave them to re-hold the next failure.
-    """
-    ok, msg = checks.gitops.gitops_status(
-        cfg,
-        "deadbeefcafe",
-        owed=_held_planes(
-            "ansible/deploy.yml radarr", "ansible/initial_setup.yml gitops_deploy"
-        ),
-    )
-    assert not ok
-    assert "ansible/deploy.yml radarr" in msg
-    assert "ansible/initial_setup.yml gitops_deploy" in msg
-    assert "2 planes unapplied" in msg
-    assert "Clear the hold in the deploy UI" in msg
-    assert " rm " not in msg
-
-
 # ── the owed ledger's manual_plane class: a setup role the deployer fast-forwarded past ──
 # One JSON line per pending role, written by DeployerState.record_manual_plane.
 

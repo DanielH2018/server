@@ -14,6 +14,8 @@ from dataclasses import replace
 
 import checks.gitops
 from _fake_sources import FakeSources
+from bridge.common import cap_push_msg
+from gitops_markers import HOLD_CLEAR_CMD
 
 _LATE = 1000.0 + 7 * 3600
 
@@ -124,9 +126,8 @@ def test_a_hold_plane_ledger_line_with_an_unknown_key_is_read_oldest_first(cfg):
     )
     ok, msg = checks.gitops.gitops_status(cfg, "deadbeefcafe", owed=owed)
     assert not ok
-    assert (
-        "2 planes unapplied: ansible/deploy.yml sonarr; ansible/initial_setup.yml k3s;"
-        in msg
+    assert msg.endswith(
+        "2 planes unapplied: ansible/deploy.yml sonarr; ansible/initial_setup.yml k3s"
     )
 
 
@@ -135,3 +136,47 @@ def test_a_hold_plane_ledger_line_without_a_held_sha_pages_nothing(cfg):
     owed = _held("ansible/deploy.yml sonarr", 1000)
     ok, _ = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
     assert ok
+
+
+def test_a_hold_on_several_planes_counts_each_entry_the_clear_waits_for(cfg):
+    """The `hold_plane` class holds one ledger line per failed apply, each cleared on its own.
+
+    The SHA is the newest failure's, not each entry's. A Clear after re-running only the
+    newest plane would erase an earlier one still unapplied, so the page counts what is owed.
+    It names the deploy UI's Clear and `gitops_state.py clear-hold` with the full SHA, not an
+    rm: the planes are `owed` ledger lines (#3392), and an rm of `hold_sha` would leave them to
+    re-hold the next failure.
+    """
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        "deadbeefcafe",
+        owed="\n".join(
+            [
+                _held("ansible/deploy.yml radarr", 1),
+                _held("ansible/initial_setup.yml gitops_deploy", 2),
+            ]
+        ),
+    )
+    assert not ok
+    assert "ansible/deploy.yml radarr" in msg
+    assert "ansible/initial_setup.yml gitops_deploy" in msg
+    assert "2 planes unapplied" in msg
+    assert "Clear the hold in the deploy UI" in msg
+    assert f"`{HOLD_CLEAR_CMD} deadbeefcafe`" in msg
+    assert " rm " not in msg
+
+
+def test_a_long_plane_list_cannot_cut_the_clear_command(cfg):
+    """`cap_push_msg` cuts from the right, so the command must sit ahead of the plane list."""
+    sha = "2d25ced3" * 5
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        sha,
+        owed="\n".join(
+            _held(f"ansible/initial_setup.yml role_{i}", i) for i in range(40)
+        ),
+    )
+    assert not ok
+    capped = cap_push_msg(msg)
+    assert len(msg) > len(capped), "the list must be long enough to be cut"
+    assert f"`{HOLD_CLEAR_CMD} {sha}`" in capped

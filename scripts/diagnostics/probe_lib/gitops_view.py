@@ -5,7 +5,7 @@ that printed the markers was the tail of `gitops_tick.sh`, which runs a real tic
 This reads the deployer's state directory and prints, without ticking:
 
 - `last_run`, whose age tells "ticked, nothing to do" from "did not tick".
-- `hold_sha` with the planes its `hold_plane` lines wait on, and `gitops_hold.HOLD_CLEAR_CMD`.
+- `hold_sha` with the planes its `hold_plane` lines wait on, and `gitops_markers.HOLD_CLEAR_CMD`.
 - `behind_since`, `diverged_sha` and `contention_since`. Only the last has an operator clear;
   the tick rewrites the other two itself.
 - Every other `owed` ledger class: `manual_plane`, `k8s_deferred`, `k8s_unapplied`, each line
@@ -40,7 +40,6 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 # The deployer's own modules, so each format and each clear command is its own.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_hold import HOLD_CLEAR_CMD
 from gitops_ledger import (
     OWED_K8S_DEFERRED,
     OWED_K8S_UNAPPLIED,
@@ -51,6 +50,7 @@ from gitops_ledger import (
 )
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
+    HOLD_CLEAR_CMD,
     MARKERS,
     NO_PLAYBOOK,
     STATE_DIR,

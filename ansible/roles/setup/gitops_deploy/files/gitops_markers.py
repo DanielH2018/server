@@ -145,6 +145,11 @@ OWED_CLEAR_CMD = "uv run python scripts/deploy_tools/gitops_state.py clear-owed"
 CONTENTION_CLEAR_CMD = (
     "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
 )
+# What an operator runs, with the full held SHA, to clear the hold from a shell once every
+# plane it waits on is applied (#3930). It is `gitops_hold.Hold.clear`, the deploy UI's Clear,
+# under the git-tree lock. It lives here rather than in `gitops_hold` because the deployer's
+# Discord alert prints it, and `deploy_alert_text` may import no state module (#4015).
+HOLD_CLEAR_CMD = "uv run python scripts/deploy_tools/gitops_state.py clear-hold"
 
 
 def k8s_deferred_deploy_cmd(services) -> str:

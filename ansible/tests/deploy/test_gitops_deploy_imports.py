@@ -148,11 +148,14 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_release",
     },
     # Every message body, and nothing that sends one: the ChangeSet its signatures take, the
-    # error-text slicers and the k8s remediation it appends. No transport, no state.
+    # error-text slicers and the k8s remediation it appends. No transport, no state:
+    # `gitops_markers` is the leaf that names marker files and clear commands, and the alert
+    # takes `HOLD_CLEAR_CMD` from it (#4015).
     "deploy_alert_text": {
         "deploy_changes",
         "deploy_failtext",
         "deploy_remediation",
+        "gitops_markers",
     },
     "deploy_alerts": {
         "deploy_alert_text",

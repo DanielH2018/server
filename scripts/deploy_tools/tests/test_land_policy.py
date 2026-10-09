@@ -117,6 +117,10 @@ REFUSALS = {
         "need the operator's approval: scripts/lib/gh.py",
     ),
     "a held deployer": ({"state": {"hold_sha": "deadbeef"}}, "holding deadbeef"),
+    "a held deployer, with the shell clear": (
+        {"state": {"hold_sha": "deadbeef"}},
+        "gitops_state.py clear-hold deadbeef`",
+    ),
     "an unreadable hold": ({"state": {"hold_sha": None}}, "could not be read"),
     "a head that moved during the checks": (
         {"head_again": "d" * 40},
