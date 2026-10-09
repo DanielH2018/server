@@ -61,27 +61,29 @@ started some other way. Three kills in a row on 2026-09-04, issue #1096.
 
 ## Arming the merge, and the two command shapes the classifier refuses
 
-**`--arm-merge` runs `gh pr merge --squash --auto` itself.** A bare `gh pr merge` sits on the
+**`--arm-merge` readies the merge inside the script.** A bare `gh pr merge` sits on the
 ask list (`Bash(gh pr merge:*)`), and auto mode suspends the allow list — an unattended session
 has nobody to answer that prompt, and it times out as a denial. Three attempts, three denials,
 on 2026-09-03 (issue #979). `land.sh --arm-merge` is not that command: its own text never
 contains `gh pr merge`, so it reaches the classifier as the single script invocation the
 worktree-containment check already accepts.
 
-The arm is idempotent, so re-running after a `merge-conflict` or `merge-timeout` re-arms
+The arm is idempotent, so re-running after a `merge-conflict` or `merge-timeout` starts
 cleanly. `--subject` overrides the squash commit's subject; the PR's own title is used
 otherwise.
 
-**A PR only a ruleset bypass lets into master is merged directly, not armed.** When
-`reviewDecision` is `REVIEW_REQUIRED` or `APPROVED`, the arm leaves the PR alone.
-`REVIEW_REQUIRED` needs the bypass for the master review gate. `APPROVED` needs it for the
-agent branch fence (ruleset 24517167), which restricts updates to every branch except
-`worktree-claude+**`, master included. An approved agent PR that was armed sat `BLOCKED` until a
-hand merge (#3911). A `CHANGES_REQUESTED` PR is refused before any merge call, because the direct
+**Every PR is merged directly, never armed for GitHub's auto-merge.** Every PR into master
+needs a ruleset bypass, and auto-merge never applies one. A PR reads `REVIEW_REQUIRED` until it
+is approved, and that needs the bypass for the master review gate (ruleset 24514824). An
+`APPROVED` PR needs it for the agent branch fence (ruleset 24517167), which restricts updates
+to every branch except `worktree-claude+**`, master included. An approved agent PR that was
+armed sat `BLOCKED` until a hand merge (#3911). From the fence going live on 2026-10-05 to
+2026-10-09, no PR merged through an auto-merge `land.sh` armed. The arm path was removed then
+(#4001). A `CHANGES_REQUESTED` PR is refused before any merge call, because the direct
 merge would apply the operator's bypass to it. `--await-merge` then merges it through the REST
 merge endpoint on the first poll where `await_ci` reads its head green, pinned to that head SHA.
-GitHub's auto-merge does not apply a ruleset bypass, so an armed PR in that state stays
-`BLOCKED` until `merge-timeout` (github/docs#45265). The REST endpoint does apply the bypass, and
+GitHub's auto-merge does not apply a ruleset bypass, so an armed PR stays `BLOCKED` until
+`merge-timeout` (github/docs#45265). The REST endpoint does apply the bypass, and
 a ruleset with no bypass actor, such as the master CI gate, still refuses the call until its
 checks pass. A refused merge is printed once and the wait continues, so a caller who cannot
 bypass ends at `merge-timeout`. Without `--await-merge` the arm dies, because nothing else in the
@@ -146,10 +148,10 @@ has to notice the merge itself, which every landing on 2026-09-01 did with a han
 reason is on the PR.
 
 **A conflicting PR ends the wait at once**, exit 1 with `VERDICT: merge-conflict`, rather than
-sitting out the 45 minutes. A PR that goes conflicting after the auto-merge was armed never
-merges, and nothing on the PR says so — with several sessions landing at once, another merge
-moving master under an open PR is the ordinary way it happens. Rebase onto master, re-arm, and
-re-run the same command. The wait tolerates a `mergeable` of `UNKNOWN` — GitHub computes the
+sitting out the 45 minutes. A PR that goes conflicting during the wait never merges, and
+nothing on the PR says so — with several sessions landing at once, another merge moving master
+under an open PR is the ordinary way it happens. Rebase onto master, push, and re-run the same
+command. The wait tolerates a `mergeable` of `UNKNOWN` — GitHub computes the
 field asynchronously — and bails only after two consecutive `CONFLICTING` polls, because the
 base moving under a PR flips it for one poll.
 

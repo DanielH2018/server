@@ -1,41 +1,25 @@
-"""The merge phase: arm `gh pr merge --auto` here, and wait for the merge to arrive.
+"""The merge phase: check the PR here, then merge it directly once its CI is green.
 
 --arm-merge exists so an unattended session never issues `gh pr merge` itself: it sits on
 the ask list, and auto mode suspends the allow list, so a session with nobody to answer the
 prompt times out as a denial.
 Idempotent: a MERGED PR is left alone, a CLOSED one dies.
 
-GitHub's `enablePullRequestAutoMerge` mutation (what `--auto` calls) rejects a PR that is
-already CLEAN -- there is nothing to defer -- so a plain `--auto` fails on exactly the PRs
-that are ready to merge. A CLEAN rejection falls through to a direct `gh pr merge --squash`; a PR that
-merged in the gap between the idempotency check and the `--auto` attempt is a no-op, not a
-failure; anything else GitHub calls not-yet-mergeable (BLOCKED, DIRTY, ...) still dies.
+--arm-merge never arms GitHub's auto-merge. Auto-merge does not apply a ruleset bypass, and
+every PR into master needs one (github/docs#45265, open since 2026-07-23). The "master review
+gate" (ruleset 24514824) requires an approving review, so a PR reads REVIEW_REQUIRED until it
+is approved. An approved PR still needs the bypass for "agent branch fence" (ruleset 24517167),
+which restricts updates to every branch but the agent's own, master included: an approved
+agent PR armed for auto-merge sat BLOCKED until a hand merge (#3911). A CHANGES_REQUESTED PR is refused outright, because the direct merge would apply
+the operator's bypass to a PR someone asked to change. `gh pr merge` refuses it at its own
+pre-flight as well (cli/cli#13388).
 
-`--auto` exiting 0 is not proof the merge was armed either: it can exit 0 with
-`autoMergeRequest` still null, leaving the landing to poll toward merge-timeout on a PR that is
-CLEAN with every check green. One read-back answers all three
-questions the arm can have gone wrong in -- merged in the gap, armed, or silently not armed --
-and an unarmed CLEAN PR takes the same direct-merge path a CLEAN rejection does. An unarmed
-PR that is NOT CLEAN dies: direct-merging it would only fail the same way. The read-back
-itself failing is not a reason to fail a landing whose arm may well have worked, so it says
-so and trusts the exit code.
-
---await-merge polls the PR's state until merged, so `gh pr create` -> `gh pr merge --auto`
--> one backgrounded land.sh is the whole procedure.
-
-A PR whose `reviewDecision` is REVIEW_REQUIRED or APPROVED is never armed. GitHub's auto-merge
-does not apply a ruleset bypass, so an armed PR that only a bypass lets into master stays
-BLOCKED until merge-timeout (github/docs#45265, open since 2026-07-23). REVIEW_REQUIRED needs
-the bypass for "master review gate". APPROVED needs it for "agent branch fence" (ruleset
-24517167), which restricts updates to every branch but the agent's own, master included: an
-agent PR the operator approved sat BLOCKED that way until a hand merge (#3911). A
-CHANGES_REQUESTED PR is refused outright, because the direct merge would apply the operator's
-bypass to a PR someone asked to change. `gh pr merge` refuses it
-at its own pre-flight as well (cli/cli#13388). The REST merge endpoint applies the bypass, so
---await-merge merges such a PR through it once await_ci reads the head green, pinned to that
-head SHA. A ruleset with no bypass actor, such as the master CI gate, still refuses that call
-until its own checks pass. A refusal is reported and the wait goes on, so a caller who cannot
-bypass reaches merge-timeout rather than a merge.
+--await-merge polls the PR's state until merged, and merges it through the REST endpoint, the
+merge path that applies the bypass, once await_ci reads the head green, pinned to that head
+SHA. A ruleset with no bypass actor, such as the master CI gate, still refuses that call until
+its own checks pass. A refusal is reported and the wait goes on, so a caller who cannot bypass
+reaches merge-timeout rather than a merge. --arm-merge without --await-merge therefore dies:
+nothing in that run would merge the PR.
 
 --arm-merge also refuses a PR whose body carries a closing keyword outside a `Closes #N` line,
 before any merge call. A "Filed and not fixed: #N" line closes #N on merge, because GitHub
@@ -43,9 +27,9 @@ reads the keyword and not the sentence around it. `stray_closing_refs` owns the
 rule.
 
 --arm-merge refuses while the repo is not public, before any merge call. On the free plan GitHub
-enforces no ruleset on a private repo, so `--auto` and both direct merges would go through
-without the CI gate: 29 PRs did on 2026-09-21 (#3610). `_refuse_private_repo` owns it. It cannot
-stop an auto-merge armed while the repo was public from firing after a later flip;
+enforces no ruleset on a private repo, so the direct merge would go through without the CI
+gate: 29 PRs did on 2026-09-21 (#3610). `_refuse_private_repo` owns it. It cannot stop an
+auto-merge armed by hand while the repo was public from firing after a later flip;
 github-ruleset-drift.sh is the cover for that.
 
 `opts.require_author` (from `LAND_REQUIRE_AUTHOR`, which renovate-agent-land@.service sets to
@@ -56,14 +40,12 @@ rather than the `--any-author` override: only the unattended session ever reads 
 operator chose that a `manual —` bump goes to a person.
 
 When a lander unit sets the landing policy (`policy.py`), --arm-merge runs its checks and pins
-every merge path to the head SHA they read: `--match-head-commit` on both `gh pr merge` calls,
-and `sha=` on the REST merge. --await-merge dies if the head moves before the merge, so a push
-after the checks needs a re-run, which checks it again.
+the REST merge to the head SHA they read through its `sha=` field. --await-merge dies if the
+head moves before the merge, so a push after the checks needs a re-run, which checks it again.
 """
 
 import re
 import subprocess
-from enum import StrEnum
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -73,30 +55,7 @@ from lib.exit_codes import CI_GREEN, CI_RED
 from lib.json_types import as_object
 from deploy_tools.land_lib import policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-
-
-class ArmDecision(StrEnum):
-    """What to do after `gh pr merge --auto` refuses to arm a PR."""
-
-    ALREADY_MERGED = "already-merged"
-    MERGE_DIRECT = "merge-direct"
-    DIE = "die"
-
-
-def arm_merge_fallback_decision(state: str, merge_state_status: str) -> ArmDecision:
-    """What to do after `gh pr merge --auto` rejects a PR: already-merged | merge-direct | die.
-
-    GitHub's `enablePullRequestAutoMerge` mutation only accepts a PR that is genuinely
-    blocked. A PR that is already CLEAN has nothing to defer, so `--auto` fails on exactly
-    the PRs that are ready to merge right now. A pure function of two strings so the branch is
-    testable without gh.
-    """
-    if state == "MERGED":
-        return ArmDecision.ALREADY_MERGED
-    if merge_state_status == "CLEAN":
-        return ArmDecision.MERGE_DIRECT
-    return ArmDecision.DIE
+from deploy_tools.land_lib.outcome import Verdict, say
 
 
 # GitHub's closing keywords, all three tenses of all three verbs. A keyword anywhere in the
@@ -191,31 +150,10 @@ def _refuse_stray_closing_refs(ln: Landing, body: str) -> None:
     )
 
 
-def _pin(ln: Landing) -> list[str]:
-    """`gh pr merge`'s head pin when the landing policy checked a head; else nothing."""
-    return ["--match-head-commit", ln.pinned_head] if ln.pinned_head else []
-
-
-def _merge_direct(ln: Landing, subject: str) -> None:
-    """Squash-merge the PR now, for a PR `--auto` will not or did not arm."""
-    say(f"PR #{ln.opts.pr} is CLEAN -- nothing to defer; merging directly")
-    try:
-        ln.tools.gh(
-            "pr", "merge", ln.opts.pr, "--squash", "--subject", subject, *_pin(ln)
-        )
-    except subprocess.CalledProcessError as exc:
-        ln.die(
-            f"direct gh pr merge --squash failed for PR #{ln.opts.pr}: {exc.stderr.strip()}",
-            1,
-        )
-    say(f"merged directly: {subject}")
-
-
 def _leave_for_a_direct_merge(ln: Landing, subject: str) -> None:
-    """Hand a PR only a ruleset bypass lets in to await_merge, which merges it directly.
+    """Hand the PR to await_merge, which merges it directly through the ruleset bypass.
 
-    Arming `--auto` here would leave it BLOCKED until merge-timeout; the module docstring has
-    why. Without --await-merge nothing in this run would merge it, so that dies instead.
+    Without --await-merge nothing in this run would merge it, so that dies instead.
     """
     pr = ln.opts.pr
     if not ln.opts.await_merge:
@@ -309,7 +247,7 @@ def _refuse_private_repo(ln: Landing) -> None:
 
 
 def arm_merge(ln: Landing) -> None:
-    """Run `gh pr merge --squash --auto` for this PR, unless it is already merged."""
+    """Check this PR and leave it for await_merge to merge, unless it is already merged."""
     pr = ln.opts.pr
     view = ln.view("state,title,body,reviewDecision")
     if view.get("state") == "MERGED":
@@ -330,73 +268,21 @@ def arm_merge(ln: Landing) -> None:
             "re-run this",
             1,
         )
-    if review in ("REVIEW_REQUIRED", "APPROVED"):
-        _leave_for_a_direct_merge(ln, subject)
-        return
-    try:
-        ln.tools.gh(
-            "pr", "merge", pr, "--squash", "--auto", "--subject", subject, *_pin(ln)
-        )
-    except subprocess.CalledProcessError:
-        retry = ln.view("state,mergeStateStatus")
-        decision = arm_merge_fallback_decision(
-            retry.get("state", ""), retry.get("mergeStateStatus", "")
-        )
-        if decision == ArmDecision.ALREADY_MERGED:
-            # A race with the idempotency check above: the PR merged between that read and
-            # this --auto attempt. Keep the MERGED short-circuit's semantics: say, not die.
-            say(f"gh pr merge --auto failed because PR #{pr} merged in the meantime")
-            return
-        if decision == ArmDecision.MERGE_DIRECT:
-            _merge_direct(ln, subject)
-            return
-        ln.die(
-            f"gh pr merge --auto failed for PR #{pr} "
-            f"(mergeStateStatus={retry.get('mergeStateStatus', '')})",
-            1,
-        )
-    # --auto exiting 0 is not proof the merge was armed. One read-back
-    # answers every way it can have gone wrong; a read-back that itself fails must not turn
-    # a possibly-successful arm into a failed landing. Only the read is guarded: an Outcome
-    # raised by anything after it is a real verdict and must not be swallowed here.
-    try:
-        armed = ln.view("state,mergeStateStatus,autoMergeRequest")
-    except Outcome:
-        say(f"could not confirm PR #{pr}'s arm; trusting gh pr merge --auto's exit 0")
-        return
-    state = armed.get("state", "")
-    mss = armed.get("mergeStateStatus", "")
-    if state == "MERGED":
-        say(f"PR #{pr} merged in the meantime")
-        return
-    if state == "OPEN" and armed.get("autoMergeRequest") is None:
-        if arm_merge_fallback_decision(state, mss) == ArmDecision.MERGE_DIRECT:
-            say(
-                f"gh pr merge --auto exited 0 but PR #{pr} is not armed "
-                "(autoMergeRequest is null)"
-            )
-            _merge_direct(ln, subject)
-            return
-        ln.die(
-            f"gh pr merge --auto exited 0 but PR #{pr} is not armed "
-            f"(mergeStateStatus={mss})",
-            1,
-        )
-    say(f"auto-merge armed: {subject}")
+    _leave_for_a_direct_merge(ln, subject)
 
 
 def await_merge(ln: Landing) -> None:
-    """Poll until merged. Bail early only on the two states an auto-merge never leaves.
+    """Poll until merged, merging directly once CI is green. Bail early on two dead ends.
 
     Only CONFLICTING may bail, and only on two consecutive polls: GitHub computes
     mergeability asynchronously and serves UNKNOWN until it settles, and master moving under
-    the PR flips the field for one poll. A red PR
-    CI is the other way an armed auto-merge never fires; GitHub says only `BLOCKED`, the
-    same word it uses while checks run, so await_ci owns that verdict, one-shot. Only its
-    exit 1 bails: `pending` IS the grace period, derived rather than guessed.
+    the PR flips the field for one poll. A red PR CI is the other dead end; GitHub says only
+    `BLOCKED`, the same word it uses while checks run, so await_ci owns that verdict,
+    one-shot. Only its exit 1 bails: `pending` IS the grace period, derived rather than
+    guessed.
 
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
-    reads its head green.
+    reads its head green. Without --arm-merge this only polls, for a PR merged some other way.
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -412,8 +298,7 @@ def await_merge(ln: Landing) -> None:
         conflicting = conflicting + 1 if view.get("mergeable") == "CONFLICTING" else 0
         if conflicting >= 2:
             ln.die(
-                f"PR #{o.pr} conflicts with {BRANCH} — rebase it, re-arm "
-                "`gh pr merge --squash --auto`, then re-run this",
+                f"PR #{o.pr} conflicts with {BRANCH} — rebase it, push, then re-run this",
                 1,
                 Verdict.MERGE_CONFLICT,
             )

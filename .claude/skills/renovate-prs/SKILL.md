@@ -293,7 +293,7 @@ soak. If the second edit fails, the box is left unticked; a plain run ticks it.
 ## 6. Land them one at a time
 
 Land each PR with the [`land-after-merge` invocation](../land-after-merge/SKILL.md#the-invocation),
-run as written there. Its `--arm-merge` runs `gh pr merge --squash --auto` inside the script
+run as written there. Its `--arm-merge` merges inside the script
 itself, so no session answers the permission prompt a bare `gh pr merge` raises (issue #979).
 The unattended daily run lands through `renovate-agent-land@<n>.service` instead, as its
 prompt says, because its own token cannot merge.

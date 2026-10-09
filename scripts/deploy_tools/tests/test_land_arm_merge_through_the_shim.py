@@ -7,9 +7,12 @@ between the command line, `pipeline._phases` and `tools.gh` fails none of them.
 This module is the one that runs the shim as a process against stubs on PATH, the way the
 deleted test_land_arm_merge.py did, and reads the recorded argv back.
 
-The two tests are a pair: an OPEN PR must produce the merge argv, and a MERGED one must
-produce none. An assertion that only ever sees the arming path cannot tell a `--arm-merge`
-that always fires from one that fires correctly.
+The two tests are a pair: an OPEN PR must be handed to the merge wait, and a MERGED one must
+not be. An assertion that only ever sees the arming path cannot tell a `--arm-merge` that
+always fires from one that fires correctly. Neither run issues a `gh pr merge`: every PR
+merges through await_merge's REST merge (#4001). That merge needs await_ci to read the head
+green over HTTP, which the stubs cannot answer, so the stubbed poll reads the PR MERGED and
+`test_land_merge_past_review.py` pins the REST argv instead.
 
 Both runs end at `nothing-to-deploy`: the stub answers an empty PR file list, which reaches
 no service tag and no plane. That is far enough to prove `LAND_PRIMARY` reaches a subprocess
@@ -23,15 +26,15 @@ from lib.proc_testing import fake_bin, path_with
 
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
-_MERGE_ARGV = "pr merge 939 --squash --auto --subject t"
+_POLL_ARGV = "pr view 939 --json state,mergeable,headRefOid"
 
 _GH_STUB = """#!/bin/sh
 printf '%s\\t%s\\n' "$PWD" "$*" >> "{calls}/gh-calls"
 case "$*" in
   *"--json state,title"*)
     printf '{{"state":"{state}","title":"Bump vale to 3.19.0"}}\\n' ;;
-  *autoMergeRequest*)
-    printf '{{"state":"OPEN","mergeStateStatus":"BLOCKED","autoMergeRequest":{{"enabledAt":"2026-09-04T00:00:00Z"}}}}\\n' ;;
+  *"--json state,mergeable,headRefOid"*)
+    printf '{{"state":"MERGED","mergeable":"MERGEABLE","headRefOid":""}}\\n' ;;
   "api repos/{{owner}}/{{repo}}")
     printf '{{"visibility":"public"}}\\n' ;;
   *mergeCommit*)
@@ -61,7 +64,9 @@ def _stub_bin(tmp_path: Path, state: str) -> Path:
 
 
 def _run(tmp_path: Path, state: str) -> subprocess.CompletedProcess[str]:
-    """`land.sh --pr 939 --arm-merge --subject t` against the stubs, primary = tmp_path.
+    """`land.sh --pr 939 --arm-merge --await-merge --subject t` against the stubs.
+
+    The primary checkout is tmp_path.
 
     `GIT_*` is stripped from the environment: `git commit` exports `GIT_DIR` and
     `GIT_INDEX_FILE` to its hooks, and a test inheriting them has written the real repo.
@@ -73,7 +78,16 @@ def _run(tmp_path: Path, state: str) -> subprocess.CompletedProcess[str]:
         "LAND_PRIMARY": str(tmp_path),
     }
     return subprocess.run(
-        ["bash", str(_LAND_SH), "--pr", "939", "--arm-merge", "--subject", "t"],
+        [
+            "bash",
+            str(_LAND_SH),
+            "--pr",
+            "939",
+            "--arm-merge",
+            "--await-merge",
+            "--subject",
+            "t",
+        ],
         env=env,
         capture_output=True,
         text=True,
@@ -86,24 +100,27 @@ def _calls(tmp_path: Path, name: str) -> list[tuple[str, str]]:
     return [(cwd, argv) for cwd, _, argv in (line.partition("\t") for line in lines)]
 
 
-def test_an_open_pr_reaches_gh_as_the_merge_argv(tmp_path):
+def test_an_open_pr_is_handed_to_the_merge_wait(tmp_path):
     result = _run(tmp_path, "OPEN")
 
     assert result.returncode == 0, result.stderr
     assert "== arm  arming PR #939's merge" in result.stdout
-    assert "auto-merge armed: t" in result.stdout
-    assert _MERGE_ARGV in [argv for _, argv in _calls(tmp_path, "gh")]
+    assert "merging directly once CI is green" in result.stdout
+    gh = [argv for _, argv in _calls(tmp_path, "gh")]
+    assert any(argv.startswith(_POLL_ARGV) for argv in gh), gh
+    assert not [argv for argv in gh if argv.startswith("pr merge")]
     # The arm falls through into the rest of the procedure rather than ending the landing.
     assert "== 1/6  resolving PR #939" in result.stdout
     assert "VERDICT: nothing-to-deploy" in result.stdout
 
 
-def test_an_already_merged_pr_reaches_gh_with_no_merge_argv(tmp_path):
+def test_an_already_merged_pr_is_not_handed_to_the_merge_wait(tmp_path):
     """The rejecting half: `--arm-merge` is idempotent, so a MERGED PR is left alone."""
     result = _run(tmp_path, "MERGED")
 
     assert result.returncode == 0, result.stderr
     assert "already merged; --arm-merge is a no-op" in result.stdout
+    assert "merging directly once CI is green" not in result.stdout
     assert not [
         argv for _, argv in _calls(tmp_path, "gh") if argv.startswith("pr merge")
     ]

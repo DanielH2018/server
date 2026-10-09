@@ -1,10 +1,11 @@
 """--arm-merge and --await-merge on a PR that can merge only through a ruleset bypass.
 
-GitHub's auto-merge does not apply a ruleset bypass (github/docs#45265), so an armed PR in
-that state sits BLOCKED until merge-timeout. arm_merge therefore leaves it unarmed, and
-await_merge merges it through the REST endpoint once await_ci reads its head green. Each
-behaviour is tested against its counterpart: a bypass-only PR against an ordinary armed one,
-a green head against a pending one, and a merge GitHub accepts against one it refuses.
+GitHub's auto-merge does not apply a ruleset bypass (github/docs#45265), and every PR into
+master needs one, so an armed PR sits BLOCKED until merge-timeout. arm_merge therefore never
+arms one, and await_merge merges it through the REST endpoint once await_ci reads its head
+green. Each behaviour is tested against its counterpart: a PR left for a direct merge against
+one only polled, a green head against a pending one, and a merge GitHub accepts against one
+it refuses.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_merge_past_review.py
 """
@@ -32,8 +33,9 @@ def _wait(states: list[str]):
 
 # REVIEW_REQUIRED needs the bypass for the review gate. APPROVED needs it for the agent branch
 # fence, which restricts updates to master itself: armed, an approved agent PR sat BLOCKED
-# until a hand merge (#3911).
-BYPASS_ONLY = pytest.mark.parametrize("review", ["REVIEW_REQUIRED", "APPROVED"])
+# until a hand merge (#3911). An empty decision, a PR into a master with no review gate, still
+# meets the fence, so it takes the same path rather than the auto-merge it once did (#4001).
+BYPASS_ONLY = pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
 
 
 @BYPASS_ONLY
@@ -134,7 +136,8 @@ def test_a_review_bound_pr_merges_directly_once_its_head_is_green(landing):
     ]
 
 
-def test_an_armed_pr_with_a_green_head_is_left_to_auto_merge(landing):
+def test_a_pr_not_left_for_a_direct_merge_is_only_polled(landing):
+    """--await-merge without --arm-merge waits for a merge made some other way."""
     ln, calls = landing(
         Fakes(
             gh_views={

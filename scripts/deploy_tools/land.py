@@ -49,7 +49,7 @@ it is not one answer, is the docstring of ``land_lib/tools.py``.
 Usage::
 
     land.sh --pr 574 --since <pre-merge-sha>
-    land.sh --pr 574 --since <sha> --await-merge   # arm `gh pr merge --auto` first, then this
+    land.sh --pr 574 --since <sha> --await-merge   # wait for a PR merged some other way
     land.sh --pr 574 --arm-merge --await-merge --since <sha>   # arm the merge INSIDE this script
     land.sh --pr 574 --tags sonarr,radarr    # skip derivation, scope by hand
     land.sh --pr 574 --arm-merge --await-merge --detach && cc-wait land 574

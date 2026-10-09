@@ -223,18 +223,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         k: (list(v) if isinstance(v, list) else [v]) for k, v in f.gh_views.items()
     }
     views.setdefault("mergeCommit", [{"mergeCommit": {"oid": MERGE_SHA}}])
-    # An arm that reads back as armed, so every --arm-merge test still says
-    # "auto-merge armed" rather than taking the direct-merge path.
-    views.setdefault(
-        "state,mergeStateStatus,autoMergeRequest",
-        [
-            {
-                "state": "OPEN",
-                "mergeStateStatus": "BLOCKED",
-                "autoMergeRequest": {"enabledAt": "x"},
-            }
-        ],
-    )
     views.setdefault(
         "files,changedFiles",
         [

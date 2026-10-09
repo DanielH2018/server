@@ -8,7 +8,7 @@ lands anything is: put the commit on a fresh branch, push that, take the commit 
 the local master so gitops-deploy's ``--ff-only`` still succeeds when the squash lands
 under a new SHA, open the PR, and hand it to a detached ``land.py`` that merges it.
 
-WHY A LANDING AND NOT ``gh pr merge --auto``. The master review gate ruleset requires an
+WHY A LANDING AND NOT GITHUB'S AUTO-MERGE. The master review gate ruleset requires an
 approving review, and GitHub's auto-merge never applies a ruleset bypass, so an armed cron PR
 waits for an approval nobody is asked to give (#3609). ``gh pr merge`` also refuses such a PR at
 its own pre-flight. ``land.py --arm-merge --await-merge`` is the path that merges past the
