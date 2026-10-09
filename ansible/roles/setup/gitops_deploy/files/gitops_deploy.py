@@ -163,18 +163,17 @@ def tick_config() -> Config:
 
     Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
 
-    THREE of the twelve kwargs below are load-bearing, and nine are not. The three:
+    TWO of the twelve kwargs below are load-bearing, and ten are not. The two:
 
       - `k8s_autodeploy_enabled` is the value AFTER the empty-denylist fail-closed disarm above,
         which is a decision this module makes and `load_config` cannot.
       - `k8s_autodeploy_enabled_in_file` is the value BEFORE it — the pair is what tells a host
         that has the feature off from one whose denylist line was lost, which is the difference
         `deploy_phases.reconcile_denylist` gates on.
-      - `repo` is the checkout every phase reads, and `main()` refuses an empty one.
 
-    The other nine equal CONFIG's fields today and are passed anyway, so that this snapshot,
-    not CONFIG, stays the one object a phase reads. A test does not patch these constants: it
-    builds its config with `dataclasses.replace(tick_config(), ...)`.
+    The other ten, `repo` among them, equal CONFIG's fields and are passed anyway, so that
+    this snapshot, not CONFIG, stays the one object a phase reads. A test does not patch these
+    constants: it builds its config with `dataclasses.replace(tick_config(), ...)`.
 
     Called from the `__main__` guard, never at import.
     """
