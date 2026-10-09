@@ -207,8 +207,16 @@ role (#3874). The deployer reads those callers from
 `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS`, a static table that
 `ansible/tests/setup/test_setup_cross_role_files.py` holds to the tree. A plugin change then
 joins the setup plane beside the deploy plane. The tick applies an `initial_setup.yml` caller
-such as `gitops_deploy` with its whole-role tag, and records a `k3s-bringup.yml` caller such as
-`k3s` as a `manual_plane` line.
+such as `gitops_deploy`, and records a `k3s-bringup.yml` caller such as `k3s` as a
+`manual_plane` line.
+
+`narrow_setup.plugin_tags` narrows each caller to the readers of the vars key whose value calls
+one of the plugin's filters (#3878). A `service_tier.py` change reaches `k3s` through
+`k3s_longhorn_r2_volumes`, so its line names `longhorn_backup,longhorn_r2` rather than `--tags
+k3s`. A `k8s_autodeploy.py` change reaches `gitops_deploy` through the denylist key, so the
+tick applies `--tags gitops-deploy-service`, the tag that renders `config.env`. An inventory
+value that calls one of the filters refuses, and so does a role that names none of them. A
+refusal falls back to the whole-role tag.
 
 **Every deploy-plane tick also logs a render-digest shadow line** (#3045), one
 `narrow shadow:` line beside the outcome above. It names the services whose applied digests
