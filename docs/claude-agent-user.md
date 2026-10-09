@@ -106,9 +106,12 @@ reported the checks working.
   set `CLAUDE_INSTALL_ALLOW_SUDO=1`, and the hold was cleared after a hand apply.
 - The first login needed a hand `uv sync` in `~/server`, because the role does not create the
   clone's `.venv` (#3513).
-- The agent's `~/.claude` came out `drwxr-s--- claude:ubuntu`, because it inherits the
-  `setgid` home's group. So slice 4's planned ACL for reading the agent's memory and artifacts is
-  probably unnecessary.
+- The agent's `~/.claude` is `drwx------ claude:ubuntu`. The role sets that mode on every
+  apply, in `ansible/roles/setup/claude_code/tasks/agent_github.yml`, because the directory
+  holds the session's login. The group comes from the `setgid` home, but at `0700` it grants
+  nothing. `ubuntu` cannot read the agent's memory or artifacts, so slice 4 needs a read grant.
+  This page said `drwxr-s---` until 2026-10-09 (#3901). 3f15ead01 added the `0700` task on
+  2026-10-05, one day after that check was written.
 
 **Check:** as `claude`, `id` lists none of the denied groups, `ls /home/ubuntu` is refused,
 `sudo -n true` fails, `kubectl get pods -A` works and `uv run pytest scripts` passes.
@@ -240,6 +243,29 @@ still opens PRs, and the operator lands them.
 store to the agent's project key, rewrite `MEMORY.md`'s `/home/ubuntu/server/...` links, and
 update `claude_code_memory_sync_dir` and `artifacts_host_dir`.
 
+**Read grant:** `ubuntu` reads the agent's artifacts and memory through one grant in the role.
+`claude-memory-sync` runs as `sys_user`, and the artifacts tree is the operator's to read, so
+both need it. The artifacts pod may not need it. Its template sets no `securityContext`, so the
+pod runs as root with the default capability set of the container runtime, which includes
+`CAP_DAC_OVERRIDE`. The slice 4 check tests that read anyway, because a later hardening of the
+pod would drop the capability.
+
+- The `~/.claude` item in `agent_github.yml` changes from `0700` to `0710`. Group `ubuntu`
+  gets traverse but not list. The grant relies on `.credentials.json` staying `0600`.
+- `~/.claude/projects` and `~/.claude/projects/<key>` get group `ubuntu` and `0710` too.
+  Claude Code creates them at a mode nobody has checked, and the memory directory sits
+  under both.
+- A task creates `~/.claude/artifacts` and the memory directory as root, owned by the agent,
+  `setgid`, with group `ubuntu`. It cannot run as the agent, because the agent belongs to no
+  group and so cannot `chgrp` to `ubuntu`. The ACL task runs as root for the same reason. It gives each a default ACL of `g:ubuntu:rX`, so files Claude Code writes
+  later inherit the read.
+- The ACL task runs after every `file:` task that names those paths or their parents. A `mode:` there runs
+  `chmod`, and `chmod` rewrites the ACL mask from the group bits. `0700` sets the mask to
+  `---`, which disables every named entry while `getfacl` still lists it.
+- A default ACL cannot widen a file's create mode. A file Claude Code creates `0600` gets
+  a mask of `---`, so `ubuntu` cannot read it. The check below reads a new file as `ubuntu`
+  for that reason, rather than reading `getfacl`.
+
 **Couplings to change:**
 
 | Coupling | Where |
@@ -253,7 +279,8 @@ update `claude_code_memory_sync_dir` and `artifacts_host_dir`.
 | The SessionStart banner's other-session list | It reads `git worktree list`, so it shows only sessions in the same clone |
 
 **Check:** a phone-created session prints `claude` for `id`, loads `MEMORY.md`, and writes an
-artifact whose link renders. The artifacts pod can traverse to that file.
+artifact whose link renders. The artifacts pod can traverse to that file. As `ubuntu`, `cat`
+reads that artifact and a memory file the session wrote, after a `claude_code` apply.
 
 **Rollback:** `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live
 sessions.
