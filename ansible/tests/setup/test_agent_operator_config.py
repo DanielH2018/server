@@ -153,7 +153,7 @@ def test_the_template_imports_the_copied_file_only_while_the_switch_is_true() ->
     assert "operator/CLAUDE.md" not in off and not re.search(r"^@", off, re.M)
 
 
-SETTINGS_TASK = "Set the agent's output style and pytest worker cap"
+SETTINGS_TASK = "Set the agent's output style, env and pytest worker cap"
 
 
 def agent_style(
@@ -219,6 +219,41 @@ def test_the_false_arm_removes_the_style_only_while_it_is_the_operators() -> Non
     assert ours["wanted"] == {"theme": "dark"}
     theirs = agent_style(False, STYLE, {"outputStyle": "mine"})
     assert theirs["wanted"] == theirs["current"] == {"outputStyle": "mine"}
+
+
+OPERATOR_ENV = {
+    "outputStyle": "daniel-voice",
+    "env": {
+        "OTEL_METRICS_EXPORTER": "otlp",
+        "CLAUDE_ARTIFACTS_HOST": "daniel-box",
+        "SUDO_ASKPASS": "/home/ubuntu/.local/bin/tmux-askpass",
+        "PYTEST_XDIST_AUTO_NUM_WORKERS": "9",
+    },
+}
+
+
+def test_the_true_arm_copies_the_operators_env_but_its_home_bound_keys() -> None:
+    wanted = agent_style(True, OPERATOR_ENV, {"env": {"MINE": "x"}})["wanted"]
+    assert wanted["env"] == {
+        "MINE": "x",
+        "OTEL_METRICS_EXPORTER": "otlp",
+        # The artifacts role mounts the agent's tree under this name.
+        "CLAUDE_ARTIFACTS_HOST": "daniel-box-claude",
+    }
+
+
+def test_the_false_arm_removes_the_operators_env_only_where_it_still_matches() -> None:
+    copied = {
+        "OTEL_METRICS_EXPORTER": "otlp",
+        "CLAUDE_ARTIFACTS_HOST": "daniel-box-claude",
+        "MINE": "x",
+    }
+    wanted = agent_style(False, OPERATOR_ENV, {"env": copied})["wanted"]
+    assert wanted == {"env": {"MINE": "x"}}
+    changed = agent_style(
+        False, OPERATOR_ENV, {"env": {"OTEL_METRICS_EXPORTER": "none"}}
+    )
+    assert changed["wanted"] == changed["current"]
 
 
 def test_the_caps_arm_sets_the_pytest_cap_and_keeps_the_other_env_keys() -> None:
