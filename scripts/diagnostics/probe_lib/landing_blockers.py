@@ -133,25 +133,43 @@ def parse_worktrees(porcelain: str) -> list[dict]:
     return trees
 
 
+_TOKEN = re.compile(r"[\w:./-]{1,200}", re.ASCII)
+UNSAFE_TOKEN = "<entry not shown>"
+
+
+def safe_token(value) -> str:
+    """`value` where it is one short `[\\w:./-]` word, else `UNSAFE_TOKEN`.
+
+    Every token a blocker line interpolates comes from deploy-ui's `/api/state` (plain HTTP,
+    no authentication) or from `gh`, and the deck mod puts the line in every session's system
+    prompt (#3793). Replacing the whole token, rather than its bad characters, keeps a prose
+    payload from surviving as words joined by placeholders.
+    """
+    return value if isinstance(value, str) and _TOKEN.fullmatch(value) else UNSAFE_TOKEN
+
+
 def blockers(snap: dict) -> list[str]:
     """One line per condition in CLAUDE.md's *When to wait* that this snapshot shows.
 
     A field that is `null` (unread) adds nothing: the mod gates nothing, and a band that cried
-    "blocked" every time a source timed out would be read past.
+    "blocked" every time a source timed out would be read past. Each value from a source passes
+    through `safe_token`, so a line carries only this function's own words and allowlisted
+    tokens.
     """
     out = []
     hold = snap.get("hold")
     if hold and hold.get("sha"):
-        planes = hold.get("planes") or []
+        planes = [safe_token(p) for p in hold.get("planes") or []]
         out.append(
-            f"hold_sha is set ({hold['sha'][:8]})"
+            f"hold_sha is set ({safe_token(hold['sha'][:8])})"
             + (f", waiting on {', '.join(planes)}" if planes else "")
         )
     if (snap.get("ci") or {}).get("state") == "red":
-        out.append(f"master CI is red: {snap['ci'].get('url', '')}".rstrip(": "))
+        url = snap["ci"].get("url", "")
+        out.append(f"master CI is red: {safe_token(url) if url else ''}".rstrip(": "))
     for owed in snap.get("manual_planes") or []:
         out.append(
-            f"the `{owed['role']}` setup role is merged and unapplied; "
+            f"the `{safe_token(owed['role'])}` setup role is merged and unapplied; "
             "`probe.py landing` names the apply"
         )
     return out
