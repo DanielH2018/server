@@ -3,6 +3,7 @@
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
+# littlelink Deployment: the public link-in-bio page (e2e deploy check).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
