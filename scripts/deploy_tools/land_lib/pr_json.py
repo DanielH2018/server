@@ -40,7 +40,6 @@ class PrView(TypedDict, total=False):
     """The `gh pr view --json` fields the lander asks for."""
 
     author: Login | None
-    autoMergeRequest: JsonObject | None
     baseRefName: str
     body: str
     changedFiles: int
@@ -103,11 +102,6 @@ def parse_view(obj: JsonObject) -> PrView:
     view: PrView = {}
     if "author" in obj:
         view["author"] = _login(obj["author"], "author")
-    if "autoMergeRequest" in obj:
-        auto = obj["autoMergeRequest"]
-        view["autoMergeRequest"] = (
-            None if auto is None else as_object(auto, "autoMergeRequest")
-        )
     if "changedFiles" in obj:
         count = obj["changedFiles"]
         if not isinstance(count, int) or isinstance(count, bool):

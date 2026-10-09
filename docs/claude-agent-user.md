@@ -140,6 +140,8 @@ Decisions, in the order they were taken:
   includes a repro). So `land.sh --arm-merge` waits for CI, then merges through the REST
   endpoint, pinned to the head SHA it checked. Slice 3's check found that an approved agent PR
   needs the same path, because the branch fence below also restricts updates to master (#3911).
+  The fence applies whatever the review decision, so every PR takes that path and `land.sh`
+  arms no auto-merge at all (#4001).
 - **Renovate's `platformAutomerge` is off** (#3542), for the same reason. Renovate's own direct
   merge uses its bypass. Automerges therefore land on Renovate's next run rather than the moment
   CI passes.

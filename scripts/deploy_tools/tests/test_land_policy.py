@@ -161,34 +161,24 @@ def test_an_unusable_approval_list_refuses_rather_than_approving_everything(
     assert expected in exc.value.error
 
 
-def test_an_approved_pr_merges_directly_at_the_checked_head(landing, tmp_path):
-    """An approved agent PR still needs the fence's bypass, so it takes the pinned REST merge.
+@pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
+def test_every_pr_merges_directly_at_the_checked_head(landing, tmp_path, review):
+    """Every PR into master needs a ruleset bypass, so none is armed for auto-merge.
 
-    Arming auto-merge left #3911 BLOCKED until a hand merge.
+    Auto-merge never applies a bypass: armed, an approved agent PR sat BLOCKED until a hand
+    merge (#3911). An empty decision meets the agent branch fence all the same (#4001).
     """
-    fakes = _fakes(arm={**_ARM, "reviewDecision": "APPROVED"})
+    fakes = _fakes(arm={**_ARM, "reviewDecision": review})
     fakes.gh_views["state,mergeable,headRefOid"] = [
         {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": HEAD},
         {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": HEAD},
     ]
     ln, calls = _arm(landing, tmp_path, fakes)
-    assert not [c for c in calls if c[0] == "gh" and "--auto" in c[1]]
+    assert not [c for c in calls if c[0] == "gh"]
     merge.await_merge(ln)
-    (call,) = [c for c in calls if c[0] == "gh" and "PUT" in c[1]]
+    (call,) = [c for c in calls if c[0] == "gh"]
     assert call[1][:4] == ("api", "-X", "PUT", "repos/{owner}/{repo}/pulls/999/merge")
     assert f"sha={HEAD}" in call[1]
-
-
-def test_the_auto_merge_arm_is_pinned_to_the_checked_head(landing, tmp_path):
-    """A PR with no review decision takes the auto-merge path, which must carry the pin too.
-
-    An empty decision is the only one left on that path: REVIEW_REQUIRED and APPROVED merge
-    directly, and CHANGES_REQUESTED is refused.
-    """
-    _, calls = _arm(landing, tmp_path, _fakes(arm={**_ARM, "reviewDecision": ""}))
-    (call,) = _merge_calls(calls)
-    assert "--auto" in call[1]
-    assert call[1][-2:] == ("--match-head-commit", HEAD)
 
 
 def test_a_head_that_moves_after_the_checks_stops_the_merge(landing):

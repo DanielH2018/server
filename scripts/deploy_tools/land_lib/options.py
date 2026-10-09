@@ -142,7 +142,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
     parser.add_argument(
         "--arm-merge",
         action="store_true",
-        help="run `gh pr merge --squash --auto` first",
+        help="check the PR, then merge it directly once CI is green (needs --await-merge)",
     )
     parser.add_argument(
         "--subject",

@@ -213,10 +213,11 @@ def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.classification.remaining_setup == "`initial_setup` also reaches daniel-pi"
+    call = next(c for c in calls if c[0] == "remaining_setup_hosts")
     # the host the tick ran on, read from the boundary rather than hardcoded
-    assert next(c for c in calls if c[0] == "remaining_setup_hosts")[1] == (
-        "daniel-box",
-    )
+    assert call[1] == ("daniel-box",)
+    # the merge commit's tree in the primary checkout, not this checkout's own (#4080)
+    assert call[2] == {"ref": MERGE_SHA, "repo": PRIMARY}
 
 
 def test_explicit_tags_skip_derivation_but_not_the_self_applied_half(landing):

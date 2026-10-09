@@ -1,21 +1,19 @@
 """--arm-merge and --await-merge, driven directly against a fake gh.
 
-The failure the await half guards is a landing that SITS: an armed auto-merge never fires
-from CONFLICTING or from a red PR CI, and GitHub reports neither in `state`, so the loop
-burned the 2700s budget and printed merge-timeout. The accept halves matter as much: GitHub
+The failure the await half guards is a landing that SITS: a PR never merges from
+CONFLICTING or from a red PR CI, and GitHub reports neither in `state`, so the loop burned
+the 2700s budget and printed merge-timeout. The accept halves matter as much: GitHub
 serves `mergeable: UNKNOWN` until it computes mergeability, and await_ci answers `pending`
 until a required check registers.
 
 WHICH ASSERTIONS ARE ON TEXT, AND WHY. A printed line is asserted here only where it is the
-ONLY thing that distinguishes two behaviours -- "merged in the meantime" against "auto-merge
-armed", say, which make the identical single `gh` call. Everywhere the `calls` list already
+ONLY thing that distinguishes two behaviours that make the identical `gh` calls. Everywhere the `calls` list already
 settles what happened, the wording is not asserted: a text assertion standing in for a
 behaviour the fakes already record breaks on a rewording and proves nothing extra.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_merge.py
 """
 
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -34,28 +32,25 @@ def _wait(states: list[str]):
     ]
 
 
-def test_arm_merge_calls_gh_pr_merge_with_the_pr_title(landing):
+def test_arm_merge_leaves_the_pr_title_for_the_direct_merge(landing):
     ln, calls = landing(
-        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}), arm_merge=True
+        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}),
+        arm_merge=True,
+        await_merge=True,
     )
     merge.arm_merge(ln)
-    assert next(c for c in calls if c[0] == "gh")[1] == (
-        "pr",
-        "merge",
-        "999",
-        "--squash",
-        "--auto",
-        "--subject",
-        "Bump vale to 3.19.0",
-    )
+    assert ln.direct_merge_subject == "Bump vale to 3.19.0"
+    assert not [c for c in calls if c[0] == "gh"]
 
 
 def test_arm_merge_subject_overrides_the_pr_title(landing):
-    ln, calls = landing(
-        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}), subject="Pin vale"
+    ln, _ = landing(
+        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}),
+        subject="Pin vale",
+        await_merge=True,
     )
     merge.arm_merge(ln)
-    assert next(c for c in calls if c[0] == "gh")[1][-1] == "Pin vale"
+    assert ln.direct_merge_subject == "Pin vale"
 
 
 def test_arm_merge_is_a_no_op_on_a_merged_pr(landing):
@@ -101,8 +96,8 @@ def test_arm_merge_refuses_another_author_when_one_is_required(landing):
     assert not [c for c in calls if c[0] == "gh"]
 
 
-def test_arm_merge_arms_the_required_authors_pr(landing):
-    ln, calls = landing(
+def test_arm_merge_accepts_the_required_authors_pr(landing):
+    ln, _ = landing(
         Fakes(
             gh_views={
                 "state,title,body,reviewDecision": _OPEN,
@@ -110,10 +105,11 @@ def test_arm_merge_arms_the_required_authors_pr(landing):
             }
         ),
         arm_merge=True,
+        await_merge=True,
         require_author="app/renovate",
     )
     merge.arm_merge(ln)
-    assert [c for c in calls if c[0] == "gh"]
+    assert ln.direct_merge_subject
 
 
 @pytest.mark.parametrize(
@@ -170,8 +166,8 @@ def test_arm_merge_refuses_a_body_that_would_close_an_unfixed_issue(landing):
 
 @pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED"])
 def test_arm_merge_refuses_while_the_repo_is_private(landing, review):
-    """No ruleset is enforced on a private free-plan repo, so neither the auto-merge nor the
-    direct merge a review leaves for await_merge may go ahead (#3610)."""
+    """No ruleset is enforced on a private free-plan repo, so the direct merge arm_merge
+    leaves for await_merge may not go ahead (#3610)."""
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -189,19 +185,23 @@ def test_arm_merge_refuses_while_the_repo_is_private(landing, review):
     assert not ln.direct_merge_subject
 
 
-def test_arm_merge_arms_a_public_repo_after_reading_its_visibility(landing):
+def test_arm_merge_accepts_a_public_repo_after_reading_its_visibility(landing):
     ln, calls = landing(
-        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}), arm_merge=True
+        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}),
+        arm_merge=True,
+        await_merge=True,
     )
     merge.arm_merge(ln)
-    names = [c[0] for c in calls]
-    assert names.index("gh:repo") < names.index("gh")
+    assert "gh:repo" in [c[0] for c in calls]
+    assert ln.direct_merge_subject
 
 
 def test_arm_merge_reads_no_author_when_none_is_required(landing):
     """An interactive landing makes exactly the calls it made before the check existed."""
     ln, calls = landing(
-        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}), arm_merge=True
+        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}),
+        arm_merge=True,
+        await_merge=True,
     )
     merge.arm_merge(ln)
     assert not [c for c in calls if c[0] == "gh:author"], calls
@@ -290,177 +290,6 @@ def test_a_merged_pr_leaves_the_wait(landing, capsys):
     )
     merge.await_merge(ln)
     assert "merged after 0s" in capsys.readouterr().out
-
-
-@pytest.mark.parametrize(
-    "state, mss, expected",
-    [
-        ("MERGED", "CLEAN", "already-merged"),
-        ("OPEN", "CLEAN", "merge-direct"),
-        ("OPEN", "BLOCKED", "die"),
-        ("OPEN", "DIRTY", "die"),
-        ("OPEN", "", "die"),
-    ],
-)
-def test_arm_merge_fallback_decision(state, mss, expected):
-    assert merge.arm_merge_fallback_decision(state, mss) == expected
-
-
-def test_a_clean_pr_falls_through_to_a_direct_merge(landing):
-    """--auto rejects a CLEAN PR; the fallback merges it directly."""
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,title,body,reviewDecision": _OPEN,
-                "state,mergeStateStatus": {
-                    "state": "OPEN",
-                    "mergeStateStatus": "CLEAN",
-                },
-            },
-            gh_merge_rc=[1, 0],
-        )
-    )
-    merge.arm_merge(ln)
-    merges = [c[1] for c in calls if c[0] == "gh"]
-    assert merges[0][:5] == ("pr", "merge", "999", "--squash", "--auto")
-    assert merges[1] == (
-        "pr",
-        "merge",
-        "999",
-        "--squash",
-        "--subject",
-        "Bump vale to 3.19.0",
-    )
-
-
-def test_a_dirty_pr_still_dies(landing):
-    ln, _ = landing(
-        Fakes(
-            gh_views={
-                "state,title,body,reviewDecision": _OPEN,
-                "state,mergeStateStatus": {
-                    "state": "OPEN",
-                    "mergeStateStatus": "DIRTY",
-                },
-            },
-            gh_merge_rc=[1],
-        )
-    )
-    with pytest.raises(Outcome) as exc:
-        merge.arm_merge(ln)
-    assert exc.value.rc == 1 and "mergeStateStatus=DIRTY" in exc.value.error
-
-
-def test_a_merge_that_lands_while_arming_reads_as_success(landing):
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,title,body,reviewDecision": _OPEN,
-                "state,mergeStateStatus": {
-                    "state": "MERGED",
-                    "mergeStateStatus": "CLEAN",
-                },
-            },
-            gh_merge_rc=[1],
-        )
-    )
-    merge.arm_merge(ln)
-    # One gh call and no raise: the rejection was absorbed, not turned into a direct merge.
-    assert len([c for c in calls if c[0] == "gh"]) == 1
-
-
-def test_an_auto_exit_0_with_no_auto_merge_request_merges_directly(landing):
-    """--auto exited 0 but autoMergeRequest stayed null."""
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,title,body,reviewDecision": _OPEN,
-                "state,mergeStateStatus,autoMergeRequest": {
-                    "state": "OPEN",
-                    "mergeStateStatus": "CLEAN",
-                    "autoMergeRequest": None,
-                },
-            }
-        )
-    )
-    merge.arm_merge(ln)
-    merges = [c[1] for c in calls if c[0] == "gh"]
-    assert len(merges) == 2 and "--auto" not in merges[1]
-
-
-def test_an_unarmed_pr_that_is_not_clean_dies_rather_than_merging(landing):
-    """The reject half: direct-merging a BLOCKED PR would fail the same way."""
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,title,body,reviewDecision": _OPEN,
-                "state,mergeStateStatus,autoMergeRequest": {
-                    "state": "OPEN",
-                    "mergeStateStatus": "BLOCKED",
-                    "autoMergeRequest": None,
-                },
-            }
-        )
-    )
-    with pytest.raises(Outcome) as exc:
-        merge.arm_merge(ln)
-    assert exc.value.rc == 1
-    assert "not armed (mergeStateStatus=BLOCKED)" in exc.value.error
-    assert len([c for c in calls if c[0] == "gh"]) == 1
-
-
-def test_a_pr_that_merged_during_the_arm_is_not_merged_again(landing, capsys):
-    """The read-back finding MERGED is the same race the rejection path already handles."""
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,title,body,reviewDecision": _OPEN,
-                "state,mergeStateStatus,autoMergeRequest": {
-                    "state": "MERGED",
-                    "mergeStateStatus": "CLEAN",
-                    "autoMergeRequest": None,
-                },
-            }
-        )
-    )
-    merge.arm_merge(ln)
-    assert len([c for c in calls if c[0] == "gh"]) == 1
-    assert "PR #999 merged in the meantime" in capsys.readouterr().out
-
-
-def test_a_read_back_that_fails_trusts_the_exit_code(landing, capsys):
-    """A read-back is a confirmation, not a gate: gh failing here must not fail a landing
-    whose arm may well have worked, and must not double-merge on a guess."""
-    ln, calls = landing(Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}))
-    real = ln.tools.gh_json
-
-    def gh_json(*args, **kwargs):
-        if "state,mergeStateStatus,autoMergeRequest" in args:
-            raise subprocess.CalledProcessError(1, "gh", stderr="HTTP 502")
-        return real(*args, **kwargs)
-
-    ln.tools.gh_json = gh_json
-    merge.arm_merge(ln)
-    assert len([c for c in calls if c[0] == "gh"]) == 1
-    assert "trusting gh pr merge --auto's exit 0" in capsys.readouterr().out
-
-
-def test_a_verified_arm_says_armed_and_merges_nothing_directly(landing, capsys):
-    ln, calls = landing(
-        Fakes(
-            gh_views={
-                "state,title,body,reviewDecision": _OPEN,
-                "state,mergeStateStatus,autoMergeRequest": {
-                    "state": "OPEN",
-                    "mergeStateStatus": "BLOCKED",
-                    "autoMergeRequest": {"enabledAt": "x"},
-                },
-            }
-        )
-    )
-    merge.arm_merge(ln)
-    assert len([c for c in calls if c[0] == "gh"]) == 1
-    assert "auto-merge armed" in capsys.readouterr().out
 
 
 def test_the_merge_wait_never_hand_polls_ci():
