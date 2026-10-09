@@ -60,11 +60,11 @@ Each arm is a rule and the function that holds it. The record page has the incid
   (`deploy_handlers.py:_rollback_k8s`). **That rollback is local-only** — the bad pin is still on
   master, so revert it there.
 - **CI gate — the tip must be green before anything is merged or deployed** (`REQUIRE_CI`,
-  `deploy_logic.ci_verdict`); this is the ONLY gate. `deploy_git._CI_NO_VERDICT_CONCLUSIONS` are
+  `deploy_git.ci_verdict`); this is the ONLY gate. `deploy_git._CI_NO_VERDICT_CONCLUSIONS` are
   **no verdict, not failure** (`docs/landing.md` owns that rule), and `CI_CONTEXTS` must match
   `ci.yml`'s `name:` exactly. `docs/gitops-pipeline.md`'s *The safety arms, in full* has the
   ancestor-walk fallback and why there is no branch protection on `master`.
-- **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`): a setup-plane change
+- **Broad changes split three ways** (`deploy_changes._BROAD_*_PREFIXES`): a setup-plane change
   (`roles/setup/<name>/`, `requirements.yml`) applies as `initial_setup.yml`; a deploy-plane
   change (`ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) applies as `deploy.yml`;
   both together apply both, setup first. `setup_role_playbook` / `setup_role_tag` route a role
