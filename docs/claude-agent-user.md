@@ -17,7 +17,7 @@ operator decided this on 2026-10-09 (#3685). See
 |---|---|---|
 | 1 | A read-only `claude` user an operator can open a session as | Done 2026-10-04 (#3504, #3505) |
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
-| 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check ran 2026-10-09: two of three cases passed, and the approval case owes a re-run after #3913. |
+| 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check ran 2026-10-09: two of three cases passed, and the approval case owes a re-run after #3999. |
 | 4 | The phone host `claude-rc.service` runs as `claude` | Planned. Starts after slice 3's check. |
 | 5 | Peer users, and the tools that decrypt SOPS | Planned |
 | 6 | Retire Claude sessions as `ubuntu` | Planned |
@@ -237,11 +237,11 @@ Only the operator can log in as `claude`, so only the operator can run this chec
   ansible/roles/setup/claude_code/CLAUDE.md`. After the operator approved the head, `land.sh`
   armed auto-merge, because the PR's review decision was `APPROVED`. The branch fence restricts
   updates to master, and auto-merge never applies a bypass, so the PR stayed `BLOCKED` until the
-  operator merged it by hand. #3913 merges an approved PR through the REST endpoint instead.
+  operator merged it by hand. #3999 merges an approved PR through the REST endpoint instead.
 - **A module the gate imports, #3990: passed.** A comment line in `scripts/lib/gh.py` was
   refused with `need the operator's approval: scripts/lib/gh.py`, and the PR was closed without a merge.
 
-**Owed:** a re-run of the approval-list case after #3913, which must land without a hand merge.
+**Owed:** a re-run of the approval-list case after #3999, which must land without a hand merge.
 Slice 4 starts after it.
 
 **Rollback:** `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude`
