@@ -7,6 +7,11 @@
 # ansible YAML. The fetch, the diff and the full-sweep rule are the same for every job, so they
 # live here once.
 #
+# Two callers use only the fetch. ci.yml's `deck_mod` job and image-smoke.yml's collect step
+# each diff their own pathspec after it, and leave the file lists below unread. The fetch is
+# here so that no workflow carries its own copy of the token header; the `workflows-fetch-
+# through-the-shared-script` row of ansible/tests/repo/test_census_rows_text.py checks that.
+#
 # Inputs, from the environment:
 #   BASE_REF          the PR's base branch (github.base_ref)
 #   FETCH_TOKEN       a contents:read token (github.token)
@@ -40,6 +45,10 @@ fi
 : "${FETCH_TOKEN:?FETCH_TOKEN is unset}"
 : "${RUNNER_TEMP:?RUNNER_TEMP is unset}"
 
+# No --depth. Every caller checks out with fetch-depth: 0 so the three-dot diff can find a merge
+# base, and a shallow fetch would write a shallow boundary over origin/$BASE_REF, which makes
+# the merge base unreachable and fails the diff with "no merge base".
+#
 # The checkout runs with persist-credentials: false (zizmor artipacked), so a bare fetch has no
 # credential and dies on "could not read Username". The token rides in a one-shot header the
 # way actions/checkout itself sends it; nothing is written to .git/config.

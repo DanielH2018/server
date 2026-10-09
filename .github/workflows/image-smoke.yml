@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
+          persist-credentials: false  # nothing here pushes; pr_changed_files.sh's fetch carries its own token
 
       # The pinned Python, from the action every CI job shares, so this job's interpreter moves
       # with the rest of CI in one Renovate bump. smoke_extract.py runs under the bare `python`
@@ -61,7 +61,7 @@ jobs:
         id: images
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
-          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch below
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own
           DISPATCH_IMAGES: ${{ inputs.images }}  # same: data, never shell source
         run: |
           set -euo pipefail
@@ -83,17 +83,10 @@ jobs:
             echo "No images given and no base branch to diff — nothing to check."
             exit 0
           fi
-          # No --depth here. The checkout above is full (fetch-depth: 0) precisely so the
-          # three-dot diff below can find a merge base; a shallow fetch writes a shallow
-          # boundary over origin/$BASE_REF and the merge base becomes unreachable, failing
-          # the step with "no merge base". ci.yml's equivalent fetch is depth-less for the
-          # same reason.
-          # The checkout runs with persist-credentials: false (zizmor artipacked), and the repo is
-          # private, so a bare fetch has no credential and dies on "could not read Username". The
-          # token rides in a one-shot header the way actions/checkout itself sends it; nothing is
-          # written to .git/config.
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
-            fetch --no-tags origin "$BASE_REF"
+          # scripts/dev/pr_changed_files.sh owns the merge-base fetch and its credential, as it
+          # does for every scoped job in ci.yml. Its file lists go unused: this step needs the
+          # diff TEXT of a pathspec, which smoke_extract.py reads for the changed refs.
+          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
           # Scope is the k8s image plane: role defaults plus group_vars/all.yml (crowdsec_k8s_image
           # lives there). Compose templates are out of scope: both cluster hosts are drained
           # and daniel-pi has no CI deploy path, so that glob would match nothing deployable.
