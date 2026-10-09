@@ -13,6 +13,7 @@ tasks that name another role's file in a `lookup()`.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -98,25 +99,103 @@ TABLE_NAMES = (
 
 
 def tables_in(source: str) -> dict[str, object]:
-    """The tables a copy of this module defines, by name (#3512).
+    """The tables a copy of this module defines, by name, read without running it (#3512).
 
     The tick classifies with the installed `/opt/gitops-deploy` copy, which predates a range
     that edits this file. A PR adding a `common/tasks` file and its table entry together then
     found no shippers and recorded `common` in `manual_plane`, so `deploy_phases.plan_tick`
-    reads origin's copy through this and passes it to `use_tables`.
+    reads origin's copy through this and passes it to `use_tables`. `land.sh` does the same
+    with the merge commit's copy (`classify.adopt_cross_role_tables`).
 
     Raises:
-        Exception: whatever `source` raises when run, or KeyError when it lacks a table.
+        SyntaxError: when `source` does not parse.
+        KeyError: when a table is missing, or its value is an expression `_value` refuses.
     """
+    # DECIDED: parse the copy rather than exec it. `land.sh` reads the merge commit's copy
+    # BEFORE it waits on master CI, so running it would execute code no gate has passed. The
+    # tables use set unions, `frozenset()` and f-strings, which `ast.literal_eval` refuses,
+    # so `_value` evaluates exactly those node types and none that can call out.
     namespace: dict[str, object] = {}
-    # DECIDED: exec origin's copy rather than parse it. The tables are built with set unions
-    # and f-strings, which `ast.literal_eval` refuses. Origin has passed the CI gate, and the
-    # same tick's `gitops-deploy-code` apply installs and imports this exact file.
-    exec(compile(source, CROSS_ROLE_FILE, "exec"), namespace)
+    for node in ast.parse(source, CROSS_ROLE_FILE).body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target, value = node.targets[0], node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            target, value = node.target, node.value
+        else:
+            continue
+        if not isinstance(target, ast.Name):
+            continue
+        try:
+            namespace[target.id] = _value(value, namespace)
+        except ValueError, TypeError:
+            # An unreadable value unbinds the name, so a table built on it goes missing
+            # rather than keeping an earlier binding.
+            namespace.pop(target.id, None)
     missing = [name for name in TABLE_NAMES if name not in namespace]
     if missing:
         raise KeyError(f"{CROSS_ROLE_FILE} defines no {', '.join(missing)}")
     return {name: namespace[name] for name in TABLE_NAMES}
+
+
+_SET_CALLS = {"frozenset": frozenset, "set": set}
+
+
+def _value(node: ast.expr, names: dict[str, object]) -> object:
+    """One table expression's value, built from literals and the names bound above it.
+
+    Admits constants, names, f-strings, tuples and lists (both as tuples), sets, dicts with `**` unpacking, `|`,
+    and a bare `frozenset(...)` or `set(...)` call. Anything else raises ValueError.
+    """
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name):
+        if node.id not in names:
+            raise ValueError(f"unbound name {node.id}")
+        return names[node.id]
+    if isinstance(node, ast.JoinedStr):
+        return "".join(_fstring_part(part, names) for part in node.values)
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        items = [_value(e, names) for e in node.elts]
+        return set(items) if isinstance(node, ast.Set) else tuple(items)
+    if isinstance(node, ast.Dict):
+        out: dict = {}
+        for key, val in zip(node.keys, node.values, strict=True):
+            if key is None:
+                out.update(_collection(_value(val, names), dict))
+            else:
+                out[_value(key, names)] = _value(val, names)
+        return out
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        left = _collection(_value(node.left, names), (set, frozenset, dict))
+        return left | _value(node.right, names)
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in _SET_CALLS
+        and len(node.args) <= 1
+        and not node.keywords
+    ):
+        arg = _value(node.args[0], names) if node.args else ()
+        arg = _collection(arg, (tuple, list, set, frozenset))
+        return _SET_CALLS[node.func.id](arg)
+    raise ValueError(f"unsupported expression {type(node).__name__}")
+
+
+def _fstring_part(node: ast.expr, names: dict[str, object]) -> str:
+    """One piece of an f-string: literal text, or a plain `{name}` holding a string."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.FormattedValue) and node.conversion == -1:
+        if node.format_spec is None:
+            return _collection(_value(node.value, names), str)
+    raise ValueError("an f-string part other than text or a plain string name")
+
+
+def _collection(value, kinds):
+    """`value` when it is one of `kinds`, else ValueError."""
+    if not isinstance(value, kinds):
+        raise ValueError(f"expected {kinds}, got {type(value).__name__}")
+    return value
 
 
 def current_tables() -> dict[str, object]:

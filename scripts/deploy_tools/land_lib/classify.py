@@ -132,7 +132,8 @@ def adopt_cross_role_tables(ln: Landing) -> None:
     printed the resolv.conf remediation for roles the change never reached. The deployer
     reads origin's copy for the same reason (#3512, `deploy_phases`).
 
-    A read or exec failure keeps this checkout's tables and says so.
+    A read or parse failure keeps this checkout's tables and says so. `tables_in` parses
+    the copy rather than running it, because this runs before master CI has passed.
     """
     path = deploy_cross_role.CROSS_ROLE_FILE
     shown = ln.git("show", f"{ln.merge_sha}:{path}")
