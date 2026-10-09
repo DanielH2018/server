@@ -24,22 +24,19 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # `core.<name>` for anything the tests monkeypatch -- binding those into this module's
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
-from datetime import datetime, timezone
 
 from diagnostics.probe_lib.core import SECRETS_PATH, prom_endpoint, prom_query_url
-from diagnostics.probe_lib.health_kubectl import k8s_pods_args
-from diagnostics.probe_lib.health_rollout import seconds_since
 
 import yaml
 from jinja2 import StrictUndefined, TemplateError
 
 from lib import yaml_fast
-from lib.json_types import as_object, as_object_list
-from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
+from lib.kubectl import DEFAULT_CLUSTER
 from lib.k8s_roles import K8S_ROLES
 from lib.render_context import render_context
 from lib.render_guard import make_env
 from lib.repo_paths import ANSIBLE, REPO
+from diagnostics.probe_lib import kuma_live
 from diagnostics.probe_lib.kuma_table_loop import TableLoop
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
@@ -401,11 +398,13 @@ def judge_gate(gate, gate_states):
     return True
 
 
-def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
+def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None, *, created):
     """Compare declared monitor names against the live exporter's. Pure.
 
     `live` is the set of monitor_name labels; `kuma_age_seconds` is how long the Kuma pod has
-    been up, or None when that could not be read.
+    been up, or None when that could not be read. `created` is `kuma_live.created_monitors()`:
+    the names Kuma holds, or a string saying why they could not be read. It has no default,
+    so a caller cannot drop it and bring back the blind spot below.
 
     Kuma's exporter emits a monitor only once it has received a heartbeat since the process
     started, so a restart empties the series for EVERY monitor — http and port tiles included,
@@ -420,8 +419,14 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
 
     An unreadable pod age is treated as a long uptime: it fails loud rather than quiet, matching
     `health_rollout`'s unreadable-restart-time rule.
+
+    PENDING applies only to a monitor Kuma holds, since the exporter cannot tell "never
+    created" from "not yet due" (`kuma_live` has why). A declared name absent from `created`
+    is missing at any pod age. When `created` is unreadable, the tile stays pending and a
+    separate line says that its existence went unverified.
     """
     gate_states = gate_states or {}
+    unreadable = created if isinstance(created, str) else None
     missing, pending, gated, unverified = [], [], [], []
     for name, spec in sorted(declared.items()):
         if name in live:
@@ -435,6 +440,11 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
             )
         elif spec["gated"] and state is False:
             gated.append(name)
+        elif unreadable is None and name not in created:
+            missing.append(
+                f"  {name}: declared, never created in Kuma (absent from its status page; "
+                "a tile added in the last 15 min may not be placed yet)"
+            )
         elif (
             kuma_age_seconds is not None
             and spec["interval"] is not None
@@ -451,6 +461,8 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
             f"  (kuma up {int(kuma_age_seconds)}s — monitors below not yet due)"
         )
     lines.extend(missing + orphans + pending + unverified)
+    if unreadable is not None and pending:
+        lines.append(f"  existence of the pending monitors unverified: {unreadable}")
     if gated:
         lines.append(
             f"  {len(gated)} gated off (a secret genuinely unset or a flag false), skipped: "
@@ -510,7 +522,8 @@ def run_kuma_drift(ns):
     base, pin = prom_endpoint()
     url = prom_query_url(base, 'monitor_status{job="uptime-kuma"}')
     if ns.dry_run:
-        return core.print_dry_run(url, resolve=pin)
+        core.print_dry_run(url, resolve=pin)
+        return core.print_dry_run(*kuma_live.status_page_url())
     with open(STATIC_MONITORS_PATH) as f:
         text = f.read()
     declared = parse_declared_monitors(text)
@@ -533,8 +546,9 @@ def run_kuma_drift(ns):
     text, code = format_kuma_drift(
         declared,
         live,
-        kuma_pod_age_seconds(getattr(ns, "cluster", DEFAULT_CLUSTER)),
+        kuma_live.pod_age_seconds(getattr(ns, "cluster", DEFAULT_CLUSTER)),
         gate_states=gate_states,
+        created=kuma_live.created_monitors(),
     )
     print(text)
     if ns.no_secrets and None in gate_states.values():
@@ -543,24 +557,6 @@ def run_kuma_drift(ns):
         # not look alike; that conflation is the recurring shape this estate keeps paying for.
         print("  (gates unverified by request: --no-secrets, no SOPS read attempted)")
     return code
-
-
-def kuma_pod_age_seconds(cluster=DEFAULT_CLUSTER):
-    """Seconds since the uptime-kuma pod started, or None if that cannot be read."""
-    pods_doc = kubectl_json(
-        cluster, *k8s_pods_args("uptime-kuma", core.k8s_namespace())
-    )
-    if pods_doc is None:
-        return None
-    starts = [
-        seconds_since(
-            as_object(p.get("status") or {}, "pod status").get("startTime"),
-            datetime.now(timezone.utc),
-        )
-        for p in as_object_list(pods_doc.get("items", []), "kubectl pods items")
-    ]
-    starts = [s for s in starts if s is not None]
-    return min(starts) if starts else None
 
 
 def run_monitors(ns):

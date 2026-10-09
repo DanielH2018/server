@@ -8,7 +8,7 @@ down leaves the ratio at N/N up.
 from pathlib import Path
 
 from check_table import CHECKS
-from diagnostics.probe_lib import monitors
+from diagnostics.probe_lib import kuma_live, monitors
 
 TEMPLATE_SAMPLE = """\
 stringData:
@@ -25,6 +25,13 @@ stringData:
     {"type": "push", "name": "Off-box etcd Snapshot", "interval": 90000, "push_token": "x"}
 {% endif %}
 """
+
+
+def drift(declared, live, kuma_age_seconds, **kwargs):
+    """`format_kuma_drift` against a Kuma that holds every declared monitor."""
+    return monitors.format_kuma_drift(
+        declared, live, kuma_age_seconds, created=set(declared), **kwargs
+    )
 
 
 def test_parse_declared_monitors_reads_names_types_and_gating():
@@ -91,7 +98,7 @@ def test_kuma_drift_reports_a_declared_monitor_that_is_not_live():
     # Long-uptime Kuma, so PENDING cannot be the explanation.
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "k3s Grafana"}
-    text, code = monitors.format_kuma_drift(declared, live, 86400 * 3)
+    text, code = drift(declared, live, 86400 * 3)
     assert code == 1
     assert "WG Pi Peer Backup: declared, not live" in text
 
@@ -102,7 +109,7 @@ def test_kuma_drift_calls_a_push_monitor_pending_inside_its_own_interval():
     # would make this check fail after every deploy.
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"k3s Grafana"}
-    text, code = monitors.format_kuma_drift(declared, live, 30)
+    text, code = drift(declared, live, 30)
     assert code == 0
     assert "no beat due yet" in text
     assert "declared, not live" not in text
@@ -140,7 +147,7 @@ def test_an_unresolvable_templated_interval_reads_as_none_and_files_as_missing()
         TEMPLATED_INTERVAL_SAMPLE, variables=TEMPLATED_INTERVAL_VARS
     )
     assert declared["Unresolvable"]["interval"] is None
-    text, code = monitors.format_kuma_drift(declared, {"Root Disk"}, 30)
+    text, code = drift(declared, {"Root Disk"}, 30)
     assert code == 1
     assert "Unresolvable: declared, not live" in text
 
@@ -153,7 +160,7 @@ def test_kuma_drift_calls_a_templated_interval_tile_pending_inside_its_interval(
     # 3024000s is 35 days; a Kuma pod a day old is well inside it. Past the literal tile's own
     # 60s+slack, so the literal one is the drift and the templated one is not — the pair that
     # shows the templated tile is classified by its interval, not waved through.
-    text, code = monitors.format_kuma_drift(declared, set(), 86400)
+    text, code = drift(declared, set(), 86400)
     assert code == 1
     assert "etcd Restore Drill (full): no beat due yet (3024000s interval)" in text
     assert "UPS Secondary: declared, not live" in text
@@ -166,7 +173,7 @@ def test_kuma_drift_treats_every_type_as_pending_after_a_restart():
     # tiles too — restricting the pending rule to push monitors made a routine deploy look like
     # mass drift. The slack covers the exporter's and Prometheus's scrape lag on top.
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
-    text, code = monitors.format_kuma_drift(declared, set(), 88)
+    text, code = drift(declared, set(), 88)
     assert code == 0
     assert "k3s Grafana: no beat due yet" in text
 
@@ -175,7 +182,7 @@ def test_kuma_drift_fails_loud_when_the_pod_age_is_unreadable():
     # Same rule as `health`'s unreadable restart time: an unknown age must not silently excuse
     # a missing monitor, or the check reports green exactly when it cannot tell.
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
-    text, code = monitors.format_kuma_drift(declared, {"k3s Grafana"}, None)
+    text, code = drift(declared, {"k3s Grafana"}, None)
     assert code == 1
     assert "Root Disk: declared, not live" in text
 
@@ -185,7 +192,7 @@ def test_kuma_drift_reports_a_live_monitor_nobody_declared():
     # removes what it still tracks — a monitor whose declaration was dropped can outlive it.
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana", "Retired Tile"}
-    text, code = monitors.format_kuma_drift(declared, live, 86400)
+    text, code = drift(declared, live, 86400)
     assert code == 1
     assert "Retired Tile: live, not declared" in text
 
@@ -193,7 +200,7 @@ def test_kuma_drift_reports_a_live_monitor_nobody_declared():
 def test_kuma_drift_skips_a_monitor_whose_gate_is_genuinely_unset():
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
-    text, code = monitors.format_kuma_drift(
+    text, code = drift(
         declared,
         live,
         86400,
@@ -215,7 +222,7 @@ def test_kuma_drift_reports_drift_when_the_gate_is_set_but_the_monitor_is_absent
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
     # Past the monitor's own 90000s interval, so `pending` cannot absorb it — a gate-set
     # monitor inside its interval is still legitimately pending, not drift.
-    text, code = monitors.format_kuma_drift(
+    text, code = drift(
         declared,
         live,
         86400 * 3,
@@ -275,7 +282,7 @@ def test_kuma_drift_pi_reports_a_missing_pi_monitor_without_cluster_noise():
         "Root Disk"
     }  # stand in: only "Root Disk" is "pi-plane" for this fixture
     scoped_declared = {n: s for n, s in declared.items() if n in pi_names}
-    text, code = monitors.format_kuma_drift(scoped_declared, set(), 86400 * 3)
+    text, code = drift(scoped_declared, set(), 86400 * 3)
     assert code == 1
     assert "Root Disk: declared, not live" in text
     # Scoping means a cluster-only miss (k3s Grafana, never in pi_names) must not appear.
@@ -288,7 +295,7 @@ def test_kuma_drift_says_so_when_a_gate_cannot_be_read():
     host is a normal state), but it is named rather than swallowed."""
     declared = monitors.parse_declared_monitors(TEMPLATE_SAMPLE)
     live = {"Root Disk", "WG Pi Peer Backup", "k3s Grafana"}
-    text, code = monitors.format_kuma_drift(
+    text, code = drift(
         declared,
         live,
         86400,
@@ -319,10 +326,13 @@ def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, 
         ]
         return json.dumps({"data": {"result": result}})
 
+    # Kuma holds the tile; it is only absent from the exporter.
+    held = [{"name": n} for n in live | pi_names]
+    page = json.dumps({"publicGroupList": [{"monitorList": held}]})
     monkeypatch.setattr(core, "fetch", fake_fetch)
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
-    monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
-    monkeypatch.setattr(monitors, "kuma_pod_age_seconds", lambda cluster: 86400 * 3)
+    monkeypatch.setattr(core, "get_status", lambda url, resolve: (200, page))
+    monkeypatch.setattr(core, "k8s_endpoint", lambda host: ("https://k.test", None))
+    monkeypatch.setattr(kuma_live, "pod_age_seconds", lambda cluster: 86400 * 3)
 
     ns = cli_parser._build_parser().parse_args(["kuma-drift", "--pi", "--no-secrets"])
     assert monitors.run_kuma_drift(ns) == 1

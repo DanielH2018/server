@@ -30,6 +30,7 @@ from diagnostics.probe_lib import core
 from diagnostics.probe_lib import arr
 from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import ha
+from diagnostics.probe_lib import kuma_live
 from diagnostics.probe_lib import monitors
 from lib import k8s_roles
 from lib.kubectl import cluster_for_host
@@ -191,8 +192,9 @@ def check_kuma_drift():
     text, code = monitors.format_kuma_drift(
         declared,
         live,
-        monitors.kuma_pod_age_seconds(host_cluster()),
+        kuma_live.pod_age_seconds(host_cluster()),
         gate_states=monitors.resolve_gate_states(declared, live),
+        created=kuma_live.created_monitors(),
     )
     return (FAIL if code else OK), text.replace("\n", "; ").strip()
 
