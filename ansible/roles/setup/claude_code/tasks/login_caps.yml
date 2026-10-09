@@ -1,0 +1,122 @@
+---
+# The login-session caps, for every account that starts Claude sessions from a shell. The RC
+# unit's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS bound only its own cgroup.
+# A session started with `claude agents` (or a bare `claude`) from a login lands in
+# user.slice/user-<uid>.slice/session-<n>.scope instead, which none of those touch, so each such
+# uid needs the two artifacts below: a slice drop-in (keyed by uid) and an environment.d file
+# (keyed by home directory). Imported from main.yml after the agent user is built, because the
+# agent's uid is only known from the passwd database. Unconditional whenever this role runs:
+# unlike the RC host, a login shell is not something claude_code_rc_enabled gates, so these
+# artifacts have their own on/off var, claude_code_login_caps_enabled.
+#
+# One list drives both directions. A uid in claude_code_login_caps_uids gets both artifacts.
+# A uid that is not (the switch is off, or it left claude_code_login_uids) has them removed, so
+# removing a uid from the list is the way out and no uid keeps a drop-in nobody reads any more.
+
+# The whole table, not one key: the environment.d half needs the home and the gid of the
+# operator and of the agent, and one lookup is cheaper than one per account. A read, so it
+# runs under --check too.
+- name: Read the passwd database for the accounts that start Claude sessions
+  ansible.builtin.getent:
+    database: passwd
+
+# claude_code_login_uids is what the operator declares. The agent's uid joins it when the
+# agent user is enabled and exists: looked up, never written down, because a hard-coded uid
+# would silently cap nothing on a host that numbered the account differently. Under --check
+# on a host that has not built the agent yet, it is absent here and joins on the real run.
+- name: Work out which uids carry the login-session caps
+  ansible.builtin.set_fact:
+    claude_code_login_caps_uids: >-
+      {{ ((claude_code_login_uids
+           + ([ansible_facts.getent_passwd[claude_code_agent_user][1] | int]
+              if claude_code_agent_user_enabled
+                 and claude_code_agent_user in ansible_facts.getent_passwd
+              else []))
+          | map('int') | unique | list)
+         if claude_code_login_caps_enabled else [] }}
+    claude_code_login_accounts: >-
+      {{ [sys_user, claude_code_agent_user] | unique
+         | select('in', ansible_facts.getent_passwd) | list }}
+
+# ── The slice drop-ins ──────────────────────────────────────────────────────────────────
+
+- name: Ensure each capped login-session slice has a drop-in directory
+  ansible.builtin.file:
+    path: "/etc/systemd/system/user-{{ item }}.slice.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  loop: "{{ claude_code_login_caps_uids }}"
+
+- name: Bound each login-session slice the way the RC unit is bounded
+  ansible.builtin.template:
+    src: login-slice-caps.conf.j2
+    dest: "/etc/systemd/system/user-{{ item }}.slice.d/claude-caps.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  loop: "{{ claude_code_login_caps_uids }}"
+  notify: Reload systemd
+
+# The reverse of the two tasks above. It sweeps every user-<uid>.slice.d rather than naming the
+# uids to remove: a uid that left the list is no longer in any variable, and the switch-off case
+# is the same sweep against an empty list. The glob matches the directory, and the removal only
+# ever touches this role's claude-caps.conf inside it.
+- name: Find the login-session slice drop-in directories on the host
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: "user-[0-9]*.slice.d"
+    file_type: directory
+  register: claude_code_login_slice_dirs
+
+- name: Remove the login-session slice drop-in of every uid that is not capped
+  ansible.builtin.file:
+    path: "{{ item.path }}/claude-caps.conf"
+    state: absent
+  become: true
+  loop: "{{ claude_code_login_slice_dirs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: >-
+    (item.path | basename | replace('user-', '') | replace('.slice.d', '') | int)
+    not in claude_code_login_caps_uids
+  notify: Reload systemd
+
+# ── The pytest fan-out cap ──────────────────────────────────────────────────────────────
+# One environment.d file per account, in that account's own home: pam_systemd reads
+# ~/.config/environment.d at session start, so the file reaches a process that none of the other
+# three locations do. Takes effect at the next login; no handler applies it.
+
+# The file module gives a missing parent (~/.config) the same owner and mode as the leaf.
+- name: Ensure the environment.d directory exists for each capped account
+  ansible.builtin.file:
+    path: "{{ ansible_facts.getent_passwd[item][4] }}/.config/environment.d"
+    state: directory
+    owner: "{{ ansible_facts.getent_passwd[item][1] }}"
+    group: "{{ ansible_facts.getent_passwd[item][2] }}"
+    mode: "0755"
+  become: true
+  loop: "{{ claude_code_login_accounts }}"
+  when: ansible_facts.getent_passwd[item][1] | int in claude_code_login_caps_uids
+
+- name: Cap the pytest fan-out for every login session, not only the RC unit
+  ansible.builtin.template:
+    src: pytest-fanout-cap.conf.j2
+    dest: "{{ ansible_facts.getent_passwd[item][4] }}/.config/environment.d/90-claude-pytest-cap.conf"
+    owner: "{{ ansible_facts.getent_passwd[item][1] }}"
+    group: "{{ ansible_facts.getent_passwd[item][2] }}"
+    mode: "0644"
+  become: true
+  loop: "{{ claude_code_login_accounts }}"
+  when: ansible_facts.getent_passwd[item][1] | int in claude_code_login_caps_uids
+
+- name: Remove the login pytest-fanout cap of every account that is not capped
+  ansible.builtin.file:
+    path: "{{ ansible_facts.getent_passwd[item][4] }}/.config/environment.d/90-claude-pytest-cap.conf"
+    state: absent
+  become: true
+  loop: "{{ claude_code_login_accounts }}"
+  when: ansible_facts.getent_passwd[item][1] | int not in claude_code_login_caps_uids

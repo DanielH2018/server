@@ -71,10 +71,10 @@ directory.
 - **`claude_code_rc_pytest_workers` caps one pytest run's fan-out, not the number of runs**, via
   `PYTEST_XDIST_AUTO_NUM_WORKERS` in the unit. **`~/.claude/settings.json` carries the same
   variable**, generated from the chezmoi repo; keep the two equal.
-- **A session started with `claude agents` from an interactive SSH shell reads none of the unit's
-  directives**: it lands in `user.slice/user-{{ claude_code_login_uid }}.slice/session-<n>.scope`.
-  `templates/login-slice-caps.conf.j2` and `templates/pytest-fanout-cap.conf.j2` carry the unit's caps
-  there, and `claude_code_login_caps_enabled` removes both.
+- **A session started with `claude agents` reads none of the unit's directives**: it lands in
+  `user-<uid>.slice`. `login-slice-caps.conf.j2` and `pytest-fanout-cap.conf.j2` carry
+  the unit's caps there for each uid in `claude_code_login_uids` and the agent's. A uid that
+  leaves the list loses both; `claude_code_login_caps_enabled: false` removes all.
 - **The background-shell pressure reaper is turned off.**
   `claude_code_rc_disable_bg_shell_pressure_reap` drives it both ways: Node derives the kill from
   the **cgroup**, so `free -m` reads clean while it kills backgrounded Bash tasks.

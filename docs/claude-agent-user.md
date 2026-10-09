@@ -20,7 +20,7 @@ operator decided this on 2026-10-09 (#3685). See
 | 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check passed 2026-10-09, after #3999 fixed the approved-PR merge. Done. |
 | 4 | The phone host `claude-rc.service` runs as `claude` | 4a to 4c deployed 2026-10-09 (#4035, #4030, #4036, #4039, #4044). 4d (#4054) switched the host over on 2026-10-09. The check passed the same day. Done. |
 | 5 | Peer users, and the tools that decrypt SOPS | The homelab-ui login deployed 2026-10-09 (#4051). Peer users dropped. The agent cannot yet drive homelab-ui (#4058). |
-| 6 | Retire Claude sessions as `ubuntu` | Planned |
+| 6 | Retire Claude sessions as `ubuntu` | New sessions start as `claude` since 2026-10-09; caps render for both users. The uid 1000 metric and alert, and dropping uid 1000, wait for the operator. |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
 
 Each slice ends in a check that can be run and a variable that turns it back off.
@@ -357,7 +357,7 @@ pod would drop the capability.
 | Coupling | Where |
 |---|---|
 | `HOME`, `PATH`, `KUBECONFIG`, `ExecStart`, `WorkingDirectory` through `sys_user` | `ansible/roles/setup/claude_code/templates/claude-rc.service.j2` |
-| `claude_code_login_uid`, which drives the login-slice caps | `ansible/roles/setup/claude_code/defaults/main.yml` |
+| `claude_code_login_uid` and `claude_code_login_uids`, which drive the login-slice caps | `ansible/roles/setup/claude_code/defaults/main.yml` |
 | `claude_code_memory_sync_dir` and the path-derived project key | `ansible/roles/setup/claude_code/defaults/main.yml` |
 | `artifacts_host_dir` and its bind mount | `ansible/roles/k8s/artifacts/defaults/main.yml` |
 | Hooks that hard-code `/home/ubuntu`, and `SUDO_ASKPASS` | the dotfiles repo's `~/.claude` sources |
@@ -442,8 +442,28 @@ login half as `claude` with
 
 ## Slice 6: retire Claude sessions as `ubuntu` (planned)
 
-**Build:** move the login-slice caps off `user-1000.slice`. Extend `claude-cgroup-metrics.sh` to
-report any `claude` process running as uid 1000. Point `claude_code_login_uid` at the agent.
+**Decision, 2026-10-09:** new interactive sessions start as `claude` through the dotfiles
+function `claude-agents`, which runs
+`sudo machinectl shell claude@ /bin/bash -lc 'cd ~/server && exec claude agents "$@"'`. Current
+sessions stay on `ubuntu` (uid 1000) until they end. A `claude-agents` session runs in
+`user.slice/user-996.slice/session-<n>.scope` beside `claude-rc.service`, and the phone host
+still connects.
+
+**Built (caps for both users):** the login-slice caps and the pytest fan-out cap render for every
+user ID in `claude_code_login_uids`, which defaults to `[claude_code_login_uid]` (1000). On a host
+with `claude_code_agent_user_enabled`, `tasks/login_caps.yml` adds the agent's ID, looked up from
+the user database and never written down. Sessions started as either account carry the same
+`MemoryHigh`, `MemorySwapMax` and `PYTEST_XDIST_AUTO_NUM_WORKERS` as `claude-rc.service`, under
+the fleet bound on `user.slice`. An ID that leaves the list has its slice drop-in and
+`environment.d` file removed on the next apply, and `claude_code_login_caps_enabled: false`
+removes every one.
+
+**Still to build, once the operator says the `ubuntu` sessions are gone:**
+
+- Extend `claude-cgroup-metrics.sh` to report any `claude` process running as uid 1000, and the
+  alert on it. Until then no metric or alert watches uid 1000.
+- Drop `claude_code_login_uid` from `claude_code_login_uids`, which removes the caps from
+  `user-1000.slice`.
 
 A root-owned `/etc/claude-code/managed-settings.json` is deferred (operator decision,
 2026-10-09). It binds every user on the host, `renovate-agent` included. Slice 4 already makes

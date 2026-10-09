@@ -72,7 +72,7 @@ claude_code_rc_pytest_workers: 4
 
 # ── The fleet bound ─────────────────────────────────────────────────────────────────────
 # The Claude fleet occupies TWO cgroups on this box: claude-rc.service's own, and
-# user-<claude_code_login_uid>.slice for a session started from an interactive shell. They are
+# the user-<uid>.slice of each login uid for a session started from an interactive shell. They are
 # siblings under different parents, so a cap on each reads as one bound and is two: neither
 # sees the other's usage and the real throttle point is the SUM, such as 16G of anon plus 4G
 # of swap on a 28 GiB box that also runs k3s, Longhorn and the rest of the homelab plane. The
@@ -178,9 +178,10 @@ claude_code_rc_restart_schedule: weekly
 # ── Login-session caps ──────────────────────────────────────────────────────────────────
 # claude-rc.service's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS bound only
 # that unit's own cgroup. A session started with `claude agents` (or a bare `claude`) from
-# an interactive SSH shell lands in user.slice/user-{{ claude_code_login_uid }}.slice/
-# session-<n>.scope instead, which none of the three touch, so such a scope can grow without
-# bound while claude-rc.service stays small.
+# an interactive SSH shell lands in user.slice/user-<uid>.slice/session-<n>.scope instead,
+# which none of the three touch, so such a scope can grow without bound while
+# claude-rc.service stays small. The caps are rendered for every uid in claude_code_login_uids
+# plus the agent user's.
 
 # Whether the two tasks below are applied. Unlike claude_code_rc_enabled this has no
 # "installed but stopped" middle state to fall back to — false removes the drop-in and the
@@ -189,13 +190,21 @@ claude_code_rc_restart_schedule: weekly
 # width).
 claude_code_login_caps_enabled: true
 
-# The numeric uid whose login-session slice (user-<uid>.slice) gets the same caps as
-# claude-rc.service's own cgroup. Confirmed to be 1000 for {{ sys_user }} on daniel-box.
-# Override per-host if a different uid
-# ever owns the account this role manages — a getent lookup was considered and rejected
-# here: it would need `become: true` just to read NSS and would make the render tests below
-# depend on a fact rather than a plain default.
+# The numeric uid of the account this role manages, whose login-session slice (user-<uid>.slice)
+# gets the same caps as claude-rc.service's own cgroup. Confirmed to be 1000 for {{ sys_user }}
+# on daniel-box. Override per-host if a different uid ever owns the account. It stays in place
+# while Claude sessions still run as that account (see claude_code_login_uids below).
 claude_code_login_uid: 1000
+
+# Every uid whose login-session slice gets the caps, and whose home gets the pytest fan-out file.
+# The default is the one uid above, so a host without the agent user is unchanged. On a host with
+# claude_code_agent_user_enabled the agent's uid is added at run time (tasks/login_caps.yml), from
+# the passwd database and never from a number written here: since 2026-10-09 new interactive
+# sessions start as the agent through `claude-agents`, so they land in the agent's own
+# user-<uid>.slice. A uid that leaves this list has its drop-in and environment.d file removed on
+# the next apply. Drop claude_code_login_uid from it only once the operator says no session still
+# runs as {{ sys_user }}; docs/claude-agent-user.md, slice 6.
+claude_code_login_uids: "{{ [claude_code_login_uid] }}"
 
 # ── Memory store copy (issue #3123) ─────────────────────────────────────────────────────
 # Sessions on each host read that host's own ~/.claude memory store, and nothing kept the two
