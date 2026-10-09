@@ -275,19 +275,9 @@ dirty_tree_status() { if [ -e "$COMMIT_FAILED_STAMP" ]; then printf down; else p
 
 cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
 
-# fd 9 held for the script's life. -w 3840 matches secret-rotate, eval-run and deploy.sh's
-# `LOCK_WAIT` (scripts/deploy_tools/deploy_under_locks.py): longer than a full gitops deploy
-# plus rollback, so a legitimately busy tree waits rather than skipping.
-#
-# This said "-w 2700 matches secret-rotate" while secret-rotate was 3000, and 2700 was 240s
-# SHORT of the deployer's 2940s worst-case hold. PR #585 resized the staging gate and raised
-# secret-rotate; this copy and eval-run's were hand-written and nothing recomputed them. A wait
-# that expires during a legitimate rollback is not a safe failure — it fires this unit's
-# OnFailure= for ordinary contention AND skips the run.
-# ENFORCED by gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py, which now derives every
-# waiter's floor from the same four deploy budgets rather than pinning two of the four by hand.
-exec 9>{{ server_git_tree_lock }}
-flock -w 3840 9 || { alert "docs-refresh: git-tree lock held >64m; skipped"; exit 1; }
+# The shared git-tree lock, held for the script's life; git-tree-lock.j2 owns the wait and why.
+{% from 'git-tree-lock.j2' import take_git_tree_lock with context %}
+{{ take_git_tree_lock('docs-refresh') }}
 
 # A dirty tree is usually a human or another job mid-edit. Committing on top of that would mix
 # their work into a docs commit. Build the site anyway -- serving current docs costs nothing and

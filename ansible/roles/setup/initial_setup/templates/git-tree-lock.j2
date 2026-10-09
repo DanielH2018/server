@@ -1,0 +1,29 @@
+{#
+The one way a host cron in this role takes the shared git-tree lock (#3722).
+
+secret-rotate, docs-refresh and eval-run each mutate the primary checkout, and so does
+gitops-deploy.service. The lock makes those mutations mutually exclusive; fd 9 is held for the
+calling script's whole life, so the lock releases only when the script exits.
+
+THE WAIT must clear the DEPLOYER's worst-case hold, not a round number. gitops-deploy.service
+wraps its whole ExecStart in this lock, and one activation can run the forward deploy and then,
+in the failure path, the rollback redeploy, sequentially inside that one hold. A waiter that gives
+up early does not fail safe: it fires its unit's OnFailure= for ordinary contention AND skips the
+run. Each copy of this wait was once hand-written and they drifted apart (2700 against 3000, then
+both short of the deployer, #585). ENFORCED by
+gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py, which reads the wait from each
+caller's RENDERED script and derives the floor from the deployer's own budgets.
+
+The caller supplies `alert`, its own failure reporter: each script's alert pushes to its own Kuma
+tile. `job` names the script in the message, and `consequence` says what a skip costs that job.
+Import it `with context`, or `server_git_tree_lock` renders empty and the lock is split in two.
+
+Named `.j2`, not `.sh.j2`: it is not a script, and validate/shell_templates.py lints every
+`*.sh.j2` as one. List this file in each caller's stamp_render_templates in tasks/crons.yml, or
+an edit here changes the rendered scripts while the drift check reads them clean.
+#}
+{% set git_tree_lock_wait_s = 3840 %}
+{% macro take_git_tree_lock(job, consequence='skipped') -%}
+exec 9>{{ server_git_tree_lock }}
+flock -w {{ git_tree_lock_wait_s }} 9 || { alert "{{ job }}: git-tree lock held >{{ git_tree_lock_wait_s // 60 }}m; {{ consequence }}"; exit 1; }
+{%- endmacro %}
