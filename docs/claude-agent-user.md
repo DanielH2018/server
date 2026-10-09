@@ -159,11 +159,19 @@ It landed as four PRs, all deployed on daniel-box on 2026-10-08:
   convenience, not a boundary: an agent that skips it has no privileges to land with. `cc-wait`
   is copied to the agent the way `claude_guard` is.
 
-The approval list holds paths that widen the agent's own authority: its roles
-(`setup/agent_user`, `setup/claude_code`, `setup/renovate_agent`), `setup/gitops_deploy/`,
-`common/tasks/agent_user.yml`, `common/files/host_lib.py`, `initial_setup/tasks/access.yml`,
-`ansible/inventory/`, `ansible/.sops.yaml`, `ansible/vars/secrets.yml`, `.github/` and
-`scripts/deploy_tools/land*`. The role's defaults are the source of truth for the rendered list.
+The approval list holds the paths that widen the agent's own authority.
+`claude_code_lander_approval_paths` in `ansible/roles/setup/claude_code/defaults/main.yml` is the
+source of truth for the rendered list, with a reason beside each entry. It holds:
+
+- `ansible/roles/setup/claude_code/`, `ansible/roles/setup/renovate_agent/` and
+  `ansible/roles/setup/gitops_deploy/`
+- `ansible/roles/setup/common/tasks/agent_user.yml` and
+  `ansible/roles/setup/common/files/host_lib.py`
+- `ansible/roles/setup/initial_setup/tasks/access.yml`
+- `ansible/inventory/`, `ansible/.sops.yaml` and `ansible/vars/secrets.yml`
+- `.github/`
+- `scripts/deploy_tools/land`, a prefix that covers `land.sh`, `land.py`, `land_*.py` and
+  `land_lib/`
 
 After each of 3b to 3d, `land.sh` reported `needs-manual-apply` for daniel-server. That run was
 skipped on purpose. Both `claude_code_agent_user_enabled` and `claude_code_lander_enabled` are
@@ -211,7 +219,7 @@ sessions.
 **Build:** create a no-sudo `claude` user on daniel-server and daniel-pi for `probe.py`'s ssh
 paths, with a key per host. Give the homelab-ui MCP server a dedicated low-privilege Authelia
 user whose credential lives in the agent's home rather than SOPS.
-`scripts/z2m/set_device_option.sh` and `qbittorrent/files/apply_prefs.py` stay operator-run, or
+`scripts/z2m/set_device_option.sh` and `ansible/roles/k8s/qbittorrent/files/apply_prefs.py` stay operator-run, or
 each gets a lander-style oneshot unit.
 
 **Check:** a `probe.py` Pi-plane subcommand works as `claude`, and homelab-ui renders a service
