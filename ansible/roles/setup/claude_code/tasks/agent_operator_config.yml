@@ -167,7 +167,10 @@
 # the artifact link settings. Two keys stay behind. SUDO_ASKPASS names a helper in the
 # operator's home, and the agent has no sudo. The pytest cap is set below from the role's own
 # variable. CLAUDE_ARTIFACTS_HOST gets `-claude` appended, because the artifacts role mounts
-# the agent's tree as `<node>-claude` beside the operator's `<node>`.
+# the agent's tree as `<node>-claude` beside the operator's `<node>`. OTEL_RESOURCE_ATTRIBUTES
+# gains `process.owner=<agent>`: both users export to one collector under one claude.ai
+# account, and the collector turns a resource attribute into the metric label
+# `process_owner`, which is what tells the agent's telemetry from the operator's.
 #
 # The same write carries the pytest worker cap into `env`, from the variable the RC unit
 # reads. login_caps.yml's environment.d file reaches only services the user manager starts,
@@ -197,10 +200,17 @@
       {{ _operator.env | default({}) | dict2items
          | rejectattr('key', 'in', ['SUDO_ASKPASS', 'PYTEST_XDIST_AUTO_NUM_WORKERS'])
          | list | items2dict }}
-    _copied_env: >-
-      {{ _operator_env | combine({'CLAUDE_ARTIFACTS_HOST':
-                                  _operator_env.CLAUDE_ARTIFACTS_HOST ~ '-claude'})
-         if 'CLAUDE_ARTIFACTS_HOST' in _operator_env else _operator_env }}
+    _artifacts_host: >-
+      {{ {'CLAUDE_ARTIFACTS_HOST': _operator_env.CLAUDE_ARTIFACTS_HOST ~ '-claude'}
+         if 'CLAUDE_ARTIFACTS_HOST' in _operator_env else {} }}
+    # Only while the operator turns telemetry on: without it there is no export to label.
+    _owner: >-
+      {{ {'OTEL_RESOURCE_ATTRIBUTES':
+            (_operator_env.OTEL_RESOURCE_ATTRIBUTES ~ ','
+             if _operator_env.OTEL_RESOURCE_ATTRIBUTES | default('') | length > 0 else '')
+            ~ 'process.owner=' ~ claude_code_agent_user}
+         if 'CLAUDE_CODE_ENABLE_TELEMETRY' in _operator_env else {} }}
+    _copied_env: "{{ _operator_env | combine(_artifacts_host, _owner) }}"
     _styled_env: "{{ _styled.env | default({}) }}"
     _env: >-
       {{ _styled_env | combine(_copied_env)

@@ -256,7 +256,9 @@ still opens PRs, and the operator lands them.
 - **The agent gets a subset of the operator's user-level config.** That subset is the user
   `CLAUDE.md`, the output style, the rules, the skills and the `env` block of `settings.json`
   (operator, 2026-10-09). The `env` copy leaves out `SUDO_ASKPASS`, and the role sets the
-  pytest cap from its own variable. The agent gets no user hooks until each one
+  pytest cap from its own variable. The agent's telemetry carries the resource attribute
+  `process.owner=claude`, so its metrics carry the label `process_owner="claude"` and the
+  operator's carry none. The agent gets no user hooks until each one
   is free of `/home/ubuntu` and `SUDO_ASKPASS`. The role installs the subset root-owned and
   read-only to `claude`, copied from the operator's rendered `~/.claude` on each apply. Root
   ownership stops an injected session from editing those files in place. It does not stop the
