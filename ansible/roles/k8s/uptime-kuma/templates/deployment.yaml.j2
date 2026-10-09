@@ -51,8 +51,14 @@ spec:
       containers:
         - name: uptime-kuma
           image: {{ uptime_kuma_k8s_image }}
+          # The entry's `port` sets the listener too, so the Service, the scrape target, the
+          # CronJobs' URLs and the process all read one value (#3816). Kuma reads it in
+          # server/config.js, ahead of its built-in default.
+          env:
+            - name: UPTIME_KUMA_PORT
+              value: "{{ containers_list | entry_port('uptime-kuma') }}"
           ports:
-            - containerPort: 3001
+            - containerPort: {{ containers_list | entry_port('uptime-kuma') }}
           # NET_RAW is what lets the daniel-pi-host monitor send a real ICMP ping.
 {{ hardened_security_context(add=['NET_RAW']) }}
           volumeMounts:
@@ -62,18 +68,18 @@ spec:
           startupProbe:
             httpGet:
               path: /
-              port: 3001
+              port: {{ containers_list | entry_port('uptime-kuma') }}
             periodSeconds: 10
             failureThreshold: 18
           readinessProbe:
             httpGet:
               path: /
-              port: 3001
+              port: {{ containers_list | entry_port('uptime-kuma') }}
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /
-              port: 3001
+              port: {{ containers_list | entry_port('uptime-kuma') }}
             periodSeconds: 30
           # First true sidecar in the fleet, deliberately (KD4): recreating Kuma invalidates
           # AutoKuma's Socket.IO session, and a shared pod reproduces Docker's
@@ -83,7 +89,7 @@ spec:
           image: {{ uptime_kuma_k8s_autokuma_image }}
           env:
             - name: AUTOKUMA__KUMA__URL
-              value: http://localhost:3001
+              value: http://localhost:{{ containers_list | entry_port('uptime-kuma') }}
             # The Kuma ADMIN password is read from a file mount rather than given inline: an
             # env VALUE is visible to
             # anything that can read the pod spec or /proc, and this credential can silence the

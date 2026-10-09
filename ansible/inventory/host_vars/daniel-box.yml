@@ -558,6 +558,9 @@ containers_list:
   - name: home-assistant
     platform: k8s
     hostname: "home-assistant"
+    # Records HA's own listener rather than setting it: HA binds 8123 by default, and
+    # files/configuration.yaml ships verbatim, so no template can move it. Changing this moves
+    # the Service, the route and the prometheus scrape target, but not the listener.
     port: 8123
     use_authelia: false
     # Named Service port, which the shared default Service renders on request.

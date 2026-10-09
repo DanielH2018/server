@@ -118,6 +118,33 @@ def test_a_hand_written_job_reads_its_target_port_from_the_entry(entry_name):
     assert targets[entry_name] == [f"{entry_name}.homelab.svc:9999"]
 
 
+@pytest.mark.parametrize(
+    "template",
+    [
+        "deployment.yaml.j2",
+        "maintenance-sync-cronjob.yaml.j2",
+        "status-page-sync-cronjob.yaml.j2",
+    ],
+)
+def test_kumas_listener_and_callers_follow_the_entry_port(template):
+    """Kuma's own role reads the port the scrape target reads, so the two cannot disagree."""
+    entries = copy.deepcopy(host_context()["containers_list"])
+    entry = next(e for e in entries if e["name"] == "uptime-kuma")
+    entry["port"] = 9999
+    text = render_role_template("uptime-kuma", template, {"containers_list": entries})
+    assert "3001" not in text
+    assert ":9999" in text or "port: 9999" in text
+    if template == "deployment.yaml.j2":
+        kuma = next(
+            c
+            for doc in yaml_fast.safe_load_all(text)
+            if doc and doc.get("kind") == "Deployment"
+            for c in doc["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "uptime-kuma"
+        )
+        assert {"name": "UPTIME_KUMA_PORT", "value": "9999"} in kuma["env"]
+
+
 def test_a_metrics_item_defaults_to_the_entry_name_and_port():
     entries = [{"name": "speedtest", "port": 80, "metrics": [{"job": "speedtest"}]}]
     assert scrape_jobs(entries, "ns") == [

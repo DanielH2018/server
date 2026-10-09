@@ -78,7 +78,7 @@ spec:
                 - name: SLUG
                   value: "{{ uptime_kuma_k8s_status_page_slug }}"
                 - name: KUMA__URL
-                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
 {# `@/path` is kuma-client's own file reference (resolve_file_ref) — it reads the file and strips
    one trailing newline — so the admin password never appears as an env VALUE in a pod spec. Same
    discipline, and the same mechanism, as the autokuma sidecar's. #}
@@ -155,7 +155,7 @@ spec:
                   fi
               env:
                 - name: KUMA__URL
-                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
                 - name: KUMA__PASSWORD
                   value: "@/etc/kuma/kuma_password"
                 - name: KUMA__USERNAME
@@ -189,7 +189,7 @@ spec:
               command: ["python3", "/config/push_heartbeat.py"]
               env:
                 - name: KUMA_URL
-                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
                 - name: PUSH_TOKEN
                   valueFrom:
                     secretKeyRef:

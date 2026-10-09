@@ -88,7 +88,7 @@ spec:
                 - name: SLUG
                   value: "{{ uptime_kuma_k8s_status_page_slug }}"
                 - name: KUMA__URL
-                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
 {# `@/path` is kuma-client's own file reference (resolve_file_ref) — it reads the file and strips
    one trailing newline — so the admin password never appears as an env VALUE in a pod spec. #}
                 - name: KUMA__PASSWORD
@@ -127,7 +127,7 @@ spec:
                 - python3
                 - /config/render_maintenance.py
                 - --phase=status
-                - --metrics-url=http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001/metrics
+                - --metrics-url=http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}/metrics
                 - --api-key-file=/etc/kuma/metrics_api_key
                 - --out=/work/down.json
               securityContext:
@@ -201,7 +201,7 @@ spec:
                   fi
               env:
                 - name: KUMA__URL
-                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
                 - name: KUMA__PASSWORD
                   value: "@/etc/kuma/kuma_password"
                 - name: KUMA__USERNAME
@@ -280,7 +280,7 @@ spec:
                   fi
               env:
                 - name: KUMA__URL
-                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
                 - name: KUMA__PASSWORD
                   value: "@/etc/kuma/kuma_password"
                 - name: KUMA__USERNAME
