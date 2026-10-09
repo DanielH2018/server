@@ -78,7 +78,8 @@ SETTINGS = REPO / ".claude" / "settings.json"
 # (#3394). Claude Code sets it to the directory the session started in, which is the worktree
 # root for a worktree session. The absolute `~/server/` path it replaced ran the PRIMARY
 # checkout's copy, so a worktree cut from a fresher master registered a script the primary
-# lacked, `/bin/sh` exited 127, and the guard was skipped (#2675).
+# lacked, `/bin/sh` exited 127, and the guard was skipped (#2675). A guard registration now
+# denies on that exit instead; see GUARD_SUFFIX.
 #
 # The cost: a session's edit to a hook in its own worktree now takes effect in that same
 # session, so a half-finished edit can disable its own guard. A `SyntaxError` in
@@ -91,6 +92,33 @@ COMMAND_PREFIX = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 # runner's posture flags (`--project`, `--ask-on-cd[=<guards>]`). One interpreter pin and one
 # failure posture for every Python hook, instead of a per-hook shim each (#3278).
 RUNNER = "run-hook.sh"
+
+# What a guard registration appends after the runner call, so a missing runner denies instead
+# of allowing. A guard is a `.py` whose `args:` carry `--ask-on-cd`: the PreToolUse hooks whose
+# only decisions are deny and ask. `{name}` is the stem, `{guards}` what the `ask` would name.
+#
+# `/bin/sh` exits 127 when `$CLAUDE_PROJECT_DIR` no longer holds the runner, and the harness
+# treats every exit but 2 as non-blocking, so the tool call went ahead unchecked. A session
+# outlived its worktree's deletion that way for four hours: 378 hook runs failed and every
+# guarded call ran (#3887). `run-hook.sh` cannot catch this itself, because it is the file that
+# is gone. The suffix runs only when the runner exited non-zero, and denies only when the
+# runner is not executable. Every other exit passes through unchanged: a guard's own deny (2),
+# and a missing `uv` (127 from the runner's `exec`), which `run-hook.sh`'s `# DECIDED:` keeps
+# fail-open.
+#
+# DECIDED: guards only. On `Stop`, exit 2 means "keep working", so a missing `fanout-stop`
+# would trap the session in a loop it cannot leave; on the other events exit 2 blocks nothing
+# a guard protects. Those hooks keep the harness's non-blocking error.
+#
+# Written for `/bin/sh` (dash on these hosts), so no `[[` and no `$(...)`.
+GUARD_SUFFIX = (
+    ' || {{ rc=$?; [ -x "$CLAUDE_PROJECT_DIR"/.claude/hooks/run-hook.sh ] && exit $rc;'
+    ' echo "run-hook.sh {name}: $CLAUDE_PROJECT_DIR/.claude/hooks/run-hook.sh is missing'
+    " or not executable (exit $rc), so this call was checked by none of: {guards}. The"
+    ' checkout this session started in is gone; restart the session from a live checkout."'
+    " >&2; exit 2; }}"
+)
+ASK_ON_CD_RE = re.compile(r"(?:^|\s)--ask-on-cd(?:=(\S+))?(?:\s|$)")
 
 OPENER_RE = re.compile(r"^# gen-hooks: (\S+)\s*$")
 FIELD_RE = re.compile(r"^#   ([a-zA-Z]+): (.*)$")
@@ -148,7 +176,12 @@ class Registration:
             base = f"{COMMAND_PREFIX}{RUNNER} {self.file.removesuffix('.py')}"
         else:
             base = f"{COMMAND_PREFIX}{self.file}"
-        return f"{base} {self.args}" if self.args else base
+        command = f"{base} {self.args}" if self.args else base
+        guard = ASK_ON_CD_RE.search(self.args or "")
+        if guard is None or not self.file.endswith(".py"):
+            return command
+        name = self.file.removesuffix(".py")
+        return command + GUARD_SUFFIX.format(name=name, guards=guard.group(1) or name)
 
     def entry(self) -> dict:
         out: dict = {

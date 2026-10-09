@@ -14,15 +14,21 @@ other hook must stay silent. `test_run_hook.py` covers the flags one at a time, 
 runner's `# DECIDED:` marker. The six per-hook `.sh` shims these tests once covered were deleted
 in #3304.
 
+The deny guards also carry `gen_hook_settings.GUARD_SUFFIX` after the runner call, because a
+session whose `$CLAUDE_PROJECT_DIR` was deleted has no runner left to ask from (#3887). The
+last tests here run those commands under `/bin/sh`, the way the harness does.
+
 Run: uv run pytest .claude/hooks/tests/test_hook_shim_fail_open.py
 """
 
 import json
+import os
 import shlex
 import subprocess
 from pathlib import Path
 
 import pytest
+from gen_hook_settings import GUARD_SUFFIX
 from test_run_hook import _variant_runner
 
 HOOKS = Path(__file__).resolve().parent.parent
@@ -32,19 +38,28 @@ HOOKS = Path(__file__).resolve().parent.parent
 MERGED_DENY_GUARDS = ("block-protected-bash", "block-footguns")
 
 
-def _registered() -> dict[str, list[str]]:
-    """`{hook name: runner flags}` for every hook `settings.json` registers."""
+def _commands() -> dict[str, str]:
+    """`{hook name: command}` for every hook `settings.json` registers, as written."""
     settings = json.loads((HOOKS.parent / "settings.json").read_text(encoding="utf-8"))
-    out: dict[str, list[str]] = {}
+    out: dict[str, str] = {}
     for groups in settings["hooks"].values():
         for group in groups:
             for hook in group["hooks"]:
-                runner, name, *flags = shlex.split(hook["command"])
-                assert runner.endswith("/run-hook.sh"), hook["command"]
-                out[name] = flags
+                out[shlex.split(hook["command"])[1]] = hook["command"]
     return out
 
 
+def _registered() -> dict[str, list[str]]:
+    """`{hook name: runner flags}`, with a guard's missing-runner suffix cut off."""
+    out: dict[str, list[str]] = {}
+    for command in COMMANDS.values():
+        runner, name, *flags = shlex.split(command.split(" || ", 1)[0])
+        assert runner.endswith("/run-hook.sh"), command
+        out[name] = flags
+    return out
+
+
+COMMANDS = _commands()
 REGISTERED = _registered()
 # The hooks whose `cd` arm must ask: the PreToolUse guards whose only decisions are deny and
 # ask. Named, so a registration that drops `--ask-on-cd` fails here rather than going quiet.
@@ -101,3 +116,57 @@ def test_accept_a_registered_non_deny_hook_that_cannot_cd_stays_silent(tmp_path,
     )
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout == ""
+
+
+def _run_as_the_harness(command: str, project_dir: Path, rc: int = 0):
+    """Run a registered command under `/bin/sh -c`, the shell Claude Code runs hooks in."""
+    return subprocess.run(
+        ["/bin/sh", "-c", command],
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "CLAUDE_PROJECT_DIR": str(project_dir), "STUB_RC": str(rc)},
+    )
+
+
+def _stub_checkout(tmp_path: Path) -> Path:
+    """A checkout whose runner exits `$STUB_RC`, standing in for a live session's."""
+    hooks = tmp_path / "live" / ".claude" / "hooks"
+    hooks.mkdir(parents=True)
+    runner = hooks / "run-hook.sh"
+    runner.write_text('#!/bin/sh\nexit "$STUB_RC"\n', encoding="utf-8")
+    runner.chmod(0o755)
+    return tmp_path / "live"
+
+
+def test_only_the_deny_guards_carry_the_missing_runner_suffix():
+    """`fanout-stop` must not: exit 2 on Stop keeps the session working, forever."""
+    marker = GUARD_SUFFIX.split("{", 1)[0]
+    suffixed = {name for name, command in COMMANDS.items() if marker in command}
+    assert suffixed == ASKING
+    assert " || " not in COMMANDS["fanout-stop"]
+
+
+@pytest.mark.parametrize("name", sorted(ASKING))
+def test_reject_a_deny_guard_whose_project_dir_is_gone_exits_2(tmp_path, name):
+    """The #3887 verify-by: bare, `/bin/sh` exits 127 here, which the harness lets through."""
+    proc = _run_as_the_harness(COMMANDS[name], tmp_path / "gone")
+    assert proc.returncode == 2, proc.stderr
+    assert f"run-hook.sh {name}:" in proc.stderr
+    assert "exit 127" in proc.stderr
+    if name == "bash-pretool":
+        for guard in MERGED_DENY_GUARDS:
+            assert guard in proc.stderr, guard
+
+
+@pytest.mark.parametrize("name", sorted(ASKING))
+@pytest.mark.parametrize("rc", [0, 2, 127])
+def test_accept_a_deny_guard_with_a_live_runner_passes_its_exit_through(
+    tmp_path, name, rc
+):
+    """An allow stays an allow and a deny a deny. A missing `uv`, 127 from the runner's own
+    `exec`, stays the fail-open that `run-hook.sh`'s `# DECIDED:` documents."""
+    proc = _run_as_the_harness(COMMANDS[name], _stub_checkout(tmp_path), rc)
+    assert proc.returncode == rc, proc.stderr
+    assert proc.stderr == ""

@@ -507,6 +507,15 @@ about 2,100 Bash calls did on daniel-server in September 2026 (#2675). The `--pr
 posture still runs the hook from the primary checkout's directory, so a fresh worktree needs
 no `.venv` of its own.
 
+The two PreToolUse guards, `bash-pretool` and `block-protected-edits`, deny when the runner
+itself is gone (#3887). A session outlives its starting worktree's deletion, and `/bin/sh` then
+exits 127 on every hook, which the harness treats as non-blocking. One session ran four hours
+that way on 2026-10-05 with every guarded call allowed. The generator appends
+`scripts/dev/gen_hook_settings.py:GUARD_SUFFIX` to each `--ask-on-cd` registration. That
+suffix exits 2 with a stderr reason when `run-hook.sh` is not executable, and passes every
+other exit through. The other hooks keep the non-blocking error, because exit 2 on `Stop`
+would keep the session working forever.
+
 A worktree cut before #3394 still registers the absolute path. Its hooks run from the primary
 checkout until it merges master, and a worktree cut before the #3278 switch still exits 127 on
 the six per-hook `.sh` shims #3304 deleted.

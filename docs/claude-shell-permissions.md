@@ -64,6 +64,9 @@ copy:** the classifier is part of the deployed hook. This repo's two PreToolUse 
 other posture on a failed cd. `run-hook.sh --ask-on-cd` runs both `bash-pretool`, which carries
 the three Bash deny guards since #2394, and `block-protected-edits`. It emits an **ask** naming
 the guards that did not run, because a bare exit 0 from a deny guard is an allow (#2171).
+When the session's `$CLAUDE_PROJECT_DIR` no longer holds `run-hook.sh` at all, the command
+`settings.json` registers for each of the two guards exits 2 instead of 127, which denies the
+call (#3887).
 
 **As of 2026-08-16 those PermissionRequest hooks no longer fire in a normal session.** `Bash(ssh:*)`
 and `Bash(curl:*)` were removed from the `ask` tier — they were the largest single source of prompts
