@@ -6,10 +6,12 @@ credential-handling that keeps it safe to run, and the Class C budget projection
 """
 
 import json
-import subprocess
 from types import SimpleNamespace
 
+import pytest
+
 from diagnostics.probe_lib import b2_api, longhorn, longhorn_budget, longhorn_cluster
+from lib import b2 as b2_lib
 
 LSF = [
     "backupstore/volumes/aa/bb/pvc-authelia/volume.cfg;120",
@@ -18,24 +20,6 @@ LSF = [
     "backupstore/volumes/aa/bb/pvc-authelia/blocks/1a/2c/cafebabe.blk;1048576",
     "backupstore/volumes/cc/dd/pvc-bento/blocks/0f/0e/f00d.blk;524288",
 ]
-
-
-def test_b2_credentials_travel_in_the_stdin_config_not_argv():
-    """argv is visible in `ps`, so the application key must only ever reach curl's stdin.
-
-    The old Docker implementation kept the key out of argv by having `docker exec -e VAR`
-    inherit it; curl's `--config -` is the same guard by the route the rest of this file
-    already uses for HA and the *arr apps.
-    """
-    body = b2_api.b2_authorize_config("keyid123", "appkey456")
-    assert 'user = "keyid123:appkey456"' in body
-    assert b2_api.B2_AUTHORIZE_URL in body
-
-
-def test_b2_list_config_carries_the_token_as_a_header_and_scopes_the_prefix():
-    body = b2_api.b2_list_files_config("https://api.example", "tok", "bid", "longhorn")
-    assert 'header = "Authorization: tok"' in body
-    assert "prefix=longhorn%2F" in body and "bucketId=bid" in body
 
 
 def test_b2_longhorn_lines_strips_the_prefix_and_pages():
@@ -73,7 +57,7 @@ def test_b2_longhorn_lines_strips_the_prefix_and_pages():
     ]
     calls = iter(pages)
     lines = b2_api.b2_longhorn_lines(
-        "k", "s", "bucket", "longhorn", _call=lambda _body: next(calls)
+        "k", "s", "bucket", "longhorn", _transport=lambda *_args: next(calls)
     )
     assert lines == [
         "backupstore/volumes/aa/bb/pvc-x/blocks/1/2/a.blk;2097152",
@@ -96,7 +80,7 @@ def test_b2_longhorn_lines_reports_pages_plus_the_authorize_as_class_c():
     ]
     calls = []
 
-    def fake(_config):
+    def fake(*_args):
         if not calls:
             calls.append(1)
             return {
@@ -106,11 +90,11 @@ def test_b2_longhorn_lines_reports_pages_plus_the_authorize_as_class_c():
         return pages.pop(0)
 
     stats = {}
-    b2_api.b2_longhorn_lines("k", "s", "bucket", _call=fake, _stats=stats)
+    b2_api.b2_longhorn_lines("k", "s", "bucket", _transport=fake, _stats=stats)
     assert stats == {"class_c": 3, "pages": 2}
 
 
-def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone(monkeypatch):
+def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
     """The regression this rewrite exists for.
 
     A `probe.py b2-longhorn` that shells out to `docker exec kopia rclone ...` dies with
@@ -118,28 +102,11 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone(monkeypatch)
     parser stay green. Neither binary exists on these hosts, so naming them here is a dead
     path by definition.
     """
-    seen = {}
-
-    def fake_run(argv, **kwargs):
-        seen["argv"] = argv
-        seen["stdin"] = kwargs.get("input", "")
-
-        return SimpleNamespace(returncode=0, stdout="{}", stderr="")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    b2_api.b2_curl('url = "https://api.example"\n')
-
-    assert seen["argv"][0] == "curl"
-    assert "docker" not in seen["argv"] and "rclone" not in seen["argv"]
-    # The url/credentials reach curl through stdin, so argv stays free of both.
-    assert seen["stdin"].startswith("url = ")
-
-    # And no `"docker"` argv literal survives in the executable code of either module the
-    # command runs through: b2_api.py holds the B2 calls the rewrite replaced, longhorn.py the
-    # subcommand that drives them. Scanning longhorn.py alone would assert nothing about the
-    # B2 calls, which live in b2_api.py.
+    # No `"docker"` argv literal may survive in the executable code of any module the command
+    # runs through: lib/b2.py holds the B2 calls, b2_api.py the listing built on them,
+    # longhorn.py the subcommand that drives both.
     source = ""
-    for module in (b2_api, longhorn):
+    for module in (b2_lib, b2_api, longhorn):
         with open(module.__file__) as fh:
             source += fh.read() + "\n"
     code = "\n".join(
@@ -147,8 +114,33 @@ def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone(monkeypatch)
     )
     # Non-vacuity: a wrong module object would pass the `not in` below by holding no code at
     # all, so pin one name each module must contribute before asserting on the absence.
-    assert "def b2_curl(" in code and "def run_b2_longhorn(" in code
-    assert '"docker"' not in code
+    assert "class B2Session" in code
+    assert "def b2_longhorn_lines(" in code and "def run_b2_longhorn(" in code
+    assert '"docker"' not in code and '"rclone"' not in code
+
+
+def test_b2_longhorn_lines_exits_on_a_b2_error_rather_than_returning_a_partial_listing():
+    """A cap refusal on page two must not read as a store holding only page one."""
+    responses = [
+        {
+            "apiInfo": {"storageApi": {"apiUrl": "https://api", "bucketId": "bid"}},
+            "authorizationToken": "t",
+        },
+        {
+            "files": [{"fileName": "longhorn/a", "contentLength": 1}],
+            "nextFileName": "b",
+        },
+    ]
+
+    def fake(*_args):
+        if responses:
+            return responses.pop(0)
+        raise b2_lib.B2Error(
+            "HTTP 403: transaction_cap_exceeded", code="transaction_cap_exceeded"
+        )
+
+    with pytest.raises(SystemExit, match="transaction_cap_exceeded"):
+        b2_api.b2_longhorn_lines("k", "s", "bucket", _transport=fake)
 
 
 def test_parse_longhorn_listing_separates_data_from_metadata():

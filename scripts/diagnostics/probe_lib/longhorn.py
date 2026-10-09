@@ -6,7 +6,7 @@ b2_ledger for the transaction ledger these commands record into.
 
 Split again at 630 lines into three helper modules this one drives:
 
-  - `b2_api.py`          — the B2 calls, the paged listing and its parser
+  - `b2_api.py`          — the paged listing (through `lib.b2`) and its parser
   - `longhorn_budget.py` — the Class C price of a retention prune, per weekly shard
   - `longhorn_cluster.py`— the live Volume/Backup/PV/BackupTarget reads
 

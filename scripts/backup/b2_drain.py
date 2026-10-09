@@ -34,16 +34,17 @@ supplies them):
 """
 
 import argparse
-import base64
-import json
 import os
 import sys
-import urllib.request
 from collections import defaultdict
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+from lib.b2 import B2Error, B2Session
 
 BACKUPSTORE_PREFIX = "longhorn/backupstore/volumes/"
-API_BASE = "https://api.backblazeb2.com/b2api/v3/b2_authorize_account"
-PAGE_SIZE = 1000
+# A listing still unfinished after this many pages (200,000 versions) is refused rather than
+# acted on: a drain that deleted from a partial view could not verify it had finished.
 MAX_PAGES = 200
 
 
@@ -138,75 +139,6 @@ def classify(
     return drainable, refused
 
 
-def _post(url: str, payload: dict, token: str) -> dict:
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode(),
-        headers={"Authorization": token, "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        return json.load(response)
-
-
-class B2:
-    """The slice of the B2 API this needs: authorize, list versions, delete a version."""
-
-    def __init__(self, key_id: str, app_key: str) -> None:
-        basic = base64.b64encode(f"{key_id}:{app_key}".encode()).decode()
-        request = urllib.request.Request(
-            API_BASE, headers={"Authorization": f"Basic {basic}"}
-        )
-        with urllib.request.urlopen(request, timeout=120) as response:
-            auth = json.load(response)
-        storage = (auth.get("apiInfo") or {}).get("storageApi") or {}
-        self.api_url = (storage.get("apiUrl") or auth.get("apiUrl")).rstrip("/")
-        self.token = auth["authorizationToken"]
-        self.bucket_id = storage.get("bucketId") or (auth.get("allowed") or {}).get(
-            "bucketId"
-        )
-        self.capabilities = storage.get("capabilities") or []
-        self.list_calls = 0
-        if not self.bucket_id:
-            raise DrainError(
-                "the application key is not bucket-scoped, so there is no bucket to drain"
-            )
-
-    def list_versions(self, prefix: str) -> list[dict]:
-        """Every version under a prefix. One Class C per 1,000 names returned."""
-        out: list[dict] = []
-        start_name = start_id = None
-        for _ in range(MAX_PAGES):
-            payload = {
-                "bucketId": self.bucket_id,
-                "prefix": prefix,
-                "maxFileCount": PAGE_SIZE,
-            }
-            if start_name:
-                payload["startFileName"] = start_name
-            if start_id:
-                payload["startFileId"] = start_id
-            self.list_calls += 1
-            page = _post(
-                f"{self.api_url}/b2api/v3/b2_list_file_versions", payload, self.token
-            )
-            out.extend(page.get("files", []))
-            start_name, start_id = page.get("nextFileName"), page.get("nextFileId")
-            if not start_name and not start_id:
-                return out
-        raise DrainError(
-            f"listing {prefix} did not finish within {MAX_PAGES} pages; refusing to act on a "
-            "partial view of the prefix"
-        )
-
-    def delete_version(self, file_name: str, file_id: str) -> None:
-        """Remove one version. Class A, which B2 does not meter."""
-        _post(
-            f"{self.api_url}/b2api/v3/b2_delete_file_version",
-            {"fileName": file_name, "fileId": file_id},
-            self.token,
-        )
-
-
 def read_live_volumes(path: str) -> set[str]:
     try:
         with open(path, encoding="utf-8") as handle:
@@ -220,8 +152,8 @@ def main(argv: list[str] | None = None) -> int:
 
     Without ``--apply`` this only reports what a drain would delete. Exits 2 on a
     missing credential, an unreadable input file, no volumes named, or a ``DrainError``
-    (including a failed post-delete verification); exits 1 if any requested volume was
-    refused (e.g. still live); exits 0 otherwise.
+    (including a failed post-delete verification) or a B2 API failure; exits 1 if any
+    requested volume was refused (e.g. still live); exits 0 otherwise.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live-volumes-file", required=True)
@@ -266,14 +198,20 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         live = read_live_volumes(args.live_volumes_file)
-        b2 = B2(key_id, app_key)
+        b2 = B2Session(key_id, app_key)
+        if not b2.bucket_id:
+            raise DrainError(
+                "the application key is not bucket-scoped, so there is no bucket to drain"
+            )
         if "deleteFiles" not in b2.capabilities:
             raise DrainError(
                 "the application key has no deleteFiles capability, so a drain would report "
                 "success while deleting nothing"
             )
 
-        everything = b2.list_versions(BACKUPSTORE_PREFIX)
+        everything = b2.list_files(
+            BACKUPSTORE_PREFIX, versions=True, max_pages=MAX_PAGES
+        )
         by_volume: dict[str, list[dict]] = defaultdict(list)
         for version in everything:
             name = volume_of(version["fileName"])
@@ -295,11 +233,11 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             own_prefix = volume_prefix(versions[0]["fileName"])
             for version in versions:
-                b2.delete_version(version["fileName"], version["fileId"])
+                b2.delete(version["fileName"], version["fileId"])
             # Verify by re-reading rather than by counting our own deletes: a drain that trusts
             # its own tally already reported "1,676/1,676 deleted" here while leaving five
             # volumes over retention.
-            still = b2.list_versions(own_prefix)
+            still = b2.list_files(own_prefix, versions=True, max_pages=MAX_PAGES)
             if still:
                 raise DrainError(
                     f"{name} still holds {len(still)} versions after the drain; stopping "
@@ -311,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         if drainable and not args.apply:
             print("dry run — nothing was deleted. Re-run with --apply.")
         return 1 if refused else 0
-    except DrainError as exc:
+    except (DrainError, B2Error) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
