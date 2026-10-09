@@ -1,3 +1,4 @@
+{% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
 # The subject of this policy is FLARESOLVERR, not prowlarr — it lives in the prowlarr role
 # because flaresolverr has no role of its own, and prowlarr is its only caller. prowlarr's own
@@ -15,22 +16,8 @@
 # Egress policy selects pods correctly and blocks nothing. Ingress policies ARE enforced —
 # n8n-broker relies on one and probes it. So this is written in the direction that holds, and
 # netpol-probe-job.yaml.j2 checks it on every deploy rather than trusting the asymmetry.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: flaresolverr
-  namespace: {{ k8s_namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      app: flaresolverr
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: prowlarr
-      ports:
-        - protocol: TCP
-          port: {{ prowlarr_k8s_flaresolverr_port }}
+#
+# Rendered from the shared macro with literal arguments rather than a `netpol_fences` item on
+# prowlarr's entry: the port is `prowlarr_k8s_flaresolverr_port`, a role default the inventory
+# cannot read, and copying it there as a literal would give the port two sources.
+{{ networkpolicy('flaresolverr', prowlarr_k8s_flaresolverr_port, ['prowlarr']) }}

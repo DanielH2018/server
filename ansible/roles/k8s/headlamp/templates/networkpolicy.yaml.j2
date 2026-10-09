@@ -1,3 +1,4 @@
+{% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
 # Closes the exposure rbac.yaml.j2's header describes: Authelia guards the IngressRoute, but the
 # ClusterIP Service does not go through Traefik at all. Headlamp runs with
@@ -13,27 +14,14 @@
 # This does not narrow the RBAC, which is the other half of the exposure and is deliberately
 # read-only: the SA holds no secrets, no pods/exec and no write verbs (rbac.yaml.j2, enforced by
 # ansible/tests/k8s/test_k8s_manifests.py).
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: headlamp
-  namespace: {{ k8s_namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      app: headlamp
-  policyTypes:
-    - Ingress
-  ingress:
-    # Traefik is the only legitimate caller: every human path to Headlamp arrives through the
-    # IngressRoute, where the Authelia middleware runs. Kubelet's probe traffic needs no rule —
-    # it reaches the pod IP directly and kube-router does not subject that path to ingress
-    # enforcement (flaresolverr has run on probes under an equally strict policy since
-    # 2026-08-13).
-    - from:
-        - podSelector:
-            matchLabels:
-              app: traefik
-      ports:
-        - protocol: TCP
-          port: {{ container_item.port }}
+#
+# Traefik is the only legitimate caller: every human path to Headlamp arrives through the
+# IngressRoute, where the Authelia middleware runs. Kubelet's probe traffic needs no rule —
+# it reaches the pod IP directly and kube-router does not subject that path to ingress
+# enforcement (flaresolverr has run on probes under an equally strict policy since
+# 2026-08-13).
+#
+# The caller list is `netpol_from:` on this role's containers_list entry
+# (inventory/host_vars/daniel-box.yml). The entry's `netpol_role_owned: true` keeps netpol-baseline
+# from rendering a second copy.
+{{ networkpolicy(container_item.name, container_item.port, container_item.netpol_from) }}

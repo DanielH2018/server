@@ -2,7 +2,7 @@
 
 Two templates render the same key. netpol-baseline's `networkpolicy-callers.yaml.j2` loops over
 every entry carrying it, and a role that must carry its own fence (sonarr, radarr, prowlarr,
-qbittorrent) renders it from its own template while its entry sets `netpol_role_owned: true`.
+qbittorrent, bazarr, headlamp) renders it from its own template while its entry sets `netpol_role_owned: true`.
 An entry whose pod label is not its own name names the label in `netpol_app`, and the fence
 selects that label and takes its name (scrutiny -> scrutiny-web). A sub-workload with no entry
 of its own is a `netpol_fences: [{app, port, from}]` item on its role's entry, rendered by the
@@ -35,6 +35,8 @@ KNOWN_FENCES = {
     "radarr": "radarr",
     "prowlarr": "prowlarr",
     "qbittorrent": "qbittorrent",
+    "bazarr": "bazarr",
+    "headlamp": "headlamp",
     # Entry `scrutiny`, rendered under its `netpol_app`.
     "scrutiny-web": "netpol-baseline",
     # A `netpol_fences` item on entry `freshrss`.
