@@ -301,7 +301,7 @@ jobs:
   #
   # This job deliberately does NOT install Vale, check systemd-analyze, or build the docs site:
   # none of them is reachable from `prek run ansible-lint`. The Galaxy cache IS kept and shares
-  # its key with the other two jobs, because the hook's own entry runs `ansible-galaxy collection
+  # its key with the `pytest` job, because the hook's own entry runs `ansible-galaxy collection
   # install` before linting — warm that is a 0.4s no-op, cold a ~40 MB download.
   ansible_lint:
     name: ansible-lint

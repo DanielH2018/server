@@ -59,12 +59,12 @@ git diff --name-only --no-renames --diff-filter=d "$base" > "$RUNNER_TEMP/change
 # scalar's trailing newline cannot become an empty pattern that matches everything. Each grep
 # tolerates exit 1 (no match) and nothing else, so a read error still fails the step.
 printf '%s\n' "${FULL_SWEEP_PATHS:-}" | { grep -v '^$' || [ $? -eq 1 ]; } > "$RUNNER_TEMP/triggers.txt"
-mapfile -t triggered < <(grep -Fx -f "$RUNNER_TEMP/triggers.txt" "$RUNNER_TEMP/changed.txt" || [ $? -eq 1 ])
+grep -Fx -f "$RUNNER_TEMP/triggers.txt" "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/triggered.txt" || [ $? -eq 1 ]
 
 if [ -s "$RUNNER_TEMP/deleted.txt" ]; then
   echo "PR deletes $(wc -l < "$RUNNER_TEMP/deleted.txt") file(s)" > "$RUNNER_TEMP/full_sweep.txt"
-elif [ "${#triggered[@]}" -gt 0 ]; then
-  echo "PR changes a full-sweep path (${triggered[*]})" > "$RUNNER_TEMP/full_sweep.txt"
+elif [ -s "$RUNNER_TEMP/triggered.txt" ]; then
+  echo "PR changes a full-sweep path ($(paste -sd ' ' "$RUNNER_TEMP/triggered.txt"))" > "$RUNNER_TEMP/full_sweep.txt"
 else
   : > "$RUNNER_TEMP/full_sweep.txt"
 fi
