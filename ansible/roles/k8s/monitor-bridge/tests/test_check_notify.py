@@ -8,7 +8,6 @@ wrong system.
 
 import io
 import urllib.error
-import urllib.request
 
 from dataclasses import replace
 
@@ -226,7 +225,7 @@ def test_email_backstop_disabled_without_password(cfg):
     assert "disabled" in msg
 
 
-def test_email_backstop_caches_success_within_interval(monkeypatch, cfg):
+def test_email_backstop_caches_success_within_interval(cfg):
     cfg = replace(cfg, SMTP_PASSWORD="app-pw", EMAIL_PROBE_INTERVAL_S=3600)
     cache: StampedCache = {"ts": 0.0, "ok": True, "msg": ""}
     calls = []
@@ -235,21 +234,15 @@ def test_email_backstop_caches_success_within_interval(monkeypatch, cfg):
         calls.append(1)
         return True, "SMTP login ok"
 
-    monkeypatch.setattr(checks.notify, "_smtp_login_ok", probe)
-    assert checks.notify.email_backstop(cfg, cache, now=10000.0)[
-        0
-    ]  # stale ts -> probes
-    ok, msg = checks.notify.email_backstop(
-        cfg, cache, now=11800.0
-    )  # +1800 < interval -> cached
+    # A stale ts probes; +1800 s is inside the interval and reads the cache; +3601 s re-probes.
+    assert checks.notify.email_backstop(cfg, cache, now=10000.0, login=probe)[0]
+    ok, msg = checks.notify.email_backstop(cfg, cache, now=11800.0, login=probe)
     assert ok and len(calls) == 1 and "verified" in msg
-    checks.notify.email_backstop(
-        cfg, cache, now=13601.0
-    )  # +3601 > interval -> re-probes
+    checks.notify.email_backstop(cfg, cache, now=13601.0, login=probe)
     assert len(calls) == 2
 
 
-def test_email_backstop_failure_reprobes_every_cycle(monkeypatch, cfg):
+def test_email_backstop_failure_reprobes_every_cycle(cfg):
     # a failure is NOT cached (unlike a success), so recovery is caught next cycle, not 6h later
     cfg = replace(cfg, SMTP_PASSWORD="app-pw", EMAIL_PROBE_INTERVAL_S=3600)
     cache: StampedCache = {"ts": 0.0, "ok": True, "msg": ""}
@@ -259,16 +252,14 @@ def test_email_backstop_failure_reprobes_every_cycle(monkeypatch, cfg):
         calls.append(1)
         raise RuntimeError("auth refused")
 
-    monkeypatch.setattr(checks.notify, "_smtp_login_ok", boom)
-    ok, msg = checks.notify.email_backstop(cfg, cache, now=10000.0)
+    ok, msg = checks.notify.email_backstop(cfg, cache, now=10000.0, login=boom)
     assert not ok and "FAILED" in msg
-    ok, _ = checks.notify.email_backstop(
-        cfg, cache, now=10001.0
-    )  # 1s later, well within interval -> still re-probes
+    # 1 s later, well within the interval, it still re-probes.
+    ok, _ = checks.notify.email_backstop(cfg, cache, now=10001.0, login=boom)
     assert not ok and len(calls) == 2
 
 
-def test_check_discord_email_backstop_failure_pages(monkeypatch, cfg):
+def test_check_discord_email_backstop_failure_pages(cfg):
     # webhooks fine but the email 2nd channel's SMTP login fails -> Discord Delivery pages after streak
     cfg = replace(
         cfg,
@@ -281,14 +272,14 @@ def test_check_discord_email_backstop_failure_pages(monkeypatch, cfg):
     )
     src = FakeSources(get_json=lambda *a, **k: {"name": "Homelab Alerts"})
 
-    def boom():
+    def boom(_cfg):
         raise RuntimeError("auth refused")
 
-    monkeypatch.setattr(checks.notify, "_smtp_login_ok", boom)
-    assert checks.notify.check_discord(cfg, src)[0]  # streak 1, suppressed
-    ok, msg = checks.notify.check_discord(cfg, src)  # streak 2, pages
+    assert checks.notify.check_discord(cfg, src, smtp_login=boom)[0]  # streak 1, held
+    ok, msg = checks.notify.check_discord(cfg, src, smtp_login=boom)  # streak 2, pages
     assert not ok
     assert "email backstop" in msg
+    assert "auth refused" in msg
 
 
 #
@@ -355,7 +346,7 @@ def test_describe_fetch_failure_ignores_a_blank_body():
     assert msg == "h:1: boom"
 
 
-def test_get_json_attaches_the_error_body_to_httperror(monkeypatch):
+def test_get_json_attaches_the_error_body_to_httperror():
     """The cap string only ever reaches an operator if the body is read off HTTPError.
 
     urllib exposes it as a one-shot file object that nothing reads by default, so the
@@ -373,9 +364,8 @@ def test_get_json_attaches_the_error_body_to_httperror(monkeypatch):
             io.BytesIO(body),
         )
 
-    monkeypatch.setattr(urllib.request, "urlopen", boom)
     with pytest.raises(urllib.error.HTTPError) as ei:
-        bridge.net._get_json("http://kopia:51515/api/v1/sources")
+        bridge.net._get_json("http://kopia:51515/api/v1/sources", opener=boom)
     # Same type, and .code intact: check_discord branches on it to tell a revoked webhook
     # (decisive 404) from a transient network blip.
     assert ei.value.code == 403
@@ -383,13 +373,12 @@ def test_get_json_attaches_the_error_body_to_httperror(monkeypatch):
     assert "Transaction cap exceeded" in str(ei.value)
 
 
-def test_get_json_wraps_non_http_errors_without_leaking_the_url(monkeypatch):
+def test_get_json_wraps_non_http_errors_without_leaking_the_url():
     def boom(*_a, **_k):
         raise TimeoutError("timed out")
 
-    monkeypatch.setattr(urllib.request, "urlopen", boom)
     url = "https://discord.com/api/webhooks/123/s3cr3t-token"
     with pytest.raises(RuntimeError) as ei:
-        bridge.net._get_json(url)
+        bridge.net._get_json(url, opener=boom)
     assert "discord.com: timed out" == str(ei.value)
     assert "s3cr3t" not in str(ei.value)

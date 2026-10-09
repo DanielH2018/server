@@ -100,8 +100,8 @@ def test_the_census_sees_a_module_inside_a_package(tmp_path):
 
 # --- The second invariant: every patched name is bound in the module the test patches it on ---
 #
-# The suite patches the runtime modules: `bridge.net.push`, a probe cache on a `checks.*` module,
-# a verdict on the `checks.*` module that from-imports it. A function reads its
+# The suite patches the runtime modules: `bridge.net._get_json`, `bridge.common.log`, a query on
+# the `checks.*` module that defines it. A function reads its
 # globals from the module it is DEFINED in, so a patch lands only if the module named in the
 # test is the module whose code reads the name. Patching `check.PROM_URL` when PROM_URL lives in
 # bridge.config and the setattr still SUCCEEDS — it creates a new attribute on `check` that

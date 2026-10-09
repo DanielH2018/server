@@ -11,18 +11,18 @@ the `Gates` seam are `gates.py`, the command line and `main()` are `cli.py` — 
 Deployment runs (`python /app/cli.py`). Configuration is a frozen `Config` `main()` builds once
 and threads down; see this role's CLAUDE.md, *Configuration is a parameter, not a module global*.
 
-A name the suite patches is read QUALIFIED from the module that binds it — `bridge.net.push`,
-`bridge.common.log` — never from-imported, because a from-import copies the value in at import
-time and never sees the patch. Nothing here is a module table any more: the checks arrive as the
-`checks` argument and every gate fact through `gates`, so a test states them instead of patching
-them. Enforced by ansible/tests/services/test_bridge_patch_boundary.py; the census of what is
-patched where is ansible/tests/services/test_monitor_bridge_modules.py.
+A name the suite patches is read QUALIFIED from the module that binds it — `bridge.common.log`
+— never from-imported, because a from-import copies the value in at import time and never sees
+the patch. Nothing here is a module table any more: the checks arrive as the `checks` argument,
+every gate fact through `gates`, the queries through `src` and the pushes through `sink`, so a
+test states them instead of patching them. Enforced by
+ansible/tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
+ansible/tests/services/test_monitor_bridge_modules.py.
 
 Design: docs/monitor-bridge-internals.md.
 """
 
 import bridge.common
-import bridge.net
 import bridge.streaks
 
 # Aliased because `gates` is also the name of run_once's parameter — the Gates VALUE a caller
@@ -30,7 +30,7 @@ import bridge.streaks
 # gates` would make the parameter shadow it inside the function body.
 import gates as gate_lib
 from bridge.config import Config
-from bridge.sources import Sources
+from bridge.sources import Sink, Sources
 from bridge.types import Check
 from gates import Gates
 
@@ -40,6 +40,7 @@ def run_once(
     src: Sources,
     checks: list[Check],
     gates: Gates,
+    sink: Sink,
     dry_run: bool = False,
     only: frozenset[str] | None = None,
 ) -> None:
@@ -54,7 +55,8 @@ def run_once(
     Args:
       cfg: The frozen config `main()` built — the ONLY source of configuration in a cycle.
       src: The `Sources` `main()` built — every Prometheus, Loki and HTTP query a gate or a
-        check body sends goes through it. A test hands in a fake holding canned answers.
+        check body sends goes through it, and its `state` carries the startup grace's streaks.
+        A test hands in a fake holding canned answers.
       checks: The registry to evaluate, as `registry.build_checks(env)` returns it. A
         parameter rather than a module table so a test hands in the two entries it means.
       dry_run: Evaluate and log every check, but push nothing to Kuma. Defaults to False, so
@@ -63,12 +65,12 @@ def run_once(
         which is what the pod runs with, so it must be threaded to EVERY check_enabled call
         below — a filter validated in main() and not passed here would print an enabled count
         it does not honour.
-      gates: Which checks each gate suppresses, and the four gate bodies. REQUIRED: cli.main()
-        builds the one production `Gates()` per process and passes it every cycle, so
-        `Gates.grace_streaks` binds `bridge.streaks._grace_streaks` once at start; the dict is
-        only ever mutated, never rebound, so the pin is safe. A default here would let a caller
-        that forgot the argument build a SECOND production Gates with its own streak dict,
-        silently resetting startup-grace hysteresis every cycle.
+      gates: Which checks each gate suppresses, and the four gate bodies. REQUIRED, so a
+        caller states the gate configuration it means: cli.main() builds the one production
+        `Gates()` and passes it every cycle.
+      sink: Where every gate's and every check's verdict is pushed. REQUIRED rather than
+        defaulted to a live `Sink(cfg)`, so a test that forgets it fails instead of pushing to
+        the real Kuma. cli.main() builds the one production `Sink` per process.
     """
     only = cfg.CHECKS_ONLY if only is None else only
     skip = cfg.CHECKS_SKIP
@@ -78,7 +80,7 @@ def run_once(
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
     prom_ok, _prom_msg = gate_lib._gate(
-        cfg, src, "prometheus", gates.probe_prometheus, dry_run, only
+        cfg, src, "prometheus", gates.probe_prometheus, sink, dry_run, only
     )
 
     # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
@@ -119,6 +121,7 @@ def run_once(
         src,
         "loki_reachable",
         gates.probe_loki,
+        sink,
         dry_run,
         only,
     )
@@ -131,7 +134,7 @@ def run_once(
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
     b2_ok, _b2_msg = gate_lib._gate(
-        cfg, src, "b2_reachable", gates.probe_b2, dry_run, only
+        cfg, src, "b2_reachable", gates.probe_b2, sink, dry_run, only
     )
 
     # WAN-reachability gate (peer of the two above): an internet outage had no gate at all,
@@ -139,7 +142,7 @@ def run_once(
     # 2026-09-18 (#2784). Two independent providers probed by hostname, down only when NEITHER
     # answers, so a single provider's outage does not silence a dependent reading the other.
     wan_ok, _wan_msg = gate_lib._gate(
-        cfg, src, "wan_reachable", gates.probe_wan, dry_run, only
+        cfg, src, "wan_reachable", gates.probe_wan, sink, dry_run, only
     )
 
     for entry in checks:
@@ -165,11 +168,11 @@ def run_once(
             ok, msg = gate_lib._evaluate(cfg, src, name, fn)
             if name in gates.startup_grace:
                 ok, msg = bridge.streaks.apply_startup_grace(
-                    name, ok, msg, cfg.GRACE_CYCLES, gates.grace_streaks
+                    name, ok, msg, cfg.GRACE_CYCLES, src.state.grace_streaks
                 )
             bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
         if not dry_run:
-            bridge.net.push(cfg, token, ok, msg)
+            sink.push(token, ok, msg)
 
 
 if __name__ == "__main__":

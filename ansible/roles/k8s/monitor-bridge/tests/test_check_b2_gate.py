@@ -17,11 +17,10 @@ from dataclasses import replace
 
 import pytest
 
-import bridge.net
 import checks.b2
 import check
 from _check_gate_helpers import mk
-from _fake_sources import FakeSources
+from _fake_sources import FakeSink, FakeSources
 from bridge.types import Check
 from gates import Gates
 
@@ -175,12 +174,10 @@ def test_b2_reachable_reprobes_after_the_interval(cfg):
     assert len(calls) == 2
 
 
-def _wire_run_once_b2(cfg, monkeypatch, b2_result, checks, b2_dependent):
+def _wire_run_once_b2(cfg, b2_result, checks, b2_dependent):
     """Drive run_once with Prometheus+Loki UP and a stated B2-reachability result."""
-    ran, pushes = [], []
-    monkeypatch.setattr(
-        bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
-    )
+    ran = []
+    sink = FakeSink()
     check.run_once(
         cfg,
         FakeSources(prom_vector=lambda q: []),
@@ -195,14 +192,14 @@ def _wire_run_once_b2(cfg, monkeypatch, b2_result, checks, b2_dependent):
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
             probe_b2=lambda _cfg, _src: b2_result,
         ),
+        sink=sink,
     )
-    return ran, pushes
+    return ran, sink.pushes
 
 
-def test_run_once_suppresses_b2_dependent_when_b2_down(monkeypatch, cfg):
+def test_run_once_suppresses_b2_dependent_when_b2_down(cfg):
     ran, pushes = _wire_run_once_b2(
         cfg,
-        monkeypatch,
         (False, "B2 unreachable: HTTP Error 403: transaction_cap_exceeded"),
         ["b2_usage", "verify", "backup"],
         {"b2_usage", "verify"},
@@ -219,10 +216,9 @@ def test_run_once_suppresses_b2_dependent_when_b2_down(monkeypatch, cfg):
     ), "the B2 Reachable monitor must page with B2's own error text"
 
 
-def test_run_once_runs_b2_dependent_when_b2_up(monkeypatch, cfg):
+def test_run_once_runs_b2_dependent_when_b2_up(cfg):
     ran, _ = _wire_run_once_b2(
         cfg,
-        monkeypatch,
         (True, "B2 reachable"),
         ["b2_usage", "verify"],
         {"b2_usage", "verify"},

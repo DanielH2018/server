@@ -1,7 +1,7 @@
 """The `run_once` drivers the gate suites share.
 
-Four test modules drive one full check cycle with the transport stubbed and one gate forced
-into a state — `test_check_gates.py`, `test_check_gates_exporters.py`, `test_check_b2_gate.py`
+Four test modules drive one full check cycle with a `FakeSources` and a `FakeSink` and one gate
+forced into a state — `test_check_gates.py`, `test_check_gates_exporters.py`, `test_check_b2_gate.py`
 and `test_check_streaks.py`. Each driver states the gate configuration, which is short enough
 to share: one `Gates(...)` and one `checks` list per driver. A module with a leading underscore
 rather than a `conftest.py` fixture, because these take arguments and return values — a fixture
@@ -9,9 +9,8 @@ would have to be a factory returning a function, which reads worse than the impo
 unique repo-wide, which is what `from conftest import ...` cannot promise.
 """
 
-import bridge.net
 import check
-from _fake_sources import FakeSources
+from _fake_sources import FakeSink, FakeSources
 from bridge.types import Check
 from gates import Gates
 
@@ -45,16 +44,14 @@ def as_probe(result):
     return _probe
 
 
-def wire_run_once(cfg, monkeypatch, prom_result):
+def wire_run_once(cfg, prom_result):
     """Drive run_once with a tiny registry (one prom-dependent, one not) and capture pushes.
 
     Returns (ran, pushes): `ran` is the names of checks actually executed, `pushes` is
     [(token, ok, msg), ...] in push order (incl. the leading `prometheus` push).
     """
-    ran, pushes = [], []
-    monkeypatch.setattr(
-        bridge.net, "push", lambda _cfg, token, ok, msg: pushes.append((token, ok, msg))
-    )
+    ran = []
+    sink = FakeSink()
     checks = [
         Check("disk", "tok_disk", mk(ran, "disk")),
         Check("backup", "tok_backup", mk(ran, "backup")),
@@ -71,13 +68,13 @@ def wire_run_once(cfg, monkeypatch, prom_result):
             probe_loki=lambda _cfg, _src: (True, "loki ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
+        sink=sink,
     )
-    return ran, pushes
+    return ran, sink.pushes
 
 
 def wire_run_once_reachability(
     cfg,
-    monkeypatch,
     names,
     loki_result=(True, "loki ok"),
     loki_dependent=(),
@@ -87,8 +84,7 @@ def wire_run_once_reachability(
     """Drive run_once with Prometheus UP and a stated Loki and WAN result; capture run+push.
 
     The two gates share one driver because they are the same shape — a reach-out probe whose
-    verdict suppresses a named set — and a second near-identical driver would spend two more
-    monkeypatch sites saying nothing new. Each gate defaults to reachable with an empty
+    verdict suppresses a named set — and a second near-identical driver would say nothing new. Each gate defaults to reachable with an empty
     dependent set, so a caller states only the gate it is about.
 
     Args:
@@ -101,10 +97,8 @@ def wire_run_once_reachability(
     Returns:
       (ran, pushes) — the names that actually executed, and [(token, ok, msg), ...].
     """
-    ran, pushes = [], []
-    monkeypatch.setattr(
-        bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
-    )
+    ran = []
+    sink = FakeSink()
     check.run_once(
         cfg,
         FakeSources(prom_vector=lambda q: []),
@@ -117,5 +111,6 @@ def wire_run_once_reachability(
             probe_loki=as_probe(loki_result),
             probe_wan=as_probe(wan_result),
         ),
+        sink=sink,
     )
-    return ran, pushes
+    return ran, sink.pushes

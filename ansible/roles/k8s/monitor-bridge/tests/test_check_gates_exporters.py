@@ -13,14 +13,12 @@ from dataclasses import replace
 
 import pytest
 
-import bridge.config
-import bridge.net
 import checks.cluster
 import check
 import gates
 import registry
 from _check_gate_helpers import mk
-from _fake_sources import FakeSources
+from _fake_sources import FakeSink, FakeSources
 from bridge.types import Check
 from gates import Gates
 
@@ -171,17 +169,15 @@ def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check(cf
     assert checked, "no excluded statically-labelled job found; this guard is inert"
 
 
-def _wire_run_once_prom_up(cfg, monkeypatch, up_vector, checks, prom_dependent):
+def _wire_run_once_prom_up(cfg, up_vector, checks, prom_dependent):
     """Drive run_once with Prometheus UP and a stated `up` vector; capture what ran + pushed.
 
     The production EXPORTER_DEPENDENT map is deliberately left in place — this suite is about
     which jobs it suppresses, so stating a sentinel map would test the driver rather than the
     table.
     """
-    ran, pushes = [], []
-    monkeypatch.setattr(
-        bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
-    )
+    ran = []
+    sink = FakeSink()
     check.run_once(
         cfg,
         FakeSources(prom_vector=lambda q: up_vector if q == "up" else []),
@@ -192,15 +188,15 @@ def _wire_run_once_prom_up(cfg, monkeypatch, up_vector, checks, prom_dependent):
             probe_loki=lambda _cfg, _src: (True, "loki ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
+        sink=sink,
     )
-    return ran, pushes
+    return ran, sink.pushes
 
 
-def test_run_once_suppresses_node_dependents_when_node_exporter_down(monkeypatch, cfg):
+def test_run_once_suppresses_node_dependents_when_node_exporter_down(cfg):
     up = [({"job": "node"}, 0.0), ({"job": "cadvisor"}, 1.0)]
     ran, pushes = _wire_run_once_prom_up(
         cfg,
-        monkeypatch,
         up,
         ["disk", "memory", "targets"],
         {"disk", "memory", "targets"},
@@ -293,12 +289,11 @@ def test_check_cpu_throttle_tiny_loss_stays_up(cfg):
     assert ok
 
 
-def test_run_once_suppression_without_cadvisor_series(monkeypatch, cfg):
+def test_run_once_suppression_without_cadvisor_series(cfg):
     # Only the node job exists in `up`.
     up = [({"job": "node"}, 0.0)]
     ran, _ = _wire_run_once_prom_up(
         cfg,
-        monkeypatch,
         up,
         ["disk", "memory", "targets"],
         {"disk", "memory", "targets"},
@@ -307,23 +302,19 @@ def test_run_once_suppression_without_cadvisor_series(monkeypatch, cfg):
     assert "targets" in ran
 
 
-def test_run_once_no_suppression_when_exporters_up(monkeypatch, cfg):
+def test_run_once_no_suppression_when_exporters_up(cfg):
     up = [({"job": "node"}, 1.0)]
-    ran, _ = _wire_run_once_prom_up(
-        cfg, monkeypatch, up, ["disk", "memory"], {"disk", "memory"}
-    )
+    ran, _ = _wire_run_once_prom_up(cfg, up, ["disk", "memory"], {"disk", "memory"})
     assert "disk" in ran and "memory" in ran
 
 
-def test_run_once_up_probe_failure_does_not_suppress(monkeypatch, cfg):
+def test_run_once_up_probe_failure_does_not_suppress(cfg):
     # If the `up` probe itself errors, fail toward alerting: run the checks, don't mask them.
     def boom(q):
         raise RuntimeError("prom hiccup")
 
-    ran, pushes = [], []
-    monkeypatch.setattr(
-        bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
-    )
+    ran = []
+    sink = FakeSink()
     check.run_once(
         cfg,
         FakeSources(prom_vector=boom),
@@ -334,6 +325,7 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch, cfg):
             probe_loki=lambda _cfg, _src: (True, "loki ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
+        sink=sink,
     )
     assert "disk" in ran  # not suppressed
 
@@ -353,9 +345,7 @@ _THREE_ORIGIN_UP = [
 ]
 
 
-def test_pi_exporter_death_suppresses_its_dependents_under_the_deployed_origin_pin(
-    monkeypatch, cfg
-):
+def test_pi_exporter_death_suppresses_its_dependents_under_the_deployed_origin_pin(cfg):
     """The Pi's node-exporter is down; pi_pressure and host_temp must not also page.
 
     Unsuppressed, pi_pressure pages with "node-pi series missing load/mem/fs", which is
@@ -366,7 +356,6 @@ def test_pi_exporter_death_suppresses_its_dependents_under_the_deployed_origin_p
     names = ["pi_pressure", "host_temp", "targets"]
     ran, pushes = _wire_run_once_prom_up(
         replace(cfg, PROM_ORIGIN='origin="daniel-server"'),
-        monkeypatch,
         _THREE_ORIGIN_UP,
         names,
         names,

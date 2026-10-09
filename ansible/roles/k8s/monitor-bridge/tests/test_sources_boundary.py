@@ -9,12 +9,11 @@ import ast
 import io
 import json
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 import pytest
 
-from bridge.sources import Sources
+from bridge.sources import Sink, Sources
 
 FILES = Path(__file__).resolve().parents[1] / "files"
 
@@ -146,38 +145,52 @@ _STREAMS = {
     ],
 )
 def test_the_live_sources_query_the_endpoint_each_method_names(
-    monkeypatch, cfg, call, body, path, query, expected
+    cfg, call, body, path, query, expected
 ):
     """FakeSources overrides every method, so no other test runs these delegations.
 
     A swapped argument (selector for window, limit for window_s) type-checks and passes the
     whole suite while the pod queries nonsense.
     """
-    sent = _fake_urlopen(monkeypatch, body)
-    assert call(Sources(cfg)) == expected
+    sent, opener = _fake_opener(body)
+    assert call(Sources(cfg, opener=opener)) == expected
     url = urllib.parse.urlsplit(sent[0].full_url)
     assert url.path.endswith(path)
     params = dict(urllib.parse.parse_qsl(url.query))
     assert query.items() <= params.items(), params
 
 
-def test_the_live_post_json_sends_the_payload(monkeypatch, cfg):
-    sent = _fake_urlopen(monkeypatch, {"ok": 1})
-    assert Sources(cfg).post_json("http://api.test/p", {"a": 1}, {"X-K": "v"}) == {
-        "ok": 1
-    }
+def test_the_live_post_json_sends_the_payload(cfg):
+    sent, opener = _fake_opener({"ok": 1})
+    assert Sources(cfg, opener=opener).post_json(
+        "http://api.test/p", {"a": 1}, {"X-K": "v"}
+    ) == {"ok": 1}
     assert sent[0].get_method() == "POST"
     assert json.loads(sent[0].data) == {"a": 1}
     assert sent[0].get_header("X-k") == "v"
 
 
-def _fake_urlopen(monkeypatch, body):
-    """Answer every urlopen with `body` as JSON; return the list of requests sent."""
+def test_the_live_sink_pushes_to_the_token_s_monitor(cfg):
+    """FakeSink overrides `push`, so this is the one test that runs the live delegation.
+
+    A swapped token, status or message would pass every run-loop test and push nonsense to Kuma.
+    """
+    sent, opener = _fake_opener({"ok": True})
+    Sink(cfg, opener=opener).push("tok123", False, "disk 95%")
+    url = urllib.parse.urlsplit(sent[0].full_url)
+    assert url.path.endswith("/api/push/tok123")
+    assert dict(urllib.parse.parse_qsl(url.query)) == {
+        "status": "down",
+        "msg": "disk 95%",
+    }
+
+
+def _fake_opener(body):
+    """An opener answering every request with `body` as JSON, and the list it records them in."""
     sent = []
 
-    def urlopen(req, timeout=None):
+    def opener(req, timeout=None):
         sent.append(req)
         return io.BytesIO(json.dumps(body).encode())
 
-    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
-    return sent
+    return sent, opener

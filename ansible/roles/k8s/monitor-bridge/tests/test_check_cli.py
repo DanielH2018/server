@@ -13,35 +13,33 @@ import pytest
 
 import bridge.common
 from bridge.config import load_config
-import bridge.net
 import cli
 from _bridge_env import bridge_env
 from _check_gate_helpers import mk
-from _fake_sources import FakeSources
+from _fake_sources import FakeSink, FakeSources
 from bridge.types import Check
 from gates import Gates
 
 
 def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
-    """Stub the transport and STATE the registry, so main() runs one cycle touching nothing live.
+    """Stub the heartbeat and STATE the registry, so main() runs one cycle touching nothing live.
 
-    Returns the `checks=` / `gate_config=` / `sources=` / `env=` keyword arguments to hand
+    Returns the `checks=` / `gate_config=` / `sources=` / `sink=` / `env=` keyword arguments to hand
     `cli.main`, which is how a test says which checks exist and what they read without mutating
     a module. `env` is the rendered
     env-secret, the environment the pod's `main()` reads.
 
     Args:
-      monkeypatch: The fixture, for the push and heartbeat stubs, which are not parameters.
-      pushes: Collects every (token, ok, msg) the cycle would have pushed.
+      monkeypatch: The fixture, for the heartbeat stub, which is not a parameter.
+      pushes: Collects every (token, ok, msg) the cycle would have pushed, through the sink.
       ran: Collects the name of every check body that ran.
       names: The registry to run — one `Check` per name, each recording into `ran`.
       probe_prometheus: A replacement Prometheus gate body. Only
         `test_check_flag_unions_in_the_gate_a_named_check_depends_on` passes one, to watch that
         gate actually run; the default reports the gate up without recording.
     """
-    monkeypatch.setattr(
-        bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
-    )
+    sink = FakeSink()
+    sink.pushes = pushes
     monkeypatch.setattr(bridge.common, "touch_heartbeat", lambda path: None)
 
     return {
@@ -49,6 +47,7 @@ def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
         "checks": [Check(n, "tok_%s" % n, mk(ran, n)) for n in names],
         # No exporter is down, so the exporter probe suppresses nothing.
         "sources": FakeSources(prom_vector=lambda q: []),
+        "sink": sink,
         "gate_config": Gates(
             probe_prometheus=probe_prometheus or (lambda _cfg, _src: (True, "prom ok")),
             probe_loki=lambda _cfg, _src: (True, "loki ok"),
@@ -164,6 +163,7 @@ def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypat
             checks=None,
             gate_config=wired["gate_config"],
             sources=wired["sources"],
+            sink=wired["sink"],
         )
         == 0
     )

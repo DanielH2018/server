@@ -13,12 +13,11 @@ import os
 import bridge.common
 from bridge.config import load_config
 import bridge.streaks
-import bridge.net
 import checks.storage
 import check
 import gates
 import registry
-from _fake_sources import FakeSources
+from _fake_sources import FakeSink, FakeSources
 
 
 # ── loop heartbeat (container healthcheck reads this file's mtime) ─────────────
@@ -115,15 +114,12 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch, cfg):
         "_evaluate",
         lambda _cfg, _src, name, fn: (evaluated.append(name), (True, "ok"))[1],
     )
-    pushed = []
-    monkeypatch.setattr(
-        bridge.net, "push", lambda _cfg, token, ok, msg: pushed.append(msg)
-    )
+    sink = FakeSink()
     # The exporter probe still runs when the Prometheus gate is in the filter; no job is down.
     src = FakeSources(prom_vector=lambda q: [])
-    check.run_once(cfg, src, registry.build_checks(), gates.Gates())
+    check.run_once(cfg, src, registry.build_checks(), gates.Gates(), sink)
     assert set(evaluated) == SUBSET_ONLY
-    assert len(pushed) == len(SUBSET_ONLY)
+    assert len(sink.pushes) == len(SUBSET_ONLY)
 
 
 # ── check_pvc_fullness ──────────────────────────────────────────────────────

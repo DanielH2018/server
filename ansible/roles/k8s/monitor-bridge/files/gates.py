@@ -10,22 +10,20 @@ configuration instead of patching module globals.
 It is a leaf: it imports `bridge.*`, `check_table` (the `gate` column every set below derives
 from) and the four gate probe bodies out of `checks.*`, and never `check`, `registry` or `cli`.
 
-`apply_startup_grace` and `_grace_streaks` are NOT here — they live in `bridge/streaks.py`
-beside the `down_streak` hysteresis they are built on, and `Gates.grace_streaks` defaults to
-that module's dict. The startup grace is a gate in the same sense the other four are (it holds
-a verdict back rather than reporting it), which is why the membership set `STARTUP_GRACE` is
-here and the mechanism is there.
+`apply_startup_grace` is NOT here — it lives in `bridge/streaks.py` beside the `down_streak`
+hysteresis it is built on, and its counters are `State.grace_streaks`, read as
+`src.state.grace_streaks`. The startup grace is a gate in the same sense the other four are (it
+holds a verdict back rather than reporting it), which is why the membership set `STARTUP_GRACE`
+is here and the mechanism is there.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import bridge.common
-import bridge.net
-import bridge.streaks
 from bridge.common import _env
 from bridge.config import Config
-from bridge.sources import Sources
+from bridge.sources import Sink, Sources
 from bridge.types import Check, CheckFn, CheckResult, push_env
 from check_table import CHECKS
 from checks.b2 import check_b2_reachable
@@ -166,14 +164,6 @@ class Gates:
       b2_dependent: Checks suppressed when the B2 gate is down.
       wan_dependent: Checks suppressed when neither WAN endpoint answers.
       startup_grace: Reach-out checks held `up` through their first consecutive down cycles.
-      grace_streaks: The name -> consecutive-down count the startup grace mutates in place.
-        Defaults to `bridge.streaks._grace_streaks`, the process-wide dict the pod uses, so a
-        test that wants isolation passes its own `{}`.
-        HAZARD: that default is the module's own dict, not a copy, and mutating it is the
-        POINT — the hysteresis has to survive across cycles. `frozen=True` blocks rebinding
-        the field, never mutation through it, so two `Gates()` built in one process share one
-        streak table. Copying here would silently reset startup grace every cycle; the fix for
-        cross-test bleed is an explicit `{}`, never a copying factory.
       probe_prometheus: The Prometheus gate's body.
       probe_loki: The Loki gate's body.
       probe_b2: The B2 gate's body.
@@ -190,9 +180,6 @@ class Gates:
     b2_dependent: frozenset[str] = B2_DEPENDENT
     wan_dependent: frozenset[str] = WAN_DEPENDENT
     startup_grace: frozenset[str] = STARTUP_GRACE
-    grace_streaks: dict[str, int] = field(
-        default_factory=lambda: bridge.streaks._grace_streaks
-    )
     probe_prometheus: CheckFn = check_prometheus
     probe_loki: CheckFn = check_loki_reachable
     probe_b2: CheckFn = check_b2_reachable
@@ -316,6 +303,7 @@ def _gate(
     src: Sources,
     name: str,
     fn: CheckFn,
+    sink: Sink,
     dry_run: bool,
     only: frozenset[str],
 ) -> CheckResult:
@@ -332,6 +320,7 @@ def _gate(
       src: The sources the gate body reads.
       name: The gate's own check name, as CHECKS_ONLY/CHECKS_SKIP and GATE_DEPENDENTS spell it.
       fn: The gate's check body, taken off the `Gates` value run_once was given.
+      sink: Where the gate's heartbeat is pushed.
       dry_run: Evaluate and log, but push nothing to Kuma.
       only: The enable-exactly-this-set filter.
     """
@@ -340,5 +329,5 @@ def _gate(
     ok, msg = _evaluate(cfg, src, name, fn)
     bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
     if not dry_run:
-        bridge.net.push(cfg, _env(push_env(name), ""), ok, msg)
+        sink.push(_env(push_env(name), ""), ok, msg)
     return CheckResult(ok, msg)

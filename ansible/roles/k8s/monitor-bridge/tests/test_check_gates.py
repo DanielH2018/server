@@ -3,7 +3,7 @@
 A monitor that cannot reach Prometheus, Loki or B2 must report "cannot tell", never "down" —
 otherwise one unreachable dependency fires every monitor that reads it at once.
 
-These are the tests that drive `run_once()` end to end with the transport stubbed, so they are
+These are the tests that drive `run_once()` end to end with fake sources and sink, so they are
 the ones that fail when the wiring changes rather than the logic. Each states the gate
 configuration it means as a `Gates(...)` value; the drivers are `_check_gate_helpers.py`.
 
@@ -14,13 +14,13 @@ Three neighbours own the rest: membership of the gate sets is
 
 import pytest
 
-import bridge.net
 import bridge.parsing
 import check
 import checks.cluster
 import checks.logs
 from _check_gate_helpers import wire_run_once, wire_run_once_reachability
-from _fake_sources import FakeSources
+from _fake_sources import FakeSink, FakeSources
+from bridge.streaks import State
 from bridge.types import Check
 from gates import Gates
 
@@ -57,8 +57,8 @@ def test_check_prometheus_no_data_is_down(cfg):
     assert not ok
 
 
-def test_run_once_suppresses_prom_dependent_when_prometheus_down(monkeypatch, cfg):
-    ran, pushes = wire_run_once(cfg, monkeypatch, (False, "prom is down"))
+def test_run_once_suppresses_prom_dependent_when_prometheus_down(cfg):
+    ran, pushes = wire_run_once(cfg, (False, "prom is down"))
     # the prom-dependent check is suppressed: never executed, pushed `up` with a skip msg
     assert "disk" not in ran
     assert "backup" in ran  # non-prom check still runs
@@ -69,16 +69,16 @@ def test_run_once_suppresses_prom_dependent_when_prometheus_down(monkeypatch, cf
     assert any(ok is False and "prom is down" in msg for _, ok, msg in pushes)
 
 
-def test_run_once_unreachable_prometheus_exception_suppresses(monkeypatch, cfg):
+def test_run_once_unreachable_prometheus_exception_suppresses(cfg):
     # prom_scalar raising (the real outage path) -> _evaluate renders it down -> suppression
-    ran, pushes = wire_run_once(cfg, monkeypatch, RuntimeError("connection refused"))
+    ran, pushes = wire_run_once(cfg, RuntimeError("connection refused"))
     assert "disk" not in ran
     assert "backup" in ran
     assert any(ok is False and "connection refused" in msg for _, ok, msg in pushes)
 
 
-def test_run_once_runs_all_when_prometheus_up(monkeypatch, cfg):
-    ran, pushes = wire_run_once(cfg, monkeypatch, (True, "ok"))
+def test_run_once_runs_all_when_prometheus_up(cfg):
+    ran, pushes = wire_run_once(cfg, (True, "ok"))
     assert ran == ["disk", "backup"]  # nothing suppressed
     by_tok = {tok: (ok, msg) for tok, ok, msg in pushes}
     assert "skipped" not in by_tok["tok_disk"][1].lower()
@@ -87,10 +87,9 @@ def test_run_once_runs_all_when_prometheus_up(monkeypatch, cfg):
 # ── Loki reachability gate (peer of the Prometheus gate) ─────────────────────
 
 
-def test_run_once_suppresses_loki_dependent_when_loki_down(monkeypatch, cfg):
+def test_run_once_suppresses_loki_dependent_when_loki_down(cfg):
     ran, pushes = wire_run_once_reachability(
         cfg,
-        monkeypatch,
         ["recyclarr", "janitorr", "backup"],
         loki_result=(False, "loki unreachable"),
         loki_dependent={"recyclarr", "janitorr"},
@@ -105,11 +104,10 @@ def test_run_once_suppresses_loki_dependent_when_loki_down(monkeypatch, cfg):
     assert any(ok is False and "loki unreachable" in m for _, ok, m in pushes)
 
 
-def test_run_once_unreachable_loki_exception_suppresses(monkeypatch, cfg):
+def test_run_once_unreachable_loki_exception_suppresses(cfg):
     # the Loki probe raising (the real outage path) -> _evaluate down -> suppression
     ran, _ = wire_run_once_reachability(
         cfg,
-        monkeypatch,
         ["recyclarr", "backup"],
         loki_result=RuntimeError("connection refused"),
         loki_dependent={"recyclarr"},
@@ -118,10 +116,9 @@ def test_run_once_unreachable_loki_exception_suppresses(monkeypatch, cfg):
     assert "backup" in ran
 
 
-def test_run_once_runs_loki_dependent_when_loki_up(monkeypatch, cfg):
+def test_run_once_runs_loki_dependent_when_loki_up(cfg):
     ran, _ = wire_run_once_reachability(
         cfg,
-        monkeypatch,
         ["recyclarr", "janitorr"],
         loki_result=(True, "Loki reachable"),
         loki_dependent={"recyclarr", "janitorr"},
@@ -129,10 +126,10 @@ def test_run_once_runs_loki_dependent_when_loki_up(monkeypatch, cfg):
     assert "recyclarr" in ran and "janitorr" in ran
 
 
-def test_run_once_reads_every_gates_field(monkeypatch, cfg):
+def test_run_once_reads_every_gates_field(cfg):
     """The seam must not be inert: a value passed on `Gates` has to reach the loop.
 
-    Eleven fields, and a field `run_once` never reads is a knob a test can turn with no effect —
+    Ten fields, and a field `run_once` never reads is a knob a test can turn with no effect —
     a stated configuration and a green assertion agreeing about nothing. Two cycles, because the
     exporter probe runs only when the Prometheus gate is UP, so one cycle cannot exercise both
     `prom_dependent` and `exporter_dependent`. Every field is set to a sentinel no production
@@ -154,14 +151,11 @@ def test_run_once_reads_every_gates_field(monkeypatch, cfg):
 
         return fn
 
-    def cycle(prom_result, up_vector, streaks):
-        seen, pushed = [], {}
-        monkeypatch.setattr(
-            bridge.net, "push", lambda _cfg, t, ok, m: pushed.setdefault(t, (ok, m))
-        )
+    def cycle(prom_result, up_vector, state):
+        seen, sink = [], FakeSink()
         check.run_once(
             cfg,
-            FakeSources(prom_vector=lambda q: up_vector),
+            FakeSources(state=state, prom_vector=lambda q: up_vector),
             [Check(n, "tok_%s" % n, body(n, seen)) for n in names],
             gates=Gates(
                 prom_dependent=frozenset({"prom_dep"}),
@@ -170,33 +164,36 @@ def test_run_once_reads_every_gates_field(monkeypatch, cfg):
                 b2_dependent=frozenset({"b2_dep"}),
                 wan_dependent=frozenset({"wan_dep"}),
                 startup_grace=frozenset({"graced"}),
-                grace_streaks=streaks,
                 probe_prometheus=lambda _cfg, _src: prom_result,
                 probe_loki=lambda _cfg, _src: (False, "loki down"),
                 probe_wan=lambda _cfg, _src: (False, "wan down"),
                 probe_b2=lambda _cfg, _src: (False, "b2 down"),
             ),
+            sink=sink,
         )
+        pushed = {}
+        for t, ok, m in sink.pushes:
+            pushed.setdefault(t, (ok, m))
         return seen, pushed
 
     # Cycle 1 — Prometheus UP with the sentinel exporter job down. exporter_dependent,
-    # loki_dependent, b2_dependent, wan_dependent, startup_grace, grace_streaks and three of
-    # the four probes all decide here.
-    streaks = {}
-    seen, pushed = cycle((True, "prom up"), [({"job": "sentinel_job"}, 0.0)], streaks)
+    # loki_dependent, b2_dependent, wan_dependent, startup_grace and three of the four probes
+    # all decide here.
+    state = State()
+    seen, pushed = cycle((True, "prom up"), [({"job": "sentinel_job"}, 0.0)], state)
     assert seen == ["prom_dep", "graced"]
     for name in ("exp_dep", "loki_dep", "b2_dep", "wan_dep"):
         assert pushed["tok_%s" % name][0] is True, name
         assert "skipped" in pushed["tok_%s" % name][1], name
-    # startup_grace + grace_streaks: `graced` went down but was held `up`, and the streak landed
-    # in the dict that was PASSED rather than in bridge.streaks' module-level one.
+    # startup_grace: `graced` went down but was held `up`, and the streak landed in the `State`
+    # the sources carried.
     assert pushed["tok_graced"][0] is True
     assert "startup/redeploy grace" in pushed["tok_graced"][1]
-    assert streaks == {"graced": 1}
+    assert state.grace_streaks == {"graced": 1}
 
     # Cycle 2 — Prometheus DOWN. prom_dependent and probe_prometheus decide here; the exporter
     # probe is deliberately not reached, so an empty `up` vector proves exp_dep ran on its own.
-    seen, pushed = cycle((False, "prom down"), [], {})
+    seen, pushed = cycle((False, "prom down"), [], State())
     assert "prom_dep" not in seen
     assert "exp_dep" in seen
     assert pushed["tok_prom_dep"][0] is True
@@ -219,22 +216,23 @@ def test_duration_seconds_parses_prometheus_durations():
 def test_run_once_requires_a_gates_value(cfg):
     """The red-proof half: `run_once` must not read `gates = Gates() if gates is None else gates`.
 
-    That default would run a full cycle against a SECOND production `Gates()` — its
-    own `grace_streaks` binding aside, cli.main() already builds the one instance the pod uses,
-    so a second one is a silent divergence rather than an error.
+    That default would run a full cycle against a SECOND production `Gates()`. cli.main()
+    already builds the one instance the pod uses, so a second one is a silent divergence
+    rather than an error.
     """
     with pytest.raises(TypeError):
-        check.run_once(cfg, FakeSources(), [])  # ty: ignore[missing-argument]
+        check.run_once(cfg, FakeSources(), [], sink=FakeSink())  # ty: ignore[missing-argument]
 
 
 # --- the sources are one injected value, not a lookup ----------------------------------------
 
 
-def test_run_once_hands_its_sources_to_every_gate_and_check(monkeypatch, cfg):
-    """The seam must not be inert: the `src` run_once is given is the one every body receives.
+def test_run_once_hands_its_sources_to_every_gate_and_check(cfg):
+    """The seam must not be inert: the `src` and `sink` run_once is given are the ones it uses.
 
     A body that looked its sources up anywhere else would answer from the live transport while
-    the test believed it had stated the answer.
+    the test believed it had stated the answer, and a push that bypassed the sink would reach
+    the real Kuma. Four gate heartbeats and one check make five pushes.
     """
     src = FakeSources(prom_vector=lambda q: [])
     received = []
@@ -243,7 +241,7 @@ def test_run_once_hands_its_sources_to_every_gate_and_check(monkeypatch, cfg):
         received.append(got)
         return True, "ok"
 
-    monkeypatch.setattr(bridge.net, "push", lambda *a: None)
+    sink = FakeSink()
     check.run_once(
         cfg,
         src,
@@ -251,13 +249,22 @@ def test_run_once_hands_its_sources_to_every_gate_and_check(monkeypatch, cfg):
         gates=Gates(
             probe_prometheus=body, probe_loki=body, probe_b2=body, probe_wan=body
         ),
+        sink=sink,
     )
     assert len(received) == 5
     assert all(got is src for got in received)
     assert src.queries("prom_vector") == ["up"]
+    assert len(sink.pushes) == 5
+    assert sink.pushes[-1] == ("tok_disk", True, "ok")
 
 
 def test_run_once_requires_its_sources(cfg):
     """The red-proof half: no default `Sources`, so a forgotten argument cannot reach the network."""
     with pytest.raises(TypeError):
-        check.run_once(cfg, checks=[], gates=Gates())  # ty: ignore[missing-argument]
+        check.run_once(cfg, checks=[], gates=Gates(), sink=FakeSink())  # ty: ignore[missing-argument]
+
+
+def test_run_once_requires_its_sink(cfg):
+    """The red-proof half: no default `Sink`, so a forgotten argument cannot push to the live Kuma."""
+    with pytest.raises(TypeError):
+        check.run_once(cfg, FakeSources(), [], gates=Gates())  # ty: ignore[missing-argument]
