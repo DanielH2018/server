@@ -90,6 +90,7 @@ from fanout_lib.red_gate import (
     GREEN_FILE,
     RED_SCHEMA,
     Gate,
+    ResetFailed,
     Gates,
     anti_patterns,
     green_finding,
@@ -377,12 +378,9 @@ class Pipeline:
     def _first_implementer(self) -> list[str]:
         """The implement phase's argv: on held settings when a red phase ran before it.
 
-        The red author could leave an ignored `.claude/settings.local.json`, a hook edit that
-        `update-index --skip-worktree` hides from `git status`, or a planted `.pyc` beside a
-        hook, and none of these is a change in the range the red gate reads (#3846).
-        `reset_worktree` removes each of them before this phase; held settings stay as the
-        second layer. They drop the project `CLAUDE.md` from this fresh session, so it gets
-        the copy read at start as text, as the reviewer does.
+        The red author could leave an ignored settings file or a skip-worktree hook edit,
+        neither in the range the red gate reads (#3846). `reset_worktree` removes them; held
+        settings are the second layer, and drop `CLAUDE.md`, so it comes as text.
         """
         if not self.red_green:
             return self._implementer()
@@ -412,10 +410,10 @@ class Pipeline:
     def _red(self, issues: str) -> tuple[str, Gate] | None:
         """Run the test author and the red gate: the red SHA and its verdict, or None.
 
-        A refused commit is reset away, so the implementer starts from the base as usual.
-        Either way the worktree is reset to the commit the implementer starts from, with
-        every untracked, ignored and index-hidden change the red phase left removed (#3852).
-        Anything the red session or its tests left running is killed before the reset.
+        Either way the worktree is reset to the commit the implementer starts from, the base
+        on a refusal, with every untracked, ignored and index-hidden change the red phase left
+        removed (#3852). Anything the red session or its tests left running is killed first.
+        A failed reset raises `ResetFailed`, which `run_all` turns into a failed batch.
         """
         base = self._git("rev-parse", "HEAD")
         with reaping():
@@ -486,7 +484,12 @@ class Pipeline:
         issues = issues_section(self.brief)
         if self.project_settings:
             self.hooks.update(held_secret_paths(self.run, SOURCE_ROOT))
-        red = self._red(issues) if self.red_green else None
+        try:
+            red = self._red(issues) if self.red_green else None
+        except ResetFailed as exc:
+            self.record.red_gate = f"reset failed: {exc}"
+            self._save()
+            return {"type": "result", "is_error": True, "result": f"failed: {exc}"}
         brief = self.brief
         if red is not None:
             brief = brief.replace(ISSUES_HEADING, red_section(*red) + ISSUES_HEADING, 1)

@@ -10,11 +10,14 @@ Run: uv run pytest scripts/dev/tests/test_fanout_red_gate.py
 import subprocess
 import sys
 
+import pytest
+
 from lib.proc_testing import DEFAULT_TIMEOUT
 
 from fanout_lib.brief import Issue
 from fanout_lib.red_gate import (
     RED_GREEN_LABEL,
+    ResetFailed,
     anti_patterns,
     green_gate,
     red_gate,
@@ -287,6 +290,14 @@ def test_reset_worktree_leaves_the_commits_tree_and_fanout_only(tmp_path):
     assert not (repo / "CLAUDE.local.md").exists()
     assert not (repo / ".mcp.json").exists()
     assert (repo / ".fanout" / "brief.md").read_text() == "brief\n"
+
+
+def test_reset_worktree_raises_when_a_git_step_fails(tmp_path):
+    """While an `index.lock` exists every index write fails, and `git clean` still exits 0."""
+    repo = _planted(tmp_path)
+    (repo / ".git" / "index.lock").write_text("")
+    with pytest.raises(ResetFailed, match="update-index"):
+        reset_worktree(run, repo, git_out(repo, "rev-parse", "HEAD"))
 
 
 def test_a_skip_worktree_edit_to_the_code_is_refused_once_unhidden(tmp_path):

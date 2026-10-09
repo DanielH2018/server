@@ -245,6 +245,26 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
     ]
 
 
+def test_a_failed_reset_fails_the_batch_before_the_implementer_runs(tmp_path):
+    """The worktree may still hold the red phase's edits or the refused commit."""
+    gates = _gates(Gate("refused"))
+    pipeline, run = _pipeline(
+        tmp_path, [_red_report()], heads=("base", "red1"), gates=gates
+    )
+
+    def locked(argv, stdin):
+        if argv[0] == "git" and "reset" in argv:
+            return subprocess.CompletedProcess(argv, 128, "", "index.lock: File exists")
+        return run(argv, stdin)
+
+    pipeline.run = locked
+    report = pipeline.run_all()
+
+    assert [phase for _, _, phase in run.claude] == ["red"]
+    assert report["is_error"] and report["result"].startswith("failed: `git reset")
+    assert pipeline.record.red_gate.startswith("reset failed:")
+
+
 def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path):
     edited = "the fix changed what the red tests stand on: t.py"
     gates = _gates(Gate(files=["t.py"], nodes=["t.py::a"]), green=[edited, edited])

@@ -245,6 +245,24 @@ def stray_config(run: Runner, worktree: Path) -> list[str]:
     return [f for f in listed.splitlines() if PurePosixPath(f).name in PYTEST_CONFIG]
 
 
+class ResetFailed(RuntimeError):
+    """A git step that clears what the red phase left exited non-zero.
+
+    The worktree may then still hold a hidden edit or the refused red commit, so the batch
+    stops rather than hand it to the implementer. A leftover `index.lock` is one cause: every
+    index write refuses while it exists, and `git clean` still exits 0.
+    """
+
+
+def _must(run: Runner, worktree: Path, *args: str) -> str:
+    proc = _git(run, worktree, *args)
+    if proc.returncode:
+        raise ResetFailed(
+            f"`git {' '.join(args[:2])}` exited {proc.returncode}: {proc.stderr.strip()}"
+        )
+    return proc.stdout
+
+
 def unhide_index(run: Runner, worktree: Path) -> list[str]:
     """Clear every skip-worktree and assume-unchanged bit in `worktree`'s index.
 
@@ -254,8 +272,11 @@ def unhide_index(run: Runner, worktree: Path) -> list[str]:
 
     Returns:
         The paths whose bits were cleared.
+
+    Raises:
+        ResetFailed: a git step exited non-zero.
     """
-    listed = _git(run, worktree, "ls-files", "-v", "-z").stdout
+    listed = _must(run, worktree, "ls-files", "-v", "-z")
     hidden = [
         entry[2:]
         for entry in listed.split("\0")
@@ -263,7 +284,7 @@ def unhide_index(run: Runner, worktree: Path) -> list[str]:
     ]
     # One call per flag: given both, `update-index` exits 0 and clears only the last.
     for flag in ("--no-skip-worktree", "--no-assume-unchanged") if hidden else ():
-        _git(run, worktree, "update-index", flag, "--", *hidden)
+        _must(run, worktree, "update-index", flag, "--", *hidden)
     return hidden
 
 
@@ -277,11 +298,14 @@ def reset_worktree(run: Runner, worktree: Path, sha: str) -> None:
     then the tree is reset, then every untracked and ignored file is deleted. That includes
     `.venv/`: `uv run` rebuilds it from its cache, and a `.pth` planted in it would run in
     every later pytest.
+
+    Raises:
+        ResetFailed: a git step exited non-zero.
     """
     unhide_index(run, worktree)
-    _git(run, worktree, "reset", "--quiet", "--hard", sha)
+    _must(run, worktree, "reset", "--quiet", "--hard", sha)
     # `-x` still honours `-e`. A second `-f` removes a nested repository too.
-    _git(run, worktree, "clean", "-ffdxq", "-e", "/.fanout/")
+    _must(run, worktree, "clean", "-ffdxq", "-e", "/.fanout/")
 
 
 def _collect(run: Runner, worktree: Path, files: list[str]) -> tuple[set[str], int]:
