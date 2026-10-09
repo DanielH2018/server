@@ -10,6 +10,7 @@ apart in what order they name the ff-merge and the playbook.
 from __future__ import annotations
 
 from deploy_changes import ChangeSet, setup_role_playbook, setup_role_tag
+from deploy_setup_roles import SETUP_ROLES_OFF_THE_TICK_HOST
 from gitops_ledger import OWED_MANUAL_PLANE
 from gitops_markers import MAXIMAL_ROLE_GATED_TAGS, owed_clear_cmd
 
@@ -295,7 +296,10 @@ def _setup_commands(
         role_tag = setup_role_tag(role)
         narrowed = _narrowed_tags(role, narrow_tags)
         tags = ",".join(sorted(narrowed)) or role_tag
-        cmd = f"`ansible-playbook {playbook} --tags {tags}`"
+        # A role gated off the tick's host only applies with `-e target=` (#3933).
+        target = SETUP_ROLES_OFF_THE_TICK_HOST.get(role)
+        target_arg = f" -e target={target}" if target else ""
+        cmd = f"`ansible-playbook {playbook} --tags {tags}{target_arg}`"
         if not narrowed:
             warning = maximal_tag_warning(role)
         elif narrowed & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):

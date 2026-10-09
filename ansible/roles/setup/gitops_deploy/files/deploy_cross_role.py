@@ -56,10 +56,10 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
 
 
 # DECIDED: `common/templates/resolv.conf.j2` stays out of the table above and records `common`
-# (#3319). `k3s` and `optimize_pi` render it directly, but `optimize_pi` applies only on
-# daniel-pi (`when: inventory_hostname == optimize_pi_host`), so the tick's `initial_setup.yml
-# --tags optimize_pi` on daniel-box would skip it and still record the apply. Recording
-# `common` prints the two-host remediation in `deploy_remediation._setup_commands` instead.
+# (#3319). `k3s` and `optimize_pi` render it directly, and neither is the tick's to apply:
+# `k3s` runs only from `k3s-bringup.yml`, and `optimize_pi` only on daniel-pi
+# (`deploy_setup_roles.SETUP_ROLES_OFF_THE_TICK_HOST`, #3933). Recording `common` prints the
+# two-host remediation in `deploy_remediation._setup_commands` as one line.
 SETUP_FILES_ROUTED_TO_OWNER = frozenset({f"{_COMMON}/templates/resolv.conf.j2"})
 
 # The k8s roles that import a setup file by path, so a change to it defer-and-alerts each one

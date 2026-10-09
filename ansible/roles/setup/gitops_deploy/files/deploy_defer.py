@@ -34,7 +34,11 @@ from typing import NamedTuple
 import deploy_alert_text
 import deploy_alerts
 import deploy_narrow
-from deploy_changes import setup_role_playbook, setup_role_tag
+from deploy_changes import (
+    setup_role_playbook,
+    setup_role_tag,
+    tick_applies_setup_role,
+)
 from deploy_config import Config, log
 from deploy_remediation import (
     broad_park_reason,
@@ -47,8 +51,6 @@ from deploy_state import (
 )
 from deploy_tick_types import TickTarget
 from deploy_toolbox import DeployTools
-
-INITIAL_SETUP = "ansible/initial_setup.yml"
 
 
 def for_contention(
@@ -95,13 +97,12 @@ def for_contention(
 
 
 def unapplyable_setup_roles(cs) -> list[str]:
-    """The setup roles in this range that NO playbook this deployer runs can apply.
+    """The setup roles in this range that NO playbook run on this host can apply.
 
-    Sorted, so the journal line and the marker agree on an order.
+    A role `initial_setup.yml` gates off the tick's host is one of them (#3933). Sorted, so
+    the journal line and the marker agree on an order.
     """
-    return sorted(
-        role for role in cs.setup_roles if setup_role_playbook(role) != INITIAL_SETUP
-    )
+    return sorted(role for role in cs.setup_roles if not tick_applies_setup_role(role))
 
 
 def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
@@ -332,9 +333,13 @@ def clear_applied(state: DeployerState, playbook: str, tags: list[str]) -> None:
     """Drop the pending roles this apply covered, and say so.
 
     The deployer's own reverse of `record`. No role reaches it today — every role the marker
-    can hold is applied by a playbook this tick never runs — and it is what a role promoted
-    into `initial_setup.yml` needs on the day it is.
+    can hold is applied by a playbook this tick never runs, or gated off this host — and it
+    is what a role promoted into `initial_setup.yml` needs on the day it is.
+
+    A tag for a role gated off this host is dropped first: `optimize_pi` shares the playbook
+    path, so its line would otherwise clear over a run that skipped the role (#3933).
     """
+    tags = [t for t in tags if tick_applies_setup_role(t)]
     for role in state.clear_manual_plane_applied(playbook, tags):
         log(
             f"manual_plane cleared for {role}: this tick applied {playbook} --tags {role}"

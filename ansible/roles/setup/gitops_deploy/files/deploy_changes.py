@@ -26,6 +26,16 @@ from deploy_cross_role import (  # noqa: F401
     SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
 )
 
+from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's readers)
+    INITIAL_SETUP,
+    SETUP_ROLES_OFF_THE_TICK_HOST,
+    _SETUP_ROLE_TAG_OVERRIDES,
+    _SETUP_ROLES_OUTSIDE_INITIAL_SETUP,
+    setup_role_playbook,
+    setup_role_tag,
+    tick_applies_setup_role,
+)
+
 # Which role directory a changed path sits in, as ONE question asked once (#3048). Six regexes
 # answered it before — `_ACTIVE_CONFIG`, `_ACTIVE_TASKS`, `_ACTIVE_META`, `_ACTIVE_ROLE`,
 # `_ACTIVE_K8S` and `_SETUP_ROLE` — plus a copy in `narrow_broad.py` and a pair in
@@ -544,36 +554,6 @@ def setup_roles_for(path: str) -> set[str]:
     return owner | shippers
 
 
-# Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.
-# `None` means no playbook includes the role at all.
-#
-# THE BUG THIS EXISTS TO KILL: `--tags` matching no task makes Ansible exit 0, so a guessed tag
-# records an apply of nothing (PR #702; `docs/gitops-pipeline.md`, *Broad changes*).
-#
-# `common` is the sharper shape: no playbook includes it, yet roles on two hosts read its files
-# by path. Its resolv.conf.j2 applies twice, via k3s-bringup.yml on daniel-box and via
-# initial_setup.yml on daniel-pi.
-_SETUP_ROLES_OUTSIDE_INITIAL_SETUP: dict[str, str | None] = {
-    "k3s": "ansible/k3s-bringup.yml",
-    "common": None,
-}
-# Setup roles whose `--tags` value is not their directory name. Same silent-exit-0 failure:
-# `--tags chezmoi_setup` matches nothing, because the playbook tags that role `chezmoi`.
-_SETUP_ROLE_TAG_OVERRIDES = {"chezmoi_setup": "chezmoi"}
-
-
-def setup_role_playbook(role: str) -> str | None:
-    """The playbook that applies a setup role, or None when no playbook includes it."""
-    if role in _SETUP_ROLES_OUTSIDE_INITIAL_SETUP:
-        return _SETUP_ROLES_OUTSIDE_INITIAL_SETUP[role]
-    return "ansible/initial_setup.yml"
-
-
-def setup_role_tag(role: str) -> str:
-    """The `--tags` value that actually selects a setup role, which is not always its name."""
-    return _SETUP_ROLE_TAG_OVERRIDES.get(role, role)
-
-
 def setup_tags_for(paths) -> set[str]:
     """The `initial_setup.yml --tags` values a set of setup-plane paths needs.
 
@@ -592,9 +572,10 @@ def setup_tags_for(paths) -> set[str]:
             tags.add("collections")
             continue
         for role in setup_roles_for(p):
-            # A role initial_setup.yml does not include returns NOTHING: its tag would match
-            # no task and exit 0, the guess this function's docstring forbids.
-            if setup_role_playbook(role) != "ansible/initial_setup.yml":
+            # A role initial_setup.yml does not include, or gates off this host, returns
+            # NOTHING: its tag would match no task here and exit 0, the guess this
+            # function's docstring forbids.
+            if not tick_applies_setup_role(role):
                 continue
             tags.add(setup_role_tag(role))
     return tags

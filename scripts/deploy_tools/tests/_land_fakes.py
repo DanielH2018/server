@@ -186,7 +186,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
     """
     record = calls if calls is not None else []
 
-    def remaining_setup_hosts(paths, local_host, quiet=()):
+    def remaining_setup_hosts(paths, local_host, quiet=(), pr_range=""):
         # local_host is recorded: the phase must pass `tools.hostname()`, not a constant.
         record.append(("remaining_setup_hosts", (local_host,), {}))
         return f.remaining_setup

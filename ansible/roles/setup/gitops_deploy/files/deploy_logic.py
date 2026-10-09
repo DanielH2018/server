@@ -55,6 +55,8 @@ from deploy_changes import (  # noqa: F401
     setup_role_playbook,
     setup_role_tag,
     setup_tags_for,
+    tick_applies_setup_role,
+    SETUP_ROLES_OFF_THE_TICK_HOST,
     _content_lines,
     shared_module_consumers,
 )

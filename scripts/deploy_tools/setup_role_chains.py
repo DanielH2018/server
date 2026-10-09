@@ -317,3 +317,72 @@ def handler_notifier_chains(role_dir: Path, handlers_file: Path) -> list[tuple] 
             return None
         chains.extend(consumers)
     return chains
+
+
+def changed_task_texts(old_text: str, new_text: str) -> set[str] | None:
+    """The leaf tasks of one task file that a change added or edited, as `json.dumps` text.
+
+    A `tasks/` file mixes gated and ungated tasks: `initial_setup/tasks/crons.yml` holds a
+    weekly apt cron every host runs beside box-only crons. Its file-level reach is all three
+    hosts, so a change to only the box-only crons named an apply on daniel-server and daniel-pi
+    that renders nothing there (#3976). The texts returned here let `land_reach` read the gates
+    on the changed tasks alone.
+
+    The leaves are `_gates_in`'s: a cross-role import counts as one, and a literal in-role
+    import does not. Returns None, and the caller keeps the file-level reach, on any doubt:
+    either side unparseable; a block or import whose own keys changed, since its `when:`
+    reaches every task under it; a removed task with no edited task of the same `name:` and
+    `when:` in its place; or no changed leaf at all.
+    """
+    try:
+        old = yaml_fast.safe_load(old_text) or []
+        new = yaml_fast.safe_load(new_text) or []
+    except yaml.YAMLError:
+        return None
+    if not (isinstance(old, list) and isinstance(new, list)):
+        return None
+    old_leaves, old_frames = _split_leaves(old)
+    new_leaves, new_frames = _split_leaves(new)
+    if sorted(old_frames) != sorted(new_frames):
+        return None
+    added = list(new_leaves)
+    for text in old_leaves:
+        if text in added:
+            added.remove(text)
+    removed = list(old_leaves)
+    for text in new_leaves:
+        if text in removed:
+            removed.remove(text)
+    edited = {_name_and_gate(text) for text in added}
+    if not added or any(_name_and_gate(text) not in edited for text in removed):
+        return None
+    return set(added)
+
+
+def _name_and_gate(text: str) -> tuple[str, str]:
+    task = json.loads(text)
+    return json.dumps(task.get("name")), json.dumps(task.get("when"))
+
+
+def _split_leaves(tasks) -> tuple[list[str], list[str]]:
+    """`tasks`' leaf texts, and the text of every block and literal import above them.
+
+    A frame is recorded without its `block:` body, so an edit to a task inside the block
+    changes a leaf and not the frame.
+    """
+    leaves: list[str] = []
+    frames: list[str] = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        target = next((task[k] for k in _IMPORT_KEYS if k in task), None)
+        if isinstance(target, str) and "{{" not in target:
+            frames.append(json.dumps(task, sort_keys=True))
+        elif "block" in task:
+            frames.append(json.dumps({k: v for k, v in task.items() if k != "block"}))
+            sub_leaves, sub_frames = _split_leaves(task["block"] or [])
+            leaves += sub_leaves
+            frames += sub_frames
+        else:
+            leaves.append(json.dumps(task))
+    return leaves, frames

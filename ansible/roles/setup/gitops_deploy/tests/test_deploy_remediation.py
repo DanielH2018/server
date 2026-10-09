@@ -15,7 +15,12 @@ import deploy_remediation
 
 from lib.repo_paths import REPO
 
-from deploy_changes import services_from_changed_paths, shared_module_consumers
+import deploy_defer
+from deploy_changes import (
+    services_from_changed_paths,
+    setup_tags_for,
+    shared_module_consumers,
+)
 from deploy_remediation import (
     broad_budget_ok,
     broad_remediation,
@@ -67,6 +72,21 @@ def test_broad_remediation_for_a_role_no_playbook_includes_names_its_consumers()
     assert "applied by no playbook of its own" in cmd
     assert "k3s-bringup.yml" in cmd
     assert "-e target=daniel-pi" in cmd
+
+
+def test_a_role_gated_off_the_tick_host_goes_to_manual_plane_with_its_target():
+    """`optimize_pi` runs only on daniel-pi, so the tick's `--tags optimize_pi` applied
+    nothing on daniel-box and still recorded the apply (#3933)."""
+    path = "ansible/roles/setup/optimize_pi/templates/node_exporter.service.j2"
+    assert setup_tags_for([path]) == set()
+    cs = services_from_changed_paths([path])
+    assert deploy_defer.unapplyable_setup_roles(cs) == ["optimize_pi"]
+    cmd = manual_plane_remediation({"optimize_pi"})
+    assert (
+        "`ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`"
+        in cmd
+    )
+    assert "clear-owed manual_plane optimize_pi" in cmd
 
 
 def test_broad_remediation_without_roles_keeps_the_generic_placeholder():

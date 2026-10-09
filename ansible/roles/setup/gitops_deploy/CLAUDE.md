@@ -73,8 +73,8 @@ Each arm is a rule and the function that holds it. The record page has the incid
 - **The ff-merge runs BEFORE the apply**, since applying first renders the pre-merge tree, and
   **every broad arm is FORWARD-ONLY**: a failure writes `hold_sha` and a `hold_plane` entry and
   leaves the tree merged, because a reset would claim the old commit over half-new state.
-- **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**, while a setup role whose tag cannot be
-  derived merges and is recorded in `manual_plane` for a human to apply and clear.
+- **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**, while a setup role the tick cannot
+  apply (`tick_applies_setup_role`) merges and is recorded in `manual_plane` for a human.
 - **k8s roles auto-deploy ONLY for an image-pin bump to a non-denylisted service; every other
   k8s change defers-and-alerts.** `docs/gitops-pipeline.md`'s *The safety arms, in full* has the
   diff-shape eligibility test and the per-tick cap.

@@ -497,7 +497,13 @@ class RemainingSetupHosts(Protocol):
     """`land_reach.remaining_setup_hosts_note`: the hosts a self-applied role still owes."""
 
     def __call__(
-        self, files: list[str], local_host: str, /, *, quiet: Iterable[str] = ()
+        self,
+        files: list[str],
+        local_host: str,
+        /,
+        *,
+        quiet: Iterable[str] = (),
+        pr_range: str = "",
     ) -> str: ...
 
 
