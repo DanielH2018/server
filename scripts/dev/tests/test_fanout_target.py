@@ -26,7 +26,7 @@ from fanout_lib.launch import (
 from fanout_lib.target import SERVER_TARGET, Target, resolve, server_checkout
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 from lib.proc_testing import run as proc_run
-from lib.repo_paths import REPO as REPO_ROOT
+from lib.repo_paths import PRIMARY_CHECKOUT, REPO as REPO_ROOT
 from _fanout_fakes import fake_tools, ok
 
 DOTFILES = Target(
@@ -47,8 +47,8 @@ def test_the_server_checkout_is_the_agent_users_clone_when_its_profile_names_one
     """The agent user cannot read /home/ubuntu; its profile exports RUN_HOOK_PROJECT_DIR."""
     clone = {"RUN_HOOK_PROJECT_DIR": "/var/lib/claude/server"}
     assert server_checkout(clone) == "/var/lib/claude/server"
-    assert server_checkout({}) == "/home/ubuntu/server"
-    assert server_checkout({"RUN_HOOK_PROJECT_DIR": ""}) == "/home/ubuntu/server"
+    assert server_checkout({}) == str(PRIMARY_CHECKOUT)
+    assert server_checkout({"RUN_HOOK_PROJECT_DIR": ""}) == str(PRIMARY_CHECKOUT)
 
 
 def test_a_repo_with_no_register_or_no_default_branch_is_refused():

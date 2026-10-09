@@ -21,8 +21,8 @@ Observability only — InstructionsLoaded cannot block, and this swallows all er
 
 Log: the PRIMARY checkout's .claude/logs/instructions.log (gitignored), even when the hook runs
 from a worktree, bounded by single-backup rotation. `_hook_common.instructions_log_path` owns
-where it is and why. Inspect: tail -n 40
-/home/ubuntu/server/.claude/logs/instructions.log
+where it is and why. Inspect: tail -n 40 .claude/logs/instructions.log, run in the primary
+checkout.
 """
 
 import os

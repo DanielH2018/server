@@ -56,6 +56,8 @@ class Config:
     def from_env(cls) -> "Config":
         e = os.environ.get
         return cls(
+            # The unit always sets DEPLOY_UI_REPO; the default is the operator's checkout,
+            # because this file ships to the host and has no repo to derive one from.
             repo=Path(e("DEPLOY_UI_REPO", "/home/ubuntu/server")),
             state_dir=Path(e("DEPLOY_UI_STATE", STATE_DIR)),
             log_dir=Path(

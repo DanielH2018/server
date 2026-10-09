@@ -358,6 +358,7 @@ def _setup_apply_command(role: str, host: str, local_host: str = "") -> str:
         return f"`ansible-playbook ansible/initial_setup.yml --tags {tag}`"
     if host in _LOCAL_CONNECTION_HOSTS:
         return (
+            # The remote host's operator checkout, not this host's: the path is daniel-server's.
             f'`ssh {host} "cd /home/ubuntu/server && git pull --ff-only && '
             f'ansible-playbook ansible/initial_setup.yml --tags {tag}"`'
         )

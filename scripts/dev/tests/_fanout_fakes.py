@@ -3,7 +3,21 @@
 import subprocess
 from dataclasses import dataclass, field
 
+from fanout_lib.target import SERVER_CHECKOUT
 from fanout_lib.transport import Tools
+
+OPERATOR_CHECKOUT = "/home/ubuntu/server"
+
+
+def as_operator(text: str) -> str:
+    """`text` with this run's server checkout written as the operator's `/home/ubuntu/server`.
+
+    A command the fan-out builds names `SERVER_CHECKOUT`, which is the checkout the suite runs
+    in (a CI runner's, for one). The tests spell their expectations against the operator's path,
+    so each normalises the command here instead of repeating the derivation in every assertion.
+    """
+    return text.replace(SERVER_CHECKOUT, OPERATOR_CHECKOUT)
+
 
 # A syntactically real ed25519 public key line (32 zero bytes), standing in for a host's
 # signing key, plus the registered set it is a member of. Both are test data: the gate

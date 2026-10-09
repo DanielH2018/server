@@ -13,7 +13,7 @@ import subprocess
 from fanout_lib.clean import read_clean_result, remote_clean_command
 from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
 from fanout_place import main
-from _fanout_fakes import fake_tools, ok
+from _fanout_fakes import as_operator, fake_tools, ok
 
 B1 = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "fanout-1", [1], "t")
 B2 = Batch("2", "daniel-server", "/w2", "worktree-fanout-2", "fanout-2", [2], "t")
@@ -32,7 +32,7 @@ def _clean(tools, tmp_path, run_id):
 
 def test_the_absent_tree_case_is_answered_before_the_interpreter_is_needed():
     """F1: the script the `uv run` leg invokes lives inside the worktree the first pass deleted."""
-    cmd = remote_clean_command(B1)
+    cmd = as_operator(remote_clean_command(B1))
     assert cmd.index("if [ ! -e /w1/.git ]") < cmd.index("uv run")
     # The three outcomes of a gone tree, in the order the chain tests them.
     assert cmd.count('echo "removed: /w1 (already gone)"') == 2
@@ -47,7 +47,7 @@ def test_the_absent_tree_case_is_answered_before_the_interpreter_is_needed():
 
 def test_the_merged_test_asks_the_forge_because_this_repo_squash_merges():
     """Ruling 36: ancestry exits 1 for a squashed branch, so it cannot decide this."""
-    cmd = remote_clean_command(B1)
+    cmd = as_operator(remote_clean_command(B1))
     assert "merge-base" not in cmd
     assert (
         "merged=$(cd /home/ubuntu/server && gh pr list --state merged "
@@ -74,7 +74,7 @@ def test_the_gone_tree_branch_deregisters_only_its_own_worktree():
     `worktree remove` refuses a locked tree, so the launch lock is released first — the same
     ordering Ruling 37's prune needed for the same reason.
     """
-    cmd = remote_clean_command(B1)
+    cmd = as_operator(remote_clean_command(B1))
     assert "worktree prune" not in cmd
     assert (
         "git -C /home/ubuntu/server worktree unlock /w1 2>/dev/null; "

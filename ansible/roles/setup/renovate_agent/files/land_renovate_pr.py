@@ -135,6 +135,8 @@ def main(
     result = os.path.join(results_dir, f"{number}.verdict")
     atomic_write(result, "PENDING\n")
     repo = os.environ.get("RENOVATE_AGENT_REPO", "DanielH2018/server")
+    # The unit always sets RENOVATE_AGENT_REPO_DIR; the default is the operator's checkout,
+    # because this file ships to the host and has no repo to derive one from.
     repo_dir = os.environ.get("RENOVATE_AGENT_REPO_DIR", "/home/ubuntu/server")
 
     def refuse(reason: str) -> int:

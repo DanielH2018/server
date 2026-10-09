@@ -15,7 +15,7 @@ from fanout_lib.target import Target
 from fanout_lib.transport import Tools
 from fanout_place import cmd_clean_one, main
 from lib.worktrees import Worktree
-from _fanout_fakes import fake_tools, ok
+from _fanout_fakes import as_operator, fake_tools, ok
 
 B = Batch(
     "b",
@@ -164,7 +164,7 @@ def test_the_lock_is_released_only_for_a_tree_about_to_be_removed():
 
 
 def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_the_script():
-    cmd = remote_clean_command(B)
+    cmd = as_operator(remote_clean_command(B))
     # The active-unit refusal is the outermost test; everything else is its else.
     assert cmd.startswith(
         "if systemctl --user is-active --quiet fanout-b; then "
@@ -351,7 +351,7 @@ def test_a_dotfiles_clean_fetches_main_and_runs_this_repos_copy_with_repo():
     target = Target(
         "DanielH2018/dotfiles", "/home/ubuntu/.local/share/chezmoi", "origin/main"
     )
-    cmd = remote_clean_command(dotfiles, target=target)
+    cmd = as_operator(remote_clean_command(dotfiles, target=target))
     assert (
         "git -C /home/ubuntu/.local/share/chezmoi fetch --quiet origin main && " in cmd
     )

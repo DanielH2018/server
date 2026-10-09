@@ -87,7 +87,7 @@ fi
 # on stderr so a warning is not mistaken for output.
 set +e
 env -i \
-    HOME="${HOME:-/home/ubuntu}" \
+    HOME="${HOME:-$(getent passwd "$(id -u)" | cut -d: -f6)}" \
     LOGNAME="${LOGNAME:-$(id -un)}" \
     USER="${USER:-$(id -un)}" \
     SHELL=/bin/sh \

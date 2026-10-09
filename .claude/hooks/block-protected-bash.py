@@ -239,7 +239,7 @@ def decision(payload):
     # fallback for a target in no checkout — and an empty prefix resolves against the
     # process cwd implicitly, the same silent probe `read_cwd`'s docstring refuses for
     # `git -C ""`. Naming the directory says which
-    # checkout those paths resolve in. The shim's `cd /home/ubuntu/server` makes it the
+    # checkout those paths resolve in. The shim's `cd` makes it the
     # primary checkout, a real repo root, so both arms keep a tree to read. Issue #2135.
     repo_root = payload.get("cwd") or os.getcwd()
     verdict, reason = decide(command, repo_root)

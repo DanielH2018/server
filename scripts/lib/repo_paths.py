@@ -23,6 +23,33 @@ constants are defaults, never the only way in.
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+def primary_checkout_of(repo: Path) -> Path:
+    """The checkout the worktrees hang off, read from ``repo``'s ``.git`` file.
+
+    A linked worktree's ``.git`` is a file reading ``gitdir: <primary>/.git/worktrees/<name>``,
+    and the primary is three parents up. Any other shape (a primary checkout, a separated
+    metadata directory, no ``.git`` at all) answers ``repo`` itself. It starts no subprocess,
+    so a module that needs the path at import time pays one file read.
+    """
+    dotgit = repo / ".git"
+    try:
+        text = dotgit.read_text(encoding="utf-8").strip() if dotgit.is_file() else ""
+    except OSError:
+        return repo
+    if not text.startswith("gitdir:"):
+        return repo
+    gitdir = repo / text.removeprefix("gitdir:").strip()
+    if gitdir.parent.name == "worktrees" and gitdir.parent.parent.name == ".git":
+        return gitdir.parent.parent.parent
+    return repo
+
+
+# The checkout every landing, deploy and fan-out runs its commands in, even when the script that
+# asks lives in a worktree under it. It is /home/ubuntu/server for the operator and the clone
+# under its own home for the `claude` user.
+PRIMARY_CHECKOUT = primary_checkout_of(REPO)
 SCRIPTS = REPO / "scripts"
 DOCS = REPO / "docs"
 

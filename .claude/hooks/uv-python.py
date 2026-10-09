@@ -15,7 +15,7 @@ than merely documented.
 It rewrites the command instead of denying it, so the session gets the answer it asked for
 rather than a round-trip. `uv run` resolves the venv from the *caller's* working directory, so a
 worktree keeps its own checkout — which is why this rewrites the command rather than pinning a
-PATH at `/home/ubuntu/server/.venv/bin`.
+PATH at the primary checkout's `.venv/bin`.
 
 WHY IT IS AN ARM AND NO LONGER ITS OWN HOOK (#3286). It was `uv-python.sh`: 269 lines of bash
 and jq, justified by "the interpreter start is the whole cost". Since #2394 `bash-pretool.py`
