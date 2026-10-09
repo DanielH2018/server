@@ -279,7 +279,8 @@ still opens PRs, and the operator lands them.
   human home without hiding the agent's. `claude_code_login_uid` stays at 1000 until slice 6,
   so interactive sessions as `ubuntu` keep their caps.
 - **4c** adds the read grant below, the second artifacts bind mount, the config subset and
-  the `systemd-journal` membership.
+  the `systemd-journal` membership. The read grant and the journal group land first, in
+  `ansible/roles/setup/claude_code/tasks/agent_access.yml`, each behind its own switch.
 - **4d** sets `claude_code_user: claude` in daniel-box's host_vars and copies the memory store.
 
 **Read grant:** `ubuntu` reads the agent's artifacts and memory through one grant in the role.

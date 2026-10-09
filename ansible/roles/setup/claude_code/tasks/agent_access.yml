@@ -1,0 +1,64 @@
+---
+# What the agent user may read of the host, and what the operator may read of the agent.
+# Imported from main.yml when claude_code_agent_user_enabled, after agent_github.yml, whose
+# ~/.claude task sets that directory's mode. docs/claude-agent-user.md (slice 4) has the
+# reasoning and the check; defaults/main.yml has both switches.
+
+# Exact, not appended: the agent joins no other group (the shared agent_user.yml gives it
+# none), so an empty list is the way back out.
+- name: Set the agent user's journal access
+  ansible.builtin.user:
+    name: "{{ claude_code_agent_user }}"
+    groups: "{{ ['systemd-journal'] if claude_code_agent_journal_access else [] }}"
+    append: false
+  become: true
+
+# The memory store sits two directories under ~/.claude, and the operator needs traverse on
+# each. 0710 gives group sys_user traverse without a listing. Claude Code creates both on a
+# session's first run at a mode nobody has checked, so the role creates them first.
+- name: Let the operator traverse to the agent's memory store
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "{{ '0710' if claude_code_agent_operator_read else '0700' }}"
+  loop:
+    - "{{ claude_code_agent_user_home }}/.claude/projects"
+    - "{{ claude_code_agent_memory_dir | dirname }}"
+  become: true
+
+# setgid keeps a file Claude Code writes here in group sys_user. Root runs this, because the
+# agent belongs to no group it could chgrp to.
+- name: Open the agent's artifacts and memory directories to the operator
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "{{ '2750' if claude_code_agent_operator_read else '0700' }}"
+  loop: &operator_read_dirs
+    - "{{ claude_code_agent_user_home }}/.claude/artifacts"
+    - "{{ claude_code_agent_memory_dir }}"
+  become: true
+
+# After every mode task above: chmod rewrites the ACL mask from the group bits, and a mask of
+# --- disables every named entry while getfacl still lists it. The default entry gives a file
+# Claude Code writes later the operator's read, as long as its create mode has a group read
+# bit to keep; a file created 0600 stays unreadable, which is why the slice 4 check reads a
+# new file as the operator rather than reading getfacl.
+- name: Give files the agent writes there the operator's read
+  ansible.posix.acl:
+    path: "{{ item }}"
+    entity: "{{ sys_user }}"
+    etype: group
+    permissions: rX
+    default: true
+    state: "{{ 'present' if claude_code_agent_operator_read else 'absent' }}"
+  loop: *operator_read_dirs
+  become: true
+  register: claude_code_agent_read_acl
+  # Check mode creates neither directory above, and setfacl on a missing path fails.
+  failed_when:
+    - not ansible_check_mode
+    - claude_code_agent_read_acl is failed

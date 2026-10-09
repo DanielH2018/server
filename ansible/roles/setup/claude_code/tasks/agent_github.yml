@@ -34,8 +34,11 @@
     - { path: "{{ claude_code_agent_user_home }}/.config/git", mode: "0755" }
     # The token file lives here.
     - { path: "{{ claude_code_agent_user_home }}/.config/gh", mode: "0700" }
-    # Claude Code's own directory, which also holds the session's login.
-    - { path: "{{ claude_code_agent_user_home }}/.claude", mode: "0700" }
+    # Claude Code's own directory, which also holds the session's login in a 0600 file. 0710
+    # lets group sys_user traverse to the artifacts and memory agent_access.yml opens, without
+    # listing the rest.
+    - path: "{{ claude_code_agent_user_home }}/.claude"
+      mode: "{{ '0710' if claude_code_agent_operator_read else '0700' }}"
   become: true
 
 - name: Generate the agent's commit-signing key
