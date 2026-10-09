@@ -9,7 +9,7 @@ from functools import cache
 
 from service_tier import tier_entries
 
-from _helpers import ALL_VARS, load_yaml
+from _helpers import ALL_VARS, HOST_VARS, load_yaml
 from _k8s_render import k8s_entries, pod_spec
 from _property_table import Property
 
@@ -185,6 +185,26 @@ def _metallb_prefix_offence(role: str, subject: dict) -> str | None:
     return f"{subject['annotation']} uses the deprecated metallb.universe.tf/ prefix; use metallb.io/"
 
 
+@cache
+def _pi_ip() -> str:
+    # The Pi's own literal, not k8s_pi_client_ip: that is derived from this through hostvars
+    # (#3719), and a derivation that lost the Pi's entry resolves to None without raising.
+    return load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
+
+
+def _pi_push_routes(role: str, tpl: str, doc: dict):
+    if tpl == "ingressroute-push.yaml.j2" and doc.get("kind") == "IngressRoute":
+        for route in doc["spec"]["routes"]:
+            yield doc["metadata"]["name"], route
+
+
+def _pi_push_offence(role: str, route: dict) -> str | None:
+    allowed = f"ClientIP(`{_pi_ip()}/32`)"
+    if allowed in route.get("match", ""):
+        return None
+    return f"match does not admit {allowed}, so the Pi's Alloy cannot push its logs"
+
+
 EDGE_PROPERTIES = (
     Property(
         name="traefik-crds-carry-no-inline-credential",
@@ -336,5 +356,19 @@ EDGE_PROPERTIES = (
         red=("traefik", {"annotation": "metallb.universe.tf/loadBalancerIPs"}),
         green=("traefik", {"annotation": "metallb.io/loadBalancerIPs"}),
         must_find=_METALLB_PINNED_ROLES,
+    ),
+    Property(
+        name="pi-push-route-admits-the-pi",
+        reason=(
+            "loki-homelab's push route allows daniel-pi by source address, built from "
+            "k8s_pi_client_ip. That variable derives from the Pi's server_ip through hostvars "
+            "(#3719), and a hostvars without the Pi's entry renders `None/32` with every "
+            "validator green. The row compares against the Pi's own host_vars literal."
+        ),
+        select=_pi_push_routes,
+        offence=_pi_push_offence,
+        red=("loki-homelab", {"match": "Host(`x`) && ClientIP(`None/32`)"}),
+        green=("loki-homelab", {"match": f"Host(`x`) && ClientIP(`{_pi_ip()}/32`)"}),
+        must_find=frozenset({"loki-homelab-push-monitoring"}),
     ),
 )

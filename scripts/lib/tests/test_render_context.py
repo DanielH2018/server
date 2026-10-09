@@ -134,8 +134,10 @@ def test_a_strict_context_raises_naming_the_value_that_will_not_expand(tree):
 
 
 def test_a_group_var_reads_another_hosts_server_ip_through_hostvars(tree):
-    # all.yml's k8s_pi_client_ip is this shape (#3719). Without the hostvars layer a strict
-    # render raises on it, and every manifest that uses it fails to render.
+    # all.yml's k8s_pi_client_ip is this shape (#3719). A strict render raises only when
+    # `hostvars` is absent. A `hostvars` missing the Pi's entry resolves to None without
+    # raising, so the rows in _scrape_property_rows.py and _edge_property_rows.py compare each
+    # consumer against the Pi's literal.
     template, inv = tree(
         {},
         group={"pi_ip": "{{ hostvars['pi'].server_ip }}"},
