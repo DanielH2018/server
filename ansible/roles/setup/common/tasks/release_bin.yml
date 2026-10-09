@@ -40,6 +40,17 @@
 # token from a separate env file (the kuma-push pattern) are fine and are what these groups hold.
 # ENFORCED by ansible/tests/setup/test_release_bin_groups_have_no_secrets.py.
 #
+# DECIDED: repo content only, never an upstream download. A release here is named after the
+# controller's commit, which is true provenance only for bytes that commit holds. A pinned
+# upstream artifact (sops, an installer script, an APT key, a release tarball) is versioned by
+# its own pin. Filing it under a repo SHA would claim a provenance it lacks, and a rollback
+# that swings `current` would not change which upstream bytes are on disk. Those downloads
+# stay plain `get_url` tasks in their own roles. #3728 classified every one of them and found
+# none that fits here. This marker says nothing about how each download is verified. Most
+# carry a `checksum:`, but the Azlux key in optimize_pi relies on a fingerprint check in the
+# task after it, and the two claude.ai/install.sh fetches (claude_code, agent_user.yml) are
+# unverified (#3979).
+#
 # Callers pass:
 #   release_bin_group      a filename-safe group id, unique across roles (e.g. k3s-backup-health)
 #   release_bin_templates  list of repo-relative .j2 paths. The host name is the basename minus
