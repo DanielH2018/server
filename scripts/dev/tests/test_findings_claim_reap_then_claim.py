@@ -14,7 +14,7 @@ from _findings_fakes import Fakes, build_tools, facts, make_issue
 
 from dev.findings import main
 from dev.findings_lib.issue_model import claim_comment
-from dev.prune_worktrees import Worktree
+from lib.worktrees import Worktree
 
 MINE = "worktree-mine"
 OTHER = "worktree-issue-1132"

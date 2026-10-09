@@ -26,10 +26,8 @@ assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-_WORKTREES = """worktree /home/ubuntu/server
-HEAD abc1230000000000000000000000000000000000
-branch refs/heads/master
-"""
+# The primary checkout the dirty-primary read is pointed at.
+_PRIMARY = "/home/ubuntu/server"
 
 _SHA = "abc1230000000000000000000000000000000000"
 _AUTHELIA = json.dumps(
@@ -39,7 +37,7 @@ _AUTHELIA = json.dumps(
 
 def _problems(k8s_unapplied=None, k8s_deferred=None, now=1000.0):
     return _mod.parked_deployer_problems(
-        list_worktrees=lambda: _WORKTREES,
+        primary=lambda: _PRIMARY,
         status=lambda path: "",
         read_marker=lambda: None,
         now=now,

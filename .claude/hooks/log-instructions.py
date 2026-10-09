@@ -7,7 +7,7 @@
 
 One line per file as it loads, carrying the file and its `load_reason`: session_start,
 path_glob_match, nested_traversal, include, compact. `inject-nested-docs.py` appends a sixth,
-`bash_path_match`, through `append_row` below, for a doc it supplied because a Bash command
+`bash_path_match`, through `_hook_common.append_instructions_row`, for a doc it supplied because a Bash command
 named a path under it — so one log grades both the harness's loads and the
 hook's.
 
@@ -20,57 +20,15 @@ Observability only — InstructionsLoaded cannot block, and this swallows all er
 0 so it can never disrupt session startup. Pure stdlib (no third-party deps), like every hook here.
 
 Log: the PRIMARY checkout's .claude/logs/instructions.log (gitignored), even when the hook runs
-from a worktree, bounded by single-backup rotation. Inspect: tail -n 40
+from a worktree, bounded by single-backup rotation. `_hook_common.instructions_log_path` owns
+where it is and why. Inspect: tail -n 40
 /home/ubuntu/server/.claude/logs/instructions.log
 """
 
 import os
-import subprocess
-from datetime import datetime, timezone
 
+from _hook_common import append_instructions_row as append_row
 from _hook_common import read_payload
-
-_HERE = os.path.dirname(os.path.abspath(__file__))
-
-
-def log_path(start: str = _HERE) -> str:
-    """The instructions log in the primary checkout of the repo holding `start`.
-
-    Each session runs the hooks its own checkout carries (#3394), so a log beside this file
-    would put a worktree session's rows in the worktree, and pruning the worktree deletes
-    them. The rows grade behaviour across sessions, so every checkout writes the one log in
-    the primary checkout: the parent of `git rev-parse --git-common-dir`. Outside a git
-    checkout, or when git fails, the log falls back to this checkout's `.claude/logs/`.
-    """
-    fallback = os.path.normpath(os.path.join(_HERE, "..", "logs", "instructions.log"))
-    # A hook-run git honours GIT_DIR over -C, so the caller's git env must not leak in.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    try:
-        common = subprocess.run(
-            [
-                "git",
-                "-C",
-                start,
-                "rev-parse",
-                "--path-format=absolute",
-                "--git-common-dir",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            env=env,
-            check=True,
-        ).stdout.strip()
-    except OSError, subprocess.SubprocessError:
-        return fallback
-    # A bare repo or a separated git dir has no checkout beside it to hold the log.
-    if os.path.basename(common) != ".git":
-        return fallback
-    return os.path.join(os.path.dirname(common), ".claude", "logs", "instructions.log")
-
-
-LOG = log_path()
-MAX_BYTES = 256 * 1024
 
 
 def rel(path, cwd):
@@ -108,31 +66,6 @@ def main():
     if d.get("agent_id"):
         extra += " agent=" + d["agent_id"]
     append_row(reason, mtype, fp, sid, extra)
-
-
-def append_row(reason, mtype, fp, session_id, extra=""):
-    """Append one row to the log: `<ts> [<sid>] <reason> <mtype> <path><extra>`.
-
-    `session_id` may be the full id or the 8-char prefix the row carries; `extra` is the
-    already-formatted tail (` trigger=…`), empty for a session_start row.
-    """
-    sid = (session_id or "")[:8]
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    line = "{} [{:8}] {:16} {:8} {}{}\n".format(ts, sid, reason, mtype, fp, extra)
-
-    os.makedirs(os.path.dirname(LOG), exist_ok=True)
-    try:  # rotate (single backup) when large
-        if os.path.getsize(LOG) > MAX_BYTES:
-            os.replace(LOG, LOG + ".1")
-    except OSError:
-        pass
-    # A single O_APPEND write below PIPE_BUF (4 KiB) is atomic across processes on
-    # POSIX, so concurrent sessions can't interleave a line — no lock needed.
-    fd = os.open(LOG, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
-    try:
-        os.write(fd, line.encode("utf-8", "replace"))
-    finally:
-        os.close(fd)
 
 
 if __name__ == "__main__":

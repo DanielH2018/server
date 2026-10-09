@@ -1,4 +1,4 @@
-"""Remove a finished batch's worktree, by prune_worktrees' content check — spec §4.
+"""Remove a finished batch's worktree, by lib.worktrees' content check — spec §4.
 
 The reverse state of launch. Never removes a dirty or unmerged tree, and names what it keeps.
 """
@@ -7,24 +7,25 @@ import dataclasses
 import subprocess
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting. `parents[1]` is
-# THIS file's own `scripts/dev` — when the remote leg runs a worktree's own copy of
-# fanout_place.py (Ruling E), that resolves to the worktree's `scripts/dev`, so `clean-one`
-# imports the worktree's OWN prune_worktrees rather than the primary checkout's stale one.
-# Never change this to an absolute path.
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting. Both inserts are
+# relative to THIS file — when the remote leg runs a worktree's own copy of fanout_place.py
+# (Ruling E), `parents[2]` resolves to the worktree's `scripts`, so `clean-one` imports the
+# worktree's OWN lib.worktrees rather than the primary checkout's stale one. Never change
+# either to an absolute path.
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # `scripts/lib` sits two levels up from this package, one above the `scripts/dev` insert
-# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh.
+# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh, and `lib.worktrees`
+# the one way it judges a worktree.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.manifest import Batch
 from fanout_lib.target import SERVER_TARGET, Target
 from fanout_lib.transport import REPO
 from lib.git import git
-from prune_worktrees import REMOVABLE, Worktree, classify, is_dirty, is_merged, remove
+from lib.worktrees import REMOVABLE, Worktree, classify, is_dirty, is_merged, remove
 
 
 def _first_line(proc, what: str) -> str:
@@ -115,7 +116,7 @@ def clean_one(
         tree: the worktree to evaluate, as read from `git worktree list --porcelain`.
         ask: `is_merged`-shaped — whether `tree`'s branch already landed.
         dirty: `is_dirty`-shaped — whether `tree` has uncommitted or untracked changes.
-        remover: `prune_worktrees.remove`-shaped — removes a worktree.
+        remover: `lib.worktrees.remove`-shaped — removes a worktree.
         unlocker: unlocks `tree` right before an actual removal.
         locker: re-locks `tree` with its original reason when a removal attempt fails.
         brancher: `delete_branch`-shaped — deletes the landed branch once its tree is gone.
@@ -230,7 +231,7 @@ def remote_clean_command(
 
     Then fetches before anything reads merge state: `b.worktree` shares refs with the
     primary checkout on `b.host`, and daniel-server's primary checkout is stale by design —
-    every local merge check in `prune_worktrees.is_merged` (ancestry, patch-id, merge-tree)
+    every local merge check in `lib.worktrees.is_merged` (ancestry, patch-id, merge-tree)
     would judge against a stale `origin/master` there, leaving only the network `gh pr list`
     fallback able to say "merged" at all. A failed fetch stops the command (`&&`) rather than
     silently falling through to that stale state.
@@ -270,7 +271,7 @@ def remote_clean_command(
     only then `removed:`, and an unmerged one is `kept:`.
 
     The merged test is `gh pr list --state merged --head <branch> --json headRefOid`, the same
-    forge oracle `prune_worktrees.is_merged` ends on, because this repo squash-merges: a
+    forge oracle `lib.worktrees.is_merged` ends on, because this repo squash-merges: a
     squashed branch is never an ancestor of `origin/master`, so `merge-base --is-ancestor`
     calls every landed branch unmerged. Ancestry exits 1 for a branch that landed by squash or
     rebase (Ruling 36).
@@ -328,6 +329,12 @@ def remote_clean_command(
             f"--repo {target.repo}"
         )
     gone_branch = f'echo "removed: {wt} (already gone)"'
+    # DECIDED: the gone-tree leg keeps its own `gh pr list` merged check in shell rather than
+    # calling `lib.worktrees.is_merged`. The interpreter leg runs the worktree's own copy of
+    # this code, and that copy is deleted with the tree, so when the tree is gone there is no
+    # Python left to import (Ruling 30). The shell answers before an interpreter is needed. It
+    # asks only the forge question because a squash-merged branch fails every local layer.
+    # Full reasoning in this function's docstring.
     return (
         f"if systemctl --user is-active --quiet {b.unit}; then "
         f'echo "kept: {wt} — unit {b.unit} still active; stop it first"; '

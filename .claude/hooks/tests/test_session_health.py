@@ -287,15 +287,17 @@ def test_main_flushes_the_banner_before_the_worktree_read(monkeypatch):
     assert any("loki" in s and "old-thing" not in s for s in out.flushed)
 
 
-# `other_live_sessions` imports prune_worktrees off a hand-built sys.path. That path must point
-# at scripts/dev/, where the module lives, and a wrong path fails silently: the except returns
+# `other_live_sessions` imports lib.worktrees off a hand-built sys.path. That path must point
+# at scripts/, which holds lib/, and a wrong path fails silently: the except returns
 # [], which reads identically to "no other sessions are running". These two pin the import and
 # the fail-loud, because a silent [] is what hid the bug.
-def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess(fenced_calls):
+def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
+    fenced_calls,
+):
     """Accept case, and it MUST be a subprocess with a clean PYTHONPATH.
 
     Calling `other_live_sessions()` in-process proves nothing here: pyproject's pytest
-    `pythonpath` lists `scripts/dev`, so `prune_worktrees` imports under the suite no matter
+    `pythonpath` lists `scripts`, so `lib.worktrees` imports under the suite no matter
     what path the hook inserts. An in-process version of this test passed with the original bug
     reintroduced — verified, not assumed. SessionStart runs this file as a plain script with no
     such path, which is the only condition under which the insert is load-bearing. This is the
@@ -317,7 +319,7 @@ def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess(fenced_cal
         check=False,
     )
     assert "detection is broken" not in proc.stdout, (
-        "session-health.py could not import prune_worktrees or lib.git from the paths it "
+        "session-health.py could not import lib.worktrees or lib.git from the paths it "
         "inserts — a module moved and an insert did not follow it. Fix the path in "
         "other_live_sessions or master_moved_problems (both report through this string).\n"
         + proc.stdout
@@ -344,7 +346,7 @@ def test_a_broken_import_is_reported_rather_than_read_as_no_sessions(monkeypatch
     """
     import sys
 
-    monkeypatch.setitem(sys.modules, "prune_worktrees", None)
+    monkeypatch.setitem(sys.modules, "lib.worktrees", None)
     monkeypatch.setattr(_mod, "REPO", "/nonexistent-repo-root")
     lines = _mod.other_live_sessions("/nonexistent-repo-root")
     assert lines, (

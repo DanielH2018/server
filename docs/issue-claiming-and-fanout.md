@@ -18,11 +18,13 @@ It is split four ways: the CLI, `findings_lib/issue_model.py` (vocabulary and pu
 `findings_lib/plans.py` (the `gh` argv every command plans) and `findings_lib/gh_calls.py` (the calls). Every
 command plans a list of argv first, then runs it, so `--dry-run` writes nothing.
 
-`scripts/dev/prune_worktrees.py` decides whether a session worktree is done with. It exports
-`parse_worktree_list` and `session_is_alive`; `.claude/hooks/session-health.py` already imports
-both to print the other-live-sessions banner. Since #2133 those two, `Worktree` and the cherry
-and merge-tree readers come from the `claude_worktree` module the dotfiles repo deploys to
-`~/.local/share/claude-worktree`; `scripts/dev/_claude_worktree.py` is the bootstrap, and it
+`scripts/lib/worktrees.py` decides whether a session worktree is done with: `is_merged`,
+`classify` and `worktree_facts`. `scripts/dev/prune_worktrees.py` is only the CLI over it, and
+nothing else imports the CLI. `.claude/hooks/session-health.py` imports `parse_worktree_list`
+and `session_is_alive` from `lib.worktrees` to print the other-live-sessions banner. Since
+#2133 those two, `Worktree` and the cherry and merge-tree readers come from the
+`claude_worktree` module the dotfiles repo deploys to `~/.local/share/claude-worktree`, and
+`lib.worktrees` re-exports them. `scripts/lib/_claude_worktree.py` is the bootstrap, and it
 raises rather than falls back, so a host without the deploy prunes and reaps nothing.
 
 Every open issue except #3 carries the `claude` label. #3 is Renovate's Dependency Dashboard,
@@ -100,7 +102,7 @@ the session whose claim comment sorts first holds the issue, and the loser relea
 A claim is reclaimable when either holds:
 
 - the worktree it names is absent from `git worktree list`, or
-- `prune_worktrees.py` already judges that worktree REMOVABLE — merged into `origin/master`,
+- `lib.worktrees.classify` already judges that worktree REMOVABLE — merged into `origin/master`,
   clean, and holding no live session lock.
 
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
@@ -112,9 +114,9 @@ agent, which is worse than leaving them held.
 There is no heartbeat and no TTL. Both would have expired exactly those claims, because the
 process was gone while the work was not.
 
-Reusing `prune_worktrees` is what makes this self-healing without either. The staleness
-question — is this worktree done with — is a question that module already answers, and
-`session-health.py` already demonstrates importing it from outside its own directory.
+Reusing `lib.worktrees` is what makes this self-healing without either. The staleness
+question — is this worktree done with — is a question that module already answers for
+`prune_worktrees.py`, and `session-health.py` already imports it from outside `scripts/`.
 
 A claim on another repo's register is judged against that repo's worktrees. With
 `--repo DanielH2018/dotfiles`, `findings.py` reads `git worktree list` in the chezmoi checkout

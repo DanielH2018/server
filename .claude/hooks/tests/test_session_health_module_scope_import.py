@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """No module-scope import in `session-health.py` can stop the banner.
 
-The file defers `lib.git` and `prune_worktrees` into the functions that use them, and says so
+The file defers `lib.git` and `lib.worktrees` into the functions that use them, and says so
 at `parked_deployer_problems`: an import that fails there costs one `⚠` line, not the banner.
 A module-scope `from lib.deployer_park import ...` would make that claim false — an
 ImportError there takes out the scrape-target, live-session and stale-worktree sections too,

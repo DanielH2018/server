@@ -364,7 +364,7 @@ def cmd_stop(args, tools: Tools) -> int:
         print(
             f"{b.batch} on {b.host}: {'stopped' if proc.returncode == 0 else proc.stderr.strip()}"
         )
-        # The worktree stays locked until `clean` runs it through prune_worktrees' content
+        # The worktree stays locked until `clean` runs it through lib.worktrees' content
         # check — stopping a batch says nothing about whether its PR merged.
         print(f"  run `clean {args.run_id}` once its PR merges")
         # A landing or detached deploy left the unit's cgroup for its own scope (#3160), so
@@ -409,7 +409,7 @@ def cmd_clean_one(
     from fanout_lib.clean import delete_branch as default_brancher
     from fanout_lib.clean import lock as default_locker
     from fanout_lib.clean import unlock as default_unlocker
-    from prune_worktrees import is_dirty, is_merged, parse_worktree_list, remove
+    from lib.worktrees import is_dirty, is_merged, parse_worktree_list, remove
 
     target = resolve(args.repo)
     checkout = target.checkout

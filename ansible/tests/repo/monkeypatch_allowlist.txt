@@ -22,7 +22,6 @@
 # the real number:
 #   uv run pytest ansible/tests/repo/test_module_length_ratchet.py -k no_test_module_patches
 .claude/hooks/tests/test_auto_mode_bridge.py 1
-.claude/hooks/tests/test_bash_pretool.py 1
 .claude/hooks/tests/test_block_footguns.py 2
 .claude/hooks/tests/test_session_health.py 14
 .claude/hooks/tests/test_session_health_master_moved.py 7
@@ -76,7 +75,7 @@ scripts/deploy_tools/tests/test_deploy_tags_blockers.py 2
 scripts/deploy_tools/tests/test_land_pipeline.py 3
 scripts/deploy_tools/tests/test_land_tags.py 5
 scripts/deploy_tools/tests/test_land_tools.py 2
-scripts/dev/tests/test_prune_worktrees.py 14
+scripts/dev/tests/test_prune_worktrees.py 6
 scripts/diagnostics/tests/_alert_fixtures.py 3
 scripts/diagnostics/tests/test_postflight.py 12
 scripts/diagnostics/tests/test_postflight_runner.py 3
@@ -97,6 +96,7 @@ scripts/home_assistant/tests/test_ha_state_model.py 3
 scripts/infra_map/tests/test_gen_infra_map.py 1
 scripts/infra_map/tests/test_infra_map_live.py 1
 scripts/lib/tests/test_gh.py 4
+scripts/lib/tests/test_worktrees.py 4
 scripts/validate/tests/test_validate_k8s_manifests.py 1
 scripts/validate/tests/test_validate_shell_templates.py 2
 scripts/validate/tests/test_validate_unit_templates.py 5

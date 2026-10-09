@@ -25,10 +25,8 @@ assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-_WORKTREES = """worktree /home/ubuntu/server
-HEAD abc1230000000000000000000000000000000000
-branch refs/heads/master
-"""
+# The primary checkout the dirty-primary read is pointed at.
+_PRIMARY = "/home/ubuntu/server"
 
 
 def _line(origin, playbook, role, at, tags=()):
@@ -65,7 +63,7 @@ _COMMON = _line("beef1230000000000000000000000000000000000", "none", "common", 2
 def _problems(manual=None, marker=None, now=1000.0):
     """The banner lines, with a clean primary checkout and no park unless one is passed."""
     return _mod.parked_deployer_problems(
-        list_worktrees=lambda: _WORKTREES,
+        primary=lambda: _PRIMARY,
         status=lambda path: "",
         read_marker=lambda: marker,
         now=now,
@@ -139,7 +137,7 @@ def test_a_raising_manual_read_does_not_take_the_dirty_line_with_it():
         raise OSError("state dir exploded")
 
     lines = _mod.parked_deployer_problems(
-        list_worktrees=lambda: _WORKTREES,
+        primary=lambda: _PRIMARY,
         status=lambda path: " M ansible/tests/deploy/test_x.py\n",
         read_marker=lambda: None,
         now=0.0,

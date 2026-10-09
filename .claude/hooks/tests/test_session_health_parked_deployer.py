@@ -16,7 +16,6 @@ Run: uv run pytest .claude/hooks/tests/test_session_health_parked_deployer.py
 
 import importlib.util
 import os
-import subprocess
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
@@ -26,23 +25,15 @@ assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-# Two entries, the way this repo's checkout really looks: the primary first, then a session's
-# worktree under .claude/worktrees/.
-_WORKTREES = """worktree /home/ubuntu/server
-HEAD abc1230000000000000000000000000000000000
-branch refs/heads/master
-
-worktree /home/ubuntu/server/.claude/worktrees/agent-1
-HEAD def4560000000000000000000000000000000000
-branch refs/heads/worktree-agent-1
-"""
+# The primary checkout the dirty-primary read is pointed at.
+_PRIMARY = "/home/ubuntu/server"
 
 _DIRTY = " M ansible/tests/services/test_traefik_edge_selfcheck.py\n"
 
 
-def _problems(worktrees=_WORKTREES, porcelain="", marker=None, now=0.0):
+def _problems(porcelain="", marker=None, now=0.0):
     return _mod.parked_deployer_problems(
-        list_worktrees=lambda: worktrees,
+        primary=lambda: _PRIMARY,
         status=lambda path: porcelain,
         read_marker=lambda: marker,
         now=now,
@@ -54,37 +45,6 @@ def _problems(worktrees=_WORKTREES, porcelain="", marker=None, now=0.0):
         read_k8s_deferred=lambda: None,
         read_k8s_unapplied=lambda: None,
     )
-
-
-# ── the primary checkout's path: the subject this check finds by parsing, so prove it is found ──
-
-
-def test_primary_worktree_path_is_the_first_entry_of_real_git_output():
-    """Non-vacuity: run the real `git worktree list --porcelain` and resolve a real directory.
-
-    This check locates its subject by parsing, so a change in git's output format (or a parser
-    that silently stops matching) would return None and take the whole banner line with it —
-    green, and checking nothing. Asserting against live git output is what makes that fail.
-    """
-    repo = _mod.REPO
-    out = subprocess.run(
-        ["git", "worktree", "list", "--porcelain"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=10,
-    ).stdout
-    primary = _mod.primary_worktree_path(out)
-    assert primary, "no primary checkout resolved from live `git worktree list` output"
-    assert os.path.isdir(primary)
-    # The primary is the checkout this worktree hangs off, never the worktree itself.
-    assert ".claude/worktrees/" not in primary
-    assert os.path.realpath(repo).startswith(os.path.realpath(primary))
-
-
-def test_primary_worktree_path_is_none_when_no_entry_is_named():
-    assert _mod.primary_worktree_path("") is None
 
 
 # ── the red-proof pair: a dirty primary is flagged, a clean one is not ──
@@ -152,7 +112,7 @@ def test_a_failed_read_degrades_to_silence_rather_than_raising():
         raise OSError("state dir unreadable")
 
     lines = _mod.parked_deployer_problems(
-        list_worktrees=lambda: _WORKTREES,
+        primary=lambda: _PRIMARY,
         status=lambda path: "",
         read_marker=boom,
         now=0.0,
@@ -169,7 +129,7 @@ def test_a_dirty_line_survives_a_failing_marker_read():
         raise FileNotFoundError("behind_since")
 
     lines = _mod.parked_deployer_problems(
-        list_worktrees=lambda: _WORKTREES,
+        primary=lambda: _PRIMARY,
         status=lambda path: _DIRTY,
         read_marker=boom,
         now=0.0,

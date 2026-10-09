@@ -2,7 +2,7 @@
 
 Its siblings in test_fanout_clean.py drive `clean_one` through its seams, which cannot see what
 `is_dirty` really raises on a tree git refuses to read. These build the tree and let the real
-`prune_worktrees.is_dirty` and `remove` run against it.
+`lib.worktrees.is_dirty` and `remove` run against it.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_clean_real_git.py
 """
@@ -15,7 +15,7 @@ import pytest
 
 from fanout_lib.clean import clean_one
 from lib.git_testing import git, init_repo, scrub_process_git_env
-from prune_worktrees import Worktree, parse_worktree_list, remove
+from lib.worktrees import Worktree, parse_worktree_list, remove
 
 
 def _init_scratch_repo(path: Path) -> None:

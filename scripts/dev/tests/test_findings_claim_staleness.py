@@ -13,7 +13,7 @@ from _findings_fakes import foreign_comment, operator_comment
 
 from dev.findings_lib.claim import claim_is_live, claim_states
 from dev.findings_lib.issue_model import claim_comment, release_comment
-from dev.prune_worktrees import Worktree, _memoised_merged
+from lib.worktrees import Worktree, memoised_merged
 
 WT = "worktree-issue-1132"
 # Every age_days assertion dates its comments against this instant and hands the same one to
@@ -298,7 +298,7 @@ def test_the_merged_callable_asks_git_once_per_worktree():
     asking git at all, and `claims` would report every worktree as unmerged.
     """
     ask, calls = _counting_ask()
-    merged = _memoised_merged("/repo", ask)
+    merged = memoised_merged("/repo", ask)
     tree = _tree()
     assert [merged(tree) for _ in range(5)] == [False] * 5
     assert calls == [("/repo", tree.head, WT)]
@@ -311,7 +311,7 @@ def test_two_different_worktrees_each_get_their_own_answer():
     live orchestrator would read as merged and have its claims reaped.
     """
     ask, calls = _counting_ask()
-    merged = _memoised_merged("/repo", ask)
+    merged = memoised_merged("/repo", ask)
     one = Worktree(path="/w/one", head="abc", branch="b1", locked=False)
     two = Worktree(path="/w/two", head="def", branch="b2", locked=False)
     merged(one)

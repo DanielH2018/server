@@ -13,7 +13,7 @@ from _findings_fakes import (
 
 from dev.findings import main
 from dev.findings_lib.issue_model import claim_comment
-from dev.prune_worktrees import Worktree
+from lib.worktrees import Worktree
 
 WT = "worktree-issue-1132"
 
@@ -207,7 +207,7 @@ def test_reap_dry_run_writes_nothing_and_says_so(capsys):
 def test_reap_refuses_to_release_anything_when_git_fails():
     """A transient git failure must not read as "every worktree is gone".
 
-    `_worktree_facts` returns `ok=False` on a git failure, not merely an empty worktree
+    `worktree_facts` returns `ok=False` on a git failure, not merely an empty worktree
     list — without that distinction `reap` cannot tell a real git error from a register
     where nothing is claimed, and would release every live claim in it.
     """

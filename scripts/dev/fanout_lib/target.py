@@ -124,7 +124,7 @@ def resolve(
     if checkout is None:
         raise ValueError(f"{repo} has no checkout in REGISTER_CHECKOUTS")
     if default_ref is None:
-        from prune_worktrees import default_ref
+        from lib.worktrees import default_ref
     base = default_ref(checkout)
     if not base:
         raise ValueError(f"{checkout} has no remote default branch to merge into")

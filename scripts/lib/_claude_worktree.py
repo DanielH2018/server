@@ -1,11 +1,12 @@
 """Bootstrap that puts the deployed `claude_worktree` module on `sys.path` and imports it.
 
-`claude_worktree` holds the readers `prune_worktrees.py` shares with the dotfiles
+`claude_worktree` holds the readers `lib.worktrees` shares with the dotfiles
 `prune-worktrees.py` SessionStart hook — the `Worktree` record, `parse_worktree_list`,
 `session_is_alive`, `cherry_says_landed`, `merge_tree_says_contained`, `default_ref`
 (#2133). It is not on the repo's `uv` environment: chezmoi deploys it to
 `~/.local/share/claude-worktree`, beside `claude-guard`, and `CLAUDE_WORKTREE_HOME`
-overrides that path. Import this module before anything from `claude_worktree`.
+overrides that path. Import this module before anything from `claude_worktree`;
+`lib.worktrees` does, and every consumer in this repo imports the readers from there.
 
 # DECIDED: no fallback to a stale local copy when the deploy is missing. Raise instead.
 # The same reasoning as `.claude/hooks/_claude_guard.py`: a private fallback keeps
