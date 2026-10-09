@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from deploy_tools import gitops_state
-from gitops_hold import HOLD_CLEAR_CMD
+from gitops_markers import HOLD_CLEAR_CMD
 from lib.repo_paths import REPO
 
 SHA = "2d25ced3" + "0" * 32

@@ -22,6 +22,7 @@ from bridge.config import Config
 from bridge.sources import Sources
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
+    HOLD_CLEAR_CMD,
     MARKERS,
     ManualPlaneEntry,
     NO_PLAYBOOK,
@@ -167,14 +168,19 @@ def gitops_status(
         # unapplied. `held_planes` reads them off the ledger's `hold_plane` class, where the
         # deployer records them (#3392). The Clear is named
         # rather than an rm because an rm of hold_sha leaves the ledger's planes behind.
+        # The way out comes BEFORE the plane list: `cap_push_msg` cuts from the right, so a
+        # long list would otherwise evict the command. It carries the FULL hold_sha, the only
+        # form `clear-hold` accepts (#4015).
         planes = held_planes(owed)
         if planes:
             return False, (
-                "broad apply held at %s (the newest failure) — %d plane%s unapplied: %s; "
-                "fix forward and re-run each, then Clear the hold in the deploy UI once all "
-                "are applied"
+                "broad apply held at %s (the newest failure) — fix forward and re-run each "
+                "plane, then once all are applied Clear the hold in the deploy UI or run "
+                "`%s %s`; %d plane%s unapplied: %s"
                 % (
                     hold_sha[:8],
+                    HOLD_CLEAR_CMD,
+                    hold_sha,
                     len(planes),
                     "s" if len(planes) > 1 else "",
                     "; ".join(planes),

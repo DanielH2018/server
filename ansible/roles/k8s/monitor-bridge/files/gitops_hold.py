@@ -49,11 +49,6 @@ from gitops_markers import MARKERS
 # Between the held planes on one line. Not a newline: every reader prints them on one line.
 HOLD_PLANE_SEP = "; "
 
-# What an operator runs, with the full held SHA, to clear the hold from a shell once every
-# plane it waits on is applied (#3930). It is `Hold.clear`, the deploy UI's Clear, under the
-# git-tree lock. One string so every surface that names the way out prints the same command.
-HOLD_CLEAR_CMD = "uv run python scripts/deploy_tools/gitops_state.py clear-hold"
-
 # Between a role tag and one of its block tags in a held tag (#3138). No Ansible tag in
 # `initial_setup.yml` or under `roles/setup/` contains one, so a held tag splits unambiguously.
 HELD_ROLE_SEP = ":"

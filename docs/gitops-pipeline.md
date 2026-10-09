@@ -1496,8 +1496,9 @@ nothing had applied.
 
 **The way out is manual, and both surfaces name it.** A hand `ansible-playbook` run is not the
 deployer, so it clears nothing. Once every held plane is applied, clear the hold with the
-deploy UI's Clear, described below. The Discord alert and the monitor's own message both name
-it, and the monitor counts the planes still owed. An `rm` of `hold_sha` is not the way out: it
+deploy UI's Clear or `gitops_state.py clear-hold <sha>`, both described below. The Discord
+alert and the monitor's own message both name the two, with the full held SHA in the command
+(#4015), and the monitor counts the planes still owed. An `rm` of `hold_sha` is not the way out: it
 leaves the class's lines in `owed.jsonl`, and the next failure's hold then waits on planes
 nobody owes. A k8s rollback hold records no plane, and `clear-hold` clears it the same way.
 
