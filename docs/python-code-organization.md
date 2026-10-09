@@ -278,25 +278,37 @@ pass on 2026-10-09 found that count was mostly heuristic error.
   `ansible/tests/` is in `SCANNED` of
   `ansible/tests/repo/test_guard_tests_read_renders_not_templates.py`. Each module in its
   `TEMPLATE_SOURCE_READERS` names what a render erases: a macro call against its expanded
-  body, byte identity, a Jinja filter, or a variable name. The four k8s modules among the 15
-  are entries there.
+  body, byte identity, a Jinja filter, or a variable name. Three of the four k8s modules
+  among the 15 are entries there. The fourth,
+  `k8s/test_uncovered_roles_justifications_resolve.py`, reads a comment block in another
+  test module, which no render or parse carries.
 - **A task file has no render, so the structural read is a parse.** The equivalent of a
   property row for `tasks/*.yml` is a read through `yaml_fast` or `_helpers.walk_tasks`.
-  Convert a regex over task text only where its claim survives the parse unchanged. Three
-  conversions landed with this section: `deploy/test_manifests_apply_guarded.py` (its "next
-  ten lines" exemption became the registering task's own `changed_when` key),
-  `deploy/test_denylist_render_suppresses_the_kick.py` (a split on `- name: ` became a parsed
-  handler), and the journald cap in `setup/test_optimize_pi_declares_log2ram_sizes.py`.
-- **The rest read text on purpose.** Four `repo/` modules compare a CI workflow, a doc or a
-  tool pin against another file's text. `deploy/test_inventory_block_scalars_have_no_comment_shaped_lines.py`
-  is about the text itself. `longhorn/test_volume_cr_has_no_volumename.py` and
+  Convert a regex over YAML or TOML text only where its claim survives the parse unchanged.
+  Five conversions landed with this section:
+    - `deploy/test_manifests_apply_guarded.py`: the "next ten lines" exemption became the
+      registering task's own `changed_when` key.
+    - `deploy/test_denylist_render_suppresses_the_kick.py`: a split on `- name: ` became a
+      parsed handler, and the argv is read through `ast`.
+    - `setup/test_optimize_pi_declares_log2ram_sizes.py`: the journald cap is read from the
+      drop-in task's `content`, not from anywhere in the file.
+    - `repo/test_ci_contexts_match_workflows.py`: job names come from `jobs`, not from a
+      four-space indent.
+    - `repo/test_python_version_consistency.py`: the workflow pins come from each step's
+      `with:`, which also reads an unquoted `3.14` the quoted-string pattern skipped.
+- **The rest read text on purpose.** `repo/test_docs_quote_current_values.py` checks doc
+  prose. `repo/test_vale_matches_the_ci_pin.py` reads a version out of a `curl` URL inside a
+  `run:` script. `deploy/test_inventory_block_scalars_have_no_comment_shaped_lines.py` is
+  about the text itself. `longhorn/test_volume_cr_has_no_volumename.py` and
   `setup/test_release_bin_groups_have_no_secrets.py` read shell and variable names a render
   would replace. `longhorn/test_prune_backups.py` greps whole task files for a Backup CR name,
   so a comment can only make it fail, never pass.
-- **Directory order.** By commits since 2026-08-08 to textual test files, `setup/` leads
-  (178), then `deploy/` (133) and `repo/` (130). Their subjects are task files, inventory and
-  shipped shell libraries, so none of them converts to a rendered-manifest row.
-- **The two ratchet lists are a different subject.** The 59- and 52-commit lists are
+- **Directory order.** By commits since 2026-08-08 to the files the issue's grep counted,
+  `setup/` leads (178), then `deploy/` (133) and `repo/` (130). Their subjects are task
+  files, inventory, CI workflows and shipped shell libraries, so none of them converts to a
+  rendered-manifest row.
+- **The two ratchet lists are a different subject.** The issue's 59- and 52-commit lists
+  (53 commits by this pass's count) are
   `ansible/tests/repo/module_length_allowlist.txt` and
   `ansible/tests/repo/monkeypatch_allowlist.txt`. Both already run on one harness,
   `ansible/tests/_ratchet.py`. Their commits are entries falling as splits and seams land,
