@@ -31,6 +31,8 @@ import pytest
 from gen_hook_settings import GUARD_SUFFIX
 from test_run_hook import _variant_runner
 
+from lib.proc_testing import write_exec
+
 HOOKS = Path(__file__).resolve().parent.parent
 
 # The guards `bash-pretool` stands in front of. Named rather than counted: it can only ask once
@@ -132,11 +134,10 @@ def _run_as_the_harness(command: str, project_dir: Path, rc: int = 0):
 
 def _stub_checkout(tmp_path: Path) -> Path:
     """A checkout whose runner exits `$STUB_RC`, standing in for a live session's."""
-    hooks = tmp_path / "live" / ".claude" / "hooks"
-    hooks.mkdir(parents=True)
-    runner = hooks / "run-hook.sh"
-    runner.write_text('#!/bin/sh\nexit "$STUB_RC"\n', encoding="utf-8")
-    runner.chmod(0o755)
+    write_exec(
+        tmp_path / "live" / ".claude" / "hooks" / "run-hook.sh",
+        '#!/bin/sh\nexit "$STUB_RC"\n',
+    )
     return tmp_path / "live"
 
 
