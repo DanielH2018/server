@@ -53,7 +53,7 @@
 # THIS IS THE ONLY WAY TO MAKE THIS NON-FATAL FOR A CALLER. `ignore_errors: true` on the
 # `include_role` that pulls this file in does NOT work: it suppresses a failure of the include
 # STATEMENT, not a fatal `fail()` raised by a task the include pulls in — this is documented
-# Ansible behaviour, not a version quirk (see k8s/volume-snapshot's CLAUDE.md and `test_longhorn_api_soft_mode_survives_no_manager` in
+# Ansible behaviour, not a version quirk (see `test_longhorn_api_soft_mode_survives_no_manager` in
 # test_longhorn_api.py, which runs this file for real through a scratch play to prove it).
 - name: Fail when this node runs no ready longhorn-manager
   tags: [deploy]

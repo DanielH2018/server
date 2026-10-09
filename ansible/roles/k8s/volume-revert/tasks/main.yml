@@ -57,7 +57,7 @@
     quiet: true
 
 # Resolved once, before the first claim is touched. `k8s/longhorn-api` fails when this node runs
-# no longhorn-manager, and that failure has nothing to do with any one service — reaching it
+# no ready longhorn-manager, and that failure has nothing to do with any one service — reaching it
 # after the scale-down would take the workload out over a problem this role never even tried to
 # fix. `tasks_from: resolve.yml` is mandatory: that role's `tasks/main.yml` exists only to fail
 # loudly at a caller who forgets, because a bare include would otherwise run nothing and leave

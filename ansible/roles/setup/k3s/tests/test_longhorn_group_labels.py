@@ -86,7 +86,8 @@ def _label_tasks() -> list[dict]:
     return [
         t
         for t in tasks
-        if "ansible.builtin.command" in t and "backup_group_label" in _command_text(t)
+        if "ansible.builtin.command" in t
+        and re.search(r"backup_group_label|recurring-job-group", _command_text(t))
     ]
 
 
@@ -115,6 +116,10 @@ def test_every_label_task_renders_the_live_labels():
     assert {t["name"] for t in tasks} == set(EXPECTED), (
         "a label task was added, renamed or dropped; give it its typed-out labels here"
     )
+    for task in tasks:
+        assert "recurring-job-group" not in _command_text(task), (
+            f"{task['name']} spells a group label out; use backup_group_label (#3946)"
+        )
     rendered = 0
     for task in tasks:
         for pvc, shard in _cases(defaults):

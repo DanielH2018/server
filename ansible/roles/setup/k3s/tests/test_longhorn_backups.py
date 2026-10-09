@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
 import longhorn_backups as backups
+from _shell_render import rendered_shell_text
 
 ROLE = Path(__file__).resolve().parents[1]
 
@@ -57,6 +58,13 @@ def test_completed_keeps_only_completed_backups():
     assert [b.state for b in backups.completed(backups.from_items(items))] == [
         "Completed"
     ]
+
+
+def test_the_restore_drill_selects_on_the_group_names():
+    """The drill's jq spells the label prefix and the opt-out group; a rename must fail here."""
+    drill = rendered_shell_text("setup", "k3s", "longhorn-restore-drill.sh.j2")
+    assert f'select(startswith("{backups.GROUP_LABEL_PREFIX}"))' in drill
+    assert f'select(. != "{backups.NO_BACKUP_GROUP}")' in drill
 
 
 def test_the_nobackup_storageclass_names_the_no_backup_group():
