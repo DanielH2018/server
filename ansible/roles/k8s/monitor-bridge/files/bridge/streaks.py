@@ -5,10 +5,8 @@ mutates. `cli.main()` builds one `Sources` per process, and that `Sources` build
 as `src.state`, so the state lives exactly as long as the process: a bridge restart resets it,
 as it always has. A check body reads it as `src.state.<field>` beside its config and its I/O,
 and a test gets a zeroed `State` with every `FakeSources` it builds, so nothing has to clear or
-patch a module global between tests (#3866).
-
-`_grace_streaks` and `apply_startup_grace` stay module-level: `gates.Gates.grace_streaks`
-already takes the dict as a field, which is the same seam by another route.
+patch a module global between tests (#3866). The startup grace's counters are a field too,
+`grace_streaks`, which `run_once` reads as `src.state.grace_streaks` (#3938).
 """
 
 from dataclasses import dataclass, field
@@ -71,6 +69,11 @@ class State:
       host_origin_streaks: The host-coverage-floor streak per key (`checks.host`): disk per
         mountpoint, memory and host temperature age independently.
       n8n_streaks: Per-workflow consecutive-failure streaks (`checks.service.check_n8n`).
+      grace_streaks: The startup grace's consecutive-down count per check (`STARTUP_GRACE` in
+        gates.py), advanced by `apply_startup_grace` from `run_once`. Keyed by a set of names
+        disjoint from `down_streaks`', and a different mechanism: it holds `up` through the
+        first GRACE_CYCLES-1 cycles after the bridge itself starts, rather than through a
+        transient at any time.
       b2_probe: The B2 gate's cache (`checks.b2.b2_reachable`).
       b2_storage: The B2 storage-usage cache (`checks.b2.b2_storage_usage`).
       r2_probe: The R2 usage cache (`checks.r2.r2_usage`).
@@ -84,6 +87,7 @@ class State:
     cpu_breach_streak: int = 0
     host_origin_streaks: dict[str, int] = field(default_factory=dict)
     n8n_streaks: dict = field(default_factory=dict)
+    grace_streaks: dict[str, int] = field(default_factory=dict)
     b2_probe: B2ProbeCache = field(
         default_factory=lambda: {
             "ts": 0.0,
@@ -130,19 +134,13 @@ def down_streak(
     return count, False, "%s (%d cycles)" % (msg, count)
 
 
-# apply_startup_grace's per-name state for the reach-out checks' post-reboot startup grace
-# (STARTUP_GRACE in gates.py). Keyed by a set of names disjoint from State.down_streaks', and a
-# different mechanism: this one holds `up` through the first GRACE_CYCLES-1 cycles after the
-# bridge itself starts, rather than through a transient at any time.
-_grace_streaks: dict[str, int] = {}
-
-
 def apply_startup_grace(
     name: str, ok: bool, msg: str, threshold: float, streaks: dict[str, int]
 ) -> tuple[bool, str]:
     """Pure: hold a reach-out check `up` through the first `threshold`-1 consecutive down cycles.
 
-    `streaks` is a name->consecutive-down-count dict, mutated in place. An `ok` result resets the
+    `streaks` is a name->consecutive-down-count dict, mutated in place: `src.state.grace_streaks`
+    in production. An `ok` result resets the
     count; a down result advances the shared `down_streak` hysteresis, so a held cycle reads with the
     same "down streak n/N" / "(n cycles)" wording as the HA/UPS/Discord per-check grace.
     """

@@ -70,9 +70,10 @@ def _suite_files():
     a sibling of the `files/` roots `_consumer_roots()` returns, not inside `files/` itself.
 
     The glob is every `*.py`, not `test_*.py` + `conftest.py`. A shared helper module —
-    monitor-bridge's `_check_gate_helpers.py`, which wires `run_once` for four suites — patches
-    the transport exactly as a test does, and under the narrower glob those patches are
-    invisible to this rule, so a from-import of one of those names would pass.
+    monitor-bridge's `_check_gate_helpers.py`, which wires `run_once` for four suites — can
+    patch a runtime module exactly as a test does (it patched `bridge.net.push` until #3938),
+    and under the narrower glob those patches would be invisible to this rule, so a from-import
+    of one of those names would pass.
     """
     files = []
     for root in _consumer_roots():
@@ -175,10 +176,9 @@ def test_there_are_patched_names_to_check():
 
 def test_the_suite_census_sees_shared_helper_modules():
     # Non-vacuity for the `*.py` glob above, naming members rather than counting.
-    # `_check_gate_helpers.py` holds seven of monitor-bridge's transport patches and is not
-    # named `test_*`; the narrower glob that missed it read exactly as green as one that sees it.
-    # Seeing the file is the weak half; the extraction anchor below is what proves those
-    # patches are read out of it.
+    # `_check_gate_helpers.py` is not named `test_*`, and once held seven of monitor-bridge's
+    # transport patches; the narrower glob that missed it read exactly as green as one that sees
+    # it. `test_helper_patch_extraction_can_go_red` proves a helper's patches are read out of it.
     names = {p.name for p in _suite_files()}
     assert {"_check_gate_helpers.py", "conftest.py"} <= names, sorted(names)
 
@@ -314,44 +314,12 @@ def test_checker_sees_a_packaged_module_in_every_spelling(tmp_path):
     assert not imported_module_ids(tree, set(per_role["alpha"]))
 
 
-# What monitor-bridge's shared test helper contributes to the census: module id -> attribute
-# names. Members rather than a count, so a failure says which patch stopped being extracted.
-# Every one of these is also patched by `test_check_cli.py`, which is why a census taken over
-# the whole suite cannot anchor this: the map stays populated on the sibling's strength while
-# the helper contributes nothing. Extraction from the helper alone is what proves it.
-# One module anchors the extraction, which is what the test needs. `push` is the helper's one
-# remaining patch: its queries go through a `FakeSources` it hands to `run_once` (#3742).
-HELPER_PATCHES = {
-    "bridge.net": frozenset({"push"}),
-}
-
-
-def _helper_files():
-    """The shared, non-`test_*` modules the `*.py` glob in `_suite_files` exists to pick up."""
-    return [p for p in _suite_files() if p.name == "_check_gate_helpers.py"]
-
-
-def test_the_helpers_patches_are_extracted_not_just_its_file_seen():
-    # The anchor that keeps `_suite_files`'s `*.py` glob honest. The file census above stays
-    # satisfied while `import_bindings` stops resolving the helper's aliases: the helper's
-    # patches drop out of the map and both halves still read green.
-    helpers = _helper_files()
-    assert helpers, sorted(p.name for p in _suite_files())
-    extracted = _patched_names_by_module(helpers, set(_runtime_modules()))
-    missing = sorted(
-        f"{module}.{name}"
-        for module, names in HELPER_PATCHES.items()
-        for name in names
-        if name not in extracted.get(module, frozenset())
-    )
-    assert not missing, "helper patches no longer extracted: %s; extracted: %s" % (
-        missing,
-        {m: sorted(n) for m, n in sorted(extracted.items())},
-    )
-
-
 def test_helper_patch_extraction_can_go_red(tmp_path):
-    """Red-proof for the anchor above: one helper it must read, one it must come up empty on."""
+    """A helper module's patches are extracted: one helper it must read, one it must come up empty on.
+
+    No helper in the tree patches a runtime module since #3938, so this synthetic pair is the
+    only proof that a non-`test_*` module's patches reach the census.
+    """
     seen = tmp_path / "_wire_helpers.py"
     seen.write_text(
         "import bridge.net\nfrom bridge import common as c\n\n"
@@ -364,7 +332,7 @@ def test_helper_patch_extraction_can_go_red(tmp_path):
         "bridge.common": {"log"},
     }
 
-    # The regression the anchor exists to catch: the helper reaches the module through a name
+    # The regression this exists to catch: the helper reaches the module through a name
     # the census cannot resolve to a module id, so every patch it makes drops out silently.
     blind = tmp_path / "_wire_blind.py"
     blind.write_text(

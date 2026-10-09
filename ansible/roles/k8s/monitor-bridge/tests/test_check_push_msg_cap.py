@@ -6,6 +6,7 @@ is an accept/reject pair, and the last test drives the real `push` to prove the 
 wire path rather than beside it.
 """
 
+import io
 import urllib.parse
 
 import bridge.net
@@ -33,9 +34,12 @@ def test_the_cycles_suffix_survives_the_cut():
 
 def test_push_sends_the_capped_msg(cfg):
     urls = []
-    bridge.net.push(
-        cfg, "tok", False, "c" * 3000, fetch=lambda url: urls.append(url) or {}
-    )
+
+    def opener(req, timeout=None):
+        urls.append(req.full_url)
+        return io.BytesIO(b"{}")
+
+    bridge.net.push(cfg, "tok", False, "c" * 3000, opener=opener)
     assert len(urls) == 1
     sent = urllib.parse.parse_qs(urllib.parse.urlsplit(urls[0]).query)["msg"][0]
     assert len(sent) == PUSH_MSG_MAX

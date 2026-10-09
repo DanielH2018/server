@@ -3,10 +3,12 @@
 Slice 7 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
 (`bridge.sources.Sources`) and its streak counters as `src.state` (`bridge.streaks.State`), so a
 test hands in a fake `src` and gets zeroed streaks with it; `discord_webhook_ok` is from-imported and patched on THIS module, where it is bound.
-`email_backstop` takes its cache as an argument, `src.state.email_probe` in production. Rule and
-enforcement: bridge/config.py's header.
+`email_backstop` takes its cache as an argument, `src.state.email_probe` in production, and the
+SMTP login as `login`, so a test hands in a stub rather than patching `_smtp_login_ok` (#3938).
+Rule and enforcement: bridge/config.py's header.
 """
 
+from collections.abc import Callable
 import smtplib
 import ssl
 import time
@@ -86,7 +88,10 @@ def _smtp_login_ok(cfg: Config) -> tuple[bool, str]:
 
 
 def email_backstop(
-    cfg: Config, probe: StampedCache, now: float | None = None
+    cfg: Config,
+    probe: StampedCache,
+    now: float | None = None,
+    login: Callable[[Config], tuple[bool, str]] = _smtp_login_ok,
 ) -> tuple[bool, str]:
     """Throttled deliverability probe for the alert-email 2nd channel. (ok, msg).
 
@@ -94,7 +99,8 @@ def email_backstop(
     Gmail doesn't see an AUTH every cycle); a FAILURE isn't cached, so it re-probes every cycle until
     it recovers — and check_discord's DISCORD_CONSECUTIVE streak rides out a transient blip before
     paging. `probe` is the cache, `src.state.email_probe` in production, reset on container restart
-    like the streak counters — no persistent state needed.
+    like the streak counters — no persistent state needed. `login` performs the SMTP login and
+    returns (ok, msg) or raises; `_smtp_login_ok` in production.
     """
     if not cfg.SMTP_PASSWORD:
         return True, "email backstop disabled (no SMTP password)"
@@ -104,7 +110,7 @@ def email_backstop(
             (now - probe["ts"]) / 3600
         )
     try:
-        ok, msg = _smtp_login_ok(cfg)
+        ok, msg = login(cfg)
     except (
         Exception
     ) as e:  # revoked password / SMTP unreachable -> ride the check_discord streak
@@ -116,7 +122,11 @@ def email_backstop(
     return ok, msg
 
 
-def check_discord(cfg: Config, src: Sources) -> tuple[bool, str]:
+def check_discord(
+    cfg: Config,
+    src: Sources,
+    smtp_login: Callable[[Config], tuple[bool, str]] = _smtp_login_ok,
+) -> tuple[bool, str]:
     """GET-verify EVERY configured Discord notification webhook still delivers, plus the email backstop.
 
     Verifies the Kuma alert webhook, the CrowdSec ban-alert webhook, AND the GitOps/Renovate
@@ -127,7 +137,8 @@ def check_discord(cfg: Config, src: Sources) -> tuple[bool, str]:
     credential surfaces here too. Streak hysteresis (DISCORD_CONSECUTIVE, like check_ha_heartbeat):
     this check reaches the public internet (webhooks + SMTP), so a single transient non-200 / network
     blip pushes `up` with a streak msg and only the Nth straight failure pages — a genuinely dead
-    webhook or SMTP credential stays bad and pages.
+    webhook or SMTP credential stays bad and pages. `smtp_login` is the email backstop's login,
+    passed to `email_backstop`; the registry calls this with `(cfg, src)` alone.
     """
     webhooks = _discord_webhooks(cfg)
     if not webhooks:
@@ -158,7 +169,7 @@ def check_discord(cfg: Config, src: Sources) -> tuple[bool, str]:
             break
         valid.append(label)
     if ok:
-        e_ok, e_msg = email_backstop(cfg, src.state.email_probe)
+        e_ok, e_msg = email_backstop(cfg, src.state.email_probe, login=smtp_login)
         if e_ok:
             valid.append("email")
         else:

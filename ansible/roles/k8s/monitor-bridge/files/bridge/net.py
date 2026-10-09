@@ -1,18 +1,20 @@
 """HTTP, PromQL and LogQL fetching for monitor-bridge, and the Kuma push.
 
 This is the transport. A check body never calls it: it queries through the `src` argument,
-`bridge.sources.Sources`, whose live methods delegate here and whose fake answers in tests. What
-the suite still patches on this module is `push`, the sink, and `_get_json` underneath a real
-`Sources` in the transport's own parsing tests. Callers reach both as `bridge.net.<name>`, never
-by from-import, because a from-import would copy the function into the caller's globals at
-import time and the stub would change nothing that runs. That rule is enforced by
+`bridge.sources.Sources`, whose live methods delegate here and whose fake answers in tests, and
+`run_once` pushes through `bridge.sources.Sink`, which delegates to `push`. Every function that
+sends a request takes an `opener`, the `urllib.request.urlopen`-shaped callable that sends it, so a
+transport test hands in a fake opener rather than patching `urllib.request` (#3938). None means
+the real `urlopen`, resolved at call time. What the suite still patches on this module is
+`_get_json` in the Loki parsing tests. Callers reach it as `bridge.net._get_json`, never by
+from-import, because a from-import would copy the function into the caller's globals at import
+time and the stub would change nothing that runs. That rule is enforced by
 ansible/tests/services/test_bridge_patch_boundary.py.
 
 CONFIGURATION IS A PARAMETER, NOT A GLOBAL. Every helper that reads a URL or the origin pin
 takes the frozen `Config` as its FIRST argument, so this module holds no env-derived state and
 a test states the configuration it wants by handing one in. `cadvisor_sel`, `_origin_name`,
-`_get_json`, `_post_json` and `_instant_query` read no configuration and keep their signatures
-— which matters, because those are the two the suite stubs most.
+`_get_json`, `_post_json` and `_instant_query` read no configuration and take none.
 
 The selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`, `_origin_name`) live
 here rather than beside the checks because they are the query-building half of fetching, they
@@ -25,6 +27,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Any
 
 import bridge.common
 
@@ -34,6 +37,10 @@ from bridge.common import HTTP_TIMEOUT, PUSH_MSG_MAX, cap_push_msg  # noqa: F401
 from bridge.config import Config
 from bridge.parsing import FETCH_BODY_MAX, describe_fetch_failure, endpoint_label
 from bridge.types import JsonObject, JsonValue, as_list, as_object, as_object_list
+
+# `urllib.request.urlopen`'s shape: called with a Request and `timeout=`, it returns a response
+# usable as a context manager. Each request function takes one as `opener`; None is the real one.
+Opener = Callable[..., Any]
 
 
 def origin_sel(cfg: Config, *matchers: str) -> str:
@@ -112,7 +119,9 @@ def _origin_name(labels: dict) -> str:
 # HTTP / parsing helpers (pure-ish, unit-tested)
 
 
-def _get_json(url: str, headers: dict[str, str] | None = None) -> JsonValue:
+def _get_json(
+    url: str, headers: dict[str, str] | None = None, opener: Opener | None = None
+) -> JsonValue:
     # The explicit User-Agent is REQUIRED, not decoration. Discord sits behind Cloudflare, which
     # 403s the default python-urllib UA with error 1010 — so `check_discord`'s webhook GETs would
     # read as revoked webhooks on every cycle without it. host_lib.discord_post carries the same
@@ -124,7 +133,7 @@ def _get_json(url: str, headers: dict[str, str] | None = None) -> JsonValue:
         hdrs.update(headers)
     req = urllib.request.Request(url, headers=hdrs)
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+        with (opener or urllib.request.urlopen)(req, timeout=HTTP_TIMEOUT) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as e:
         # Re-raise the SAME type: check_discord branches on `e.code`, so wrapping this would
@@ -148,7 +157,10 @@ def _get_json(url: str, headers: dict[str, str] | None = None) -> JsonValue:
 
 
 def _post_json(
-    url: str, payload: dict, headers: dict[str, str] | None = None
+    url: str,
+    payload: dict,
+    headers: dict[str, str] | None = None,
+    opener: Opener | None = None,
 ) -> JsonValue:
     """POST a JSON body and return the parsed JSON response. Same failure contract as _get_json.
 
@@ -161,7 +173,7 @@ def _post_json(
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=hdrs, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+        with (opener or urllib.request.urlopen)(req, timeout=HTTP_TIMEOUT) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as e:
         try:
@@ -206,7 +218,7 @@ def _labels(series: JsonObject) -> dict[str, str]:
 
 
 def _instant_query(
-    base_url: str, path: str, query: str, source: str
+    base_url: str, path: str, query: str, source: str, opener: Opener | None = None
 ) -> list[JsonObject]:
     """Runs an instant query against `base_url + path` and returns the result list.
 
@@ -215,11 +227,17 @@ def _instant_query(
     labels the error ('prometheus'/'loki').
     """
     url = base_url + path + "?" + urllib.parse.urlencode({"query": query})
-    return as_object_list(_query_result(_get_json(url), source), "%s result" % source)
+    return as_object_list(
+        _query_result(_get_json(url, opener=opener), source), "%s result" % source
+    )
 
 
 def prom_scalar(
-    cfg: Config, promql: str, base: str | None = None, source: str = "prometheus"
+    cfg: Config,
+    promql: str,
+    base: str | None = None,
+    source: str = "prometheus",
+    opener: Opener | None = None,
 ) -> float | None:
     """Run an instant query; return the first result's value as float, or None if empty.
 
@@ -229,14 +247,20 @@ def prom_scalar(
     Prometheus would be reintroduced through — a caller that passes one also needs a
     reachability gate watching that instance, or it pages beside the gate that already did.
     """
-    result = _instant_query(base or cfg.PROM_URL, "/api/v1/query", promql, source)
+    result = _instant_query(
+        base or cfg.PROM_URL, "/api/v1/query", promql, source, opener
+    )
     if not result:
         return None
     return _sample_value(result[0])
 
 
 def prom_vector(
-    cfg: Config, promql: str, base: str | None = None, source: str = "prometheus"
+    cfg: Config,
+    promql: str,
+    base: str | None = None,
+    source: str = "prometheus",
+    opener: Opener | None = None,
 ) -> list[tuple[dict[str, str], float]]:
     """Run an instant query; return [(labels: dict, value: float), ...] (empty if none).
 
@@ -246,12 +270,14 @@ def prom_vector(
     return [
         (_labels(series), _sample_value(series))
         for series in _instant_query(
-            base or cfg.PROM_URL, "/api/v1/query", promql, source
+            base or cfg.PROM_URL, "/api/v1/query", promql, source, opener
         )
     ]
 
 
-def loki_count(cfg: Config, selector: str, window: str) -> float | None:
+def loki_count(
+    cfg: Config, selector: str, window: str, opener: Opener | None = None
+) -> float | None:
     """Instant LogQL query: total log lines for `selector` over `window`. None if no series.
 
     Loki's instant-query endpoint evaluates a metric query — here
@@ -259,13 +285,15 @@ def loki_count(cfg: Config, selector: str, window: str) -> float | None:
     [ts, value] shape prom_scalar parses, so we read result[0].value[1].
     """
     query = "sum(count_over_time(%s[%s]))" % (selector, window)
-    result = _instant_query(cfg.LOKI_URL, "/loki/api/v1/query", query, "loki")
+    result = _instant_query(cfg.LOKI_URL, "/loki/api/v1/query", query, "loki", opener)
     if not result:
         return None
     return _sample_value(result[0])
 
 
-def loki_vector(cfg: Config, query: str) -> list[tuple[dict[str, str], float]]:
+def loki_vector(
+    cfg: Config, query: str, opener: Opener | None = None
+) -> list[tuple[dict[str, str], float]]:
     """Instant LogQL query keeping each series' labels — the loki_count peer of prom_vector.
 
     Not prom_vector(base=LOKI_URL): Loki's instant endpoint is /loki/api/v1/query, and
@@ -273,12 +301,14 @@ def loki_vector(cfg: Config, query: str) -> list[tuple[dict[str, str], float]]:
     """
     return [
         (_labels(series), _sample_value(series))
-        for series in _instant_query(cfg.LOKI_URL, "/loki/api/v1/query", query, "loki")
+        for series in _instant_query(
+            cfg.LOKI_URL, "/loki/api/v1/query", query, "loki", opener
+        )
     ]
 
 
 def loki_lines(
-    cfg: Config, logql: str, window_s: int, limit: int
+    cfg: Config, logql: str, window_s: int, limit: int, opener: Opener | None = None
 ) -> list[tuple[int, str]]:
     """Range LogQL query: the raw lines matching `logql` over the last `window_s` seconds.
 
@@ -301,7 +331,9 @@ def loki_lines(
         "direction": "forward",
     }
     url = cfg.LOKI_URL + "/loki/api/v1/query_range?" + urllib.parse.urlencode(params)
-    streams = as_object_list(_query_result(_get_json(url), "loki"), "loki result")
+    streams = as_object_list(
+        _query_result(_get_json(url, opener=opener), "loki"), "loki result"
+    )
     lines: list[tuple[int, str]] = []
     for stream in streams:
         for entry in as_list(stream.get("values", []), "loki stream values"):
@@ -318,7 +350,7 @@ def push(
     token: str,
     ok: bool,
     msg: str,
-    fetch: Callable[[str], JsonValue] | None = None,
+    opener: Opener | None = None,
 ) -> None:
     """Pushes an up/down heartbeat plus message to the Kuma push monitor for `token`.
 
@@ -332,7 +364,7 @@ def push(
         token: The Kuma push-monitor token; empty/None skips the push.
         ok: Whether the check succeeded (pushed as status "up") or not ("down").
         msg: The status message to attach to the push.
-        fetch: The GET that carries the push; `_get_json` unless a test injects one.
+        opener: Sends the GET that carries the push. None is the real `urlopen`.
     """
     if not token:
         bridge.common.log("WARN: no push token set; skipping push:", msg)
@@ -340,6 +372,6 @@ def push(
     msg = cap_push_msg(msg)
     qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
     try:
-        (fetch or _get_json)("%s/api/push/%s?%s" % (cfg.KUMA_URL, token, qs))
+        _get_json("%s/api/push/%s?%s" % (cfg.KUMA_URL, token, qs), opener=opener)
     except Exception as e:  # best-effort heartbeat; never crash the loop
         bridge.common.log("push failed (%s):" % msg, e)

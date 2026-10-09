@@ -11,12 +11,12 @@ import pytest
 
 import bridge.config
 import bridge.streaks
-import bridge.net
 import checks.logs
 import check
 import gates
 import registry
-from _fake_sources import FakeSources
+from _fake_sources import FakeSink, FakeSources
+from bridge.streaks import State
 from bridge.types import Check
 from gates import Gates
 
@@ -192,55 +192,52 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
     )
 
 
-def _wire_run_once_grace(cfg, monkeypatch, results):
+def _wire_run_once_grace(cfg, results):
     """Drive run_once with Prometheus+Loki UP and one STARTUP_GRACE check whose eval returns
     `results` in order across calls; capture the (ok, msg) pushed for it each cycle."""
     cfg = replace(cfg, GRACE_CYCLES=2)
     seq = iter(results)
     checks = [Check("n8n", "tok_n8n", lambda _cfg, _src: next(seq))]
-    # The streak dict is STATED rather than patched onto bridge.streaks: it is one of the eleven
-    # `Gates` fields, so passing an empty one here is both the isolation this needs and a read of
-    # the seam.
     gate_config = Gates(
         prom_dependent=frozenset(),
         loki_dependent=frozenset(),
         startup_grace=frozenset({"n8n"}),
-        grace_streaks={},
         probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
         probe_loki=lambda _cfg, _src: (True, "loki ok"),
         probe_wan=lambda _cfg, _src: (True, "wan ok"),
     )
-    pushes = []
-    monkeypatch.setattr(
-        bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
-    )
+    # Each cycle builds its own fake, so the streak survives only through the ONE `State` they
+    # share, as it survives in the pod through the one `Sources` main() builds.
+    state = State()
     out = []
     for _ in range(len(results)):
+        sink = FakeSink()
         check.run_once(
-            cfg, FakeSources(prom_vector=lambda q: []), checks, gates=gate_config
+            cfg,
+            FakeSources(state=state, prom_vector=lambda q: []),
+            checks,
+            gates=gate_config,
+            sink=sink,
         )
-        out.append(next((ok, m) for t, ok, m in pushes if t == "tok_n8n"))
-        pushes.clear()
+        out.append(next((ok, m) for t, ok, m in sink.pushes if t == "tok_n8n"))
     return out
 
 
-def test_run_once_holds_graced_check_up_on_first_down_then_pages(monkeypatch, cfg):
+def test_run_once_holds_graced_check_up_on_first_down_then_pages(cfg):
     # The weekly-reboot case end to end: first cycle down (dependency mid-start) is held up with a
     # streak msg; a second straight down (dependency really gone) pages with the real reason.
     out = _wire_run_once_grace(
         cfg,
-        monkeypatch,
         [(False, "Connection refused"), (False, "Connection refused")],
     )
     assert out[0][0] is True and "1/2" in out[0][1]
     assert out[1][0] is False and "Connection refused" in out[1][1]
 
 
-def test_run_once_graced_check_recovers_without_paging(monkeypatch, cfg):
+def test_run_once_graced_check_recovers_without_paging(cfg):
     # Down then up (the real reboot recovery) never pushes a down for the graced monitor.
     out = _wire_run_once_grace(
         cfg,
-        monkeypatch,
         [(False, "Connection refused"), (True, "queue clean")],
     )
     assert out[0][0] is True

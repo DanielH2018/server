@@ -1,4 +1,4 @@
-"""`FakeSources`: the `bridge.sources.Sources` a test hands to a check body or to `run_once`.
+"""`FakeSources` and `FakeSink`: the `bridge.sources` doubles a test hands to a check or `run_once`.
 
 A test states the answer each query gets instead of patching `bridge.net`:
 
@@ -17,13 +17,16 @@ streak or probe cache as `src.state.<field>` rather than through a module global
 cycles need different answers builds a second fake with `FakeSources(state=first.state, ...)`. `log_error_counts` is inherited from `Sources`, so it reaches the
 `loki_vector` and `loki_count` answers with the real query shape.
 
+`FakeSink` records every push `run_once` would have sent to Kuma as `(token, ok, msg)` in
+`pushes`, so a test reads what was pushed without patching `bridge.net.push`.
+
 A module with a leading underscore rather than a `conftest.py` fixture, for the reason
 `_check_gate_helpers.py` gives: it takes arguments, and the name is unique repo-wide.
 """
 
 from collections.abc import Callable
 
-from bridge.sources import Sources
+from bridge.sources import Sink, Sources
 from bridge.streaks import State
 
 _METHODS = (
@@ -96,3 +99,18 @@ class FakeSources(Sources):
         if headers is None:
             return self._answer("post_json", url, payload)
         return self._answer("post_json", url, payload, headers=headers)
+
+
+class FakeSink(Sink):
+    """A `Sink` that records each push instead of sending it.
+
+    Attributes:
+      pushes: `(token, ok, msg)` for every push, in the order `run_once` sent them.
+    """
+
+    def __init__(self) -> None:
+        # No `cfg` or opener: nothing here reaches Kuma.
+        self.pushes: list[tuple[str, bool, str]] = []
+
+    def push(self, token: str, ok: bool, msg: str) -> None:
+        self.pushes.append((token, ok, msg))

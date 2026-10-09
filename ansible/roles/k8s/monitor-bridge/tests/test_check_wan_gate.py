@@ -84,11 +84,10 @@ def test_wan_dependent_names_real_checks_and_is_not_empty():
     assert {"r2_usage", "cloudflare_ips_drift", "discord"} <= gates.WAN_DEPENDENT
 
 
-def test_run_once_suppresses_wan_dependents_and_pages_once(monkeypatch, cfg):
+def test_run_once_suppresses_wan_dependents_and_pages_once(cfg):
     """One page for the outage, not eleven — and not zero."""
     ran, pushes = wire_run_once_reachability(
         cfg,
-        monkeypatch,
         ["r2_usage", "discord", "targets"],
         wan_result=(False, "no WAN: both endpoints failed"),
         wan_dependent={"r2_usage", "discord"},
@@ -104,22 +103,20 @@ def test_run_once_suppresses_wan_dependents_and_pages_once(monkeypatch, cfg):
     assert any(ok is False and "no WAN" in msg for _, ok, msg in pushes)
 
 
-def test_run_once_runs_wan_dependents_when_the_link_is_up(monkeypatch, cfg):
+def test_run_once_runs_wan_dependents_when_the_link_is_up(cfg):
     """The reject half: a healthy gate must suppress nothing."""
     ran, _ = wire_run_once_reachability(
         cfg,
-        monkeypatch,
         ["r2_usage", "discord"],
         wan_dependent={"r2_usage", "discord"},
     )
     assert set(ran) == {"r2_usage", "discord"}
 
 
-def test_a_raising_probe_is_a_down_gate(monkeypatch, cfg):
+def test_a_raising_probe_is_a_down_gate(cfg):
     """The real outage path: the probe raises rather than returning a pair."""
     ran, _ = wire_run_once_reachability(
         cfg,
-        monkeypatch,
         ["r2_usage"],
         wan_result=RuntimeError("Temporary failure in name resolution"),
         wan_dependent={"r2_usage"},
