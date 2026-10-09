@@ -1,6 +1,6 @@
 ---
 # check.py lives in this role's files/ and every check runs here.
-monitor_bridge_k8s_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
+monitor_bridge_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 
 # The Python files that make up the running bridge. This is the SHIP LIST: a module missing
 # here never reaches the ConfigMap, and the pod dies at import with ModuleNotFoundError the

@@ -137,7 +137,7 @@ uptime_kuma_k8s_cli_image: ghcr.io/bigboot/kuma:2.1.0-rc.2@sha256:08ac3d0bc4b1e9
 # one pod and writes nothing at all.
 # The render and heartbeat stages are stdlib Python; per-role pin like every other
 # python:3.14-alpine consumer here, so Renovate tracks them one by one.
-uptime_kuma_k8s_status_page_sync_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
+uptime_kuma_k8s_status_page_sync_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 uptime_kuma_k8s_status_page_sync_schedule: "*/15 * * * *"
 # The job WAITS OUT a Kuma restart rather than failing through it. Kuma is unreachable on two
 # routine events:
