@@ -28,6 +28,11 @@ def _scratch_with_an_unmerged_locked_worktree(tmp_path):
     worktree = tmp_path / "w"
     git(repo, "worktree", "add", "-q", "-b", BRANCH, str(worktree))
     git(worktree, "commit", "-q", "-m", "work", "--allow-empty", "--no-gpg-sign")
+    # What an abandoned tree holds: uncommitted edits, `.fanout/`, an ignored venv.
+    (worktree / ".gitignore").write_text(".venv/\n")
+    (worktree / ".fanout").mkdir()
+    (worktree / ".fanout" / "report.json").write_text("{}")
+    (worktree / ".venv").mkdir()
     git(repo, "worktree", "lock", "--reason", UNIT, str(worktree))
     return repo, worktree
 
@@ -38,10 +43,13 @@ def _run_chain(tmp_path, repo, worktree, unit_active=False):
     rc = 0 if unit_active else 3
     fake_bin(
         bin_dir,
-        systemctl=f'#!/bin/sh\ncase "$2" in is-active) exit {rc} ;; esac\nexit 0\n',
+        systemctl=(
+            f'#!/bin/sh\necho "$@" >> {bin_dir / "systemctl-calls"}\n'
+            f'case "$2" in is-active) exit {rc} ;; esac\nexit 0\n'
+        ),
     )
     batch = Batch("x", "h", str(worktree), BRANCH, UNIT, [1], "t")
-    cmd = remote_abandon_command(batch, RUN_ID, repo=str(repo))
+    cmd = remote_abandon_command(batch, repo=str(repo))
     assert str(repo) in cmd and "/home/ubuntu/server" not in cmd
     env = scrubbed_env()
     env["PATH"] = path_with(str(bin_dir), env=env)
@@ -54,21 +62,23 @@ def _state(repo):
     return branches, registrations
 
 
-def test_an_unmerged_locked_tree_and_its_branch_are_removed(tmp_path):
+def test_an_unmerged_dirty_locked_tree_and_its_branch_are_removed(tmp_path):
     repo, worktree = _scratch_with_an_unmerged_locked_worktree(tmp_path)
     proc = _run_chain(tmp_path, repo, worktree)
     assert proc.stdout.strip() == f"removed: {worktree} (abandoned)"
+    calls = (tmp_path / "bin" / "systemctl-calls").read_text().splitlines()
+    assert calls[0] == f"--user stop {UNIT}"
     branches, registrations = _state(repo)
     assert BRANCH not in branches
     assert str(worktree) not in registrations
     assert not worktree.exists()
 
 
-def test_a_running_unit_keeps_the_tree_and_names_stop(tmp_path):
+def test_a_unit_that_survives_the_stop_keeps_the_tree(tmp_path):
     repo, worktree = _scratch_with_an_unmerged_locked_worktree(tmp_path)
     proc = _run_chain(tmp_path, repo, worktree, unit_active=True)
-    assert proc.stdout.strip() == (
-        f"kept: {worktree} — unit {UNIT} still active; run stop {RUN_ID} x first"
+    assert (
+        proc.stdout.strip() == f"kept: {worktree} — unit {UNIT} still active after stop"
     )
     branches, registrations = _state(repo)
     assert BRANCH in branches and str(worktree) in registrations
@@ -108,12 +118,21 @@ def test_abandon_records_the_removal_and_releases_under_the_orchestrator(tmp_pat
 
 
 def test_abandon_of_a_kept_tree_releases_nothing_and_exits_1(tmp_path):
-    kept = ok("kept: /w1 — unit fanout-1-2 still active; run stop x 1-2 first")
+    kept = ok("kept: /w1 — unit fanout-1-2 still active after stop")
     tools, calls = fake_tools(answers={"daniel-box": kept})
     assert _abandon(tools, tmp_path, "1-2") == 1
     written = json.loads(manifest_path(RUN_ID, tmp_path).read_text())
     assert written["batches"][0]["removed_at"] is None
     assert not [c for c in calls.calls if c[0] == "findings"]
+
+
+def test_a_failed_release_prints_the_command_to_retry(tmp_path, capsys):
+    tools, _calls = fake_tools(
+        answers={"daniel-box": ok("removed: /w3 (abandoned)")}, findings_exit=1
+    )
+    assert _abandon(tools, tmp_path, "3") == 1
+    out = capsys.readouterr().out
+    assert "run: findings.py release 3 --worktree worktree-orch --reason" in out
 
 
 def test_abandon_names_the_batches_when_the_batch_is_unknown(tmp_path, capsys):

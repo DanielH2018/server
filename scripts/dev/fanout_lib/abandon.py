@@ -3,10 +3,11 @@
 `clean` keeps an unmerged tree by design, so giving up on a batch took a hand-run teardown on
 its host: unlock, force-remove, `branch -D`, a second `clean`, then one `findings.py release`
 per issue (#3919, #3924). This is that teardown as one command. It discards whatever the agent
-committed, which is why it names one batch and refuses while that batch's unit still runs.
+committed and stops the batch's agent, which is why it names exactly one batch.
 """
 
 import dataclasses
+import shlex
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -26,12 +27,13 @@ from fanout_lib.transport import Tools
 
 
 def remote_abandon_command(
-    b: Batch, run_id: str, repo: str | None = None, target: Target = SERVER_TARGET
+    b: Batch, repo: str | None = None, target: Target = SERVER_TARGET
 ) -> str:
     """The command `abandon` runs on `b.host` to discard one batch's tree and branch.
 
-    Refuses while `b.unit` is active, as `remote_clean_command` does: the agent is still
-    working in the tree. The refusal reads `kept:` and names `stop` as the way through.
+    Stops `b.unit` first, since abandoning a batch means giving up on its agent, and an agent
+    left running would go on writing into a tree being deleted. A unit still active after the
+    stop reads `kept:`, and nothing is removed.
 
     The order is what git enforces. `worktree remove` refuses a locked tree, and `launch`
     locked it, so the unlock comes first. `branch -D` refuses a branch a registered worktree
@@ -44,7 +46,6 @@ def remote_abandon_command(
 
     Args:
         b: the batch to abandon, as recorded in the run manifest.
-        run_id: the run, named in the refusal's `stop` command.
         repo: the checkout the chain acts on, defaulting to `target`'s. A test seam that keeps
             the chain off the shared primary checkout.
         target: the repo the batch works.
@@ -52,8 +53,9 @@ def remote_abandon_command(
     wt, branch = b.worktree, b.branch
     repo = repo or target.checkout
     return (
+        f"systemctl --user stop {b.unit} 2>/dev/null; "
         f"if systemctl --user is-active --quiet {b.unit}; then "
-        f'echo "kept: {wt} — unit {b.unit} still active; run stop {run_id} {b.batch} first"; '
+        f'echo "kept: {wt} — unit {b.unit} still active after stop"; '
         f"else "
         f"systemctl --user reset-failed {b.unit} 2>/dev/null; "
         f"git -C {repo} worktree unlock {wt} 2>/dev/null; "
@@ -85,14 +87,17 @@ def _release(tools: Tools, run: Manifest, b: Batch, target: Target) -> bool:
         argv += ["--repo", target.repo]
     argv += ["--reason", f"fan-out batch {b.batch} abandoned"]
     issues = ", ".join(f"#{n}" for n in b.issues)
+    # The manifest may already be gone, so a failed release prints its own retry: a second
+    # `abandon` stops at "no manifest".
+    retry = "findings.py " + shlex.join(argv)
     try:
         proc = tools.findings(argv)
     except subprocess.TimeoutExpired:
-        print(f"  release timed out; run: findings.py {' '.join(argv)}")
+        print(f"  release timed out; run: {retry}")
         return False
     if proc.returncode != 0:
         detail = " ".join((proc.stderr or proc.stdout).split())
-        print(f"  release failed ({proc.returncode}): {detail}")
+        print(f"  release failed ({proc.returncode}): {detail}; run: {retry}")
         return False
     print(f"  released {issues} from `{holder}`")
     return True
@@ -126,7 +131,7 @@ def cmd_abandon(args, tools: Tools) -> int:
     except ValueError as exc:
         print(f"{b.batch} on {b.host}: abandon failed: {exc}")
         return 1
-    command = remote_abandon_command(b, run.run_id, target=target)
+    command = remote_abandon_command(b, target=target)
     try:
         proc = tools.run(b.host, command, 120.0, None)
     except subprocess.TimeoutExpired:

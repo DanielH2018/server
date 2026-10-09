@@ -222,12 +222,13 @@ tree by design and records no removal, so the refusal above stands until the bra
 uv run python scripts/dev/fanout_place.py abandon <run-id> <batch>
 ```
 
-It runs on the batch's host from the checkout the batch was launched from. It unlocks the
-tree, force-removes it and deletes the branch, which discards whatever the agent committed.
-It then records the removal in the manifest and releases the batch's claims, so the relaunch
-is free to place. It refuses while the batch's unit is still active: run `stop <run-id>
-<batch>` first. The PR, if the agent opened one, stays open on GitHub; close it with
-`gh pr close`.
+It runs on the batch's host from the checkout the batch was launched from. It stops the
+batch's unit, unlocks the tree, force-removes it and deletes the branch, which discards
+whatever the agent committed. It then records the removal in the manifest and releases the
+batch's claims, so the relaunch is free to place. A landing or detached deploy the agent
+started runs in its own scope and is not stopped; check
+`systemctl --user list-units 'land*' 'deploy-*'` on that host first. The PR, if the agent
+opened one, stays open on GitHub; close it with `gh pr close`.
 
 **daniel-server is refused as a host until its signing key is registered.** The repo ruleset
 requires a verified commit signature, and `launch` drops a host whose `user.signingkey` is not
@@ -467,7 +468,7 @@ d. **Release and abandon under the batch's branch.** Section 5's `release` names
    orchestrator's branch, which holds no dotfiles claim, so it is refused here. Release an
    unfinished batch with
    `findings.py release <n> --worktree worktree-fanout-<batch> --repo DanielH2018/dotfiles --reason "..."`.
-   To abandon a batch whose branch never merged, run `stop <run-id> <batch>`, then
+   To abandon a batch whose branch never merged, run
    `abandon <run-id> <batch>`. `abandon` acts on the chezmoi checkout and releases the claims
    under the batch's branch on its own.
 
