@@ -77,12 +77,11 @@ def test_a_torn_byte_in_the_marker_reads_as_no_park(tmp_path):
     assert read_behind_marker(str(tmp_path)) is None
 
 
-def test_a_torn_sibling_marker_blanks_every_read(tmp_path):
-    """The snapshot reads every marker at once, so an unreadable `hold_sha` hides the park."""
+def test_a_torn_sibling_marker_does_not_hide_the_park(tmp_path):
+    """Each marker is read alone, so a torn `hold_sha` leaves the park visible."""
     (tmp_path / MARKERS["behind"]).write_text(_MARKER + "\n")
-    assert read_behind_marker(str(tmp_path)) == _MARKER
     (tmp_path / MARKERS["hold"]).write_bytes(b"\xff\n")
-    assert read_behind_marker(str(tmp_path)) is None
+    assert read_behind_marker(str(tmp_path)) == _MARKER
 
 
 # ── the owed ledger's manual_plane class; its parser is tested with `gitops_ledger` ──────

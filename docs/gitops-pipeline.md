@@ -1258,8 +1258,9 @@ and the ledger together and raises on a marker it cannot read. #3972 moved the l
 onto it, each keeping its own failure rule. `land_lib.tools.read_state` answers None for an
 unreadable snapshot, so `land.sh` fails closed. `deployer_park` answers None too, which the
 SessionStart banner reads as no park. The deploy-ui panel lets the error through to its
-`Unavailable` reply. The snapshot reads every marker at once, so one unreadable marker
-blanks every field for all three. `gitops_state.py` reads only through `DeployerState`
+`Unavailable` reply. The first two read one marker at a time through
+`gitops_hold.read_field`, so a torn sibling cannot hide a readable hold or park.
+`gitops_state.py` reads only through `DeployerState`
 under the tree lock, because each of its clears rewrites the marker it read. `probe.py gitops-state`
 (`probe_lib/gitops_view.py`) also reads each marker raw. It reports every marker as set,
 absent or unreadable and keeps going, where the snapshot raises on the first one it cannot

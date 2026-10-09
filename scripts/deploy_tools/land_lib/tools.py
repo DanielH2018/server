@@ -47,7 +47,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # has to be on the path for the names this module reads from it.
 _sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
 from deploy_locks import TREE_LOCK as LOCK
-from gitops_hold import DeployerSnapshot
+from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
 from deploy_tools import (
     await_ci,
@@ -441,8 +441,8 @@ def read_state(deployer_state: Path, name: str) -> str | None:
     """The deployer's `<name>` marker, stripped; '' when absent, None when unreadable.
 
     A basename `gitops_hold.DeployerSnapshot` carries (`hold_sha`, `behind_since`) is read
-    through it (#3972). It reads every marker at once, so one unreadable or torn marker
-    answers None for all of them. Any other basename (`receipts.jsonl`) is read raw.
+    through `gitops_hold.read_field` (#3972), one marker only, so a torn sibling cannot turn
+    a readable hold into None. Any other basename (`receipts.jsonl`) is read raw.
 
     ABSENT AND UNREADABLE ARE DIFFERENT ANSWERS. A missing marker means the deployer is not
     holding and is not behind, the ordinary case. Collapsing the two made
@@ -453,7 +453,7 @@ def read_state(deployer_state: Path, name: str) -> str | None:
     try:
         if field_name is None:
             return (deployer_state / name).read_text().strip()
-        return getattr(DeployerSnapshot.load(deployer_state), field_name) or ""
+        return read_field(deployer_state, field_name) or ""
     except FileNotFoundError:
         return ""
     except OSError, UnicodeDecodeError:

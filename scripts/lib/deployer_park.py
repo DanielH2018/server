@@ -39,7 +39,7 @@ JSON-lines ledger rather than a line-format marker (#3392).
 
 The directory and the line parsers come from ``gitops_markers``, the deployer's own module in
 ``ansible/roles/setup/gitops_deploy/files/``, and every marker is read through
-``gitops_hold.DeployerSnapshot`` beside it (#3972), so this module and monitor-bridge read
+``gitops_hold.read_field`` beside it (#3972), so this module and monitor-bridge read
 exactly the lines the deployer wrote. What stays here is the
 banner's own judgement: the thresholds, the readers that collapse an unreadable marker to
 "no park", and the functions that render a marker as banner lines. Those renderers sit here
@@ -63,7 +63,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_hold import DeployerSnapshot
+from gitops_hold import read_field
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
@@ -111,23 +111,20 @@ def park_age(marker: str | None, now: float) -> float | None:
     return age if age >= BEHIND_PARK_SECONDS else None
 
 
-def _snapshot(state_dir: str) -> DeployerSnapshot | None:
-    """The deployer's state through `gitops_hold.DeployerSnapshot`, or None when unreadable.
+def _read(state_dir: str, field: str) -> str | None:
+    """One `DeployerSnapshot` field via `gitops_hold.read_field`, or None when unreadable.
 
-    The snapshot raises on a marker it cannot read or decode, and every reader below collapses
-    that to "absent". It reads every marker at once, so one unreadable marker blanks them all:
-    for a state directory nobody can fully read, this banner reports no park.
+    One marker at a time, so a damaged sibling cannot hide the park this one records.
     """
     try:
-        return DeployerSnapshot.load(state_dir)
+        return read_field(state_dir, field)
     except OSError, UnicodeDecodeError:
         return None
 
 
 def _owed(state_dir: str) -> str | None:
     """The `owed` ledger's decodable lines, or None when absent, empty or unreadable."""
-    snapshot = _snapshot(state_dir)
-    return snapshot.owed if snapshot else None
+    return _read(state_dir, "owed")
 
 
 def read_behind_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
@@ -137,8 +134,7 @@ def read_behind_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     `read_state`: every caller here only ever asks "is this a park?", and the answer to that
     for a marker nobody can read is no.
     """
-    snapshot = _snapshot(state_dir)
-    return snapshot.behind if snapshot else None
+    return _read(state_dir, "behind")
 
 
 def park_note(marker: str | None, now: float | None = None) -> str:
@@ -359,5 +355,4 @@ def read_contention_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
 
     `gitops_markers.parse_contention` turns the text into the streak.
     """
-    snapshot = _snapshot(state_dir)
-    return snapshot.contention if snapshot else None
+    return _read(state_dir, "contention")

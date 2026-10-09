@@ -9,6 +9,7 @@ import pathlib
 import pytest
 
 from gitops_hold import (
+    read_field,
     DeployerSnapshot,
     Hold,
     broad_hold_cleared_by,
@@ -214,4 +215,15 @@ def test_a_snapshot_raises_on_a_marker_it_cannot_read(tmp_path):
     """An unreadable `hold_sha` is not "no hold": the caller decides what it means."""
     (tmp_path / MARKERS["hold"]).mkdir()
     with pytest.raises(IsADirectoryError):
+        DeployerSnapshot.load(tmp_path)
+
+
+def test_read_field_reads_one_marker_past_a_torn_sibling(tmp_path):
+    """`load` raises on the torn `behind_since`; `read_field` for `hold` does not read it."""
+    (tmp_path / MARKERS["hold"]).write_text(SHA + "\n")
+    (tmp_path / MARKERS["behind"]).write_bytes(b"\xff\n")
+    assert read_field(tmp_path, "hold") == SHA
+    with pytest.raises(UnicodeDecodeError):
+        read_field(tmp_path, "behind")
+    with pytest.raises(UnicodeDecodeError):
         DeployerSnapshot.load(tmp_path)
