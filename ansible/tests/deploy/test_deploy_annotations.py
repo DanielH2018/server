@@ -127,16 +127,21 @@ def _annotate_guards(source: str, function: str = "run") -> list[str]:
         for stmt in branch.body
         for call in ast.walk(stmt)
         if isinstance(call, ast.Call)
-        and isinstance(call.func, ast.Name)
-        and call.func.id == "annotate"
+        and (
+            (isinstance(call.func, ast.Name) and call.func.id == "annotate")
+            or (isinstance(call.func, ast.Attribute) and call.func.attr == "annotate")
+        )
     ]
 
 
 def test_the_python_locked_half_annotates_only_on_success():
     """A failed deploy must not leave a marker saying it happened: one `annotate` call per
-    mode, behind `status == 0` -- the foreground's `run` and the detached `child`."""
+    mode, behind `status == 0` -- the foreground's `run` and the detached child's
+    `deploy_and_gate`, which calls it as `steps.annotate`."""
     assert _annotate_guards(_DEPLOY_UNDER_LOCKS.read_text()) == ["status == 0"]
-    assert _annotate_guards(_DEPLOY_DETACH.read_text(), "child") == ["status == 0"]
+    assert _annotate_guards(_DEPLOY_DETACH.read_text(), "deploy_and_gate") == [
+        "status == 0"
+    ]
 
 
 def test_an_unconditional_annotation_is_flagged():
