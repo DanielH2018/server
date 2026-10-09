@@ -14,9 +14,20 @@
 # that is the rollback.
 claude_code_rc_enabled: true
 
+# The account claude-rc.service runs as. Slice 4 of docs/claude-agent-user.md moves it to
+# `claude_code_agent_user`; the default keeps the operator, so a host that does not set this
+# renders the unit it always did. Only a non-operator user gets the unit's hardening lines.
+claude_code_user: "{{ sys_user }}"
+
+# That account's home. The agent user's lives outside /home (claude_code_agent_user_home), so
+# the unit's ProtectHome=yes can hide every human home without hiding it.
+claude_code_user_home: >-
+  {{ claude_code_agent_user_home if claude_code_user == claude_code_agent_user
+  else '/home/' ~ claude_code_user }}
+
 # The directory the host runs in. Sessions spawned on demand get their own worktree
 # underneath it; the pre-created session stays here.
-claude_code_rc_workdir: "/home/{{ sys_user }}/server"
+claude_code_rc_workdir: "{{ claude_code_user_home }}/server"
 
 # DECIDED: worktree, not same-dir. Concurrent sessions sharing one checkout is the exact
 # thing this repo's parallel-session rule forbids, and `prune_worktrees.py` already
@@ -199,7 +210,7 @@ claude_code_memory_sync_target: daniel-server
 
 # The store's directory, the same path on both hosts. Claude Code keys a project's store by
 # its working directory with every `/` turned into `-`, so it derives from the checkout.
-claude_code_memory_sync_dir: "/home/{{ sys_user }}/.claude/projects/{{ claude_code_rc_workdir | replace('/', '-') }}/memory"
+claude_code_memory_sync_dir: "{{ claude_code_user_home }}/.claude/projects/{{ claude_code_rc_workdir | replace('/', '-') }}/memory"
 
 # How often the copy runs, as a systemd time span. A memory written here reaches the other
 # host's next session within this interval.
