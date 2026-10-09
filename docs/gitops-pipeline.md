@@ -1506,7 +1506,8 @@ It calls `Hold.clear` under the git-tree lock and prints every plane it dropped.
 live hold, or none, refuses with exit 1. It journals `event=clear-hold` under `-t gitops-state`.
 It is its own verb rather than a `clear-owed hold_plane` class. `clear-owed` drops one ledger
 line, and a `hold_plane` line dropped without `hold_sha`, or `hold_sha` without its lines, is
-the orphaning above. `probe.py gitops-state` prints the command with the held SHA filled in,
+the orphaning above. `clear-hold --orphaned` removes `hold_plane` lines an earlier hand `rm`
+left with no `hold_sha`, and refuses while a hold is set. `probe.py gitops-state` prints the command with the held SHA filled in,
 and so does `gitops_tick.sh`, which prints that view after every tick.
 
 **The cost, stated: a surviving hold parks the Renovate agent** (`agent_logic.decide` returns

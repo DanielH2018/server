@@ -258,6 +258,7 @@ on daniel-server: one `gh` call, two deploy-ui GETs and one `findings.py` run.
 `contention_since`, and the `owed` ledger's `manual_plane`, `k8s_deferred` and `k8s_unapplied`
 lines. Each set marker carries what discharges it and the command that clears it after. The
 hold's command is `gitops_state.py clear-hold <sha>` with the held SHA filled in.
+`hold_plane` lines with no `hold_sha` print as orphaned, with `clear-hold --orphaned`.
 `gitops_tick.sh` prints this same view after every tick.
 
 It reads `/var/lib/gitops-deploy` directly, so it answers only on daniel-box as the deploy

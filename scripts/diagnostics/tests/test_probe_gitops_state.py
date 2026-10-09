@@ -55,6 +55,16 @@ def test_every_set_marker_is_printed_with_its_way_out(tmp_path):
     assert "gitops_state.py clear-owed k8s_unapplied homepage" in out
 
 
+def test_hold_plane_lines_with_no_hold_sha_are_shown_as_orphaned(tmp_path):
+    """A hand `rm hold_sha` leaves planes the next hold waits on; `none` alone hid them."""
+    _state(tmp_path, owed=_owed("hold_plane", "ansible/deploy.yml sonarr"))
+    snap = view.collect(tmp_path, NOW)
+    assert snap["hold"]["clear"] == f"{view.HOLD_CLEAR_CMD} --orphaned"
+    out = view.format_text(snap)
+    assert "hold_sha:     none, but 1 orphaned hold_plane line(s)" in out
+    assert "plane: ansible/deploy.yml sonarr" in out
+
+
 def test_absent_markers_read_as_none_and_exit_zero(tmp_path, capsys):
     """An empty state directory is a deployer with nothing to say, which reads cleanly."""
     assert view.run_gitops_state(SimpleNamespace(json=False), tmp_path, NOW) == 0

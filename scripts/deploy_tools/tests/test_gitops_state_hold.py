@@ -12,6 +12,8 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from deploy_tools import gitops_state
 from gitops_hold import HOLD_CLEAR_CMD
 from lib.repo_paths import REPO
@@ -100,3 +102,35 @@ def test_the_printed_clear_hold_command_is_one_this_parser_runs(tmp_path, run):
     assert prefix == "uv run python", HOLD_CLEAR_CMD
     assert run(tmp_path, *verb.split(), SHA) == 0
     assert not (tmp_path / "hold_sha").exists()
+
+
+def test_orphaned_drops_hold_plane_lines_left_with_no_hold_sha(
+    tmp_path, run, capsys, journal
+):
+    """CLEAN half: what a hand `rm hold_sha` left goes, and the other class's line stays."""
+    _held(tmp_path)
+    (tmp_path / "hold_sha").unlink()
+    assert run(tmp_path, "clear-hold", "--orphaned") == 0
+    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [DEFERRED]
+    assert "orphaned" in capsys.readouterr().out
+    assert journal == [
+        ("-", ["ansible/initial_setup.yml gitops_deploy", "ansible/deploy.yml sonarr"])
+    ]
+
+
+def test_orphaned_refuses_while_a_hold_is_set(tmp_path, run, capsys, journal):
+    """FLAGGED half: a live hold's planes are not orphans, so both markers stay whole."""
+    _held(tmp_path)
+    before = (tmp_path / "owed.jsonl").read_text()
+    assert run(tmp_path, "clear-hold", "--orphaned") == 1
+    assert (tmp_path / "hold_sha").read_text().strip() == SHA
+    assert (tmp_path / "owed.jsonl").read_text() == before
+    assert "not --orphaned" in capsys.readouterr().err
+    assert journal == []
+
+
+def test_clear_hold_takes_a_sha_or_orphaned_not_both(tmp_path, run):
+    for argv in (("clear-hold",), ("clear-hold", SHA, "--orphaned")):
+        with pytest.raises(SystemExit) as exc:
+            run(tmp_path, *argv)
+        assert exc.value.code == 2

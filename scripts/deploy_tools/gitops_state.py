@@ -15,7 +15,8 @@ marker an operator wants gone now, after ending the holder.
 `gitops_hold.Hold.clear`. A `hold_plane` line is not a `clear-owed` class because dropping one without
 `hold_sha`, or `hold_sha` without its lines, is how a hold was orphaned before (`rm hold_sha`). Apply every
 plane the hold lists first: after the clear nothing records them. It journals `event=clear-hold`, naming
-each plane it dropped, since it silences **GitOps Deploy — Status**.
+each plane it dropped, since it silences **GitOps Deploy — Status**. `clear-hold --orphaned` drops `hold_plane`
+lines left with no `hold_sha` (an earlier hand `rm`), and refuses while a hold is set.
 
 `clear-owed manual_plane <role>` drops a role's line from the ledger. The deployer writes that line when a range carries a setup
 role no playbook it runs can apply — `k3s` (applied by `k3s-bringup.yml`) or `common` (applied by no playbook at all). The tick
@@ -434,9 +435,8 @@ def clear_contention(
 def journal_hold_clear(
     sha: str, dropped: list[str], run: Callable[..., object] = subprocess.run
 ) -> None:
-    """Write the one line that says an operator cleared the hold on `sha`, and which planes went.
+    """Journal an operator's clear of the hold on `sha`, fire-and-forget like `journal_clear`.
 
-    Fire-and-forget like `journal_clear`, whose `ManualPlaneEntry` shape a hold does not fit.
     `dropped` is quoted because a plane is free text with spaces in it.
     """
     fields = [
@@ -470,11 +470,13 @@ def clear_hold(
 ) -> int:
     """Remove `hold_sha` and every `hold_plane` line while `sha` is the SHA held.
 
+    An empty `sha` is `--orphaned`: no hold may be set, and the lines a hand `rm` of
+    `hold_sha` left behind go. `Hold.clear` reads "" as "nothing is held".
+
     Exit 0 on a clear, 1 on a SHA mismatch or a lock or permission refusal, which change
-    nothing. `Hold.clear` owns the rule; this takes the tree lock around it and reads the
-    planes under the same lock, so the list it prints is the list it dropped. The lock is
-    taken here once and `Hold.clear` gets the default no-op lock: a second `flock` from this
-    process on a fresh descriptor would wait on the first.
+    nothing. The planes are read under the same tree lock, so the list printed is the list
+    dropped. `Hold.clear` gets the default no-op lock: a second `flock` from this process
+    on a fresh descriptor would wait on the first.
 
     Args:
       lock_path: the tree lock. None reads `TREE_LOCK`.
@@ -483,24 +485,22 @@ def clear_hold(
         means `journal_hold_clear`.
     """
     hold = Hold(state_dir)
-    hold_path = _Path(state_dir) / MARKERS["hold"]
     try:
         with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
             dropped = hold.held_subjects()
             refusal = hold.clear(sha)
     except (LockBusy, LockUnavailable, PermissionError) as refused:
-        return _refused(refused, hold_path)
+        return _refused(refused, _Path(state_dir) / MARKERS["hold"])
     if refusal:
+        if not sha:
+            refusal = "hold_sha is set; clear it by its SHA, not --orphaned"
         print(f"nothing cleared: {refusal}", file=sys.stderr)
         return 1
-    (journal_hold_clear if journal is None else journal)(sha, dropped)
-    if not dropped:
-        print(f"cleared the hold on {sha} ({hold_path}); it waited on no plane")
-        return 0
+    (journal_hold_clear if journal is None else journal)(sha or "-", dropped)
+    head = f"cleared the hold on {sha} and its" if sha else "dropped the orphaned"
     print(
-        f"cleared the hold on {sha} and its {len(dropped)} hold_plane line(s). Nothing "
-        "records these planes now, so each must already be applied: "
-        + HOLD_PLANE_SEP.join(dropped)
+        f"{head} {len(dropped)} hold_plane line(s). Nothing records these planes now, so "
+        "each must already be applied: " + (HOLD_PLANE_SEP.join(dropped) or "none")
     )
     return 0
 
@@ -520,8 +520,7 @@ def main(
       lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
       journal: what records an owed-ledger clear. None reads `journal_clear`; a test passes
         its own, because a real `logger` line from a test reads as an operator's clear.
-      hold_journal: what records a `clear-hold`, for the same reason. None reads
-        `journal_hold_clear`.
+      hold_journal: the same for a `clear-hold`. None reads `journal_hold_clear`.
     """
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -556,15 +555,22 @@ def main(
         help="drop hold_sha and every hold_plane line together, AFTER applying each held plane",
     )
     hold.add_argument(
-        "sha", help="the full SHA in hold_sha; a different live hold refuses"
+        "sha", nargs="?", help="the full SHA in hold_sha; a different live hold refuses"
+    )
+    hold.add_argument(
+        "--orphaned",
+        action="store_true",
+        help="instead, drop hold_plane lines left with no hold_sha; refused while one is set",
     )
     args = parser.parse_args(argv)
     state = DeployerState(args.state_dir)
     if args.command == "clear-contention":
         return clear_contention(state, lock_path, lock_wait_s)
     if args.command == "clear-hold":
+        if args.orphaned == bool(args.sha):
+            parser.error("clear-hold takes the held SHA, or --orphaned, not both")
         return clear_hold(
-            args.state_dir, args.sha, lock_path, lock_wait_s, hold_journal
+            args.state_dir, args.sha or "", lock_path, lock_wait_s, hold_journal
         )
     if args.command == "clear-owed":
         cls = args.cls

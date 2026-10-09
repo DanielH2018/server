@@ -160,11 +160,18 @@ def collect(state_dir: str | Path = STATE_DIR, now: float | None = None) -> dict
     owed_status, owed = raw["owed"]
     owed_known = owed_status != UNREADABLE
     status, sha = raw["hold"]
+    planes = held_planes(owed) if owed_known else None
+    # Planes with no `hold_sha` are what a hand `rm` of it leaves; the next hold waits on them.
+    orphaned = status == ABSENT and bool(planes)
     snap["hold"] = {
         "status": status,
         "sha": sha,
-        "planes": held_planes(owed) if owed_known else None,
-        "clear": f"{HOLD_CLEAR_CMD} {sha}" if sha else None,
+        "planes": planes,
+        "clear": f"{HOLD_CLEAR_CMD} {sha}"
+        if sha
+        else f"{HOLD_CLEAR_CMD} --orphaned"
+        if orphaned
+        else None,
     }
 
     status, text = raw["behind"]
@@ -243,6 +250,13 @@ def format_text(snap: dict) -> str:
             "  apply each plane, then (dropping hold_sha and every plane line): "
             f"{hold['clear']}"
         )
+    elif hold["planes"]:
+        lines.append(
+            f"hold_sha:     none, but {len(hold['planes'])} orphaned hold_plane line(s)  "
+            "<-- the next hold would wait on these too"
+        )
+        lines += [f"  plane: {p}" for p in hold["planes"]]
+        lines.append(f"  apply any still owed, then: {hold['clear']}")
     else:
         lines.append("hold_sha:     none")
 
