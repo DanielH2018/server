@@ -19,6 +19,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.issue_model import DOMAINS, KINDS, SEVERITIES
 
+# How many search hits `history` reads back unless `--limit` says otherwise. A topic search
+# that needs more than this is too broad to read, and `cmd_history` warns when it fills.
+HISTORY_LIMIT = 30
+
 
 def _add_dry_run(parser: argparse.ArgumentParser, *, suppress: bool) -> None:
     """Add ``--dry-run`` to ``parser``.
@@ -190,13 +194,42 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
     ls = sub.add_parser(
         "list",
-        help="rows for the review skill and the docs generator; marks manual, deferred "
-        "and claimed issues rather than hiding any",
+        help="the open findings, for the review skill; marks manual, deferred and claimed "
+        "issues rather than hiding any. Past findings are `history`",
     )
     _add_dry_run(ls, suppress=True)
     _add_repo(ls)
-    ls.add_argument("--state", default="open", choices=("open", "closed", "all"))
     ls.add_argument("--json", action="store_true")
+
+    hs = sub.add_parser(
+        "history",
+        help="search findings in any state by topic or cited file; prints how each closed",
+    )
+    _add_dry_run(hs, suppress=True)
+    _add_repo(hs)
+    hs.add_argument(
+        "terms", nargs="*", help="gh search terms, matched against the issue"
+    )
+    hs.add_argument(
+        "--file",
+        help="only findings whose body cites this path (a directory matches the files under "
+        "it); a `:line` suffix is dropped",
+    )
+    hs.add_argument(
+        "--limit",
+        type=int,
+        default=HISTORY_LIMIT,
+        help=f"search hits to read (default {HISTORY_LIMIT}); a full page warns on stderr",
+    )
+    hs.add_argument("--json", action="store_true")
+
+    sh = sub.add_parser(
+        "show", help="one finding's body, outcome, closing PR and comment thread"
+    )
+    _add_dry_run(sh, suppress=True)
+    _add_repo(sh)
+    sh.add_argument("number", type=int)
+    sh.add_argument("--json", action="store_true")
 
     sl = sub.add_parser("sync-labels", help="create any missing label")
     _add_dry_run(sl, suppress=True)

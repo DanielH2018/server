@@ -40,7 +40,9 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py close 688 --fixed [--pr 700]
     uv run python scripts/dev/findings.py close 688 --refuted --reason "..."
     uv run python scripts/dev/findings.py close 688 --accepted --reason "..."
-    uv run python scripts/dev/findings.py list [--state open|closed|all] [--json]
+    uv run python scripts/dev/findings.py list [--json]
+    uv run python scripts/dev/findings.py history <terms> [--file path] [--limit N] [--json]
+    uv run python scripts/dev/findings.py show 688 [--json]
     uv run python scripts/dev/findings.py verify --all
     uv run python scripts/dev/findings.py verify 688 701
     uv run python scripts/dev/findings.py next [--limit N] [--json]
@@ -130,6 +132,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from dev.findings_lib.claim import claim_states
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
 from dev.findings_lib.cli import _parser
+from dev.findings_lib.history_cli import cmd_history, cmd_show
 from dev.findings_lib.gh_calls import (
     _create_with_optional_project,
     _existing_labels,
@@ -405,11 +408,14 @@ def _still_deferred(row: dict, today) -> bool:
 def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``list`` subcommand: prints open findings as a table or JSON.
 
+    Open only. A closed read crossed gh's 1000-issue cap and a 120s tool timeout, so past
+    findings are `history`'s search (findings_lib/history_cli.py).
+
     Args:
-        args: parsed CLI namespace carrying ``state`` and ``json``.
+        args: parsed CLI namespace carrying ``json``.
         tools: the process boundaries the issue read goes through.
     """
-    rows = sorted(issue_rows(load_issues(args.state, tools)), key=sort_key)
+    rows = sorted(issue_rows(load_issues("open", tools)), key=sort_key)
     today = today_utc()
     if args.json:
         print(json.dumps(rows, indent=2))
@@ -542,6 +548,8 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
     handler = {
         "sync-labels": cmd_sync_labels,
         "list": cmd_list,
+        "history": cmd_history,
+        "show": cmd_show,
         "open": cmd_open,
         "touch": cmd_touch,
         "defer": cmd_defer,
