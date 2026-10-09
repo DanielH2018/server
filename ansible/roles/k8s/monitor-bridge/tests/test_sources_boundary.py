@@ -6,7 +6,15 @@ believed it had stated the answer, and the suite would need its `bridge.net` pat
 """
 
 import ast
+import io
+import json
+import urllib.parse
+import urllib.request
 from pathlib import Path
+
+import pytest
+
+from bridge.sources import Sources
 
 FILES = Path(__file__).resolve().parents[1] / "files"
 
@@ -82,3 +90,94 @@ def test_a_query_through_src_is_clean():
         )
         == []
     )
+
+
+# --- the live Sources reaches the endpoint each method names ---------------------------------
+
+_VECTOR = {
+    "status": "success",
+    "data": {"result": [{"metric": {"job": "node"}, "value": [0, "2"]}]},
+}
+_STREAMS = {
+    "status": "success",
+    "data": {"result": [{"stream": {}, "values": [["5", "line"]]}]},
+}
+
+
+@pytest.mark.parametrize(
+    ("call", "body", "path", "query", "expected"),
+    [
+        (lambda s: s.prom_scalar("up"), _VECTOR, "/api/v1/query", {"query": "up"}, 2.0),
+        (
+            lambda s: s.prom_vector("up"),
+            _VECTOR,
+            "/api/v1/query",
+            {"query": "up"},
+            [({"job": "node"}, 2.0)],
+        ),
+        (
+            lambda s: s.loki_count('{job="x"}', "5m"),
+            _VECTOR,
+            "/loki/api/v1/query",
+            {"query": 'sum(count_over_time({job="x"}[5m]))'},
+            2.0,
+        ),
+        (
+            lambda s: s.loki_vector("q"),
+            _VECTOR,
+            "/loki/api/v1/query",
+            {"query": "q"},
+            [({"job": "node"}, 2.0)],
+        ),
+        (
+            lambda s: s.loki_lines("q", 60, 7),
+            _STREAMS,
+            "/loki/api/v1/query_range",
+            {"query": "q", "limit": "7", "direction": "forward"},
+            [(5, "line")],
+        ),
+        (
+            lambda s: s.get_json("http://api.test/x?a=1"),
+            {"ok": 1},
+            "/x",
+            {"a": "1"},
+            {"ok": 1},
+        ),
+    ],
+)
+def test_the_live_sources_query_the_endpoint_each_method_names(
+    monkeypatch, cfg, call, body, path, query, expected
+):
+    """FakeSources overrides every method, so no other test runs these delegations.
+
+    A swapped argument (selector for window, limit for window_s) type-checks and passes the
+    whole suite while the pod queries nonsense.
+    """
+    sent = _fake_urlopen(monkeypatch, body)
+    assert call(Sources(cfg)) == expected
+    url = urllib.parse.urlsplit(sent[0].full_url)
+    assert url.path.endswith(path)
+    params = dict(urllib.parse.parse_qsl(url.query))
+    assert query.items() <= params.items(), params
+
+
+def test_the_live_post_json_sends_the_payload(monkeypatch, cfg):
+    sent = _fake_urlopen(monkeypatch, {"ok": 1})
+    assert Sources(cfg).post_json("http://api.test/p", {"a": 1}, {"X-K": "v"}) == {
+        "ok": 1
+    }
+    assert sent[0].get_method() == "POST"
+    assert json.loads(sent[0].data) == {"a": 1}
+    assert sent[0].get_header("X-k") == "v"
+
+
+def _fake_urlopen(monkeypatch, body):
+    """Answer every urlopen with `body` as JSON; return the list of requests sent."""
+    sent = []
+
+    def urlopen(req, timeout=None):
+        sent.append(req)
+        return io.BytesIO(json.dumps(body).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    return sent
