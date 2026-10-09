@@ -33,7 +33,7 @@ from lib.proc_testing import fake_bin, path_with
 _K3S_STUB = """#!/bin/sh
 case "$*" in
   *"app=longhorn-manager"*)
-      printf '10.255.255.1' ;;
+      printf '%s' '{"items":[{"spec":{"nodeName":"testnode"},"status":{"phase":"Running","podIP":"10.255.255.1","containerStatuses":[{"ready":true}]}}]}' ;;
   *"get pvc"*)
       printf 'pvc-drilltest' ;;
   *"get snapshots.longhorn.io"*)
@@ -95,6 +95,9 @@ def _run_revert_guard(
         env["PATH"] = path_with(bin_dir, env=env)
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"
+        # The real playbooks find `filter_plugins/` beside them in `ansible/`; this one is in a
+        # temp dir, and longhorn-api's resolve.yml calls `ready_manager_ip`.
+        env["ANSIBLE_FILTER_PLUGINS"] = str(_REPO_ROOT / "ansible" / "filter_plugins")
         # Pin the interpreter to the suite's own, so the play's modules import from the venv
         # the test runs in rather than whatever discovery finds first on PATH.
         env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable

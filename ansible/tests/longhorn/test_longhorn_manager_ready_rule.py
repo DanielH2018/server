@@ -13,10 +13,9 @@ import subprocess
 
 import pytest
 
-from _helpers import SETUP_ROLES
+from _shell_render import rendered_shell_text
 from longhorn_manager import ready_manager_ip
 
-TRIM = SETUP_ROLES / "k3s" / "templates" / "longhorn-trim-volumes.sh.j2"
 NODE = "this-node"
 
 
@@ -47,7 +46,9 @@ CASES = {
 
 def _trim_jq_program() -> str:
     match = re.search(
-        r"""jq -r --arg node "\$NODE" '(.*?)' \| head -1""", TRIM.read_text(), re.S
+        r"""jq -r --arg node "\$NODE" '(.*?)' \| head -1""",
+        rendered_shell_text("setup", "k3s", "longhorn-trim-volumes.sh.j2"),
+        re.S,
     )
     assert match, "the trim script's manager-pod jq moved; point this test at it"
     return match.group(1)
