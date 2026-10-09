@@ -27,6 +27,7 @@ Usage:
     uv run python scripts/diagnostics/ui_login.py --check          # ask Authelia if the session still stands
     uv run python scripts/diagnostics/ui_login.py --two-factor     # a two_factor session, ~1h
     uv run python scripts/diagnostics/ui_login.py --path           # print the state file path
+    uv run python scripts/diagnostics/ui_login.py --domain         # print the domain (ui_mcp.sh reads it)
 
 The two tiers log in as DIFFERENT users. The one_factor tier is the operator
 (`authelia_user`). The two_factor tier is `claude-ui`, an Authelia identity that exists
@@ -47,6 +48,12 @@ long form.
 
 `--totp <code>` still accepts a typed code, as break-glass for a seeded secret that has
 drifted from the row in Authelia's database.
+
+The agent user `claude` has no age key, so it reads none of those SOPS values. Where
+`~/.config/homelab-ui/credentials.json` exists, the one_factor tier logs in with the username,
+password and domain in it: a third Authelia account, `claude-agent`, which `roles/setup/claude_code`
+writes as a 0600 file. The file wins over SOPS, and an operator has none. The two_factor tier
+never reads it, because that account has no TOTP registration.
 
 Exit 0 = a usable state file is on disk. Exit 1 = it is missing, expired or rejected.
 """
@@ -88,6 +95,46 @@ CLAUDE_USER = "claude-ui"
 TOTP_ALGORITHM = hashlib.sha1
 TOTP_DIGITS = 6
 TOTP_PERIOD = 30
+
+
+# Where the agent user's login lives. The claude_code role renders it as
+# `claude_code_homelab_ui_credentials`, and `test_ui_login.py` asserts the paths agree.
+AGENT_CREDENTIALS_PATH = os.path.expanduser("~/.config/homelab-ui/credentials.json")
+
+
+def agent_credentials(path=AGENT_CREDENTIALS_PATH):
+    """The agent user's login file as a dict, or None when this account has none.
+
+    Raises SystemExit when the file exists but is unreadable or lacks `username`, `password`
+    or `domain`: falling back to SOPS would hide a bad render behind a decrypt error the agent
+    can never satisfy.
+    """
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as err:
+        raise SystemExit(
+            f"could not read the homelab-ui login at {path}: {err}"
+        ) from err
+    missing = [k for k in ("username", "password", "domain") if not (data or {}).get(k)]
+    if missing:
+        raise SystemExit(f"{path} has no value for {', '.join(missing)}")
+    return data
+
+
+def lookup_domain():
+    """The LAN domain: from the agent's login file when it has one, else from SOPS."""
+    creds = agent_credentials()
+    return creds["domain"] if creds else core.sops_extract("domain")
+
+
+def one_factor_login(creds, read_secret):
+    """(username, password) for the one_factor tier: the agent's file wins over SOPS."""
+    if creds is not None:
+        return creds["username"], creds["password"]
+    return read_secret("authelia_user"), read_secret("authelia_password")
 
 
 def derive_totp(
@@ -264,7 +311,7 @@ def mint(two_factor=False, totp_code=None):
     for why that secret is readable here and what the dedicated identity buys.
     """
     two_factor = two_factor or totp_code is not None
-    domain = core.sops_extract("domain")
+    domain = lookup_domain()
     if two_factor:
         user = CLAUDE_USER
         password = core.sops_extract("authelia_claude_password")
@@ -273,8 +320,7 @@ def mint(two_factor=False, totp_code=None):
                 core.sops_extract("authelia_claude_totp_secret"), time.time()
             )
     else:
-        user = core.sops_extract("authelia_user")
-        password = core.sops_extract("authelia_password")
+        user, password = one_factor_login(agent_credentials(), core.sops_extract)
     host = portal_host(domain)
 
     body = json.dumps(
@@ -405,7 +451,7 @@ def check(two_factor=False):
         print(f"{path} {problem} — re-mint with {hint}")
         return 1
 
-    domain = core.sops_extract("domain")
+    domain = lookup_domain()
     host = portal_host(domain)
     out = _curl(
         [
@@ -456,7 +502,7 @@ def verify(service, two_factor=False):
     with open(path) as f:
         state = json.load(f)
     cookie_value = state["cookies"][0]["value"]
-    domain = core.sops_extract("domain")
+    domain = lookup_domain()
     host = f"{service}.local.{domain}"
 
     # Cookie via stdin config, never argv — same reasoning as the login above.
@@ -506,6 +552,11 @@ def main(argv=None):
         "--path", action="store_true", help="print the state file path and exit"
     )
     parser.add_argument(
+        "--domain",
+        action="store_true",
+        help="print the LAN domain and exit; ui_mcp.sh uses it to pin the browser's DNS",
+    )
+    parser.add_argument(
         "--verify",
         metavar="SERVICE",
         help="fetch <service>.local.<domain> with the saved cookie and report whether "
@@ -528,6 +579,9 @@ def main(argv=None):
     if args.path:
         print(state_path(args.two_factor))
         return 0
+    if args.domain:
+        print(lookup_domain())
+        return 0
     if args.verify:
         return verify(args.verify, two_factor=args.two_factor)
     if args.check:
@@ -536,7 +590,8 @@ def main(argv=None):
     two_factor = args.two_factor or args.totp is not None
     path = mint(two_factor=two_factor, totp_code=args.totp)
     tier = "two_factor" if two_factor else "one_factor"
-    user = CLAUDE_USER if two_factor else "the operator"
+    agent = (agent_credentials() or {}).get("username", "the operator")
+    user = CLAUDE_USER if two_factor else agent
     print(f"minted a {tier} session as {user}; storage state written to {path}")
     return 0
 

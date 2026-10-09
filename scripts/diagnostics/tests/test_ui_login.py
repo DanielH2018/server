@@ -12,6 +12,8 @@ import os
 import re
 import sys
 
+import pytest
+
 # `scripts/diagnostics` is deliberately absent from `pythonpath` in pyproject.toml, so each test
 # here puts its own parent directory on `sys.path` — the same insert its siblings carry. Without
 # it this module imported only when a sibling that HAS the insert happened to be collected first,
@@ -332,3 +334,68 @@ def test_an_insufficient_session_is_not_told_to_type_a_code():
     _, detail = ui_login.classify_state(_state(1), required_level=2)
     assert "--totp" not in detail
     assert "--two-factor" in detail
+
+
+# --- the agent user's login file: the account with no age key ------------------------
+
+CLAUDE_CODE_DEFAULTS = os.path.join(
+    REPO_ROOT, "ansible", "roles", "setup", "claude_code", "defaults", "main.yml"
+)
+
+
+def test_the_login_file_path_matches_the_claude_code_role_default():
+    """The role writes the file where this script looks: under the agent's home, so `~`."""
+    with open(CLAUDE_CODE_DEFAULTS) as f:
+        match = re.search(
+            r'^claude_code_homelab_ui_credentials:\s*"\{\{ claude_code_agent_user_home \}\}/(\S+)"',
+            f.read(),
+            re.M,
+        )
+    assert match, "claude_code_homelab_ui_credentials not found, or not home-relative"
+    assert ui_login.AGENT_CREDENTIALS_PATH == os.path.expanduser("~/" + match.group(1))
+
+
+class _Sops:
+    """A stand-in for core.sops_extract that records which keys were asked for."""
+
+    def __init__(self, values):
+        self.values = values
+        self.asked = []
+
+    def __call__(self, key):
+        self.asked.append(key)
+        return self.values[key]
+
+
+def _login_file(tmp_path, contents):
+    path = tmp_path / "credentials.json"
+    path.write_text(json.dumps(contents))
+    return str(path)
+
+
+def test_the_login_file_is_read_and_sops_is_not_asked(tmp_path):
+    """The agent has no age key, so any sops call would fail it before the login."""
+    sops = _Sops({})
+    creds = ui_login.agent_credentials(
+        _login_file(
+            tmp_path,
+            {"username": "claude-agent", "password": "pw-1", "domain": "lan.example"},
+        )
+    )
+    assert ui_login.one_factor_login(creds, sops) == ("claude-agent", "pw-1")
+    assert creds["domain"] == "lan.example"
+    assert sops.asked == []
+
+
+def test_an_account_without_a_login_file_still_logs_in_as_the_operator(tmp_path):
+    sops = _Sops({"authelia_user": "op", "authelia_password": "pw-2"})
+    creds = ui_login.agent_credentials(str(tmp_path / "absent.json"))
+    assert creds is None
+    assert ui_login.one_factor_login(creds, sops) == ("op", "pw-2")
+
+
+def test_a_login_file_missing_a_key_is_refused_not_papered_over_with_sops(tmp_path):
+    """Falling back to SOPS would turn a bad render into a decrypt error the agent cannot fix."""
+    path = _login_file(tmp_path, {"username": "claude-agent", "domain": "lan.example"})
+    with pytest.raises(SystemExit, match="password"):
+        ui_login.agent_credentials(path)

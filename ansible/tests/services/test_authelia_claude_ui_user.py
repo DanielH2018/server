@@ -1,4 +1,4 @@
-"""Authelia's users database holds two users, and one bug would make them the same account.
+"""Authelia's users database holds three users, and one bug would make them the same account.
 
 `claude-ui` is the identity the headless UI tier logs in as, so it can reach the
 `two_factor` services (code-server, n8n, longhorn) without a code typed off a phone. The
@@ -23,6 +23,7 @@ from lib.render_context import render_context
 
 OPERATOR_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$operator"
 CLAUDE_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$claudeui"
+AGENT_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$claudeagent"
 
 
 def users_database(docs):
@@ -89,6 +90,19 @@ def test_no_users_at_all_is_flagged():
     assert not every_user_has_a_digest({})
 
 
+def carries_none_of(user, privileged):
+    """True when the user is in none of the `privileged` groups."""
+    return not set(user.get("groups") or []) & set(privileged)
+
+
+def test_a_user_outside_the_privileged_groups_is_clean():
+    assert carries_none_of({"groups": []}, {"admins", "dev"})
+
+
+def test_a_user_in_a_privileged_group_is_flagged():
+    assert not carries_none_of({"groups": ["dev", "admins"]}, {"admins"})
+
+
 ROLE = K8S_ROLES / "authelia"
 
 
@@ -119,6 +133,27 @@ def test_the_claude_ui_user_is_rendered(live_users):
     )
 
 
+def test_the_claude_agent_user_is_rendered_in_none_of_the_operators_groups(live_users):
+    """Grafana maps `admins` to Admin and Headlamp binds `oidc:admins`; see the role defaults.
+
+    The groups to keep it out of are the operator's own, read from the render, so a group
+    added to the operator later is covered without editing this test.
+    """
+    agent = render_context(ROLE, strict=True)["authelia_k8s_agent_user"]
+    assert agent in live_users, (
+        f"the homelab-ui login the agent user holds needs this account; found "
+        f"{sorted(live_users)}"
+    )
+    operator_groups = {
+        g
+        for name, u in live_users.items()
+        if name != agent
+        for g in u.get("groups") or []
+    }
+    assert "admins" in operator_groups, "the operator is no longer in `admins`"
+    assert carries_none_of(live_users[agent], operator_groups), live_users[agent]
+
+
 def test_the_claude_ui_user_carries_groups(live_users):
     """Its groups match the operator's on purpose — see the role defaults.
 
@@ -140,6 +175,9 @@ def test_each_user_renders_the_digest_resolved_for_that_user():
     claude = render_context(K8S_ROLES / "authelia", strict=True)[
         "authelia_k8s_claude_user"
     ]
+    agent = render_context(K8S_ROLES / "authelia", strict=True)[
+        "authelia_k8s_agent_user"
+    ]
     secret = yaml_fast.safe_load(
         render_role_template(
             "authelia",
@@ -147,14 +185,16 @@ def test_each_user_renders_the_digest_resolved_for_that_user():
             {
                 "authelia_user": operator,
                 "authelia_k8s_manage_claude_user": True,
+                "authelia_k8s_manage_agent_user": True,
                 "authelia_password_hash": OPERATOR_PLACEHOLDER,
                 "authelia_claude_password_hash": CLAUDE_PLACEHOLDER,
+                "authelia_agent_password_hash": AGENT_PLACEHOLDER,
             },
         )
     )
     users = users_database([("authelia", "config-secret.yaml.j2", secret)])
-    assert sorted(users) == sorted([operator, claude]), (
-        f"expected exactly {operator!r} and {claude!r} in the users database, "
+    assert sorted(users) == sorted([operator, claude, agent]), (
+        f"expected exactly {operator!r}, {claude!r} and {agent!r} in the users database, "
         f"found {sorted(users)}"
     )
     assert digests_are_distinct(users), (
@@ -163,6 +203,27 @@ def test_each_user_renders_the_digest_resolved_for_that_user():
     )
     assert users[operator]["password"] == OPERATOR_PLACEHOLDER, users
     assert users[claude]["password"] == CLAUDE_PLACEHOLDER, users
+    assert users[agent]["password"] == AGENT_PLACEHOLDER, users
+
+
+def test_a_cluster_that_does_not_manage_the_agent_user_renders_no_such_account():
+    """Staging holds no `authelia_agent_password`, so a rendered account would carry no hash."""
+    agent = render_context(K8S_ROLES / "authelia", strict=True)[
+        "authelia_k8s_agent_user"
+    ]
+    secret = yaml_fast.safe_load(
+        render_role_template(
+            "authelia",
+            "config-secret.yaml.j2",
+            {
+                "authelia_k8s_manage_agent_user": False,
+                "authelia_password_hash": OPERATOR_PLACEHOLDER,
+                "authelia_claude_password_hash": CLAUDE_PLACEHOLDER,
+            },
+        )
+    )
+    users = users_database([("authelia", "config-secret.yaml.j2", secret)])
+    assert agent not in users and len(users) == 2, sorted(users)
 
 
 def test_the_hash_read_back_is_keyed_by_username():
@@ -179,3 +240,4 @@ def test_the_hash_read_back_is_keyed_by_username():
     )
     assert "authelia_k8s_existing_users.get(authelia_user" in tasks
     assert "authelia_k8s_existing_users.get(authelia_k8s_claude_user" in tasks
+    assert "authelia_k8s_existing_users.get(authelia_k8s_agent_user" in tasks

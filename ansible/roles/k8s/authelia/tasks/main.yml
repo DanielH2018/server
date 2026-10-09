@@ -21,6 +21,20 @@
       authelia_k8s_manage_claude_user to false for this cluster.
   when: authelia_k8s_manage_claude_user | bool
 
+- name: Fail if the claude-agent credential is missing
+  tags: [config]
+  # Same reason as the claude-ui assert above: the role default is an empty stand-in, and
+  # `authelia crypto hash generate` hashes the empty string into a well-formed digest.
+  ansible.builtin.assert:
+    that:
+      - authelia_agent_password | default('') | length > 0
+    fail_msg: >-
+      authelia_k8s_manage_agent_user is on, but authelia_agent_password is empty. Add it to
+      ansible/vars/secrets.yml, or set authelia_k8s_manage_agent_user to false for this cluster.
+    quiet: true
+  no_log: true
+  when: authelia_k8s_manage_agent_user | bool
+
 - name: Look for an existing Authelia users database in the cluster
   tags: [config]
   # Fetches the whole .data map rather than jsonpath={.data.users_database\.yml}. A key
@@ -76,6 +90,16 @@
     - authelia_k8s_manage_claude_user | bool
     - not authelia_k8s_rehash_passwords | bool
     - authelia_k8s_existing_users.get(authelia_k8s_claude_user, {}).get('password', '') | length > 0
+  no_log: true
+
+- name: Reuse the claude-agent password hash already in the cluster
+  tags: [config]
+  ansible.builtin.set_fact:
+    authelia_agent_password_hash: "{{ authelia_k8s_existing_users[authelia_k8s_agent_user]['password'] }}"
+  when:
+    - authelia_k8s_manage_agent_user | bool
+    - not authelia_k8s_rehash_passwords | bool
+    - authelia_k8s_existing_users.get(authelia_k8s_agent_user, {}).get('password', '') | length > 0
   no_log: true
 
 - name: Hash the Authelia password
@@ -158,10 +182,41 @@
     - authelia_claude_password_hash is not defined
   no_log: true
 
+- name: Hash the claude-agent password
+  tags: [config]
+  # A third one-shot pod, for the reason the claude-ui one is a second: the password reaches
+  # `authelia` over stdin and the in-pod shell, never the pod spec, and no loop folds the three
+  # digests into one registered result.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-agent
+      --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
+      sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
+      --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
+    stdin: "{{ authelia_agent_password }}"
+  register: authelia_k8s_agent_hash
+  become: true
+  changed_when: false
+  no_log: true
+  when:
+    - authelia_k8s_manage_agent_user | bool
+    - authelia_agent_password_hash is not defined
+
+- name: Extract the claude-agent digest
+  tags: [config]
+  ansible.builtin.set_fact:
+    authelia_agent_password_hash: "{{ authelia_k8s_agent_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
+  when:
+    # Same reasoning as the operator digest above.
+    - not ansible_check_mode
+    - authelia_k8s_manage_agent_user | bool
+    - authelia_agent_password_hash is not defined
+  no_log: true
+
 - name: Fail if no password hash could be obtained
   tags: [config]
   # Without this the template renders an empty password and Authelia starts with an account
-  # nobody can log into — a green deploy with a locked portal. Both users are asserted: a
+  # nobody can log into — a green deploy with a locked portal. Every managed user is asserted: a
   # missing claude-ui digest locks out the headless UI tier the same way, and it would
   # otherwise surface much later as a login the browser cannot complete.
   ansible.builtin.assert:
@@ -169,6 +224,8 @@
       - authelia_password_hash | default('') | length > 0
       - not authelia_k8s_manage_claude_user | bool
         or authelia_claude_password_hash | default('') | length > 0
+      - not authelia_k8s_manage_agent_user | bool
+        or authelia_agent_password_hash | default('') | length > 0
     fail_msg: >-
       Could not read or generate an Authelia password hash. Check that the authelia-hash
       pods could pull {{ authelia_k8s_image }}.

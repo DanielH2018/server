@@ -331,20 +331,54 @@ reads that artifact and a memory file the session wrote, after a `claude_code` a
 **Rollback:** `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live
 sessions.
 
-## Slice 5: peers, and the tools that decrypt SOPS (planned)
+## Slice 5: peers, and the tools that decrypt SOPS (homelab-ui login built; peers planned)
 
 **Build:** create a no-sudo `claude` user on daniel-server and daniel-pi for `probe.py`'s ssh
-paths, with a key per host. Give the homelab-ui MCP server a dedicated low-privilege Authelia
-user. Its password stays in SOPS, so `secret_rotation.yml` tracks it, and the role renders it
-into a `0600` file in the agent's home (operator decision, 2026-10-09). Ansible decrypts it as
-the operator, so the agent still never holds the age key.
-`scripts/z2m/set_device_option.sh` and `ansible/roles/k8s/qbittorrent/files/apply_prefs.py` stay operator-run, or
-each gets a lander-style oneshot unit.
+paths, with a key per host. `scripts/z2m/set_device_option.sh` and
+`ansible/roles/k8s/qbittorrent/files/apply_prefs.py` stay operator-run, or each gets a
+lander-style oneshot unit.
+
+**Built, 2026-10-09: the homelab-ui login.** The MCP server logs in as its own Authelia user,
+`claude-agent`, instead of the operator.
+
+- The password is `authelia_agent_password` in SOPS, so `secret_rotation.yml` tracks it (tier
+  `assisted`, like `claude-ui`'s). The operator decided on 2026-10-09 that it stays in SOPS.
+  The `authelia` role hashes it at deploy time, with the same username-keyed read-back as the
+  other two users.
+- The `claude_code` role renders `/var/lib/claude/.config/homelab-ui/credentials.json` with the
+  username, the password and the domain. The file is `0600`, owned by `claude`, and written
+  under `no_log`. Ansible decrypts the three values as the operator, so the agent still never
+  holds the age key.
+- The file carries the domain because `ui_mcp.sh` and `ui_login.py` read it from SOPS for the
+  operator. The agent can already read the domain from the IngressRoutes its read-only
+  kubeconfig covers.
+- `ui_login.py` logs in from that file when it exists and from SOPS otherwise, so the
+  operator's login is unchanged. `ui_mcp.sh` takes the domain from `ui_login.py --domain`.
+- The account is in no group. Grafana maps `admins` to Admin and Headlamp binds `oidc:admins`
+  to cluster read access. `claude-ui` copies the operator's groups on purpose and keeps both.
+- The `access_control` rules are domain-scoped, never `subject:`-scoped, so a group cannot
+  narrow what the account reaches. It reaches every `one_factor` `*.local.<domain>` route from
+  an RFC1918 address, the set the operator's own UI session reaches. It has no TOTP
+  registration, so it cannot open the four `two_factor` routes (code-server, n8n, longhorn and
+  deploy-ui). It has no public name.
+- To switch it off, set `claude_code_agent_user_enabled: false`, which removes the file. To
+  revoke the account, delete the `claude-agent` block from the authelia role's
+  `users_database.yml` template and redeploy. To rotate the password, run `sops` set, then
+  `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`, then apply
+  `claude_code` to rewrite the file.
+
+**Not built, so the check below cannot pass from this slice alone.** `agent_user.yml` installs
+no Node, `playwright-mcp` or Chromium for `claude`. The agent also has no homelab-ui MCP
+registration: the operator's is user-scope in `~/.claude.json`, which
+`agent_operator_config.yml` does not copy.
 
 **Check:** a `probe.py` Pi-plane subcommand works as `claude`, and homelab-ui renders a service
-page.
+page. Until the gap above closes, check the login half as `claude`, after both the `authelia`
+and `claude_code` applies, with
+`uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage`.
 
-**Rollback:** remove the peer users.
+**Rollback:** remove the peer users. For the login, switch the agent user off and delete the
+`claude-agent` block.
 
 ## Slice 6: retire Claude sessions as `ubuntu` (planned)
 

@@ -82,8 +82,11 @@ session, remember-me included.
 
 ## The `claude-ui` user
 
-The users database holds the operator and `claude-ui`, the identity the headless UI tier logs in as
-to reach the `two_factor` services without a code off a phone.
+The users database holds the operator, `claude-ui` and `claude-agent`. `claude-ui` is the identity the
+headless UI tier logs in as to reach the `two_factor` services without a code off a phone.
+`claude-agent` is the agent user's login for the homelab-ui MCP server: no groups, no TOTP. The
+`claude_code` role renders its SOPS password into the agent's home, so a rotation also needs a
+`claude_code` apply. `authelia_k8s_agent_user` in `defaults/main.yml` has the reasoning.
 `authelia_k8s_claude_user` in `defaults/main.yml` has the reasoning, and the TOTP registration
 lives in Authelia's SQLite database rather than the rendered `users_database.yml`, re-seeded from
 the fixed `authelia_claude_totp_secret` every deploy.
