@@ -524,9 +524,9 @@ class Tools:
     snapshot: Callable[[Path, str], contextlib.AbstractContextManager[Path | None]] = (
         gate_snapshot
     )
-    # Which tags another deploy re-rolled after this landing's own; asked only after a failed
-    # gate, and it waits out any such deploy still running before it answers.
-    later_deploys: Callable[..., list[str]] = land_rerolls.later_deploys
+    # The tags another deploy re-rolled after this landing's own, each with the commit that
+    # deploy rendered. Asked only after a failed gate; it waits out any such deploy first.
+    later_deploys: Callable[..., dict[str, str]] = land_rerolls.later_deploys
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     # `deploy_tags.py hosts` reads the checkout; this reads `containers_list` at the merge
     # commit a fast-path landing deploys. None sends the caller to the subprocess.

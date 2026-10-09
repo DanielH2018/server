@@ -100,6 +100,9 @@ class Landing:
         # stamped after this was written by a LATER deploy of the same service, which is how
         # the health verdict tells a re-rolled workload from a broken one (#3812).
         self.deploy_ended_at: float | None = None
+        # The tags `health_verdict` gated a second time after a later deploy re-rolled them,
+        # comma-joined for the verdict line; empty when it did not.
+        self.regated = ""
         # True once a tick attempt returned TICK_STILL_RUNNING: this landing stopped WATCHING
         # a tick that was still applying. Every later read of the deployer's markers is then
         # racing that apply, so `behind_since` set with `hold_sha` empty is the state of a run

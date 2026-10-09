@@ -33,9 +33,11 @@ def test_later_deploys_waits_out_a_deploy_holding_the_service_lock(
     holder = _hold_then_release(
         tmp_path / "server-deploy-radarr.lock", fcntl.LOCK_EX, 0.3
     )
-    assert land_rerolls.later_deploys(["radarr", "sonarr"], None, tmp_path) == [
-        "radarr"
-    ]
+    (tmp_path / "radarr.json").write_text('{"commit": "c0ffee"}')
+    # The commit is read AFTER the wait, so it names what the later deploy rendered.
+    assert land_rerolls.later_deploys(["radarr", "sonarr"], None, tmp_path) == {
+        "radarr": "c0ffee"
+    }
     # It returned only once the holder had let go: a re-gate reads the finished rollout.
     assert not holder.is_alive()
 
@@ -45,10 +47,10 @@ def test_later_deploys_counts_every_tag_while_a_broad_apply_holds_all(
 ):
     monkeypatch.setenv("HOMELAB_DEPLOY_LOCK_DIR", str(tmp_path))
     _hold_then_release(tmp_path / "server-deploy-all.lock", fcntl.LOCK_EX, 0.3)
-    assert land_rerolls.later_deploys(["radarr", "sonarr"], None, tmp_path) == [
-        "radarr",
-        "sonarr",
-    ]
+    assert land_rerolls.later_deploys(["radarr", "sonarr"], None, tmp_path) == {
+        "radarr": "",
+        "sonarr": "",
+    }
 
 
 def test_later_deploys_reads_a_record_stamped_after_the_landings_deploy(
@@ -57,10 +59,12 @@ def test_later_deploys_reads_a_record_stamped_after_the_landings_deploy(
     """The deploy came and went before the check, so only its release record shows it."""
     monkeypatch.setenv("HOMELAB_DEPLOY_LOCK_DIR", str(tmp_path / "locks"))
     since = datetime(2026, 10, 9, 2, 16, 0, tzinfo=UTC).timestamp()
-    (tmp_path / "radarr.json").write_text('{"applied_at": "2026-10-09T02:16:36Z"}')
+    (tmp_path / "radarr.json").write_text(
+        '{"applied_at": "2026-10-09T02:16:36Z", "commit": "c0ffee"}'
+    )
     (tmp_path / "sonarr.json").write_text('{"applied_at": "2026-10-09T02:15:59Z"}')
     assert land_rerolls.later_deploys(
         ["radarr", "sonarr", "lidarr"], since, tmp_path
-    ) == ["radarr"]
+    ) == {"radarr": "c0ffee"}
     # No step-5 time, no comparison: a stamp alone proves nothing.
-    assert land_rerolls.later_deploys(["radarr"], None, tmp_path) == []
+    assert land_rerolls.later_deploys(["radarr"], None, tmp_path) == {}

@@ -44,7 +44,7 @@ def test_a_workload_a_later_deploy_re_rolled_is_gated_again_not_failed(landing):
     fakes = Fakes(
         gate=(False, ["sonarr: 0/1 ready, 0 updated — rollout incomplete"]),
         regate=(True, ["sonarr: healthy"]),
-        later_deploys=["sonarr"],
+        later_deploys={"sonarr": "c0ffee"},
     )
     ln, calls = _deployed(landing, fakes)
     ln.deploy_ended_at = 1234.0
@@ -54,6 +54,21 @@ def test_a_workload_a_later_deploy_re_rolled_is_gated_again_not_failed(landing):
     assert "re-gated after a later deploy of sonarr" in exc.value.detail
     assert [c[0] for c in calls].count("gate") == 2
     assert ("later_deploys", (["sonarr"], 1234.0), {}) in calls
+
+
+def test_a_healthy_re_gate_of_a_commit_without_this_pr_stays_unhealthy(landing, capsys):
+    """The tick's rollback redeploys an older pin: its pods are healthy, this change is gone."""
+    fakes = Fakes(
+        gate=(False, ["sonarr: unhealthy"]),
+        regate=(True, ["sonarr: healthy"]),
+        later_deploys={"sonarr": "0ldc0mm1t"},
+        is_ancestor_of={"0ldc0mm1t": 1},
+    )
+    ln, _ = _deployed(landing, fakes)
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (1, "unhealthy")
+    assert "0ldc0mm1t, which is not proved to contain" in capsys.readouterr().out
 
 
 def test_a_failed_gate_no_later_deploy_explains_stays_unhealthy(landing):
@@ -69,7 +84,7 @@ def test_a_re_rolled_workload_still_broken_on_the_re_gate_stays_unhealthy(landin
     fakes = Fakes(
         gate=(False, ["sonarr: unhealthy"]),
         regate=(False, ["sonarr: RECENT RESTART"]),
-        later_deploys=["sonarr"],
+        later_deploys={"sonarr": "c0ffee"},
     )
     ln, _ = _deployed(landing, fakes)
     with pytest.raises(Outcome) as exc:

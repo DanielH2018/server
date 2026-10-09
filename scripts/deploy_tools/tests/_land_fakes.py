@@ -112,8 +112,9 @@ class Fakes:
     # What the gate returns from its second call onward -- the re-gate after a later deploy.
     # None repeats `gate`.
     regate: tuple[bool, list[str]] | None = None
-    # `tools.later_deploys`: the tags another deploy re-rolled after this landing's own.
-    later_deploys: list[str] = field(default_factory=list)
+    # `tools.later_deploys`: each tag another deploy re-rolled after this landing's own, to
+    # the commit that deploy rendered.
+    later_deploys: dict[str, str] = field(default_factory=dict)
     # What `tools.snapshot` yields: a directory for a snapshot that was taken, None for one
     # that could not be (the tree lock busy, the worktree add failed).
     gate_snapshot: Path | None = Path("/snap")
