@@ -7,19 +7,16 @@ result, so a typo'd directive key reached a live host with `daemon_reload: true`
 success and systemd loading the unit anyway, ignoring the bad line with only a journal warning
 (GitHub issue #948).
 
-Render context = StubUndefined (`scripts.lib.render_guard`) PLUS the OWNING ROLE's
-`defaults/main.yml` loaded as real values, plus `ansible/inventory/group_vars/all.yml`. Bare
-stubs are not enough: `systemd-analyze verify` treats `OnCalendar=STUB` and
-`OnUnitActiveSec=STUB` as parse failures, so 3 of the 17 live timers (gitops-deploy,
-renovate-agent, claude-rc-restart) were red on a clean repo before their role's real schedule
-value was layered in. What still renders as STUB: `inventory_hostname` and `ansible_managed`
-(Ansible magic vars with no plaintext fallback here — both are used only in comments or
-human-facing alert text, never in a directive systemd parses) and any default whose OWN value is
-itself an unrendered Jinja reference to a var this script does not set (e.g.
-`renovate_agent_repo_dir: "/home/{{ sys_user }}/server"` — loading defaults with `yaml.safe_load`
-reads that as a literal string, so the rendered unit carries the literal text `{{ sys_user }}`
-rather than a resolved path; harmless here since a `WorkingDirectory=` value's syntax doesn't
-depend on what's inside it).
+Render context = `lib.render_context`: StubUndefined (`scripts.lib.render_guard`) under the
+OWNING ROLE's `defaults/main.yml` under `ansible/inventory/group_vars/all.yml`, every value
+expanded the way Ansible expands it. Bare stubs are not enough: `systemd-analyze verify` treats
+`OnCalendar=STUB` and `OnUnitActiveSec=STUB` as parse failures, so 3 of the 17 live timers
+(gitops-deploy, renovate-agent, claude-rc-restart) were red on a clean repo before their role's
+real schedule value was layered in. What still renders as STUB: `inventory_hostname` and
+`ansible_managed` (Ansible magic vars with no plaintext fallback here — both are used only in
+comments or human-facing alert text, never in a directive systemd parses). Until #3692 a default
+whose own value referenced another variable (`renovate_agent_repo_dir: "/home/{{ sys_user
+}}/server"`) reached the unit as literal braces; it now arrives as the resolved path.
 
 `systemd-analyze verify`'s EXIT STATUS is ignored — measured on systemd 255.4, it is 0 on
 `SuccessExitStatuss=75` (a typo'd key) and on `TimeoutStartSec=6zz0min` (an unparsable value) on
@@ -70,13 +67,11 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.ansible_jinja_env import template_env
+from lib.render_context import render_context
 from lib.render_guard import (
-    ALL_VARS,
     ANSIBLE,
-    BASE_CONTEXT,
     REPO,
     dump_numbered,
-    load_yaml,
     render_or_error,
 )
 
@@ -107,15 +102,6 @@ def discover_rules() -> list[Path]:
     return sorted(ROLES.rglob("*.rules.j2"))
 
 
-def owning_role_defaults(template: Path) -> Path:
-    """The `defaults/main.yml` of the role that ships `template`.
-
-    Every live unit template sits directly under `<role>/templates/`, so the role directory is
-    always the template's grandparent.
-    """
-    return template.parent.parent / "defaults" / "main.yml"
-
-
 # Values a CALLER passes to a shared template, keyed by template basename. `roles/setup/common`
 # is never run as a role, so it has no defaults to layer in, and its unit pair takes every
 # directive value from the importing role's `vars:` (`tasks/kuma_check_timer.yml`). A bare
@@ -136,20 +122,13 @@ CALLER_CONTEXT: dict[str, dict] = {
 }
 
 
-def render_context(template: Path) -> dict:
-    """StubUndefined base context, plus the owning role's real defaults layered on top.
+def unit_context(template: Path) -> dict:
+    """The context `template` renders with: `lib.render_context`, plus any `CALLER_CONTEXT`.
 
-    Role defaults come last so a role's own value wins over the generic BASE_CONTEXT/all.yml
-    fallback on a name collision (none exist today, by Ansible's role-prefix naming convention).
     A shared template with no owning defaults takes its caller-passed values from
     `CALLER_CONTEXT` instead.
     """
-    return {
-        **BASE_CONTEXT,
-        **load_yaml(ALL_VARS),
-        **load_yaml(owning_role_defaults(template)),
-        **CALLER_CONTEXT.get(template.name, {}),
-    }
+    return render_context(template, overrides=CALLER_CONTEXT.get(template.name, {}))
 
 
 def systemd_verify(unit_path: Path, systemd_analyze_bin: str) -> str | None:
@@ -211,7 +190,7 @@ def check_polkit_rule(template: Path, out_dir: Path, node_bin: str) -> str | Non
     Uses the same StubUndefined + owning-role defaults context as the unit templates: a rule
     interpolates only a user name, which its role's own defaults carry.
     """
-    ctx = render_context(template)
+    ctx = unit_context(template)
     env = template_env(template.parent)
     rendered, err = render_or_error(env, template.name, ctx)
     if rendered is None:
@@ -271,7 +250,7 @@ def main() -> int:
         out_dir = Path(tmp)
         for path in templates:
             rel = path.relative_to(REPO)
-            ctx = render_context(path)
+            ctx = unit_context(path)
             err = check_template(path, ctx, out_dir, systemd_analyze_bin)
             if err:
                 failures += 1

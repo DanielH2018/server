@@ -2,8 +2,8 @@
 """Ansible's variable semantics, reproduced for the k8s manifest render guard.
 
 These are the pieces that decide what a manifest renders WITH — the recursive expansion Ansible
-does on a variable's value, a role's resolved defaults, and the precedence collision the
-validator asserts is empty. The `bool` filter that expansion registers is
+does on a variable's value, and a role's resolved defaults. The layering of those into one
+render context, in Ansible's precedence, is `lib.render_context`. The `bool` filter that expansion registers is
 `lib.ansible_jinja_env.ansible_bool`, that module's light-tier copy, rather than the real
 filters its `register_ansible_filters` gives every render guard.
 """
@@ -20,7 +20,6 @@ from lib.render_guard import SHARED_TPL, load_yaml, make_env
 from lib.repo_paths import K8S_ROLES
 
 __all__ = [
-    "colliding_default_keys",
     "resolve_vars",
     "role_defaults",
 ]
@@ -102,20 +101,3 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
 
 def role_defaults(role: str, base: dict) -> dict:
     return resolve_vars(load_yaml(K8S_ROLES / role / "defaults" / "main.yml"), base)
-
-
-def colliding_default_keys(role_vars: dict, base: dict) -> set:
-    """The keys a role's defaults and the inventory both define — which must be none.
-
-    The render context below is built `{**base, **role_defaults(...)}`, so a role default
-    outranks the group_vars and host_vars merged into `base`. Ansible's own precedence is the
-    reverse: role defaults are the WEAKEST layer and host_vars beat them. A shared key therefore
-    makes this validator render a value a deploy would never produce, and it passes — the
-    manifest is still valid YAML and still schema-checks, just against the wrong number.
-
-    Asserted rather than fixed by swapping the merge order: swapping changes the context of all
-    54 roles at once to correct a collision that does not exist today, where failing loudly
-    costs nothing until one appears. `crowdsec_k8s_image` was hoisted into all.yml exactly this
-    way once, so the hoist that creates one is a real move, not a hypothetical.
-    """
-    return set(role_vars) & set(base)

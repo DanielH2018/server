@@ -51,11 +51,8 @@ from lib.repo_paths import FILTER_PLUGINS
 _sys.path.insert(0, str(FILTER_PLUGINS))
 
 from k8s_autodeploy import is_leftover_dir
-from lib.k8s_context import (
-    colliding_default_keys,
-    resolve_vars,
-    role_defaults,
-)
+from lib.k8s_context import resolve_vars, role_defaults
+from lib.render_context import UnresolvedVarsError, render_context
 from validate.validate_lib.k8s_net_rules import (
     HTTPS_ENTRYPOINT,
     https_route_without_tls,
@@ -125,7 +122,6 @@ __all__ = [
     "SHARED_TPL",
     "SKIP_ROLES",
     "check_template",
-    "colliding_default_keys",
     "crd_schema_error",
     "crd_schema_path",
     "dump_numbered",
@@ -202,24 +198,6 @@ def main() -> int:
     Returns:
         0 if every template rendered, parsed and schema-checked clean; 1 otherwise.
     """
-    # playbook_dir is real, not stubbed: templates use it to build lookup('file', ...) paths
-    # into the Docker roles, and a stubbed value would make those paths unreadable.
-    # group_vars values are resolved against each other first — several reference siblings
-    # (k8s_registry_pull_host is "localhost:{{ k8s_registry_port }}"), and a role default that
-    # reaches one of those needs it already expanded.
-    # daniel-box's host_vars are layered over group_vars, which is Ansible's own precedence.
-    # containers_list was already read from this file (k8s_entries) so that ports and hostnames
-    # render as a deploy would; the rest of the file has to come with it for the same reason.
-    # Without it a var defined only there renders as STUB — `render_gid: 993` reached
-    # jellyfin's and tdarr's securityContext.supplementalGroups as the string "STUB", which
-    # parses as valid YAML and is caught only by the schema check below.
-    base = {
-        **BASE_CONTEXT,
-        **load_yaml(ALL_VARS),
-        **load_yaml(HOST_VARS),
-        "playbook_dir": str(ANSIBLE),
-    }
-    base = resolve_vars(base, base)
     entries = k8s_entries()
 
     roles = role_names(K8S_ROLES)
@@ -267,26 +245,26 @@ def main() -> int:
             failures += 1
             continue
 
-        role_vars = role_defaults(role, base)
-        collisions = colliding_default_keys(role_vars, base)
-        if collisions:
+        # daniel-box's host_vars, over group_vars, over the role's defaults: Ansible's own
+        # precedence (`lib.render_context`). containers_list was already read from that host's
+        # file (k8s_entries) so that ports and hostnames render as a deploy would; the rest of
+        # the file has to come with it for the same reason. Without it a var defined only there
+        # renders as STUB — `render_gid: 993` reached jellyfin's and tdarr's
+        # securityContext.supplementalGroups as the string "STUB", which parses as valid YAML
+        # and is caught only by the schema check below. Strict, because a default that will not
+        # expand would render STUB into a manifest that may still schema-check.
+        try:
+            ctx = render_context(
+                templates[0], overrides={"container_item": entries[role]}, strict=True
+            )
+        except UnresolvedVarsError as exc:
             print(
-                f"  [FAIL] {role}: defaults/main.yml redefines inventory key(s) "
-                f"{sorted(collisions)} — role defaults are Ansible's weakest layer but outrank "
-                f"`base` here, so this renders a value a deploy would not. Rename, or drop the "
-                f"role default and keep the inventory one.",
+                f"  [FAIL] {role}: a variable will not expand, so it would render as STUB: "
+                f"{exc}",
                 file=sys.stderr,
             )
             failures += 1
             continue
-
-        # DECIDED: role defaults are merged LAST here, so they outrank the inventory — the
-        # reverse of Ansible's own precedence, where role defaults are the weakest layer. The
-        # inversion is held harmless by `colliding_default_keys` above rather than corrected,
-        # because swapping the merge order changes the render context of every role at once to
-        # fix a collision that does not exist. Full reasoning in that function's docstring.
-        # Contradict it with a case where the guard passes and the render is still wrong.
-        ctx = {**base, **role_vars, "container_item": entries[role]}
         # A manifest `k8s/manifests` renders from ansible/templates/ because this role ships
         # none of its own. Rendered here under the role's own context, exactly as the
         # deploy renders it -- 25 roles' Service manifests left the tree with their template

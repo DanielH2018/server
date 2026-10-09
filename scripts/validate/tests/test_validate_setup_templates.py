@@ -37,7 +37,7 @@ def known():
 
 @pytest.fixture(scope="module")
 def ctx():
-    return {**v.BASE_CONTEXT, **v.ANSIBLE_RUNTIME_CONTEXT, **v.load_yaml(v.ALL_VARS)}
+    return v.render_context(v.SETUP / "common", overrides=v.ANSIBLE_RUNTIME_CONTEXT)
 
 
 def _rel(path):
@@ -51,12 +51,11 @@ def test_the_census_finds_the_named_setup_templates():
     assert len(found) >= 70
 
 
-def test_every_real_setup_template_renders_with_no_unresolved_variable(ctx, known):
+def test_every_real_setup_template_renders_with_no_unresolved_variable(known):
     """The regression guard: the whole setup plane renders clean against the real tree."""
     bad = {}
     for tpl in v.discover_templates():
-        role_ctx = {**ctx, **v.load_yaml(tpl.parents[1] / "defaults" / "main.yml")}
-        problems = v.check_template(tpl, role_ctx, known)
+        problems = v.check_role_template(tpl, known)
         if problems:
             bad[_rel(tpl)] = problems
     assert not bad, f"setup templates failed to render clean: {bad}"

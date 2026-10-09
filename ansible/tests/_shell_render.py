@@ -20,13 +20,8 @@ names them that way.
 import re
 from pathlib import Path
 
-from lib.k8s_context import resolve_vars
 from lib.repo_paths import ROLES
-from validate.shell_templates import (
-    base_context,
-    discover_templates,
-    template_context,
-)
+from validate.shell_templates import discover_templates, template_context
 from validate.validate_lib.shell_lint import render_template
 
 
@@ -69,22 +64,18 @@ def render_shell_texts(
     For a census at a value the inventory does not hold: set a secret to a sentinel, and every
     script whose render reaches it carries the sentinel, aliases included (#3191).
 
-    The overrides go into the base BEFORE anything resolves, and on top again after.
-    `template_context` resolves a role's defaults against the base alone, so a default aliasing
-    an overridden secret (`x: "{{ some_secret }}"`) would otherwise resolve to the secret's
-    STUB — the trap `_k8s_render._render_texts` names too. The base is resolved here as well,
-    so an all.yml alias arrives expanded rather than as literal braces.
+    `lib.render_context` lays the overrides in before anything resolves and on top again
+    after, so a default aliasing an overridden secret (`x: "{{ some_secret }}"`) carries the
+    override rather than the secret's STUB.
 
     `templates` defaults to every `*.sh.j2` the gate discovers; a test hands it paths under a
     `tmp_path` tree laid out `<plane>/<role>/templates/<name>.sh.j2`.
     """
-    raw = {**base_context(), **overrides}
-    base = resolve_vars(raw, raw)
     texts = []
     for path in discover_templates() if templates is None else templates:
         plane, role = path.parents[2].name, path.parents[1].name
         try:
-            rendered = render_template(path, template_context(path, base, overrides))
+            rendered = render_template(path, template_context(path, overrides))
         except RuntimeError as exc:
             raise AssertionError(f"{plane}/{role}/{path.name}: {exc}") from exc
         texts.append((plane, role, path.name, rendered))
@@ -106,12 +97,11 @@ def rendered_shell_texts() -> tuple[tuple[str, str, str, str], ...]:
     """
     global _TEXTS
     if _TEXTS is None:
-        base = base_context()
         texts = []
         for path in discover_templates():
             plane, role = path.parents[2].name, path.parents[1].name
             try:
-                rendered = render_template(path, template_context(path, base))
+                rendered = render_template(path, template_context(path))
             except RuntimeError as exc:
                 raise AssertionError(f"{plane}/{role}/{path.name}: {exc}") from exc
             texts.append((plane, role, path.name, rendered))

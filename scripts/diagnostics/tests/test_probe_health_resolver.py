@@ -284,16 +284,14 @@ def _rendered_workloads():
 
 
 def _iter_rendered_workloads():
-    validator, base, entries = health._render_context()
+    validator, entries = health._render_context()
     for role_dir in sorted(d for d in validator.K8S_ROLES.iterdir() if d.is_dir()):
         role = role_dir.name
         if role in validator.SKIP_ROLES or role not in entries:
             continue
-        ctx = {
-            **base,
-            **validator.role_defaults(role, base),
-            "container_item": entries[role],
-        }
+        ctx = validator.render_context(
+            role_dir, overrides={"container_item": entries[role]}, strict=True
+        )
         for tpl in sorted(
             p
             for p in (role_dir / "templates").glob("*.j2")
