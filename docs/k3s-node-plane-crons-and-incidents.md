@@ -166,22 +166,27 @@ the `down` with the added and cleared names prefixed. A DOWN that is not a verdi
 failing, or the probe exiting above 1) keeps the recorded set, or records an empty one so the
 first verdict after it still notifies. An `up` clears it.
 
-## Both nodes pin their LAN address, because k3s binds it
+## daniel-box pins its LAN address, because k3s binds it
 
-k3s binds `server_ip` itself: etcd's peer listener on daniel-box and the node IP on an agent. A
-node that takes its address from DHCP cannot start k3s while the gateway's DHCP server is down.
-From the 2026-10-05 23:55 reboot to 2026-10-08 21:55 an internet outage took the gateway's DHCP
-with it. k3s crash-looped every ~6s on `listen tcp 10.0.0.215:2380: bind: cannot assign
-requested address`, and no CronJob fired for ~70h (#3882).
+k3s binds `server_ip` itself, through etcd's peer listener and the apiserver's advertise
+address. A node that takes its address from DHCP cannot start k3s while the gateway's DHCP
+server is down. From the 2026-10-05 23:55 reboot to 2026-10-08 21:55, an internet outage took
+the gateway's DHCP with it. k3s crash-looped every ~6s on `listen tcp 10.0.0.215:2380: bind:
+cannot assign requested address`, and no CronJob fired for ~70h (#3882). eno1 kept carrier
+throughout: syslog has `NIC Link is Up` at 2026-10-05T23:55:15 and no `Link is Down` until
+2026-10-08T21:03:41.
 
 `tasks/static-address.yml` renders `/etc/netplan/90-homelab-static-address.yaml` on the link
-each host names in `k3s_node_static_link`. It switches DHCPv4 off on that link, pins the
-address and a default route via `lan_router_ip`, and leaves IPv6 router advertisements alone.
-DNS never came from the lease on either node, because this role renders `/etc/resolv.conf`.
-The template says why DHCPv4 is off rather than running alongside. The gateway must keep both
-addresses out of its DHCP pool, since with DHCPv4 off nothing renews a lease on them. To apply
-it, run `k3s-bringup.yml --tags node-address` on daniel-box, and the `k3s_agent` join path on
-daniel-server.
+`k3s_node_static_link` names. It switches DHCPv4 off on that link, pins the address and a
+default route via `lan_router_ip`, sets `ignore-carrier`, and leaves IPv6 router
+advertisements alone. DNS never came from the lease, because this role renders
+`/etc/resolv.conf`. The template says why DHCPv4 is off rather than running alongside. The
+gateway must keep the address out of its DHCP pool, since with DHCPv4 off nothing renews a
+lease on it. To apply it, run `k3s-bringup.yml --tags node-address` on daniel-box.
+
+daniel-server is still on DHCP. The agent play reaches it over SSH through a dynamic
+`include_role`, which `--tags node-address` cannot select, and a `netplan apply` there would
+reconfigure the link the session uses.
 
 ## Two smaller traps
 

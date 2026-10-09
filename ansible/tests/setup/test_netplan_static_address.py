@@ -1,4 +1,4 @@
-"""Guard: each k3s node pins server_ip statically on the link that carries it, with DHCPv4 off.
+"""Guard: the k3s server pins server_ip statically on the link that carries it, with DHCPv4 off.
 
 WHY THIS EXISTS. k3s binds server_ip itself, so a node whose address comes from DHCP cannot
 start k3s while the gateway's DHCP server is down. A WAN outage spanning the 2026-10-05 reboot
@@ -12,8 +12,9 @@ from lib import yaml_fast
 from _setup_render import render_setup_text
 
 _TEMPLATE = "netplan-static-address.yaml.j2"
-# Both k3s nodes bind server_ip; a node missing from this set is a node left on DHCP.
-_NODES = ("daniel-box", "daniel-server")
+# The server node, the one static-address.yml runs on. daniel-server is still on DHCP; the
+# agent path cannot apply the pin safely (static-address.yml's header says why).
+_NODES = ("daniel-box",)
 
 
 def static_address_problems(
@@ -31,6 +32,8 @@ def static_address_problems(
     problems = []
     if iface.get("dhcp4") is not False:
         problems.append("dhcp4 is not false")
+    if iface.get("ignore-carrier") is not True:
+        problems.append("ignore-carrier is not true")
     if [a.split("/")[0] for a in iface.get("addresses", [])] != [server_ip]:
         problems.append(f"addresses are {iface.get('addresses')}, not {server_ip}")
     if not any(
@@ -47,7 +50,7 @@ def _host_vars(host: str) -> dict:
     )
 
 
-def test_every_k3s_node_renders_its_own_address_pinned() -> None:
+def test_the_server_node_renders_its_own_address_pinned() -> None:
     router = yaml_fast.safe_load(
         (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
     )["lan_router_ip"]
@@ -68,6 +71,7 @@ network:
   ethernets:
     eno1:
       dhcp4: false
+      ignore-carrier: true
       addresses: ["10.0.0.215/24"]
       routes: [{to: default, via: 10.0.0.1, metric: 100}]
 """

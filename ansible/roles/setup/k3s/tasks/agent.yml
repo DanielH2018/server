@@ -95,12 +95,6 @@
     checksum: "sha256:{{ k3s_install_script_sha256 }}"
   become: true
 
-# Before the install, so a fresh agent's first k3s start already has an address the gateway's
-# DHCP server cannot take away. static-address.yml has the incident (#3882).
-- name: Pin the agent's LAN address
-  ansible.builtin.import_tasks: static-address.yml
-  tags: [k3s_agent]
-
 - name: Keep k3s-agent's own output in a file the journald cap cannot drop
   ansible.builtin.import_tasks: unit-logging.yml
   tags: [k3s_agent]

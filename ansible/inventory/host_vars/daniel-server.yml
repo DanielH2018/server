@@ -1,9 +1,5 @@
 ---
 server_ip: 10.0.0.161
-# The link carrying server_ip. setup/k3s pins the address on it statically, so k3s still
-# starts when the gateway's DHCP server is down (#3882). Confirm the gateway keeps server_ip
-# out of its DHCP pool before applying it: with DHCPv4 off, nothing renews a lease on it.
-k3s_node_static_link: enp88s0
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.
 has_igpu: true

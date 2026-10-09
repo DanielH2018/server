@@ -1,8 +1,10 @@
 ---
 # Pin the node's LAN address statically, so k3s does not depend on the gateway's DHCP server
-# to start. Imported by main.yml for the server and by agent.yml for an agent; both bind
-# server_ip, and both crash-loop without it. templates/netplan-static-address.yaml.j2 has the
-# incident (#3882) and why DHCPv4 is switched off rather than kept alongside.
+# to start. Imported by main.yml, so it runs on the server node only: the agent play reaches
+# daniel-server through a dynamic include_role over SSH, where `--tags node-address` cannot
+# select it and `netplan apply` would reconfigure the link the session rides on.
+# templates/netplan-static-address.yaml.j2 has the incident (#3882) and why DHCPv4 is switched
+# off rather than kept alongside.
 #
 # No-op where `k3s_node_static_link` is empty. Set it in host_vars to the link that carries
 # server_ip, and only after the gateway reserves that address (the template names why).
