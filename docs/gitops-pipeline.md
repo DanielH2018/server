@@ -703,12 +703,7 @@ stay).
       permanent line per routine landing. `gitops_state.py clear-owed k8s_unapplied <svc>` is the
       hand clear, for a change that was REVERTED rather than applied, or for a shared role
       with a caller nothing can prove applied.
-      A demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
-      `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm
-      after it resets the tree, so a marker written there would describe a range that is no
-      longer merged. A contention arm takes the line back with the `manual_plane` lines beside
-      it; a failed broad apply keeps it, because that arm leaves the range merged. Any tick that
-      deploys the service clears the line; an operator's own
+      Any tick that deploys the service clears the line; an operator's own
       `./scripts/deploy.sh` is invisible to the deployer, so it clears with
       `gitops_state.py clear-owed k8s_deferred <svc>`, the same shape `clear-owed manual_plane` has.
     - **A failure writes `hold_sha` and adds `ansible/deploy.yml <bumps>` to `hold_plane`**,
@@ -1283,10 +1278,6 @@ what it recorded.
   tick by `deploy_k8s_owed.drop_deleted_k8s_unapplied` (#3569), which `reconcile` runs right
   after `deploy_k8s_owed.discharge_k8s_unapplied`. It asks the same helper `plan_tick` uses,
   `deploy_k8s_owed.k8s_roles_deleted_at`, at `HEAD` instead of at origin.
-- The demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
-  `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm after
-  it resets the tree. A contention arm takes the line back with the `manual_plane` lines beside
-  it. A failed broad apply keeps it, because that arm leaves the range merged.
 - Every tick DISCHARGES a `k8s_unapplied` line whose service has since been deployed
   (`deploy_k8s_owed.discharge_k8s_unapplied`), from the service's release record and one `git
   merge-base --is-ancestor`. That is what drops the line for an operator's own `deploy.sh`,

@@ -11,9 +11,10 @@ guard reads the pre-repair state. Every other order is safe.
 - `scripts/dev/pytest_shard.py --record`. Runs the full serial suite and writes the weights
   only if it passed. No test in the suite reads the weights table for staleness, so the
   precondition cannot refuse to clear itself. Not deadlocked.
-- `scripts/docs/gen_doc_fragments.py`. Writes unconditionally. Its guard,
+- `scripts/docs/gen_doc_fragments.py`. Writes unconditionally, under `--fix` too. Its guard,
   `test_every_committed_fragment_matches_what_the_generator_writes_now`, runs at commit time
-  over the regenerated output. Not deadlocked.
+  over the regenerated output — the `regen-doc-fragments` prek hook sits above
+  `static-ratchet-tests` so the order holds. Not deadlocked.
 - `scripts/dev/tighten_ratchets.py --tighten`. Lowers each ratchet allowlist entry to what
   its file is today, unconditionally and without running the suite. Its guard, the length and
   monkeypatch ratchets in `test_module_length_ratchet.py`, runs at commit time over the

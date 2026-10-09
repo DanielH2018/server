@@ -411,7 +411,8 @@ def main(argv=None) -> int:
         f"  ROLES_WITH_A_DEFAULT_SERVICE in "
         f"ansible/tests/k8s/test_shared_manifest_defaults.py — add {args.name}, since it "
         f"takes the shared default Service{route_census}.\n"
-        f"  uv run python scripts/docs/gen_doc_fragments.py, then commit what it writes."
+        f"The regen-doc-fragments prek hook rewrites the auto-deploy coverage fragment on "
+        f"your commit and fails once: stage what it wrote and commit again."
     )
     return 0
 

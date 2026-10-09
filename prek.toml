@@ -375,6 +375,30 @@ language = "system"
 pass_filenames = false
 files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py)$"
 
+# Rewrites a stale docs fragment (docs/assets/generated/fragments/) in the commit that moves
+# one of its tunables, and fails like a formatter so the author stages the fragment and commits
+# again (#3827). Before it, `static-ratchet-tests` ran
+# test_every_committed_fragment_matches_what_the_generator_writes_now at commit time, which
+# only failed, and the root CLAUDE.md carried a row teaching the hand repair. It sits above
+# `static-ratchet-tests` so that test reads the rewritten fragment.
+#
+# `files` is every input the generator reads: role defaults and templates (the auto-deploy
+# coverage walks every k8s role's defaults, which no fragment header lists), the inventory,
+# the filter plugin, `ansible/secret_rotation.yml`, the deployer's deploy_changes.py, and the
+# Python under scripts/ that reads or renders a fragment. The fragments themselves match too,
+# so a hand edit is reverted in the same commit. That makes the hook fire on the docs-refresh
+# cron's commit, which stages docs/assets/generated/; build_docs.py regenerates the fragments
+# into that directory before the cron commits, so there it writes nothing and exits 0.
+#
+# Cost, measured: 0.2s wall for a full run.
+[[repos.hooks]]
+id = "regen-doc-fragments"
+name = "Docs fragments match their sources"
+entry = "uv run --frozen python scripts/docs/gen_doc_fragments.py --fix"
+language = "system"
+pass_filenames = false
+files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|ansible/[^/]+\\.ya?ml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
+
 # Re-hashes a verified section whose citation SET an edit changed, in the commit making the
 # edit, and fails like a formatter so the author stages what it wrote. It refuses any section
 # whose recorded atom MOVED -- that is content drift, and re-reading the prose is a human's

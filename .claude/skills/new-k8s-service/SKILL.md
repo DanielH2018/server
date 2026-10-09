@@ -54,7 +54,8 @@ scaffolder names both when it finishes:
 - `ROLES_WITH_A_DEFAULT_SERVICE` in `ansible/tests/k8s/test_shared_manifest_defaults.py`, and
   `ROLES_WITH_A_DEFAULT_INGRESSROUTE` beside it for a routed role.
 
-Then `uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes.
+The new role moves the auto-deploy coverage docs fragment. The `regen-doc-fragments` prek hook
+rewrites it on your commit and fails once, so stage what it wrote and commit again.
 
 **The pod-spec shell comes from two shared macros, which the scaffolder already calls.** A
 Deployment template calls `spec_shell(strategy)` under `spec:` and `pod_shell(priority_class,
