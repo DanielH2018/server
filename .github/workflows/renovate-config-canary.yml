@@ -45,9 +45,13 @@ jobs:
         with:
           persist-credentials: false # nothing here pushes; the repo is public, so the fetch needs no token
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      # The pinned Node, from the action ci.yml's `renovate-config` job uses, so the two run the
+      # validator under one Node release.
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
         with:
-          node-version: "24.21.0"
+          python: "false"
+          uv: "false"
+          node: "true"
 
       - name: Validate renovate.json
         run: scripts/validate/renovate_config.sh renovate.json

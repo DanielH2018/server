@@ -11,7 +11,7 @@ Two failure modes, both silent:
     direction.
 
 `.python-version` is the source of truth this pin follows. test_python_version_pins_in_lockstep
-already couples it to both workflows.
+already couples it to the CI pin in .github/actions/setup/action.yml.
 """
 
 import re

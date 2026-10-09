@@ -301,13 +301,14 @@ files = "^\\.github/workflows/[^/]+\\.ya?ml$"
 # The security half of workflow linting, which actionlint does not do: a checkout that leaves
 # the token on disk, a `${{ }}` expression injected into a `run:` shell, an unpinned action, a
 # `pull_request_target` reading the PR head. Offline audits
-# only: the online ones ask GitHub's API and would need a token on every commit.
+# only: the online ones ask GitHub's API and would need a token on every commit. It also audits
+# the local composite actions under .github/actions/, which actionlint does not lint at all.
 [[repos.hooks]]
 id = "zizmor"
 name = "Audit GitHub Actions workflows (zizmor)"
 entry = "uv run --frozen zizmor --no-progress --no-online-audits"
 language = "system"
-files = "^\\.github/workflows/[^/]+\\.ya?ml$"
+files = "^\\.github/(workflows/[^/]+|actions/[^/]+/action)\\.ya?ml$"
 
 # Gate that the secret-rotation registry (ansible/secret_rotation.yml) stays in sync with the
 # encrypted secrets.yml — fails the commit if a secret was added/removed without running

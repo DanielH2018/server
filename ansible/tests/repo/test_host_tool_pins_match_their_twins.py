@@ -7,7 +7,7 @@ whatever PyPI served on provisioning day, and each version is already chosen som
 - ansible-core: pyproject.toml's dev group (`ansible-core==`), the env the tests and
   `uv run ansible-playbook` resolve;
 - ansible-lint: prek.toml's `ansible/ansible-lint` rev, the hook's own version;
-- prek: ci.yml's `pip install prek==`, the runner's copy.
+- prek: the CI setup action's `pip install prek==`, the runner's copy.
 
 Two copies is the failure class `test_vale_matches_the_ci_pin.py` records: a Renovate bump that
 rewrites one copy leaves the other behind, and both a green CI and a green host are consistent
@@ -29,7 +29,7 @@ HOST_REL = "ansible/roles/setup/initial_setup/tasks/host-basics.yml"
 TWINS = (
     ("ansible-core", "pyproject.toml", r'"ansible-core==([\d.]+)"'),
     ("ansible-lint", "prek.toml", r'ansible/ansible-lint"\s+rev\s*=\s*"v([\d.]+)"'),
-    ("prek", ".github/workflows/ci.yml", r"pip install prek==([\d.]+)"),
+    ("prek", ".github/actions/setup/action.yml", r"pip install prek==([\d.]+)"),
 )
 
 

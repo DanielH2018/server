@@ -10,6 +10,10 @@ The scratch repository itself comes from `lib.git_testing`.
 The script is extracted from the workflow and run with the step's own `env:` block, so a
 variable the step declares (`FULL_SWEEP_PATHS`) reaches it the way the runner supplies it, and
 a `${{ }}` expression in that block is replaced by the caller's value rather than passed raw.
+
+The step calls `scripts/dev/pr_changed_files.sh` through `$GITHUB_WORKSPACE`, which on the
+runner is the checkout it stands in. Here it is this repository, so the scratch clone runs the
+live script without carrying a copy of it.
 """
 
 import subprocess
@@ -88,6 +92,7 @@ def run_step(
         env[key] = "master" if "${{" in str(value) else str(value)
     env["BASE_REF"] = "master"
     env["RUNNER_TEMP"] = str(runner_tmp)
+    env["GITHUB_WORKSPACE"] = str(REPO)
     env["GITHUB_OUTPUT"] = str(output)
     proc = run(["bash", "-c", script], cwd=repo, env=env)
     return proc, output.read_text()

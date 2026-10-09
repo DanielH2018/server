@@ -5,8 +5,9 @@ move in lockstep.
 
 A Dockerfile Renovate cannot see ages silently, and a `FROM` without a tag or digest is rebuilt
 against whatever upstream pushed last. The lockstep guards cover n8n (two Dockerfiles),
-shellcheck-py (prek.toml and pyproject.toml) and the Python version (`.python-version` and both
-workflows), each of which Renovate bumps as separate PRs.
+shellcheck-py (prek.toml and pyproject.toml), and the Python and Node versions (`.python-version`
+and every copy in the workflows and the CI setup action), each of which Renovate bumps as separate
+PRs.
 
 Run: uv run pytest scripts/tests/test_renovate_dockerfiles.py
 """
@@ -333,58 +334,92 @@ def test_shellcheck_py_pins_in_lockstep() -> None:
     )
 
 
-def test_python_version_pins_in_lockstep() -> None:
-    """ci.yml, image-smoke.yml, and .python-version must pin the same Python minor version.
+# Where the CI toolchain pins live since #3733. Every workflow and local action is scanned, so a
+# copy that reappears in a workflow is compared too, but the action must hold exactly one of each:
+# that is the member a scan finding nothing would otherwise pass over.
+SETUP_ACTION = ".github/actions/setup/action.yml"
 
-    A single Renovate customManager scans every workflow file (renovate.json), so one bump PR is
-    meant to edit both `python-version:` pins together; nothing else asserts the coupling actually
-    held. A skew would run the scripts suite under one interpreter in CI and boot-smoke changed
-    images under another — a silent test/runtime mismatch. `.python-version` (the interpreter host
-    `uv run` selects) is tracked by a SEPARATE Renovate manager (built-in pyenv) whose PR does NOT
-    automerge, so it can lag the workflow bump — leaving the host on 3.N while CI moves to 3.N+1.
-    Compared on major.minor (pyenv may carry a patch the workflow pin omits). Mirrors the
-    shellcheck-py / portainer lockstep tests above.
-    """
-    ci = (_REPO / ".github/workflows/ci.yml").read_text()
-    smoke = (_REPO / ".github/workflows/image-smoke.yml").read_text()
-    dotver = (_REPO / ".python-version").read_text().strip()
-    c = re.search(r'python-version:\s*"([^"]+)"', ci)
-    s = re.search(r'python-version:\s*"([^"]+)"', smoke)
-    assert c, "python-version pin not found in ci.yml"
-    assert s, "python-version pin not found in image-smoke.yml"
-    assert c.group(1) == s.group(1), (
-        f"python-version pins drifted: ci.yml {c.group(1)} vs image-smoke.yml {s.group(1)} — bump "
-        f"both together (they must run the scripts suite and image smoke on the same interpreter)."
+
+def _ci_files() -> dict[str, str]:
+    paths = sorted((_REPO / ".github/workflows").glob("*.yml")) + sorted(
+        (_REPO / ".github/actions").glob("*/action.yml")
     )
+    return {p.relative_to(_REPO).as_posix(): p.read_text() for p in paths}
 
-    def _minor(v: str) -> str:
-        return ".".join(v.split(".")[:2])
 
-    assert _minor(dotver) == _minor(c.group(1)), (
-        f"python-version drifted: .python-version {dotver} vs the workflows' {c.group(1)} — bump "
+def ci_pins(key: str, files: dict[str, str]) -> list[tuple[str, str]]:
+    """(file, version) for EVERY quoted `<key>: "X"` in each file, not just the first (#3731)."""
+    return [
+        (name, version)
+        for name, text in files.items()
+        for version in re.findall(rf'{key}:\s*"([^"]+)"', text)
+    ]
+
+
+def _minor(v: str) -> str:
+    return ".".join(v.split(".")[:2])
+
+
+def test_a_drifted_later_copy_is_found() -> None:
+    """The #3731 red proof: a second copy that differs must show up as a second version."""
+    files = {
+        "ci.yml": 'a:\n  python-version: "3.14.7"\nb:\n  python-version: "3.14.6"\n',
+        "smoke.yml": 'c:\n  python-version: "3.14.7"\n',
+    }
+    assert {v for _f, v in ci_pins("python-version", files)} == {"3.14.7", "3.14.6"}
+
+
+def test_agreeing_copies_read_as_one_version() -> None:
+    files = {
+        "ci.yml": 'a:\n  python-version: "3.14.7"\nb:\n  python-version: "3.14.7"\n'
+    }
+    assert {v for _f, v in ci_pins("python-version", files)} == {"3.14.7"}
+
+
+def test_python_version_pins_in_lockstep() -> None:
+    """Every CI `python-version:` and `.python-version` must pin the same Python.
+
+    One Renovate customManager scans every workflow and local action (renovate.json), so one
+    bump PR is meant to edit every copy together. A skew would run the scripts suite under one
+    interpreter in CI and boot-smoke changed images under another. `.python-version` (the
+    interpreter host `uv run` selects) is tracked by a SEPARATE Renovate manager (built-in
+    pyenv) whose PR does NOT automerge, so it can lag the CI bump. That half is compared on
+    major.minor, since `.python-version` stays two-part on purpose.
+    """
+    pins = ci_pins("python-version", _ci_files())
+    in_action = [v for f, v in pins if f == SETUP_ACTION]
+    assert len(in_action) == 1, (
+        f"{SETUP_ACTION} should hold exactly one python-version pin, found {in_action}"
+    )
+    versions = {v for _f, v in pins}
+    assert len(versions) == 1, (
+        f"python-version pins drifted: {pins} — bump every copy together (they must run the "
+        f"scripts suite and image smoke on the same interpreter)."
+    )
+    dotver = (_REPO / ".python-version").read_text().strip()
+    assert _minor(dotver) == _minor(in_action[0]), (
+        f"python-version drifted: .python-version {dotver} vs CI's {in_action[0]} — bump "
         f"the pyenv .python-version to match (its Renovate PR doesn't automerge, so it can lag)."
     )
 
 
 def test_node_version_pins_in_lockstep() -> None:
-    """ci.yml and renovate-config-canary.yml must pin the same three-part Node release.
+    """Every CI `node-version:` must pin the same three-part Node release.
 
-    The node customManager scans every workflow file. One depName groups both files into one
-    bump PR; this asserts the coupling held, the way the python test above does. Both jobs run
-    the same `renovate_config.sh`, so a skew would validate renovate.json under two Node
-    releases. Three-part, because `\\d+` read the major alone and the runner then installed
-    whatever 24.x the toolcache held that day.
+    ci.yml's renovate-config job and renovate-config-canary.yml both run `renovate_config.sh`,
+    so a skew would validate renovate.json under two Node releases. Three-part, because `\\d+`
+    read the major alone and the runner then installed whatever 24.x the toolcache held that
+    day.
     """
-    ci = (_REPO / ".github/workflows/ci.yml").read_text()
-    canary = (_REPO / ".github/workflows/renovate-config-canary.yml").read_text()
-    c = re.search(r'node-version:\s*"([^"]+)"', ci)
-    k = re.search(r'node-version:\s*"([^"]+)"', canary)
-    assert c, "node-version pin not found in ci.yml"
-    assert k, "node-version pin not found in renovate-config-canary.yml"
-    assert c.group(1) == k.group(1), (
-        f"node-version pins drifted: ci.yml {c.group(1)} vs renovate-config-canary.yml "
-        f"{k.group(1)} — bump both together (one Renovate group edits both)."
+    pins = ci_pins("node-version", _ci_files())
+    in_action = [v for f, v in pins if f == SETUP_ACTION]
+    assert len(in_action) == 1, (
+        f"{SETUP_ACTION} should hold exactly one node-version pin, found {in_action}"
     )
-    assert c.group(1).count(".") == 2, (
-        f"node-version {c.group(1)} is not a full release — a major alone floats on the toolcache"
+    versions = {v for _f, v in pins}
+    assert len(versions) == 1, (
+        f"node-version pins drifted: {pins} — bump every copy together."
+    )
+    assert in_action[0].count(".") == 2, (
+        f"node-version {in_action[0]} is not a full release — a major alone floats on the toolcache"
     )

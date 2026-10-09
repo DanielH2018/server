@@ -1,0 +1,114 @@
+name: Set up the CI toolchain
+description: >-
+  Python, uv, the Ansible collections cache, prek and Node, each behind an input. The one place
+  a CI job's toolchain pins live, so a Renovate bump edits one line rather than one per job.
+
+# Every pin below is a LITERAL in a step, never an input default. renovate.json's python, node
+# and prek custom managers match the quoted value after the `python-version` and `node-version`
+# keys and the version after `pip install prek==`; a `default:` would read as none of them and
+# age silently. That is also why
+# no job can ask for a different version: a second version is a second pin, which is the
+# duplication this action exists to remove.
+#
+# The pins are three-part. A two-part `python-version:` or `node-version:` resolves the patch
+# from whatever the runner image's toolcache holds that day, while a three-part one moves only
+# through Renovate.
+#
+# The caller checks the repository out first. A local action is a file in the checkout, so it
+# cannot run before one, and each job's checkout differs anyway (fetch-depth).
+#
+# DECIDED: callers write `uses: ./.github/actions/setup` with a `zizmor: ignore[self-repository]`
+# comment, not GitHub's `$/.github/actions/setup` form (added 2026-07-30). zizmor 1.30.1 asks for
+# `$/`, but the pinned actionlint rejects it as "ref is missing", and actionlint is the hook that
+# validates each caller's `with:` keys against the inputs below. Measured 2026-10-09. Switch to
+# `$/` and drop the ignores once a Renovate bump gives actionlint the syntax.
+
+inputs:
+  python:
+    description: Install the pinned Python.
+    default: "true"
+  uv:
+    description: Install uv with its download cache keyed on uv.lock. Needs `python`.
+    default: "true"
+  galaxy:
+    description: Restore and save the Ansible collections cache (ansible/collections).
+    default: "false"
+  prek-cache-key:
+    description: >-
+      Install the pinned prek and cache its hook environments under this key prefix. Empty
+      skips prek. Each job passes its own prefix, because two jobs building different hook
+      environments under one key overwrite each other's entry every run.
+    default: ""
+  node:
+    description: Install the pinned Node.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - if: inputs.python == 'true'
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      with:
+        python-version: "3.14.7"
+
+    - name: Install uv
+      if: inputs.uv == 'true'
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0  # no floating major tag is published; pin the exact release
+      with:
+        # Most prek hooks shell out to `uv run`, which resolves the whole `dev` group
+        # (ansible-core, pytest, docker, flask, ruff, ty, shellcheck-py) before the first one
+        # executes. Without this the download is repaid on every run. Keyed on uv.lock by
+        # the action itself, so a lock change invalidates it exactly.
+        enable-cache: true
+
+    # Several ansible/tests read the Galaxy collections, and the ansible-lint hook's own entry
+    # runs `ansible-galaxy collection install` before linting — warm that is a 0.4s no-op, cold
+    # a ~40 MB download. One key for every job that asks, so they share one entry.
+    - name: Cache Ansible collections
+      if: inputs.galaxy == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ansible/collections
+        key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
+
+    # prek bootstraps one isolated environment per remote hook repo whenever its cache is
+    # cold — uncached, that is every CI run. Worth ~14s in the `hooks` job (the step measured
+    # 141s before these caches and 127s after). It is much cheaper on the runner than it is on
+    # a workstation: the `gitleaks` hook is `language = "golang"`, and where daniel-box has no
+    # Go and makes prek fetch a ~270 MB managed toolchain to build gitleaks from source (220s
+    # cold, for a scan that takes 0.05s), the runner image ships Go preinstalled and prek uses
+    # it. Hence a 45 MB cache rather than a 350 MB one.
+    #
+    # Only the environment dirs are cached. `~/.cache/prek/cache` is prek's own pip/uv
+    # DOWNLOAD cache — pure redundancy once the envs it built are themselves restored, and
+    # (~500 MB on a machine that does fetch a toolchain) large enough that carrying it would
+    # eat the saving in transfer time.
+    #
+    # restore-keys is safe because prek's env dirs are content-addressed
+    # (hooks/<language>-<hash>): a stale entry from an older prek.toml is ignored rather than
+    # reused, so a partial hit still lets the UNCHANGED hooks skip their rebuild when one rev
+    # bumps. The fresh key then saves the union. The second restore-key reaches the `hooks`
+    # job's `prek-` entry, so a job with its own prefix still gets a warm start on a branch
+    # where its own entry does not exist yet; for the `hooks` job it repeats the first.
+    - name: Cache prek hook environments
+      if: inputs.prek-cache-key != ''
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cache/prek/repos
+          ~/.cache/prek/hooks
+          ~/.cache/prek/tools
+        key: ${{ inputs.prek-cache-key }}-${{ runner.os }}-${{ hashFiles('prek.toml') }}
+        restore-keys: |
+          ${{ inputs.prek-cache-key }}-${{ runner.os }}-
+          prek-${{ runner.os }}-
+
+    - name: Install prek
+      if: inputs.prek-cache-key != ''
+      shell: bash
+      run: pip install prek==0.5.3  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+
+    - if: inputs.node == 'true'
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      with:
+        node-version: "24.21.0"

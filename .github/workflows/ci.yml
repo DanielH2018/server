@@ -131,8 +131,7 @@ jobs:
     # versioned label through the `github-runners` datasource, so the image moves in a PR that
     # runs these hooks on it first. The alias resolved to ubuntu-24.04 when this was
     # pinned (2026-09-21), so the pin changed nothing on the day. The same reasoning covers
-    # `python-version:` and `node-version:` below — a two-part pin resolves to whatever patch
-    # the toolcache holds that day, while a three-part one moves only through Renovate.
+    # the `python-version:` and `node-version:` pins in .github/actions/setup/action.yml.
     # Every `runs-on` in .github/workflows is a versioned label, ENFORCED by
     # the `workflow-runners-are-pinned` row of ansible/tests/repo/test_census_rows_text.py.
     runs-on: ubuntu-26.04
@@ -143,48 +142,11 @@ jobs:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      # Python, uv and prek, with their caches. The pins and the reasoning behind each cache
+      # live in the action. No Galaxy cache: see the DECIDED block above.
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
         with:
-          python-version: "3.14.7"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0  # no floating major tag is published; pin the exact release
-        with:
-          # Most prek hooks shell out to `uv run`, which resolves the whole `dev` group
-          # (ansible-core, pytest, docker, flask, ruff, ty, shellcheck-py) before the first one
-          # executes. Without this the download is repaid on every run. Keyed on uv.lock by
-          # the action itself, so a lock change invalidates it exactly.
-          enable-cache: true
-
-      # prek bootstraps one isolated environment per remote hook repo whenever its cache is
-      # cold — uncached, that is every CI run. Worth ~14s here (the step measured 141s before
-      # these caches and 127s after). It is much cheaper on the runner than it is on a
-      # workstation: the `gitleaks` hook is `language = "golang"`, and where daniel-box has no
-      # Go and makes prek fetch a ~270 MB managed toolchain to build gitleaks from source
-      # (220s cold, for a scan that takes 0.05s), the runner image ships Go preinstalled and prek
-      # uses it. Hence a 45 MB cache rather than a 350 MB one.
-      #
-      # Only the environment dirs are cached. `~/.cache/prek/cache` is prek's own pip/uv
-      # DOWNLOAD cache — pure redundancy once the envs it built are themselves restored, and
-      # (~500 MB on a machine that does fetch a toolchain) large enough that carrying it would
-      # eat the saving in transfer time.
-      #
-      # restore-keys is safe here because prek's env dirs are content-addressed
-      # (hooks/<language>-<hash>): a stale entry from an older prek.toml is ignored rather
-      # than reused, so a partial hit still lets the UNCHANGED hooks skip their rebuild when
-      # one rev bumps. The fresh key then saves the union.
-      - name: Cache prek hook environments
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/prek/repos
-            ~/.cache/prek/hooks
-            ~/.cache/prek/tools
-          key: prek-${{ runner.os }}-${{ hashFiles('prek.toml') }}
-          restore-keys: prek-${{ runner.os }}-
-
-      - name: Install prek
-        run: pip install prek==0.5.3  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+          prek-cache-key: prek
 
       # validate-unit-templates is `language = "system"`, so it runs whatever `systemd-analyze`
       # is on PATH — unverified on the runner image before this ran once. This step exists so a
@@ -226,14 +188,15 @@ jobs:
       # filenames, and a hook that walks the tree when given none then does so. `ansible-lint` is
       # that hook, and it runs in its own job now — see the warning on the identical step there.
       #
-      # `A...B` (three dots) diffs against the merge base, so this is the PR's own changes and not
-      # whatever else landed on master meanwhile.
+      # scripts/dev/pr_changed_files.sh owns the fetch, the merge-base diff and the rule that a
+      # deletion or a FULL_SWEEP_PATHS change forces the full sweep; the `ansible_lint` job
+      # calls the same script. What stays here is this job's own list and its empty-merge check.
       - name: Collect this PR's changed files
         id: changed
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
-          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch below
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch in the script
           # A change to one of these is a change to what a hook CHECKS, not to a file it checks,
           # and the scoped run cannot see that: the hook's `files` regex matches the code, so a
           # PR editing only the config ran that hook against nothing and master's full sweep
@@ -257,43 +220,28 @@ jobs:
           # ansible/roles/setup/initial_setup/tasks/host-basics.yml is deliberately NOT here:
           # it is not the binary CI runs, and test_vale_matches_the_ci_pin.py already forces a
           # bump to move both in one commit.
+          #
+          # The setup action carries the prek pin, which changes how every hook runs, as a
+          # prek.toml rev bump does. The changed-files script decides what this job checks. Both
+          # lived in this file until #3713 and #3714 moved them out, and they stay listed so an
+          # edit to either still sweeps the whole tree on its own PR.
           FULL_SWEEP_PATHS: |
             prek.toml
             .vale.ini
             styles/config/vocabularies/Homelab/accept.txt
             .github/workflows/ci.yml
+            .github/actions/setup/action.yml
+            scripts/dev/pr_changed_files.sh
             .shellcheckrc
             .gitleaks.toml
         run: |
           set -euo pipefail
-          # The checkout runs with persist-credentials: false (zizmor artipacked), and the repo is
-          # private, so a bare fetch has no credential and dies on "could not read Username". The
-          # token rides in a one-shot header the way actions/checkout itself sends it; nothing is
-          # written to .git/config.
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
-            fetch --no-tags origin "$BASE_REF"
-          # --no-renames so a rename is reported as its D + A halves rather than one R entry:
-          # the D is what trips the full-sweep fallback below, which is the behaviour we want.
-          base="origin/$BASE_REF...HEAD"
-          mapfile -t deleted < <(git diff --name-only --no-renames --diff-filter=D "$base")
-          # --diff-filter=d (lowercase) drops deletions: a removed file is still "changed", but
-          # passing a path that no longer exists is a hook error, not a lint finding.
-          git diff --name-only --no-renames --diff-filter=d "$base" > "$RUNNER_TEMP/changed.txt"
-          # `-x` so `prek.toml` cannot match `docs/prek.toml.md`; the blank-line filter so the
-          # block scalar's trailing newline cannot become an empty pattern that matches everything.
-          printf '%s\n' "$FULL_SWEEP_PATHS" | grep -v '^$' > "$RUNNER_TEMP/triggers.txt"
-          mapfile -t triggered < <(grep -Fx -f "$RUNNER_TEMP/triggers.txt" "$RUNNER_TEMP/changed.txt" || true)
-          # Fall back to the full sweep rather than a fast green when the scoped list cannot be
-          # trusted to represent the change: a PR that only deletes files yields an EMPTY changed
-          # list, and "skip everything" is the wrong answer there — dropping a template changes
-          # what the render validators produce. Deletions are rare on the PRs this optimises for
-          # (Renovate bumps, single-role edits), so the fast path stays the common one.
-          if [ "${#deleted[@]}" -gt 0 ]; then
+          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
+          # Deletions are rare on the PRs this optimises for (Renovate bumps, single-role edits),
+          # so the fast path stays the common one.
+          if [ -s "$RUNNER_TEMP/full_sweep.txt" ]; then
             echo "mode=full" >> "$GITHUB_OUTPUT"
-            echo "PR deletes ${#deleted[@]} file(s) — running the full sweep."
-          elif [ "${#triggered[@]}" -gt 0 ]; then
-            echo "mode=full" >> "$GITHUB_OUTPUT"
-            echo "PR changes hook configuration (${triggered[*]}) — running the full sweep."
+            printf '%s — running the full sweep.\n' "$(< "$RUNNER_TEMP/full_sweep.txt")"
           elif [ ! -s "$RUNNER_TEMP/changed.txt" ]; then
             # No deletions and no changed files means merging this PR would land NOTHING: the
             # checkout is the merge ref, so a three-dot diff against the base is exactly what a
@@ -365,76 +313,38 @@ jobs:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      # Its own prek cache prefix rather than the `hooks` job's. The two jobs build disjoint hook
+      # environments, and one shared key would have them overwrite each other's entry every run.
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
         with:
-          python-version: "3.14.7"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0  # no floating major tag is published; pin the exact release
-        with:
-          enable-cache: true
-
-      # Its own key rather than the `hooks` job's. The two jobs build disjoint hook environments
-      # now, and one shared key would have them overwrite each other's entry every run. The
-      # second restore-key reaches the older single-job entry, so a branch that predates this
-      # split still gets a warm start once.
-      - name: Cache prek hook environments
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/prek/repos
-            ~/.cache/prek/hooks
-            ~/.cache/prek/tools
-          key: prek-lint-${{ runner.os }}-${{ hashFiles('prek.toml') }}
-          restore-keys: |
-            prek-lint-${{ runner.os }}-
-            prek-${{ runner.os }}-
-
-      - name: Cache Ansible collections
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ansible/collections
-          key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
-
-      - name: Install prek
-        run: pip install prek==0.5.3  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+          prek-cache-key: prek-lint
+          galaxy: "true"
 
       # $RUNNER_TEMP is per-job, so this recomputes the list rather than reading what the `hooks`
-      # job wrote. Same merge-base diff and same deletions-force-a-full-sweep rule as there; the
-      # ansible filter is the part that is only here.
+      # job wrote. The same script computes it, so the merge-base diff and the deletions-force-a-
+      # full-sweep rule cannot drift between the two; the ansible filter is the part only here.
       - name: Collect this PR's changed ansible files
         id: changed
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
-          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch below
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch in the script
           # What changes ansible-lint's verdict on files this PR did not touch: its own config,
           # the hook rev in prek.toml, and the collections it resolves modules against. None of
           # them can go in the hook's `files` — an explicitly passed path is linted whatever it
           # is (see the hook's comment in prek.toml) — and the ansible filter below would either
           # drop them (`mode=none`, so a `.ansible-lint` edit was linted by master alone) or
-          # scope-lint requirements.yml as if it were a task file. Same contract as the `hooks`
-          # job's list; ENFORCED by the same test.
+          # scope-lint requirements.yml as if it were a task file. The setup action is here for
+          # its prek pin, which changes how this hook runs as a prek.toml rev bump does. Same
+          # contract as the `hooks` job's list; ENFORCED by the same test.
           FULL_SWEEP_PATHS: |
             prek.toml
             .ansible-lint
             ansible/requirements.yml
+            .github/actions/setup/action.yml
         run: |
           set -euo pipefail
-          # The checkout runs with persist-credentials: false (zizmor artipacked), and the repo is
-          # private, so a bare fetch has no credential and dies on "could not read Username". The
-          # token rides in a one-shot header the way actions/checkout itself sends it; nothing is
-          # written to .git/config.
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
-            fetch --no-tags origin "$BASE_REF"
-          base="origin/$BASE_REF...HEAD"
-          # --no-renames so a rename is reported as its D + A halves rather than one R entry.
-          mapfile -t deleted < <(git diff --name-only --no-renames --diff-filter=D "$base")
-          # --diff-filter=d (lowercase) drops deletions: passing a path that no longer exists is
-          # a hook error, not a lint finding.
-          git diff --name-only --no-renames --diff-filter=d "$base" > "$RUNNER_TEMP/changed.txt"
-          printf '%s\n' "$FULL_SWEEP_PATHS" | grep -v '^$' > "$RUNNER_TEMP/triggers.txt"
-          mapfile -t triggered < <(grep -Fx -f "$RUNNER_TEMP/triggers.txt" "$RUNNER_TEMP/changed.txt" || true)
+          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
           # Filtered with grep rather than a git pathspec glob (`ansible/**/*.yml` behaves
           # differently under git's wildmatch than it reads). secrets.yml is dropped here as well
           # as by the hook's own exclude: were it the ONLY changed ansible file, the hook would
@@ -446,12 +356,9 @@ jobs:
           # while reporting green.
           grep -E '^ansible/.*\.ya?ml$' "$RUNNER_TEMP/changed.txt" \
             | grep -v '^ansible/vars/secrets\.yml$' > "$RUNNER_TEMP/ansible.txt" || true
-          if [ "${#deleted[@]}" -gt 0 ]; then
+          if [ -s "$RUNNER_TEMP/full_sweep.txt" ]; then
             echo "mode=full" >> "$GITHUB_OUTPUT"
-            echo "PR deletes ${#deleted[@]} file(s) — linting the whole tree."
-          elif [ "${#triggered[@]}" -gt 0 ]; then
-            echo "mode=full" >> "$GITHUB_OUTPUT"
-            echo "PR changes ansible-lint's inputs (${triggered[*]}) — linting the whole tree."
+            printf '%s — linting the whole tree.\n' "$(< "$RUNNER_TEMP/full_sweep.txt")"
           elif [ -s "$RUNNER_TEMP/ansible.txt" ]; then
             echo "mode=scoped" >> "$GITHUB_OUTPUT"
             echo "Linting $(wc -l < "$RUNNER_TEMP/ansible.txt") changed ansible file(s):"
@@ -548,20 +455,11 @@ jobs:
         with:
           fetch-depth: 0  # several tests read git history and worktree state
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      # Several ansible/tests read the Galaxy collections, so they must be on disk. The action's
+      # Galaxy cache key is the one the `ansible_lint` job uses, so the two share one entry.
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
         with:
-          python-version: "3.14.7"
-      - name: Install uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
-        with:
-          enable-cache: true
-      # Several ansible/tests read the Galaxy collections, so they must be on disk. Same cache
-      # key as the hooks job, so the two share one entry.
-      - name: Cache Ansible collections
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ansible/collections
-          key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
+          galaxy: "true"
       - name: Install Ansible collections
         run: uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
       # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and the
@@ -691,9 +589,11 @@ jobs:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
         with:
-          node-version: "24.21.0"
+          python: "false"
+          uv: "false"
+          node: "true"
 
       # The script's `npm install renovate@latest` re-downloads Renovate on every run — 33-39s, and with
       # ansible-lint scoped to changed files this job is the longest in the workflow on a PR that
@@ -714,21 +614,17 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
-          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch below
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch in the script
         run: |
           set -euo pipefail
-          # The checkout runs with persist-credentials: false (zizmor artipacked), and the repo is
-          # private, so a bare fetch has no credential and dies on "could not read Username". The
-          # token rides in a one-shot header the way actions/checkout itself sends it; nothing is
-          # written to .git/config.
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
-            fetch --no-tags origin "$BASE_REF"
-          # Three dots: against the merge base, so it is this PR's own change to the file.
-          if git diff --quiet "origin/$BASE_REF...HEAD" -- renovate.json; then
+          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
+          # The script diffs against the merge base, so this is the PR's own change to the file.
+          # A deletion of renovate.json counts as touching it, as `git diff -- renovate.json` did.
+          if grep -qFx renovate.json "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "renovate.json untouched by this PR — it is validated on the merge to master."
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       # Semantic validation of renovate.json — the one dependency-management axis with no
