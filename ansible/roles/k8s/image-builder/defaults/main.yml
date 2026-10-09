@@ -6,7 +6,7 @@
 # The `-rootless` variant specifically: the daemonful one wants a privileged pod. This runs as
 # uid 1000 with no added capabilities. It is still the least-confined workload in the fleet —
 # see the securityContext comment in build-job.yaml.j2, which is the honest version of that.
-image_builder_k8s_image: moby/buildkit:v0.33.0-rootless
+image_builder_k8s_image: moby/buildkit:v0.33.1-rootless@sha256:f8a833b2de9d68e27f0815e4a737abdfaf8a2e4c615650557df11025101557b4
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Denylisted on purpose, not by denylist absence: this role renders a Job and a ConfigMap, no
