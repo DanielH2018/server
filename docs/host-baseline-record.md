@@ -248,6 +248,10 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   and the unlanded-branch guard: an `evals-history/*` branch still on origin skips the run
   rather than stacking a second one, and it reads origin rather than the open-PR list because a
   failed `gh pr create` leaves a branch with no PR.
+- **Each sweep's per-run output is kept** under `/var/lib/homelab/eval-run.d/sweeps/<UTC
+  stamp>/`: every agent's `--json` report (agent text, assertion failures, judge reason) and the
+  last MiB of the console log. The newest 8 sweeps stay. Read these before editing a case that
+  fell below its threshold; `history.json` holds only the scores (#4019).
 - **A REGRESSED case still gets committed** — the data is real — but reports the push DOWN with
   the regression named, matching autofix-bridge's "act, but do not launder the result" pattern
   rather than silently dropping the regression or silently blocking the commit.

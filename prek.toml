@@ -2,6 +2,18 @@
 # See https://prek.j178.dev for more information.
 #:schema https://www.schemastore.org/prek.json
 
+# Every hook runs at commit time and at no other stage. A hook without `stages` runs at EVERY
+# stage, so a `.git/hooks/pre-push` shim left by an older `prek install` (from when the
+# `pytest` hook ran pre-push, removed 2026-10-02) re-ran all of them over the pushed range,
+# fixers included (#4018). Setting this here covers every checkout and any future shim; a hook
+# that genuinely belongs at another stage sets its own `stages`.
+#
+# default_stages does NOT reach a hook whose upstream manifest declares `stages` itself, and
+# pre-commit-hooks v6.0.0 lists `[pre-commit, pre-push, manual]` on three of ours. So every hook
+# from a remote repo repeats `stages = ["pre-commit"]`, which also covers a manifest that gains
+# `stages` on a Renovate bump. ENFORCED: ansible/tests/repo/test_prek_hooks_run_only_at_commit.py
+default_stages = ["pre-commit"]
+
 # Standard cleanup hooks
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
@@ -9,31 +21,39 @@ rev = "v6.0.0"
 
 [[repos.hooks]]
 id = "trailing-whitespace"
+stages = ["pre-commit"]
 
 [[repos.hooks]]
 id = "end-of-file-fixer"
+stages = ["pre-commit"]
 
 [[repos.hooks]]
 id = "check-yaml"
+stages = ["pre-commit"]
 
 [[repos.hooks]]
 # Guards renovate.json (a syntax error there silently disables ALL dependency management)
 # and every other JSON in the repo (Grafana dashboards, settings).
 id = "check-json"
+stages = ["pre-commit"]
 
 [[repos.hooks]]
 # prek.toml and pyproject.toml configure every other gate; a TOML syntax error in either
 # fails those gates with a parser traceback rather than a pointer at the line.
 id = "check-toml"
+stages = ["pre-commit"]
 
 [[repos.hooks]]
 id = "check-merge-conflict"
+stages = ["pre-commit"]
 
 [[repos.hooks]]
 id = "check-added-large-files"
+stages = ["pre-commit"]
 
 [[repos.hooks]]
 id = "mixed-line-ending"
+stages = ["pre-commit"]
 args = ["--fix=lf"]
 
 # Ansible linting
@@ -43,6 +63,7 @@ rev = "v26.9.0"
 
 [[repos.hooks]]
 id = "ansible-lint"
+stages = ["pre-commit"]
 # Scoped to `ansible/` and paired with pass_filenames — ansible-lint lints the files it is
 # GIVEN instead of walking the tree itself. Its cost is almost purely per-file (measured:
 # one task file 1.45s, five 1.98s, the whole repo 37s locally / 89.7s on the
@@ -100,6 +121,7 @@ rev = "v8.30.1"
 
 [[repos.hooks]]
 id = "gitleaks"
+stages = ["pre-commit"]
 
 # Shell script linting. shellcheck-py ships a precompiled shellcheck binary via pip
 # (language = python) — no host apt package and no Docker, so it works unmodified on the
@@ -114,6 +136,7 @@ rev = "v0.11.0.1"
 
 [[repos.hooks]]
 id = "shellcheck"
+stages = ["pre-commit"]
 # .bashrc is a SOURCED dotfile (no shebang by design — `shell(1)` sources it, never execs it) and
 # is the stock Debian/Ubuntu skeleton .bashrc plus one guarded nvm block, not a script this gate
 # is meant to police. Excluded rather than annotated so the near-stock file stays diffable against

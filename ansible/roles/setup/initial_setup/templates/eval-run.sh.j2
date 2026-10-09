@@ -50,6 +50,10 @@ PR_BRANCH_PREFIX="evals-history/"
 STAMP_DIR="/var/lib/homelab/eval-run.d"
 COMMIT_FAILED_LOG="$STAMP_DIR/last-commit-failure.log"
 UNPUBLISHED_HISTORY="$STAMP_DIR/unpublished-history.json"
+# One directory per sweep, named by its UTC start, holding each agent's --json report and the
+# sweep's console log. Weekly runs, so 8 is about two months of per-run evidence.
+SWEEP_ARCHIVE="$STAMP_DIR/sweeps"
+SWEEPS_KEPT=8
 
 ANTHROPIC_API_KEY="{{ anthropic_api_key | default('') }}"
 export ANTHROPIC_API_KEY
@@ -117,6 +121,32 @@ say_failure() {
 keep_failure_log() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
   tail -c 65536 "$1" >"$COMMIT_FAILED_LOG" 2>/dev/null || return 0
+}
+
+# Keeps this sweep's per-run output, which nothing else does (#4019). $REPORT_DIR holds each
+# agent's --json report, the only place the engine writes a run's agent text, assertion failures
+# and judge reason; $LOG holds the console lines naming each failing run. on_exit deletes both,
+# so before this a below-threshold sweep could not be diagnosed once the run ended.
+#
+# CALLED RIGHT AFTER THE SWEEP, NOT FROM on_exit: the suite and the commit below overwrite $LOG
+# with their own output, so by exit time the console lines are gone. Bounded twice -- the console
+# log to its last MiB, the archive to the newest $SWEEPS_KEPT sweeps -- and outside $REPO for the
+# same untracked-file reason as the rest of $STAMP_DIR. A failure here is logged, not fatal: the
+# sweep's numbers still go to evals/history.json without it.
+keep_sweep_output() {
+  local dest
+  dest="$SWEEP_ARCHIVE/$(date -u +%Y%m%dT%H%M%SZ)"
+  if ! mkdir -p "$dest" 2>/dev/null; then
+    logger -t eval-run "could not create ${dest}; this sweep's per-run output is not kept"
+    return 0
+  fi
+  # No glob match means every agent died before writing a report; the console log says why.
+  cp -- "$REPORT_DIR"/*.json "$dest"/ 2>/dev/null
+  tail -c 1048576 "$LOG" >"$dest/console.log" 2>/dev/null
+  # The names are fixed-width UTC stamps, so their sorted order is age order.
+  find "$SWEEP_ARCHIVE" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort \
+    | head -n "-$SWEEPS_KEPT" | xargs -r rm -rf --
+  logger -t eval-run "per-run output kept at ${dest}"
 }
 
 # Puts the checkout back the way it was before `git add`, and keeps the sweep.
@@ -221,6 +251,7 @@ for agent_dir in "$REPO"/evals/cases/*/; do
     FAILED_AGENTS="$FAILED_AGENTS $agent"
   fi
 done
+keep_sweep_output
 
 # Each --json write is one JSON array (one per agent, run-evals.mjs has no multi-agent flag);
 # `jq -s add` slurps the N arrays and concatenates them into the single flat array
