@@ -17,8 +17,8 @@ operator decided this on 2026-10-09 (#3685). See
 |---|---|---|
 | 1 | A read-only `claude` user an operator can open a session as | Done 2026-10-04 (#3504, #3505) |
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
-| 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check ran 2026-10-09: two of three cases passed, and the approval case owes a re-run after #3999. |
-| 4 | The phone host `claude-rc.service` runs as `claude` | Planned. Starts after slice 3's check. |
+| 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check passed 2026-10-09, after #3999 fixed the approved-PR merge. Done. |
+| 4 | The phone host `claude-rc.service` runs as `claude` | Planned. Waits on the operator's slice 4 decisions. |
 | 5 | Peer users, and the tools that decrypt SOPS | Planned |
 | 6 | Retire Claude sessions as `ubuntu` | Planned |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
@@ -225,7 +225,7 @@ After each of 3b to 3d, `land.sh` reported `needs-manual-apply` for daniel-serve
 skipped on purpose. Both `claude_code_agent_user_enabled` and `claude_code_lander_enabled` are
 false there, so the role runs only its removal path, with nothing to remove.
 
-**Check (run 2026-10-09, one case owed):** the operator logged in as `claude` and had a session
+**Check (passed 2026-10-09):** the operator logged in as `claude` and had a session
 run `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` on three agent PRs.
 Only the operator can log in as `claude`, so only the operator can run this check.
 
@@ -241,8 +241,10 @@ Only the operator can log in as `claude`, so only the operator can run this chec
 - **A module the gate imports, #3990: passed.** A comment line in `scripts/lib/gh.py` was
   refused with `need the operator's approval: scripts/lib/gh.py`, and the PR was closed without a merge.
 
-**Owed:** a re-run of the approval-list case after #3999, which must land without a hand merge.
-Slice 4 starts after it.
+- **The approval-list case again, #4025: passed.** After #3999 landed, the same kind of PR was
+  refused with `DanielH2018 has not approved it`. Once the operator approved the head, the
+  lander logged `merged directly through the ruleset bypass` and ended `VERDICT:
+  nothing-to-deploy`, with no hand merge.
 
 **Rollback:** `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude`
 still opens PRs, and the operator lands them.
