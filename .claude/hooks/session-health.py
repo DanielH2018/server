@@ -334,7 +334,7 @@ def target_problems():
     return lines + service_lines.stale_release_problems(_run)
 
 
-def master_moved_problems():
+def master_moved_problems(git=None):
     """One line when this branch is behind origin/master's remote-tracking ref, else [].
 
     `git rev-list --count HEAD..origin/master` reads only the local object store -- no
@@ -358,13 +358,14 @@ def master_moved_problems():
     `cwd=` overrides an inherited `GIT_DIR`, and a session opened from inside a git hook
     inherits one. The import is deferred into this function for the reason
     `other_live_sessions` defers its own: an ImportError at module level stops the banner
-    instead of degrading it.
+    instead of degrading it. `git` is that function, and a test passes a fake instead.
     """
-    sys.path.insert(0, os.path.join(REPO, "scripts"))
-    try:
-        from lib.git import git
-    except ImportError as exc:
-        return [f"  ⚠ behind-master detection is broken: {exc}"]
+    if git is None:
+        sys.path.insert(0, os.path.join(REPO, "scripts"))
+        try:
+            from lib.git import git
+        except ImportError as exc:
+            return [f"  ⚠ behind-master detection is broken: {exc}"]
     try:
         res = git(
             "rev-list",
@@ -389,20 +390,25 @@ def master_moved_problems():
     ]
 
 
-def other_live_sessions(cwd):
+def other_live_sessions(cwd, *, run=None, git_dirty=None):
     """Lines describing the other Claude sessions working this repo right now.
 
     Derived from git and /proc rather than from anything a session declares, so it cannot
     go stale when a session forgets to announce itself or dies without cleaning up. Knowing
     another session is already in a role is what stops two of them editing it at once.
+
+    `run` and `git_dirty` default to `_run` and `lib.git.git_dirty`; a test passes fakes.
     """
+    run = run or _run
     # scripts/, which holds `lib/`. A stale insert would fail silently: the except below
     # returns an empty list, and an empty list is indistinguishable from "no other sessions
     # are running".
     sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
         from lib.worktrees import parse_worktree_list, session_is_alive
-        from lib.git import git_dirty
+
+        if git_dirty is None:
+            from lib.git import git_dirty
     except ImportError as exc:
         # Fail open, because a SessionStart banner must never block a session from starting —
         # but say so. The silence is what let the path bug live for a month.
@@ -410,13 +416,13 @@ def other_live_sessions(cwd):
 
     lines = []
     for tree in parse_worktree_list(
-        _run(["git", "worktree", "list", "--porcelain"], 5).stdout
+        run(["git", "worktree", "list", "--porcelain"], 5).stdout
     )[1:]:
         if os.path.realpath(tree.path) == os.path.realpath(cwd):
             continue
         if not (tree.locked and session_is_alive(tree.lock_reason)):
             continue
-        changed = _run(
+        changed = run(
             ["git", "-C", tree.path, "diff", "--name-only", "origin/master...HEAD"], 5
         ).stdout
         # Untracked counted: an unlanded scratch file in another live session's worktree is
@@ -443,9 +449,9 @@ def other_live_sessions(cwd):
 WORKTREE_TIMEOUT_S = 5
 
 
-def stale_worktree_lines():
+def stale_worktree_lines(run=None):
     """Shim: `hooklib.worktree_lines` can't import `_run` back from this module."""
-    return _stale_worktree_lines(_run, WORKTREE_TIMEOUT_S)
+    return _stale_worktree_lines(run or _run, WORKTREE_TIMEOUT_S)
 
 
 PROBE = "uv run python scripts/diagnostics/probe.py"
@@ -473,7 +479,12 @@ def format_banner(problems, landing=False):
 
 def main(
     *,
+    read_payload=read_payload,
+    target_problems=target_problems,
+    master_moved_problems=master_moved_problems,
     parked_deployer_problems=parked_deployer_problems,
+    other_live_sessions=other_live_sessions,
+    stale_worktree_lines=stale_worktree_lines,
     remote_fanout_lines=remote_fanout_lines,
 ):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
@@ -483,14 +494,11 @@ def main(
     this repo, worktrees ready to remove, and fan-out worktrees running on another host —
     all three regardless of health status.
 
-    Args:
-        parked_deployer_problems: override for the parked-deployer probe. Defaults to the
-            module's own `parked_deployer_problems`; a test passes a fake here instead of
-            monkeypatching the module attribute, because the monkeypatch ratchet
-            (ansible/tests/_ratchet.py) caps this file's patches on a first-party module at
-            its current allowlist entry — the same reason `parked_deployer_problems` itself
-            takes its four reads as parameters rather than patched globals.
-        remote_fanout_lines: override for the same reason (live `.claude/fanout` state).
+    Every keyword argument is one of this module's own probes, and its default is that
+    probe. A test passes a fake instead of monkeypatching the module attribute: the
+    monkeypatch ratchet (ansible/tests/_ratchet.py) caps a test module at zero patches on a
+    first-party module, and each probe reads live state (stdin, this checkout's git, the
+    machine's worktrees, `.claude/fanout`) that would make an assertion depend on the host.
     """
     payload = read_payload() or {}
     # Don't re-banner on mid-session compaction — only on a genuine open/resume/clear.

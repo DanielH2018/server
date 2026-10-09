@@ -60,33 +60,28 @@ def _run_main(
     worktrees=None,
     remote_fanout=None,
 ):
-    """Wire up main()'s dependencies; returns a zero-arg callable, `_run_main(...)()`,
-    rather than calling main() itself."""
-    monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(stdin))
-    monkeypatch.setattr(_mod, "target_problems", lambda: targets or [])
-    # stubbed by default: the real one reads this checkout's actual relationship to
-    # origin/master, which would make every main() assertion depend on the branch state
-    # of whatever worktree happens to be running the suite
-    monkeypatch.setattr(_mod, "master_moved_problems", lambda: master_moved or [])
-    # stubbed by default: the real one reads this machine's live worktrees, which would
-    # make every main() assertion depend on what else happens to be open right now
-    monkeypatch.setattr(_mod, "other_live_sessions", lambda cwd: sessions or [])
-    # stubbed by default for the same reason: the real one shells out to
-    # prune_worktrees.py, whose answer depends on this machine's live worktrees and on
-    # GitHub being reachable
-    monkeypatch.setattr(_mod, "stale_worktree_lines", lambda: worktrees or [])
+    """Wire up main()'s dependencies; returns a callable, `_run_main(...)()`, rather than
+    calling main() itself, so a test can override one more seam as a keyword argument.
+
+    Every probe is a fake, because each real one reads live state that would make a main()
+    assertion depend on the host: this checkout's distance from origin/master, the PRIMARY
+    checkout's `git status` (genuinely dirty while docs-refresh runs the suite over the pages
+    it just staged), this machine's worktrees, GitHub, and `~/.claude/fanout`. They go in as
+    main()'s keyword seams rather than as patches, because the monkeypatch ratchet
+    (ansible/tests/_ratchet.py) caps a test module at zero patches on a first-party module.
+    """
     if env:
         for k, v in env.items():
             monkeypatch.setenv(k, v)
-    # Passed as call arguments, not monkeypatched: main() reads the PRIMARY checkout's
-    # `git status --porcelain` by default (genuinely dirty while docs-refresh runs the suite
-    # over the pages it just staged), remote_fanout_lines reads real
-    # ~/.claude/fanout content. Both are keyword seams
-    # (main()'s docstring) -- the monkeypatch ratchet (ansible/tests/_ratchet.py) caps this
-    # file's allowlist entry.
+    payload = json.loads(stdin)
     return functools.partial(
         _mod.main,
+        read_payload=lambda: payload,
+        target_problems=lambda: targets or [],
+        master_moved_problems=lambda: master_moved or [],
         parked_deployer_problems=lambda: parked or [],
+        other_live_sessions=lambda cwd: sessions or [],
+        stale_worktree_lines=lambda: worktrees or [],
         remote_fanout_lines=lambda: remote_fanout or [],
     )
 
@@ -176,8 +171,7 @@ def test_main_survives_a_broken_session_scan(monkeypatch, capsys):
         raise OSError("git exploded")
 
     run_main = _run_main(monkeypatch, '{"source":"startup"}')
-    monkeypatch.setattr(_mod, "other_live_sessions", boom)
-    assert run_main() == 0
+    assert run_main(other_live_sessions=boom) == 0
     assert capsys.readouterr().out == ""
 
 
@@ -201,8 +195,7 @@ def test_main_actually_calls_the_target_check(monkeypatch, capsys):
         return ["  ✗ target loki [loki:3100] down"]
 
     run_main = _run_main(monkeypatch, '{"source":"startup"}')
-    monkeypatch.setattr(_mod, "target_problems", tp)
-    assert run_main() == 0
+    assert run_main(target_problems=tp) == 0
     assert called["targets"] is True
     assert "loki" in capsys.readouterr().out
 
@@ -242,27 +235,25 @@ def test_main_prints_remote_fanout_lines(monkeypatch, capsys):
     assert "daniel-server" in capsys.readouterr().out
 
 
-def test_stale_worktree_lines_reports_removable(monkeypatch):
+def test_stale_worktree_lines_reports_removable():
     brief = (
         "\U0001f9f9 1 merged worktree(s) can be removed:\n"
         "  old-thing — worktree-old-thing merged, clean, unlocked\n"
         "  → uv run python scripts/dev/prune_worktrees.py --prune\n"
     )
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result(brief))
-    assert any("old-thing" in line for line in _mod.stale_worktree_lines())
+    lines = _mod.stale_worktree_lines(lambda *a, **k: _result(brief))
+    assert any("old-thing" in line for line in lines)
 
 
-def test_stale_worktree_lines_silent_when_clean(monkeypatch):
-    monkeypatch.setattr(_mod, "_run", lambda *a, **k: _result(""))
-    assert _mod.stale_worktree_lines() == []
+def test_stale_worktree_lines_silent_when_clean():
+    assert _mod.stale_worktree_lines(lambda *a, **k: _result("")) == []
 
 
-def test_stale_worktree_lines_swallows_a_timeout(monkeypatch):
+def test_stale_worktree_lines_swallows_a_timeout():
     def boom(*a, **k):
         raise subprocess.TimeoutExpired(cmd="prune_worktrees.py", timeout=30)
 
-    monkeypatch.setattr(_mod, "_run", boom)
-    assert _mod.stale_worktree_lines() == []
+    assert _mod.stale_worktree_lines(boom) == []
 
 
 # settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
@@ -363,13 +354,11 @@ def test_a_broken_import_is_reported_rather_than_read_as_no_sessions(monkeypatch
     """Reject case: when the import fails the banner says so instead of going quiet.
 
     `sys.modules[name] = None` is what makes `from name import ...` raise ImportError even
-    after the accept case above has imported it for real — pointing REPO at a missing
-    directory is not enough on its own, because the module stays cached.
+    after the accept case above has imported it for real, because the module stays cached.
     """
     import sys
 
     monkeypatch.setitem(sys.modules, "lib.worktrees", None)
-    monkeypatch.setattr(_mod, "REPO", "/nonexistent-repo-root")
     lines = _mod.other_live_sessions("/nonexistent-repo-root")
     assert lines, (
         "a failed import returned no lines — indistinguishable from 'no other sessions'"
@@ -384,8 +373,8 @@ _OTHER_WORKTREE_PORCELAIN = (
 )
 
 
-def _fake_subprocess_run_for_other_sessions(diff_stdout):
-    def fake(cmd, **kwargs):
+def _fake_run_for_other_sessions(diff_stdout):
+    def fake(cmd, *_args, **_kwargs):
         return _result(
             _OTHER_WORKTREE_PORCELAIN if cmd[:2] == ["git", "worktree"] else diff_stdout
         )
@@ -396,25 +385,19 @@ def _fake_subprocess_run_for_other_sessions(diff_stdout):
 # The per-tree dirty check delegates to `lib.git.git_dirty`, not its own `git status
 # --porcelain` read. Pins "(+ uncommitted)" to follow git_dirty's answer, including a
 # git_dirty failure (tree vanished mid-scan) degrading to not-dirty rather than crashing the
-# section. Patches stdlib `subprocess.run` (uncounted) instead of `_mod._run`, and `git_dirty`
-# by its STRING target because `other_live_sessions` imports it inside the function, so `_mod`
-# never holds the name. That string target IS counted by the monkeypatch ratchet — these three
-# patches are three of this file's entry, and only a seam on `other_live_sessions` would shed
-# them.
-def test_other_live_sessions_dirty_marker_follows_lib_git(monkeypatch):
-    monkeypatch.setattr(
-        subprocess, "run", _fake_subprocess_run_for_other_sessions("file.py\n")
-    )
-    monkeypatch.setattr("lib.git.git_dirty", lambda *a, **k: True)
-    assert "(+ uncommitted)" in _mod.other_live_sessions("/repo")[0]
-    monkeypatch.setattr("lib.git.git_dirty", lambda *a, **k: False)
-    assert "(+ uncommitted)" not in _mod.other_live_sessions("/repo")[0]
+# section. `run` and `git_dirty` are `other_live_sessions`' own seams.
+def test_other_live_sessions_dirty_marker_follows_lib_git():
+    def scan(git_dirty):
+        run = _fake_run_for_other_sessions("file.py\n")
+        return _mod.other_live_sessions("/repo", run=run, git_dirty=git_dirty)[0]
+
+    assert "(+ uncommitted)" in scan(lambda *a, **k: True)
+    assert "(+ uncommitted)" not in scan(lambda *a, **k: False)
 
     def boom(*a, **k):
         raise subprocess.CalledProcessError(128, ["git", "status"])
 
-    monkeypatch.setattr("lib.git.git_dirty", boom)
-    assert "(+ uncommitted)" not in _mod.other_live_sessions("/repo")[0]
+    assert "(+ uncommitted)" not in scan(boom)
 
 
 def _hook_copy_with_a_broken_hooklib(tmp_path):

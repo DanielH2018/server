@@ -23,8 +23,6 @@
 #   uv run pytest ansible/tests/repo/test_module_length_ratchet.py -k no_test_module_patches
 .claude/hooks/tests/test_auto_mode_bridge.py 1
 .claude/hooks/tests/test_block_footguns.py 2
-.claude/hooks/tests/test_session_health.py 14
-.claude/hooks/tests/test_session_health_master_moved.py 7
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 2
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 13
 ansible/roles/k8s/qbittorrent/tests/test_apply_prefs.py 1
