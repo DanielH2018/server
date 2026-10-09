@@ -2,9 +2,10 @@
 """The files other roles ship, import or read by path, and the roles a change to one reaches.
 
 `deploy_changes.services_from_changed_paths` and `setup_roles_for` read the setup tables below to
-re-apply, or defer-and-alert, every role holding a copy of a changed file. They are static
-because every caller passes paths alone, and
-`ansible/tests/setup/test_setup_cross_role_files.py` holds each one to the tree.
+re-apply, or defer-and-alert, every role holding a copy of a changed file, and every setup
+role calling a changed filter plugin's filters. They are static because every caller passes
+paths alone, and `ansible/tests/setup/test_setup_cross_role_files.py` holds each one to the
+tree.
 
 The k8s plane needs no table: `k8s_lookup_readers` derives its readers from the templates and
 tasks that name another role's file in a `lookup()`.
