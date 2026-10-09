@@ -23,6 +23,7 @@ Run: uv run pytest ansible/tests/k8s/test_built_images_name_the_content_tag.py
 import re
 
 from _helpers import ANSIBLE
+from _role_census import role_dirs, role_task_files
 from _k8s_render import pod_spec, rendered_docs
 from lib.render_guard import BASE_CONTEXT, BUILT_IMAGE_TAG_STUBS
 
@@ -59,10 +60,11 @@ KNOWN_BUILT_IMAGES = frozenset(
 def built_image_names() -> set[str]:
     """Every image name a k8s role hands k8s/image-builder, read from the callers' tasks."""
     found: set[str] = set()
-    for tasks in (ANSIBLE / "roles" / "k8s").glob("*/tasks/*.yml"):
-        if tasks.parent.parent.name == "image-builder":
+    for role in role_dirs(ANSIBLE / "roles" / "k8s"):
+        if role.name == "image-builder":
             continue
-        found.update(_NAME_DECL_RE.findall(tasks.read_text()))
+        for tasks in role_task_files(role):
+            found.update(_NAME_DECL_RE.findall(tasks.read_text()))
     return found
 
 

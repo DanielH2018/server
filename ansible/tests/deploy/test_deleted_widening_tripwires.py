@@ -22,6 +22,7 @@ from lib.k8s_roles import role_callers
 from lib.render_guard import containers_entries
 
 from _helpers import REPO
+from _role_census import task_files
 
 # The commit that deleted all three. Named in every failure message below.
 DELETED_IN = "fb9e4017f"
@@ -144,7 +145,7 @@ def _task_file_paths(node) -> list[str]:
 
 
 def k8s_tasks_files(repo: Path = REPO) -> list[Path]:
-    return sorted((Path(repo) / "ansible" / "roles" / "k8s").glob("*/tasks/**/*.yml"))
+    return task_files(Path(repo) / "ansible" / "roles" / "k8s")
 
 
 def sibling_path_imports(repo: Path = REPO) -> dict[str, list[str]]:

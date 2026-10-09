@@ -32,6 +32,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
+from _role_census import task_files, task_files_by_role
 from _shell_render import rendered_shell_text
 
 MANIFEST_ROOT = "/etc/rancher/k3s/manifests"
@@ -72,7 +73,7 @@ def pruned_dirs(roles_dir: Path) -> dict[str, tuple[str, ...]]:
     the alternative is a guard that flags a file the role does list.
     """
     found: dict[str, tuple[str, ...]] = {}
-    for tasks_file in sorted(roles_dir.glob("*/tasks/*.yml")):
+    for tasks_file in task_files(roles_dir):
         for task in walk_tasks(load_tasks(tasks_file)):
             if _included_role(task) != MANIFESTS_ROLE:
                 continue
@@ -129,8 +130,8 @@ def files_in_pruned_dirs(roles_dir: Path) -> dict[str, list[str]]:
     """Role name -> the `<dir>/<file>` staged paths that the prune deletes on the next deploy."""
     owned = pruned_dirs(roles_dir)
     found: dict[str, list[str]] = {}
-    for tasks_file in sorted(roles_dir.glob("*/tasks/*.yml")):
-        role = tasks_file.parent.parent.name
+    for role_dir, tasks_file in task_files_by_role(roles_dir):
+        role = role_dir.name
         if role in UTILITY_ROLES:
             continue
         for directory, filename in sorted(staged_files(tasks_file)):
@@ -142,21 +143,21 @@ def files_in_pruned_dirs(roles_dir: Path) -> dict[str, list[str]]:
 def owning_roles(roles_dir: Path) -> dict[str, str]:
     """`manifests_service` -> the role whose tasks declare it."""
     found: dict[str, str] = {}
-    for tasks_file in sorted(roles_dir.glob("*/tasks/*.yml")):
+    for role_dir, tasks_file in task_files_by_role(roles_dir):
         for task in walk_tasks(load_tasks(tasks_file)):
             if _included_role(task) != MANIFESTS_ROLE:
                 continue
             service = str((task.get("vars") or {}).get("manifests_service", "")).strip()
             if service and "{{" not in service:
-                found[service] = tasks_file.parent.parent.name
+                found[service] = role_dir.name
     return found
 
 
 def staged_dirs_by_role(roles_dir: Path) -> dict[str, set[str]]:
     """Sibling directory name -> the roles that write into it."""
     found: dict[str, set[str]] = {}
-    for tasks_file in sorted(roles_dir.glob("*/tasks/*.yml")):
-        role = tasks_file.parent.parent.name
+    for role_dir, tasks_file in task_files_by_role(roles_dir):
+        role = role_dir.name
         for path in _PATH_RE.findall(tasks_file.read_text()):
             head = path[len(MANIFEST_ROOT) + 1 :].split("/")[0]
             if "{{" not in head:
@@ -356,7 +357,7 @@ def test_the_census_finds_the_known_pruned_directories():
 
 def test_the_path_reader_finds_the_known_staged_files():
     found: set[tuple[str, str]] = set()
-    for tasks_file in K8S_ROLES.glob("*/tasks/*.yml"):
+    for tasks_file in task_files(K8S_ROLES):
         found |= staged_files(tasks_file)
     missing = KNOWN_STAGED_FILES - found
     assert not missing, (

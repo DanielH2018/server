@@ -29,6 +29,7 @@ import jinja2
 import pytest
 from lib.ansible_jinja_env import make_ansible_env
 from _helpers import SETUP_ROLES, leaf_tasks, load_tasks
+from _role_census import task_files
 
 COMMON = SETUP_ROLES / "common"
 SERVICE = COMMON / "templates" / "kuma-check.service.j2"
@@ -184,7 +185,7 @@ def test_task_file_carries_no_tags() -> None:
 def _wired_checks() -> dict[str, dict]:
     """`kuma_check_name` -> the import task's vars, for every setup role that imports the file."""
     found: dict[str, dict] = {}
-    for tasks_file in SETUP_ROLES.glob("*/tasks/*.yml"):
+    for tasks_file in task_files(SETUP_ROLES):
         for task in leaf_tasks(load_tasks(tasks_file)):
             target = task.get("ansible.builtin.import_tasks") or task.get(
                 "ansible.builtin.include_tasks"

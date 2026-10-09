@@ -23,6 +23,7 @@ Run: uv run pytest ansible/tests/services/test_health_reader_code_is_stamped.py
 from pathlib import Path
 
 from _helpers import REPO, ROLES, load_tasks, walk_tasks
+from _role_census import role_task_files
 
 HOST_LIB_SRC = "ansible/roles/setup/common/files/host_lib.py"
 
@@ -34,9 +35,7 @@ _ROLES = {
 }
 
 
-def copied_into(
-    tasks_dir: Path, opt_dir: str, repo_root: Path = REPO
-) -> dict[str, str]:
+def copied_into(role_dir: Path, opt_dir: str, repo_root: Path = REPO) -> dict[str, str]:
     """live path -> the source relative to repo_root, per script a `copy:` loop ships into opt_dir.
 
     A loop item is either a bare basename, resolved against the role's `files/`, or a
@@ -45,7 +44,7 @@ def copied_into(
     parameter so the rejecting half below can build its offender outside the tree.
     """
     out = {}
-    for task_file in sorted(tasks_dir.rglob("*.yml")):
+    for task_file in role_task_files(role_dir):
         for task in walk_tasks(load_tasks(task_file)):
             copy = task.get("ansible.builtin.copy") or task.get("copy")
             items = task.get("loop")
@@ -53,7 +52,6 @@ def copied_into(
                 continue
             if opt_dir not in str(copy.get("dest", "")):
                 continue
-            role_dir = tasks_dir.parent
             for item in items:
                 if not isinstance(item, str) or not item.endswith(".py"):
                     continue
@@ -63,10 +61,10 @@ def copied_into(
     return out
 
 
-def stamped_in(tasks_dir: Path) -> dict[str, str]:
+def stamped_in(role_dir: Path) -> dict[str, str]:
     """live path -> declared source, across every stamp_deployed pair the role declares."""
     out = {}
-    for task_file in sorted(tasks_dir.rglob("*.yml")):
+    for task_file in role_task_files(role_dir):
         for task in walk_tasks(load_tasks(task_file)):
             for pair in (task.get("vars") or {}).get("stamp_deployed_pairs") or []:
                 if isinstance(pair, dict) and pair.get("live"):
@@ -74,18 +72,18 @@ def stamped_in(tasks_dir: Path) -> dict[str, str]:
     return out
 
 
-def _tasks(role: str) -> Path:
-    return ROLES / "k8s" / role / "tasks"
+def _role(role: str) -> Path:
+    return ROLES / "k8s" / role
 
 
 def test_every_copied_reader_script_is_stamped_is_clean():
     for role, opt_dir in _ROLES.items():
-        copied = copied_into(_tasks(role), opt_dir)
+        copied = copied_into(_role(role), opt_dir)
         assert copied, (
             f"no `copy:` loop in roles/k8s/{role}/tasks writes into {opt_dir} any more, so this "
             f"guard is scanning nothing — repoint it or delete it."
         )
-        stamped = stamped_in(_tasks(role))
+        stamped = stamped_in(_role(role))
         missing = sorted(set(copied) - set(stamped))
         assert not missing, (
             f"{role} copies {missing} onto the host and declares no stamp_deployed pair for "
@@ -102,7 +100,7 @@ def test_every_copied_reader_script_is_stamped_is_clean():
 def test_the_host_lib_sibling_is_stamped_too():
     """The copy comes from the shared include, so it is not in the role's own `copy:` loop."""
     for role, opt_dir in _ROLES.items():
-        stamped = stamped_in(_tasks(role))
+        stamped = stamped_in(_role(role))
         assert stamped.get(f"{opt_dir}/host_lib.py") == HOST_LIB_SRC, (
             f"{role} does not stamp the host_lib copy the shared include installs into "
             f"{opt_dir} — the #2564 omission, in the role that inherited it."
@@ -112,7 +110,7 @@ def test_the_host_lib_sibling_is_stamped_too():
 def test_every_stamped_source_exists_in_the_repo():
     """An unreadable source is reported as drift on the host, so a typo here pages an operator."""
     for role in _ROLES:
-        for live, src in stamped_in(_tasks(role)).items():
+        for live, src in stamped_in(_role(role)).items():
             assert (REPO / src).is_file(), (
                 f"{role} stamps {live} against a missing {src}"
             )
@@ -143,8 +141,8 @@ def test_a_copied_script_with_no_pair_is_flagged(tmp_path):
         "      - live: /opt/synthetic-health/reader.py\n"
         "        src: ansible/roles/k8s/synthetic/files/reader.py\n"
     )
-    copied = copied_into(tasks, "/opt/synthetic-health", tmp_path)
-    stamped = stamped_in(tasks)
+    copied = copied_into(tasks.parent, "/opt/synthetic-health", tmp_path)
+    stamped = stamped_in(tasks.parent)
     assert sorted(set(copied) - set(stamped)) == [
         "/opt/synthetic-health/reader_logic.py"
     ]
@@ -156,6 +154,6 @@ def test_a_copied_script_with_no_pair_is_flagged(tmp_path):
         + "      - live: /opt/synthetic-health/reader_logic.py\n"
         + "        src: ansible/roles/k8s/synthetic/files/reader_logic.py\n"
     )
-    assert not set(copied_into(tasks, "/opt/synthetic-health", tmp_path)) - set(
-        stamped_in(tasks)
+    assert not set(copied_into(tasks.parent, "/opt/synthetic-health", tmp_path)) - set(
+        stamped_in(tasks.parent)
     )

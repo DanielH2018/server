@@ -6,7 +6,7 @@ directory is not, need their own coverage rather than each caller's.
 """
 
 from _helpers import CONTAINER_ROLES, SETUP_ROLES
-from _role_census import role_dirs
+from _role_census import role_dirs, task_files, task_files_by_role
 
 
 def test_a_retired_roles_debris_shell_is_not_a_role(tmp_path):
@@ -34,6 +34,21 @@ def test_a_file_beside_the_roles_is_not_a_role(tmp_path):
     (tmp_path / "README.md").write_text("not a role\n")
 
     assert role_dirs(tmp_path) == []
+
+
+def test_a_nested_task_file_is_credited_to_its_role(tmp_path):
+    """`parent.parent` names `tasks` for `tasks/sub/b.yml`; the pairs must name the role."""
+    (tmp_path / "widget" / "tasks" / "sub").mkdir(parents=True)
+    (tmp_path / "widget" / "tasks" / "a.yml").write_text("[]\n")
+    (tmp_path / "widget" / "tasks" / "sub" / "b.yml").write_text("[]\n")
+
+    pairs = task_files_by_role(tmp_path)
+
+    assert [(role.name, path.name) for role, path in pairs] == [
+        ("widget", "a.yml"),
+        ("widget", "b.yml"),
+    ]
+    assert [path for _role, path in pairs] == task_files(tmp_path)
 
 
 def test_the_default_census_finds_the_real_k8s_roles():

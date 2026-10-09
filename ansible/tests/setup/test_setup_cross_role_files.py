@@ -37,7 +37,7 @@ import fnmatch
 import re
 
 from _helpers import ROLES
-from _role_census import role_dirs
+from _role_census import role_dirs, role_task_files
 
 from deploy_cross_role import (
     K8S_ROLES_IMPORTING_SETUP_FILES,
@@ -142,7 +142,7 @@ def with_rendered_templates(
 def _task_texts(plane: str) -> dict[str, str]:
     texts = {}
     for role_dir in role_dirs(ROLES / plane):
-        tasks = sorted((role_dir / "tasks").rglob("*.yml"))
+        tasks = role_task_files(role_dir)
         texts[role_dir.name] = "\n".join(p.read_text() for p in tasks)
     return texts
 

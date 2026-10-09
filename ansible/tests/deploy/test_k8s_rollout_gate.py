@@ -25,6 +25,7 @@ from _helpers import load_tasks as _tasks
 from _helpers import command_of as _cmd
 from _helpers import render_expr as _render
 from _k8s_render import deploy_play
+from _role_census import task_files
 
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -330,7 +331,7 @@ def _walk(tasks) -> list[dict]:
 def _role_includes(role_name: str) -> list[dict]:
     """The `vars` of every include of `role_name` across roles/k8s/*/tasks/*.yml."""
     out: list[dict] = []
-    for path in sorted((_REPO / "ansible/roles/k8s").glob("*/tasks/*.yml")):
+    for path in task_files(_REPO / "ansible/roles/k8s"):
         for task in _walk(_tasks(path)):
             inc = task.get("ansible.builtin.include_role")
             if isinstance(inc, dict) and inc.get("name") == role_name:

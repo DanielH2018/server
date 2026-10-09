@@ -27,7 +27,8 @@ Run: uv run pytest ansible/tests/setup/test_cron_output_goes_to_the_journal.py
 import re
 
 import pytest
-from _helpers import ROLES, load_tasks, walk_tasks
+from _helpers import load_tasks, walk_tasks
+from _role_census import task_files
 
 # The crons that mail a per-run success line, by `ansible.builtin.cron` name, and
 # the `logger` tag each must route to. Named rather than globbed: a census that finds its
@@ -52,7 +53,7 @@ def _routing(tag: str) -> re.Pattern[str]:
 def _cron_job_list() -> list[tuple[str, str]]:
     """(cron name, job string) for every `ansible.builtin.cron` task that installs a job."""
     jobs = []
-    for path in sorted(ROLES.glob("*/*/tasks/**/*.yml")):
+    for path in task_files():
         for task in walk_tasks(load_tasks(path)):
             cron = task.get("ansible.builtin.cron")
             if isinstance(cron, dict) and cron.get("job"):

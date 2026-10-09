@@ -34,6 +34,7 @@ import re
 
 import pytest
 from _helpers import ROLES, load_tasks, registry_secret_names, walk_tasks
+from _role_census import task_files_by_role
 
 TEMPLATE_MODULES = {"ansible.builtin.template", "template"}
 PLANES = ("k8s", "setup")
@@ -133,8 +134,8 @@ def test_no_log_must_be_the_boolean_true(task, ok):
 def _shell_template_tasks():
     """(plane, role, src, task) for every template task on either plane whose src is *.sh.j2."""
     for plane in PLANES:
-        for tasks_file in sorted((ROLES / plane).glob("*/tasks/*.yml")):
-            role = tasks_file.parent.parent.name
+        for role_dir, tasks_file in task_files_by_role(ROLES / plane):
+            role = role_dir.name
             for task in walk_tasks(load_tasks(tasks_file)):
                 module = next((m for m in TEMPLATE_MODULES if m in task), None)
                 if module is None:

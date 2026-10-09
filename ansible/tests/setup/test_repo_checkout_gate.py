@@ -23,6 +23,7 @@ import yaml
 from lib import yaml_fast
 
 from _helpers import ALL_VARS, HOST_VARS, SETUP_ROLES
+from _role_census import task_files
 
 GATE = "has_repo_checkout"
 
@@ -118,7 +119,7 @@ def _target_side_hits(task: dict) -> list[str]:
 def _census() -> list[tuple[str, str, object, list[str]]]:
     """(file, task name, its `when`, the offending arguments) for every target-side hit."""
     found = []
-    for tasks_file in sorted(SETUP_ROLES.glob("*/tasks/*.yml")):
+    for tasks_file in task_files(SETUP_ROLES):
         try:
             parsed = yaml_fast.safe_load(tasks_file.read_text())
         except yaml.YAMLError:
@@ -177,7 +178,7 @@ def test_a_fixed_task_stays_off_the_checkout():
 def test_the_fixed_tasks_still_exist():
     """Non-vacuity for the test above: a renamed task would pass it by vanishing."""
     names = set()
-    for tasks_file in SETUP_ROLES.glob("*/tasks/*.yml"):
+    for tasks_file in task_files(SETUP_ROLES):
         try:
             parsed = yaml_fast.safe_load(tasks_file.read_text())
         except yaml.YAMLError:

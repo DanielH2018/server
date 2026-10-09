@@ -23,7 +23,7 @@ Run: uv run pytest ansible/tests/k8s/test_script_configmaps_apply_server_side.py
 import pytest
 from lib import yaml_fast
 from _helpers import K8S_ROLES
-from _role_census import role_dirs
+from _role_census import role_dirs, role_task_files
 
 TASK_NAME = "Apply the script ConfigMap"
 ANNOTATION_CAP = 262144
@@ -46,7 +46,7 @@ def _role_apply_tasks(role):
     """Every apply task across the role's task files: game-stats keeps one per game file."""
     return [
         task
-        for tasks_file in sorted((role / "tasks").glob("*.yml"))
+        for tasks_file in role_task_files(role)
         for task in _apply_tasks(yaml_fast.safe_load(tasks_file.read_text()))
     ]
 

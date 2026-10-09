@@ -10,6 +10,7 @@ Run: uv run pytest ansible/tests/setup/test_pi_watchdog_restarts_after_provision
 from _helpers import ANSIBLE
 from _helpers import load_tasks
 from _helpers import walk_tasks
+from _role_census import task_files
 from lib import yaml_fast
 
 SETUP = ANSIBLE / "roles" / "setup"
@@ -64,7 +65,7 @@ def stops_left_stopped(tasks: list[dict], handlers: list[dict]) -> list[str]:
 
 def _real_tasks() -> list[dict]:
     tasks: list[dict] = []
-    for tasks_file in sorted(SETUP.glob("*/tasks/**/*.yml")):
+    for tasks_file in task_files(SETUP):
         tasks.extend(walk_tasks(load_tasks(tasks_file)))
     return tasks
 
