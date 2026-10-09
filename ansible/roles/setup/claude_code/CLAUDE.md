@@ -111,3 +111,4 @@ effect at the next start**, so the deploy that changes it drops the RC host's se
 - **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.
 - **Evidence:** `journalctl -u claude-memory-sync` lists each file a run changed or deleted;
   a failure pages Discord.
+<!-- e2e approval-path landing check -->
