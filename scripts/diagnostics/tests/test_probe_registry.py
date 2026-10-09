@@ -116,3 +116,41 @@ def test_only_routed_subcommands_with_a_callable_lack_the_handler_flag():
         if e.func is not None and "handler" not in e.flags
     }
     assert unflagged == subcommands.ROUTED_IN_MAIN
+
+
+# The invocations of each `ROUTED_IN_MAIN` subcommand that must stream through `plan()` rather
+# than reach the registry callable. `health` is absent: `main()` answers every `health`
+# invocation before the `handlers` lookup, so its flag cannot change where it goes.
+_STREAMING_INVOCATIONS = [
+    ["--dry-run", "metric", "up", "--json"],
+    ["--dry-run", "metric", "up"],
+    ["--dry-run", "loki-query", '{app="x"}', "--json"],
+    ["--dry-run", "targets"],
+]
+
+
+@pytest.mark.parametrize("argv", _STREAMING_INVOCATIONS, ids=" ".join)
+def test_a_routed_subcommand_streams_when_its_callable_does_not_apply(
+    argv, monkeypatch, capsys
+):
+    # Every registry callable raises, so a dispatch that reaches one fails here rather than
+    # printing a plausible answer. Dropping a name from ROUTED_IN_MAIN flags it "handler",
+    # which sends these invocations to the callable. The stubs cover every entry, not just
+    # ROUTED_IN_MAIN, so editing that set cannot also shrink what this test guards.
+    for entry in subcommands.REGISTRY:
+        if entry.func is None:
+            continue
+
+        def _refuse(*_a, _name=entry.name, **_k):
+            raise AssertionError(f"{_name}: reached the registry callable, not plan()")
+
+        monkeypatch.setattr(entry, "func", _refuse)
+    planned = []
+
+    def fake_plan(args, _resolve_ip):
+        planned.append(args)
+        return [["curl", "planned"]]
+
+    assert probe.main(argv, plan=fake_plan) == 0
+    assert planned == [argv]
+    assert capsys.readouterr().out == "curl planned\n"

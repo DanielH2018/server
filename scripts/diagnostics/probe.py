@@ -102,7 +102,7 @@ from diagnostics.probe_lib.subcommands import REGISTRY
 from lib.kubectl import WrongCluster, kubectl_argv, nodes_args
 
 
-def main(argv=None):
+def main(argv=None, *, plan=plan):
     """Parse argv, dispatch to the matching subcommand, and return its exit code.
 
     `health` and the handler-table subcommands answer directly from an API or from
@@ -110,6 +110,9 @@ def main(argv=None):
     formatted view; every other subcommand falls through to the streaming `curl` pipeline
     built by `plan()`. `targets --pi` is checked ahead of that fallback, because plain
     `targets` still streams.
+
+    `plan` is injectable so a test can see which invocations reach the streaming path without
+    SOPS or the network.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
     # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are
