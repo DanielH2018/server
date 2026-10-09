@@ -11,9 +11,13 @@ The hand-written pages under `docs/` transclude their fact tables — a `--8<--`
 in a file `scripts/docs/gen_doc_fragments.py` writes under `docs/assets/generated/fragments/`.
 The prose stays hand-written; the tunables beside it are re-read from the tree.
 
-**Changing one of those tunables fails CI until you regenerate.** Run
-`uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes, in the same PR.
-`FRAGMENTS` in that generator lists every tunable it reads.
+**Changing one of those tunables rewrites its fragment at commit time.** The
+`regen-doc-fragments` prek hook runs `gen_doc_fragments.py --fix` on any commit that touches a
+source the generator reads. It rewrites the stale fragment and fails once like a formatter, so
+stage the rewritten fragment and commit again. `FRAGMENTS` in that generator lists every
+tunable it reads. A commit that skipped prek fails
+`test_every_committed_fragment_matches_what_the_generator_writes_now` in CI; the repair is
+`uv run python scripts/docs/gen_doc_fragments.py` and a commit of what it writes.
 
 **A role `CLAUDE.md`'s `## At a glance` block is generated the same way, in place.**
 `scripts/docs/gen_role_glance.py` writes one field set per role shape between two

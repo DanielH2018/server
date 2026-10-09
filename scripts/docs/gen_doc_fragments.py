@@ -40,9 +40,15 @@ Every fragment must be included by at least one page and every include must name
 fragment this script emits; scripts/docs/tests/test_gen_doc_fragments.py checks both
 directions, so a fragment cannot go dead and a page cannot include a name nobody writes.
 
+The `regen-doc-fragments` prek hook runs `--fix` on every commit that touches a source this
+generator reads (#3827). It rewrites a stale fragment and exits 1 like a formatter, so the
+author stages it and commits again. A plain run always exits 0: the docs-refresh cron calls
+it through build_docs.py and commits whatever it wrote.
+
 Usage::
 
     uv run python scripts/docs/gen_doc_fragments.py --out-dir docs/assets/generated/fragments
+    uv run python scripts/docs/gen_doc_fragments.py --fix  # write, exit 1 if any was stale
 """
 
 import argparse
@@ -233,14 +239,14 @@ FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
 }
 
 
-def write_fragments(out_dir: _Path) -> int:
-    """Write every fragment whose content changed. Returns how many were written."""
+def write_fragments(out_dir: _Path) -> list[str]:
+    """Write every fragment whose content changed. Returns the names written."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    written = 0
+    written = []
     for name, build in FRAGMENTS.items():
         body, sources = build()
         if write_if_body_changed(out_dir / f"{name}.md", header(sources) + body):
-            written += 1
+            written.append(name)
     return written
 
 
@@ -249,18 +255,30 @@ def main(argv: list[str] | None = None) -> int:
 
     Args:
         argv: command-line arguments, or None to use `sys.argv`.
+
+    Returns:
+        0, or 1 under `--fix` when a fragment was stale and has been rewritten.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--out-dir", default=DEFAULT_OUT_DIR, help="where the fragments go"
+    )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="exit 1 naming every fragment written (the prek hook's mode)",
     )
     args = parser.parse_args(argv)
     out_dir = _Path(args.out_dir)
     if not out_dir.is_absolute():
         out_dir = REPO / out_dir
     written = write_fragments(out_dir)
+    if args.fix and written:
+        print(f"gen_doc_fragments: rewrote stale fragment(s): {', '.join(written)}")
+        print("  stage the rewritten fragments and commit again")
+        return 1
     print(
-        f"gen_doc_fragments: {len(FRAGMENTS)} fragment(s), {written} written -> {out_dir}"
+        f"gen_doc_fragments: {len(FRAGMENTS)} fragment(s), {len(written)} written -> {out_dir}"
     )
     return 0
 
