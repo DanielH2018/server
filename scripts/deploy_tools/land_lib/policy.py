@@ -27,12 +27,20 @@ approval as well.
 
 import subprocess
 import sys as _sys
+from collections.abc import Callable
 from pathlib import Path as _Path
-from typing import Any, NoReturn
+from typing import NoReturn
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.pr_json import (
+    PrFile,
+    PrReview,
+    PrView,
+    parse_file,
+    parse_review,
+)
 from lib.json_types import JsonObject, as_list, as_object_list
 
 # GitHub's REST files endpoint returns at most 3000 files, so a PR at the cap may hide a path
@@ -60,7 +68,7 @@ def read_approval_paths(path: str) -> list[str]:
     return prefixes
 
 
-def branch_problems(view: dict[str, Any], prefix: str) -> list[str]:
+def branch_problems(view: PrView, prefix: str) -> list[str]:
     """Why the PR's head branch is not one the policy lands; empty when it is."""
     problems = []
     if view.get("isCrossRepository") is not False:
@@ -75,7 +83,7 @@ def branch_problems(view: dict[str, Any], prefix: str) -> list[str]:
     return problems
 
 
-def approval_hits(files: list[dict[str, Any]], prefixes: list[str]) -> list[str]:
+def approval_hits(files: list[PrFile], prefixes: list[str]) -> list[str]:
     """Each changed path under an approval prefix, in order, without duplicates.
 
     A renamed file is checked under its old path too, so a rename out of a listed directory
@@ -89,7 +97,7 @@ def approval_hits(files: list[dict[str, Any]], prefixes: list[str]) -> list[str]
     return hits
 
 
-def approval_problem(reviews: list[dict[str, Any]], approver: str, head: str) -> str:
+def approval_problem(reviews: list[PrReview], approver: str, head: str) -> str:
     """Why `approver` has not approved `head`; empty when their latest verdict approves it."""
     theirs = sorted(
         (
@@ -103,8 +111,9 @@ def approval_problem(reviews: list[dict[str, Any]], approver: str, head: str) ->
     if not theirs:
         return f"{approver} has not approved it"
     latest = theirs[-1]
-    if latest["state"] != "APPROVED":
-        return f"{approver}'s latest review is {latest['state'].lower()}"
+    state = latest.get("state", "")
+    if state != "APPROVED":
+        return f"{approver}'s latest review is {state.lower()}"
     approved = latest.get("commit_id") or ""
     if approved != head:
         return f"{approver} approved {approved[:8] or '<unknown>'}, not the head {head[:8]}"
@@ -115,8 +124,12 @@ def _refuse(ln: Landing, why: str) -> NoReturn:
     ln.die(f"refused by the landing policy: {why}", 1)
 
 
-def _list(ln: Landing, what: str) -> list[JsonObject]:
-    """Every entry of the PR's REST `what` listing (`files`, `reviews`), across all pages."""
+def _list[T](ln: Landing, what: str, parse: Callable[[JsonObject], T]) -> list[T]:
+    """Every entry of the PR's REST `what` listing (`files`, `reviews`), across all pages.
+
+    `parse` runs inside the read, so an entry of the wrong shape refuses the landing as
+    unparseable gh output rather than escaping as a traceback.
+    """
     try:
         pages = as_list(
             ln.tools.gh_json(
@@ -129,7 +142,7 @@ def _list(ln: Landing, what: str) -> list[JsonObject]:
             f"gh api pulls/{what}",
         )
         return [
-            entry
+            parse(entry)
             for page in pages
             for entry in as_object_list(page, f"gh api pulls/{what} page")
         ]
@@ -171,7 +184,7 @@ def check(ln: Landing) -> str:
         except (OSError, ValueError) as exc:
             _refuse(ln, f"the approval-path list is unusable: {exc}")
         # The REST listing, because it also names a rename's old path.
-        files = _list(ln, "files")
+        files = _list(ln, "files", parse_file)
         if len(files) >= FILE_CAP:
             _refuse(ln, f"it changes {len(files)} files, at GitHub's listing cap")
         hits = approval_hits(files, prefixes)
@@ -181,7 +194,9 @@ def check(ln: Landing) -> str:
             )
             if not o.approver:
                 _refuse(ln, why)
-            problem = approval_problem(_list(ln, "reviews"), o.approver, head)
+            problem = approval_problem(
+                _list(ln, "reviews", parse_review), o.approver, head
+            )
             if problem:
                 _refuse(ln, f"{why}; {problem}")
             say(f"{o.approver} approved {head[:8]}, lifting the approval-path refusal")
