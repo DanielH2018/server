@@ -18,7 +18,7 @@ operator decided this on 2026-10-09 (#3685). See
 | 1 | A read-only `claude` user an operator can open a session as | Done 2026-10-04 (#3504, #3505) |
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
 | 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check passed 2026-10-09, after #3999 fixed the approved-PR merge. Done. |
-| 4 | The phone host `claude-rc.service` runs as `claude` | 4a to 4c deployed 2026-10-09 (#4035, #4030, #4036, #4039, #4044). 4d is draft PR #4054 and waits for the operator's switch-over window. |
+| 4 | The phone host `claude-rc.service` runs as `claude` | 4a to 4c deployed 2026-10-09 (#4035, #4030, #4036, #4039, #4044). 4d (#4054) switched the host over on 2026-10-09; the operator's `/login` and the check are owed. |
 | 5 | Peer users, and the tools that decrypt SOPS | The homelab-ui login deployed 2026-10-09 (#4051). Peer users dropped. The agent cannot yet drive homelab-ui (#4058). |
 | 6 | Retire Claude sessions as `ubuntu` | Planned |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
@@ -288,6 +288,34 @@ still opens PRs, and the operator lands them.
   the `systemd-journal` membership. The read grant and the journal group land first, in
   `ansible/roles/setup/claude_code/tasks/agent_access.yml`, each behind its own switch.
 - **4d** sets `claude_code_user: claude` in daniel-box's host_vars and copies the memory store.
+  The copy is `tasks/agent_memory_seed.yml`. It runs as root while the agent's `MEMORY.md` does
+  not exist, so a later apply never overwrites what the agent wrote. It gives the files to the
+  agent with group `ubuntu` and mode `0640`, and it strips `/home/ubuntu/server/` from every
+  copied `.md` so a link reads `docs/x.md` and resolves in any clone. The `ubuntu` store is not
+  touched.
+  - `claude-memory-sync` now reads the agent's store and still writes the operator's store on
+    daniel-server, where sessions run as `ubuntu`. The target is its own variable,
+    `claude_code_memory_sync_target_dir`.
+  - The unit gains `UMask=0027`. systemd's default `0022` already leaves group read on a file
+    created `0666`, so the line pins that and removes the "other" bits. It cannot widen a file
+    Claude Code creates `0600`, which the check below tests.
+
+**4d switch-over, after the merge:**
+
+1. Wait for the deployer to apply `claude_code`. The change touches `ansible/inventory/` too, so
+   the same tick then runs a full `deploy.yml`. The `claude_code` apply restarts `claude-rc.service` as
+   `claude`, which drops live phone sessions. Until step 2 finishes, the agent has no login.
+1. Log in once as the agent:
+
+    ```bash
+    sudo machinectl shell claude@ /bin/bash -l
+    cd ~/server
+    claude
+    ```
+
+    Run `/login`, trust the folder, then exit. Then run
+    `sudo systemctl restart claude-rc.service`, so the host reads the new login.
+1. Run the check below.
 
 **Read grant:** `ubuntu` reads the agent's artifacts and memory through one grant in the role.
 `claude-memory-sync` runs as `sys_user`, and the artifacts tree is the operator's to read, so
@@ -324,9 +352,19 @@ pod would drop the capability.
 | `/home/ubuntu` literals in repo tooling | `scripts/dev/fanout_lib/launch.py`, `scripts/deploy_tools/land_lib/options.py`, `scripts/deploy_tools/land_reach.py` and about 16 more non-test files |
 | The SessionStart banner's other-session list | It reads `git worktree list`, so it shows only sessions in the same clone |
 
-**Check:** a phone-created session prints `claude` for `id`, loads `MEMORY.md`, and writes an
-artifact whose link renders. The artifacts pod can traverse to that file. As `ubuntu`, `cat`
-reads that artifact and a memory file the session wrote, after a `claude_code` apply.
+**Check:** create a session from the phone, and ask it to do three things.
+
+1. Print `id`. It must show `claude`.
+1. Say what `MEMORY.md` lists. A session that loads it names entries from the copied store.
+1. Write an artifact and a new memory file. The artifact's link must render under
+   `/a/daniel-box-claude/`, which proves the artifacts pod can traverse to the file.
+
+Then, as `ubuntu`, `cat` the new artifact and the new memory file in
+`/var/lib/claude/.claude/projects/-var-lib-claude-server/memory/`. A permission error on the
+memory file means Claude Code created it `0600`, which `UMask=0027` cannot widen. In that case
+`claude-memory-sync` cannot read it either, so file a finding with `findings.py open`. Last,
+`journalctl -u claude-memory-sync` must show a run that copied to daniel-server, and the new
+file must appear in `/home/ubuntu/.claude/projects/-home-ubuntu-server/memory/` there.
 
 **Rollback:** `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live
 sessions.

@@ -309,6 +309,9 @@ def test_default_user_is_the_operator_and_the_unit_is_not_hardened(unit: str) ->
             f"{key}= rendered for the operator; it must appear only when "
             "claude_code_user differs from sys_user"
         )
+    assert not directive(unit, "UMask"), (
+        "UMask= rendered for the operator; the operator's sessions keep systemd's default"
+    )
 
 
 def test_agent_user_runs_from_its_own_home_with_hardening() -> None:
@@ -330,3 +333,7 @@ def test_agent_user_runs_from_its_own_home_with_hardening() -> None:
         assert directive(moved, key) == ["yes"], (
             f"{key}=yes must render for the agent user"
         )
+    assert directive(moved, "UMask") == ["0027"], (
+        "the agent's unit must pin UMask=0027: group read on what a session creates, "
+        "none for other"
+    )

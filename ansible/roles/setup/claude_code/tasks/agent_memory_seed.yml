@@ -1,0 +1,90 @@
+---
+# Copies the operator's Claude memory store into the agent's, once, when claude-rc.service
+# moves to the agent (slice 4d of docs/claude-agent-user.md). Imported from main.yml when
+# claude_code_agent_user_enabled and claude_code_user is the agent, after agent_access.yml,
+# which creates the agent's memory directory with the setgid bit and the default ACL this
+# copy relies on. defaults/main.yml has the switch.
+#
+# The guard is the agent's own MEMORY.md. A store with an index is the agent's, whatever it
+# holds, so no later apply copies over a memory the agent wrote. The operator's store stays in
+# place and is only read.
+#
+# Every copied .md loses the operator's checkout prefix, so a link into the repo reads
+# `docs/x.md` and resolves from any clone on any host. Prose that mentions the prefix loses it
+# too. Other text is untouched.
+
+- name: Look for the agent's memory index
+  ansible.builtin.stat:
+    path: "{{ claude_code_agent_memory_dir }}/MEMORY.md"
+  register: claude_code_agent_memory_index
+  become: true
+
+- name: Look for the operator's memory index to copy
+  ansible.builtin.stat:
+    path: "{{ claude_code_operator_memory_dir }}/MEMORY.md"
+  register: claude_code_operator_memory_index
+  become: true
+
+- name: Copy the operator's memory store into the agent's, once
+  when:
+    - not claude_code_agent_memory_index.stat.exists
+    - claude_code_operator_memory_index.stat.exists
+  block:
+    # Owner and group follow agent_access.yml: the agent owns the files and group sys_user
+    # reads them. 0640 makes the default ACL's mask r--, and the directories keep setgid.
+    # -t keeps the operator's mtimes, -O leaves a directory's mtime out of the itemised
+    # output, so any output line is a real change. --dry-run in check mode makes that output
+    # a faithful "would change".
+    - name: Copy the operator's memory files
+      ansible.builtin.command:
+        argv: >-
+          {{ ['rsync', '-rLptogO', '--itemize-changes',
+              '--chown=' ~ claude_code_agent_user ~ ':' ~ sys_user,
+              '--chmod=D2750,F0640']
+             + (['--dry-run'] if ansible_check_mode else [])
+             + [claude_code_operator_memory_dir ~ '/', claude_code_agent_memory_dir ~ '/'] }}
+      register: claude_code_agent_memory_rsync
+      changed_when: claude_code_agent_memory_rsync.stdout | trim | length > 0
+      # Read-only under --dry-run, so check mode may run it.
+      check_mode: false
+      become: true
+
+    - name: List the copied memory notes
+      ansible.builtin.find:
+        paths: "{{ claude_code_agent_memory_dir }}"
+        patterns: "*.md"
+        recurse: true
+      register: claude_code_agent_memory_notes
+      become: true
+
+    # Mode, owner and group are named again because replace writes a new file.
+    - name: Make the copied memory notes' links repo-relative
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: "{{ claude_code_agent_memory_seed_strip | regex_escape }}"
+        replace: ""
+        owner: "{{ claude_code_agent_user }}"
+        group: "{{ sys_user }}"
+        mode: "0640"
+      loop: "{{ claude_code_agent_memory_notes.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      # A memory note is the operator's prose; --diff must not print it.
+      diff: false
+      become: true
+
+  # The block runs only while MEMORY.md is absent, so removing it here undoes only this
+  # copy's own write. Without the removal a half-finished copy would close the guard for
+  # good, with links left absolute.
+  rescue:
+    - name: Reopen the copy after a failure
+      ansible.builtin.file:
+        path: "{{ claude_code_agent_memory_dir }}/MEMORY.md"
+        state: absent
+      become: true
+
+    - name: Stop the apply after a failed memory copy
+      ansible.builtin.fail:
+        msg: >-
+          Copying the operator's memory store into {{ claude_code_agent_memory_dir }} failed.
+          Its MEMORY.md was removed, so the next apply copies again.
