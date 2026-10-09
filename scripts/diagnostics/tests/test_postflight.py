@@ -354,7 +354,7 @@ def test_the_drift_check_reports_a_long_interval_tile_kuma_never_created(monkeyp
         monkeypatch, declared, set(), pod_age=lambda c: 3600, created=set()
     )
     assert status == postflight.FAIL
-    assert "Homelab Evals: declared, never created in Kuma" in detail
+    assert "Homelab Evals: declared, absent from Kuma's status page" in detail
 
 
 def _drift_over(

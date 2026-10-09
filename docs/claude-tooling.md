@@ -117,11 +117,13 @@ could only ever read as missing (#2019).
 
 Pending applies only to a monitor Kuma holds. `kuma-drift` reads which monitors exist from Kuma's
 public status page, which `kuma-status-page-sync` keeps listing every declared monitor. A
-declared name absent from that page reads as "never created" at any pod age (#4005). Without
-the page, a weekly tile AutoKuma refused stayed pending forever, because the weekly reboot
-restarts Kuma before the tile's interval elapses. A tile added in the last 15 minutes can read
-as never created until the sync places it. An unreadable page keeps the tiles pending and
-prints a line saying their existence went unverified.
+declared name absent from that page is missing at any pod age (#4005). Without the page, a
+weekly tile AutoKuma refused stayed pending forever, because the weekly reboot restarts Kuma
+before the tile's interval elapses. Absent from the page means never created, or added since the
+sync last succeeded. The sync runs every 15 minutes, and it fails while any declared tile is
+missing from Kuma, so one refused tile also leaves every tile added after it off the page. An
+unreadable page keeps the tiles pending and prints a line saying their existence went
+unverified.
 
 ### The Pi's own first-command triage
 

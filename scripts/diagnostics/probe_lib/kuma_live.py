@@ -19,8 +19,10 @@ with `Other` as the net for an unmatched one. ENFORCED:
 Kuma's schema declares `monitor_group.monitor_id` ON DELETE CASCADE, so a monitor AutoKuma
 deletes leaves the page as well. A monitor Kuma never created was never placed.
 
-It has two blind spots. A new tile reads as absent until the quarter-hourly sync places it. A
-sync that has stopped leaves the page stale, and the sync's own push tile reports that.
+Absence is all it can report, not its cause. A new tile is absent until the quarter-hourly sync
+places it. The sync fails while any declared tile is missing from Kuma
+(`render_status_page.build_group_list`), so one refused tile keeps every tile added after it off
+the page too. The sync's own push tile reports a sync that has stopped.
 """
 
 import json

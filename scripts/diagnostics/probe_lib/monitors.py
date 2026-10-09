@@ -442,8 +442,8 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None, *, cre
             gated.append(name)
         elif unreadable is None and name not in created:
             missing.append(
-                f"  {name}: declared, never created in Kuma (absent from its status page; "
-                "a tile added in the last 15 min may not be placed yet)"
+                f"  {name}: declared, absent from Kuma's status page (never created, "
+                "or added since kuma-status-page-sync last succeeded)"
             )
         elif (
             kuma_age_seconds is not None

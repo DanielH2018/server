@@ -21,7 +21,7 @@ def test_kuma_drift_reports_a_never_created_long_interval_tile_as_missing_is_fla
     declared = monitors.parse_declared_monitors(LONG_INTERVAL_SAMPLE)
     text, code = monitors.format_kuma_drift(declared, set(), 3600, created=set())
     assert code == 1
-    assert "Homelab Evals: declared, never created in Kuma" in text
+    assert "Homelab Evals: declared, absent from Kuma's status page" in text
     assert "no beat due yet" not in text
 
 
