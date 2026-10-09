@@ -23,8 +23,9 @@ one. No timestamp either: docs_provenance.write_if_body_changed compares the who
 when there is no frontmatter, and a stamp would make every run a rewrite and every cron
 run a commit. When a fragment's content last changed is its git history.
 
-STATIC PARSING ONLY, like every generator here. Role defaults are read with yaml.safe_load
-and Python constants with `ast`, never by importing the deployer or the rotation tool --
+STATIC PARSING ONLY, like every generator here. Role defaults and the inventory are read
+through `lib.estate`, which parses the YAML and applies Ansible's precedence, and Python
+constants with `ast`, never by importing the deployer or the rotation tool --
 both bootstrap sys.path and read the environment on import. The k8s auto-deploy stance is
 the one exception: `scripts/dev/k8s_autodeploy_counts.py` and the `k8s_autodeploy` filter
 plugin it wraps do neither -- they only walk role directories and `yaml.safe_load` their
@@ -69,7 +70,6 @@ from fragment_readers import (
     parse_jails,
     registry_counts,
     registry_record_keys,
-    role_defaults,
 )
 from fragment_renderers import (
     render_autodeploy_coverage,
@@ -85,8 +85,9 @@ from fragment_renderers import (
     render_traefik_ports,
 )
 from lib.docs_provenance import write_if_body_changed
-from lib.ansible_inventory import K8S_HOST_VARS, PI_HOST_VARS
-from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI, K3S_DEFAULTS, REPO
+from lib.ansible_inventory import K8S_HOST, K8S_HOST_VARS, PI_HOST, PI_HOST_VARS
+from lib.estate import Estate
+from lib.repo_paths import ALL_VARS, K3S_ROLE, K8S_ROLES, REPO, ROLES
 from lib.service_tiers import resolved_tier_lists
 
 SELF = "scripts/docs/gen_doc_fragments.py"
@@ -97,13 +98,11 @@ DEPLOY_CHANGES = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_changes.
 GITOPS_DEPLOY = REPO / "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
 SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
 SECRET_REGISTRY = REPO / "ansible/secret_rotation.yml"
-PI_PEER_DEFAULTS = REPO / "ansible/roles/k8s/pi-peer-backup/defaults/main.yml"
-REGISTRY_DEFAULTS = REPO / "ansible/roles/k8s/registry/defaults/main.yml"
-FAIL2BAN_CONF = (
-    REPO / "ansible/roles/setup/initial_setup/templates/fail2ban_homelab.conf.j2"
-)
-INITIAL_SETUP_DEFAULTS = REPO / "ansible/roles/setup/initial_setup/defaults/main.yml"
-TRAEFIK_DEFAULTS = REPO / "ansible/roles/k8s/traefik/defaults/main.yml"
+PI_PEER_ROLE = K8S_ROLES / "pi-peer-backup"
+REGISTRY_ROLE = K8S_ROLES / "registry"
+INITIAL_SETUP_ROLE = ROLES / "setup" / "initial_setup"
+FAIL2BAN_CONF = INITIAL_SETUP_ROLE / "templates" / "fail2ban_homelab.conf.j2"
+TRAEFIK_ROLE = K8S_ROLES / "traefik"
 
 
 def header(sources: list[str]) -> str:
@@ -118,7 +117,7 @@ def header(sources: list[str]) -> str:
 
 
 def _longhorn() -> tuple[str, list[str]]:
-    return render_longhorn_tiers(resolved_tier_lists(role_defaults(K3S_DEFAULTS))), [
+    return render_longhorn_tiers(resolved_tier_lists(Estate().role_vars(K3S_ROLE))), [
         "ansible/roles/setup/k3s/defaults/main.yml"
     ]
 
@@ -151,33 +150,35 @@ def _crowdsec_agent_liveness() -> tuple[str, list[str]]:
 
 
 def _etcd_offbox_retention() -> tuple[str, list[str]]:
-    retention = role_defaults(K3S_DEFAULTS)["k3s_etcd_s3_retention"]
+    retention = Estate().role_vars(K3S_ROLE)["k3s_etcd_s3_retention"]
     return render_etcd_offbox_retention(retention), [
         "ansible/roles/setup/k3s/defaults/main.yml"
     ]
 
 
 def _traefik_ports() -> tuple[str, list[str]]:
-    d = role_defaults(TRAEFIK_DEFAULTS)
+    d = Estate().role_vars(TRAEFIK_ROLE)
     return render_traefik_ports(
         d["traefik_k8s_http_port"], d["traefik_k8s_https_port"]
     ), ["ansible/roles/k8s/traefik/defaults/main.yml"]
 
 
-def deadman_inputs() -> tuple[dict, dict, dict, dict, dict, dict[str, bool]]:
+def deadman_inputs(
+    estate: Estate | None = None,
+) -> tuple[dict, dict, dict, dict, dict, dict[str, bool]]:
     """The six arguments `deadman_crons` takes, read from the tree.
 
     Shared with the monitor-bridge expectations test, so the fragment and the test cannot read
     different sources.
     """
-    group_vars = role_defaults(ALL_VARS)
+    estate = estate or Estate()
     return (
-        role_defaults(K3S_DEFAULTS),
-        role_defaults(PI_PEER_DEFAULTS),
-        role_defaults(REGISTRY_DEFAULTS),
-        group_vars,
-        role_defaults(INITIAL_SETUP_DEFAULTS),
-        host_has_docker(HOSTS_INI, group_vars, HOST_VARS),
+        estate.role_vars(K3S_ROLE),
+        estate.role_vars(PI_PEER_ROLE),
+        estate.role_vars(REGISTRY_ROLE),
+        estate.group_vars,
+        estate.role_vars(INITIAL_SETUP_ROLE),
+        host_has_docker(estate),
     )
 
 
@@ -200,12 +201,13 @@ def _fail2ban() -> tuple[str, list[str]]:
 
 
 def _lan() -> tuple[str, list[str]]:
-    group = role_defaults(ALL_VARS)
+    estate = Estate()
+    group = estate.group_vars
     return render_lan_addresses(
         str(group["k3s_metallb_ingress_vip"]),
         str(group["dns_k8s_vip"]),
-        container_udp_port(role_defaults(K8S_HOST_VARS), "wg-easy"),
-        container_udp_port(role_defaults(PI_HOST_VARS), "wg-easy"),
+        container_udp_port(estate.entries(K8S_HOST), "wg-easy"),
+        container_udp_port(estate.entries(PI_HOST), "wg-easy"),
         str(group["lan_subnet"]),
         str(group["wg_client_subnet"]),
     ), [

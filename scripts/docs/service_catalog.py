@@ -73,16 +73,11 @@ from catalog_backup import (
 from catalog_facts import auth_tier, route_for
 from catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
 from catalog_render import render_html, render_markdown
-from lib.render_guard import (
-    ALL_VARS,
-    HOST_VARS,
-    containers_entries,
-    host_files,
-    load_yaml as _load_yaml,
-)
+from lib.estate import Estate, Inventory
+from lib.repo_paths import ALL_VARS, HOST_VARS
 
-# containers_list and the host_vars walk both come from lib.render_guard — the same source and
-# shape scripts/deploy_tools/deploy_tags.py already parses, rather than a second copy here.
+# containers_list and the host_vars walk both come from lib.estate, the loader every docs
+# generator reads the inventory through.
 
 
 # Assembly
@@ -109,13 +104,13 @@ def build_rows(
     # Built once: a claim mounted by one role and declared by another (media-data) resolves
     # through this index, and every k8s row reads it.
     claim_classes = claim_index(k8s_roles)
-    k8s_namespace = _load_yaml(all_vars).get("k8s_namespace", "homelab")
+    estate = Estate(Inventory(all_vars=all_vars, host_vars=host_vars))
+    k8s_namespace = estate.group_vars.get("k8s_namespace", "homelab")
 
     rows: list[ServiceRow] = []
-    for path in host_files(host_vars):
-        host_data = _load_yaml(path)
-        host = path.stem
-        for entry in containers_entries(path):
+    for host in estate.host_vars_hosts():
+        host_data = estate.own_vars(host)
+        for entry in estate.entries(host):
             name = entry["name"]
             platform = entry.get("platform", "docker")
             rows.append(

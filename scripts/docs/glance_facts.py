@@ -25,9 +25,9 @@ from pathlib import Path
 from typing import Any
 
 from lib import yaml_fast
-from lib.ansible_inventory import PI_HOST, PI_HOST_VARS
+from lib.ansible_inventory import PI_HOST
 from lib.json_types import JsonObject, JsonValue, as_object
-from lib.render_guard import containers_entries, entry_tags
+from lib.render_guard import entry_tags
 from lib.jinja_comments import strip_jinja_comments
 from lib.jinja_defaults import resolve
 from lib.k8s_roles import role_dirs
@@ -280,15 +280,6 @@ def setup_glance_lines(role_dir: Path, *, playbooks_dir: Path = ANSIBLE) -> list
 
 
 # --- Pi compose-plane facts ------------------------------------------------------------------
-
-
-def pi_service_entries(pi_host_vars: Path = PI_HOST_VARS) -> list[dict[str, Any]]:
-    """Every `containers_list` entry of the Pi (the platform default there is Docker)."""
-    return [
-        e
-        for e in containers_entries(pi_host_vars)
-        if e.get("platform", "docker") != "k8s"
-    ]
 
 
 def compose_images(role_dir: Path) -> list[tuple[str, list[str]]]:

@@ -39,8 +39,7 @@ from docs.route_facts import (
     reachability,
     route_cell,
 )
-from lib.ansible_inventory import containers_entries_in
-from lib.render_guard import host_files, load_yaml
+from lib.estate import Estate, Inventory
 from lib.repo_paths import HOST_VARS, K8S_ROLES
 
 # The macro applies these to every route it renders, in this order. Read from
@@ -51,19 +50,16 @@ _EXTRA_MW_RE = re.compile(r"extra_middlewares\s*=\s*\[([^\]]*)\]")
 _QUOTED_RE = re.compile(r"['\"]([^'\"]+)['\"]")
 
 
-def _load_host_vars(host_vars: Path) -> dict[str, dict]:
-    return {path.stem: load_yaml(path) for path in host_files(host_vars)}
-
-
 def build_rows(
     host_vars: Path = HOST_VARS,
     k8s_roles: Path = K8S_ROLES,
     group_vars: Path = GROUP_VARS,
 ) -> list[dict[str, str]]:
     """One row per k8s service that declares a route."""
+    estate = Estate(Inventory(host_vars=host_vars))
     rows = []
-    for host, data in _load_host_vars(host_vars).items():
-        for entry in containers_entries_in(data):
+    for host in estate.host_vars_hosts():
+        for entry in estate.entries(host):
             if entry.get("platform") != "k8s":
                 continue
             name = entry["name"]

@@ -23,9 +23,8 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST_VARS, containers_entries_in
+from lib.ansible_inventory import K8S_HOST_VARS
 from lib.jinja_comments import strip_jinja_comments
-from lib.render_guard import load_yaml
 from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES, REPO, SHARED_TPL
 
 __all__ = [
@@ -184,9 +183,17 @@ def non_manifest_documents(docs) -> list:
 
 
 def k8s_entries(host_vars: Path = K8S_HOST_VARS) -> dict[str, dict]:
-    """containers_list entries for the k8s platform in `host_vars`, keyed by service name."""
-    entries = containers_entries_in(load_yaml(host_vars))
-    return {c["name"]: c for c in entries if c.get("platform") == "k8s"}
+    """containers_list entries for the k8s platform in `host_vars`, keyed by service name.
+
+    The filter is `Estate.k8s_entries`, which the docs generators call; this takes the one
+    host file a caller names instead of an `Inventory`.
+    """
+    from lib.estate import Estate, Inventory
+
+    inventory = Inventory(
+        host_vars=host_vars.parent, plane_hosts={"k8s": host_vars.stem}
+    )
+    return Estate(inventory).k8s_entries()
 
 
 # How one k8s role reaches another's tasks: `include_role`/`import_role` naming it as

@@ -15,6 +15,7 @@ import pytest
 import fragment_readers as readers
 import fragment_renderers as renderers
 import gen_doc_fragments as g
+from lib.estate import Estate, Inventory
 
 DOCS = g.REPO / "docs"
 INCLUDE = re.compile(
@@ -255,26 +256,16 @@ def test_fail2ban_table_renders_one_row_per_enabled_jail():
 
 
 def test_container_udp_port_reads_the_named_entry():
-    hv = {
-        "containers_list": [
-            {"name": "a", "udp_port": 1},
-            {"name": "wg-easy", "udp_port": 51820},
-        ]
-    }
-    assert readers.container_udp_port(hv, "wg-easy") == "51820"
+    entries = [{"name": "a", "udp_port": 1}, {"name": "wg-easy", "udp_port": 51820}]
+    assert readers.container_udp_port(entries, "wg-easy") == "51820"
 
 
 def test_container_udp_port_refuses_an_ambiguous_or_missing_entry():
-    hv = {
-        "containers_list": [
-            {"name": "wg-easy", "udp_port": 1},
-            {"name": "wg-easy", "udp_port": 2},
-        ]
-    }
+    entries = [{"name": "wg-easy", "udp_port": 1}, {"name": "wg-easy", "udp_port": 2}]
     with pytest.raises(AssertionError):
-        readers.container_udp_port(hv, "wg-easy")
+        readers.container_udp_port(entries, "wg-easy")
     with pytest.raises(AssertionError):
-        readers.container_udp_port({"containers_list": []}, "wg-easy")
+        readers.container_udp_port([], "wg-easy")
 
 
 def test_deadman_cadences_assembles_each_cron_from_its_variables():
@@ -364,7 +355,11 @@ def test_host_has_docker_lets_host_vars_override_group_vars(tmp_path):
     host_vars = tmp_path / "host_vars"
     host_vars.mkdir()
     (host_vars / "pi.yml").write_text("has_docker: true\n")
-    assert readers.host_has_docker(hosts, {"has_docker": False}, host_vars) == {
+    (tmp_path / "all.yml").write_text("has_docker: false\n")
+    inventory = Inventory(
+        all_vars=tmp_path / "all.yml", host_vars=host_vars, hosts_ini=hosts
+    )
+    assert readers.host_has_docker(Estate(inventory)) == {
         "box": False,
         "pi": True,
     }
