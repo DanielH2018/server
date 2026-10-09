@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Operate on the GitOps deployer's own state markers, from the deploy host's shell.
 
-Two subcommands. `clear-owed <class> <subject>` drops one line of `/var/lib/gitops-deploy/owed.jsonl`, the deployer's owed-work
+Three subcommands. `clear-owed <class> <subject>` drops one line of `/var/lib/gitops-deploy/owed.jsonl`, the deployer's owed-work
 ledger, for any class an operator may clear: `manual_plane`, `k8s_deferred` or `k8s_unapplied` (#3544). `hold_plane` is not one of
 them, because a hold clears only once an apply covers each plane it lists. Every surface prints this command through
 `gitops_markers.owed_clear_cmd` (#3547).
@@ -9,6 +9,13 @@ them, because a hold clears only once an apply covers each plane it lists. Every
 `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the marker the deployer writes while
 consecutive ticks defer on one busy service lock; the tick clears it itself on its next run that is not deferred, so this is for a
 marker an operator wants gone now, after ending the holder.
+
+`clear-hold <sha>` removes `hold_sha` together with every `hold_plane` line of the ledger, only while
+`<sha>` is the SHA held (#3930). It is the deploy UI's Clear from a shell, through the same
+`gitops_hold.Hold.clear`. A `hold_plane` line is not a `clear-owed` class because dropping one without
+`hold_sha`, or `hold_sha` without its lines, is how a hold was orphaned before (`rm hold_sha`). Apply every
+plane the hold lists first: after the clear nothing records them. It journals `event=clear-hold`, naming
+each plane it dropped, since it silences **GitOps Deploy — Status**.
 
 `clear-owed manual_plane <role>` drops a role's line from the ledger. The deployer writes that line when a range carries a setup
 role no playbook it runs can apply — `k3s` (applied by `k3s-bringup.yml`) or `common` (applied by no playbook at all). The tick
@@ -78,8 +85,9 @@ _sys.path.insert(0, str(HOST_LIB_FILES))
 from deploy_changes import setup_role_tag
 from deploy_locks import TREE_LOCK, take
 from deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
+from gitops_hold import HOLD_PLANE_SEP, Hold
 from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, OWED_MANUAL_PLANE
-from gitops_markers import maximal_apply_warning, owed_clear_cmd
+from gitops_markers import MARKERS, maximal_apply_warning, owed_clear_cmd
 
 # Seconds to wait for it. Every other waiter on this lock waits 3000 (the census in the
 # deployer's test_gitops_deploy_timeout_budgets.py), because those are unattended jobs that
@@ -139,6 +147,33 @@ def tree_lock(path: str, wait_s: float | None = None):
             fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
         os.close(fd)
+
+
+def _refused(exc: Exception, marker: object) -> int:
+    """Print why a clear changed nothing, and return its exit code, 1.
+
+    Args:
+      exc: the `LockBusy`, `LockUnavailable` or `PermissionError` the clear raised.
+      marker: the marker file the clear would have written, named in a permission refusal.
+    """
+    if isinstance(exc, LockBusy):
+        message = (
+            f"{exc.args[0]} is held — a deploy or a gitops tick is running. Nothing was "
+            "changed; re-run this when it finishes."
+        )
+    elif isinstance(exc, LockUnavailable):
+        path, err = exc.args
+        message = (
+            f"cannot open the tree lock {path}: {err}. Nothing was changed — this command "
+            "serialises against that lock and will not write the marker without it."
+        )
+    else:
+        message = (
+            f"cannot write {marker} as this user — the state directory "
+            "is owned by the deploy user; retry with `sudo -u ubuntu`"
+        )
+    print(message, file=sys.stderr)
+    return 1
 
 
 def marker_key(role: str) -> str:
@@ -255,28 +290,8 @@ def clear_manual_plane(
             else:
                 remaining = None
                 cleared = state.clear_manual_plane(key)
-    except LockBusy as busy:
-        print(
-            f"{busy.args[0]} is held — a deploy or a gitops tick is running. Nothing was "
-            "changed; re-run this when it finishes.",
-            file=sys.stderr,
-        )
-        return 1
-    except LockUnavailable as bad_lock:
-        path, exc = bad_lock.args
-        print(
-            f"cannot open the tree lock {path}: {exc}. Nothing was changed — this command "
-            "serialises against that lock and will not write the marker without it.",
-            file=sys.stderr,
-        )
-        return 1
-    except PermissionError:
-        print(
-            f"cannot write {state.path('owed')} as this user — the state directory "
-            "is owned by the deploy user; retry with `sudo -u ubuntu`",
-            file=sys.stderr,
-        )
-        return 1
+    except (LockBusy, LockUnavailable, PermissionError) as refused:
+        return _refused(refused, state.path("owed"))
     # After the lock is released and only once the rewrite happened: a refusal above writes
     # no line, because a line claiming a clear that never happened is worse than none.
     (journal_clear if journal is None else journal)(
@@ -343,28 +358,8 @@ def clear_k8s_owed(
                 (e for e in state.owed_pending(cls) if e.service == service), None
             )
             cleared = bool(state.clear_owed(cls, {service}))
-    except LockBusy as busy:
-        print(
-            f"{busy.args[0]} is held — a deploy or a gitops tick is running. Nothing was "
-            "changed; re-run this when it finishes.",
-            file=sys.stderr,
-        )
-        return 1
-    except LockUnavailable as bad_lock:
-        path, exc = bad_lock.args
-        print(
-            f"cannot open the tree lock {path}: {exc}. Nothing was changed — this command "
-            "serialises against that lock and will not write the marker without it.",
-            file=sys.stderr,
-        )
-        return 1
-    except PermissionError:
-        print(
-            f"cannot write {state.path('owed')} as this user — the state directory "
-            "is owned by the deploy user; retry with `sudo -u ubuntu`",
-            file=sys.stderr,
-        )
-        return 1
+    except (LockBusy, LockUnavailable, PermissionError) as refused:
+        return _refused(refused, state.path("owed"))
     default_journal = functools.partial(journal_clear, event=journal_event(cls))
     (default_journal if journal is None else journal)(
         service,
@@ -427,32 +422,86 @@ def clear_contention(
     try:
         with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
             cleared = state.clear_contention()
-    except LockBusy as busy:
-        print(
-            f"{busy.args[0]} is held — a deploy or a gitops tick is running. Nothing was "
-            "changed; re-run this when it finishes.",
-            file=sys.stderr,
-        )
-        return 1
-    except LockUnavailable as bad_lock:
-        path, exc = bad_lock.args
-        print(
-            f"cannot open the tree lock {path}: {exc}. Nothing was changed — this command "
-            "serialises against that lock and will not write the marker without it.",
-            file=sys.stderr,
-        )
-        return 1
-    except PermissionError:
-        print(
-            f"cannot write {state.path('contention')} as this user — the state directory "
-            "is owned by the deploy user; retry with `sudo -u ubuntu`",
-            file=sys.stderr,
-        )
-        return 1
+    except (LockBusy, LockUnavailable, PermissionError) as refused:
+        return _refused(refused, state.path("contention"))
     if not cleared:
         print(f"no contention streak in {state.path('contention')} — nothing to clear")
         return 0
     print(f"cleared {state.path('contention')}")
+    return 0
+
+
+def journal_hold_clear(
+    sha: str, dropped: list[str], run: Callable[..., object] = subprocess.run
+) -> None:
+    """Write the one line that says an operator cleared the hold on `sha`, and which planes went.
+
+    Fire-and-forget like `journal_clear`, whose `ManualPlaneEntry` shape a hold does not fit.
+    `dropped` is quoted because a plane is free text with spaces in it.
+    """
+    fields = [
+        "event=clear-hold",
+        f"sha={sha}",
+        f"user={operator()}",
+        f"cwd={os.getcwd()}",
+        f"planes={len(dropped)}",
+    ]
+    if dropped:
+        fields.append(
+            'dropped="' + HOLD_PLANE_SEP.join(dropped).replace('"', "'") + '"'
+        )
+    try:
+        run(
+            ["logger", "-t", JOURNAL_TAG, " ".join(fields)],
+            check=False,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+    except OSError, subprocess.SubprocessError:
+        pass
+
+
+def clear_hold(
+    state_dir: str,
+    sha: str,
+    lock_path: str | None = None,
+    lock_wait_s: float | None = None,
+    journal: Callable[[str, list[str]], None] | None = None,
+) -> int:
+    """Remove `hold_sha` and every `hold_plane` line while `sha` is the SHA held.
+
+    Exit 0 on a clear, 1 on a SHA mismatch or a lock or permission refusal, which change
+    nothing. `Hold.clear` owns the rule; this takes the tree lock around it and reads the
+    planes under the same lock, so the list it prints is the list it dropped. The lock is
+    taken here once and `Hold.clear` gets the default no-op lock: a second `flock` from this
+    process on a fresh descriptor would wait on the first.
+
+    Args:
+      lock_path: the tree lock. None reads `TREE_LOCK`.
+      lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
+      journal: what records the clear, called with the SHA and the planes dropped. None
+        means `journal_hold_clear`.
+    """
+    hold = Hold(state_dir)
+    hold_path = _Path(state_dir) / MARKERS["hold"]
+    try:
+        with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
+            dropped = hold.held_subjects()
+            refusal = hold.clear(sha)
+    except (LockBusy, LockUnavailable, PermissionError) as refused:
+        return _refused(refused, hold_path)
+    if refusal:
+        print(f"nothing cleared: {refusal}", file=sys.stderr)
+        return 1
+    (journal_hold_clear if journal is None else journal)(sha, dropped)
+    if not dropped:
+        print(f"cleared the hold on {sha} ({hold_path}); it waited on no plane")
+        return 0
+    print(
+        f"cleared the hold on {sha} and its {len(dropped)} hold_plane line(s). Nothing "
+        "records these planes now, so each must already be applied: "
+        + HOLD_PLANE_SEP.join(dropped)
+    )
     return 0
 
 
@@ -461,6 +510,7 @@ def main(
     lock_path: str | None = None,
     lock_wait_s: float | None = None,
     journal: Journal | None = None,
+    hold_journal: Callable[[str, list[str]], None] | None = None,
 ) -> int:
     """Parse `argv` and run the subcommand it names.
 
@@ -470,6 +520,8 @@ def main(
       lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
       journal: what records an owed-ledger clear. None reads `journal_clear`; a test passes
         its own, because a real `logger` line from a test reads as an operator's clear.
+      hold_journal: what records a `clear-hold`, for the same reason. None reads
+        `journal_hold_clear`.
     """
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -499,10 +551,21 @@ def main(
         "clear-contention",
         help="drop the busy-service-lock streak marker, AFTER ending the lock's holder",
     )
+    hold = sub.add_parser(
+        "clear-hold",
+        help="drop hold_sha and every hold_plane line together, AFTER applying each held plane",
+    )
+    hold.add_argument(
+        "sha", help="the full SHA in hold_sha; a different live hold refuses"
+    )
     args = parser.parse_args(argv)
     state = DeployerState(args.state_dir)
     if args.command == "clear-contention":
         return clear_contention(state, lock_path, lock_wait_s)
+    if args.command == "clear-hold":
+        return clear_hold(
+            args.state_dir, args.sha, lock_path, lock_wait_s, hold_journal
+        )
     if args.command == "clear-owed":
         cls = args.cls
     else:

@@ -13,7 +13,7 @@ The registry carries names, descriptions, each subcommand's backing `probe_lib` 
 the `probe_lib` modules agree.
 
 This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`
-still reports the same fourteen subcommand backends — the `run_*` names below are imported, and
+still reports the same fifteen subcommand backends — the `run_*` names below are imported, and
 that function counts only what a module defines.
 """
 
@@ -33,6 +33,7 @@ from diagnostics.probe_lib.b2_ledger import (
     run_b2_spend,
 )
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
+from diagnostics.probe_lib.gitops_view import run_gitops_state
 from diagnostics.probe_lib.landing_blockers import run_landing
 from diagnostics.probe_lib.health import run_health
 from diagnostics.probe_lib.longhorn import (
@@ -155,6 +156,13 @@ SUBCOMMANDS = [
         "claims (exit 1 when something blocks)",
         "landing_blockers",
         run_landing,
+    ),
+    (
+        "gitops-state",
+        "every GitOps deployer marker and owed-ledger line with its clear command, "
+        "read-only (exit 1 when one is unreadable)",
+        "gitops_view",
+        run_gitops_state,
     ),
 ]
 

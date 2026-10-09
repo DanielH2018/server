@@ -167,7 +167,7 @@ def tree_lock(tmp_path: Path) -> Path:
 @pytest.fixture
 def journal() -> list[tuple]:
     """Every (role, dropped line, still-pending tags) a clear recorded, in place of
-    the real `logger` line.
+    the real `logger` line. A `clear-hold` records (sha, dropped planes).
 
     `run` injects it into every test: a real line from a test run would read as an
     operator's clear (`cleared=true role=k3s`) to the next investigator of this host.
@@ -191,6 +191,7 @@ def run(tree_lock: Path, journal):
             journal=lambda role, dropped, remaining: journal.append(
                 (role, dropped, remaining)
             ),
+            hold_journal=lambda sha, dropped: journal.append((sha, dropped)),
         )
 
     return _run

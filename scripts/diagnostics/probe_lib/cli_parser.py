@@ -408,4 +408,12 @@ def _build_parser():
         action="store_true",
         help="one JSON document, the shape the deck mod in .claude/plugins/deck/ reads",
     )
+    gitops_state = sub.add_parser(
+        "gitops-state",
+        help="every GitOps deployer marker and owed-ledger line with its clear command, "
+        "read-only (exit 1 when one is unreadable)",
+    )
+    gitops_state.add_argument(
+        "--json", action="store_true", help="one JSON document instead of the text view"
+    )
     return p

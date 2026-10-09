@@ -17,6 +17,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from _deploy_sh_fakes import stub_bin
 from _deploy_sh_fakes import stub_path as _stub_path
 from lib import exit_codes as ec
 from deploy_tools.land_lib import tools
@@ -257,3 +258,36 @@ def test_a_joined_run_that_hit_contention_is_graded_as_itself(tmp_path):
     proc, starts = _wait_on_joined(tmp_path, journalctl=_JOURNALCTL_CONTENDED)
     assert proc.returncode == ec.TICK_LOCK_CONTENTION, proc.stdout + proc.stderr
     assert starts == 0
+
+
+def test_the_deployer_state_block_is_probe_gitops_state_ahead_of_the_verdict(tmp_path):
+    """The marker block is `probe.py gitops-state`'s view, printed before the verdict line.
+
+    Its header reads the same on a host with no state directory, so this holds on CI too.
+    """
+    proc, _ = _wait_on_joined(tmp_path)
+    out = proc.stdout
+    assert "GitOps deployer state (/var/lib/gitops-deploy), read-only:" in out, out
+    assert out.index("GitOps deployer state") < out.index("TICK-VERDICT:")
+
+
+def test_a_probe_that_cannot_run_leaves_the_verdict_alone(tmp_path):
+    """FLAGGED half: the view is decoration, so a failing `uv` changes no exit code."""
+    env = _tick_env(tmp_path, _SYSTEMCTL, _JOURNALCTL)
+    # Into the same stub directory, which `_tick_env` already put first on PATH.
+    stub_bin(tmp_path, {"uv": "#!/bin/bash\nexit 1\n"})
+    proc = subprocess.run(
+        [str(_TICK_SH), "--wait", "60"],
+        cwd=_REPO,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert proc.returncode == ec.TICK_OK, proc.stdout + proc.stderr
+    assert "probe.py gitops-state could not read every marker" in proc.stdout
+    # The real probe prints this header even with no state directory, so its absence is
+    # what shows the stub ran rather than the probe failing for its own reasons.
+    assert "GitOps deployer state (" not in proc.stdout
+    assert proc.stdout.rstrip().splitlines()[-1].startswith("TICK-VERDICT: ticked")
