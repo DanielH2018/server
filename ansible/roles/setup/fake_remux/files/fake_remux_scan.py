@@ -39,10 +39,15 @@ DISCORD_MARKER = (
 )
 
 
-def load_config():
+def load_config(path: str = CONFIG_PATH) -> dict:
+    """Return os.environ overlaid with the env file at `path`, when it exists.
+
+    The sibling scripts import this copy. The reconciler passes its own path, because it reads
+    FAKE_REMUX_REPLACE_CONFIG rather than FAKE_REMUX_CONFIG.
+    """
     cfg = dict(os.environ)
-    if os.path.exists(CONFIG_PATH):
-        cfg.update(parse_env_file(CONFIG_PATH))
+    if os.path.exists(path):
+        cfg.update(parse_env_file(path))
     return cfg
 
 

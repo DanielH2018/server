@@ -32,19 +32,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fake_remux_logic as frl
 import fake_remux_replace_logic as frl_replace
 import fake_remux_scan as scan
-from host_lib import atomic_write, discord_post, parse_env_file
+from host_lib import atomic_write, discord_post
 
 CONFIG_PATH = os.environ.get(
     "FAKE_REMUX_REPLACE_CONFIG", "/etc/autofix-fake-remux/config.env"
 )
 log = scan.log  # reuse verbatim — no reason for a second timestamp-prefixed printer
-
-
-def load_config():
-    cfg = dict(os.environ)
-    if os.path.exists(CONFIG_PATH):
-        cfg.update(parse_env_file(CONFIG_PATH))
-    return cfg
 
 
 class Sonarr(scan.Sonarr):
@@ -523,7 +516,7 @@ def main() -> int:
     propagated, so a bad tick pages through the state file instead of crashing the cron. Always
     returns 0 — the exit code carries no information, the state file does.
     """
-    cfg = load_config()
+    cfg = scan.load_config(CONFIG_PATH)
     state_file = cfg.get(
         "REPLACE_STATE_FILE", "/var/lib/autofix-fake-remux/replace_state.json"
     )
