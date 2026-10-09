@@ -27,6 +27,7 @@ import pytest
 from lib import yaml_fast
 from _helpers import ANSIBLE
 from _kuma_monitors import entity, monitors_text
+from _role_census import role_task_files
 from _setup_render import render_setup_text
 
 ROLE_NAME = "renovate_agent"
@@ -150,7 +151,7 @@ def test_arming_is_wired_in_both_directions() -> None:
 
 def test_the_role_kicks_no_run_on_config_change() -> None:
     """A config edit must not spend a session as a side effect — unlike renovate_notify."""
-    text = "".join(p.read_text() for p in sorted((ROLE / "tasks").glob("*.yml")))
+    text = "".join(p.read_text() for p in role_task_files(ROLE))
     assert "Install agent Python files" in text, (
         "the task-file glob read the wrong files"
     )

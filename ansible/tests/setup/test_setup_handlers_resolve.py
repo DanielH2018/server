@@ -9,6 +9,7 @@ Run: uv run pytest ansible/tests/setup/test_setup_handlers_resolve.py
 """
 
 from _helpers import ANSIBLE, SETUP_ROLES, load_tasks, walk_tasks
+from _role_census import role_task_files
 from lib import yaml_fast
 
 PLAYBOOK = ANSIBLE / "initial_setup.yml"
@@ -25,7 +26,7 @@ def notified(roles: list[str]) -> dict[str, set[str]]:
     """Handler name -> the roles whose tasks notify it."""
     found: dict[str, set[str]] = {}
     for role in roles:
-        for tasks_file in sorted((SETUP_ROLES / role / "tasks").rglob("*.yml")):
+        for tasks_file in role_task_files(SETUP_ROLES / role):
             for task in walk_tasks(load_tasks(tasks_file)):
                 names = task.get("notify") or []
                 for name in [names] if isinstance(names, str) else names:

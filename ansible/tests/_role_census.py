@@ -8,8 +8,9 @@ Covers all three trees: `roles/k8s/`, `roles/setup/` and the Pi's `roles/contain
 retired role ghosts the same way in each, so they read through one predicate.
 
 Lives in its own module rather than in `_helpers.py`, which is at its 500-line cap.
-The `role-tree-walks-use-role-dirs` row of `ansible/tests/repo/test_census_rows_suite.py` is
-the guard that keeps the next walk from being written bare.
+The `role-tree-walks-use-role-dirs` and `role-task-walks-use-task-files` rows of
+`ansible/tests/repo/test_census_rows_suite.py` are the guards that keep the next walk of either
+kind from being written inline.
 """
 
 from pathlib import Path
@@ -84,5 +85,14 @@ def task_files(plane: Path | None = None) -> list[Path]:
     # 8d825a872, and a role directory is a role whatever it is named, so the filter matched
     # nothing and only let two guards disagree with the rest about the same question.
     """
+    return [path for _role, path in task_files_by_role(plane)]
+
+
+def task_files_by_role(plane: Path | None = None) -> list[tuple[Path, Path]]:
+    """`(role directory, task file)` for every file `task_files(plane)` returns, in its order.
+
+    For a guard that names the role a task file belongs to. `path.parent.parent` is only the
+    role for a top-level file; a nested `tasks/sub/x.yml` would name `tasks` instead.
+    """
     roles = every_plane_role_dirs() if plane is None else role_dirs(plane)
-    return [path for role in roles for path in role_task_files(role)]
+    return [(role, path) for role in roles for path in role_task_files(role)]

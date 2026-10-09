@@ -25,7 +25,7 @@ import re
 from pathlib import Path
 
 from _helpers import REPO
-from _role_census import role_dirs
+from _role_census import role_dirs, role_task_files
 from _k8s_guards import (
     _GUARD_FACT,
     _guard_covered_files,
@@ -119,7 +119,7 @@ def _unguarded_host_writes(role: Path) -> list[str]:
     """
     covered = _guard_covered_files(role)
     offenders = []
-    for task_file in sorted((role / "tasks").glob("*.yml")):
+    for task_file in role_task_files(role):
         if task_file.name in covered:
             continue
         for task in _iter_tasks(yaml_fast.safe_load(task_file.read_text())):
@@ -155,7 +155,7 @@ def test_the_host_write_census_is_not_empty() -> None:
     found = {
         role.name
         for role in _roles_with_host_writes()
-        for task_file in sorted((role / "tasks").glob("*.yml"))
+        for task_file in role_task_files(role)
         for task in _iter_tasks(yaml_fast.safe_load(task_file.read_text()))
         if _writes_the_host(task)
     }

@@ -19,7 +19,7 @@ census must contain, so a renamed `tasks/` layout fails loudly rather than check
 from pathlib import Path
 
 from _helpers import SETUP_ROLES, load_tasks, walk_tasks
-from _role_census import role_dirs
+from _role_census import role_dirs, role_task_files
 
 CONTRACT_HEADING = "## Autonomous-role contract"
 
@@ -49,7 +49,7 @@ def _installs_a_cron_or_timer(role_dir: Path) -> bool:
     A cron task whose `state` is a Jinja expression (`present if armed else absent`) counts:
     the role CAN install it, and the contract governs what it does when armed.
     """
-    for tasks_file in sorted((role_dir / "tasks").glob("*.yml")):
+    for tasks_file in role_task_files(role_dir):
         for task in walk_tasks(load_tasks(tasks_file)):
             cron = task.get("ansible.builtin.cron")
             if isinstance(cron, dict) and cron.get("state") != "absent":

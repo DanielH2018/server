@@ -31,7 +31,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 from _helpers import REPO, load_tasks
-from _role_census import role_dirs
+from _role_census import role_dirs, role_task_files
 
 # The `when:`-coverage scanners, shared with test_k8s_dry_run_host_writes.py beside this file.
 from _k8s_guards import (
@@ -246,7 +246,7 @@ def _mutates_outside_manifests(role: Path) -> bool:
     """Does this role write to the cluster from its OWN tasks?"""
     return any(
         _chunk_mutates(chunk)
-        for task_file in sorted((role / "tasks").glob("*.yml"))
+        for task_file in role_task_files(role)
         for chunk in _task_chunks(task_file)
     )
 
@@ -277,7 +277,7 @@ def _unguarded_mutations(role: Path) -> list[str]:
     """
     covered = _guard_covered_files(role)
     offenders = []
-    for task_file in sorted((role / "tasks").glob("*.yml")):
+    for task_file in role_task_files(role):
         if task_file.name in covered:
             continue
         guarded = _task_chunks(task_file, strip_trailing_comments=True)
@@ -340,9 +340,7 @@ def _roles_included_by_other_roles() -> set[str]:
     """Roles reachable as a dependency rather than by name on the command line."""
     included: set[str] = set()
     for role in role_dirs():
-        if not (role / "tasks").is_dir():
-            continue
-        for task_file in sorted((role / "tasks").glob("*.yml")):
+        for task_file in role_task_files(role):
             for hit in re.findall(r"name:\s*k8s/([a-z0-9-]+)", task_file.read_text()):
                 included.add(hit)
     return included

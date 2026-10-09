@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
+from _role_census import task_files
 from test_no_role_stages_files_in_a_pruned_manifest_dir import (
     MANIFESTS_ROLE,
     _included_role,
@@ -39,7 +40,7 @@ KNOWN_DEFERRED_DIRS = {
 def deferred_dirs(roles_dir: Path) -> dict[str, str]:
     """Deferred directory name -> the role that hands it to `k8s/manifests`."""
     found: dict[str, str] = {}
-    for tasks_file in sorted(roles_dir.glob("*/tasks/*.yml")):
+    for tasks_file in task_files(roles_dir):
         for task in walk_tasks(load_tasks(tasks_file)):
             if _included_role(task) != MANIFESTS_ROLE:
                 continue

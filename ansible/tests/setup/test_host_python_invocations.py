@@ -13,6 +13,7 @@ interpreter inside its own digest-pinned image, which has nothing to do with the
 
 import re
 from _helpers import REPO as _REPO, load_tasks, walk_tasks
+from _role_census import task_files
 
 
 # The same export the root crons' templates carry (cron_checks.py enforces it there). A task
@@ -50,7 +51,7 @@ def _root_uv_task_missing_install_dir(task: dict) -> bool:
 
 
 def _root_uv_tasks():
-    for path in sorted((_REPO / "ansible/roles").glob("*/*/tasks/*.yml")):
+    for path in task_files():
         for task in walk_tasks(load_tasks(path)):
             command = _command_text(task)
             if task.get("become") is True and "uv" in command and "--python" in command:

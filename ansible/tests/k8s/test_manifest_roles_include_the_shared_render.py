@@ -19,7 +19,7 @@ Run: uv run pytest ansible/tests/k8s/test_manifest_roles_include_the_shared_rend
 from pathlib import Path
 
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
-from _role_census import role_dirs
+from _role_census import role_dirs, role_task_files
 
 
 from lib.k8s_roles import CALLER_RENDERED_ROLES, is_manifest_template
@@ -45,7 +45,7 @@ def renders_manifests(role: Path) -> bool:
 
 
 def includes_shared_render(role: Path) -> bool:
-    for tasks_file in sorted((role / "tasks").glob("*.yml")):
+    for tasks_file in role_task_files(role):
         for task in walk_tasks(load_tasks(tasks_file)):
             for key in _ROLE_KEYS:
                 spec = task.get(key)

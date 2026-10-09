@@ -60,11 +60,26 @@ def _glob_using_test_files() -> list[str]:
 # `<anything naming a role tree>.iterdir()` on one line: the constants a guard imports and
 # their local aliases, and the literal path written out or built a segment at a time. A tree
 # bound on one line and walked on another is invisible to it; ROLE_DIRS_CALLERS covers that.
+# The last branch is a parameter or local named for the tree (`roles_root`, `k8s_roles_dir`)
+# walked directly. A test that passes a `tmp_path` tree in still walks a real one in
+# production, and such a walk escaped every other branch (#3769). It needs the `roles` plural,
+# so a single role's `(role / "templates").iterdir()` stays clean.
 BARE_ROLE_WALK = re.compile(
     r"(?:K8S_ROLES|SETUP_ROLES|CONTAINER_ROLES|CONTAINERS_ROLES|DOCKER_ROLES"
     r'|roles/(?:k8s|setup|containers)"'
     r'|ROLES\s*/\s*"(?:k8s|setup|containers)"'
     r'|"roles"\s*/\s*"(?:k8s|setup|containers)")[^\n]*\.iterdir\(\)'
+    r"|\b\w*roles\w*\.iterdir\(\)"
+)
+
+# A role's task files read inline: a plane-wide `*/tasks/` glob, or one role's `tasks`
+# directory globbed. `_role_census.task_files`/`role_task_files` answer that question, and the
+# inline copies disagreed on depth and on a retired role's shell (#3770). A `main.yml`-only
+# glob asks which roles have an entry point, a different question, so it stays clean.
+INLINE_TASK_WALK = re.compile(
+    r'glob\("\*/(?:\*/)?tasks/(?!main\.yml")'
+    r'|"tasks"\)\.r?glob\('
+    r'|rglob\("tasks'
 )
 
 # Every module whose role census goes through `role_dirs`, pinned by name so a rewrite that
@@ -73,6 +88,8 @@ ROLE_DIRS_CALLERS = frozenset(
     f"ansible/tests/{rel}"
     for rel in (
         "_k8s_render.py",
+        "k8s/test_built_images_name_the_content_tag.py",
+        "k8s/test_checksum_annotation_census.py",
         "k8s/test_checksum_annotations_documented.py",
         "k8s/test_configmap_keys_not_absorbed.py",
         "k8s/test_manifest_roles_include_the_shared_render.py",
@@ -143,6 +160,9 @@ ROWS = (
             Subject("d.py", 'for p in (REPO / "ansible" / "roles" / "k8s").iterdir():'),
             Subject("e.py", "for p in DOCKER_ROLES.iterdir():"),
             Subject("f.py", "for p in sorted(_SETUP_ROLES_DIR.iterdir()):"),
+            Subject("g.py", "for p in roles_root.iterdir():"),
+            Subject("h.py", "for p in sorted(roles_dir.iterdir()):"),
+            Subject("i.py", "for p in sorted(k8s_roles_dir.iterdir())"),
         ),
         green=(
             Subject("a.py", "for p in role_dirs(K8S_ROLES):"),
@@ -157,6 +177,46 @@ ROWS = (
             ),
             "ansible/tests/deploy/test_denylist_parsers_agree.py": (
                 "mirrors the denylist filter's own skips inline, as its comment argues"
+            ),
+            "ansible/tests/deploy/test_k8s_autodeploy_denylist.py": (
+                "counts the denied roles independently of the filter it checks, as its "
+                "comment argues, and filters with is_leftover_dir inline"
+            ),
+            "ansible/tests/_role_census.py": "is role_dirs, the walk every other guard calls",
+        },
+    ),
+    Census(
+        name="role-task-walks-use-task-files",
+        reason=(
+            "Inline `tasks` globs read the role task files to three different depths, and some "
+            "skipped a retired role's `__pycache__/` shell while others read it. A top-level "
+            "glob passes a nested `include_tasks: sub/x.yml` offender (#3770). Use "
+            "`_role_census.task_files(plane)` or `role_task_files(role)`."
+        ),
+        files=lambda: tracked("ansible/tests/*.py"),
+        offence=lines_matching(INLINE_TASK_WALK),
+        red=(
+            Subject("a.py", 'for f in sorted((role / "tasks").glob("*.yml")):'),
+            Subject("b.py", 'for f in (role_dir / "tasks").rglob("*.yml"):'),
+            Subject("c.py", 'for f in sorted(roles_dir.glob("*/tasks/*.yml")):'),
+            Subject("d.py", 'for f in sorted(ROLES.glob("*/*/tasks/**/*.yml")):'),
+        ),
+        green=(
+            Subject("a.py", "for f in role_task_files(role):"),
+            Subject("b.py", 'for f in sorted(K8S_ROLES.glob("*/tasks/main.yml")):'),
+            Subject("c.py", 'for f in sorted(ROLES.glob("*/*/tasks/main.yml")):'),
+        ),
+        min_matches=100,
+        must_find=frozenset(
+            {
+                "ansible/tests/_role_census.py",
+                "ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py",
+            }
+        ),
+        allow={
+            SELF: "the red fixtures above hold the offending spelling as text",
+            "ansible/tests/longhorn/test_prune_backups.py": (
+                "reads ansible/prune_backups/tasks/, a playbook's task directory, not a role's"
             ),
         },
     ),

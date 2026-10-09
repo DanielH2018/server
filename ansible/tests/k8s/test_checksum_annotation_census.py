@@ -41,6 +41,7 @@ from validate.k8s_manifests import (
 )
 
 from _k8s_render import rendered_docs
+from _role_census import role_dirs, role_task_files
 
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 WORKLOAD_KINDS = {"Deployment", "DaemonSet", "StatefulSet"}
@@ -58,11 +59,8 @@ def from_file_configmap_roles(roles_dir: Path = K8S_ROLES) -> set[str]:
     count that helper role — which stages nothing and renders no workload — as one of them.
     """
     found = set()
-    for role_dir in sorted(roles_dir.iterdir()):
-        tasks_dir = role_dir / "tasks"
-        if not tasks_dir.is_dir():
-            continue
-        for task_file in tasks_dir.glob("*.yml"):
+    for role_dir in role_dirs(roles_dir):
+        for task_file in role_task_files(role_dir):
             if any(
                 "create configmap" in command_of(task)
                 for task in walk_tasks(load_tasks(task_file))

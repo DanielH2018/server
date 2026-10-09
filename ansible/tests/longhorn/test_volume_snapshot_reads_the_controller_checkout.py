@@ -19,6 +19,7 @@ command runs, which is only visible in the task's own keywords.
 
 import pytest
 from _helpers import REPO
+from _role_census import role_task_files
 from lib import yaml_fast
 
 _ROLE = REPO / "ansible" / "roles" / "k8s" / "volume-snapshot"
@@ -75,7 +76,8 @@ def _role_tasks(name: str):
 
 
 @pytest.mark.parametrize(
-    "tasks_file", sorted(p.name for p in (_ROLE / "tasks").glob("*.yml"))
+    "tasks_file",
+    sorted(p.relative_to(_ROLE / "tasks").as_posix() for p in role_task_files(_ROLE)),
 )
 def test_every_checkout_read_runs_on_the_controller(tasks_file: str) -> None:
     offenders = undelegated_checkout_reads(_role_tasks(tasks_file))
@@ -131,8 +133,8 @@ def test_the_role_really_has_a_checkout_read_to_govern() -> None:
     """
     reads = [
         task
-        for name in (_ROLE / "tasks").glob("*.yml")
-        for task in _flatten(_role_tasks(name.name))
+        for path in role_task_files(_ROLE)
+        for task in _flatten(yaml_fast.safe_load(path.read_text()))
         if (_chdir_of(task) or "").find("playbook_dir") >= 0
     ]
     assert reads, (

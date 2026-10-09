@@ -21,6 +21,7 @@ from _helpers import ANSIBLE
 from _helpers import REPO
 from _helpers import load_tasks
 from _helpers import walk_tasks
+from _role_census import task_files
 from _setup_render import rendered_setup_texts
 import json
 
@@ -87,7 +88,7 @@ def scheduled_texts(setup_root: Path) -> dict[str, str]:
     systemd unit template (`ExecStart=`), which `unit_texts` reads off the render.
     """
     found: dict[str, str] = {}
-    for tasks_file in sorted(setup_root.glob("*/tasks/**/*.yml")):
+    for tasks_file in task_files(setup_root):
         for i, task in enumerate(walk_tasks(load_tasks(tasks_file))):
             key = f"{tasks_file.relative_to(setup_root)}#{i}"
             for module in CRON_MODULES:
