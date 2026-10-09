@@ -19,14 +19,14 @@ those. Home Assistant is NOT one of them — its review lives in the separate `/
 user asks for HA, point them there (or invoke it) rather than folding it in here. Map each area to its
 agent:
 
-| Area | Agent | Size |
-|---|---|---|
-| Security & hardening | `security-review` | opus, effort medium |
-| Network & reverse proxy | `homelab-network-diagnostician` | sonnet (frontmatter) |
-| Backups & observability | `homelab-backup-observability-reviewer` | opus, effort medium |
-| CI/CD & GitOps | `homelab-cicd-reviewer` | opus, effort medium |
-| Media & container infra | `homelab-container-reviewer` | sonnet (frontmatter) |
-| Docs vs live-config drift | `homelab-docs-freshness-reviewer` | sonnet (frontmatter) |
+| Area | Agent |
+|---|---|
+| Security & hardening | `security-review` |
+| Network & reverse proxy | `homelab-network-diagnostician` |
+| Backups & observability | `homelab-backup-observability-reviewer` |
+| CI/CD & GitOps | `homelab-cicd-reviewer` |
+| Media & container infra | `homelab-container-reviewer` |
+| Docs vs live-config drift | `homelab-docs-freshness-reviewer` |
 
 **Sizing:** reviewer tiers are pinned in each agent's frontmatter so a routine review never
 silently rides the session model. Judgment-heavy domains (security, backup/alert-chain, GitOps)

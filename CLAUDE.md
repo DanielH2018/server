@@ -130,7 +130,8 @@ list of conclusions it covers (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
 **Verify the change, not just the workload.** The `VERDICT:` line cannot see whether *your
-change* took effect, so exercise the thing you actually changed as well.
+change* took effect, so exercise the thing you actually changed as well. `docs/landing.md` has
+the two incidents that made this a rule.
 
 ### Working alongside other sessions
 
@@ -146,8 +147,10 @@ Say which of these applies, then stop:
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
   broad apply failed. `hold_plane` names each failed playbook when it was the latter.
-- A change in `_BROAD_MANUAL_PREFIXES` — `bootstrap.yml`, `k3s-bringup.yml`,
-  `initial_setup.yml` — sits in the `local..origin` range. The deployer applies every other broad
+- A change in one of the bring-up playbooks — `bootstrap.yml`, `k3s-bringup.yml`,
+  `initial_setup.yml`, the list
+  `ansible/roles/setup/gitops_deploy/files/deploy_changes.py:_BROAD_MANUAL_PREFIXES` holds —
+  sits in the `local..origin` range. The deployer applies every other broad
   change itself, but not the bring-up playbooks: those run by hand by construction. If it is
   another session's, clearing it means applying their change; name it and stop.
 - A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer

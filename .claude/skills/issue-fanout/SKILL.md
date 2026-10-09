@@ -346,14 +346,8 @@ Each agent starts with none of this conversation's context, so its brief must ca
   cannot be woken once its turn ends, so it runs the command in the foreground and re-runs only
   the `cc-wait` half on exit 75.
 
-  Before `--detach` existed (#2853) the agent had to background `land.sh`, redirect it and then
-  block on `timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'`. A backgrounded call whose
-  output is redirected to a file is not a harness-tracked child, so nothing wakes the agent when
-  it finishes: four of four agents stopped short on the 2026-09-06 fan-out (issue #1291), and
-  supplying the wait ended it in every case. `cc-wait` removes the step rather than the
-  requirement — an agent must still not end its turn on a landing. Its predecessor,
-  `--await-verdict`, waited up to 1200s, past the 600s foreground limit: 12 of the 15 waits that
-  overran it in the 30 days to 2026-10-04 never woke their agent.
+  Why the wait has to be in-turn, and what the hand-written `tail -f | grep` wait it replaced
+  cost (#1291), is in `docs/landing.md`.
 - That `deploy.sh` exit 75 is a **resume point to retry**, not a failure to report.
 - **What to do with a verdict that leaves a host apply owed.** `needs-manual-apply` and
   `blocked` mean the PR merged and an apply is still owed on a host — a `manual_plane` role, a
