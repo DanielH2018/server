@@ -6,8 +6,8 @@ single run: unresolved claimNames, schema failures, a role default shadowing the
 https route with no `tls:`, a NetworkPolicy on a Service's port, and the coverage tail naming
 any object no schema checked.
 
-The unit tests for the pieces `main()` calls live beside those pieces: `test_k8s_yaml.py`,
-`test_k8s_pvc.py` and `test_k8s_context.py` under `scripts/lib/tests/`, and `test_k8s_schema.py`
+The unit tests for the pieces `main()` calls live beside those pieces: `test_k8s_yaml.py`
+and `test_k8s_context.py` under `scripts/lib/tests/`, and `test_k8s_schema.py`
 and `test_k8s_net_rules.py` in this directory. What stays here is what needs the real tree.
 
 Run: uv run pytest scripts/validate/tests/test_validate_k8s_manifests.py

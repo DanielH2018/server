@@ -10,6 +10,11 @@ import that resolves to a role's ``files/``, and ``scripts/docs/reference/secret
 stdlib ``secrets``.
 """
 
+# DECIDED: a separate module despite one production importer (`lib.script_classify`).
+# Its interface is two functions over ~200 lines of import resolution, so it is deep rather
+# than a pass-through seam, and folding it in would push `script_classify` past 650 lines.
+# Weighed and kept in the #3667 deep-modules pass.
+
 import sys as _sys
 from pathlib import Path as _Path
 

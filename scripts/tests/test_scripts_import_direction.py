@@ -4,8 +4,7 @@
 Several modules under ``scripts/`` were split out of a larger one, and each records the same
 invariant in its own docstring — ``rotation_tools.py`` says it "names ``secret_rotation``
 nowhere, at import time or later", ``lib/script_classify.py`` says "a leaf never imports the
-facade it was split out of", ``lib/k8s_pvc.py`` and ``docs/catalog_model.py`` say it again in
-their own words. A docstring is not a check. The deployer's own split is guarded by
+facade it was split out of", and ``docs/catalog_model.py`` says it again in its own words. A docstring is not a check. The deployer's own split is guarded by
 ``ansible/tests/deploy/test_gitops_deploy_imports.py`` and monitor-bridge's by
 ``ansible/tests/services/test_bridge_patch_boundary.py``, but nothing walked ``scripts/``, so a
 late ``import secret_rotation`` inside a leaf function would have landed green.
@@ -52,8 +51,8 @@ FACADE_EDGES = frozenset(
         # scripts/docs/reference/scripts.py renders the page; the census was split into lib/
         # so the `--help` test could reach it without importing the generator.
         ("docs.reference.scripts", "lib.script_classify"),
-        # scripts/validate/k8s_manifests.py re-exports every name in lib/k8s_pvc.py.
-        ("validate.k8s_manifests", "lib.k8s_pvc"),
+        # scripts/validate/k8s_manifests.py re-exports the claim-name helpers from lib/k8s_yaml.py.
+        ("validate.k8s_manifests", "lib.k8s_yaml"),
         # The rule modules only one validator imports sit in validate/validate_lib/.
         ("validate.k8s_manifests", "validate.validate_lib.k8s_net_rules"),
         ("validate.k8s_manifests", "validate.validate_lib.k8s_schema"),

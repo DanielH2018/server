@@ -28,7 +28,7 @@ live). Reported as ``[WARN]``, not folded into the exit code. Promote to a hard 
 
 The rendering and parsing pieces live under ``scripts/lib/`` — ``k8s_roles`` (which roles are
 rendered and which are exempt), ``k8s_context`` (Ansible's variable semantics), ``k8s_yaml``
-(the strict loaders and the ``lookup()`` stub), ``k8s_pvc`` (claim names). The two rule modules
+(the strict loaders, the ``lookup()`` stub and the claim names). The two rule modules
 only this validator imports sit in ``validate_lib/``: ``k8s_schema`` (the OpenAPI and
 vendored-CRD checks) and ``k8s_net_rules`` (the two semantic rules no schema can make). The
 filter registration every render guard shares is ``lib.ansible_jinja_env``. This module keeps
@@ -63,11 +63,6 @@ from validate.validate_lib.k8s_net_rules import (
     service_port_translations,
     workload_container_ports,
 )
-from lib.k8s_pvc import (
-    find_claim_name_refs,
-    find_pvc_names,
-    parse_docs,
-)
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     claim_contexts,
@@ -95,7 +90,13 @@ from lib.ansible_jinja_env import (
     register_ansible_filters,
     template_env,
 )
-from lib.k8s_yaml import make_lookup, yaml_error
+from lib.k8s_yaml import (
+    find_claim_name_refs,
+    find_pvc_names,
+    make_lookup,
+    parse_docs,
+    yaml_error,
+)
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
