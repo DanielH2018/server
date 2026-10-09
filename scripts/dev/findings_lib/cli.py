@@ -158,7 +158,12 @@ def _parser(description: str) -> argparse.ArgumentParser:
     rl = sub.add_parser("release", help="release this worktree's claim")
     _add_dry_run(rl, suppress=True)
     _add_repo(rl)
-    rl.add_argument("numbers", nargs="+", type=int)
+    rl.add_argument("numbers", nargs="*", type=int)
+    rl.add_argument(
+        "--all",
+        action="store_true",
+        help="release every open claim --worktree holds, in place of issue numbers",
+    )
     rl.add_argument("--worktree", required=True)
     rl.add_argument("--reason", help="why, for the release comment")
 
