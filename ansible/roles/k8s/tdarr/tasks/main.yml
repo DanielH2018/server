@@ -36,8 +36,8 @@
   when: not k8s_no_mutate
 
 # `inspecti` first, so an unchanged image costs no registry round trip and a ghcr.io outage
-# cannot fail a deploy that pulls nothing. A digest ref resolves locally the way the kubelet's
-# IfNotPresent check does.
+# cannot fail a deploy that pulls nothing. If inspecti cannot match the `tag@digest` ref, the
+# pull below runs anyway; containerd then finds every layer present and only resolves the digest.
 - name: Check whether the tdarr image is already on the node
   tags: [deploy]
   ansible.builtin.command:
