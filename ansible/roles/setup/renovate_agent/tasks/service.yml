@@ -53,17 +53,14 @@
   become: true
   no_log: true
 
-- name: Write the alert webhook where only systemd reads it
+- name: Install the renovate-agent failure alert
   tags: [renovate-agent-service]
-  ansible.builtin.template:
-    src: alert-webhook.env.j2
-    dest: /etc/renovate-agent/alert-webhook.env
-    owner: root
-    group: root
-    mode: "0600"
-  become: true
-  no_log: true
-  notify: Reload systemd
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: renovate-agent
+    alert_unit_description: Alert when renovate-agent fails
+    alert_unit_message: "🚨 renovate-agent unit failed on {{ inventory_hostname }} — check `journalctl -u renovate-agent` and /var/lib/renovate-agent/last_session.json."
+    alert_unit_env_dir: /etc/renovate-agent
 
 - name: Install systemd units
   tags: [renovate-agent-service]
@@ -73,7 +70,6 @@
     mode: "0644"
   loop:
     - renovate-agent.service
-    - renovate-agent-alert.service
     - renovate-agent.timer
     - renovate-agent-land@.service
   become: true
@@ -111,7 +107,8 @@
     stamp_render_name: renovate-agent
     stamp_render_templates:
       - ansible/roles/setup/renovate_agent/templates/renovate-agent.service.j2
-      - ansible/roles/setup/renovate_agent/templates/renovate-agent-alert.service.j2
+      - ansible/roles/setup/common/templates/unit-failure-alert.service.j2
+      - ansible/roles/setup/common/templates/alert-webhook.env.j2
       - ansible/roles/setup/renovate_agent/templates/renovate-agent.timer.j2
       - ansible/roles/setup/renovate_agent/templates/renovate-agent-land@.service.j2
       - ansible/roles/setup/renovate_agent/templates/50-renovate-agent-land.rules.j2
@@ -119,5 +116,4 @@
       # .env.j2 carries no secret into either.
       - ansible/roles/setup/renovate_agent/templates/config.env.j2
       - ansible/roles/setup/renovate_agent/templates/session.env.j2
-      - ansible/roles/setup/renovate_agent/templates/alert-webhook.env.j2
       - ansible/roles/setup/renovate_agent/templates/prompt.txt.j2

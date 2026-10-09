@@ -17,10 +17,15 @@ def _systemd_units_install_writes() -> set[str]:
     """Every unit basename `service.yml` writes under `/etc/systemd/system/`.
 
     Reads every `template`/`copy` task's `dest:`, expanding a bare `{{ item }}` over that
-    task's own `loop:` -- the shape every systemd-unit-installing task in this role uses.
+    task's own `loop:` -- the shape every systemd-unit-installing task in this role uses. An
+    import of common's `alert_unit.yml` writes `<alert_unit_name>-alert.service`.
     """
     units: set[str] = set()
     for task in load_tasks(ROLE / "service.yml"):
+        if str(task.get("ansible.builtin.import_tasks", "")).endswith(
+            "common/tasks/alert_unit.yml"
+        ):
+            units.add(f"{task['vars']['alert_unit_name']}-alert.service")
         for module_key in ("ansible.builtin.template", "ansible.builtin.copy"):
             module = task.get(module_key)
             if not isinstance(module, dict):

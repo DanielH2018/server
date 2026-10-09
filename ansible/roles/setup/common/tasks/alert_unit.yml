@@ -1,0 +1,60 @@
+---
+# Install the Discord page a setup-role unit fires through `OnFailure=<name>-alert.service`.
+#
+# ONE TEMPLATE, PER-SERVICE FILES. The unit and its webhook file render from the shared pair in
+# roles/setup/common/templates/, so a security or delivery fix lands in every alert at once: the
+# copies had already drifted once, when claude-rc's alert embedded the webhook after the units it
+# copied had moved off that (#3694). Each service still gets its own `<name>-alert.service` and
+# its own `<env_dir>/alert-webhook.env`. The unit name is what the failing unit's OnFailure= and
+# its role's teardown name; the env file lives in the service's own /etc directory so the role
+# that removes the directory removes it too. Every copy carries the same value
+# (gitops_deploy_discord_webhook, root 0600), so splitting it per service scopes no secret.
+#
+# Chosen over one `alert@.service` instantiated as `OnFailure=alert@%n.service` (#3694): that
+# renames four live units, needs one shared env file some role must own, and loses the
+# per-service triage hint in the message, which a drop-in per unit would have to restore.
+#
+# NO TAGS IN THIS FILE, matching kuma_check_timer.yml. `when:` on the caller's import_tasks
+# applies to every task here, because the import is static.
+#
+# Both tasks notify `Reload systemd`, which every caller's handlers must define, plus whatever
+# `alert_unit_notify` names.
+#
+# Callers pass:
+#   alert_unit_name         unit prefix: renders /etc/systemd/system/<name>-alert.service
+#   alert_unit_description  the unit's Description=
+#   alert_unit_message      the Discord message text. It sits inside a single-quoted JSON string
+#                           in ExecStart, so it must hold no `'`, `"` or `\`. Jinja in it, such
+#                           as {{ inventory_hostname }}, resolves at render time.
+#   alert_unit_env_dir      the existing directory the webhook file goes in (the service's /etc
+#                           directory); the caller creates it
+#   alert_unit_notify       optional list of the caller's own handler names to notify beside
+#                           `Reload systemd`, such as a role whose every task kicks a run-once
+#                           handler; defaults to none
+
+- name: Write the alert webhook where only systemd reads it, for {{ alert_unit_name }}
+  # `src` names the owning role outright, as kuma_check_timer.yml does.
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/roles/setup/common/templates/alert-webhook.env.j2"
+    dest: "{{ alert_unit_env_dir }}/alert-webhook.env"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  # no_log also hides an undefined-variable failure: check gitops_deploy_discord_webhook is in
+  # scope if this task fails opaquely.
+  no_log: true
+  notify: "{{ ['Reload systemd'] + (alert_unit_notify | default([])) }}"
+
+# The unit reads the webhook through EnvironmentFile and contains no secret, so 0644 is the
+# honest mode. A 0600 unit would not protect an embedded value: systemd serves unit content over
+# the system bus regardless of file mode.
+- name: Install the alert unit for {{ alert_unit_name }}
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/roles/setup/common/templates/unit-failure-alert.service.j2"
+    dest: "/etc/systemd/system/{{ alert_unit_name }}-alert.service"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: "{{ ['Reload systemd'] + (alert_unit_notify | default([])) }}"

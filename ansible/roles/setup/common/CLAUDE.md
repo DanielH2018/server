@@ -19,7 +19,8 @@ remediation, which names the wrong roles, and leave one more marker to clear aft
 consumers are applied. A PR may add a file and its table entry together: the tick classifies
 a range that edits `deploy_cross_role.py` with origin's copy of it, not the installed one
 (#3512). The kuma-check templates route to the importers of
-`kuma_check_timer.yml`, the task file that renders them (#3319). The k8s roles `janitorr` and
+`kuma_check_timer.yml`, the task file that renders them (#3319), and the alert pair routes
+to the importers of `alert_unit.yml` the same way. The k8s roles `janitorr` and
 `configarr` import `install_host_lib.yml` and `stamp_deployed.yml` too, so a change to those or
 to `host_lib.py` also defer-and-alerts both (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`,
 #3320). `resolv.conf.j2` still records `common`, for the reason its `DECIDED:` marker in
@@ -34,6 +35,7 @@ to `host_lib.py` also defer-and-alerts both (`deploy_cross_role.K8S_ROLES_IMPORT
 | `tasks/stamp_render.yml` | Records the source checksum of a group of rendered templates, one fragment per group, so a tag-scoped run leaves the other groups' fragments stale and the drift check reports the truth. |
 | `tasks/stamp_deployed.yml` | Records `{live, src}` pairs for `copy:`-deployed artifacts, so `manifest-prune-check.sh`'s second arm can compare live bytes against the repo in either direction. |
 | `tasks/kuma_check_timer.yml` | Schedules a Kuma-fed host check as a systemd timer plus oneshot service (`templates/kuma-check.{service,timer}.j2`) that reruns every `RestartSec` while the check is red. The contract is the exit code: the script exits 1 after it pushes `down`, 0 after `up`, and `Restart=on-failure` does the rest. The timer is `Persistent=true`, so a slot missed inside an outage runs at boot; a check that judges the cluster pairs that with a boot-grace arm that exits 1 without a push, and the restart carries the real verdict. `kuma_check_state: absent` is the way out, and the legacy cron is removed in both states. Guarded by `ansible/tests/setup/test_kuma_check_timer.py`, whose `KNOWN_CHECKS` names every caller. |
+| `tasks/alert_unit.yml` | Installs the Discord page a unit fires through `OnFailure=<name>-alert.service`: `templates/unit-failure-alert.service.j2` plus a root-0600 `alert-webhook.env` in the service's own `/etc` directory, so the alert still pages when that service's `config.env` is what broke. One template per fix: the five role-local copies it replaced had drifted on whether the webhook sat in unit text (#3694). Guarded by `ansible/tests/setup/test_alert_unit.py`, whose `KNOWN_ALERTS` names every caller and which holds every `OnFailure=*-alert.service` in a setup template to an import of this file. |
 | `files/host_lib.py` | `parse_env_file`, `atomic_write`, `discord_post` (the Cloudflare-1010 User-Agent, 2xx-only success, the one `DISCORD_MAX` clamp), `kuma_push` (kuma-push-lib.sh's retry rule and 900-character cap, over DNS rather than the VIP pin), `github_token` and `github_get` (every host GitHub reader's token lookup and request), and two bound transports: `kubectl_runner` and `journal_reader` (a syslog tag's messages over a window, `None` when the read itself failed). The one copy of Python shared across setup-role host scripts; tested in `tests/`. |
 | `templates/resolv.conf.j2` | The resolv.conf `k3s` (`node.yml`) and `optimize_pi` both render. |
 

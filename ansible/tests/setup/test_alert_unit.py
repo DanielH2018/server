@@ -1,0 +1,192 @@
+"""Every setup-role Discord failure alert renders from the one shared template.
+
+`roles/setup/common/tasks/alert_unit.yml` installs `<name>-alert.service` and its webhook file
+from `common/templates/`. Five role-local copies preceded it, and they drifted on a security
+property: one embedded the webhook in unit text after the others had moved off that (#3694).
+Three properties keep the single source single and correct:
+
+1. Every `OnFailure=<name>-alert.service` in a setup unit template is installed by an import
+   of the task file with that `alert_unit_name`, and no role carries its own alert template.
+2. Each caller's message renders into ExecStart's single-quoted JSON as valid JSON. A quote in
+   the message would break the payload, and curl would post a body Discord rejects.
+3. The webhook file is root 0600 under `no_log`, and the task file carries no tags.
+
+Run: uv run pytest ansible/tests/setup/test_alert_unit.py
+"""
+
+import json
+import re
+from pathlib import Path
+
+import jinja2
+from lib.ansible_jinja_env import make_ansible_env
+from _helpers import SETUP_ROLES, leaf_tasks, load_tasks
+from _role_census import task_files_by_role
+
+COMMON = SETUP_ROLES / "common"
+UNIT = COMMON / "templates" / "unit-failure-alert.service.j2"
+TASKS = COMMON / "tasks" / "alert_unit.yml"
+
+# Named members, so a census that stops matching fails by name rather than agreeing with an
+# empty set.
+KNOWN_ALERTS = frozenset(
+    {
+        "claude-memory-sync",
+        "claude-rc",
+        "gitops-deploy",
+        "renovate-agent",
+        "renovate-notify",
+    }
+)
+CALLER_VARS = (
+    "alert_unit_name",
+    "alert_unit_description",
+    "alert_unit_message",
+    "alert_unit_env_dir",
+)
+
+
+def _wired_alerts_by_role() -> dict[str, tuple[Path, dict]]:
+    """`alert_unit_name` -> (calling role directory, the import task's vars)."""
+    found: dict[str, tuple[Path, dict]] = {}
+    for role, tasks_file in task_files_by_role(SETUP_ROLES):
+        for task in leaf_tasks(load_tasks(tasks_file)):
+            target = task.get("ansible.builtin.import_tasks")
+            if isinstance(target, str) and target.endswith(
+                "common/tasks/alert_unit.yml"
+            ):
+                variables = task.get("vars") or {}
+                found[str(variables.get("alert_unit_name"))] = (role, variables)
+    return found
+
+
+def _wired_alerts() -> dict[str, dict]:
+    """`alert_unit_name` -> the import task's vars, for every setup role importing the file."""
+    return {name: variables for name, (_, variables) in _wired_alerts_by_role().items()}
+
+
+def onfailure_alerts(unit_texts: list[str]) -> set[str]:
+    """Every `<name>` the given unit texts name as `OnFailure=<name>-alert.service`."""
+    names: set[str] = set()
+    for text in unit_texts:
+        names |= set(
+            re.findall(r"^OnFailure=(\S+)-alert\.service$", text, re.MULTILINE)
+        )
+    return names
+
+
+def unwired_alerts(unit_texts: list[str], wired: set[str]) -> set[str]:
+    """The OnFailure= alert names no import of the shared task file installs."""
+    return onfailure_alerts(unit_texts) - wired
+
+
+def local_alert_templates(paths: list[Path]) -> list[Path]:
+    """The `*-alert.service.j2` paths that are not the shared template."""
+    return [p for p in paths if p.name.endswith("-alert.service.j2") and p != UNIT]
+
+
+def _render(text: str, **context: object) -> str:
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    return env.from_string(text).render(context)
+
+
+def test_every_onfailure_alert_renders_from_the_shared_template() -> None:
+    wired = _wired_alerts()
+    missing = KNOWN_ALERTS - wired.keys()
+    assert not missing, (
+        f"alerts no longer wired through alert_unit.yml: {sorted(missing)}"
+    )
+    texts = [p.read_text() for p in SETUP_ROLES.glob("*/templates/*.j2")]
+    assert KNOWN_ALERTS <= onfailure_alerts(texts), "the OnFailure= scan found too few"
+    unwired = unwired_alerts(texts, set(wired))
+    assert not unwired, (
+        f"OnFailure= names {sorted(unwired)}-alert.service, but no import of "
+        f"common/tasks/alert_unit.yml installs it under that alert_unit_name"
+    )
+    for name, variables in wired.items():
+        for key in CALLER_VARS:
+            assert key in variables, f"{name}: import passes no {key}"
+
+
+def test_an_onfailure_alert_with_no_import_is_flagged() -> None:
+    unit = "[Unit]\nOnFailure=widget-alert.service\n"
+    assert unwired_alerts([unit], {"widget"}) == set()
+    assert unwired_alerts([unit], {"gitops-deploy"}) == {"widget"}
+
+
+def test_no_role_carries_its_own_alert_template() -> None:
+    local = local_alert_templates(sorted(SETUP_ROLES.glob("*/templates/*.j2")))
+    assert not local, (
+        f"{local} copy the alert unit; import common/tasks/alert_unit.yml instead"
+    )
+
+
+def test_a_role_local_alert_template_is_flagged() -> None:
+    stray = SETUP_ROLES / "widget" / "templates" / "widget-alert.service.j2"
+    assert local_alert_templates([UNIT]) == []
+    assert local_alert_templates([UNIT, stray]) == [stray]
+
+
+def test_each_message_renders_a_valid_json_payload() -> None:
+    template = UNIT.read_text()
+    for name, variables in _wired_alerts().items():
+        message = _render(
+            variables["alert_unit_message"],
+            inventory_hostname="daniel-box",
+            claude_code_memory_sync_target="daniel-server",
+        )
+        unit = _render(template, **{**variables, "alert_unit_message": message})
+        payload = re.search(r"-d '([^']*)'", unit)
+        assert payload, f"{name}: no single-quoted -d payload in ExecStart"
+        assert json.loads(payload.group(1)) == {"content": message}, (
+            f"{name}: the message does not survive as the JSON payload's content"
+        )
+        assert (
+            f"EnvironmentFile={variables['alert_unit_env_dir']}/alert-webhook.env"
+            in unit
+        )
+
+
+def test_every_notified_handler_exists_in_the_calling_role() -> None:
+    # A notify naming no handler fails the play only when the task changes, which is the
+    # deploy that edits the alert, not the one that adds the caller.
+    for name, (role, variables) in _wired_alerts_by_role().items():
+        handlers = {h["name"] for h in load_tasks(role / "handlers" / "main.yml")}
+        for handler in ["Reload systemd", *variables.get("alert_unit_notify", [])]:
+            assert handler in handlers, (
+                f"{name}: {role.name} defines no handler {handler!r}"
+            )
+
+
+def test_a_quote_in_the_message_breaks_the_payload() -> None:
+    # The red half of the check above: a `"` ends the JSON string early.
+    unit = _render(
+        UNIT.read_text(),
+        alert_unit_name="widget",
+        alert_unit_description="Widget",
+        alert_unit_message='widget "failed"',
+        alert_unit_env_dir="/etc/widget",
+    )
+    payload = re.search(r"-d '([^']*)'", unit)
+    assert payload
+    try:
+        json.loads(payload.group(1))
+    except json.JSONDecodeError:
+        return
+    raise AssertionError(
+        "a quoted message parsed as JSON; the check above proves nothing"
+    )
+
+
+def test_webhook_file_is_root_only_and_task_file_has_no_tags() -> None:
+    tasks = leaf_tasks(load_tasks(TASKS))
+    for task in tasks:
+        assert "tags" not in task, f"{task['name']}: tags here union with the caller's"
+    webhook = next(
+        t
+        for t in tasks
+        if t["ansible.builtin.template"]["dest"].endswith("/alert-webhook.env")
+    )
+    spec = webhook["ansible.builtin.template"]
+    assert (spec["owner"], spec["group"], spec["mode"]) == ("root", "root", "0600")
+    assert webhook.get("no_log") is True
