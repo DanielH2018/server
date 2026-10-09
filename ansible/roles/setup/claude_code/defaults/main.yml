@@ -237,7 +237,8 @@ claude_code_memory_sync_interval: 15min
 # as renovate-agent's (roles/setup/common/tasks/agent_user.yml). A session running as
 # {{ sys_user }} reads everything that user can: the age key, which decrypts the become
 # password, the operator's gh token, ssh keys, and the deployer's primary checkout. This user
-# reaches none of them. No unit runs as it: claude-rc.service runs as {{ sys_user }}.
+# reaches none of them. claude-rc.service runs as {{ sys_user }} unless a host's host_vars set
+# claude_code_user to this user (slice 4d).
 #
 # To start a session as it, open a login shell, which reads the .profile this role writes, then
 # run `claude` in ~/server. The first run needs `/login` and trusting the directory:

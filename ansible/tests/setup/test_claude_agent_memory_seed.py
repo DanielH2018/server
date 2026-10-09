@@ -19,6 +19,7 @@ Run: uv run pytest ansible/tests/setup/test_claude_agent_memory_seed.py
 
 import grp
 import os
+import pwd
 import re
 import shutil
 from pathlib import Path
@@ -167,7 +168,7 @@ def _copy_argv(src: Path, dst: Path, check_mode: bool) -> list[str]:
     task = named(block_tasks(), "Copy the operator's memory files")
     group = grp.getgrgid(os.getgid()).gr_name
     variables = role_context(ROLE, {}) | {
-        "claude_code_agent_user": os.environ.get("USER") or os.getlogin(),
+        "claude_code_agent_user": pwd.getpwuid(os.getuid()).pw_name,
         "sys_user": group,
         "claude_code_operator_memory_dir": str(src),
         "claude_code_agent_memory_dir": str(dst),

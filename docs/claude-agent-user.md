@@ -302,7 +302,8 @@ still opens PRs, and the operator lands them.
 
 **4d switch-over, after the merge:**
 
-1. Wait for the deployer to apply `claude_code`. The apply restarts `claude-rc.service` as
+1. Wait for the deployer to apply `claude_code`. The change touches `ansible/inventory/` too, so
+   the same tick then runs a full `deploy.yml`. The `claude_code` apply restarts `claude-rc.service` as
    `claude`, which drops live phone sessions. Until step 2 finishes, the agent has no login.
 1. Log in once as the agent:
 
