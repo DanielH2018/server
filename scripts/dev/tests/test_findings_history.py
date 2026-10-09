@@ -119,6 +119,19 @@ def test_history_file_keeps_only_findings_whose_body_cites_the_path(capsys):
     assert [r["number"] for r in rows] == [1, 2]
 
 
+def test_history_file_matches_a_root_file_and_not_its_namesakes(capsys):
+    """`cited_paths` needs a `/` and an extension, so a root file once matched nothing."""
+    root = make_issue(1)
+    root["body"] = "The root CLAUDE.md, line 40."
+    role_doc = make_issue(2)
+    role_doc["body"] = "Only ansible/roles/k8s/docs/CLAUDE.md is cited here."
+    trailer_only = make_issue(3, fp="abc")
+    rows, _ = _rows(
+        capsys, ["history", "--file", "CLAUDE.md"], [root, role_doc, trailer_only]
+    )
+    assert [r["number"] for r in rows] == [1]
+
+
 def test_history_warns_when_the_search_fills_its_limit(capsys):
     tools, _ = build_tools(Fakes(issues=[make_issue(n) for n in (1, 2)]))
     assert main(["history", "x", "--limit", "2"], tools) == 0

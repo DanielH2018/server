@@ -35,7 +35,7 @@ from dev.findings_lib.gh_calls import HISTORY_FIELDS, search_register
 from dev.findings_lib.issue_model import (
     _LINE_SUFFIX,
     PR_REPO,
-    cited_paths,
+    _TRAILER_RE,
     is_operator_comment,
     label_names,
     settled_reason,
@@ -107,9 +107,18 @@ def history_row(issue: dict, repo: str) -> dict:
 
 
 def cites(issue: dict, path: str) -> bool:
-    """Whether ``issue``'s body cites ``path``, or a file under it when it is a directory."""
-    prefix = path.rstrip("/") + "/"
-    return any(p == path or p.startswith(prefix) for p in cited_paths(issue["body"]))
+    """Whether ``issue``'s body cites ``path``, or a file under it when it is a directory.
+
+    Not `cited_paths`: it needs a `/` and a file extension, so it never captures `CLAUDE.md`,
+    `prek.toml` or `bin/land`, and `--file CLAUDE.md` dropped all 30 of gh's hits. The path
+    matches as a whole token instead. Nothing path-like may precede it, so `CLAUDE.md` does
+    not match `ansible/roles/k8s/docs/CLAUDE.md`; it may be followed by `/` (a directory),
+    `:<line>` or sentence punctuation, but not by more of a name. The trailer is cut first,
+    because it names `scripts/dev/findings.py` on every issue.
+    """
+    body = _TRAILER_RE.sub("", (issue.get("body") or "").replace("\r\n", "\n"))
+    token = re.compile(rf"(?<![\w/.-]){re.escape(path.rstrip('/'))}(?![\w-]|\.\w)")
+    return token.search(body) is not None
 
 
 def _print_row(row: dict) -> None:
@@ -128,7 +137,7 @@ def cmd_history(args: argparse.Namespace, tools: FindingsTools) -> int:
 
     Search narrows and the body decides for ``--file``. GitHub's tokenizer splits a path
     on `/` and `.`, so a phrase search for one path also returns issues citing its
-    neighbours; only an issue whose body cites the path (`cited_paths`) is printed.
+    neighbours; only an issue whose body cites the path (`cites`) is printed.
 
     Args:
         args: parsed CLI namespace carrying ``terms``, ``file``, ``limit`` and ``json``.
