@@ -288,9 +288,11 @@ jobs:
       # out and leaves the PREVIOUS site serving, which means the docs silently stop updating
       # and nothing says why until someone reads the journal.
       #
-      # Deliberately a CI step and NOT a prek hook. A hook scoped `^(docs/|mkdocs\.yml)`
-      # would match the paths docs-refresh.sh itself stages and commits with hooks running,
-      # which is the widening prek.toml:347 forbids in writing — it would wedge the cron.
+      # This step predates the `mkdocs-strict` prek hook (#806), which runs the same build. The
+      # hook fires only when a file in its `files` regex changes, and every full sweep matches
+      # one, so a full sweep builds the site twice at about 4s each. On a scoped PR whose diff
+      # misses that regex, this step is the only build. How the hook coexists with the
+      # docs-refresh cron, which commits with hooks running, is in its comment in prek.toml.
       - name: Build the docs site (mkdocs --strict)
         run: uv run mkdocs build --strict --site-dir "$RUNNER_TEMP/docs-site"
 
