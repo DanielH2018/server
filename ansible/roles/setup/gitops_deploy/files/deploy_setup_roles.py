@@ -7,6 +7,8 @@ so its readers keep their imports.
 
 from __future__ import annotations
 
+from gitops_markers import SETUP_ROLES_OFF_THE_TICK_HOST
+
 # Setup roles `ansible/initial_setup.yml` does NOT include, mapped to the playbook that does.
 # `None` means no playbook includes the role at all.
 #
@@ -24,11 +26,6 @@ _SETUP_ROLES_OUTSIDE_INITIAL_SETUP: dict[str, str | None] = {
 # `--tags chezmoi_setup` matches nothing, because the playbook tags that role `chezmoi`.
 _SETUP_ROLE_TAG_OVERRIDES = {"chezmoi_setup": "chezmoi"}
 
-# Roles `initial_setup.yml` gates off the tick's host, mapped to the host they run on. The
-# tick's `--tags optimize_pi` on daniel-box skipped the role and recorded an apply (#3933), so
-# these go to `manual_plane` with `-e target=<host>`. Static, because the deployer cannot read
-# the gates; `ansible/tests/deploy/test_setup_roles_the_tick_host_skips.py` derives it.
-SETUP_ROLES_OFF_THE_TICK_HOST: dict[str, str] = {"optimize_pi": "daniel-pi"}
 INITIAL_SETUP = "ansible/initial_setup.yml"
 
 

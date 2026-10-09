@@ -14,7 +14,7 @@ import yaml
 import land_reach
 from lib.proc_testing import run
 from lib.repo_paths import REPO
-from setup_role_chains import changed_task_texts
+from setup_role_diff import changed_task_texts
 
 _CRONS = """\
 - name: Weekly apt autoremove
@@ -47,13 +47,20 @@ def test_a_removed_task_or_a_changed_block_gate_stays_wide():
 _TASKS = "ansible/roles/setup/crony/tasks/main.yml"
 
 
-def _commit(repo, text: str) -> str:
-    """Write `text` as crony's tasks file in `repo`, commit it, and return the SHA."""
+def _commit(repo, text: str, extra: dict[str, str | None] | None = None) -> str:
+    """Write `text` as crony's tasks file in `repo`, commit it, and return the SHA.
+
+    `extra` maps a further repo path to its content, or to None to delete it.
+    """
     env = {"GIT_CONFIG_GLOBAL": "/dev/null", "HOME": str(repo), "PATH": "/usr/bin:/bin"}
-    (repo / _TASKS).parent.mkdir(parents=True, exist_ok=True)
-    (repo / _TASKS).write_text(text)
+    for path, content in {_TASKS: text, **(extra or {})}.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        if content is None:
+            (repo / path).unlink()
+        else:
+            (repo / path).write_text(content)
     ident = ["-c", "user.name=t", "-c", "user.email=t@example.com"]
-    run(["git", "add", _TASKS], cwd=repo, check=True, env=env)
+    run(["git", "add", "-A"], cwd=repo, check=True, env=env)
     run(
         ["git", *ident, "commit", "-q", "-m", "x", "--no-gpg-sign"],
         cwd=repo,
@@ -64,8 +71,12 @@ def _commit(repo, text: str) -> str:
     return head.stdout.strip()
 
 
-def _reach_of_an_edit(tmp_path, job: str) -> frozenset[str]:
-    """`setup_file_hosts` over a two-commit range whose only change is the task running `job`."""
+def _reach(tmp_path, path: str, before: dict, after: dict) -> frozenset[str]:
+    """`setup_file_hosts` for `path` over a two-commit range from `before` to `after`.
+
+    Each side maps a repo path to its content, or to None for a deleted file; crony's tasks
+    file is `_TASKS`.
+    """
     repo = tmp_path / "repo"
     env = {
         "GIT_CONFIG_GLOBAL": "/dev/null",
@@ -73,8 +84,8 @@ def _reach_of_an_edit(tmp_path, job: str) -> frozenset[str]:
         "PATH": "/usr/bin:/bin",
     }
     run(["git", "init", "-q", "-b", "master", str(repo)], check=True, env=env)
-    old = _commit(repo, _CRONS)
-    new = _commit(repo, _edit(_CRONS, job))
+    old = _commit(repo, before.pop(_TASKS), before)
+    new = _commit(repo, after.pop(_TASKS), after)
     roles_dir = repo / "ansible" / "roles" / "setup"
     playbook = tmp_path / "initial_setup.yml"
     playbook.write_text(yaml.safe_dump([{"hosts": "all", "roles": ["crony"]}]))
@@ -85,7 +96,7 @@ def _reach_of_an_edit(tmp_path, job: str) -> frozenset[str]:
     (host_vars / "daniel-box.yml").write_text("has_gitops: true\n")
     return land_reach.setup_file_hosts(
         "crony",
-        _TASKS,
+        path,
         playbook,
         all_vars,
         host_vars,
@@ -95,12 +106,32 @@ def _reach_of_an_edit(tmp_path, job: str) -> frozenset[str]:
     )
 
 
+def _reach_of_an_edit(tmp_path, job: str) -> frozenset[str]:
+    """The reach of crony's tasks file over a range whose only change is `job`'s task."""
+    before, after = {_TASKS: _CRONS}, {_TASKS: _edit(_CRONS, job)}
+    return _reach(tmp_path, _TASKS, before, after)
+
+
 def test_an_edit_to_a_has_gitops_task_reaches_the_gitops_host_only(tmp_path):
     assert _reach_of_an_edit(tmp_path, "docs-refresh") == {"daniel-box"}
 
 
 def test_an_edit_to_an_ungated_task_in_the_same_file_reaches_every_host(tmp_path):
     assert _reach_of_an_edit(tmp_path, "autoremove") == _ALL
+
+
+_UNNAMED = "ansible/roles/setup/crony/templates/unnamed.j2"
+
+
+def test_a_deleted_template_reaches_no_host(tmp_path):
+    """#3890 deleted gitops_deploy's role-local alert template, which no task names."""
+    before, after = {_TASKS: _CRONS, _UNNAMED: "x\n"}, {_TASKS: _CRONS, _UNNAMED: None}
+    assert _reach(tmp_path, _UNNAMED, before, after) == frozenset()
+
+
+def test_an_edited_template_no_task_names_keeps_the_role_reach(tmp_path):
+    before, after = {_TASKS: _CRONS, _UNNAMED: "x\n"}, {_TASKS: _CRONS, _UNNAMED: "y\n"}
+    assert _reach(tmp_path, _UNNAMED, before, after) == _ALL
 
 
 def test_the_alert_template_reaches_gitops_deploy_through_its_install_half_only():

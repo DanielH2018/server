@@ -28,7 +28,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.ansible_inventory import inventory_hosts
-from lib.git import git
 from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -42,10 +41,10 @@ from deploy_logic import (
 )
 
 from land_changes import changes_for
+from setup_role_diff import deleted_in, task_file_chains
 from setup_role_chains import (
     SHIPPED_DIRS,
     VARS_DIRS,
-    changed_task_texts,
     handler_notifier_chains,
     task_chains,
     task_gates_naming,
@@ -258,7 +257,7 @@ def setup_file_hosts(
     own and returns the role-level answer, which for a dispatcher is the union.
 
     Given `pr_range` (`<old>..<new>`), a `tasks/` path narrows further, to the tasks the
-    range added or edited (`setup_role_chains.changed_task_texts`). `initial_setup/tasks/
+    range added or edited (`setup_role_diff.changed_task_texts`). `initial_setup/tasks/
     crons.yml` holds ungated crons beside box-only ones, so an edit to only the box-only
     ones read as owing daniel-server and daniel-pi an apply (#3976). `repo` is the checkout
     whose git store holds the range. A diff it cannot read keeps the whole file's reach.
@@ -295,15 +294,14 @@ def setup_file_hosts(
     if not role_hosts or parts[: len(prefix)] != prefix or len(parts) < 6:
         return role_hosts
     if parts[4] == "tasks":
-        task_file = parts[-1]
-        changed = _changed_tasks(path, pr_range, repo) if pr_range else None
-        chains = task_chains(
-            roles_dir / role,
-            lambda task, f: (
-                f == task_file and (changed is None or json.dumps(task) in changed)
-            ),
-        )
+        chains = task_file_chains(roles_dir / role, path, pr_range, repo)
     elif parts[4] in SHIPPED_DIRS:
+        if pr_range and deleted_in(path, pr_range, repo):
+            # A deleted template or file ships nothing, and re-applying the role does not
+            # remove a rendered copy; a task that cleans one up is its own changed path.
+            # #3890 deleted gitops_deploy's role-local alert template, which no task named,
+            # so its reach fell back to the role's three hosts.
+            return frozenset()
         chains = task_gates_naming(roles_dir / role, parts[-1])
     elif parts[4] in VARS_DIRS:
         chains = var_consumer_chains(
@@ -318,23 +316,6 @@ def setup_file_hosts(
     if not chains:
         return role_hosts
     return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
-
-
-def _changed_tasks(path: str, pr_range: str, repo: Path) -> set[str] | None:
-    """The leaf tasks of `path` that `pr_range` added or edited, or None to stay wide.
-
-    Read from git at both ends of the range, not from the checkout, so a checkout on another
-    commit cannot shift the diff. A file absent at either end is None: an added file has no
-    narrower reach than its own, and a deleted one ships nothing.
-    """
-    old, _, new = pr_range.partition("..")
-    texts = []
-    for ref in (old, new):
-        shown = git("show", f"{ref}:{path}", cwd=repo, check=False)
-        if shown.returncode != 0:
-            return None
-        texts.append(shown.stdout)
-    return changed_task_texts(*texts)
 
 
 def setup_shipped_file_hosts(

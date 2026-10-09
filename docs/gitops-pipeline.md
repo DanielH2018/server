@@ -344,7 +344,7 @@ neither `k3s-bringup.yml` nor a playbook for `common`; it is what a role promote
 `optimize_pi` is recorded the same way (#3933). `initial_setup.yml` includes it under `when:
 inventory_hostname == optimize_pi_host`, so the tick's `--tags optimize_pi` run on daniel-box
 matched no task, exited 0 and recorded an apply the Pi never received.
-`deploy_setup_roles.SETUP_ROLES_OFF_THE_TICK_HOST` maps the role to its host, and the remediation
+`gitops_markers.SETUP_ROLES_OFF_THE_TICK_HOST` maps the role to its host, and the remediation
 prints `ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`.
 `ansible/tests/deploy/test_setup_roles_the_tick_host_skips.py` derives that table from the
 playbook gates, so a second role gated off the tick's host fails it until the table names it.

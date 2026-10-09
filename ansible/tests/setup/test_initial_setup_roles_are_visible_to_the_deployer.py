@@ -27,7 +27,7 @@ import yaml
 
 import land_reach
 from deploy_changes import services_from_changed_paths, setup_tags_for
-from deploy_setup_roles import SETUP_ROLES_OFF_THE_TICK_HOST
+from gitops_markers import SETUP_ROLES_OFF_THE_TICK_HOST
 
 INITIAL_SETUP_YML = ANSIBLE / "initial_setup.yml"
 ROLES = ANSIBLE / "roles"

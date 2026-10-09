@@ -72,6 +72,7 @@ from gitops_markers import (
     parse_contention,
     maximal_apply_warning,
     owed_clear_cmd,
+    target_arg,
 )
 from gitops_ledger import (
     OWED_K8S_DEFERRED,
@@ -227,7 +228,7 @@ def manual_plane_lines(owed, now):
         tags = ",".join(sorted(selected))
         warning = maximal_apply_warning(e.role, selected)
         how = (
-            f"apply `{e.playbook} --tags {tags}` by hand"
+            f"apply `{e.playbook} --tags {tags}{target_arg(e.role)}` by hand"
             + (f" (WARNING: {warning})" if warning else "")
             if e.playbook != "none"
             else "apply the role by hand"

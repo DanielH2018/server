@@ -1,4 +1,4 @@
-"""`deploy_setup_roles.SETUP_ROLES_OFF_THE_TICK_HOST` names every role the tick's host never runs.
+"""`gitops_markers.SETUP_ROLES_OFF_THE_TICK_HOST` names every role the tick's host never runs.
 
 The deployer applies a setup role as `initial_setup.yml --tags <role>` on its own host. A role
 the playbook gates off that host matches no task there and exits 0, so the tick recorded an
@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 import land_reach
-from deploy_setup_roles import SETUP_ROLES_OFF_THE_TICK_HOST
+from gitops_markers import SETUP_ROLES_OFF_THE_TICK_HOST
 from lib.repo_paths import ALL_VARS, HOST_VARS
 
 
