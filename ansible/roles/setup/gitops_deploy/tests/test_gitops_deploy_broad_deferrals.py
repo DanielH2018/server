@@ -34,7 +34,7 @@ from _broad_k8s_range import (
 
 
 def test_a_failed_broad_apply_still_pages_a_secret_riding_the_same_range(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """Every arm that leaves the range merged sends the page itself.
 
@@ -44,24 +44,24 @@ def test_a_failed_broad_apply_still_pages_a_secret_riding_the_same_range(
     """
     config = mixed(settings, tick, APPLYABLE_ROLE, SECRETS)
     tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert alerted(state_dir, "secrets") == ORIGIN
     assert any("`secrets.yml` changed" in post for post in tick.posts)
 
 
 def test_a_failed_broad_apply_pages_no_secret_the_range_never_carried(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The rejecting half: firing on the failure arm must not mean firing unconditionally."""
     config = mixed(settings, tick, APPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert alerted(state_dir, "secrets") is None
     assert not [post for post in tick.posts if "`secrets.yml` changed" in post]
 
 
 def test_a_contended_tick_pages_no_secret_until_the_retry_merges(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The contention arm resets the ff-merge, so its page would be false.
 
@@ -73,11 +73,11 @@ def test_a_contended_tick_pages_no_secret_until_the_retry_merges(
     """
     config = mixed(settings, tick, APPLYABLE_ROLE, SECRETS)
     tick.playbook_outcomes = [deploy_locks.ServiceLockBusy("service lock busy")]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.head == LOCAL, "the ff-merge was undone"
     assert not [post for post in tick.posts if "`secrets.yml` changed" in post]
     assert alerted(state_dir, "secrets") is None
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.head == ORIGIN, "the retry merged and applied"
     secrets_posts = [post for post in tick.posts if "`secrets.yml` changed" in post]
     assert len(secrets_posts) == 1, "the retry owes exactly one page"
@@ -102,7 +102,7 @@ def _hand_edited_radarr(settings, tick, *, declared: bool):
 
 
 def test_a_k8s_role_the_narrowed_plane_applied_is_not_called_unapplied(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The plane ran `deploy.yml --tags radarr,sonarr`, so "not applied" is false.
 
@@ -112,14 +112,14 @@ def test_a_k8s_role_the_narrowed_plane_applied_is_not_called_unapplied(
     """
     config = _hand_edited_radarr(settings, tick, declared=True)
     tick.narrow = (0, "radarr,sonarr")
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == [[*DEPLOY_SONARR[:-1], "radarr,sonarr"]]
     assert alerted(state_dir, "k8s") is None
     assert not [post for post in tick.posts if "radarr" in post]
 
 
 def test_a_k8s_role_a_refused_narrowing_applied_is_not_called_unapplied(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The other applying branch: a refused narrowing runs the whole `deploy.yml`.
 
@@ -129,13 +129,13 @@ def test_a_k8s_role_a_refused_narrowing_applied_is_not_called_unapplied(
     """
     config = _hand_edited_radarr(settings, tick, declared=True)
     tick.narrow = (3, "")
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == [DEPLOY_PLANE_FULL]
     assert alerted(state_dir, "k8s") is None
 
 
 def test_a_k8s_role_this_host_does_not_declare_is_still_called_unapplied(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The rejecting half for the full run: `deploy.yml` applies no undeclared role.
 
@@ -145,25 +145,25 @@ def test_a_k8s_role_this_host_does_not_declare_is_still_called_unapplied(
     """
     config = _hand_edited_radarr(settings, tick, declared=False)
     tick.narrow = (3, "")
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == [DEPLOY_PLANE_FULL]
     assert alerted(state_dir, "k8s") == ORIGIN
     assert any("radarr" in post for post in tick.posts)
 
 
 def test_a_k8s_role_the_deploy_plane_missed_is_still_called_unapplied(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The rejecting half for the narrowed run: a plane narrowed elsewhere covers nothing."""
     config = _hand_edited_radarr(settings, tick, declared=True)
     tick.narrow = (0, "jellyfin")
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert alerted(state_dir, "k8s") == ORIGIN
     assert any("radarr" in post for post in tick.posts)
 
 
 def test_a_budget_deferred_bump_is_still_named_by_the_deferral_post(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The subtraction above must not reach the one signal a budget-deferred bump has.
 
@@ -171,7 +171,7 @@ def test_a_budget_deferred_bump_is_still_named_by_the_deferral_post(
     BECAUSE no plan applied it — so it can never be plane-covered. Losing it from the post
     would leave the bump merged, unapplied and named nowhere.
     """
-    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
+    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick), state) == 0
     assert alerted(state_dir, "k8s") == ORIGIN
     assert any("sonarr" in post for post in tick.posts)
 
@@ -201,7 +201,7 @@ def _out_of_budget(settings, tick):
 
 
 def test_a_budget_deferred_bump_is_recorded_in_the_k8s_deferred_class(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The post fires once and the range is merged, so the marker is the durable half.
 
@@ -209,41 +209,41 @@ def test_a_budget_deferred_bump_is_recorded_in_the_k8s_deferred_class(
     stale record in the fleet — a new deferral adds nothing an operator can see on a tile that
     is already red. The marker pages GitOps Deploy — Status on its own age instead.
     """
-    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
+    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick), state) == 0
     [entry] = deferred(state_dir)
     assert (entry.origin, entry.subject) == (ORIGIN, "sonarr")
     assert entry.at > 0, "the first-seen stamp is what monitor-bridge pages on"
 
 
 def test_a_bump_the_tick_deployed_is_not_recorded(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The rejecting half: recording every promoted bump would page on the happy path."""
     config = mixed(settings, tick, DEPLOY_PLANE)
     tick.narrow = (0, "jellyfin")
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks[-1] == DEPLOY_SONARR, "the bump was deployed, not deferred"
     assert deferred(state_dir) == []
 
 
 def test_the_service_deploy_a_later_tick_runs_clears_the_marker(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The way out the deployer owns. Without it the page never stops.
 
     An operator's own `./scripts/deploy.sh` is invisible here, which is what
     `gitops_state.py clear-owed k8s_deferred` exists for; a deploy the TICK runs is not.
     """
-    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
+    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick), state) == 0
     assert deferred(state_dir) != []
     tick.head = LOCAL
-    assert gitops_deploy.main(tick.tools, mixed(settings, tick)) == 0
+    assert gitops_deploy.main(tick.tools, mixed(settings, tick), state) == 0
     assert tick.playbooks[-1] == DEPLOY_SONARR, "the retry deployed the bump"
     assert deferred(state_dir) == []
 
 
 def test_a_deploy_plane_that_applies_the_service_clears_the_marker(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The second way out: a later broad range's plane applies the service on its own.
 
@@ -253,13 +253,15 @@ def test_a_deploy_plane_that_applies_the_service_clears_the_marker(
     (state_dir / "owed.jsonl").write_text(
         f'{{"at": 1000, "class": "k8s_deferred", "origin": "{"9" * 40}", "subject": "radarr"}}\n'
     )
-    assert gitops_deploy.main(tick.tools, plane_applies_radarr(settings, tick)) == 0
+    assert (
+        gitops_deploy.main(tick.tools, plane_applies_radarr(settings, tick), state) == 0
+    )
     assert tick.playbooks[0] == [*DEPLOY_SONARR[:-1], "radarr"], "the plane ran"
     assert deferred(state_dir) == []
 
 
 def test_a_hand_edited_k8s_role_is_not_recorded(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The class the marker does NOT cover.
 
@@ -267,6 +269,6 @@ def test_a_hand_edited_k8s_role_is_not_recorded(
     recording every such change would hold GitOps Deploy — Status red as normal operation.
     """
     config = mixed(settings, tick, APPLYABLE_ROLE, HAND_EDITED_K8S)
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert alerted(state_dir, "k8s") == ORIGIN, "it took the defer-and-alert path"
     assert deferred(state_dir) == []

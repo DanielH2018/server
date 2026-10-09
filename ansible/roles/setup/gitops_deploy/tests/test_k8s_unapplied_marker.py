@@ -40,12 +40,12 @@ def _tools(**kwargs) -> DeployTools:
 
 # ── the write: every deferred k8s role, on every exit that leaves the range merged ─────────
 def test_a_deferred_k8s_role_is_recorded_with_the_sha_and_the_stamp(
-    gitops_deploy, state_dir, settings
+    gitops_deploy, settings, state
 ):
     """FLAGGED half: the marker names the service and the SHA an operator's deploy applies."""
     deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
-        gitops_deploy.STATE,
+        state,
         settings,
         ORIGIN,
         set(),
@@ -53,20 +53,19 @@ def test_a_deferred_k8s_role_is_recorded_with_the_sha_and_the_stamp(
         declared_k8s={"authelia"},
     )
     ((origin, service, _at),) = [
-        (e.origin, e.service, e.at)
-        for e in gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED)
+        (e.origin, e.service, e.at) for e in state.owed_pending(OWED_K8S_UNAPPLIED)
     ]
     assert (origin, service) == (ORIGIN, "authelia")
 
 
 def test_each_line_names_the_commit_that_changed_its_service(
-    gitops_deploy, state_dir, settings
+    gitops_deploy, settings, state
 ):
     """sonarr changed at APPLIED, below a later tip. Its landing's record names APPLIED,
     so a line at the tip would never discharge. authelia has no attribution and keeps the tip."""
     deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
-        gitops_deploy.STATE,
+        state,
         settings,
         ORIGIN,
         set(),
@@ -74,34 +73,34 @@ def test_each_line_names_the_commit_that_changed_its_service(
         declared_k8s={"sonarr", "authelia"},
     )
     assert sorted(
-        (e.service, e.origin)
-        for e in gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED)
+        (e.service, e.origin) for e in state.owed_pending(OWED_K8S_UNAPPLIED)
     ) == [("authelia", ORIGIN), ("sonarr", APPLIED)]
 
 
-def test_a_range_with_no_k8s_role_records_nothing(gitops_deploy, state_dir, settings):
+def test_a_range_with_no_k8s_role_records_nothing(
+    gitops_deploy, state_dir, settings, state
+):
     """CLEAN half: a tasks-only push must not leave a line nobody can discharge."""
     deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
-        gitops_deploy.STATE,
+        state,
         settings,
         ORIGIN,
         set(),
         ChangeSet(tasks={"svca"}),
     )
-    assert gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED) == []
+    assert state.owed_pending(OWED_K8S_UNAPPLIED) == []
     assert not (state_dir / "owed.jsonl").exists()
 
 
 def test_a_second_deferral_of_the_same_role_moves_the_origin_and_keeps_the_stamp(
-    gitops_deploy, state_dir, settings
+    gitops_deploy, settings, state
 ):
     """The line has to name the NEWEST unapplied change, or it discharges past it.
 
     The stamp is the age the banner prints, and it dates the oldest unapplied change, so a
     later range touching the role must not reset it.
     """
-    state = gitops_deploy.STATE
     state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
     deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
@@ -117,13 +116,10 @@ def test_a_second_deferral_of_the_same_role_moves_the_origin_and_keeps_the_stamp
     ]
 
 
-def test_a_first_deferral_of_a_role_appends_its_line(
-    gitops_deploy, state_dir, settings
-):
+def test_a_first_deferral_of_a_role_appends_its_line(gitops_deploy, settings, state):
     """The other half of the advance: a service the marker does not list gets a NEW line,
     stamped now, and is what `record_k8s_unapplied` returns — `deploy_defer.unrecord` clears
     exactly that, so an advanced line must stay out of it."""
-    state = gitops_deploy.STATE
     state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
     assert state.record_owed(
         OWED_K8S_UNAPPLIED, LATER, {"authelia", "sonarr"}, 2000.0
@@ -145,21 +141,19 @@ def _line(service: str, origin: str = ORIGIN, **fields) -> str:
     )
 
 
-def test_a_torn_line_survives_an_origin_advance(gitops_deploy, state_dir, settings):
+def test_a_torn_line_survives_an_origin_advance(gitops_deploy, settings, state):
     """A line no parser can read is carried through untouched: the rewrite walks the RAW
     lines, which the parsed entries are not aligned with once one of them is skipped."""
-    state = gitops_deploy.STATE
     state.write("owed", f"garbled\n{_line('authelia')}")
     state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0)
     assert state.read("owed").splitlines() == ["garbled", _line("authelia", LATER)]
 
 
 def test_a_key_this_writer_does_not_know_survives_an_origin_advance(
-    gitops_deploy, state_dir, settings
+    gitops_deploy, settings, state
 ):
     """The ledger's whole point (#3392): a key a NEWER writer added is neither a reason to
     skip the line nor something an older writer strips on its way through."""
-    state = gitops_deploy.STATE
     state.write("owed", _line("authelia", future=["kept"]))
     assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["authelia"]
     state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0)
@@ -175,7 +169,7 @@ def test_a_key_this_writer_does_not_know_survives_an_origin_advance(
     ids=["no-stamp-at-all", "a-stamp-no-parser-reads"],
 )
 def test_a_torn_line_naming_a_service_is_repaired_rather_than_duplicated(
-    torn, gitops_deploy, state_dir, settings
+    torn, gitops_deploy, settings, state
 ):
     """A torn line the record CAN attribute is rewritten in place.
 
@@ -183,7 +177,6 @@ def test_a_torn_line_naming_a_service_is_repaired_rather_than_duplicated(
     a second line beside the torn one — and the clear and the discharge would then carry the
     torn one forever. One line, readable, is the only end state that clears.
     """
-    state = gitops_deploy.STATE
     state.write("owed", torn)
     assert state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0) == [], (
         "a line predating the tick must stay out of what `unrecord` clears"
@@ -196,30 +189,25 @@ def test_a_torn_line_naming_a_service_is_repaired_rather_than_duplicated(
 
 
 def test_a_repaired_line_keeps_a_stamp_that_reads_as_one(
-    gitops_deploy, state_dir, settings
+    gitops_deploy, settings, state
 ):
     """A torn line's stamp is the age a reader dates the change from, so the repair keeps it."""
-    state = gitops_deploy.STATE
     torn = {"class": "k8s_unapplied", "subject": "authelia", "origin": 7, "at": 1000}
     state.write("owed", json.dumps(torn))
     state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0)
     assert [e.at for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == [1000.0]
 
 
-def test_a_torn_line_beside_a_readable_one_is_dropped(
-    gitops_deploy, state_dir, settings
-):
+def test_a_torn_line_beside_a_readable_one_is_dropped(gitops_deploy, settings, state):
     """Repairing here would duplicate what the readable line already says."""
-    state = gitops_deploy.STATE
     state.write("owed", f"{_line('authelia', at=None)}\n{_line('authelia')}")
     state.record_owed(OWED_K8S_UNAPPLIED, LATER, {"authelia"}, 2000.0)
     assert state.read("owed").splitlines() == [_line("authelia", LATER)]
 
 
-def test_the_two_k8s_markers_are_separate_files(gitops_deploy, state_dir, settings):
+def test_the_two_k8s_markers_are_separate_files(gitops_deploy, settings, state):
     """A class tag on a `k8s_deferred` line would read as NO pending bump in an un-redeployed
     monitor-bridge, which is why `k8s_unapplied` lives in the `owed` ledger instead."""
-    state = gitops_deploy.STATE
     state.record_owed(OWED_K8S_DEFERRED, ORIGIN, {"sonarr"}, 1000.0)
     state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
     assert [e.service for e in state.owed_pending(OWED_K8S_DEFERRED)] == ["sonarr"]
@@ -228,10 +216,10 @@ def test_the_two_k8s_markers_are_separate_files(gitops_deploy, state_dir, settin
 
 # ── the discharge: a deploy the deployer never saw still drops the line ────────────────────
 @pytest.fixture
-def pending(gitops_deploy, state_dir, settings):
+def pending(gitops_deploy, state_dir, settings, state):
     """A state with one pending `k8s_unapplied` line for authelia at ORIGIN."""
-    gitops_deploy.STATE.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
-    return gitops_deploy.STATE
+    state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
+    return state
 
 
 def _discharge(state, settings, release_commit, is_ancestor=lambda *_a: True):
@@ -283,12 +271,10 @@ def test_a_missing_release_record_keeps_the_line(pending, settings):
 
 # ── a shared role has no record of its own, so its callers' records stand in ───────────
 @pytest.fixture
-def shared_pending(gitops_deploy, state_dir, settings):
+def shared_pending(gitops_deploy, state_dir, settings, state):
     """A pending `k8s_unapplied` line for the shared role `game-stats-lib` at ORIGIN."""
-    gitops_deploy.STATE.record_owed(
-        OWED_K8S_UNAPPLIED, ORIGIN, {"game-stats-lib"}, 1000.0
-    )
-    return gitops_deploy.STATE
+    state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"game-stats-lib"}, 1000.0)
+    return state
 
 
 def _discharge_shared(
@@ -352,12 +338,12 @@ def _render_proved(svc):
 
 
 def test_a_manifests_line_discharges_on_a_matching_render(
-    gitops_deploy, state_dir, settings
+    gitops_deploy, settings, state
 ):
     """FLAGGED half: valheim-stats was never redeployed, but its bytes did not move."""
-    gitops_deploy.STATE.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"manifests"}, 1000.0)
+    state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"manifests"}, 1000.0)
     assert _discharge_shared(
-        gitops_deploy.STATE, settings, {"valheim-stats"}, None, _render_proved
+        state, settings, {"valheim-stats"}, None, _render_proved
     ) == ["manifests"]
 
 
@@ -445,11 +431,10 @@ def test_the_release_dir_matches_the_manifests_role():
 
 
 def test_a_service_already_paging_from_k8s_deferred_is_not_recorded_twice(
-    gitops_deploy, state_dir, settings
+    gitops_deploy, settings, state
 ):
     """`deploy_broad_k8s` folds a budget-deferred bump back into `cs.k8s` after recording it
     in the paging marker, so the banner would otherwise name the service twice."""
-    state = gitops_deploy.STATE
     state.record_owed(OWED_K8S_DEFERRED, ORIGIN, {"sonarr"}, 1000.0)
     deploy_k8s_owed.alert_and_record_deferred(
         _tools(),

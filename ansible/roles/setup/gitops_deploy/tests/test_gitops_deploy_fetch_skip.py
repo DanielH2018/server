@@ -13,7 +13,9 @@ and a tmp state dir from conftest.py.
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_fetch_skip.py
 
 import dataclasses
+import functools
 import subprocess
+from collections.abc import Callable
 
 import pytest
 
@@ -46,7 +48,7 @@ def _tools(**overrides) -> DeployTools:
     return dataclasses.replace(base, **overrides)
 
 
-def test_a_failing_git_status_raises_retryable(gitops_deploy, state_dir):
+def test_a_failing_git_status_raises_retryable(gitops_deploy, state):
     # `git status --porcelain` exits 128 on a momentarily unreadable work tree (a parallel
     # `git worktree` operation) while the very next tick is fine, so it must raise retryable.
     tools = _tools(
@@ -55,10 +57,10 @@ def test_a_failing_git_status_raises_retryable(gitops_deploy, state_dir):
         )
     )
     with pytest.raises(gitops_deploy.RetryableFetchError, match="work tree"):
-        gitops_deploy.main(tools)
+        gitops_deploy.main(tools, gitops_deploy.tick_config(), state)
 
 
-def test_a_failing_fetch_raises_retryable(gitops_deploy, state_dir):
+def test_a_failing_fetch_raises_retryable(gitops_deploy, state):
     # A clean status, then a fetch that fails: git_fetch is unchecked `subprocess.run`, not
     # `run()`, so the failure carries git's stderr and does not fall through run()'s RuntimeError
     # to the crash page.
@@ -68,29 +70,30 @@ def test_a_failing_fetch_raises_retryable(gitops_deploy, state_dir):
         )
     )
     with pytest.raises(gitops_deploy.RetryableFetchError, match="unable to access"):
-        gitops_deploy.main(tools)
+        gitops_deploy.main(tools, gitops_deploy.tick_config(), state)
 
 
-def test_a_missing_config_refuses_to_tick(gitops_deploy, monkeypatch, state_dir):
+def test_a_missing_config_refuses_to_tick(gitops_deploy, state):
     # The import survives a missing config so the suite can load the module; the tick must not.
     # An empty REPO would run every git command below against cwd="" and page from somewhere
     # confusing, so main() pages from the top and names the file it could not read.
-    monkeypatch.setattr(gitops_deploy, "REPO", "")
+    config = dataclasses.replace(gitops_deploy.tick_config(), repo="")
     with pytest.raises(RuntimeError, match="REPO_DIR is unset"):
-        gitops_deploy.main(_tools())
+        gitops_deploy.main(_tools(), config, state)
 
 
 # ── entrypoint(): the exit-code contract around main() ────────────────────────────────────────
 def _tick(
-    gitops_deploy, monkeypatch, outcome, discord_ok: bool = True
-) -> tuple[DeployTools, dict[str, list]]:
-    """entrypoint()'s tools, with main() replaced by `outcome`.
+    gitops_deploy, state, outcome, discord_ok: bool = True
+) -> tuple[Callable[[], int], dict[str, list]]:
+    """entrypoint() bound to fake tools, with main() replaced by `outcome`.
 
     `outcome` is a return value or an exception to raise. The returned dict records every
     Discord post and every git call `_record_behind` made — the real one runs, so "the marker
     was recorded after main()" is read off the git it did rather than off a patched stub.
 
-    main() itself stays patched: it is this module's subject, not a process boundary.
+    main() itself is replaced through entrypoint()'s `main` parameter: it is this module's
+    subject, not a process boundary.
     """
     seen: dict[str, list] = {"posts": [], "git": []}
 
@@ -102,27 +105,28 @@ def _tick(
         seen["git"].append(argv)
         return ORIGIN if argv[-1].startswith("origin/") else LOCAL
 
-    def fake_main(_tools, _config) -> int:
+    def fake_main(_tools, _config, _state) -> int:
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
 
-    monkeypatch.setattr(gitops_deploy, "main", fake_main)
-    return _tools(
+    tools = _tools(
         discord_post=discord_post,
         run=run,
         is_ancestor=lambda _repo, _a, _d: True,
+    )
+    config = gitops_deploy.tick_config()
+    return functools.partial(
+        gitops_deploy.entrypoint, tools, config, state, main=fake_main
     ), seen
 
 
-def test_a_retryable_fetch_failure_is_a_clean_skip(
-    gitops_deploy, monkeypatch, state_dir
-):
-    tools, seen = _tick(
-        gitops_deploy, monkeypatch, gitops_deploy.RetryableFetchError("blip")
+def test_a_retryable_fetch_failure_is_a_clean_skip(gitops_deploy, state_dir, state):
+    run_tick, seen = _tick(
+        gitops_deploy, state, gitops_deploy.RetryableFetchError("blip")
     )
     # exit 0 → systemd sees success → the OnFailure alert unit does not fire
-    assert gitops_deploy.entrypoint(tools) == 0
+    assert run_tick() == 0
     assert seen["posts"] == [], "a retryable fetch failure must not post a crash alert"
     assert not (state_dir / "last_run").exists(), (
         "a skipped tick must not refresh last_run — a persistent fetch break would then hide "
@@ -137,7 +141,7 @@ def test_a_retryable_fetch_failure_is_a_clean_skip(
 
 
 def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
-    gitops_deploy, monkeypatch, state_dir, capsys
+    gitops_deploy, state_dir, capsys, state
 ):
     """The acceptance criterion for moving the config parse out of import time.
 
@@ -151,14 +155,14 @@ def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
     """
     import deploy_io
 
-    tools, seen = _tick(
+    run_tick, seen = _tick(
         gitops_deploy,
-        monkeypatch,
+        state,
         deploy_io.ConfigError(
             "unusable deployer config: K8S_DEPLOY_TIMEOUT_S='5m' is not a whole number"
         ),
     )
-    assert gitops_deploy.entrypoint(tools) == 0
+    assert run_tick() == 0
     out = capsys.readouterr().out.strip()
     assert out.count("\n") == 0, (
         f"a diagnosable failure is one line, not a block: {out}"
@@ -175,42 +179,40 @@ def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
 
 
 def test_an_unusable_config_exits_1_when_the_alert_itself_cant_be_delivered(
-    gitops_deploy, monkeypatch, state_dir
+    gitops_deploy, state_dir, state
 ):
     # Red proof for the branch above: when the detailed post fails, OnFailure is the backstop.
     import deploy_io
 
-    tools, _seen = _tick(
+    run_tick, _seen = _tick(
         gitops_deploy,
-        monkeypatch,
+        state,
         deploy_io.ConfigError(
             "unusable deployer config: K8S_DEPLOY_TIMEOUT_S='5m' is not a whole number"
         ),
         discord_ok=False,
     )
-    assert gitops_deploy.entrypoint(tools) == 1
+    assert run_tick() == 1
     assert not (state_dir / "last_run").exists()
 
 
-def test_a_genuine_crash_still_pages_and_reraises(
-    gitops_deploy, monkeypatch, state_dir
-):
+def test_a_genuine_crash_still_pages_and_reraises(gitops_deploy, state_dir, state):
     # The fix must not have silenced real crashes: page, re-raise (so OnFailure fires too), and
     # leave last_run alone so the Alive monitor also goes stale if this keeps happening.
-    tools, seen = _tick(gitops_deploy, monkeypatch, ValueError("boom"))
+    run_tick, seen = _tick(gitops_deploy, state, ValueError("boom"))
     with pytest.raises(ValueError, match="boom"):
-        gitops_deploy.entrypoint(tools)
+        run_tick()
     assert seen["posts"] == ["🚨 gitops-deploy crashed: boom"]
     assert not (state_dir / "last_run").exists()
 
 
 @pytest.mark.parametrize("rc", [0, 1])
 def test_a_completed_tick_writes_last_run_and_returns_mains_rc(
-    gitops_deploy, monkeypatch, state_dir, rc
+    gitops_deploy, state_dir, rc, state
 ):
     # rc=1 is a rollback: the tick completed, so the liveness marker is written all the same.
-    tools, seen = _tick(gitops_deploy, monkeypatch, rc)
-    assert gitops_deploy.entrypoint(tools) == rc
+    run_tick, seen = _tick(gitops_deploy, state, rc)
+    assert run_tick() == rc
     assert seen["posts"] == []
     assert [argv[1] for argv in seen["git"]] == ["rev-parse"] * 3, (
         "HEAD is read before main(), then both refs after it, for the behind marker"

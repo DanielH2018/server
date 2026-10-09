@@ -264,6 +264,7 @@ def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
 
 def test_the_broad_k8s_alert_fits_the_head_slice_and_names_the_services_once(
     gitops_deploy,
+    state,
 ) -> None:
     """The same 1900-char budget as its siblings, at the widest service list seen.
 
@@ -278,7 +279,7 @@ def test_the_broad_k8s_alert_fits_the_head_slice_and_names_the_services_once(
         "2d25ced3" * 5,
         NINE_BUMPS,
         exc,
-        gitops_deploy.STATE.path("hold"),
+        state.path("hold"),
     )
     assert len(message) <= 1900
     assert "Nothing was rolled back" in message

@@ -40,7 +40,7 @@ from gitops_ledger import OWED_HOLD_PLANE, owed_line
 
 
 def test_a_mixed_range_applies_the_setup_plane_then_deploys_the_bump(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """Both applies run, in that order, and both come out of the one broad budget.
 
@@ -50,7 +50,7 @@ def test_a_mixed_range_applies_the_setup_plane_then_deploys_the_bump(
     bump must NOT get a `K8S_DEPLOY_TIMEOUT_S` of its own on top of it.
     """
     config = mixed(settings, tick, APPLYABLE_ROLE)
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == [APPLY_GITOPS_DEPLOY, DEPLOY_SONARR]
     assert tick.index("git", "merge") < tick.index("playbook", "sonarr")
     deployed = tick.log[tick.index("playbook", "sonarr")][2]
@@ -60,7 +60,7 @@ def test_a_mixed_range_applies_the_setup_plane_then_deploys_the_bump(
 
 
 def test_a_setup_role_the_deployer_cannot_apply_still_deploys_the_bump(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """A range with an unapplyable `roles/setup/k3s` commit still deploys its bumps.
 
@@ -68,7 +68,7 @@ def test_a_setup_role_the_deployer_cannot_apply_still_deploys_the_bump(
     the image bumps beside it, which nothing in `roles/setup/k3s` gates.
     """
     config = mixed(settings, tick, UNAPPLYABLE_ROLE)
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == [DEPLOY_SONARR]
     assert tick.merges == [ORIGIN]
     owed = marker(state_dir, "owed.jsonl")
@@ -80,19 +80,19 @@ def test_a_setup_role_the_deployer_cannot_apply_still_deploys_the_bump(
 
 
 def test_an_unapplyable_setup_role_alone_runs_no_playbook(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The rejecting half: with no bump in the range there is nothing for the arm to run."""
     config = mixed(settings, tick, UNAPPLYABLE_ROLE)
     tick.paths = [UNAPPLYABLE_ROLE]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == []
     owed = marker(state_dir, "owed.jsonl")
     assert owed is not None and "k3s" in owed
 
 
 def test_a_bump_auto_deploy_never_promoted_is_deferred_not_deployed(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The second rejecting half: the arm keys on `cs.k8s_deploy`, not on any k8s path.
 
@@ -100,7 +100,7 @@ def test_a_bump_auto_deploy_never_promoted_is_deferred_not_deployed(
     defer-and-alert channel.
     """
     config = mixed(settings, tick, UNAPPLYABLE_ROLE, promote=False)
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == []
     assert alerted(state_dir, "k8s") == ORIGIN
 
@@ -109,7 +109,7 @@ def test_a_bump_auto_deploy_never_promoted_is_deferred_not_deployed(
 
 
 def test_a_failed_bump_holds_the_sha_and_its_plane_and_does_not_reset(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """Forward-only. A reset here would undo the ff-merge under an applied setup plane.
 
@@ -119,10 +119,10 @@ def test_a_failed_bump_holds_the_sha_and_its_plane_and_does_not_reset(
     """
     config = mixed(settings, tick, UNAPPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("image manifest unknown")]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.head == ORIGIN, "the tree stays fast-forwarded"
     assert marker(state_dir, "hold_sha") == ORIGIN
-    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml sonarr"
+    assert state.hold_plane == "ansible/deploy.yml sonarr"
     assert "Nothing was rolled back" in tick.posts[-1]
 
 
@@ -135,28 +135,28 @@ def test_a_failed_bump_holds_the_sha_and_its_plane_and_does_not_reset(
     ids=["narrowed-to-the-bump", "refused-full-run"],
 )
 def test_a_bump_the_deploy_plane_applies_is_not_deployed_again(
-    gitops_deploy, tick, settings, narrow, expected
+    gitops_deploy, tick, settings, narrow, expected, state
 ):
     """A second `--tags sonarr` re-takes the Longhorn snapshot and spends the shared budget."""
     config = mixed(settings, tick, DEPLOY_PLANE)
     tick.narrow = narrow
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == expected
     assert ("annotation", {"sonarr"}) in tick.log
 
 
 def test_a_deploy_plane_narrowed_elsewhere_still_deploys_the_bump(
-    gitops_deploy, tick, settings
+    gitops_deploy, tick, settings, state
 ):
     """The rejecting half: a plane that does not name the bump's tag does not cover it."""
     config = mixed(settings, tick, DEPLOY_PLANE)
     tick.narrow = (0, "radarr")
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == [[*DEPLOY_SONARR[:-1], "radarr"], DEPLOY_SONARR]
 
 
 def test_a_bump_the_remaining_budget_cannot_fit_is_deferred(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """Less left than a k8s-only tick grants a bump: defer it, never start a run to be killed.
 
@@ -168,7 +168,7 @@ def test_a_bump_the_remaining_budget_cannot_fit_is_deferred(
         broad_deploy_timeout_s=60,
         k8s_deploy_timeout_s=900,
     )
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks == [APPLY_GITOPS_DEPLOY]
     assert tick.head == ORIGIN
     assert marker(state_dir, "hold_sha") is None
@@ -201,7 +201,7 @@ def test_a_bump_the_remaining_budget_cannot_fit_is_deferred(
     ids=["untagged-deploy-plane", "setup-plane", "narrowed-deploy-plane"],
 )
 def test_a_failed_bump_keeps_an_earlier_plane_held_past_the_bumps_fix(
-    gitops_deploy, tick, settings, state_dir, earlier, broad_path, outcomes
+    gitops_deploy, tick, settings, state_dir, earlier, broad_path, outcomes, state
 ):
     """The bump's fix-forward deploy must clear the bump's entry and no other.
 
@@ -215,14 +215,14 @@ def test_a_failed_bump_keeps_an_earlier_plane_held_past_the_bumps_fix(
     )
     config = mixed(settings, tick, broad_path)
     tick.playbook_outcomes = outcomes
-    assert gitops_deploy.main(tick.tools, config) == 0
-    gitops_deploy.STATE.clear_service_hold({"sonarr"})
+    assert gitops_deploy.main(tick.tools, config, state) == 0
+    state.clear_service_hold({"sonarr"})
     assert marker(state_dir, "hold_sha") is not None, "the earlier plane is still owed"
-    assert gitops_deploy.STATE.hold_plane == earlier
+    assert state.hold_plane == earlier
 
 
 def test_a_failed_plane_keeps_an_earlier_plane_held_beside_its_own(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The broad loop's own failure arm must not overwrite the marker either."""
     (state_dir / "hold_sha").write_text("e" * 40)
@@ -231,25 +231,25 @@ def test_a_failed_plane_keeps_an_earlier_plane_held_beside_its_own(
     )
     config = mixed(settings, tick, APPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
-    assert gitops_deploy.main(tick.tools, config) == 0
-    gitops_deploy.STATE.clear_broad_hold("ansible/initial_setup.yml", ["gitops_deploy"])
+    assert gitops_deploy.main(tick.tools, config, state) == 0
+    state.clear_broad_hold("ansible/initial_setup.yml", ["gitops_deploy"])
     assert marker(state_dir, "hold_sha") == ORIGIN
-    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml radarr"
+    assert state.hold_plane == "ansible/deploy.yml radarr"
 
 
 def test_a_failed_bump_still_annotates_the_bump_the_plane_applied(
-    gitops_deploy, tick, settings
+    gitops_deploy, tick, settings, state
 ):
     """radarr went out with the narrowed deploy plane; sonarr's failure must not hide that."""
     config = plane_applies_radarr(settings, tick)
     tick.playbook_outcomes = [None, RuntimeError("image manifest unknown")]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.playbooks[-1] == DEPLOY_SONARR, "sonarr was the bump that failed"
     assert ("annotation", {"radarr"}) in tick.log
 
 
 def test_a_contended_bump_annotates_nothing_the_next_tick_will_annotate_again(
-    gitops_deploy, tick, settings
+    gitops_deploy, tick, settings, state
 ):
     """The reset makes the plane's own apply something the next tick redoes.
 
@@ -259,13 +259,13 @@ def test_a_contended_bump_annotates_nothing_the_next_tick_will_annotate_again(
     """
     config = plane_applies_radarr(settings, tick)
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy("lock sonarr busy")]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.head == LOCAL, "the ff-merge was undone"
     assert not [entry for entry in tick.log if entry[0] == "annotation"]
 
 
 def test_a_contended_bump_takes_back_the_planes_receipt(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state
 ):
     """The bump's own contention arm drops the receipt too.
 
@@ -275,13 +275,13 @@ def test_a_contended_bump_takes_back_the_planes_receipt(
     """
     config = plane_applies_radarr(settings, tick)
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy("lock sonarr busy")]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.head == LOCAL, "the ff-merge was undone"
-    assert receipt_applied(gitops_deploy.STATE) is None
+    assert receipt_applied(state) is None
 
 
 def test_a_contended_bump_leaves_an_earlier_ticks_receipt_alone(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """The rejecting half: the reverse drops THIS origin's receipt and no other.
 
@@ -300,12 +300,12 @@ def test_a_contended_bump_leaves_an_earlier_ticks_receipt_alone(
     (state_dir / "receipts.jsonl").write_text(earlier)
     config = plane_applies_radarr(settings, tick)
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy("lock sonarr busy")]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert marker(state_dir, "receipts.jsonl") == earlier
 
 
 def test_a_busy_service_lock_undoes_the_range_and_the_manual_plane_line(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """Contention is not a failed deploy: nothing ran, so the whole range goes back.
 
@@ -314,7 +314,7 @@ def test_a_busy_service_lock_undoes_the_range_and_the_manual_plane_line(
     """
     config = mixed(settings, tick, UNAPPLYABLE_ROLE)
     tick.playbook_outcomes = [deploy_locks.ServiceLockBusy("service lock sonarr busy")]
-    assert gitops_deploy.main(tick.tools, config) == 0
+    assert gitops_deploy.main(tick.tools, config, state) == 0
     assert tick.head == LOCAL, "the ff-merge was undone"
     assert marker(state_dir, "hold_sha") is None
     assert marker(state_dir, "owed.jsonl") is None

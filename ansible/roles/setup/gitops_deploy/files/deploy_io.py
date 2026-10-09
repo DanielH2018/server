@@ -18,8 +18,9 @@ Two rules hold this module's shape:
   it needs — `repo`, `hostname`, a timeout — as an argument, so a test can call it directly and
   so `gitops_deploy` stays the one place the deployer's configuration is bound.
 - **Most of these reach a caller as a `DeployTools` field (`deploy_toolbox.py`), so a test
-  replaces the field, not this module. `deploy`, `deploy_k8s` and `deploy_broad` are the exception:
-  they call `run` qualified and the suite patches `deploy_io.run` to read the argv they build.**
+  replaces the field, not this module. `k8s_declarations_at`, `k8s_image_diff`, `deploy_k8s`
+  and `deploy_broad` are not fields, because the argv they build is what the suite asserts on.
+  Each takes a required `run` instead, which a caller passes as `tools.run`.**
 
 Stdlib only: the unit runs under `uv run --no-project`, never from a venv. The `# DECIDED:`
 marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
@@ -29,6 +30,7 @@ import os
 import pathlib
 import signal
 import subprocess
+from collections.abc import Callable
 
 from deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
     Config,
@@ -224,7 +226,9 @@ def host_vars_text(repo: str, hostname: str) -> str | None:
 # ── reading k8s roles out of git ──────────────────────────────────────────────────────────────
 
 
-def k8s_declarations_at(repo: str, ref: str) -> dict[str, str | None]:
+def k8s_declarations_at(
+    repo: str, ref: str, *, run: Callable[..., str]
+) -> dict[str, str | None]:
     """Every k8s role's defaults/main.yml as it exists at `ref`.
 
     Reads the ref directly rather than the working tree: the promotion decision runs BEFORE the
@@ -247,7 +251,9 @@ def k8s_declarations_at(repo: str, ref: str) -> dict[str, str | None]:
     }
 
 
-def k8s_image_diff(repo: str, local: str, origin: str, svc: str) -> str:
+def k8s_image_diff(
+    repo: str, local: str, origin: str, svc: str, *, run: Callable[..., str]
+) -> str:
     """Unified diff of one k8s role's defaults/main.yml across the incoming range.
 
     -U0 drops context lines, so is_image_only_diff classifies changed lines only — an
@@ -297,7 +303,12 @@ PLAYBOOK_ARGV = ("uv", "run", "--frozen", "ansible-playbook")
 
 
 def deploy_k8s(
-    repo: str, services: set[str], timeout: float, restore_sha: str | None = None
+    repo: str,
+    services: set[str],
+    timeout: float,
+    restore_sha: str | None = None,
+    *,
+    run: Callable[..., str],
 ) -> None:
     """Deploy k8s services by tag. The rollout gate lives INSIDE the role.
 
@@ -326,7 +337,14 @@ def deploy_k8s(
         run(argv, cwd=repo, timeout=budget)
 
 
-def deploy_broad(repo: str, playbook: str, tags: list[str], timeout: float) -> None:
+def deploy_broad(
+    repo: str,
+    playbook: str,
+    tags: list[str],
+    timeout: float,
+    *,
+    run: Callable[..., str],
+) -> None:
     """Run a broad-plane playbook, bounded. Raises on failure or timeout.
 
     `uv run --frozen` for the same reason deploy() uses it: the repo's pinned env, and never

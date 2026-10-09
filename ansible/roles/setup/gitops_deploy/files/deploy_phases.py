@@ -357,7 +357,9 @@ RENDER_CONFIG_ARGV = [
 ]
 
 
-def reconcile_denylist(state: DeployerState, config: Config, head: str) -> bool:
+def reconcile_denylist(
+    tools: DeployTools, state: DeployerState, config: Config, head: str
+) -> bool:
     """Re-render config.env when its denylist disagrees with the checkout it was rendered from.
 
     `K8S_AUTODEPLOY_DENYLIST` is derived from every role under roles/k8s/ at RENDER time, and
@@ -395,7 +397,9 @@ def reconcile_denylist(state: DeployerState, config: Config, head: str) -> bool:
         # unpushed tree — re-renders once for that checkout instead of every ten minutes.
         return False
     try:
-        declared = declared_denylist(deploy_io.k8s_declarations_at(config.repo, head))
+        declared = declared_denylist(
+            deploy_io.k8s_declarations_at(config.repo, head, run=tools.run)
+        )
     except Exception as exc:
         # No marker write: an unreadable ref is transient, so the next tick tries again.
         log(
@@ -434,10 +438,8 @@ def reconcile_denylist(state: DeployerState, config: Config, head: str) -> bool:
         "— re-rendering it"
     )
     try:
-        # Built here rather than in deploy_io because that module is at its length ratchet;
-        # it still reaches `deploy_io.run` qualified, which is the one boundary the suite
-        # patches, so the argv above is what a test asserts on.
-        deploy_io.run(
+        # Through `tools.run`, so the argv above is what a test asserts on.
+        tools.run(
             RENDER_CONFIG_ARGV, cwd=config.repo, timeout=config.broad_deploy_timeout_s
         )
     except Exception as exc:
@@ -479,7 +481,7 @@ def _promote_k8s_auto_deploys(
             # the alert already evaluate against that exact commit; re-resolving the ref here
             # would open a TOCTOU where a concurrent fetch lands between the two reads.
             k8s_defaults_at_origin = deploy_io.k8s_declarations_at(
-                config.repo, target.origin
+                config.repo, target.origin, run=tools.run
             )
             declared = declared_denylist(k8s_defaults_at_origin)
             read_error = None
@@ -534,7 +536,9 @@ def _promote_k8s_auto_deploys(
         pilot=config.k8s_autodeploy_pilot,
         enabled=autodeploy_enabled,
         image_only=lambda svc: is_image_only_diff(
-            deploy_io.k8s_image_diff(config.repo, target.local, target.origin, svc)
+            deploy_io.k8s_image_diff(
+                config.repo, target.local, target.origin, svc, run=tools.run
+            )
         ),
         max_per_tick=config.k8s_autodeploy_max_per_tick,
         # Read at the PINNED origin, like the denylist above and for the same reason — the

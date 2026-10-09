@@ -230,7 +230,11 @@ def handle_broad(
         try:
             if broad.apply:
                 deploy_io.deploy_broad(
-                    config.repo, playbook, tags, max(1.0, deadline - time.monotonic())
+                    config.repo,
+                    playbook,
+                    tags,
+                    max(1.0, deadline - time.monotonic()),
+                    run=tools.run,
                 )
         except deploy_locks.ServiceLockBusy as exc:
             # Before the generic arm: nothing was applied, so this plane must not be held —
@@ -313,7 +317,9 @@ def handle_k8s(
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     log_pi_changes(cs)
     try:
-        deploy_io.deploy_k8s(config.repo, cs.k8s_deploy, config.k8s_deploy_timeout_s)
+        deploy_io.deploy_k8s(
+            config.repo, cs.k8s_deploy, config.k8s_deploy_timeout_s, run=tools.run
+        )
     except deploy_locks.ServiceLockBusy as exc:
         # Before the rollback arm: a rollback would revert volumes and redeploy the prior pin
         # over a cluster this tick never touched.
@@ -373,6 +379,7 @@ def _rollback_k8s(
             cs.k8s_deploy,
             config.k8s_rollback_timeout_s,
             restore_sha=origin[:8],
+            run=tools.run,
         )
     except Exception as exc2:
         rollback_failed = exc2

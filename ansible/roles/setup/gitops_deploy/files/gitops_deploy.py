@@ -21,9 +21,12 @@ Config comes from /etc/gitops-deploy/config.env (KEY=VALUE), written by Ansible:
   REQUIRE_CI, CI_CONTEXTS, GITHUB_REPO
 
 `deploy_config.load_config` parses it into one frozen `Config`, and CONFIG is that object. The
-module-level constants below are still derived from it at import, and that is the remaining
-coupling: they are what the test suite patches and what `state_dir` repoints. `tick_config()`
-snapshots them back onto a `Config` once per tick, which is the object every phase then reads.
+module-level constants below are derived from it at import. `tick_config()` snapshots them back
+onto a `Config` once per tick, which is the object every phase then reads.
+
+`main()` and `entrypoint()` build nothing: they take the tick's `tools`, `config` and `state`
+as arguments, and only the `__main__` guard at the bottom builds the production three. A test
+passes fakes rather than patching this module (#3744).
 Parsing itself no longer raises — a malformed numeric value is collected and reported by
 `CONFIG.validate()` inside `main()`, so a bad config.env is a Discord post naming the key
 rather than an import traceback before the heartbeat exists.
@@ -63,14 +66,6 @@ from deploy_toolbox import DeployTools, default_tools
 RetryableFetchError = deploy_tick_types.RetryableFetchError
 # Same arrangement for the refusal `deploy_phases.refuse_unless_deployer` raises (#1733).
 NotTheDeployerHost = deploy_tick_types.NotTheDeployerHost
-
-
-# Every marker read and write goes through this — `deploy_state.DeployerState.MARKERS` is the
-# one table of what lives under /var/lib/gitops-deploy, and the `state_dir` fixture rebuilds
-# this object against tmp_path. No path literal for that directory belongs in this module:
-# `test_state_dir_repoints_every_state_path_in_the_module` fails on one, because a path built
-# here would escape the fixture and write to the host during a test run.
-STATE = deploy_state.DeployerState(deploy_state.STATE_DIR)
 
 
 # Overridable so the test suite can import this module against a canned copy
@@ -168,25 +163,20 @@ def tick_config() -> Config:
 
     Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
 
-    THREE of the twelve kwargs below are load-bearing, and nine are not — that asymmetry
-    is deliberate, so do not prune the nine. The three:
+    THREE of the twelve kwargs below are load-bearing, and nine are not. The three:
 
       - `k8s_autodeploy_enabled` is the value AFTER the empty-denylist fail-closed disarm above,
         which is a decision this module makes and `load_config` cannot.
       - `k8s_autodeploy_enabled_in_file` is the value BEFORE it — the pair is what tells a host
         that has the feature off from one whose denylist line was lost, which is the difference
         `deploy_phases.reconcile_denylist` gates on.
-      - `repo` is what `tests/conftest.py`'s `tick` fixture repoints.
+      - `repo` is the checkout every phase reads, and `main()` refuses an empty one.
 
-    The other nine equal CONFIG's fields today and are passed anyway, so that a patch of ANY
-    module constant above reaches the phases. Dropping them would make the set of constants a
-    test may repoint an implicit list nobody maintains, and the failure would be a fixture that
-    silently describes the host's settings instead of the scripted ones.
+    The other nine equal CONFIG's fields today and are passed anyway, so that this snapshot,
+    not CONFIG, stays the one object a phase reads. A test does not patch these constants: it
+    builds its config with `dataclasses.replace(tick_config(), ...)`.
 
-    Called from `main()` and `entrypoint()`, never at import, and that is what keeps the
-    constants above the single source: a phase reads `config.repo`, and `config.repo` is
-    whatever `REPO` holds at the moment the tick starts — which is how `tests/conftest.py`'s
-    `tick` fixture repoints `REPO` without any phase importing this module.
+    Called from the `__main__` guard, never at import.
     """
     return dataclasses.replace(
         CONFIG,
@@ -205,7 +195,7 @@ def tick_config() -> Config:
     )
 
 
-def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
+def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) -> int:
     """Run one gitops-deploy tick end to end, as a sequence of named phases.
 
     `assess()` reads git and classifies the tick; `plan_tick()` turns the incoming range into a
@@ -217,15 +207,19 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     non-zero exit. The exceptions are the few `0 if posted else 1` branches, reached only when
     even the failure alert itself could not be delivered.
 
+    Args:
+        tools: every process boundary the tick crosses (`deploy_toolbox.DeployTools`).
+        config: the tick's settings, `tick_config()` in production.
+        state: the marker files. No default, so a call that forgot it cannot fall back to
+            the host's state directory.
+
     Raises:
         deploy_config.ConfigError: config.env holds a value this deployer cannot use.
         RuntimeError: there is no config at all, so there is no repo to tick.
         RetryableFetchError: from `assess()`; entrypoint() skips the tick on it.
     """
-    tools = tools if tools is not None else default_tools(CONFIG)
-    config = config if config is not None else tick_config()
     CONFIG.validate()
-    if not REPO:
+    if not config.repo:
         # No config, no repo to tick: page via the crash handler rather than run every git
         # command below against cwd="".
         raise RuntimeError(f"REPO_DIR is unset: no deployer config at {CONFIG_PATH}")
@@ -235,26 +229,26 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     # Resend any alert a prior tick failed to deliver, BEFORE any short-circuit below: the ff-merged
     # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
     # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
-    deploy_alerts.drain_pending(tools, STATE, config)
+    deploy_alerts.drain_pending(tools, state, config)
     # Disk-only too, and likewise ahead of every branch that can return. A role in the
     # `manual_plane` marker is owed to a hand on EVERY later tick, and the tick that recorded
     # it fast-forwarded — so from the next tick on this deployer is converged and re-enters
     # the broad arm never again. Without a line here the journal would say nothing at all
     # about a role nobody has applied yet.
-    deploy_defer.log_pending(STATE)
+    deploy_defer.log_pending(state)
     # Same shape, one plane over: the k8s changes a tick merged and did not apply (#2449,
     # #2570). `reconcile` discharges what a deploy has since covered, then names the rest.
-    deploy_k8s_owed.reconcile(tools, STATE, config)
+    deploy_k8s_owed.reconcile(tools, state, config)
 
-    target = deploy_phases.assess(tools, STATE, config)
+    target = deploy_phases.assess(tools, state, config)
     if target.action == "dirty":
-        return deploy_handlers.handle_dirty(tools, STATE, config, target)
+        return deploy_handlers.handle_dirty(tools, state, config, target)
     # Before any branch that could return: a stale denylist is healed on an IDLE tick, which is
     # what the tick after an ff-merge is, and that is the tick whose checkout already carries the
     # role that made the config stale. Deliberately after the dirty branch — the render derives
     # the denylist from the working tree, so rendering from a tree an operator is mid-edit in
     # would bake a list nobody pushed.
-    if deploy_phases.reconcile_denylist(STATE, config, target.local):
+    if deploy_phases.reconcile_denylist(tools, state, config, target.local):
         # A render ENDS the tick, for two reasons. The in-memory config still holds the list the
         # render just proved wrong, so anything below would decide against it. And every arm of
         # this unit is non-stacking by construction — the unit template sizes TimeoutStartSec as
@@ -276,31 +270,36 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
         )
         return 0
     if target.action == "ci_failed":
-        return deploy_handlers.handle_ci_failed(tools, STATE, config, target)
+        return deploy_handlers.handle_ci_failed(tools, state, config, target)
     if target.red_tip:
         # This tick fast-forwarded to a green ancestor of a RED tip, so it deploys — and the
         # tip's own failure still pages once for that SHA. Here rather than inside `assess`
         # because a phase that reads and classifies must not alert, and after the two CI
         # branches above because only a tick that got past them acts on a chosen ancestor.
-        deploy_handlers.alert_red_tip(tools, STATE, config, target)
+        deploy_handlers.alert_red_tip(tools, state, config, target)
 
-    plan = deploy_phases.plan_tick(tools, STATE, config, target)
+    plan = deploy_phases.plan_tick(tools, state, config, target)
     if plan.cs.broad:
-        return deploy_handlers.handle_broad(tools, STATE, config, target, plan)
+        return deploy_handlers.handle_broad(tools, state, config, target, plan)
     if plan.cs.k8s_deploy:
-        return deploy_handlers.handle_k8s(tools, STATE, config, target, plan)
-    return deploy_handlers.handle_no_services(tools, STATE, config, target, plan)
+        return deploy_handlers.handle_k8s(tools, state, config, target, plan)
+    return deploy_handlers.handle_no_services(tools, state, config, target, plan)
 
 
-def entrypoint(tools: DeployTools | None = None) -> int:
+def entrypoint(
+    tools: DeployTools,
+    config: Config,
+    state: deploy_state.DeployerState,
+    *,
+    main=main,
+) -> int:
     """One tick as systemd runs it.
 
     main() plus the exit-code contract around it. Returns the process exit code; the `__main__`
-    guard below only hands it to sys.exit, so a test can call this directly
-    (test_gitops_deploy_fetch_skip.py).
+    guard below builds the arguments and hands the result to sys.exit, so a test can call this
+    directly (test_gitops_deploy_fetch_skip.py). `main` is a parameter so that a test can
+    script main()'s outcome without patching this module.
     """
-    tools = tools if tools is not None else default_tools(CONFIG)
-    config = tick_config()
     # When this tick began, so the contention streak below can tell a marker this tick wrote
     # from one an earlier tick left: `for_contention` stamps `last_seen` with the wall clock.
     tick_started = time.time()
@@ -313,7 +312,7 @@ def entrypoint(tools: DeployTools | None = None) -> int:
         log(f"could not read HEAD before the tick: {e}")
         head_before = None
     try:
-        rc = main(tools, config)
+        rc = main(tools, config, state)
     except RetryableFetchError as e:
         # Transient `git fetch` failure: skip this tick without paging (no crash Discord, and exit 0
         # so the OnFailure alert unit doesn't fire either) and WITHOUT writing last_run — a one-off
@@ -363,7 +362,7 @@ def entrypoint(tools: DeployTools | None = None) -> int:
         origin = tools.run(
             ["git", "rev-parse", f"origin/{config.branch}"], cwd=config.repo
         )
-        STATE.record_behind(
+        state.record_behind(
             origin,
             origin != local and tools.is_ancestor(config.repo, local, origin),
             time.time(),
@@ -375,13 +374,19 @@ def entrypoint(tools: DeployTools | None = None) -> int:
     # the lock has stopped wedging the deployer, whatever else this tick did. Only a tick
     # that reaches this line clears it — a crash above raises past here, and a crash is not
     # evidence the lock was released.
-    if STATE.clear_contention_unless_touched_since(tick_started):
+    if state.clear_contention_unless_touched_since(tick_started):
         log("contention_since cleared: this tick was not deferred on a service lock")
     # Liveness marker: a tick that completed without crashing (incl. a rollback, rc=1).
     # monitor-bridge reads this; a crash skips the write so the Alive monitor goes stale.
-    STATE.write("last_run", str(time.time()))
+    state.write("last_run", str(time.time()))
     return rc
 
 
 if __name__ == "__main__":
-    sys.exit(entrypoint())
+    sys.exit(
+        entrypoint(
+            default_tools(CONFIG),
+            tick_config(),
+            deploy_state.DeployerState(deploy_state.STATE_DIR),
+        )
+    )

@@ -143,7 +143,9 @@ def apply_broad_k8s(
     applied = cs.k8s_deploy - bumps
     if bumps:
         try:
-            deploy_io.deploy_k8s(config.repo, bumps, deadline - time.monotonic())
+            deploy_io.deploy_k8s(
+                config.repo, bumps, deadline - time.monotonic(), run=tools.run
+            )
         except deploy_locks.ServiceLockBusy as exc:
             # Same shape as the broad loop's arm, and for the same reason: nothing here was
             # applied, the reset undoes the ff-merge, and the `manual_plane` lines this tick

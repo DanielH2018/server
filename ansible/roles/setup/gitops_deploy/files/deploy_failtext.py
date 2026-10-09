@@ -7,9 +7,8 @@ not a plain tail — profile_tasks prints its timing table after the PLAY RECAP,
 failing task's own lines out first and spends what is left of the budget on the tail.
 
 This is a leaf: it imports the standard library and nothing else. No test patches a name
-defined here, so a caller may from-import one — unlike `deploy_io`, where a from-import would
-take its own reference and never see the one `monkeypatch` the suite still uses. `deploy_io`
-also re-exports these names for the suite, which reads them through the module it always has.
+defined here, so a caller may from-import one. `deploy_io` also re-exports these names for the
+suite, which reads them through the module it always has.
 
 Stdlib only: the unit runs under `uv run --no-project`, never from a venv. The `# DECIDED:`
 marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.

@@ -29,26 +29,24 @@ def _playbook_argv(tick):
     return tick.playbooks[0]
 
 
-def test_a_narrowed_range_deploys_only_the_tags_it_named(gitops_deploy, tick):
+def test_a_narrowed_range_deploys_only_the_tags_it_named(gitops_deploy, tick, state):
     tick.paths = [GROUP_VARS]
     tick.narrow = (0, "radarr,sonarr")
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-3:] == [
         "ansible/deploy.yml",
         "--tags",
         "radarr,sonarr",
     ]
     assert tick.merges == [ORIGIN]
-    assert receipt_applied(gitops_deploy.STATE) == {
-        "ansible/deploy.yml": ("radarr", "sonarr")
-    }
+    assert receipt_applied(state) == {"ansible/deploy.yml": ("radarr", "sonarr")}
 
 
-def test_a_refused_range_still_runs_the_whole_play(gitops_deploy, tick, capsys):
+def test_a_refused_range_still_runs_the_whole_play(gitops_deploy, tick, capsys, state):
     """The rejecting half: exit 3 is what the tick did for every deploy-plane range before."""
     tick.paths = [GROUP_VARS]
     tick.narrow = (3, "")
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick) == [
         "uv",
         "run",
@@ -57,10 +55,12 @@ def test_a_refused_range_still_runs_the_whole_play(gitops_deploy, tick, capsys):
         "ansible/deploy.yml",
     ]
     assert "cannot narrow (exit 3)" in capsys.readouterr().out
-    assert receipt_applied(gitops_deploy.STATE) == {"ansible/deploy.yml": ()}
+    assert receipt_applied(state) == {"ansible/deploy.yml": ()}
 
 
-def test_a_range_that_moves_no_rendered_output_applies_nothing(gitops_deploy, tick):
+def test_a_range_that_moves_no_rendered_output_applies_nothing(
+    gitops_deploy, tick, state
+):
     """Exit 0 with no tags: the fast-forward IS the apply, and the marker says so.
 
     `--tags ''` would run the whole playbook and `--tags <a name nothing matches>` would run
@@ -68,27 +68,27 @@ def test_a_range_that_moves_no_rendered_output_applies_nothing(gitops_deploy, ti
     """
     tick.paths = [GROUP_VARS]
     tick.narrow = (0, "")
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == []
     assert tick.merges == [ORIGIN]
-    assert receipt_applied(gitops_deploy.STATE) == {
-        "ansible/deploy.yml": ("narrowed-to-nothing",)
-    }
+    assert receipt_applied(state) == {"ansible/deploy.yml": ("narrowed-to-nothing",)}
 
 
 def test_a_failed_narrowed_apply_holds_the_tags_it_tried(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """The hold names the narrowed plane, so only an apply covering those tags clears it."""
     tick.paths = [GROUP_VARS]
     tick.narrow = (0, "sonarr")
     tick.playbook_outcomes = [RuntimeError("boom")]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert (state_dir / "hold_sha").read_text() == ORIGIN
-    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml sonarr"
+    assert state.hold_plane == "ansible/deploy.yml sonarr"
 
 
-def test_the_setup_plane_never_consults_the_deploy_plane_narrowing(gitops_deploy, tick):
+def test_the_setup_plane_never_consults_the_deploy_plane_narrowing(
+    gitops_deploy, tick, state
+):
     """The two narrowings are separate derivations over separate playbooks.
 
     `setup_tags_for` maps a setup path to its role tag and `narrow_setup_role` narrows that
@@ -98,7 +98,7 @@ def test_the_setup_plane_never_consults_the_deploy_plane_narrowing(gitops_deploy
     """
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
     tick.narrow = (0, "sonarr")
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert not [entry for entry in tick.log if entry[0] == "narrow"]
     assert _playbook_argv(tick)[-3:] == [
         "ansible/initial_setup.yml",
@@ -108,7 +108,7 @@ def test_the_setup_plane_never_consults_the_deploy_plane_narrowing(gitops_deploy
 
 
 def test_a_mixed_range_applies_the_setup_plane_and_then_the_deploy_plane(
-    gitops_deploy, tick
+    gitops_deploy, tick, state
 ):
     """Both planes in one range, both applied, setup first (#2046).
 
@@ -118,41 +118,41 @@ def test_a_mixed_range_applies_the_setup_plane_and_then_the_deploy_plane(
     """
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml", GROUP_VARS]
     tick.narrow = (3, "")
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert [argv[-3:] for argv in tick.playbooks] == [
         ["ansible/initial_setup.yml", "--tags", "gitops_deploy"],
         ["--frozen", "ansible-playbook", "ansible/deploy.yml"],
     ]
     assert tick.merges == [ORIGIN]
-    assert receipt_applied(gitops_deploy.STATE) == {
+    assert receipt_applied(state) == {
         "ansible/initial_setup.yml": ("gitops_deploy",),
         "ansible/deploy.yml": (),
     }
 
 
 def test_a_mixed_range_whose_deploy_half_fails_keeps_the_setup_apply_recorded(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state
 ):
     """The hold names the plane that failed; the plane that applied stays recorded."""
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml", GROUP_VARS]
     tick.narrow = (0, "sonarr")
     tick.playbook_outcomes = [None, RuntimeError("boom")]
-    assert gitops_deploy.main(tick.tools) == 0
-    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml sonarr"
-    assert receipt_applied(gitops_deploy.STATE) == {
-        "ansible/initial_setup.yml": ("gitops_deploy",)
-    }
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert state.hold_plane == "ansible/deploy.yml sonarr"
+    assert receipt_applied(state) == {"ansible/initial_setup.yml": ("gitops_deploy",)}
 
 
-def test_a_setup_only_range_plans_no_deploy_plane(gitops_deploy, tick):
+def test_a_setup_only_range_plans_no_deploy_plane(gitops_deploy, tick, state):
     """The rejecting half: no deploy-plane path means no `deploy.yml`, narrowed or full."""
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
     tick.narrow = (3, "")
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert [argv[-1] for argv in tick.playbooks] == ["gitops_deploy"]
 
 
-def test_a_crashing_narrowing_still_runs_the_whole_play(gitops_deploy, tick, capsys):
+def test_a_crashing_narrowing_still_runs_the_whole_play(
+    gitops_deploy, tick, capsys, state
+):
     """The `# DECIDED:` marker says a crash here lands on the fallback, so prove it can.
 
     `narrow_deploy_plane` decodes a subprocess's output, so it can raise a plain ValueError
@@ -161,7 +161,7 @@ def test_a_crashing_narrowing_still_runs_the_whole_play(gitops_deploy, tick, cap
     """
     tick.paths = [GROUP_VARS]
     tick.narrow_error = ValueError("invalid start byte")
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
     assert tick.merges == [ORIGIN]
     assert "cannot narrow (ValueError: invalid start byte)" in capsys.readouterr().out
@@ -228,7 +228,7 @@ def test_the_denylist_decision_is_recorded_where_the_narrowing_reads_it(gitops_s
 
 # ── the render-digest shadow (#3045): logged beside the answer, never applied ──────────────
 def test_a_refused_range_logs_the_digest_shadow_and_still_runs_the_whole_play(
-    gitops_deploy, tick, capsys
+    gitops_deploy, tick, capsys, state
 ):
     """The shadow names what a digest diff would apply; the argv is the full play regardless."""
     tick.paths = [GROUP_VARS]
@@ -241,7 +241,7 @@ def test_a_refused_range_logs_the_digest_shadow_and_still_runs_the_whole_play(
             "unknown: render is of another commit": ["authelia", "traefik"],
         },
     )
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
     assert (
         "narrow shadow: render digest at 22222222 would apply radarr (current 1; "
@@ -250,7 +250,7 @@ def test_a_refused_range_logs_the_digest_shadow_and_still_runs_the_whole_play(
 
 
 def test_a_digest_diff_that_raises_leaves_the_narrowed_apply_alone(
-    gitops_deploy, tick, capsys
+    gitops_deploy, tick, capsys, state
 ):
     """The shadow runs before the ff-merge, so a crash in it must not reach the tick."""
 
@@ -260,7 +260,7 @@ def test_a_digest_diff_that_raises_leaves_the_narrowed_apply_alone(
     tick.paths = [GROUP_VARS]
     tick.narrow = (0, "radarr,sonarr")
     tick.tools = dataclasses.replace(tick.tools, digest_diff=broken)
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1:] == ["radarr,sonarr"]
     assert tick.merges == [ORIGIN]
     assert (
@@ -281,7 +281,9 @@ def _stamped(digest, commit=ORIGIN):
     }
 
 
-def test_a_full_play_logs_the_services_its_apply_moved(gitops_deploy, tick, capsys):
+def test_a_full_play_logs_the_services_its_apply_moved(
+    gitops_deploy, tick, capsys, state
+):
     """Only the digest that changed counts; a service the play did not re-stamp is unstamped."""
     before = {
         "radarr": _stamped("r1", "1" * 40),
@@ -295,7 +297,7 @@ def test_a_full_play_logs_the_services_its_apply_moved(gitops_deploy, tick, caps
     tick.tools = dataclasses.replace(
         tick.tools, release_records=lambda: next(snapshots)
     )
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
     assert (
         "narrow measured: the full play at 22222222 moved radarr (moved 1; unchanged 1; "
@@ -303,7 +305,7 @@ def test_a_full_play_logs_the_services_its_apply_moved(gitops_deploy, tick, caps
     ) in capsys.readouterr().out
 
 
-def test_a_narrowed_apply_reads_no_release_records(gitops_deploy, tick, capsys):
+def test_a_narrowed_apply_reads_no_release_records(gitops_deploy, tick, capsys, state):
     """The rejecting half: a narrowed play re-stamps only its tags, so it measures nothing."""
 
     def unread():
@@ -312,5 +314,5 @@ def test_a_narrowed_apply_reads_no_release_records(gitops_deploy, tick, capsys):
     tick.paths = [GROUP_VARS]
     tick.narrow = (0, "radarr,sonarr")
     tick.tools = dataclasses.replace(tick.tools, release_records=unread)
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert "narrow measured" not in capsys.readouterr().out

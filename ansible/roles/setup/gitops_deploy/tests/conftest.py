@@ -4,16 +4,17 @@ gitops_deploy.py reads its config from the path in GITOPS_DEPLOY_CONFIG at impor
 file points that at the canned `config.env` beside it BEFORE any test module imports the
 deployer, so the suite imports the same module in CI and on a host, and never opens the
 host's /etc copy (0600, it carries the Discord webhook). The `gitops_deploy` fixture is
-that import; `state_dir` repoints every /var/lib/gitops-deploy marker at tmp_path.
+that import; `state` is a `DeployerState` over tmp_path, which a test passes to main() in place
+of the host's /var/lib/gitops-deploy.
 
 The AST fixtures below remain for the guards that pin a function's shape at the source. One
 per module those guards read: `gitops_fn` for the entry module, `deploy_io_fn`, and
 `handlers_fn` for `deploy_handlers.py`. `tick` runs main() itself against a scripted checkout
 (test_gitops_deploy_main_branches.py).
 
-`settings` is the `Config` a phase takes. It is a fixture rather than a constant because
-`gitops_deploy.tick_config()` snapshots the module globals `state_dir` and `tick` have just
-repointed, so it has to be built after them and not at import.
+`settings` is the `Config` a phase takes: `tick_config()` with `repo` pointed at the
+scripted checkout. Nothing here patches a module. main() and entrypoint() take their tools,
+config and state as arguments (#3744).
 
 Fixtures rather than importable functions: `from conftest import x` resolves to whichever
 conftest.py sys.path reached first once the whole repo suite runs, and this repo has three.
@@ -22,6 +23,7 @@ so nothing here is in the role's ship list and nothing here reaches a host.
 """
 
 import ast
+import dataclasses
 import os
 import pathlib
 from collections.abc import Callable
@@ -74,21 +76,24 @@ def gitops_deploy() -> ModuleType:
 
 
 @pytest.fixture
-def state_dir(
-    gitops_deploy: ModuleType, monkeypatch, tmp_path: pathlib.Path
-) -> pathlib.Path:
-    """tmp_path, with the deployer's state directory repointed into it, so a test reads what a
-    tick wrote (`last_run`, `pending_alerts.json`, the keyed `alerted_shas` marker)
-    under the same basenames without touching the host.
-
-    One object carries every marker path — `STATE` is what the deployer reads and writes
-    through, and `DeployerState.MARKERS` is the only table of basenames — so replacing that
-    object is the whole repoint. `test_state_dir_repoints_every_state_path_in_the_module`
-    keeps it whole: a path literal for the state directory anywhere in `gitops_deploy.py`
-    would escape this fixture and write to /var/lib during a test run.
-    """
-    monkeypatch.setattr(gitops_deploy, "STATE", deploy_io.DeployerState(tmp_path))
+def state_dir(tmp_path: pathlib.Path) -> pathlib.Path:
+    """The directory `state` keeps its markers in, so a test reads what a tick wrote
+    (`last_run`, `pending_alerts.json`, the keyed `alerted_shas` marker) under the same
+    basenames without touching the host."""
     return tmp_path
+
+
+@pytest.fixture
+def state(state_dir: pathlib.Path) -> deploy_io.DeployerState:
+    """The `DeployerState` a test passes to main(), entrypoint() and every phase.
+
+    One object carries every marker path, and `DeployerState.MARKERS` is the only table of
+    basenames, so this object is the whole state directory.
+    `test_state_dir_repoints_every_state_path_in_the_module` keeps it whole: a path literal
+    for the state directory anywhere in `gitops_deploy.py` would escape this object and write
+    to /var/lib during a test run.
+    """
+    return deploy_io.DeployerState(state_dir)
 
 
 @pytest.fixture(scope="session")
@@ -178,38 +183,28 @@ def ast_calls() -> Callable[[ast.AST, str], bool]:
 
 
 @pytest.fixture
-def tick(gitops_deploy: ModuleType, monkeypatch, state_dir, tmp_path) -> ScriptedTick:
+def tick(gitops_deploy: ModuleType, state, tmp_path) -> ScriptedTick:
     """Run main() against a scripted checkout.
 
     git, ansible-playbook, the CI verdict, the health gate, the clock and
     Discord all answer from the ScriptedTick through the `DeployTools` on `tick.tools`, and the
-    state files live under `state_dir`. Nothing reaches a shell or the network.
+    state files live under `state_dir`. Nothing reaches a shell or the network, and nothing
+    patches a module: `deploy_io.deploy_k8s` and `deploy_broad` reach the scripted runner as
+    `run=tools.run`.
 
-    Call `gitops_deploy.main(tick.tools)`; the fixture injects nothing on its own.
-
-    The ONE remaining module patch is `deploy_io.run`. `deploy_io.deploy`, `deploy_k8s` and
-    `deploy_broad` build the `ansible-playbook` argv the suite asserts on and reach `run`
-    qualified, so faking them here would retire that assertion; threading a runner into the
-    three of them costs deploy_io.py more lines than its entry in
-    ansible/tests/repo/module_length_allowlist.txt allows, and lands with the split that lowers
-    it.
+    Call `gitops_deploy.main(tick.tools, tick.config, state)`. `tick.config` is
+    `tick_config()` pointed at the scripted checkout.
     """
     repo = tmp_path / "repo"
     repo.mkdir()
     scripted = ScriptedTick(repo)
-    monkeypatch.setattr(gitops_deploy, "REPO", str(repo))
-    monkeypatch.setattr(deploy_io, "run", scripted.run)
     scripted.tools = build_tools(scripted)
+    scripted.config = dataclasses.replace(gitops_deploy.tick_config(), repo=str(repo))
+    scripted.state = state
     return scripted
 
 
 @pytest.fixture
-def settings(gitops_deploy: ModuleType, tick: ScriptedTick):
-    """The `Config` a phase takes, snapshotted AFTER every fixture patch is in place.
-
-    It depends on `tick`, not on `state_dir`, and that is the whole point: `tick` repoints
-    `REPO` on the entry module, and `tick_config()` reads those globals ONCE. A snapshot taken before them would silently describe the host's
-    settings instead of the scripted ones, and pytest orders sibling fixtures by the test's
-    parameter list — which is not something a test should have to get right.
-    """
-    return gitops_deploy.tick_config()
+def settings(tick: ScriptedTick):
+    """The `Config` a phase takes: `tick.config`, pointed at the scripted checkout."""
+    return tick.config

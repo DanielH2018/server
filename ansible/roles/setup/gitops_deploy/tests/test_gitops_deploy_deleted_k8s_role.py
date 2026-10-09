@@ -42,17 +42,17 @@ TARGET = deploy_tick_types.TickTarget(
     ],
 )
 def test_plan_tick_drops_a_k8s_role_whose_directory_is_gone_at_origin(
-    gitops_deploy, tick, settings, listing, expected
+    gitops_deploy, tick, settings, listing, expected, state
 ):
     tick.paths = [SONARR_TEMPLATE, DELETED_ROLE]
     tick.tree_listing = listing
-    plan = deploy_phases.plan_tick(tick.tools, gitops_deploy.STATE, settings, TARGET)
+    plan = deploy_phases.plan_tick(tick.tools, state, settings, TARGET)
     assert plan.cs.k8s == expected
     assert set(plan.cs.k8s_origins) >= expected
 
 
 def test_plan_tick_drops_no_role_when_the_listing_cannot_be_read(
-    gitops_deploy, tick, settings, capsys
+    gitops_deploy, tick, settings, capsys, state
 ):
     def run(argv, **kwargs):
         if argv[:2] == ["git", "ls-tree"]:
@@ -62,7 +62,7 @@ def test_plan_tick_drops_no_role_when_the_listing_cannot_be_read(
     tick.paths = [SONARR_TEMPLATE, DELETED_ROLE]
     tick.tree_listing = "ansible/roles/k8s/sonarr\n"
     plan = deploy_phases.plan_tick(
-        dataclasses.replace(tick.tools, run=run), gitops_deploy.STATE, settings, TARGET
+        dataclasses.replace(tick.tools, run=run), state, settings, TARGET
     )
     assert plan.cs.k8s == {"sonarr", "volume-claim"}
     assert "could not list the k8s roles" in capsys.readouterr().out
@@ -79,12 +79,12 @@ def test_plan_tick_drops_no_role_when_the_listing_cannot_be_read(
     ],
 )
 def test_a_tick_deleting_a_shared_role_leaves_no_k8s_unapplied_line(
-    gitops_deploy, tick, settings, listing, owed
+    gitops_deploy, tick, settings, listing, owed, state
 ):
     tick.paths = [DELETED_ROLE]
     tick.tree_listing = listing
-    assert gitops_deploy.main(tick.tools, settings) == 0
-    pending = gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED)
+    assert gitops_deploy.main(tick.tools, settings, state) == 0
+    pending = state.owed_pending(OWED_K8S_UNAPPLIED)
     assert [e.service for e in pending] == owed
 
 
@@ -101,11 +101,11 @@ def test_a_tick_deleting_a_shared_role_leaves_no_k8s_unapplied_line(
     ],
 )
 def test_a_pending_line_for_a_role_deleted_since_is_dropped_on_the_next_tick(
-    gitops_deploy, tick, settings, listing, owed
+    gitops_deploy, tick, settings, listing, owed, state
 ):
-    gitops_deploy.STATE.record_owed(OWED_K8S_UNAPPLIED, LOCAL, {"volume-claim"}, 1.0)
+    state.record_owed(OWED_K8S_UNAPPLIED, LOCAL, {"volume-claim"}, 1.0)
     tick.paths = []
     tick.tree_listing = listing
-    assert gitops_deploy.main(tick.tools, settings) == 0
-    pending = gitops_deploy.STATE.owed_pending(OWED_K8S_UNAPPLIED)
+    assert gitops_deploy.main(tick.tools, settings, state) == 0
+    pending = state.owed_pending(OWED_K8S_UNAPPLIED)
     assert [e.service for e in pending] == owed

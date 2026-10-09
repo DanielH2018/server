@@ -84,7 +84,7 @@ def test_every_alert_once_call_site_names_a_real_alert_slot():
     unknown = [c for c in channels if c not in gitops_markers.ALERT_SLOTS]
     assert not unknown, (
         f"alert_once() is called with channel(s) not in ALERT_SLOTS: {unknown} — this raises "
-        "KeyError inside STATE.record_alerted(), reachable only from entrypoint()'s crash "
+        "KeyError inside state.record_alerted(), reachable only from entrypoint()'s crash "
         "path."
     )
 

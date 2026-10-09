@@ -69,14 +69,16 @@ def test_every_ambiguous_shape_is_clean(text):
 
 
 # ── main(): the refusal lands before any state is touched ─────────────────────────────────────
-def test_main_refuses_on_a_host_that_declares_no_gitops(gitops_deploy, tick, state_dir):
+def test_main_refuses_on_a_host_that_declares_no_gitops(
+    gitops_deploy, tick, state_dir, state
+):
     deploy_alerts.write_pending(
-        gitops_deploy.STATE.path("pending_alerts"),
+        state.path("pending_alerts"),
         {"secrets:" + ORIGIN: "queued last tick"},
     )
     tick.declare("containers_list: []\nhas_gitops: false\n")
     with pytest.raises(gitops_deploy.NotTheDeployerHost, match="has_gitops: false"):
-        gitops_deploy.main(tick.tools)
+        gitops_deploy.main(tick.tools, tick.config, state)
     assert tick.posts == [], "the refusal must not drain the alert queue"
     assert json.loads((state_dir / "pending_alerts.json").read_text()) == {
         "secrets:" + ORIGIN: "queued last tick"
@@ -84,24 +86,26 @@ def test_main_refuses_on_a_host_that_declares_no_gitops(gitops_deploy, tick, sta
     assert tick.merges == [] and tick.playbooks == []
 
 
-def test_main_proceeds_when_the_host_declares_has_gitops_true(gitops_deploy, tick):
+def test_main_proceeds_when_the_host_declares_has_gitops_true(
+    gitops_deploy, tick, state
+):
     tick.declare("containers_list: []\nhas_gitops: true\n")
     tick.origin = tick.local
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
 
 
-def test_main_proceeds_when_the_host_has_no_host_vars_file(gitops_deploy, tick):
+def test_main_proceeds_when_the_host_has_no_host_vars_file(gitops_deploy, tick, state):
     # The `tick` fixture writes none unless a test calls declare(); this is the fail-open case.
     tick.origin = tick.local
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
 
 
 # ── entrypoint(): a refusal is one line, exit 0, and writes nothing ───────────────────────────
 def test_entrypoint_turns_the_refusal_into_a_silent_exit_0(
-    gitops_deploy, tick, state_dir, capsys
+    gitops_deploy, tick, state_dir, capsys, state
 ):
     tick.declare("containers_list: []\nhas_gitops: false\n")
-    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert gitops_deploy.entrypoint(tick.tools, tick.config, state) == 0
     assert tick.posts == [], (
         "a refusal must not page from a webhook this host should not hold"
     )

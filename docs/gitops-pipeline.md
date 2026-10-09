@@ -1449,11 +1449,12 @@ pinned to `STATE_DIR` by the same test.
 and status markers plus the pending-alert queue — and holds the hold-marker writes
 (`write_hold`, `clear_broad_hold`,
 `clear_service_hold`) and `record_behind`. A caller names a marker (`state.path("hold")`)
-rather than carrying a path, which is what lets `state_dir` repoint the whole state directory
-by replacing one object. `gitops_deploy.STATE` is the instance, and `gitops_markers.MARKERS` is the only
-table of basenames — the 22 module-level path literals `gitops_deploy.py` used to declare
-beside it had no production reader and went with issue #2051 (`tests/conftest.py`'s
-`state_dir` now repoints the one object). `read()` returns None for a missing AND an empty marker —
+rather than carrying a path, which is what lets a test point the whole state directory at
+`tmp_path` by passing one object. `gitops_deploy.py`'s `__main__` guard builds the production
+instance and hands it to `entrypoint()`, so no module global holds one (#3744), and
+`gitops_markers.MARKERS` is the only table of basenames. The 22 module-level path literals
+`gitops_deploy.py` used to declare had no production reader and went with issue #2051
+(`tests/conftest.py`'s `state` fixture is the one object a test passes). `read()` returns None for a missing AND an empty marker —
 a torn write is a disarmed hold, not a hold on `""` — and PROPAGATES any other `OSError`:
 an unreadable state directory must not read as "no hold," or a held host reports converged.
 `tests/test_deployer_state.py` pins all three outcomes.
@@ -1947,16 +1948,17 @@ is decided by what it touches.
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s` | `assess` and `plan_tick`; one `handle_*` per terminal branch |
 | the k8s changes owed | `deploy_k8s_owed` | the one reader and writer of the `k8s_deferred` and `k8s_unapplied` ledger classes: record, discharge, the tick-start `reconcile` (#3669) |
-| the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` and `entrypoint()` |
+| the tick | `gitops_deploy` | the config constants, `tick_config()`, `main()` and `entrypoint()` |
 
 - **`main()` sequences, it does not decide.** `assess()` returns a frozen `TickTarget`,
   `plan_tick()` a frozen `TickPlan`, and one `handle_*` owns each terminal branch. No leaf imports
   `gitops_deploy` (ENFORCED by `test_no_leaf_imports_the_entry_module`). The branch order — broad
   before k8s — is load-bearing: the broad plane has to win.
-- **Every process boundary is injected, not patched.** `main(tools)` threads one frozen
-  `DeployTools` through every phase; a test builds one from `tests/_deploy_fakes.py`.
+- **Every process boundary is injected, not patched.** `main(tools, config, state)` threads
+  one frozen `DeployTools` through every phase; a test builds one from `tests/_deploy_fakes.py`.
   `deploy_io.deploy_k8s` and `deploy_broad` stay outside it because the suite asserts on the argv
-  they build, so `tests/conftest.py` keeps ONE patch, `deploy_io.run`.
+  they build, so they take a required `run=tools.run` instead. `tests/conftest.py` patches
+  nothing (#3744).
 - **`deploy_io`, `deploy_alerts` and `deploy_alert_text` are reached QUALIFIED.** ENFORCED in
   `ansible/tests/deploy/test_gitops_deploy_imports.py`, which also holds every module's sibling
   imports to an explicit `ALLOWED` map and keeps `deploy_logic.py` defining nothing, so a

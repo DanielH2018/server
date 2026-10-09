@@ -62,12 +62,12 @@ def _alerted(state_dir, slot: str) -> str | None:
 
 # ── alert_once(): the per-SHA dedupe ──────────────────────────────────────────────────────────
 def test_alert_once_delivers_and_advances_the_marker(
-    gitops_deploy, monkeypatch, state_dir, settings
+    gitops_deploy, state_dir, settings, state
 ):
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_once(
         tools,
-        gitops_deploy.STATE,
+        state,
         settings,
         "tasks",
         ORIGIN,
@@ -78,33 +78,31 @@ def test_alert_once_delivers_and_advances_the_marker(
 
 
 def test_alert_once_is_silent_for_a_sha_already_alerted(
-    gitops_deploy, monkeypatch, state_dir, settings
+    gitops_deploy, state_dir, settings, state
 ):
     tools, seen = _posts(state_dir)
     for _ in range(3):
         deploy_alerts.alert_once(
             tools,
-            gitops_deploy.STATE,
+            state,
             settings,
             "tasks",
             ORIGIN,
             "changed",
         )
     assert len(seen) == 1
-    deploy_alerts.alert_once(
-        tools, gitops_deploy.STATE, settings, "tasks", LATER, "again"
-    )
+    deploy_alerts.alert_once(tools, state, settings, "tasks", LATER, "again")
     assert seen[-1] == (f"tasks:{LATER}", "again")
     assert _alerted(state_dir, "tasks") == LATER
 
 
-def test_alert_once_marks_detection_not_delivery(gitops_deploy, state_dir, settings):
+def test_alert_once_marks_detection_not_delivery(
+    gitops_deploy, state_dir, settings, state
+):
     # A failed post must not re-page on the next tick through this path: the marker advances
     # anyway, and redelivery is the pending queue's job. Real deliver(), refused webhook.
     tools = DeployTools(discord_post=lambda _webhook, _content: False)
-    deploy_alerts.alert_once(
-        tools, gitops_deploy.STATE, settings, "tasks", ORIGIN, "changed"
-    )
+    deploy_alerts.alert_once(tools, state, settings, "tasks", ORIGIN, "changed")
     assert _alerted(state_dir, "tasks") == ORIGIN
     queued = json.loads((state_dir / "pending_alerts.json").read_text())
     assert queued == {f"tasks:{ORIGIN}": "changed"}
@@ -112,14 +110,14 @@ def test_alert_once_marks_detection_not_delivery(gitops_deploy, state_dir, setti
 
 # ── alert_secrets_deferred() ──────────────────────────────────────────────────────────────────
 def test_a_secrets_change_pages_once_naming_the_sha(
-    gitops_deploy, monkeypatch, state_dir, settings
+    gitops_deploy, state_dir, settings, state
 ):
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_secrets_deferred(
-        tools, gitops_deploy.STATE, settings, ORIGIN, ChangeSet(secrets=True)
+        tools, state, settings, ORIGIN, ChangeSet(secrets=True)
     )
     deploy_alerts.alert_secrets_deferred(
-        tools, gitops_deploy.STATE, settings, ORIGIN, ChangeSet(secrets=True)
+        tools, state, settings, ORIGIN, ChangeSet(secrets=True)
     )
     ((key, content),) = seen
     assert key == f"secrets:{ORIGIN}"
@@ -127,25 +125,19 @@ def test_a_secrets_change_pages_once_naming_the_sha(
     assert _alerted(state_dir, "secrets") == ORIGIN
 
 
-def test_no_secrets_change_pages_nothing(
-    gitops_deploy, monkeypatch, state_dir, settings
-):
+def test_no_secrets_change_pages_nothing(gitops_deploy, state_dir, settings, state):
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_secrets_deferred(
-        tools, gitops_deploy.STATE, settings, ORIGIN, ChangeSet(services={"sonarr"})
+        tools, state, settings, ORIGIN, ChangeSet(services={"sonarr"})
     )
     assert seen == []
     assert _alerted(state_dir, "secrets") is None
 
 
 # ── alert_deferred(): tasks and k8s channels ──────────────────────────────────────────────────
-def test_an_empty_changeset_pages_nothing(
-    gitops_deploy, monkeypatch, state_dir, settings
-):
+def test_an_empty_changeset_pages_nothing(gitops_deploy, state_dir, settings, state):
     tools, seen = _posts(state_dir)
-    deploy_alerts.alert_deferred(
-        tools, gitops_deploy.STATE, settings, ORIGIN, set(), ChangeSet()
-    )
+    deploy_alerts.alert_deferred(tools, state, settings, ORIGIN, set(), ChangeSet())
     assert seen == []
     # The keyed marker itself, not a glob for per-channel basenames: those
     # files do not exist at all, so `not any(...endswith("_alerted_sha"))` would pass over a
@@ -154,14 +146,12 @@ def test_an_empty_changeset_pages_nothing(
 
 
 def test_tasks_name_only_what_this_tick_did_not_deploy(
-    gitops_deploy, monkeypatch, state_dir, settings
+    gitops_deploy, state_dir, settings, state
 ):
     # A combined push: svcA's template rode its scoped redeploy, svcB's tasks/ did not.
     tools, seen = _posts(state_dir)
     cs = ChangeSet(services={"svca"}, tasks={"svca", "svcb"})
-    deploy_alerts.alert_deferred(
-        tools, gitops_deploy.STATE, settings, ORIGIN, {"svca"}, cs
-    )
+    deploy_alerts.alert_deferred(tools, state, settings, ORIGIN, {"svca"}, cs)
     by_key = dict(seen)
     assert set(by_key) == {f"tasks:{ORIGIN}"}
     assert "`svcb`" in by_key[f"tasks:{ORIGIN}"]
@@ -170,23 +160,21 @@ def test_tasks_name_only_what_this_tick_did_not_deploy(
 
 
 def test_a_structural_change_that_rode_its_own_redeploy_is_not_flagged(
-    gitops_deploy, monkeypatch, state_dir, settings
+    gitops_deploy, state_dir, settings, state
 ):
     tools, seen = _posts(state_dir)
     cs = ChangeSet(services={"svca"}, tasks={"svca"})
-    deploy_alerts.alert_deferred(
-        tools, gitops_deploy.STATE, settings, ORIGIN, {"svca"}, cs
-    )
+    deploy_alerts.alert_deferred(tools, state, settings, ORIGIN, {"svca"}, cs)
     assert seen == []
 
 
 def test_a_k8s_change_pages_with_the_remediation_for_this_host(
-    gitops_deploy, monkeypatch, state_dir, settings
+    gitops_deploy, state_dir, settings, state
 ):
     tools, seen = _posts(state_dir)
     cs = ChangeSet(k8s={"sonarr"})
     deploy_alerts.alert_deferred(
-        tools, gitops_deploy.STATE, settings, ORIGIN, set(), cs, declared_k8s={"sonarr"}
+        tools, state, settings, ORIGIN, set(), cs, declared_k8s={"sonarr"}
     )
     ((key, content),) = seen
     assert key == f"k8s:{ORIGIN}"
@@ -196,14 +184,14 @@ def test_a_k8s_change_pages_with_the_remediation_for_this_host(
 
 
 def test_a_k8s_change_is_flagged_even_when_something_else_deployed(
-    gitops_deploy, monkeypatch, state_dir, settings
+    gitops_deploy, state_dir, settings, state
 ):
     # Unlike tasks/meta there is no `- deployed` subtraction: this deployer never applies a k8s
     # role through deploy(cs.services), so nothing a k8s change could have ridden.
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_deferred(
         tools,
-        gitops_deploy.STATE,
+        state,
         settings,
         ORIGIN,
         {"sonarr"},
@@ -214,14 +202,14 @@ def test_a_k8s_change_is_flagged_even_when_something_else_deployed(
 
 
 def test_an_unread_inventory_prescribes_the_full_deploy(
-    gitops_deploy, monkeypatch, state_dir, settings
+    gitops_deploy, state_dir, settings, state
 ):
     # declared_k8s=None is the caller that has not read host_vars. Treated as the empty set,
     # every changed role reads as untaggable and the remediation is the full deploy: slower,
     # but a `--tags` line for a role with no entry exits 0 having applied nothing.
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_deferred(
-        tools, gitops_deploy.STATE, settings, ORIGIN, set(), ChangeSet(k8s={"sonarr"})
+        tools, state, settings, ORIGIN, set(), ChangeSet(k8s={"sonarr"})
     )
     ((_key, content),) = seen
     assert content.endswith(k8s_remediation({"sonarr"}, set(), set()))
@@ -230,31 +218,27 @@ def test_an_unread_inventory_prescribes_the_full_deploy(
 # ── DeployerState.record_behind(): the behind-origin marker ───────────────────────────────────
 # The marker itself is the state object's; the two rev-parses and the ancestry query that feed
 # it are entrypoint()'s, which is why the git-failure case below drives entrypoint instead.
-def test_a_tick_that_ended_behind_stamps_first_seen_once(gitops_deploy, state_dir):
-    gitops_deploy.STATE.record_behind(
-        ORIGIN, behind=True, now=1700000000.0, fast_forwarded=False
-    )
+def test_a_tick_that_ended_behind_stamps_first_seen_once(
+    gitops_deploy, state_dir, state
+):
+    state.record_behind(ORIGIN, behind=True, now=1700000000.0, fast_forwarded=False)
     behind_since = _marker(state_dir, "behind_since")
     assert behind_since is not None
     sha, first_seen = behind_since.split()
     assert sha == ORIGIN
     # A later push to a still-stuck host refreshes the SHA and keeps the clock.
-    gitops_deploy.STATE.record_behind(
-        LATER, behind=True, now=1700009999.0, fast_forwarded=False
-    )
+    state.record_behind(LATER, behind=True, now=1700009999.0, fast_forwarded=False)
     assert _marker(state_dir, "behind_since") == f"{LATER} {first_seen}"
 
 
-def test_convergence_clears_the_marker(gitops_deploy, state_dir):
+def test_convergence_clears_the_marker(gitops_deploy, state_dir, state):
     (state_dir / "behind_since").write_text(f"{ORIGIN} 1700000000")
-    gitops_deploy.STATE.record_behind(
-        ORIGIN, behind=False, now=1700009999.0, fast_forwarded=False
-    )
+    state.record_behind(ORIGIN, behind=False, now=1700009999.0, fast_forwarded=False)
     assert _marker(state_dir, "behind_since") is None
 
 
 def test_a_git_failure_here_logs_and_leaves_the_marker(
-    gitops_deploy, monkeypatch, state_dir, capsys
+    gitops_deploy, state_dir, capsys, state
 ):
     # The tick has already done its work; a rev-parse error must not turn it into a crash page.
     (state_dir / "behind_since").write_text(f"{ORIGIN} 1700000000")
@@ -262,20 +246,27 @@ def test_a_git_failure_here_logs_and_leaves_the_marker(
     def broken_run(_argv, **_kwargs):
         raise RuntimeError("git rev-parse HEAD -> 128")
 
-    monkeypatch.setattr(gitops_deploy, "main", lambda _tools, _config: 0)
-    assert gitops_deploy.entrypoint(DeployTools(run=broken_run)) == 0
+    assert (
+        gitops_deploy.entrypoint(
+            DeployTools(run=broken_run),
+            gitops_deploy.tick_config(),
+            state,
+            main=lambda _tools, _config, _state: 0,
+        )
+        == 0
+    )
     assert "could not record behind-origin state" in capsys.readouterr().out
     assert _marker(state_dir, "behind_since") == f"{ORIGIN} 1700000000"
 
 
-# ── the state_dir fixture covers every state path the module names ────────────────────────────
+# ── the state fixture covers every state path the module names ────────────────────────────────
 def test_state_dir_repoints_every_state_path_in_the_module(gitops_deploy, gitops_tree):
     """No literal naming the state directory may exist in `gitops_deploy.py` at all.
 
-    Every marker path is reached through `STATE`, which the fixture replaces. A path built any
-    other way (a literal, an f-string, `os.path.join`) would keep pointing at the host and the
-    test writing through it would pass against /var/lib. This guard keeps module-level path
-    constants from coming back.
+    Every marker path is reached through the `state` main() is handed, which a test builds
+    over tmp_path. A path built any other way (a literal, an f-string, `os.path.join`) would
+    keep pointing at the host and the test writing through it would pass against /var/lib.
+    This guard keeps module-level path constants from coming back.
     """
     prefix = deploy_state.STATE_DIR
     literals = {
@@ -295,13 +286,13 @@ def test_state_dir_repoints_every_state_path_in_the_module(gitops_deploy, gitops
 
 
 @pytest.mark.parametrize("marker", ["last_run", "pending_alerts", "hold"])
-def test_state_dir_keeps_each_markers_basename(gitops_deploy, state_dir, marker):
+def test_state_dir_keeps_each_markers_basename(gitops_deploy, state_dir, marker, state):
     expected = deploy_state.DeployerState.MARKERS[marker]
-    assert gitops_deploy.STATE.path(marker) == str(state_dir / expected)
+    assert state.path(marker) == str(state_dir / expected)
 
 
 def test_an_ancestor_fast_forward_leaves_behind_since_naming_the_real_tip(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """The host IS still behind origin, so the 6h behind-origin watchdog must keep its SHA.
 
@@ -314,13 +305,13 @@ def test_an_ancestor_fast_forward_leaves_behind_since_naming_the_real_tip(
     tick.rev_list = [origin, ancestor]
     tick.ancestor_ci = {ancestor: "pass"}
     tick.paths = ["docs/runbook.md"]
-    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert gitops_deploy.entrypoint(tick.tools, tick.config, state) == 0
     assert tick.merges == [ancestor]
     assert (state_dir / "behind_since").read_text().split()[0] == origin
 
 
 def test_a_tick_that_fast_forwarded_restamps_behind_since(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """The stamp measures time WITHOUT a fast-forward, so progress resets it.
 
@@ -334,13 +325,13 @@ def test_a_tick_that_fast_forwarded_restamps_behind_since(
     tick.rev_list = [origin, ancestor]
     tick.ancestor_ci = {ancestor: "pass"}
     tick.paths = ["docs/runbook.md"]
-    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert gitops_deploy.entrypoint(tick.tools, tick.config, state) == 0
     assert tick.merges == [ancestor]
     assert float((state_dir / "behind_since").read_text().split()[1]) > 1000.0
 
 
 def test_a_parked_tick_keeps_the_existing_behind_since_stamp(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """The other half: a tick that moved nothing must not restart the clock.
 
@@ -352,33 +343,35 @@ def test_a_parked_tick_keeps_the_existing_behind_since_stamp(
     tick.ci = "pending"
     tick.rev_list = [origin, "3" * 40]
     tick.ancestor_ci = {"3" * 40: "pending"}
-    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert gitops_deploy.entrypoint(tick.tools, tick.config, state) == 0
     assert tick.merges == []
     assert (state_dir / "behind_since").read_text() == f"{origin} 1000.0"
 
 
 # ── the contention streak ends with the first tick that is not a contention defer ─────────────
 def test_a_tick_that_did_not_defer_on_a_lock_clears_the_contention_streak(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """CLEAN half: a converged noop tick means the lock stopped wedging the deployer."""
     (state_dir / "contention_since").write_text(f"{ORIGIN} sonarr 1000.0 1000.0 3")
     tick.origin = tick.local
-    assert gitops_deploy.entrypoint(tick.tools) == 0
+    assert gitops_deploy.entrypoint(tick.tools, tick.config, state) == 0
     assert _marker(state_dir, "contention_since") is None
 
 
-def test_a_crashed_tick_leaves_the_contention_streak(gitops_deploy, tick, state_dir):
+def test_a_crashed_tick_leaves_the_contention_streak(
+    gitops_deploy, tick, state_dir, state
+):
     """A crash is not evidence the lock was released, so the streak keeps its age."""
     (state_dir / "contention_since").write_text(f"{ORIGIN} sonarr 1000.0 1000.0 3")
     tick.run_error = RuntimeError("git rev-parse HEAD -> 128")
     with pytest.raises(RuntimeError):
-        gitops_deploy.entrypoint(tick.tools)
+        gitops_deploy.entrypoint(tick.tools, tick.config, state)
     assert _marker(state_dir, "contention_since") == f"{ORIGIN} sonarr 1000.0 1000.0 3"
 
 
 def test_a_parked_range_keeps_its_stamp_while_green_commits_land_above_it(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """A wedge cannot game the re-stamp, because a fast-forward to any
     commit above it crosses it and every deferral that stops the tick leaves HEAD in place.
@@ -395,7 +388,9 @@ def test_a_parked_range_keeps_its_stamp_while_green_commits_land_above_it(
         tick.ci = "pending"
         tick.rev_list = [tip, park_at]
         tick.ancestor_ci = {park_at: "pass"}
-        assert gitops_deploy.entrypoint(tick.tools) == 0, f"tick {n}"
+        assert gitops_deploy.entrypoint(tick.tools, tick.config, state) == 0, (
+            f"tick {n}"
+        )
         assert tick.merges == [], f"tick {n} fast-forwarded a parked range"
         assert tick.head == tick.local, f"tick {n} moved HEAD"
     assert (state_dir / "behind_since").read_text().split()[1] == "1000.0", (

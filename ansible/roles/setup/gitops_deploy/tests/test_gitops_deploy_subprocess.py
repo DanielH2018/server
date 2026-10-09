@@ -24,9 +24,8 @@ REPO = "/tmp/gitops-test-repo"
 
 
 # ── deploy_k8s ────────────────────────────────────────────────────────────────────────────────
-def _capture_run(monkeypatch):
-    """Patch deploy_io.run() to record every call instead of shelling out, and return the
-    list it appends to."""
+def _capture_run():
+    """A `run` that records every call instead of shelling out, and the list it appends to."""
 
     class _Call:
         def __init__(self, argv, kwargs):
@@ -39,8 +38,7 @@ def _capture_run(monkeypatch):
         calls.append(_Call(argv, kwargs))
         return ""
 
-    monkeypatch.setattr(deploy_io, "run", _fake_run)
-    return calls
+    return _fake_run, calls
 
 
 _FORWARD_ARGV = [
@@ -54,28 +52,28 @@ _FORWARD_ARGV = [
 ]
 
 
-def test_deploy_k8s_passes_no_extra_vars_by_default(monkeypatch) -> None:
+def test_deploy_k8s_passes_no_extra_vars_by_default() -> None:
     """The ordinary deploy must be byte-identical to what it was before this slice.
 
     ~50 services go through this call on every tick. Pins the full argv, not just -e's absence — a
     stray extra arg anywhere else in the list would pass a presence-only check.
     """
-    calls = _capture_run(monkeypatch)
-    deploy_io.deploy_k8s(REPO, {"sonarr"}, 900.0)
+    run, calls = _capture_run()
+    deploy_io.deploy_k8s(REPO, {"sonarr"}, 900.0, run=run)
     assert calls[0].argv == _FORWARD_ARGV
 
 
-def test_deploy_k8s_passes_the_restore_sha_when_given(monkeypatch) -> None:
-    calls = _capture_run(monkeypatch)
-    deploy_io.deploy_k8s(REPO, {"sonarr"}, 900.0, restore_sha="deadbeef")
+def test_deploy_k8s_passes_the_restore_sha_when_given() -> None:
+    run, calls = _capture_run()
+    deploy_io.deploy_k8s(REPO, {"sonarr"}, 900.0, run=run, restore_sha="deadbeef")
     assert calls[0].argv == _FORWARD_ARGV + ["-e", "k8s_restore_snapshot_sha=deadbeef"]
 
 
-def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent(monkeypatch) -> None:
+def test_deploy_k8s_treats_a_whitespace_only_restore_sha_as_absent() -> None:
     """restore_sha="" or all-whitespace must stay inert, matching the manifests role's own
     `| trim | length > 0` guard — a blank-but-truthy string must not add a broken `-e` arg."""
-    calls = _capture_run(monkeypatch)
-    deploy_io.deploy_k8s(REPO, {"sonarr"}, 900.0, restore_sha="   ")
+    run, calls = _capture_run()
+    deploy_io.deploy_k8s(REPO, {"sonarr"}, 900.0, run=run, restore_sha="   ")
     assert calls[0].argv == _FORWARD_ARGV
 
 
