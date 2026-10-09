@@ -16,8 +16,8 @@ that wrote the file:
 
 The index is built ON REQUEST and cached against a signature of (path, mtime, size) for
 every file under ROOT. It is not built on a timer: prune-artifacts.sh deletes artifacts
-after 7 days, so a timer-built index serves links to files that are already gone. Building
-on request cannot. ~50 files parse in single-digit milliseconds.
+after 30 days (CLAUDE_ARTIFACT_RETENTION_DAYS in the dotfiles settings.base.json), so a
+timer-built index serves links to files that are already gone. Building on request cannot. ~50 files parse in single-digit milliseconds.
 
 Two siblings ship beside this one in the same ConfigMap: `artifact_meta.py` holds the
 taxonomy and the metadata parsers, and `_gui_html.py` holds the page served at `/`.

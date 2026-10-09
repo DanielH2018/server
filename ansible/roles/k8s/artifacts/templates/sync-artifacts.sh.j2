@@ -78,7 +78,7 @@ fi
 {% endfor %}
 
 # DECIDED: no file-age staleness check. rsync -a copies the peer's own mtimes and the peer prunes
-# at 7 days, so the newest file's age measures how often sessions on the peer write artifacts,
+# at 30 days, so the newest file's age measures how often sessions on the peer write artifacts,
 # not whether this sync runs — a quiet week on daniel-server would page. A successful rsync
 # --delete leaves the mirror equal to the peer by construction, so the failure streak covers a
 # broken transport and the push deadline covers a cron that stopped running at all.

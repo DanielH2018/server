@@ -86,7 +86,7 @@ recognised term. **Retiring a service should ADD its name there**, not drop it f
 it is called out here.
 
 ## Pruning
-Artifacts age out after 7 days without an update, so a doc that keeps being refreshed as work
+Artifacts age out after 30 days without an update, so a doc that keeps being refreshed as work
 lands stays put and an abandoned one clears itself. **Executable files are never pruned** — a
 generated script is a tool, not a report. If a session writes one here it must be `chmod +x` or
 it ages out with the docs.
