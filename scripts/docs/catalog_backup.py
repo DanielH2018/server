@@ -32,7 +32,6 @@ __all__ = [
     "autodeploy_stance",
     "backup_tier",
     "claim_index",
-    "role_dirs",
     "claim_names",
     "claim_tiers",
     "load_longhorn_tier_lists",
