@@ -43,10 +43,9 @@ system prompt, this repo's `.claude/settings.json` and every hook once, at start
 the worktree that is rewritten before every call. In this repo's batch, every phase after the
 implementer also loads no settings file from the worktree, and the reviewer gets the start-time
 `CLAUDE.md` as text; `held_hooks` says why. A red batch's implement phase runs the same way,
-because the red author had the worktree before it (#3846). After the red gate, the pipeline
-also resets the worktree to the commit the implementer starts from and deletes every untracked
-and ignored file outside `.fanout/` (#3852), after killing whatever the red phase left
-running (`processes.reaping`).
+because the red author had the worktree before it (#3846). Both before and after the red
+gate, the pipeline kills whatever the red phase left running (`processes.reaping`) and runs
+`red_gate.reset_worktree` (#3852, #3871); `_red` says why.
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -97,7 +96,6 @@ from fanout_lib.red_gate import (
     red_prompt,
     red_section,
     reset_worktree,
-    unhide_index,
 )
 from fanout_lib.processes import reaping, run_process
 from fanout_lib.launch import (
@@ -313,6 +311,8 @@ class Pipeline:
 
     def _claude(self, name: str, argv: list[str], stdin: str) -> Phase:
         fanout = self.worktree / ".fanout"
+        # `reset_worktree` keeps the directory only while one of `FANOUT_KEPT` is in it.
+        fanout.mkdir(exist_ok=True)
         (self.worktree / OWN_COPY).write_text(
             f"{write_hooks(self.hooks, self.hook_root)}\n"
         )
@@ -410,26 +410,27 @@ class Pipeline:
     def _red(self, issues: str) -> tuple[str, Gate] | None:
         """Run the test author and the red gate: the red SHA and its verdict, or None.
 
-        Either way the worktree is reset to the commit the implementer starts from, the base
-        on a refusal, with every untracked, ignored and index-hidden change the red phase left
-        removed (#3852). Anything the red session or its tests left running is killed first.
-        A failed reset raises `ResetFailed`, which `run_all` turns into a failed batch.
+        Before the gate, what the red session left running is killed and the worktree reset
+        to `red`, so the verdict is `red`'s tree alone (#3871): an ignored root `conftest.py`,
+        a `.pth` in `.venv/` or a skip-worktree edit to the code would each make the tests
+        fail for a reason no diff shows. After it, the same again, to the commit the
+        implementer starts from, the base on a refusal (#3852). A failed reset raises
+        `ResetFailed`, which `run_all` turns into a failed batch.
         """
         base = self._git("rev-parse", "HEAD")
         with reaping():
             phase = self._claude(
                 "red", self._red_author(), red_prompt(issues, self.anti_patterns)
             )
-            red = self._git("rev-parse", "HEAD")
-            # A skip-worktree edit to the code would make the red tests fail for a reason no
-            # diff shows; with the bit cleared, the gate's dirty-tree check refuses it.
-            unhide_index(self.run, self.worktree)
-            if phase.failed:
-                gate = Gate(
-                    f"the test author's session failed ({phase.report.get('subtype') or 'error'})"
-                )
-            else:
-                # The gate runs the red author's tests, which could start processes too.
+        red = self._git("rev-parse", "HEAD")
+        if phase.failed:
+            gate = Gate(
+                f"the test author's session failed ({phase.report.get('subtype') or 'error'})"
+            )
+        else:
+            reset_worktree(self.run, self.worktree, red)
+            # The gate runs the red author's tests, which could start processes too.
+            with reaping():
                 gate = self.gates.red(self.run, self.worktree, base, red)
         reset_worktree(self.run, self.worktree, red if gate.passed else base)
         out = phase.report.get("structured_output")

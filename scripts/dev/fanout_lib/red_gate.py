@@ -17,7 +17,11 @@ THE RED GATE reads the test author's commit range `base..red`. It refuses the ra
   node that errors, skips or xfails proves nothing about the behaviour.
 
 Only test files change in the range, so running at `red` runs the new tests against `base`'s
-code.
+code. In the pipeline, `reset_worktree` runs before the red gate, so the tree already holds
+`red` alone and the two refusals about uncommitted and untracked files guard direct callers.
+
+Every git call on the worktree runs under `_hardened`, so the repo's hooks, filters, replace
+refs and the settings that move or skip a reset do not apply (#3871).
 
 THE GREEN GATE runs after the implementer and again after every fix round. The working tree
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
@@ -204,8 +208,67 @@ _BARE_GIT = (
 )  # fmt: skip
 
 
+# Settings in the worktree's own git config that would run a command, move where a reset
+# writes, or keep an edit through `reset --hard`, each overridden for every call below.
+# `post-index-change` fires on any index write and `reference-transaction` on a HEAD update;
+# a sparse checkout re-sets the skip-worktree bits `unhide_index` clears; an edit of the same
+# size with its mtime restored is stat-clean unless ctime counts.
+_PINNED = (
+    ("core.hooksPath", "/dev/null"),
+    ("core.fsmonitor", "false"),
+    ("core.sparseCheckout", "false"),
+    ("core.attributesFile", "/dev/null"),
+    ("core.trustctime", "true"),
+    ("core.checkStat", "default"),
+)
+# Blanking all three disables a driver; `process` wins over `smudge` when both are set.
+_FILTER_KEYS = (("smudge", ""), ("clean", ""), ("process", ""), ("required", "false"))
+_NO_USER_CONFIG = ("GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+
+
+def _hardened(run: Runner, worktree: Path) -> list[str]:
+    """The `env ... git` prefix every git call on the worktree runs under (#3871).
+
+    The red author, and later the implementer, can write the repo's config, its hooks, its
+    `info/attributes` and its replace refs, and the reset that clears the red phase would
+    otherwise run through all of them. No git switch skips the repository's config file, but
+    `GIT_CONFIG_COUNT` settings outrank every file, so each setting these commands consult
+    is pinned, and every filter driver the config names is blanked: a planted
+    `info/attributes` line can still name one. `GIT_WORK_TREE` overrides `core.worktree`.
+    `GIT_NO_REPLACE_OBJECTS` stops a replace ref swapping the commit being reset to.
+
+    DECIDED: pin settings rather than snapshot and restore the config file. Every worktree
+    shares the one in the common git dir and writes `branch.*` keys into it, so a restore
+    would undo other sessions' writes. A planted `.git/config` and hooks still reach every
+    later phase and every other worktree; the reset only stops running through them.
+    """
+    listed = run(
+        [
+            "env", *_NO_USER_CONFIG, "git", "-C", str(worktree),
+            "config", "--null", "--name-only", "--get-regexp", r"^filter\.",
+        ],
+        None,
+    ).stdout  # fmt: skip
+    drivers = sorted({name.rpartition(".")[0] for name in listed.split("\0") if name})
+    pinned = [
+        *_PINNED,
+        *(
+            (f"{driver}.{key}", value)
+            for driver in drivers
+            for (key, value) in _FILTER_KEYS
+        ),
+    ]
+    env = [f"GIT_CONFIG_COUNT={len(pinned)}"]
+    for i, (key, value) in enumerate(pinned):
+        env += [f"GIT_CONFIG_KEY_{i}={key}", f"GIT_CONFIG_VALUE_{i}={value}"]
+    return [
+        "env", *_NO_USER_CONFIG, "GIT_NO_REPLACE_OBJECTS=1",
+        f"GIT_WORK_TREE={Path(worktree).absolute()}", *env, "git",
+    ]  # fmt: skip
+
+
 def _git(run: Runner, worktree: Path, *args: str) -> subprocess.CompletedProcess:
-    return run(["git", "-C", str(worktree), *args], None)
+    return run([*_hardened(run, worktree), "-C", str(worktree), *args], None)
 
 
 ORIGIN_MASTER = "refs/remotes/origin/master"
@@ -288,24 +351,36 @@ def unhide_index(run: Runner, worktree: Path) -> list[str]:
     return hidden
 
 
-def reset_worktree(run: Runner, worktree: Path, sha: str) -> None:
-    """Make `worktree` hold exactly `sha`'s tree, plus the pipeline's own `.fanout/`.
+# The `.fanout/` files `reset_worktree` keeps. systemd holds `report.json` and `stderr.log`
+# open as the unit's stdout and stderr, so deleting either loses what `status` reads, and
+# `fanout-stop.py` finds the worktree by `brief.md`. `red.json` is the red session's report,
+# which nothing reads back. Everything else there is the pipeline's own and is rewritten
+# before it is next read, or is a file the red author planted, such as a `land1.log` whose
+# `VERDICT:` line `status` would report (#3871). A red batch is this repo's, so there is no
+# `.fanout/server` snapshot to keep.
+FANOUT_KEPT = ("brief.md", "report.json", "stderr.log", "red.json")
 
-    The red author had the worktree before the implementer, and neither gate nor the reviewer
-    reads anything outside the commit range (#3852). A skip-worktree edit to a script a later
-    phase runs, an untracked root `.mcp.json` or `CLAUDE.local.md`, and an ignored file the
-    red author created or overwrote would each outlive the red phase. So the bits go first,
-    then the tree is reset, then every untracked and ignored file is deleted. That includes
-    `.venv/`: `uv run` rebuilds it from its cache, and a `.pth` planted in it would run in
-    every later pytest.
+
+def reset_worktree(run: Runner, worktree: Path, sha: str) -> None:
+    """Make `worktree` hold exactly `sha`'s tree, plus `FANOUT_KEPT`.
+
+    The red author had the worktree before the red gate and the implementer, and neither gate
+    nor the reviewer reads anything outside the commit range (#3852, #3871). A skip-worktree
+    edit to a script a later phase runs, an untracked root `.mcp.json` or `CLAUDE.local.md`,
+    and an ignored file the red author created or overwrote would each outlive the red phase.
+    So the bits go first, then the tree is reset, then every untracked and ignored file is
+    deleted. That includes `.venv/`: `uv run` rebuilds it from its cache, and a `.pth` planted
+    in it would run in every later pytest. Every step runs under `_hardened`.
 
     Raises:
         ResetFailed: a git step exited non-zero.
     """
     unhide_index(run, worktree)
     _must(run, worktree, "reset", "--quiet", "--hard", sha)
-    # `-x` still honours `-e`. A second `-f` removes a nested repository too.
-    _must(run, worktree, "clean", "-ffdxq", "-e", "/.fanout/")
+    kept = [arg for name in FANOUT_KEPT for arg in ("-e", f"/.fanout/{name}")]
+    # `-x` still honours `-e`, and keeps an excluded file inside a directory it otherwise
+    # removes. A second `-f` removes a nested repository too.
+    _must(run, worktree, "clean", "-ffdxq", *kept)
 
 
 def _collect(run: Runner, worktree: Path, files: list[str]) -> tuple[set[str], int]:

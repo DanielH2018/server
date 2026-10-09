@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-from lib.proc_testing import DEFAULT_TIMEOUT
+from lib.proc_testing import DEFAULT_TIMEOUT, write_exec
 
 from fanout_lib.brief import Issue
 from fanout_lib.red_gate import (
@@ -25,7 +25,7 @@ from fanout_lib.red_gate import (
     review_flags,
     unhide_index,
 )
-from lib.git_testing import commit, git_out, init_repo, scrubbed_env
+from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
 
 CODE = "def double(x):\n    return x\n"
 FIXED = "def double(x):\n    return 2 * x\n"
@@ -280,6 +280,7 @@ def test_reset_worktree_leaves_the_commits_tree_and_fanout_only(tmp_path):
     (repo / ".mcp.json").write_text("{}\n")
     (repo / ".fanout").mkdir()
     (repo / ".fanout" / "brief.md").write_text("brief\n")
+    (repo / ".fanout" / "land1.log").write_text("VERDICT: landed\n")
     head = git_out(repo, "rev-parse", "HEAD")
 
     reset_worktree(run, repo, head)
@@ -290,6 +291,34 @@ def test_reset_worktree_leaves_the_commits_tree_and_fanout_only(tmp_path):
     assert not (repo / "CLAUDE.local.md").exists()
     assert not (repo / ".mcp.json").exists()
     assert (repo / ".fanout" / "brief.md").read_text() == "brief\n"
+    assert not (repo / ".fanout" / "land1.log").exists()
+
+
+def test_reset_worktree_runs_no_hook_filter_or_replace_ref_the_red_author_planted(
+    tmp_path,
+):
+    """Each would otherwise change what the reset does, or run a command (#3871)."""
+    repo, _, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
+    fake = commit(repo, "fake", **{"mod.py": FIXED})
+    git_out(repo, "reset", "--quiet", "--hard", red)
+    git_out(repo, "replace", red, fake)
+    fired = tmp_path / "fired"
+    write_exec(repo / ".git" / "hooks" / "post-index-change", f"echo hook >> {fired}\n")
+    (repo / ".git" / "info" / "attributes").write_text("*.py filter=planted\n")
+    git_out(
+        repo, "config", "filter.planted.smudge", f"sh -c 'echo filter >> {fired}; cat'"
+    )
+
+    def planted_reset(reset):
+        (repo / "mod.py").write_text("planted\n")
+        reset()
+        ran = fired.read_text() if fired.exists() else ""
+        return (repo / "mod.py").read_text(), ran
+
+    assert planted_reset(lambda: reset_worktree(run, repo, red)) == (CODE, "")
+    # The control: plain git runs the hook and the filter, and checks out the replacement.
+    plain = planted_reset(lambda: git(repo, "reset", "--quiet", "--hard", red))
+    assert plain == (FIXED, "filter\nhook\n")
 
 
 def test_reset_worktree_raises_when_a_git_step_fails(tmp_path):

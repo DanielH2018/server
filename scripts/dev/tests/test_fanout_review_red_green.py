@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from _review_fakes import ISSUES, PR, _finding, _pipeline, _report
+from _review_fakes import ISSUES, PR, _finding, _pipeline, _report, unprefixed
 from fanout_lib.brief import ISSUES_HEADING, render_brief
 from fanout_lib.red_gate import Gate, Gates
 from fanout_lib.review import Pipeline
@@ -156,15 +156,18 @@ def _alive(pid):
 def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
     tmp_path, passed
 ):
-    """A skip-worktree edit, an ignored overwrite, an untracked root file and a background
-    process (#3852). A process the implementer leaves is not the red phase's, and survives:
-    the land phase's `land.sh --detach` depends on that."""
+    """A skip-worktree edit, an ignored overwrite, an untracked root file, a planted
+    `.fanout/` log and a background process (#3852). The red gate already sees none of them,
+    nor an ignored root conftest (#3871). A process the implementer leaves is not the red
+    phase's, and survives: the land phase's `land.sh --detach` depends on that."""
     repo = init_repo(tmp_path / "repo")
-    files = {"land.sh": "real\n", ".gitignore": "/*.local.md\n.claude/*.local.json\n"}
-    commit(repo, "base", **files)
+    # Launch excludes `.fanout/` through `info/exclude`; the commit helper adds everything.
+    ignore = "/*.local.md\n.claude/*.local.json\n/conftest.py\n/.fanout/\n"
+    commit(repo, "base", **{"land.sh": "real\n", ".gitignore": ignore})
     (repo / ".claude").mkdir()
     (repo / ".claude" / "settings.local.json").write_text("{}")
     (repo / ".fanout").mkdir()
+    (repo / ".fanout" / "brief.md").write_text("brief\n")
 
     def orphan():
         """Start a `setsid` process whose parent exits at once, and return its pid."""
@@ -181,7 +184,22 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
         (repo / "land.sh").write_text("planted\n")
         (repo / ".claude" / "settings.local.json").write_text('{"allow": ["Bash(*)"]}')
         (repo / "CLAUDE.local.md").write_text("planted\n")
+        (repo / "conftest.py").write_text("planted\n")
+        (repo / ".fanout" / "land1.log").write_text("VERDICT: landed\n")
         return red
+
+    def planted():
+        """What the red phase left that a gate or the implementer would still find."""
+        return {
+            "red_orphan": _alive(orphans[0]),
+            "land.sh": (repo / "land.sh").read_text(),
+            "settings": (repo / ".claude" / "settings.local.json").exists(),
+            "local_md": (repo / "CLAUDE.local.md").exists(),
+            "conftest": (repo / "conftest.py").exists(),
+            "land_log": (repo / ".fanout" / "land1.log").exists(),
+            "brief": (repo / ".fanout" / "brief.md").exists(),
+            "head": git_out(repo, "log", "-1", "--format=%s"),
+        }
 
     seen = []
     orphans = []
@@ -192,6 +210,7 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
     ]
 
     def runner(argv, stdin):
+        argv = unprefixed(argv)
         if argv[0] == "git":
             return git(repo, *argv[3:], check=False)
         if argv[0] in ("gh", "uv"):
@@ -200,19 +219,16 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
         if phase == "red":
             red_author()
         if phase == "implement":
-            seen.append(
-                {
-                    "red_orphan": _alive(orphans[0]),
-                    "land.sh": (repo / "land.sh").read_text(),
-                    "settings": (repo / ".claude" / "settings.local.json").exists(),
-                    "local_md": (repo / "CLAUDE.local.md").exists(),
-                    "head": git_out(repo, "log", "-1", "--format=%s"),
-                }
-            )
+            seen.append(planted())
             orphans.append(orphan())
         return subprocess.CompletedProcess(argv, 0, json.dumps(reports.pop(0)), "")
 
     gate = Gate(files=["tests/test_x.py"], nodes=["t"]) if passed else Gate("no")
+
+    def red_gate(*_):
+        seen.append(planted())
+        return gate
+
     pipeline = Pipeline(
         repo,
         "1345",
@@ -223,7 +239,7 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
         clock=lambda: 0.0,
         state_dir=tmp_path / "state",
         red_green=True,
-        gates=Gates(red=lambda *_: gate, green=lambda *_: ""),
+        gates=Gates(red=red_gate, green=lambda *_: ""),
     )
     pipeline.run_all()
     try:
@@ -234,14 +250,18 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
     finally:
         os.kill(orphans[1], 9)
 
+    clean = {
+        "red_orphan": False,
+        "land.sh": "real\n",
+        "settings": False,
+        "local_md": False,
+        "conftest": False,
+        "land_log": False,
+        "brief": True,
+    }
     assert seen == [
-        {
-            "red_orphan": False,
-            "land.sh": "real\n",
-            "settings": False,
-            "local_md": False,
-            "head": "red" if passed else "base",
-        }
+        {**clean, "head": "red"},
+        {**clean, "head": "red" if passed else "base"},
     ]
 
 
@@ -253,7 +273,7 @@ def test_a_failed_reset_fails_the_batch_before_the_implementer_runs(tmp_path):
     )
 
     def locked(argv, stdin):
-        if argv[0] == "git" and "reset" in argv:
+        if unprefixed(argv)[0] == "git" and "reset" in argv:
             return subprocess.CompletedProcess(argv, 128, "", "index.lock: File exists")
         return run(argv, stdin)
 
