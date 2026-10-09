@@ -132,9 +132,9 @@ test('a hold shows in the band and the system prompt, and both go once it clears
   expect(held.sections.map(s => s.id)).toEqual(['base', 'deck:landing-blocked'])
   expect(held.sections[1]?.text).toContain('setup:k3s')
 
+  // The timer alone must clear it: no /deck refresh here.
   answer.snap = CLEAR
   await clock.advance(60_000)
-  await deck($, 'refresh')
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ plugin: 'deck', surface, ...BAND })

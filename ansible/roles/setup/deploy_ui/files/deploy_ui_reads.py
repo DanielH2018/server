@@ -276,8 +276,10 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
     the `owed` ledger's `hold_plane` class read through `gitops_ledger.held_planes` (#3392).
     It is what the page lists, one entry per failed apply, because a Clear drops all of them
     at once (#2453). The
-    `k8s_deferred_entries` key comes from the ledger's `k8s_deferred` class. The ledger is
-    read but not served, because its other classes have no panel here.
+    `k8s_deferred_entries` key comes from the ledger's `k8s_deferred` class. The
+    `manual_plane_owed` key is that class's raw ledger lines, served for `probe.py landing` on
+    a host that cannot read the state directory itself (#3676), which words them with the
+    banner's own renderer. The ledger's other classes are not served.
 
     Raises:
         OSError: a marker exists but can't be read (e.g. permission denied). Only a
@@ -296,6 +298,12 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
     owed = _read_owed(state_dir)
     st["hold_plane_entries"] = gitops_ledger.held_planes(owed)
     st["k8s_deferred_entries"] = k8s_deferred_rows(owed)
+    st["manual_plane_owed"] = "\n".join(
+        line
+        for line in (owed or "").splitlines()
+        if (gitops_ledger.owed_line_key(line) or ("",))[0]
+        == gitops_ledger.OWED_MANUAL_PLANE
+    )
     return st
 
 

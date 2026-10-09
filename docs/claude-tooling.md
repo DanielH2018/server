@@ -227,12 +227,12 @@ A blocker is one of three states: a non-empty `hold_sha`, a red master CI run, o
 `manual_plane` role. The command computes that list itself, so every surface that shows it
 agrees. Each fact comes from a reader that already exists:
 
-- On daniel-box, `hold_sha` and the `owed` ledger are read from the deployer's state directory
-  through `gitops_ledger` and `deployer_park`. Elsewhere, deploy-ui's `/api/state` serves the
-  hold.
-- deploy-ui does not serve the `manual_plane` class, so off daniel-box that field is `null`.
-  A `null` field means the source was not readable, not that nothing is owed. It adds no
-  blocker.
+- Where the running user can read the deployer's state directory, `hold_sha` and the `owed`
+  ledger are read from it through `gitops_ledger` and `deployer_park`. The directory is 0750
+  and owned by the deploy user. So off daniel-box, and for the `claude` user on it, deploy-ui's
+  `/api/state` serves the hold and the `manual_plane` ledger lines instead.
+- A deploy-ui older than the `manual_plane_owed` key leaves the manual planes `null`. A `null`
+  field means the source was not readable, not that nothing is owed. It adds no blocker.
 - Master CI is the newest `ci.yml` run on master. A run in progress is pending, and a
   conclusion in `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict. Neither counts as red.
 - deploy-ui's `/api/inflight` lists the runs in flight. A run's `VERDICT:` line is read with
@@ -241,7 +241,11 @@ agrees. Each fact comes from a reader that already exists:
   daniel-box, a terminal run shows no verdict.
 - A blocker line carries no age. The mod puts the blockers in the system prompt, and a line
   that changed each minute would rewrite the prompt on every turn.
-- `findings.py claims --json` gives the claims, joined to `git worktree list` by branch.
+- `findings.py claims --json` gives the claims. A claim joins a worktree from
+  `git worktree list` on its branch, or on the issue numbers a fan-out batch worktree's
+  name carries (`fanout-<n>-<n>`). A fan-out batch's issues are claimed under the
+  orchestrator's branch, so the branch alone matches none of them. The pane lists a claim no
+  worktree works with `findings.py`'s own reason.
 
 A source that fails is named in `errors`, and its field stays `null`. One read takes about 3 s
 on daniel-server: one `gh` call, two deploy-ui GETs and one `findings.py` run.

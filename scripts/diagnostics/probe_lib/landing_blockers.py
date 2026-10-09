@@ -6,13 +6,15 @@ state behind it once. This subcommand reads that state on demand, as one JSON do
 
 Every fact comes from a reader that already exists; this module only joins them:
 
-- **Hold.** On the deployer's host, `hold_sha` and the `owed` ledger are read directly, through
-  `gitops_markers` and `gitops_ledger`. Anywhere else, deploy-ui's `/api/state` serves the same
-  two through those same modules.
+- **Hold.** Where this user can read the deployer's state directory, `hold_sha` and the
+  `owed` ledger are read directly, through `gitops_markers` and `gitops_ledger`. Anywhere else,
+  including a user on the deployer's host the directory's mode shuts out, deploy-ui's
+  `/api/state` serves the same two through those same modules.
 - **Manual planes.** Read from the ledger through `gitops_ledger.manual_plane_entries`, and
-  worded by `deployer_park.manual_plane_lines`, the banner's renderer. deploy-ui does not serve
-  this class, so off the deployer's host it is `null` (unknown), never `[]`. An empty list
-  would read as "nothing owed" when the truth is "not readable from here" (#3761).
+  worded by `deployer_park.manual_plane_lines`, the banner's renderer. deploy-ui serves that
+  class's raw ledger lines as `manual_plane_owed`, so both paths word them the same way. A
+  deploy-ui that predates the key leaves the field `null` (unknown), never `[]`: an empty list
+  would read as "nothing owed" when the truth is "not readable from here".
 - **Master CI.** The newest `ci.yml` run on master, through `gh`. A conclusion in
   `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict and a run in progress is pending.
   Neither is red, per `docs/landing.md`.
@@ -24,8 +26,10 @@ Every fact comes from a reader that already exists; this module only joins them:
 - **Last verdict.** The newest `land*.log` in `land_lib.detach.default_log_dir()`, as this
   process sees it: `$CLAUDE_JOB_DIR/tmp` when that variable is set, otherwise
   `/tmp/homelab-landings-<user>`.
-- **Worktrees and claims.** `git worktree list` and `findings.py claims --json`, joined on
-  the branch name.
+- **Worktrees and claims.** `git worktree list` and `findings.py claims --json`. A claim
+  joins a worktree on its branch, or on the issue numbers a fan-out batch worktree's name
+  carries (`fanout_lib.launch.worktree_path`: `fanout-<n>-<n>`), because a fan-out batch's
+  issues are claimed under the orchestrator's branch, not the batch's.
 
 `blockers` is the list a landing would stop on: a non-empty hold, a red master CI, or an owed
 manual plane. It is computed here rather than in the mod so that the band, the model's
@@ -48,6 +52,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
 
 import json
 import os
+import re
 import socket
 import subprocess
 import time
@@ -90,12 +95,27 @@ def ci_state(run: dict | None) -> str:
     return "red"
 
 
-def claims_by_worktree(claims: list[dict]) -> dict[str, list[int]]:
-    """Each claiming branch -> the issue numbers it holds, ascending."""
-    held: dict[str, list[int]] = {}
-    for c in claims:
-        held.setdefault(c["worktree"], []).append(c["number"])
-    return {branch: sorted(nums) for branch, nums in held.items()}
+_BATCH_DIR = re.compile(r"^fanout-(\d+(?:-\d+)*)$")
+
+
+def batch_issues(path: str) -> set[int]:
+    """The issue numbers a fan-out batch worktree's directory name carries, or an empty set."""
+    match = _BATCH_DIR.match(Path(path).name)
+    return {int(n) for n in match.group(1).split("-")} if match else set()
+
+
+def worktree_claims(tree: dict, claims: list[dict]) -> list[int]:
+    """The claimed issues one worktree is working, ascending.
+
+    A claim counts when it names the worktree's branch, or when its issue is one the
+    worktree's batch name carries.
+    """
+    batch = batch_issues(tree["path"])
+    return sorted(
+        c["number"]
+        for c in claims
+        if (tree["branch"] and c["worktree"] == tree["branch"]) or c["number"] in batch
+    )
 
 
 def parse_worktrees(porcelain: str) -> list[dict]:
@@ -151,10 +171,20 @@ def manual_plane_rows(owed: str | None, now: float) -> list[dict]:
     ]
 
 
-def _owed_locally() -> tuple[str | None, str | None] | None:
-    """`(hold_sha, owed ledger text)` from this host's state dir, or None when it has none."""
-    state_dir = deployer_park.GITOPS_STATE_DIR
-    if not os.path.isdir(state_dir):
+def _owed_locally(
+    state_dir: str = deployer_park.GITOPS_STATE_DIR,
+) -> tuple[str | None, str | None] | None:
+    """`(hold_sha, owed ledger text)` from the deployer's state dir, or None if unreadable.
+
+    The directory is 0750 and owned by the deploy user, so another user on the deployer's host
+    (the `claude` agent user) sees it exist and still cannot read a marker. `deployer_park`'s
+    readers turn that EACCES into "absent", which would read as no hold and nothing owed. None
+    sends the caller to deploy-ui instead.
+    """
+    if not os.path.isdir(state_dir) or not os.access(state_dir, os.R_OK | os.X_OK):
+        return None
+    markers = [Path(state_dir) / MARKERS[name] for name in ("hold", "owed")]
+    if any(m.exists() and not os.access(m, os.R_OK) for m in markers):
         return None
     return (
         deployer_park._read(state_dir, MARKERS["hold"]),
@@ -236,6 +266,10 @@ def collect(
             "sha": state.get("hold_sha", ""),
             "planes": state.get("hold_plane_entries", []),
         }
+        if "manual_plane_owed" in state:
+            snap["manual_planes"] = manual_plane_rows(
+                state["manual_plane_owed"], time.time()
+            )
 
     def read_ci():
         runs = json.loads(
@@ -295,9 +329,8 @@ def collect(
         claims = json.loads(
             run([_sys.executable, "scripts/dev/findings.py", "claims", "--json"])
         )
-        held = claims_by_worktree(claims)
         snap["worktrees"] = [
-            {**t, "claims": held.get(t["branch"], [])}
+            {**t, "claims": worktree_claims(t, claims)}
             for t in trees
             if "/.claude/worktrees/" in t["path"]
         ]
@@ -310,6 +343,12 @@ def collect(
     attempt("sessions", read_sessions)
     snap["blockers"] = blockers(snap)
     return snap
+
+
+def unmatched_claims(snap: dict) -> list[dict]:
+    """The claims no listed worktree works, each still carrying findings.py's own reason."""
+    held = {n for t in snap["worktrees"] or [] for n in t["claims"]}
+    return [c for c in snap["claims"] or [] if c["number"] not in held]
 
 
 def format_text(snap: dict) -> str:
@@ -346,6 +385,10 @@ def format_text(snap: dict) -> str:
         for t in snap["worktrees"]:
             nums = " ".join(f"#{n}" for n in t["claims"])
             lines.append(f"  {t['branch'] or t['path']}  {nums}".rstrip())
+    for c in unmatched_claims(snap):
+        lines.append(
+            f"Claim no worktree here works: #{c['number']} {c['reason']}".rstrip()
+        )
     lines += [f"error: {e}" for e in snap["errors"]]
     return "\n".join(lines)
 

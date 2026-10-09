@@ -657,8 +657,10 @@ jobs:
   # module the way the engine will, and `claude plugin test` runs its tests against the engine
   # with the probe call mocked. Neither needs credentials. `.github/claude-cli/package-lock.json`
   # pins the CLI to the version whose API the mod was written and type-checked against, so a
-  # bump is a deliberate change that re-runs this job. `--ignore-scripts` is safe: the package
-  # ships the native binary in its platform dependency, and the postinstall only relinks it.
+  # bump is a deliberate change that re-runs this job. The package's postinstall puts the
+  # native binary in place: run 37866869971 failed under --ignore-scripts with `claude native
+  # binary not installed`. The install skips every script and then runs that one by name, so
+  # it works whatever npm's lifecycle-script policy is and runs no other package's script.
   #
   # On a push to master the steps below skip and the job passes, as renovate-config skips its
   # push run. The PR run already checked the mod, and an npm outage on a master push would turn
@@ -702,6 +704,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --ignore-scripts --prefix .github/claude-cli
+          node .github/claude-cli/node_modules/@anthropic-ai/claude-code/install.cjs
           claude=.github/claude-cli/node_modules/.bin/claude
           "$claude" --version
           "$claude" plugin validate .claude/plugins/deck

@@ -235,12 +235,13 @@ export const register: Register = on => {
         const claims = t.claims.map(n => `#${n}`).join(' ')
         add(`  ${t.branch || t.path} ${claims}`.trimEnd())
       }
-      const local = new Set((snap.worktrees ?? []).map(t => t.branch))
-      const elsewhere = (snap.claims ?? []).filter(c => !local.has(c.worktree))
-      if (elsewhere.length > 0) {
-        add('Claims held by worktrees not on this host')
-        for (const c of elsewhere) {
-          add(`  #${c.number} ${c.worktree}${c.live ? '' : ' (stale here)'}`, undefined, !c.live)
+      // A claim the probe matched to no worktree above, with findings.py's own reason.
+      const worked = new Set((snap.worktrees ?? []).flatMap(t => t.claims))
+      const unmatched = (snap.claims ?? []).filter(c => !worked.has(c.number))
+      if (unmatched.length > 0) {
+        add('Claims no worktree here works')
+        for (const c of unmatched) {
+          add(`  #${c.number} ${c.worktree} ${c.reason}`.trimEnd(), undefined, !c.live)
         }
       }
       for (const err of snap.errors) {

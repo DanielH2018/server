@@ -195,3 +195,64 @@ def test_the_snapshot_carries_exactly_the_fields_the_deck_mod_types():
 def test_a_field_the_mod_does_not_type_is_caught():
     snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
     assert _drift({**snap, "extra": 1}, DECK_TYPES.read_text()) == {"extra"}
+
+
+OWED_K3S = json.dumps(
+    {
+        "class": "manual_plane",
+        "subject": "k3s",
+        "origin": "c" * 40,
+        "at": 0,
+        "playbook": "k3s-bringup.yml",
+    }
+)
+
+
+def test_an_owed_manual_plane_served_by_deploy_ui_is_a_blocker_off_the_host():
+    state = {**CLEAR, "manual_plane_owed": OWED_K3S}
+    snap = landing.collect(lambda: None, fake_deploy_ui(state), fake_run(GREEN))
+    assert [m["role"] for m in snap["manual_planes"]] == ["k3s"]
+    assert len(snap["blockers"]) == 1
+
+
+def test_a_state_dir_this_user_cannot_read_falls_back_to_deploy_ui(tmp_path):
+    (tmp_path / "hold_sha").write_text("deadbeef\n")
+    assert landing._owed_locally(str(tmp_path)) == ("deadbeef", None)
+    tmp_path.chmod(0o000)
+    try:
+        assert landing._owed_locally(str(tmp_path)) is None
+    finally:
+        tmp_path.chmod(0o700)
+
+
+def test_an_unreadable_hold_marker_falls_back_to_deploy_ui(tmp_path):
+    marker = tmp_path / "hold_sha"
+    marker.write_text("deadbeef\n")
+    marker.chmod(0o000)
+    try:
+        assert landing._owed_locally(str(tmp_path)) is None
+    finally:
+        marker.chmod(0o600)
+
+
+def test_a_fanout_batch_worktree_carries_the_issues_its_name_lists():
+    tree = {"path": "/repo/.claude/worktrees/fanout-3676-3700", "branch": "worktree-x"}
+    claims = [
+        {"number": 3676, "worktree": "worktree-issue-fanout-2026-10-09"},
+        {"number": 3700, "worktree": "worktree-issue-fanout-2026-10-09"},
+        {"number": 3701, "worktree": "worktree-issue-fanout-2026-10-09"},
+    ]
+    assert landing.worktree_claims(tree, claims) == [3676, 3700]
+    other = {"path": "/repo/.claude/worktrees/etcd-drill", "branch": "worktree-y"}
+    assert landing.worktree_claims(other, claims) == []
+
+
+def test_a_claim_no_worktree_works_is_listed_with_its_reason():
+    snap = {
+        "worktrees": [{"path": "p", "branch": "b", "claims": [1]}],
+        "claims": [
+            {"number": 1, "worktree": "b", "reason": ""},
+            {"number": 2, "worktree": "gone", "reason": "no worktree"},
+        ],
+    }
+    assert [c["number"] for c in landing.unmatched_claims(snap)] == [2]
