@@ -54,8 +54,10 @@ registers the worktree's copy, so a copy inside the worktree stands down while t
 exists, and one Stop spends the block cap once. The pipeline's copy lives outside the worktree
 and ignores the file, so deleting or forging it changes nothing that copy decides. A marker
 file rather than an environment variable, because a variable would reach every process the
-agent starts, the suite's hook tests included. An edited worktree copy can still block on its
-own (#3810), but it cannot stop the pipeline's copy from running.
+agent starts, the suite's hook tests included. A phase that resumes the implementer's session
+loads no project settings file at all, so it never runs the worktree's copy (#3810). The
+implement and review phases still do, and there an edited worktree copy can block on its own,
+though it cannot stop the pipeline's copy from running.
 
 THE CAP. A counter in `.fanout/stop-blocks` allows at most `MAX_BLOCKS` blocks per batch.
 After that it lets the session end, and `status` reports the batch `no-pr` rather than `done`.

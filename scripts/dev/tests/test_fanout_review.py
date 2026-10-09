@@ -226,9 +226,9 @@ def test_the_reviewer_prompt_is_the_text_read_before_the_implementer_ran(tmp_pat
     )
 
 
-def test_every_phase_runs_the_prompt_and_stop_hook_read_at_start(tmp_path):
-    """The implementer can rewrite the worktree's prompt file and hook, so neither is read
-    again once it has run (#3794)."""
+def test_every_phase_runs_the_prompt_and_hooks_read_at_start(tmp_path):
+    """The implementer can rewrite the worktree's prompt file, settings and hooks, so none is
+    read again once it has run (#3794, #3810)."""
     reports = [
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": [_finding("off by one")]}),
@@ -238,34 +238,71 @@ def test_every_phase_runs_the_prompt_and_stop_hook_read_at_start(tmp_path):
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     pipeline.headless_prompt = "PROMPT AT START"
-    pipeline.stop_hook = dict(
-        pipeline.stop_hook, **{"fanout-stop.py": b"HOOK AT START"}
-    )
+    pipeline.hooks = dict(pipeline.hooks, **{"fanout-stop.py": b"HOOK AT START"})
+    assert "hooklib/worktree_lines.py" in pipeline.hooks
+    assert not [name for name in pipeline.hooks if name.startswith("tests/")]
 
-    hook = pipeline.hook_root / ".claude" / "hooks" / "fanout-stop.py"
+    hooks = pipeline.hook_root / ".claude" / "hooks"
+    hook = hooks / "fanout-stop.py"
     seen = []
 
-    def agent_edits_the_hook(argv, stdin):
+    def agent_edits_the_hooks(argv, stdin):
         if "--settings" in argv:
-            seen.append(hook.read_bytes())
+            seen.append((hook.read_bytes(), (hooks / "json.py").exists()))
             hook.chmod(0o644)
             hook.write_bytes(b"EDITED")
+            (hooks / "json.py").write_text("PLANTED")
         return run(argv, stdin)
 
-    pipeline.run = agent_edits_the_hook
+    pipeline.run = agent_edits_the_hooks
     pipeline.run_all()
 
     for argv in (run.claude[0][0], run.claude[2][0], run.claude[4][0]):
         assert "--append-system-prompt-file" not in argv
         assert argv[argv.index("--append-system-prompt") + 1] == "PROMPT AT START"
         settings = json.loads(argv[argv.index("--settings") + 1])
-        command = settings["hooks"]["Stop"][0]["hooks"][0]["command"]
-        assert command.startswith(str(pipeline.hook_root))
-        assert str(tmp_path / ".claude") not in command
-    # Every phase starts from the bytes read at start, not the last phase's edit.
-    assert seen == [b"HOOK AT START"] * 5
+        stops = [h for group in settings["hooks"]["Stop"] for h in group["hooks"]]
+        assert [h["command"] for h in stops] == [f"{hooks}/run-hook.sh fanout-stop"]
+    # Every phase starts from the bytes read at start, not the last phase's edit or plant.
+    assert seen == [(b"HOOK AT START", False)] * 5
     # The worktree's own copy stands down on this marker; the snapshot path is the proof.
     assert (tmp_path / ".fanout" / "stop-hook").read_text().strip() == str(hook)
+
+
+def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
+    """The fix and land phases resume the implementer's session after it could edit
+    `.claude/settings.json` and every guard hook (#3810)."""
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [_finding("off by one")]}),
+        _report(f"Fixed it. {PR}"),
+        _report(structured={"summary": "resolved", "findings": []}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    held = json.loads(pipeline.project_settings)
+    pipeline.run_all()
+
+    hooks = pipeline.hook_root / ".claude" / "hooks"
+    fix, land = run.claude[2][0], run.claude[4][0]
+    for argv in (fix, land):
+        assert argv[argv.index("--setting-sources") + 1] == "user"
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        commands = [
+            h["command"]
+            for groups in settings["hooks"].values()
+            for group in groups
+            for h in group["hooks"]
+        ]
+        assert len(commands) == len(
+            [h for groups in held["hooks"].values() for g in groups for h in g["hooks"]]
+        )
+        assert all(c.startswith(f"{hooks}/run-hook.sh ") for c in commands)
+        assert settings["permissions"] == held["permissions"]
+        assert (hooks / "block-protected-edits.py").is_file()
+    # The implement and review phases keep the project source: dropping it drops CLAUDE.md.
+    assert "--setting-sources" not in run.claude[0][0]
+    assert "--setting-sources" not in run.claude[1][0]
 
 
 def _red_report(behaviours=1):

@@ -19,9 +19,11 @@ THE RED GATE reads the test author's commit range `base..red`. It refuses the ra
 Only test files change in the range, so running at `red` runs the new tests against `base`'s
 code.
 
-THE GREEN GATE runs after the implementer and again after every fix round. The red files,
-every pytest config file and the `leakguard` plugin must be unchanged since `red`, no
-untracked config file may exist, and every red node must pass.
+THE GREEN GATE runs after the implementer and again after every fix round. The working tree
+must match HEAD, because pytest runs the tree while the PR ships HEAD: an uncommitted edit to a
+red test or to the code would pass a gate the pushed head fails (#3821). The red files, every
+pytest config file and the `leakguard` plugin must be unchanged since `red`, no untracked
+config file may exist, and every red node must pass.
 
 Both gates run pytest with `-c pyproject.toml`, so the root configuration decides every run.
 Every process here runs as the agent's own user, so a determined agent can still edit the
@@ -257,6 +259,12 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str) -> Gate:
 
 def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
     """Why the implementer's HEAD fails the green gate, or "" when it passes."""
+    dirty = _git(run, worktree, "status", "--porcelain").stdout.strip()
+    if dirty:
+        return (
+            "the tree pytest would run differs from the HEAD the PR ships; commit or "
+            f"discard these changes: {dirty}"
+        )
     touched = _git(
         run, worktree, "diff", "--name-only", red, "HEAD", "--",
         *gate.files, *GREEN_PROTECTED,

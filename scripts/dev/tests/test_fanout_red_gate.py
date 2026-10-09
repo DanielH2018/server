@@ -151,6 +151,17 @@ def test_the_green_gate_passes_a_fix_and_refuses_an_edited_red_test(tmp_path):
     assert git_out(repo, "rev-parse", "HEAD") != red
 
 
+def test_the_green_gate_refuses_an_uncommitted_edit_the_pushed_head_lacks(tmp_path):
+    """pytest runs the tree and the PR ships HEAD, so a vacuous uncommitted test is no pass."""
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
+    gate = red_gate(run, repo, base, red)
+    commit(repo, "not a fix", **{"mod.py": CODE + "\n"})
+    (repo / "tests/test_new.py").write_text("def test_two():\n    assert True\n")
+    assert green_gate(run, repo, red, gate).endswith(
+        "commit or discard these changes: M tests/test_new.py"
+    )
+
+
 def test_an_ignored_root_conftest_is_refused_by_both_gates(tmp_path):
     """`git status` and `git diff` cannot see an ignored file, and `/*` ignores every root path."""
     repo = init_repo(tmp_path / "repo")
