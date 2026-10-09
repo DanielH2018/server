@@ -40,10 +40,10 @@ ALLOWED: dict[str, set[str] | None] = {
     "deploy_changes": {"deploy_cross_role"},
     "deploy_cross_role": set(),
     # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and
-    # `deploy_git` for `held_tag`, the hold-marker format `broad_hold_cleared_by` reads back
-    # (#3138) — an import-free leaf, so no cycle. It must NOT import `deploy_toolbox`, which
+    # `gitops_hold` for `held_tag`, the hold-marker format `broad_hold_cleared_by` reads back
+    # (#3138) — a stdlib leaf, so no cycle. It must NOT import `deploy_toolbox`, which
     # imports IT for the `narrow_deploy_plane` default.
-    "deploy_narrow": {"deploy_config", "deploy_git"},
+    "deploy_narrow": {"deploy_config", "gitops_hold"},
     # The state directory, the marker table and the line parsers. Import-free by construction:
     # a copy of it ships into every other tree that reads the markers (its header says how),
     # so an import here would have to be satisfiable in a monitor-bridge pod.
@@ -51,6 +51,9 @@ ALLOWED: dict[str, set[str] | None] = {
     # The JSON-lines markers (the owed-work ledger and the tick receipt). Reads
     # `gitops_markers` for the `K8sDeferredEntry` tuple and nothing else.
     "gitops_ledger": {"gitops_markers"},
+    # The hold and the rule that clears it (#3658). The deploy UI installs it beside the two
+    # modules above, so it may import nothing else.
+    "gitops_hold": {"gitops_ledger", "gitops_markers"},
     # The k8s release records, read to discharge a `k8s_unapplied` line. Stdlib only, for the
     # reason `gitops_markers` is: `deploy_toolbox` imports it for the `release_commit`
     # default, so an import back would be a cycle.
@@ -104,9 +107,9 @@ ALLOWED: dict[str, set[str] | None] = {
         "gitops_ledger",
         "gitops_markers",
     },
-    # The hold and its planes, as a mixin `DeployerState` inherits. `deploy_git` for the two
-    # pure hold decisions `clear_broad_hold` makes, `deploy_config` for `log`.
-    "deploy_state_hold": {"deploy_config", "deploy_git", "gitops_ledger"},
+    # The hold and its planes, as a mixin `DeployerState` inherits. `gitops_hold` owns them,
+    # `deploy_config` for `log`.
+    "deploy_state_hold": {"deploy_config", "gitops_hold"},
     # The `k8s_deferred` and `k8s_unapplied` families, as a mixin `DeployerState` inherits.
     # It reads and writes through the methods that class defines, so it imports only the
     # parsers — never `deploy_state`, which would be a cycle.

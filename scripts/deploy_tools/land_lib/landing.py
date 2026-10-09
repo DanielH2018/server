@@ -416,7 +416,7 @@ class Landing:
         from the primary when nothing was deployed `--at`), it applied `ansible/deploy.yml`
         (a setup-plane apply deploys no service), and that plane's tags cover `tags`: empty
         means the whole play ran, `narrowed-to-nothing` means no play ran, and a list covers
-        the tags it is a superset of. Those are the semantics `deploy_git.broad_hold_cleared_by`
+        the tags it is a superset of. Those are the semantics `gitops_hold.broad_hold_cleared_by`
         gives the same tags on the deployer's side; land_lib does not import across that
         boundary, so they are restated here.
 

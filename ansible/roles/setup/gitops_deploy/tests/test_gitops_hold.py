@@ -1,0 +1,155 @@
+"""The hold's one owner: which apply clears a plane, and what `Hold` does with the files.
+
+Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_hold.py
+"""
+
+import contextlib
+import pathlib
+
+import pytest
+
+from gitops_hold import Hold, broad_hold_cleared_by, held_tag, hold_plane_marker
+from gitops_ledger import OWED_HOLD_PLANE, owed_line
+from gitops_markers import MARKERS
+
+SHA = "a" * 40
+
+
+# ── which apply clears a broad hold ───────────────────────────────────────────────────────────
+# A hold names one unapplied plane, and every consumer gates on hold_sha, so clearing it after
+# a success in another plane reads as "the pipeline is fine" over a plane nothing applied.
+def test_the_same_playbook_untagged_clears_a_deploy_plane_hold():
+    assert broad_hold_cleared_by("ansible/deploy.yml", "ansible/deploy.yml", [])
+
+
+def test_another_playbook_does_not_clear_it():
+    assert not broad_hold_cleared_by(
+        "ansible/deploy.yml", "ansible/initial_setup.yml", ["gitops_deploy"]
+    )
+
+
+def test_an_untagged_run_covers_any_tag_set_held_against_it():
+    assert broad_hold_cleared_by(
+        "ansible/initial_setup.yml k3s", "ansible/initial_setup.yml", []
+    )
+
+
+def test_a_superset_of_tags_clears_it():
+    assert broad_hold_cleared_by(
+        "ansible/initial_setup.yml k3s", "ansible/initial_setup.yml", ["k3s", "dns"]
+    )
+
+
+def test_a_subset_of_tags_does_not():
+    assert not broad_hold_cleared_by(
+        "ansible/initial_setup.yml k3s,dns", "ansible/initial_setup.yml", ["k3s"]
+    )
+
+
+# A narrowed setup apply holds `<role>:<block>` (#3138): the block or its whole role covers it.
+NARROWED_HOLD = "ansible/initial_setup.yml gitops_deploy:gitops-config"
+
+
+def test_the_block_it_ran_clears_a_narrowed_hold():
+    assert broad_hold_cleared_by(
+        NARROWED_HOLD, "ansible/initial_setup.yml", ["gitops-config"]
+    )
+
+
+def test_the_whole_role_clears_a_narrowed_hold():
+    assert broad_hold_cleared_by(
+        NARROWED_HOLD, "ansible/initial_setup.yml", ["gitops_deploy"]
+    )
+
+
+def test_another_block_of_the_same_role_does_not_clear_a_narrowed_hold():
+    assert not broad_hold_cleared_by(
+        NARROWED_HOLD, "ansible/initial_setup.yml", ["gitops-timer"]
+    )
+
+
+def test_another_roles_tag_does_not_clear_a_narrowed_hold():
+    assert not broad_hold_cleared_by(
+        NARROWED_HOLD, "ansible/initial_setup.yml", ["renovate_notify"]
+    )
+
+
+def test_a_role_tag_holds_bare_so_a_hold_from_before_the_qualifier_reads_the_same():
+    assert held_tag("gitops_deploy", "gitops_deploy") == "gitops_deploy"
+    assert held_tag("gitops_deploy", "gitops-config") == "gitops_deploy:gitops-config"
+    assert broad_hold_cleared_by(
+        "ansible/initial_setup.yml gitops_deploy",
+        "ansible/initial_setup.yml",
+        ["gitops_deploy"],
+    )
+
+
+def test_a_tagged_run_does_not_clear_an_untagged_hold():
+    assert not broad_hold_cleared_by(
+        "ansible/initial_setup.yml", "ansible/initial_setup.yml", ["k3s"]
+    )
+
+
+def test_no_hold_is_nothing_to_keep():
+    assert broad_hold_cleared_by("", "ansible/deploy.yml", [])
+
+
+def test_the_marker_format_round_trips():
+    marker = hold_plane_marker("ansible/initial_setup.yml", ["k3s", "dns"])
+    assert marker == "ansible/initial_setup.yml k3s,dns"
+    assert broad_hold_cleared_by(marker, "ansible/initial_setup.yml", ["k3s", "dns"])
+    assert hold_plane_marker("ansible/deploy.yml", []) == "ansible/deploy.yml"
+
+
+# ── Hold: the two files behind one object ─────────────────────────────────────────────────
+
+
+@pytest.fixture
+def hold(tmp_path: pathlib.Path) -> Hold:
+    return Hold(tmp_path)
+
+
+def _hold_sha(hold: Hold) -> pathlib.Path:
+    return hold.state_dir / MARKERS["hold"]
+
+
+def test_cover_keeps_hold_sha_while_another_plane_is_unapplied(hold: Hold):
+    hold.record(SHA, "ansible/deploy.yml", ["sonarr"])
+    hold.record(SHA, "ansible/initial_setup.yml", ["k3s"])
+
+    assert hold.cover("ansible/deploy.yml", ["sonarr"]) == [
+        "ansible/initial_setup.yml k3s"
+    ]
+    assert hold.current() == SHA
+    assert hold.cover("ansible/initial_setup.yml", ["k3s"]) == []
+    assert hold.current() is None
+
+
+def test_cover_services_with_no_service_covers_no_plane(hold: Hold):
+    """`cover` reads an empty tag list as the whole playbook; a deploy of nothing is not that."""
+    hold.record(SHA, "ansible/deploy.yml", ["sonarr"])
+
+    assert hold.cover_services(set()) == ["ansible/deploy.yml sonarr"]
+    assert hold.current() == SHA
+
+
+def test_clear_with_no_plane_held_takes_no_lock(hold: Hold):
+    _hold_sha(hold).write_text(SHA)
+
+    def refuse() -> contextlib.AbstractContextManager[None]:
+        raise AssertionError("the lock was taken with no plane to drop")
+
+    assert hold.clear(SHA, lock=refuse) is None
+    assert not _hold_sha(hold).exists()
+
+
+def test_clear_drops_a_torn_plane_line_too(hold: Hold):
+    """A torn `hold_plane` line still names a plane; leaving it would hold over a clear SHA."""
+    _hold_sha(hold).write_text(SHA)
+    whole = owed_line(OWED_HOLD_PLANE, "ansible/deploy.yml", SHA, 1)
+    torn = '{"class": "hold_plane", "subject": "ansible/initial_setup.yml k3s"}'
+    (hold.state_dir / MARKERS["owed"]).write_text(f"{whole}\n{torn}")
+
+    assert hold.clear(SHA) is None
+    assert hold.held_subjects() == []
+    assert hold.current() is None

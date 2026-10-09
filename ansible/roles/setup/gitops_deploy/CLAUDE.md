@@ -89,7 +89,8 @@ Each arm is a rule and the function that holds it. The record page has the incid
 ## Which apply clears a hold
 
 **`hold_sha` clears only once every plane `hold_plane` lists is applied**, each entry dropped by
-an apply covering it (`clear_broad_hold` / `clear_service_hold`). `docs/gitops-pipeline.md`'s
+an apply covering it (`clear_broad_hold` / `clear_service_hold`). `files/gitops_hold.py`'s `Hold`
+owns that rule for every writer, the deploy UI's Clear included (#3658). `docs/gitops-pipeline.md`'s
 *Which apply clears a hold* has the coverage rule for each shape — including a narrowed setup
 apply's `<role>:<block>` form (#3138) — the two manual clears, and the incident that made one of
 them look sufficient when it was not.

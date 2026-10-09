@@ -1435,11 +1435,13 @@ an unreadable state directory must not read as "no hold," or a held host reports
 ### Which apply clears a hold
 
 **`hold_sha` clears only when the plane the hold names is applied**
-(`DeployerState.clear_broad_hold` / `DeployerState.clear_service_hold` in `deploy_state_hold.py`,
-deciding through `deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run applies the
+(`Hold.cover` / `Hold.cover_services` in `gitops_hold.py`, which `DeployerState.clear_broad_hold`
+and `DeployerState.clear_service_hold` call, deciding through `gitops_hold.broad_hold_cleared_by`).
+`gitops_hold.Hold` is the rule's one owner (#3658): the deploy UI's Clear calls `Hold.clear`
+rather than restating which files a clear removes. Coverage, not equality: an untagged run applies the
 whole playbook and covers any tag set held against it, a tagged run covers a held tag set it is
 a superset of, and a tagged run covers an untagged hold not at all. A narrowed setup apply holds
-each block tag it ran as `<role>:<block>` (`deploy_git.held_tag`, #3138), for example
+each block tag it ran as `<role>:<block>` (`gitops_hold.held_tag`, #3138), for example
 `ansible/initial_setup.yml gitops_deploy:gitops-config`. That block's tag or the role's own tag
 covers it, so the whole-role fallback clears it, while an apply narrowed to a different block
 of the same role does not. The Discord alert quotes the tags the apply ran, not the held form,
@@ -1908,7 +1910,7 @@ is decided by what it touches.
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, when an alert is sent, and the alert queue's own I/O |
 | the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS (#2600) |
-| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_state_hold`, `deploy_failtext` | the marker table, its parsers and line rewrites, the config file, the state directory, the two k8s marker families and the hold, each a mixin class, and the text a failed run's alert quotes |
+| transport leaves | `gitops_markers`, `gitops_hold`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_state_hold`, `deploy_failtext` | the marker table, its parsers and line rewrites, the hold's owner and its clear rule, the config file, the state directory, the two k8s marker families and the hold, each a mixin class, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s` | `assess` and `plan_tick`; one `handle_*` per terminal branch |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` and `entrypoint()` |

@@ -78,6 +78,9 @@ lock's path in as `DEPLOY_UI_TREE_LOCK`, rendered from `server_git_tree_lock`, a
 Each write spawns the command detached, logs to `~/.local/state/deploy-ui/`, and emits one
 logfmt line via `logger -t deploy-ui`. Land and deploy refuse under `hold_sha`; the hold
 clears only as `hold_sha` plus its `owed` ledger `hold_plane` lines, against a typed SHA.
+The deployer's `gitops_hold.Hold.clear`, installed beside `gitops_ledger`, owns that rule.
+The daemon passes it the git-tree lock, which it takes only when a `hold_plane` line exists
+(#3658).
 
 The `hold_plane` class holds one ledger line per failed apply, and Clear drops all of them whatever is still
 unapplied. The state panel lists the entries one per line, the confirm prompt names them, and

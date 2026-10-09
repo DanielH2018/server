@@ -20,7 +20,7 @@ import time
 from typing import Callable, NamedTuple
 
 from deploy_config import log
-from deploy_git import held_tag
+from gitops_hold import held_tag
 
 # What the tick's receipt records as a plane's tags when a deploy-plane range moves no
 # rendered output at all — a comment-only inventory edit, a variable nothing reads, a macro
@@ -72,7 +72,7 @@ class BroadPlan(NamedTuple):
         apply: False when there is nothing to run, and the ff-merge is the whole apply.
         hold_tags: what a FAILED apply holds, when it differs from what it ran. None
             means the two are the same, which is every plan but the narrowed setup plane.
-            That plane holds each block tag qualified by its role (`deploy_git.held_tag`).
+            That plane holds each block tag qualified by its role (`gitops_hold.held_tag`).
     """
 
     playbook: str

@@ -27,9 +27,6 @@ MARKERS = tuple(
         "behind",
     )
 )
-# Between the held planes a message prints on one line (#2381). A literal, because the daemon runs under `uv run --no-project` outside the repo venv and
-# cannot import `deploy_git.HOLD_PLANE_SEP`, which pytest asserts this matches.
-HOLD_PLANE_SEP = "; "
 
 # `deploy_run.py`: the `deploy.sh` shim execs `uv run … deploy_run.py`, and that `uv` process
 # stays the family root while the locked half runs under it (#2412), so no process says

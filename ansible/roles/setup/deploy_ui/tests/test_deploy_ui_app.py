@@ -359,7 +359,7 @@ def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
     status, text = app.post(
         "/api/hold/clear", HDRS, json.dumps({"expected_sha": "deadbeef"})
     )
-    assert status == 200 and (state_dir / "owed.jsonl").read_text() == ""
+    assert status == 200 and not (state_dir / "owed.jsonl").exists()
     assert not (state_dir / "hold_sha").exists()
     assert "k3s" in text and "deploy.yml sonarr" in text
 
