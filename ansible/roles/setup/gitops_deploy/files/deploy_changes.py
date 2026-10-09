@@ -15,16 +15,10 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
+# Every reader looks a table up as `deploy_cross_role.<TABLE>` at call time, so a tick or a
+# landing that swaps the tables with `deploy_cross_role.use_tables` reaches it (#3512). A
+# `from deploy_cross_role import <TABLE>` binding keeps the old table (#4077).
 import deploy_cross_role
-
-# Re-exported: `narrow_setup` and the cross-role scan read the tables through this module.
-# This module's own readers go through `deploy_cross_role.<TABLE>` instead, so a tick that
-# swaps the tables with `deploy_cross_role.use_tables` reaches them (#3512).
-from deploy_cross_role import (  # noqa: F401
-    K8S_ROLES_IMPORTING_SETUP_FILES,
-    SETUP_FILES_ROUTED_TO_OWNER,
-    SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
-)
 
 from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's readers)
     INITIAL_SETUP,

@@ -35,7 +35,9 @@ class FilterModule:
 def calls_plugin(tmp_path, monkeypatch) -> Tree:
     """The demo role, whose `demo_beta_list` calls `demo_double` and feeds `beta.conf.j2`."""
     monkeypatch.setitem(
-        narrow_setup.SETUP_ROLES_CALLING_FILTER_PLUGINS, PLUGIN, frozenset({"demo"})
+        narrow_setup.deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS,
+        PLUGIN,
+        frozenset({"demo"}),
     )
     tree = build(tmp_path)
     tree.write(PLUGIN, PLUGIN_TEXT.format(factor=2))
@@ -104,5 +106,7 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
 def test_the_real_plugin_callers_narrow_below_their_role_tag(role, plugin, tags):
     index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
     path = f"ansible/filter_plugins/{plugin}"
-    assert role in narrow_setup.SETUP_ROLES_CALLING_FILTER_PLUGINS[path]
+    assert (
+        role in narrow_setup.deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS[path]
+    )
     assert narrow_setup.plugin_tags(path, index, "HEAD", "HEAD", str(REPO)) == tags

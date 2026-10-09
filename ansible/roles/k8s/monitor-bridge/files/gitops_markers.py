@@ -7,7 +7,7 @@
 ONE SOURCE, SHIPPED FROM HERE. Every tree that reads the markers under
 `/var/lib/gitops-deploy` gets this file. The deployer runs from `/opt/gitops-deploy`, and the
 deploy-ui and renovate-agent roles install this same file into their own `/opt` directories by
-path, which `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes so a change here
+path, which `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes so a change here
 re-applies all three (#3306). Code that runs from the checkout (`scripts/lib/deployer_park.py`,
 `scripts/deploy_tools/gitops_state.py`) imports it through a `sys.path` insert of this
 directory. Until issue #2063 each reader restated the directory and the basenames it read, and

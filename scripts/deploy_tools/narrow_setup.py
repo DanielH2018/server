@@ -85,8 +85,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_changes import SETUP_FILES_SHIPPED_BY_OTHER_ROLES
-from deploy_cross_role import SETUP_ROLES_CALLING_FILTER_PLUGINS
+import deploy_cross_role
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 from narrow_setup_index import SETUP_TREE, RoleIndex, foreign_tags
 from narrow_setup_playbook import playbook_applies_role
@@ -232,15 +231,16 @@ def role_tags(
     """
     prefix = f"{SETUP_TREE}/{role}/"
     # Another role's file this role ships by path is this role's change too (#3306), so the
-    # diff reads those paths beside the role's own prefix.
+    # diff reads those paths beside the role's own prefix. Both tables are looked up at call
+    # time, so a landing that adopted the merge commit's with `use_tables` reads it (#4077).
     shipped = sorted(
         path
-        for path, consumers in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
+        for path, consumers in deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
         if role in consumers
     )
     plugins = {
         path
-        for path, callers in SETUP_ROLES_CALLING_FILTER_PLUGINS.items()
+        for path, callers in deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS.items()
         if role in callers
     }
     r = git(
