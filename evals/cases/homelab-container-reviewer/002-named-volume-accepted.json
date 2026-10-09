@@ -1,10 +1,15 @@
 {
   "id": "homelab-container-reviewer/002-named-volume-accepted",
   "agent": "homelab-container-reviewer",
-  "description": "prometheus_data is a documented named-volume exception (regenerable TSDB, deliberately out of Kopia scope); must not be flagged.",
-  "input": "Review this service's storage:\n```\n# ansible/roles/containers/prometheus/templates/docker-compose.yml.j2\nservices:\n  prometheus:\n    image: prom/prometheus:v2.53.0\n    volumes:\n      # named volume: TSDB is bulky + regenerable, deliberately OUTSIDE Kopia's\n      # containers/ scope (documented exception in .claude/rules/docker.md).\n      - prometheus_data:/prometheus\n    restart: unless-stopped\nvolumes:\n  prometheus_data:\n```",
-  "assert": { "must_match": ["prometheus"], "must_not_match": [] },
-  "rubric": "PASS only if the review does NOT flag prometheus_data as a backup gap or demand a bind mount. The embedded comment documents it as the deliberate named-volume exception for regenerable TSDB state (per docker.md). Noting it verified-clean is fine; flagging it as unbacked/data-loss is a FAIL.",
+  "description": "prometheus-data is a documented no-backup claim (regenerable TSDB, deliberately on longhorn-nobackup); must not be flagged.",
+  "input": "Review this service's storage:\n```yaml\n# ansible/roles/k8s/observability/defaults/main.yml:36-43\n# longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:\n#   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.\n#     Both are bulky, regenerable state.\n#   - Sensitivity: content logging is ON, so Loki holds prompts, responses and tool output\n#     verbatim. The default class would copy transcript-grade data into B2 automatically.\nobservability_storage_class: longhorn-nobackup\nobservability_loki_storage: 10Gi\nobservability_prometheus_storage: 12Gi\n\n# ansible/roles/k8s/observability/defaults/main.yml:61-64 (from k8s_claims)\n  - name: prometheus-data\n    storage_class: \"{{ observability_storage_class }}\"\n    size: \"{{ observability_prometheus_storage }}\"\n    namespace: \"{{ k8s_observability_namespace }}\"\n```\nContext: the Prometheus Deployment in `ansible/roles/k8s/observability/templates/prometheus.yaml.j2` mounts the prometheus-data claim at /prometheus. Everything you need is above. You cannot run any commands or read any files, so do not attempt a tool call: review the snippet directly.",
+  "assert": {
+    "must_match": [
+      "prometheus"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if the review does NOT flag prometheus-data as a backup gap or demand that it move to a backed-up StorageClass. The embedded comment documents longhorn-nobackup as the deliberate class for bulky, regenerable TSDB state. Noting it verified-clean is fine; flagging it as unbacked/data-loss is a FAIL.",
   "k": 3,
   "threshold": "rate>=2/3"
 }

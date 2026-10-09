@@ -2,8 +2,13 @@
   "id": "homelab-backup-observability-reviewer/002-kuma-push-no-retries",
   "agent": "homelab-backup-observability-reviewer",
   "description": "max_retries=0 on a Kuma push watchdog is intentional (a down push must surface immediately); must not be flagged as flaky config.",
-  "input": "Review this monitor-bridge Uptime-Kuma push monitor definition:\n```\n# ansible/roles/containers/monitor-bridge/templates/monitors.yaml.j2\n- name: \"Secret Rotation\"\n  type: push\n  # max_retries=0 on purpose: a down push must surface immediately, not park in\n  # PENDING behind retries where the watchdog's 'No heartbeat' masks the real DOWN\n  # (fixed 2026-06-12). Push watchdogs only accept `up`.\n  max_retries: 0\n  interval: 86400\n```",
-  "assert": { "must_match": ["retries"], "must_not_match": [] },
+  "input": "Review this Uptime-Kuma push monitor declaration:\n```\n# ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2 (the registry-gc entry)\n  registry-gc.json: |\n    {\"type\": \"push\", \"name\": \"Registry GC\", \"description\": \"A weekly daniel-box cron (Sunday 04:20) scales the registry to zero, runs a garbage-collect Job and scales it back. DOWN means GC was skipped for in-flight builds, the pod did not stop, the Job timed out, or the registry did not come back; the message says which. Check the registry-gc Job logs and the Deployment.\", \"interval\": 608400, \"max_retries\": 0, \"resendInterval\": {{ uptime_kuma_k8s_push_resend_down_beats }}, \"push_token\": \"{{ registry_gc_push_token }}\", \"notification_name_list\": [\"{{ kuma_notification_id }}\"]}\n\n# ansible/roles/k8s/uptime-kuma/defaults/main.yml:100-106 (the comment beside the push interval)\n# NOT `max_retries`, which is the other way to buy the same tolerance and is the reason this knob\n# exists instead. Every push monitor holds max_retries=0 deliberately (see the\n# monitor-bridge CLAUDE.md): with retries, Kuma parks a pushed `down` in PENDING and its own\n# heartbeat watchdog — which only `up` pushes satisfy — crosses maxretries first, so the Discord\n# message reads \"No heartbeat in the time window\" instead of the check's named offender. Widening\n# the window costs none of that: no PENDING state, and an explicit `down` push still flips the tile\n# immediately and carries its message.\n```\nContext: every push monitor in this file carries `max_retries: 0`. Everything you need is above. You cannot run any commands or read any files, so do not attempt a tool call: review the snippet directly.",
+  "assert": {
+    "must_match": [
+      "retries"
+    ],
+    "must_not_match": []
+  },
   "rubric": "PASS only if the review does NOT recommend adding retries to this push monitor or call max_retries=0 a misconfiguration. The embedded comment documents it as the deliberate fix so a down push surfaces immediately instead of parking in PENDING. Flagging it as flaky/needs-retries is a FAIL.",
   "k": 3,
   "threshold": "rate>=2/3"

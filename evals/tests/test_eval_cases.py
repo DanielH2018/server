@@ -7,9 +7,20 @@ eval itself is run manually — see evals/README.md.
 
 import json
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
+import yaml
+
+from lib.repo_paths import REPO
+
 CASES_DIR = Path(__file__).parent.parent / "cases"
+PI_HOST_VARS = REPO / "ansible/inventory/host_vars/daniel-pi.yml"
+# A Compose role path, cited bare or under `ansible/`. The role-name class excludes `*`, so the
+# `roles/containers/**` glob a Renovate ruling quotes is not read as a role.
+_CONTAINER_ROLE_RE = re.compile(
+    r"(?<![\w-])(?:ansible/)?roles/containers/([a-z0-9][a-z0-9_-]*)"
+)
 REQUIRED = ("id", "agent", "input", "assert", "rubric", "k", "threshold")
 _THRESHOLD_RE = re.compile(r"^(all|rate>=\d+/\d+)$")
 
@@ -60,6 +71,37 @@ def validate_case(obj: dict) -> list[str]:
 
 def _all_case_files() -> list[Path]:
     return sorted(CASES_DIR.rglob("*.json"))
+
+
+def _strings(value: object) -> Iterator[str]:
+    """Every string in a decoded case, at any depth, so a path in a rubric counts too."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
+
+
+def cited_container_roles(obj: dict) -> set[str]:
+    return {m for text in _strings(obj) for m in _CONTAINER_ROLE_RE.findall(text)}
+
+
+def live_pi_roles() -> set[str]:
+    """The Compose roles a case may cite: daniel-pi's containers_list, plus the shared `common`."""
+    entries = yaml.safe_load(PI_HOST_VARS.read_text())["containers_list"]
+    return {entry["name"] for entry in entries} | {"common"}
+
+
+def retired_container_roles(obj: dict) -> set[str]:
+    """README rule 1: a cited `roles/containers/<x>` must be a live Pi role.
+
+    A fixture for a service that does not exist yet belongs under `roles/k8s/`, marked
+    `(a new role, not yet merged)`, because no new service lands on Docker.
+    """
+    return cited_container_roles(obj) - live_pi_roles()
 
 
 def test_validate_case_accepts_a_good_case():
@@ -154,3 +196,41 @@ def test_all_case_files_valid():
         obj = json.loads(f.read_text())
         problems = validate_case(obj)
         assert not problems, f"{f}: {problems}"
+
+
+def test_retired_container_role_is_flagged():
+    case = {
+        "input": "# ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
+        "rubric": "see $HOME/server/ansible/roles/containers/ledger/tasks/main.yml",
+    }
+    assert retired_container_roles(case) == {"dozzle", "ledger"}
+
+
+def test_live_pi_role_and_renovate_glob_are_not_flagged():
+    case = {
+        "input": "ansible/roles/containers/wg-easy/tasks/main.yml",
+        "rubric": "Renovate must not track `roles/containers/**`.",
+    }
+    assert retired_container_roles(case) == set()
+
+
+def test_no_case_cites_a_retired_container_role():
+    cited: dict[Path, set[str]] = {
+        f: cited_container_roles(json.loads(f.read_text())) for f in _all_case_files()
+    }
+    # A scan that matches nothing would pass vacuously; skeptic/001 quotes the live wg-easy role.
+    skeptic = CASES_DIR / "skeptic/001-refuted-with-evidence.json"
+    assert "wg-easy" in cited[skeptic], (
+        "the role-path scan no longer finds wg-easy in skeptic/001"
+    )
+    live = live_pi_roles()
+    stale = {
+        str(f.relative_to(CASES_DIR)): sorted(roles - live)
+        for f, roles in cited.items()
+        if roles - live
+    }
+    assert not stale, (
+        f"cases cite roles/containers/ roles that are not live on daniel-pi ({sorted(live)}): {stale}. "
+        "Rebuild the case from a live file, or move a new-service fixture under roles/k8s/ "
+        "marked '(a new role, not yet merged)' (evals/README.md, rule 1)."
+    )
