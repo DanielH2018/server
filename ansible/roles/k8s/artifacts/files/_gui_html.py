@@ -159,7 +159,7 @@ async function load() {
   fill("category", "All categories", DATA.categories);
   fill("status", "Any status", DATA.statuses);
   $("foot").textContent = "Indexed " + fmtDate(DATA.generated) +
-    " - artifacts are pruned 7 days after their last update.";
+    " - artifacts are pruned 30 days after their last update.";
   render();
 }
 ["q", "host", "category", "status", "sort", "dupes"].forEach(

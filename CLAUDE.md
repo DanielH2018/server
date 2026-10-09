@@ -210,6 +210,11 @@ The rules for promoting a review learning into memory live in the `memory-consol
   (`.claude/skills/homelab-review/SKILL.md`, step 3), so the marker is what carries the decision to
   the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
   evidence at a cited `file:line` and name the marker you are contradicting.
+- **A decision recorded in a Claude artifact moves into `docs/` in the PR that acts on it.**
+  `prune-artifacts.sh` deletes an artifact 30 days after its last update, and artifacts are in
+  neither git nor the break-glass bundle. When an artifact holds a plan or a decision that
+  outlives the session, write its substance into `docs/` or `docs/adr/` and keep the artifact as
+  a rendering. `docs/claude-agent-user.md` is the worked example (#3657).
 - **A finding you will not fix this session is filed, not remembered.** Run `findings.py open`
   before the session ends (flags: `findings.py <cmd> --help`; the `homelab-review` skill covers
   the review-specific ones) — for a review finding, a remediation the fix-skeptic refused, or an
