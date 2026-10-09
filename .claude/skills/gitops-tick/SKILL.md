@@ -27,9 +27,10 @@ carried a copy of them until 2026-09-30 (#2853).
 
 **An uneventful tick logs nothing.** The deployer prints only on a deferral, an alert or a real
 deploy, so the journal alone renders a healthy run as `-- No entries --`, which reads like the
-unit never ran. The wrapper therefore also prints `last_run`, `hold_sha` and `behind_since`
-from `/var/lib/gitops-deploy`, and `TICK-VERDICT: ticked` is the line that says the tick
-happened at all.
+unit never ran. The wrapper therefore also prints `probe.py gitops-state`: `last_run`, the
+hold with its planes, `behind_since`, `contention_since` and the owed ledger, each with its
+clear command. `TICK-VERDICT: ticked` is the line that says the tick happened at all. To read
+those markers WITHOUT ticking, run `probe.py gitops-state` on its own.
 
 Run it on `daniel-box` — that is where the timer and the unit live.
 

@@ -250,6 +250,21 @@ agrees. Each fact comes from a reader that already exists:
 A source that fails is named in `errors`, and its field stays `null`. One read takes about 3 s
 on daniel-server: one `gh` call, two deploy-ui GETs and one `findings.py` run.
 
+
+### `gitops-state [--json]`
+
+`gitops-state` prints every marker the GitOps deployer keeps, without ticking (#3931). It reads
+`last_run`, `hold_sha` with its `hold_plane` lines, `behind_since`, `diverged_sha`,
+`contention_since`, and the `owed` ledger's `manual_plane`, `k8s_deferred` and `k8s_unapplied`
+lines. Each set marker carries what discharges it and the command that clears it after. The
+hold's command is `gitops_state.py clear-hold <sha>` with the held SHA filled in.
+`hold_plane` lines with no `hold_sha` print as orphaned, with `clear-hold --orphaned`.
+`gitops_tick.sh` prints this same view after every tick.
+
+It reads `/var/lib/gitops-deploy` directly, so it answers only on daniel-box as the deploy
+user. Elsewhere it says there is no state directory. A marker that exists and cannot be read is
+reported as unreadable, never as absent. Exit 1 means the directory or a marker could not be
+read; the exit says nothing about what the markers hold.
 ### `ha …`
 
 Reads live Home Assistant state, authed with the SOPS `claude_ha_token`. `ha automation

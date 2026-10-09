@@ -266,30 +266,21 @@ echo "────────────────────────�
 
 # An uneventful tick logs NOTHING — the deployer prints only on a deferral, an alert or a
 # real deploy — so the journal alone renders a healthy run as "-- No entries --", which
-# reads like the unit never ran. These three markers are the deployer's own state, and
-# they distinguish "ticked, nothing to do" from "did not tick at all".
-state_dir=/var/lib/gitops-deploy
+# reads like the unit never ran. The deployer's own markers distinguish "ticked, nothing to
+# do" from "did not tick at all": `last_run` above all. `probe.py gitops-state` prints every
+# one of them with its clear command (#3931), the same view an operator gets without
+# ticking, so this block cannot word a hold or a clear differently from it. It is a
+# decoration on the run's outcome, so a probe that cannot run says so and changes nothing:
+# the verdict below is graded from systemd alone.
+#
+# `uv run` resolves the project from its caller's working directory, so the call is anchored
+# to this checkout's root, the way land.sh anchors its own.
 echo
 echo "── deployer state ───────────────────────────────────────────────────────────"
-if [[ -r "$state_dir/last_run" ]]; then
-  last_run="$(cut -d. -f1 <"$state_dir/last_run")"
-  echo "last_run:     $(date -u -d "@$last_run" '+%Y-%m-%d %H:%M:%S UTC') ($((  $(date -u +%s) - last_run ))s ago)"
-else
-  echo "last_run:     unreadable — the tick did not get far enough to write it"
-fi
-if [[ -s "$state_dir/hold_sha" ]]; then
-  echo "hold_sha:     $(cat "$state_dir/hold_sha")  <-- a rolled-back SHA is held; see the role CLAUDE.md"
-else
-  echo "hold_sha:     empty (no rollback is being held)"
-fi
-if [[ -s "$state_dir/behind_since" ]]; then
-  echo "behind_since: $(cat "$state_dir/behind_since")  <-- parked behind origin since this SHA/time"
-else
-  echo "behind_since: empty (converged with origin)"
-fi
-if [[ -s "$state_dir/contention_since" ]]; then
-  echo "contention:   $(cat "$state_dir/contention_since")  <-- consecutive ticks deferred on a busy service lock (sha lock first last count)"
-fi
+repo_root="$(dirname "$(readlink -f "$0")")/../.."
+uv run --quiet --project "$repo_root" python "$repo_root/scripts/diagnostics/probe.py" \
+  gitops-state ||
+  echo "(probe.py gitops-state could not read every marker; the run's verdict is below)"
 echo "─────────────────────────────────────────────────────────────────────────────"
 
 state="$(show ActiveState)"

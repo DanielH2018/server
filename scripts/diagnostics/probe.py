@@ -49,6 +49,7 @@ Subcommands:
     ha verify-entities       Assert every entity in external_entities.yml still exists live
     ha-state [--inventory]   Live view of the derived HA state model
     landing [--json]         What would stop a landing now, runs in flight, worktrees + claims
+    gitops-state [--json]    Every deployer marker + owed-ledger line with its clear command
 
 `metric` and `loki-query` print a formatted view by default (one `<labels> = <value>`
 line per series; log lines oldest→newest) so you don't need to pipe into `python3 -c`

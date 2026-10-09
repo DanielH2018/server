@@ -529,7 +529,8 @@ the held SHA, which stops the `skip_hold` short-circuit — but the marker itsel
 comparison) only clears when a later tick completes a *successful service deploy on this
 host*: the clean-deploy branch calls `clear_service_hold()`, and noop/docs-only ticks return
 before reaching it. If everything after the held SHA maps to no service here, diagnose the
-hold, then delete `/var/lib/gitops-deploy/hold_sha` by hand.
+hold, then clear it with `uv run python scripts/deploy_tools/gitops_state.py clear-hold <sha>`
+on daniel-box (#3930).
 
 **A BROAD hold clears only when its own plane is applied** — see *Which apply clears a hold*
 below. `clear_service_hold()` is the service half of that rule: a k8s deploy is
@@ -1486,10 +1487,9 @@ nothing had applied.
 **The way out is manual, and both surfaces name it.** A hand `ansible-playbook` run is not the
 deployer, so it clears nothing. Once every held plane is applied, clear the hold with the
 deploy UI's Clear, described below. The Discord alert and the monitor's own message both name
-it, and the monitor counts the planes still owed. An `rm` of `hold_sha` is no longer the way
-out: it leaves the class's lines in `owed.jsonl`, and the next failure's hold then waits on
-planes nobody owes. A k8s rollback hold records no plane, so the *Health gate + rollback*
-section's `rm` of `hold_sha` still clears that one.
+it, and the monitor counts the planes still owed. An `rm` of `hold_sha` is not the way out: it
+leaves the class's lines in `owed.jsonl`, and the next failure's hold then waits on planes
+nobody owes. A k8s rollback hold records no plane, and `clear-hold` clears it the same way.
 
 **The Clear button in the deploy UI drops every entry at once.**
 `deploy_ui_writes.clear_hold` removes `hold_sha` and the `owed` ledger's `hold_plane` lines
@@ -1500,7 +1500,15 @@ confirm prompt names them, and the reply repeats them
 at all: no marker, no monitor sentence, no banner line. From a shell on daniel-box, the page's
 own request is the same Clear:
 `curl -X POST -H 'X-Deploy-UI: 1' -d '{"expected_sha": "<full hold_sha>"}' http://10.0.0.215:8790/api/hold/clear`.
-No `gitops_state.py` verb repeats it, because #3392 retires `clear-*` verbs rather than adding them.
+
+**`gitops_state.py clear-hold <full hold_sha>` is the same Clear without deploy-ui** (#3930).
+It calls `Hold.clear` under the git-tree lock and prints every plane it dropped. A different
+live hold, or none, refuses with exit 1. It journals `event=clear-hold` under `-t gitops-state`.
+It is its own verb rather than a `clear-owed hold_plane` class. `clear-owed` drops one ledger
+line, and a `hold_plane` line dropped without `hold_sha`, or `hold_sha` without its lines, is
+the orphaning above. `clear-hold --orphaned` removes `hold_plane` lines an earlier hand `rm`
+left with no `hold_sha`, and refuses while a hold is set. `probe.py gitops-state` prints the command with the held SHA filled in,
+and so does `gitops_tick.sh`, which prints that view after every tick.
 
 **The cost, stated: a surviving hold parks the Renovate agent** (`agent_logic.decide` returns
 `run=False` for any non-empty `hold_sha`). That is the intended direction — an unapplied plane

@@ -2,7 +2,7 @@
 
 The guard asserts every `probe_lib` module that defines a `run_*`/`main` entry point is
 covered by some REGISTRY entry's `module=`. It is deliberately checked against the literal
-fourteen names below, not just "REGISTRY matches whatever `package_entry_points` returns
+fifteen names below, not just "REGISTRY matches whatever `package_entry_points` returns
 today" — see CLAUDE.md's "Python & Tests" on non-vacuity.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_registry.py
@@ -26,8 +26,8 @@ from diagnostics.probe_lib import subcommands
 from diagnostics.probe_lib.cli_parser import _build_parser
 from lib.cli_registry import Registry, package_entry_points
 
-# The fourteen probe_lib modules that define a run_*/main entry point (core.py doesn't — it's
-# helpers, not a subcommand backend). Every one of probe.py's 23 subcommands maps to one of
+# The fifteen probe_lib modules that define a run_*/main entry point (core.py doesn't — it's
+# helpers, not a subcommand backend). Every one of probe.py's 24 subcommands maps to one of
 # these (several subcommands share a module, e.g. "monitors"/"kuma-drift" both back onto
 # monitors.py, and "targets"/"pi" both back onto pi_plane.py) or to none (the streaming,
 # plan()-driven subcommands like `loki-labels`/`cert`).
@@ -36,6 +36,7 @@ EXPECTED_MODULES = frozenset(
         "alerts",
         "arr",
         "b2_ledger",
+        "gitops_view",
         "ha",
         "health",
         "landing_blockers",
@@ -51,7 +52,7 @@ EXPECTED_MODULES = frozenset(
 )
 
 
-def test_package_entry_points_matches_the_known_fourteen():
+def test_package_entry_points_matches_the_known_fifteen():
     assert package_entry_points(probe_lib) == sorted(EXPECTED_MODULES)
 
 
@@ -70,7 +71,7 @@ def test_list_flag_prints_every_subcommand_with_a_description(capsys):
     assert probe.main(["--list"]) == 0
     out = capsys.readouterr().out
     lines = out.strip().splitlines()
-    assert len(lines) == len(subcommands.SUBCOMMANDS) == 23
+    assert len(lines) == len(subcommands.SUBCOMMANDS) == 24
     for name, description, _module, _func in subcommands.SUBCOMMANDS:
         assert any(line.startswith(name) and description in line for line in lines), (
             name,

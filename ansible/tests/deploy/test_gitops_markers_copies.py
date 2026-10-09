@@ -53,11 +53,11 @@ _COPY_TASKS = {
     ),
 }
 
-# Literals outside Python that must name the same directory: the tick wrapper reads the
-# markers from a shell, and two manifests hand the directory to a unit and a pod. They cannot
-# import anything, so they are pinned here rather than generated.
+# Literals outside Python that must name the same directory: two manifests hand the directory
+# to a unit and a pod. They cannot import anything, so they are pinned here rather than
+# generated. The tick wrapper read the markers from a shell until #3931; it prints
+# `probe.py gitops-state`, which imports `STATE_DIR`, so it names no directory of its own.
 _DIRECTORY_LITERALS = {
-    "scripts/deploy_tools/gitops_tick.sh": re.compile(r"^state_dir=(\S+)$", re.M),
     "ansible/roles/setup/deploy_ui/templates/deploy-ui.service.j2": re.compile(
         r"^Environment=DEPLOY_UI_STATE=(\S+)$", re.M
     ),
