@@ -164,7 +164,8 @@ and re-running it, not by reasoning:
    `roles/k8s/traefik/templates/middleware.yaml.j2`, which does not exist, for an orphaned
    compression middleware; compression is attached entrypoint-wide in `dynamic.yaml.j2`, so the
    finding was false against any live file. #4020 replaced it with an open, true finding on a
-   live file (the never-rendered `wg-easy/templates/pull-pi-peers.sh.j2`, #3748). The same
+   live file (the Pi's LAN IP held three times, #3719), picked because its fix edits that file
+   rather than deleting it. The same
    change rebuilt eight cases that passed the sweep but cited retired `roles/containers/` roles,
    and one of them, `homelab-review/002`, also carried a settled "Pi images are unpinned"
    decision that the Pi's digest pins had made false. A passing case edited this way is unverified until the next hermetic sweep.

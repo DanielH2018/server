@@ -19,7 +19,7 @@ PI_HOST_VARS = REPO / "ansible/inventory/host_vars/daniel-pi.yml"
 # A Compose role path, cited bare or under `ansible/`. The role-name class excludes `*`, so the
 # `roles/containers/**` glob a Renovate ruling quotes is not read as a role.
 _CONTAINER_ROLE_RE = re.compile(
-    r"(?<![\w/-])(?:ansible/)?roles/containers/([a-z0-9][a-z0-9_-]*)"
+    r"(?<![\w-])(?:ansible/)?roles/containers/([a-z0-9][a-z0-9_-]*)"
 )
 REQUIRED = ("id", "agent", "input", "assert", "rubric", "k", "threshold")
 _THRESHOLD_RE = re.compile(r"^(all|rate>=\d+/\d+)$")
@@ -200,9 +200,10 @@ def test_all_case_files_valid():
 
 def test_retired_container_role_is_flagged():
     case = {
-        "input": "# ansible/roles/containers/dozzle/templates/docker-compose.yml.j2"
+        "input": "# ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
+        "rubric": "see $HOME/server/ansible/roles/containers/ledger/tasks/main.yml",
     }
-    assert retired_container_roles(case) == {"dozzle"}
+    assert retired_container_roles(case) == {"dozzle", "ledger"}
 
 
 def test_live_pi_role_and_renovate_glob_are_not_flagged():
