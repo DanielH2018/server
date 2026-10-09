@@ -206,6 +206,9 @@ http:
   # a log line. It cannot bypass auth: there is no `trusted_networks` auth provider. /16 not a
   # /24: the pod CIDR grows a /24 per node. The Docker-era 172.16.0.0/12 and daniel-server's
   # 10.0.0.161/32 were dropped 2026-08-16, since no live hop comes from either.
+  # The pod CIDR is `k3s_pod_cidr` in ansible/inventory/group_vars/all.yml, written out here
+  # because this file ships verbatim and cannot template it.
+  # test_ha_trusted_proxies_cover_cloudflare.py reads the variable, so the two stay equal.
   trusted_proxies:
     - 10.42.0.0/16
     # Cloudflare, kept equal to `cloudflare_ips` in ansible/inventory/group_vars/all.yml.

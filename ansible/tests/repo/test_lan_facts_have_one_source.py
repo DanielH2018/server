@@ -70,12 +70,6 @@ ALLOWLIST: list[tuple[str, str]] = [
         "placeholder template (`10.0.0.x`), not a real address",
     ),
     (
-        r"^ansible/roles/k8s/netpol-baseline/defaults/main\.yml$",
-        "netpol_baseline_node_cidrs now aliases k3s_cni0_gateways; "
-        "netpol_baseline_obs_node_cidrs is a DELIBERATELY separate list per its own comment "
-        "('carries its OWN node-CIDR list... widening it would re-scope all of them')",
-    ),
-    (
         r"^ansible/roles/k8s/monitor-bridge/files/bridge/config\.py$",
         "shipped runtime file (runs in-pod); no repo-side loader is reachable from there",
     ),

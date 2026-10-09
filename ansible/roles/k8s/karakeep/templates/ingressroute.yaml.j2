@@ -32,6 +32,6 @@
     container_item.hostname | default(container_item.name),
     container_item.port,
     '/api/v1/users/me/stats',
-    extra_client_cidrs=['10.42.0.0/16']
+    extra_client_cidrs=[k3s_pod_cidr]
   )
 }}
