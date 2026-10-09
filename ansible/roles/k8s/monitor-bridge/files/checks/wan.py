@@ -31,6 +31,7 @@ import urllib.request
 
 from bridge.common import HTTP_TIMEOUT
 from bridge.config import Config
+from bridge.sources import Sources
 from bridge.parsing import describe_fetch_failure
 
 
@@ -72,6 +73,6 @@ def wan_verdict(
     return False, "no WAN: %s" % "; ".join(failures)
 
 
-def check_wan_reachable(cfg: Config) -> tuple[bool, str]:
+def check_wan_reachable(cfg: Config, src: Sources) -> tuple[bool, str]:
     """The gate body: can this host reach the public internet at all?"""
     return wan_verdict(cfg.WAN_PROBE_URLS)

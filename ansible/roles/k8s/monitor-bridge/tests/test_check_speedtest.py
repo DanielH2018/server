@@ -10,10 +10,9 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 
-import bridge.config
-import bridge.net
 import checks.host_edge
 import verdicts.host
+from _fake_sources import FakeSources
 
 
 # ── speedtest-tracker's newest result row ────────────────────────────────────────────────
@@ -166,16 +165,14 @@ def test_speedtest_completed_row_without_a_download_figure_pages():
     assert "no download figure" in msg
 
 
-def test_speedtest_disabled_without_url_or_token(monkeypatch, cfg):
+def test_speedtest_disabled_without_url_or_token(cfg):
     cfg = replace(cfg, SPEEDTEST_URL="", SPEEDTEST_TOKEN="")
-    ok, msg = checks.host_edge.check_speedtest(cfg)
+    ok, msg = checks.host_edge.check_speedtest(cfg, FakeSources())
     assert ok
     assert "disabled" in msg
 
 
-def test_speedtest_fetch_failure_rides_the_streak_but_a_bad_row_does_not(
-    monkeypatch, cfg
-):
+def test_speedtest_fetch_failure_rides_the_streak_but_a_bad_row_does_not(cfg):
     # The app runs every 6h and this loop every 5 min, so hysteresis on the VERDICT would
     # re-read one row up to 72 times. Only the fetch gets a streak.
     cfg = replace(
@@ -188,28 +185,26 @@ def test_speedtest_fetch_failure_rides_the_streak_but_a_bad_row_does_not(
     def _boom(*a, **k):
         raise RuntimeError("connection refused")
 
-    monkeypatch.setattr(bridge.net, "_get_json", _boom)
-    assert checks.host_edge.check_speedtest(cfg)[
+    down = FakeSources(get_json=_boom)
+    assert checks.host_edge.check_speedtest(cfg, down)[
         0
     ]  # first failure is held by the streak
-    assert not checks.host_edge.check_speedtest(cfg)[0]  # second pages
+    assert not checks.host_edge.check_speedtest(cfg, down)[0]  # second pages
 
-    monkeypatch.setattr(
-        bridge.net,
-        "_get_json",
-        lambda *a, **k: {
+    slow = FakeSources(
+        get_json=lambda *a, **k: {
             "data": [
                 _st_row(download_bits=13_800_312),
                 _st_row(id=779, download_bits=20_000_000),
             ]
-        },
+        }
     )
-    assert not checks.host_edge.check_speedtest(cfg)[
+    assert not checks.host_edge.check_speedtest(cfg, slow)[
         0
     ]  # two sub-floor rows page on the FIRST cycle — no cycle streak
 
 
-def test_speedtest_requests_the_newest_rows_not_the_oldest(monkeypatch, cfg):
+def test_speedtest_requests_the_newest_rows_not_the_oldest(cfg):
     # The API defaults to ASCENDING order, so an unsorted request returns the oldest row in
     # the 30-day window — permanently stale, and stale in a way that looks like a real verdict.
     # The page size is asserted here rather than in a test of its own: the floor arm's history
@@ -227,8 +222,7 @@ def test_speedtest_requests_the_newest_rows_not_the_oldest(monkeypatch, cfg):
         seen["headers"] = headers
         return {"data": [_st_row()]}
 
-    monkeypatch.setattr(bridge.net, "_get_json", _capture)
-    checks.host_edge.check_speedtest(cfg)
+    checks.host_edge.check_speedtest(cfg, FakeSources(get_json=_capture))
     assert "sort=-created_at" in seen["url"]
     assert "page%5Bsize%5D=3" in seen["url"]
     assert seen["headers"]["Authorization"] == "Bearer t"

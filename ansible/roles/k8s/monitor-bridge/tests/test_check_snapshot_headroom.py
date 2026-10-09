@@ -12,12 +12,12 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-import bridge.net
 import bridge.streaks
 import checks.storage
 import gates
 import registry
 from verdicts.storage import parse_snapshot_caps, snapshot_used_by_pvc
+from _fake_sources import FakeSources
 
 ROLES = Path(__file__).resolve().parents[3]
 ENV_SECRET = Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
@@ -36,103 +36,93 @@ def _volume(volume, pvc):
     return ({"volume": volume, "pvc": pvc, "pvc_namespace": "homelab"}, 8589934592.0)
 
 
-def _arm(
-    cfg, monkeypatch, snapshots, volumes, caps="jellyfin-config=%d" % JELLYFIN_CAP
-):
+def _arm(cfg, snapshots, volumes, caps="jellyfin-config=%d" % JELLYFIN_CAP):
     """State the two Prometheus vectors the check joins, keyed by which metric is asked for."""
 
-    def _vector(_cfg, promql, *a, **k):
+    def _vector(promql, *a, **k):
         return snapshots if "snapshot_actual_size" in promql else volumes
 
-    monkeypatch.setattr(bridge.net, "prom_vector", _vector)
-    return replace(cfg, SNAPSHOT_CAPS=caps)
+    return replace(cfg, SNAPSHOT_CAPS=caps), FakeSources(prom_vector=_vector)
 
 
-def test_a_capped_volume_well_under_its_cap_is_clean(monkeypatch, cfg):
-    cfg = _arm(
+def test_a_capped_volume_well_under_its_cap_is_clean(cfg):
+    cfg, src = _arm(
         cfg,
-        monkeypatch,
         [_snapshot("pvc-jf", "autodeploy-jellyfin-1", JELLYFIN_USED)],
         [_volume("pvc-jf", "jellyfin-config")],
     )
-    ok, msg = checks.storage.check_snapshot_headroom(cfg)
+    ok, msg = checks.storage.check_snapshot_headroom(cfg, src)
     assert ok
     assert "1 capped volume(s) under 90% of cap" in msg
     assert "jellyfin-config at 12.1%" in msg
 
 
-def test_a_capped_volume_past_the_warn_ratio_is_flagged(monkeypatch, cfg):
-    cfg = _arm(
+def test_a_capped_volume_past_the_warn_ratio_is_flagged(cfg):
+    cfg, src = _arm(
         cfg,
-        monkeypatch,
         [_snapshot("pvc-jf", "weekly-b-1", int(JELLYFIN_CAP * 0.91))],
         [_volume("pvc-jf", "jellyfin-config")],
     )
     cfg = replace(cfg, SNAPSHOT_CAP_CONSECUTIVE=1)
-    ok, msg = checks.storage.check_snapshot_headroom(cfg)
+    ok, msg = checks.storage.check_snapshot_headroom(cfg, src)
     assert not ok
     assert "jellyfin-config 91.0% of cap" in msg
     assert "refuses new snapshots at the cap" in msg
 
 
-def test_a_breach_holds_up_until_the_streak_then_pages(monkeypatch, cfg):
+def test_a_breach_holds_up_until_the_streak_then_pages(cfg):
     """A prune leaves markRemoved snapshots counted for a cycle, so one breach must not page."""
-    cfg = _arm(
+    cfg, src = _arm(
         cfg,
-        monkeypatch,
         [_snapshot("pvc-jf", "weekly-b-1", JELLYFIN_CAP)],
         [_volume("pvc-jf", "jellyfin-config")],
     )
-    held_ok, held_msg = checks.storage.check_snapshot_headroom(cfg)
+    held_ok, held_msg = checks.storage.check_snapshot_headroom(cfg, src)
     assert held_ok
     assert "down streak 1/3 (prune lag grace)" in held_msg
-    assert checks.storage.check_snapshot_headroom(cfg)[0]
-    assert not checks.storage.check_snapshot_headroom(cfg)[0]
+    assert checks.storage.check_snapshot_headroom(cfg, src)[0]
+    assert not checks.storage.check_snapshot_headroom(cfg, src)[0]
 
 
-def test_recovery_resets_the_streak(monkeypatch, cfg):
-    cfg = _arm(
+def test_recovery_resets_the_streak(cfg):
+    cfg, src = _arm(
         cfg,
-        monkeypatch,
         [_snapshot("pvc-jf", "weekly-b-1", JELLYFIN_CAP)],
         [_volume("pvc-jf", "jellyfin-config")],
     )
-    checks.storage.check_snapshot_headroom(cfg)
+    checks.storage.check_snapshot_headroom(cfg, src)
     assert bridge.streaks._down_streaks["snapshot_headroom"] == 1
-    cfg = _arm(
+    cfg, src = _arm(
         cfg,
-        monkeypatch,
         [_snapshot("pvc-jf", "weekly-b-1", JELLYFIN_USED)],
         [_volume("pvc-jf", "jellyfin-config")],
     )
-    assert checks.storage.check_snapshot_headroom(cfg)[0]
+    assert checks.storage.check_snapshot_headroom(cfg, src)[0]
     assert bridge.streaks._down_streaks["snapshot_headroom"] == 0
 
 
-def test_a_declared_cap_with_no_snapshot_series_is_flagged_not_green(monkeypatch, cfg):
+def test_a_declared_cap_with_no_snapshot_series_is_flagged_not_green(cfg):
     """Fail closed: the capped volume is snapshotted on every deploy, so empty means blind."""
-    cfg = _arm(cfg, monkeypatch, [], [])
+    cfg, src = _arm(cfg, [], [])
     cfg = replace(cfg, SNAPSHOT_CAP_CONSECUTIVE=1)
-    ok, msg = checks.storage.check_snapshot_headroom(cfg)
+    ok, msg = checks.storage.check_snapshot_headroom(cfg, src)
     assert not ok
     assert "no snapshot series for capped volume(s) jellyfin-config" in msg
 
 
-def test_no_declared_cap_is_clean_and_queries_nothing(monkeypatch, cfg):
+def test_no_declared_cap_is_clean_and_queries_nothing(cfg):
     """The inert state until a cap is declared — and it must not report a fault."""
 
-    def _explode(*a, **k):
-        raise AssertionError("queried Prometheus with no cap declared")
-
-    monkeypatch.setattr(bridge.net, "prom_vector", _explode)
-    ok, msg = checks.storage.check_snapshot_headroom(replace(cfg, SNAPSHOT_CAPS=""))
+    ok, msg = checks.storage.check_snapshot_headroom(
+        replace(cfg, SNAPSHOT_CAPS=""), FakeSources()
+    )
     assert ok
     assert "no capped Longhorn volumes declared" in msg
 
 
-def test_an_unparseable_cap_declaration_is_flagged(monkeypatch, cfg):
+def test_an_unparseable_cap_declaration_is_flagged(cfg):
     cfg = replace(cfg, SNAPSHOT_CAPS="jellyfin-config=0", SNAPSHOT_CAP_CONSECUTIVE=1)
-    ok, msg = checks.storage.check_snapshot_headroom(cfg)
+    ok, msg = checks.storage.check_snapshot_headroom(cfg, FakeSources())
     assert not ok
     assert "parsed to no usable cap" in msg
     # `0` is Longhorn's UNCAPPED value and the fleet default, so it is never a cap of zero.

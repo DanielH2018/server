@@ -17,6 +17,7 @@ import bridge.net
 import cli
 from _bridge_env import bridge_env
 from _check_gate_helpers import mk
+from _fake_sources import FakeSources
 from bridge.types import Check
 from gates import Gates
 
@@ -24,12 +25,13 @@ from gates import Gates
 def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
     """Stub the transport and STATE the registry, so main() runs one cycle touching nothing live.
 
-    Returns the `checks=` / `gate_config=` / `env=` keyword arguments to hand `cli.main`, which
-    is how a test says which checks exist without mutating a module. `env` is the rendered
+    Returns the `checks=` / `gate_config=` / `sources=` / `env=` keyword arguments to hand
+    `cli.main`, which is how a test says which checks exist and what they read without mutating
+    a module. `env` is the rendered
     env-secret, the environment the pod's `main()` reads.
 
     Args:
-      monkeypatch: The fixture, for the two transport stubs that are not yet parameters.
+      monkeypatch: The fixture, for the push and heartbeat stubs, which are not parameters.
       pushes: Collects every (token, ok, msg) the cycle would have pushed.
       ran: Collects the name of every check body that ran.
       names: The registry to run — one `Check` per name, each recording into `ran`.
@@ -41,16 +43,17 @@ def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
         bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
     )
     monkeypatch.setattr(bridge.common, "touch_heartbeat", lambda path: None)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
 
     return {
         "env": bridge_env(),
         "checks": [Check(n, "tok_%s" % n, mk(ran, n)) for n in names],
+        # No exporter is down, so the exporter probe suppresses nothing.
+        "sources": FakeSources(prom_vector=lambda q: []),
         "gate_config": Gates(
-            probe_prometheus=probe_prometheus or (lambda _cfg: (True, "prom ok")),
-            probe_loki=lambda _cfg: (True, "loki ok"),
-            probe_wan=lambda _cfg: (True, "wan ok"),
-            probe_b2=lambda _cfg: (True, "b2 ok"),
+            probe_prometheus=probe_prometheus or (lambda _cfg, _src: (True, "prom ok")),
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
+            probe_wan=lambda _cfg, _src: (True, "wan ok"),
+            probe_b2=lambda _cfg, _src: (True, "b2 ok"),
         ),
     }
 
@@ -124,7 +127,16 @@ def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypat
     monkeypatch.setenv("KUMA_PUSH_DISK", "from_os_environ")
     env = bridge_env(KUMA_PUSH_DISK="from_the_argument")
     argv = ["--once", "--check", "disk"]
-    assert cli.main(argv, env=env, checks=None, gate_config=wired["gate_config"]) == 0
+    assert (
+        cli.main(
+            argv,
+            env=env,
+            checks=None,
+            gate_config=wired["gate_config"],
+            sources=wired["sources"],
+        )
+        == 0
+    )
     tokens = [t for t, _ok, _msg in pushes]
     assert "from_the_argument" in tokens, tokens
     assert "from_os_environ" not in tokens, tokens

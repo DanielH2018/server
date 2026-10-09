@@ -6,27 +6,23 @@ speedtest.
 
 `check_mem` also carries the Claude Code cgroup arm (`with_claude_cgroups`, issue #1258).
 
-Slice 5 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge.net.X` and
-the shared streak counter as `bridge.streaks.X`, so the tests' patches on those modules reach
-it; `claude_cgroup_verdict` is from-imported from verdicts.host_cgroups and is therefore patched on
+Slice 5 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
+(`bridge.sources.Sources`) and the shared streak counter as `bridge.streaks.X`, so a test hands
+in a fake `src` and clears the streak dict; `claude_cgroup_verdict` is from-imported from verdicts.host_cgroups and is therefore patched on
 THIS module, where it is bound. `_host_origin_streaks` lives here beside
 `_host_origin_shortfall`, the only code that mutates it — `checks.host_thermal` reads the floor
 qualified, off this module, rather than from-importing it. Rule and enforcement:
 bridge/config.py's header.
 """
 
-from collections.abc import Callable
-
 from bridge.config import Config
+from bridge.sources import Sources
 import bridge.net
 import bridge.streaks
 from verdicts.host_cgroups import claude_cgroup_verdict
 
 
 _host_origin_streaks: dict[str, int] = {}
-
-# The fetch seam's type: what `bridge.net.prom_vector` returns for one PromQL expression.
-type PromVector = Callable[[Config, str], list[tuple[dict, float]]]
 
 
 def _host_origin_shortfall(
@@ -84,7 +80,7 @@ def _host_origin_shortfall(
     )
 
 
-def check_disk(cfg: Config) -> tuple[bool, str]:
+def check_disk(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Checks whether any monitored disk mountpoint is over cfg.DISK_MAX_PCT full.
 
     Computes each mountpoint's used percentage per-origin (host), pairing avail and size
@@ -100,8 +96,7 @@ def check_disk(cfg: Config) -> tuple[bool, str]:
     shortfalls = []
     for mp in cfg.DISK_MOUNTPOINTS:
         sel = bridge.net.host_metric_sel(cfg, 'mountpoint="%s"' % mp)
-        vec = bridge.net.prom_vector(
-            cfg,
+        vec = src.prom_vector(
             "max by (origin) (100 * (1 - node_filesystem_avail_bytes%s"
             " / node_filesystem_size_bytes%s))" % (sel, sel),
         )
@@ -129,20 +124,15 @@ def check_disk(cfg: Config) -> tuple[bool, str]:
     return True, "all mounts under %.0f%%" % cfg.DISK_MAX_PCT
 
 
-def check_cert(cfg: Config, prom_vector: PromVector | None = None) -> tuple[bool, str]:
+def check_cert(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Checks whether any certificate Traefik serves expires within cfg.CERT_MIN_DAYS.
 
     Per-series, not `min(...)`: the aggregation discarded the labels, so a DOWN said a
     certificate was expiring and could not say which (#3101). The series carry `cn`, `sans`
     and `serial` rather than the `origin` the host checks group by, so the message names the
     `cn` — and every breaching one, the way check_disk names every full mountpoint.
-
-    `prom_vector` is the fetch seam, an ARGUMENT rather than a module global a test patches,
-    the same shape check_mem gives it. None resolves `bridge.net.prom_vector` at call time,
-    which is what the pod does.
     """
-    fetch = bridge.net.prom_vector if prom_vector is None else prom_vector
-    vec = fetch(cfg, "(traefik_tls_certs_not_after - time()) / 86400")
+    vec = src.prom_vector("(traefik_tls_certs_not_after - time()) / 86400")
     if not vec:
         return False, "cert metric unavailable"
     breaching = sorted(
@@ -161,18 +151,13 @@ def check_cert(cfg: Config, prom_vector: PromVector | None = None) -> tuple[bool
     return True, "cert valid %.0fd (soonest: %s)" % (soonest, cn)
 
 
-def check_mem(cfg: Config, prom_vector: PromVector | None = None) -> tuple[bool, str]:
+def check_mem(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Checks whether any host's memory usage is over cfg.MEM_MAX_PCT.
 
     Host-level pressure only; per-container OOM kills are check_oom's job. Computed
     per-origin so a two-host estate can't pair one host's avail with another's total.
     Returns (ok, msg).
-
-    `prom_vector` is the fetch seam, an ARGUMENT rather than a module global a test patches —
-    the same shape check_pi_pressure gives `tcp_open`, and for the same reason. None resolves
-    `bridge.net.prom_vector` at call time, which is what the pod does.
     """
-    fetch = bridge.net.prom_vector if prom_vector is None else prom_vector
     # Host memory pressure only. Per-container OOM kills are reported (with the
     # offending container named) by check_oom — single source of truth.
     #
@@ -180,8 +165,7 @@ def check_mem(cfg: Config, prom_vector: PromVector | None = None) -> tuple[bool,
     # so which host it reported was an ordering artifact of Prometheus's response once both
     # estates emitted node_memory_*. The division pairs each host's avail with its own total.
     sel = bridge.net.host_metric_sel(cfg)
-    vec = fetch(
-        cfg,
+    vec = src.prom_vector(
         "100 * (1 - node_memory_MemAvailable_bytes%s / node_memory_MemTotal_bytes%s)"
         % (sel, sel),
     )
@@ -201,18 +185,18 @@ def check_mem(cfg: Config, prom_vector: PromVector | None = None) -> tuple[bool,
     if breaching:
         return with_claude_cgroups(
             cfg,
+            src,
             False,
             "mem over %.0f%%: %s" % (cfg.MEM_MAX_PCT, ", ".join(breaching)),
-            fetch,
         )
     if short is not None:
-        return with_claude_cgroups(cfg, *short, prom_vector=fetch)
+        return with_claude_cgroups(cfg, src, *short)
     worst = max(pct for _, pct in vec)
-    return with_claude_cgroups(cfg, True, "mem %.0f%%" % worst, fetch)
+    return with_claude_cgroups(cfg, src, True, "mem %.0f%%" % worst)
 
 
 def with_claude_cgroups(
-    cfg: Config, ok: bool, msg: str, prom_vector: PromVector | None = None
+    cfg: Config, src: Sources, ok: bool, msg: str
 ) -> tuple[bool, str]:
     """Fold the Claude Code cgroup arm into the host memory verdict, a cgroup fault winning.
 
@@ -236,11 +220,10 @@ def with_claude_cgroups(
     # DECIDED: a down_streak, and it does double duty — see CLAUDE_CGROUP_CONSECUTIVE in
     # bridge/config_host.py for both jobs (burst suppression and the weekly cgroup-recreate
     # counter reset).
-    # DECIDED: the fetch arrives as an ARGUMENT (`prom_vector`, threaded from check_mem) rather
-    # than being reached through `bridge.net`, the same shape check_pi_pressure gives `tcp_open`.
-    # A test hands in a fake that answers each of the two queries separately; patching
-    # `bridge.net.prom_vector` would answer both with one value, which is how a fixture ends up
-    # proving the opposite of what it claims.
+    # DECIDED: the fetch arrives as the `src` argument, threaded from check_mem, rather than
+    # being reached through `bridge.net`. A test hands in a fake that answers each of the two
+    # queries separately; patching `bridge.net.prom_vector` would answer both with one value,
+    # which is how a fixture ends up proving the opposite of what it claims.
     # DECIDED: neither query is a subquery. The distribution behind
     # CLAUDE_CGROUP_STALL_MAX_PCT was derived with a `[6h:1m]` subquery, which is far more
     # expensive than what runs here; measured against the live Prometheus three times each on
@@ -252,14 +235,11 @@ def with_claude_cgroups(
     """
     if not cfg.CLAUDE_CGROUPS:
         return ok, msg
-    fetch = bridge.net.prom_vector if prom_vector is None else prom_vector
-    stalls = fetch(
-        cfg,
+    stalls = src.prom_vector(
         'max by (origin, cgroup) (rate(claude_cgroup_memory_pressure_stalled_usec_total{kind="full"}[%s]) / 10000)'
         % cfg.CLAUDE_CGROUP_STALL_WINDOW,
     )
-    events = fetch(
-        cfg,
+    events = src.prom_vector(
         'sum by (origin, cgroup, event) (increase(claude_cgroup_memory_events_total{event=~"%s"}[%s]))'
         % (cfg.CLAUDE_CGROUP_EVENTS, cfg.CLAUDE_CGROUP_EVENT_WINDOW),
     )

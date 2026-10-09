@@ -1,8 +1,8 @@
 """Notification-path checks for monitor-bridge — Discord webhook delivery and the SMTP backstop.
 
-Slice 7 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge.net.X` and
-the shared streak counter as `bridge.streaks.X`, so the tests' patches on those modules reach
-it; `discord_webhook_ok` is from-imported and patched on THIS module, where it is bound.
+Slice 7 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
+(`bridge.sources.Sources`) and the shared streak counter as `bridge.streaks.X`, so a test hands
+in a fake `src` and clears the streak dict; `discord_webhook_ok` is from-imported and patched on THIS module, where it is bound.
 `_email_probe` lives here beside `email_backstop`, the only code that mutates it. Rule and
 enforcement: bridge/config.py's header.
 """
@@ -14,7 +14,7 @@ import urllib.error
 from typing import TypedDict
 
 from bridge.config import Config
-import bridge.net
+from bridge.sources import Sources
 import bridge.streaks
 from bridge.common import HTTP_TIMEOUT
 from bridge.types import as_object
@@ -123,7 +123,7 @@ def email_backstop(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     return ok, msg
 
 
-def check_discord(cfg: Config) -> tuple[bool, str]:
+def check_discord(cfg: Config, src: Sources) -> tuple[bool, str]:
     """GET-verify EVERY configured Discord notification webhook still delivers, plus the email backstop.
 
     Verifies the Kuma alert webhook, the CrowdSec ban-alert webhook, AND the GitOps/Renovate
@@ -142,7 +142,7 @@ def check_discord(cfg: Config) -> tuple[bool, str]:
     ok, msg, valid = True, "", []
     for label, url in webhooks:
         try:
-            data = bridge.net._get_json(url)
+            data = src.get_json(url)
             name = as_object(data or {}, "discord webhook").get("name")
             w_ok, w_msg = discord_webhook_ok(
                 200, name if isinstance(name, str) else None

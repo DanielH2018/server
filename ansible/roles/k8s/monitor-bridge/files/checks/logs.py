@@ -1,8 +1,8 @@
 """Log-pipeline checks for monitor-bridge — Loki ingestion, shipper drops, Loki reachability.
 
-Slice 3 of the check.py split. Reads config as `cfg.X` and the fetch layer as `bridge.net.X`,
-so the tests' patches on those modules reach it; the verdicts it from-imports are patched on
-THIS module (`monkeypatch.setattr(checks.logs, "log_error_verdict", ...)`), because this is
+Slice 3 of the check.py split. Reads config as `cfg.X` and every query through the `src`
+argument (`bridge.sources.Sources`), so a test hands in a fake; the verdicts it from-imports
+are patched on THIS module (`monkeypatch.setattr(checks.logs, "log_error_verdict", ...)`), because this is
 where they are bound. Rule and enforcement: bridge/config.py's header.
 
 `with_log_errors` lives here rather than beside `check_k8s_workloads`, its only caller,
@@ -14,7 +14,8 @@ from collections.abc import Callable
 
 from bridge.common import host_uptime_s
 from bridge.config import Config
-import bridge.net
+from bridge.sources import Sources
+from bridge.types import as_object
 from bridge.parsing import duration_seconds
 from verdicts.cluster import log_error_verdict
 from verdicts.logs import (
@@ -26,7 +27,7 @@ from verdicts.logs import (
 )
 
 
-def check_loki_ingestion(cfg: Config) -> tuple[bool, str]:
+def check_loki_ingestion(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Checks that all three Loki ingestion arms (file-tail, container stream, Pi) are fresh.
 
     Down if any arm is silent: the cluster file-tail union, the cluster pod streams, and the
@@ -38,13 +39,13 @@ def check_loki_ingestion(cfg: Config) -> tuple[bool, str]:
     # wider window (LOKI_FILETAIL_WINDOW). Arms 1 and 2 also exclude every daniel-pi stream,
     # for the same masking reason (#3739). The selectors' reasoning is at bridge/config_io.py.
     ok_all, msg_all = loki_ingestion_fresh(
-        bridge.net.loki_count(cfg, cfg.LOKI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
+        src.loki_count(cfg.LOKI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
         cfg.LOKI_FILETAIL_WINDOW,
     )
     if not ok_all:
         return False, "file-tail streams silent — " + msg_all
     ok_docker, msg_docker = loki_ingestion_fresh(
-        bridge.net.loki_count(cfg, cfg.LOKI_DOCKER_STREAM, cfg.LOKI_WINDOW),
+        src.loki_count(cfg.LOKI_DOCKER_STREAM, cfg.LOKI_WINDOW),
         cfg.LOKI_WINDOW,
     )
     if not ok_docker:
@@ -52,7 +53,7 @@ def check_loki_ingestion(cfg: Config) -> tuple[bool, str]:
     # Arm 3: the Pi ships its own logs and neither arm above counts them, so its Alloy
     # dying is invisible while the cluster keeps talking.
     ok_pi, msg_pi = loki_ingestion_fresh(
-        bridge.net.loki_count(cfg, cfg.LOKI_PI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
+        src.loki_count(cfg.LOKI_PI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
         cfg.LOKI_FILETAIL_WINDOW,
     )
     if not ok_pi:
@@ -62,9 +63,8 @@ def check_loki_ingestion(cfg: Config) -> tuple[bool, str]:
 
 def check_shipper_dropped(
     cfg: Config,
+    src: Sources,
     uptime_s: Callable[[], float | None] = host_uptime_s,
-    prom_scalar: Callable[..., float | None] | None = None,
-    prom_vector: Callable[..., list[tuple[dict, float]]] | None = None,
 ) -> tuple[bool, str]:
     """Prometheus-based log-shipper + Loki-distributor partial-loss watchdog. Prom-dependent.
 
@@ -76,11 +76,9 @@ def check_shipper_dropped(
     metric name, the same reason SHIPPER_DROPPED_METRICS does: a counter rename on either side
     must not silently read as "0 dropped forever".
     """
-    # Three seams, each defaulting to the real thing, so a test states a boot time and a pair of
-    # metric answers instead of patching this module — the rule `with_pi_ports` follows with
+    # `uptime_s` and `src` are the seams, so a test states a boot time and a pair of metric
+    # answers instead of patching this module — the rule `with_pi_ports` follows with
     # `tcp_open`, and what keeps the grace below from being provable only by inspection.
-    prom_scalar = prom_scalar or bridge.net.prom_scalar
-    prom_vector = prom_vector or bridge.net.prom_vector
     # The node's uptime, not this pod's age: an ordinary deploy restarts the bridge without
     # rebooting anything, and both reboot arms below cover a fault only a reboot produces. An
     # unreadable /proc/uptime reads as no grace, so the check evaluates normally.
@@ -101,11 +99,11 @@ def check_shipper_dropped(
         if since_settle <= 0:
             return with_export_failures(
                 cfg,
+                src,
                 True,
                 "shipper drops skipped — the node booted %ds ago, inside BOOT_SETTLE_S "
                 "(%ds): the reboot's own drops are owned by the reboot, not by this tile"
                 % (int(uptime), cfg.BOOT_SETTLE_S),
-                prom_scalar=prom_scalar,
             )
         try:
             configured_s = duration_seconds(window)
@@ -115,14 +113,12 @@ def check_shipper_dropped(
             configured_s = None
         if configured_s is not None and since_settle < configured_s:
             window = "%ds" % since_settle
-    client_count = prom_scalar(
-        cfg,
+    client_count = src.prom_scalar(
         'sum(increase({__name__=~"%s"}[%s]))' % (cfg.SHIPPER_DROPPED_METRICS, window),
     )
     server_reasons = [
         (labels.get("reason", "unknown"), value)
-        for labels, value in prom_vector(
-            cfg,
+        for labels, value in src.prom_vector(
             'sum by (reason) (increase({__name__=~"%s"}[%s]))'
             % (cfg.SHIPPER_DROPPED_SERVER_METRIC, window),
         )
@@ -135,14 +131,11 @@ def check_shipper_dropped(
         backlog_grace_active=uptime is not None
         and uptime < cfg.SHIPPER_BACKLOG_GRACE_S,
     )
-    return with_export_failures(cfg, ok, msg, prom_scalar=prom_scalar)
+    return with_export_failures(cfg, src, ok, msg)
 
 
 def with_export_failures(
-    cfg: Config,
-    ok: bool,
-    msg: str,
-    prom_scalar: Callable[..., float | None] | None = None,
+    cfg: Config, src: Sources, ok: bool, msg: str
 ) -> tuple[bool, str]:
     """Fold the collector's export-failure arm into the shipper verdict, a failure winning.
 
@@ -165,9 +158,7 @@ def with_export_failures(
     """
     if not cfg.OTELCOL_SEND_FAILED_METRICS:
         return ok, msg
-    prom_scalar = prom_scalar or bridge.net.prom_scalar
-    failed = prom_scalar(
-        cfg,
+    failed = src.prom_scalar(
         'sum(increase({__name__=~"%s"}[%s]))'
         % (cfg.OTELCOL_SEND_FAILED_METRICS, cfg.OTELCOL_SEND_FAILED_WINDOW),
     )
@@ -181,12 +172,24 @@ def with_export_failures(
     return False, "%s | %s" % (export_msg, msg)
 
 
-def check_loki_reachable(cfg: Config) -> tuple[bool, str]:
-    bridge.net.loki_reachable(cfg)
+def check_loki_reachable(cfg: Config, src: Sources) -> tuple[bool, str]:
+    """Is Loki itself reachable and answering queries? The gate for the LOKI_DEPENDENT checks.
+
+    Hits the labels endpoint, a fixed query independent of ingestion that returns
+    status=success whenever Loki is up. That separates "Loki is down" (one root cause, one page:
+    Loki Reachable) from "Loki is up but a shipper stopped shipping" (Loki Log Ingestion, which
+    still evaluates whenever Loki is reachable). A raise reaches `_evaluate`, which renders the
+    Loki Reachable monitor down.
+    """
+    envelope = as_object(
+        src.get_json(cfg.LOKI_URL + "/loki/api/v1/labels"), "loki response"
+    )
+    if envelope.get("status") != "success":
+        raise RuntimeError("loki labels status=%s" % envelope.get("status"))
     return True, "Loki reachable"
 
 
-def with_log_errors(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
+def with_log_errors(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, str]:
     """Fold the log-pattern arm into the workload verdict, a burst winning the message.
 
     Folded here rather than given its own monitor, for the reason the extended-resource and
@@ -203,8 +206,8 @@ def with_log_errors(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
         return ok, msg
     ignore = {n.strip().lower() for n in cfg.LOG_ERROR_IGNORE.split(",") if n.strip()}
     try:
-        matches, total = bridge.net.log_error_counts(
-            cfg, cfg.LOG_ERROR_SELECTOR, cfg.LOG_ERROR_PATTERN, cfg.LOG_ERROR_WINDOW
+        matches, total = src.log_error_counts(
+            cfg.LOG_ERROR_SELECTOR, cfg.LOG_ERROR_PATTERN, cfg.LOG_ERROR_WINDOW
         )
     except Exception as e:
         return ok, "%s, log-error arm unavailable (%s)" % (msg, e)
@@ -233,14 +236,14 @@ SWALLOWED_VERDICTS_LOGQL = '{job="syslog"} |~ `: (status=(up|down)|push failed \
 # is the only label here that ties the stream to that pod, so any other workload naming a
 # container the same would be read as this pusher (#1976).
 SWALLOWED_VERDICTS_POD_LOGQL = '{container="pi-peer-backup"} |~ `: (status=(up|down)|push failed \\()` != "push failed transiently"'
-# ~9x the population measured 2026-09-17 (529 lines / 3h) — see bridge.net.loki_lines.
+# ~9x the population measured 2026-09-17 (529 lines / 3h) — see Sources.loki_lines.
 SWALLOWED_VERDICTS_LIMIT = 5000
 
 
 def check_swallowed_verdicts(
     cfg: Config,
+    src: Sources,
     uptime_s: Callable[[], float | None] = host_uptime_s,
-    fetch: Callable[..., list[tuple[int, str]]] | None = None,
 ) -> tuple[bool, str]:
     """A host cron's DOWN verdict that kuma-push-lib.sh logged and then lost (#1869).
 
@@ -261,8 +264,6 @@ def check_swallowed_verdicts(
     # Inside BOOT_SETTLE_S there is no window left to read, so the cycle is skipped; after it the
     # window grows back to its configured length, and the tile pages again on the first verdict
     # lost for any other reason.
-    # Both seams default to the real thing; see check_shipper_dropped for the rule.
-    fetch = fetch or bridge.net.loki_lines
     uptime = uptime_s()
     window_s = cfg.SWALLOWED_VERDICTS_WINDOW_S
     if uptime is not None and uptime - cfg.BOOT_SETTLE_S < window_s:
@@ -275,7 +276,9 @@ def check_swallowed_verdicts(
             )
         window_s = since_settle
     try:
-        lines = fetch(cfg, SWALLOWED_VERDICTS_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT)
+        lines = src.loki_lines(
+            SWALLOWED_VERDICTS_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
+        )
     except Exception as e:
         return (
             True,
@@ -286,8 +289,8 @@ def check_swallowed_verdicts(
     # syslog arm's, and the message says so rather than reading clean.
     pod_note = ""
     try:
-        pod_lines = fetch(
-            cfg, SWALLOWED_VERDICTS_POD_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
+        pod_lines = src.loki_lines(
+            SWALLOWED_VERDICTS_POD_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
         )
     except Exception as e:
         pod_lines = []
@@ -317,7 +320,7 @@ KUMA_NOTIFY_FAILURES_LOGQL = (
 KUMA_NOTIFY_FAILURES_LIMIT = 500
 
 
-def check_kuma_notify_failures(cfg: Config) -> tuple[bool, str]:
+def check_kuma_notify_failures(cfg: Config, src: Sources) -> tuple[bool, str]:
     """A notification Kuma tried to send and dropped — a Discord 429, a dead SMTP login (#1891).
 
     Kuma logs `Cannot send notification to <name>` and does not retry, so the transition or
@@ -332,8 +335,8 @@ def check_kuma_notify_failures(cfg: Config) -> tuple[bool, str]:
     """
     window_s = cfg.KUMA_NOTIFY_FAILURES_WINDOW_S
     try:
-        lines = bridge.net.loki_lines(
-            cfg, KUMA_NOTIFY_FAILURES_LOGQL, window_s, KUMA_NOTIFY_FAILURES_LIMIT
+        lines = src.loki_lines(
+            KUMA_NOTIFY_FAILURES_LOGQL, window_s, KUMA_NOTIFY_FAILURES_LIMIT
         )
     except Exception as e:
         return (

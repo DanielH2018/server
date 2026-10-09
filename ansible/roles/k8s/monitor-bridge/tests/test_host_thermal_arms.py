@@ -237,7 +237,8 @@ def test_check_host_temp_calls_both_arms_and_undervoltage_first():
     never called them — the inert-check shape this repo has paid for twice.
 
     Read off the compiled function rather than driven end to end, because driving it means
-    faking `bridge.net` and this module is held to zero first-party patches. The ORDER of the
+    answering every query it sends through a `FakeSources`, and this test pins call order, not
+    answers. The ORDER of the
     two names in `co_names` is the order their call sites appear, which is the property the
     check's docstring claims: undervoltage returns ahead of everything else.
     """

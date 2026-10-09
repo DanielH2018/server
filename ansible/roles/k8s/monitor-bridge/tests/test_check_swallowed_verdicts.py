@@ -9,10 +9,10 @@ burst, where every push failed and nothing landed.
 import re
 from pathlib import Path
 
-import bridge.net
 import checks.logs
 import gates
 import registry
+from _fake_sources import FakeSources
 from _shell_render import rendered_shell_texts
 from verdicts.logs import HC_ROUTED_TAGS, parse_push_line, swallowed_verdicts
 
@@ -211,15 +211,15 @@ def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
     assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
 
 
-def _patch_fetch(monkeypatch, fetch):
-    """The file's one seam onto `bridge.net.loki_lines(cfg, logql, window_s, limit)`."""
-    monkeypatch.setattr(bridge.net, "loki_lines", fetch)
+def _src(fetch):
+    """The file's one seam onto `Sources.loki_lines(logql, window_s, limit)`."""
+    return FakeSources(loki_lines=fetch)
 
 
 def _streams(syslog, pod):
     """A fetch answering the syslog selector with `syslog` and the pod selector with `pod`."""
 
-    def _lines(cfg, logql, window_s, limit):
+    def _lines(logql, window_s, limit):
         if logql == checks.logs.SWALLOWED_VERDICTS_LOGQL:
             return syslog
         if logql == checks.logs.SWALLOWED_VERDICTS_POD_LOGQL:
@@ -229,14 +229,15 @@ def _streams(syslog, pod):
     return _lines
 
 
-def test_a_fetch_error_fails_open_and_names_the_owner(monkeypatch, cfg):
+def test_a_fetch_error_fails_open_and_names_the_owner(cfg):
     # The Loki gate probes /labels, which stays fast while a range query is what a busy Loki
     # is slow at, so a raise here would page this tile for a slow Loki, not a lost verdict.
     def _raise(*a, **k):
         raise RuntimeError("loki-homelab: timed out")
 
-    _patch_fetch(monkeypatch, _raise)
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
+    ok, msg = checks.logs.check_swallowed_verdicts(
+        cfg, _src(_raise), uptime_s=_unread_clock
+    )
     assert ok
     assert "timed out" in msg and "Loki Reachable" in msg
 
@@ -270,13 +271,10 @@ def test_the_pod_logql_names_the_pi_peer_backup_container():
     assert '!= "push failed transiently"' in checks.logs.SWALLOWED_VERDICTS_POD_LOGQL
 
 
-def test_a_rejected_push_from_the_pod_stream_is_flagged(monkeypatch, cfg):
+def test_a_rejected_push_from_the_pod_stream_is_flagged(cfg):
     # ACCEPT: the pod stream's lines reach the verdict alongside syslog's.
-    _patch_fetch(
-        monkeypatch,
-        _streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP), (3, _POD_REJECTED)]),
-    )
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
+    src = _src(_streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP), (3, _POD_REJECTED)]))
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg, src, uptime_s=_unread_clock)
     assert not ok
     assert (
         "Kuma rejected the push for pi-peer-backup on pi-peer-backup-29312345-x7k2q"
@@ -284,34 +282,35 @@ def test_a_rejected_push_from_the_pod_stream_is_flagged(monkeypatch, cfg):
     )
 
 
-def test_the_pre_1943_pod_line_is_not_read_as_anything(monkeypatch, cfg):
+def test_the_pre_1943_pod_line_is_not_read_as_anything(cfg):
     # REJECT (the pair): the old shape parses to nothing, so it neither pages nor counts as a
     # landed sibling.
     assert parse_push_line(_POD_PRE_1943) is None
-    _patch_fetch(monkeypatch, _streams([(1, _SIBLING_RUN)], [(2, _POD_PRE_1943)]))
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
+    src = _src(_streams([(1, _SIBLING_RUN)], [(2, _POD_PRE_1943)]))
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg, src, uptime_s=_unread_clock)
     assert ok, msg
     assert "1 tag(s) pushed" in msg
 
 
-def test_a_capped_pod_fetch_reports_truncation_too(monkeypatch, cfg):
+def test_a_capped_pod_fetch_reports_truncation_too(cfg):
     cap = checks.logs.SWALLOWED_VERDICTS_LIMIT
-    _patch_fetch(monkeypatch, _streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP)] * cap))
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
+    src = _src(_streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP)] * cap))
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg, src, uptime_s=_unread_clock)
     assert ok
     assert "hit its line cap" in msg
 
 
-def test_a_failed_pod_fetch_keeps_the_syslog_verdict_and_says_so(monkeypatch, cfg):
+def test_a_failed_pod_fetch_keeps_the_syslog_verdict_and_says_so(cfg):
     # The syslog arm caught setup-drift-check and release-staleness-check on its own; a slow
     # or failing pod query must not fail that arm open with it.
-    def _fetch(cfg, logql, window_s, limit):
+    def _fetch(logql, window_s, limit):
         if logql == checks.logs.SWALLOWED_VERDICTS_POD_LOGQL:
             raise RuntimeError("loki-homelab: pod query timed out")
         return [(1, _RUN_DOWN), (2, _SWALLOWED_DOWN), (3, _SIBLING_RUN)]
 
-    _patch_fetch(monkeypatch, _fetch)
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
+    ok, msg = checks.logs.check_swallowed_verdicts(
+        cfg, _src(_fetch), uptime_s=_unread_clock
+    )
     assert not ok
     assert "release-staleness-check on daniel-box (http=500 rc=0)" in msg
     assert "pod-stream fetch unavailable: loki-homelab: pod query timed out" in msg

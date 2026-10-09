@@ -16,6 +16,7 @@ import checks.logs
 import check
 import gates
 import registry
+from _fake_sources import FakeSources
 from bridge.types import Check
 from gates import Gates
 
@@ -194,10 +195,9 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
 def _wire_run_once_grace(cfg, monkeypatch, results):
     """Drive run_once with Prometheus+Loki UP and one STARTUP_GRACE check whose eval returns
     `results` in order across calls; capture the (ok, msg) pushed for it each cycle."""
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: [])
     cfg = replace(cfg, GRACE_CYCLES=2)
     seq = iter(results)
-    checks = [Check("n8n", "tok_n8n", lambda _cfg: next(seq))]
+    checks = [Check("n8n", "tok_n8n", lambda _cfg, _src: next(seq))]
     # The streak dict is STATED rather than patched onto bridge.streaks: it is one of the eleven
     # `Gates` fields, so passing an empty one here is both the isolation this needs and a read of
     # the seam.
@@ -206,9 +206,9 @@ def _wire_run_once_grace(cfg, monkeypatch, results):
         loki_dependent=frozenset(),
         startup_grace=frozenset({"n8n"}),
         grace_streaks={},
-        probe_prometheus=lambda _cfg: (True, "prom ok"),
-        probe_loki=lambda _cfg: (True, "loki ok"),
-        probe_wan=lambda _cfg: (True, "wan ok"),
+        probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+        probe_loki=lambda _cfg, _src: (True, "loki ok"),
+        probe_wan=lambda _cfg, _src: (True, "wan ok"),
     )
     pushes = []
     monkeypatch.setattr(
@@ -216,7 +216,9 @@ def _wire_run_once_grace(cfg, monkeypatch, results):
     )
     out = []
     for _ in range(len(results)):
-        check.run_once(cfg, checks, gates=gate_config)
+        check.run_once(
+            cfg, FakeSources(prom_vector=lambda q: []), checks, gates=gate_config
+        )
         out.append(next((ok, m) for t, ok, m in pushes if t == "tok_n8n"))
         pushes.clear()
     return out
@@ -297,27 +299,17 @@ def test_shipper_dropped(client_count, server_reasons, ok, must_contain):
         assert s in msg
 
 
-def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch, cfg):
+def test_check_shipper_dropped_reads_both_shippers_counters(cfg):
     """One scalar query over a __name__ regex, no reason filter, for the CLIENT side.
 
     The query stays a name regex: a selector naming only one counter would read a source
     shipping under another name as "0 dropped" forever — the same fail-open shape as a
     selector on a label nothing emits. No reason filter: every reason is a real drop.
     """
-    queries = []
-
-    def fake_scalar(_cfg, q):
-        queries.append(q)
-        return 5000.0
-
-    def fake_vector(_cfg, q):
-        queries.append(q)
-        return []
-
-    monkeypatch.setattr(bridge.net, "prom_scalar", fake_scalar)
-    monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
-    ok, _ = checks.logs.check_shipper_dropped(cfg, uptime_s=_unread_clock)
+    src = FakeSources(prom_scalar=lambda q: 5000.0, prom_vector=lambda q: [])
+    ok, _ = checks.logs.check_shipper_dropped(cfg, src, uptime_s=_unread_clock)
     assert not ok
+    queries = [args[0] for _, args in src.calls]
     assert any(
         "increase(" in q
         and '{__name__=~"' in q
@@ -356,29 +348,13 @@ def test_otelcol_export_failures(failed, ok, must_contain):
 
 
 def _shipper_queries(cfg, otelcol_answer):
-    """Run `check_shipper_dropped` with both Prometheus seams stated, collecting the queries.
-
-    Through the check's own `prom_scalar`/`prom_vector` parameters rather than a monkeypatch on
-    `bridge.net`, which is what those seams exist for — `test_module_length_ratchet.py` holds
-    this file to its patch count, and a stated seam needs none.
-    """
-    queries = []
-
-    def fake_scalar(_cfg, q):
-        queries.append(q)
-        return otelcol_answer if "otelcol" in q else 0.0
-
-    def fake_vector(_cfg, q):
-        queries.append(q)
-        return []
-
-    ok, msg = checks.logs.check_shipper_dropped(
-        cfg,
-        uptime_s=_unread_clock,
-        prom_scalar=fake_scalar,
-        prom_vector=fake_vector,
+    """Run `check_shipper_dropped` against a FakeSources, returning every query it sent."""
+    src = FakeSources(
+        prom_scalar=lambda q: otelcol_answer if "otelcol" in q else 0.0,
+        prom_vector=lambda q: [],
     )
-    return ok, msg, queries
+    ok, msg = checks.logs.check_shipper_dropped(cfg, src, uptime_s=_unread_clock)
+    return ok, msg, [args[0] for _, args in src.calls]
 
 
 def test_check_shipper_dropped_reads_the_collector_send_failed_family(cfg):
@@ -414,21 +390,20 @@ def test_check_shipper_dropped_disables_the_collector_arm_on_an_empty_selector(c
     assert not any("otelcol" in q for q in queries), queries
 
 
-def test_check_shipper_dropped_reads_server_side_by_reason(monkeypatch, cfg):
+def test_check_shipper_dropped_reads_server_side_by_reason(cfg):
     """The SERVER-side arm queries Loki's own discard counter, grouped `by (reason)`.
 
     Grouping by reason is what lets a fired alert name the cause (too_far_behind vs a
     throughput/limit reason) instead of just a bare count.
     """
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, q: 0.0)
 
-    def fake_vector(_cfg, q):
+    def fake_vector(q):
         assert "sum by (reason)" in q
         assert '{__name__=~"' in q
         assert "loki_discarded_samples_total" in q
         return [({"reason": "too_far_behind"}, 161608.0)]
 
-    monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
-    ok, msg = checks.logs.check_shipper_dropped(cfg, uptime_s=_unread_clock)
+    src = FakeSources(prom_scalar=lambda q: 0.0, prom_vector=fake_vector)
+    ok, msg = checks.logs.check_shipper_dropped(cfg, src, uptime_s=_unread_clock)
     assert not ok
     assert "too_far_behind" in msg

@@ -9,7 +9,7 @@ Two facts the query depends on, both measured against the live cluster Prometheu
 k3s scrapes that series under BOTH `job="kubernetes-apiserver"` and `job="kubernetes-kubelet"`
 (one process serves both endpoints), and it read 56,389,632 — 2.6% of the 2 GiB default quota.
 
-Every test here hands the check its `fetch` seam rather than patching `bridge.net`, so each one
+Every test here hands the check a `FakeSources` rather than patching `bridge.net`, so each one
 states the reading it means.
 """
 
@@ -17,18 +17,19 @@ from dataclasses import replace
 
 import checks.cluster_etcd
 import gates
+from _fake_sources import FakeSources
 
 QUOTA = 2 * 1024**3
 
 
 def _reads(value):
-    """A `fetch` that answers every query with `value`."""
-    return lambda *a, **k: value
+    """Sources whose `prom_scalar` answers every query with `value`."""
+    return FakeSources(prom_scalar=lambda *a, **k: value)
 
 
 def _at(cfg, used, quota=QUOTA):
     return checks.cluster_etcd.check_etcd_db_size(
-        replace(cfg, ETCD_DB_QUOTA_BYTES=quota), fetch=_reads(used)
+        replace(cfg, ETCD_DB_QUOTA_BYTES=quota), _reads(used)
     )
 
 
@@ -86,16 +87,10 @@ def test_the_query_collapses_the_two_scrape_jobs_to_one_value(cfg):
     with the same value. A query selecting on `job` would tie the check to a scrape-job name;
     handing two series to prom_scalar would make `result[0]` an arbitrary pick.
     """
-    seen = {}
-
-    def _spy(_cfg, promql, base=None, source="prometheus"):
-        seen.update(promql=promql, base=base)
-        return 1.0
-
-    checks.cluster_etcd.check_etcd_db_size(cfg, fetch=_spy)
-    assert seen["promql"] == "max(apiserver_storage_size_bytes)"
-    assert "job=" not in seen["promql"]
-    assert seen["base"] is None  # the one Prometheus, so prom_scalar's PROM_URL default
+    src = _reads(1.0)
+    checks.cluster_etcd.check_etcd_db_size(cfg, src)
+    assert src.queries("prom_scalar") == ["max(apiserver_storage_size_bytes)"]
+    assert "job=" not in src.queries("prom_scalar")[0]
 
 
 def test_the_in_code_quota_default_is_etcds_own(cfg):

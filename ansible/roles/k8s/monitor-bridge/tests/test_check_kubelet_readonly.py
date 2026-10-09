@@ -8,9 +8,9 @@ on its own, so holding it through a streak only delays a real page.
 
 from dataclasses import replace
 
-import bridge.net
 import checks.storage
 import gates
+from _fake_sources import FakeSources
 
 
 def test_the_check_is_prom_dependent():
@@ -25,55 +25,49 @@ def _ro_series(mountpoint, origin="daniel-box"):
     return ({"mountpoint": mountpoint, "origin": origin}, 1.0)
 
 
-def test_no_readonly_mounts_is_up(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
-    ok, msg = checks.storage.check_kubelet_plugin_readonly(cfg)
+def test_no_readonly_mounts_is_up(cfg):
+    src = FakeSources(prom_vector=lambda *a, **k: [])
+    ok, msg = checks.storage.check_kubelet_plugin_readonly(cfg, src)
     assert ok
     assert "no read-only" in msg
 
 
-def test_one_readonly_mount_pages_naming_host_and_mountpoint(monkeypatch, cfg):
+def test_one_readonly_mount_pages_naming_host_and_mountpoint(cfg):
     mp = "/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount"
-    monkeypatch.setattr(
-        bridge.net, "prom_vector", lambda _cfg, *a, **k: [_ro_series(mp)]
-    )
-    ok, msg = checks.storage.check_kubelet_plugin_readonly(cfg)
+    src = FakeSources(prom_vector=lambda *a, **k: [_ro_series(mp)])
+    ok, msg = checks.storage.check_kubelet_plugin_readonly(cfg, src)
     assert not ok
     assert "daniel-box" in msg
     assert mp in msg
 
 
-def test_a_breach_gets_no_grace_and_pages_on_the_first_cycle(monkeypatch, cfg):
+def test_a_breach_gets_no_grace_and_pages_on_the_first_cycle(cfg):
     # THE BUG THIS PINS: a Longhorn-style consecutive-down streak here would hold the first
     # cycle `up` and delay detection instead of making it a one-cycle detection. Two consecutive calls with the same breach must both be `down`.
     mp = "/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount"
-    monkeypatch.setattr(
-        bridge.net, "prom_vector", lambda _cfg, *a, **k: [_ro_series(mp)]
-    )
-    ok1, _ = checks.storage.check_kubelet_plugin_readonly(cfg)
-    ok2, _ = checks.storage.check_kubelet_plugin_readonly(cfg)
+    src = FakeSources(prom_vector=lambda *a, **k: [_ro_series(mp)])
+    ok1, _ = checks.storage.check_kubelet_plugin_readonly(cfg, src)
+    ok2, _ = checks.storage.check_kubelet_plugin_readonly(cfg, src)
     assert not ok1
     assert not ok2
 
 
-def test_recovery_is_immediately_up_with_no_streak_to_reset(monkeypatch, cfg):
+def test_recovery_is_immediately_up_with_no_streak_to_reset(cfg):
     mp = "/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount"
-    monkeypatch.setattr(
-        bridge.net, "prom_vector", lambda _cfg, *a, **k: [_ro_series(mp)]
-    )
-    checks.storage.check_kubelet_plugin_readonly(cfg)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
-    ok, _ = checks.storage.check_kubelet_plugin_readonly(cfg)
+    firing = FakeSources(prom_vector=lambda *a, **k: [_ro_series(mp)])
+    checks.storage.check_kubelet_plugin_readonly(cfg, firing)
+    cleared = FakeSources(prom_vector=lambda *a, **k: [])
+    ok, _ = checks.storage.check_kubelet_plugin_readonly(cfg, cleared)
     assert ok
 
 
-def test_several_offenders_are_named_and_sorted(monkeypatch, cfg):
+def test_several_offenders_are_named_and_sorted(cfg):
     vec = [
         _ro_series("/var/lib/kubelet/plugins/z", origin="daniel-server"),
         _ro_series("/var/lib/kubelet/plugins/a", origin="daniel-box"),
     ]
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: vec)
-    ok, msg = checks.storage.check_kubelet_plugin_readonly(cfg)
+    src = FakeSources(prom_vector=lambda *a, **k: vec)
+    ok, msg = checks.storage.check_kubelet_plugin_readonly(cfg, src)
     assert not ok
     assert "2 CSI global mount(s)" in msg
     assert msg.index("daniel-box") < msg.index("daniel-server")
@@ -86,13 +80,10 @@ def test_the_query_scopes_to_the_plugins_subtree_and_is_not_origin_pinned(cfg):
     # host_metric_sel() must be what builds the selector, not origin_sel() — so the pin set
     # here (matching the deployed env, whose PROM_ORIGIN default pins) must NOT reach it.
     cfg = replace(cfg, PROM_ORIGIN='origin="daniel-server"')
-    queries = []
+    src = FakeSources(prom_vector=lambda *a, **k: [])
 
-    def record(_cfg, promql, *a, **k):
-        queries.append(promql)
-        return []
-
-    checks.storage.check_kubelet_plugin_readonly(cfg, prom_vector=record)
+    checks.storage.check_kubelet_plugin_readonly(cfg, src)
+    queries = src.queries("prom_vector")
 
     assert len(queries) == 1
     assert 'mountpoint=~"/var/lib/kubelet/plugins/.*"' in queries[0]

@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 import bridge.common
 import bridge.parsing
 from bridge.config import Config, load_config
-import bridge.net
 import checks.service
+from _fake_sources import FakeSources
 
 
 # The `_FILE` indirection is exercised through the field it produces rather than through
@@ -104,7 +104,7 @@ def test_sanitize_collapses_whitespace():
     assert bridge.common.sanitize("a\t b\n\nc") == "a b c"
 
 
-def test_arr_queue_msg_is_sanitized(monkeypatch, cfg):
+def test_arr_queue_msg_is_sanitized(cfg):
     # An @everyone-laden release title reaches the alert msg defused, not as a live ping.
     cfg = replace(cfg, SONARR_API_KEY="k", RADARR_API_KEY="")
     queue = {
@@ -112,8 +112,8 @@ def test_arr_queue_msg_is_sanitized(monkeypatch, cfg):
             {"title": "@everyone Free.Movie", "trackedDownloadStatus": "warning"}
         ]
     }
-    monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: queue)
-    ok, msg = checks.service.check_arr_queue(cfg)
+    src = FakeSources(get_json=lambda *a, **k: queue)
+    ok, msg = checks.service.check_arr_queue(cfg, src)
     assert ok is False
     assert "@everyone" not in msg
     assert "(at)everyone" in msg

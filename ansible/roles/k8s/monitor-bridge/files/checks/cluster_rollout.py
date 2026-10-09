@@ -2,18 +2,19 @@
 
 Its own module rather than more functions in `checks/cluster.py`, which sits at the 600-line
 cap the module-length ratchet enforces. Same layering as its neighbours: reads config as `cfg.X`,
-the fetch layer through the `fetch` parameter `check_k8s_workloads` already threads for its other
-arms, and the shared streak counter as `bridge.streaks.X`.
+every query through the `src` argument (`bridge.sources.Sources`) `check_k8s_workloads` passes
+to its other arms, and the shared streak counter as `bridge.streaks.X`.
 
 Rule and enforcement: bridge/config.py's header.
 """
 
 from bridge.config import Config
+from bridge.sources import Sources
 import bridge.streaks
 from verdicts.cluster import replica_offender_names, stalled_rollout_names
 
 
-def stalled_rollout_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
+def stalled_rollout_offenders(cfg: Config, src: Sources) -> list[tuple[dict, float]]:
     """Deployments whose UPDATED replicas are short of the desired count, with `desired` attached.
 
     A PromQL `<` returns the left-hand series alone, so the desired count is not in the result's
@@ -21,8 +22,7 @@ def stalled_rollout_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
     supplies it, and runs only when the first found something — a stall is rare, and a healthy
     cycle pays one query rather than two.
     """
-    stalled = fetch(
-        cfg,
+    stalled = src.prom_vector(
         "kube_deployment_status_replicas_updated"
         " < on(namespace, deployment) kube_deployment_spec_replicas",
     )
@@ -30,10 +30,7 @@ def stalled_rollout_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
         return []
     desired = {
         (labels.get("namespace"), labels.get("deployment")): value
-        for labels, value in fetch(
-            cfg,
-            "kube_deployment_spec_replicas",
-        )
+        for labels, value in src.prom_vector("kube_deployment_spec_replicas")
     }
     out = []
     for labels, value in stalled:

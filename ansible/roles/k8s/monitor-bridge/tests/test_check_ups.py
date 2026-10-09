@@ -15,9 +15,9 @@ import pytest
 
 import bridge.config
 import bridge.streaks
-import bridge.net
 import checks.host_thermal
 import verdicts.host_power
+from _fake_sources import FakeSources
 
 
 @pytest.mark.parametrize(
@@ -88,9 +88,9 @@ def test_ups_health(charge, runtime, replace, ok, must_contain, must_not_contain
 
 
 def _ups_scalars(
-    cfg, monkeypatch, charge, runtime, replace=0.0, source_up=None, on_battery=0.0
-):
-    def fake(_cfg, q):
+    cfg, charge, runtime, replace=0.0, source_up=None, on_battery=0.0
+) -> FakeSources:
+    def fake(q):
         if q == cfg.UPS_CHARGE_QUERY:
             return charge
         if q == cfg.UPS_RUNTIME_QUERY:
@@ -103,39 +103,37 @@ def _ups_scalars(
             return source_up
         return None
 
-    monkeypatch.setattr(bridge.net, "prom_scalar", fake)
+    return FakeSources(prom_scalar=fake)
 
 
-def test_check_ups_healthy_is_up(monkeypatch, cfg):
-    _ups_scalars(cfg, monkeypatch, 100, 900)
-    ok, msg = checks.host_thermal.check_ups(cfg)
+def test_check_ups_healthy_is_up(cfg):
+    src = _ups_scalars(cfg, 100, 900)
+    ok, msg = checks.host_thermal.check_ups(cfg, src)
     assert ok and "battery 100%" in msg and "self-test ok" in msg
 
 
-def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch, cfg):
+def test_check_ups_absent_data_defers_to_scrape_targets(cfg):
     # Unqueryable up-gate (source_up None via the fake) -> all arms absent defers to Scrape
     # Targets. on_battery=None with the rest: the on-battery arm is in the same census, so
     # "all arms absent" means all FOUR.
-    _ups_scalars(cfg, monkeypatch, None, None, replace=None, on_battery=None)
-    ok, msg = checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, None, None, replace=None, on_battery=None)
+    ok, msg = checks.host_thermal.check_ups(cfg, src)
     assert ok and "no UPS data" in msg
 
 
-def test_check_ups_all_absent_but_nut_scraping_pages(monkeypatch, cfg):
+def test_check_ups_all_absent_but_nut_scraping_pages(cfg):
     # Every UPS series renamed/removed at once while the nut job keeps scraping (up==1): Scrape
     # Targets can't see it, so the old all-absent defer silently unmonitored the UPS. It pages
     # through the streak (naming the missing arms) instead of deferring.
-    _ups_scalars(
-        cfg, monkeypatch, None, None, replace=None, source_up=1.0, on_battery=None
-    )
-    ok1, msg1 = checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, None, None, replace=None, source_up=1.0, on_battery=None)
+    ok1, msg1 = checks.host_thermal.check_ups(cfg, src)
     assert ok1 and "streak 1/2" in msg1
-    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    ok2, msg2 = checks.host_thermal.check_ups(cfg, src)
     assert not ok2 and "absent" in msg2
     assert bridge.streaks._down_streaks.get("ups", 0) == 2
 
 
-def test_check_ups_all_absent_nut_scrape_down_still_defers(monkeypatch, cfg):
+def test_check_ups_all_absent_nut_scrape_down_still_defers(cfg):
     """A dead upsd and a dead exporter are the SAME shape: one source answers every arm.
 
     nut-exporter fails the whole /ups_metrics scrape when upsd is unreachable (its probes are
@@ -144,24 +142,22 @@ def test_check_ups_all_absent_nut_scrape_down_still_defers(monkeypatch, cfg):
     own those between them, and paging here would double-page one of them with a misdirecting
     "renamed?" message.
     """
-    _ups_scalars(
-        cfg, monkeypatch, None, None, replace=None, source_up=0.0, on_battery=None
-    )
-    ok, msg = checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, None, None, replace=None, source_up=0.0, on_battery=None)
+    ok, msg = checks.host_thermal.check_ups(cfg, src)
     assert ok and "no UPS data" in msg
     assert bridge.streaks._down_streaks.get("ups", 0) == 0
 
 
-def test_check_ups_replace_battery_pages(monkeypatch, cfg):
+def test_check_ups_replace_battery_pages(cfg):
     # RB verdict from the self-test -> down after the streak even with a full charge / good runtime.
-    _ups_scalars(cfg, monkeypatch, 100, 900, replace=1.0)
-    ok1, _ = checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, 100, 900, replace=1.0)
+    ok1, _ = checks.host_thermal.check_ups(cfg, src)
     assert ok1  # streak grace on the first cycle
-    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    ok2, msg2 = checks.host_thermal.check_ups(cfg, src)
     assert not ok2 and "replace-battery" in msg2
 
 
-def test_check_ups_numeric_arms_absent_while_replace_reports_pages(monkeypatch, cfg):
+def test_check_ups_numeric_arms_absent_while_replace_reports_pages(cfg):
     """charge and runtime absent while the replace arm reports: a selective shape.
 
     One source cannot produce that shape for an outage: nut-exporter fails the whole
@@ -169,42 +165,42 @@ def test_check_ups_numeric_arms_absent_while_replace_reports_pages(monkeypatch, 
     `--nut.vars_enable` entry dropped from the exporter's arguments, and both must page rather
     than leave the runway arms silently unmonitored.
     """
-    _ups_scalars(cfg, monkeypatch, None, None, replace=0.0)
-    ok1, msg1 = checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, None, None, replace=0.0)
+    ok1, msg1 = checks.host_thermal.check_ups(cfg, src)
     assert ok1 and "streak 1/2" in msg1
-    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    ok2, msg2 = checks.host_thermal.check_ups(cfg, src)
     assert not ok2
     assert "charge" in msg2 and "runtime" in msg2 and "absent" in msg2
 
 
-def test_check_ups_partial_absence_pages_not_silently_survives(monkeypatch, cfg):
+def test_check_ups_partial_absence_pages_not_silently_survives(cfg):
     # charge+runtime present but the replace arm vanished (series rename) -> flag, don't monitor the
     # survivor silently. Goes through the streak (restart grace) then pages, naming the missing arm.
-    _ups_scalars(cfg, monkeypatch, 100, 900, replace=None)
-    ok1, msg1 = checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, 100, 900, replace=None)
+    ok1, msg1 = checks.host_thermal.check_ups(cfg, src)
     assert ok1 and "streak 1/2" in msg1
-    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    ok2, msg2 = checks.host_thermal.check_ups(cfg, src)
     assert not ok2 and "absent" in msg2 and "replace-battery" in msg2
 
 
-def test_check_ups_single_low_runtime_is_suppressed_then_pages(monkeypatch, cfg):
-    _ups_scalars(cfg, monkeypatch, 100, 60)  # runtime 1m < 5m floor
-    ok1, msg1 = checks.host_thermal.check_ups(cfg)
+def test_check_ups_single_low_runtime_is_suppressed_then_pages(cfg):
+    src = _ups_scalars(cfg, 100, 60)  # runtime 1m < 5m floor
+    ok1, msg1 = checks.host_thermal.check_ups(cfg, src)
     assert ok1 and "streak 1/2" in msg1  # UPS_CONSECUTIVE default 2
-    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    ok2, msg2 = checks.host_thermal.check_ups(cfg, src)
     assert not ok2 and "runtime" in msg2
 
 
-def test_check_ups_recovery_resets_streak(monkeypatch, cfg):
-    _ups_scalars(cfg, monkeypatch, 100, 60)
-    checks.host_thermal.check_ups(cfg)  # streak advances to 1
-    _ups_scalars(cfg, monkeypatch, 100, 900)  # healthy again
-    ok, _ = checks.host_thermal.check_ups(cfg)
+def test_check_ups_recovery_resets_streak(cfg):
+    src = _ups_scalars(cfg, 100, 60)
+    checks.host_thermal.check_ups(cfg, src)  # streak advances to 1
+    src = _ups_scalars(cfg, 100, 900)  # healthy again
+    ok, _ = checks.host_thermal.check_ups(cfg, src)
     assert ok
     assert bridge.streaks._down_streaks.get("ups", 0) == 0
 
 
-def test_check_ups_disabled_when_no_queries(monkeypatch, cfg):
+def test_check_ups_disabled_when_no_queries(cfg):
     cfg = replace(
         cfg,
         UPS_CHARGE_QUERY="",
@@ -212,7 +208,7 @@ def test_check_ups_disabled_when_no_queries(monkeypatch, cfg):
         UPS_REPLACE_QUERY="",
         UPS_ON_BATTERY_QUERY="",
     )
-    ok, msg = checks.host_thermal.check_ups(cfg)
+    ok, msg = checks.host_thermal.check_ups(cfg, FakeSources())
     assert ok and "disabled" in msg
 
 
@@ -241,42 +237,42 @@ def test_the_on_battery_arm_says_nothing_when_the_series_is_absent():
     assert verdicts.host_power.ups_on_battery_verdict(None) is None
 
 
-def test_check_ups_pages_on_sustained_mains_loss(monkeypatch, cfg):
+def test_check_ups_pages_on_sustained_mains_loss(cfg):
     """The check goes red off network_ups_tools_ups_status{flag="OB"},
     with the runway arms reading perfectly healthy throughout — which is what they do for most
     of a real outage."""
-    _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=1.0)
-    ok1, msg1 = checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, 100, 900, on_battery=1.0)
+    ok1, msg1 = checks.host_thermal.check_ups(cfg, src)
     assert ok1 and "streak 1/2" in msg1  # UPS_CONSECUTIVE grace rides out a brownout
-    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    ok2, msg2 = checks.host_thermal.check_ups(cfg, src)
     assert not ok2 and "on battery" in msg2
 
 
-def test_mains_loss_outranks_a_healthy_runway_message(monkeypatch, cfg):
-    _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=1.0)
-    _, msg = checks.host_thermal.check_ups(cfg)
+def test_mains_loss_outranks_a_healthy_runway_message(cfg):
+    src = _ups_scalars(cfg, 100, 900, on_battery=1.0)
+    _, msg = checks.host_thermal.check_ups(cfg, src)
     assert "battery 100%" not in msg, "the outage is the report, not the runway"
 
 
-def test_the_on_battery_arm_holds_its_own_streak(monkeypatch, cfg):
+def test_the_on_battery_arm_holds_its_own_streak(cfg):
     """Separate keys, for the reason check_host_temp's arms record: a brownout cycle and a
     low-runway cycle sharing one counter would page at half the intended grace."""
-    _ups_scalars(cfg, monkeypatch, 100, 60, on_battery=1.0)
-    checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, 100, 60, on_battery=1.0)
+    checks.host_thermal.check_ups(cfg, src)
     assert bridge.streaks._down_streaks.get("ups_on_battery", 0) == 1
     assert bridge.streaks._down_streaks.get("ups", 0) == 0
 
 
-def test_restored_mains_clears_the_on_battery_streak(monkeypatch, cfg):
-    _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=1.0)
-    checks.host_thermal.check_ups(cfg)
-    _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=0.0)
-    ok, _ = checks.host_thermal.check_ups(cfg)
+def test_restored_mains_clears_the_on_battery_streak(cfg):
+    src = _ups_scalars(cfg, 100, 900, on_battery=1.0)
+    checks.host_thermal.check_ups(cfg, src)
+    src = _ups_scalars(cfg, 100, 900, on_battery=0.0)
+    ok, _ = checks.host_thermal.check_ups(cfg, src)
     assert ok
     assert bridge.streaks._down_streaks.get("ups_on_battery", 0) == 0
 
 
-def test_the_on_battery_series_going_missing_alone_pages(monkeypatch, cfg):
+def test_the_on_battery_series_going_missing_alone_pages(cfg):
     """The absence half of the arm: a rename of the OB series alone must not go quiet.
 
     The three runway arms report normally, so nothing else in the check has anything to say and
@@ -284,24 +280,24 @@ def test_the_on_battery_series_going_missing_alone_pages(monkeypatch, cfg):
     The arm is in `configured`, so its absence is a partial absence and pages through the same
     UPS_CONSECUTIVE streak as a charge or runtime rename.
     """
-    _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=None)
-    ok1, msg1 = checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, 100, 900, on_battery=None)
+    ok1, msg1 = checks.host_thermal.check_ups(cfg, src)
     assert ok1 and "streak 1/2" in msg1
-    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    ok2, msg2 = checks.host_thermal.check_ups(cfg, src)
     assert not ok2 and "on-battery" in msg2 and "absent" in msg2
 
 
-def test_the_on_battery_series_present_is_not_flagged_absent(monkeypatch, cfg):
+def test_the_on_battery_series_present_is_not_flagged_absent(cfg):
     """The accepting half: a reporting OB series leaves the up message as it was."""
-    _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=0.0)
-    ok, msg = checks.host_thermal.check_ups(cfg)
+    src = _ups_scalars(cfg, 100, 900, on_battery=0.0)
+    ok, msg = checks.host_thermal.check_ups(cfg, src)
     assert ok and "absent" not in msg
 
 
-def test_the_on_battery_arm_is_off_when_no_query_is_configured(monkeypatch, cfg):
+def test_the_on_battery_arm_is_off_when_no_query_is_configured(cfg):
     off = replace(cfg, UPS_ON_BATTERY_QUERY="")
-    _ups_scalars(off, monkeypatch, 100, 900, on_battery=1.0)
-    ok, msg = checks.host_thermal.check_ups(off)
+    src = _ups_scalars(off, 100, 900, on_battery=1.0)
+    ok, msg = checks.host_thermal.check_ups(off, src)
     assert ok and "battery 100%" in msg
 
 

@@ -1,9 +1,11 @@
 """HTTP, PromQL and LogQL fetching for monitor-bridge, and the Kuma push.
 
-Every check body reaches these as `bridge.net.prom_vector(...)`, never by from-import, and the
-test suite stubs them HERE — `monkeypatch.setattr(bridge.net, "_get_json", ...)` — where the
-callers look them up at call time. A from-import would copy the function into the caller's
-globals at import time and the stub would change nothing that runs. That rule is enforced by
+This is the transport. A check body never calls it: it queries through the `src` argument,
+`bridge.sources.Sources`, whose live methods delegate here and whose fake answers in tests. What
+the suite still patches on this module is `push`, the sink, and `_get_json` underneath a real
+`Sources` in the transport's own parsing tests. Callers reach both as `bridge.net.<name>`, never
+by from-import, because a from-import would copy the function into the caller's globals at
+import time and the stub would change nothing that runs. That rule is enforced by
 ansible/tests/services/test_bridge_patch_boundary.py.
 
 CONFIGURATION IS A PARAMETER, NOT A GLOBAL. Every helper that reads a URL or the origin pin
@@ -309,46 +311,6 @@ def loki_lines(
             lines.append((int(ts), line))
     lines.sort()
     return lines
-
-
-def log_error_counts(
-    cfg: Config,
-    selector: str,
-    pattern: str,
-    window: str,
-    by_label: str = "container",
-) -> tuple[list[tuple[dict[str, str], float]], float | None]:
-    """(matches, total) — per-container counts of `pattern`, and the selector's total volume.
-
-    `total` is what keeps this arm honest. The whole arm fails OPEN (see with_log_errors), so a
-    selector that matches no stream returns no matches and reads exactly like a healthy estate
-    — the trap that shipped HA_BAN_SELECTOR with an `app` label promtail does not emit, and
-    pushed "no ip_ban events" through a window containing a real ban. Counting the selector's
-    own volume separates "nothing is wrong" from "I asked the wrong question".
-    """
-    matches = loki_vector(
-        cfg,
-        "sum by (%s) (count_over_time(%s |~ `%s` [%s]))"
-        % (by_label, selector, pattern, window),
-    )
-    total = loki_count(cfg, selector, window)
-    return matches, total
-
-
-def loki_reachable(cfg: Config) -> bool:
-    """Is Loki itself reachable and answering queries? (the LOKI_DEPENDENT gate).
-
-    Hits the labels endpoint — a fixed, ingestion-independent query that returns status=success
-    whenever Loki is up — so 'Loki is down' (one root cause, one page: Loki Reachable) is separated
-    from 'Loki is up but promtail stopped shipping' (Loki Log Ingestion, which still evaluates
-    whenever Loki is reachable). Raising -> _evaluate renders the Loki Reachable monitor down.
-    """
-    envelope = as_object(
-        _get_json(cfg.LOKI_URL + "/loki/api/v1/labels"), "loki response"
-    )
-    if envelope.get("status") != "success":
-        raise RuntimeError("loki labels status=%s" % envelope.get("status"))
-    return True
 
 
 def push(

@@ -13,6 +13,7 @@ from dataclasses import replace
 import pytest
 
 import checks.gitops
+from _fake_sources import FakeSources
 import gates
 
 # The last_run marker is written against this epoch and the check reads the same one, so
@@ -90,7 +91,9 @@ def test_check_gitops_alive(tmp_path, monkeypatch, content_fn, ok, must_contain,
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     if content_fn is not None:
         _gw(tmp_path, "last_run", content_fn())
-    result_ok, msg = checks.gitops.check_gitops_alive(cfg, now=GITOPS_NOW)
+    result_ok, msg = checks.gitops.check_gitops_alive(
+        cfg, FakeSources(), now=GITOPS_NOW
+    )
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -112,7 +115,7 @@ def test_check_gitops_status(
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     if filename is not None:
         _gw(tmp_path, filename, content)
-    result_ok, msg = checks.gitops.check_gitops_status(cfg)
+    result_ok, msg = checks.gitops.check_gitops_status(cfg, FakeSources())
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -350,7 +353,7 @@ def test_check_gitops_status_reads_the_manual_plane_class_off_the_mount(tmp_path
     """The ledger is read off the same :ro state mount as `behind_since`."""
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     _gw(tmp_path, "owed.jsonl", _k3s("kubeconfig", at=1))
-    ok, msg = checks.gitops.check_gitops_status(cfg)
+    ok, msg = checks.gitops.check_gitops_status(cfg, FakeSources())
     assert not ok
     assert "k3s --applied kubeconfig" in msg, "the tags key is read off the mount too"
 
@@ -417,7 +420,7 @@ def test_hold_wins_over_contention(cfg):
 def test_check_gitops_status_reads_the_contention_file(tmp_path, cfg):
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     _gw(tmp_path, "contention_since", "abc123def4567890 all 1.0 1.0 1")
-    ok, msg = checks.gitops.check_gitops_status(cfg)
+    ok, msg = checks.gitops.check_gitops_status(cfg, FakeSources())
     assert not ok
     assert "service lock all" in msg
 
@@ -476,7 +479,7 @@ def test_an_undecodable_ledger_still_pages_the_arm_that_fired(tmp_path, cfg):
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     _gw(tmp_path, "hold_sha", "held123abc456789")
     (tmp_path / "owed.jsonl").write_bytes(b'{"class": "manual_plane", "\xff\xfe"}\n')
-    ok, msg = checks.gitops.check_gitops_status(cfg)
+    ok, msg = checks.gitops.check_gitops_status(cfg, FakeSources())
     assert not ok
     assert "deploy held at held123a" in msg
 
@@ -490,6 +493,8 @@ def test_an_undecodable_marker_other_than_the_ledger_is_a_check_error(tmp_path, 
     """
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     (tmp_path / "hold_sha").write_bytes(b"held\xff123abc456789\n")
-    ok, msg = gates._evaluate(cfg, "gitops_status", checks.gitops.check_gitops_status)
+    ok, msg = gates._evaluate(
+        cfg, FakeSources(), "gitops_status", checks.gitops.check_gitops_status
+    )
     assert not ok
     assert "gitops_status check error" in msg

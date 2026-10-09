@@ -4,9 +4,10 @@ Covers the Pi's resource pressure with the published-port arm folded into it, an
 speedtest-tracker's newest result row.
 
 Split out of `checks/host.py`, which keeps disk, certificate expiry and memory. Reads config as
-`cfg.X`, the fetch layer as `bridge.net.X` and the shared streak counter as `bridge.streaks.X`,
-so the tests' patches on those modules reach it; the verdicts it from-imports from verdicts.host
-are patched on THIS module, where they are bound. The TCP prober is an ARGUMENT rather than a
+`cfg.X` and the shared streak counter as `bridge.streaks.X`, so the tests' patches on that
+module reach it. Every Prometheus and HTTP query goes through the `src` argument
+(`bridge.sources.Sources`), which a test replaces with a `FakeSources`. The verdicts it
+from-imports from verdicts.host are patched on THIS module, where they are bound. The TCP prober is an ARGUMENT rather than a
 module global a test patches — `check_pi_pressure` and `with_pi_ports` both take `tcp_open`,
 defaulting to `_tcp_open`, so a test injects a fake port map by calling them. Rule and
 enforcement: bridge/config.py's header.
@@ -16,7 +17,7 @@ import socket
 from collections.abc import Callable
 
 from bridge.config import Config
-import bridge.net
+from bridge.sources import Sources
 import bridge.streaks
 from bridge.types import as_object, as_object_list
 from verdicts.host import (
@@ -97,7 +98,7 @@ def with_pi_ports(
 
 
 def check_pi_pressure(
-    cfg: Config, tcp_open: Callable[[str, int, float], bool] = _tcp_open
+    cfg: Config, src: Sources, tcp_open: Callable[[str, int, float], bool] = _tcp_open
 ) -> tuple[bool, str]:
     """Swap-thrash / overload early warning for the memory-constrained Pi.
 
@@ -117,19 +118,15 @@ def check_pi_pressure(
     if not cfg.PI_ORIGIN:
         return True, "pi monitoring disabled (no PI_ORIGIN)"
     sel = 'origin="%s"' % cfg.PI_ORIGIN
-    load5 = bridge.net.prom_scalar(cfg, "node_load5{%s}" % sel)
-    cores = bridge.net.prom_scalar(
-        cfg, 'count(node_cpu_seconds_total{%s,mode="idle"})' % sel
-    )
-    avail = bridge.net.prom_scalar(cfg, "node_memory_MemAvailable_bytes{%s}" % sel)
+    load5 = src.prom_scalar("node_load5{%s}" % sel)
+    cores = src.prom_scalar('count(node_cpu_seconds_total{%s,mode="idle"})' % sel)
+    avail = src.prom_scalar("node_memory_MemAvailable_bytes{%s}" % sel)
     fs_sel = '%s,fstype!="tmpfs"' % sel
-    disk = bridge.net.prom_vector(
-        cfg,
+    disk = src.prom_vector(
         "max by (device) (100 * (1 - node_filesystem_avail_bytes{%s}"
         " / node_filesystem_size_bytes{%s}))" % (fs_sel, fs_sel),
     )
-    readonly = bridge.net.prom_vector(
-        cfg,
+    readonly = src.prom_vector(
         'node_filesystem_readonly{%s,mountpoint=~"%s"}' % (sel, PI_READONLY_MOUNTS),
     )
     per_core = load5 / cores if load5 is not None and cores else None
@@ -145,7 +142,7 @@ def check_pi_pressure(
     return with_pi_ports(cfg, ok, msg, tcp_open)
 
 
-def check_speedtest(cfg: Config) -> tuple[bool, str]:
+def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Judge speedtest-tracker's newest result row (the SPEEDTEST_* env block in bridge/config_host.py).
 
     Empty URL/token -> disabled (stays up), like check_ha_heartbeat.
@@ -185,7 +182,7 @@ def check_speedtest(cfg: Config) -> tuple[bool, str]:
         # The page holds SPEEDTEST_FLOOR_CONSECUTIVE rows, not one: the floor arm's hysteresis
         # is a run of RESULTS and this fetch is where that history comes from. rows[0] is still
         # the newest, so every other arm is unaffected.
-        payload = bridge.net._get_json(
+        payload = src.get_json(
             cfg.SPEEDTEST_URL
             + "/api/v1/results?sort=-created_at&page%5Bsize%5D="
             + str(max(1, cfg.SPEEDTEST_FLOOR_CONSECUTIVE)),

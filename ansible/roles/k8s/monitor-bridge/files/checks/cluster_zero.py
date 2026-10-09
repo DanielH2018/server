@@ -8,16 +8,17 @@ and a cold start, and neither takes ten minutes.
 
 Its own module for the same reason `cluster_rollout.py` is one: `checks/cluster.py` sits at
 the 600-line cap the module-length ratchet enforces. Same layering — config as `cfg.X`, the
-fetch layer through the `fetch` parameter `check_k8s_workloads` threads to its other arms, the
-shared streak counter as `bridge.streaks.X`.
+queries through the `src` argument (`bridge.sources.Sources`) `check_k8s_workloads` passes to its
+other arms, the shared streak counter as `bridge.streaks.X`.
 """
 
 from bridge.config import Config
+from bridge.sources import Sources
 import bridge.streaks
 from verdicts.cluster import stalled_rollout_names
 
 
-def zero_available_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
+def zero_available_offenders(cfg: Config, src: Sources) -> list[tuple[dict, float]]:
     """Deployments with zero available replicas while wanting at least one, `desired` attached.
 
     `and on(...)` keeps the left-hand series (the zero) and drops a Deployment scaled to zero on
@@ -25,8 +26,7 @@ def zero_available_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
     arm does: a bare `authelia(0)` reads as "zero replicas", which is the scaled-down case this
     query already excludes, where `authelia(0/1)` says what is wrong.
     """
-    zero = fetch(
-        cfg,
+    zero = src.prom_vector(
         "kube_deployment_status_replicas_available == 0"
         " and on(namespace, deployment) kube_deployment_spec_replicas > 0",
     )
@@ -34,10 +34,7 @@ def zero_available_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
         return []
     desired = {
         (labels.get("namespace"), labels.get("deployment")): value
-        for labels, value in fetch(
-            cfg,
-            "kube_deployment_spec_replicas",
-        )
+        for labels, value in src.prom_vector("kube_deployment_spec_replicas")
     }
     out = []
     for labels, value in zero:

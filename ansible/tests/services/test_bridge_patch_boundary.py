@@ -319,9 +319,10 @@ def test_checker_sees_a_packaged_module_in_every_spelling(tmp_path):
 # Every one of these is also patched by `test_check_cli.py`, which is why a census taken over
 # the whole suite cannot anchor this: the map stays populated on the sibling's strength while
 # the helper contributes nothing. Extraction from the helper alone is what proves it.
-# One module anchors the extraction, which is what the test needs.
+# One module anchors the extraction, which is what the test needs. `push` is the helper's one
+# remaining patch: its queries go through a `FakeSources` it hands to `run_once` (#3742).
 HELPER_PATCHES = {
-    "bridge.net": frozenset({"prom_vector", "push"}),
+    "bridge.net": frozenset({"push"}),
 }
 
 

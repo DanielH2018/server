@@ -1,7 +1,7 @@
 """Backblaze B2 checks for monitor-bridge — reachability (the B2_DEPENDENT gate) and storage usage.
 
-Reads config as `cfg.X` and the fetch layer as `bridge.net.X`, so the tests' patches on those
-modules reach it; `b2_reachable` and `b2_authorize` are patched on THIS module, where
+Reads config as `cfg.X` and queries B2 through the `src` argument (`bridge.sources.Sources`),
+which a test replaces with a fake; `b2_reachable` and `b2_authorize` are patched on THIS module, where
 `check_b2_reachable` reads them. The probe caches `_b2_probe` / `_b2_storage` live beside the
 code that mutates them. Rule and enforcement: bridge/config.py's header.
 """
@@ -13,7 +13,7 @@ import urllib.parse
 from typing import TypedDict
 
 from bridge.config import Config
-import bridge.net
+from bridge.sources import Sources
 from bridge.types import JsonObject, JsonValue, as_object
 from verdicts.storage import b2_storage_verdict, b2_sum_versions
 
@@ -44,16 +44,17 @@ _b2_probe: _ProbeCache = {
 _b2_storage: _StorageCache = {"ts": 0.0, "ok": False, "msg": "not yet probed"}
 
 
-def b2_authorize_data(cfg: Config) -> JsonObject:
+def b2_authorize_data(cfg: Config, src: Sources) -> JsonObject:
     """The parsed b2_authorize_account response. Raises on any transport/HTTP failure.
 
     The bridge's only authorize call: `b2_authorize` (the gate) and `b2_storage_usage` both
     reach B2 through it.
 
     DECIDED: the bridge keeps this client rather than using scripts/lib/b2.py's `B2Session`
-    (#3766). `b2_reachable` picks its cache TTL from the exception type: `bridge.net._get_json`
-    re-raises an HTTPError untouched (B2 answered, so the call was billed) and wraps a
-    transport failure as RuntimeError (nothing billed). `lib.b2.http_json` folds both into one
+    (#3766). `b2_reachable` picks its cache TTL from the exception type: `Sources.get_json`
+    (over `bridge.net._get_json`) re-raises an HTTPError untouched (B2 answered, so the call
+    was billed) and wraps a transport failure as RuntimeError (nothing billed).
+    `lib.b2.http_json` folds both into one
     `B2Error`, which would bring back the 2026-08-30 gate that held a recovery DOWN for 25
     minutes. `B2Session` also authorizes against a fixed `AUTHORIZE_URL`, where
     `cfg.B2_PROBE_URL` is kept swappable to a Class C call (bridge/config_io.py). The pod
@@ -64,9 +65,7 @@ def b2_authorize_data(cfg: Config) -> JsonObject:
         ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
     ).decode()
     return as_object(
-        bridge.net._get_json(
-            cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
-        ),
+        src.get_json(cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}),
         "b2_authorize_account response",
     )
 
@@ -85,7 +84,9 @@ def b2_storage_api(auth: dict) -> tuple[str | None, str | None, str | None]:
     return api_url, auth.get("authorizationToken"), bucket_id
 
 
-def b2_storage_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:
+def b2_storage_usage(
+    cfg: Config, src: Sources, now: float | None = None
+) -> tuple[bool, str]:
     """Throttled B2 storage-headroom probe. (ok, msg).
 
     SUCCESSES are cached for B2_STORAGE_INTERVAL_S and a failure is not, the
@@ -102,14 +103,14 @@ def b2_storage_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:
             (now - _b2_storage["ts"]) / 3600,
         )
     try:
-        api_url, token, bucket_id = b2_storage_api(b2_authorize_data(cfg))
+        api_url, token, bucket_id = b2_storage_api(b2_authorize_data(cfg, src))
         if not api_url or not token:
             raise RuntimeError("B2 auth response carried no storage apiUrl/token")
         if not bucket_id:
             raise RuntimeError(
                 "B2 key is not bucket-scoped (no bucketId) — cannot size a bucket"
             )
-        pages, truncated = b2_list_versions(cfg, api_url, token, bucket_id)
+        pages, truncated = b2_list_versions(cfg, src, api_url, token, bucket_id)
         used, versions = b2_sum_versions(pages)
         ok, msg = b2_storage_verdict(
             used,
@@ -128,7 +129,7 @@ def b2_storage_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:
 
 
 def b2_list_versions(
-    cfg: Config, api_url: str, token: str, bucket_id: str
+    cfg: Config, src: Sources, api_url: str, token: str, bucket_id: str
 ) -> tuple[list[dict], bool]:
     """(pages, truncated) — every b2_list_file_versions page for the bucket.
 
@@ -146,7 +147,7 @@ def b2_list_versions(
         if start_id:
             payload["startFileId"] = start_id
         page = as_object(
-            bridge.net._post_json(
+            src.post_json(
                 "%s/b2api/v3/b2_list_file_versions" % api_url.rstrip("/"),
                 payload,
                 headers={"Authorization": token},
@@ -161,11 +162,11 @@ def b2_list_versions(
     return pages, True
 
 
-def check_b2_storage(cfg: Config) -> tuple[bool, str]:
-    return b2_storage_usage(cfg)
+def check_b2_storage(cfg: Config, src: Sources) -> tuple[bool, str]:
+    return b2_storage_usage(cfg, src)
 
 
-def b2_authorize(cfg: Config) -> tuple[bool, str]:
+def b2_authorize(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Authenticate against B2. (ok, msg) — the msg carries B2's own error text on failure.
 
     Basic auth with the key id + application key is the whole protocol for b2_authorize_account,
@@ -173,7 +174,7 @@ def b2_authorize(cfg: Config) -> tuple[bool, str]:
     "HTTP Error 403: ... transaction_cap_exceeded ..." and that string is what reaches Kuma and
     Discord — the named cause G3 asked for.
     """
-    data = b2_authorize_data(cfg)
+    data = b2_authorize_data(cfg, src)
     # A 200 from something that isn't B2 must not read as healthy. Accept EITHER field rather than
     # pinning the response shape: Backblaze publishes a body example for v4 (accountId top-level)
     # but not for v3, whose documented change was to group endpoint info under `apiInfo`. Both
@@ -184,7 +185,9 @@ def b2_authorize(cfg: Config) -> tuple[bool, str]:
     return True, "B2 reachable"
 
 
-def b2_reachable(cfg: Config, now: float | None = None) -> tuple[bool, str]:
+def b2_reachable(
+    cfg: Config, src: Sources, now: float | None = None
+) -> tuple[bool, str]:
     """Throttled B2 reachability probe — the gate for the B2_DEPENDENT checks. (ok, msg).
 
     Empty credentials -> disabled (stays up), like check_n8n's empty API key. Outcomes are cached
@@ -220,7 +223,7 @@ def b2_reachable(cfg: Config, now: float | None = None) -> tuple[bool, str]:
             (now - _b2_probe["ts"]) / 60,
         )
     try:
-        ok, msg = b2_authorize(cfg)
+        ok, msg = b2_authorize(cfg, src)
         ttl = cfg.B2_PROBE_INTERVAL_S
     except urllib.error.HTTPError as e:
         # B2 answered, so the call was billed — hold the full interval.
@@ -235,5 +238,5 @@ def b2_reachable(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     return ok, msg
 
 
-def check_b2_reachable(cfg: Config) -> tuple[bool, str]:
-    return b2_reachable(cfg)
+def check_b2_reachable(cfg: Config, src: Sources) -> tuple[bool, str]:
+    return b2_reachable(cfg, src)

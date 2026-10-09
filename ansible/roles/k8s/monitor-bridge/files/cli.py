@@ -3,8 +3,8 @@
 
 The Deployment runs `python /app/cli.py` with no arguments, which loops forever at INTERVAL
 seconds. Everything below the loop is a leaf: `registry.build_checks(env)` says which checks
-exist, `gates.Gates` says what each reachability gate suppresses, and `check.run_once` runs one
-cycle over both. Nothing here holds env-derived state after import.
+exist, `gates.Gates` says what each reachability gate suppresses, `bridge.sources.Sources` is
+what every check queries, and `check.run_once` runs one cycle over them. Nothing here holds env-derived state after import.
 
 Design: docs/monitor-bridge-internals.md.
 """
@@ -20,6 +20,7 @@ import check
 import gates
 import registry
 from bridge.config import load_config
+from bridge.sources import Sources
 from bridge.types import Check
 from gates import Gates
 
@@ -64,6 +65,7 @@ def main(
     env: Mapping[str, str] | None = None,
     checks: list[Check] | None = None,
     gate_config: Gates | None = None,
+    sources: Sources | None = None,
 ) -> int:
     """Validates the configuration and the check filter, then runs the check loop.
 
@@ -86,6 +88,8 @@ def main(
         `validate_check_filter` are handed here. None builds the production `Gates()`. Named
         `gate_config` rather than `gates` because this module imports the `gates` MODULE, and a
         parameter of that name would shadow it in the body.
+      sources: The `Sources` every gate and check body queries through. None builds the live
+        `Sources(cfg)` from the config loaded here; a test passes a fake.
 
     Returns:
       The process exit code: 0 after a completed --once run, 2 on a configuration fault.
@@ -109,6 +113,7 @@ def main(
             bridge.common.log("FATAL: bad monitor-bridge config:", problem)
         return 2
     checks = registry.build_checks(environment) if checks is None else checks
+    sources = Sources(cfg) if sources is None else sources
     # Built here rather than left to run_once's own default, so the filter is validated against
     # the same dependent sets the run loop will suppress by.
     gate_config = Gates() if gate_config is None else gate_config
@@ -131,7 +136,9 @@ def main(
         % (cfg.INTERVAL, args.once, args.dry_run, len(enabled), len(checks))
     )
     while True:
-        check.run_once(cfg, checks, dry_run=args.dry_run, only=only, gates=gate_config)
+        check.run_once(
+            cfg, sources, checks, dry_run=args.dry_run, only=only, gates=gate_config
+        )
         # A --dry-run hand-run must touch nothing live, including the liveness-probe file — see
         # build_parser()'s --dry-run help.
         if not args.dry_run:

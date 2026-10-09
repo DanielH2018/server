@@ -20,39 +20,40 @@ import check
 import checks.cluster
 import checks.logs
 from _check_gate_helpers import wire_run_once, wire_run_once_reachability
+from _fake_sources import FakeSources
 from bridge.types import Check
 from gates import Gates
 
 
-def test_loki_reachable_ok(monkeypatch, cfg):
-    monkeypatch.setattr(
-        bridge.net, "_get_json", lambda *a, **k: {"status": "success", "data": ["job"]}
-    )
-    assert bridge.net.loki_reachable(cfg) is True
-    ok, msg = checks.logs.check_loki_reachable(cfg)
+def test_loki_reachable_ok(cfg):
+    src = FakeSources(get_json=lambda url: {"status": "success", "data": ["job"]})
+    ok, msg = checks.logs.check_loki_reachable(cfg, src)
     assert ok
     assert "reachable" in msg.lower()
+    assert src.queries("get_json") == [cfg.LOKI_URL + "/loki/api/v1/labels"]
 
 
-def test_loki_reachable_non_success_raises(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: {"status": "error"})
+def test_loki_reachable_non_success_raises(cfg):
+    src = FakeSources(get_json=lambda url: {"status": "error"})
     with pytest.raises(RuntimeError):
-        bridge.net.loki_reachable(cfg)
+        checks.logs.check_loki_reachable(cfg, src)
 
 
 # ── Prometheus reachability gate + alert-storm suppression (L1) ──────────────
 
 
-def test_check_prometheus_reachable(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, q: 1.0)
-    ok, msg = checks.cluster.check_prometheus(cfg)
+def test_check_prometheus_reachable(cfg):
+    ok, msg = checks.cluster.check_prometheus(
+        cfg, FakeSources(prom_scalar=lambda q: 1.0)
+    )
     assert ok
     assert "reachable" in msg.lower()
 
 
-def test_check_prometheus_no_data_is_down(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, q: None)
-    ok, _msg = checks.cluster.check_prometheus(cfg)
+def test_check_prometheus_no_data_is_down(cfg):
+    ok, _msg = checks.cluster.check_prometheus(
+        cfg, FakeSources(prom_scalar=lambda q: None)
+    )
     assert not ok
 
 
@@ -147,7 +148,7 @@ def test_run_once_reads_every_gates_field(monkeypatch, cfg):
     ]
 
     def body(name, seen):
-        def fn(_cfg):
+        def fn(_cfg, _src):
             seen.append(name)
             return False, "%s failed" % name
 
@@ -158,9 +159,9 @@ def test_run_once_reads_every_gates_field(monkeypatch, cfg):
         monkeypatch.setattr(
             bridge.net, "push", lambda _cfg, t, ok, m: pushed.setdefault(t, (ok, m))
         )
-        monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: up_vector)
         check.run_once(
             cfg,
+            FakeSources(prom_vector=lambda q: up_vector),
             [Check(n, "tok_%s" % n, body(n, seen)) for n in names],
             gates=Gates(
                 prom_dependent=frozenset({"prom_dep"}),
@@ -170,10 +171,10 @@ def test_run_once_reads_every_gates_field(monkeypatch, cfg):
                 wan_dependent=frozenset({"wan_dep"}),
                 startup_grace=frozenset({"graced"}),
                 grace_streaks=streaks,
-                probe_prometheus=lambda _cfg: prom_result,
-                probe_loki=lambda _cfg: (False, "loki down"),
-                probe_wan=lambda _cfg: (False, "wan down"),
-                probe_b2=lambda _cfg: (False, "b2 down"),
+                probe_prometheus=lambda _cfg, _src: prom_result,
+                probe_loki=lambda _cfg, _src: (False, "loki down"),
+                probe_wan=lambda _cfg, _src: (False, "wan down"),
+                probe_b2=lambda _cfg, _src: (False, "b2 down"),
             ),
         )
         return seen, pushed
@@ -223,4 +224,40 @@ def test_run_once_requires_a_gates_value(cfg):
     so a second one is a silent divergence rather than an error.
     """
     with pytest.raises(TypeError):
-        check.run_once(cfg, [])  # ty: ignore[missing-argument]
+        check.run_once(cfg, FakeSources(), [])  # ty: ignore[missing-argument]
+
+
+# --- the sources are one injected value, not a lookup ----------------------------------------
+
+
+def test_run_once_hands_its_sources_to_every_gate_and_check(monkeypatch, cfg):
+    """The seam must not be inert: the `src` run_once is given is the one every body receives.
+
+    A body that looked its sources up anywhere else would answer from the live transport while
+    the test believed it had stated the answer.
+    """
+    src = FakeSources(prom_vector=lambda q: [])
+    received = []
+
+    def body(_cfg, got):
+        received.append(got)
+        return True, "ok"
+
+    monkeypatch.setattr(bridge.net, "push", lambda *a: None)
+    check.run_once(
+        cfg,
+        src,
+        [Check("disk", "tok_disk", body)],
+        gates=Gates(
+            probe_prometheus=body, probe_loki=body, probe_b2=body, probe_wan=body
+        ),
+    )
+    assert len(received) == 5
+    assert all(got is src for got in received)
+    assert src.queries("prom_vector") == ["up"]
+
+
+def test_run_once_requires_its_sources(cfg):
+    """The red-proof half: no default `Sources`, so a forgotten argument cannot reach the network."""
+    with pytest.raises(TypeError):
+        check.run_once(cfg, checks=[], gates=Gates())  # ty: ignore[missing-argument]

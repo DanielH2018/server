@@ -10,9 +10,8 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 
-import bridge.config
-import bridge.net
 import checks.host_thermal
+from _fake_sources import FakeSources
 
 
 def _summary(*entries):
@@ -211,24 +210,18 @@ def test_scrutiny_wear_no_devices_is_inert():
     assert "INERT" in msg
 
 
-def test_scrutiny_wear_devices_skips_archived_and_labels_by_model(monkeypatch, cfg):
+def test_scrutiny_wear_devices_skips_archived_and_labels_by_model(cfg):
     # Both live drives report device_name "nvme0", one per host — the label has to carry the model
     # or the two are indistinguishable in the alert.
-    fetched = []
-
-    def fake_get_json(url):
-        fetched.append(url)
-        return _details(attrs=_attr(7))
-
-    monkeypatch.setattr(bridge.net, "_get_json", fake_get_json)
+    src = FakeSources(get_json=lambda url: _details(attrs=_attr(7)))
     cfg = replace(cfg, SCRUTINY_URL="http://scrutiny:8080")
     summary = {
         "w1": {"device": {"device_name": "nvme0", "model_name": "SHPP41-500GM"}},
         "w2": {"device": {"device_name": "sda", "archived": True}},
     }
-    devices = checks.host_thermal.scrutiny_wear_devices(cfg, summary)
+    devices = checks.host_thermal.scrutiny_wear_devices(cfg, src, summary)
     assert devices == [("nvme0 (SHPP41-500GM)", 7)]
-    assert fetched == ["http://scrutiny:8080/api/device/w1/details"]
+    assert src.queries("get_json") == ["http://scrutiny:8080/api/device/w1/details"]
 
 
 # ── ups (battery health via HA's Prometheus-scraped UPS sensors) ─────────────
