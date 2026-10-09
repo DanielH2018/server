@@ -12,37 +12,10 @@ Run: uv run pytest scripts/backup/tests/test_longhorn_reap_logic.py
 import pytest
 
 import longhorn_reap_logic as logic
+from _reap_entrypoint_harness import _backup, _snapshot, _volume
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────────────────
-
-
-def _volume(name, *, group=None, state="attached"):
-    labels = {}
-    if group is not None:
-        labels["recurring-job-group.longhorn.io/%s" % group] = "enabled"
-    return {"metadata": {"name": name, "labels": labels}, "status": {"state": state}}
-
-
-def _backup(name, vol, created, job, state="Completed"):
-    return {
-        "metadata": {"name": name},
-        "status": {
-            "volumeName": vol,
-            "snapshotCreatedAt": created,
-            "labels": {"RecurringJob": job} if job else {},
-            "state": state,
-        },
-    }
-
-
-def _snapshot(name, vol, created, job=None, removed=None):
-    status = {"creationTime": created}
-    if job is not None:
-        status["labels"] = {"RecurringJob": job}
-    if removed is not None:
-        status["markRemoved"] = removed
-    return {"metadata": {"name": name}, "spec": {"volume": vol}, "status": status}
 
 
 def _recurringjob(name, groups):

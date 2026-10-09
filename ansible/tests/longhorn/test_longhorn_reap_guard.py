@@ -28,6 +28,7 @@ import re
 from _shell_render import rendered_shell_texts
 
 import longhorn_reap_logic as logic
+from _reap_entrypoint_harness import _backup
 
 # `{range .metadata.labels}` and friends. Ranging .items[*] is fine and ubiquitous — that IS a
 # list. This matches ranging into a map-valued field, which is the defect.
@@ -64,18 +65,6 @@ def _code(text: str) -> str:
     return "\n".join(
         line for line in text.splitlines() if not line.lstrip().startswith("#")
     )
-
-
-def _backup(name, vol, created, job, state="Completed"):
-    return {
-        "metadata": {"name": name},
-        "status": {
-            "volumeName": vol,
-            "snapshotCreatedAt": created,
-            "labels": {"RecurringJob": job} if job else {},
-            "state": state,
-        },
-    }
 
 
 def test_no_shell_template_ranges_a_label_map_in_jsonpath():

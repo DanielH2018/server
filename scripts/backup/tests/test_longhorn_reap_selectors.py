@@ -9,38 +9,14 @@ of these cases is reachable through `test_longhorn_reap_logic.py`'s fixtures.
 Run: uv run pytest scripts/backup/tests/test_longhorn_reap_selectors.py
 """
 
-import json
-
 import longhorn_reap_logic as logic
 import longhorn_reap_selectors as selectors
-
-
-def _volume(name, *, group=None, state="attached"):
-    labels = {}
-    if group is not None:
-        labels["recurring-job-group.longhorn.io/%s" % group] = "enabled"
-    return {"metadata": {"name": name, "labels": labels}, "status": {"state": state}}
-
-
-def _backup(name, vol, created, job, state="Completed"):
-    return {
-        "metadata": {"name": name},
-        "status": {
-            "volumeName": vol,
-            "snapshotCreatedAt": created,
-            "labels": {"RecurringJob": job} if job else {},
-            "state": state,
-        },
-    }
+from _reap_entrypoint_harness import _backup, _volume
 
 
 def _claimed(name, vol, created, job, pvc, state="Completed"):
     """A Backup CR carrying the KubernetesStatus label Longhorn writes, as compact JSON."""
-    backup = _backup(name, vol, created, job, state=state)
-    backup["status"]["labels"]["KubernetesStatus"] = json.dumps(
-        {"pvcName": pvc, "namespace": "homelab"}, separators=(",", ":")
-    )
-    return backup
+    return _backup(name, vol, created, job, state=state, pvc=pvc)
 
 
 def test_backup_claim_reads_the_pvc_out_of_the_kubernetesstatus_label():
