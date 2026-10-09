@@ -314,10 +314,13 @@ still opens PRs, and the operator lands them.
     ```
 
     Run `/login`, trust the folder, then exit. The interactive session leaves a
-    `claude daemon run --origin transient` process behind in the login scope, and while it runs
-    the host spawns no phone session. The service stays `active` and logs nothing, so nothing
-    reports the failure. On 2026-10-09 the host started spawning only after that daemon was
-    killed, with the unit's hardening unchanged. Kill it, then restart the host:
+    `claude daemon run --origin transient` process behind in the login scope. On 2026-10-09 the
+    host spawned no phone session while that daemon ran. The service stayed `active` and logged
+    nothing, so nothing reported the failure. The host started spawning once the daemon was
+    killed, with the unit's hardening unchanged. A daemon is not a problem in itself: later
+    that day a `claude-agents` session's daemon ran as `claude` beside the host, and the phone
+    still connected. So the daemon `/login` leaves is the one to kill. The cause is unknown. Kill
+    it, then restart the host:
 
     ```bash
     sudo pkill -u claude -f 'claude daemon run'
