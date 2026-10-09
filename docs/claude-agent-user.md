@@ -17,7 +17,7 @@ operator decided this on 2026-10-09 (#3685). See
 |---|---|---|
 | 1 | A read-only `claude` user an operator can open a session as | Done 2026-10-04 (#3504, #3505) |
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
-| 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check as `claude` is owed. |
+| 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check ran 2026-10-09: two of three cases passed, and the approval case owes a re-run after #3913. |
 | 4 | The phone host `claude-rc.service` runs as `claude` | Planned. Starts after slice 3's check. |
 | 5 | Peer users, and the tools that decrypt SOPS | Planned |
 | 6 | Retire Claude sessions as `ubuntu` | Planned |
@@ -138,7 +138,8 @@ Decisions, in the order they were taken:
 - **`land.sh` merges directly when a PR is blocked only by the missing review** (#3541). GitHub
   auto-merge ignores a ruleset bypass, while a direct merge honours it (github/docs#45265, which
   includes a repro). So `land.sh --arm-merge` waits for CI, then merges through the REST
-  endpoint, pinned to the head SHA it checked.
+  endpoint, pinned to the head SHA it checked. Slice 3's check found that an approved agent PR
+  needs the same path, because the branch fence below also restricts updates to master (#3911).
 - **Renovate's `platformAutomerge` is off** (#3542), for the same reason. Renovate's own direct
   merge uses its bypass. Automerges therefore land on Renovate's next run rather than the moment
   CI passes.
@@ -224,11 +225,24 @@ After each of 3b to 3d, `land.sh` reported `needs-manual-apply` for daniel-serve
 skipped on purpose. Both `claude_code_agent_user_enabled` and `claude_code_lander_enabled` are
 false there, so the role runs only its removal path, with nothing to remove.
 
-**Check (owed):** a `claude` login runs
-`land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` on a real agent PR.
-The verdict file ends `VERDICT: settled`, and `probe.py health <svc>` passes. A PR touching
-`setup/claude_code/` is refused without an approval and lands with one. Only the operator can
-log in as `claude`, so only the operator can run this check. Slice 4 starts after it.
+**Check (run 2026-10-09, one case owed):** the operator logged in as `claude` and had a session
+run `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` on three agent PRs.
+Only the operator can log in as `claude`, so only the operator can run this check.
+
+- **A deployable change, #3904: passed.** A comment line in littlelink's deployment template
+  landed with `VERDICT: settled`. `/var/lib/claude-land/3904.verdict` ends with the same line,
+  and `probe.py health littlelink` exited 0.
+- **An approval-list path, #3911: the gate worked, and the landing needed a hand merge.** The
+  first run was refused with `need the operator's approval:
+  ansible/roles/setup/claude_code/CLAUDE.md`. After the operator approved the head, `land.sh`
+  armed auto-merge, because the PR's review decision was `APPROVED`. The branch fence restricts
+  updates to master, and auto-merge never applies a bypass, so the PR stayed `BLOCKED` until the
+  operator merged it by hand. #3913 merges an approved PR through the REST endpoint instead.
+- **A module the gate imports, #3990: passed.** A comment line in `scripts/lib/gh.py` was
+  refused with `need the operator's approval: scripts/lib/gh.py`, and the PR was closed without a merge.
+
+**Owed:** a re-run of the approval-list case after #3913, which must land without a hand merge.
+Slice 4 starts after it.
 
 **Rollback:** `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude`
 still opens PRs, and the operator lands them.

@@ -30,10 +30,24 @@ def _wait(states: list[str]):
     ]
 
 
-def test_a_pr_waiting_on_a_review_is_left_for_a_direct_merge(landing):
+# REVIEW_REQUIRED needs the bypass for the review gate. APPROVED needs it for the agent branch
+# fence, which restricts updates to master itself: armed, an approved agent PR sat BLOCKED
+# until a hand merge (#3911).
+BYPASS_ONLY = pytest.mark.parametrize("review", ["REVIEW_REQUIRED", "APPROVED"])
+
+
+@BYPASS_ONLY
+def test_a_pr_only_a_bypass_merges_is_left_for_a_direct_merge(landing, review):
     """Armed, it would sit BLOCKED: GitHub's auto-merge never applies a ruleset bypass."""
     ln, calls = landing(
-        Fakes(gh_views={"state,title,body,reviewDecision": _REVIEW_BOUND}),
+        Fakes(
+            gh_views={
+                "state,title,body,reviewDecision": {
+                    **_REVIEW_BOUND,
+                    "reviewDecision": review,
+                }
+            }
+        ),
         arm_merge=True,
         await_merge=True,
     )
@@ -42,10 +56,18 @@ def test_a_pr_waiting_on_a_review_is_left_for_a_direct_merge(landing):
     assert ln.direct_merge_subject == "Bump vale to 3.19.0"
 
 
-def test_a_pr_waiting_on_a_review_dies_without_await_merge(landing):
+@BYPASS_ONLY
+def test_a_pr_only_a_bypass_merges_dies_without_await_merge(landing, review):
     """Nothing else in the run would merge it, so leaving it unarmed would end silently."""
     ln, calls = landing(
-        Fakes(gh_views={"state,title,body,reviewDecision": _REVIEW_BOUND}),
+        Fakes(
+            gh_views={
+                "state,title,body,reviewDecision": {
+                    **_REVIEW_BOUND,
+                    "reviewDecision": review,
+                }
+            }
+        ),
         arm_merge=True,
     )
     with pytest.raises(Outcome) as exc:
@@ -54,6 +76,27 @@ def test_a_pr_waiting_on_a_review_dies_without_await_merge(landing):
     assert not [c for c in calls if c[0] == "gh"]
     # --await-merge alone only polls; the direct merge needs arm_merge in the same run (#3625).
     assert "re-run with both --arm-merge --await-merge" in exc.value.error
+
+
+def test_a_pr_with_changes_requested_is_refused_before_any_merge(landing):
+    """A direct merge would apply the operator's bypass to a PR someone asked to change."""
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title,body,reviewDecision": {
+                    **_REVIEW_BOUND,
+                    "reviewDecision": "CHANGES_REQUESTED",
+                }
+            }
+        ),
+        arm_merge=True,
+        await_merge=True,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert exc.value.rc == 1 and "changes requested" in exc.value.error
+    assert not [c for c in calls if c[0] == "gh"]
+    assert not ln.direct_merge_subject
 
 
 def _left_for_a_direct_merge(landing, states, ci, merge_rc=(0,)):

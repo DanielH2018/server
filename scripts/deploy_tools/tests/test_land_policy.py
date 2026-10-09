@@ -157,13 +157,22 @@ def test_an_unusable_approval_list_refuses_rather_than_approving_everything(
     assert expected in exc.value.error
 
 
-def test_the_auto_merge_arm_is_pinned_to_the_checked_head(landing, tmp_path):
-    """An approved PR takes the auto-merge path, which must carry the pin too."""
-    _, calls = _arm(
-        landing, tmp_path, _fakes(arm={**_ARM, "reviewDecision": "APPROVED"})
-    )
-    (call,) = _merge_calls(calls)
-    assert call[1][-2:] == ("--match-head-commit", HEAD)
+def test_an_approved_pr_merges_directly_at_the_checked_head(landing, tmp_path):
+    """An approved agent PR still needs the fence's bypass, so it takes the pinned REST merge.
+
+    Arming auto-merge left #3911 BLOCKED until a hand merge.
+    """
+    fakes = _fakes(arm={**_ARM, "reviewDecision": "APPROVED"})
+    fakes.gh_views["state,mergeable,headRefOid"] = [
+        {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": HEAD},
+        {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": HEAD},
+    ]
+    ln, calls = _arm(landing, tmp_path, fakes)
+    assert not [c for c in calls if c[0] == "gh" and "--auto" in c[1]]
+    merge.await_merge(ln)
+    (call,) = [c for c in calls if c[0] == "gh" and "PUT" in c[1]]
+    assert call[1][:4] == ("api", "-X", "PUT", "repos/{owner}/{repo}/pulls/999/merge")
+    assert f"sha={HEAD}" in call[1]
 
 
 def test_a_head_that_moves_after_the_checks_stops_the_merge(landing):
