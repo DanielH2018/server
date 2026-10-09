@@ -43,7 +43,7 @@ from diagnostics.probe_lib.health_rollout import seconds_since
 from lib.json_types import as_object, as_object_list
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
-from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
+from lib.kubectl import DEFAULT_CLUSTER, DEFAULT_TOOLS, MissingKubectl, kubectl_json
 
 _DEFAULTS_PATH = K8S_ROLES / "uptime-kuma" / "defaults" / "main.yml"
 
@@ -116,11 +116,18 @@ def created_monitors():
     return names
 
 
-def pod_age_seconds(cluster=DEFAULT_CLUSTER):
-    """Seconds since the uptime-kuma pod started, or None if that cannot be read."""
-    pods_doc = kubectl_json(
-        cluster, *k8s_pods_args("uptime-kuma", core.k8s_namespace())
-    )
+def pod_age_seconds(cluster=DEFAULT_CLUSTER, tools=DEFAULT_TOOLS):
+    """Seconds since the uptime-kuma pod started, or None if that cannot be read.
+
+    A host with no kubectl or no readable kubeconfig reads as None too (#4038): the caller's
+    unknown-age rule then fails loud on every absent tile, where the raise was a traceback.
+    """
+    try:
+        pods_doc = kubectl_json(
+            cluster, *k8s_pods_args("uptime-kuma", core.k8s_namespace()), tools=tools
+        )
+    except MissingKubectl:
+        return None
     if pods_doc is None:
         return None
     starts = [
