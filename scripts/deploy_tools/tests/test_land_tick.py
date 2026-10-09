@@ -39,9 +39,7 @@ def test_an_outright_failure_dies(landing):
     ln, _ = landing(Fakes(tick=[1]))
     with pytest.raises(Outcome) as exc:
         tick.run_tick(ln)
-    assert exc.value.rc == 1 and "gitops tick failed (exit 1)" in (
-        exc.value.error or ""
-    )
+    assert exc.value.rc == 1 and "gitops tick failed (exit 1)" in exc.value.error
     assert exc.value.verdict == "deploy-failed"
     assert ln.ledger.cause == "tick-failed"
 

@@ -26,7 +26,7 @@ def test_finish_carries_no_error(landing):
     ln, _ = landing()
     with pytest.raises(Outcome) as exc:
         ln.finish("settled", 0, "PR #999, abc")
-    assert exc.value.error is None and exc.value.rc == 0
+    assert exc.value.error == "" and exc.value.rc == 0
 
 
 def test_view_dies_when_gh_fails(landing):
@@ -36,7 +36,7 @@ def test_view_dies_when_gh_fails(landing):
     )
     with pytest.raises(Outcome) as exc:
         ln.view("state")
-    assert exc.value.rc == 1 and "HTTP 404" in (exc.value.error or "")
+    assert exc.value.rc == 1 and "HTTP 404" in exc.value.error
 
 
 def test_view_dies_when_gh_times_out(landing):
@@ -46,7 +46,7 @@ def test_view_dies_when_gh_times_out(landing):
     )
     with pytest.raises(Outcome) as exc:
         ln.view("state")
-    assert exc.value.rc == 1 and "gh timed out" in (exc.value.error or "")
+    assert exc.value.rc == 1 and "gh timed out" in exc.value.error
 
 
 def test_view_dies_when_gh_answers_with_something_that_is_not_json(landing):
@@ -57,7 +57,7 @@ def test_view_dies_when_gh_answers_with_something_that_is_not_json(landing):
     )
     with pytest.raises(Outcome) as exc:
         ln.view("state")
-    assert exc.value.rc == 1 and "unparseable gh output" in (exc.value.error or "")
+    assert exc.value.rc == 1 and "unparseable gh output" in exc.value.error
 
 
 def test_git_runs_in_the_primary_checkout_without_raising(landing):

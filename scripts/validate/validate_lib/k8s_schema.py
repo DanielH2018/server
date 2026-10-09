@@ -15,10 +15,12 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import enum
 import functools
 import json
 import re
 from pathlib import Path
+from typing import Final, Literal
 
 import jsonschema
 
@@ -48,8 +50,15 @@ K8S_SCHEMA_VERSION = "1.37"
 
 _OCTAL_LITERAL = re.compile(r"^0o[0-7]+$")
 
+
+class _NoSchema(enum.Enum):
+    """The type of `NO_SCHEMA`: a one-member enum, so `is NO_SCHEMA` narrows a return type."""
+
+    NO_SCHEMA = enum.auto()
+
+
 # Returned by schema_error for a kind the upstream OpenAPI spec does not describe — a CRD.
-NO_SCHEMA = object()
+NO_SCHEMA: Final = _NoSchema.NO_SCHEMA
 
 
 def normalise_octal(node):
@@ -184,7 +193,7 @@ def crd_schema_path(doc: dict) -> Path | None:
     return CRD_SCHEMA_DIR / group / f"{kind.lower()}_{version}.json"
 
 
-def crd_schema_error(doc: dict) -> str | None | object:
+def crd_schema_error(doc: dict) -> str | None | Literal[_NoSchema.NO_SCHEMA]:
     """Validate one CRD object against its vendored JSON Schema, or NO_SCHEMA if none exists.
 
     WHAT THIS CATCHES, precisely — it is narrower than it looks and the difference matters.
@@ -217,7 +226,7 @@ def crd_schema_error(doc: dict) -> str | None | object:
     return None
 
 
-def schema_error(doc: dict) -> str | None | object:
+def schema_error(doc: dict) -> str | None | Literal[_NoSchema.NO_SCHEMA]:
     """Validate one rendered object against the Kubernetes schema for K8S_SCHEMA_VERSION.
 
     Returns None when the object validates, NO_SCHEMA when nothing can check its
