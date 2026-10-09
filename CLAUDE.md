@@ -92,13 +92,9 @@ on the run says so. Commit first. `--check` and `--dry-run` still read the worki
 is where an uncommitted edit is meant to be exercised.
 
 **A failing run says what its exit code means — read its last two lines rather than looking
-the number up.** `deploy.sh: <NAME> (<code>): <meaning> <what to do>`, then
-`DEPLOY-VERDICT: <verdict> (<the arguments>)`, both from `scripts/lib/exit_codes.py`. Every
-member of `DEPLOY_SH_NO_VERDICT` means **nothing was deployed** — a resume point rather than a
-playbook failure. `DEPLOY_BAD_FLAGS` also ran nothing, but the fix is the command line rather
-than a retry. `DEPLOY_PLAYBOOK_FAILED` is the inverse: the playbook ran, a task failed, and
-changes before it are live — not a safe re-run. The Pi's `-e target=`, config-only runs and
-initial setup are in the **`deploy` skill**; the per-code table is `docs/reference/scripts.md`.
+the number up.** Which exits deployed nothing and which left changes live is owned by
+`docs/deploying.md`'s *Exit codes are resume points*. The Pi's `-e target=`, config-only runs
+and initial setup are in the **`deploy` skill**.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and
