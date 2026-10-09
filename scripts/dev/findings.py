@@ -169,6 +169,7 @@ from dev.findings_lib.plans import (
     plan_touch,
 )
 from dev.findings_lib.boundaries import REGISTER_CHECKOUTS, FindingsTools, aimed
+from dev.findings_lib.solo_only import fanout_tooling_paths
 from dev.findings_lib.verify import verification_report
 
 
@@ -473,6 +474,9 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     today = today_utc()
     rows = pickable(issues, live_claims=live, pr_refs=open_pr_refs(tools), today=today)
     rows = rows[: args.limit]
+    bodies = {i["number"]: i.get("body") or "" for i in issues}
+    for r in rows:
+        r["solo_only"] = bool(fanout_tooling_paths(bodies[r["number"]]))
     # Named, not hidden: withheld silently, a deferred issue reads as a closed one. Under
     # `--json` the note goes to stderr, because the array IS the free set an orchestrator
     # claims (`issue-fanout`), and a deferred row inside it would be claimed.
@@ -491,9 +495,11 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
         held = (
             f"  [stale claim by `{stale[r['number']]}`]" if r["number"] in stale else ""
         )
+        # Offered, not withheld: a solo session works it. Only a fan-out batch may not.
+        solo = "  [solo-only: cites fan-out tooling]" if r["solo_only"] else ""
         print(
             f"#{r['number']:<5} {r['severity'] or '-':<6} {r['domain'] or '-':<21} "
-            f"{r['title']}{held}"
+            f"{r['title']}{held}{solo}"
         )
     if any(r["number"] in stale for r in rows):
         print(

@@ -61,6 +61,13 @@ direction differs from the two wave-level bounds below: a shared file is
 merged into one batch, never held for the next wave, because holding it would still produce
 two identical fixes.
 
+**An issue that cites the fan-out tooling goes in no batch.** `next` marks it
+`[solo-only: cites fan-out tooling]` (`solo_only` under `--json`) when its body names any
+`fanout*.py` or a file under `fanout_lib/`, and `launch` refuses a batch holding one before it
+touches a host. A batch that edits that code runs under its own edited reviewer, red gate and
+Stop hook, and those batches caused the most rework in 68 review records (#3959). Work it in a
+session of its own: claim it and fix it as usual.
+
 Two shapes collide across roles as well, so they are bounded per wave rather than per role.
 Both were measured on the 2026-09-10 fan-outs:
 

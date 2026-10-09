@@ -7,6 +7,7 @@ from datetime import date
 from _findings_fakes import Fakes, build_tools, facts, make_issue, operator_comment
 
 from dev.findings import main
+from dev.findings_lib.solo_only import fanout_tooling_paths
 from dev.findings_lib.issue_model import (
     claim_comment,
     deferred,
@@ -19,12 +20,12 @@ WT = "worktree-issue-1132"
 TODAY = date(2026, 9, 11)
 
 
-def _issue(number, labels=(), comments=()):
+def _issue(number, labels=(), comments=(), body=""):
     return {
         "number": number,
         "title": f"finding {number}",
         "state": "OPEN",
-        "body": "",
+        "body": body,
         "labels": [{"name": n} for n in ("claude", *labels)],
         "comments": [operator_comment(b) for b in comments],
         "createdAt": "2026-09-01T00:00:00Z",
@@ -104,6 +105,19 @@ def test_a_stale_claimed_issue_is_pickable():
 
 def test_an_issue_with_an_open_pr_is_not_pickable():
     assert pickable([_issue(1)], live_claims=set(), pr_refs={1}, today=TODAY) == []
+
+
+def test_fanout_tooling_paths_finds_bare_and_pathed_citations_only():
+    body = (
+        "`fanout_place.py status` and scripts/dev/fanout_lib/review.py:120, "
+        "the `.claude/hooks/fanout-stop.py` hook; not scripts/dev/tests/"
+        "test_fanout_red_gate.py, the issue-fanout skill or ~/.claude/fanout/."
+    )
+    assert fanout_tooling_paths(body) == [
+        ".claude/hooks/fanout-stop.py",
+        "fanout_place.py",
+        "scripts/dev/fanout_lib/review.py",
+    ]
 
 
 def test_pickable_orders_high_severity_first():
@@ -195,6 +209,29 @@ def test_next_text_render_marks_a_stale_claim_and_names_reap(capsys):
     assert "#1140" in out and "#1132" in out
     assert f"[stale claim by `{stale_wt}`]" in out
     assert "reap" in out
+
+
+def test_next_json_offers_a_fanout_tooling_issue_marked_solo_only(capsys):
+    tooling = make_issue(1150)
+    tooling["body"] = "Fix `fanout_place.py stop`."
+    tools, _ = build_tools(
+        Fakes(issues=[tooling, make_issue(1151)], worktree_facts=facts())
+    )
+    assert main(["next", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert {r["number"]: r["solo_only"] for r in rows} == {1150: True, 1151: False}
+
+
+def test_next_text_render_marks_a_solo_only_issue(capsys):
+    tooling = make_issue(1150, title="tooling")
+    tooling["body"] = "scripts/dev/fanout_lib/red_gate.py drops the commit"
+    tools, _ = build_tools(
+        Fakes(issues=[tooling, make_issue(1151)], worktree_facts=facts())
+    )
+    assert main(["next"], tools) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert any("#1150" in ln and "[solo-only" in ln for ln in lines)
+    assert not any("#1151" in ln and "[solo-only" in ln for ln in lines)
 
 
 def test_next_text_render_marks_nothing_when_no_claim_is_stale(capsys):

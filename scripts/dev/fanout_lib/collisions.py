@@ -19,6 +19,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import Issue
 from findings_lib.issue_model import cited_paths
+from findings_lib.solo_only import fanout_tooling_paths
 
 
 def shared_files(
@@ -79,4 +80,31 @@ def refuse_shared_files(
             f"--allow-shared-file {path} if the citation is context rather than an edit",
             file=sys.stderr,
         )
+    return refused
+
+
+def refuse_solo_only(
+    batches: Mapping[str, Sequence[int]], issues: Mapping[int, Issue]
+) -> bool:
+    """Whether `launch` must refuse because a batch holds an issue citing the fan-out tooling.
+
+    `next` marks such an issue `[solo-only]` (#3959). A batch that edits the pipeline runs
+    under its own edited copy of the reviewer, the red gate and the Stop hook, which is why
+    the held-settings machinery exists. Refused before the first ssh, like the shared-file
+    check, and a solo session claims and works the issue instead.
+    """
+    refused = False
+    for batch, numbers in batches.items():
+        for number in numbers:
+            issue = issues.get(number)
+            cited = fanout_tooling_paths(issue.body) if issue else []
+            if not cited:
+                continue
+            refused = True
+            print(
+                f"launch: batch {batch}: #{number} cites the fan-out tooling "
+                f"({', '.join(cited)}) — it is solo-only (#3959); drop it from the batch "
+                "and work it in a session of its own",
+                file=sys.stderr,
+            )
     return refused
