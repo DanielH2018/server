@@ -12,10 +12,13 @@ tick merged and never applies, because the role is denylisted or the change is n
 - `pending_k8s_deferred` answers what is owed,
 - `reconcile` is the tick-start pass that discharges and names what is left.
 
+Within the deployer's `files/`, no other module reads or writes the two classes
+(`tests/test_k8s_unapplied_marker.py::test_only_deploy_k8s_owed_touches_the_k8s_ledger_classes`).
 `deploy_state_k8s.K8sLineMarkers` stays the storage layer under it, because
 `scripts/deploy_tools/gitops_state.py clear-owed` reaches the same ledger as `state.*` from
-outside a tick. That operator clear, and the copies of `gitops_ledger` that monitor-bridge
-and deploy-ui read, are the only other code touching the two classes.
+outside a tick. The readers outside the deployer — monitor-bridge, deploy-ui, renovate-agent,
+the SessionStart banner and `scripts/` — parse the ledger through `gitops_ledger` or a copy
+of it, and never write these classes.
 
 "Digest provable" has one definition. `deploy_narrow.digest_provable` is the transport: it
 runs `scripts/deploy_tools/digest_provable.py` and decodes its answer. `_digest_provable`
