@@ -28,23 +28,20 @@ manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 # dropped from the file lists" task only deletes the STAGED FILE, never the live object.
 # manifest-prune-check.sh pages about that gap after the fact; this is the in-place fix.
 #
-# DECIDED: armed on every role but two. The operator overturned the earlier "default false,
-# hand-label each template" marker on 2026-10-04 (#3388). Its first blocker was a missing
-# mechanism: a role arming the prune renders through ansible/templates/role-labelled.yaml.j2,
-# which stamps `homelab/role: <service>` onto every document, so no template needs a hand edit.
-# Its second blocker is a cost, not a hazard: an orphan whose staged file was deleted before its
+# DECIDED: armed by default, and a role opts out with `manifests_prune: false` at its include.
+# The operator flipped the default on 2026-10-09 (#3662), after #3388 had armed every caller
+# by hand on 2026-10-04. A role arming the prune renders through
+# ansible/templates/role-labelled.yaml.j2, which stamps `homelab/role: <service>` onto every
+# document, so no template needs a hand edit. An orphan whose staged file was deleted before its
 # role was armed never receives the label and needs one kubectl delete by hand. The prune cannot
 # see such an orphan, so arming a role that still has one is safe, and manifest-prune-check.sh
-# keeps flagging it. The armed roles are not listed here, because a hand list drifted behind
-# the armings: every role that includes this one arms it, except authelia (its redis lever drops
-# three manifests whose live objects must survive the drop) and nut (arming restarts the UPS
-# monitor), each excluded by an operator decision recorded as a DECIDED marker at its include.
+# keeps flagging it. Two roles opt out, each by an operator decision recorded as a DECIDED marker
+# at its include: authelia (its redis lever drops three manifests whose live objects must
+# survive the drop) and nut (arming restarts the UPS monitor).
 # ansible/tests/deploy/test_manifests_prune.py:_UNARMED_ROLES holds that rule. A deferred render
 # (pihole's instance 2, headlamp's observability RBAC, netpol-baseline's observability policies)
-# never goes through the labelling wrapper, so the caller's prune cannot select it. The default
-# stays false while two roles are excluded, and because flipping it moves every role's rendered
-# bytes and needs one full deploy.
-manifests_prune: false
+# never goes through the labelling wrapper, so the caller's prune cannot select it.
+manifests_prune: true
 
 # The one namespace an armed role's apply and prune run in (`-n`). kubectl refuses a document
 # placed in any other namespace, and the prune lists candidates only here. A role whose

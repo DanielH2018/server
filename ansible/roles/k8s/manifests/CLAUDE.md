@@ -63,8 +63,8 @@ deferred pair below.
   whose manifests were *accepted*, not one whose pods are up. Every task in `drain.yml` is
   `tags: [always]`: a gitops-deploy run filters `[deploy]` out, which left the drain waiting
   on nothing behind a `failed=0` recap.
-- **Dropping a name from `manifests_files` leaves the live object serving** unless the role
-  passes `manifests_prune: true`. An armed role renders through
+- **Dropping a name from `manifests_files` leaves the live object serving** only where a
+  role passes `manifests_prune: false`. An armed role renders through
   `ansible/templates/role-labelled.yaml.j2`, which labels every document, since the `-l`
   selector also filters the apply. Pruned kinds:
   `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`. It applies in
@@ -100,7 +100,7 @@ the `rollouts[]` each workload is owed, and `manifests_digest`/`secret_digest` â
 ## Guards
 
 `grep -rl manifests ansible/tests/k8s ansible/tests/deploy` lists the checks that keep callers
-honest: the apply and dry-run guards, the rollout gates, the `manifests_prune` opt-in, the
+honest: the apply and dry-run guards, the rollout gates, the prune opt-outs, the
 pruned-directory reservation, the checksum census and the stamp-ordering pair. A role rolling a
 workload outside this one (`observability`, `pihole`, `prowlarr`) is covered by the inline-gate
 test, not exempted.
