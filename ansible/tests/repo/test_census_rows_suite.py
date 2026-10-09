@@ -72,14 +72,17 @@ BARE_ROLE_WALK = re.compile(
     r"|\b\w*roles\w*\.iterdir\(\)"
 )
 
-# A role's task files read inline: a plane-wide `*/tasks/` glob, or one role's `tasks`
-# directory globbed. `_role_census.task_files`/`role_task_files` answer that question, and the
-# inline copies disagreed on depth and on a retired role's shell (#3770). A `main.yml`-only
-# glob asks which roles have an entry point, a different question, so it stays clean.
+# A role's task files read inline: a plane-wide `*/tasks/` glob, one role's `tasks` directory
+# globbed, or a name bound to that directory (`tasks_dir`, `TASKS`) and globbed on a later
+# line. `_role_census.task_files`/`role_task_files` answer that question, and the inline copies
+# disagreed on depth and on a retired role's shell (#3770). A `main.yml`-only glob asks which
+# roles have an entry point, a different question, so it stays clean. A binding whose name
+# does not say `tasks` (`d = role / "tasks"`) still escapes; no walk on the tree is spelt so.
 INLINE_TASK_WALK = re.compile(
-    r'glob\("\*/(?:\*/)?tasks/(?!main\.yml")'
-    r'|"tasks"\)\.r?glob\('
-    r'|rglob\("tasks'
+    r'glob\("(?:\*/){1,2}tasks/(?!main\.yml")'
+    r'|glob\("tasks/(?!main\.yml")'
+    r'|"tasks"\s*\)\s*\.r?glob\('
+    r"|\b\w*(?i:tasks)\w*\.r?glob\("
 )
 
 # Every module whose role census goes through `role_dirs`, pinned by name so a rewrite that
@@ -200,6 +203,12 @@ ROWS = (
             Subject("b.py", 'for f in (role_dir / "tasks").rglob("*.yml"):'),
             Subject("c.py", 'for f in sorted(roles_dir.glob("*/tasks/*.yml")):'),
             Subject("d.py", 'for f in sorted(ROLES.glob("*/*/tasks/**/*.yml")):'),
+            Subject(
+                "e.py", 'tasks_dir = role / "tasks"\nfor f in tasks_dir.glob("*.yml"):'
+            ),
+            Subject("f.py", 'for f in sorted(TASKS.glob("*.yml")):'),
+            Subject("g.py", 'for f in role.glob("tasks/*.yml"):'),
+            Subject("h.py", 'for f in (role / "tasks" ).rglob("*.yml"):'),
         ),
         green=(
             Subject("a.py", "for f in role_task_files(role):"),
@@ -217,6 +226,11 @@ ROWS = (
             SELF: "the red fixtures above hold the offending spelling as text",
             "ansible/tests/longhorn/test_prune_backups.py": (
                 "reads ansible/prune_backups/tasks/, a playbook's task directory, not a role's"
+            ),
+            "ansible/tests/_role_census.py": "is role_task_files, the walk every guard calls",
+            "ansible/tests/_check_mode.py": (
+                "importer_guards reads the files beside one task file, in whatever directory "
+                "its caller passes, tmp_path fixtures included; it is not a role census"
             ),
         },
     ),

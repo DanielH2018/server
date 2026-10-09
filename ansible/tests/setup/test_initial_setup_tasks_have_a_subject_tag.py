@@ -20,6 +20,7 @@ from pathlib import Path
 from lib import yaml_fast
 
 from _helpers import ROLES
+from _role_census import role_task_files
 
 TASKS = ROLES / "setup" / "initial_setup" / "tasks"
 
@@ -59,7 +60,7 @@ def untagged_or_umbrella_only(tasks) -> list[str]:
 
 def _initial_setup_task_files() -> list[Path]:
     # main.yml holds only the import_tasks lines; the tasks they import are walked directly.
-    return sorted(p for p in TASKS.glob("*.yml") if p.name != "main.yml")
+    return [p for p in role_task_files(TASKS.parent) if p != TASKS / "main.yml"]
 
 
 def test_every_initial_setup_task_has_a_subject_tag() -> None:

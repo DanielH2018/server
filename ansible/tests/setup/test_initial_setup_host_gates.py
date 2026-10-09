@@ -26,6 +26,7 @@ Run: uv run pytest ansible/tests/setup/test_initial_setup_host_gates.py
 import re
 
 from _helpers import ALL_VARS, ANSIBLE
+from _role_census import role_task_files
 from land_reach import _eval_when
 from lib import yaml_fast
 
@@ -91,7 +92,7 @@ def _when_text(task: dict) -> str:
 def _gates() -> dict[str, str]:
     """Task name -> its `when:`, for every host-gated task in the role's task files."""
     gates = {}
-    for path in sorted(TASKS.glob("*.yml")):
+    for path in role_task_files(TASKS.parent):
         for task in yaml_fast.safe_load(path.read_text()) or []:
             if not isinstance(task, dict):
                 continue

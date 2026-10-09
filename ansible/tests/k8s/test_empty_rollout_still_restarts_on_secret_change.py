@@ -50,6 +50,7 @@ from pathlib import Path
 from lib import yaml_fast
 from _helpers import K8S_ROLES
 from _k8s_render import rendered_texts
+from _role_census import role_task_files
 
 _MANIFESTS = K8S_ROLES / "manifests/tasks/main.yml"
 
@@ -91,11 +92,8 @@ def _restarts_privately(role_dir: Path) -> bool:
     `roll_one.yml`. Searching the whole `tasks/` tree rather than `main.yml` is the point —
     pihole's restart lives in the include, so a main.yml-only check would call it broken.
     """
-    tasks_dir = role_dir / "tasks"
-    if not tasks_dir.is_dir():
-        return False
     return any(
-        "rollout restart" in path.read_text() for path in tasks_dir.rglob("*.yml")
+        "rollout restart" in path.read_text() for path in role_task_files(role_dir)
     )
 
 

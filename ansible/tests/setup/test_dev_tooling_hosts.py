@@ -18,6 +18,7 @@ Run: uv run pytest ansible/tests/setup/test_dev_tooling_hosts.py
 """
 
 from _helpers import ANSIBLE, HOST_VARS
+from _role_census import role_task_files
 from lib import yaml_fast
 
 VAR = "dev_tooling_hosts"
@@ -51,7 +52,7 @@ KNOWN_TOOLING_TASKS = frozenset(
 def _tooling_tasks() -> list[tuple[str, dict]]:
     """(file name, task) for every task in the role carrying the `tooling` tag."""
     found = []
-    for tasks_file in sorted(TASKS_DIR.glob("*.yml")):
+    for tasks_file in role_task_files(TASKS_DIR.parent):
         for task in yaml_fast.safe_load(tasks_file.read_text()) or []:
             if not isinstance(task, dict):
                 continue
