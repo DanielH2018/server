@@ -22,14 +22,11 @@ Run: uv run pytest ansible/tests/setup/test_per_user_home_resolution.py
 import pytest
 
 from _helpers import SETUP_ROLES, load_tasks, walk_tasks
-
-
-def _task_files():
-    return sorted(SETUP_ROLES.glob("*/tasks/*.yml"))
+from _role_census import task_files
 
 
 @pytest.mark.parametrize(
-    "path", _task_files(), ids=lambda p: f"{p.parents[1].name}/{p.name}"
+    "path", task_files(SETUP_ROLES), ids=lambda p: f"{p.parents[1].name}/{p.name}"
 )
 def test_unescalated_tasks_do_not_use_ansible_env_home(path):
     offenders = [
@@ -47,4 +44,4 @@ def test_unescalated_tasks_do_not_use_ansible_env_home(path):
 
 
 def test_the_guard_actually_inspects_something():
-    assert len(_task_files()) >= 5, "expected several setup-role task files"
+    assert len(task_files(SETUP_ROLES)) >= 5, "expected several setup-role task files"

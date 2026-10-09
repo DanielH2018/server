@@ -59,7 +59,8 @@ from lib import yaml_fast
 
 from _check_mode import unguarded_deref
 from _helpers import ROLES as _ROLES
-from _skip_result_rule import _offenders, _task_files
+from _role_census import task_files
+from _skip_result_rule import _offenders
 
 
 _COREDNS = _ROLES / "setup" / "k3s" / "tasks" / "coredns.yml"
@@ -85,9 +86,7 @@ _KNOWN_TASK_FILES = frozenset(
 )
 
 
-@pytest.mark.parametrize(
-    "path", _task_files(), ids=lambda p: str(p.relative_to(_ROLES))
-)
+@pytest.mark.parametrize("path", task_files(), ids=lambda p: str(p.relative_to(_ROLES)))
 def test_no_unguarded_consumer_of_a_conditional_register(path: Path) -> None:
     problems = _offenders(path)
     assert not problems, "\n".join(problem.message for problem in problems)
@@ -99,9 +98,9 @@ def test_the_census_walks_the_files_it_was_written_for() -> None:
     The rule's own behaviour is pinned by the anchors below. This asserts the glob still
     reaches files that hold an offender, so a moved roles tree fails here by name.
     """
-    walked = {path.relative_to(_ROLES).as_posix() for path in _task_files()}
+    walked = {path.relative_to(_ROLES).as_posix() for path in task_files()}
     missing = sorted(_KNOWN_TASK_FILES - walked)
-    assert not missing, f"_task_files() no longer reaches {missing}"
+    assert not missing, f"task_files() no longer reaches {missing}"
 
 
 def test_the_widened_rule_would_have_caught_the_coredns_read(tmp_path: Path) -> None:

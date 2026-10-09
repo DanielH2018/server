@@ -227,6 +227,21 @@ def render_role_template(
 # `_render_all` skips `Dockerfile*` because its output feeds a YAML parse. A build pin is still
 # a rendered value — code-server's Dockerfile names its node URL and every extension URL
 # through a role default — so the build files get their own accessor and their own cache (#3175).
+def traefik_static_config(
+    overrides: dict | None = None, *, host: str = "daniel-box"
+) -> dict:
+    """Traefik's static config itself, parsed, not the ConfigMap that wraps it.
+
+    `static-config.yaml.j2`'s data value is a block scalar, so the config is a STRING at the
+    manifest level and has to be parsed a second time. Checked on the render rather than the
+    template's text: the indirection trap in `textual-guard-checks-break-on-indirection`.
+    """
+    doc = yaml_fast.safe_load(
+        render_role_template("traefik", "static-config.yaml.j2", overrides, host=host)
+    )
+    return yaml_fast.safe_load(doc["data"]["traefik.yml"])
+
+
 BUILD_TEMPLATE_GLOB = "Dockerfile*.j2"
 
 # The roles whose build the accessor must reach, so a renamed or moved template fails as a

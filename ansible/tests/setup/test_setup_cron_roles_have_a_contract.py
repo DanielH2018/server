@@ -43,16 +43,6 @@ EXEMPT: dict[str, str] = {
 }
 
 
-def _role_dirs(roles_dir: Path = SETUP_ROLES) -> list[Path]:
-    """Every role under `roles_dir`, a dotted directory and a retired role's shell skipped.
-
-    A shell is a directory holding only a gitignored `__pycache__/` after the deployer's
-    fast-forward removed the role's tracked files; reading it as a role would raise
-    `FileNotFoundError` on its missing `CLAUDE.md`.
-    """
-    return [d for d in role_dirs(roles_dir) if not d.name.startswith(".")]
-
-
 def _installs_a_cron_or_timer(role_dir: Path) -> bool:
     """True if any task file schedules a cron (not `state: absent`) or the role ships a timer.
 
@@ -93,7 +83,7 @@ def _contract_problems(role_dir: Path, exempt: dict[str, str] = EXEMPT) -> list[
 
 def test_every_setup_role_with_a_state_changing_cron_has_the_contract():
     problems = []
-    for role_dir in _role_dirs():
+    for role_dir in role_dirs(SETUP_ROLES, skip_dotted=True):
         problems.extend(_contract_problems(role_dir))
     assert not problems, "\n".join(problems)
 
@@ -110,7 +100,11 @@ def test_exempt_roles_still_install_a_cron_or_timer():
 
 def test_census_finds_the_roles_known_to_install_crons():
     """Non-vacuity, per CLAUDE.md's "a check that finds its own subject by pattern" rule."""
-    found = {d.name for d in _role_dirs() if _installs_a_cron_or_timer(d)}
+    found = {
+        d.name
+        for d in role_dirs(SETUP_ROLES, skip_dotted=True)
+        if _installs_a_cron_or_timer(d)
+    }
     expected = {"gitops_deploy", "renovate_agent", "k3s", "fake_remux", "initial_setup"}
     assert expected <= found, f"missing from the cron/timer census: {expected - found}"
 
