@@ -124,9 +124,9 @@ class DeployTools:
     """Every boundary one tick crosses, so a test replaces a field and not a module.
 
     The defaults are production. `run` is the one that also reaches subprocess indirectly:
-    `deploy_io.deploy_k8s` and `deploy_broad` build their own argv and call
-    `deploy_io.run` qualified, so they are not fields here — the argv they build is what the
-    suite asserts on, and a field would replace the builder rather than the process.
+    `deploy_io.deploy_k8s` and `deploy_broad` build their own argv and take `run=tools.run`,
+    so they are not fields here — the argv they build is what the suite asserts on, and a
+    field would replace the builder rather than the process.
     """
 
     run: Callable[..., str] = deploy_io.run

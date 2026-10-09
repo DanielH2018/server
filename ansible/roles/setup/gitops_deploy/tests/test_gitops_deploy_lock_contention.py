@@ -74,7 +74,7 @@ def _deferred(tick, state_dir, posts: int = 0) -> None:
 
 
 def test_a_busy_service_lock_defers_a_k8s_deploy(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """CLEAN half for handle_k8s: one rollout is running, so this tick does nothing at all.
 
@@ -83,16 +83,14 @@ def test_a_busy_service_lock_defers_a_k8s_deploy(
     """
     _busy(tick)
     plan = _plan(ChangeSet(k8s_deploy={"sonarr"}))
-    code = deploy_handlers.handle_k8s(
-        tick.tools, gitops_deploy.STATE, settings, _target(), plan
-    )
+    code = deploy_handlers.handle_k8s(tick.tools, state, settings, _target(), plan)
     assert code == 0
     assert len(tick.playbooks) == 1, "a rollback ran for a deploy that never started"
     _deferred(tick, state_dir)
 
 
 def test_a_busy_service_lock_defers_a_broad_apply(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """CLEAN half for handle_broad, which is forward-only and so has no rollback to skip.
 
@@ -105,9 +103,7 @@ def test_a_busy_service_lock_defers_a_broad_apply(
         ChangeSet(broad=True, broad_setup=True, setup_roles={"gitops_deploy"}),
         paths=["ansible/roles/setup/gitops_deploy/templates/config.env.j2"],
     )
-    code = deploy_handlers.handle_broad(
-        tick.tools, gitops_deploy.STATE, settings, _target(), plan
-    )
+    code = deploy_handlers.handle_broad(tick.tools, state, settings, _target(), plan)
     assert code == 0
     _deferred(tick, state_dir)
     assert not (state_dir / "receipts.jsonl").exists(), (
@@ -117,18 +113,16 @@ def test_a_busy_service_lock_defers_a_broad_apply(
 
 
 def test_a_busy_service_lock_names_the_lock_in_the_marker(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     tick.playbook_outcomes = [deploy_locks.ServiceLockBusy(BUSY, lock="sonarr")]
     plan = _plan(ChangeSet(k8s_deploy={"sonarr"}))
-    deploy_handlers.handle_k8s(
-        tick.tools, gitops_deploy.STATE, settings, _target(), plan
-    )
+    deploy_handlers.handle_k8s(tick.tools, state, settings, _target(), plan)
     assert (state_dir / "contention_since").read_text().split()[1] == "sonarr"
 
 
 def test_consecutive_contention_defers_extend_one_streak(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state
 ):
     """The second defer keeps the first tick's stamp: the age monitor-bridge reads is how
     long the lock has kept the deployer from deploying, not how long since the last try."""
@@ -138,10 +132,8 @@ def test_consecutive_contention_defers_extend_one_streak(
     ]
     plan = _plan(ChangeSet(k8s_deploy={"sonarr"}))
     for _ in range(2):
-        deploy_handlers.handle_k8s(
-            tick.tools, gitops_deploy.STATE, settings, _target(), plan
-        )
-    entry = gitops_deploy.STATE.contention_pending()
+        deploy_handlers.handle_k8s(tick.tools, state, settings, _target(), plan)
+    entry = state.contention_pending()
     assert entry.count == 2
     assert entry.first_seen <= entry.last_seen
 
@@ -161,7 +153,7 @@ _MIXED_PATHS = [
 
 
 def test_a_contended_mixed_range_records_no_pending_role(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """CLEAN half: nothing is merged when this returns, so nothing is pending.
 
@@ -172,18 +164,18 @@ def test_a_contended_mixed_range_records_no_pending_role(
     _busy(tick)
     code = deploy_handlers.handle_broad(
         tick.tools,
-        gitops_deploy.STATE,
+        state,
         settings,
         _target(),
         _plan(_MIXED, _MIXED_PATHS),
     )
     assert code == 0
-    assert gitops_deploy.STATE.manual_plane_pending() == [], (
+    assert state.manual_plane_pending() == [], (
         "a role was left recorded as merged-and-unapplied for a merge that was undone"
     )
     # The one keyed marker, by the name it actually has: a read of a basename the deployer
     # never wrote would pass whatever the dedupe held.
-    assert gitops_deploy.STATE.alerted_sha("broad") is None, (
+    assert state.alerted_sha("broad") is None, (
         "the page dedupe survived, so the record this range gets next tick would be silent"
     )
     # One post, and it is `record`'s own — sent before the apply was even attempted, so it
@@ -208,7 +200,7 @@ _TWO_PLANE_PATHS = [
 
 
 def test_a_contended_second_plan_takes_back_the_first_plans_receipt(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """CLEAN half: the reset undoes the merge, so no marker may claim that SHA.
 
@@ -220,7 +212,7 @@ def test_a_contended_second_plan_takes_back_the_first_plans_receipt(
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
     code = deploy_handlers.handle_broad(
         tick.tools,
-        gitops_deploy.STATE,
+        state,
         settings,
         _target(),
         _plan(_TWO_PLANES, _TWO_PLANE_PATHS),
@@ -235,7 +227,7 @@ def test_a_contended_second_plan_takes_back_the_first_plans_receipt(
 
 
 def test_a_contended_tick_leaves_an_earlier_ticks_receipt_alone(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """FLAGGED half: the reverse drops this origin's receipt, not every receipt.
 
@@ -255,7 +247,7 @@ def test_a_contended_tick_leaves_an_earlier_ticks_receipt_alone(
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
     deploy_handlers.handle_broad(
         tick.tools,
-        gitops_deploy.STATE,
+        state,
         settings,
         _target(),
         _plan(_TWO_PLANES, _TWO_PLANE_PATHS),
@@ -264,7 +256,7 @@ def test_a_contended_tick_leaves_an_earlier_ticks_receipt_alone(
 
 
 def test_a_failed_mixed_apply_still_records_its_pending_role(
-    gitops_deploy, tick, settings, state_dir
+    gitops_deploy, tick, settings, state_dir, state
 ):
     """FLAGGED half: a FAILED apply keeps the record.
 
@@ -276,7 +268,7 @@ def test_a_failed_mixed_apply_still_records_its_pending_role(
     tick.playbook_outcomes = [RuntimeError("the play failed")]
     code = deploy_handlers.handle_broad(
         tick.tools,
-        gitops_deploy.STATE,
+        state,
         settings,
         _target(),
         _plan(_MIXED, _MIXED_PATHS),

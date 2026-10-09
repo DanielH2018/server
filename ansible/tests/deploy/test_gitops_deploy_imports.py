@@ -7,7 +7,7 @@ Everything else is a leaf. Two rules keep that shape, and both fail silently wit
 
 1. **A leaf may not reach back up.** `deploy_toolbox` supplies `gitops_deploy`'s boundaries, so
    an import of `gitops_deploy` from it is a cycle — and when the entry module runs as
-   `__main__`, a SECOND copy of it under a second name, with its own CONFIG and its own STATE.
+   `__main__`, a SECOND copy of it under a second name, with its own CONFIG.
 2. **`deploy_logic.py` defines nothing.** A `def` added to the index is a def the layer map
    cannot place, and the first step back toward one 1.4k-line module.
 
@@ -310,7 +310,7 @@ def test_no_leaf_imports_the_entry_module():
     """The rule ALLOWED encodes, asserted directly so the failure names the cycle.
 
     A leaf that imports `gitops_deploy` gets a second copy of it whenever the deployer runs as
-    `__main__`, with its own CONFIG object and its own STATE.
+    `__main__`, with its own CONFIG object.
     """
     siblings = _modules_on_disk()
     importers = sorted(

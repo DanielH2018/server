@@ -82,43 +82,41 @@ def _marker(state_dir, name: str) -> str | None:
 
 # ── the phase on its own ──────────────────────────────────────────────────────────────────
 def test_a_config_that_disagrees_with_the_checkout_is_re_rendered(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """The flagged half: HEAD denies a role the baked config does not."""
     _declares(tick, "false")
-    assert deploy_phases.reconcile_denylist(
-        gitops_deploy.STATE, _armed(settings), LOCAL
-    )
+    assert deploy_phases.reconcile_denylist(tick.tools, state, _armed(settings), LOCAL)
     assert tick.playbooks == [RENDER_CONFIG]
-    assert gitops_deploy.STATE.read("denylist_rendered") == LOCAL
+    assert state.read("denylist_rendered") == LOCAL
 
 
 def test_a_config_that_already_matches_renders_nothing(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """The clean half. Same scripted checkout, config that agrees with it — no playbook."""
     _declares(tick, "false")
     assert not deploy_phases.reconcile_denylist(
-        gitops_deploy.STATE, _armed(settings, ["sonarr"]), LOCAL
+        tick.tools, state, _armed(settings, ["sonarr"]), LOCAL
     )
     assert tick.playbooks == []
-    assert gitops_deploy.STATE.read("denylist_rendered") == LOCAL
+    assert state.read("denylist_rendered") == LOCAL
 
 
 def test_the_same_checkout_is_read_once_and_only_once(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """The once-per-SHA guard: no re-render, and not even the per-role `git show` reads."""
     _declares(tick, "false")
-    gitops_deploy.STATE.write("denylist_rendered", LOCAL)
+    state.write("denylist_rendered", LOCAL)
     assert not deploy_phases.reconcile_denylist(
-        gitops_deploy.STATE, _armed(settings), LOCAL
+        tick.tools, state, _armed(settings), LOCAL
     )
     assert tick.playbooks == [] and tick.git == []
 
 
 def test_a_failed_re_render_marks_the_sha_and_does_not_park_the_deployer(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """A render that fails must not retry every tick, and must not hold the whole pipeline.
 
@@ -128,27 +126,25 @@ def test_a_failed_re_render_marks_the_sha_and_does_not_park_the_deployer(
     """
     _declares(tick, "false")
     tick.playbook_outcomes = [RuntimeError("ansible exploded")]
-    assert deploy_phases.reconcile_denylist(
-        gitops_deploy.STATE, _armed(settings), LOCAL
-    )
-    assert gitops_deploy.STATE.read("denylist_rendered") == LOCAL
-    assert gitops_deploy.STATE.hold_sha is None
+    assert deploy_phases.reconcile_denylist(tick.tools, state, _armed(settings), LOCAL)
+    assert state.read("denylist_rendered") == LOCAL
+    assert state.hold_sha is None
 
 
 def test_an_unreadable_ref_retries_next_tick_instead_of_claiming_the_sha(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """A transient git failure is not evidence about the denylist, so it marks no SHA."""
     tick.tree_listing = K8S_DEFAULTS + "\n"  # nothing scripted for `git show`
     assert not deploy_phases.reconcile_denylist(
-        gitops_deploy.STATE, _armed(settings), LOCAL
+        tick.tools, state, _armed(settings), LOCAL
     )
     assert tick.playbooks == []
-    assert gitops_deploy.STATE.read("denylist_rendered") is None
+    assert state.read("denylist_rendered") is None
 
 
 def test_an_empty_declaration_read_is_not_agreement_with_an_empty_denylist(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """The vacuity half of the comparison.
 
@@ -158,37 +154,37 @@ def test_an_empty_declaration_read_is_not_agreement_with_an_empty_denylist(
     behaves like an unreadable ref: no render, and no marker, so the next tick tries again."""
     tick.tree_listing = ""
     assert not deploy_phases.reconcile_denylist(
-        gitops_deploy.STATE, _lost_the_denylist_line(settings), LOCAL
+        tick.tools, state, _lost_the_denylist_line(settings), LOCAL
     )
     assert tick.playbooks == []
-    assert gitops_deploy.STATE.read("denylist_rendered") is None
+    assert state.read("denylist_rendered") is None
 
 
 def test_an_empty_declaration_read_does_not_re_render_against_a_real_denylist(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """The same guard where the config is intact: empty `declared` vs a baked list is a
     mismatch, and re-rendering off it would bake whatever the broken read produced. The guard is
     on `declared`, not on the pairing, so this state also waits for a tick that can read."""
     tick.tree_listing = ""
     assert not deploy_phases.reconcile_denylist(
-        gitops_deploy.STATE, _armed(settings, ["sonarr"]), LOCAL
+        tick.tools, state, _armed(settings, ["sonarr"]), LOCAL
     )
     assert tick.playbooks == []
-    assert gitops_deploy.STATE.read("denylist_rendered") is None
+    assert state.read("denylist_rendered") is None
 
 
-def test_it_is_inert_while_auto_deploy_is_off(gitops_deploy, tick, state_dir, settings):
+def test_it_is_inert_while_auto_deploy_is_off(gitops_deploy, tick, settings, state):
     """Nothing reads the denylist when the feature is off, so nothing renders for it."""
     _declares(tick, "false")
     assert not deploy_phases.reconcile_denylist(
-        gitops_deploy.STATE, _disarmed(settings), LOCAL
+        tick.tools, state, _disarmed(settings), LOCAL
     )
     assert tick.playbooks == [] and tick.git == []
 
 
 def test_a_host_with_auto_deploy_off_renders_nothing_on_any_tick(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """The cost half of the file-level gate: reading the FILE flag must not turn a host that
     legitimately has the feature off into one that renders every ten minutes. Ten ticks, no
@@ -197,14 +193,14 @@ def test_a_host_with_auto_deploy_off_renders_nothing_on_any_tick(
     _declares(tick, "false")
     for _ in range(10):
         assert not deploy_phases.reconcile_denylist(
-            gitops_deploy.STATE, _disarmed(settings), LOCAL
+            tick.tools, state, _disarmed(settings), LOCAL
         )
     assert tick.playbooks == [] and tick.git == []
-    assert gitops_deploy.STATE.read("denylist_rendered") is None
+    assert state.read("denylist_rendered") is None
 
 
 def test_a_config_that_lost_its_denylist_line_is_re_rendered(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """The state the fail-closed disarm creates, which must stay healable.
 
@@ -214,71 +210,69 @@ def test_a_config_that_lost_its_denylist_line_is_re_rendered(
     repair's trigger, not its blocker."""
     _declares(tick, "false")
     assert deploy_phases.reconcile_denylist(
-        gitops_deploy.STATE, _lost_the_denylist_line(settings), LOCAL
+        tick.tools, state, _lost_the_denylist_line(settings), LOCAL
     )
     assert tick.playbooks == [RENDER_CONFIG]
-    assert gitops_deploy.STATE.read("denylist_rendered") == LOCAL
+    assert state.read("denylist_rendered") == LOCAL
 
 
 # ── the same thing through a whole tick ───────────────────────────────────────────────────
 def test_an_idle_tick_re_renders_a_stale_denylist(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, state_dir, settings, state
 ):
     """The heal lands on the tick AFTER the fast-forward, which is a converged, otherwise-idle
     one — exactly the tick that would otherwise return 0 having done nothing while auto-deploy
     stays disarmed fleet-wide."""
     _declares(tick, "false")
     tick.origin = tick.local
-    assert gitops_deploy.main(tick.tools, _armed(settings, ["other"])) == 0
+    assert gitops_deploy.main(tick.tools, _armed(settings, ["other"]), state) == 0
     assert tick.playbooks == [RENDER_CONFIG]
     assert _marker(state_dir, "denylist_rendered_sha") == LOCAL
 
 
 def test_a_render_ends_the_tick_before_anything_deploys(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """No arm of this unit stacks its budget on another's — the unit template sizes
     TimeoutStartSec as max(broad, staging + k8s + rollback) rather than a sum — and the config
     in memory still holds the list the render just disproved. So a render is terminal."""
     _declares(tick, "false")
     tick.paths = [K8S_DEFAULTS]
-    assert gitops_deploy.main(tick.tools, _armed(settings, ["other"])) == 0
+    assert gitops_deploy.main(tick.tools, _armed(settings, ["other"]), state) == 0
     assert tick.playbooks == [RENDER_CONFIG]
     assert tick.merges == [] and tick.posts == []
 
 
-def test_a_tick_that_renders_nothing_carries_on(
-    gitops_deploy, tick, state_dir, settings
-):
+def test_a_tick_that_renders_nothing_carries_on(gitops_deploy, tick, settings, state):
     """The other half: the early return is the render's, not the reconcile's."""
     _declares(tick, "false")
     tick.paths = ["docs/runbook.md"]
-    assert gitops_deploy.main(tick.tools, _armed(settings, ["sonarr"])) == 0
+    assert gitops_deploy.main(tick.tools, _armed(settings, ["sonarr"]), state) == 0
     assert tick.playbooks == []
     assert tick.merges == [tick.origin], "a docs-only push still fast-forwards"
 
 
 def test_a_lost_denylist_line_heals_without_promoting_anything(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """One gate moved, not two. The reconcile runs on the damaged config while the promotion
     path stays fail-closed on the disarmed flag — so the tick repairs the deployer's config and
     deploys no service off the empty denylist it was repairing."""
     _declares(tick, "false")
     tick.paths = [K8S_DEFAULTS]
-    assert gitops_deploy.main(tick.tools, _lost_the_denylist_line(settings)) == 0
+    assert gitops_deploy.main(tick.tools, _lost_the_denylist_line(settings), state) == 0
     assert tick.playbooks == [RENDER_CONFIG], "the render, and nothing deployed"
     assert tick.merges == []
 
 
 def test_a_dirty_checkout_is_never_rendered_from(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, state_dir, settings, state
 ):
     """The reject half of the placement: the render derives the denylist from the WORKING TREE,
     so rendering mid-edit would bake a list nobody pushed."""
     _declares(tick, "false")
     tick.origin = tick.local
     tick.dirty = True
-    assert gitops_deploy.main(tick.tools, _armed(settings, ["other"])) == 0
+    assert gitops_deploy.main(tick.tools, _armed(settings, ["other"]), state) == 0
     assert tick.playbooks == []
     assert _marker(state_dir, "denylist_rendered_sha") is None

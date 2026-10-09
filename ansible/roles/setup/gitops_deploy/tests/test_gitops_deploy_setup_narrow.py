@@ -37,10 +37,10 @@ def _playbook_argv(tick):
     return tick.playbooks[0]
 
 
-def test_a_narrowed_setup_role_applies_its_block_tags(gitops_deploy, tick):
+def test_a_narrowed_setup_role_applies_its_block_tags(gitops_deploy, tick, state):
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "gitops-config,gitops-unit")}
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-3:] == [
         "ansible/initial_setup.yml",
         "--tags",
@@ -50,12 +50,12 @@ def test_a_narrowed_setup_role_applies_its_block_tags(gitops_deploy, tick):
 
 
 def test_a_refused_setup_role_still_applies_the_whole_role_tag(
-    gitops_deploy, tick, capsys
+    gitops_deploy, tick, capsys, state
 ):
     """The rejecting half: exit 1 is what the arm did for every setup range before #3120."""
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (1, "")}
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-3:] == [
         "ansible/initial_setup.yml",
         "--tags",
@@ -67,12 +67,12 @@ def test_a_refused_setup_role_still_applies_the_whole_role_tag(
 
 
 def test_an_exception_in_the_derivation_applies_the_whole_role_tag(
-    gitops_deploy, tick, capsys
+    gitops_deploy, tick, capsys, state
 ):
     """`plan` runs before the ff-merge, so an escape here would park every landing."""
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup_error = TimeoutError("the child outlived its budget")
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-3:] == [
         "ansible/initial_setup.yml",
         "--tags",
@@ -81,11 +81,11 @@ def test_an_exception_in_the_derivation_applies_the_whole_role_tag(
     assert "TimeoutError: the child outlived its budget" in capsys.readouterr().out
 
 
-def test_exit_zero_with_no_tags_applies_the_whole_role_tag(gitops_deploy, tick):
+def test_exit_zero_with_no_tags_applies_the_whole_role_tag(gitops_deploy, tick, state):
     """An empty `--tags` value runs the WHOLE playbook, so an empty answer is doubt."""
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "")}
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-3:] == [
         "ansible/initial_setup.yml",
         "--tags",
@@ -93,11 +93,13 @@ def test_exit_zero_with_no_tags_applies_the_whole_role_tag(gitops_deploy, tick):
     ]
 
 
-def test_one_role_narrowing_does_not_widen_another_that_refused(gitops_deploy, tick):
+def test_one_role_narrowing_does_not_widen_another_that_refused(
+    gitops_deploy, tick, state
+):
     """PER ROLE, not all-or-nothing: the narrowed tags sit beside the refused role's tag."""
     tick.paths = [GITOPS_TEMPLATE, RENOVATE_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "gitops-config")}
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-3:] == [
         "ansible/initial_setup.yml",
         "--tags",
@@ -105,7 +107,7 @@ def test_one_role_narrowing_does_not_widen_another_that_refused(gitops_deploy, t
     ]
 
 
-def test_a_tag_belonging_to_no_role_passes_through(gitops_deploy, tick):
+def test_a_tag_belonging_to_no_role_passes_through(gitops_deploy, tick, state):
     """`collections` is `requirements.yml`'s tag, mapped to no role directory.
 
     Nothing can derive it, and dropping it would leave the Galaxy collections uninstalled
@@ -113,7 +115,7 @@ def test_a_tag_belonging_to_no_role_passes_through(gitops_deploy, tick):
     """
     tick.paths = [REQUIREMENTS, GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "gitops-config")}
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-3:] == [
         "ansible/initial_setup.yml",
         "--tags",
@@ -122,7 +124,7 @@ def test_a_tag_belonging_to_no_role_passes_through(gitops_deploy, tick):
 
 
 def test_the_derivation_is_asked_about_the_role_and_this_ticks_range(
-    gitops_deploy, tick
+    gitops_deploy, tick, state
 ):
     """One call per appliable role, carrying the role directory rather than its tag.
 
@@ -132,26 +134,26 @@ def test_the_derivation_is_asked_about_the_role_and_this_ticks_range(
     """
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "gitops-config")}
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     asked = [entry[1] for entry in tick.log if entry[0] == "narrow_setup"]
     assert asked == [["gitops_deploy", "ansible/initial_setup.yml", tick.local, ORIGIN]]
 
 
-def test_a_role_this_deployer_cannot_apply_is_not_narrowed(gitops_deploy, tick):
+def test_a_role_this_deployer_cannot_apply_is_not_narrowed(gitops_deploy, tick, state):
     """`setup/k3s` lives in `k3s-bringup.yml`, so it is recorded for a human, not narrowed.
 
     `deploy_defer.record` runs its own derivation for the marker that human reads. Narrowing
     it here as well would narrow a command this tick never runs.
     """
     tick.paths = ["ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2"]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     asked = [entry[1][0] for entry in tick.log if entry[0] == "narrow_setup"]
     assert asked == ["k3s"]
     assert tick.playbooks == []
 
 
 def test_a_failed_narrowed_setup_apply_holds_the_blocks_it_ran_with_their_role(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """The hold names the block tags the apply ran, each qualified by its role (#3138).
 
@@ -162,19 +164,16 @@ def test_a_failed_narrowed_setup_apply_holds_the_blocks_it_ran_with_their_role(
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "gitops-config")}
     tick.playbook_outcomes = [RuntimeError("boom")]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1] == "gitops-config", (
         "it still APPLIES the narrow tags"
     )
     assert (state_dir / "hold_sha").read_text() == ORIGIN
-    assert (
-        gitops_deploy.STATE.hold_plane
-        == "ansible/initial_setup.yml gitops_deploy:gitops-config"
-    )
+    assert state.hold_plane == "ansible/initial_setup.yml gitops_deploy:gitops-config"
 
 
 def test_a_narrowed_apply_of_another_block_keeps_the_hold(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """A held block stays held until something reruns it.
 
@@ -188,14 +187,14 @@ def test_a_narrowed_apply_of_another_block_keeps_the_hold(
     (state_dir / "owed.jsonl").write_text(owed_line(OWED_HOLD_PLANE, held, "1" * 40, 1))
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (0, "gitops-timer")}
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1] == "gitops-timer"
     assert (state_dir / "hold_sha").read_text() == "1" * 40
-    assert gitops_deploy.STATE.hold_plane == held
+    assert state.hold_plane == held
 
 
 def test_the_whole_role_fallback_clears_a_hold_a_narrowed_apply_left(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """The way out: the apply that fixes a held setup role clears the hold.
 
@@ -213,10 +212,10 @@ def test_the_whole_role_fallback_clears_a_hold_a_narrowed_apply_left(
     )
     tick.paths = [GITOPS_TEMPLATE]
     tick.narrow_setup = {"gitops_deploy": (1, "")}
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1] == "gitops_deploy"
     assert not (state_dir / "hold_sha").exists()
-    assert gitops_deploy.STATE.hold_plane is None
+    assert state.hold_plane is None
 
 
 def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
@@ -255,7 +254,7 @@ def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
 
 
 def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state
 ):
     """deploy_ui and renovate_agent install the deployer's markers by path (#3306).
 
@@ -269,12 +268,12 @@ def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
         "renovate_agent": (0, "renovate-agent-code"),
     }
     tick.playbook_outcomes = [RuntimeError("boom")]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1] == (
         "deploy-ui-code,gitops-deploy-code,renovate-agent-code"
     )
-    assert gitops_deploy.STATE.hold_plane == (
+    assert state.hold_plane == (
         "ansible/initial_setup.yml deploy_ui:deploy-ui-code,"
         "gitops_deploy:gitops-deploy-code,renovate_agent:renovate-agent-code"
     )
-    assert gitops_deploy.STATE.manual_plane_pending() == []
+    assert state.manual_plane_pending() == []

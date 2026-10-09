@@ -1,15 +1,14 @@
-"""Fakes for every `DeployTools` boundary, so the deployer's suite patches almost nothing.
+"""Fakes for every `DeployTools` boundary, so the deployer's suite patches nothing.
 
 `ScriptedTick` is the whole scenario for one `main()` call: what git, ansible-playbook, GitHub
 and Discord answer, and what the tick did to them. Set the
 attributes before the call, then read `log` (every call, oldest first) afterwards. `build_tools`
-turns one into the `DeployTools` `main(tools)` takes.
+turns one into the `DeployTools` `main(tools, config, state)` takes.
 
 WHAT IS DELIBERATELY NOT A FIELD. `deploy_io.deploy_k8s` and `deploy_broad` build the
-`ansible-playbook` argv the suite asserts on and reach `deploy_io.run` qualified, so replacing
-them here would retire the assertion rather than fake the process. The `tick` fixture patches
-`deploy_io.run` — one module attribute, the last one — and conftest.py says why threading a
-runner into those two is deferred.
+`ansible-playbook` argv the suite asserts on, so replacing them here would retire the assertion
+rather than fake the process. They take `run=tools.run` instead, which is `ScriptedTick.run`
+here.
 """
 
 import pathlib
@@ -17,6 +16,8 @@ import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from deploy_config import Config
+from deploy_state import DeployerState
 from deploy_toolbox import DeployTools
 from gitops_ledger import parse_receipts
 
@@ -105,6 +106,9 @@ class ScriptedTick:
         # The DeployTools built from this object; the `tick` fixture fills it in, and every
         # test passes it to main() rather than the fixture injecting it behind their back.
         self.tools: DeployTools | None = None
+        # The tick's settings and marker state, which the `tick` fixture sets beside `tools`.
+        self.config: Config | None = None
+        self.state: DeployerState | None = None
 
     # ── the scenario ──────────────────────────────────────────────────────────────────────────
     def declare(self, hostvars: str) -> None:

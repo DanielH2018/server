@@ -55,29 +55,26 @@ def _target(gitops_deploy, **overrides):
 
 # ── assess() ──────────────────────────────────────────────────────────────────────────────
 def test_assess_reads_both_heads_and_classifies_an_ordinary_push(
-    gitops_deploy, tick, settings
+    gitops_deploy, tick, settings, state
 ):
     tick.paths = ["ansible/roles/containers/sonarr/templates/docker-compose.yml.j2"]
-    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    target = deploy_phases.assess(tick.tools, state, settings)
     assert (target.local, target.origin) == (LOCAL, ORIGIN)
     assert target.action == "deploy" and target.dirty is False
 
 
 def test_assess_reports_a_dirty_tree_without_fetching_a_ci_verdict(
-    gitops_deploy, tick, settings
+    gitops_deploy, tick, settings, state
 ):
     """The CI call is spent only on a tick that would otherwise deploy — one request per tick
     is the whole of this deployer's share of the GitHub rate limit."""
     tick.dirty = True
     tick.ci = "fail"  # would change the action if it were consulted
-    assert (
-        deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings).action
-        == "dirty"
-    )
+    assert deploy_phases.assess(tick.tools, state, settings).action == "dirty"
 
 
 def test_assess_fast_forwards_to_the_newest_green_ancestor_of_a_pending_tip(
-    gitops_deploy, tick, settings, capsys
+    gitops_deploy, tick, settings, capsys, state
 ):
     """The tip is pending on most ticks that would deploy (124 merges/day, ~103s sweep).
 
@@ -87,7 +84,7 @@ def test_assess_fast_forwards_to_the_newest_green_ancestor_of_a_pending_tip(
     tick.ci = "pending"
     tick.rev_list = [ORIGIN, NEWER_GREEN, OLDER_GREEN]
     tick.ancestor_ci = {NEWER_GREEN: "pass", OLDER_GREEN: "pass"}
-    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    target = deploy_phases.assess(tick.tools, state, settings)
     assert (target.origin, target.action) == (NEWER_GREEN, "deploy")
     assert (target.tip, target.tip_ci) == (ORIGIN, "pending")
     assert (
@@ -97,7 +94,7 @@ def test_assess_fast_forwards_to_the_newest_green_ancestor_of_a_pending_tip(
 
 
 def test_assess_still_defers_when_no_ancestor_in_the_walk_is_green(
-    gitops_deploy, tick, settings, capsys
+    gitops_deploy, tick, settings, capsys, state
 ):
     """The rejecting half: an all-red walk leaves the tip's own verdict deciding the tick.
 
@@ -107,13 +104,13 @@ def test_assess_still_defers_when_no_ancestor_in_the_walk_is_green(
     tick.ci = "pending"
     tick.rev_list = [ORIGIN, NEWER_GREEN]
     tick.ancestor_ci = {NEWER_GREEN: "fail"}
-    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    target = deploy_phases.assess(tick.tools, state, settings)
     assert (target.origin, target.action) == (ORIGIN, "ci_pending")
     assert "no green ancestor in the 1 commit(s)" in capsys.readouterr().out
 
 
 def test_an_unauthenticated_host_does_not_walk_at_all(
-    gitops_deploy, tick, settings, capsys
+    gitops_deploy, tick, settings, capsys, state
 ):
     """Anonymous, the whole host shares 60 GitHub requests an hour; a walk spends ten.
 
@@ -124,66 +121,68 @@ def test_an_unauthenticated_host_does_not_walk_at_all(
     tick.ci = "pending"
     tick.authenticated = False
     tick.rev_list = [ORIGIN, NEWER_GREEN]
-    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    target = deploy_phases.assess(tick.tools, state, settings)
     assert (target.origin, target.action) == (ORIGIN, "ci_pending")
     assert not [argv for argv in tick.git if argv[1] == "rev-list"]
     assert "no GitHub token" in capsys.readouterr().out
 
 
 def test_assess_skips_a_red_ancestor_and_takes_the_green_one_below_it(
-    gitops_deploy, tick, settings
+    gitops_deploy, tick, settings, state
 ):
     """A red ancestor is skipped, never chosen — the walk stops at the first PASS."""
     tick.ci = "fail"
     tick.rev_list = [ORIGIN, NEWER_GREEN, OLDER_GREEN]
     tick.ancestor_ci = {NEWER_GREEN: "fail", OLDER_GREEN: "pass"}
-    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    target = deploy_phases.assess(tick.tools, state, settings)
     assert (target.origin, target.action) == (OLDER_GREEN, "deploy")
     assert target.red_tip == ORIGIN
 
 
-def test_the_walk_stops_at_the_configured_maximum(gitops_deploy, tick, settings):
+def test_the_walk_stops_at_the_configured_maximum(gitops_deploy, tick, settings, state):
     """The bound is on GitHub requests per tick, and the tip's own verdict is one of them."""
     tick.ci = "pending"
     tick.rev_list = [ORIGIN, NEWER_GREEN, OLDER_GREEN]
     tick.ancestor_ci = {NEWER_GREEN: "fail", OLDER_GREEN: "pass"}
     capped = dataclasses.replace(settings, ci_ancestor_walk_max=2)
-    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, capped)
+    target = deploy_phases.assess(tick.tools, state, capped)
     assert (target.origin, target.action) == (ORIGIN, "ci_pending")
 
 
 def test_assess_never_chooses_the_held_sha_as_an_ancestor(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, state_dir, settings, state
 ):
     """A SHA a previous deploy failed on is not a tree to converge on, tip or ancestor."""
     (state_dir / "hold_sha").write_text(NEWER_GREEN)
     tick.ci = "pending"
     tick.rev_list = [ORIGIN, NEWER_GREEN, OLDER_GREEN]
     tick.ancestor_ci = {NEWER_GREEN: "pass", OLDER_GREEN: "pass"}
-    target = deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    target = deploy_phases.assess(tick.tools, state, settings)
     assert (target.origin, target.action) == (OLDER_GREEN, "deploy")
 
 
-def test_a_green_tip_never_lists_the_commits_below_it(gitops_deploy, tick, settings):
+def test_a_green_tip_never_lists_the_commits_below_it(
+    gitops_deploy, tick, settings, state
+):
     """The walk runs only on a tick that would otherwise defer — no extra git, no extra API."""
     tick.paths = ["docs/runbook.md"]
-    deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
+    deploy_phases.assess(tick.tools, state, settings)
     assert not [argv for argv in tick.git if argv[1] == "rev-list"]
 
 
 def test_assess_records_a_divergence_and_clears_it_on_the_next_tick(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     tick.origin_ahead = False
     tick.local_ahead = False
-    deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
-    assert gitops_deploy.STATE.diverged_sha == ORIGIN
+    deploy_phases.assess(tick.tools, state, settings)
+    assert state.diverged_sha == ORIGIN
     tick.origin_ahead = True
-    deploy_phases.assess(tick.tools, gitops_deploy.STATE, settings)
-    assert gitops_deploy.STATE.diverged_sha is None
+    deploy_phases.assess(tick.tools, state, settings)
+    assert state.diverged_sha is None
 
 
-def test_assess_raises_retryable_on_a_git_failure(gitops_deploy, tick, settings):
+def test_assess_raises_retryable_on_a_git_failure(gitops_deploy, tick, settings, state):
     """A transient tree state must skip the tick, not page — entrypoint() owns that contract."""
     import dataclasses
     import subprocess
@@ -195,35 +194,33 @@ def test_assess_raises_retryable_on_a_git_failure(gitops_deploy, tick, settings)
 
     tools = dataclasses.replace(tick.tools, git_status=broken)
     with pytest.raises(gitops_deploy.RetryableFetchError, match="not a work tree"):
-        deploy_phases.assess(tools, gitops_deploy.STATE, settings)
+        deploy_phases.assess(tools, state, settings)
 
 
 # ── plan_tick() ───────────────────────────────────────────────────────────────────────────
-def test_plan_tick_maps_a_template_push_to_its_service(gitops_deploy, tick, settings):
+def test_plan_tick_maps_a_template_push_to_its_service(
+    gitops_deploy, tick, settings, state
+):
     tick.paths = ["ansible/roles/containers/sonarr/templates/docker-compose.yml.j2"]
-    plan = deploy_phases.plan_tick(
-        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy)
-    )
+    plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
     assert plan.cs.services == {"sonarr"}
     assert plan.paths == tick.paths
 
 
 def test_plan_tick_keeps_a_containers_path_off_the_same_named_k8s_role(
-    gitops_deploy, tick, settings
+    gitops_deploy, tick, settings, state
 ):
     """wg-easy is a Pi Docker role and a k8s role at once. A containers/ template edit is Pi
     work, so it must not page as a deferred change to the k8s role of the same name."""
     tick.declare("containers_list:\n  - name: wg-easy\n    platform: k8s\n")
     tick.paths = ["ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2"]
-    plan = deploy_phases.plan_tick(
-        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy)
-    )
+    plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
     assert plan.cs.services == {"wg-easy"}
     assert plan.cs.k8s == set()
 
 
 def test_plan_tick_drops_a_comment_only_change_to_a_bring_up_playbook(
-    gitops_deploy, tick, capsys, settings
+    gitops_deploy, tick, capsys, settings, state
 ):
     """Parking on a comment would cost sessions their landings."""
     tick.paths = ["ansible/bootstrap.yml"]
@@ -231,16 +228,14 @@ def test_plan_tick_drops_a_comment_only_change_to_a_bring_up_playbook(
         f"{LOCAL}:ansible/bootstrap.yml": "# old comment\n- hosts: all\n",
         f"{ORIGIN}:ansible/bootstrap.yml": "# new comment\n- hosts: all\n",
     }
-    plan = deploy_phases.plan_tick(
-        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy)
-    )
+    plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
     assert plan.paths == []
     assert not plan.cs.broad_manual
     assert "not parking" in capsys.readouterr().out
 
 
 def test_plan_tick_attributes_each_k8s_role_to_the_newest_commit_touching_it(
-    gitops_deploy, tick, settings
+    gitops_deploy, tick, settings, state
 ):
     """A role change below a tests-only tip. The
     tip reaches no role, so sonarr's line must name the commit its own landing deployed."""
@@ -248,9 +243,7 @@ def test_plan_tick_attributes_each_k8s_role_to_the_newest_commit_touching_it(
     template = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
     tick.paths = [template, "ansible/tests/k8s/test_sonarr.py"]
     tick.commits = [(tests_only, [tick.paths[1]]), (role_change, [template])]
-    plan = deploy_phases.plan_tick(
-        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy)
-    )
+    plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
     assert plan.cs.k8s == {"sonarr"}
     assert plan.cs.k8s_origins == {"sonarr": role_change}
 
@@ -268,7 +261,7 @@ def installed_tables():
 
 @pytest.mark.parametrize("origin_copy", [True, False])
 def test_plan_tick_routes_a_new_shared_file_with_the_tables_its_own_range_adds(
-    gitops_deploy, tick, settings, installed_tables, origin_copy
+    gitops_deploy, tick, settings, installed_tables, origin_copy, state
 ):
     """#3512: a PR adding a common/tasks file and its table entry recorded `common`.
 
@@ -286,56 +279,44 @@ def test_plan_tick_routes_a_new_shared_file_with_the_tables_its_own_range_adds(
                 "SETUP_ROLES_CALLING_FILTER_PLUGINS = {}\n"
             )
         }
-    plan = deploy_phases.plan_tick(
-        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy)
-    )
+    plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
     expected = {"claude_code"} if origin_copy else {"common"}
     assert plan.cs.setup_roles == expected | {"gitops_deploy"}
 
 
 # ── handle_dirty() ────────────────────────────────────────────────────────────────────────
 def test_handle_dirty_logs_the_paths_on_every_tick(
-    gitops_deploy, tick, state_dir, capsys, settings
+    gitops_deploy, tick, capsys, settings, state
 ):
     """Unthrottled, unlike the Discord page: an empty journal reads exactly like a tick with
     nothing to do, which is most of what a long park costs."""
     target = _target(gitops_deploy, dirty=True, action="dirty", status=" M some/file\n")
-    assert (
-        deploy_handlers.handle_dirty(tick.tools, gitops_deploy.STATE, settings, target)
-        == 0
-    )
+    assert deploy_handlers.handle_dirty(tick.tools, state, settings, target) == 0
     assert "working tree dirty" in capsys.readouterr().out
 
 
-def test_handle_dirty_pages_at_most_once_per_slot(
-    gitops_deploy, tick, state_dir, settings
-):
+def test_handle_dirty_pages_at_most_once_per_slot(gitops_deploy, tick, settings, state):
     target = _target(gitops_deploy, dirty=True, action="dirty", status=" M some/file\n")
-    deploy_handlers.handle_dirty(tick.tools, gitops_deploy.STATE, settings, target)
+    deploy_handlers.handle_dirty(tick.tools, state, settings, target)
     first = len(tick.posts)
-    deploy_handlers.handle_dirty(tick.tools, gitops_deploy.STATE, settings, target)
+    deploy_handlers.handle_dirty(tick.tools, state, settings, target)
     assert len(tick.posts) == first, "a second tick in the same slot must not re-page"
 
 
 # ── handle_ci_failed() ────────────────────────────────────────────────────────────────────
 def test_handle_ci_failed_pages_once_per_sha_and_deploys_nothing(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     target = _target(gitops_deploy, action="ci_failed")
-    assert (
-        deploy_handlers.handle_ci_failed(
-            tick.tools, gitops_deploy.STATE, settings, target
-        )
-        == 0
-    )
-    deploy_handlers.handle_ci_failed(tick.tools, gitops_deploy.STATE, settings, target)
+    assert deploy_handlers.handle_ci_failed(tick.tools, state, settings, target) == 0
+    deploy_handlers.handle_ci_failed(tick.tools, state, settings, target)
     assert len(tick.posts) == 1 and "CI is RED" in tick.posts[0]
     assert tick.playbooks == [] and tick.merges == []
 
 
 # ── handle_broad() ────────────────────────────────────────────────────────────────────────
 def test_handle_broad_defers_a_bring_up_playbook_without_merging(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """Staying parked is what keeps `behind_since` set, the only durable signal that a plane is
     unapplied."""
@@ -346,7 +327,7 @@ def test_handle_broad_defers_a_bring_up_playbook_without_merging(
     )
     assert (
         deploy_handlers.handle_broad(
-            tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+            tick.tools, state, settings, _target(gitops_deploy), plan
         )
         == 0
     )
@@ -356,7 +337,7 @@ def test_handle_broad_defers_a_bring_up_playbook_without_merging(
 
 
 def test_handle_broad_merges_before_it_applies_the_setup_plane(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """Ansible renders from the working tree, so applying first deploys the pre-merge files and
     recaps changed=0 — indistinguishable from a clean idempotent run."""
@@ -367,7 +348,7 @@ def test_handle_broad_merges_before_it_applies_the_setup_plane(
     )
     assert (
         deploy_handlers.handle_broad(
-            tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+            tick.tools, state, settings, _target(gitops_deploy), plan
         )
         == 0
     )
@@ -377,7 +358,7 @@ def test_handle_broad_merges_before_it_applies_the_setup_plane(
 
 
 def test_a_successful_broad_apply_records_what_it_applied(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """The evidence `land.sh` needs to tell an applied plane from one it fast-forwarded past.
 
@@ -390,16 +371,12 @@ def test_a_successful_broad_apply_records_what_it_applied(
         paths=["ansible/roles/setup/gitops_deploy/templates/config.env.j2"],
     )
     deploy_handlers.handle_broad(
-        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+        tick.tools, state, settings, _target(gitops_deploy), plan
     )
-    assert receipt_applied(gitops_deploy.STATE) == {
-        "ansible/initial_setup.yml": ("gitops_deploy",)
-    }
+    assert receipt_applied(state) == {"ansible/initial_setup.yml": ("gitops_deploy",)}
 
 
-def test_a_failed_broad_apply_records_no_apply(
-    gitops_deploy, tick, state_dir, settings
-):
+def test_a_failed_broad_apply_records_no_apply(gitops_deploy, tick, settings, state):
     """The must-not-fire half: an attempted apply is not an apply, so the marker stays absent
     and `land.sh` keeps saying the plane is unfinished."""
     tick.playbook_outcomes = [RuntimeError("uv run ansible-playbook -> 2\nboom")]
@@ -409,13 +386,13 @@ def test_a_failed_broad_apply_records_no_apply(
         paths=["ansible/roles/setup/gitops_deploy/templates/config.env.j2"],
     )
     deploy_handlers.handle_broad(
-        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+        tick.tools, state, settings, _target(gitops_deploy), plan
     )
-    assert receipt_applied(gitops_deploy.STATE) is None
+    assert receipt_applied(state) is None
 
 
 def test_a_failed_broad_apply_holds_the_plane_and_does_not_reset(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """Forward-only: resetting without redeploying would leave the tree claiming the old commit
     while live state is half-new."""
@@ -427,22 +404,22 @@ def test_a_failed_broad_apply_holds_the_plane_and_does_not_reset(
     )
     assert (
         deploy_handlers.handle_broad(
-            tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+            tick.tools, state, settings, _target(gitops_deploy), plan
         )
         == 0
     )
-    assert gitops_deploy.STATE.hold_sha == ORIGIN
-    assert gitops_deploy.STATE.hold_plane
+    assert state.hold_sha == ORIGIN
+    assert state.hold_plane
     assert not [argv for argv in tick.git if argv[1] == "reset"]
     assert "broad apply failed" in tick.posts[-1]
 
 
 # ── handle_k8s() ──────────────────────────────────────────────────────────────────────────
-def test_handle_k8s_merges_then_deploys(gitops_deploy, tick, state_dir, settings):
+def test_handle_k8s_merges_then_deploys(gitops_deploy, tick, settings, state):
     plan = _plan(gitops_deploy, ChangeSet(k8s_deploy={"sonarr"}))
     assert (
         deploy_handlers.handle_k8s(
-            tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+            tick.tools, state, settings, _target(gitops_deploy), plan
         )
         == 0
     )
@@ -452,7 +429,7 @@ def test_handle_k8s_merges_then_deploys(gitops_deploy, tick, state_dir, settings
 
 
 def test_handle_k8s_rolls_back_to_the_failed_shas_snapshot(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     """`origin[:8]`, never `local`: the snapshot worth reverting to is the one taken before the
     deploy that failed."""
@@ -461,9 +438,9 @@ def test_handle_k8s_rolls_back_to_the_failed_shas_snapshot(
     ]
     plan = _plan(gitops_deploy, ChangeSet(k8s_deploy={"sonarr"}))
     deploy_handlers.handle_k8s(
-        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+        tick.tools, state, settings, _target(gitops_deploy), plan
     )
-    assert gitops_deploy.STATE.hold_sha == ORIGIN
+    assert state.hold_sha == ORIGIN
     rollback = tick.playbooks[-1]
     assert f"k8s_restore_snapshot_sha={ORIGIN[:8]}" in rollback
     assert ("annotation", {"sonarr"}) not in tick.log
@@ -471,14 +448,14 @@ def test_handle_k8s_rolls_back_to_the_failed_shas_snapshot(
 
 # ── handle_no_services() ──────────────────────────────────────────────────────────────────
 def test_handle_no_services_merges_and_flags_a_rotated_secret(
-    gitops_deploy, tick, state_dir, settings
+    gitops_deploy, tick, settings, state
 ):
     plan = _plan(
         gitops_deploy, ChangeSet(secrets=True), paths=["ansible/vars/secrets.yml"]
     )
     assert (
         deploy_handlers.handle_no_services(
-            tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
+            tick.tools, state, settings, _target(gitops_deploy), plan
         )
         == 0
     )

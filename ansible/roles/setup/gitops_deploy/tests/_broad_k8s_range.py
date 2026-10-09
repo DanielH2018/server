@@ -71,7 +71,7 @@ def mixed(settings, tick, *broad_paths, promote: bool = True):
     """A range carrying `broad_paths` beside a sonarr image-pin bump.
 
     Returns the `Config` to hand `main()`. Auto-deploy is armed on that object rather than by
-    `monkeypatch`ing the entry module's globals: `main(tools, config)` takes both seams, and
+    `monkeypatch`ing the entry module's globals: `main(tools, config, state)` takes them, and
     the `settings` fixture has already snapshotted the scripted checkout onto the config.
 
     Args:

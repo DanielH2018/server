@@ -12,6 +12,7 @@ call in order.
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py
 
+import dataclasses
 import json
 from collections.abc import Sequence
 
@@ -45,61 +46,61 @@ def _alerted(state_dir, slot: str) -> str | None:
 
 
 # ── the short-circuits: nothing merges, nothing deploys ───────────────────────────────────────
-def test_a_converged_checkout_is_a_noop(gitops_deploy, tick):
+def test_a_converged_checkout_is_a_noop(gitops_deploy, tick, state):
     tick.origin = tick.local
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [] and tick.playbooks == [] and tick.posts == []
 
 
 def test_drain_pending_runs_ahead_of_the_noop_short_circuit(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     # The ff-merged channels never re-reach their alert code on a later tick, so a queued alert
     # is only recoverable at the top of EVERY tick, before local == origin returns.
     deploy_alerts.write_pending(
-        gitops_deploy.STATE.path("pending_alerts"),
+        state.path("pending_alerts"),
         {"secrets:" + ORIGIN: "queued last tick"},
     )
     tick.origin = tick.local
-    gitops_deploy.main(tick.tools)
+    gitops_deploy.main(tick.tools, tick.config, state)
     assert tick.posts == ["queued last tick"]
     assert json.loads((state_dir / "pending_alerts.json").read_text()) == {}
 
 
-def test_a_dirty_tree_skips_without_merging(gitops_deploy, tick):
+def test_a_dirty_tree_skips_without_merging(gitops_deploy, tick, state):
     tick.dirty = True
     tick.paths = ["docs/x.md"]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [] and tick.playbooks == []
 
 
-def test_a_held_sha_is_skipped(gitops_deploy, tick):
-    gitops_deploy.STATE.write_hold(ORIGIN)
+def test_a_held_sha_is_skipped(gitops_deploy, tick, state):
+    state.write_hold(ORIGIN)
     tick.paths = [DOCKER_TEMPLATE]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [] and tick.playbooks == []
 
 
-def test_pending_ci_defers_silently(gitops_deploy, tick, state_dir):
+def test_pending_ci_defers_silently(gitops_deploy, tick, state_dir, state):
     tick.ci = "pending"
     tick.paths = [DOCKER_TEMPLATE]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [] and tick.posts == []
     assert _alerted(state_dir, "ci") is None
 
 
-def test_red_ci_parks_and_pages_once_per_sha(gitops_deploy, tick, state_dir):
+def test_red_ci_parks_and_pages_once_per_sha(gitops_deploy, tick, state_dir, state):
     tick.ci = "fail"
     tick.paths = [DOCKER_TEMPLATE]
-    assert gitops_deploy.main(tick.tools) == 0
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == []
     assert len(tick.posts) == 1 and "CI is RED" in tick.posts[0]
     assert _alerted(state_dir, "ci") == ORIGIN
 
 
 def test_a_red_tip_over_a_green_ancestor_deploys_the_ancestor_and_still_pages(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """The tick deploys what it can and the red tip is still reported, once for that SHA.
 
@@ -110,9 +111,9 @@ def test_a_red_tip_over_a_green_ancestor_deploys_the_ancestor_and_still_pages(
     tick.rev_list = [ORIGIN, GREEN_ANCESTOR]
     tick.ancestor_ci = {GREEN_ANCESTOR: "pass"}
     tick.paths = ["docs/runbook.md"]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     # The second tick converges on the same ancestor, so it is a noop and pages nothing new.
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [GREEN_ANCESTOR]
     assert len(tick.posts) == 1 and "CI is RED" in tick.posts[0]
     assert _alerted(state_dir, "ci") == ORIGIN
@@ -120,33 +121,33 @@ def test_a_red_tip_over_a_green_ancestor_deploys_the_ancestor_and_still_pages(
 
 # ── the diverged marker is managed every tick, ahead of the action ────────────────────────────
 def test_a_diverged_checkout_is_recorded_even_on_a_dirty_tick(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     tick.origin_ahead = False
     tick.local_ahead = False
     tick.dirty = True
-    gitops_deploy.main(tick.tools)
+    gitops_deploy.main(tick.tools, tick.config, state)
     assert _marker(state_dir, "diverged_sha") == ORIGIN
     assert tick.merges == []
 
 
 def test_an_unpushed_local_commit_is_a_plain_noop_not_a_divergence(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     (state_dir / "diverged_sha").write_text(ORIGIN)
     tick.origin_ahead = False
     tick.local_ahead = True
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _marker(state_dir, "diverged_sha") is None
     assert tick.merges == []
 
 
 # ── the ff-merge lands the pinned SHA, on every path that merges ──────────────────────────────
 def test_a_docs_only_push_ff_merges_the_pinned_sha_and_deploys_nothing(
-    gitops_deploy, tick
+    gitops_deploy, tick, state
 ):
     tick.paths = ["docs/runbook.md"]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [] and tick.posts == []
     assert tick.head == ORIGIN
@@ -154,7 +155,7 @@ def test_a_docs_only_push_ff_merges_the_pinned_sha_and_deploys_nothing(
 
 # ── a Docker role change ──────────────────────────────────────────────────────────────────────
 def test_a_docker_template_push_merges_deploys_nothing_and_says_so(
-    gitops_deploy, tick, state_dir, capsys
+    gitops_deploy, tick, state_dir, capsys, state
 ):
     """No has_gitops host runs Docker, so a Pi role change is merged and left to a hand deploy.
 
@@ -163,7 +164,7 @@ def test_a_docker_template_push_merges_deploys_nothing_and_says_so(
     (state_dir / "hold_sha").write_text("f" * 40)
     tick.declare(DECLARES_WG_EASY)
     tick.paths = [DOCKER_TEMPLATE]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [] and tick.posts == []
     assert _marker(state_dir, "hold_sha") == "f" * 40
@@ -171,11 +172,11 @@ def test_a_docker_template_push_merges_deploys_nothing_and_says_so(
 
 
 def test_a_containers_common_push_merges_without_the_full_play(
-    gitops_deploy, tick, capsys
+    gitops_deploy, tick, capsys, state
 ):
     """The Pi's shared deploy path is not broad, so it does not buy a full deploy.yml."""
     tick.paths = ["ansible/roles/containers/common/tasks/docker_deploy.yml"]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [] and tick.posts == []
     assert "-e target=daniel-pi" in capsys.readouterr().out
@@ -183,10 +184,10 @@ def test_a_containers_common_push_merges_without_the_full_play(
 
 # ── the broad planes ──────────────────────────────────────────────────────────────────────────
 def test_a_setup_plane_push_merges_then_applies_its_own_playbook(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [
         [
@@ -202,28 +203,30 @@ def test_a_setup_plane_push_merges_then_applies_its_own_playbook(
     applied = tick.log[tick.index("playbook", "ansible/initial_setup.yml")][2]
     assert fits_budget(applied, gitops_deploy.BROAD_DEPLOY_TIMEOUT_S)
     assert _marker(state_dir, "hold_sha") is None
-    assert gitops_deploy.STATE.hold_plane is None
+    assert state.hold_plane is None
 
 
 def test_a_failed_broad_apply_holds_the_plane_and_rolls_nothing_back(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
     tick.playbook_outcomes = [RuntimeError("timed out")]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _marker(state_dir, "hold_sha") == ORIGIN
-    assert gitops_deploy.STATE.hold_plane == "ansible/initial_setup.yml gitops_deploy"
+    assert state.hold_plane == "ansible/initial_setup.yml gitops_deploy"
     assert tick.head == ORIGIN, "the arm is forward-only: no reset"
     assert all(argv[1] != "reset" for argv in tick.git)
     (post,) = tick.posts
     assert "nothing was rolled back" in post
 
 
-def test_a_bring_up_playbook_push_parks_and_pages(gitops_deploy, tick, state_dir):
+def test_a_bring_up_playbook_push_parks_and_pages(
+    gitops_deploy, tick, state_dir, state
+):
     tick.paths = ["ansible/bootstrap.yml"]
     tick.files[f"{LOCAL}:ansible/bootstrap.yml"] = "- hosts: all\n"
     tick.files[f"{ORIGIN}:ansible/bootstrap.yml"] = "- hosts: all\n  become: true\n"
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [] and tick.playbooks == []
     assert _alerted(state_dir, "broad") == ORIGIN
     assert "needing a hand" in tick.posts[0]
@@ -239,7 +242,7 @@ def _hold_the_deploy_plane(state_dir) -> None:
 
 
 def test_a_setup_plane_success_keeps_a_deploy_plane_hold(
-    gitops_deploy, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     """A held deploy.yml survives a successful setup-plane tick.
 
@@ -248,13 +251,13 @@ def test_a_setup_plane_success_keeps_a_deploy_plane_hold(
     """
     _hold_the_deploy_plane(state_dir)
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks, "the setup plane still applies"
     assert _marker(state_dir, "hold_sha") == "f" * 40
-    assert gitops_deploy.STATE.hold_plane == "ansible/deploy.yml"
+    assert state.hold_plane == "ansible/deploy.yml"
 
 
-def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir):
+def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir, state):
     """The converse, so the guard is not simply "never clears"."""
     (state_dir / "hold_sha").write_text("f" * 40)
     (state_dir / "owed.jsonl").write_text(
@@ -263,18 +266,19 @@ def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir)
         )
     )
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _marker(state_dir, "hold_sha") is None
-    assert gitops_deploy.STATE.hold_plane is None
+    assert state.hold_plane is None
 
 
 # ── the k8s auto-deploy path ──────────────────────────────────────────────────────────────────
-def _image_bump(
-    gitops_deploy, monkeypatch, tick, extra_paths: Sequence[str] = ()
-) -> None:
-    monkeypatch.setattr(gitops_deploy, "K8S_AUTODEPLOY_ENABLED", True)
-    monkeypatch.setattr(gitops_deploy, "K8S_AUTODEPLOY_DENYLIST", frozenset())
-    monkeypatch.setattr(gitops_deploy, "K8S_AUTODEPLOY_PILOT", frozenset())
+def _image_bump(tick, extra_paths: Sequence[str] = ()) -> None:
+    tick.config = dataclasses.replace(
+        tick.config,
+        k8s_autodeploy_enabled=True,
+        k8s_autodeploy_denylist=frozenset(),
+        k8s_autodeploy_pilot=frozenset(),
+    )
     tick.declare(DECLARES_SONARR)
     tick.paths = [K8S_DEFAULTS, *extra_paths]
     tick.tree_listing = K8S_DEFAULTS + "\n"
@@ -294,7 +298,7 @@ DEPLOY_SONARR = [
 
 
 def test_an_image_bump_beside_a_pi_change_deploys_and_names_the_pi_half(
-    gitops_deploy, monkeypatch, tick, capsys
+    gitops_deploy, tick, capsys, state
 ):
     """The bump deploys, and the Pi work it rode in with is still named.
 
@@ -302,15 +306,15 @@ def test_an_image_bump_beside_a_pi_change_deploys_and_names_the_pi_half(
     `handle_no_services`, the only path that said anything about the Pi half — so `handle_k8s`
     says it.
     """
-    _image_bump(gitops_deploy, monkeypatch, tick, extra_paths=[DOCKER_TEMPLATE])
-    assert gitops_deploy.main(tick.tools) == 0
+    _image_bump(tick, extra_paths=[DOCKER_TEMPLATE])
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == [DEPLOY_SONARR], "the bump deployed rather than deferring"
     assert "does not deploy: ['wg-easy']" in capsys.readouterr().out
 
 
-def test_an_image_bump_merges_then_deploys(gitops_deploy, monkeypatch, tick, state_dir):
-    _image_bump(gitops_deploy, monkeypatch, tick)
-    assert gitops_deploy.main(tick.tools) == 0
+def test_an_image_bump_merges_then_deploys(gitops_deploy, tick, state_dir, state):
+    _image_bump(tick)
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [DEPLOY_SONARR]
     assert tick.index("git", "merge") < tick.index("playbook", "sonarr")
@@ -321,14 +325,14 @@ def test_an_image_bump_merges_then_deploys(gitops_deploy, monkeypatch, tick, sta
 
 
 def test_a_failed_rollout_rolls_back_to_the_failed_shas_snapshot_under_its_own_budget(
-    gitops_deploy, monkeypatch, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     # The snapshot worth reverting to was taken before the failed deploy and is named for the
     # commit rolled back FROM. `local` would find no snapshot on a first rollback and a stale one
     # on a second. The redeploy also reverts volumes, so it gets the larger budget.
-    _image_bump(gitops_deploy, monkeypatch, tick)
+    _image_bump(tick)
     tick.playbook_outcomes = [RuntimeError("rollout gate failed")]
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     forward, rollback = (entry for entry in tick.log if entry[0] == "playbook")
     assert forward[1] == DEPLOY_SONARR
     assert rollback[1] == DEPLOY_SONARR + [
@@ -343,22 +347,22 @@ def test_a_failed_rollout_rolls_back_to_the_failed_shas_snapshot_under_its_own_b
 
 
 def test_a_secrets_change_bundled_with_an_image_bump_is_still_flagged(
-    gitops_deploy, monkeypatch, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
     # The promoted service is image-bump-only by construction, so it is never the secret's
     # consumer; without the alert the rotation is ff-merged and forgotten.
-    _image_bump(gitops_deploy, monkeypatch, tick, ["ansible/vars/secrets.yml"])
-    assert gitops_deploy.main(tick.tools) == 0
+    _image_bump(tick, ["ansible/vars/secrets.yml"])
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == [DEPLOY_SONARR]
     assert _alerted(state_dir, "secrets") == ORIGIN
     assert any("nothing was redeployed" in post for post in tick.posts)
 
 
 def test_a_non_image_k8s_change_is_ff_merged_and_flagged_not_deployed(
-    gitops_deploy, monkeypatch, tick, state_dir
+    gitops_deploy, tick, state_dir, state
 ):
-    _image_bump(gitops_deploy, monkeypatch, tick)
+    _image_bump(tick)
     tick.diffs["sonarr"] = "--- a\n+++ b\n+sonarr_replicas: 2\n"
-    assert gitops_deploy.main(tick.tools) == 0
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN] and tick.playbooks == []
     assert _alerted(state_dir, "k8s") == ORIGIN

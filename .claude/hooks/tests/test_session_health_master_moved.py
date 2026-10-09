@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the SessionStart hook's behind-master warning (`master_moved_problems`).
 
-These seven tests share one subject and one patch target, and the module-length ratchet
+These seven tests share one subject and one seam (`git`), and the module-length ratchet
 says split rather than list.
 
 Run: uv run pytest .claude/hooks
@@ -26,56 +26,46 @@ def _result(stdout, returncode=0):
     return types.SimpleNamespace(stdout=stdout, stderr="", returncode=returncode)
 
 
-# The count comes from `lib.git.git`, patched by STRING target (see `git_dirty`).
-def test_master_moved_silent_when_current(monkeypatch):
-    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("0\n"))
-    assert _mod.master_moved_problems() == []
+# The count comes from `lib.git.git`; each test passes a fake through `master_moved_problems`' `git` seam.
+def test_master_moved_silent_when_current():
+    assert _mod.master_moved_problems(lambda *a, **k: _result("0\n")) == []
 
 
-def test_master_moved_reports_commit_count(monkeypatch):
-    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("3\n"))
-    lines = _mod.master_moved_problems()
+def test_master_moved_reports_commit_count():
+    lines = _mod.master_moved_problems(lambda *a, **k: _result("3\n"))
     assert len(lines) == 1
     assert "3 commits behind origin/master" in lines[0]
 
 
-def test_master_moved_singular_commit(monkeypatch):
-    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("1\n"))
-    lines = _mod.master_moved_problems()
+def test_master_moved_singular_commit():
+    lines = _mod.master_moved_problems(lambda *a, **k: _result("1\n"))
     assert "1 commit behind" in lines[0]  # not "1 commits"
 
 
-def test_master_moved_reads_this_checkout_without_fetching(monkeypatch):
-    # Two properties off one call, because the monkeypatch ratchet caps this file: the hook
-    # reads the local object store, never the network, and `cwd` names this checkout (which is
-    # load-bearing — `lib.git.git` strips `GIT_*`, so `cwd` alone decides the tree it reads).
+def test_master_moved_reads_this_checkout_without_fetching():
+    # Two properties off one call: the hook reads the local object store, never the network,
+    # and `cwd` names this checkout (which is load-bearing — `lib.git.git` strips `GIT_*`, so `cwd` alone decides the tree it reads).
     seen = []
-    monkeypatch.setattr(
-        "lib.git.git", lambda *a, **k: seen.append((a, k)) or _result("0\n")
-    )
-    _mod.master_moved_problems()
+    _mod.master_moved_problems(lambda *a, **k: seen.append((a, k)) or _result("0\n"))
     assert seen and "fetch" not in seen[0][0]
     assert seen[0][1].get("cwd") == _mod.REPO
 
 
-def test_master_moved_silent_on_nonzero_git_exit(monkeypatch):
+def test_master_moved_silent_on_nonzero_git_exit():
     # No origin/master ref in this checkout at all, say — not this hook's job to diagnose.
     # `check=False` is what makes this reachable: `lib.git.git` raises on a non-zero exit.
-    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("", returncode=128))
-    assert _mod.master_moved_problems() == []
+    assert _mod.master_moved_problems(lambda *a, **k: _result("", returncode=128)) == []
 
 
-def test_master_moved_silent_on_timeout(monkeypatch):
+def test_master_moved_silent_on_timeout():
     def boom(*a, **k):
         raise subprocess.TimeoutExpired("git", 5)
 
-    monkeypatch.setattr("lib.git.git", boom)
-    assert _mod.master_moved_problems() == []
+    assert _mod.master_moved_problems(boom) == []
 
 
-def test_master_moved_silent_on_unparseable_output(monkeypatch):
-    monkeypatch.setattr("lib.git.git", lambda *a, **k: _result("not a number\n"))
-    assert _mod.master_moved_problems() == []
+def test_master_moved_silent_on_unparseable_output():
+    assert _mod.master_moved_problems(lambda *a, **k: _result("not a number\n")) == []
 
 
 def test_master_moved_reports_a_broken_import_rather_than_going_quiet(monkeypatch):
