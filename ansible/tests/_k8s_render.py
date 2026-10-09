@@ -265,18 +265,16 @@ _BUILD_TEXTS: tuple[tuple[str, str, str], ...] | None = None
 
 def _render_build_files(overrides: dict | None = None):
     # Overrides before resolution and on top again after, for the reason `_render_texts` gives.
-    base = _inventory_base(overrides)
     entries = k8s_entries()
     for role_dir in role_dirs():
         role = role_dir.name
         if role in SKIP_ROLES or role not in entries:
             continue
-        ctx = {
-            **base,
-            **role_defaults(role, base),
-            "container_item": entries[role],
-            **(overrides or {}),
-        }
+        ctx = render_context(
+            role_dir,
+            overrides={"container_item": entries[role], **(overrides or {})},
+            strict=True,
+        )
         env = _role_env(role_dir, ctx)
         for tpl in sorted(role_dir.glob(f"templates/{BUILD_TEMPLATE_GLOB}")):
             rendered, err = render_or_error(env, tpl.name, ctx)
