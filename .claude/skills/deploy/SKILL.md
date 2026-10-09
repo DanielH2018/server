@@ -180,12 +180,11 @@ Because the snapshot is of `HEAD`, **an uncommitted edit is not deployed** — c
 
 ## When a run fails, read its last two lines
 
-`deploy.sh` prints what its exit code means on every non-zero exit, as its last two lines:
-`deploy.sh: <NAME> (<code>): <meaning> <what to do>`, then
-`DEPLOY-VERDICT: <verdict> (<the arguments>)`. Act on those lines rather than on the number.
-The wrapper prints them from `CONTRACTS` in `scripts/lib/exit_codes.py`, and
-`docs/reference/scripts.md` renders the same table. A fact an operator needs at a failed run
-belongs in that table's text, not in this skill: a copy here drifted once already (#2853).
+`deploy.sh` prints what its exit code means on every non-zero exit, as its last two lines; act
+on those rather than on the number. What the codes mean as a group is
+[docs/deploying.md's *Exit codes are resume points*](../../../docs/deploying.md#exit-codes-are-resume-points),
+and a fact an operator needs at a failed run belongs in `CONTRACTS` in `scripts/lib/exit_codes.py`,
+not in this skill: a copy here drifted once already (#2853).
 
 ## What `--tags`, `--at` and `--detach` change
 

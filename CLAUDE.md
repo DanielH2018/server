@@ -92,13 +92,9 @@ on the run says so. Commit first. `--check` and `--dry-run` still read the worki
 is where an uncommitted edit is meant to be exercised.
 
 **A failing run says what its exit code means — read its last two lines rather than looking
-the number up.** `deploy.sh: <NAME> (<code>): <meaning> <what to do>`, then
-`DEPLOY-VERDICT: <verdict> (<the arguments>)`, both from `scripts/lib/exit_codes.py`. Every
-member of `DEPLOY_SH_NO_VERDICT` means **nothing was deployed** — a resume point rather than a
-playbook failure. `DEPLOY_BAD_FLAGS` also ran nothing, but the fix is the command line rather
-than a retry. `DEPLOY_PLAYBOOK_FAILED` is the inverse: the playbook ran, a task failed, and
-changes before it are live — not a safe re-run. The Pi's `-e target=`, config-only runs and
-initial setup are in the **`deploy` skill**; the per-code table is `docs/reference/scripts.md`.
+the number up.** Which exits deployed nothing and which left changes live is owned by
+`docs/deploying.md`'s *Exit codes are resume points*. The Pi's `-e target=`, config-only runs
+and initial setup are in the **`deploy` skill**.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and
@@ -134,7 +130,8 @@ list of conclusions it covers (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
 **Verify the change, not just the workload.** The `VERDICT:` line cannot see whether *your
-change* took effect, so exercise the thing you actually changed as well.
+change* took effect, so exercise the thing you actually changed as well. `docs/landing.md` has
+the two incidents that made this a rule.
 
 ### Working alongside other sessions
 
@@ -150,8 +147,10 @@ Say which of these applies, then stop:
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
   broad apply failed. `hold_plane` names each failed playbook when it was the latter.
-- A change in `_BROAD_MANUAL_PREFIXES` — `bootstrap.yml`, `k3s-bringup.yml`,
-  `initial_setup.yml` — sits in the `local..origin` range. The deployer applies every other broad
+- A change in one of the bring-up playbooks — `bootstrap.yml`, `k3s-bringup.yml`,
+  `initial_setup.yml`, the list
+  `ansible/roles/setup/gitops_deploy/files/deploy_changes.py:_BROAD_MANUAL_PREFIXES` holds —
+  sits in the `local..origin` range. The deployer applies every other broad
   change itself, but not the bring-up playbooks: those run by hand by construction. If it is
   another session's, clearing it means applying their change; name it and stop.
 - A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer

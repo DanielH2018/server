@@ -108,6 +108,6 @@ into `evals/history.json`, then publishes it.
   detail* has the REGRESSED-case commit rule and why there is no non-hermetic fallback.
 
 ## Notable
-**Two daily host checks live here rather than in monitor-bridge**, both `kuma-check-*` timers
-that rerun on failure: the setup-plane drift reader (`setup_drift`) and the Loki read-route
-witness (`loki_route_witness`).
+**Two host checks live here rather than in monitor-bridge**, both `kuma-check-*` timers that
+rerun on failure: the setup-plane drift reader (`setup_drift`) and the Loki read-route witness
+(`loki_route_witness`).
