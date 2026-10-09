@@ -10,7 +10,10 @@
   Indentation is fixed at 10 spaces, the container-list depth in a Deployment, DaemonSet or
   StatefulSet pod template. A CronJob's containers sit one level further in, under
   `jobTemplate`, and take `job_container_resources()`: the same arguments and body, fixed at 14
-  spaces. Each macro emits at one depth, for the reason security-context.yml.j2 gives.
+  spaces. Each macro emits at one depth, so neither takes an indent argument. Calling the
+  10-space one at CronJob depth puts `resources:` on the pod spec and leaves the container with
+  none, which ansible/tests/k8s/test_namespace_resource_defaults.py's
+  test_every_rendered_container_sets_requests_and_limits reports.
 
   image-builder's build Job is outside `_k8s_render.rendered_docs()`, being caller-rendered.
   test_namespace_resource_defaults.py's
