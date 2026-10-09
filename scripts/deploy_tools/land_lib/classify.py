@@ -13,6 +13,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Classification, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_tags import DeriveSource
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+import deploy_cross_role
 
 
 def _classified[**P, R](
@@ -119,6 +123,31 @@ def _owed_to_a_hand(
     return declared, plane_paths, plane
 
 
+def adopt_cross_role_tables(ln: Landing) -> None:
+    """Classify with the merge commit's cross-role tables, not this checkout's (#3976).
+
+    `land_tags` is imported from beside `land.py`, so the tables it reads are whatever that
+    checkout holds. PR #3890 added the alert-unit rows and their files together, and a
+    landing that read the older copy found no shippers for the files, recorded `common`, and
+    printed the resolv.conf remediation for roles the change never reached. The deployer
+    reads origin's copy for the same reason (#3512, `deploy_phases`).
+
+    A read or parse failure keeps this checkout's tables and says so. `tables_in` parses
+    the copy rather than running it, because this runs before master CI has passed.
+    """
+    path = deploy_cross_role.CROSS_ROLE_FILE
+    shown = ln.git("show", f"{ln.merge_sha}:{path}")
+    try:
+        if shown.returncode != 0:
+            raise OSError(shown.stderr.strip() or f"git show exited {shown.returncode}")
+        deploy_cross_role.use_tables(deploy_cross_role.tables_in(shown.stdout))
+    except Exception as exc:
+        say(
+            f"could not read {path} at {ln.merge_sha[:8]} ({exc}) — "
+            "classifying with this checkout's cross-role tables"
+        )
+
+
 def classify(ln: Landing) -> None:
     """Tags, the plane a hand must apply, and whether the tick applies part of this PR.
 
@@ -133,6 +162,7 @@ def classify(ln: Landing) -> None:
     common way to land, not an escape hatch.
     """
     t, c = ln.tools, ln.classifier
+    adopt_cross_role_tables(ln)
     view = ln.view("files,changedFiles")
     paths = [f["path"] for f in view.get("files", [])]
     recorded = pr_range(ln)
@@ -160,6 +190,9 @@ def classify(ln: Landing) -> None:
         paths,
         t.hostname(),
         quiet=quiet,
+        pr_range=recorded,
+        ref=ln.merge_sha,
+        repo=ln.opts.primary,
     )
     # `--tags` named the services, so the plane is left unread: the operator's list wins over
     # a derivation, and `plane` is what a HAND applies rather than an input to any wait this

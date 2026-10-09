@@ -355,7 +355,8 @@ class DeployerState(AlertSlotMarkers, HoldMarkers, K8sLineMarkers):
         `setup_tags_for` returns an empty set to avoid.
 
         No role reaches this today, because every role the marker can hold is applied by a
-        playbook this deployer never runs. It is the clearing half of a marker whose writer
+        playbook this deployer never runs, or gated off its host (`deploy_defer.clear_applied`
+        drops those). It is the clearing half of a marker whose writer
         would otherwise have no reverse, and it is what a role promoted into
         `initial_setup.yml` needs on the day it is.
         """

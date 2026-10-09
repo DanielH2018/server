@@ -13,6 +13,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_ph
 """
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 import deploy_handlers
@@ -282,6 +283,28 @@ def test_plan_tick_routes_a_new_shared_file_with_the_tables_its_own_range_adds(
     plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
     expected = {"claude_code"} if origin_copy else {"common"}
     assert plan.cs.setup_roles == expected | {"gitops_deploy"}
+
+
+def test_tables_in_reads_the_live_module_as_it_imports():
+    """The parser must rebuild every table the real file defines, f-strings and unions included."""
+    import deploy_cross_role
+
+    source = Path(deploy_cross_role.__file__).read_text()
+    assert deploy_cross_role.tables_in(source) == deploy_cross_role.current_tables()
+
+
+def test_tables_in_runs_nothing_the_copy_calls(installed_tables, tmp_path):
+    """land.sh reads the merge commit's copy before master CI passes, so it must not run it."""
+    marker = tmp_path / "ran"
+    source = (
+        "K8S_ROLES_IMPORTING_SETUP_FILES = {}\n"
+        "SETUP_FILES_ROUTED_TO_OWNER = frozenset()\n"
+        f"SETUP_FILES_SHIPPED_BY_OTHER_ROLES = {{open({str(marker)!r}, 'w').name: 1}}\n"
+        "SETUP_ROLES_CALLING_FILTER_PLUGINS = {}\n"
+    )
+    with pytest.raises(KeyError, match="SETUP_FILES_SHIPPED_BY_OTHER_ROLES"):
+        installed_tables.tables_in(source)
+    assert not marker.exists()
 
 
 # ── handle_dirty() ────────────────────────────────────────────────────────────────────────

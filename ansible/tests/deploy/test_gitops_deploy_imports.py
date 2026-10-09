@@ -37,8 +37,10 @@ QUALIFIED = {"deploy_io", "deploy_alerts", "deploy_alert_text"}
 # module with no entry here would otherwise be governed by nothing.
 ALLOWED: dict[str, set[str] | None] = {
     # The cross-role tables, a leaf of their own so the classifier stays under its line cap.
-    "deploy_changes": {"deploy_cross_role"},
+    "deploy_changes": {"deploy_cross_role", "deploy_setup_roles"},
     "deploy_cross_role": set(),
+    # Which playbook and tag apply a setup role, split from the classifier at its line cap.
+    "deploy_setup_roles": {"gitops_markers"},
     # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and
     # `gitops_hold` for `held_tag`, the hold-marker format `broad_hold_cleared_by` reads back
     # (#3138) — a stdlib leaf, so no cycle. It must NOT import `deploy_toolbox`, which

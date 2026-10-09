@@ -130,7 +130,9 @@ SHIP_TASK = """\
 def ships(tree, monkeypatch) -> Tree:
     """The demo role declared a consumer of `SHIPPED`, which the owner role holds."""
     monkeypatch.setitem(
-        narrow_setup.SETUP_FILES_SHIPPED_BY_OTHER_ROLES, SHIPPED, frozenset({"demo"})
+        narrow_setup.deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
+        SHIPPED,
+        frozenset({"demo"}),
     )
     tree.write(SHIPPED, "VALUE = 1\n")
     tree.commit("the owner role's module")
@@ -142,6 +144,25 @@ def test_a_shipped_file_another_role_owns_narrows_to_the_shipping_task(ships):
     ships.commit("demo ships it")
     ships.write(SHIPPED, "VALUE = 2\n")
     assert narrow(ships, *_refs(ships)) == frozenset({"alpha"})
+
+
+def test_a_shipped_row_adopted_with_use_tables_is_the_one_read(tree):
+    """A landing adopts the merge commit's tables with `use_tables`, which rebinds the module
+    attribute only. A `from deploy_cross_role import` binding kept the checkout's table, so a
+    PR adding a row and its file together refused here (#4077)."""
+    tables = narrow_setup.deploy_cross_role
+    saved = tables.current_tables()
+    shipped = dict(tables.SETUP_FILES_SHIPPED_BY_OTHER_ROLES)
+    shipped[SHIPPED] = frozenset({"demo"})
+    tables.use_tables({**saved, "SETUP_FILES_SHIPPED_BY_OTHER_ROLES": shipped})
+    try:
+        tree.write(SHIPPED, "VALUE = 1\n")
+        tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA + SHIP_TASK)
+        tree.commit("demo ships the owner's module")
+        tree.write(SHIPPED, "VALUE = 2\n")
+        assert narrow(tree, *_refs(tree)) == frozenset({"alpha"})
+    finally:
+        tables.use_tables(saved)
 
 
 @pytest.mark.parametrize(

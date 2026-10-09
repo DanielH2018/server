@@ -4,7 +4,7 @@
 ONE SOURCE, SHIPPED FROM HERE. Every tree that reads the markers under
 `/var/lib/gitops-deploy` gets this file. The deployer runs from `/opt/gitops-deploy`, and the
 deploy-ui and renovate-agent roles install this same file into their own `/opt` directories by
-path, which `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes so a change here
+path, which `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes so a change here
 re-applies all three (#3306). Code that runs from the checkout (`scripts/lib/deployer_park.py`,
 `scripts/deploy_tools/gitops_state.py`) imports it through a `sys.path` insert of this
 directory. Until issue #2063 each reader restated the directory and the basenames it read, and
@@ -135,6 +135,26 @@ ALERT_SLOTS: frozenset[str] = frozenset(
 # What the `playbook` key of a `manual_plane` ledger line holds for a role no playbook applies
 # (`common`).
 NO_PLAYBOOK = "none"
+
+# Setup roles `initial_setup.yml` gates off the GitOps tick's host, mapped to the host each runs
+# on. The tick's own `--tags optimize_pi` run on daniel-box matched no task, exited 0 and
+# recorded an apply (#3933), so the deployer records these in `manual_plane` instead. Here
+# rather than in the deployer's `deploy_setup_roles`, which re-exports it, because the
+# SessionStart banner, monitor-bridge and `probe.py` print the line's apply command and none of
+# them can import the deployer. `ansible/tests/deploy/test_setup_roles_the_tick_host_skips.py`
+# derives the table from the playbook's gates.
+SETUP_ROLES_OFF_THE_TICK_HOST: dict[str, str] = {"optimize_pi": "daniel-pi"}
+
+
+def target_arg(role: str) -> str:
+    """` -e target=<host>` for a role gated off the tick's host, else "".
+
+    Appended to every printed `ansible-playbook ... --tags <role>`: without it the command
+    runs on the operator's host, skips the role and exits 0.
+    """
+    host = SETUP_ROLES_OFF_THE_TICK_HOST.get(role)
+    return f" -e target={host}" if host else ""
+
 
 # What an operator runs to clear one owed-ledger line after applying, deploying or reverting
 # what it names, and to end a contention streak once the lock's holder is gone. The deployer's

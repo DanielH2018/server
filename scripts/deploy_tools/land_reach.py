@@ -18,6 +18,7 @@ The traversal that reads a role's `tasks/` tree for those gates is `setup_role_c
 this one evaluates the chains it returns.
 """
 
+import contextlib
 import functools
 import json
 import sys
@@ -28,13 +29,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.ansible_inventory import inventory_hosts
-from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS
+from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import _is_test_only_path, setup_role_playbook, setup_role_tag
+import deploy_cross_role
+from deploy_logic import (
+    _is_test_only_path,
+    setup_role_playbook,
+    setup_role_tag,
+    tick_applies_setup_role,
+)
 
 from land_changes import changes_for
+from setup_role_diff import deleted_in, task_file_chains, tree_at
 from setup_role_chains import (
     SHIPPED_DIRS,
     VARS_DIRS,
@@ -227,6 +235,8 @@ def setup_file_hosts(
     all_vars: Path = ALL_VARS,
     host_vars_dir: Path = HOST_VARS,
     roles_dir: Path = _SETUP_ROLES_DIR,
+    pr_range: str = "",
+    repo: Path = REPO,
 ) -> frozenset[str]:
     """Which hosts a change to `path` (one file of setup role `role`) actually lands on.
 
@@ -246,6 +256,12 @@ def setup_file_hosts(
     `not has_gitops` half of the same dispatcher, reaches the other two the same way. A
     task file holding only includes -- `main.yml` of a dispatcher -- has no leaf of its
     own and returns the role-level answer, which for a dispatcher is the union.
+
+    Given `pr_range` (`<old>..<new>`), a `tasks/` path narrows further, to the tasks the
+    range added or edited (`setup_role_diff.changed_task_texts`). `initial_setup/tasks/
+    crons.yml` holds ungated crons beside box-only ones, so an edit to only the box-only
+    ones read as owing daniel-server and daniel-pi an apply (#3976). `repo` is the checkout
+    whose git store holds the range. A diff it cannot read keeps the whole file's reach.
 
     A `defaults/` or `vars/` file ships nowhere, so its reach is read from the tasks that
     consume the vars it defines (`_var_consumer_chains`), and stays at the role level unless
@@ -279,9 +295,14 @@ def setup_file_hosts(
     if not role_hosts or parts[: len(prefix)] != prefix or len(parts) < 6:
         return role_hosts
     if parts[4] == "tasks":
-        task_file = parts[-1]
-        chains = task_chains(roles_dir / role, lambda task, f: f == task_file)
+        chains = task_file_chains(roles_dir / role, path, pr_range, repo)
     elif parts[4] in SHIPPED_DIRS:
+        if pr_range and deleted_in(path, pr_range, repo):
+            # A deleted template or file ships nothing, and re-applying the role does not
+            # remove a rendered copy; a task that cleans one up is its own changed path.
+            # #3890 deleted gitops_deploy's role-local alert template, which no task named,
+            # so its reach fell back to the role's three hosts.
+            return frozenset()
         chains = task_gates_naming(roles_dir / role, parts[-1])
     elif parts[4] in VARS_DIRS:
         chains = var_consumer_chains(
@@ -296,6 +317,56 @@ def setup_file_hosts(
     if not chains:
         return role_hosts
     return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
+
+
+def setup_shipped_file_hosts(
+    role: str,
+    path: str,
+    playbook: Path = _INITIAL_SETUP_YML,
+    all_vars: Path = ALL_VARS,
+    host_vars_dir: Path = HOST_VARS,
+    roles_dir: Path = _SETUP_ROLES_DIR,
+) -> frozenset[str]:
+    """Which hosts a changed file ANOTHER setup role owns lands on through `role`.
+
+    `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` names the roles that import or copy
+    a file from `common/` or `gitops_deploy/files/`. Such a role has no changed path under its
+    own directory, so `setup_file_hosts` gave it the ROLE-level reach: `gitops_deploy`'s
+    teardown half put daniel-server and daniel-pi in the note for a change to
+    `common/templates/unit-failure-alert.service.j2`, which `gitops_deploy` renders only on
+    daniel-box (#3976).
+
+    The evidence is the role's tasks that name the file, or that import a task file of the
+    owner naming it: the alert template reaches a host only through `alert_unit.yml`. No such
+    task keeps the role-level reach.
+    """
+    role_hosts = setup_role_hosts(role, playbook, all_vars, host_vars_dir, roles_dir)
+    if not role_hosts:
+        return frozenset()
+    names = _shipping_names(path, roles_dir)
+    chains = task_chains(
+        roles_dir / role,
+        lambda task, _: any(name in json.dumps(task) for name in names),
+    )
+    if not chains:
+        return role_hosts
+    return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
+
+
+def _shipping_names(path: str, roles_dir: Path) -> set[str]:
+    """`path`'s basename, and each owner task file that names it, by basename."""
+    basename = Path(path).name
+    names = {basename}
+    parts = Path(path).parts
+    if len(parts) < 5 or parts[:3] != ("ansible", "roles", "setup"):
+        return names
+    for task_file in sorted((roles_dir / parts[3] / "tasks").glob("*.yml")):
+        try:
+            if basename in task_file.read_text():
+                names.add(task_file.name)
+        except OSError:
+            continue
+    return names
 
 
 def setup_repo_file_hosts(
@@ -369,10 +440,33 @@ def remaining_setup_hosts_note(
     files,
     local_host: str,
     quiet=(),
+    pr_range: str = "",
+    ref: str = "",
+    repo: Path = REPO,
+) -> str:
+    """`_remaining_note` over `ref`'s `ansible/` tree, or `repo`'s checkout without one.
+
+    `ref` is the merge commit: the checkout can predate it (`setup_role_diff.tree_at`), and
+    a ref git cannot archive falls back to `repo`'s checkout and says so on stderr.
+    """
+    paths = (_INITIAL_SETUP_YML, ALL_VARS, HOST_VARS, _SETUP_ROLES_DIR)
+    with tree_at(ref, repo) if ref else contextlib.nullcontext() as root:
+        at = [(root or repo) / p.relative_to(REPO) for p in paths]
+        return _remaining_note(
+            files, local_host, quiet, at[0], at[1], at[2], at[3], pr_range, repo
+        )
+
+
+def _remaining_note(
+    files,
+    local_host: str,
+    quiet=(),
     playbook: Path = _INITIAL_SETUP_YML,
     all_vars: Path = ALL_VARS,
     host_vars_dir: Path = HOST_VARS,
     roles_dir: Path = _SETUP_ROLES_DIR,
+    pr_range: str = "",
+    repo: Path = REPO,
 ) -> str:
     """What a self-applied setup-role change still needs beyond `local_host`, or "" if nothing does.
 
@@ -389,7 +483,12 @@ def remaining_setup_hosts_note(
 
     Empty for a role like `gitops_deploy`, which is `when: has_gitops`, true only on
     daniel-box, so a PR touching only a role whose sole reached host is `local_host` stays
-    unowed to a hand, exactly as `plane_note` already keeps it.
+    unowed to a hand, exactly as `plane_note` already keeps it. A role the tick does not apply
+    at all (`optimize_pi`, gated off the tick's host) is `plane_note`'s to name, and is
+    skipped here so the landing prints its command once.
+
+    `pr_range` is the PR's own `<old>..<new>`, which `setup_file_hosts` reads to narrow a
+    changed `tasks/` file to its changed tasks; "" keeps the whole file's reach.
     """
     loud = changes_for(files, quiet)
     cs = loud.changes
@@ -403,14 +502,42 @@ def remaining_setup_hosts_note(
     # ship from the checkout (`setup_repo_file_hosts`). Quiet paths are dropped here where
     # `role_files` above keeps them, because a quiet path owes no host an apply at all.
     repo_files = [p for p in loud.loud if not p.startswith("ansible/roles/")]
+    # Every loud path another setup role owns and this one imports or copies. Looked up as a
+    # module attribute, so tables a caller adopted with `use_tables` are the ones read.
+    shipped = {
+        r: [
+            p
+            for p in loud.loud
+            if r in deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(p, ())
+        ]
+        for r in cs.setup_roles
+    }
     for role in cs.setup_roles:
+        if not tick_applies_setup_role(role):
+            continue
         # Per file, not per role: the gate that decides where a file lands is on the task
         # that ships it (`setup_file_hosts`), and a role-level read said every host for
         # any change to the ungated `initial_setup` role.
+        own = role_files[role] or ([] if shipped[role] else [""])
         hosts = frozenset().union(
             *(
-                setup_file_hosts(role, p, playbook, all_vars, host_vars_dir, roles_dir)
-                for p in role_files[role] or [""]
+                setup_file_hosts(
+                    role,
+                    p,
+                    playbook,
+                    all_vars,
+                    host_vars_dir,
+                    roles_dir,
+                    pr_range,
+                    repo,
+                )
+                for p in own
+            ),
+            *(
+                setup_shipped_file_hosts(
+                    role, p, playbook, all_vars, host_vars_dir, roles_dir
+                )
+                for p in shipped[role]
             ),
             *(
                 setup_repo_file_hosts(

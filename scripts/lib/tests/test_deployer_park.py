@@ -105,6 +105,23 @@ def test_a_manual_plane_ledger_line_with_an_unknown_key_reaches_the_banner(tmp_p
     assert line_text.endswith("clear-owed manual_plane k3s --applied kubeconfig`")
 
 
+def test_a_pi_only_role_is_applied_with_its_target(tmp_path):
+    """#3933: run on daniel-box, `--tags optimize_pi` skips the role and exits 0."""
+    line = {
+        "class": "manual_plane",
+        "subject": "optimize_pi",
+        "origin": "f" * 40,
+        "at": 500,
+        "playbook": "ansible/initial_setup.yml",
+    }
+    (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
+    (line_text,) = manual_plane_lines(read_manual_plane_marker(str(tmp_path)), 4000)
+    assert (
+        "apply `ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi` by hand"
+        in line_text
+    )
+
+
 def test_an_absent_ledger_reads_as_nothing_pending(tmp_path):
     assert read_manual_plane_marker(str(tmp_path / "nope")) is None
     assert manual_plane_lines(None, 4000) == []

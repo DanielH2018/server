@@ -41,6 +41,7 @@
     - deploy_handlers.py
     - deploy_narrow.py
     - deploy_cross_role.py
+    - deploy_setup_roles.py
   become: true
   notify: Run gitops-deploy once
 
@@ -122,5 +123,7 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py
       - live: /opt/gitops-deploy/deploy_cross_role.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py
+      - live: /opt/gitops-deploy/deploy_setup_roles.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_setup_roles.py
       - live: /opt/gitops-deploy/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py

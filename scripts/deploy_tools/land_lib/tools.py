@@ -49,17 +49,9 @@ _sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
 from deploy_locks import TREE_LOCK as LOCK
 from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
-from deploy_tools import (
-    await_ci,
-    land_platform,
-    land_rerolls,
-    land_reach,
-    land_shared,
-    land_tags,
-    shared_role_reach,
-)
-from deploy_tools.deploy_detach_notify import GateResult
-from deploy_tools.deploy_detach_notify import gate as health_gate
+from deploy_tools import await_ci, land_platform, land_reach, land_rerolls
+from deploy_tools import land_shared, land_tags, shared_role_reach
+from deploy_tools.deploy_detach_notify import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_tags import Derivation
 from lib.gh import gh, gh_json
@@ -497,7 +489,15 @@ class RemainingSetupHosts(Protocol):
     """`land_reach.remaining_setup_hosts_note`: the hosts a self-applied role still owes."""
 
     def __call__(
-        self, files: list[str], local_host: str, /, *, quiet: Iterable[str] = ()
+        self,
+        files: list[str],
+        local_host: str,
+        /,
+        *,
+        quiet: Iterable[str] = (),
+        pr_range: str = "",
+        ref: str = "",
+        repo: Path = ...,
     ) -> str: ...
 
 

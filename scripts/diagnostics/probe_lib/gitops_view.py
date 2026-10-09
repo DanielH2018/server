@@ -59,6 +59,7 @@ from gitops_markers import (
     owed_clear_cmd,
     parse_behind,
     parse_contention,
+    target_arg,
 )
 
 SET, ABSENT, UNREADABLE = "set", "absent", "unreadable"
@@ -90,7 +91,7 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
     for e in entries:
         selected = narrow.get(e.role) or frozenset({e.role})
         apply = (
-            f"{e.playbook} --tags {','.join(sorted(selected))}"
+            f"{e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.role)}"
             if e.playbook != NO_PLAYBOOK
             else "apply the role by hand; no playbook applies it"
         )

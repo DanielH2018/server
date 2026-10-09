@@ -198,9 +198,9 @@ def test_remaining_setup_hosts_note_stays_empty_for_pr_723():
 def test_remaining_setup_hosts_note_is_relative_to_the_given_host():
     """A role reaching only the host asked about has nothing remaining, whichever host that
     is -- the note is relative to `local_host`, not hardcoded to daniel-box."""
-    files = ["ansible/roles/setup/optimize_pi/tasks/main.yml"]
-    assert land_reach.remaining_setup_hosts_note(files, "daniel-pi") == ""
-    assert "daniel-pi" in land_reach.remaining_setup_hosts_note(files, "daniel-box")
+    files = ["ansible/roles/setup/deploy_ui/tasks/main.yml"]
+    assert land_reach.remaining_setup_hosts_note(files, "daniel-box") == ""
+    assert "daniel-box" in land_reach.remaining_setup_hosts_note(files, "daniel-pi")
 
 
 def test_an_unroutable_setup_role_has_no_remaining_hosts():

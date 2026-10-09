@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from deploy_changes import ChangeSet, setup_role_playbook, setup_role_tag
 from gitops_ledger import OWED_MANUAL_PLANE
-from gitops_markers import MAXIMAL_ROLE_GATED_TAGS, owed_clear_cmd
+from gitops_markers import MAXIMAL_ROLE_GATED_TAGS, owed_clear_cmd, target_arg
 
 # The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
 # real one from config.env and passes it; the repo-side callers (deploy_tags, land_tags) run
@@ -295,7 +295,7 @@ def _setup_commands(
         role_tag = setup_role_tag(role)
         narrowed = _narrowed_tags(role, narrow_tags)
         tags = ",".join(sorted(narrowed)) or role_tag
-        cmd = f"`ansible-playbook {playbook} --tags {tags}`"
+        cmd = f"`ansible-playbook {playbook} --tags {tags}{target_arg(role)}`"
         if not narrowed:
             warning = maximal_tag_warning(role)
         elif narrowed & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):

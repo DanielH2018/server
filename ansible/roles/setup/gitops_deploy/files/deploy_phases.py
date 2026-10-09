@@ -264,7 +264,7 @@ def _adopt_incoming_cross_role_tables(
 ) -> None:
     """Classify a range that edits the cross-role tables with origin's copy of them (#3512).
 
-    A read or exec failure keeps the installed copy, which is the behaviour before #3512.
+    A read or parse failure keeps the installed copy, which is the behaviour before #3512.
     """
     path = deploy_cross_role.CROSS_ROLE_FILE
     try:

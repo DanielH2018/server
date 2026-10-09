@@ -31,6 +31,7 @@ from gitops_markers import (
     owed_clear_cmd,
     parse_behind,
     parse_contention,
+    target_arg,
 )
 from gitops_ledger import (
     OWED_K8S_DEFERRED,
@@ -68,10 +69,11 @@ def _apply_and_clear(pending, narrow) -> str:
         how = (
             "apply the role by hand"
             if entry.playbook == NO_PLAYBOOK
-            else "apply `%s --tags %s` by hand%s"
+            else "apply `%s --tags %s%s` by hand%s"
             % (
                 entry.playbook,
                 ",".join(sorted(selected)),
+                target_arg(role),
                 " (WARNING: %s)" % warning if warning else "",
             )
         )

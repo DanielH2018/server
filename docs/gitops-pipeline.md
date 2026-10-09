@@ -135,9 +135,9 @@ A `common/templates/` file a common task file renders inherits that task file's 
 (#3319): the kuma-check pair routes to the roles importing `kuma_check_timer.yml`. `narrow_setup`
 finds no reader of the template in `gitops_deploy`, `render_records` or `k3s`, so those apply
 or are recorded under their whole-role tag. `resolv.conf.j2` is the exception
-(`SETUP_FILES_ROUTED_TO_OWNER`). `optimize_pi` renders it on daniel-pi only, so a tick on
-daniel-box would record an apply that changed nothing there. It still routes `common` to
-`manual_plane`, as described above.
+(`SETUP_FILES_ROUTED_TO_OWNER`). Both roles that render it are hand applies: `k3s` runs from
+`k3s-bringup.yml`, and `optimize_pi` runs on daniel-pi only. It routes `common` to
+`manual_plane`, as described above, whose remediation names both commands.
 
 A k8s role can import a `common` file too. `janitorr` and `configarr` copy `host_lib.py` through
 `install_host_lib.yml` and stamp it through `stamp_deployed.yml`.
@@ -340,6 +340,14 @@ The deployer clears a line itself when a tick applies that role's own playbook a
 (`DeployerState.clear_manual_plane_applied`). No role reaches that today, since the tick runs
 neither `k3s-bringup.yml` nor a playbook for `common`; it is what a role promoted into
 `initial_setup.yml` needs on the day it is.
+
+`optimize_pi` is recorded the same way (#3933). `initial_setup.yml` includes it under `when:
+inventory_hostname == optimize_pi_host`, so the tick's `--tags optimize_pi` run on daniel-box
+matched no task, exited 0 and recorded an apply the Pi never received.
+`gitops_markers.SETUP_ROLES_OFF_THE_TICK_HOST` maps the role to its host, and the remediation
+prints `ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`.
+`ansible/tests/deploy/test_setup_roles_the_tick_host_skips.py` derives that table from the
+playbook gates, so a second role gated off the tick's host fails it until the table names it.
 
 #### The tag the remediation prints is derived, not the role tag
 
@@ -815,7 +823,8 @@ stay).
     hand command to print and no role to record.
   - **A setup ROLE whose tag cannot be derived no longer parks: it fast-forwards and is
     recorded in `manual_plane`.** `k3s` (applied by `k3s-bringup.yml`) and `common` (applied by
-    no playbook at all) are the two, and `deploy_defer.py`'s module docstring carries the
+    no playbook at all) were the two; `optimize_pi` (gated off the tick's host) joined them
+    under #3933, and `deploy_defer.py`'s module docstring carries the
     `DECIDED:` marker and the measurement. The tick writes one `manual_plane` line per role
     to the `owed` ledger, deduplicated by role so a role already listed keeps its first-seen
     stamp,

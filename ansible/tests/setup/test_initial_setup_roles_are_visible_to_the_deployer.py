@@ -11,8 +11,8 @@ landing side. `ansible.cfg`'s `roles_path` resolves a bare `role: <name>` across
 `roles/containers`, `roles/setup` and `roles/`, so Ansible itself runs a role from any of the
 three and neither mapper is told. This guard closes that gap from the playbook's side: each
 role in `initial_setup.yml`'s `roles:` must route through `services_from_changed_paths` to
-`setup_roles` and yield a `setup_tags_for` tag, and its directory must be the one
-`land_reach` reads.
+`setup_roles` and yield a `setup_tags_for` tag, unless the playbook gates it off the tick's
+host, and its directory must be the one `land_reach` reads.
 
 Red-proof pair on a synthetic tree under `tmp_path`; non-vacuity pins `nut_host` and
 `initial_setup` in the live census so a renamed playbook cannot pass by including nothing.
@@ -27,6 +27,7 @@ import yaml
 
 import land_reach
 from deploy_changes import services_from_changed_paths, setup_tags_for
+from gitops_markers import SETUP_ROLES_OFF_THE_TICK_HOST
 
 INITIAL_SETUP_YML = ANSIBLE / "initial_setup.yml"
 ROLES = ANSIBLE / "roles"
@@ -62,7 +63,10 @@ def invisible_roles(
             + "/tasks/main.yml"
         )
         cs = services_from_changed_paths([rel])
-        if role not in cs.setup_roles or not setup_tags_for([rel]):
+        # A role gated off the tick's host yields no tag by design: the deployer records it
+        # in `manual_plane` instead (#3933).
+        tagged = setup_tags_for([rel]) or role in SETUP_ROLES_OFF_THE_TICK_HOST
+        if role not in cs.setup_roles or not tagged:
             problems[role] = (
                 f"{rel} does not route to the setup plane in deploy_changes.py "
                 f"(setup_roles={sorted(cs.setup_roles)}, tags={sorted(setup_tags_for([rel]))})"

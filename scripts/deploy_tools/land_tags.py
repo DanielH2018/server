@@ -54,6 +54,7 @@ from deploy_logic import (
     setup_role_playbook,
     manual_plane_clear_for,
     setup_role_tag,
+    tick_applies_setup_role,
 )
 
 # Same directory, so a direct invocation already has it on sys.path. `service_tags` is the
@@ -239,17 +240,14 @@ def plane_note(
     # change as `initial_setup.yml --tags <role>`, including the deployer's own role.
     # What is left for a hand: the bring-up playbooks
     # (`_BROAD_MANUAL_PREFIXES`, which park the tick outright), and a setup role that
-    # initial_setup.yml does not include (k3s lives in k3s-bringup.yml, common in no playbook),
-    # for which `setup_tags_for` derives nothing and the tick defers. Reporting the self-applied
+    # initial_setup.yml does not include (k3s lives in k3s-bringup.yml, common in no playbook)
+    # or gates off the tick's host (optimize_pi, #3933), for which `setup_tags_for` derives
+    # nothing and the tick defers. Reporting the self-applied
     # roles here would make land.sh exit 1 with `needs-manual-apply` while the next tick is
     # applying exactly those roles. land.sh reads the deployer's own state for
     # that case instead.
     loud = changes_for(files, quiet)
-    unroutable = {
-        r
-        for r in loud.changes.setup_roles
-        if setup_role_playbook(r) != "ansible/initial_setup.yml"
-    }
+    unroutable = {r for r in loud.changes.setup_roles if not tick_applies_setup_role(r)}
     if loud.manual or unroutable:
         notes.append(
             broad_remediation(
@@ -312,9 +310,7 @@ def self_applied(files, quiet=()) -> bool:
     cs = changes_for(files, quiet).changes
     if cs.broad_deploy:
         return True
-    return any(
-        setup_role_playbook(r) == "ansible/initial_setup.yml" for r in cs.setup_roles
-    )
+    return any(tick_applies_setup_role(r) for r in cs.setup_roles)
 
 
 def self_applied_command(files, quiet=()) -> str:
@@ -332,11 +328,7 @@ def self_applied_command(files, quiet=()) -> str:
     recorded no apply covering the PR.
     """
     cs = changes_for(files, quiet).changes
-    routable = {
-        r
-        for r in cs.setup_roles
-        if setup_role_playbook(r) == "ansible/initial_setup.yml"
-    }
+    routable = {r for r in cs.setup_roles if tick_applies_setup_role(r)}
     if not (cs.broad_deploy or routable):
         return ""
     return broad_remediation(cs.broad_deploy, bool(routable), routable)
@@ -470,7 +462,11 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
         print("yes" if self_applied(paths, quiet=quiet) else "")
         return 0
     if ns.remaining_setup_hosts is not None:
-        print(remaining_setup_hosts_note(paths, ns.remaining_setup_hosts, quiet=quiet))
+        print(
+            remaining_setup_hosts_note(
+                paths, ns.remaining_setup_hosts, quiet=quiet, pr_range=ns.range_
+            )
+        )
         return 0
     tags, source = derive(
         [f["path"] for f in payload.get("files", [])],
