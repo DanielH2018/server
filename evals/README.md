@@ -138,6 +138,9 @@ and re-running it, not by reasoning:
    same reason. `test_no_case_cites_a_retired_container_role` holds every cited
    `roles/containers/<x>` to daniel-pi's `containers_list`. A fixture for a service that does not
    exist yet goes under `roles/k8s/`, marked "(a new role, not yet merged)".
+   `test_no_case_cites_a_missing_role_path` holds every other cited `ansible/roles/...` path to
+   the tree. A path that does not exist passes only when one citation under its role carries that
+   marker and the role directory is absent; a marker on a role that exists exempts nothing.
 2. **Pre-supply anything an earlier step would have gathered.** `012` asked for the step-3 dispatch
    plan, so the model correctly went to do step-2 priming first — a memory read — and never got to
    the briefs: 0/3. With the primed material inlined and priming declared done, **3/3**. Same
@@ -170,7 +173,15 @@ and re-running it, not by reasoning:
    deleting it. The same
    change rebuilt eight cases that passed the sweep but cited retired `roles/containers/` roles,
    and one of them, `homelab-review/002`, also carried a settled "Pi images are unpinned"
-   decision that the Pi's digest pins had made false. A passing case edited this way is unverified until the next hermetic sweep.
+   decision that the Pi's digest pins had made false. #4045 widened the check from Compose role
+   names to every cited `ansible/roles/` path and rebuilt the six cases citing five paths that no
+   longer existed. Three were path-only repoints in synthesis cases, where the path is a label: the
+   Authelia session secret, the homepage widget file, and `grafana-data` in `k8s/observability`.
+   The two `ha-review` cases now name `files/automations/lighting.yaml` and the live actuator
+   `light.bedroom_lights`, with their planted automation marked a proposed addition.
+   `skeptic/002` plants the jsonpath bug the bash reaper really shipped, which the Python
+   rewrite in `scripts/backup/` fixed, so it became a new-role fixture. A passing case edited this
+   way is unverified until the next hermetic sweep.
 
 **Grade judgment in the rubric, not the regex.** `skeptic/003` first asserted
 `must_not_match: REFUTED`, which fires on "this is *not* refuted" — the assertion rejected correct
