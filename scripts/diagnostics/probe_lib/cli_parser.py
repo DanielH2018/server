@@ -129,7 +129,15 @@ def _build_parser():
         help=LOKI_STORE_HELP
         + "; unset, `homelab` unless the query is the claude-code selector",
     )
-    lq.add_argument("--limit", type=int, default=100)
+    lq.add_argument(
+        "--limit",
+        type=int,
+        default=100,
+        help="how many lines to return (default 100). These are the NEWEST N, not the "
+        "first N: a selector matching a busy stream and a quiet one spends the whole budget "
+        "on the busy one, and the quiet stream's older lines never appear. Pin the pod in "
+        "the selector, or raise --limit.",
+    )
     lq.add_argument(
         "--since",
         help="how far back to look, e.g. 30m/6h/2d/1w. Loki defaults to ONE HOUR, and "

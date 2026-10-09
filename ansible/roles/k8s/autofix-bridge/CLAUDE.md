@@ -95,4 +95,3 @@ here must satisfy this summary.
   `docs/autofix-bridge-actuators.md` carries the command that runs either by hand safely.
 - Tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` and `uv run pytest
   ansible/roles/setup/fake_remux/files`.
-- Deploy: `./scripts/deploy.sh --tags "autofix-bridge"`
