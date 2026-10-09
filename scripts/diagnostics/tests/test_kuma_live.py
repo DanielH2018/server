@@ -6,6 +6,7 @@ The census exists for #4005: the exporter alone filed a never-created weekly til
 import json
 
 from diagnostics.probe_lib import kuma_live, monitors
+from lib.kubectl import Tools
 
 LONG_INTERVAL_SAMPLE = """\
 stringData:
@@ -73,3 +74,17 @@ def test_parse_status_page_reads_a_body_without_a_group_list_as_unreadable():
     # reported as never created.
     assert kuma_live.parse_status_page('{"ok": false}') is None
     assert kuma_live.parse_status_page("<html>502 Bad Gateway</html>") is None
+
+
+def test_pod_age_reads_a_host_without_a_kubeconfig_as_unknown():
+    # #4038: `kuma-drift` died on MissingKubectl before printing a verdict. No kubeconfig
+    # must read as an unknown age, which `format_kuma_drift` already fails loud on.
+    def no_run(argv, timeout):
+        raise AssertionError(f"ran {argv} with no kubeconfig")
+
+    tools = Tools(
+        run=no_run,
+        find_tool=lambda name: "/usr/bin/kubectl",
+        find_kubeconfig=lambda: None,
+    )
+    assert kuma_live.pod_age_seconds(tools=tools) is None
