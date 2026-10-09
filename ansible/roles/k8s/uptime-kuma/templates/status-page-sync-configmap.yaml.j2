@@ -15,7 +15,18 @@
   indented comment leaves its leading spaces behind and pushes the following key inside the
   preceding block scalar, which still parses as valid YAML (the trap artifacts/configmap.yaml.j2
   records at length).
+
+  monitor-bridge's push tiles take their group from the `status_group` column of that role's
+  files/check_table.py (#3781): each row's id is pinned, as an exact pattern, at the head of
+  its group's rule, so a new bridge check needs no rule here.
 #}
+{% set bridge = lookup('file', playbook_dir + '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') %}
+{% set ns = namespace(rules=[]) %}
+{% for rule in uptime_kuma_k8s_status_page_groups %}
+{%   set pins = [] %}
+{%   for row in bridge if row.status_group == rule.name %}{% set _ = pins.append('^' ~ row.kuma_id ~ '$') %}{% endfor %}
+{%   set ns.rules = ns.rules + [{'name': rule.name, 'match': pins + rule.match}] %}
+{% endfor %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -24,7 +35,7 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   rules.json: |
-    {{ uptime_kuma_k8s_status_page_groups | tojson }}
+    {{ ns.rules | tojson }}
   index.json: |
     {
 {% for autokuma_id, declaration in kuma_declarations | default({}) | dictsort if declaration.type not in ('notification', 'tag') %}

@@ -74,6 +74,9 @@ class PushCheck:
         entity map on it, so changing it deletes the live monitor and its history.
       display: The Kuma display name.
       description: What the tile reads, what a DOWN means and where to look.
+      status_group: The status page group the tile is listed under, one of
+        `uptime_kuma_k8s_status_page_groups`' names. uptime-kuma's sync ConfigMap pins the
+        tile's id into that group's rule.
       gate: The gate whose outage suppresses this check (`prometheus`, `loki_reachable`,
         `b2_reachable`, `wan_reachable`), or `startup_grace` for a reach-out check held `up`
         through its first down cycles. One value per row, because a check in two of these
@@ -92,6 +95,7 @@ class PushCheck:
     kuma_id: str
     display: str
     description: str
+    status_group: str
     gate: str | None = None
     is_gate: bool = False
     critical: bool = False
