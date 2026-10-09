@@ -68,8 +68,17 @@ What the monkeypatch heuristic counts, and what it misses:
   the module's own dotted name rather than a local alias, so its root is matched against the
   first-party names directly and not against what the test imported. `"subprocess.run"` stays
   out for the same reason a patch on `sys` does.
-- Not counted: a receiver spelled anything but `monkeypatch`, and
-  `delattr`/`setitem`/`setenv`/`chdir`.
+- Counted: an assignment whose target is an attribute chain rooted at a first-party module
+  name, `mod.attr = double` or `mod.sub.attr = double`, plain, augmented, annotated or inside a
+  tuple target. It does what `monkeypatch.setattr` does and pins the same name into the test,
+  with less safety: an exception between the save and the `try` leaks the double into later
+  tests (#3670). Four such patches were hiding behind ty suppressions.
+  An assignment inside a `finally:` block is not counted, because that is the restore half of
+  the same patch. The root is resolved the way the object form of `monkeypatch.setattr` is,
+  so `cfg.X = 1` on a local object and `sys.argv = []` on the standard library stay out.
+- Not counted: a receiver spelled anything but `monkeypatch`, a `setattr(mod, "x", v)` call,
+  and `delattr`/`setitem`/`setenv`/`chdir`. A restore written outside a `finally:` block
+  counts as a second patch.
 - Not counted: a patch on an imported class or function, unless its name happens to match a
   first-party module name. Restricting roots to module names is what keeps the standard
   library out, and an import statement does not say which kind of object it binds.
@@ -328,18 +337,62 @@ def _targets_a_first_party_module(
     return isinstance(target, ast.Name) and target.id in bound
 
 
+def _assigned_attributes(node: ast.AST) -> list[ast.Attribute]:
+    """The attribute targets one assignment statement writes, tuple targets unpacked."""
+    pending: list[ast.expr]
+    match node:
+        case ast.Assign(targets=targets):
+            pending = list(targets)
+        case ast.AugAssign(target=target):
+            pending = [target]
+        case ast.AnnAssign(target=target, value=ast.expr()):
+            pending = [target]
+        case _:
+            return []
+    found: list[ast.Attribute] = []
+    while pending:
+        target = pending.pop()
+        match target:
+            case ast.Attribute():
+                found.append(target)
+            case ast.Tuple(elts=elts) | ast.List(elts=elts):
+                pending.extend(elts)
+            case ast.Starred(value=value):
+                pending.append(value)
+    return found
+
+
+def _restore_nodes(tree: ast.AST) -> set[int]:
+    """The `id` of every node inside a `finally:` block.
+
+    A hand-rolled patch saves the attribute, assigns a double and puts the original back in
+    `finally`. The restore is an assignment to the same module attribute, so counting it would
+    score one patch as two where `monkeypatch.setattr` scores it as one.
+    """
+    return {
+        id(inner)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Try | ast.TryStar)
+        for stmt in node.finalbody
+        for inner in ast.walk(stmt)
+    }
+
+
 def count_module_patches(
     source: str,
     first_party: Collection[str],
     module_fixtures: Collection[str] = (),
 ) -> int:
-    """How many `monkeypatch.setattr` calls in `source` target a first-party module.
+    """How many patches in `source` target a first-party module.
 
-    `module_fixtures` names the conftest fixtures that hand back a module, so a patch on such
-    a parameter counts. The module docstring lists what this deliberately does not see.
+    A patch is a `monkeypatch.setattr` call, or an assignment to an attribute of a name bound
+    to a first-party module (`mod.attr = double`, `mod.sub.attr = double`). `module_fixtures`
+    names the conftest fixtures that hand back a module, so a patch on such a parameter
+    counts. The module docstring lists what this deliberately does not see.
     """
     tree = ast.parse(source)
     bound = _bound_module_names(tree, first_party, module_fixtures)
+    restores = _restore_nodes(tree)
 
     counted = 0
     for node in ast.walk(tree):
@@ -350,6 +403,11 @@ def count_module_patches(
             ):
                 if _targets_a_first_party_module(target, bound, first_party):
                     counted += 1
+        if id(node) not in restores:
+            counted += sum(
+                _targets_a_first_party_module(attribute, bound, first_party)
+                for attribute in _assigned_attributes(node)
+            )
     return counted
 
 

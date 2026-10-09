@@ -359,8 +359,8 @@ exclude = ["ansible/collections", "site", ".claude/worktrees"]
 # - Test doubles bolted onto functions as attributes; they are now small classes.
 # - Mixins calling methods only their host class defines; a TYPE_CHECKING stub declares them.
 #
-# Six line suppressions remain, each a `# ty: ignore[<rule>]` with its reason on the line. Four
-# are hand-rolled patches of a `def`, tracked as #3670. One is a test that writes to a frozen
+# Four line suppressions remain, each a `# ty: ignore[<rule>]`. Two are tests that omit a
+# required argument to prove the call raises a TypeError. One is a test that writes to a frozen
 # dataclass to prove it raises. One reads an attribute ansible's `constants` module sets at
 # import time. The vendored karakeep script is exempted per file in [[tool.ty.overrides]] below.
 #

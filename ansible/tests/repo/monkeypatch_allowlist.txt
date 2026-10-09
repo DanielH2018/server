@@ -22,10 +22,11 @@
 # the real number:
 #   uv run pytest ansible/tests/repo/test_module_length_ratchet.py -k no_test_module_patches
 .claude/hooks/tests/test_auto_mode_bridge.py 1
+.claude/hooks/tests/test_bash_pretool.py 1
 .claude/hooks/tests/test_block_footguns.py 2
 .claude/hooks/tests/test_session_health.py 14
 .claude/hooks/tests/test_session_health_master_moved.py 7
-ansible/roles/k8s/artifacts/tests/test_artifact_server.py 1
+ansible/roles/k8s/artifacts/tests/test_artifact_server.py 2
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 13
 ansible/roles/k8s/monitor-bridge/tests/_check_gate_helpers.py 4
 ansible/roles/k8s/monitor-bridge/tests/test_b2_storage.py 4
@@ -34,7 +35,7 @@ ansible/roles/k8s/monitor-bridge/tests/test_check_b2_gate.py 8
 ansible/roles/k8s/monitor-bridge/tests/test_check_cadvisor_floor.py 9
 ansible/roles/k8s/monitor-bridge/tests/test_check_cli.py 6
 ansible/roles/k8s/monitor-bridge/tests/test_check_gates.py 6
-ansible/roles/k8s/monitor-bridge/tests/test_check_gates_exporters.py 5
+ansible/roles/k8s/monitor-bridge/tests/test_check_gates_exporters.py 8
 ansible/roles/k8s/monitor-bridge/tests/test_check_ha.py 5
 ansible/roles/k8s/monitor-bridge/tests/test_check_host.py 21
 ansible/roles/k8s/monitor-bridge/tests/test_check_k8s_workload_gates.py 1
@@ -97,4 +98,5 @@ scripts/infra_map/tests/test_gen_infra_map.py 1
 scripts/infra_map/tests/test_infra_map_live.py 1
 scripts/lib/tests/test_gh.py 4
 scripts/validate/tests/test_validate_k8s_manifests.py 1
-scripts/validate/tests/test_validate_unit_templates.py 3
+scripts/validate/tests/test_validate_shell_templates.py 2
+scripts/validate/tests/test_validate_unit_templates.py 5

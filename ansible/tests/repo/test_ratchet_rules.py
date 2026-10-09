@@ -1,7 +1,7 @@
 """Red-proof pairs for the patch counter in `ansible/tests/_ratchet.py`.
 
 The counter is the half of the two ratchets with a heuristic in it: which names in a test
-module hold a first-party module, and therefore which `monkeypatch.setattr` calls count. Every
+module hold a first-party module, and therefore which `monkeypatch.setattr` calls and attribute assignments count. Every
 test here is a pure call on a source string, so each rule has one input it must count and one
 it must not.
 
@@ -112,3 +112,37 @@ def test_the_same_patch_is_not_counted_when_no_fixture_returns_a_module():
         "    monkeypatch.setattr(gitops_deploy, 'REPO', '/tmp')\n"
     )
     assert count_module_patches(src, set()) == 0
+
+
+def test_a_hand_rolled_patch_of_a_first_party_module_is_counted_once():
+    """The save, assign, restore shape counts as one patch: the restore sits in `finally:`."""
+    src = (
+        "import mod\n"
+        "def test_x():\n"
+        "    saved = mod.sub.f\n"
+        "    try:\n"
+        "        mod.sub.f = lambda: 1\n"
+        "        run()\n"
+        "    finally:\n"
+        "        mod.sub.f = saved\n"
+    )
+    assert count_module_patches(src, {"mod"}) == 1
+
+
+def test_every_attribute_a_tuple_or_augmented_assignment_writes_is_counted():
+    src = "import mod\ndef test_x():\n    mod.a, mod.b = 1, 2\n    mod.n += 1\n"
+    assert count_module_patches(src, {"mod"}) == 3
+
+
+def test_an_assignment_to_a_local_object_or_the_standard_library_is_not_counted():
+    src = (
+        "import mod\n"
+        "import sys\n"
+        "def test_x(cfg):\n"
+        "    cfg.X = 1\n"
+        "    local = Thing()\n"
+        "    local.sub.f = 2\n"
+        "    sys.argv = []\n"
+        "    value = mod.f\n"
+    )
+    assert count_module_patches(src, {"mod"}) == 0
