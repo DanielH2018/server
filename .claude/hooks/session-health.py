@@ -448,16 +448,26 @@ def stale_worktree_lines():
     return _stale_worktree_lines(_run, WORKTREE_TIMEOUT_S)
 
 
-def format_banner(problems):
-    """Render the problem list as the session banner (empty string => print nothing)."""
+PROBE = "uv run python scripts/diagnostics/probe.py"
+
+
+def format_banner(problems, landing=False):
+    """Render the problem list as the session banner (empty string => print nothing).
+
+    The triage line names whole commands joined by `or`, so a line copied into a shell is
+    one runnable command rather than a pipe. `landing` adds `probe.py landing`, the command
+    that reads the deployer and primary-checkout state; `main` sets it when the
+    parked-deployer section produced a line, because `targets` and `health` cannot see that
+    state.
+    """
     if not problems:
         return ""
     out = ["\U0001f3e0 Homelab health check — issues detected:"]
     out.extend(problems)
-    out.append(
-        "  → triage: uv run python scripts/diagnostics/probe.py targets | "
-        "probe.py health <svc>"
-    )
+    commands = [f"{PROBE} targets", f"{PROBE} health <svc>"]
+    if landing:
+        commands.insert(0, f"{PROBE} landing")
+    out.append("  → triage: " + " or ".join(f"`{c}`" for c in commands))
     return "\n".join(out)
 
 
@@ -491,9 +501,10 @@ def main(
     master_moved = master_moved_problems()
     # master_moved last deliberately: "this branch is behind origin/master" is the SYMPTOM of a
     # parked deployer, so the cause reads first.
-    problems = targets + parked_deployer_problems() + master_moved
+    parked = parked_deployer_problems()
+    problems = targets + parked + master_moved
 
-    banner = format_banner(problems)
+    banner = format_banner(problems, landing=bool(parked))
     if banner:
         print(banner)
     elif os.environ.get("SESSION_HEALTH_VERBOSE"):

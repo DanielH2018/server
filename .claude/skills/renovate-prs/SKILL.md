@@ -211,9 +211,13 @@ trigger, then dispatch CI on it:
 
 ```bash
 uv run python scripts/dev/renovate_rebase.py <n>            # wait for Renovate to refresh the branch
-gh workflow run ci.yml --ref "$(gh pr view <n> --json headRefName -q .headRefName)"
+gh pr view <n> --json headRefName -q .headRefName           # prints the branch name
+gh workflow run ci.yml --ref <branch>                        # paste the branch printed above
 gh run list --workflow ci.yml --event workflow_dispatch --limit 1
 ```
+
+The branch is read and pasted in two commands because a command substitution never
+auto-approves (`docs/claude-shell-permissions.md`).
 
 A CI-toolchain pin inherits `minimumReleaseAge` from the catch-all rule (`renovate.json`, the
 `{{depName}}` rule's own description says so), so the first line exits 3 while the PR soaks.

@@ -8,12 +8,10 @@ Deploy a service using Ansible.
 
 If the user provided a service name as an argument, use it directly. Otherwise ask which service to deploy.
 
-**In the post-merge path, do not ask anything.** When this deploy is the follow-through on a PR
-that just merged (`CLAUDE.md` → *After a PR Merges — Pull, Deploy, Verify*), the service is
-already determined by the merged diff and the user has already asked. Skip step 2's dry-run
-question and go straight to the deploy, from `/home/ubuntu/server` on master rather than from a
-worktree. Everything else below — the platform split, the lock, the verification gate — is
-unchanged.
+**A deploy that follows a merge is not this skill's.** When the deploy is the follow-through
+on a PR (`CLAUDE.md` → *After a PR Merges — Pull, Deploy, Verify*), use the `land-after-merge`
+skill: `land.sh` merges, waits for master CI, deploys the merge commit with `deploy.sh --at`,
+and gates the health. Do not deploy a merge by hand from `/home/ubuntu/server`.
 
 **First, determine the platform** — the verification step differs and the Docker one is dead
 on the cluster nodes:
@@ -96,9 +94,8 @@ Steps:
        rolled. Also note `kubectl apply` leaves **stale Secret keys** behind — a key removed
        from the manifest persists live until patched out.
    - **Docker (Pi only):** `uv run python scripts/diagnostics/probe.py health <service> --docker` —
-     exit 0 = running + healthy; allow-listed. `--docker` inspects the **local** Docker
-     daemon, and the Pi's is remote, so run it over ssh (`ssh daniel-pi ...`) or verify via
-     the Pi's Uptime Kuma monitor instead.
+     exit 0 = running + healthy; allow-listed. Run it from daniel-box as written: `--docker`
+     reaches the Pi's Docker daemon over ssh itself.
    - For a config-only run (`--skip-tags deploy`), the workload isn't recreated, so this is
      just a liveness check, not a deploy verification.
 6. Report the result, including the verification line. If the gate fails, surface the failing
@@ -106,16 +103,18 @@ Steps:
    `uv run python scripts/diagnostics/probe.py loki-query '{container="<service>"}'`) before declaring
    success.
 
-Run all commands from `/home/ubuntu/server`. Always go through `uv run` — bare
-`ansible-playbook` (the uv-tool shim) lacks the module deps and fails. For a service on the
+Run all commands from the root of the checkout you mean to deploy: `deploy.sh` deploys the
+checkout containing your working directory. A playbook run outside `deploy.sh` goes through
+`uv run` — bare `ansible-playbook` (the uv-tool shim) lacks the module deps and fails. For a service on the
 Pi, add `-e target=daniel-pi` (deploy.yml defaults `hosts:` to the local hostname — `--limit`
 alone matches nothing).
 
 ## The command reference
 
-The bare `ansible-playbook` forms are what the wrapper runs. They work, but they have none of
-the locks, the snapshot, the tag check or the staleness check — use one only when you
-deliberately want that.
+Every deploy goes through `deploy.sh`. Its arguments other than its own flags pass through to
+`ansible-playbook` in order, so `--check`, `--skip-tags` and `-e` work as they do on the
+playbook. A bare `uv run ansible-playbook ansible/deploy.yml` has none of the locks, the
+snapshot, the tag check or the staleness check.
 
 ```bash
 # Deploy a specific service
@@ -130,7 +129,7 @@ deliberately want that.
 # hostname, so --limit daniel-pi matches zero hosts. The Pi is ansible_connection=ssh, so
 # this reaches it from either node. `-e target=` a LOCAL-connection host (either cluster
 # node) and the tasks run on the machine you typed it on — see ansible/inventory/hosts.ini.
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" -e target=daniel-pi
+./scripts/deploy.sh --tags "<service-name>" -e target=daniel-pi
 
 # Deploy a commit that is not this checkout's HEAD: the snapshot is cut from <sha>, and the
 # staleness gate and the tag check are asked about <sha> too. This is how land.sh deploys a
@@ -138,11 +137,11 @@ uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" -e target=dan
 # Any committish this checkout's object store resolves; --at with --changed is a bad command line.
 ./scripts/deploy.sh --tags "<service-name>" --at <sha>
 
-# Deploy everything
-uv run ansible-playbook ansible/deploy.yml
+# Deploy everything. Without --tags the staleness gate refuses any commit behind origin/master.
+./scripts/deploy.sh
 
 # Check mode (task wiring only — the apply is skipped, no API server is involved)
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --check
+./scripts/deploy.sh --tags "<service-name>" --check
 
 # Validate the k8s manifests against the live API server without applying them
 ./scripts/deploy.sh --tags "<service-name>" --dry-run
@@ -151,7 +150,7 @@ uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --check
 # Every container-role task is block-tagged config/deploy/cron, and tags UNION in Ansible,
 # so scope with --skip-tags. `--skip-tags config` is NOT supported — the registered
 # config-change facts feed docker_deploy's recreate decision.
-uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --skip-tags deploy
+./scripts/deploy.sh --tags "<service-name>" --skip-tags deploy
 
 # Edit encrypted secrets
 sops ansible/vars/secrets.yml
