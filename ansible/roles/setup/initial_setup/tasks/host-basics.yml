@@ -269,7 +269,7 @@
   loop:
     - ansible-core==2.21.4
     - ansible-lint==26.9.0
-    - prek==0.5.3
+    - prek==0.5.4
   become: false
   when:
     - inventory_hostname in dev_tooling_hosts
