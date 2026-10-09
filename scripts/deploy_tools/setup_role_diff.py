@@ -55,8 +55,8 @@ def task_file_chains(role_dir: Path, path: str, pr_range: str, repo: Path):
         return chains
     old, _, new = pr_range.partition("..")
     _warn(
-        f"{role_dir} does not hold the tasks {old[:8]}..{new[:8]} changed in {path} "
-        f"({len(changed) - len(matched)} of {len(changed)} missing), so its owed-host "
+        f"the task chains read from {role_dir} reach {len(matched)} of the "
+        f"{len(changed)} tasks {old[:8]}..{new[:8]} changed in {path}, so its owed-host "
         "note keeps the whole file's reach"
     )
     return every

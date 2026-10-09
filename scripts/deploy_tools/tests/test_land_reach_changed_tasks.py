@@ -216,5 +216,5 @@ def test_a_tree_without_the_changed_tasks_says_the_note_stays_wide(
     note = _note(repo, old, new, ref=ref)
     assert "daniel-pi" in note and "daniel-server" in note, note
     err = capsys.readouterr().err
-    assert f"does not hold the tasks {old[:8]}..{new[:8]} changed in {_TASKS}" in err
+    assert f"reach 0 of the 1 tasks {old[:8]}..{new[:8]} changed in {_TASKS}" in err
     assert ("could not read" in err) == bool(ref), err
