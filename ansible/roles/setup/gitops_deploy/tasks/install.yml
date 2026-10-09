@@ -17,6 +17,9 @@
     - /opt/gitops-deploy      # deployer scripts
     - /var/lib/gitops-deploy  # state (hold_sha, last_run, per-SHA alert markers, pending_alerts.json)
     - /etc/gitops-deploy      # config.env (0600 secrets) — template won't mkdir its parent
+    # deploy --detach verdicts its notifier could not post; the tick re-sends them (#3987).
+    # After its parent, which the loop creates first.
+    - /var/lib/gitops-deploy/detach_spool
   become: true
 
 # State files whose marker was retired from `MARKERS`. Nothing removes a file the code stops

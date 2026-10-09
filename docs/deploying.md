@@ -151,6 +151,9 @@ So exercise the thing you actually changed as well.
 - A `--detach` run holds its service locks until its notifier's health gate has posted. A
   second deploy of the same service queues behind the gate rather than rolling the workload
   under its sample (#3817).
+- A `--detach` verdict the host could not post to Discord is not lost. The notifier queues it
+  in `/var/lib/gitops-deploy/detach_spool`, and the next GitOps deployer tick sends it with a
+  `(delayed: first attempt <UTC time>)` line (#3987). The detach log holds the verdict either way.
 
 ## Retiring a k8s service
 

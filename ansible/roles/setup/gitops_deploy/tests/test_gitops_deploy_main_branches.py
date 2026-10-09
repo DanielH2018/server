@@ -67,6 +67,19 @@ def test_drain_pending_runs_ahead_of_the_noop_short_circuit(
     assert json.loads((state_dir / "pending_alerts.json").read_text()) == {}
 
 
+def test_the_detach_spool_is_flushed_on_a_noop_and_a_dirty_tick(
+    gitops_deploy, tick, state_dir, state
+):
+    # `deploy --detach`'s notifier runs once and queues an undelivered verdict for this tick to
+    # send (#3987). A noop tick and a dirty one are the two this host spends most ticks in.
+    spool = str(state_dir / deploy_alerts.DETACH_SPOOL)
+    tick.origin = tick.local
+    gitops_deploy.main(tick.tools, tick.config, state)
+    tick.dirty = True
+    gitops_deploy.main(tick.tools, tick.config, state)
+    assert [e[1] for e in tick.log if e[0] == "flush"] == [spool, spool]
+
+
 def test_a_dirty_tree_skips_without_merging(gitops_deploy, tick, state):
     tick.dirty = True
     tick.paths = ["docs/x.md"]
