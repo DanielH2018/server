@@ -62,6 +62,21 @@ def health(ln: Landing) -> NoReturn:
     settled, lines = gate_from_the_deployed_tree(ln)
     for line in lines:
         say(line)
+    if not settled:
+        # A later deploy of the same service can roll its pods under the gate's one sample,
+        # once this landing's deploy has released the service lock (#3812). Gate again once
+        # that deploy has ended, so the verdict grades what it left. A change it re-rolled
+        # that is still broken fails this second gate too.
+        rerolled = ln.tools.later_deploys(ln.resolved_tags, ln.deploy_ended_at)
+        if rerolled:
+            say(
+                f"{','.join(rerolled)}: a later deploy rolled this out again after this "
+                "landing's own deploy; gating the generation that deploy left"
+            )
+            tags += f" (re-gated after a later deploy of {','.join(rerolled)})"
+            settled, lines = gate_from_the_deployed_tree(ln)
+            for line in lines:
+                say(line)
     # Before any verdict, so every exit below has asked: the gate is the wait that lets a
     # joined tick end (`tick.rearm_tick`).
     tick.rearm_tick(ln)

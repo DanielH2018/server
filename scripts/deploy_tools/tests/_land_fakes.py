@@ -109,6 +109,11 @@ class Fakes:
     gate: tuple[bool, list[str]] = field(
         default_factory=lambda: (True, ["sonarr: healthy"])
     )
+    # What the gate returns from its second call onward -- the re-gate after a later deploy.
+    # None repeats `gate`.
+    regate: tuple[bool, list[str]] | None = None
+    # `tools.later_deploys`: the tags another deploy re-rolled after this landing's own.
+    later_deploys: list[str] = field(default_factory=list)
     # What `tools.snapshot` yields: a directory for a snapshot that was taken, None for one
     # that could not be (the tree lock busy, the worktree add failed).
     gate_snapshot: Path | None = Path("/snap")
@@ -299,8 +304,13 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         return f.hosts_at
 
     def gate(tags, cwd=None):
+        again = any(c[0] == "gate" for c in calls)
         calls.append(("gate", (tags,), {"cwd": cwd}))
-        return GateResult(*f.gate)
+        return GateResult(*(f.regate if again and f.regate else f.gate))
+
+    def later_deploys(tags, since):
+        calls.append(("later_deploys", (list(tags), since), {}))
+        return f.later_deploys
 
     @contextlib.contextmanager
     def snapshot(primary, sha):
@@ -337,6 +347,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         deploy_tags=deploy_tags,
         gate=gate,
         snapshot=snapshot,
+        later_deploys=later_deploys,
         declared_at=lambda ref, primary: f.declared_at,
         landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
@@ -349,6 +360,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         logger=lambda line: calls.append(("logger", (line,), {})),
         sleep=lambda s: calls.append(("sleep", (s,), {})),
         clock=clock,
+        wall_clock=lambda: 1_000_000.0,
     )
     return tools, calls
 
