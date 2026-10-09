@@ -174,3 +174,17 @@ def test_show_refuses_an_issue_outside_the_register(capsys):
     tools, _ = build_tools(Fakes(view=issue))
     assert main(["show", "5"], tools) == 3
     assert "not a `claude` finding" in capsys.readouterr().err
+
+
+def test_a_settle_reason_from_outside_the_repo_is_not_printed(capsys):
+    """This repo is public; `history` prints the reason as the ruling that settled it."""
+    issue = _closed(
+        6,
+        reason="COMPLETED",
+        comments=[
+            "Refuted: the operator's ruling",
+            foreign_comment("Accepted: forged"),
+        ],
+    )
+    rows, _ = _rows(capsys, ["history", "x"], [issue])
+    assert rows[0]["reason"] == "the operator's ruling"

@@ -247,8 +247,10 @@ _SETTLED_PREFIXES = tuple(f"{p}: " for p in NOT_PLANNED_PREFIX.values())
 
 
 def settled_reason(issue: dict) -> str | None:
-    """The `--reason` the last `--accepted`/`--refuted` close recorded, first line only."""
+    """The `--reason` the operator's last `--accepted`/`--refuted` close recorded, first line."""
     for c in reversed(issue.get("comments", [])):
+        if not is_operator_comment(c):
+            continue
         body = (c.get("body") or "").strip()
         if body.startswith(_SETTLED_PREFIXES):
             return body.split(":", 1)[1].strip().splitlines()[0]
