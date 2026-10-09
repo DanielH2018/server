@@ -321,9 +321,25 @@ def primary_checkout(start: str = HOOKS_DIR) -> str | None:
 
 
 # A test points the instructions log at a scratch file through this variable rather than by
-# patching a module attribute; nothing on a host sets it.
+# patching a module attribute; nothing on a host sets it. The appender writes to and
+# eventually renames whatever file it names, so a value leaked into a real session must not
+# reach a state file or another log (#3805). The override is honoured only for a file named
+# `instructions.log` under the temp dir, where pytest's tmp_path lives. The name matters as
+# much as the directory: the temp dir also holds this module's own `claude-<name>-<sid>`
+# state files.
 INSTRUCTIONS_LOG_ENV = "CLAUDE_INSTRUCTIONS_LOG"
 INSTRUCTIONS_LOG_MAX_BYTES = 256 * 1024
+_INSTRUCTIONS_LOG_NAME = "instructions.log"
+
+
+def _is_scratch_instructions_log(path: str) -> bool:
+    """Whether `path` resolves to a file named `instructions.log` below the temp dir."""
+    root = os.path.realpath(tempfile.gettempdir())
+    resolved = os.path.realpath(path)
+    return (
+        os.path.basename(resolved) == _INSTRUCTIONS_LOG_NAME
+        and os.path.commonpath([resolved, root]) == root
+    )
 
 
 def instructions_log_path(start: str = HOOKS_DIR) -> str:
@@ -339,7 +355,7 @@ def instructions_log_path(start: str = HOOKS_DIR) -> str:
     the path only when a command names a path under a doc it might inject.
     """
     override = os.environ.get(INSTRUCTIONS_LOG_ENV)
-    if override:
+    if override and _is_scratch_instructions_log(override):
         return override
     primary = primary_checkout(start)
     if primary is None:
@@ -350,15 +366,21 @@ def instructions_log_path(start: str = HOOKS_DIR) -> str:
 
 
 def append_instructions_row(
-    reason: str, mtype: str, fp: str, session_id: str, extra: str = ""
+    reason: str,
+    mtype: str,
+    fp: str,
+    session_id: str,
+    extra: str = "",
+    start: str = HOOKS_DIR,
 ) -> None:
     """Append one row to the instructions log: `<ts> [<sid>] <reason> <mtype> <path><extra>`.
 
     `session_id` may be the full id or the 8-char prefix the row carries; `extra` is the
     already-formatted tail (` trigger=…`), empty for a session_start row. One appender serves
     both the InstructionsLoaded event and inject-nested-docs, so the log keeps one row format.
+    `start` is the checkout `instructions_log_path` resolves the log from.
     """
-    log = instructions_log_path()
+    log = instructions_log_path(start)
     sid = (session_id or "")[:8]
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     line = "{} [{:8}] {:16} {:8} {}{}\n".format(ts, sid, reason, mtype, fp, extra)
