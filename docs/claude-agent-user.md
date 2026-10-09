@@ -255,8 +255,9 @@ pod would drop the capability.
 - `~/.claude/projects` and `~/.claude/projects/<key>` get group `ubuntu` and `0710` too.
   Claude Code creates them at a mode nobody has checked, and the memory directory sits
   under both.
-- A task creates `~/.claude/artifacts` and the memory directory as the agent, `setgid`, with
-  group `ubuntu`. It gives each a default ACL of `g:ubuntu:rX`, so files Claude Code writes
+- A task creates `~/.claude/artifacts` and the memory directory as root, owned by the agent,
+  `setgid`, with group `ubuntu`. It cannot run as the agent, because the agent belongs to no
+  group and so cannot `chgrp` to `ubuntu`. The ACL task runs as root for the same reason. It gives each a default ACL of `g:ubuntu:rX`, so files Claude Code writes
   later inherit the read.
 - The ACL task runs after every `file:` task that names those paths or their parents. A `mode:` there runs
   `chmod`, and `chmod` rewrites the ACL mask from the group bits. `0700` sets the mask to
