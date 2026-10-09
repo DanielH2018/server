@@ -25,6 +25,19 @@
   # Fetched to a user-owned directory rather than piped straight into a shell: the script
   # is executed, so it should land somewhere world-writable code cannot have tampered with
   # it first, and it stays inspectable after the fact.
+  #
+  # DECIDED: no `checksum:` on install.sh, unlike the k3s, chezmoi and uv installers. A pin
+  # controls which bytes run only when the installed binary stays the one the pinned script
+  # fetched. The k3s binary does: it never updates itself. Claude Code does not: the native
+  # binary updates itself from downloads.claude.ai, so whatever runs a day after install came
+  # from that origin with or without a pin here. The script itself is unversioned at a URL
+  # upstream replaces in place, so a pin would only fail the next fresh install (a new host or
+  # agent user, since `creates:` below makes the install run-once) until someone re-pinned it.
+  # The script checks the binary's sha256 against manifest.json before installing it. That
+  # catches a corrupt or truncated download; it is not authentication, because the manifest
+  # comes from the same origin as the binary. The trust root is TLS to claude.ai either way.
+  # The agent user's copy of this fetch, in setup/common/tasks/agent_user.yml, rests on this
+  # decision (#3979).
   ansible.builtin.get_url:
     url: https://claude.ai/install.sh
     dest: "/home/{{ sys_user }}/.local/share/installers/claude-install.sh"
