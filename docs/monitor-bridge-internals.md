@@ -89,8 +89,11 @@ table, the gate-set membership, the operator prerequisites and the test-side sea
 
 ## The test seams
 
-- **A test states its configuration.** The `cfg` fixture is `load_config({})`; narrow it with
-  `dataclasses.replace(cfg, X=...)`, or call `load_config({...})` when the READ is under test.
+- **A test states its configuration.** The `cfg` fixture is `load_config(bridge_env())`, the
+  rendered `templates/env-secret.yaml.j2`, because a key the template renders has no Python
+  default (#3659); narrow it with
+  `dataclasses.replace(cfg, X=...)`, or call `load_config(bridge_env(X=...))` when the READ is
+  under test.
 - **A test patches the module that READS the name, and a module reads it qualified**
   (`bridge.net._get_json` at call time, never `from bridge.net import _get_json`). Getting it
   wrong is silent, so `ansible/tests/services/test_monitor_bridge_modules.py` re-derives every

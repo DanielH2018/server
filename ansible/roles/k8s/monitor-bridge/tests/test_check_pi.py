@@ -134,10 +134,9 @@ def _prom(monkeypatch, load5=0.8, cores=4.0, avail=150 * MB, disk=None, readonly
 
 
 def test_pi_check_disabled_without_origin(monkeypatch, cfg):
-    # PI_ORIGIN defaults to "" in tests -> monitoring disabled, never a false page, and no
-    # query is issued.
+    # An empty PI_ORIGIN disables monitoring: never a false page, and no query is issued.
     seen = _prom(monkeypatch)
-    ok, msg = checks.host_edge.check_pi_pressure(cfg)
+    ok, msg = checks.host_edge.check_pi_pressure(replace(cfg, PI_ORIGIN=""))
     assert ok
     assert "disabled" in msg.lower()
     assert seen == []

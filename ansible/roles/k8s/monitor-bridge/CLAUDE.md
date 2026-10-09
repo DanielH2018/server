@@ -83,10 +83,11 @@ it kills the pod at import on its next roll;
 `cli.py`'s `main()` calls `load_config(os.environ)` ONCE and hands the frozen `Config` to
 `check.run_once`, which passes it to every gate, check body and `bridge.net` helper that reads a
 URL; a test states the registry and the `Gates` rather than patching tables. Building the config
-MUST NOT raise: `_int`/`_num` record a malformed value in `bridge.common.CONFIG_PROBLEMS`, keep
-the default, and `main()` exits 2. A default argument cannot read the config — defaults evaluate
-at import — and a `verdicts/` module reads no `cfg` at all. The internals page has the
-test-side rules.
+MUST NOT raise: `_int`/`_num` record a malformed or missing value in `CONFIG_PROBLEMS`, and
+`main()` exits 2. **A key `templates/env-secret.yaml.j2` renders has no Python default** — the
+template holds its value once, and the `cfg` test fixture is that render (#3659). A default
+argument cannot read the config — defaults evaluate at import — and a `verdicts/` module reads
+no `cfg` at all. The internals page has the test-side rules.
 
 ## Editing & testing
 Unit tests are `uv run pytest ansible/roles/k8s/monitor-bridge/tests`, one file per domain.

@@ -52,8 +52,8 @@ def test_the_pin_is_on_by_default():
         load_config({"PROMETHEUS_URL": "https://prom-k8s.example"}).PROM_ORIGIN
         == 'origin="daniel-server"'
     )
-    # An unset PROMETHEUS_URL pins too: the code default names a Prometheus, so leaving the pin
-    # off here would make "configured nothing" the one silently-unpinned configuration.
+    # An unset PROMETHEUS_URL pins too. It is a config fault main() exits 2 on, but leaving the
+    # pin off here would make "configured nothing" the one silently-unpinned configuration.
     assert load_config({}).PROM_ORIGIN == 'origin="daniel-server"'
 
 

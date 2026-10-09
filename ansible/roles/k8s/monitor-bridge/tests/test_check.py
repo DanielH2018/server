@@ -202,6 +202,9 @@ def _arm_pvc(cfg, monkeypatch, vector, claims=43.0):
         PVC_MIN_CLAIMS=32,
         PVC_CLAIMS_CONSECUTIVE=3,
         PVC_EXCLUDE=["media-data"],
+        # The deployed free-bytes floor names valheim-server; these tests are about the
+        # percentage and census arms, and state their own floors where they mean one.
+        PVC_MIN_FREE="",
     )
     monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: claims)
     monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: vector)

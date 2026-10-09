@@ -5,7 +5,7 @@ workload floors, Longhorn and the PVC fullness arm.
 
 Most of these are FLOORS rather than limits, and the comments beside them say what an absent
 series would otherwise read as. Field justifications sit beside the declarations, env var names
-and defaults beside the reads. Composed into `Config` by `bridge/config.py`; imports nothing
+beside the reads, and the values in `templates/env-secret.yaml.j2`. Composed into `Config` by `bridge/config.py`; imports nothing
 from it.
 """
 
@@ -52,8 +52,8 @@ class ClusterConfig:
 
 def cluster_config(
     _env: Callable[..., str],
-    _int: Callable[[str, str], int],
-    _num: Callable[[str, str], float],
+    _int: Callable[..., int],
+    _num: Callable[..., float],
 ) -> ClusterConfig:
     """The cluster fields, read through the parsers `load_config` built over its environment."""
     return ClusterConfig(
@@ -111,16 +111,15 @@ def cluster_config(
         # The deployed TARGETS_MIN is 1 (env-secret.yaml.j2), which matches that single job and
         # still fails closed: targets_verdict tests `len(vec) < min_targets`, so an empty vector
         # is 0 < 1 and reports UNKNOWN. A floor of 1 cannot detect a PARTIAL shortfall, but with
-        # one expected series there is no partial case to detect. The code default of 2 is kept
-        # only as the fail-safe for a host whose env omits the key entirely.
-        TARGETS_MIN=_int("TARGETS_MIN", "2"),
+        # one expected series there is no partial case to detect.
+        TARGETS_MIN=_int("TARGETS_MIN"),
         # Same floor idea for the cluster's own scrape targets (see check_cluster_targets).
         # Since the otel-collector became a DaemonSet (Phase F drain, 2026-08-13) its two jobs
         # are per-POD — one target per node each — so the set is seven: prometheus, 2x
         # otel-collector, 2x otel-collector-internal, kube-state-metrics, kubernetes-cadvisor.
         # 3 still tolerates a deliberate removal without ever mistaking an empty vector for a
         # clean one.
-        CLUSTER_TARGETS_MIN=_int("CLUSTER_TARGETS_MIN", "3"),
+        CLUSTER_TARGETS_MIN=_int("CLUSTER_TARGETS_MIN"),
         # Consecutive down cycles before check_cluster_targets pages, the same hysteresis its
         # siblings LONGHORN_CONSECUTIVE / PVC_CLAIMS_CONSECUTIVE / SNAPSHOT_CAP_CONSECUTIVE
         # already carry, and for the same reason. `up` goes to 0 for a single scrape every time
@@ -129,11 +128,11 @@ def cluster_config(
         # one cycle long and naming one target. 3 cycles = 15 min at INTERVAL=300, which is far
         # longer than any rollout's scrape gap and far shorter than an exporter that has actually
         # died. A target genuinely down still pages, one extra cycle later.
-        CLUSTER_TARGETS_CONSECUTIVE=_int("CLUSTER_TARGETS_CONSECUTIVE", "3"),
+        CLUSTER_TARGETS_CONSECUTIVE=_int("CLUSTER_TARGETS_CONSECUTIVE"),
         # Coverage floor for the three cAdvisor checks (restarts/oom/cpu), which filter a
         # per-pod vector down to offenders and so cannot tell "quiet" from "gone". Reasoning and
         # the measurements behind the value: cadvisor_coverage_shortfall in verdicts/cluster.py.
-        CADVISOR_PODS_MIN=_int("CADVISOR_PODS_MIN", "20"),
+        CADVISOR_PODS_MIN=_int("CADVISOR_PODS_MIN"),
         # Hysteresis for the same reason HOST_ORIGINS_CONSECUTIVE exists: a kubelet restart
         # takes a node's cAdvisor away briefly, and three monitors going down together on one
         # transient is the alert storm the gates elsewhere in this file exist to prevent.
@@ -147,7 +146,7 @@ def cluster_config(
         # covers a partially-loaded kube-state-metrics: its ClusterRole is deliberately scoped,
         # so dropping `apps` from it would take every deployment series away while the pod stays
         # up and Ready.
-        K8S_MIN_WORKLOADS=_int("K8S_MIN_WORKLOADS", "5"),
+        K8S_MIN_WORKLOADS=_int("K8S_MIN_WORKLOADS"),
         # Same fail-closed reasoning as K8S_MIN_WORKLOADS, for the DaemonSet series
         # (kube_daemonset_status_number_unavailable) instead of the Deployment one — a
         # DaemonSet's absent/unschedulable pod has no Deployment-arm equivalent, so it was
@@ -156,7 +155,7 @@ def cluster_config(
         # engine-image-*, longhorn-csi-plugin, longhorn-manager, speaker. Bump this floor (and
         # the comment) when a DaemonSet is added or retired — same discipline as
         # K8S_MIN_WORKLOADS.
-        K8S_MIN_DAEMONSETS=_int("K8S_MIN_DAEMONSETS", "9"),
+        K8S_MIN_DAEMONSETS=_int("K8S_MIN_DAEMONSETS"),
         # Consecutive down cycles before check_k8s_workloads' UNAVAILABLE-REPLICA arm pages —
         # that arm alone, not the check. A Deployment rolling has one unavailable replica by
         # definition, so an ungated arm turns every ordinary rollout into a DOWN episode: of the
@@ -167,7 +166,7 @@ def cluster_config(
         # LONGHORN_CONSECUTIVE / PVC_CLAIMS_CONSECUTIVE carry: longer than any rollout, shorter
         # than a workload that cannot come back. The crash-loop, DaemonSet, floor and log arms
         # get no grace and still page on cycle one.
-        K8S_WORKLOADS_CONSECUTIVE=_int("K8S_WORKLOADS_CONSECUTIVE", "3"),
+        K8S_WORKLOADS_CONSECUTIVE=_int("K8S_WORKLOADS_CONSECUTIVE"),
         # Consecutive cycles a Deployment may sit with fewer UPDATED replicas than it wants
         # before check_k8s_workloads' stalled-rollout arm pages (#1783). The arm above reads
         # `unavailable`, which counts replicas the Deployment HAS; this one reads `updated`,
@@ -191,12 +190,12 @@ def cluster_config(
         # existing arm paged those at 15), or the 2026-09-05 outage. A single 2-sample cold
         # start (sonarr 09-01) is the measured cost of 2 over 3. At 1 the arm pages every
         # Recreate swap of a slow-starting workload, which the census counts in the dozens.
-        K8S_ZERO_AVAILABLE_CONSECUTIVE=_int("K8S_ZERO_AVAILABLE_CONSECUTIVE", "2"),
+        K8S_ZERO_AVAILABLE_CONSECUTIVE=_int("K8S_ZERO_AVAILABLE_CONSECUTIVE"),
         # Hysteresis for check_longhorn_volumes. A node drain and the Sunday 07:30 reboot both
         # degrade every volume on the departing node BY DESIGN, so a single breaching cycle must
         # not page — 3 cycles at the bridge cadence is longer than either takes to settle. Same
         # shape as CPU_CONSECUTIVE / UPS_CONSECUTIVE.
-        LONGHORN_CONSECUTIVE=_int("LONGHORN_CONSECUTIVE", "3"),
+        LONGHORN_CONSECUTIVE=_int("LONGHORN_CONSECUTIVE"),
         # Filesystem fullness of the cluster's PersistentVolumeClaims (check_pvc_fullness). A
         # separate arm from check_disk rather than another DISK_MOUNTPOINTS entry: a Longhorn
         # PVC is its own filesystem at a FIXED capacity, so it cannot borrow the host's free
@@ -206,7 +205,7 @@ def cluster_config(
         # unhurried work. Measured 2026-09-01: the fullest claim was uptime-kuma-data at 38.6%,
         # and the smallest genuine claim is 973 MiB, where 85% leaves 146 MiB of headroom
         # against 97 MiB at 90%.
-        PVC_MAX_PCT=_num("PVC_MAX_PCT", "85"),
+        PVC_MAX_PCT=_num("PVC_MAX_PCT"),
         # Coverage floor, in CLAIMS not series — see check_pvc_fullness for why the two differ.
         # NOT a conservative under-count like CADVISOR_PODS_MIN, because the degraded state here
         # is a specific number rather than an empty vector. The two scrape jobs cover unequally
@@ -217,33 +216,33 @@ def cluster_config(
         # partial blindness HOST_ORIGINS_MIN exists for. 32 is strictly above the 27-claim
         # survivor and 11 below the live 43, so it fires on that outage and still tolerates a
         # dozen services being retired.
-        PVC_MIN_CLAIMS=_int("PVC_MIN_CLAIMS", "32"),
+        PVC_MIN_CLAIMS=_int("PVC_MIN_CLAIMS"),
         # Hysteresis on the coverage floor only. A kubelet restart or a node drain drops a
         # node's volume stats for a cycle or two, and that must not page; a fullness breach gets
         # no grace because it is monotonic rather than flappy.
-        PVC_CLAIMS_CONSECUTIVE=_int("PVC_CLAIMS_CONSECUTIVE", "3"),
+        PVC_CLAIMS_CONSECUTIVE=_int("PVC_CLAIMS_CONSECUTIVE"),
         # Per-claim free-bytes floors, `<pvc>=<bytes>` comma separated, for a claim whose peak
         # is a step rather than a slope (#1875): valheim-server went 79% -> 100% inside one
         # updater cycle, under PVC_MAX_PCT the whole way. The value is the claim's largest
         # transient, declared by its own role — parse_pvc_floors says what keeps it honest.
         # Empty means no floor is declared; a non-empty string that parses to nothing is a
         # breach, so a typo cannot read as "nothing to watch".
-        PVC_MIN_FREE=_env("PVC_MIN_FREE", ""),
+        PVC_MIN_FREE=_env("PVC_MIN_FREE"),
         # Snapshot-space headroom on capped Longhorn volumes (check_snapshot_headroom). The caps
         # themselves, `<pvc>=<bytes>` comma separated, because nothing exports
         # `spec.snapshotMaxSize` as a metric — parse_snapshot_caps says why, and why `0` (the
         # fleet-wide uncapped default) is dropped rather than read as a cap of zero. Empty means
         # no capped volume is declared, which the check reports as such rather than as green.
-        SNAPSHOT_CAPS=_env("SNAPSHOT_CAPS", ""),
+        SNAPSHOT_CAPS=_env("SNAPSHOT_CAPS"),
         # Fraction of a cap that counts as a breach. 0.9 matches volume_snapshot_cap_warn_ratio,
         # the deploy-time gate's warn threshold (roles/k8s/volume-snapshot), so the monitor and
         # the deploy agree about when a cap is close rather than naming two different numbers.
-        SNAPSHOT_CAP_WARN_RATIO=_num("SNAPSHOT_CAP_WARN_RATIO", "0.9"),
+        SNAPSHOT_CAP_WARN_RATIO=_num("SNAPSHOT_CAP_WARN_RATIO"),
         # Hysteresis, for the markRemoved reason in snapshot_headroom_verdict: the metric counts
         # snapshots the deploy gate's sum skips, so usage can read high for a cycle between a
         # prune and Longhorn purging what it removed. Same shape and cadence as
         # LONGHORN_CONSECUTIVE above.
-        SNAPSHOT_CAP_CONSECUTIVE=_int("SNAPSHOT_CAP_CONSECUTIVE", "3"),
+        SNAPSHOT_CAP_CONSECUTIVE=_int("SNAPSHOT_CAP_CONSECUTIVE"),
         # Crash-loop arm of the workload check: pods whose restart counter climbed more than
         # K8S_RESTART_MAX inside K8S_RESTART_WINDOW page even while readiness flaps green
         # (CrashLoopBackOff passes probes briefly each backoff cycle — the 2026-08-13 homepage
@@ -274,9 +273,9 @@ def cluster_config(
         # (setup/k3s defaults) carries no `--etcd-arg=quota-backend-bytes`. Add one there and
         # this number moves with it, or the check measures against a quota the cluster does not
         # have. Deployed value in monitor-bridge's env-secret.yaml.j2.
-        ETCD_DB_QUOTA_BYTES=_int("ETCD_DB_QUOTA_BYTES", "2147483648"),
+        ETCD_DB_QUOTA_BYTES=_int("ETCD_DB_QUOTA_BYTES"),
         # 80%, in the PVC_MAX_PCT percent form rather than SNAPSHOT_CAP_WARN_RATIO's ratio.
         # The DB read 2.6% of the quota on 2026-09-25, so a breach is pathological growth rather
         # than a slow fill and the exact figure is not load-bearing.
-        ETCD_DB_MAX_PCT=_num("ETCD_DB_MAX_PCT", "80"),
+        ETCD_DB_MAX_PCT=_num("ETCD_DB_MAX_PCT"),
     )

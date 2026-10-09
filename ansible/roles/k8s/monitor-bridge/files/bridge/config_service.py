@@ -4,14 +4,13 @@ Traefik, n8n, the *arr stack, the deployer's own state files, the etcd restore d
 staging-gate backfill and Home Assistant — every threshold read by a check in
 `checks/service.py`, plus the Traefik latency and error-rate bounds `checks/cluster.py` reads.
 
-Field justifications sit beside the declarations, env var names and defaults beside the reads.
+Field justifications sit beside the declarations, env var names beside the reads, and the values
+in `templates/env-secret.yaml.j2`.
 Composed into `Config` by `bridge/config.py`; imports nothing from it.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-
-from gitops_markers import CONTENTION_PAGE_SECONDS
 
 
 @dataclass(frozen=True)
@@ -62,19 +61,19 @@ class ServiceConfig:
 
 def service_config(
     _env: Callable[..., str],
-    _int: Callable[[str, str], int],
-    _num: Callable[[str, str], float],
+    _int: Callable[..., int],
+    _num: Callable[..., float],
     _env_file: Callable[..., str],
 ) -> ServiceConfig:
     """The app fields, read through the parsers `load_config` built over its environment."""
     return ServiceConfig(
-        TRAEFIK_5XX_PCT=_num("TRAEFIK_5XX_PCT", "5"),
+        TRAEFIK_5XX_PCT=_num("TRAEFIK_5XX_PCT"),
         # The 404 SHARE of entrypoint traffic that means the edge has lost its routers.
         # High, not low, on purpose: a homelab edge serves a steady trickle of ordinary
         # 404s (favicons, probes, a stale bookmark), measured at 4.0% of 0.83 rps on
         # 2026-09-06, while the total-404 outage that day was 100% of 0.61 rps. 90 sits in
         # that gap with a wide margin on both sides.
-        TRAEFIK_404_PCT=_num("TRAEFIK_404_PCT", "90"),
+        TRAEFIK_404_PCT=_num("TRAEFIK_404_PCT"),
         # The per-ROUTER 421 rate that means a client is wedged on a connection whose SNICheck
         # pinned the wrong TLS-options name (#2757; traefik's CLAUDE.md has the mechanism). An
         # absolute rate, not a share behind TRAEFIK_MIN_RPS: 421 has no legitimate sustained
@@ -83,12 +82,12 @@ def service_config(
         # 2026-09-20 23:10 to 09-21 13:40, then #2747's Loki push and #2749's authelia pair),
         # while the only 421 outside them was one 5-minute window on uptime-kuma at 0.0083 rps.
         # 0.02 sits 2.4x above that blip and 5x below the slowest wedge.
-        TRAEFIK_421_RPS=_num("TRAEFIK_421_RPS", "0.02"),
+        TRAEFIK_421_RPS=_num("TRAEFIK_421_RPS"),
         # 3 cycles = 15 min at INTERVAL=300, the value CLUSTER_TARGETS_CONSECUTIVE and its
         # siblings carry. A one-shot handshake mismatch lives in a [5m] rate for at most two
         # evaluations, so it cannot reach the third; every wedge measured lasted hours.
-        TRAEFIK_421_CONSECUTIVE=_int("TRAEFIK_421_CONSECUTIVE", "3"),
-        TRAEFIK_MIN_RPS=_num("TRAEFIK_MIN_RPS", "0.05"),
+        TRAEFIK_421_CONSECUTIVE=_int("TRAEFIK_421_CONSECUTIVE"),
+        TRAEFIK_MIN_RPS=_num("TRAEFIK_MIN_RPS"),
         # Slowness is measured at a histogram BUCKET BOUNDARY, not with histogram_quantile.
         # Traefik's default buckets are 0.1 / 0.3 / 1.2 / 5.0 / +Inf, so between 1.2s and 5.0s
         # there is nothing to interpolate from and a quantile landing there is invented, not
@@ -112,7 +111,7 @@ def service_config(
         # The ratio alone therefore pages on a single request for every low-traffic route, which
         # is the small-sample artifact, not a latency signal. Derived, not fitted: the count is
         # what makes the percentage mean something, so state it as a count.
-        TRAEFIK_SLOW_MIN_REQUESTS=_num("TRAEFIK_SLOW_MIN_REQUESTS", "3"),
+        TRAEFIK_SLOW_MIN_REQUESTS=_num("TRAEFIK_SLOW_MIN_REQUESTS"),
         # Services whose traffic is dominated by LONG-LIVED CONNECTIONS, exempt from the latency
         # ratio. Matched as a prefix of the Traefik service label, which is
         # `homelab-<name>-<hash>@kubernetescrd` — the hash moves when an IngressRoute is renamed,
@@ -137,36 +136,35 @@ def service_config(
             s.strip()
             for s in _env(
                 "TRAEFIK_STREAM_SERVICES",
-                "homelab-headlamp-,homelab-home-assistant-,homelab-uptime-kuma-",
             ).split(",")
             if s.strip()
         ),
-        N8N_URL=_env("N8N_URL", "http://n8n:5678").rstrip("/"),
-        N8N_API_KEY=_env("N8N_API_KEY", ""),
+        N8N_URL=_env("N8N_URL").rstrip("/"),
+        N8N_API_KEY=_env("N8N_API_KEY"),
         # n8n hides successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, kept that way
         # to bound database.sqlite + its B2 backup churn), so "consecutive" can't be read from
         # one snapshot — the per-workflow failure streak is accumulated across cycles in
         # _n8n_streaks (see n8n_update_streaks): it advances once per NEW error (deduped by
         # execution id) and resets when a workflow's latest error ages past N8N_FAIL_WINDOW
         # (recovered / went idle).
-        N8N_FAIL_WINDOW=_env("N8N_FAIL_WINDOW", "2h"),
-        N8N_CONSECUTIVE_MAX=_int("N8N_CONSECUTIVE_MAX", "3"),
+        N8N_FAIL_WINDOW=_env("N8N_FAIL_WINDOW"),
+        N8N_CONSECUTIVE_MAX=_int("N8N_CONSECUTIVE_MAX"),
         # Systemic catch: if N8N_SYSTEMIC_MAX+ workflows are each failing >=
         # N8N_SYSTEMIC_STREAK times, something is wrong with n8n itself — page now as ONE alert
         # instead of waiting for each to reach N8N_CONSECUTIVE_MAX (and instead of a
         # per-workflow flood).
-        N8N_SYSTEMIC_STREAK=_int("N8N_SYSTEMIC_STREAK", "2"),
-        N8N_SYSTEMIC_MAX=_int("N8N_SYSTEMIC_MAX", "2"),
+        N8N_SYSTEMIC_STREAK=_int("N8N_SYSTEMIC_STREAK"),
+        N8N_SYSTEMIC_MAX=_int("N8N_SYSTEMIC_MAX"),
         # Sonarr/Radarr queue warnings: the 2026-07-01 incident — an indexer served a poisoned
         # fake-episode .exe, sonarr itself blocked the import and flagged the queue item
         # trackedDownloadStatus "warning" (message: "Caution: Found executable file with
         # extension: '.exe'") — but nothing paged, so the release sat seeding for a full day
         # before a manual review caught it. Polled directly (X-Api-Key header), same "internal
         # REST API, empty key disables" idiom as N8N_API_KEY.
-        SONARR_URL=_env("SONARR_URL", "http://sonarr:8989").rstrip("/"),
-        SONARR_API_KEY=_env("SONARR_API_KEY", ""),
-        RADARR_URL=_env("RADARR_URL", "http://radarr:7878").rstrip("/"),
-        RADARR_API_KEY=_env("RADARR_API_KEY", ""),
+        SONARR_URL=_env("SONARR_URL").rstrip("/"),
+        SONARR_API_KEY=_env("SONARR_API_KEY"),
+        RADARR_URL=_env("RADARR_URL").rstrip("/"),
+        RADARR_API_KEY=_env("RADARR_API_KEY"),
         # Consecutive cycles an *arr API must stay UNREACHABLE before check_arr_queue pages —
         # the fetch alone; a queue item needing review still pages on the cycle it is seen.
         # A rolling radarr refuses connections for as long as its pod takes to come back, and
@@ -176,7 +174,7 @@ def service_config(
         # the hour. This REPLACED arr_queue's STARTUP_GRACE membership rather than stacking on
         # it: that grace covered the same transient at 2 cycles and covered the queue verdict
         # too, which this deliberately does not.
-        ARR_FETCH_CONSECUTIVE=_int("ARR_FETCH_CONSECUTIVE", "3"),
+        ARR_FETCH_CONSECUTIVE=_int("ARR_FETCH_CONSECUTIVE"),
         # Hours a queue item on Sonarr's own self-clearing title hold is held before it pages
         # (#2786). 48 is upstream's OWN window, not a taste: EpisodeTitleSpecification stops
         # applying the rule once the episode's `airDateUtc` is more than 48h old, so an item
@@ -186,7 +184,7 @@ def service_config(
         # could take; the other four were Custom Format rejections and still page on sight. The
         # grace is narrow by construction — see verdicts/service.py's queue_warnings for the
         # four conditions that turn it off.
-        ARR_TITLE_HOLD_GRACE_H=_num("ARR_TITLE_HOLD_GRACE_H", "48"),
+        ARR_TITLE_HOLD_GRACE_H=_num("ARR_TITLE_HOLD_GRACE_H"),
         # Bazarr's link to Sonarr and Radarr. Bazarr holds its OWN copies of their API keys, in
         # its config on the bazarr-config PVC and entered through its UI — so no Ansible
         # template carries them and no deploy updates them. On 2026-08-29 a rotation swept the
@@ -198,8 +196,8 @@ def service_config(
         # NOTE the header spelling: `X-API-KEY`, not the `X-Api-Key` Sonarr and Radarr take.
         # Verified against the live app 2026-08-29 — a request with no key returns 401, so the
         # key is doing work.
-        BAZARR_URL=_env("BAZARR_URL", "http://bazarr:6767").rstrip("/"),
-        BAZARR_API_KEY=_env("BAZARR_API_KEY", ""),
+        BAZARR_URL=_env("BAZARR_URL").rstrip("/"),
+        BAZARR_API_KEY=_env("BAZARR_API_KEY"),
         # Prowlarr sustained-indexer watchdog: Prowlarr's in-app health notification is binary —
         # with warnings on every indexer flap pages, with warnings off only the
         # all-indexers-down red error fires; there's no duration grace. We poll
@@ -208,21 +206,21 @@ def service_config(
         # a monitor-bridge redeploy), suppressing the sub-threshold flaps public trackers throw
         # that self-clear inside Prowlarr's ~5-15min backoff. Empty key = disabled (stays up),
         # same idiom as N8N_API_KEY. Already on `media`, so prowlarr:9696 is reachable.
-        PROWLARR_URL=_env("PROWLARR_URL", "http://prowlarr:9696").rstrip("/"),
-        PROWLARR_API_KEY=_env("PROWLARR_API_KEY", ""),
-        PROWLARR_INDEXER_MIN_DOWN_MIN=_num("PROWLARR_INDEXER_MIN_DOWN_MIN", "30"),
+        PROWLARR_URL=_env("PROWLARR_URL").rstrip("/"),
+        PROWLARR_API_KEY=_env("PROWLARR_API_KEY"),
+        PROWLARR_INDEXER_MIN_DOWN_MIN=_num("PROWLARR_INDEXER_MIN_DOWN_MIN"),
         # Comma-separated indexer names (case-insensitive) never counted as offenders. For
         # chronically flaky PUBLIC trackers whose backend routinely 503s/times-out past the
         # sustained-down gate (e.g. The Pirate Bay's apibay.org) — they'd page every outage
         # though the other indexers cover the same searches. Prowlarr's own all-indexers-down
         # onHealthIssue is the backstop if every indexer, ignored or not, fails at once.
         # Empty = ignore nothing.
-        PROWLARR_INDEXER_IGNORE=_env("PROWLARR_INDEXER_IGNORE", ""),
+        PROWLARR_INDEXER_IGNORE=_env("PROWLARR_INDEXER_IGNORE"),
         # Since the Docker uninstall (2026-08-14) this reads daniel-box's own deployer state —
         # the pod is pinned to that node and hostPath-mounts /var/lib/gitops-deploy. One
         # deployer remains in the fleet (the Pi runs has_gitops: false), so one watcher.
-        GITOPS_STATE_DIR=_env("GITOPS_STATE_DIR", "/gitops-state"),
-        GITOPS_MAX_AGE_S=_num("GITOPS_MAX_AGE_MIN", "90") * 60,
+        GITOPS_STATE_DIR=_env("GITOPS_STATE_DIR"),
+        GITOPS_MAX_AGE_S=_num("GITOPS_MAX_AGE_MIN") * 60,
         ETCD_DRILL_STATE_DIR=_env("ETCD_DRILL_STATE_DIR", "/etcd-drill-state"),
         # DECIDED: 8 days, DERIVED from the drill's cadence rather than picked round. The cron
         # is k3s_etcd_restore_drill_cron = "20 10 * * 1" — weekly, Monday 10:20 — so anything
@@ -237,7 +235,7 @@ def service_config(
         # purpose: the deployer ticks every 30 min, and the dirty-tree path (operator mid-edit)
         # is behind by design for as long as the edit lasts. 6 h pages a genuinely-stuck host
         # well inside a day while never firing on a normal push or a long editing session.
-        GITOPS_BEHIND_MAX_S=_num("GITOPS_BEHIND_MAX_MIN", "360") * 60,
+        GITOPS_BEHIND_MAX_S=_num("GITOPS_BEHIND_MAX_MIN") * 60,
         # How long consecutive ticks may defer on one busy service lock before GitOps Status
         # pages (issue #1847). Derived from the longest deploy the deployer itself is allowed
         # — `gitops_deploy_broad_timeout_s`, 1800 s, the same ceiling `SERVICE_LOCK_WAIT_S`
@@ -246,10 +244,7 @@ def service_config(
         # but only after six hours sized for a dirty tree.
         # The default is the shared module's figure, the same one the SessionStart banner
         # names a streak at, so the banner and this page cannot disagree about a lock.
-        GITOPS_CONTENTION_MAX_S=_num(
-            "GITOPS_CONTENTION_MAX_MIN", str(CONTENTION_PAGE_SECONDS // 60)
-        )
-        * 60,
+        GITOPS_CONTENTION_MAX_S=_num("GITOPS_CONTENTION_MAX_MIN") * 60,
         # HA automation-engine heartbeat: an HA time_pattern automation stamps
         # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY
         # while HA's automation scheduler is executing. We poll HA's /api/states over the apps
@@ -258,17 +253,17 @@ def service_config(
         # URL/token = disabled (stays up), like N8N_API_KEY/PI_ORIGIN. 300s = 5 missed
         # 1-min beats; rides out an HA restart/deploy. Seconds (no unit suffix) — kept a plain
         # float here because parse_duration belongs to the verdict layer, not to config.
-        HA_URL=_env("HA_URL", "").rstrip("/"),
+        HA_URL=_env("HA_URL").rstrip("/"),
         # File-mounted (HA_TOKEN_FILE) so this full-access HA long-lived token stays out of the
         # pod environment envFrom cannot filter; falls back to the HA_TOKEN env.
         HA_TOKEN=_env_file("HA_TOKEN", ""),
-        HA_HEARTBEAT_MAX_AGE_S=_num("HA_HEARTBEAT_MAX_AGE", "300"),
+        HA_HEARTBEAT_MAX_AGE_S=_num("HA_HEARTBEAT_MAX_AGE"),
         HA_HEARTBEAT_ENTITY="input_datetime.ha_heartbeat",
         # Consecutive-cycle hysteresis (like CPU_CONSECUTIVE) so a planned HA redeploy — which
         # takes the API unreachable for ~120s and then leaves the scheduler a beat behind —
         # doesn't page. 2 straight down cycles (~one full INTERVAL of continuous badness) before
         # `down`.
-        HA_CONSECUTIVE=_int("HA_CONSECUTIVE", "2"),
+        HA_CONSECUTIVE=_int("HA_CONSECUTIVE"),
         # ip_ban arm of the HA monitor. HA's ban middleware runs on every request and keys on
         # the peer address, so a burst of unauthenticated /api/ calls can ban an INFRASTRUCTURE
         # ip rather than an attacker — on 2026-08-23 five bad calls from the node's pod-network
