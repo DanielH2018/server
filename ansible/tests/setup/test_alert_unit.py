@@ -158,11 +158,14 @@ def service_settings(unit: str) -> dict[str, str]:
 
 
 def retries_until_delivered(settings: dict[str, str]) -> bool:
-    """True when systemd re-runs a failed delivery and stops only on a bad URL or HTTP error."""
+    """True when systemd re-runs a failed delivery and stops only on a malformed URL.
+
+    Exit 22 must retry: curl -f gives it for a transient 5xx or 429 as well as a 4xx.
+    """
     return (
         settings.get("Restart") == "on-failure"
         and bool(settings.get("RestartSec"))
-        and sorted(settings.get("RestartPreventExitStatus", "").split()) == ["22", "3"]
+        and settings.get("RestartPreventExitStatus", "").split() == ["3"]
     )
 
 
@@ -181,7 +184,7 @@ def test_a_failed_delivery_retries_until_the_network_returns() -> None:
     assert settings.get("Type") == "oneshot", "the [Service] parse found no Type="
     assert retries_until_delivered(settings), (
         "a failed page must retry: Restart=on-failure, a RestartSec, and "
-        "RestartPreventExitStatus=3 22 so only a bad URL or an HTTP rejection is final"
+        "RestartPreventExitStatus=3 so only a malformed URL is final"
     )
 
 
@@ -189,15 +192,14 @@ def test_an_alert_that_gives_up_or_retries_a_rejection_is_flagged() -> None:
     retrying = {
         "Restart": "on-failure",
         "RestartSec": "5min",
-        "RestartPreventExitStatus": "3 22",
+        "RestartPreventExitStatus": "3",
     }
     assert retries_until_delivered(retrying)
     assert not retries_until_delivered(
         {k: v for k, v in retrying.items() if k != "Restart"}
     )
-    assert not retries_until_delivered(
-        {**retrying, "RestartPreventExitStatus": "3 6 22"}
-    )
+    assert not retries_until_delivered({**retrying, "RestartPreventExitStatus": "3 6"})
+    assert not retries_until_delivered({**retrying, "RestartPreventExitStatus": "3 22"})
     assert not retries_until_delivered({**retrying, "RestartPreventExitStatus": ""})
 
 
