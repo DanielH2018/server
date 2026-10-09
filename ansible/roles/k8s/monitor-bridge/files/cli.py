@@ -13,7 +13,7 @@ import argparse
 import os
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 import bridge.common
 import check
@@ -67,6 +67,7 @@ def main(
     gate_config: Gates | None = None,
     sources: Sources | None = None,
     sink: Sink | None = None,
+    sleep: Callable[[float], None] | None = None,
 ) -> int:
     """Validates the configuration and the check filter, then runs the check loop.
 
@@ -93,6 +94,8 @@ def main(
         `Sources(cfg)` from the config loaded here; a test passes a fake.
       sink: Where every verdict is pushed. None builds the live `Sink(cfg)`, which pushes to
         Kuma; a test passes a `FakeSink` that records the pushes.
+      sleep: Waits out the INTERVAL between cycles. None is `time.sleep`; a test passes one that
+        raises, to stop the loop at its first sleep.
 
     Returns:
       The process exit code: 0 after a completed --once run, 2 on a configuration fault.
@@ -118,6 +121,7 @@ def main(
     checks = registry.build_checks(environment) if checks is None else checks
     sources = Sources(cfg) if sources is None else sources
     sink = Sink(cfg) if sink is None else sink
+    sleep = time.sleep if sleep is None else sleep
     # Built here rather than left to run_once's own default, so the filter is validated against
     # the same dependent sets the run loop will suppress by.
     gate_config = Gates() if gate_config is None else gate_config
@@ -155,7 +159,7 @@ def main(
             bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
         if args.once:
             return 0
-        time.sleep(cfg.INTERVAL)
+        sleep(cfg.INTERVAL)
 
 
 if __name__ == "__main__":

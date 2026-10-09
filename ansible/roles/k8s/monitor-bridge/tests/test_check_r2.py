@@ -169,33 +169,22 @@ def test_r2_usage_disabled_without_credentials(cfg):
     assert ok and "disabled" in msg
 
 
-def test_r2_usage_caches_a_success(monkeypatch, cfg):
+def test_r2_usage_caches_a_success(cfg):
     cfg = _arm_r2(cfg)
-    calls = []
-    monkeypatch.setattr(
-        checks.r2,
-        "r2_query_usage",
-        lambda _cfg, _src, now: (calls.append(now), (0, 0, 0, 0, []))[1],
-    )
-    src = FakeSources()
+    src = FakeSources(post_json=lambda *a, **k: _r2_payload())
     checks.r2.r2_usage(cfg, src, now=1000.0)
     ok, msg = checks.r2.r2_usage(cfg, src, now=1000.0 + cfg.R2_PROBE_INTERVAL_S - 1)
     assert ok
-    assert len(calls) == 1
+    assert len(src.queries("post_json")) == 1
     assert "checked" in msg
 
 
-def test_r2_usage_reprobes_after_a_failure(monkeypatch, cfg):
+def test_r2_usage_reprobes_after_a_failure(cfg):
     # Unlike b2_reachable, a failure is NOT cached: these calls are free, so re-probing costs
     # nothing and finds recovery a cycle sooner.
     cfg = _arm_r2(cfg)
-    calls = []
-    monkeypatch.setattr(
-        checks.r2,
-        "r2_query_usage",
-        lambda _cfg, _src, now: (calls.append(now), (9_000_000_000, 0, 0, 0, []))[1],
-    )
-    src = FakeSources()
+    over_storage = _r2_payload(storage=[{"max": {"payloadSize": 9_000_000_000}}])
+    src = FakeSources(post_json=lambda *a, **k: over_storage)
     assert not checks.r2.r2_usage(cfg, src, now=1000.0)[0]
     assert not checks.r2.r2_usage(cfg, src, now=1001.0)[0]
-    assert len(calls) == 2
+    assert len(src.queries("post_json")) == 2

@@ -9,6 +9,8 @@ The ingestion watchdog counts lines for an always-active stream over a window an
 zero — the freshness analogue of the SMART and restore-drill checks.
 """
 
+import io
+import json
 import re
 
 from dataclasses import fields, replace
@@ -384,20 +386,25 @@ def test_loki_ingestion_no_series_is_down():
     assert not ok
 
 
-def test_loki_count_parses_value(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: _loki_scalar(42))
-    assert bridge.net.loki_count(cfg, '{job="syslog"}', "10m") == 42.0
+def _answering(body):
+    """An opener in `urllib.request.urlopen`'s shape that answers every request with `body`."""
+    return lambda req, timeout=None: io.BytesIO(json.dumps(body).encode())
 
 
-def test_loki_count_empty_result_is_none(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: _loki_scalar(None))
-    assert bridge.net.loki_count(cfg, '{job="syslog"}', "10m") is None
+def test_loki_count_parses_value(cfg):
+    opener = _answering(_loki_scalar(42))
+    assert bridge.net.loki_count(cfg, '{job="syslog"}', "10m", opener=opener) == 42.0
 
 
-def test_loki_count_non_success_raises(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: {"status": "error"})
+def test_loki_count_empty_result_is_none(cfg):
+    opener = _answering(_loki_scalar(None))
+    assert bridge.net.loki_count(cfg, '{job="syslog"}', "10m", opener=opener) is None
+
+
+def test_loki_count_non_success_raises(cfg):
+    opener = _answering({"status": "error"})
     with pytest.raises(RuntimeError):
-        bridge.net.loki_count(cfg, '{job="syslog"}', "10m")
+        bridge.net.loki_count(cfg, '{job="syslog"}', "10m", opener=opener)
 
 
 def test_check_loki_ingestion_fresh_is_up(cfg):

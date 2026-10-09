@@ -117,8 +117,13 @@ reason it is a member. The rules below shaped those memberships.
   `sink.pushes`. Every `bridge.net` request function, and `Sources` and `Sink`, take an `opener`
   in `urllib.request.urlopen`'s shape, and the SMTP backstop takes its `login`, so no test
   patches `bridge.net.push`, `urlopen` or `_smtp_login_ok` (#3938).
-- **What a test still patches, it patches on the module that READS the name, and a module reads
-  it qualified** (`bridge.net._get_json` at call time, never `from bridge.net import _get_json`). Getting it
+- **The loop's clock is a parameter as well.** `cli.main` takes `sleep`, and a test points
+  `HEARTBEAT_FILE` at the null device through the env it hands `main`, so no test patches
+  `time.sleep`, `bridge.common.touch_heartbeat` or `bridge.common.log` (#3986). No monitor-bridge
+  test patches a runtime module, and `ansible/tests/repo/monkeypatch_allowlist.txt` has no row
+  for this role.
+- **A test that does patch one must patch the module that READS the name, and a module reads
+  it qualified** (`bridge.net.push` at call time, never `from bridge.net import push`). Getting it
   wrong is silent, so `ansible/tests/services/test_monitor_bridge_modules.py` re-derives every
   patched `(module, name)` pair by AST, and `test_bridge_patch_boundary.py` beside it fails a
   runtime module that from-imports a patched name.

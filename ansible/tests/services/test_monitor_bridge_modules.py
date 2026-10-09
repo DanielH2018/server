@@ -100,8 +100,9 @@ def test_the_census_sees_a_module_inside_a_package(tmp_path):
 
 # --- The second invariant: every patched name is bound in the module the test patches it on ---
 #
-# The suite patches the runtime modules: `bridge.net._get_json`, `bridge.common.log`, a query on
-# the `checks.*` module that defines it. A function reads its
+# No test patches a runtime module since #3986: each one hands its I/O, clock and sink in as a
+# parameter, and ansible/tests/repo/monkeypatch_allowlist.txt carries no monitor-bridge row. This
+# guard stays for the next test that does patch one. A function reads its
 # globals from the module it is DEFINED in, so a patch lands only if the module named in the
 # test is the module whose code reads the name. Patching `check.PROM_URL` when PROM_URL lives in
 # bridge.config and the setattr still SUCCEEDS — it creates a new attribute on `check` that
@@ -199,18 +200,6 @@ def _unbound_patches(pairs, sources):
         for name in names
         if name not in _top_level_bindings(sources[module])
     )
-
-
-def test_the_patch_census_spans_more_than_one_module():
-    # Without this the assertion below passes vacuously if the AST walk stops matching.
-    #
-    # Nothing patches the run loop: the gate sets and probes are the `Gates` value run_once is
-    # handed, which is the point of that seam. So the pair that keeps this honest is
-    # `bridge.common` and `bridge.net`, the two the suite stubs. Repoint it rather than deleting
-    # it when another module gets its seam.
-    pairs = _patched_pairs()
-    assert {"bridge.common", "bridge.net"} <= pairs.keys(), sorted(pairs)
-    assert len(pairs) >= 2, sorted(pairs)
 
 
 def test_every_patched_name_is_bound_in_the_module_it_is_patched_on():
