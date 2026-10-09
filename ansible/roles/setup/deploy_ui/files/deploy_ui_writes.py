@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from pathlib import Path
 
 from deploy_ui_reads import Run
@@ -92,7 +92,7 @@ def guard_cancel(pid: int, listed: set[int]) -> str | None:
 
 
 @contextlib.contextmanager
-def _tree_lock(tree_lock: Path, wait_s: float) -> Iterator[None]:
+def _tree_lock(tree_lock: Path, wait_s: float) -> Generator[None]:
     """Hold the git-tree lock, polling for up to `wait_s` seconds.
 
     Raises:

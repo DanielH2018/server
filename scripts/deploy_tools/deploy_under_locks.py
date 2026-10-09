@@ -30,7 +30,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -393,7 +393,7 @@ def enumerate_full_run_tags(run: Run) -> list[str]:
 
 
 @contextlib.contextmanager
-def tree_lock() -> Iterator[None]:
+def tree_lock() -> Generator[None]:
     """Hold the git-tree lock for the body, printing the wait when there was one.
 
     The holder is sampled BEFORE this process opens the lock file: fuser reports every process
