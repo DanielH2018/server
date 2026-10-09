@@ -101,6 +101,13 @@ def test_read_state_is_empty_for_a_missing_or_blank_marker(tmp_path):
     assert tools.read_state(tmp_path, "hold_sha") == "abc"
 
 
+def test_read_state_is_none_when_any_marker_is_torn(tmp_path):
+    """The snapshot reads every marker at once; a torn `diverged_sha` fails the hold closed."""
+    (tmp_path / "hold_sha").write_text("abc\n")
+    (tmp_path / "diverged_sha").write_bytes(b"\xff\n")
+    assert tools.read_state(tmp_path, "hold_sha") is None
+
+
 def test_the_syslog_tag_is_the_one_the_board_expects(monkeypatch):
     seen = _capture(monkeypatch)
     tools.syslog("event=landing pr=1")

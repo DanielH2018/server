@@ -37,21 +37,21 @@ construction — that is what lets the class have a durable record at all — so
 banner and the deployer's journal are its only readers. It is a class of the ``owed``
 JSON-lines ledger rather than a line-format marker (#3392).
 
-The directory, the basenames and the line parsers come from ``gitops_markers``, the deployer's
-own module in ``ansible/roles/setup/gitops_deploy/files/``, so this module and monitor-bridge
-read exactly the lines the deployer wrote. What stays here is the
+The directory and the line parsers come from ``gitops_markers``, the deployer's own module in
+``ansible/roles/setup/gitops_deploy/files/``, and every marker is read through
+``gitops_hold.DeployerSnapshot`` beside it (#3972), so this module and monitor-bridge read
+exactly the lines the deployer wrote. What stays here is the
 banner's own judgement: the thresholds, the readers that collapse an unreadable marker to
 "no park", and the functions that render a marker as banner lines. Those renderers sit here
 rather than in the hook because the hook is at its module-length cap and they belong beside
 the readers and thresholds they consume; ``behind_park_lines`` is the exception, still in the
 hook, and moving it is somebody else's change.
 
-Stdlib plus that one module and ``lib.repo_paths``, and nothing else from this repo: the
+Stdlib plus those deployer modules and ``lib.repo_paths``, and nothing else from this repo: the
 SessionStart hook imports it with only ``scripts/`` on ``sys.path``, so this module puts the
 deployer's ``files/`` there itself.
 """
 
-import os
 import sys as _sys
 import time
 from pathlib import Path as _Path
@@ -63,10 +63,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from gitops_hold import DeployerSnapshot
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
-    MARKERS,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
     parse_contention,
@@ -111,13 +111,23 @@ def park_age(marker: str | None, now: float) -> float | None:
     return age if age >= BEHIND_PARK_SECONDS else None
 
 
-def _read(state_dir: str, name: str) -> str | None:
-    """One marker's stripped text, or None when it cannot be read."""
+def _snapshot(state_dir: str) -> DeployerSnapshot | None:
+    """The deployer's state through `gitops_hold.DeployerSnapshot`, or None when unreadable.
+
+    The snapshot raises on a marker it cannot read or decode, and every reader below collapses
+    that to "absent". It reads every marker at once, so one unreadable marker blanks them all:
+    for a state directory nobody can fully read, this banner reports no park.
+    """
     try:
-        with open(os.path.join(state_dir, name)) as fh:
-            return fh.read().strip()
-    except OSError:
+        return DeployerSnapshot.load(state_dir)
+    except OSError, UnicodeDecodeError:
         return None
+
+
+def _owed(state_dir: str) -> str | None:
+    """The `owed` ledger's decodable lines, or None when absent, empty or unreadable."""
+    snapshot = _snapshot(state_dir)
+    return snapshot.owed if snapshot else None
 
 
 def read_behind_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
@@ -127,7 +137,8 @@ def read_behind_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     `read_state`: every caller here only ever asks "is this a park?", and the answer to that
     for a marker nobody can read is no.
     """
-    return _read(state_dir, MARKERS["behind"])
+    snapshot = _snapshot(state_dir)
+    return snapshot.behind if snapshot else None
 
 
 def park_note(marker: str | None, now: float | None = None) -> str:
@@ -161,7 +172,7 @@ def read_manual_plane_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     "is a role pending?", and for a ledger nobody can read the answer is no.
     `gitops_ledger.manual_plane_entries` turns the text into entries and their tags.
     """
-    return _read(state_dir, MARKERS["owed"])
+    return _owed(state_dir)
 
 
 # How long a contention streak may run before the banner names it: the same number
@@ -317,7 +328,7 @@ def read_k8s_unapplied_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     The class lives in the `owed` ledger (#3392). Absent and unreadable collapse to the same
     answer, for the reason the readers above give.
     """
-    owed = _read(state_dir, MARKERS["owed"])
+    owed = _owed(state_dir)
     if owed is None:
         return None
     return "\n".join(
@@ -334,7 +345,7 @@ def read_k8s_deferred_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     reason the readers above give: every caller here only asks "is a bump merged and
     unapplied?", and for a marker nobody can read the answer is no.
     """
-    entries = k8s_deferred_entries(_read(state_dir, MARKERS["owed"]))
+    entries = k8s_deferred_entries(_owed(state_dir))
     return (
         "\n".join(
             owed_line(OWED_K8S_DEFERRED, e.service, e.origin, e.at) for e in entries
@@ -348,4 +359,5 @@ def read_contention_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
 
     `gitops_markers.parse_contention` turns the text into the streak.
     """
-    return _read(state_dir, MARKERS["contention"])
+    snapshot = _snapshot(state_dir)
+    return snapshot.contention if snapshot else None
