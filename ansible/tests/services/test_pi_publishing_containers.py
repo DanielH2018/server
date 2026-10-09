@@ -15,10 +15,10 @@ that the Jinja is still spelled the way it was spelled — it cannot see which c
 out, which port each one carries, or that `udp_port` stays out (#3107, #2809). Rendered, the
 same value is one string the test parses the way `bridge/config_host.py` parses it.
 
-The render needs `hostvars`, which the shared `rendered_texts()` does not lay down — it
-resolves daniel-box's inventory only, so `hostvars['daniel-pi']` would come out undefined and
-the set would be empty. So this renders the one template with the three hosts' `host_vars`
-handed in, the way `_kuma_entities.py` does for the tiles that index the Pi.
+The shared render context carries the Pi's literal `containers_list` in `hostvars` (#3860),
+but this test needs to swap that list for one the inventory does not hold. So it renders the
+one template with the three hosts' `host_vars` handed in, the way `_kuma_entities.py` does for
+the tiles that index the Pi.
 
 The expected members are named rather than counted. A container legitimately added to or
 removed from the Pi changes the expected set here in the same commit that changes the

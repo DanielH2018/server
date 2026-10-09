@@ -167,6 +167,22 @@ def test_hostvars_carries_no_value_that_would_resolve_against_the_wrong_host(tre
     }
 
 
+def test_hostvars_carries_a_literal_containers_list_and_omits_a_templated_one(tree):
+    # observability's alloy-pi job reads the Pi's entry port this way (#3860). A templated
+    # list would resolve against the rendered host, so it stays out like `ansible_host`.
+    pi_list = [{"name": "alloy", "port": 12345}]
+    template, inv = tree(
+        {},
+        hosts={
+            "box": {"containers_list": [{"name": "x", "port": "{{ x_port }}"}]},
+            "pi": {"server_ip": "10.0.0.2", "containers_list": pi_list},
+        },
+        plane="k8s",
+    )
+    hostvars = rc.render_context(template, inventory=inv)["hostvars"]
+    assert hostvars == {"pi": {"server_ip": "10.0.0.2", "containers_list": pi_list}}
+
+
 def test_a_callers_hostvars_replaces_the_inventory_layer(tree):
     template, inv = tree({}, hosts={"box": {"server_ip": "10.0.0.1"}}, plane="k8s")
     ctx = rc.render_context(template, inventory=inv, overrides={"hostvars": {"x": {}}})

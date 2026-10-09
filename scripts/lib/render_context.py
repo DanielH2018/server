@@ -128,20 +128,42 @@ def _host_layer(inventory: Inventory, host: str | None) -> dict:
     return load_yaml(inventory.host_vars / f"{host}.yml") if host else {}
 
 
-def _hostvars(inventory: Inventory) -> dict[str, dict]:
-    """Each host's literal ``server_ip``, as Ansible's ``hostvars`` exposes it in every play.
+# The host_vars `hostvars` carries for each host, each only while its value holds no Jinja.
+_HOSTVARS_KEYS = ("server_ip", "containers_list")
 
-    ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way (#3719), so a strict
-    render needs it. Only ``server_ip`` goes in: every other host_var would resolve here
-    against the rendered host's context, so the Pi's ``ansible_host: "{{ server_ip }}"`` would
-    come out as daniel-box's address. A caller needing more passes its own ``hostvars``.
+
+def _hostvars(inventory: Inventory) -> dict[str, dict]:
+    """Each host's literal ``server_ip`` and ``containers_list``, as Ansible's ``hostvars`` has them.
+
+    ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way (#3719), and
+    observability's ``alloy-pi`` scrape job reads the Pi's ``alloy`` port from its
+    ``containers_list`` (#3860), so a strict render needs both. A value goes in only while it
+    holds no Jinja: here it would resolve against the rendered host's context, so the Pi's
+    ``ansible_host: "{{ server_ip }}"`` would come out as daniel-box's address. daniel-box's
+    own ``containers_list`` templates its entries, so it stays out. A caller needing more
+    passes its own ``hostvars``.
     """
     found = {}
     for path in host_files(inventory.host_vars):
-        ip = load_yaml(path).get("server_ip")
-        if ip is not None:
-            found[path.stem] = {"server_ip": ip}
+        layer = load_yaml(path)
+        literal = {
+            key: layer[key]
+            for key in _HOSTVARS_KEYS
+            if key in layer and not _holds_jinja(layer[key])
+        }
+        if literal:
+            found[path.stem] = literal
     return found
+
+
+def _holds_jinja(value) -> bool:
+    if isinstance(value, str):
+        return "{{" in value or "{%" in value
+    if isinstance(value, dict):
+        return any(_holds_jinja(k) or _holds_jinja(v) for k, v in value.items())
+    if isinstance(value, list):
+        return any(_holds_jinja(v) for v in value)
+    return False
 
 
 def _resolve(raw: dict) -> tuple[dict, dict[str, str]]:
