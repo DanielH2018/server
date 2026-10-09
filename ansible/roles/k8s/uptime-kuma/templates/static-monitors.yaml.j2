@@ -228,21 +228,6 @@ stringData:
   # docker-fleet + autofix-disk-prune keys removed at the Docker uninstall (2026-08-14):
   # their producers (the fleet-health cron, the disk-prune cron) retired with the
   # daemon. AutoKuma ON_DELETE=delete removes the live monitors on apply.
-  # Phase G retargeting (same evening): the restart/OOM/throttle depth checks re-armed
-  # against kubernetes-cadvisor, cluster-scoped and grouped by pod — fresh k3s-named
-  # monitors on the Docker-era tokens.
-  k3s-container-restarts.json: |
-    {"type": "push", "name": "k3s Container Restarts", "description": "cAdvisor via monitor-bridge: a container restarted more than RESTART_MAX times in 15m. The message names it. `kubectl -n homelab describe pod` for the last state.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_restarts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  k3s-container-oom.json: |
-    {"type": "push", "name": "k3s Container OOM", "description": "cAdvisor via monitor-bridge: a container was OOM-killed in the last hour. The message names it; the tile clears one hour after the kill, so read the Discord alert, not the tile, for the evidence.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_oom_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  k3s-cpu-throttling.json: |
-    {"type": "push", "name": "k3s CPU Throttling", "description": "cAdvisor via monitor-bridge: a container pinned at its CPU limit for 3 cycles (~15m). Raise the limit in its role or accept it; short bursts never page.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cpu_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # 600s like its monitor-bridge siblings, NOT the app's 6-hour test cadence. The producer is
-  # the bridge's 5-minute loop re-reading the newest row, not the speedtest run itself, so the
-  # deadline tracks the bridge's period. A dead bridge is what push silence means here; a dead
-  # speedtest scheduler is caught by the check's own staleness arm instead.
-  k3s-speedtest.json: |
-    {"type": "push", "name": "k3s Speedtest", "description": "monitor-bridge reads the newest speedtest-tracker result every 5 min; the app itself runs about every 6 h. DOWN means the last run is older than 8 h, did not complete, or downloaded under 100 Mbps; an unreachable API is tolerated for 2 cycles. Open the speedtest UI and check its scheduler and last result.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_speedtest_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   crowdsec-home-allowlist.json: |
     {"type": "push", "name": "CrowdSec Home Allowlist", "description": "A daniel-box cron runs every 5 min: it looks up the home public IPv4 and IPv6 prefix via ipify and keeps them in the cluster LAPI home-ips allowlist via cscli. DOWN means an ipify lookup or cscli allowlists add failed; the message says which. Check syslog tag crowdsec-home-allowlist and the crowdsec pod.", "interval": 600, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   crowdsec-remote-allowlist.json: |
@@ -264,33 +249,6 @@ stringData:
     {"type": "push", "name": "Cloudflare DDNS Direct", "description": "The cloudflare-ddns-direct Deployment (favonia/cloudflare-ddns) beats only after a successful update of the unproxied terraria and valheim A records. DOWN means no successful update in 6 min: the pod is not running or Cloudflare API calls are failing. Read the cloudflare-ddns-direct pod logs first.", "interval": 360, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ cloudflare_ddns_direct_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   longhorn-backup.json: |
     {"type": "push", "name": "k3s Longhorn Backup", "description": "A daniel-box cron runs longhorn_backup_health.py every 10 min with the read-only kubeconfig: backup target availability, per-tier freshness, errored backups, failed jobs, the restore drill stamp and restore coverage. DOWN names the failing check. Run journalctl -t longhorn-backup-health, then check the Longhorn UI.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ longhorn_backup_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-disaster-recovery/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-longhorn-volumes.json: |
-    {"type": "push", "name": "Longhorn Volume Redundancy", "description": "monitor-bridge reads Longhorn's volume metrics via the cluster Prometheus, held 3 cycles for a replica rebuild. DOWN: a volume is degraded or faulted, or the census emptied. The message names the volume; `longhorn-disaster-recovery` has the revert and rebuild procedures.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_longhorn_volumes_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-disaster-recovery/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  # The space axis of the storage layer, where Longhorn Volume Redundancy above is the replica
-  # axis. A PVC has a fixed capacity of its own, so a full one is invisible to daniel-box Disk
-  # below and to Root Disk — email is attached for the same reason redundancy has it: the fix is
-  # an operator expanding a volume.
-  monitor-bridge-pvc-fullness.json: |
-    {"type": "push", "name": "k3s PVC Fullness", "description": "kubelet volume stats via monitor-bridge: a Longhorn PVC over 85%, or a named claim under its declared free-bytes floor. A PVC cannot borrow space — expand the volume in its role.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pvc_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-disaster-recovery/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  # The snapshot-space axis of the same layer: how close a capped Longhorn volume is to its
-  # spec.snapshotMaxSize (#1627). Snapshots live in the backend rather than in the claim's
-  # filesystem, so PVC Fullness above cannot see one filling; a reached cap makes Longhorn refuse
-  # new snapshots rather than prune, which fails every later deploy of that service (#1560).
-  # Email for the same reason as its two neighbours — the fix is an operator deleting snapshots or
-  # raising the cap.
-  #
-  # Armed 2026-09-10: `monitor_bridge_snapshot_headroom_push_token` is in SOPS, so this is
-  # declared unguarded like its monitor-bridge neighbours above rather than behind a token
-  # conditional — a missing token now fails the render instead of silently removing the
-  # monitor (#1632).
-  monitor-bridge-snapshot-headroom.json: |
-    {"type": "push", "name": "Longhorn Snapshot Headroom", "description": "monitor-bridge sums a volume's snapshot bytes against the cap declared in SNAPSHOT_CAPS (only jellyfin-config carries one). DOWN: the cap is near, and Longhorn refuses new snapshots at it, which fails every deploy of that service until snapshots are deleted by hand.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_snapshot_headroom_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-disaster-recovery/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  # #1243: the CSI global mounts under var/lib/kubelet/plugins/ ext4 remounted read-only after a
-  # journal abort, with every existing monitor silent for 50 minutes (Volume CRs stayed
-  # `attached healthy` throughout). email attached for the same reason as its two siblings above:
-  # the fix is an operator action (remount/recreate), not a self-healing retry.
-  monitor-bridge-kubelet-readonly.json: |
-    {"type": "push", "name": "Kubelet CSI Mount Read-Only", "description": "monitor-bridge reads node_filesystem_readonly for /var/lib/kubelet/plugins mounts. DOWN: a Longhorn volume's ext4 remounted read-only after an iSCSI stall (#1243); Longhorn's own state stays healthy through it. Scale the workload to 0, wait for detached, scale back.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_kubelet_readonly_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-disaster-recovery/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-box-disk.json: |
     {"type": "push", "name": "daniel-box Disk", "description": "A daniel-box cron runs df on / every 10 min, independent of Prometheus. DOWN means the root LV is over 75 percent used, the point where Longhorn stops scheduling replicas, or df returned nothing. Run df -h / on daniel-box; Longhorn replicas, container images and etcd all live on that volume.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ daniel_box_disk_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {# The weekly registry garbage collection (k8s/registry role, registry-gc.sh). INTERVAL IS DERIVED FROM THE
@@ -376,7 +334,7 @@ stringData:
    Where the push itself failed (`journalctl -t <tag> | grep 'push failed'` — setup-drift-check,
    2026-08-29 16:47, a verdict the library logged and then swallowed) the deadline is what
    reported it, which is the margin doing its job; since #1869 the Swallowed Push Verdicts tile
-   below pages that case within a cycle, and the deadline stays as the backstop. A sticky DOWN
+   (monitor-bridge's `swallowed_verdicts` row) pages that case within a cycle, and the deadline stays as the backstop. A sticky DOWN
    with a message is the tile doing its job too. Widening one to shorten those episodes would hide the finding, not
    the gap, and lengthen how long a dropped verdict stays invisible. Re-check the same way
    before touching any of them. What DID shorten the episodes (2026-09-19, #2141-#2143) is
@@ -466,68 +424,22 @@ stringData:
   etcd-restore-drill-fence.json: |
     {"type": "push", "name": "etcd Restore Drill (egress fence)", "description": "The same monthly daniel-server cron dials every range the staging nwfilter drops, plus an internet control target, from inside the throwaway guest before that guest is handed the cluster token and the R2 write credentials. DOWN means the fence LEAKED, or that a range could not be measured at all and so is unproven — the message says which, and names the targets. Read egress-fence.log in the newest run directory under the drill log root.", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ etcd_drill_fence_push_token }}", "tag_names": [{"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
-  # ── Transcribed 2026-08-10: the LIVE push fleet. Ids must keep matching the push-token
-  # names monitor-bridge and autofix-bridge push to.
-  # monitor-bridge-restarts/oom/cpu removed 2026-08-14 with the Docker cadvisor — the
-  # apply prunes the keys (baseline exists since the kubectl-replace reset) and the live
-  # monitors were kuma-cli-deleted at the same cutover.
-  monitor-bridge-disk.json: |
-    {"type": "push", "name": "Root Disk", "description": "node-exporter via monitor-bridge: `/`, `/boot` or `/boot/efi` over DISK_MAX_PCT on a cluster node, or one node's exporter missing from the census. `df -h` on the named host.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_disk_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-cert.json: |
-    {"type": "push", "name": "TLS Cert Expiry", "description": "monitor-bridge reads traefik_tls_certs_not_after from Prometheus every 5 min. DOWN: a certificate Traefik serves expires within CERT_MIN_DAYS; the message names it. Check Traefik's ACME log and `probe.py cert <host>` for the served chain.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cert_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-mem.json: |
-    {"type": "push", "name": "Memory", "description": "node-exporter via monitor-bridge: host memory pressure on a cluster node, a Claude Code cgroup stalling or OOM-killing, or one node missing from the census. The message names host and cgroup.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_mem_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-prometheus.json: |
-    {"type": "push", "name": "Prometheus Reachable", "description": "monitor-bridge's gate for every Prometheus-backed check: a vector(1) query every 5 min. DOWN: Prometheus itself is unreachable, and every dependent tile is held green with a `skipped` message so this one pages alone. Check the prometheus pod first.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_prometheus_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-targets.json: |
-    {"type": "push", "name": "Scrape Targets", "description": "monitor-bridge reads `up == 0` on daniel-server's scrape jobs every 5 min. DOWN names the dead job. An exporter that is up but missing a collector is not caught here; that is Root Disk's and Memory's census floor.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_targets_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-traefik.json: |
-    {"type": "push", "name": "Traefik 5xx", "description": "monitor-bridge: a backend's 5xx share over 5 min per Traefik service, behind a TRAEFIK_MIN_RPS volume floor. DOWN names the erroring service. Loki `{container=\"traefik\"}` has the status codes; the backend's own log has the cause.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_traefik_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-traefik-latency.json: |
-    {"type": "push", "name": "Traefik Latency", "description": "monitor-bridge: share of a service's requests slower than the 5.0s histogram bucket, behind TRAEFIK_MIN_RPS and a 3-slow-request floor; long-lived-connection services (headlamp, HA, Kuma) are exempt. DOWN names the slow backend, not the edge.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_traefik_latency_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Minted 2026-09-06 for #1340, ahead of the check that pushes to it. Its two siblings above
-  # are per-SERVICE and read green through the 3.5-hour total-404 edge of #1322, because zero
-  # routers means no traefik_service_* series to iterate; check_traefik_404_flood reads the
-  # entrypoint counter, which survives that failure.
-  monitor-bridge-traefik-404.json: |
-    {"type": "push", "name": "Traefik 404 Flood", "description": "monitor-bridge: 404 share of entrypoint traffic over 5 min above 90%, the shape of an edge that lost its routers (a missing CrowdSec plugin, #1322). DOWN means most requests to the edge are 404; check Traefik's startup log for a router or plugin error.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_traefik_404_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Minted 2026-09-27 for #2757, ahead of the check that pushes to it. A client wedged on a
-  # connection SNICheck pinned wrong gets 421 at the router and never reaches a service, so
-  # neither the 5xx, latency nor 404 tile above sees it (#2747, #2749).
-  monitor-bridge-traefik-421.json: |
-    {"type": "push", "name": "Traefik 421", "description": "monitor-bridge: a Traefik router serving 421 above 0.02 rps for 3 cycles (15 min). A long-lived client connected while Traefik was still reconciling routes and SNICheck pinned the wrong TLS options on that connection; it gets 421 until it redials. DOWN names the router: restart the client that calls it (a Traefik config change does not help). #2747, #2749.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_traefik_421_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-n8n.json: |
-    {"type": "push", "name": "n8n Prod Workflows", "description": "monitor-bridge reads n8n's executions API every 5 min: DOWN when an active workflow failed 3 times in a row, or 2+ workflows are each failing repeatedly. The message names the workflow; open its last execution in n8n.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_n8n_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-arr-queue.json: |
-    {"type": "push", "name": "Arr Queue Warnings", "description": "monitor-bridge reads sonarr's and radarr's /api/v3/queue every 5 min. DOWN: an item needs review (warning, importBlocked, or importPending with a status message) — the shape of the 2026-07-01 fake-episode .exe. The message names the release and the app.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_arr_queue_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-bazarr.json: |
-    {"type": "push", "name": "Bazarr Health", "description": "monitor-bridge reads bazarr's system status and health every 5 min. DOWN: bazarr's own copy of the sonarr or radarr API key is rejected (an empty peer version field), or bazarr reports a health issue. Bazarr holds those keys in its UI, so a key rotation misses it.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_bazarr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-prowlarr-indexers.json: |
-    {"type": "push", "name": "Prowlarr Indexers", "description": "monitor-bridge reads Prowlarr's indexer status every 5 min. DOWN: an indexer has been failing for a week or more by Prowlarr's own initialFailure; The Pirate Bay and 1337x are ignored as chronic flappers. Short outages never page.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_prowlarr_indexers_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  gitops-deploy-alive.json: |
-    {"type": "push", "name": "GitOps Deploy — Alive", "description": "The pull-based deployer on daniel-box has not ticked in GITOPS_MAX_AGE_MIN. Check `systemctl status gitops-deploy.timer` and the SessionStart banner's parked state.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  gitops-deploy-status.json: |
-    {"type": "push", "name": "GitOps Deploy — Status", "description": "The deployer is parked or owes an apply: a held SHA after a failed health gate, a diverged tree, a busy service lock, a tree behind origin for 6h, a setup role only a hand can apply, or an image bump a broad tick deferred for lack of budget. The message names which. `gitops_state.py` clears a marker once the cause is fixed.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Pushed every bridge cycle like its neighbours, so the standard 600s interval applies — the
-  # DRILL is weekly, but the CHECK reading its stamp runs every cycle, and it is the check that
-  # beats. The staleness window lives in check.py (ETCD_DRILL_MAX_AGE_S, 8 days derived from the
-  # cron); this interval is only the heartbeat that says the bridge is still evaluating it.
-  etcd-restore-drill.json: |
-    {"type": "push", "name": "etcd Restore Drill", "description": "monitor-bridge reads the last-success-list-only stamp written by the weekly (Monday 10:20) etcd restore drill cron on daniel-box. DOWN means no list-only drill has ever passed, the stamp is older than 8 days, or the pod cannot read it. Run journalctl on daniel-box for etcd-restore-drill and check the stamp mode.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_etcd_drill_push_token }}", "tag_names": [{"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # The drill above proves a restore works; this tile watches the failure a restore follows
-  # (#2403). etcd goes READ-ONLY at its backend quota and the whole control plane stops
-  # accepting writes, so this is the email tier for the same reason as the Longhorn trio: the
-  # fix is an operator compacting and defragmenting, or raising the quota, not a retry.
-  # `monitor_bridge_etcd_db_size_push_token` is in SOPS, so this is declared unguarded — a
-  # missing token fails the render instead of silently removing the monitor (#1632).
-  etcd-db-size.json: |
-    {"type": "push", "name": "etcd DB Size", "description": "monitor-bridge reads apiserver_storage_size_bytes against etcd's 2 GiB backend quota, because etcd's own db-size series is empty while k3s_etcd_expose_metrics is off. DOWN means the DB is over ETCD_DB_MAX_PCT of the quota; at the quota etcd rejects every write and the control plane stops. Compact and defragment, or raise --etcd-arg=quota-backend-bytes.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_etcd_db_size_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  # Board and CPU temperature across all three hosts, pushed every bridge cycle. The hysteresis
-  # that keeps a boost excursion off this tile is HWMON_TEMP_CONSECUTIVE (12 cycles = 60 min)
-  # in the monitor-bridge role's files/bridge/config_host.py, not
-  # max_retries here — a held cycle still pushes `up`, so the tile stays green through the grace.
-  host-temperature.json: |
-    {"type": "push", "name": "Host Temperature", "description": "hwmon via monitor-bridge: a board or CPU sensor over 90% of its declared, rated or fallback limit for an hour, the Pi's undervoltage alarm, or kernel CPU thermal throttling for 15m. The message names the sensor and which limit set the bar.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_host_temp_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # ── monitor-bridge's push tiles: one per row of monitor-bridge's files/check_table.py ───────
+  # Derived since #3781, so a new bridge check needs no edit here. The row's `kuma_id` is the
+  # AutoKuma id, and AutoKuma deletes a monitor whose id disappears (ON_DELETE=delete), so a
+  # row's id, display name and description are what keep a monitor and its history. Every
+  # tile shares the bridge's cadence: the deadline is the bridge's push interval, never
+  # retried, and a `critical` row carries the severity tag and pages email too.
+  # `probe.py kuma-drift` reads this loop from the same table, so its census still lists every
+  # bridge tile. The tokens are bare lookups, so a row whose secret is missing fails the
+  # render rather than dropping its tile (#1632). `ensure_ascii=False` keeps an em dash a literal
+  # character, the bytes the hand-written tiles carried, so AutoKuma sees no change.
+{% for check in lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') %}
+{%   set tags = ([{'name': 'tag-severity', 'value': 'critical'}] if check.critical | default(false) else [])
+              + ([{'name': 'tag-runbook', 'value': 'https://docs.local.' ~ domain ~ '/' ~ check.runbook ~ '/'}] if check.runbook | default(none) else []) %}
+  {{ check.kuma_id }}.json: |
+    {"type": "push", "name": {{ check.display | to_json(ensure_ascii=False) }}, "description": {{ check.description | to_json(ensure_ascii=False) }}, "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ lookup('vars', check.token) }}"{% if tags %}, "tag_names": {{ tags | to_json }}{% endif %}, "notification_name_list": {{ ([kuma_notification_id] + (['email'] if check.critical | default(false) else [])) | to_json }}}
+{% endfor %}
   # Host flip 1 (2026-08-14): pushed once nightly by the k8s/pi-peer-backup CronJob
   # (23:30), not every bridge cycle — the window is 2.5 days (two missed runs + slack,
   # the same tolerance the retired pi_peers check applied). Same token.
@@ -536,24 +448,7 @@ stringData:
   # E7 (2026-08-13): DOCKER-USER Origin Lock retired with the public 80/443 it guarded.
   # CrowdSec AppSec stays — its feeder moved to daniel-box (k8s/crowdsec's
   # crowdsec-appsec-verify.sh cron, pushing directly; same token).
-  #
-  # Cloudflare IP Drift retired alongside it and should NOT have: only the origin-lock half
-  # of what it watched went away, and cloudflare_ips still gates forwardedHeaders.trustedIPs
-  # on both entrypoints. Restored 2026-08-15 with the same id, name and token, fed by
-  # k8s/traefik's cloudflare-ip-drift.sh daily cron until 2026-09-19, and by monitor-bridge's
-  # checks/cloudflare_ips.py since: the bridge caches a success for a day and re-probes a
-  # failure every cycle, so a red tile clears within one cycle of the list being fixed. The
-  # interval is therefore the bridge's, not the daily cron's 90000s.
-  cloudflare-ip-drift.json: |
-    {"type": "push", "name": "Cloudflare IP Drift", "description": "monitor-bridge fetches the Cloudflare published IPv4 and IPv6 ranges and compares them to cloudflare_ips in group_vars/all.yml, which sets traefik trustedIPs and the netpol allow-list. A match is re-checked daily; a failure every cycle. DOWN means the list drifted or the fetch failed. Update cloudflare_ips and redeploy traefik, netpol-baseline and monitor-bridge.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # #2566: monitor-bridge's checks/healthchecks.py reads the Healthchecks.io console with the
-  # read-only key and compares each dead-man check's schedule and grace against
-  # docs/healthchecks-io-deadman.md. Same cache shape as Cloudflare IP Drift above, so the
-  # interval is the bridge's. The `-drift-check` suffix places it in Automation & Drift.
-  healthchecks-io-drift-check.json: |
-    {"type": "push", "name": "Healthchecks.io Console Drift", "description": "monitor-bridge reads the Healthchecks.io console (read-only API key) and compares every off-site dead-man check's schedule type, period or cron, timezone and grace against docs/healthchecks-io-deadman.md. A match is re-checked daily; a failure every cycle. DOWN names each slug and field that differs, or a check missing from the console. Fix the console, or change the doc and monitor_bridge_healthchecks_expected together and redeploy monitor-bridge.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_healthchecks_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # 90000s (25h) for the same reason as Cloudflare IP Drift directly above: fed by a DAILY cron
-  # (setup/gitops_deploy's github-ruleset-drift.sh), so the interval gives one missed run of
+  # 90000s (25h): fed by a DAILY cron (setup/gitops_deploy's github-ruleset-drift.sh), so the interval gives one missed run of
   # slack. Watches the merge gate the deployer's CI verdict rests on — a required context
   # removed in the GitHub UI otherwise changes what can reach master with no commit anywhere.
   github-ruleset-drift.json: |
@@ -584,24 +479,6 @@ stringData:
   # 1800 = two cron periods, the same one-missed-run slack 600 gives the 300s bridge loop.
   crowdsec-appsec.json: |
     {"type": "push", "name": "CrowdSec AppSec", "description": "A daniel-box cron runs every 15 min and asserts the crowdsec engine has at least one enabled appsec-config and one enabled appsec-rule. DOWN means the inline WAF is not loaded and the edge is ban-list-only, since the bouncer fails open; an unreachable LAPI stays UP. Run cscli appsec-configs list in the crowdsec pod.", "interval": 1800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-b2-reachable.json: |
-    {"type": "push", "name": "B2 Reachable", "description": "monitor-bridge authenticates against Backblaze B2 at most every 30 min; a billed answer is cached, a transport failure retried next cycle. DOWN: B2 refuses the key or the transaction cap is exceeded — read the message before assuming data loss, a cap denial looks the same.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_b2_reachable_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-backup-tiering/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-k8s-workloads.json: |
-    {"type": "push", "name": "k3s Workload Health", "description": "kube-state-metrics via monitor-bridge: a Deployment or DaemonSet with unavailable replicas (held 3 cycles for a rollout), a crash loop, a stalled rollout, zero available replicas, or a deregistered `devic.es/dri`. The message names the workload. `probe.py health <svc>` for the rollout state; roles/k8s/monitor-bridge/CLAUDE.md.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_k8s_workloads_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-r2-usage.json: |
-    {"type": "push", "name": "R2 Free Tier Headroom", "description": "monitor-bridge reads Cloudflare's GraphQL analytics every 30 min: month-to-date R2 storage, Class A and Class B operations and incomplete multipart uploads against the free tier. DOWN past 80% on any arm. Cloudflare offers no cap on R2; this is the only boundary.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_r2_usage_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-backup-tiering/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-b2-storage.json: |
-    {"type": "push", "name": "B2 Free Tier Headroom", "description": "monitor-bridge reads B2's bucket usage against the free tier, gated behind B2 Reachable so a cap incident pages once. DOWN: storage past the threshold. A drain is nearly free; a prune pays per deleted backup, so read longhorn-backup-tiering before deleting.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_b2_storage_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-backup-tiering/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-cluster-targets.json: |
-    {"type": "push", "name": "Cluster Scrape Targets", "description": "monitor-bridge reads `up` for every non-daniel-server scrape job via the cluster Prometheus, held 3 cycles so a rolling pod's scrape gap does not page. DOWN names the target that stayed down 15 min, or reports UNKNOWN when the `up` vector emptied.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cluster_targets_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-scrutiny.json: |
-    {"type": "push", "name": "SMART Data / Health", "description": "monitor-bridge reads Scrutiny's summary every 5 min. DOWN: a drive's collector data is older than 26h, its SMART self-assessment or an attribute threshold failed, or NVMe wear passed 80%. Scrutiny's own notifier is unconfigured, so this is the only drive-failure page.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_scrutiny_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-ups.json: |
-    {"type": "push", "name": "UPS Battery Health", "description": "NUT via monitor-bridge: mains lost, charge under 50%, runtime under 5 min, or the UPS asking for a battery replacement. Mains loss is judged first and alone.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_ups_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-pi.json: |
-    {"type": "push", "name": "Pi Pressure", "description": "daniel-pi's node-exporter via monitor-bridge: load per core, free memory, SD card or boot partition fullness, or a published container port not listening after a reboot. A dead port needs a container recreate, not a restart.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-ha.json: |
-    {"type": "push", "name": "Home Assistant Automations", "description": "HA's scheduler heartbeat helper is stale (HA up, automations not running) or HA banned an IP in the last hour — a ban of a cluster gateway locks out everything behind it. Read /config/ip_bans.yaml on a ban.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_ha_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Host flip 2 (2026-08-14): pushed once daily by renovate-notify's ExecStartPost on
   # daniel-box (13:00 timer), not every bridge cycle — 36h window = one missed run +
   # slack, the same tolerance the retired renovate_alive check applied. Same token.
@@ -621,35 +498,6 @@ stringData:
   renovate-agent-alive.json: |
     {"type": "push", "name": "Renovate Agent — Alive", "description": "renovate-agent.service on daniel-box beats this tile from ExecStartPost after each daily 06:00 run exits 0; a crash pushes down with the exception text. DOWN means no clean run in 28 h, including a worktree-blocked skip, or a crash. Run systemctl status renovate-agent.timer and journalctl -u renovate-agent.", "interval": 100800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ renovate_agent_kuma_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
-  monitor-bridge-loki.json: |
-    {"type": "push", "name": "Loki Log Ingestion", "description": "One of Loki's three stream arms went silent: the file-tailed syslog/authlog union, the container stream, or daniel-pi's Alloy. Loki itself answers; the shipper does not.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-promtail-dropped.json: |
-    {"type": "push", "name": "Log Shipper Dropped Entries", "description": "Alloy dropped entries client-side or Loki discarded them server-side, over 3000 in an hour, or the OTel collector failed to export telemetry at all in the last 15 min. `too_far_behind` after a shipper restart is a re-tail, not loss; anything else is throughput or limits.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{# kuma-push-lib.sh logs a lost push and returns 0 by design, so
-   a host cron's DOWN verdict that never reaches its tile is reported only by that tile's
-   heartbeat deadline — the one-period-plus-an-hour margin the DECIDED marker above the drift
-   tiles keeps. monitor-bridge reads the library's final `push failed` line out of Loki and
-   pages here within a cycle, but ONLY when a sibling cron landed a push in the same window: a
-   fleet-wide loss is the edge or host tiles' page, and a plain count of push failures was
-   measured and rejected for paging on exactly those (uptime-kuma/CLAUDE.md). The exception is
-   a push Kuma itself rejected (`by=kuma` on the line): a token no monitor here holds
-   has no tile to go red, so it pages here whatever its status and company. #}
-  monitor-bridge-swallowed-verdicts.json: |
-    {"type": "push", "name": "Swallowed Push Verdicts", "description": "A host cron pushed status=down and the push failed while a sibling cron's push landed, so the verdict was lost rather than the network. The message names the cron; run it by hand and read its logger lines.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_swallowed_verdicts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{# Kuma logs `Cannot send notification to <name>` and does not
-   retry, so the transition or resend behind that line reaches nobody — typically a Discord
-   HTTP 429. The verdict names the status Kuma logged beside each drop. The
-   Discord Delivery tile GET-verifies the webhook and cannot see a dropped POST. This tile
-   notifies EMAIL as well as Discord on purpose: a page for a dropped Discord send that goes
-   only over the Discord webhook is the failure it reports. #}
-  monitor-bridge-kuma-notify-failures.json: |
-    {"type": "push", "name": "Kuma Notification Delivery", "description": "Kuma tried to send a notification and dropped it (`Cannot send notification to`), usually a Discord 429 or 400. Kuma does not retry, so the alert behind it reached nobody — read the tile list for what fired in that window. Also emails.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_kuma_notify_failures_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-loki-reachable.json: |
-    {"type": "push", "name": "Loki Reachable", "description": "monitor-bridge's gate for the Loki-reading checks: a /loki/api/v1/labels probe every 5 min. DOWN: Loki does not answer, and the dependent tiles are held green with a `skipped` message. Loki up but nothing shipping is Loki Log Ingestion's page.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_loki_reachable_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-wan-reachable.json: |
-    {"type": "push", "name": "WAN Reachable", "description": "monitor-bridge's gate for the internet-reaching checks: two independent providers fetched by hostname every 5 min, DOWN only when neither answers. DOWN means this house has no working link or no DNS, and R2 Free Tier Headroom, Cloudflare IP Drift, Healthchecks.io Console Drift and Discord Delivery are held green with a `skipped` message. B2 Reachable is its peer, not behind it, so a WAN outage lights those two tiles.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_wan_reachable_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-  monitor-bridge-discord.json: |
-    {"type": "push", "name": "Discord Delivery", "description": "One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy, *arr, healthchecks) no longer resolves, or the Gmail SMTP backstop login failed. Rotate the named webhook in SOPS and redeploy its consumer.", "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_discord_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   arr-autoblock.json: |
     {"type": "push", "name": "Arr Auto-Block", "description": "autofix-bridge polls the Sonarr and Radarr queues every 5 min, blocklists hard-bad or malware-signature items after 3 cycles and pushes its verdict. DOWN means an arr was unreachable, a mutation failed, or over 5 items were eligible at once so it acted on none. Run kubectl -n homelab logs deploy/autofix-bridge.", "interval": 600, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ arr_autoblock_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# Deadman for the status-page-sync CronJob in this role — the job that owns the /status/

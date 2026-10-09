@@ -118,7 +118,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     own tile pages by email, and it raises on an entry name it cannot find. observability's
     Prometheus config renders its plain scrape jobs through ``scrape_jobs``, and each owning
     role reads its exporter's port through ``metrics_port``; both raise on a malformed
-    ``metrics`` item. Registering the real ones makes those failures reach the guard.
+    ``metrics`` item.
+    ``py_table`` reads monitor-bridge's check table out of its Python source, for the
+    env-secret and the Kuma tiles. Registering the real ones makes those failures reach the guard.
 
     Args:
         env: The environment to register on, modified in place.
@@ -131,6 +133,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     if str(ANSIBLE / "filter_plugins") not in _sys.path:
         _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
     from authelia_access import authelia_service_rules
+    from py_table import py_table
     from scrape_jobs import metrics_port, scrape_jobs
     from service_tier import in_service_tier, tier_priority_class
     from toposort import filter_by_platform
@@ -156,6 +159,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["in_service_tier"] = in_service_tier
     env.filters["scrape_jobs"] = scrape_jobs
     env.filters["metrics_port"] = metrics_port
+    env.filters["py_table"] = py_table
     env.tests["search"] = search
     return env
 

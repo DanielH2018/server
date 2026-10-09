@@ -85,6 +85,14 @@ def test_the_census_reports_nothing_for_a_name_no_role_references():
     assert tree_consumers("sonarr_api_key_that_does_not_exist_anywhere") == {}
 
 
+def test_the_census_credits_a_role_rendering_the_secret_out_of_another_roles_file():
+    """uptime-kuma renders every bridge token from monitor-bridge's check table (#3781)."""
+    assert tree_consumers("monitor_bridge_traefik_421_push_token") == {
+        "monitor-bridge": "deploy",
+        "uptime-kuma": "deploy",
+    }
+
+
 def test_the_census_separates_the_plane_deploy_sh_cannot_reach():
     consumers = tree_consumers("sonarr_api_key")
 

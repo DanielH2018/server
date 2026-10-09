@@ -54,7 +54,8 @@ scaffolder names both when it finishes:
 - `ROLES_WITH_A_DEFAULT_SERVICE` in `ansible/tests/k8s/test_shared_manifest_defaults.py`, and
   `ROLES_WITH_A_DEFAULT_INGRESSROUTE` beside it for a routed role.
 
-Then `uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes.
+The new role moves the auto-deploy coverage docs fragment. The `regen-doc-fragments` prek hook
+rewrites it on your commit and fails once, so stage what it wrote and commit again.
 
 **The pod-spec shell comes from two shared macros, which the scaffolder already calls.** A
 Deployment template calls `spec_shell(strategy)` under `spec:` and `pod_shell(priority_class,
@@ -99,11 +100,12 @@ A `false` declaration also needs the extra command in step 4.
 **Every deployed role has a `CLAUDE.md` that opens with `## At a glance`, and the block under
 that heading is generated.** The scaffolder writes the heading, the markers and the prose
 skeleton, and runs the generator once. After any later change to the role's defaults,
-templates or `containers_list` entry, re-run
-`uv run python scripts/docs/gen_role_glance.py`, which writes the deploy tag, image
+templates or `containers_list` entry, the `regen-role-glance` prek hook re-runs
+`scripts/docs/gen_role_glance.py` at commit time. It writes the deploy tag, image
 repositories, route, claims and auto-deploy stance between two `generated_from` markers and
-leaves everything below them alone. `scripts/docs/tests/test_gen_role_glance.py` fails CI
-while the committed block differs from what the generator writes. Put the reasoning
+leaves everything below them alone. When it rewrites a block it fails the commit once, so
+stage the doc and commit again. `scripts/docs/tests/test_gen_role_glance.py` fails CI only
+for a commit that skipped the hook. Put the reasoning
 — why a claim is unbacked, what a route bypasses — in the bullets below the block, not in
 the sources it reads.
 

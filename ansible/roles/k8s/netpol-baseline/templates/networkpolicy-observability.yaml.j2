@@ -1,3 +1,9 @@
+{# DECIDED: the observability baseline selects a whole other namespace and admits traefik
+   across namespaces plus node ipBlocks, so it stays bespoke.
+   The callers model (`netpol_from` / `netpol_fences`, macro in
+   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+#}
 ---
 # The observability namespace's own ingress baseline. Slice 1/2's baseline-ingress lives in
 # {{ k8s_namespace }} and cannot cover this namespace — a NetworkPolicy only ever selects pods in

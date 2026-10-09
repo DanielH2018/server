@@ -143,17 +143,16 @@ That check catches *unlabelled* pods. It does not catch two more consequences of
 other label and so would pass that check while still breaking:
 
 - **`podSelector: {}` fences each probe's control target, not the probe pod itself.** Every probe
-  leg in this repo is **outbound** (`netpol-probe-job.yaml.j2:44,61,104`;
-  `netpol-probe-slice2-job.yaml.j2`; `netpol-probe-slice3-job.yaml.j2:72,93,102`;
-  `prowlarr/netpol-probe-job.yaml.j2:53,64`; `sonarr/tasks/main.yml`) — nothing needs a
+  leg in this repo is **outbound** (`netpol-baseline/templates/netpol-probe-job.yaml.j2`, which merged the five
+  per-slice probes in #3813; `prowlarr/netpol-probe-job.yaml.j2:53,64`; `sonarr/tasks/main.yml`) — nothing needs a
   probe pod to be reachable *inbound*. An Ingress-only policy selecting a probe pod governs what
   reaches it, not what it can reach, and return traffic rides conntrack, so being selected as a
   target cannot break an outbound assertion. What actually breaks is the mirror image:
-  `podSelector: {}` also selects each probe's **control target**. `netpol-probe-slice3-job.yaml.j2:72`
-  dials `traefik:80` for its control; under a namespace-scope baseline, traefik's own ingress policy
+  `podSelector: {}` also selects each probe's **control target**. The slice-3 probe dialled
+  `traefik:80` for its control; under a namespace-scope baseline, traefik's own ingress policy
   would admit only `app: traefik`, observability's `prometheus`, and the two cni0 `/32`s — the probe
   pod matches none of those, the control fails, and the Job exits 1 with `CONTROL FAILED`, not with
-  a failed inverted assertion. `netpol-probe-job.yaml.j2:51-55` already documents the same shape for
+  a failed inverted assertion. The slice-1 probe already documented the same shape for
   its own NEGATIVE CONTROL leg (dialing homepage): "by construction there is no unfenced pod left"
   once slice 5 lands. Slice 5 must apply the same fix to every probe's control leg: admit the probe
   pod as an explicit peer **on its control target's policy** — the shape

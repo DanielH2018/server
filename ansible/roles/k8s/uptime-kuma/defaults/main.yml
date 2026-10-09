@@ -179,29 +179,23 @@ uptime_kuma_k8s_status_page_sync_job_ttl_seconds: 7200
 # still reaches the page instead of vanishing. test_status_page_groups.py asserts it stays
 # EMPTY for the committed declarations, so adding a monitor without placing it fails CI rather
 # than quietly appending it to a junk drawer.
+#
+# monitor-bridge's tiles need no pattern here: templates/status-page-sync-configmap.yaml.j2
+# pins each one into the group its row's `status_group` names in that role's check_table.py.
 uptime_kuma_k8s_status_page_groups:
   - name: Services
     match:
       - "-k8s$"
       - "^pihole-k8s-dns$"
       - "^jellyfin-lan-vip$"
-      - "^k3s-speedtest$"
       - "^loki$"
       - "^email-to-rss$"
       - "^slzb-coordinator$"
-      - "^monitor-bridge-(ha|n8n)$"
   - name: Cluster Health
     match:
-      - "^k3s-container-"
-      - "^k3s-cpu-"
-      - "^monitor-bridge-k8s-workloads$"
       - "^crowdsec-"
   - name: Observability
     match:
-      - "^monitor-bridge-(prometheus|targets|cluster-prometheus|cluster-targets)$"
-      - "^monitor-bridge-(loki|loki-reachable|promtail-dropped|discord|swallowed-verdicts|kuma-notify-failures)$"
-      - "^monitor-bridge-wan-reachable$"
-      - "^monitor-bridge-traefik"
       # A routing signal, not a per-app tile: it probes ping@internal behind the edge's own
       # self-check path, so it groups with the other edge observability tiles rather than
       # with Services.
@@ -213,34 +207,28 @@ uptime_kuma_k8s_status_page_groups:
   - name: Backups & Storage
     match:
       - "^longhorn-backup$"
-      - "^monitor-bridge-(longhorn-volumes|pvc-fullness|kubelet-readonly)$"
-      - "^monitor-bridge-snapshot-headroom$"
-      - "^monitor-bridge-(b2-reachable|b2-storage|r2-usage)$"
       # The registry PVC's only space reclaim: a storage tile, not an automation one.
       - "^registry-gc$"
       - "^etcd-"
   - name: Hosts & Power
     match:
       - "^daniel-box-disk$"
-      - "^monitor-bridge-(disk|mem|cert|scrutiny|ups)$"
       - "^ups-secondary"
-      - "^host-temperature$"
       - "^cloudflare-(ddns|ip-drift)"
   - name: Raspberry Pi
     match:
       - "^daniel-pi-"
-      - "^monitor-bridge-pi$"
       - "^wg-easy-pi-peers$"
   - name: Media Automation
     match:
       - "^configarr$"
-      - "^monitor-bridge-(janitorr|arr-queue|bazarr|prowlarr-indexers)$"
+      # A janitorr cron's tile, named for the bridge only for Kuma history; not a bridge row.
+      - "^monitor-bridge-janitorr$"
       - "^autofix-fake-remux"
       - "^mkv-attachment-repair$"
       - "^arr-autoblock$"
   - name: Automation & Drift
     match:
-      - "^gitops-deploy-"
       - "^renovate-"
       - "-drift-check$"
       - "^github-ruleset-drift$"

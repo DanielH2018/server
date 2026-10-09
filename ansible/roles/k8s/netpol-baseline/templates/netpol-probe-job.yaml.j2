@@ -1,36 +1,61 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% set homelab = netpol_baseline_enforced | bool %}
 ---
-# Proves the baseline is ENFORCED, not merely applied. Four assertions, because the obvious
-# single one is not sufficient for this slice: these six apps have no in-cluster caller, so
-# "cannot reach littlelink" is true under enforcement, under a missing label, AND when
-# littlelink is down. Each assertion below eliminates one of those.
+# Proves the policies are ENFORCED, not merely applied. One Job, driven by the target table
+# `netpol_baseline_probe_active` (defaults/main.yml). It stands in for a compromised workload
+# trying to move laterally: this pod is on no caller list, so every `refused` row must refuse it.
 #
-# This pod carries NO netpol-baseline label, so the policy does not select it. That is the point
-# — it stands in for a compromised workload trying to move laterally.
+# An inverted leg alone proves nothing. "Cannot reach X" is also true when this pod has no
+# network, when the policy engine denies everything, and when X is down. Each of those has its own
+# leg or gate:
+#
+#   1. CONTROL — traefik:80, open to every source by design. A failure means this pod has no
+#      network or DNS, so nothing below is attributable to a policy.
+#   2. SENTINEL — speedtest:80, a FENCED pod whose policy admits this pod's `netpol-probe: control`
+#      label (networkpolicy-netpol-sentinel.yaml.j2). A failure means admitted traffic is being
+#      denied, so every inverted leg would pass whether or not its policy works.
+#   3. LIVENESS — littlelink through traefik, homelab plane only. It is the positive test of the
+#      baseline's traefik rule.
+#   4. THE TABLE — one `nc` leg per row with an `expect`. A row whose target is down is caught
+#      before this Job starts: tasks/main.yml gates every active row on a ready endpoint.
+#   5. DNS — pihole answers through its fence, homelab plane only.
+#
+# THIS JOB RUNS IN {{ k8s_namespace }}, NOT {{ k8s_observability_namespace }}, including for the
+# observability rows. The observability baseline admits `podSelector: {}`, every pod in that
+# namespace, as an intra-namespace peer. A probe pod placed there would be blocked by nothing, and
+# would report the fence broken while the policy is working as designed.
+#
+# NO HTTP LIVENESS LEG FOR THE OBSERVABILITY ROWS, for a different reason per target. grafana is
+# Authelia-gated, so a forwardauth 302 would read as success without reaching the app.
+# prometheus's route admits only LAN and node-bridge ClientIPs, so a pod-sourced request fails the
+# match before reaching the app. The readiness gate stands in for liveness there.
+#
+# THE POSITIVE DIRECTION OF THE CALLER LISTS IS NOT PROBED HERE. janitorr's verify.yml opens TCP to
+# sonarr, radarr and jellyfin from inside its pod, and sonarr's verify.yml calls its API. Both run
+# on every deploy and fail it if a fence is wrong. Extend one of those rather than adding a
+# positive leg here.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: netpol-baseline-probe
   namespace: {{ k8s_namespace }}
 spec:
-  # Deliberately BELOW the `kubectl wait --timeout=180s` in tasks/main.yml, not equal to it. The
-  # two clocks start at different moments, so equal values make it a coin flip which one fires on
-  # a slow cold image pull — and the two failures read completely differently. Lower here means
-  # the Job is always the clock that expires first, so the pod is terminal (and its logs final)
-  # by the time the wait gives up and the log fetch runs. Costs no wall time either way: with
-  # backoffLimit: 0 a failed Job never satisfies --for=condition=complete, so the wait burns its
-  # full 180s regardless.
-  activeDeadlineSeconds: 120
+  # Below the `kubectl wait --timeout` in tasks/main.yml, so the Job is the clock that expires
+  # first, the pod is terminal and its logs are final when the log fetch runs. Above the worst
+  # case of the script under DROP rather than REJECT: the sentinel's 12 x (5s + 5s) retry, the
+  # control and liveness timeouts, and 5s per table leg.
+  # `ansible/tests/k8s/test_netpol_probe_targets.py` pins the order.
+  activeDeadlineSeconds: 300
   backoffLimit: 0
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
       labels:
+        # No caller list in the repo names this label. Checked against prometheus-callers and
+        # loki-callers too, which admit monitor-bridge, homelab-mcp and homepage.
         app: netpol-baseline-probe
-        # Admits this pod to the sentinel (speedtest:80) and nothing else — see
-        # networkpolicy-netpol-sentinel.yaml.j2. It does NOT affect the inverted assertions:
-        # no policy in the repo names this label except the sentinel's.
+        # Admits this pod to the sentinel (speedtest:80) and nothing else.
         netpol-probe: control
     spec:
       restartPolicy: Never
@@ -43,10 +68,8 @@ spec:
             - sh
             - -c
             - |
-              # 1. CONTROL — the network and DNS work at all. traefik:80 is open to every source
-              #    deliberately (see the spec: narrowing the front door buys nothing and would
-              #    break every other probe job's control). A failure here means this probe proves
-              #    nothing, rather than meaning the policy failed.
+              set -u
+              # 1. CONTROL.
               if ! nc -w 5 -z traefik 80; then
                 echo "CONTROL FAILED: cannot reach traefik:80, so nothing below is attributable"
                 echo "to the policy. Check DNS and the traefik Service."
@@ -54,79 +77,84 @@ spec:
               fi
               echo "control ok: traefik:80 reachable"
 
-              # 2. SENTINEL CONTROL — a FENCED pod that explicitly admits this probe is still
-              #    reachable. This pod carries `netpol-probe: control`, and
-              #    networkpolicy-netpol-sentinel.yaml.j2 admits exactly that label to
-              #    speedtest:80. If this fails, either the probe pod cannot open connections at
-              #    all or the policy engine is denying admitted traffic — and assertion 4 below
-              #    would pass whether or not the policy works.
-              #
-              #    This leg used to dial homepage:3000, which was reachable only because homepage
-              #    was unfenced. Slice 4.5 fences it and slice 5 leaves no unfenced pod at all, so
-              #    the control is now a named peer rather than an accident of the rollout order.
-              #    RETRIED. This is the only leg here whose result depends on kube-router knowing
-              #    THIS pod's OWN labels — assertion 1 dials an open port and assertion 4 asserts
-              #    a denial, and neither needs the source pod resolved. A Job pod is seconds old
-              #    when it dials, and kube-router must observe it and add its IP to the ipset
-              #    behind `netpol-probe: control` first. Measured 2026-08-20: one immediate
-              #    attempt fails with the policy, the labels and the target all correct.
+              # 2. SENTINEL. RETRIED: this is the only leg whose result depends on kube-router
+              #    knowing THIS pod's own labels. A Job pod is seconds old when it dials, and
+              #    kube-router must add its IP to the ipset behind `netpol-probe: control` first.
+              #    Measured 2026-08-20: one immediate attempt fails with the policy, the labels and
+              #    the target all correct.
               i=0
               until nc -w 5 -z speedtest 80; do
                 i=$((i + 1))
                 if [ "$i" -ge 12 ]; then
-                  echo "SENTINEL CONTROL FAILED: cannot reach speedtest:80 after 60s, which the"
-                  echo "sentinel policy admits this pod to. Either this pod cannot open"
-                  echo "connections at all, or admitted traffic is being denied. Assertion 4"
-                  echo "below would pass whether or not the policy works."
+                  echo "SENTINEL CONTROL FAILED: cannot reach speedtest:80 after 12 attempts,"
+                  echo "which the sentinel policy admits this pod to. Either this pod cannot open"
+                  echo "connections at all, or admitted traffic is being denied, so every inverted"
+                  echo "leg below would pass whether or not its policy works."
                   exit 1
                 fi
                 sleep 5
               done
               echo "sentinel control ok: speedtest:80 reachable, admitted by policy"
+{% if homelab %}
 
-              # 3. LIVENESS — littlelink is actually UP and Traefik can reach it. Goes through the
-              #    Traefik VIP by hostname, which is the real allowed path, so this doubles as the
-              #    positive test of the policy's traefik rule. If this fails but 4 passes, the app
-              #    is down (or CrowdSec banned this source) and the fencing result is meaningless.
-              #
-              #    Deliberately littlelink, not bento-pdf: littlelink has use_authelia: false, so
-              #    this request reaches the app directly. An Authelia-gated app would have the
-              #    forwardauth middleware answer first (401, or a 302 to the login portal) before
-              #    Traefik ever proxies to the pod — the probe would then either be permanently
-              #    red for a reason unrelated to enforcement, or print "liveness ok" without ever
-              #    contacting the app, silently reintroducing the exact false-pass this job exists
-              #    to eliminate. If littlelink is ever swapped for an Authelia-gated app, pick
-              #    another unauthed one instead of adding a bypass rule for this probe.
+              # 3. LIVENESS. Deliberately littlelink: it has use_authelia: false, so this request
+              #    reaches the app. An Authelia-gated app would have forwardauth answer first, and
+              #    the leg would pass without contacting the app. littlelink is not the sentinel,
+              #    because a target cannot be both admitted and denied.
               if ! wget -q -T 10 --no-check-certificate -O /dev/null \
                    "https://www.local.{{ domain }}/"; then
                 echo "LIVENESS FAILED: littlelink is not reachable through traefik. Three causes,"
                 echo "and the third is the one that looks like the other two:"
                 echo "  1. the app is down;"
                 echo "  2. the baseline's traefik rule is wrong;"
-                echo "  3. this wget never got as far as the policy — DNS or TLS. This is the"
-                echo "     only busybox-TLS call in the repo, so ssl_client in this image and"
-                echo "     busybox wget's option surface are both unexercised, and Pi-hole"
-                echo "     answers AAAA for .local names with ::, which getaddrinfo may try"
-                echo "     first. Check from inside this pod before touching the policy:"
-                echo "       nslookup www.local.{{ domain }}   # does it resolve, and to what"
-                echo "       nc -w 5 -z traefik 443            # is the TLS port even open"
+                echo "  3. this wget never got as far as the policy: DNS or TLS. busybox wget and"
+                echo "     ssl_client are exercised nowhere else in the repo, and Pi-hole answers"
+                echo "     AAAA for .local names with ::, which getaddrinfo may try first."
+                echo "     Check from inside this pod before touching the policy:"
+                echo "       nslookup www.local.{{ domain }}"
+                echo "       nc -w 5 -z traefik 443"
                 echo "       wget -S -O /dev/null --no-check-certificate https://www.local.{{ domain }}/"
-                echo "Assertion 4 below cannot distinguish enforcement from an app that is"
-                echo "simply not listening."
                 exit 1
               fi
               echo "liveness ok: littlelink reachable through traefik"
+{% endif %}
 
-              # 4. THE ASSERTION — direct pod-to-pod must FAIL. Inverted: success here is the
-              #    failure case. littlelink is deliberately NOT the sentinel from assertion 2 —
-              #    a target cannot be both admitted and denied.
-              if nc -w 5 -z littlelink 3000; then
-                echo "POLICY NOT ENFORCED: reached littlelink:3000 directly from a pod that"
-                echo "carries no netpol-baseline label. Either netpol_baseline_enforced is false,"
-                echo "or the label is missing from littlelink's POD TEMPLATE (check"
-                echo "spec.template.metadata.labels, not spec.selector.matchLabels)."
+              # 4. THE TABLE. A `refused` leg is inverted: a connection is the failure.
+{% for t in netpol_baseline_probe_active if t.expect is defined %}
+{%   set host = t.service if t.plane == 'homelab' else t.service ~ '.' ~ k8s_observability_namespace %}
+{%   set lever = 'netpol_baseline_enforced' if t.plane == 'homelab' else 'netpol_baseline_obs_enforced' %}
+{%   if t.expect == 'refused' %}
+              if nc -w 5 -z {{ host }} {{ t.port }}; then
+                echo "POLICY NOT ENFORCED: reached {{ host }}:{{ t.port }} from a pod on no caller list."
+                echo "Either {{ lever }} is false, the netpol-baseline label is missing from the"
+                echo "target's POD TEMPLATE (spec.template.metadata.labels), or {{ t.policy }}"
+                echo "admits too much."
                 exit 1
               fi
-              echo "isolated: littlelink:3000 unreachable except through traefik"
+              echo "isolated: {{ host }}:{{ t.port }} unreachable from an unlisted caller"
+{%   elif t.expect == 'open' %}
+              if ! nc -w 5 -z {{ host }} {{ t.port }}; then
+                echo "OPEN PORT FAILED: {{ host }}:{{ t.port }} refused a connection {{ t.policy }}"
+                echo "leaves open to every source."
+                exit 1
+              fi
+              echo "open port ok: {{ host }}:{{ t.port }} reachable from an unlisted caller, as designed"
+{%   endif %}
+{% endfor %}
+{% if homelab %}
+
+              # 5. DNS. daniel-pi.lan is a pihole-only record: CoreDNS holds no authority for
+              #    `.lan`, so the query traverses `forward .`, and Cloudflare (the fallback on that
+              #    line) NXDOMAINs it. Resolving it therefore proves pihole itself answered.
+              #    Two forms: `daniel-pi.lan` has one dot against the pod's `ndots:5`, and some
+              #    BusyBox nslookup builds stop at the first search-list NXDOMAIN. The trailing-dot
+              #    form skips the search list. Nothing but pihole answers either form.
+              if ! nslookup daniel-pi.lan. >/dev/null 2>&1 &&
+                 ! nslookup daniel-pi.lan >/dev/null 2>&1; then
+                echo "DNS FAILED: pihole did not answer daniel-pi.lan -- check the pihole policy"
+                exit 1
+              fi
+              echo "dns ok: pihole answered daniel-pi.lan, so :53 is reachable through the fence"
+{% endif %}
 {{ hardened_security_context() }}
 {{ container_resources(cpu_limit='200m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}

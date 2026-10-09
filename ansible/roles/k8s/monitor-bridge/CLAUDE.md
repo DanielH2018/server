@@ -5,8 +5,9 @@ A stdlib-only Python loop (`files/cli.py`) that runs every registered check each
 threshold breach pages. The *At a glance* block below has why it carries neither a readiness
 probe nor auto-deploy.
 
-**`files/registry.py`'s `build_checks()` is the authority on which checks exist**; each check's
-`verdicts/` function says what it evaluates. This file states what holds across every check.
+**`files/check_table.py`'s `CHECKS` declares every check once**: body, push token, gate and
+Kuma tile, from which the registry, the gate sets, the env-secret and uptime-kuma's tiles
+derive. Each check's `verdicts/` function says what it evaluates. This file states what holds across every check.
 `docs/monitor-bridge-checks.md` has the measurement behind each number, and
 `docs/monitor-bridge-internals.md` the module table, prerequisites, gate-set membership and
 test-patching rules.
@@ -30,16 +31,12 @@ Traefik or gate sits in a probe's path.
 
 Four reachability gates run first each cycle and suppress their dependents, so one outage pages
 once; a suppressed check pushes `up` with a `skipped — <source> unreachable` message, so its
-heartbeat survives. The sets live in `files/gates.py`, pinned to the registry.
+heartbeat survives. A check's row names its gate in the `gate` column, with the reason, and
+`files/gates.py` derives the sets from it.
 
-- **Prometheus Reachable**: when Prometheus is unreachable, every
-  prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_latency/traefik_404/traefik_421/ups/
-  host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly/pi_pressure/
-  k8s_workloads/cluster_targets/pvc_fullness/etcd_db_size) is
-  **suppressed**. `tests/test_claude_md_prom_dependent_enumeration.py` pins that list to
-  `PROM_DEPENDENT` — edit the set and the sentence together.
-- **Loki, B2 and WAN Reachable** gate their own dependent sets.
-  `docs/monitor-bridge-internals.md` has each membership and the rules that shaped it.
+- **Prometheus, Loki, B2 and WAN Reachable** suppress the rows naming them. One value per row,
+  a gate or `startup_grace`, keeps the sets disjoint. The internals page has the membership
+  rules.
 - **A gate has no gate of its own** — a tile that cannot go red is not coverage; #2825 deleted
   the second Prometheus gate on that reasoning.
 - **`EXPORTER_DEPENDENT`** suppresses a dead node-exporter's dependents, keyed by scrape job,
@@ -62,17 +59,19 @@ the template rather than the constant.
 Two push-side rules bind as widely. **Every push monitor has `max_retries=0`**, so widen
 `uptime_kuma_k8s_bridge_push_interval` to fix post-boot flapping and never add retries
 (`test_push_monitors_never_retry`). **A new arm folds into an existing monitor by default**;
-prove its selector against a live source first (checks page's *Traps*). **A new tile is a
-`monitor_bridge_push_checks` row** in `defaults/main.yml`. The liveness probe, the credentials
-and the prerequisites are on the internals page.
+prove its selector against a live source first (checks page's *Traps*). **A new check is one
+`check_table.py` row, one `check_*` body and its push-token secret** (`/add-secret`); the
+Kuma tile renders from the row, and landing it deploys uptime-kuma too. The liveness probe,
+the credentials and the prerequisites are on the internals page.
 
 ## Module layout — and the one rule that governs it
 
-`files/` holds four flat modules and three packages: `bridge/` (shared plumbing), `checks/` (one
+`files/` holds its flat modules and three packages: `bridge/` (shared plumbing), `checks/` (one
 module per domain of `check_*` bodies, mirroring its test file) and `verdicts/` (pure logic
-taking its inputs as arguments). `registry.py` and `gates.py` import `bridge.types` and the
-`checks.*` bodies, never each other. Modules split at 600 lines; the internals page has the
-per-module table.
+taking its inputs as arguments). `check_table.py` imports only `bridge.types` and the
+`checks.*` bodies; `registry.py` and `gates.py` import it, never each other. A row's fields
+but `fn` are literals: `ansible/filter_plugins/py_table.py` parses the table without running
+it. Modules split at 600 lines; the internals page has the per-module table.
 
 **Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`, a
 flat ConfigMap key mounted back at its path by the Deployment's `items:`. A module missing from

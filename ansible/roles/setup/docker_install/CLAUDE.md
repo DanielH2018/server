@@ -20,7 +20,6 @@ answers. This file keeps the rules a session must not break.
 - In `ansible/initial_setup.yml`, after [[sops_setup]] — every host, **unconditionally**.
   `tasks/main.yml` is a dispatcher: `has_docker: true` runs `install.yml` (everything below),
   `has_docker: false` runs `teardown.yml`.
-- `uv run ansible-playbook ansible/initial_setup.yml --tags "docker_install"`.
 - **Granular tags:** `docker-repo` (APT repo + GPG + the cache refresh), `docker-engine`
   (install + hold + v1-wrapper removal), `docker-group`, `docker-daemon` (daemon.json +
   conditional restart), `docker-networks`, `docker-go-runtime` (both Go runtime drop-ins;

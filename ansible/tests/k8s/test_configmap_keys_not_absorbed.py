@@ -21,9 +21,10 @@ see it. Three templates are covered only in part for that reason:
 all, and `artifacts/configmap.yaml.j2` writes `known_services.json` literally but loops its
 three `.py` keys over `artifacts_modules`. Those `.py` keys are pinned by
 `test_artifacts_configmap.py` instead, which compares them against the files on disk.
-monitor-bridge's `env-secret.yaml.j2` loops its 44 `KUMA_PUSH_*` keys over
-`monitor_bridge_push_checks` (#3659), and that role's `tests/test_push_check_table.py` pins
-them against the table.
+monitor-bridge's `env-secret.yaml.j2` loops its 44 `KUMA_PUSH_*` keys over its
+`files/check_table.py` (#3659), and that role's `tests/test_check_table.py` pins them against
+the table. uptime-kuma's `static-monitors.yaml.j2` loops its 44 bridge tiles over the same
+table (#3781); the render-based guards in `ansible/tests/services/` parse each one.
 
 Two narrowings, both because the source is a template and not YAML:
 

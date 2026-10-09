@@ -13,8 +13,10 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
-- **Renders nothing runnable** — NetworkPolicy objects plus five probe Jobs
-  (`netpol-probe*-job.yaml.j2`) that verify the policy actually fenced what it claims to.
+- **Renders nothing runnable** — NetworkPolicy objects plus one probe Job
+  (`netpol-probe-job.yaml.j2`) that verifies the policies actually fence what they claim to.
+  Its legs and its readiness gate both read the target table `netpol_baseline_probe_targets`
+  in `defaults/main.yml`. Add a target as a row there, never as a second Job (#3813).
 - **Auto-deploy-eligible because** an image-only diff touches only the pinned probe image; the policies re-apply unchanged and the role hard-fails
   if the live exempt set has drifted from `netpol_baseline_exempt_workloads`.
 - **`netpol_baseline_scope: namespace`** — the baseline selects every pod in the namespace
@@ -52,6 +54,10 @@ needs, decides which one.
   `netpol_baseline_enforced` lever or `netpol_baseline_node_cidrs`. Role defaults are
   role-scoped, so neither resolves in another role. Every `templates/networkpolicy-*.yaml.j2`
   file here reads one of them.
+  Each one but `networkpolicy-callers.yaml.j2` also opens with a `DECIDED:` marker naming the
+  shape the callers model below cannot express: an ipBlock, a from-less open port, UDP, a
+  second port, a cross-namespace peer or a non-`app:` peer (#3701). The `bespoke-netpol-says-why-it-is-not-a-callers-fence`
+  row of `ansible/tests/repo/test_census_rows_roles.py` fails on one that does not.
 - **As data on the `containers_list` entry**, when the fence is one port and a list of caller
   pods: `netpol_from: [apps]`, rendered through the `networkpolicy` macro in
   `ansible/templates/networkpolicy.yml.j2`. `templates/networkpolicy-callers.yaml.j2` loops

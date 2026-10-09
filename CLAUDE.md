@@ -40,8 +40,6 @@ review — routes through the skill listing rather than this table.
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** (a file carrying a `generated_from:` banner); a hook denies the write. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
-| CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. `.claude/rules/generated-docs.md` has the regenerate command, the generator whose `FRAGMENTS` names the tunables, and why this one gate is not left to the cron. |
-| CI fails on `test_every_deployed_role_block_matches_what_the_generator_writes_now` | You changed a role's defaults, templates, tasks, playbook entry or `containers_list` entry (k8s, setup or the Pi's compose roles), or hand-edited its generated `## At a glance` block. Run `uv run python scripts/docs/gen_role_glance.py` and commit; the reasoning goes in the bullets below the block. |
 | CI fails on `test_every_recorded_atom_hashes_as_recorded` | A `CLAUDE.md` section's support no longer matches what `docs/facts.lock` recorded. The finding names which of five causes: you changed a cited symbol, value, test or marker (`moved`/`missing`); you added a citation to an already-verified section (`unrecorded-atom`); you dropped one (`atom-no-longer-cited`); you cited a marker prefix that now matches twice (`ambiguous`); or the interpreter moved (`interpreter-moved`). The middle two reach CI only when you commit past the `facts-reverify-changed` hook, which re-hashes them in the commit that edits the prose. Edit the section, or `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` and commit `docs/facts.lock`. A RENAMED heading reads as `section-gone` instead: verify the new key, then `fact_status.py forget '<old key>'`. `.claude/rules/facts.md` has the citation grammar. |
 | Writing a Python module or a test, and deciding where it goes | `.claude/rules/python-layout.md` — the `sys.path` bootstrap a cross-directory import needs, the `tests/` sibling rule and the `ansible/tests/` taxonomy. It loads on its own when you touch a path it governs; read it first when you are choosing the path. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `ansible/roles/k8s/monitor-bridge/files/registry.py` (the check registry) **first** — mature setup, most are handled |
@@ -93,13 +91,9 @@ on the run says so. Commit first. `--check` and `--dry-run` still read the worki
 is where an uncommitted edit is meant to be exercised.
 
 **A failing run says what its exit code means — read its last two lines rather than looking
-the number up.** `deploy.sh: <NAME> (<code>): <meaning> <what to do>`, then
-`DEPLOY-VERDICT: <verdict> (<the arguments>)`, both from `scripts/lib/exit_codes.py`. Every
-member of `DEPLOY_SH_NO_VERDICT` means **nothing was deployed** — a resume point rather than a
-playbook failure. `DEPLOY_BAD_FLAGS` also ran nothing, but the fix is the command line rather
-than a retry. `DEPLOY_PLAYBOOK_FAILED` is the inverse: the playbook ran, a task failed, and
-changes before it are live — not a safe re-run. The Pi's `-e target=`, config-only runs and
-initial setup are in the **`deploy` skill**; the per-code table is `docs/reference/scripts.md`.
+the number up.** Which exits deployed nothing and which left changes live is owned by
+`docs/deploying.md`'s *Exit codes are resume points*. The Pi's `-e target=`, config-only runs
+and initial setup are in the **`deploy` skill**.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and
@@ -135,7 +129,8 @@ list of conclusions it covers (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
 **Verify the change, not just the workload.** The `VERDICT:` line cannot see whether *your
-change* took effect, so exercise the thing you actually changed as well.
+change* took effect, so exercise the thing you actually changed as well. `docs/landing.md` has
+the two incidents that made this a rule.
 
 ### Working alongside other sessions
 
@@ -151,8 +146,10 @@ Say which of these applies, then stop:
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
   broad apply failed. `hold_plane` names each failed playbook when it was the latter.
-- A change in `_BROAD_MANUAL_PREFIXES` — `bootstrap.yml`, `k3s-bringup.yml`,
-  `initial_setup.yml` — sits in the `local..origin` range. The deployer applies every other broad
+- A change in one of the bring-up playbooks — `bootstrap.yml`, `k3s-bringup.yml`,
+  `initial_setup.yml`, the list
+  `ansible/roles/setup/gitops_deploy/files/deploy_changes.py:_BROAD_MANUAL_PREFIXES` holds —
+  sits in the `local..origin` range. The deployer applies every other broad
   change itself, but not the bring-up playbooks: those run by hand by construction. If it is
   another session's, clearing it means applying their change; name it and stop.
 - A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer

@@ -552,3 +552,4 @@ def deploy_phase(ln: Landing) -> None:
         )
     deploy_outcome(ln, rc)
     ln.ledger.t_deploy = t.clock()
+    ln.deploy_ended_at = t.wall_clock()

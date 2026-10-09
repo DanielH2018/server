@@ -1,3 +1,9 @@
+{# DECIDED: traefik's fence is an ipBlock origin lock on :8443, a from-less :8000 and a
+   cross-namespace prometheus grant on two ports, so it stays bespoke.
+   The callers model (`netpol_from` / `netpol_fences`, macro in
+   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+#}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

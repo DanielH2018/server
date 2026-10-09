@@ -22,6 +22,7 @@ import deploy_alerts
 import deploy_broad_k8s
 import deploy_defer
 import deploy_io
+import deploy_k8s_owed
 import deploy_locks
 import deploy_narrow
 from deploy_changes import setup_tags_for, setup_role_tag
@@ -258,7 +259,7 @@ def handle_broad(
             # dedupe marker then suppressed the page the re-merging tick owes. Sending it
             # from each exit that leaves the range merged keeps #2383's property — every one
             # of them is reached with `local == origin`, where no later tick re-evaluates.
-            deploy_defer.alert_and_record_deferred(
+            deploy_k8s_owed.alert_and_record_deferred(
                 tools, state, config, origin, set(), cs, plan.k8s_services
             )
             deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
@@ -324,14 +325,14 @@ def handle_k8s(
     state.clear_service_hold(cs.k8s_deploy)
     # A bump an earlier broad tick deferred for budget is applied by its own later deploy,
     # which is the ordinary way out of the marker (#2449).
-    deploy_defer.clear_applied_k8s_deferred(state, cs.k8s_deploy)
+    deploy_k8s_owed.clear_applied_k8s_deferred(state, cs.k8s_deploy)
     # Only after the gate inside deploy_k8s has passed and the hold is cleared — annotating
     # from inside the try would mark a deploy that the rollout gate went on to reject.
     tools.emit_deploy_annotation(cs.k8s_deploy, origin)
     # A promoted k8s service is image-bump-only, so it is never the consumer of a secret that
     # rode along in the same tick. Without this the rotated value is ff-merged and forgotten.
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
-    deploy_defer.alert_and_record_deferred(
+    deploy_k8s_owed.alert_and_record_deferred(
         tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
     )
     return 0
@@ -422,7 +423,7 @@ def handle_no_services(
     # tasks/ changes aren't auto-deployed but DO change what a deploy does, so they must not
     # sit silently ff-merged. Nothing was deployed this tick (deployed=set()), so
     # the full sets are flagged. Same helper runs on the deploy path for a combined push.
-    deploy_defer.alert_and_record_deferred(
+    deploy_k8s_owed.alert_and_record_deferred(
         tools, state, config, origin, set(), cs, plan.k8s_services
     )
     return 0

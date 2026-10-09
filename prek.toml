@@ -349,6 +349,56 @@ language = "system"
 pass_filenames = false
 files = "^(pyproject\\.toml|uv\\.lock)$"
 
+# Rewrites a role CLAUDE.md's generated `## At a glance` block in the commit that moves one of
+# its sources, and fails like a formatter so the author stages the doc and commits again
+# (#3698). Before it, every such edit went red in CI on
+# test_every_deployed_role_block_matches_what_the_generator_writes_now and cost a fix commit.
+# The test stays as the backstop for a commit that skipped prek.
+#
+# It sits above `facts-reverify-changed`: several `#At a glance` sections are rows in
+# docs/facts.lock, so the reverify has to read the rewritten block, not the stale one.
+#
+# `files` is every input the generator reads: the roles, the inventory, the shared templates
+# whose macros declare claims, the bring-up playbooks at ansible/ (`glance_facts.
+# SETUP_PLAYBOOKS`), the filter plugin it imports, and the Python under scripts/docs and
+# scripts/lib. A role CLAUDE.md matches too, so a hand edit inside the
+# markers is reverted in the same commit. None of the docs-refresh cron's three staged paths
+# match, so that cron's commit never writes under ansible/roles/. Renovate edits defaults
+# without prek, but only an image tag or digest, which the block does not print.
+#
+# Cost, measured: 0.5s wall for a full run over all three planes.
+[[repos.hooks]]
+id = "regen-role-glance"
+name = "Role At a glance blocks match their sources"
+entry = "uv run --frozen python scripts/docs/gen_role_glance.py --fix"
+language = "system"
+pass_filenames = false
+files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py)$"
+
+# Rewrites a stale docs fragment (docs/assets/generated/fragments/) in the commit that moves
+# one of its tunables, and fails like a formatter so the author stages the fragment and commits
+# again (#3827). Before it, `static-ratchet-tests` ran
+# test_every_committed_fragment_matches_what_the_generator_writes_now at commit time, which
+# only failed, and the root CLAUDE.md carried a row teaching the hand repair. It sits above
+# `static-ratchet-tests` so that test reads the rewritten fragment.
+#
+# `files` is every input the generator reads: role defaults and templates (the auto-deploy
+# coverage walks every k8s role's defaults, which no fragment header lists), the inventory,
+# the filter plugin, `ansible/secret_rotation.yml`, the deployer's deploy_changes.py, and the
+# Python under scripts/ that reads or renders a fragment. The fragments themselves match too,
+# so a hand edit is reverted in the same commit. That makes the hook fire on the docs-refresh
+# cron's commit, which stages docs/assets/generated/; build_docs.py regenerates the fragments
+# into that directory before the cron commits, so there it writes nothing and exits 0.
+#
+# Cost, measured: 0.2s wall for a full run.
+[[repos.hooks]]
+id = "regen-doc-fragments"
+name = "Docs fragments match their sources"
+entry = "uv run --frozen python scripts/docs/gen_doc_fragments.py --fix"
+language = "system"
+pass_filenames = false
+files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|ansible/[^/]+\\.ya?ml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
+
 # Re-hashes a verified section whose citation SET an edit changed, in the commit making the
 # edit, and fails like a formatter so the author stages what it wrote. It refuses any section
 # whose recorded atom MOVED -- that is content drift, and re-reading the prose is a human's

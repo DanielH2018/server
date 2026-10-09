@@ -164,21 +164,17 @@
     'created' in netpol_baseline_observability_apply.stdout
     or 'configured' in netpol_baseline_observability_apply.stdout
 
-# ── prove the policy is enforced, rather than merely applied ────────────────────────────────
+# ── prove the policies are enforced, rather than merely applied ─────────────────────────────
 # DECIDED: probe pods need no per-node placement; ingress NetworkPolicy is enforced on the
 # DESTINATION node, and the probe targets schedule onto daniel-server.
 #
-# DECIDED: the five probe blocks below stay hand-copied — do not fold them into an
-# `include_tasks` loop. Tried 2026-08-23: it works and it shrinks this file from 955 lines to
-# 470, with ansible-lint green at production profile. It also breaks
-# `test_k8s_autodeploy_guard.py::test_auto_deployable_roles_gate_every_batch_workload_they_render`.
-# That test's `_batch_gated_names` matches each rendered Job name against a LITERAL
-# `wait --for=condition=complete job/<name>` in the task text. Under a loop the wait reads
-# `job/netpol-baseline-probe{{ probe.suffix }}`, which the scanner cannot match: the wait still
-# runs, but the check that catches a genuinely ungated probe Job stops working for this role.
-# N Jobs need N literal wait statements, so the duplication is the guard's substrate — and
-# planting literal names somewhere the scanner happens to read would be a dodge, not a fix.
-# Same class as textual-guard-checks-break-on-indirection.
+# DECIDED: one probe Job driven by `netpol_baseline_probe_targets`, not one Job per rollout slice
+# (#3813). The five slice Jobs recorded the order the default-deny rollout happened in, which no
+# probe needs. They stayed hand-copied while there were five, because folding them into an
+# `include_tasks` loop breaks `_batch_gated_names` in `ansible/tests/deploy/_autodeploy_batch.py`: it credits a Job only
+# against a LITERAL `wait --for=condition=complete job/<name>`, and a looped wait reads
+# `job/netpol-baseline-probe{{ suffix }}`. One Job has one literal wait, so the guard still reads
+# it. Add a target as a table row, never as a second Job.
 #
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
 # a Job's pod template is immutable, so a Job left beside the policy would be re-applied as
@@ -194,6 +190,16 @@
   become: true
   when: not k8s_dry_run | bool
 
+# The per-slice probes rendered into these until #3813 merged them. Nothing reads them now.
+- name: Remove the retired per-slice probe directories
+  tags: [config]
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/manifests/netpol-baseline-probe-{{ item }}"
+    state: absent
+  become: true
+  when: not k8s_dry_run | bool
+  loop: [slice2, slice3, slice4, slice45]
+
 - name: Render the netpol-baseline probe
   tags: [config]
   ansible.builtin.template:
@@ -205,10 +211,67 @@
   become: true
   when: not k8s_dry_run | bool
 
+# Most of the probe's legs are INVERTED: a failed `nc` is the PASS case. A crashlooping or
+# scaled-to-zero target reads identically to a correctly fenced one, and the probe would print
+# "isolated" for a reason that has nothing to do with the policy. So every active row is proved
+# up first, at the layer that has cluster access. The `open` legs are gated for the opposite
+# reason: they must succeed, so a down target would read as a policy fault. Rows with no `expect`
+# are gated without being dialled.
+#
+# EndpointSlice, not `get endpoints`: an EndpointSlice states readiness per address
+# (`.endpoints[].conditions.ready`). The gate and the Job read the same list, so a leg cannot be
+# added without its gate.
+- name: Read the probe targets' endpoint readiness
+  tags: [deploy]
+  when: not k8s_no_mutate
+  ansible.builtin.command:
+    # `endpoints[*]`, NOT `endpoints[?(@.conditions.ready==true)]`. A Service with no ready pods
+    # keeps its EndpointSlice and sets `endpoints: null` rather than `[]`, and kubectl's jsonpath
+    # filter cannot filter nil: it exits 1 with `<nil> is not array or slice` and a 3 KB dump of
+    # the object. So the READ would die before the assert below could name the target. Measured
+    # against the live cluster: the filter form exits 1 on terraria (0 replicas) and 0 on
+    # freshrss, while this form exits 0 on both, empty and `true` respectively.
+    #
+    # Readiness is still asserted: the path returns each endpoint's `conditions.ready`, and the
+    # assert requires an explicit `true`. Selecting `targetRef.name` under `[*]` would have been
+    # null-safe too, and would have counted a NOT-ready endpoint as present.
+    cmd: >-
+      k3s kubectl
+      -n {{ k8s_namespace if item.plane == 'homelab' else k8s_observability_namespace }}
+      get endpointslice -l kubernetes.io/service-name={{ item.service }}
+      -o jsonpath={.items[*].endpoints[*].conditions.ready}
+  become: true
+  changed_when: false
+  register: netpol_baseline_probe_targets_ready
+  loop: "{{ netpol_baseline_probe_active }}"
+  loop_control:
+    label: "{{ item.service }}"
+
+# Not best-effort: an empty result, from zero ready addresses or from a query that could not be
+# answered, fails the play rather than letting the probe run and misreport. A non-empty stdout is
+# not enough: a target whose only endpoint is `false` would read as present.
+- name: Fail if any probe target has no ready endpoint
+  tags: [deploy]
+  when: not k8s_no_mutate
+  ansible.builtin.assert:
+    that: "'true' in item.stdout.split()"
+    fail_msg: >-
+      {{ item.item.service }} ({{ item.item.plane }}) has no ready endpoint, so the netpol-baseline
+      probe was not run. Most of its legs are inverted: a failed connection is the PASS case, so
+      it cannot tell "fenced by the policy" apart from "nothing is listening". Fix
+      {{ item.item.service }}'s readiness first, then re-run this deploy so the probe's result is
+      attributable to the policy again.
+    quiet: true
+  loop: "{{ netpol_baseline_probe_targets_ready.results }}"
+  loop_control:
+    label: "{{ item.item.service }}"
+
+# Every task from here runs while either lever is on. The table rows of a plane whose lever is
+# off are not rendered, so the Job tests only what is meant to be enforced.
 - name: Clear the previous netpol-baseline probe run
   tags: [deploy]
   when:
-    - netpol_baseline_enforced | bool
+    - netpol_baseline_probe_active | length > 0
     - not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
@@ -220,7 +283,7 @@
 - name: Run the netpol-baseline probe
   tags: [deploy]
   when:
-    - netpol_baseline_enforced | bool
+    - netpol_baseline_probe_active | length > 0
     - not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
@@ -229,34 +292,20 @@
   become: true
   changed_when: true
 
-# 130s, not 180s, and the same on all five probe waits below. Sized against two numbers rather
-# than picked:
-#
-#   * the FLOOR is each probe Job's own `activeDeadlineSeconds: 120`. A wait shorter than that
-#     would report a timeout on a probe the cluster still considers legitimately running — the
-#     `until nc -w 5 -z speedtest 80` retry loop in the probe scripts is bounded at 12
-#     iterations and can legitimately run into the deadline on a DROP path. So the Job's own
-#     deadline stays the thing that decides, and this only has to outlast it.
-#   * the CEILING is `K8S_DEPLOY_TIMEOUT_S` (1440s), which gitops_deploy gives the whole
-#     unattended deploy. Measured live, all five probes on daniel-box with the image cached:
-#     8s, 10s, 4s, 5s, 8s — 35s of waiting in total. A 180s wait would put the arithmetic
-#     worst case at 5 x 180 = the entire budget.
-#
-# The five-timeouts-in-a-row worst case is not actually reachable: each wait is followed by its
-# own `Fail if … did not complete`, so the play aborts at the FIRST probe that does not
-# complete. The real worst case is the successful probes plus one timeout. Lowering the timeout
-# is still worth it — it cuts 50s of dead wall time off every failing deploy, and it makes the
-# arithmetic bound (5 x 130 = 650s) fit the budget for a reader who does not trace the fail
-# tasks.
+# 310s. The FLOOR is the Job's own `activeDeadlineSeconds: 300`: a shorter wait would report a
+# timeout on a probe the cluster still considers legitimately running, and the Job's deadline
+# should be the clock that decides. The CEILING is `K8S_DEPLOY_TIMEOUT_S` (1440s), which
+# gitops_deploy gives the whole unattended deploy. Measured live with the five slice Jobs this
+# one replaced, image cached: 8s, 10s, 4s, 5s, 8s.
 - name: Wait for the netpol-baseline probe
   tags: [deploy]
   when:
-    - netpol_baseline_enforced | bool
+    - netpol_baseline_probe_active | length > 0
     - not k8s_no_mutate
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe --timeout=130s
+      job/netpol-baseline-probe --timeout=310s
   become: true
   changed_when: false
   register: netpol_baseline_probe
@@ -265,18 +314,18 @@
 # Deliberately unconditional on the wait's outcome (not `when: netpol_baseline_probe is
 # succeeded`): with backoffLimit: 0 a failing probe never satisfies --for=condition=complete, so
 # the wait above times out. If Report/Show only ran on success, the play would abort at the wait
-# with nothing but "timed out waiting for the condition" — none of the four assertion messages
-# the probe was written specifically to print. Logs must be fetched from the failed Job before
-# the failure below stops the play.
+# with nothing but "timed out waiting for the condition", none of the messages the probe was
+# written to print. Logs must be fetched from the failed Job before the failure below stops the
+# play.
 #
 # `failed_when: false` for the same reason the wait above has it, one level further out: if the
 # pod never starts (image pull failure, node pressure, an admission rejection) there are no logs
-# and `kubectl logs` exits non-zero. Without the guard the play aborts HERE — before Show and
-# before the descriptive fail — which is precisely the outcome this ordering exists to avoid.
+# and `kubectl logs` exits non-zero. Without the guard the play aborts HERE, before Show and
+# before the descriptive fail.
 - name: Report the netpol-baseline probe
   tags: [deploy]
   when:
-    - netpol_baseline_enforced | bool
+    - netpol_baseline_probe_active | length > 0
     - not k8s_no_mutate
   ansible.builtin.command:
     cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/netpol-baseline-probe"
@@ -290,7 +339,7 @@
 - name: Show the netpol-baseline probe result
   tags: [deploy]
   when:
-    - netpol_baseline_enforced | bool
+    - netpol_baseline_probe_active | length > 0
     - not k8s_no_mutate
   ansible.builtin.debug:
     msg: >-
@@ -306,707 +355,13 @@
   # netpol_baseline_probe.rc from being dereferenced on a dry run, where the wait that registers
   # it never ran.
   when:
-    - netpol_baseline_enforced | bool
+    - netpol_baseline_probe_active | length > 0
     - not k8s_no_mutate
     - netpol_baseline_probe.rc != 0
   ansible.builtin.fail:
     msg: >-
       netpol-baseline probe did not complete (rc={{ netpol_baseline_probe.rc }}).
-      {{ 'It printed no output at all, so the pod never ran its script — this is a scheduling,
+      {{ 'It printed no output at all, so the pod never ran its script. This is a scheduling,
       image-pull or admission failure, NOT an assertion failure; see the describe command above.'
       if not netpol_baseline_probe_log.stdout_lines else
-      'See the logged assertion output above for which of the four checks failed.' }}
-
-# ── slice 2: prove the per-workload allow policies admit exactly their listed callers ──────────
-# Own directory, same reason as the slice-1 probe above: `kubectl apply -f <dir>` reads every
-# file in the directory it is given, and a Job's pod template is immutable.
-- name: Create the netpol-baseline-probe-slice2 manifest directory
-  tags: [config]
-  ansible.builtin.file:
-    path: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice2
-    state: directory
-    mode: "0700"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Render the netpol-baseline-probe-slice2 probe
-  tags: [config]
-  ansible.builtin.template:
-    src: netpol-probe-slice2-job.yaml.j2
-    dest: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice2/netpol-probe-slice2-job.yaml
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-# The slice-2 probe's assertions are INVERTED (see netpol-probe-slice2-job.yaml.j2): a failed
-# `nc` is the PASS case. That means a crashlooping or scaled-to-zero target reads
-# identically to a correctly-fenced one — both produce "unreachable" — and the probe would print
-# "isolated: ... unreachable from an unlisted caller" and exit 0 for a reason that has nothing to
-# do with the policy. Slice 1's probe avoids this with its own liveness leg (assertion 3, through
-# traefik to littlelink); slice 2 cannot reuse that shape because sonarr is Authelia-gated — a
-# forwardauth 302 would look like a healthy backend without the request ever reaching the app,
-# the exact trap slice 1's probe header documents as the reason it picks an UNauthed app instead.
-# So the liveness check happens here, at the layer that already has cluster access, gating the
-# probe itself rather than living inside it.
-#
-# EndpointSlice, not `get endpoints`: EndpointSlice states readiness per address, as a condition on
-# each entry (`.endpoints[].conditions.ready`), so one jsonpath filter selects exactly the ready
-# backends. Endpoints can express readiness too — `subsets[].addresses` against
-# `subsets[].notReadyAddresses` — and rc alone already separates the two failure cases there
-# (`get endpoints <missing>` exits non-zero with NotFound; an existing Service with no ready
-# backends exits 0). So this is a choice about reading readiness directly, not the only way to ask.
-# Same query shape as roles/k8s/pihole/tasks/main.yml's own endpoint-readiness check.
-- name: Read the slice-2 probe targets' endpoint readiness
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    # `endpoints[*]`, NOT `endpoints[?(@.conditions.ready==true)]`. A Service with no ready
-    # pods keeps its EndpointSlice and sets `endpoints: null` rather than `[]`, and kubectl's
-    # jsonpath filter cannot filter nil: it exits 1 with `<nil> is not array or slice` and a
-    # 3 KB dump of the object. So the READ would die before the assert below could name the
-    # target, and the operator would get a Go template error instead of a diagnosis. Measured
-    # against the live cluster: the filter form exits 1 on terraria (0 replicas) and 0 on
-    # freshrss, while this form exits 0 on both, empty and `true` respectively.
-    #
-    # Readiness is still asserted — the path returns each endpoint's `conditions.ready`, and
-    # the assert requires an explicit `true`. Selecting `targetRef.name` under `[*]` would have
-    # been null-safe too, and would have counted a NOT-ready endpoint as present.
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name={{ item }}
-      -o jsonpath={.items[*].endpoints[*].conditions.ready}
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice2_targets
-  # One entry per target the probe asserts against. Adding an assertion to
-  # netpol-probe-slice2-job.yaml.j2 without adding its target here reopens the silent-green hole
-  # this gate exists to close.
-  loop:
-    - sonarr
-    - radarr
-    - prowlarr
-    - qbittorrent
-
-# Not best-effort: a silent pass here is exactly the failure mode this task exists to close, so
-# an empty result — whether from zero ready addresses or a query that could not be answered —
-# fails the play rather than letting the probe run and misreport.
-- name: Fail if any slice-2 probe target has no ready endpoint
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.assert:
-    that: "'true' in item.stdout.split()"
-    fail_msg: >-
-      {{ item.item }} has no ready endpoint, so the slice-2 probe was not run. Its assertions are
-      inverted — a failed connection is the PASS case — so it cannot tell "fenced by the policy"
-      apart from "nothing is listening"; running it against a down target would report green for
-      the wrong reason. Fix {{ item.item }}'s readiness first (check
-      `sudo k3s kubectl -n {{ k8s_namespace }} get pods -l app={{ item.item }}` and its rollout
-      status), then re-run this deploy so the probe's result is attributable to the policy again.
-    quiet: true
-  loop: "{{ netpol_baseline_probe_slice2_targets.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: Clear the previous netpol-baseline-probe-slice2 run
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} delete job netpol-baseline-probe-slice2
-      --ignore-not-found --wait=true
-  become: true
-  changed_when: true
-
-- name: Run the netpol-baseline-probe-slice2 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl apply -f
-      /etc/rancher/k3s/manifests/netpol-baseline-probe-slice2/netpol-probe-slice2-job.yaml
-  become: true
-  changed_when: true
-
-- name: Wait for the netpol-baseline-probe-slice2 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe-slice2 --timeout=130s
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice2
-  failed_when: false
-
-# Same reasoning as the slice-1 Report task above: unconditional on the wait's outcome, and
-# `failed_when: false`, so a failing probe still gets its logs fetched and shown before the play
-# aborts, instead of dying at the wait with nothing but "timed out waiting for the condition".
-- name: Report the netpol-baseline-probe-slice2 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/netpol-baseline-probe-slice2"
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice2_log
-  failed_when: false
-
-# stdout_lines is [] when the pod never ran, so print stderr (where "container not found" and the
-# other kubectl-side reasons land) and a next step, rather than an empty list.
-- name: Show the netpol-baseline-probe-slice2 result
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.debug:
-    msg: >-
-      {{ netpol_baseline_probe_slice2_log.stdout_lines
-         or ['no probe output. kubectl logs said: '
-             ~ (netpol_baseline_probe_slice2_log.stderr | default('') | trim | default('(nothing)', true)),
-             'Inspect with: sudo k3s kubectl -n ' ~ k8s_namespace
-             ~ ' describe job netpol-baseline-probe-slice2'] }}
-
-- name: Fail if the netpol-baseline-probe-slice2 probe did not complete
-  tags: [deploy]
-  # Ansible short-circuits a `when` list, so `not k8s_no_mutate` is what keeps
-  # netpol_baseline_probe_slice2.rc from being dereferenced on a dry run, where the wait that
-  # registers it never ran.
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-    - netpol_baseline_probe_slice2.rc != 0
-  ansible.builtin.fail:
-    msg: >-
-      netpol-baseline-probe-slice2 did not complete (rc={{ netpol_baseline_probe_slice2.rc }}).
-      {{ 'It printed no output at all, so the pod never ran its script — this is a scheduling,
-      image-pull or admission failure, NOT an assertion failure; see the describe command above.'
-      if not netpol_baseline_probe_slice2_log.stdout_lines else
-      'See the logged assertion output above for which check failed.' }}
-
-# ── slice 3: prove the observability namespace's per-workload allow policies admit exactly ────
-# ── their listed cross-namespace callers ────────────────────────────────────────────────────
-# Own directory, same reason as the slice-1/2 probes above: `kubectl apply -f <dir>` reads every
-# file in the directory it is given, and a Job's pod template is immutable.
-#
-# Gated on netpol_baseline_obs_enforced, NOT netpol_baseline_enforced — the observability
-# fencing has its own lever (defaults/main.yml), separate from the homelab-namespace one slices
-# 1-2 already run under.
-- name: Create the netpol-baseline-probe-slice3 manifest directory
-  tags: [config]
-  ansible.builtin.file:
-    path: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice3
-    state: directory
-    mode: "0700"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Render the netpol-baseline-probe-slice3 probe
-  tags: [config]
-  ansible.builtin.template:
-    src: netpol-probe-slice3-job.yaml.j2
-    dest: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice3/netpol-probe-slice3-job.yaml
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-# The slice-3 probe's assertions are INVERTED, same as slice 2's: a failed `nc` is the PASS
-# case. That means a crashlooping or scaled-to-zero target reads identically to a correctly-
-# fenced one, so this gate proves prometheus, loki, grafana and tempo are actually up before the
-# probe runs — otherwise "unreachable" could mean either "fenced" or "down", and the probe would
-# report green for the wrong reason. grafana and tempo are included even though the probe itself
-# does not connect to them: the probe's own header explains why (podSelector: {} intra-namespace
-# peer). This readiness check still proves all four observability targets are live.
-#
-# EndpointSlice, not `get endpoints` — same reasoning and same jsonpath as the slice-2 gate
-# above. Namespace is {{ k8s_observability_namespace }} here, not {{ k8s_namespace }}: these are
-# observability's own Services, not the homelab ones slice 2 checks.
-- name: Read the slice-3 probe targets' endpoint readiness
-  tags: [deploy]
-  when:
-    - netpol_baseline_obs_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    # `endpoints[*]`, never a `[?(...)]` filter — see the slice-2 gate above for why a
-    # target with no ready pods makes the filter form exit 1 before the assert can run.
-    cmd: >-
-      k3s kubectl -n {{ k8s_observability_namespace }} get endpointslice
-      -l kubernetes.io/service-name={{ item }}
-      -o jsonpath={.items[*].endpoints[*].conditions.ready}
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice3_targets
-  # One entry per observability target this task proves is up. Adding an assertion to
-  # netpol-probe-slice3-job.yaml.j2 without adding its target here reopens the silent-green hole
-  # this gate exists to close.
-  loop:
-    - prometheus
-    - loki
-    - grafana
-    - tempo
-
-# Not best-effort: a silent pass here is exactly the failure mode this task exists to close, so
-# an empty result — whether from zero ready addresses or a query that could not be answered —
-# fails the play rather than letting the probe run and misreport. Fails closed: an unreadable
-# result is a failure, not a pass.
-- name: Fail if any slice-3 probe target has no ready endpoint
-  tags: [deploy]
-  when:
-    - netpol_baseline_obs_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.assert:
-    that: "'true' in item.stdout.split()"
-    fail_msg: >-
-      {{ item.item }} has no ready endpoint in {{ k8s_observability_namespace }}, so the slice-3
-      probe was not run. Its assertions are inverted — a failed connection is the PASS case — so
-      it cannot tell "fenced by the policy" apart from "nothing is listening"; running it against
-      a down target would report green for the wrong reason. Fix {{ item.item }}'s readiness
-      first (check `sudo k3s kubectl -n {{ k8s_observability_namespace }} get pods -l app={{
-      item.item }}` and its rollout status), then re-run this deploy so the probe's result is
-      attributable to the policy again.
-    quiet: true
-  loop: "{{ netpol_baseline_probe_slice3_targets.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: Clear the previous netpol-baseline-probe-slice3 run
-  tags: [deploy]
-  when:
-    - netpol_baseline_obs_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} delete job netpol-baseline-probe-slice3
-      --ignore-not-found --wait=true
-  become: true
-  changed_when: true
-
-- name: Run the netpol-baseline-probe-slice3 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_obs_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl apply -f
-      /etc/rancher/k3s/manifests/netpol-baseline-probe-slice3/netpol-probe-slice3-job.yaml
-  become: true
-  changed_when: true
-
-- name: Wait for the netpol-baseline-probe-slice3 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_obs_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe-slice3 --timeout=130s
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice3
-  failed_when: false
-
-# Same reasoning as the slice-1/2 Report tasks above: unconditional on the wait's outcome, and
-# `failed_when: false`, so a failing probe still gets its logs fetched and shown before the play
-# aborts, instead of dying at the wait with nothing but "timed out waiting for the condition".
-- name: Report the netpol-baseline-probe-slice3 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_obs_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/netpol-baseline-probe-slice3"
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice3_log
-  failed_when: false
-
-# stdout_lines is [] when the pod never ran, so print stderr (where "container not found" and the
-# other kubectl-side reasons land) and a next step, rather than an empty list.
-- name: Show the netpol-baseline-probe-slice3 result
-  tags: [deploy]
-  when:
-    - netpol_baseline_obs_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.debug:
-    msg: >-
-      {{ netpol_baseline_probe_slice3_log.stdout_lines
-         or ['no probe output. kubectl logs said: '
-             ~ (netpol_baseline_probe_slice3_log.stderr | default('') | trim | default('(nothing)', true)),
-             'Inspect with: sudo k3s kubectl -n ' ~ k8s_namespace
-             ~ ' describe job netpol-baseline-probe-slice3'] }}
-
-- name: Fail if the netpol-baseline-probe-slice3 probe did not complete
-  tags: [deploy]
-  # Ansible short-circuits a `when` list, so `not k8s_no_mutate` is what keeps
-  # netpol_baseline_probe_slice3.rc from being dereferenced on a dry run, where the wait that
-  # registers it never ran.
-  when:
-    - netpol_baseline_obs_enforced | bool
-    - not k8s_no_mutate
-    - netpol_baseline_probe_slice3.rc != 0
-  ansible.builtin.fail:
-    msg: >-
-      netpol-baseline-probe-slice3 did not complete (rc={{ netpol_baseline_probe_slice3.rc }}).
-      {{ 'It printed no output at all, so the pod never ran its script — this is a scheduling,
-      image-pull or admission failure, NOT an assertion failure; see the describe command above.'
-      if not netpol_baseline_probe_slice3_log.stdout_lines else
-      'See the logged assertion output above for which of the two assertions failed.' }}
-
-# ── slice 4: prove the infra-tier's per-workload allow policies admit exactly their listed ─────
-# ── callers ──────────────────────────────────────────────────────────────────────────────────
-# Own directory, same reason as the slice-1/2/3 probes above: `kubectl apply -f <dir>` reads
-# every file in the directory it is given, and a Job's pod template is immutable.
-#
-# Gated on netpol_baseline_enforced, NOT netpol_baseline_obs_enforced — unlike slice 3, all four
-# slice-4 targets (authelia, crowdsec, nut, mosquitto) live in {{ k8s_namespace }}, under the
-# same homelab-namespace lever slices 1-2 already run under.
-- name: Create the netpol-baseline-probe-slice4 manifest directory
-  tags: [config]
-  ansible.builtin.file:
-    path: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice4
-    state: directory
-    mode: "0700"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Render the netpol-baseline-probe-slice4 probe
-  tags: [config]
-  ansible.builtin.template:
-    src: netpol-probe-slice4-job.yaml.j2
-    dest: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice4/netpol-probe-slice4-job.yaml
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-# The slice-4 probe's assertions are INVERTED, same as slices 2-3: a failed `nc` is the PASS
-# case. That means a crashlooping or scaled-to-zero target reads identically to a correctly-
-# fenced one, so this gate proves authelia, crowdsec, nut and mosquitto are actually up before
-# the probe runs — otherwise "unreachable" could mean either "fenced" or "down", and the probe
-# would report green for the wrong reason.
-#
-# EndpointSlice, not `get endpoints` — same reasoning and same jsonpath as the slice-2/3 gates
-# above. Namespace is {{ k8s_namespace }}, same as the targets themselves.
-- name: Read the slice-4 probe targets' endpoint readiness
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    # `endpoints[*]`, never a `[?(...)]` filter — see the slice-2 gate above for why a
-    # target with no ready pods makes the filter form exit 1 before the assert can run.
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name={{ item }}
-      -o jsonpath={.items[*].endpoints[*].conditions.ready}
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice4_targets
-  # One entry per target the probe asserts against. Adding an assertion to
-  # netpol-probe-slice4-job.yaml.j2 without adding its target here reopens the silent-green hole
-  # this gate exists to close.
-  loop:
-    - authelia
-    - crowdsec
-    - nut
-    - mosquitto
-
-# Not best-effort: a silent pass here is exactly the failure mode this task exists to close, so
-# an empty result — whether from zero ready addresses or a query that could not be answered —
-# fails the play rather than letting the probe run and misreport. Fails closed: an unreadable
-# result is a failure, not a pass.
-- name: Fail if any slice-4 probe target has no ready endpoint
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.assert:
-    that: "'true' in item.stdout.split()"
-    fail_msg: >-
-      {{ item.item }} has no ready endpoint, so the slice-4 probe was not run. Its assertions are
-      inverted — a failed connection is the PASS case — so it cannot tell "fenced by the policy"
-      apart from "nothing is listening"; running it against a down target would report green for
-      the wrong reason. Fix {{ item.item }}'s readiness first (check
-      `sudo k3s kubectl -n {{ k8s_namespace }} get pods -l app={{ item.item }}` and its rollout
-      status), then re-run this deploy so the probe's result is attributable to the policy again.
-    quiet: true
-  loop: "{{ netpol_baseline_probe_slice4_targets.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: Clear the previous netpol-baseline-probe-slice4 run
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} delete job netpol-baseline-probe-slice4
-      --ignore-not-found --wait=true
-  become: true
-  changed_when: true
-
-- name: Run the netpol-baseline-probe-slice4 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl apply -f
-      /etc/rancher/k3s/manifests/netpol-baseline-probe-slice4/netpol-probe-slice4-job.yaml
-  become: true
-  changed_when: true
-
-- name: Wait for the netpol-baseline-probe-slice4 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe-slice4 --timeout=130s
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice4
-  failed_when: false
-
-# Same reasoning as the slice-1/2/3 Report tasks above: unconditional on the wait's outcome, and
-# `failed_when: false`, so a failing probe still gets its logs fetched and shown before the play
-# aborts, instead of dying at the wait with nothing but "timed out waiting for the condition".
-- name: Report the netpol-baseline-probe-slice4 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/netpol-baseline-probe-slice4"
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice4_log
-  failed_when: false
-
-# stdout_lines is [] when the pod never ran, so print stderr (where "container not found" and the
-# other kubectl-side reasons land) and a next step, rather than an empty list.
-- name: Show the netpol-baseline-probe-slice4 result
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.debug:
-    msg: >-
-      {{ netpol_baseline_probe_slice4_log.stdout_lines
-         or ['no probe output. kubectl logs said: '
-             ~ (netpol_baseline_probe_slice4_log.stderr | default('') | trim | default('(nothing)', true)),
-             'Inspect with: sudo k3s kubectl -n ' ~ k8s_namespace
-             ~ ' describe job netpol-baseline-probe-slice4'] }}
-
-- name: Fail if the netpol-baseline-probe-slice4 probe did not complete
-  tags: [deploy]
-  # Ansible short-circuits a `when` list, so `not k8s_no_mutate` is what keeps
-  # netpol_baseline_probe_slice4.rc from being dereferenced on a dry run, where the wait that
-  # registers it never ran.
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-    - netpol_baseline_probe_slice4.rc != 0
-  ansible.builtin.fail:
-    msg: >-
-      netpol-baseline-probe-slice4 did not complete (rc={{ netpol_baseline_probe_slice4.rc }}).
-      {{ 'It printed no output at all, so the pod never ran its script — this is a scheduling,
-      image-pull or admission failure, NOT an assertion failure; see the describe command above.'
-      if not netpol_baseline_probe_slice4_log.stdout_lines else
-      'See the logged assertion output above for which of the five checks failed.' }}
-
-# ── slice 4.5: prove the remaining 27 workloads are fenced, and that the LAN-facing ports the ──
-# ── policies deliberately leave open really are open ─────────────────────────────────────────
-# Own directory, same reason as the slice-1/2/3/4 probes above: `kubectl apply -f <dir>` reads
-# every file in the directory it is given, and a Job's pod template is immutable.
-#
-# Gated on netpol_baseline_enforced: every slice-4.5 target lives in {{ k8s_namespace }}, under
-# the same lever slices 1, 2 and 4 already run under.
-- name: Create the netpol-baseline-probe-slice45 manifest directory
-  tags: [config]
-  ansible.builtin.file:
-    path: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice45
-    state: directory
-    mode: "0700"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-- name: Render the netpol-baseline-probe-slice45 probe
-  tags: [config]
-  ansible.builtin.template:
-    src: netpol-probe-slice45-job.yaml.j2
-    dest: /etc/rancher/k3s/manifests/netpol-baseline-probe-slice45/netpol-probe-slice45-job.yaml
-    mode: "0644"
-    owner: root
-    group: root
-  become: true
-  when: not k8s_dry_run | bool
-
-# Five of this probe's legs are INVERTED, so a crashlooping or scaled-to-zero target reads
-# identically to a correctly-fenced one. This gate proves the targets are up first — otherwise
-# "unreachable" could mean either "fenced" or "down".
-#
-# The non-inverted legs are gated here too, for the opposite reason: they must SUCCEED, so a
-# target that is down would fail the probe and read as a policy fault. speedtest is one.
-# terraria is the other: it is out of netpol_baseline_slice45_targets while scaled to zero, and
-# its leg is rendered only while it is in.
-#
-# NOTE the Service names, not the pod labels: `scrutiny` is scrutiny-web's Service. Querying
-# `scrutiny-web` here would find no EndpointSlice and fail the gate on a healthy workload.
-- name: Read the slice-4.5 probe targets' endpoint readiness
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    # `endpoints[*]`, NOT `endpoints[?(@.conditions.ready==true)]`. A Service with no ready pods
-    # keeps its EndpointSlice and sets `endpoints: null` rather than `[]`, and kubectl's jsonpath
-    # filter cannot filter nil: it exits 1 with `<nil> is not array or slice` and a 3 KB dump of
-    # the object. So the READ would die before the assert below could say which target was down,
-    # and the operator would get a Go template error instead of a diagnosis. Measured against
-    # the live cluster: the filter form exits 1 on terraria (0 replicas) and 0 on freshrss, while
-    # this form exits 0 on both, empty and `true` respectively.
-    #
-    # Readiness is still asserted — the path returns each endpoint's `conditions.ready`, and the
-    # assert requires an explicit `true`. Selecting `targetRef.name` under `[*]` would have been
-    # null-safe too and would have counted a NOT-ready endpoint as present.
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} get endpointslice -l kubernetes.io/service-name={{ item }}
-      -o jsonpath={.items[*].endpoints[*].conditions.ready}
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice45_targets
-  loop: "{{ netpol_baseline_slice45_targets }}"
-
-- name: Fail if any slice-4.5 probe target has no ready endpoint
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.assert:
-    # An explicit `true` among the endpoints' readiness flags. A non-empty stdout is not enough
-    # now that the query returns booleans: a target whose only endpoint is `false` would read as
-    # present, which is the state this gate exists to catch.
-    that: "'true' in item.stdout.split()"
-    fail_msg: >-
-      {{ item.item }} has no ready endpoint, so the slice-4.5 probe was not run. Most of its
-      assertions are inverted — a failed connection is the PASS case — so it cannot tell "fenced
-      by the policy" apart from "nothing is listening"; running it against a down target would
-      report green for the wrong reason. Fix {{ item.item }}'s readiness first, then re-run this
-      deploy so the probe's result is attributable to the policy again.
-    quiet: true
-  loop: "{{ netpol_baseline_probe_slice45_targets.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: Clear the previous netpol-baseline-probe-slice45 run
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} delete job netpol-baseline-probe-slice45
-      --ignore-not-found --wait=true
-  become: true
-  changed_when: true
-
-- name: Run the netpol-baseline-probe-slice45 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl apply -f
-      /etc/rancher/k3s/manifests/netpol-baseline-probe-slice45/netpol-probe-slice45-job.yaml
-  become: true
-  changed_when: true
-
-- name: Wait for the netpol-baseline-probe-slice45 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
-      job/netpol-baseline-probe-slice45 --timeout=130s
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice45
-  failed_when: false
-
-# Same reasoning as the Report tasks above: unconditional on the wait's outcome, and
-# `failed_when: false`, so a failing probe still gets its logs fetched and shown before the play
-# aborts, instead of dying at the wait with nothing but "timed out waiting for the condition".
-- name: Report the netpol-baseline-probe-slice45 probe
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.command:
-    cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/netpol-baseline-probe-slice45"
-  become: true
-  changed_when: false
-  register: netpol_baseline_probe_slice45_log
-  failed_when: false
-
-- name: Show the netpol-baseline-probe-slice45 result
-  tags: [deploy]
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-  ansible.builtin.debug:
-    msg: >-
-      {{ netpol_baseline_probe_slice45_log.stdout_lines
-         or ['no probe output. kubectl logs said: '
-             ~ (netpol_baseline_probe_slice45_log.stderr | default('') | trim | default('(nothing)', true)),
-             'Inspect with: sudo k3s kubectl -n ' ~ k8s_namespace
-             ~ ' describe job netpol-baseline-probe-slice45'] }}
-
-- name: Fail if the netpol-baseline-probe-slice45 probe did not complete
-  tags: [deploy]
-  # Ansible short-circuits a `when` list, so `not k8s_no_mutate` is what keeps
-  # netpol_baseline_probe_slice45.rc from being dereferenced on a dry run, where the wait that
-  # registers it never ran.
-  when:
-    - netpol_baseline_enforced | bool
-    - not k8s_no_mutate
-    - netpol_baseline_probe_slice45.rc != 0
-  ansible.builtin.fail:
-    msg: >-
-      netpol-baseline-probe-slice45 did not complete (rc={{ netpol_baseline_probe_slice45.rc }}).
-      {{ 'It printed no output at all, so the pod never ran its script — this is a scheduling,
-      image-pull or admission failure, NOT an assertion failure; see the describe command above.'
-      if not netpol_baseline_probe_slice45_log.stdout_lines else
-      'See the logged assertion output above for which of the seven checks failed.' }}
+      'The last line of the logged output above names the leg that failed.' }}

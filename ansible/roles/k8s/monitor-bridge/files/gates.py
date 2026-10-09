@@ -7,8 +7,8 @@ same source. This module owns the membership sets, the filter rules that keep a 
 disabled underneath its dependents, and the `Gates` seam that lets a test STATE a gate
 configuration instead of patching module globals.
 
-It is a leaf: it imports `bridge.*` and the four gate probe bodies out of `checks.*`, and never
-`check`, `registry` or `cli`.
+It is a leaf: it imports `bridge.*`, `check_table` (the `gate` column every set below derives
+from) and the four gate probe bodies out of `checks.*`, and never `check`, `registry` or `cli`.
 
 `apply_startup_grace` and `_grace_streaks` are NOT here — they live in `bridge/streaks.py`
 beside the `down_streak` hysteresis they are built on, and `Gates.grace_streaks` defaults to
@@ -26,84 +26,28 @@ import bridge.streaks
 from bridge.common import _env
 from bridge.config import Config
 from bridge.types import Check, CheckFn, CheckResult, push_env
+from check_table import CHECKS
 from checks.b2 import check_b2_reachable
 from checks.cluster import check_prometheus
 from checks.logs import check_loki_reachable
 from checks.wan import check_wan_reachable
 
+
+def _members(gate: str) -> frozenset[str]:
+    """The checks whose `check_table` row names `gate` in its `gate` column."""
+    return frozenset(row.name for row in CHECKS if row.gate == gate)
+
+
+# Every set below is DERIVED from the `gate` column of `check_table.CHECKS`, where each member's
+# row carries the reason it is a member. A row names at most one gate, which is what keeps a
+# check from being suppressed by one gate and held by the startup grace at once.
+
 # Checks that query Prometheus. A single Prometheus outage would fail every one of them at once
 # — one root cause, a storm of identical pages. run_once probes Prometheus first (check_prometheus
 # -> its own monitor) and, when it's unreachable, SUPPRESSES these (pushes `up` with a skip msg so
 # their push-monitor heartbeat stays alive and the dead-bridge watchdog isn't tripped) so only the
-# Prometheus monitor pages. Keep this in sync with the prom_scalar/prom_vector callers.
-PROM_DEPENDENT = frozenset(
-    {
-        "disk",
-        "cert",
-        "memory",
-        "restarts",
-        "oom",
-        "cpu",
-        "targets",
-        "traefik5xx",
-        # Reads traefik_service_request_duration_seconds_count/_bucket through prom_vector, so
-        # a Prometheus outage raises in its fetch and _evaluate turns that into a down. Missing
-        # until 2026-09-27 (#2778): it co-fired with the `prometheus` gate on 2026-09-18 and in
-        # both Sunday reboots, one root cause paging twice.
-        "traefik_latency",
-        "traefik_404",
-        "traefik_421",
-        "ups",  # queries HA's Prometheus-scraped UPS battery sensors
-        # Reads node_hwmon_temp_celsius. Its empty-vector branch pages on a blind hwmon
-        # collector, so a Prometheus outage must suppress it — same reason as longhorn_volumes.
-        "host_temp",
-        "shipper_dropped",  # increase() over both shippers' dropped-entries counters
-        # Reads longhorn_volume_robustness. Its own absent-metric branch pages when the
-        # longhorn scrape job dies, so it must be suppressed when PROMETHEUS itself is the
-        # cause — otherwise a Prometheus outage pages twice for one root cause.
-        "longhorn_volumes",
-        # Reads longhorn_snapshot_actual_size_bytes and longhorn_volume_capacity_bytes, the same
-        # `longhorn` job as longhorn_volumes above, and pages on a declared cap whose volume has
-        # no series — so a Prometheus outage must suppress it for the same reason.
-        "snapshot_headroom",
-        # Reads node_filesystem_readonly (#1243). prom_vector RAISES on an unreachable
-        # Prometheus (unlike the empty-vector-is-healthy case this check's own docstring
-        # covers), and _evaluate turns that into a `down` — so without this entry a Prometheus
-        # restart pages this monitor a second time for the one root cause the `prometheus`
-        # gate already reports.
-        "kubelet_plugin_readonly",
-        # Reads node_load5 / node_memory_MemAvailable_bytes / node_filesystem_* on the Pi's
-        # `node-pi` job since 2026-09-18 (#2004, glances retired). Its absent-series branch
-        # pages, so a Prometheus outage must suppress it for the same reason as host_temp.
-        "pi_pressure",
-        # The four below read the same Prometheus as everything above and used to sit in a
-        # CLUSTER_DEPENDENT set behind a second gate, back when PROMETHEUS_URL and
-        # CLUSTER_PROMETHEUS_URL named two instances on two hosts. The Docker plane retired
-        # 2026-08-14 and both URLs rendered to one cluster Service after it, so the second
-        # gate's tile could not go red on its own and read as coverage that did not exist.
-        # Folded here and the gate deleted on 2026-09-28 (#2825); `git revert` restores the
-        # split if a second Prometheus is ever reintroduced.
-        #
-        # Each keeps its OWN fail-closed arm, and the division of labour is why they are not
-        # interchangeable with this gate. The gate covers "Prometheus is unreachable".
-        # k8s_workloads' series-count floor and pvc_fullness' claim-count floor cover
-        # "Prometheus answers but kube-state-metrics / the kubelet volume stats are not being
-        # scraped", which a gate structurally cannot see — the Prometheus answering `vector(1)`
-        # is perfectly healthy. Suppression is right for the first and would turn a blind
-        # monitor green for the second.
-        "k8s_workloads",
-        "cluster_targets",
-        # pvc_fullness gets NO EXPORTER_DEPENDENT entry keyed on job="kubernetes-kubelet",
-        # which is the nearest-looking wiring and would be wrong: those claims are scraped
-        # under two jobs, so a dead kubelet job still leaves the apiserver job answering for
-        # 27 of the 43 claims — a PARTIAL blindness PVC_MIN_CLAIMS is sized to page on.
-        "pvc_fullness",
-        # etcd_db_size joined 2026-09-25. Its one series is carried by both the apiserver and
-        # the kubelet job, so there is no partial-coverage case to keep visible, and its own
-        # fail-open arm covers total scrape loss.
-        "etcd_db_size",
-    }
-)
+# Prometheus monitor pages. A new prom_scalar/prom_vector caller takes `gate="prometheus"`.
+PROM_DEPENDENT = _members("prometheus")
 
 # One level BELOW the Prometheus gate: a single exporter down while Prometheus is UP fails every
 # check reading its metrics at once. node-exporter death false-pages Root Disk + Memory (node_* go
@@ -139,10 +83,8 @@ EXPORTER_DEPENDENT = {
 # (check_loki_reachable -> its own "Loki Reachable" monitor) and, when it's unreachable, SUPPRESSES
 # these (pushes `up` with a skip msg so their push heartbeats stay alive) so only Loki Reachable
 # pages. Loki being UP but a shipper not shipping is a different signal Loki Log Ingestion still
-# surfaces (it evaluates whenever Loki is reachable). Guarded by a test against the registry.
-LOKI_DEPENDENT = frozenset(
-    {"loki_ingestion", "swallowed_verdicts", "kuma_notify_failures"}
-)
+# surfaces (it evaluates whenever Loki is reachable).
+LOKI_DEPENDENT = _members("loki_reachable")
 
 # B2-reachability gate — the third peer of the Prometheus and Loki gates (see check_b2_reachable /
 # b2_reachable in run_once), and the fix for G2/G4 of docs/archive/b2-transaction-cap-monitoring-gaps.md.
@@ -157,7 +99,7 @@ LOKI_DEPENDENT = frozenset(
 # file, so it does not have the stale-state fault the original five had — but it is gated for the
 # other reason a gate exists: a transaction cap fails BOTH it and b2_reachable, and one root cause
 # must not light two monitors.
-B2_DEPENDENT = frozenset({"b2_storage"})
+B2_DEPENDENT = _members("b2_reachable")
 
 # WAN-reachability gate — the fourth peer, and the one whose absence cost the most. An internet
 # outage had no gate at all, so every check reaching the internet paged on its own: on
@@ -173,9 +115,7 @@ B2_DEPENDENT = frozenset({"b2_storage"})
 # kuma_notify_failures and swallowed_verdicts also went red on 2026-09-18 and are NOT here:
 # both read Loki, which is in-cluster, so the Loki gate already owns their source. What failed
 # for them was Kuma's own outbound Discord send, which is a real fault the tiles should report.
-WAN_DEPENDENT = frozenset(
-    {"r2_usage", "cloudflare_ips_drift", "healthchecks_drift", "discord"}
-)
+WAN_DEPENDENT = _members("wan_reachable")
 
 # Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the
 # Cloudflare GraphQL API) with NO reachability gate above them and NO per-check
@@ -191,38 +131,13 @@ WAN_DEPENDENT = frozenset(
 # guard that every un-gated _get_json reach-out check is in here (prowlarr_indexers/scrutiny were
 # added 2026-07-14 after they were found missing — the weekly-reboot flap's original set omitted
 # them).
-STARTUP_GRACE = frozenset(
-    {
-        "n8n",
-        # arr_queue left this set on 2026-09-11: its fetch carries its own
-        # ARR_FETCH_CONSECUTIVE streak, which covers the same reboot transient for longer
-        # and leaves the queue verdict ungraced. Compounding both would only delay a page.
-        "bazarr",
-        # pi_pressure left this set on 2026-09-18 (#2004): it reads Prometheus now, so the
-        # `prometheus` gate and EXPORTER_DEPENDENT cover its source and the two sets must
-        # stay disjoint.
-        "prowlarr_indexers",
-        "scrutiny",
-        # r2_usage and healthchecks_drift left this set on 2026-09-27 (#2784): both are
-        # WAN_DEPENDENT now, and the two sets must stay disjoint so a graced check still
-        # reaches the eval path every cycle. Same move pi_pressure made when it gained the
-        # Prometheus gate (#2004). The WAN gate covers the reboot transient too — a bridge
-        # cycling before the node's DNS is up fails the WAN probe as well — and it covers the
-        # outage the grace never could.
-        "speedtest",
-    }
-)
+STARTUP_GRACE = _members("startup_grace")
 
 # GATE_DEPENDENTS maps each reachability gate to the checks it suppresses when it is down. The
 # CHECKS_ONLY/CHECKS_SKIP filter that names these lives in bridge/config.py, with the account of
 # what the mechanism is for; validate_check_filter below is what refuses a filter that would
 # disable a gate while leaving its dependents enabled.
-GATE_DEPENDENTS = {
-    "prometheus": PROM_DEPENDENT,
-    "loki_reachable": LOKI_DEPENDENT,
-    "b2_reachable": B2_DEPENDENT,
-    "wan_reachable": WAN_DEPENDENT,
-}
+GATE_DEPENDENTS = {row.name: _members(row.name) for row in CHECKS if row.is_gate}
 
 
 @dataclass(frozen=True)

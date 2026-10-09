@@ -15,8 +15,7 @@ See repo-root `CLAUDE.md` for conventions.
 - **First** role in `ansible/initial_setup.yml` (before [[initial_setup]], [[sops_setup]],
   [[docker_install]]) — every host. Both copies skip a host whose dotfiles chezmoi owns
   (see Notable).
-- `uv run ansible-playbook ansible/initial_setup.yml --tags "config_files"`
-  (sub-tags `git`, `bash` select one file).
+- Sub-tags `git` and `bash` select one file.
 
 ## What it does (`tasks/main.yml`)
 - `copy`s the tracked static `files/.gitconfig` and `files/.bashrc` to the deploy user's

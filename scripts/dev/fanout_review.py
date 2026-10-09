@@ -6,7 +6,7 @@ phases and the reasons for them.
 
 Usage::
 
-    fanout_review.py --batch 1345-1386 --repo DanielH2018/server < .fanout/brief.md
+    fanout_review.py --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md
 """
 
 import argparse
@@ -25,9 +25,19 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0], allow_abbrev=False)
     p.add_argument("--batch", required=True)
     p.add_argument("--repo", required=True)
+    p.add_argument(
+        "--red-green",
+        action="store_true",
+        help="write and gate failing tests before the implementer runs",
+    )
     args = p.parse_args(argv)
     pipeline = Pipeline(
-        Path.cwd(), args.batch, _local_host(), resolve(args.repo), sys.stdin.read()
+        Path.cwd(),
+        args.batch,
+        _local_host(),
+        resolve(args.repo),
+        sys.stdin.read(),
+        red_green=args.red_green,
     )
     print(json.dumps(pipeline.run_all()))
     return 0

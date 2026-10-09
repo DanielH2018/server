@@ -21,10 +21,11 @@ import deploy_alert_text
 import deploy_alerts
 import deploy_defer
 import deploy_io
+import deploy_k8s_owed
 import deploy_locks
 from deploy_changes import ChangeSet
 from deploy_config import Config, log
-from deploy_state import OWED_K8S_DEFERRED, DeployerState
+from deploy_state import DeployerState
 from deploy_tick_types import TickPlan, TickTarget
 from deploy_toolbox import DeployTools
 
@@ -113,8 +114,8 @@ def apply_broad_k8s(
     # A bump an EARLIER tick deferred for budget, applied by this tick's deploy plane, is no
     # longer owed. The pending set is asked rather than the range: the deferring tick merged
     # the bump, so it is in nobody's `local..origin` any more (#2449).
-    deploy_defer.clear_applied_k8s_deferred(
-        state, covered_by_plane(plans, deploy_defer.pending_k8s_deferred(state))
+    deploy_k8s_owed.clear_applied_k8s_deferred(
+        state, covered_by_plane(plans, deploy_k8s_owed.pending_k8s_deferred(state))
     )
     if bumps and deadline - time.monotonic() < config.k8s_deploy_timeout_s:
         log(
@@ -132,7 +133,7 @@ def apply_broad_k8s(
         # Safe to write here rather than on an exit: this branch empties `bumps`, so the
         # deploy below is skipped and neither the contention arm nor the failure arm that
         # would have to take the marker back is reachable from it.
-        state.record_owed(OWED_K8S_DEFERRED, origin, bumps, time.time())
+        deploy_k8s_owed.defer_bumps(state, origin, bumps)
         bumps = set()
     # The deploy plane has already applied these, so they are annotated on every path out of
     # here BUT the reset one — a failed bump beside them must not hide that they went out.
@@ -164,7 +165,7 @@ def apply_broad_k8s(
             # no page but this one. Before the failure post, which stays the tick's last word.
             # The secrets page rides this exit for the reason the `DECIDED:` in
             # `deploy_handlers.handle_broad`'s own failure arm gives (#2459).
-            deploy_defer.alert_and_record_deferred(
+            deploy_k8s_owed.alert_and_record_deferred(
                 tools, state, config, origin, applied, cs, plan.k8s_services
             )
             deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
@@ -181,12 +182,12 @@ def apply_broad_k8s(
             )
             return 0 if posted else 1
         state.clear_service_hold(bumps)
-        deploy_defer.clear_applied_k8s_deferred(state, bumps)
+        deploy_k8s_owed.clear_applied_k8s_deferred(state, bumps)
     if applied:
         tools.emit_deploy_annotation(applied, origin)
     if bumps:
         tools.emit_deploy_annotation(bumps, origin)
-    deploy_defer.alert_and_record_deferred(
+    deploy_k8s_owed.alert_and_record_deferred(
         tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
     )
     # The tick's last exit, and the only one a range with nothing deferred reaches, so the

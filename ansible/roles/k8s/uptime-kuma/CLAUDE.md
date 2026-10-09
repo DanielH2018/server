@@ -74,8 +74,8 @@ same convention in plain text. Both read `heartbeatJSON.msg`, `monitorJSON.descr
   `ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py::test_no_status_page_is_declared_as_an_autokuma_entity`.
 - **A tile aimed at a path-only route uses a hostname no IngressRoute claims**, because Traefik
   ranks routers by rule length — hence `edge-selfcheck.local.<domain>`.
-- **Adding a monitor means adding a group rule too**:
-  `test_every_declared_monitor_lands_in_a_named_group` fails until one matches its id.
+- **A new monitor needs a group rule**, or
+  `test_every_declared_monitor_lands_in_a_named_group` fails; a bridge tile's row names its group.
 
 ## The weekly reboot's maintenance window is reconciled over the API
 

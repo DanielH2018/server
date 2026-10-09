@@ -44,6 +44,21 @@ message is structured JSON, with no PR URL to give. A `land` session owes a `VER
 although its brief stops at the PR, because the pipeline handed it the landing section
 afterwards. With no phase file, the brief alone decides, as before.
 
+A `red` session never blocks either. It writes the failing tests a red/green batch starts
+from, and like a reviewer it ends with structured JSON and has no PR to name.
+
+THE PIPELINE'S OWN COPY. A review pipeline reads this file once at start and runs every phase
+from a copy outside the worktree, because the implementer can rewrite the worktree's copy
+(#3794). It names that copy in `.fanout/stop-hook`. This repo's `.claude/settings.json` still
+registers the worktree's copy, so a copy inside the worktree stands down while that file
+exists, and one Stop spends the block cap once. The pipeline's copy lives outside the worktree
+and ignores the file, so deleting or forging it changes nothing that copy decides. A marker
+file rather than an environment variable, because a variable would reach every process the
+agent starts, the suite's hook tests included. A phase that resumes the implementer's session
+loads no project settings file at all, so it never runs the worktree's copy (#3810). The
+implement and review phases still do, and there an edited worktree copy can block on its own,
+though it cannot stop the pipeline's copy from running.
+
 THE CAP. A counter in `.fanout/stop-blocks` allows at most `MAX_BLOCKS` blocks per batch.
 After that it lets the session end, and `status` reports the batch `no-pr` rather than `done`.
 Anthropic's Opus 5.5 guide recommends stopping after two or three automatic continuations. A
@@ -67,6 +82,10 @@ MARKER = Path(".fanout") / "brief.md"
 COUNTER = Path(".fanout") / "stop-blocks"
 PHASE = Path(".fanout") / "phase"
 MAX_BLOCKS = 3
+# Mirrors `review.OWN_COPY`: the pipeline writes it before each phase it runs.
+OWN_COPY = Path(".fanout") / "stop-hook"
+# The pipeline phases whose final message is structured JSON rather than a PR URL.
+UNBLOCKED_PHASES = frozenset({"review", "red"})
 
 # Mirrors `status.PR_URL`, `status.BLOCKER` and `status.VERDICT`.
 PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
@@ -160,13 +179,20 @@ def _blocks_so_far(root: Path) -> int:
         return 0
 
 
+def stands_down(root: Path, here: Path = Path(__file__)) -> bool:
+    """Whether this is the worktree's copy and the pipeline runs its own copy outside it."""
+    if not (root / OWN_COPY).is_file():
+        return False
+    return here.resolve().is_relative_to(root.resolve())
+
+
 def decide(payload: dict) -> str | None:
     """The block reason for this Stop, or None to let the session end."""
     root = fanout_root(str(payload.get("cwd") or "."))
-    if root is None:
+    if root is None or stands_down(root):
         return None
     running = phase(root)
-    if running == "review":
+    if running in UNBLOCKED_PHASES:
         return None
     item = open_item(
         str(payload.get("last_assistant_message") or ""),

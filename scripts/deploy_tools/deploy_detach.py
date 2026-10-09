@@ -32,6 +32,8 @@ import re
 import subprocess
 import sys
 import traceback
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -123,6 +125,38 @@ def notify(run: locked.Run, status: int, log: Path, notifier: str) -> None:
     )
 
 
+@dataclass(frozen=True)
+class ChildSteps:
+    """The three steps `deploy_and_gate` runs, so a test replaces a field, not a module."""
+
+    run_playbook: Callable[[locked.Run], int] = run_playbook
+    annotate: Callable[[locked.Run], None] = annotate
+    notify: Callable[[locked.Run, int, Path, str], None] = notify
+
+
+def deploy_and_gate(
+    run: locked.Run, log: Path, notifier: str, steps: ChildSteps | None = None
+) -> None:
+    """Run the playbook, annotate a success, then run the notifier's health gate.
+
+    The service locks stay held until the caller's `run.close()`, AFTER the notifier returns
+    (#3817). The gate reads one `probe.py health` sample per tag. Released before it, a second
+    deploy of the same service could take the lock and roll a `Recreate` workload under that
+    sample, and the run would post `unhealthy` about a healthy change. The hold grows by the
+    gate's few probe calls; a deploy queued behind it waits `SERVICE_LOCK_WAIT_S`, 1800s.
+    land.sh cannot hold its deploy's locks across its own gate, so it waits out the later
+    deploy instead (`land_rerolls.later_deploys`).
+    """
+    steps = steps or ChildSteps()
+    status = steps.run_playbook(run)
+    # Annotated here, where the run finished: the parent returned long before.
+    if status == 0:
+        steps.annotate(run)
+    # The snapshot outlives the playbook by exactly this call: the notifier's health gate
+    # renders the deployed role's manifests from it to enumerate what to check.
+    steps.notify(run, status, log, notifier)
+
+
 def child(run: locked.Run, log: Path, notifier: str) -> None:
     """The backgrounded half. Never returns: its end is `os._exit`, never deploy_run's frames."""
     code = 1
@@ -140,16 +174,7 @@ def child(run: locked.Run, log: Path, notifier: str) -> None:
         moved = leave_unit_cgroup("deploy")
         if moved:
             print(moved, flush=True)
-        status = run_playbook(run)
-        for fd in run.service_fds:
-            os.close(fd)
-        run.service_fds = []
-        # Annotated here, where the run finished: the parent returned long before.
-        if status == 0:
-            annotate(run)
-        # The snapshot outlives the playbook by exactly this call: the notifier's health gate
-        # renders the deployed role's manifests from it to enumerate what to check.
-        notify(run, status, log, notifier)
+        deploy_and_gate(run, log, notifier)
         code = 0
     except SystemExit as stop:
         code = stop.code if isinstance(stop.code, int) else 1

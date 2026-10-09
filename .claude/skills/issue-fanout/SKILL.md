@@ -161,6 +161,15 @@ security findings as a count only. The full record goes to `~/.local/state/fanou
 stay with the implementer; only the slow model review moves out. The fallback `Agent(...)`
 path below has no review phase.
 
+**A `--review` batch whose every issue carries the `red-green` label also gets a red phase.**
+Label only issues whose stated behaviour is in Python this repo's suite runs: `scripts/`,
+monitor-bridge's registry, the filter plugins and the tested HA Jinja macros. Before the
+implementer starts, a separate session writes one failing test per stated behaviour from the
+issue text alone, and `scripts/dev/fanout_lib/red_gate.py` proves each new test fails on the
+unchanged code. The implementer gets that commit and may not edit it. A refused red commit is
+dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
+is not landed. The PR comment and the local record carry both gates' results.
+
 Each batch's branch is `worktree-fanout-<batch>`, the name used throughout this skill. Run as
 the `claude` agent user, the dispatcher names it `worktree-claude+fanout-<batch>` instead.
 That user's login profile sets `CLAUDE_WORKTREE_PREFIX`, and the agent branch fence lets its
@@ -337,14 +346,8 @@ Each agent starts with none of this conversation's context, so its brief must ca
   cannot be woken once its turn ends, so it runs the command in the foreground and re-runs only
   the `cc-wait` half on exit 75.
 
-  Before `--detach` existed (#2853) the agent had to background `land.sh`, redirect it and then
-  block on `timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'`. A backgrounded call whose
-  output is redirected to a file is not a harness-tracked child, so nothing wakes the agent when
-  it finishes: four of four agents stopped short on the 2026-09-06 fan-out (issue #1291), and
-  supplying the wait ended it in every case. `cc-wait` removes the step rather than the
-  requirement — an agent must still not end its turn on a landing. Its predecessor,
-  `--await-verdict`, waited up to 1200s, past the 600s foreground limit: 12 of the 15 waits that
-  overran it in the 30 days to 2026-10-04 never woke their agent.
+  Why the wait has to be in-turn, and what the hand-written `tail -f | grep` wait it replaced
+  cost (#1291), is in `docs/landing.md`.
 - That `deploy.sh` exit 75 is a **resume point to retry**, not a failure to report.
 - **What to do with a verdict that leaves a host apply owed.** `needs-manual-apply` and
   `blocked` mean the PR merged and an apply is still owed on a host — a `manual_plane` role, a

@@ -32,6 +32,7 @@ Reads the hook JSON on stdin. Emits a decision or stays silent -> normal permiss
 """
 
 import importlib.util
+import json
 import os
 import re
 import sys
@@ -143,11 +144,27 @@ def prints_whole_lines(args):
 _HOST_BIN_PREFIXES = ("/usr/local/bin", "/opt/homelab")
 
 
-def _secret_bearing_paths(repo_root):
+# A fan-out review pipeline derives the set at start and writes it beside its held copy of
+# this hook (#3810), because the worktree a resumed phase runs in is the agent's to edit.
+# `scripts/dev/fanout_lib/held_hooks.py` mirrors the name.
+_HELD_PATHS = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "secret_bearing_host_paths.json"
+)
+
+
+def _secret_bearing_paths(repo_root, held=_HELD_PATHS):
     """The derived host-path set, or {} if it cannot be computed.
 
-    Import is deferred so the hot path never pays for it — see the cheap gate above.
+    The set in `held`, beside this file by default, wins over a derivation from `repo_root`. Import is deferred
+    so the hot path never pays for it — see the cheap gate above.
     """
+    try:
+        with open(held) as listing:
+            return json.load(listing)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        return {}
     scripts = os.path.join(repo_root, "scripts", "secrets_mgmt")
     if scripts not in sys.path:
         sys.path.insert(0, scripts)

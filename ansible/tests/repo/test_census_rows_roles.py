@@ -206,6 +206,41 @@ ROWS = (
         min_matches=100,
         must_find=frozenset({"ansible/roles/setup/initial_setup/tasks/access.yml"}),
     ),
+    Census(
+        name="bespoke-netpol-says-why-it-is-not-a-callers-fence",
+        reason=(
+            "A per-workload NetworkPolicy of one TCP port admitting same-namespace `app:` "
+            "callers belongs on its containers_list entry as `netpol_from`/`netpol_fences`, "
+            "where the callers template renders it. Every hand-written one in netpol-baseline "
+            "is of another shape, and its opening `{# DECIDED:` says which (#3701). A new one "
+            "either moves onto the entry or opens with that marker, so the next census does "
+            "not have to re-derive it."
+        ),
+        # The callers loop is the model itself. The homelab baseline, networkpolicy.yaml.j2,
+        # falls outside the glob; the observability one is inside it and carries a marker.
+        files=lambda: [
+            rel
+            for rel in tracked(
+                "ansible/roles/k8s/netpol-baseline/templates/networkpolicy-*.yaml.j2"
+            )
+            if not rel.endswith("/networkpolicy-callers.yaml.j2")
+        ],
+        offence=lambda s: (
+            []
+            if s.text.startswith("{# DECIDED: ")
+            else ["opens with no DECIDED: marker"]
+        ),
+        red=(Subject("networkpolicy-new.yaml.j2", "---\nkind: NetworkPolicy\n"),),
+        green=(Subject("networkpolicy-old.yaml.j2", "{# DECIDED: x. #}\n---\n"),),
+        # 15 policies when the row landed (2026-10-09).
+        min_matches=15,
+        must_find=frozenset(
+            {
+                "ansible/roles/k8s/netpol-baseline/templates/networkpolicy-traefik.yaml.j2",
+                "ansible/roles/k8s/netpol-baseline/templates/networkpolicy-loki.yaml.j2",
+            }
+        ),
+    ),
 )
 
 _IDS = [row.name for row in ROWS]

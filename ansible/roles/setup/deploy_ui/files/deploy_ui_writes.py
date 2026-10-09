@@ -117,9 +117,9 @@ def clear_hold(
     """Remove `hold_sha` and every plane the hold waits on, only when `expected_sha` matches.
 
     `gitops_hold.Hold.clear` owns the rule. This passes it the git-tree lock, which a tick
-    already holds when the deployer writes the ledger, and `wait_s` bounds the wait for it.
-    The lock is taken only when a `hold_plane` line exists, and a timeout leaves the hold
-    whole.
+    already holds when the deployer writes the hold, and `wait_s` bounds the wait for it.
+    The lock is taken for every Clear, so a Clear during a tick refuses with the retry text,
+    and a timeout leaves the hold whole.
     """
     try:
         return Hold(state_dir).clear(

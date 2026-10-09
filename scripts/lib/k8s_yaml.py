@@ -120,12 +120,14 @@ def _from_json(value) -> object:
         return {}
 
 
-def to_json_stub(value) -> str:
+def to_json_stub(value, **kwargs) -> str:
     """Ansible's ``to_json`` for looked-up templates.
 
     ``default=str`` so a StubUndefined serializes as its placeholder instead of aborting the render.
+    Other keywords reach ``json.dumps`` as Ansible's filter passes them: uptime-kuma's bridge
+    tiles render their names with ``ensure_ascii=False``.
     """
-    return json.dumps(value, default=str)
+    return json.dumps(value, default=str, **kwargs)
 
 
 def make_lookup(ctx: dict):

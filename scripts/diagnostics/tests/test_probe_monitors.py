@@ -5,6 +5,9 @@ structurally cannot — it counts the exporter's own set, so a monitor that is g
 down leaves the ratio at N/N up.
 """
 
+from pathlib import Path
+
+from check_table import CHECKS
 from diagnostics.probe_lib import monitors
 
 TEMPLATE_SAMPLE = """\
@@ -427,3 +430,43 @@ def test_declared_secret_names_reads_the_real_stores_key_list():
     # after it resolve.
     assert "sops" not in names
     assert "homelab_eval_push_token" not in names
+
+
+def test_the_bridge_tile_loop_expands_to_one_declaration_per_table_row(
+    tmp_path, monkeypatch
+):
+    table = tmp_path / "roles/k8s/b/files/t.py"
+    table.parent.mkdir(parents=True)
+    table.write_text(
+        'ROWS = (Row(display="Alpha", fn=x.a), Row(display="Beta", fn=x.b))\n'
+    )
+    text = (
+        "stringData:\n"
+        "{% for row in lookup('file', playbook_dir ~ '/roles/k8s/b/files/t.py')"
+        " | py_table('ROWS') %}\n"
+        "  {{ row.kuma_id }}.json: |\n"
+        '    {"type": "push", "name": {{ row.display | to_json }}, "interval": 60'
+        '{% if row.x %}, "x": 1{% endif %}}\n'
+        "{% endfor %}\n"
+        "  after.json: |\n"
+        '    {"type": "http", "name": "After", "interval": 30}\n'
+    )
+    declared = monitors.parse_declared_monitors(text, root=tmp_path)
+    assert set(declared) == {"Alpha", "Beta", "After"}
+    assert declared["Beta"] == {
+        "type": "push",
+        "interval": 60,
+        "gated": False,
+        "gate": None,
+    }
+
+
+def test_the_real_template_declares_every_bridge_tile_ungated():
+    """#3781 moved the bridge tiles into a loop; kuma-drift must still list each one."""
+    declared = monitors.parse_declared_monitors(
+        Path(monitors.STATIC_MONITORS_PATH).read_text()
+    )
+    bridge = {row.display: declared.get(row.display) for row in CHECKS}
+    assert len(bridge) >= 44 and "Traefik 421" in bridge
+    assert all(d is not None and d["gated"] is False for d in bridge.values()), bridge
+    assert not [name for name in declared if "{" in name]

@@ -162,7 +162,7 @@ the deployer reads, so its verdict and the tick's agree by construction. Hand-po
 polls across 213 wait episodes before it existed.
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
-SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_logic.py` is the list, and a commit whose
+SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_git.py` is the list, and a commit whose
 merge was immediately followed by another reads `cancelled` permanently. `await_ci.py` follows
 the tip in that case, but only once your commit is an ancestor of it. The log line is `<sha> has
 no verdict (cancelled/stale) — following the tip <tip>`, and it is normal. It also fires when
@@ -284,6 +284,16 @@ reads `skipped` — green, on the landing that most needs a gate. That worktree 
 it cannot be made at all, the landing reports `unhealthy` rather than gating the primary — the
 one exception being a primary that already contains the commit.
 
+A failed gate is asked once more whether a later deploy re-rolled the workload. The landing's
+deploy releases the service lock before the gate runs, so another landing or a tick can deploy
+the same service under the gate's one sample. A `Recreate` workload then reads `0/1 ready`
+mid-roll (#3812). `land.sh` counts a tag as re-rolled when its service lock (or `all`) is held,
+or its release record was stamped after step 5 ended. It waits for that deploy to finish and
+gates again. The verdict line then reads `re-gated after a later deploy of <tags>`, and a change
+that is still broken fails the second gate as well. A healthy second gate settles only when the
+commit in that deploy's release record contains the merge commit. The tick's rollback
+redeploys an older pin, and its healthy pods say nothing about this change.
+
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the 180s
 restart window. It cannot see whether *your change* took effect: an Authelia 302 fires in the
 middleware before the backend is reached, and 19 dead Grafana panels sat behind a 1/1 pod.
@@ -336,7 +346,7 @@ Four things sit in that position:
   `shared_role_callers.smoke_caller` derives it — and the other 56 take the new task logic on
   their own next deploy. PR #3117 was the measured case: 57 tags, about 20 minutes, and 0 of 60
   release records showed the restart it was changing. The `# DECIDED:` at `smoke_caller` holds
-  the ruling and the gap it accepts, and `deploy_defer.discharge_k8s_unapplied` still reads
+  the ruling and the gap it accepts, and `deploy_k8s_owed.discharge_k8s_unapplied` still reads
   every caller, because its question is whether the change is applied rather than whether it
   runs.
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so

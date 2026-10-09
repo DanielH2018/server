@@ -189,6 +189,7 @@ def refusing_paths(
         declared: every tag naming a `containers_list` entry, which is how a shared k8s role
             is told from a service one.
     """
+    from deploy_cross_role import k8s_lookup_readers
     from deploy_logic import services_from_changed_paths, shared_module_consumers
 
     flagged = []
@@ -212,6 +213,7 @@ def refusing_paths(
             | cs.k8s_deploy
             | cs.tasks
             | shared_module_consumers([path], repo)
+            | k8s_lookup_readers([path], repo)
         )
         hit = sorted(reached & tags)
         if hit:

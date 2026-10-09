@@ -1,86 +1,18 @@
 """The review pipeline a `launch --review` batch runs: phase order, the filter, disclosure.
 
-Every process goes through one fake runner, which answers `git`, records `gh` and replays a
-scripted report per `claude` call. It also records `.fanout/phase` at each call, since the
-Stop hook reads that file to decide what a session owes.
+Every process goes through one fake runner, `_review_fakes.FakeRunner`, which answers `git`,
+records `gh` and replays a scripted report per `claude` call. It also records `.fanout/phase`
+at each call, since the Stop hook reads that file to decide what a session owes. The red/green
+phases are tested in `test_fanout_review_red_green.py`.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_review.py
 """
 
 import json
-import subprocess
 
-from fanout_lib.brief import Issue, render_brief
+from _review_fakes import PR, _finding, _pipeline, _report
 from fanout_lib.review import PROMPT_FILE, Pipeline, actionable
-from fanout_lib.target import SERVER_TARGET
-
-PR = "https://github.com/DanielH2018/server/pull/4000"
-ISSUES = [Issue(1345, "Traefik startupProbe has no red-proof", "body one")]
-
-
-def _report(result="", session="sid-1", structured=None, is_error=False, cost=1.0):
-    out = {
-        "type": "result",
-        "result": result,
-        "session_id": session,
-        "is_error": is_error,
-        "total_cost_usd": cost,
-    }
-    if structured is not None:
-        out["structured_output"] = structured
-    return out
-
-
-def _finding(title, severity="high", confidence=0.9, category="correctness"):
-    return {
-        "title": title,
-        "file": "scripts/x.py",
-        "line": 3,
-        "severity": severity,
-        "confidence": confidence,
-        "category": category,
-        "detail": "fails on an empty list",
-    }
-
-
-class FakeRunner:
-    def __init__(self, worktree, reports, heads=("aaa", "bbb")):
-        self.worktree = worktree
-        self.reports = list(reports)
-        self.heads = list(heads)
-        self.claude = []  # (argv, stdin, phase file at call time)
-        self.comments = []
-
-    def __call__(self, argv, stdin):
-        if argv[0] == "git":
-            if "merge-base" in argv:
-                out = "base0"
-            else:
-                out = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
-            return subprocess.CompletedProcess(argv, 0, out + "\n", "")
-        if argv[0] == "gh":
-            self.comments.append(stdin)
-            return subprocess.CompletedProcess(argv, 0, "", "")
-        phase = (self.worktree / ".fanout" / "phase").read_text().strip()
-        self.claude.append((argv, stdin, phase))
-        return subprocess.CompletedProcess(argv, 0, json.dumps(self.reports.pop(0)), "")
-
-
-def _pipeline(tmp_path, reports, host="daniel-box", heads=("aaa", "bbb"), clock=None):
-    (tmp_path / ".fanout").mkdir()
-    brief = render_brief(ISSUES, host, "1345", "worktree-orch", [], review=True)
-    run = FakeRunner(tmp_path, reports, heads)
-    pipeline = Pipeline(
-        tmp_path,
-        "1345",
-        host,
-        SERVER_TARGET,
-        brief,
-        run=run,
-        clock=clock or (lambda: 0.0),
-        state_dir=tmp_path / "state",
-    )
-    return pipeline, run
+from fanout_lib.target import SERVER_TARGET, Target
 
 
 def test_an_implementer_with_no_pr_ends_the_run_before_any_review(tmp_path):
@@ -162,7 +94,7 @@ def test_a_security_finding_stays_off_the_public_comment_and_the_tracker(tmp_pat
         "token leaks" not in run.claude[4][1]
     )  # the land prompt files public ones only
     assert "held off the public tracker" in final["result"]
-    (record,) = (tmp_path / "state").iterdir()
+    (record,) = [f for f in (tmp_path / "state").iterdir() if f.suffix == ".json"]
     assert "token leaks" in record.read_text()
 
 
@@ -211,7 +143,142 @@ def test_the_reviewer_prompt_is_the_text_read_before_the_implementer_ran(tmp_pat
     pipeline.run_all()
     reviewer = run.claude[1][0]
     assert "--append-system-prompt-file" not in reviewer
-    assert reviewer[reviewer.index("--append-system-prompt") + 1] == "PROMPT AT START"
+    assert reviewer[reviewer.index("--append-system-prompt") + 1].startswith(
+        "PROMPT AT START"
+    )
     assert Pipeline(tmp_path, "1", "h", SERVER_TARGET, "").review_prompt == (
         PROMPT_FILE.read_text()
+    )
+
+
+def test_every_phase_runs_the_prompt_and_hooks_read_at_start(tmp_path):
+    """The implementer can rewrite the worktree's prompt file, settings and hooks, so none is
+    read again once it has run (#3794, #3810)."""
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [_finding("off by one")]}),
+        _report(f"Fixed it. {PR}"),
+        _report(structured={"summary": "resolved", "findings": []}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    pipeline.headless_prompt = "PROMPT AT START"
+    pipeline.hooks = dict(pipeline.hooks, **{"fanout-stop.py": b"HOOK AT START"})
+    assert "hooklib/worktree_lines.py" in pipeline.hooks
+    assert not [name for name in pipeline.hooks if name.startswith("tests/")]
+
+    hooks = pipeline.hook_root / ".claude" / "hooks"
+    hook = hooks / "fanout-stop.py"
+    seen = []
+
+    def agent_edits_the_hooks(argv, stdin):
+        if "--settings" in argv:
+            seen.append((hook.read_bytes(), (hooks / "json.py").exists()))
+            hook.chmod(0o644)
+            hook.write_bytes(b"EDITED")
+            (hooks / "json.py").write_text("PLANTED")
+        return run(argv, stdin)
+
+    pipeline.run = agent_edits_the_hooks
+    pipeline.run_all()
+
+    for argv in (run.claude[0][0], run.claude[2][0], run.claude[4][0]):
+        assert "--append-system-prompt-file" not in argv
+        assert argv[argv.index("--append-system-prompt") + 1] == "PROMPT AT START"
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        stops = [h for group in settings["hooks"]["Stop"] for h in group["hooks"]]
+        assert [h["command"] for h in stops] == [f"{hooks}/run-hook.sh fanout-stop"]
+    # Every phase starts from the bytes read at start, not the last phase's edit or plant.
+    assert seen == [(b"HOOK AT START", False)] * 5
+    # The worktree's own copy stands down on this marker; the snapshot path is the proof.
+    assert (tmp_path / ".fanout" / "stop-hook").read_text().strip() == str(hook)
+
+
+def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
+    """The fix and land phases resume the implementer's session after it could edit
+    `.claude/settings.json` and every guard hook (#3810)."""
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [_finding("off by one")]}),
+        _report(f"Fixed it. {PR}"),
+        _report(structured={"summary": "resolved", "findings": []}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    held = json.loads(pipeline.project_settings)
+    pipeline.run_all()
+
+    hooks = pipeline.hook_root / ".claude" / "hooks"
+    fix, land = run.claude[2][0], run.claude[4][0]
+    for argv in (fix, land):
+        assert argv[argv.index("--setting-sources") + 1] == "user"
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        commands = [
+            h["command"]
+            for groups in settings["hooks"].values()
+            for group in groups
+            for h in group["hooks"]
+        ]
+        assert len(commands) == len(
+            [h for groups in held["hooks"].values() for g in groups for h in g["hooks"]]
+        )
+        assert all(c.startswith(f"{hooks}/run-hook.sh ") for c in commands)
+        assert settings["permissions"] == held["permissions"]
+        assert (hooks / "block-protected-edits.py").is_file()
+    # The guard reads the secret-bearing paths derived at start, not the agent's tree.
+    assert run.derived[-1] == "scripts/secrets_mgmt/secret_bearing_host_paths.py"
+    assert json.loads((hooks / "secret_bearing_host_paths.json").read_text()) == {
+        "/usr/local/bin/a.sh": ["one_token", "two_token"]
+    }
+    # With no red phase before it, the implement phase keeps the project source.
+    assert "--setting-sources" not in run.claude[0][0]
+
+
+def test_the_reviewers_load_no_settings_file_and_get_claude_md_read_at_start(tmp_path):
+    """The reviewer starts after the implementer could edit the settings, the guard hooks
+    and `CLAUDE.md`, and it has Bash (#3825)."""
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [_finding("off by one")]}),
+        _report(f"Fixed it. {PR}"),
+        _report(structured={"summary": "resolved", "findings": []}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    assert pipeline.project_claude_md.startswith("# Server Homelab")
+    pipeline.project_claude_md = "CLAUDE.MD AT START"
+    held = json.loads(pipeline.project_settings)
+    pipeline.run_all()
+
+    hooks = pipeline.hook_root / ".claude" / "hooks"
+    for argv in (run.claude[1][0], run.claude[3][0]):
+        assert argv[argv.index("--setting-sources") + 1] == "user"
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        assert settings["permissions"] == held["permissions"]
+        commands = [
+            h["command"]
+            for groups in settings["hooks"].values()
+            for group in groups
+            for h in group["hooks"]
+        ]
+        assert commands and all(c.startswith(f"{hooks}/run-hook.sh ") for c in commands)
+        prompt = argv[argv.index("--append-system-prompt") + 1]
+        assert prompt.startswith(pipeline.review_prompt)
+        assert prompt.endswith("CLAUDE.MD AT START")
+        assert "--disallowedTools" in argv
+
+
+def test_another_repos_later_phases_keep_its_own_project_settings(tmp_path):
+    """The pipeline holds no copy of another repo's hooks, so dropping its source drops them."""
+    dotfiles = Target("DanielH2018/dotfiles", str(tmp_path), "origin/main")
+    pipeline, _ = _pipeline(tmp_path, [], target=dotfiles)
+    pipeline.session = "sid-1"
+    argv = pipeline._resume()
+    assert "--setting-sources" not in argv
+    settings = json.loads(argv[argv.index("--settings") + 1])
+    assert list(settings["hooks"]) == ["Stop"]
+    reviewer = pipeline._reviewer()
+    assert "--setting-sources" not in reviewer
+    assert reviewer[reviewer.index("--append-system-prompt") + 1] == (
+        pipeline.review_prompt
     )

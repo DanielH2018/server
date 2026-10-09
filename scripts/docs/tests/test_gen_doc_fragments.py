@@ -189,8 +189,8 @@ def test_secret_tiers_renders_cadence_and_count_per_tier():
 
 
 def test_a_second_run_writes_nothing(tmp_path):
-    assert g.write_fragments(tmp_path) == len(g.FRAGMENTS)
-    assert g.write_fragments(tmp_path) == 0
+    assert g.write_fragments(tmp_path) == list(g.FRAGMENTS)
+    assert g.write_fragments(tmp_path) == []
 
 
 # --- fail2ban, deadman cadences, LAN addresses ---------------------------------------------
