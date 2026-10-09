@@ -34,22 +34,11 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mkv_attachment_logic as mal
-from host_lib import atomic_write, discord_post, parse_env_file
+from fake_remux_scan import load_config, log
+from host_lib import atomic_write, discord_post
 
-CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-mkv-attachments"
 DISCORD_MARKER = "🔤 mkv-attachments:"
-
-
-def load_config() -> dict:
-    cfg = dict(os.environ)
-    if os.path.exists(CONFIG_PATH):
-        cfg.update(parse_env_file(CONFIG_PATH))
-    return cfg
-
-
-def log(*args) -> None:
-    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
 
 
 def write_state(state_file: str, ok: bool, msg: str) -> None:
