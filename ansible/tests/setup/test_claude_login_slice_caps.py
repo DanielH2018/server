@@ -24,17 +24,20 @@ tested as a pair: one render it must accept, one override it must follow, per th
 Run: uv run pytest ansible/tests/setup/test_claude_login_slice_caps.py
 """
 
+import ast
+import os
 import re
 
 import pytest
 from _helpers import ANSIBLE, load_yaml
-from _setup_render import render_setup_text
+from _setup_render import render_setup_text, role_context
+from lib.ansible_jinja_env import make_ansible_env
 
 ROLE = "claude_code"
 ROLE_DIR = ANSIBLE / "roles" / "setup" / ROLE
 TEMPLATES = ROLE_DIR / "templates"
 DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
-TASKS = ROLE_DIR / "tasks" / "main.yml"
+TASKS = ROLE_DIR / "tasks" / "login_caps.yml"
 
 SLICE_UNIT = "login-slice-caps.conf.j2"
 PYTEST_UNIT = "pytest-fanout-cap.conf.j2"
@@ -120,14 +123,14 @@ def test_slice_has_no_memory_max() -> None:
     )
 
 
-def test_slice_drop_in_targets_the_configured_uid() -> None:
-    """The dest path must key off claude_code_login_uid, not a literal 1000."""
+def test_slice_drop_in_targets_each_listed_uid() -> None:
+    """The dest path must key off the looped uid, not a literal 1000 or a single variable."""
     tasks = TASKS.read_text()
-    assert "user-{{ claude_code_login_uid }}.slice.d" in tasks, (
-        "the login-slice drop-in's destination must be derived from claude_code_login_uid "
-        "— a hardcoded user-1000.slice.d would silently miss any host where that account "
-        "has a different uid"
+    assert "user-{{ item }}.slice.d" in tasks, (
+        "the login-slice drop-in's destination must be derived from the looped uid — a "
+        "hardcoded user-1000.slice.d would silently miss the agent user's slice"
     )
+    assert 'loop: "{{ claude_code_login_caps_uids }}"' in tasks
 
 
 def test_pytest_cap_follows_the_same_variable_as_the_unit(
@@ -160,18 +163,14 @@ def test_login_caps_var_defaults_to_enabled() -> None:
 
 def test_login_caps_can_be_turned_off() -> None:
     """The reverse-states rule: a way to disable the caps needs to exist, not just a way to
-    enable them. Both artifacts must have a `when: not claude_code_login_caps_enabled`
-    removal task, or setting the var false leaves a stale drop-in / environment.d file that
-    nothing ever cleans up."""
+    enable them. The removal tasks key off the same uid list the render tasks loop over, so
+    setting the var false (an empty list) or dropping a uid from the list removes its files."""
     tasks = TASKS.read_text()
-    assert "when: not claude_code_login_caps_enabled" in tasks, (
-        "no task removes the login-session caps when claude_code_login_caps_enabled is set "
-        "false — a one-way door: the caps could be turned on but never off"
-    )
     assert tasks.count("state: absent") >= 2, (
         "expected an absent-state removal task for both the slice drop-in and the "
         "environment.d file"
     )
+    assert "not in claude_code_login_caps_uids" in tasks
 
 
 def test_login_uid_default_is_a_plain_integer() -> None:
@@ -181,3 +180,122 @@ def test_login_uid_default_is_a_plain_integer() -> None:
         "claude_code_login_uid is gone from defaults — the login-slice drop-in path has no "
         "owner"
     )
+
+
+# ── Which uids carry the caps ────────────────────────────────────────────────────────────
+# tasks/login_caps.yml derives the uid list at run time, so these tests render its expressions
+# against a passwd table standing in for the host's, rather than reading the YAML as text.
+
+SLICE_DIRS = [
+    "/etc/systemd/system/user-1000.slice.d",
+    "/etc/systemd/system/user-996.slice.d",
+]
+PASSWD = {
+    "ubuntu": ["x", "1000", "1000", "", "/home/ubuntu", "/bin/bash"],
+    "claude": ["x", "996", "996", "", "/var/lib/claude", "/bin/bash"],
+}
+
+
+def _task(name_part: str) -> dict:
+    matches = [t for t in load_yaml(TASKS) if name_part in t["name"]]
+    assert len(matches) == 1, f"expected one task named like {name_part!r}: {matches}"
+    return matches[0]
+
+
+def _evaluate(expression: str, context: dict) -> list[int] | bool:
+    env = make_ansible_env()
+    env.filters["basename"] = os.path.basename
+    # A `when:` is a bare expression; a set_fact value already carries its own braces.
+    source = expression.strip()
+    if not source.startswith("{{"):
+        source = "{{ (" + source + ") }}"
+    return ast.literal_eval(env.from_string(source).render(context))
+
+
+def _context(**overrides: object) -> dict:
+    return {
+        **role_context(ROLE_DIR),
+        "ansible_facts": {"getent_passwd": PASSWD},
+        **overrides,
+    }
+
+
+def _capped_uids(**overrides: object) -> list[int]:
+    facts = _task("Work out which uids")["ansible.builtin.set_fact"]
+    capped = _evaluate(facts["claude_code_login_caps_uids"], _context(**overrides))
+    assert isinstance(capped, list)
+    return capped
+
+
+def _swept(capped: list[int]) -> list[str]:
+    """The user-<uid>.slice.d directories whose claude-caps.conf the sweep removes."""
+    when = _task("Remove the login-session slice drop-in")["when"]
+    return [
+        path
+        for path in SLICE_DIRS
+        if _evaluate(
+            when, _context(claude_code_login_caps_uids=capped, item={"path": path})
+        )
+    ]
+
+
+def test_without_the_agent_only_the_operator_uid_is_capped() -> None:
+    assert _capped_uids(claude_code_agent_user_enabled=False) == [1000]
+
+
+def test_with_the_agent_both_uids_are_capped() -> None:
+    assert _capped_uids(claude_code_agent_user_enabled=True) == [1000, 996]
+
+
+def test_the_agent_uid_is_looked_up_not_written_down() -> None:
+    renumbered = {
+        **PASSWD,
+        "claude": ["x", "1234", "1234", "", "/var/lib/claude", "sh"],
+    }
+    capped = _capped_uids(
+        claude_code_agent_user_enabled=True,
+        ansible_facts={"getent_passwd": renumbered},
+    )
+    assert capped == [1000, 1234]
+
+
+def test_an_agent_that_does_not_exist_yet_adds_no_uid() -> None:
+    capped = _capped_uids(
+        claude_code_agent_user_enabled=True,
+        ansible_facts={"getent_passwd": {"ubuntu": PASSWD["ubuntu"]}},
+    )
+    assert capped == [1000]
+
+
+def test_switching_the_caps_off_caps_no_uid() -> None:
+    capped = _capped_uids(
+        claude_code_agent_user_enabled=True, claude_code_login_caps_enabled=False
+    )
+    assert capped == []
+
+
+def test_switching_the_caps_off_sweeps_every_drop_in() -> None:
+    assert _swept([]) == SLICE_DIRS
+
+
+def test_a_uid_that_leaves_the_list_has_its_drop_in_swept() -> None:
+    assert _swept([996]) == SLICE_DIRS[:1]
+
+
+def test_a_capped_uid_keeps_its_drop_in() -> None:
+    assert _swept([1000, 996]) == []
+
+
+def test_the_environment_file_is_written_or_removed_by_the_same_list() -> None:
+    write_when = _task("Cap the pytest fan-out")["when"]
+    remove_when = _task("Remove the login pytest-fanout cap")["when"]
+    for capped, written in (([1000, 996], True), ([1000], False)):
+        ctx = _context(item="claude", claude_code_login_caps_uids=capped)
+        assert _evaluate(write_when, ctx) is written
+        assert _evaluate(remove_when, ctx) is (not written)
+
+
+def test_login_uids_defaults_to_the_one_login_uid() -> None:
+    assert role_context(ROLE_DIR)["claude_code_login_uids"] == [1000]
+    renumbered = role_context(ROLE_DIR, {"claude_code_login_uid": 1500})
+    assert renumbered["claude_code_login_uids"] == [1500]

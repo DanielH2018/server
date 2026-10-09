@@ -108,7 +108,8 @@
 
 # ── The fleet bound ────────────────────────────────────────────────────────────────────
 # One cap for both Claude cgroup planes, on the slice that parents them: claude-rc.service
-# (moved into it by the unit's Slice= line) and user-{{ claude_code_login_uid }}.slice.
+# (moved into it by the unit's Slice= line) and the user-<uid>.slice of every uid in
+# claude_code_login_uids.
 # Applied BEFORE the unit is installed so the parent cap is already on disk when the first
 # daemon-reload of this play happens — otherwise the unit lands in a slice with no cap until
 # the next run. See defaults/main.yml for the derivation and for why user.slice is the only
@@ -260,76 +261,6 @@
     state: started
     daemon_reload: true
   become: true
-
-# ── Login-session caps ──────────────────────────────────────────────────────────────────
-# The RC unit's MemoryHigh/MemorySwapMax/PYTEST_XDIST_AUTO_NUM_WORKERS bound only its own
-# cgroup. A session started with `claude agents` (or a bare `claude`) from an interactive
-# SSH shell lands in user.slice/user-{{ claude_code_login_uid }}.slice instead, which none of
-# those touch — see defaults/main.yml for the gap this closes. Unconditional whenever
-# this role runs: unlike the RC host, a login shell is not something claude_code_rc_enabled
-# gates, so these two artifacts have their own on/off var instead.
-
-- name: Ensure the login-session slice drop-in directory exists
-  tags: [claude_code]
-  ansible.builtin.file:
-    path: "/etc/systemd/system/user-{{ claude_code_login_uid }}.slice.d"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  when: claude_code_login_caps_enabled
-
-- name: Bound the login-session slice the way the RC unit is bounded
-  tags: [claude_code]
-  ansible.builtin.template:
-    src: login-slice-caps.conf.j2
-    dest: "/etc/systemd/system/user-{{ claude_code_login_uid }}.slice.d/claude-caps.conf"
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  when: claude_code_login_caps_enabled
-  notify: Reload systemd
-
-# The reverse of the two tasks above: state: absent on both toggles this off cleanly rather
-# than leaving a drop-in dangling once nobody reads defaults/main.yml's comment again.
-- name: Remove the login-session slice drop-in when the cap is disabled
-  tags: [claude_code]
-  ansible.builtin.file:
-    path: "/etc/systemd/system/user-{{ claude_code_login_uid }}.slice.d/claude-caps.conf"
-    state: absent
-  become: true
-  when: not claude_code_login_caps_enabled
-  notify: Reload systemd
-
-- name: "Ensure the environment.d directory exists for {{ sys_user }}"
-  tags: [claude_code]
-  ansible.builtin.file:
-    path: "/home/{{ sys_user }}/.config/environment.d"
-    state: directory
-    mode: "0755"
-  become: false
-  when: claude_code_login_caps_enabled
-
-- name: Cap the pytest fan-out for every login session, not only the RC unit
-  tags: [claude_code]
-  # Takes effect at the next login (pam_systemd reads environment.d at session start, not
-  # continuously), so no handler applies it — there is nothing to reload.
-  ansible.builtin.template:
-    src: pytest-fanout-cap.conf.j2
-    dest: "/home/{{ sys_user }}/.config/environment.d/90-claude-pytest-cap.conf"
-    mode: "0644"
-  become: false
-  when: claude_code_login_caps_enabled
-
-- name: Remove the login pytest-fanout cap when disabled
-  tags: [claude_code]
-  ansible.builtin.file:
-    path: "/home/{{ sys_user }}/.config/environment.d/90-claude-pytest-cap.conf"
-    state: absent
-  become: false
-  when: not claude_code_login_caps_enabled
 
 # ── Memory store copy (issue #3123) ─────────────────────────────────────────────────────
 # Copies this host's Claude memory store to claude_code_memory_sync_target, one-way and
@@ -570,6 +501,13 @@
     - claude_code_user == claude_code_agent_user
     - claude_code_agent_memory_seed
   ansible.builtin.import_tasks: agent_memory_seed.yml
+
+# After the agent user exists: the caps follow its uid, looked up from the passwd database.
+# The block sits down here, not beside the cgroup metrics above, because a first apply that
+# built the user in the same run would otherwise find no uid to cap.
+- name: Cap the login-session slices of every account that starts Claude sessions
+  tags: [claude_code]
+  ansible.builtin.import_tasks: login_caps.yml
 
 # The token is the one credential in the home that works off this host, so switching the user
 # off removes it. The signing key stays: it can only sign, and a new one would need adding to
