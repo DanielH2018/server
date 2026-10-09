@@ -215,20 +215,19 @@ manifest still lists as not cleaned, whichever host that run put it on. The seco
 compares issue numbers, not the `--batch` text, so reordering or narrowing the spec does not
 get past it. A failed batch is cleaned, never re-placed elsewhere.
 
-**Abandoning a batch whose branch never merged takes one more step.** `clean` keeps an
-unmerged tree by design and records no removal, so the refusal above stands until the branch
-is gone. On that batch's host, from the launching user's checkout (`/home/ubuntu/server`, or
-`/var/lib/claude/server` for the `claude` agent user), in this order — git refuses
-`branch -D` while the worktree is still registered, and `launch` locked it:
+**To abandon a batch whose branch never merged, run `abandon`.** `clean` keeps an unmerged
+tree by design and records no removal, so the refusal above stands until the branch is gone.
 
 ```bash
-git worktree unlock .claude/worktrees/fanout-<batch>
-git worktree remove --force .claude/worktrees/fanout-<batch>
-git branch -D worktree-fanout-<batch>
+uv run python scripts/dev/fanout_place.py abandon <run-id> <batch>
 ```
 
-That discards whatever the agent committed. Then run `clean <run-id>` again — it finds neither
-tree nor branch, records the removal, and the relaunch is free to place.
+It runs on the batch's host from the checkout the batch was launched from. It unlocks the
+tree, force-removes it and deletes the branch, which discards whatever the agent committed.
+It then records the removal in the manifest and releases the batch's claims, so the relaunch
+is free to place. It refuses while the batch's unit is still active: run `stop <run-id>
+<batch>` first. The PR, if the agent opened one, stays open on GitHub; close it with
+`gh pr close`.
 
 **daniel-server is refused as a host until its signing key is registered.** The repo ruleset
 requires a verified commit signature, and `launch` drops a host whose `user.signingkey` is not
@@ -468,9 +467,9 @@ d. **Release and abandon under the batch's branch.** Section 5's `release` names
    orchestrator's branch, which holds no dotfiles claim, so it is refused here. Release an
    unfinished batch with
    `findings.py release <n> --worktree worktree-fanout-<batch> --repo DanielH2018/dotfiles --reason "..."`.
-   To abandon a batch whose branch never merged, run section 3's three commands from
-   `~/.local/share/chezmoi` instead of `/home/ubuntu/server`, after
-   `systemctl --user stop fanout-dotfiles-<batch>`, then `clean <run-id>` again.
+   To abandon a batch whose branch never merged, run `stop <run-id> <batch>`, then
+   `abandon <run-id> <batch>`. `abandon` acts on the chezmoi checkout and releases the claims
+   under the batch's branch on its own.
 
 The dotfiles agents run without the `fanout-stop` Stop hook, which only this repo's
 `.claude/settings.json` registers. An agent that ends its turn on a progress report is not sent
