@@ -144,6 +144,9 @@ So exercise the thing you actually changed as well.
   and deploying another session's half-finished landing is not yours to do.
 - **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
   most of the deploy.
+- A `--detach` run holds its service locks until its notifier's health gate has posted. A
+  second deploy of the same service queues behind the gate rather than rolling the workload
+  under its sample (#3817).
 
 ## Retiring a k8s service
 
