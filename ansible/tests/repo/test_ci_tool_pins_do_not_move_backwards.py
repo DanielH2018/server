@@ -18,20 +18,28 @@ The escape hatch is an inline `# downgrade-ok:` comment on the pin's own line. A
 with no override is a one-way door, and a yanked release makes a deliberate downgrade correct —
 the marker goes where the decision is made rather than in a list somewhere else.
 
-The comparison against `origin/master` needs that ref. It skips, naming the reason, when the ref
-is not fetched — `test_ci_pytest_job_fetch_depth.py` is what keeps it resolvable on the runner,
-the same arrangement `test_module_length_ratchet.py` relies on. A stale local ref compares
-against older numbers, which can only make the check lenient.
+The comparison reads master's pins at `git merge-base HEAD origin/master`, never the live
+`origin/master` tip. CI tests a PR's merge ref, and Renovate bumps pins on master. Against the
+live tip, a pin master raised after the merge ref was built reads as one this PR moved backwards
+(#4040, the race #4009 fixed in `test_module_length_ratchet.py`). The merge base is the merge
+ref's first parent in CI, the fork point on a local branch, and HEAD itself on master.
+
+The comparison needs the `origin/master` ref. It skips, naming the reason, when the ref is not
+fetched — `test_ci_pytest_job_fetch_depth.py` is what keeps it resolvable on the runner, the
+same arrangement `test_module_length_ratchet.py` relies on. A stale local ref yields an older
+base, which can only make the check lenient.
 
 Run: uv run pytest ansible/tests/repo/test_ci_tool_pins_do_not_move_backwards.py
 """
 
 import re
 import subprocess
+from collections.abc import Callable
 
 import pytest
 
 from _helpers import REPO
+from lib.git_testing import commit, git, init_repo
 from lib.proc_testing import run
 
 # Each pin, as the file that carries it and the patterns that find EVERY copy of its version
@@ -158,8 +166,39 @@ def _git(*args: str) -> subprocess.CompletedProcess[str]:
     return run(["git", *args], cwd=REPO, check=False)
 
 
-def master_is_fetched() -> bool:
-    return _git("rev-parse", "--verify", "origin/master").returncode == 0
+def base_of(run_git: Callable[..., subprocess.CompletedProcess[str]]) -> str | None:
+    """The commit master's pins are read at, or None when `origin/master` is absent."""
+    found = run_git("merge-base", "HEAD", "origin/master")
+    return found.stdout.strip() if found.returncode == 0 else None
+
+
+def test_a_pin_master_raised_after_the_merge_ref_was_built_is_not_flagged(tmp_path):
+    """The #4040 race: CI's merge ref is built, then Renovate bumps a pin the PR never touched.
+
+    The live tip reads the untouched pin as moved backwards, which is the red half. The base
+    resolves to the merge ref's first parent, where the pin still has the PR's version.
+    """
+    rel, patterns = PINS["prek"]
+    repo = init_repo(tmp_path)
+    built_on = commit(repo, "base", **{rel: "run: pip install prek==0.5.0\n"})
+    git(repo, "checkout", "-q", "-b", "pr")
+    commit(repo, "the PR", **{"other.py": "x\n"})
+    git(repo, "checkout", "-q", "--detach", built_on)
+    git(repo, "merge", "-q", "--no-ff", "--no-gpg-sign", "-m", "merge ref", "pr")
+    merge_ref = git(repo, "rev-parse", "HEAD").stdout.strip()
+    git(repo, "checkout", "-q", "-b", "later", built_on)
+    tip = commit(repo, "renovate bump", **{rel: "run: pip install prek==0.5.2\n"})
+    git(repo, "update-ref", "refs/remotes/origin/master", tip)
+    git(repo, "checkout", "-q", "--detach", merge_ref)
+
+    def pinned(ref: str) -> str:
+        (version,) = versions_in(git(repo, "show", f"{ref}:{rel}").stdout, patterns)
+        return version
+
+    head = pinned("HEAD")
+    assert pin_moved_backwards(pinned("origin/master"), head)
+    assert base_of(lambda *a: git(repo, *a, check=False)) == built_on
+    assert not pin_moved_backwards(pinned(built_on), head)
 
 
 def _text(pin: str) -> str:
@@ -195,26 +234,27 @@ def test_every_copy_of_a_pin_names_the_same_version(pin):
 
 
 @pytest.mark.parametrize("pin", sorted(PINS))
-def test_no_pin_moves_backwards_against_master(pin):
-    if not master_is_fetched():
+def test_no_pin_moves_backwards_against_the_merge_base(pin):
+    base = base_of(_git)
+    if base is None:
         pytest.skip(
-            "origin/master is not fetched, so there is nothing to compare against"
+            "origin/master is not fetched, so there is no merge base to compare against"
         )
     rel, patterns = PINS[pin]
     here_text = _text(pin)
     # A pin whose file is new on this branch has no master copy to have moved back from.
-    if _git("cat-file", "-e", f"origin/master:{rel}").returncode != 0:
+    if _git("cat-file", "-e", f"{base}:{rel}").returncode != 0:
         pytest.skip(
-            f"{rel} does not exist on master yet, so {pin} cannot have moved backwards"
+            f"{rel} does not exist on the merge base yet, so {pin} cannot have moved backwards"
         )
-    shown = _git("show", f"origin/master:{rel}")
+    shown = _git("show", f"{base}:{rel}")
     assert shown.returncode == 0, (
-        f"git show origin/master:{rel} failed: {shown.stderr.strip()}"
+        f"git show {base}:{rel} failed: {shown.stderr.strip()}"
     )
     master_versions = versions_in(shown.stdout, patterns)
     if not master_versions:
         pytest.skip(
-            f"{pin} is not pinned on master yet, so it cannot have moved backwards"
+            f"{pin} is not pinned on the merge base yet, so it cannot have moved backwards"
         )
     here = versions_in(here_text, patterns)
     if not copies_agree(here) or not copies_agree(master_versions):
@@ -226,7 +266,7 @@ def test_no_pin_moves_backwards_against_master(pin):
     if not pin_moved_backwards(old, new):
         return
     assert downgrade_is_declared(here_text, patterns), (
-        f"{pin} goes from {old} on master to {new} here, which installs an OLDER tool while "
+        f"{pin} goes from {old} on the merge base to {new} here, which installs an OLDER tool while "
         f"reading as a bump (#1513). If the downgrade is deliberate — a yanked release — say so "
         f"with a `# {DOWNGRADE_MARKER} <reason>` comment on the pin's own line"
     )
