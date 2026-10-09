@@ -37,17 +37,13 @@ _UNGATED_BY_DESIGN = {"traefik"}
 _DIAL = re.compile(r"nc -w (\d+) -z (\S+) (\d+)")
 
 
-def _job(
-    enforced: bool = True, obs_enforced: bool = True, terraria_replicas: int = 1
-) -> dict:
-    """The probe Job, rendered with every row's target scaled up unless told otherwise."""
+def _job(enforced: bool = True, obs_enforced: bool = True) -> dict:
     text = render_role_template(
         "netpol-baseline",
         PROBE_TEMPLATE,
         {
             "netpol_baseline_enforced": enforced,
             "netpol_baseline_obs_enforced": obs_enforced,
-            "terraria_k8s_replicas": terraria_replicas,
         },
     )
     return yaml_fast.safe_load(text)
@@ -186,14 +182,19 @@ def test_the_clocks_are_ordered() -> None:
     assert worst < deadline < int(wait.group(1)), (worst, deadline, int(wait.group(1)))
 
 
-def test_a_row_follows_its_replica_count() -> None:
-    """terraria's row carries `terraria_k8s_replicas`, so scaling the server needs no edit here.
+def test_terraria_is_absent_while_it_is_scaled_to_zero() -> None:
+    """terraria runs at replicas 0, so gating it on a ready endpoint can only fail.
 
-    At 0 its EndpointSlice is empty and gating it can only fail; at 1 its open-port leg runs.
+    One direction only. A count above 0 does not require the row: its `expect: open` leg dials
+    :7777, which can crash a 1.4.5.7 server (#822), so the row comes back with the image fix
+    rather than with the replica count. defaults/main.yml records the decision (#3848).
     """
-    row = next(r for r in TARGETS if r["service"] == "terraria")
-    assert "terraria_k8s_replicas" in row["replicas"], (
-        "terraria's probe row no longer reads terraria_k8s_replicas"
-    )
-    assert "terraria" not in _dialled_services(_script(_job(terraria_replicas=0)))
-    assert "terraria" in _dialled_services(_script(_job(terraria_replicas=1)))
+    # In inventory, not terraria's defaults — k8s/game-stats renders the exporter
+    # at the same count and a role default does not cross a role boundary.
+    all_vars = yaml_fast.safe_load(ALL_VARS.read_text())
+    services = {r["service"] for r in TARGETS}
+    if int(all_vars["terraria_k8s_replicas"]) == 0:
+        assert "terraria" not in services, (
+            "terraria is scaled to zero but is still a probe target, so every full deploy.yml "
+            "fails its readiness gate"
+        )
