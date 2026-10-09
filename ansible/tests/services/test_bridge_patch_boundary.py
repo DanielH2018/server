@@ -91,6 +91,25 @@ def _runtime_modules():
     return found
 
 
+def _loaded_by_path(tree, module_names):
+    """Local name -> module id for every `m = importlib.util.module_from_spec(...)` naming one.
+
+    autofix-bridge's test loads its bind-mounted script by path, so no import statement binds
+    `autofix` and `import_bindings` alone would leave every patch on it out of the census.
+    """
+    bound = {}
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and getattr(node.value.func, "attr", None) == "module_from_spec"
+        ):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id in module_names:
+                    bound[t.id] = t.id
+    return bound
+
+
 def _patched_names_by_module(test_files=None, module_names=None):
     """Map each runtime module to the attributes any suite assigns, patches, or mutates.
 
@@ -109,7 +128,9 @@ def _patched_names_by_module(test_files=None, module_names=None):
 
     for path in test_files:
         tree = ast.parse(path.read_text(errors="ignore"), filename=str(path))
-        bound = import_bindings(tree, module_names)
+        bound = import_bindings(tree, module_names) | _loaded_by_path(
+            tree, module_names
+        )
 
         def _add(target, name, bound=bound):
             module = module_of(target, bound, module_names)
@@ -158,6 +179,30 @@ def _unqualified_binds(patched, modules):
                         "instead, or the tests' monkeypatch silently misses this module"
                     )
     return problems
+
+
+def test_the_census_reads_the_real_suites():
+    # Without this every assertion over `_patched_names_by_module()` passes vacuously if the
+    # census stops reading the real suites. monitor-bridge's tests patch no runtime module since
+    # #3986, so the member is autofix-bridge's `autofix`, which its test loads by path with
+    # `importlib.util.module_from_spec` and patches through that binding.
+    patched = _patched_names_by_module()
+    assert {"autofix"} <= patched.keys(), sorted(patched)
+    assert {"_request", "push"} <= patched["autofix"], sorted(patched["autofix"])
+
+
+def test_the_census_binds_a_module_loaded_by_path(tmp_path):
+    """Red/green for the `module_from_spec` binding: a name in the ids counts, any other not."""
+    test = tmp_path / "test_loaded.py"
+    test.write_text(
+        "import importlib.util\n\n"
+        "autofix = importlib.util.module_from_spec(spec)\n"
+        "other = importlib.util.module_from_spec(spec)\n\n"
+        "def test_x(monkeypatch):\n"
+        '    monkeypatch.setattr(autofix, "push", 1)\n'
+        '    monkeypatch.setattr(other, "push", 2)\n'
+    )
+    assert _patched_names_by_module([test], {"autofix"}) == {"autofix": {"push"}}
 
 
 def test_the_suite_census_sees_shared_helper_modules():
