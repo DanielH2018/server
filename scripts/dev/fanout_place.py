@@ -7,8 +7,8 @@ on the tighter of the two, picks the host with the most headroom per batch, crea
 worktree there, and starts a headless
 Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
 stop at `gh pr create`. It shipped in commit bd8e62bf8.
-`launch --review` puts a separate review between each batch's PR and its landing; the unit
-runs `fanout_review.py`, and `fanout_lib/review.py` describes the phases.
+`launch --review` runs `fanout_review.py`: a review between each batch's PR and its landing,
+and a red phase before a `red-green` batch's implementer. `fanout_lib/review.py` has the phases.
 
 Usage::
 
@@ -65,6 +65,7 @@ from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
 from fanout_lib.collisions import refuse_shared_files
+from fanout_lib.red_gate import review_flags
 from fanout_lib.launch_gates import (
     live_elsewhere,
     over_live_batch_cap,
@@ -243,11 +244,10 @@ def cmd_launch(args, tools: Tools) -> int:
         return 3
     if over_ssh_budget(placed) or over_live_batch_cap(placed, args.manifest_root):
         return 3
-    # Only the hosts a batch actually landed on. Reading every host placement looked at
-    # spends an ssh connection — against the 5-per-30s `ufw limit ssh` budget — on a host
-    # the signing gate or a failed headroom read already dropped, and puts that host's
-    # banner state into briefs for agents that never run there. Sorted, because set order
-    # is not stable across processes and these lines go into the brief verbatim.
+    # Only the hosts a batch landed on. Reading every host placement looked at spends an ssh
+    # connection (`ufw limit ssh` allows 5 per 30s) on a host the signing gate or a failed
+    # headroom read dropped, and puts its banner state into briefs for agents that never run
+    # there. Sorted: set order is not stable across processes, and the lines go in verbatim.
     health = [
         ln
         for host in sorted({host for _, host in placed})
@@ -258,13 +258,14 @@ def cmd_launch(args, tools: Tools) -> int:
     )
     for batch, host in placed:
         issues = [fetched[n] for n in batches[batch]]
+        flags = review_flags(batch, issues, args.review, target.is_server)
         brief = render_brief(
             issues, host, batch, args.orchestrator_branch, health, target, args.review
         )
         try:
             run.batches.append(
                 launch_mod.launch(
-                    tools, host, batch, brief, batches[batch], target, args.review
+                    tools, host, batch, brief, batches[batch], target, *flags
                 )
             )
         except launch_mod.LaunchError as exc:
@@ -574,9 +575,8 @@ def main(argv=None, tools: Tools | None = None) -> int:
     # that without also removing every visible subcommand from it.
     clean_one_parser = sub.add_parser("clean-one")
     clean_one_parser.add_argument("worktree")
-    # `branch` is unused by cmd_clean_one itself (clean_one reads the branch straight off
-    # the worktree it re-parses); it's a positional here only so `ps` on the host names the
-    # batch, the same reason systemd-run's --unit does at launch.
+    # `branch` is unused by cmd_clean_one, which reads the branch off the worktree; it is a
+    # positional only so `ps` on the host names the batch, as systemd-run's --unit does.
     clean_one_parser.add_argument("branch")
     clean_one_parser.add_argument("--repo", default=SERVER)
     clean_one_parser.set_defaults(fn=cmd_clean_one)

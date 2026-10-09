@@ -161,6 +161,15 @@ security findings as a count only. The full record goes to `~/.local/state/fanou
 stay with the implementer; only the slow model review moves out. The fallback `Agent(...)`
 path below has no review phase.
 
+**A `--review` batch whose every issue carries the `red-green` label also gets a red phase.**
+Label only issues whose stated behaviour is in Python this repo's suite runs: `scripts/`,
+monitor-bridge's registry, the filter plugins and the tested HA Jinja macros. Before the
+implementer starts, a separate session writes one failing test per stated behaviour from the
+issue text alone, and `scripts/dev/fanout_lib/red_gate.py` proves each new test fails on the
+unchanged code. The implementer gets that commit and may not edit it. A refused red commit is
+dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
+is not landed. The PR comment and the local record carry both gates' results.
+
 Each batch's branch is `worktree-fanout-<batch>`, the name used throughout this skill. Run as
 the `claude` agent user, the dispatcher names it `worktree-claude+fanout-<batch>` instead.
 That user's login profile sets `CLAUDE_WORKTREE_PREFIX`, and the agent branch fence lets its

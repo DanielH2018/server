@@ -265,11 +265,14 @@ def review_script(batch: str, target: Target = SERVER_TARGET) -> str:
     return f"{snapshot_root(worktree_path(batch, target))}/{REVIEW_SCRIPT}"
 
 
-def review_command(batch: str, target: Target = SERVER_TARGET) -> str:
+def review_command(
+    batch: str, target: Target = SERVER_TARGET, red_green: bool = False
+) -> str:
     """The unit's command for a `--review` batch: `fanout_review.py` in place of `claude -p`."""
     return (
         f"uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
         f"{review_script(batch, target)} --batch {batch} --repo {target.repo}"
+        + (" --red-green" if red_green else "")
     )
 
 
@@ -278,11 +281,14 @@ def systemd_run_command(
     target: Target = SERVER_TARGET,
     home: str | None = None,
     review: bool = False,
+    red_green: bool = False,
 ) -> str:
     """The `systemd-run` step; `home` defaults to the launching user's own HOME."""
     wt = worktree_path(batch, target)
     home = home or str(_Path.home())
-    command = review_command(batch, target) if review else claude_args(target, wt)
+    command = claude_args(target, wt)
+    if review:
+        command = review_command(batch, target, red_green)
     runtime = REVIEW_RUNTIME_MAX_S if review else RUNTIME_MAX_S
     return _step(
         (
@@ -310,7 +316,7 @@ def prepare_command(batch: str, target: Target) -> str:
     )
 
 
-def launch_command(batch: str, review: bool = False) -> str:
+def launch_command(batch: str, review: bool = False, red_green: bool = False) -> str:
     """The one call a batch launch runs: worktree add+lock, brief write, systemd-run.
 
     The brief text is this command's own stdin, consumed by the `cat` in the middle of the
@@ -322,7 +328,7 @@ def launch_command(batch: str, review: bool = False) -> str:
         [
             create_worktree_command(batch),
             write_brief_command(batch),
-            systemd_run_command(batch, review=review),
+            systemd_run_command(batch, review=review, red_green=red_green),
         ]
     )
 
@@ -519,6 +525,7 @@ def launch(
     issues: list[int],
     target: Target = SERVER_TARGET,
     review: bool = False,
+    red_green: bool = False,
 ) -> Batch:
     """Create the worktree, write the brief over stdin, then start the agent unit.
 
@@ -552,6 +559,8 @@ def launch(
             `systemd-run` failure, or one this can't attribute, leaves the worktree as it
             found it instead.
         review: start `fanout_lib.review`'s pipeline instead of one `claude -p`.
+        red_green: give that pipeline its red phase (`fanout_lib.red_gate`); this repo
+            only, as `red_gate.review_flags` decides.
     """
     # DECIDED: no exit or timeout from this call can happen after the unit is live.
     # `systemd-run` (without --wait/--pty/--scope) starts the transient unit and returns
@@ -567,7 +576,11 @@ def launch(
     else:
         try:
             proc = _run(
-                tools, host, launch_command(batch, review), brief_text, "launch"
+                tools,
+                host,
+                launch_command(batch, review, red_green),
+                brief_text,
+                "launch",
             )
         except LaunchError as exc:
             message = str(exc) + (_cleanup_worktree(tools, host, batch) or "")

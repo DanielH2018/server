@@ -175,3 +175,23 @@ def test_a_land_phase_owes_a_verdict_although_its_brief_stops_at_the_pr(tmp_path
     reason = _stop(root, FINISHED)
     assert reason and "no `VERDICT:` line" in reason
     assert _stop(root, LANDED) is None
+
+
+def test_a_red_phase_may_stop_on_its_json(tmp_path):
+    """The test author ends with structured JSON and opens no PR."""
+    root = _fanout_tree(tmp_path)
+    (root / ".fanout" / "phase").write_text("red\n")
+    assert _stop(root, '{"behaviours": []}') is None
+
+
+def test_the_worktrees_copy_stands_down_while_the_pipeline_runs_its_own_and_no_other_does(
+    tmp_path,
+):
+    """The worktree's copy and the pipeline's snapshot both run on a server batch (#3794)."""
+    root = _fanout_tree(tmp_path / "wt")
+    in_tree = root / ".claude" / "hooks" / "fanout-stop.py"
+    snapshot = tmp_path / "state" / ".claude" / "hooks" / "fanout-stop.py"
+    assert not _mod.stands_down(root, in_tree)
+    (root / _mod.OWN_COPY).write_text(f"{snapshot}\n")
+    assert _mod.stands_down(root, in_tree)
+    assert not _mod.stands_down(root, snapshot)
