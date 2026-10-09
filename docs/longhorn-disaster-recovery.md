@@ -214,14 +214,25 @@ Job filtered its volumes at 21:55:26. Any volume already marked `faulted` was sk
 (`Cannot create job for <vol> volume in state attached`). Volumes not yet marked were backed up
 normally, even while being salvaged. Longhorn does not retry a skipped volume, and the Job still
 reports `succeeded=1`. Three weekly volumes were skipped: prowlarr-config (d4), valheim-config
-(d2) and karakeep-data (d3). The backup-health check flags a skipped weekly volume only when its
-newest backup passes `k3s_longhorn_weekly_backup_max_age_hours` (198 h). For prowlarr that was
-2026-10-09 10:40, 13 h after the skip. A volume in the daily tier recovers on the next night's run.
+(d2) and karakeep-data (d3). At the time, the backup-health check flagged a skipped weekly volume
+only when its newest backup passed `k3s_longhorn_weekly_backup_max_age_hours` (198 h). For
+prowlarr that was 2026-10-09 10:40, 13 h after the skip. A volume in the daily tier recovers on
+the next night's run.
+
+**How the skip surfaces (#3968).** Check 11 of `longhorn-backup-health.sh` reads the logs of each
+RecurringJob's newest pod on every 10-minute tick. It turns the `k3s Longhorn Backup` tile DOWN
+for each skipped volume in the weekly tier that has no backup newer than the skip. Any backup
+clears it, including a seed. Longhorn keeps one pod per RecurringJob, so the evidence lasts until
+that shard's next run replaces the pod, a week later. Skips in the daily tier are not flagged,
+because the next night's run closes them.
 
 **What to do after a cold start.** Do not seed every weekly volume whose backup predates the
 recovery. Most of them belong to shards that ran normally before the outage, and seeding them
-spends the day's B2 budget. Seed only the weekly volumes a catch-up Job skipped. The Jobs log
-each skip, so this query names them:
+spends the day's B2 budget. Seed only the weekly volumes a catch-up Job skipped. Check 11 names
+them as `weekly volume(s) a RecurringJob skipped`. The tile shows only the top-ranked problem,
+and after a cold start another problem usually outranks this one, so read the full list with
+`journalctl -t longhorn-backup-health`. The Jobs log each skip, so this query also names them,
+including skips in the daily tier and skips whose pod has since been replaced:
 
 ```bash
 uv run python scripts/diagnostics/probe.py loki-query --since 24h \

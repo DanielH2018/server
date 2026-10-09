@@ -123,19 +123,22 @@ def _rfc3339(epoch: float) -> str:
     )
 
 
-def _backup_list_body(volume: str, snapshot_ts: str, job: str) -> str:
-    """`kubectl get backups.longhorn.io -o json` holding one Completed backup of `volume`."""
-    item = {
-        "metadata": {"name": f"backup-{volume}"},
-        "status": {
-            "volumeName": volume,
-            "snapshotCreatedAt": snapshot_ts,
-            "state": "Completed",
-            "size": "1048576",
-            "labels": {"RecurringJob": job},
-        },
-    }
-    return json.dumps({"items": [item]})
+def _backup_list_body(*backups: tuple[str, str, str]) -> str:
+    """`kubectl get backups.longhorn.io -o json`: one Completed backup per (volume, ts, job)."""
+    items = [
+        {
+            "metadata": {"name": f"backup-{volume}"},
+            "status": {
+                "volumeName": volume,
+                "snapshotCreatedAt": snapshot_ts,
+                "state": "Completed",
+                "size": "1048576",
+                "labels": {"RecurringJob": job},
+            },
+        }
+        for volume, snapshot_ts, job in backups
+    ]
+    return json.dumps({"items": items})
 
 
 def _green_path_stub_kubectl(tmp_path, snapshot_ts: str) -> Path:
@@ -144,10 +147,13 @@ def _green_path_stub_kubectl(tmp_path, snapshot_ts: str) -> Path:
     Dispatches on argv (after stripping the `-n <namespace>` host_lib.kubectl_runner inserts),
     not on raw text matching, so it stays exact even though several distinct queries all target
     `volumes.longhorn.io` with different -o jsonpath shapes. The backup list is one `-o json`
-    fetch (#3735); any other backup query is an UNEXPECTED ARGS failure. One volume,
-    `pvc-web-data`, is backed up by the "daily" tier only — every other tier's label selector
-    matches nothing, which is the ordinary (and simplest-to-fixture) shape for a fleet where only
-    one recurring job is armed.
+    fetch (#3735); any other backup query is an UNEXPECTED ARGS failure. Two volumes:
+    `pvc-web-data` in the daily tier and `pvc-weekly-data` in weekly shard d4, each with one
+    backup from its own job. Every other tier's label selector matches nothing.
+
+    The RecurringJob pod-log read answers `STUB_POD_LOGS` (empty by default), and only to the
+    exact flags the reader passes: without `--tail=-1` kubectl returns 10 lines per pod, and a
+    reader that dropped it would pass every test while reading nothing in production.
 
     Each dispatch arm carries a branch NAME, and two env knobs turn one named branch red without
     disturbing the other eight: `STUB_FAIL_BRANCH` makes it exit 124 (host_lib's timeout code)
@@ -173,11 +179,17 @@ elif args == ["get", "backups.longhorn.io", "-o", "json"]:
     branch, body = "backups", BACKUP_LIST
 elif args[:2] == ["get", "jobs.batch"] and args[-1] == "json":
     branch, body = "failed-jobs", '{"items": []}'
+elif args == [
+    "logs", "-l", "recurring-job.longhorn.io", "--prefix", "--tail=-1", "--ignore-errors"
+]:
+    branch, body = "pod-logs", os.environ.get("STUB_POD_LOGS", "")
 elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
     sel = args[args.index("-l") + 1]
     branch = "tier-" + sel.split("/")[-1].split("=")[0]
     if sel == "recurring-job-group.longhorn.io/default=enabled":
         body = "pvc-web-data %s default/web-data default\n" % SNAPSHOT_TS
+    elif sel == "recurring-job-group.longhorn.io/weekly-backup-d4=enabled":
+        body = "pvc-weekly-data %s default/weekly-data default\n" % SNAPSHOT_TS
     else:
         body = ""
 elif args[:2] == ["get", "volumes.longhorn.io"]:
@@ -195,7 +207,12 @@ if branch == os.environ.get("STUB_NULL_BRANCH"):
 sys.stdout.write(body)
 """.replace("__SNAPSHOT_TS__", snapshot_ts).replace(
         "__BACKUP_LIST__",
-        repr(_backup_list_body("pvc-web-data", snapshot_ts, "daily-backup")),
+        repr(
+            _backup_list_body(
+                ("pvc-web-data", snapshot_ts, "daily-backup"),
+                ("pvc-weekly-data", snapshot_ts, "weekly-backup-d4"),
+            )
+        ),
     )
     return write_exec(stub, script)
 
@@ -232,7 +249,7 @@ def _grace_pair_stub_kubectl(tmp_path, created_ts: str, old_backup_ts: str) -> P
     LONGHORN_BACKUP_CRON parses.
     """
     stub = tmp_path / "stub-kubectl-grace"
-    backup_list = _backup_list_body("pvc-old", old_backup_ts, "daily-backup")
+    backup_list = _backup_list_body(("pvc-old", old_backup_ts, "daily-backup"))
     script = f"""#!/usr/bin/env python3
 import sys
 
@@ -253,6 +270,8 @@ elif args == ["get", "backups.longhorn.io", "-o", "json"]:
     emit({backup_list!r})
 elif args[:2] == ["get", "jobs.batch"] and args[-1] == "json":
     emit('{{"items": []}}')
+elif args[:1] == ["logs"]:
+    emit("")
 elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
     sel = args[args.index("-l") + 1]
     if sel == "recurring-job-group.longhorn.io/default=enabled":

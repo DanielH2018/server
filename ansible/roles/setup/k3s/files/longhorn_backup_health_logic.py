@@ -2,8 +2,9 @@
 
 Ported verbatim from longhorn-backup-health.sh.j2's eight `add()` checks. Checks 9 and 10 —
 the trim and B2-accounting crons' evidence and liveness — live in longhorn_cron_evidence_logic.py
-under the same contract; they read a journal rather than the cluster. Split from the I/O
-shell (host-side kubectl reads, stamp-file reads) the same way configarr_health_logic.py is: this
+under the same contract; they read a journal rather than the cluster. Check 11, the weekly
+volumes a RecurringJob skipped, lives in longhorn_skipped_volumes_logic.py (#3968). Split from
+the I/O shell (host-side kubectl reads, stamp-file reads) the same way configarr_health_logic.py is: this
 stays stdlib-only, takes every clock reading and file read as an argument, and is unit-testable
 without a cluster. `now_s` is always injected rather than read from `time.time()` here, so a test
 can pin it.

@@ -214,8 +214,8 @@ def test_reader_green_path_pins_the_transport(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("up\t"), proc.stdout
     assert "backup target(s) default r2 available" in proc.stdout
-    assert "1 backed-up volume(s) covered across daily+weekly" in proc.stdout
-    assert "1 B2 backup(s)/24h (budget 16)" in proc.stdout
+    assert "2 backed-up volume(s) covered across daily+weekly" in proc.stdout
+    assert "2 B2 backup(s)/24h (budget 16)" in proc.stdout
 
 
 def test_reader_pages_when_the_trim_cron_file_is_gone(tmp_path):
@@ -298,12 +298,13 @@ def test_reader_argv_hands_now_to_main(tmp_path):
         ("tier-default", "daily tier volumes fetch failed (rc=124)"),
         ("r2", "r2 volume set fetch failed (rc=124)"),
         ("failed-jobs", "failed-jobs fetch failed (rc=124)"),
+        ("pod-logs", "recurring-job pod logs fetch failed (rc=124)"),
     ],
 )
 def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, named):
     """rc 124 is host_lib's timeout code — the case that must not read as an empty result.
 
-    None of these five fetches may turn a nonzero rc into `[]`/`set()`: a check that reads
+    None of these fetches may turn a nonzero rc into `[]`/`set()`: a check that reads
     empty as clean ("nothing errored", "no failed jobs", or a tier silently dropped from the
     coverage count) would leave the whole verdict UP with a quietly smaller number in it after
     a 30s API-server timeout on one call.
@@ -412,3 +413,41 @@ def test_reader_pages_naming_a_volume_the_drill_excluded_for_no_pvc(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("down\t"), proc.stdout
     assert "no bound PVC" in proc.stdout and "pvc-released" in proc.stdout, proc.stdout
+
+
+def test_reader_pages_naming_a_weekly_volume_its_job_skipped(tmp_path):
+    """Check 11 through the real log read: a skip after the volume's last backup goes DOWN.
+
+    The green path is the clean half: the same fixture with no skip line in the pod logs is UP.
+    """
+    skip = (
+        "[pod/weekly-backup-d4-1-abcde/weekly-backup-d4] "
+        f'time="{_rfc3339(NOW - 30)}" level=warning '
+        'msg="Cannot create job for pvc-weekly-data volume in state attached"\n'
+    )
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(stub, tmp_path, STUB_POD_LOGS=skip)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "default/weekly-data (weekly-backup-d4" in proc.stdout, proc.stdout
+
+
+def test_reader_ignores_a_daily_volume_its_job_skipped(tmp_path):
+    """The reader builds check 11's scope from the weekly shards only, so a daily skip stays UP.
+
+    The next night's run closes a daily skip; see `DECIDED: only weekly-tier volumes are
+    checked` in longhorn_skipped_volumes_logic.py.
+    """
+    skip = (
+        "[pod/daily-backup-1-abcde/daily-backup] "
+        f'time="{_rfc3339(NOW - 30)}" level=warning '
+        'msg="Cannot create job for pvc-web-data volume in state attached"\n'
+    )
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(stub, tmp_path, STUB_POD_LOGS=skip)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout
