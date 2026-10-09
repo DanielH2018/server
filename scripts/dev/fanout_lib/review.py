@@ -335,6 +335,10 @@ class Pipeline:
         self.state_dir = state_dir
         self.record = Record(batch)
         self.session = ""
+        # Read now, before the implementer runs. A server unit imports this module from the
+        # batch worktree, which that agent can write, so a file read at review time would
+        # take whatever the implementer left there.
+        self.review_prompt = PROMPT_FILE.read_text()
 
     def _claude(self, name: str, argv: list[str], stdin: str) -> Phase:
         fanout = self.worktree / ".fanout"
@@ -372,7 +376,7 @@ class Pipeline:
         return [
             "claude", "-p", "--model", "opus", "--permission-mode", "auto",
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
-            "--append-system-prompt-file", str(PROMPT_FILE),
+            "--append-system-prompt", self.review_prompt,
             "--disallowedTools", "Edit,Write,NotebookEdit",
             "--json-schema", json.dumps(FINDINGS_SCHEMA),
         ]  # fmt: skip

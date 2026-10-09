@@ -11,7 +11,7 @@ import json
 import subprocess
 
 from fanout_lib.brief import Issue, render_brief
-from fanout_lib.review import Pipeline, actionable
+from fanout_lib.review import PROMPT_FILE, Pipeline, actionable
 from fanout_lib.target import SERVER_TARGET
 
 PR = "https://github.com/DanielH2018/server/pull/4000"
@@ -197,3 +197,21 @@ def test_actionable_keeps_medium_at_the_confidence_floor_and_drops_the_rest():
     assert actionable(
         [kept, _finding("unsure", "medium", 0.59), _finding("nit", "low")]
     ) == [kept]
+
+
+def test_the_reviewer_prompt_is_the_text_read_before_the_implementer_ran(tmp_path):
+    """The implementer can write the worktree the module loads from, so a prompt file read
+    at review time is one it could have rewritten."""
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports, host="daniel-server")
+    pipeline.review_prompt = "PROMPT AT START"
+    pipeline.run_all()
+    reviewer = run.claude[1][0]
+    assert "--append-system-prompt-file" not in reviewer
+    assert reviewer[reviewer.index("--append-system-prompt") + 1] == "PROMPT AT START"
+    assert Pipeline(tmp_path, "1", "h", SERVER_TARGET, "").review_prompt == (
+        PROMPT_FILE.read_text()
+    )

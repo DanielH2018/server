@@ -172,3 +172,32 @@ def test_a_refused_dotfiles_claim_releases_removes_the_tree_and_starts_nothing()
     assert not any("systemd-run" in c for c in commands)
     assert commands[2].startswith("release 763 --worktree worktree-fanout-763 ")
     assert f"worktree remove --force {DOT_WT}" in commands[3]
+
+
+def test_a_dotfiles_review_unit_runs_this_repos_checkouts_script():
+    """The dotfiles worktree carries no `fanout_review.py`; the server batch's own test is
+    `test_a_server_review_unit_runs_the_worktrees_script_not_the_primary_checkouts`."""
+    cmd = systemd_run_command("763", DOTFILES, review=True)
+    assert " /home/ubuntu/server/scripts/dev/fanout_review.py --batch 763 " in cmd
+
+
+def test_a_dotfiles_review_launch_on_a_checkout_without_the_script_creates_nothing():
+    """A checkout predating the script failed every review unit at spawn, after the claim
+    (#3684). The check runs first, so the refusal leaves no tree, no branch and no claim."""
+    missing = subprocess.CompletedProcess(
+        [], 1, stdout="", stderr="fanout-step: review script\n"
+    )
+    tools, run = fake_tools({"daniel-box": ok("")})
+    run.answers_by_call = [missing]
+    with pytest.raises(LaunchError, match="fast-forward /home/ubuntu/server"):
+        launch(tools, "daniel-box", "763", "BRIEF", [763], DOTFILES, review=True)
+    [(_, prepare, _)] = run.calls
+    script = "/home/ubuntu/server/scripts/dev/fanout_review.py"
+    assert prepare.startswith(f"test -f {script} ")
+    assert prepare.index(script) < prepare.index("worktree add")
+
+
+def test_a_plain_dotfiles_launch_does_not_check_for_the_review_script():
+    tools, run = fake_tools({"daniel-box": ok("")})
+    launch(tools, "daniel-box", "763", "BRIEF", [763], DOTFILES)
+    assert "fanout_review.py" not in run.calls[0][1]

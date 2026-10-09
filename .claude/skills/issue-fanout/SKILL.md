@@ -147,8 +147,10 @@ uncleaned worktree counts against its host. `--host daniel-box` pins a batch tha
 the same run or that only daniel-box can verify.
 
 **`--review` adds a separate review to every batch in the run.** The unit runs
-`scripts/dev/fanout_review.py` in place of one `claude -p`. The agent stops at its PR on every
-host. A fresh reviewer then reads only the issue text and the diff, and returns findings with
+`scripts/dev/fanout_review.py` in place of one `claude -p`, the batch worktree's copy, so a host
+whose primary checkout lags `origin/master` still runs the current one. Another repo's batch
+runs this repo's primary checkout's copy, and `launch` refuses it when that copy is missing.
+The agent stops at its PR on every host. A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, at confidence 0.6 or more,
 resumes the agent for one fix round, and a second reviewer reads only the fix. On daniel-box
 the agent is then resumed to land. The review's counts and costs go on the PR as a comment,
