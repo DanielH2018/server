@@ -390,4 +390,14 @@ def _build_parser():
             "line, to PATH; release-staleness-check.sh re-alerts when that set changes (#2378)"
         ),
     )
+    landing = sub.add_parser(
+        "landing",
+        help="what would stop a landing now (hold, red master CI, owed manual planes), the "
+        "runs in flight and the worktrees with their claims (exit 1 when something blocks)",
+    )
+    landing.add_argument(
+        "--json",
+        action="store_true",
+        help="one JSON document, the shape the deck mod in .claude/plugins/deck/ reads",
+    )
     return p

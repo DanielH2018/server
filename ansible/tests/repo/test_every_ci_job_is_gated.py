@@ -36,13 +36,15 @@ GATE_JOB = "prek"
 
 # Jobs ci.yml is known to declare. A parser that returned an empty mapping would make the subset
 # check below vacuously true, so a rename fails here rather than silently shrinking coverage.
-KNOWN_JOBS = frozenset({"hooks", "pytest", "ansible_lint", GATE_JOB, "renovate-config"})
+KNOWN_JOBS = frozenset(
+    {"hooks", "pytest", "ansible_lint", "deck_mod", GATE_JOB, "renovate-config"}
+)
 
 # The results the gate's step must go on comparing, for the same reason.
 # `ansible_lint` rather than `ansible-lint`: a GitHub expression parses a hyphen as
 # subtraction, so `needs.ansible-lint.result` is a syntax error. The job id carries the
 # underscore and the display name carries the hyphen.
-GATE_READS = frozenset({"hooks", "pytest", "ansible_lint"})
+GATE_READS = frozenset({"hooks", "pytest", "ansible_lint", "deck_mod"})
 
 _RESULT_EXPR = re.compile(r"needs\.([A-Za-z0-9_-]+)\.result")
 

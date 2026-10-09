@@ -65,6 +65,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "b2_ledger",
         "ha",
         "health",
+        "landing_blockers",
         "longhorn",
         "metrics",
         "monitors",

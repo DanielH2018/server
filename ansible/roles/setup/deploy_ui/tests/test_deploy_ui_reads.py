@@ -303,3 +303,19 @@ TWO_PRS_PS = """\
 def test_runs_keep_landings_for_different_prs_apart_is_flagged():
     got = reads.runs(reads.parse_ps(TWO_PRS_PS), {}, {})
     assert [(r.pid, r.pr) for r in got] == [(4400, "1550"), (4500, "1551")]
+
+
+def test_read_state_serves_only_the_manual_plane_ledger_lines_is_clean(state_dir):
+    """`probe.py landing` reads them off daniel-box, where it cannot read the ledger (#3676)."""
+    manual = json.dumps(
+        {"class": "manual_plane", "subject": "k3s", "origin": "abc", "at": 1000}
+    )
+    (state_dir / "owed.jsonl").write_text(
+        _held("ansible/initial_setup.yml k3s", 1000) + "\n" + manual
+    )
+    assert reads.read_state(state_dir)["manual_plane_owed"] == manual
+
+
+def test_read_state_with_no_manual_plane_serves_empty_is_flagged(state_dir):
+    (state_dir / "owed.jsonl").write_text(_held("ansible/deploy.yml sonarr", 2000))
+    assert reads.read_state(state_dir)["manual_plane_owed"] == ""

@@ -1,0 +1,8 @@
+{
+  "name": "deck-mod-ci-claude-cli",
+  "private": true,
+  "description": "Pins the Claude Code CLI that CI's deck_mod job validates and tests .claude/plugins/deck with",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.288"
+  }
+}

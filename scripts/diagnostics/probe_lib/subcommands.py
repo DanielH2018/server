@@ -13,7 +13,7 @@ The registry carries names, descriptions, each subcommand's backing `probe_lib` 
 the `probe_lib` modules agree.
 
 This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`
-still reports the same thirteen subcommand backends — the `run_*` names below are imported, and
+still reports the same fourteen subcommand backends — the `run_*` names below are imported, and
 that function counts only what a module defines.
 """
 
@@ -33,6 +33,7 @@ from diagnostics.probe_lib.b2_ledger import (
     run_b2_spend,
 )
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
+from diagnostics.probe_lib.landing_blockers import run_landing
 from diagnostics.probe_lib.health import run_health
 from diagnostics.probe_lib.longhorn import (
     run_b2_budget,
@@ -147,6 +148,13 @@ SUBCOMMANDS = [
         "which commit produced each k8s service's applied manifests",
         "releases",
         run_releases,
+    ),
+    (
+        "landing",
+        "what would stop a landing now, the runs in flight and the worktrees with their "
+        "claims (exit 1 when something blocks)",
+        "landing_blockers",
+        run_landing,
     ),
 ]
 
