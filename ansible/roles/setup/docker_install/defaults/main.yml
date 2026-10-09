@@ -19,9 +19,26 @@ docker_install_stale_crons:
 # would fail AFTER stopping every Compose project. Merging a bump still moves nothing on the
 # Pi by itself; tasks/install.yml refuses to move an installed engine and engine-upgrade.yml
 # is the path that applies it (it stops every Compose project first).
+#
+# One `# renovate:` annotation per pin, each naming the apt package whose spec its var
+# renders (scripts/tests/test_renovate_docker_engine_pins.py holds the two together).
+# - `suite` and `binaryArch` are daniel-pi's own, measured 2026-09-24 (`dpkg
+#   --print-architecture` -> arm64, `VERSION_CODENAME` -> noble). A second Docker host on
+#   another release or arch needs its own registryUrl.
+# - extractVersion strips apt's epoch and Debian revision (`5:29.8.1-1~ubuntu.24.04~noble`
+#   -> `29.8.1`). It is deliberately NOT anchored on `~ubuntu`: the same index carries bare
+#   `<version>-<rev>` rows for containerd.io, and a version extractVersion cannot match is
+#   dropped from the version space. The stripped revision is the blind spot, so a
+#   revision-only repackage offers no PR; the spec globs the revision for that reason (#2357).
+# - `versioning=semver` overrides the deb datasource's default `deb` versioning, so the bare
+#   versions classify major/minor/patch the way the packageRules expect.
+# renovate: datasource=deb depName=docker-ce versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
 docker_install_engine_version: "29.8.1"
+# renovate: datasource=deb depName=containerd.io versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
 docker_install_containerd_version: "2.3.5"
+# renovate: datasource=deb depName=docker-compose-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
 docker_install_compose_plugin_version: "5.5.1"
+# renovate: datasource=deb depName=docker-buildx-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
 docker_install_buildx_plugin_version: "0.37.1"
 
 # Docker's apt versions are `<upstream>-<rev>~ubuntu.<release>~<codename>` for every package,

@@ -4,9 +4,10 @@ description: Work through the repo's open Renovate PRs — triage each by class,
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 ---
 
-Renovate opens PRs here that are **deliberately incomplete**. Ten package rules carry
+Renovate opens PRs here that are **deliberately incomplete**. Many package rules carry
 `automerge: false` and a group name ending in a parenthetical — `(manual — finish the targetAbi
-+ MD5, raise jellyfin with it)`, `(manual — finish the per-arch sha256 from checksums.txt)`,
++ MD5, raise jellyfin with it)`, `(manual — finish any paired digest: asset_pins.py --refresh
+getsops/sops)`,
 `(manual — append each resolved version to base-pin-history.tsv; lockstep: app + task runners; k8s_autodeploy: false)`.
 That parenthetical is a **work order**, not a label. Merging such a PR on green CI ships half a
 bump.
@@ -184,6 +185,14 @@ bot's branch and fetch every pin it touched:
 ```bash
 uv run python scripts/validate/asset_pins.py --only <pin name>   # `--list` prints the names
 ```
+
+**A pin declared by a `# renovate:` annotation finishes with one command.** Its PR title reads
+`(manual — finish any paired digest: asset_pins.py --refresh <depName>)`. Run that on the bot's
+branch: it fetches every pin whose URL renders from the bumped version, hashes the download and
+rewrites the digest in `defaults/`, then commit the result. It trusts the first download, so where
+upstream publishes its own checksum (SOPS's `checksums.txt`, CoreDNS's `.sha256` sidecar), compare
+before merging. `--list` prints each pin's depNames after `<-`. The unattended agent cannot push
+the commit, so it hands the PR over in its digest.
 
 It renders the URL from `defaults/` (including `{{ version }}` references), requires a 200,
 hashes the download and compares it to the pinned `_sha256`/`_md5`; a failure names which of

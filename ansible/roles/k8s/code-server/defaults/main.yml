@@ -109,9 +109,11 @@ code_server_k8s_extensions:
 # Node.js, installed from the official linux-x64 tarball rather than NodeSource's `setup_22.x`
 # script piped to bash, which resolves whatever NodeSource serves on build day. The
 # sha256 is the tarball's line in https://nodejs.org/dist/v<version>/SHASUMS256.txt. Renovate
-# tracks the version (regex manager in renovate.json, `node-version` datasource); the hash is
-# the manual finish on its PR, the same class as `initial_setup_uv_version`. The URL sits
-# beside the digest so `scripts/validate/asset_pins.py` pairs the two and fetches it.
+# tracks the version through the `# renovate:` annotation below; the hash is the manual
+# finish on its PR (`asset_pins.py --refresh node`), the same class as
+# `initial_setup_uv_version`. The URL sits beside the digest so
+# `scripts/validate/asset_pins.py` pairs the two and fetches it.
+# renovate: datasource=node-version depName=node
 code_server_k8s_node_version: "24.21.0"
 code_server_k8s_node_url: "https://nodejs.org/dist/v{{ code_server_k8s_node_version }}/node-v{{ code_server_k8s_node_version }}-linux-x64.tar.xz"
 code_server_k8s_node_sha256: fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6

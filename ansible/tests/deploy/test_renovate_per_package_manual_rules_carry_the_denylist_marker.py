@@ -30,6 +30,7 @@ from pathlib import Path
 
 from _autodeploy import _denylist
 from _helpers import REPO
+from lib.renovate_annotations import effective_managers
 from test_renovate_automerge_follows_the_autodeploy_denylist import (
     MANUAL_GROUP_PREFIX,
     find_rule,
@@ -163,10 +164,13 @@ def _renovate() -> dict:
 
 def _owners_by_package(config: dict) -> dict[str, set[str]]:
     files = _role_relative_files()
+    # An annotated pin names its package in the defaults file, not in the config, so the
+    # annotation manager is expanded into one per-pin manager before ownership is read.
+    managers = effective_managers(config["customManagers"], files, _read)
     return {
         package: pin_owner_roles(
             package,
-            config["customManagers"],
+            managers,
             files,
             datasources=set(rule.get("matchDatasources", [])) or None,
         )

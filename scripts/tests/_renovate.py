@@ -10,6 +10,7 @@ import re
 from typing import NamedTuple
 
 from _ratchet_census import tracked_files
+from lib.renovate_annotations import effective_managers
 from lib.repo_paths import REPO
 
 # Re-export for modules that import _REPO from this module
@@ -17,7 +18,17 @@ _REPO = REPO
 
 _RENOVATE_CONFIG = json.loads((REPO / "renovate.json").read_text())
 
-_MANAGERS = _RENOVATE_CONFIG["customManagers"]
+# The custom managers as written in renovate.json.
+_CONFIG_MANAGERS = _RENOVATE_CONFIG["customManagers"]
+
+# The same list with the `# renovate:` annotation manager expanded into one per-pin manager per
+# annotation, so a guard that looks a pin up by depName or file finds an annotated pin the way
+# it finds a hand-written manager. lib/renovate_annotations.py has why.
+_MANAGERS = effective_managers(
+    _CONFIG_MANAGERS,
+    tracked_files(),
+    lambda rel: (REPO / rel).read_text(errors="replace"),
+)
 
 _PACKAGE_RULES = _RENOVATE_CONFIG["packageRules"]
 
@@ -259,17 +270,22 @@ def _resolve_setting(
     update_type: str,
     datasource: str,
     rules: list[dict] = _PACKAGE_RULES,
+    dep_type: str | None = None,
 ):
     """The value of `field` Renovate would resolve for a dep, walking packageRules in order.
 
     Later rules win a field they set, so the last matching rule that sets `field` decides —
     this mirrors `_is_disabled_by_packagerule`'s walk, for an arbitrary field instead of
     `enabled`. Rule ORDER is what this reads, which is why a guard on a rule that overrides an
-    earlier one asserts through here rather than against the rule's own body.
+    earlier one asserts through here rather than against the rule's own body. `dep_type` is
+    the manager's `depTypeTemplate`; a rule with `matchDepTypes` matches only a dep carrying
+    one of them.
     """
     value = None
     for rule in rules:
         if "matchManagers" in rule and "custom.regex" not in rule["matchManagers"]:
+            continue
+        if "matchDepTypes" in rule and dep_type not in rule["matchDepTypes"]:
             continue
         if "matchFileNames" in rule and not any(
             _minimatch_to_regex(g).match(rel_path) for g in rule["matchFileNames"]
@@ -297,8 +313,9 @@ def _resolve_group_name(
     update_type: str,
     datasource: str,
     rules: list[dict] = _PACKAGE_RULES,
+    dep_type: str | None = None,
 ) -> str | None:
     """The `groupName` Renovate would resolve for a dep. `_resolve_setting` for one field."""
     return _resolve_setting(
-        "groupName", dep_name, rel_path, update_type, datasource, rules
+        "groupName", dep_name, rel_path, update_type, datasource, rules, dep_type
     )

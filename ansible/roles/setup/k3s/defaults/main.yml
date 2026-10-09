@@ -5,15 +5,27 @@
 # k3s is pinned because the install task re-runs the installer whenever k3s_server_args
 # changes, and get.k3s.io installs the latest stable unless told otherwise — an unpinned
 # reconfigure would silently upgrade the control plane as a side effect of editing a flag.
+#
+# The `+k3sN` suffix is semver build metadata, which Renovate ignores when comparing: an
+# upstream bump (v1.36.2 -> v1.37.0) is offered, a same-version re-tag (+k3s1 -> +k3s2) is not.
+# renovate: datasource=github-releases depName=k3s-io/k3s
 k3s_version: v1.37.1+k3s1
 # The installer script at that same tag, and its hash. get.k3s.io serves master's copy, which
 # can differ from the tag's and moves with no signal, and the script runs as root on both
-# nodes. Renovate's k3s manager bumps
-# k3s_version; the sha256 is a MANUAL finish on that PR (same class as sops_setup's binary):
-#   curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/<tag>/install.sh" | sha256sum
+# nodes. Renovate bumps k3s_version through the annotation above; the sha256 is a MANUAL
+# finish on that PR (same class as sops_setup's binary):
+#   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
 k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
+# MetalLB serves every LoadBalancer VIP (Traefik's edge, Pi-hole's DNS). extractVersion is
+# load-bearing: metallb/metallb publishes the app (`v0.16.0`) and the Helm chart
+# (`metallb-chart-0.16.1`) into one releases feed, and the chart runs a minor ahead of the
+# app. Anchoring on a leading `v` reads app releases only.
+# renovate: datasource=github-releases depName=metallb/metallb extractVersion=^v(?<version>.+)$
 k3s_metallb_version: v0.16.0
+# Longhorn holds every PVC, and a careless bump is worse than a stale one: see the version-skip
+# warning at the top of this file. Tracked for the signal, never automerged.
+# renovate: datasource=github-releases depName=longhorn/longhorn
 k3s_longhorn_version: v1.12.1
 
 # Where k3s's own stdout/stderr goes on both node types (tasks/unit-logging.yml). journald
@@ -1003,6 +1015,14 @@ k3s_node_dns_options: "timeout:{{ k3s_node_dns_timeout }} attempts:{{ k3s_node_d
 # fraction of this node's queries actually reached Pi-hole, which is the question otherwise
 # answerable only by hand with a marked lookup.
 k3s_host_coredns_enabled: true
+# extractVersion strips the tag's `v` (the var holds a bare `1.14.7`) and anchors on three
+# components (#3087). coredns/coredns carries stray tags `v002` ... `v011`, and the earlier
+# `^v(?<version>.*)$` admitted `v011`, which Renovate ranked above 1.14.7 and proposed as PR
+# #3061: a 404 URL beside the old sha256, in a plane the deployer never applies. The anchor
+# drops the stray tags without capping the major, so a real 2.0.0 stays offerable. Finish
+# the sha256 below with `asset_pins.py --refresh coredns/coredns`, then compare it with the
+# release's coredns_<ver>_linux_amd64.tgz.sha256.
+# renovate: datasource=github-releases depName=coredns/coredns extractVersion=^v(?<version>\d+\.\d+\.\d+)$
 k3s_host_coredns_version: "1.14.7"
 
 # amd64 only — daniel-box is the sole consumer, and node.yml is a server-node play. The

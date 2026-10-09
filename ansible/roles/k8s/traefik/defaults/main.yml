@@ -125,6 +125,9 @@ traefik_k8s_mem_request: 128Mi
 # The CrowdSec bouncer plugin and the log-tailing agent sidecar. The sidecar parses this pod's
 # access log locally and ships signals to the in-cluster LAPI, so its collections are the
 # HTTP-side subset — the syslog/authelia parsers stay with the agents that read those logs.
+# The static config reads the plugin version from this var, so the annotation below is the
+# only place Renovate learns it; a stale plugin can lag Traefik API changes or miss a fix.
+# renovate: datasource=github-releases depName=maxlerebourg/crowdsec-bouncer-traefik-plugin
 traefik_k8s_bouncer_plugin_version: v1.7.1
 
 # The Cloudflare real-IP middleware: an in-repo Traefik local plugin (files/cloudflare-realip/),

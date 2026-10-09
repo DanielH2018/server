@@ -6,13 +6,21 @@ script does when run by hand; the census and the comparison are what this covers
 Run: uv run pytest scripts/validate/tests/test_validate_asset_pins.py
 """
 
+import dataclasses
 import gzip
 import hashlib
 import io
 
 import pytest
 from validate import asset_pins
-from validate.asset_pins import KNOWN_PINS, Pin, check_pin, discover_pins, pins_in
+from validate.asset_pins import (
+    KNOWN_PINS,
+    Pin,
+    check_pin,
+    discover_pins,
+    pins_in,
+    refresh_pin,
+)
 
 PAYLOAD = b"plugin bytes"
 SHA256 = hashlib.sha256(PAYLOAD).hexdigest()
@@ -40,6 +48,14 @@ def test_the_census_finds_every_known_pin():
     missing = KNOWN_PINS - {pin.name for pin in pins}
     assert not missing, f"census lost {sorted(missing)}"
     assert len(pins) >= len(KNOWN_PINS)
+
+
+def test_the_census_names_the_annotated_depname_behind_each_pin():
+    """`--refresh getsops/sops` selects both per-arch pins through the annotation."""
+    by_name = {pin.name: pin for pin in discover_pins()[0]}
+    assert by_name["sops_setup_binary_amd64"].dep_names == {"getsops/sops"}
+    assert by_name["sops_setup_binary_arm64"].dep_names == {"getsops/sops"}
+    assert by_name["k3s_install_script"].dep_names == {"k3s-io/k3s"}
 
 
 def test_every_discovered_pin_renders_to_a_fetchable_url():
@@ -82,6 +98,17 @@ def test_a_url_that_does_not_resolve_is_reported_not_skipped():
     pins, _ = pins_in(defaults, "d")
     assert len(pins) == 1 and pins[0].error and "missing" in pins[0].error
     assert check_pin(pins[0], _fetcher()) == pins[0].error
+
+
+def test_a_pin_records_the_keys_its_url_renders_from_through_another_key():
+    defaults = {
+        "tool_version": "1.2",
+        "tool_tag": "v{{ tool_version }}",
+        "tool_url": "https://host/{{ tool_tag }}/x",
+        "tool_sha256": SHA256,
+    }
+    pins, _ = pins_in(defaults, "d")
+    assert pins[0].inputs == {"tool_tag", "tool_version"}
 
 
 def test_a_digest_with_no_url_beside_it_is_listed_as_unpaired():
@@ -168,3 +195,95 @@ def test_main_refuses_when_the_census_lost_a_known_pin():
 @pytest.mark.parametrize("argv", [["--only", "nope"], ["--only", "x,nope"]])
 def test_an_unknown_only_name_is_a_usage_error(argv):
     assert _main(argv, [_pin()])[0] == 64
+
+
+# ── --refresh ───────────────────────────────────────────────────────────────────────────────
+
+OLD = "0" * 64
+DEFAULTS_TEXT = f"""\
+# renovate: datasource=github-releases depName=vendor/tool
+tool_version: "v1.3"
+tool_url: "https://host/{{{{ tool_version }}}}/tool"
+tool_sha256: {OLD}
+"""
+
+
+def _refreshable(tmp_path, text: str = DEFAULTS_TEXT) -> Pin:
+    (tmp_path / "defaults.yml").write_text(text)
+    return Pin(
+        "tool",
+        "https://host/v1.3/tool",
+        "sha256",
+        OLD,
+        "defaults.yml",
+        dep_names=frozenset({"vendor/tool"}),
+    )
+
+
+def test_refresh_rewrites_the_digest_and_keeps_the_annotation(tmp_path):
+    ok, message = refresh_pin(_refreshable(tmp_path), _fetcher(), tmp_path)
+    assert ok, message
+    assert (tmp_path / "defaults.yml").read_text() == DEFAULTS_TEXT.replace(OLD, SHA256)
+
+
+def test_refresh_leaves_a_current_digest_alone(tmp_path):
+    pin = dataclasses.replace(
+        _refreshable(tmp_path, DEFAULTS_TEXT.replace(OLD, SHA256)), digest=SHA256
+    )
+    ok, message = refresh_pin(pin, _fetcher(), tmp_path)
+    assert ok and "already current" in message
+
+
+def test_refresh_refuses_a_digest_that_occurs_twice(tmp_path):
+    pin = _refreshable(tmp_path, DEFAULTS_TEXT + f"other_sha256: {OLD}\n")
+    ok, message = refresh_pin(pin, _fetcher(), tmp_path)
+    assert not ok and "occurs 2 times" in message
+    assert SHA256 not in (tmp_path / "defaults.yml").read_text()
+
+
+def test_refresh_writes_nothing_when_the_download_fails(tmp_path):
+    ok, message = refresh_pin(_refreshable(tmp_path), _fetcher(status=404), tmp_path)
+    assert not ok and message == "HTTP 404 (must be 200)"
+    assert (tmp_path / "defaults.yml").read_text() == DEFAULTS_TEXT
+
+
+def test_main_refresh_selects_pins_by_depname(tmp_path):
+    pin = _refreshable(tmp_path)
+    out = io.StringIO()
+    code = asset_pins.main(
+        ["--refresh", "vendor/tool"],
+        fetcher=_fetcher(),
+        out=out,
+        discover=lambda: ([pin, _pin()], []),
+        known=frozenset({"x"}),
+        root=tmp_path,
+    )
+    assert code == 0, out.getvalue()
+    assert "1/1 pin(s) current" in out.getvalue()
+    assert SHA256 in (tmp_path / "defaults.yml").read_text()
+
+
+def test_an_unknown_refresh_name_is_a_usage_error():
+    code = asset_pins.main(
+        ["--refresh", "vendor/nope"],
+        fetcher=_fetcher(),
+        out=io.StringIO(),
+        discover=lambda: ([_pin()], []),
+        known=frozenset({"x"}),
+        annotated=lambda: {"vendor/digestless"},
+    )
+    assert code == 64
+
+
+def test_an_annotated_depname_with_no_digest_has_nothing_to_refresh():
+    out = io.StringIO()
+    code = asset_pins.main(
+        ["--refresh", "vendor/digestless"],
+        fetcher=_fetcher(),
+        out=out,
+        discover=lambda: ([_pin()], []),
+        known=frozenset({"x"}),
+        annotated=lambda: {"vendor/digestless"},
+    )
+    assert code == 0
+    assert "nothing to refresh: vendor/digestless pins no digest" in out.getvalue()
