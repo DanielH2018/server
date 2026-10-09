@@ -50,10 +50,8 @@ from _check_mode import (
     walk_with_inherited_when,
 )
 from _helpers import ALL_VARS, ROLES
+from _role_census import task_files
 
-# Task files whose roles are retired. They deploy nothing, so a red here would be a demand to
-# edit history.
-_ARCHIVED = "/archive/"
 
 # The retried tasks the census must still find, so a rename or a move cannot empty it and
 # leave every assertion below passing over nothing. One member per fix shape, named rather
@@ -115,18 +113,10 @@ def check_mode_retry_problem(task: dict, inherited_when=()) -> str | None:
     return None
 
 
-def _task_files() -> list:
-    return [
-        path
-        for path in sorted(ROLES.glob("*/*/tasks/*.yml"))
-        if _ARCHIVED not in path.as_posix()
-    ]
-
-
 def _retried_command_tasks() -> list[tuple]:
     """Every retried `command` in the deployed role tree, with its inherited `when:`s."""
     found = []
-    for path in _task_files():
+    for path in task_files():
         loaded = yaml_fast.safe_load(path.read_text())
         if not isinstance(loaded, list):
             continue

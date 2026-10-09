@@ -57,7 +57,7 @@ def untagged_or_umbrella_only(tasks) -> list[str]:
     return [name for name, tags in _leaves_with_tags(tasks) if not tags - _UMBRELLA]
 
 
-def _task_files() -> list[Path]:
+def _initial_setup_task_files() -> list[Path]:
     # main.yml holds only the import_tasks lines; the tasks they import are walked directly.
     return sorted(p for p in TASKS.glob("*.yml") if p.name != "main.yml")
 
@@ -65,7 +65,7 @@ def _task_files() -> list[Path]:
 def test_every_initial_setup_task_has_a_subject_tag() -> None:
     offenders = []
     seen: dict[str, set[str]] = {}
-    for path in _task_files():
+    for path in _initial_setup_task_files():
         doc = yaml_fast.safe_load(path.read_text())
         seen.update(dict(_leaves_with_tags(doc)))
         offenders += [f"{path.name}: {name}" for name in untagged_or_umbrella_only(doc)]

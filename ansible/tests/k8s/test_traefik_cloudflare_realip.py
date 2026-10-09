@@ -23,7 +23,7 @@ import pytest
 from lib import yaml_fast
 from validate.k8s_manifests import K8S_ROLES
 
-from _k8s_render import host_context, render_role_template
+from _k8s_render import host_context, render_role_template, traefik_static_config
 
 _ROLE = "traefik"
 _HOST = "daniel-box"
@@ -31,11 +31,6 @@ _HOST = "daniel-box"
 
 def _render(template: str) -> str:
     return render_role_template(_ROLE, template, host=_HOST)
-
-
-def _static_config() -> dict:
-    doc = yaml_fast.safe_load(_render("static-config.yaml.j2"))
-    return yaml_fast.safe_load(doc["data"]["traefik.yml"])
 
 
 def _ref(name: str) -> str:
@@ -60,7 +55,9 @@ def realip_chain_gaps(
 
 def test_the_https_chain_rewrites_before_crowdsec() -> None:
     """The accepting half, on daniel-box's rendered static config."""
-    chain = _static_config()["entryPoints"]["https"]["http"]["middlewares"]
+    chain = traefik_static_config(host=_HOST)["entryPoints"]["https"]["http"][
+        "middlewares"
+    ]
     problems = realip_chain_gaps(chain, _ref("cloudflare-realip"), _ref("crowdsec"))
     assert not problems, problems
 
@@ -99,7 +96,9 @@ def test_only_cloudflare_is_a_trusted_forwarder() -> None:
     expected = set(ctx["cloudflare_ips"]) | {"127.0.0.1/32"}
     for name in ("http", "https"):
         trusted = set(
-            _static_config()["entryPoints"][name]["forwardedHeaders"]["trustedIPs"]
+            traefik_static_config(host=_HOST)["entryPoints"][name]["forwardedHeaders"][
+                "trustedIPs"
+            ]
         )
         assert trusted == expected, f"{name}: {sorted(trusted ^ expected)}"
     middleware = next(
@@ -117,7 +116,7 @@ def test_the_local_plugin_names_agree() -> None:
     """localPlugins key == the Middleware's plugin key; moduleName == the projected directory
     and prefixes the manifest's `import`; the ConfigMap carries the files the items name."""
     (local_name, local) = next(
-        iter(_static_config()["experimental"]["localPlugins"].items())
+        iter(traefik_static_config(host=_HOST)["experimental"]["localPlugins"].items())
     )
     module = local["moduleName"]
 

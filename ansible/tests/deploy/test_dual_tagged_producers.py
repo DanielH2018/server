@@ -28,23 +28,17 @@ Scope: `roles/**/tasks/*.yml`, the same surface as `test_conditional_register_co
 Playbook-level `pre_tasks`/`post_tasks` are not walked.
 """
 
-from pathlib import Path
-
 import yaml
 from lib import yaml_fast
 
 from _helpers import REPO as _REPO_ROOT
-from _helpers import ROLES as _ROLES
 from _helpers import walk_tasks
+from _role_census import task_files
 
 _SPLIT_TAGS = frozenset({"config", "deploy"})
 
 # The two ways a task hands a value to a later one. A dual tag on either is the documented bug.
 _PRODUCER_KEYS = ("register", "set_fact", "ansible.builtin.set_fact")
-
-
-def _task_files() -> list[Path]:
-    return sorted(p for p in _ROLES.rglob("tasks/*.yml") if "archive" not in p.parts)
 
 
 def _tags_of(task: dict) -> set[str]:
@@ -76,7 +70,7 @@ def dual_tagged_producers(tasks) -> list[str]:
 def test_no_value_producer_carries_both_tags() -> None:
     """The real tree. See the module docstring on why this passing proves little on its own."""
     offenders = []
-    for path in _task_files():
+    for path in task_files():
         try:
             doc = yaml_fast.safe_load(path.read_text())
         except (

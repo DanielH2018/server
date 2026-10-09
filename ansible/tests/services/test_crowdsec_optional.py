@@ -35,7 +35,7 @@ from validate.k8s_manifests import (
     role_defaults,
 )
 
-from _k8s_render import host_context, render_role_template
+from _k8s_render import host_context, render_role_template, traefik_static_config
 
 _FLAGS = {
     "traefik": "traefik_k8s_manage_crowdsec",
@@ -58,8 +58,7 @@ def _pod_spec(role: str, manage: bool, **extra) -> dict:
 
 
 def _static_config(manage: bool) -> dict:
-    doc = _docs("traefik", "static-config.yaml.j2", manage)[0]
-    return yaml_fast.safe_load(doc["data"]["traefik.yml"])
+    return traefik_static_config({_FLAGS["traefik"]: manage})
 
 
 @pytest.mark.parametrize("role", sorted(_FLAGS))
@@ -338,11 +337,7 @@ def has_bouncer(host: str, overrides: dict | None = None) -> bool:
         for doc in yaml_fast.safe_load_all(dynamic)
         if doc is not None
     )
-    config = yaml_fast.safe_load(
-        yaml_fast.safe_load(_host_render(host, "static-config.yaml.j2", overrides))[
-            "data"
-        ]["traefik.yml"]
-    )
+    config = traefik_static_config(overrides, host=host)
     attached = any(
         "crowdsec" in mw
         for entry in (config.get("entryPoints") or {}).values()

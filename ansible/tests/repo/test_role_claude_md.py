@@ -98,13 +98,6 @@ PLANE_IDS = [p.name for p in PLANES]
 BY_NAME = {p.name: p for p in PLANES}
 
 
-def _role_dirs(plane: Plane, roles_dir: Path | None = None) -> list[Path]:
-    """Every role in the plane's tree, a dotted directory and a retired role's shell skipped."""
-    return [
-        d for d in role_dirs(roles_dir or plane.roles_dir) if not d.name.startswith(".")
-    ]
-
-
 def _non_blank_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if line.strip()]
 
@@ -181,7 +174,7 @@ def _band_notice(
 @pytest.mark.parametrize("plane", PLANES, ids=PLANE_IDS)
 def test_census_finds_its_named_members(plane):
     """Non-vacuity, per python-layout.md's "a named member it must find" rule."""
-    found = {d.name for d in _role_dirs(plane)}
+    found = {d.name for d in role_dirs(plane.roles_dir, skip_dotted=True)}
     assert found, (
         f"subject gone: {plane.roles_dir} holds no roles — delete the {plane.name!r} row"
     )
@@ -196,7 +189,11 @@ def test_census_finds_its_named_members(plane):
 
 @pytest.mark.parametrize("plane", PLANES, ids=PLANE_IDS)
 def test_every_role_has_an_adequate_claude_md(plane):
-    problems = [p for d in _role_dirs(plane) for p in _doc_problems(d, plane)]
+    problems = [
+        p
+        for d in role_dirs(plane.roles_dir, skip_dotted=True)
+        for p in _doc_problems(d, plane)
+    ]
     assert not problems, "\n".join(problems)
 
 
@@ -219,7 +216,7 @@ def test_over_ceiling_entries_are_still_over_the_ceiling(plane):
 def test_role_docs_near_the_ceiling_are_reported_without_failing():
     """Always green: it reports the band, it never judges it."""
     for plane in PLANES:
-        for role_dir in _role_dirs(plane):
+        for role_dir in role_dirs(plane.roles_dir, skip_dotted=True):
             notice = _band_notice(role_dir, plane)
             if notice:
                 warnings.warn(notice, RoleDocNearCeiling, stacklevel=2)
@@ -364,7 +361,7 @@ def test_fixture_band_edges_are_not_reported(tmp_path):
 
 def test_fixture_tree_with_no_roles_is_subject_gone(tmp_path):
     """The red half of `test_census_finds_its_named_members`: an empty tree yields no roles."""
-    assert _role_dirs(BY_NAME["k8s"], roles_dir=tmp_path) == []
+    assert role_dirs(tmp_path, skip_dotted=True) == []
 
 
 # ── The ceiling against the hook that delivers the doc ────────────────────────────────
@@ -409,7 +406,7 @@ def test_the_planes_cover_every_tracked_role_doc():
     covered = {
         str((d / "CLAUDE.md").relative_to(REPO))
         for plane in PLANES
-        for d in _role_dirs(plane)
+        for d in role_dirs(plane.roles_dir, skip_dotted=True)
     }
     tracked = {doc for doc, _ in _role_docs_with_longest_trigger()}
     assert tracked <= covered, f"role docs no PLANES row walks: {tracked - covered}"

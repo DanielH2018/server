@@ -27,6 +27,7 @@ from jinja2 import Undefined
 
 from lib.ansible_jinja_env import make_ansible_env
 from _helpers import K8S_ROLES, imported_module_ids, leaf_tasks, load_tasks, walk_tasks
+from _role_census import role_dirs, role_task_files
 
 MODULE = "stats_lib"
 OWNER_ROLE = "game-stats"
@@ -39,14 +40,6 @@ FACT = "game_stats_lib_from_file"
 # consumer that forgets the include is exactly what this exists to catch.
 EXPECTED_IMPORTERS = frozenset({"stats.py", "valheim_stats.py"})
 EXPECTED_CONSUMERS = frozenset({"terraria.yml", "valheim.yml"})
-
-
-def _role_dirs(roles_root: Path) -> list[Path]:
-    return sorted(d for d in roles_root.iterdir() if d.is_dir())
-
-
-def _task_files(role: Path) -> list[Path]:
-    return sorted((role / "tasks").rglob("*.yml")) if (role / "tasks").is_dir() else []
 
 
 def _imports_the_module(module: Path) -> bool:
@@ -73,7 +66,7 @@ def importers(roles_root: Path) -> set[str]:
     """Role names, other than the owner, whose shipped `files/` scripts import stats_lib."""
     return {
         role.name
-        for role in _role_dirs(roles_root)
+        for role in role_dirs(roles_root)
         if role.name != OWNER_ROLE and importing_scripts(role)
     }
 
@@ -94,7 +87,9 @@ def includes_of(task_file: Path) -> list[dict]:
 
 def consumer_files(role: Path) -> list[Path]:
     """The role's task files that import the shared stage file."""
-    return [f for f in _task_files(role) if f.name != SHARED_TASK and includes_of(f)]
+    return [
+        f for f in role_task_files(role) if f.name != SHARED_TASK and includes_of(f)
+    ]
 
 
 def _copy(task: dict):
@@ -204,7 +199,9 @@ def test_the_task_files_that_include_the_stage_are_the_ones_that_stage_an_import
     that dies at `import stats_lib`; an include beside no importer is a dead copy."""
     including = {f.name for f in consumer_files(_OWNER)}
     staging_an_importer = {
-        f.name for f in _task_files(_OWNER) if staged_scripts(f) & EXPECTED_IMPORTERS
+        f.name
+        for f in role_task_files(_OWNER)
+        if staged_scripts(f) & EXPECTED_IMPORTERS
     }
     assert including == staging_an_importer == set(EXPECTED_CONSUMERS)
 

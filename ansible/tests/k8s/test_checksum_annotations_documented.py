@@ -143,7 +143,7 @@ def _source_fallbacks() -> dict[str, str | None]:
     }
 
 
-def _role_dirs():
+def _documented_roles():
     return sorted(d for d in role_dirs() if (d / "CLAUDE.md").is_file())
 
 
@@ -186,7 +186,7 @@ def _annotations_in_templates(role: Path) -> set[str]:
     return found | _annotations_in_plain_yaml(role)
 
 
-@pytest.mark.parametrize("role", _role_dirs(), ids=lambda p: p.name)
+@pytest.mark.parametrize("role", _documented_roles(), ids=lambda p: p.name)
 def test_claude_md_checksum_names_exist_in_the_role(role: Path):
     documented = set(
         CHECKSUM_RE.findall((role / "CLAUDE.md").read_text(errors="replace"))

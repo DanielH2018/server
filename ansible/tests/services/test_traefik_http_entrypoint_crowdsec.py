@@ -14,7 +14,7 @@ keeps the chain in place.
 
 Checked on the RENDERED static config, not the template's text — the indirection trap in
 `textual-guard-checks-break-on-indirection`, and the same reason as the sibling
-test_traefik_edge_selfcheck.py, whose `_static_config` shape this file reuses.
+test_traefik_edge_selfcheck.py. Both read it through `_k8s_render.traefik_static_config`.
 """
 
 from typing import Any
@@ -22,24 +22,8 @@ from typing import Any
 import pytest
 
 
-from lib import yaml_fast
+from _k8s_render import host_context, traefik_static_config
 
-from validate.k8s_manifests import (
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
-    K8S_ROLES,
-    SHARED_TPL,
-    load_yaml,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-    render_or_error,
-    resolve_vars,
-    role_defaults,
-)
-
-_ROLE = "traefik"
 # daniel-box runs the bouncer plugin. A cluster with traefik_k8s_manage_crowdsec false renders
 # no chain at all on either entrypoint — covered by its own test below. That case is an
 # override rather than a host.
@@ -47,41 +31,8 @@ _HOST = "daniel-box"
 _WITHOUT_CROWDSEC = {"traefik_k8s_manage_crowdsec": False}
 
 
-def _context(host: str, overrides: dict | None = None) -> dict:
-    host_vars = ANSIBLE / "inventory" / "host_vars" / f"{host}.yml"
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **load_yaml(host_vars)}
-    base["playbook_dir"] = str(ANSIBLE)
-    base = resolve_vars(base, base)
-    entry = next(c for c in base["containers_list"] if c["name"] == _ROLE)
-    # Role defaults FIRST: Ansible ranks host_vars above them. Same ordering as the sibling.
-    return {
-        **role_defaults(_ROLE, base),
-        **base,
-        "container_item": entry,
-        **(overrides or {}),
-    }
-
-
-def _static_config(host: str, overrides: dict | None = None) -> dict:
-    """The Traefik config itself, not the ConfigMap wrapping it.
-
-    static-config.yaml.j2's data value is a block scalar, so the config is a STRING at the
-    manifest level and has to be parsed a second time.
-    """
-    ctx = _context(host, overrides)
-    env = make_env([K8S_ROLES / _ROLE / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    rendered, err = render_or_error(env, "static-config.yaml.j2", ctx)
-    assert rendered is not None, (
-        f"{_ROLE}/static-config.yaml.j2 failed to render for {host}: {err}"
-    )
-    doc = yaml_fast.safe_load(rendered)
-    return yaml_fast.safe_load(doc["data"]["traefik.yml"])
-
-
 def _chains(host: str, overrides: dict | None = None) -> dict[str, list[str]]:
-    config = _static_config(host, overrides)
+    config = traefik_static_config(overrides, host=host)
     return {
         # `or []`, not a default: dropping the last entry leaves a bare `middlewares:` key,
         # which parses to None. `.get(..., [])` returns that None and the comparison below
@@ -128,7 +79,7 @@ def crowdsec_chain_gaps(
 def test_the_http_entrypoint_enforces_crowdsec() -> None:
     """The accepting half, on the rendered static config for the host that runs the bouncer."""
     chains = _chains(_HOST)
-    crowdsec_ref = f"{_context(_HOST)['k8s_namespace']}-crowdsec@kubernetescrd"
+    crowdsec_ref = f"{host_context(_HOST)['k8s_namespace']}-crowdsec@kubernetescrd"
     # Non-vacuity: a guard that finds no crowdsec reference anywhere would pass silently.
     assert crowdsec_ref in chains["https"], (
         f"{_HOST}: the https entrypoint does not chain {crowdsec_ref} — this guard's "
@@ -142,9 +93,7 @@ def test_a_cluster_without_the_bouncer_is_not_flagged() -> None:
     """traefik_k8s_manage_crowdsec false renders no chain on either entrypoint, and that is
     a supported configuration rather than a gap."""
     chains = _chains(_HOST, _WITHOUT_CROWDSEC)
-    crowdsec_ref = (
-        f"{_context(_HOST, _WITHOUT_CROWDSEC)['k8s_namespace']}-crowdsec@kubernetescrd"
-    )
+    crowdsec_ref = f"{host_context(_HOST)['k8s_namespace']}-crowdsec@kubernetescrd"
     assert crowdsec_ref not in chains["https"], (
         "the flag no longer removes the chain; this test's premise is stale"
     )

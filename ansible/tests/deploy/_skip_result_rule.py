@@ -24,7 +24,6 @@ from _check_mode import (
     walk_with_inherited,
 )
 from _helpers import REPO as _REPO_ROOT
-from _helpers import ROLES as _ROLES
 
 # The synthetic condition a check-mode producer is gated on. It carries no `when:`, but the
 # effect is exactly `when: not ansible_check_mode` — so the lazy-guard exemption below, which
@@ -37,10 +36,6 @@ class Problem(NamedTuple):
 
     task: str
     message: str
-
-
-def _task_files() -> list[Path]:
-    return sorted(p for p in _ROLES.rglob("tasks/*.yml") if "archive" not in p.parts)
 
 
 def _when_text(task: dict) -> str:

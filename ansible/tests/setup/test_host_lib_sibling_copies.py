@@ -30,7 +30,7 @@ import ast
 from pathlib import Path
 
 from _helpers import ROLES, load_tasks, walk_tasks
-from _role_census import role_dirs
+from _role_census import every_plane_role_dirs, role_task_files
 
 MODULE = "host_lib"
 SHARED_TASK = "common/tasks/install_host_lib.yml"
@@ -85,20 +85,10 @@ def _imports_host_lib(source: str) -> bool:
     return False
 
 
-def _role_dirs(roles_root: Path) -> list[Path]:
-    """Every role directory under a two-level plane root (setup/, k8s/, containers/)."""
-    return sorted(
-        d
-        for plane in sorted(roles_root.iterdir())
-        if plane.is_dir()
-        for d in role_dirs(plane)
-    )
-
-
 def consumers(roles_root: Path) -> set[str]:
     """Role names whose shipped `files/` scripts import host_lib."""
     found = set()
-    for role in _role_dirs(roles_root):
+    for role in every_plane_role_dirs(roles_root):
         if role.name == OWNER_ROLE:
             continue
         files = role / "files"
@@ -118,9 +108,7 @@ def includes_of(role: Path) -> list[dict]:
     `import_tasks` a sub-file that itself includes the shared install task.
     """
     out = []
-    for task_file in (
-        sorted((role / "tasks").rglob("*.yml")) if (role / "tasks").is_dir() else []
-    ):
+    for task_file in role_task_files(role):
         for task in walk_tasks(load_tasks(task_file)):
             target = task.get("ansible.builtin.import_tasks") or task.get(
                 "import_tasks"
@@ -133,9 +121,7 @@ def includes_of(role: Path) -> list[dict]:
 def stamp_pairs_of(role: Path) -> list[dict]:
     """Every declared stamp_deployed pair in this role, across all its task files, nested too."""
     out = []
-    for task_file in (
-        sorted((role / "tasks").rglob("*.yml")) if (role / "tasks").is_dir() else []
-    ):
+    for task_file in role_task_files(role):
         for task in walk_tasks(load_tasks(task_file)):
             pairs = (task.get("vars") or {}).get("stamp_deployed_pairs")
             if isinstance(pairs, list):
@@ -175,10 +161,8 @@ def hand_copies(roles_root: Path) -> list[str]:
     OWNER_ROLE ships, so a hand copy planted elsewhere in that role is still caught.
     """
     offenders = []
-    for role in _role_dirs(roles_root):
-        if not (role / "tasks").is_dir():
-            continue
-        for task_file in sorted((role / "tasks").rglob("*.yml")):
+    for role in every_plane_role_dirs(roles_root):
+        for task_file in role_task_files(role):
             if role.name == OWNER_ROLE and task_file.name == "install_host_lib.yml":
                 continue
             for task in walk_tasks(load_tasks(task_file)):
@@ -192,7 +176,7 @@ def hand_copies(roles_root: Path) -> list[str]:
 
 
 def _role(name: str) -> Path:
-    matches = [d for d in _role_dirs(ROLES) if d.name == name]
+    matches = [d for d in every_plane_role_dirs(ROLES) if d.name == name]
     assert len(matches) == 1, (
         f"expected one role directory named {name!r}, found {matches}"
     )

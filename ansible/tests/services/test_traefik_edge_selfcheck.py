@@ -30,7 +30,7 @@ from validate.k8s_manifests import (
     K8S_ROLES,
 )
 
-from _k8s_render import host_context, render_role_template
+from _k8s_render import host_context, render_role_template, traefik_static_config
 
 _ROLE = "traefik"
 # daniel-box runs the bouncer plugin. A cluster without it has neither the failure mode nor
@@ -47,16 +47,6 @@ def _traefik_container(host: str, overrides: dict | None = None) -> dict:
     doc = yaml_fast.safe_load(_render(host, "deployment.yaml.j2", overrides))
     containers = doc["spec"]["template"]["spec"]["containers"]
     return next(c for c in containers if c["name"] == "traefik")
-
-
-def _static_config(host: str) -> dict:
-    """The Traefik config itself, not the ConfigMap wrapping it.
-
-    static-config.yaml.j2's data value is a block scalar, so the config is a STRING at the
-    manifest level and has to be parsed a second time.
-    """
-    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2"))
-    return yaml_fast.safe_load(doc["data"]["traefik.yml"])
 
 
 def _selfcheck_route(host: str) -> dict:
@@ -83,7 +73,7 @@ def _entrypoint_for_port_name(host: str, port_name: str) -> str:
     number = ports[port_name]
     matches = [
         name
-        for name, spec in _static_config(host)["entryPoints"].items()
+        for name, spec in traefik_static_config(host=host)["entryPoints"].items()
         if spec["address"].rsplit(":", 1)[-1] == str(number)
     ]
     assert len(matches) == 1, (
@@ -133,7 +123,7 @@ def test_the_probe_detects_a_missing_bouncer_plugin() -> None:
         "traefik has no startupProbe — /ping alone reports 200 with zero routers (#1322)"
     )
     route = _selfcheck_route(_HOST)
-    config = _static_config(_HOST)
+    config = traefik_static_config(host=_HOST)
     chains = {
         # `or []`, not a default: dropping the last entry leaves a bare `middlewares:` key,
         # which parses to None. `.get(..., [])` returns that None and `selfcheck_gaps` raises

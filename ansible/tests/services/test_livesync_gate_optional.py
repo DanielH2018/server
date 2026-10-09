@@ -23,7 +23,7 @@ import pytest
 
 from lib import yaml_fast
 
-from _k8s_render import render_role_template
+from _k8s_render import render_role_template, traefik_static_config
 
 _ROLE = "traefik"
 _FLAG = "traefik_k8s_manage_livesync_gate"
@@ -41,8 +41,7 @@ def _pod_spec(manage: bool) -> dict:
 
 
 def _static_config(manage: bool) -> dict:
-    doc = yaml_fast.safe_load(_render("static-config.yaml.j2", manage))
-    return yaml_fast.safe_load(doc["data"]["traefik.yml"])
+    return traefik_static_config({_FLAG: manage})
 
 
 def test_the_file_provider_is_declared_with_the_gate_on_and_gone_with_it_off() -> None:
