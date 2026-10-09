@@ -21,15 +21,26 @@ estate that predates the derivation, whose ids and names were hand-picked:
 - The display name defaults to `k3s <name>`. It is what Kuma shows and what `probe.py
   kuma-drift` reconciles against Prometheus, but it is not the identity.
 
+`kuma_malformed_push_tokens` guards the other direction: AutoKuma refuses a push declaration
+whose `push_token` is not 32 letters and digits, logs one WARN per sync, and never creates the
+monitor (#3985). The pusher then gets HTTP 404 and nothing pages. uptime-kuma's tasks assert
+over it so the deploy fails instead.
+
 No Ansible import, so `probe_lib/kuma_table_loop.py` and the status-page census read the same
 function the playbook runs. Ansible wraps a filter's `ValueError` in its own error.
 """
+
+import re
 
 # The keys a `kuma:` mapping may carry. A misspelt one would otherwise be ignored and the
 # tile would keep its derived identity, which reads as the override having worked.
 _KUMA_KEYS = frozenset({"id", "name"})
 
 ID_SUFFIX = "-k8s"
+
+# AutoKuma's own check, from its error text: "push token should be 32 characters and contain
+# only letters and numbers". `secret_rotation.py rotate` mints `token_hex(16)`, which passes.
+_PUSH_TOKEN = re.compile(r"[A-Za-z0-9]{32}")
 
 
 def kuma_ingress_monitors(containers_list):
@@ -72,6 +83,27 @@ def kuma_ingress_monitors(containers_list):
     return tiles
 
 
+def kuma_malformed_push_tokens(declarations):
+    """The sorted ids of the push declarations AutoKuma would refuse for their token.
+
+    `declarations` maps an AutoKuma id to its parsed entity. A push entity whose `push_token`
+    is missing, not a string, or not exactly 32 ASCII letters and digits is returned. Only ids
+    are returned, never a token, so a caller can print the result without leaking one.
+    """
+    return sorted(
+        ident
+        for ident, entity in declarations.items()
+        if entity.get("type") == "push"
+        and not (
+            isinstance(entity.get("push_token"), str)
+            and _PUSH_TOKEN.fullmatch(entity["push_token"])
+        )
+    )
+
+
 class FilterModule:
     def filters(self):
-        return {"kuma_ingress_monitors": kuma_ingress_monitors}
+        return {
+            "kuma_ingress_monitors": kuma_ingress_monitors,
+            "kuma_malformed_push_tokens": kuma_malformed_push_tokens,
+        }

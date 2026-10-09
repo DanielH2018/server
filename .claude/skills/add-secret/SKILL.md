@@ -40,7 +40,8 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
      created, every push to it is lost, and the only visible symptom is `kuma-drift` reporting
      it "declared, not live" plus a failing `kuma-status-page-sync` job. A base64 value has
      `+`, `/` and `=` in it and is 44 characters. `secret_rotation.py rotate` already mints
-     `token_hex(16)` for exactly this reason; match it on the first write:
+     `token_hex(16)` for exactly this reason. The uptime-kuma deploy asserts the format and
+     names the refused tile, but only once someone deploys it. Match it on the first write:
      `openssl rand -hex 16 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`
    - **Any other generated value (auto tier):** generate and set without echoing the value:
      `openssl rand -base64 32 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`

@@ -29,6 +29,11 @@ reading behind each rule below.
   serde model drops an unknown field silently — that is how 2.0.0 discarded `resendInterval` on
   all 50 push tiles behind a correct template. ENFORCED:
   `ansible/tests/services/test_kuma_static_monitors.py::test_autokuma_pin_carries_resend_interval_on_push_monitors`.
+- **A push token is 32 letters and digits, or the tile never exists.** AutoKuma refuses any
+  other shape with one WARN per sync, so the pusher gets 404 and `kuma-drift` reads the tile as
+  "no beat due yet" (#3985). The deploy asserts the format over every rendered push tile and
+  names each refused id. ENFORCED:
+  `ansible/tests/services/test_kuma_push_token_format.py::test_one_base64_token_is_flagged`.
 - **`resendInterval` counts DOWN beats, not minutes** — `uptime_kuma_k8s_push_resend_down_beats`, 90, six
   hours for a bridge-fed tile and something else at any other cadence.
 - **Every notification declaration carries `applyExisting`**, the key Kuma forces into the stored
