@@ -111,7 +111,7 @@ def _loaded_by_path(tree, module_names):
 
 
 def _patched_names_by_module(test_files=None, module_names=None):
-    """Map each runtime module to the attributes any suite assigns, patches, or mutates.
+    """Map each runtime module to the attributes any suite assigns or patches.
 
     Returns `{module: {name}}`.
 
@@ -141,8 +141,8 @@ def _patched_names_by_module(test_files=None, module_names=None):
             if isinstance(node, ast.Call):
                 fn = node.func
                 is_setattr = (
-                    isinstance(fn, ast.Attribute) and fn.attr == "setattr"
-                ) or (isinstance(fn, ast.Name) and fn.id == "setattr")
+                    isinstance(fn, ast.Attribute) and fn.attr in ("setattr", "delattr")
+                ) or (isinstance(fn, ast.Name) and fn.id in ("setattr", "delattr"))
                 if is_setattr and len(node.args) >= 2:
                     target, attr = node.args[0], node.args[1]
                     if isinstance(attr, ast.Constant) and isinstance(attr.value, str):
