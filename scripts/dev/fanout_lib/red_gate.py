@@ -245,19 +245,43 @@ def stray_config(run: Runner, worktree: Path) -> list[str]:
     return [f for f in listed.splitlines() if PurePosixPath(f).name in PYTEST_CONFIG]
 
 
-def ignored_claude_files(run: Runner, worktree: Path) -> set[str]:
-    """The ignored files under `worktree`'s `.claude/`.
+def unhide_index(run: Runner, worktree: Path) -> list[str]:
+    """Clear every skip-worktree and assume-unchanged bit in `worktree`'s index.
 
-    Neither the red range nor `git status` shows an ignored file, and `.gitignore` ignores
-    `.claude/*.local.json`, so a red author could plant a `.claude/settings.local.json` that
-    widens what a later session may run (#3838). The pipeline deletes each one the red phase
-    added.
+    Either bit hides an edit to a tracked file from `git status`, and `git reset --hard`
+    leaves a skip-worktree file's contents as they are. `ls-files -v` tags a skip-worktree
+    entry `S` and an assume-unchanged one in lowercase.
+
+    Returns:
+        The paths whose bits were cleared.
     """
-    listed = _git(
-        run, worktree, "ls-files", "--others", "--ignored", "--exclude-standard",
-        "--", ".claude/",
-    ).stdout  # fmt: skip
-    return set(listed.splitlines())
+    listed = _git(run, worktree, "ls-files", "-v", "-z").stdout
+    hidden = [
+        entry[2:]
+        for entry in listed.split("\0")
+        if entry and (entry[0] == "S" or entry[0].islower())
+    ]
+    # One call per flag: given both, `update-index` exits 0 and clears only the last.
+    for flag in ("--no-skip-worktree", "--no-assume-unchanged") if hidden else ():
+        _git(run, worktree, "update-index", flag, "--", *hidden)
+    return hidden
+
+
+def reset_worktree(run: Runner, worktree: Path, sha: str) -> None:
+    """Make `worktree` hold exactly `sha`'s tree, plus the pipeline's own `.fanout/`.
+
+    The red author had the worktree before the implementer, and neither gate nor the reviewer
+    reads anything outside the commit range (#3852). A skip-worktree edit to a script a later
+    phase runs, an untracked root `.mcp.json` or `CLAUDE.local.md`, and an ignored file the
+    red author created or overwrote would each outlive the red phase. So the bits go first,
+    then the tree is reset, then every untracked and ignored file is deleted. That includes
+    `.venv/`: `uv run` rebuilds it from its cache, and a `.pth` planted in it would run in
+    every later pytest.
+    """
+    unhide_index(run, worktree)
+    _git(run, worktree, "reset", "--quiet", "--hard", sha)
+    # `-x` still honours `-e`. A second `-f` removes a nested repository too.
+    _git(run, worktree, "clean", "-ffdxq", "-e", "/.fanout/")
 
 
 def _collect(run: Runner, worktree: Path, files: list[str]) -> tuple[set[str], int]:
