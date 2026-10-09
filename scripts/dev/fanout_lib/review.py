@@ -40,8 +40,9 @@ WHAT THE IMPLEMENTER CAN WRITE. The worktree, and for another repo's batch the `
 snapshot this module runs from. The pipeline therefore reads the review prompt, the headless
 system prompt, this repo's `.claude/settings.json` and every hook once, at start (#3763,
 #3794, #3810). Each phase gets the prompts as text and runs the Stop hook from a copy outside
-the worktree that is rewritten before every call. In this repo's batch, a phase that resumes
-the implementer's session also loads no settings file from the worktree; `held_hooks` says which phases and why.
+the worktree that is rewritten before every call. In this repo's batch, every phase after the
+implementer also loads no settings file from the worktree, and the reviewer gets the start-time
+`CLAUDE.md` as text; `held_hooks` says why.
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -339,6 +340,10 @@ class Pipeline:
             if target.is_server
             else ""
         )
+        # The reviewer loads no project source, so no `CLAUDE.md`: it gets this copy as text.
+        self.project_claude_md = (
+            (SOURCE_ROOT / "CLAUDE.md").read_text() if target.is_server else ""
+        )
         self.hook_root = state_dir / f"{batch}-stop-hook"
 
     def _claude(self, name: str, argv: list[str], stdin: str) -> Phase:
@@ -380,7 +385,7 @@ class Pipeline:
         return ["claude", "--settings", settings]
 
     def _held_settings(self) -> list[str]:
-        """The prefix a resumed phase runs `claude` with.
+        """The prefix a phase after the implementer runs `claude` with.
 
         For this repo's batch it loads no project or local settings file, and passes the
         project settings read at start, each hook command pointed at the copy in `hook_root`.
@@ -455,11 +460,17 @@ class Pipeline:
         return [*self._implementer(self._held_settings()), "--resume", self.session]
 
     def _reviewer(self) -> list[str]:
+        prompt = self.review_prompt
+        if self.project_claude_md:
+            prompt += (
+                "\n\n# The repo's CLAUDE.md, as it stood before the implementer ran\n\n"
+                + self.project_claude_md
+            )
         return [
-            *self._stop_hook(),
+            *self._held_settings(),
             "-p", "--model", "opus", "--permission-mode", "auto",
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
-            "--append-system-prompt", self.review_prompt,
+            "--append-system-prompt", prompt,
             "--disallowedTools", "Edit,Write,NotebookEdit",
             "--json-schema", json.dumps(FINDINGS_SCHEMA),
         ]  # fmt: skip

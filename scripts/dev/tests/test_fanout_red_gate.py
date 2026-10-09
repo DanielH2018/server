@@ -173,6 +173,49 @@ def test_the_green_gate_runs_head_not_an_edit_hidden_from_git_status(tmp_path):
     assert green_gate(run, repo, red, gate).startswith("pytest exited 1; not passing")
 
 
+def test_the_green_gate_passes_a_fixed_red_test_that_calls_git(tmp_path):
+    """A red test that lists tracked files needs a repository to run in (#3837)."""
+    calls_git = (
+        "\n\ndef test_tracked():\n    import subprocess\n\n    from mod import double\n\n"
+        "    listed = subprocess.run(\n        ['git', 'ls-files', 'mod.py'],\n"
+        "        capture_output=True, text=True, check=True,\n    ).stdout\n"
+        "    assert listed == 'mod.py\\n' and double(2) == 4\n"
+    )
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": calls_git})
+    gate = red_gate(run, repo, base, red)
+    assert gate.passed, gate.reason
+    commit(repo, "fix", **{"mod.py": FIXED})
+    assert green_gate(run, repo, red, gate) == ""
+
+
+def test_the_green_gate_reads_the_same_origin_master_as_the_red_gate(tmp_path):
+    """A clone of a path would map the source's local branch to `origin/master`."""
+    diffs_base = (
+        "\n\ndef test_changed():\n    import subprocess\n\n"
+        "    changed = subprocess.run(\n"
+        "        ['git', 'diff', '--name-only', 'origin/master', 'HEAD'],\n"
+        "        capture_output=True, text=True, check=True,\n    ).stdout.split()\n"
+        "    assert 'mod.py' in changed\n"
+    )
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": diffs_base})
+    git_out(repo, "update-ref", "refs/remotes/origin/master", base)
+    gate = red_gate(run, repo, base, red)
+    assert gate.passed, gate.reason
+    commit(repo, "fix", **{"mod.py": FIXED})
+    assert green_gate(run, repo, red, gate) == ""
+
+
+def test_a_smudge_filter_cannot_rewrite_what_the_green_gate_runs(tmp_path):
+    """The implementer owns the repo's config and `info/attributes` (#3837)."""
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
+    gate = red_gate(run, repo, base, red)
+    commit(repo, "not a fix", **{"mod.py": CODE + "\n"})
+    git_out(repo, "config", "filter.x.smudge", "sed 's/assert .*/assert True/'")
+    (repo / ".git" / "info").mkdir(exist_ok=True)
+    (repo / ".git" / "info" / "attributes").write_text("tests/test_new.py filter=x\n")
+    assert green_gate(run, repo, red, gate).startswith("pytest exited 1; not passing")
+
+
 def test_an_ignored_root_conftest_is_refused_by_both_gates(tmp_path):
     """`git status` and `git diff` cannot see an ignored file, and `/*` ignores every root path."""
     repo = init_repo(tmp_path / "repo")
