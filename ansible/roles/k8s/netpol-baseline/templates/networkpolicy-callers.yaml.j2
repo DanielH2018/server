@@ -10,8 +10,8 @@
 
    DECIDED: an entry with `netpol_role_owned: true` is skipped here, because its own role
    renders the same NetworkPolicy so that `--tags <svc>` carries the fence (sonarr, radarr,
-   prowlarr, qbittorrent). Rendering it here too would apply two objects of one name from two roles, the
-   last apply winning. netpol-baseline's CLAUDE.md, "Where a per-workload policy lives", has
+   prowlarr, qbittorrent, bazarr, headlamp). Rendering it here too would apply two objects of
+   one name from two roles, the last apply winning. netpol-baseline's CLAUDE.md, "Where a per-workload policy lives", has
    the rule.
 
    An entry also lists `netpol_fences: [{app, port, from}]` for a sub-workload of its role that

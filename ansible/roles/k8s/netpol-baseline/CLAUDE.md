@@ -72,13 +72,15 @@ needs, decides which one.
   - A workload in `netpol_baseline_exempt_workloads` keeps its complete fence beside it:
     headlamp, n8n, registry, prowlarr's flaresolverr and karakeep's chrome. Exempt, it is
     fenced by nothing else.
+    headlamp's single-caller fence is `netpol_from` on its entry with `netpol_role_owned: true`,
+    and flaresolverr's calls the macro directly because its port is a prowlarr role default.
   - A backend that the pod's startup waits on ships with the pod. The precedents are
     authelia's session store (#1609) and the scrutiny and karakeep backends (#1620).
     authelia's and karakeep's are `netpol_fences` items with `role_owned: true`, each rendered
     through the macro by a template in that role.
   - The additive caller rules of the *arr stack and qbittorrent live with the workload they
-    admit callers to. sonarr's, radarr's, prowlarr's and qbittorrent's caller lists are
-    `netpol_from` on their entries, with `netpol_role_owned: true`.
+    admit callers to. sonarr's, radarr's, prowlarr's, bazarr's and qbittorrent's caller lists
+    are `netpol_from` on their entries, with `netpol_role_owned: true`.
 
 **A hand `--tags <svc>` deploy does not apply that service's policy when the policy lives
 here.** When a change needs a policy change and a workload change together, deploy both

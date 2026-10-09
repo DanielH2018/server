@@ -30,7 +30,8 @@ shared conventions.
 - `templates/networkpolicy-bazarr.yaml.j2` admits monitor-bridge to bazarr's API port on top
   of the netpol-baseline default set (traefik, prometheus, the two cni0 gateways) — without
   it monitor-bridge's health check gets refused, which happened on the check's first three
-  cycles (2026-08-29) before the policy existed.
+  cycles (2026-08-29) before the policy existed. The caller list is `netpol_from` on bazarr's
+  `containers_list` entry, rendered through the shared `networkpolicy` macro.
 
 ## Subtitle providers — PVC state, recorded here because the repo cannot hold it
 

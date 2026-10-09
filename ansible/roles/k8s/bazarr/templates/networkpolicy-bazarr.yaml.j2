@@ -1,3 +1,4 @@
+{% from 'networkpolicy.yml.j2' import networkpolicy with context %}
 ---
 # Admits monitor-bridge to bazarr's API, which the ingress default-deny otherwise refuses.
 #
@@ -17,25 +18,8 @@
 # stays so this policy states its own complete caller set rather than depending on the baseline
 # continuing to admit traefik on every port — if that baseline rule is ever port-scoped, or this
 # pod template loses the label, this line is what keeps the UI reachable.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: bazarr
-  namespace: {{ k8s_namespace }}
-spec:
-  podSelector:
-    matchLabels:
-      app: bazarr
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: traefik
-        - podSelector:
-            matchLabels:
-              app: monitor-bridge
-      ports:
-        - protocol: TCP
-          port: {{ container_item.port }}
+#
+# The caller list is `netpol_from:` on this role's containers_list entry
+# (inventory/host_vars/daniel-box.yml). The entry's `netpol_role_owned: true` keeps netpol-baseline
+# from rendering a second copy.
+{{ networkpolicy(container_item.name, container_item.port, container_item.netpol_from) }}

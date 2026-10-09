@@ -157,6 +157,11 @@ containers_list:
     port: 4466
     use_authelia: true
     auth_tier: one_factor
+    # Callers of roles/k8s/headlamp/templates/networkpolicy.yaml.j2, which the role renders
+    # itself (hence netpol_role_owned) so its netpol-probe Job tests the fence it just applied.
+    netpol_role_owned: true
+    netpol_from:
+      - traefik  # the only caller: every human path runs the Authelia middleware first
   # Route-only: the backend is deploy-ui.service on this host (roles/setup/deploy_ui), reached
   # through a selector-less Service. use_authelia is the whole access control, and the tier is
   # two_factor because the page starts land.sh/deploy.sh and clears the deployer's hold on a
@@ -313,6 +318,13 @@ containers_list:
     port: 6767
     use_authelia: true
     auth_tier: one_factor
+    # Callers of roles/k8s/bazarr/templates/networkpolicy-bazarr.yaml.j2, the additive fence on
+    # this port; the header there says why. The role renders it itself so `--tags bazarr`
+    # carries its own fence, hence netpol_role_owned.
+    netpol_role_owned: true
+    netpol_from:
+      - traefik         # deliberate, not redundant — see the policy's header
+      - monitor-bridge  # its Bazarr Health check dials bazarr:6767 directly
 
   # use_authelia stays FALSE, and that is load-bearing rather than an oversight: Jellyfin's
   # clients are TV and phone apps that cannot complete a web SSO flow.

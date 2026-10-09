@@ -14,8 +14,8 @@
     its role's entry, and the same template renders it (freshrss's feed cache).
   - A role whose deploy must carry its own fence renders it from its own template, reading
     `container_item.netpol_from`, and its entry sets `netpol_role_owned: true` so the loop
-    skips it. sonarr, radarr, prowlarr and qbittorrent do this; netpol-baseline's CLAUDE.md
-    says when a policy belongs in the workload's role. A `netpol_fences` item its role renders
+    skips it. sonarr, radarr, prowlarr, qbittorrent, bazarr and headlamp do this;
+    netpol-baseline's CLAUDE.md says when a policy belongs in the workload's role. A `netpol_fences` item its role renders
     sets `role_owned: true` instead, and the role's template selects the item by `app`
     (authelia's session store, karakeep's meilisearch and chrome).
 
