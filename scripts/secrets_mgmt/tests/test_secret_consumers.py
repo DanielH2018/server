@@ -19,6 +19,7 @@ from secrets_mgmt.consumers import (
     consumer_tags,
 )
 from secrets_mgmt.secret_registry import audit
+from lib.repo_paths import HOST_VARS
 from secrets_mgmt.rotation_tools import REPO, load_registry, today
 
 
@@ -236,7 +237,7 @@ def test_the_tile_and_pusher_tags_are_both_real_deploy_targets():
     If `uptime-kuma` were not a valid deploy tag, `rotate --deploy` would exit 2 (the wrapper's
     unmatched-tag guard) and rotate nothing — a fix that breaks the thing it fixes.
     """
-    host_vars = (Path(REPO) / "ansible/inventory/host_vars/daniel-box.yml").read_text()
+    host_vars = (HOST_VARS / "daniel-box.yml").read_text()
     assert "name: uptime-kuma" in host_vars, (
         "uptime-kuma must be in daniel-box's containers_list for the tag to match anything"
     )

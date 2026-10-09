@@ -22,6 +22,7 @@ from pathlib import PurePosixPath
 
 import pytest
 
+from lib.repo_paths import ALL_VARS
 from _renovate import (
     _CONFIG_MANAGERS,
     _MANAGERS,
@@ -273,7 +274,7 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
     assert defaults, "no k8s role defaults found"
     defaults += sorted((_REPO / "ansible/roles/setup").glob("*/defaults/main.yml"))
-    defaults.append(_REPO / "ansible/inventory/group_vars/all.yml")
+    defaults.append(ALL_VARS)
     untracked = []
     for f in defaults:
         rel_path = str(f.relative_to(_REPO))

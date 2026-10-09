@@ -25,7 +25,7 @@ from validate.validate_lib.k8s_schema import (
     schema_error,
     strict_schema,
 )
-from lib.repo_paths import ANSIBLE, REPO
+from lib.repo_paths import K3S_DEFAULTS, REPO
 
 
 # ── schema validation ────────────────────────────────────────────────────────────────────
@@ -216,9 +216,7 @@ def test_vendored_core_schemas_match_the_cluster():
     # reads as fine. Silent in both directions, hence this test. It compares the FULL tag, so a
     # patch bump refreshes the schemas too and the vendored files always name the release the
     # cluster runs.
-    k3s_defaults = (
-        ANSIBLE / "roles" / "setup" / "k3s" / "defaults" / "main.yml"
-    ).read_text()
+    k3s_defaults = K3S_DEFAULTS.read_text()
     assert schema_tag_problem(k3s_defaults, _vendored_tag(), K8S_SCHEMA_VERSION) is None
 
 
