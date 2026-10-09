@@ -14,6 +14,7 @@ import yaml
 
 import gen_role_glance as g
 import glance_facts as f
+from lib.estate import Inventory
 
 KNOWN_SERVICES = frozenset(
     {"sonarr", "traefik", "authelia", "home-assistant", "pihole"}
@@ -294,7 +295,7 @@ def test_every_deployed_role_block_matches_what_the_generator_writes_now():
 def test_the_gate_covers_the_known_services():
     # `k8s_entries` filters `containers_list` by platform; a filter that stopped
     # matching would make the gate above pass on nothing.
-    names = {e["name"] for e in g.k8s_entries().values()}
+    names = {e["name"] for e in g.Estate().k8s_entries().values()}
     assert KNOWN_SERVICES <= names, sorted(KNOWN_SERVICES - names)
 
 
@@ -302,7 +303,7 @@ def test_the_gate_covers_the_known_setup_roles_and_pi_services():
     setup = {d.name for d in g.setup_role_dirs()}
     assert KNOWN_SETUP_ROLES <= setup, sorted(KNOWN_SETUP_ROLES - setup)
     assert "common" not in setup
-    pi = {e["name"] for e in g.pi_service_entries()}
+    pi = {e["name"] for e in g.Estate().pi_entries()}
     assert KNOWN_PI_SERVICES <= pi, sorted(KNOWN_PI_SERVICES - pi)
 
 
@@ -322,7 +323,7 @@ def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):
 def test_every_setup_and_pi_doc_carries_the_marker_under_the_heading():
     """The heading, then the marker directly under it, on every doc."""
     docs = [d / "CLAUDE.md" for d in g.setup_role_dirs()] + [
-        g.CONTAINERS_ROLES / e["name"] / "CLAUDE.md" for e in g.pi_service_entries()
+        g.CONTAINERS_ROLES / e["name"] / "CLAUDE.md" for e in g.Estate().pi_entries()
     ]
     missing = []
     for doc in docs:
@@ -351,23 +352,25 @@ def _copy_role(name: str, roles: Path) -> Path:
 
 def test_a_hand_edited_block_is_flagged(tmp_path):
     """The gate's rejecting half: a copy of sonarr is clean, and one changed value makes it stale."""
-    entry = next(e for e in g.k8s_entries().values() if e["name"] == "sonarr")
+    entry = g.Estate().k8s_entries()["sonarr"]
     dst = _copy_role("sonarr", tmp_path / "roles")
     # sonarr's claims resolve through two other roles: volume-claim's default StorageClass
     # names `sonarr-config`'s class, and media-volume declares the `media-data` it mounts.
     _copy_role("volume-claim", tmp_path / "roles")
     _copy_role("media-volume", tmp_path / "roles")
-    host_vars = tmp_path / "daniel-box.yml"
-    host_vars.write_text(yaml.safe_dump({"containers_list": [entry]}))
+    (tmp_path / "daniel-box.yml").write_text(
+        yaml.safe_dump({"containers_list": [entry]})
+    )
+    estate = g.Estate(Inventory(host_vars=tmp_path))
     roles = dst.parent
-    assert g.stale_k8s_docs(write=False, host_vars=host_vars, k8s_roles=roles) == []
+    assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == []
 
     doc = (dst / "CLAUDE.md").read_text()
     assert '`--tags "sonarr"`' in doc
     (dst / "CLAUDE.md").write_text(
         doc.replace('`--tags "sonarr"`', '`--tags "sonar"`', 1)
     )
-    assert g.stale_k8s_docs(write=False, host_vars=host_vars, k8s_roles=roles) == [
+    assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == [
         "k8s/sonarr"
     ]
 
@@ -474,24 +477,22 @@ def test_a_hand_edited_pi_block_is_flagged(tmp_path):
     _write(
         role / "CLAUDE.md", "# widget\n\nIntro.\n\n## At a glance\n- **Why:** kept.\n"
     )
-    host_vars = _write(
+    _write(
         tmp_path / "daniel-pi.yml",
         yaml.safe_dump(
             {"containers_list": [{"name": "widget", "networks": ["proxy"]}]}
         ),
     )
-    assert g.stale_pi_docs(
-        write=True, pi_host_vars=host_vars, containers_roles=roles
-    ) == ["containers/widget"]
-    assert (
-        g.stale_pi_docs(write=False, pi_host_vars=host_vars, containers_roles=roles)
-        == []
-    )
+    estate = g.Estate(Inventory(host_vars=tmp_path))
+    assert g.stale_pi_docs(write=True, estate=estate, containers_roles=roles) == [
+        "containers/widget"
+    ]
+    assert g.stale_pi_docs(write=False, estate=estate, containers_roles=roles) == []
     doc = (role / "CLAUDE.md").read_text()
     assert "- **Why:** kept." in doc
     (role / "CLAUDE.md").write_text(
         doc.replace("networks `proxy`", "networks `apps`", 1)
     )
-    assert g.stale_pi_docs(
-        write=False, pi_host_vars=host_vars, containers_roles=roles
-    ) == ["containers/widget"]
+    assert g.stale_pi_docs(write=False, estate=estate, containers_roles=roles) == [
+        "containers/widget"
+    ]

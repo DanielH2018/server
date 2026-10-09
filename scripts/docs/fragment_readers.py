@@ -7,7 +7,7 @@ neither half has to know about the other.
 
 STATIC PARSING ONLY, for the reason the generator's own docstring gives: importing the
 deployer or the rotation tool would bootstrap `sys.path` and read the environment on import.
-Python constants come from `ast`, role defaults and inventory from `yaml.safe_load`, and the
+Python constants come from `ast`, role defaults and inventory from `lib.estate`, and the
 fail2ban jail template from `configparser`.
 """
 
@@ -22,8 +22,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
-from lib.ansible_inventory import containers_entries_in, inventory_hosts
-
+from lib.estate import Estate
 from lib.repo_paths import REPO
 
 
@@ -38,27 +37,16 @@ def module_constant(path: _Path, name: str):
     raise KeyError(f"{path.relative_to(REPO)}: no top-level `{name} = <literal>`")
 
 
-def role_defaults(path: _Path) -> dict:
-    return yaml_fast.safe_load(path.read_text())
-
-
-def host_has_docker(
-    hosts_ini: _Path, group_vars: dict, host_vars_dir: _Path
-) -> dict[str, bool]:
+def host_has_docker(estate: Estate) -> dict[str, bool]:
     """`{host: has_docker}` for every host in hosts.ini's `[homeservers]`, in file order.
 
-    A host's own host_vars value wins over group_vars, the precedence Ansible applies. The
-    host list is what `initial_setup.yml` targets, so it is the set of hosts that install the
-    crons this role pings from.
+    The host list is what `initial_setup.yml` targets, so it is the set of hosts that install
+    the crons this role pings from.
     """
-    hosts = [h.name for h in inventory_hosts(hosts_ini) if "homeservers" in h.groups]
-    default = bool(group_vars.get("has_docker", False))
-    out = {}
-    for host in hosts:
-        path = host_vars_dir / f"{host}.yml"
-        own = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
-        out[host] = bool((own or {}).get("has_docker", default))
-    return out
+    return {
+        host: bool(estate.vars(host).get("has_docker", False))
+        for host in estate.hosts_in("homeservers")
+    }
 
 
 def registry_counts(path: _Path) -> dict[str, int]:
@@ -100,8 +88,8 @@ def parse_jails(conf: str) -> list[dict[str, str]]:
     return jails
 
 
-def container_udp_port(host_vars: dict, name: str) -> str:
-    entries = [c for c in containers_entries_in(host_vars) if c["name"] == name]
+def container_udp_port(entries: list[dict], name: str) -> str:
+    entries = [c for c in entries if c["name"] == name]
     assert len(entries) == 1, (
         f"expected one {name!r} in containers_list, found {len(entries)}"
     )

@@ -50,4 +50,5 @@ ALL_VARS = INVENTORY / "group_vars" / "all.yml"
 HOST_VARS = INVENTORY / "host_vars"
 # The k3s role's defaults: the Longhorn tier lists, the etcd snapshot retention and the
 # schema version the manifest validator pins all live here.
-K3S_DEFAULTS = ROLES / "setup" / "k3s" / "defaults" / "main.yml"
+K3S_ROLE = ROLES / "setup" / "k3s"
+K3S_DEFAULTS = K3S_ROLE / "defaults" / "main.yml"
