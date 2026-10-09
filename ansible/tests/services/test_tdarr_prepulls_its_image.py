@@ -13,10 +13,11 @@ play host; the second test holds that coupling.
 Run: uv run pytest ansible/tests/services/test_tdarr_prepulls_its_image.py
 """
 
+import yaml
 from _helpers import K8S_ROLES, load_defaults, load_tasks
+from _k8s_render import render_role_template
 
 _TDARR = K8S_ROLES / "tdarr"
-_PV_TEMPLATE = K8S_ROLES / "media-volume" / "templates" / "pv.yaml.j2"
 
 
 def _cmd(task: dict) -> str:
@@ -54,13 +55,19 @@ def test_the_image_is_pulled_before_the_manifests_apply_and_never_on_a_dry_run()
 def test_the_local_pull_lands_on_the_node_the_media_volume_pins() -> None:
     # The pull runs on the play host. It reaches tdarr's node only because media-volume pins
     # the local PV to the same `inventory_hostname`, on the claim tdarr mounts.
-    pv = _PV_TEMPLATE.read_text()
-    assert "{{ inventory_hostname }}" in pv, (
-        "media-volume no longer pins the PV to the play host"
+    # Rendered at a sentinel host, so a PV pinned to a literal name or to any other variable
+    # renders something other than the sentinel and fails here.
+    pv = yaml.safe_load(
+        render_role_template(
+            "media-volume", "pv.yaml.j2", {"inventory_hostname": "sentinel-node"}
+        )
     )
+    terms = pv["spec"]["nodeAffinity"]["required"]["nodeSelectorTerms"]
+    assert [v for t in terms for e in t["matchExpressions"] for v in e["values"]] == [
+        "sentinel-node"
+    ], "media-volume no longer pins the PV to the play host"
     assert (
-        load_defaults(_TDARR)["tdarr_k8s_media_claim"]
-        == load_defaults(K8S_ROLES / "media-volume")["media_volume_claim"]
+        pv["spec"]["claimRef"]["name"] == load_defaults(_TDARR)["tdarr_k8s_media_claim"]
     )
     tasks = load_tasks(_TDARR / "tasks" / "main.yml")
     asserts = [t for t in tasks if "ansible.builtin.assert" in t]
