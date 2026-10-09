@@ -42,8 +42,8 @@ def seq():
     """Factory for a callable yielding each value on successive calls, like mock side_effect.
 
     A fixture rather than an importable function: suites answer a FakeSources query this way
-    (`get_json=seq(...)`), and `from conftest import seq` resolves to whichever conftest.py sys.path reached first once
-    the whole repo suite runs. pytest resolves a fixture by directory, so it cannot collide.
+    (`get_json=seq(...)`), and `from conftest import seq` resolves to whichever conftest.py
+    sys.path reached first once the whole repo suite runs. pytest resolves a fixture by directory, so it cannot collide.
 
     conftest.py lives in `tests/`, a sibling of `files/` rather than a member of it, so a shared
     test helper here can never be a candidate for the ConfigMap ship list (`monitor_bridge_modules`)
