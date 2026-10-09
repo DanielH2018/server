@@ -11,6 +11,8 @@ spec:
   # Both config PVCs are ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
   # the new pod waits for volumes the old pod has not released.
 {{ spec_shell('Recreate') }}
+  # The same budget as the rollout waits. See tdarr_k8s_rollout_timeout in defaults/main.yml.
+  progressDeadlineSeconds: {{ tdarr_k8s_rollout_timeout[:-1] | int }}
   replicas: 1
   selector:
     matchLabels:

@@ -14,6 +14,21 @@
 # refuses. Same shape as the dri-device-plugin role's pin, for the same reason.
 tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:6b4dcd9a20dc80a26d06b50378bdfa6955f2d37e413bf4c52d93a4bb37e74afc
 
+# The rollout budget, declared once. Read by THREE places, so none of them can drift: the
+# `manifests_rollout_timeout` passed to k8s/manifests in tasks/main.yml, the inline `rollout
+# status` gate in tasks/verify.yml, and `progressDeadlineSeconds` in templates/deployment.yaml.j2.
+# The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
+# fails on ProgressDeadlineExceeded whatever `--timeout` says.
+#
+# The image is 1432 MiB compressed (node status `sizeBytes`, 2026-10-09), five times
+# flaresolverr's. Its pull on daniel-box took 25m37s on 2026-10-08 (`Pulling` at 23:50:48,
+# container started 00:16:25, #3689), about 0.93 MiB/s. That is not a one-evening ghcr.io
+# outlier: prowlarr's 278 MiB flaresolverr pull took 8m54s (#2369), about 0.52 MiB/s, so a
+# tdarr pull sits between 1537s and roughly 2750s on this line. 3000s covers the slow end, the
+# rule manifests_rollout_timeout_default states. Because the Deployment is `Recreate`, tdarr is
+# down for the whole pull.
+tdarr_k8s_rollout_timeout: 3000s
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # k8s/manifests takes a pre-apply Longhorn snapshot of both config claims below and reverts
 # them on a failed deploy, and that machinery works here. Auto-deploy stays off for three
