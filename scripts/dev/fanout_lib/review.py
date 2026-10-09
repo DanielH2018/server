@@ -38,11 +38,10 @@ each call. The hook never blocks a `review` phase, whose final message is JSON, 
 
 WHAT THE IMPLEMENTER CAN WRITE. The worktree, and for another repo's batch the `.fanout/server`
 snapshot this module runs from. The pipeline therefore reads the review prompt, the headless
-system prompt and the Stop hook once, at start (#3763, #3794). Each phase gets the prompts as
-text and runs the hook from a copy outside the worktree that is rewritten before every call.
-This repo's `.claude/settings.json` still registers the worktree's copy of the hook, and the
-other project hooks, from the tree the agent writes; `--setting-sources` could drop them only
-with every guard hook besides.
+system prompt, this repo's `.claude/settings.json` and every hook once, at start (#3763,
+#3794, #3810). Each phase gets the prompts as text and runs the Stop hook from a copy outside
+the worktree that is rewritten before every call. In this repo's batch, a phase that resumes
+the implementer's session also loads no settings file from the worktree; `held_hooks` says which phases and why.
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -67,6 +66,12 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import ISSUES_HEADING, _landing, lands
+from fanout_lib.held_hooks import (
+    held_secret_paths,
+    pointed_settings,
+    read_hooks,
+    write_hooks,
+)
 from fanout_lib.review_prompts import (
     FINDINGS_SCHEMA,
     _as_data,
@@ -99,9 +104,6 @@ PROMPT_FILE = Path(__file__).resolve().parent / "review_system_prompt.md"
 # `.fanout/server` snapshot for another repo. Both are trees the implementer can write.
 SOURCE_ROOT = Path(__file__).resolve().parents[3]
 HEADLESS_PROMPT_FILE = SOURCE_ROOT / SYSTEM_PROMPT_FILE
-# The files the `fanout-stop` Stop hook runs from: the hook, the shared module it imports and
-# the shell entry point that registers it.
-STOP_HOOK_FILES = ("run-hook.sh", "fanout-stop.py", "_hook_common.py")
 # Names the pipeline's own copy of `fanout-stop.py`. The worktree's copy, which this repo's
 # `.claude/settings.json` registers too, stands down while the file exists, so one Stop spends
 # the block cap once. `.claude/hooks/fanout-stop.py` mirrors the path.
@@ -329,29 +331,21 @@ class Pipeline:
         # which `_snapshot_hook` rewrites from these bytes before every call.
         self.review_prompt = PROMPT_FILE.read_text()
         self.headless_prompt = HEADLESS_PROMPT_FILE.read_text()
-        hooks = SOURCE_ROOT / ".claude" / "hooks"
-        self.stop_hook = {name: (hooks / name).read_bytes() for name in STOP_HOOK_FILES}
+        self.hooks = read_hooks(SOURCE_ROOT)
+        # Another repo's snapshot carries no `.claude/settings.json`, and its worktree's
+        # settings are that repo's, not these.
+        self.project_settings = (
+            (SOURCE_ROOT / ".claude" / "settings.json").read_text()
+            if target.is_server
+            else ""
+        )
         self.hook_root = state_dir / f"{batch}-stop-hook"
-
-    def _snapshot_hook(self) -> Path:
-        """Write the Stop hook held since start into `hook_root`, outside the worktree.
-
-        Every process here runs as one user, so no directory is out of the agent's reach.
-        Rewriting the bytes before each call is what makes the copy the pipeline's: an edit
-        the agent makes to it lasts until the next phase starts, never into it.
-        """
-        hooks = self.hook_root / ".claude" / "hooks"
-        hooks.mkdir(parents=True, exist_ok=True)
-        for name, data in self.stop_hook.items():
-            path = hooks / name
-            path.unlink(missing_ok=True)
-            path.write_bytes(data)
-            path.chmod(0o555 if name.endswith(".sh") else 0o444)
-        return hooks / "fanout-stop.py"
 
     def _claude(self, name: str, argv: list[str], stdin: str) -> Phase:
         fanout = self.worktree / ".fanout"
-        (self.worktree / OWN_COPY).write_text(f"{self._snapshot_hook()}\n")
+        (self.worktree / OWN_COPY).write_text(
+            f"{write_hooks(self.hooks, self.hook_root)}\n"
+        )
         (fanout / "phase").write_text(
             f"{'review' if name.startswith('review') else name}\n"
         )
@@ -385,9 +379,25 @@ class Pipeline:
         settings = json.dumps(stop_hook_settings(str(self.hook_root)))
         return ["claude", "--settings", settings]
 
-    def _implementer(self) -> list[str]:
+    def _held_settings(self) -> list[str]:
+        """The prefix a resumed phase runs `claude` with.
+
+        For this repo's batch it loads no project or local settings file, and passes the
+        project settings read at start, each hook command pointed at the copy in `hook_root`.
+        That set already registers `fanout-stop`, so the Stop hook is not added a second time.
+        Another repo's batch keeps `_stop_hook`'s prefix and its own project settings: the
+        pipeline holds no copy of that repo's hooks, so dropping the source would drop them.
+        """
+        if not self.project_settings:
+            return self._stop_hook()
+        settings = pointed_settings(self.project_settings, self.hook_root)
         return [
-            *self._stop_hook(),
+            "claude", "--setting-sources", "user", "--settings", json.dumps(settings),
+        ]  # fmt: skip
+
+    def _implementer(self, prefix: list[str] | None = None) -> list[str]:
+        return [
+            *(prefix or self._stop_hook()),
             "-p", "--model", "opus", "--permission-mode", "auto",
             "--output-format", "json", "--max-budget-usd", str(BUDGET_USD),
             "--append-system-prompt", self.headless_prompt,
@@ -442,7 +452,7 @@ class Pipeline:
         return reason
 
     def _resume(self) -> list[str]:
-        return [*self._implementer(), "--resume", self.session]
+        return [*self._implementer(self._held_settings()), "--resume", self.session]
 
     def _reviewer(self) -> list[str]:
         return [
@@ -467,6 +477,8 @@ class Pipeline:
         single-session batch: a PR URL, a `VERDICT:` line, or a blocker line.
         """
         issues = issues_section(self.brief)
+        if self.project_settings:
+            self.hooks.update(held_secret_paths(self.run, SOURCE_ROOT))
         red = self._red(issues) if self.red_green else None
         brief = self.brief
         if red is not None:

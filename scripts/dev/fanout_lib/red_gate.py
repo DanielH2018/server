@@ -19,9 +19,14 @@ THE RED GATE reads the test author's commit range `base..red`. It refuses the ra
 Only test files change in the range, so running at `red` runs the new tests against `base`'s
 code.
 
-THE GREEN GATE runs after the implementer and again after every fix round. The red files,
-every pytest config file and the `leakguard` plugin must be unchanged since `red`, no
-untracked config file may exist, and every red node must pass.
+THE GREEN GATE runs after the implementer and again after every fix round. The working tree
+must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
+would otherwise pass a gate the pushed head fails (#3821). The red files, every pytest config
+file and the `leakguard` plugin must be unchanged since `red`, no untracked config file may
+exist, and every red node must pass in a fresh export of HEAD. The export is what makes the
+verdict HEAD's: the implementer controls the worktree's index and git config, so a
+skip-worktree entry, an `info/exclude` line or `status.showUntrackedFiles=no` each hides an
+edit from `git status`.
 
 Both gates run pytest with `-c pyproject.toml`, so the root configuration decides every run.
 Every process here runs as the agent's own user, so a determined agent can still edit the
@@ -33,6 +38,7 @@ Every process goes through the pipeline's `Runner`, so the tests script pytest's
 import re
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -257,6 +263,12 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str) -> Gate:
 
 def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
     """Why the implementer's HEAD fails the green gate, or "" when it passes."""
+    dirty = _git(run, worktree, "status", "--porcelain").stdout.strip()
+    if dirty:
+        return (
+            "the tree pytest would run differs from the HEAD the PR ships; commit or "
+            f"discard these changes: {dirty}"
+        )
     touched = _git(
         run, worktree, "diff", "--name-only", red, "HEAD", "--",
         *gate.files, *GREEN_PROTECTED,
@@ -266,7 +278,17 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
     stray = stray_config(run, worktree)
     if stray:
         return f"untracked pytest configuration: {', '.join(stray)}"
-    proc = run(_pytest(worktree, "-q", "-rA", "--tb=no", *gate.nodes), None)
+    with tempfile.TemporaryDirectory(prefix="green-gate-") as tmp:
+        archive, tree = Path(tmp) / "head.tar", Path(tmp) / "head"
+        tree.mkdir()
+        exported = _git(run, worktree, "archive", "-o", str(archive), "HEAD")
+        if exported.returncode == 0:
+            exported = run(["tar", "-xf", str(archive), "-C", str(tree)], None)
+        if exported.returncode:
+            return (
+                f"could not export HEAD to run the red tests: {exported.stderr.strip()}"
+            )
+        proc = run(_pytest(tree, "-q", "-rA", "--tb=no", *gate.nodes), None)
     return judge_green(proc.returncode, proc.stdout, gate.nodes)
 
 
