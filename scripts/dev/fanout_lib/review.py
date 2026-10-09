@@ -83,6 +83,7 @@ from fanout_lib.red_gate import (
     green_finding,
     red_prompt,
     red_section,
+    stray_config,
 )
 from fanout_lib.launch import (
     BUDGET_USD,
@@ -101,10 +102,10 @@ HEADLESS_PROMPT_FILE = SOURCE_ROOT / SYSTEM_PROMPT_FILE
 # The files the `fanout-stop` Stop hook runs from: the hook, the shared module it imports and
 # the shell entry point that registers it.
 STOP_HOOK_FILES = ("run-hook.sh", "fanout-stop.py", "_hook_common.py")
-# Names the pipeline's own copy of `fanout-stop.py` to every hook the session runs. The
-# worktree's copy, which this repo's `.claude/settings.json` registers too, stands down when
-# it is set to another path, so one Stop spends the block cap once.
-STOP_HOOK_ENV = "FANOUT_STOP_HOOK"
+# Names the pipeline's own copy of `fanout-stop.py`. The worktree's copy, which this repo's
+# `.claude/settings.json` registers too, stands down while the file exists, so one Stop spends
+# the block cap once. `.claude/hooks/fanout-stop.py` mirrors the path.
+OWN_COPY = Path(".fanout") / "stop-hook"
 REVIEW_BUDGET_USD = 15
 # A finding the fix round acts on. The reviewer reports everything, as the user-level
 # `## Code review` rule asks; this is the separate filtering pass.
@@ -350,7 +351,7 @@ class Pipeline:
 
     def _claude(self, name: str, argv: list[str], stdin: str) -> Phase:
         fanout = self.worktree / ".fanout"
-        self._snapshot_hook()
+        (self.worktree / OWN_COPY).write_text(f"{self._snapshot_hook()}\n")
         (fanout / "phase").write_text(
             f"{'review' if name.startswith('review') else name}\n"
         )
@@ -381,9 +382,8 @@ class Pipeline:
         `launch.claude_args` names the hook by path inside a tree the agent can write, so a
         later phase would run whatever the agent left there.
         """
-        hook = self.hook_root / ".claude" / "hooks" / "fanout-stop.py"
         settings = json.dumps(stop_hook_settings(str(self.hook_root)))
-        return ["env", f"{STOP_HOOK_ENV}={hook}", "claude", "--settings", settings]
+        return ["claude", "--settings", settings]
 
     def _implementer(self) -> list[str]:
         return [
@@ -428,6 +428,9 @@ class Pipeline:
             return red, gate
         self._git("reset", "--hard", base)
         self._git("clean", "-fd")
+        # `clean` without `-x` keeps ignored files, and a root conftest.py is one.
+        for stray in stray_config(self.run, self.worktree):
+            (self.worktree / stray).unlink(missing_ok=True)
         return None
 
     def _green(self, red: tuple[str, Gate] | None) -> str:
@@ -494,7 +497,9 @@ class Pipeline:
             fix = self._claude(
                 "fix",
                 self._resume(),
-                fix_prompt(self.record.actionable, self.record.pr),
+                fix_prompt(
+                    self.record.actionable, self.record.pr, red[0] if red else ""
+                ),
             )
             last = fix if PR_URL.search(fix.text) else impl
             after = self._git("rev-parse", "HEAD")
@@ -515,7 +520,9 @@ class Pipeline:
                 )
                 if delta_error:
                     self.record.review_error = f"delta review: {delta_error}"
-            if green:
+            # The fix may touch the red tests even when the first run passed, so the PR that
+            # ships is the one the gate reads.
+            if red is not None:
                 green = self._green(red)
                 if not green:
                     self.record.remaining = [

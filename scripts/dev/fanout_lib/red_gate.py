@@ -8,8 +8,9 @@ fix exists, and this module proves those tests fail on the unchanged code.
 
 THE RED GATE reads the test author's commit range `base..red`. It refuses the range when:
 
-- it changes a file that is not a test: code, `conftest.py` or the pytest config could make
-  the tests fail for a reason the fix never touches;
+- it changes a file that is not a test: code, a `conftest.py`, a pytest config file at any
+  depth or the `leakguard` plugin could make the tests fail for a reason the fix never
+  touches. An untracked or ignored config file, which no diff shows, is refused too;
 - it adds no test node, collected at `red` but not at `base`;
 - running only the new nodes does not exit 1 with every node reported `FAILED`. Exit 2 is a
   collection error, such as a module-level ImportError of a module the fix will create, and a
@@ -18,8 +19,13 @@ THE RED GATE reads the test author's commit range `base..red`. It refuses the ra
 Only test files change in the range, so running at `red` runs the new tests against `base`'s
 code.
 
-THE GREEN GATE runs after the implementer. The red files, every `conftest.py` and
-`pyproject.toml` must be unchanged since `red`, and every red node must pass.
+THE GREEN GATE runs after the implementer and again after every fix round. The red files,
+every pytest config file and the `leakguard` plugin must be unchanged since `red`, no
+untracked config file may exist, and every red node must pass.
+
+Both gates run pytest with `-c pyproject.toml`, so the root configuration decides every run.
+Every process here runs as the agent's own user, so a determined agent can still edit the
+virtualenv pytest runs from; CI's run on the pushed head is the backstop for that.
 
 Every process goes through the pipeline's `Runner`, so the tests script pytest's output.
 """
@@ -47,7 +53,21 @@ RED_GREEN_LABEL = "red-green"
 # What the implementer may not change once the red commit exists, besides the red files.
 # The `file` of the finding a failed green gate becomes, which no real path can equal.
 GREEN_FILE = "(red/green gate)"
-GREEN_PROTECTED = (":(glob)**/conftest.py", "pyproject.toml")
+# Files pytest reads as configuration wherever they sit: a nested inifile replaces the root
+# one for nodes below it, and a conftest can rewrite any outcome.
+PYTEST_CONFIG = frozenset(
+    {
+        "conftest.py",
+        "pytest.ini",
+        ".pytest.ini",
+        "tox.ini",
+        "setup.cfg",
+        "pyproject.toml",
+    }
+)
+# `pyproject.toml`'s addopts loads this plugin into every run with `-p leakguard`.
+PLUGINS = ("ansible/tests/leakguard.py",)
+GREEN_PROTECTED = (*(f":(glob)**/{name}" for name in sorted(PYTEST_CONFIG)), *PLUGINS)
 
 RED_SCHEMA = {
     "type": "object",
@@ -118,6 +138,8 @@ def review_flags(
 def is_test_path(path: str) -> bool:
     """Whether the red commit may touch `path`: a `test_*.py`, or a data file under `tests/`."""
     p = PurePosixPath(path)
+    if p.name in PYTEST_CONFIG or path in PLUGINS:
+        return False
     if p.suffix == ".py":
         return p.name.startswith("test_")
     return "tests" in p.parts[:-1]
@@ -154,12 +176,24 @@ def _pytest(worktree: Path, *args: str) -> list[str]:
     # `-n0` overrides the suite's `-n auto`: a handful of nodes gains nothing from workers.
     return [
         "uv", "run", "--directory", str(worktree), "pytest",
-        "-p", "no:cacheprovider", "-n0", *args,
+        "-p", "no:cacheprovider", "-n0", "-c", "pyproject.toml", *args,
     ]  # fmt: skip
 
 
 def _git(run: Runner, worktree: Path, *args: str) -> subprocess.CompletedProcess:
     return run(["git", "-C", str(worktree), *args], None)
+
+
+def stray_config(run: Runner, worktree: Path) -> list[str]:
+    """Untracked files pytest would read as configuration, ignored ones included.
+
+    `git status` and `git diff` see neither kind, and this repo's `.gitignore` ignores every
+    root path, so a root `conftest.py` is invisible to both. `--directory` folds a wholly
+    untracked directory into one entry; pytest reads a conftest only from a test's own
+    directories, which hold tracked files and so are never folded.
+    """
+    listed = _git(run, worktree, "ls-files", "--others", "--directory").stdout
+    return [f for f in listed.splitlines() if PurePosixPath(f).name in PYTEST_CONFIG]
 
 
 def _collect(run: Runner, worktree: Path, files: list[str]) -> tuple[set[str], int]:
@@ -188,6 +222,9 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str) -> Gate:
     dirty = _git(run, worktree, "status", "--porcelain").stdout.strip()
     if dirty:
         return Gate(f"the test author left uncommitted changes: {dirty}")
+    stray = stray_config(run, worktree)
+    if stray:
+        return Gate(f"untracked pytest configuration: {', '.join(stray)}")
     if _git(run, worktree, "merge-base", "--is-ancestor", base, red).returncode:
         return Gate(f"the red commits do not descend from the base {base}")
     diff = _git(run, worktree, "diff", "--name-only", "--no-renames", base, red)
@@ -226,6 +263,9 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
     ).stdout.split()  # fmt: skip
     if touched:
         return f"the fix changed what the red tests stand on: {', '.join(touched)}"
+    stray = stray_config(run, worktree)
+    if stray:
+        return f"untracked pytest configuration: {', '.join(stray)}"
     proc = run(_pytest(worktree, "-q", "-rA", "--tb=no", *gate.nodes), None)
     return judge_green(proc.returncode, proc.stdout, gate.nodes)
 

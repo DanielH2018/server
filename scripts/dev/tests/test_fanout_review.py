@@ -246,7 +246,7 @@ def test_every_phase_runs_the_prompt_and_stop_hook_read_at_start(tmp_path):
     seen = []
 
     def agent_edits_the_hook(argv, stdin):
-        if argv[0] == "env":
+        if "--settings" in argv:
             seen.append(hook.read_bytes())
             hook.chmod(0o644)
             hook.write_bytes(b"EDITED")
@@ -264,6 +264,8 @@ def test_every_phase_runs_the_prompt_and_stop_hook_read_at_start(tmp_path):
         assert str(tmp_path / ".claude") not in command
     # Every phase starts from the bytes read at start, not the last phase's edit.
     assert seen == [b"HOOK AT START"] * 5
+    # The worktree's own copy stands down on this marker; the snapshot path is the proof.
+    assert (tmp_path / ".fanout" / "stop-hook").read_text().strip() == str(hook)
 
 
 def _red_report(behaviours=1):
@@ -366,3 +368,29 @@ def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path)
     assert "git checkout red1 -- t.py" in run.claude[3][1]
     assert final["result"].startswith("needs input: the PR fails the green gate")
     assert final["result"].endswith(PR)
+
+
+def test_a_fix_round_after_a_passing_green_gate_runs_the_gate_again_and_holds_a_failure(
+    tmp_path,
+):
+    """The fixer may edit a red test even when the implementer's head passed the gate."""
+    edited = "the fix changed what the red tests stand on: t.py"
+    gates = _gates(Gate(files=["t.py"], nodes=["t.py::a"]), green=["", edited])
+    reports = [
+        _red_report(),
+        _report(f"Opened {PR}"),
+        _report(
+            structured={"summary": "", "findings": [_finding("red test is wrong")]}
+        ),
+        _report(f"Fixed. {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+    ]
+    pipeline, run = _pipeline(
+        tmp_path, reports, heads=("base", "red1", "aaa", "bbb"), gates=gates
+    )
+    final = pipeline.run_all()
+
+    assert "The red tests committed at red1 stay as they are" in run.claude[3][1]
+    assert final["result"].startswith("needs input: the PR fails the green gate")
+    assert pipeline.record.green_gate == edited
+    assert "land" not in [phase for _, _, phase in run.claude]

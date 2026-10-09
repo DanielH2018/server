@@ -93,14 +93,22 @@ new defect the fix introduces as well.
 """
 
 
-def fix_prompt(found: list[dict], pr: str) -> str:
+def fix_prompt(found: list[dict], pr: str, red: str = "") -> str:
+    """What the resumed implementer is asked to fix; `red` is a red/green batch's red SHA."""
+    rule = (
+        f"\nThe red tests committed at {red} stay as they are, with every `conftest.py` and "
+        "pytest config: a gate runs them again after this round and refuses the PR otherwise. "
+        "Where a finding says a red test is wrong, answer it in one sentence instead.\n"
+        if red
+        else ""
+    )
     return f"""A separate reviewer read {pr} and raised the findings below. Address each one:
 fix it, or explain in one sentence why it is wrong. Run the checks that cover what you change,
 commit and push. Do not merge, land or close anything yet.
 
 Do not describe a finding of category `security` in a commit message or the PR body beyond
 naming the file: the repo is public.
-
+{rule}
 {_as_data("The findings", found)}
 
 End your final message with the PR URL.

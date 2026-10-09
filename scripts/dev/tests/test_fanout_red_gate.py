@@ -25,6 +25,8 @@ from lib.git_testing import commit, git_out, init_repo, scrubbed_env
 CODE = "def double(x):\n    return x\n"
 FIXED = "def double(x):\n    return 2 * x\n"
 OLD_TEST = "from mod import double\n\n\ndef test_zero():\n    assert double(0) == 0\n"
+# The gate runs pytest with `-c pyproject.toml`, so every scratch base carries one.
+CONFIG = {"pyproject.toml": "[tool.pytest.ini_options]\n"}
 NEW_TEST = (
     "\n\ndef test_two():\n    from mod import double\n\n    assert double(2) == 4\n"
 )
@@ -55,7 +57,9 @@ def run(argv, stdin):
 def _repo(tmp_path, **red_files):
     """A repo whose base holds `mod.py` and one passing test, then the red commit."""
     repo = init_repo(tmp_path / "repo")
-    base = commit(repo, "base", **{"mod.py": CODE, "tests/test_mod.py": OLD_TEST})
+    base = commit(
+        repo, "base", **{"mod.py": CODE, "tests/test_mod.py": OLD_TEST, **CONFIG}
+    )
     red = commit(repo, "red", **red_files)
     return repo, base, red
 
@@ -117,7 +121,9 @@ def test_a_red_commit_that_touches_a_conftest_is_refused(tmp_path):
 def test_an_uncommitted_edit_that_breaks_the_code_is_refused(tmp_path):
     """Base already doubles, so the new test passes there; only the dirty edit fails it."""
     repo = init_repo(tmp_path / "repo")
-    base = commit(repo, "base", **{"mod.py": FIXED, "tests/test_mod.py": OLD_TEST})
+    base = commit(
+        repo, "base", **{"mod.py": FIXED, "tests/test_mod.py": OLD_TEST, **CONFIG}
+    )
     red = commit(repo, "red", **{"tests/test_new.py": NEW_TEST})
     (repo / "mod.py").write_text(CODE)
     gate = red_gate(run, repo, base, red)
@@ -143,6 +149,38 @@ def test_the_green_gate_passes_a_fix_and_refuses_an_edited_red_test(tmp_path):
     commit(repo, "weaken", **{"tests/test_new.py": "def test_two():\n    pass\n"})
     assert "tests/test_new.py" in green_gate(run, repo, red, gate)
     assert git_out(repo, "rev-parse", "HEAD") != red
+
+
+def test_an_ignored_root_conftest_is_refused_by_both_gates(tmp_path):
+    """`git status` and `git diff` cannot see an ignored file, and `/*` ignores every root path."""
+    repo = init_repo(tmp_path / "repo")
+    files = {
+        "mod.py": CODE,
+        "tests/test_mod.py": OLD_TEST,
+        ".gitignore": "/conftest.py\n__pycache__/\n",
+    }
+    base = commit(repo, "base", **files, **CONFIG)
+    red = commit(repo, "red", **{"tests/test_new.py": NEW_TEST})
+    gate = red_gate(run, repo, base, red)
+    assert gate.passed, gate.reason
+    (repo / "conftest.py").write_text("x = 1\n")
+    assert red_gate(run, repo, base, red).reason == (
+        "untracked pytest configuration: conftest.py"
+    )
+    commit(repo, "fix", **{"mod.py": FIXED})
+    assert (
+        green_gate(run, repo, red, gate)
+        == "untracked pytest configuration: conftest.py"
+    )
+
+
+def test_a_pytest_inifile_under_tests_is_not_a_test_file(tmp_path):
+    repo, base, red = _repo(
+        tmp_path,
+        **{"tests/test_new.py": NEW_TEST, "tests/pytest.ini": "[pytest]\n"},
+    )
+    gate = red_gate(run, repo, base, red)
+    assert gate.reason.endswith("not tests: tests/pytest.ini")
 
 
 def test_only_a_review_batch_whose_every_issue_carries_the_label_gets_the_red_phase(
