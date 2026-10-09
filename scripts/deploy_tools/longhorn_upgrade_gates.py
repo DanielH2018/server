@@ -63,14 +63,13 @@ from deploy_tools.runbook_gates import (
 )
 from lib import yaml_fast
 from lib.kubectl import DEFAULT_TOOLS, Tools
-from lib.repo_paths import ROLES
+from lib.repo_paths import K3S_DEFAULTS
 
 CLUSTER = "prod"
 RUNBOOK = "docs/longhorn-upgrade.md"
 
 DRILL_STATE_DIR = "/var/lib/longhorn-restore-drill"
 DRILL_STAMP = "last-success"
-K3S_DEFAULTS = ROLES / "setup" / "k3s" / "defaults" / "main.yml"
 MAX_AGE_KEY = "k3s_longhorn_restore_drill_max_age_days"
 
 # The target the runbook's own block names. Others (`r2`) are checked when armed.

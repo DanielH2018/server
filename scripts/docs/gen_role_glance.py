@@ -117,7 +117,9 @@ from glance_facts import (
     setup_glance_lines,
     setup_role_dirs,
 )
-from lib.render_guard import ALL_VARS, containers_entries, entry_tags, load_yaml
+from lib.ansible_inventory import K8S_HOST_VARS
+from lib.k8s_roles import k8s_entries
+from lib.render_guard import ALL_VARS, entry_tags, load_yaml
 from lib.repo_paths import ANSIBLE, REPO
 
 SELF = "scripts/docs/gen_role_glance.py"
@@ -144,8 +146,6 @@ BEGIN_SETUP = begin_marker(
 BEGIN_PI = begin_marker("compose template, tasks or containers_list entry")
 END = "<!-- /generated_from -->"
 WIDTH = 95
-# The one host that declares k8s services (lib.k8s_roles.HOST_VARS says the same).
-HOST_VARS = REPO / "ansible/inventory/host_vars/daniel-box.yml"
 
 
 class MissingHeading(ValueError):
@@ -341,11 +341,6 @@ def render_doc(text: str, block: str, *, create_heading: bool = False) -> str:
     return "\n".join(head) + "\n" + block + "\n" + "\n".join(rest)
 
 
-def k8s_service_entries(host_vars: Path = HOST_VARS) -> list[dict[str, Any]]:
-    """Every `platform: k8s` entry of the cluster host's `containers_list`."""
-    return [e for e in containers_entries(host_vars) if e.get("platform") == "k8s"]
-
-
 def _refresh(
     doc: Path, block: str, *, write: bool, create_heading: bool = False
 ) -> bool:
@@ -367,7 +362,7 @@ def _refresh(
 def stale_k8s_docs(
     *,
     write: bool,
-    host_vars: Path = HOST_VARS,
+    host_vars: Path = K8S_HOST_VARS,
     k8s_roles: Path = K8S_ROLES,
     all_vars: Path = ALL_VARS,
     k3s_defaults: Path = K3S_DEFAULTS,
@@ -379,7 +374,7 @@ def stale_k8s_docs(
     group_vars = load_yaml(all_vars)
     claim_classes = claim_index(k8s_roles)
     stale: list[str] = []
-    for entry in k8s_service_entries(host_vars):
+    for entry in k8s_entries(host_vars).values():
         name = entry["name"]
         role_dir = k8s_roles / name
         block = render_block(

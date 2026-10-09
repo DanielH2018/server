@@ -18,24 +18,19 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.repo_paths import FILTER_PLUGINS, REPO as _REPO
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, K8S_ROLES
 
 sys.path.insert(0, str(FILTER_PLUGINS))
 
 from lib import yaml_fast
-from k8s_autodeploy import SHARED_ROLES, is_leftover_dir, k8s_autodeploy_denylist
-
-_ROLES_DIR = _REPO / "ansible/roles/k8s"
+from lib.k8s_roles import role_dirs
+from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
 
 
 def eligible_roles() -> list[str]:
     """Role names declaring `k8s_autodeploy: true` — mirrors the guard test's `_auto_deployable`."""
     names = []
-    for entry in sorted(_ROLES_DIR.iterdir()):
-        if not entry.is_dir() or entry.name in SHARED_ROLES:
-            continue
-        if is_leftover_dir(str(entry)):
-            continue
+    for entry in role_dirs(K8S_ROLES, exclude=SHARED_ROLES):
         defaults = entry / "defaults" / "main.yml"
         if not defaults.is_file():
             continue
@@ -46,16 +41,8 @@ def eligible_roles() -> list[str]:
 
 
 def all_role_names() -> list[str]:
-    """Every role directory under `ansible/roles/k8s/`, sorted.
-
-    A retired role's `__pycache__`-only leftover is not a role — it would otherwise be
-    counted as one that declares no stance.
-    """
-    return sorted(
-        entry.name
-        for entry in _ROLES_DIR.iterdir()
-        if entry.is_dir() and not is_leftover_dir(str(entry))
-    )
+    """Every role directory under `ansible/roles/k8s/`, sorted, debris excluded."""
+    return [entry.name for entry in role_dirs(K8S_ROLES)]
 
 
 def autodeploy_stances() -> tuple[list[str], list[str], list[str]]:
@@ -70,7 +57,7 @@ def autodeploy_stances() -> tuple[list[str], list[str], list[str]]:
         `(eligible, denied, not_declaring)`, each sorted.
     """
     eligible = eligible_roles()
-    denied = k8s_autodeploy_denylist(str(_REPO / "ansible"))
+    denied = k8s_autodeploy_denylist(str(ANSIBLE))
     not_declaring = sorted(set(all_role_names()) - set(eligible) - set(denied))
     return eligible, denied, not_declaring
 

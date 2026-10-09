@@ -83,13 +83,13 @@ from fragment_renderers import (
     render_traefik_ports,
 )
 from lib.docs_provenance import write_if_body_changed
-from lib.repo_paths import REPO
+from lib.ansible_inventory import K8S_HOST_VARS, PI_HOST_VARS
+from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI, K3S_DEFAULTS, REPO
 from lib.service_tiers import resolved_tier_lists
 
 SELF = "scripts/docs/gen_doc_fragments.py"
 DEFAULT_OUT_DIR = "docs/assets/generated/fragments"
 
-K3S_DEFAULTS = REPO / "ansible/roles/setup/k3s/defaults/main.yml"
 GITOPS_DEFAULTS = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 DEPLOY_CHANGES = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_changes.py"
 GITOPS_DEPLOY = REPO / "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
@@ -100,9 +100,6 @@ REGISTRY_DEFAULTS = REPO / "ansible/roles/k8s/registry/defaults/main.yml"
 FAIL2BAN_CONF = (
     REPO / "ansible/roles/setup/initial_setup/templates/fail2ban_homelab.conf.j2"
 )
-GROUP_VARS = REPO / "ansible/inventory/group_vars/all.yml"
-HOST_VARS = REPO / "ansible/inventory/host_vars"
-HOSTS_INI = REPO / "ansible/inventory/hosts.ini"
 INITIAL_SETUP_DEFAULTS = REPO / "ansible/roles/setup/initial_setup/defaults/main.yml"
 TRAEFIK_DEFAULTS = REPO / "ansible/roles/k8s/traefik/defaults/main.yml"
 
@@ -171,7 +168,7 @@ def deadman_inputs() -> tuple[dict, dict, dict, dict, dict, dict[str, bool]]:
     Shared with the monitor-bridge expectations test, so the fragment and the test cannot read
     different sources.
     """
-    group_vars = role_defaults(GROUP_VARS)
+    group_vars = role_defaults(ALL_VARS)
     return (
         role_defaults(K3S_DEFAULTS),
         role_defaults(PI_PEER_DEFAULTS),
@@ -201,18 +198,18 @@ def _fail2ban() -> tuple[str, list[str]]:
 
 
 def _lan() -> tuple[str, list[str]]:
-    group = role_defaults(GROUP_VARS)
+    group = role_defaults(ALL_VARS)
     return render_lan_addresses(
         str(group["k3s_metallb_ingress_vip"]),
         str(group["dns_k8s_vip"]),
-        container_udp_port(role_defaults(HOST_VARS / "daniel-box.yml"), "wg-easy"),
-        container_udp_port(role_defaults(HOST_VARS / "daniel-pi.yml"), "wg-easy"),
+        container_udp_port(role_defaults(K8S_HOST_VARS), "wg-easy"),
+        container_udp_port(role_defaults(PI_HOST_VARS), "wg-easy"),
         str(group["lan_subnet"]),
         str(group["wg_client_subnet"]),
     ), [
-        "ansible/inventory/group_vars/all.yml",
-        "ansible/inventory/host_vars/daniel-box.yml",
-        "ansible/inventory/host_vars/daniel-pi.yml",
+        ALL_VARS.relative_to(REPO).as_posix(),
+        K8S_HOST_VARS.relative_to(REPO).as_posix(),
+        PI_HOST_VARS.relative_to(REPO).as_posix(),
     ]
 
 

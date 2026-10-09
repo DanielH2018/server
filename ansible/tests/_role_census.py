@@ -15,7 +15,7 @@ kind from being written inline.
 
 from pathlib import Path
 
-from k8s_autodeploy import is_leftover_dir
+from lib.k8s_roles import role_dirs as _role_dirs
 
 from _helpers import K8S_ROLES, ROLES
 
@@ -34,8 +34,8 @@ def role_dirs(roles_dir: Path = K8S_ROLES, *, skip_dotted: bool = False) -> list
     `containers_list` guard and the setup-playbook routing guard assert set equality against a
     declaration, so the shell reads as an undeclared role and they fail outright.
 
-    `is_leftover_dir` is the predicate the deployer's own filter uses, so every walker agrees
-    on what counts as a role. It skips only a directory with NO non-`.pyc` file; an empty
+    `lib.k8s_roles.role_dirs` is the walk, the one `scripts/` reads too, and its predicate is
+    the deployer's own. It skips only a directory with NO non-`.pyc` file; an empty
     directory is not debris and is still returned, which is what keeps a synthetic role built
     by a test from vanishing out of a caller that passes its own `roles_dir`.
 
@@ -43,13 +43,9 @@ def role_dirs(roles_dir: Path = K8S_ROLES, *, skip_dotted: bool = False) -> list
     carry (`CLAUDE.md`), where a stray dotted directory would read as a role missing it. It is
     off by default because the deployer's filter does not apply it.
     """
-    return sorted(
-        p
-        for p in roles_dir.iterdir()
-        if p.is_dir()
-        and not is_leftover_dir(str(p))
-        and not (skip_dotted and p.name.startswith("."))
-    )
+    return [
+        p for p in _role_dirs(roles_dir) if not (skip_dotted and p.name.startswith("."))
+    ]
 
 
 def every_plane_role_dirs(roles_root: Path = ROLES) -> list[Path]:

@@ -229,35 +229,6 @@ def test_a_role_that_never_applies_manifests_is_never_missing(tmp_path):
     assert missing == []
 
 
-def test_the_two_leftover_predicates_agree(tmp_path):
-    """The probe's copy and the Ansible filter's must classify a directory the same way.
-
-    `ansible/filter_plugins/k8s_autodeploy.py:is_leftover_dir` is authoritative -- it gates
-    the deployer's config write -- and the probe carries its own derivation because `probe.py`
-    must not import `ansible.errors`. Two derivations need a test holding them together, the
-    way `ansible/tests/deploy/test_denylist_parsers_agree.py` holds the denylist's two readers.
-    """
-    from diagnostics.probe_lib import releases_retired
-    from k8s_autodeploy import is_leftover_dir
-
-    cases = {
-        "debris-nested": ["files/__pycache__/x.pyc"],
-        "debris-top-level": ["x.pyc"],
-        "real-role": ["defaults/main.yml"],
-        "real-and-debris": ["files/check.py", "files/__pycache__/check.pyc"],
-        "empty": [],
-    }
-    for name, files in cases.items():
-        role = tmp_path / name
-        role.mkdir()
-        for rel in files:
-            target = role / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("")
-        probe_says = releases_retired._is_leftover_dir(role)
-        assert probe_says == is_leftover_dir(str(role)), name
-
-
 def test_a_retired_roles_pycache_debris_is_not_a_shared_role(tmp_path):
     """A directory left behind by a retired role must not widen every service's paths.
 

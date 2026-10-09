@@ -11,8 +11,8 @@ tuples. This module imports only ``pathlib`` and ``repo_paths``, the same reason
 ``containers_entries_in`` takes an already-parsed mapping, so the caller keeps its own YAML
 loader and its own error handling. ``render_guard`` re-exports it.
 
-Two hosts hold a role a script must name without parsing YAML: ``GITOPS_HOST`` and
-``PI_HOST`` below. Each is a literal rather than a read of the inventory var that confers the
+Three host roles a script must name without parsing YAML: ``GITOPS_HOST``, ``PI_HOST``
+and ``K8S_HOST`` below. Each is a literal rather than a read of the inventory var that confers the
 role, because this module imports no YAML loader. ``scripts/lib/tests/test_ansible_inventory.py``
 pins each literal to that var instead, so moving the role in the inventory fails a test rather
 than leaving every script naming the old host.
@@ -31,13 +31,25 @@ from pathlib import Path
 # `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import HOSTS_INI
+from lib.repo_paths import HOST_VARS, HOSTS_INI
 
 # The one host whose host_vars set `has_gitops: true`: it runs the GitOps deployer and
 # `land.sh`. group_vars defaults the key to false, so a host is armed only by saying so.
 GITOPS_HOST = "daniel-box"
 # The one host whose host_vars set `has_docker: true`, driven over ssh with `-e target=`.
 PI_HOST = "daniel-pi"
+# The one host whose `containers_list` declares the `platform: k8s` entries. The same host as
+# GITOPS_HOST today, but a different fact: moving the deployer would not move the services.
+K8S_HOST = "daniel-box"
+
+
+def host_vars_file(host: str, host_vars: Path = HOST_VARS) -> Path:
+    """The host_vars file Ansible reads for `host`, under `host_vars`."""
+    return host_vars / f"{host}.yml"
+
+
+K8S_HOST_VARS = host_vars_file(K8S_HOST)
+PI_HOST_VARS = host_vars_file(PI_HOST)
 
 
 def containers_entries_in(data: dict | None) -> list[dict]:
