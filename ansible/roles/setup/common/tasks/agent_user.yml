@@ -1,7 +1,7 @@
 ---
 # A Claude agent's own Unix user, and what that user needs that the operator's user used to
 # supply: uv and the pinned Python, a Claude Code install, the operator's claude_guard rules and
-# a clone to work in.
+# claude_worktree readers, and a clone to work in.
 #
 # WHY A SEPARATE USER. A session running as sys_user can read everything sys_user can: the age
 # key that decrypts the become password, the operator's gh token, ssh keys and the deployer's
@@ -56,7 +56,7 @@
     mode: "2750"
   become: true
 
-- name: Create the agent user's bin and claude-guard directories
+- name: Create the agent user's bin, claude-guard and claude-worktree directories
   # The agent's, with the parents this creates: `uv python install` and the installer run as
   # the agent below, and write into .local/bin and .local/share. The group is the closing
   # chown's, so the two tasks never flip each other.
@@ -69,6 +69,7 @@
   loop:
     - "{{ agent_user_home }}/.local/bin"
     - "{{ agent_user_home }}/.local/share/claude-guard"
+    - "{{ agent_user_home }}/.local/share/claude-worktree"
   become: true
 
 - name: Give the agent user the operator's pinned uv
@@ -109,6 +110,28 @@
   # `default`: both callers import this file, and a skipped stat above still sets the register,
   # with no `stat` key in it.
   when: common_agent_user_claude_guard.stat.exists | default(false)
+
+- name: Look for the operator's deployed claude_worktree module
+  ansible.builtin.stat:
+    path: /home/{{ sys_user }}/.local/share/claude-worktree/claude_worktree.py
+  register: common_agent_user_claude_worktree
+  become: true
+
+- name: Give the agent user the operator's claude_worktree module
+  # scripts/lib/_claude_worktree.py imports it from ~/.local/share/claude-worktree, where the
+  # dotfiles repo deploys it, and raises when it is absent. lib.worktrees imports that, so
+  # without the module findings.py and the suite's worktree tests fail for this user (#4033).
+  # One stdlib-only file, copied for the reason claude_guard is above, and skipped the same way
+  # on a host without the dotfiles deploy.
+  ansible.builtin.copy:
+    src: /home/{{ sys_user }}/.local/share/claude-worktree/claude_worktree.py
+    dest: "{{ agent_user_home }}/.local/share/claude-worktree/claude_worktree.py"
+    remote_src: true
+    owner: "{{ agent_user_name }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+  become: true
+  when: common_agent_user_claude_worktree.stat.exists | default(false)
 
 - name: Install the pinned host Python for the agent user
   # Every project hook runs under `uv run --python {{ host_python_version }}`, and uv keeps
