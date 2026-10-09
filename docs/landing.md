@@ -77,9 +77,9 @@ needs a ruleset bypass, and auto-merge never applies one. A PR reads `REVIEW_REQ
 is approved, and that needs the bypass for the master review gate (ruleset 24514824). An
 `APPROVED` PR needs it for the agent branch fence (ruleset 24517167), which restricts updates
 to every branch except `worktree-claude+**`, master included. An approved agent PR that was
-armed sat `BLOCKED` until a hand merge (#3911). From the fence going live on 2026-10-05 to
-2026-10-09, no PR merged through an auto-merge `land.sh` armed. The arm path was removed then
-(#4001). A `CHANGES_REQUESTED` PR is refused before any merge call, because the direct
+armed sat `BLOCKED` until a hand merge (#3911). After #3613 merged during the fence's cutover
+on 2026-10-05, #3911 was the only PR armed for auto-merge, and that arm never fired. The arm
+path was removed on 2026-10-09 (#4001). A `CHANGES_REQUESTED` PR is refused before any merge call, because the direct
 merge would apply the operator's bypass to it. `--await-merge` then merges it through the REST
 merge endpoint on the first poll where `await_ci` reads its head green, pinned to that head SHA.
 GitHub's auto-merge does not apply a ruleset bypass, so an armed PR stays `BLOCKED` until
