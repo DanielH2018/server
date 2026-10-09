@@ -118,7 +118,9 @@ to hold on both sides of a roll.
 
 ## The whole `apply_prefs.py` command
 
-Run this from the repo root, against the live pod's IP, with `--dry-run` first:
+Run this from the repo root, against the live pod's IP, with `--dry-run` first. It is
+**operator-only**: the agent guard denies `sops -d`, `--extract` included, because the
+credentials would land in the transcript. An agent hands the operator the command instead.
 
 ```bash
 QBT_USERNAME=$(sops -d --extract '["qbittorrent_username"]' ansible/vars/secrets.yml) \

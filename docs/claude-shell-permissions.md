@@ -260,3 +260,26 @@ is the record of how the rule got its shape.
 
 The generalisation: a filter that leaks everything when mistyped is the wrong shape for the
 job, and a flag that emits no content cannot leak however it is typed.
+
+## Inspecting a secret without decrypting it
+
+`claude_guard.deny.sops_decrypt`, behind the same `~/.claude/hooks/guard-pre-tool-use.sh`,
+denies every `sops` command that decrypts. It matches `-d` alone or inside a combined short
+flag, `--decrypt`, and the `decrypt`, `exec-env` and `exec-file` subcommands. `sops -d
+--extract '["one_key"]'` is denied too, because one value in the transcript is still a leak.
+The guard matches the command text, so a here-document or a `python3 -c` whose body
+contains such a command is denied as well. The guard is user-level (dotfiles), not in this
+repo's `.claude/hooks/`.
+
+What an agent can check without plaintext:
+
+- **Whether a key exists.** SOPS encrypts values and leaves top-level key names in
+  plaintext, which `scripts/secrets_mgmt/rotation_tools.py:sops_names` also relies on.
+  `grep -c '^<name>:' ansible/vars/secrets.yml` prints `0` or `1`.
+- **Whether its value is ciphertext.** `grep -c '^<name>: ENC\[' ansible/vars/secrets.yml`
+  prints `1` for a key SOPS encrypted. `ansible/.sops.yaml` sets no `encrypted_regex` or
+  `unencrypted_suffix`, so every value carries the `ENC[` prefix.
+
+Both commands print a count and auto-approve. Whether a value *decrypts* is proven by the
+deploy that reads it. A runbook step that decrypts on purpose, such as the break-glass
+decrypt check, is marked operator-only where it appears.

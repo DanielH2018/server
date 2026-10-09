@@ -231,6 +231,14 @@ def _parser(description: str) -> argparse.ArgumentParser:
     sh.add_argument("number", type=int)
     sh.add_argument("--json", action="store_true")
 
+    ex = sub.add_parser(
+        "export",
+        help="write every finding in every state to one JSON file, for the break-glass kit",
+    )
+    _add_dry_run(ex, suppress=True)
+    _add_repo(ex)
+    ex.add_argument("--out", required=True, help="the JSON file to write")
+
     sl = sub.add_parser("sync-labels", help="create any missing label")
     _add_dry_run(sl, suppress=True)
     _add_repo(sl)

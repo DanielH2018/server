@@ -18,8 +18,10 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
 
 ## Steps
 
-1. **Check it doesn't already exist.** `Bash(sops -d ansible/vars/secrets.yml)` is allow-listed
-   for inspection — confirm the key isn't already present. If it is, stop and tell the user.
+1. **Check it doesn't already exist.** SOPS encrypts values but leaves key names in plaintext,
+   so `grep -c '^<name>:' ansible/vars/secrets.yml` answers without decrypting anything. `0`
+   means the name is free. If it prints `1`, stop and tell the user. Never decrypt the file
+   to inspect it; CLAUDE.md *Secrets Management* has why.
 
 2. **Classify the tier** (this changes how you add it):
    - **pinned** (`authelia_storage_encryption_key` and similar break-glass
@@ -42,16 +44,19 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
      `openssl rand -hex 16 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`
    - **Any other generated value (auto tier):** generate and set without echoing the value:
      `openssl rand -base64 32 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`
-     (the value is never printed). `Bash(openssl rand *)` and `Bash(sops set *)` are allow-listed.
+     (the value is never printed). Neither settings file allow-lists these commands, so expect
+     a permission prompt.
    - **User-provided value via sops set:** only if the user explicitly accepts that the value
      will appear in the command — warn them first.
 
-4. **Verify encryption** — re-run `sops -d ansible/vars/secrets.yml` and confirm the new key
-   is present and decrypts. Confirm the on-disk file is still ciphertext (the value is NOT in
-   `git diff` as plaintext).
+4. **Verify encryption** — `grep -c '^<name>: ENC\[' ansible/vars/secrets.yml` must print `1`.
+   That proves the key exists and its stored value is SOPS ciphertext, and it prints a count,
+   never a value. Do not run `git diff` on the file: its `diff=sops` driver decrypts before
+   diffing. The first deploy that reads the value proves it decrypts.
 
 5. **Reference it in the template** (if a service uses it): edit the role's
-   `ansible/roles/containers/<svc>/templates/*.j2` to use `{{ name }}`. Add `no_log: true` to
+   `ansible/roles/k8s/<svc>/templates/*.j2` (or `ansible/roles/containers/<svc>/` for one of
+   the Pi's Docker services) to use `{{ name }}`. Add `no_log: true` to
    any task that handles it. (Per `.claude/rules/secrets.md`.)
 
 6. **Register for rotation tracking:** `uv run python scripts/secrets_mgmt/secret_rotation.py sync` — this
@@ -64,7 +69,7 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
    trailer. Do **not** deploy unless the user asks (the `/deploy` skill handles that).
 
 ## Done when
-- The key decrypts from `secrets.yml`, the on-disk file is ciphertext, `secret_rotation.py audit`
+- Step 4's `grep -c '^<name>: ENC\['` prints `1`, `secret_rotation.py audit`
   shows it registered, and the change is committed. Report which template now references it and
   which deploy tag would apply it.
 

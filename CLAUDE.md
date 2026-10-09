@@ -258,6 +258,12 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   ansible/vars/secrets.yml` or `--name-only`. To see what actually changed, open it with `sops
   ansible/vars/secrets.yml`. Do not filter the plaintext through a pipe; the deny hook refuses
   it, and `docs/claude-shell-permissions.md` has why.
+- **An agent never decrypts `ansible/vars/secrets.yml`.** The user-level guard denies every
+  `sops` decrypt form, `--extract` included, because the plaintext lands in the transcript.
+  Key names stay plaintext in the encrypted file, so `grep -c '^<name>:'` on it checks that a
+  key exists, and `grep -c '^<name>: ENC\['` checks that its value is ciphertext; both print
+  a count, never a value. A runbook step that decrypts is marked operator-only.
+  `docs/claude-shell-permissions.md` has the guard's location.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
 - **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their

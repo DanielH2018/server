@@ -85,7 +85,10 @@ otherwise; none of the values below are secrets themselves, only names and locat
    the only off-site copy of the encrypted `secrets.yml` and all the Ansible; the age key
    alone cannot reconstruct it. Keep a `git bundle create … --all` snapshot in the same
    off-site place as the recovery age key so a simultaneous loss of both hosts and GitHub
-   itself does not strand everything else on this list.
+   itself does not strand everything else on this list. The bundle carries no issue history,
+   so beside it keep the `claude` issue register exported by `findings.py export`: every
+   refuted and accepted ruling lives only on GitHub, and without it the next review re-files
+   them.
    Source: `docs/longhorn-disaster-recovery.md` ("The off-site recovery kit").
 
 ## What to do first, by scenario
@@ -172,7 +175,9 @@ If your own working machine is what's gone, the lab itself needs nothing done to
 2. If daniel-box itself is unreachable this way, clone the repo fresh (item 8, or straight
    from GitHub) onto any replacement machine, drop the recovery age key (item 1) at
    `~/.config/sops/age/keys.txt`, and `sops -d ansible/vars/secrets.yml` to confirm decrypt
-   before doing anything else.
+   before doing anything else. **Operator-only:** this prints every secret, and the agent
+   guard denies it (`docs/claude-shell-permissions.md`, *Inspecting a secret without
+   decrypting it*).
 3. From there, operate normally — `./scripts/deploy.sh`, `probe.py`, etc., per the
    repo-root CLAUDE.md command tables.
 
@@ -241,7 +246,8 @@ Once a year, on a scratch host with no other access to this repo's live infrastr
 1. Place **only** the recovery age key (item 1) at `~/.config/sops/age/keys.txt`.
 2. Clone the repo (or restore item 8's bundle).
 3. Run `sops -d ansible/vars/secrets.yml` and confirm it decrypts cleanly, using the
-   recovery recipient alone — no host key present.
+   recovery recipient alone — no host key present. **Operator-only:** an agent cannot run
+   this step, because the guard denies any `sops` decrypt.
 4. Record the date and outcome in this doc's *Documented vs drilled* table, in the SOPS
    decrypt row, the same way `docs/longhorn-disaster-recovery.md:172` records its own
    drill date.
