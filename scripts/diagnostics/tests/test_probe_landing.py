@@ -1,0 +1,139 @@
+"""Tests for `probe.py landing`, the snapshot the deck mod renders.
+
+Every source is handed to `collect` as a callable, so no test reaches deploy-ui, GitHub or git.
+"""
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from diagnostics.probe_lib import landing
+
+PORCELAIN = """worktree /home/ubuntu/server
+HEAD aaa
+branch refs/heads/master
+
+worktree /home/ubuntu/server/.claude/worktrees/fanout-1
+HEAD bbb
+branch refs/heads/worktree-fanout-1
+
+worktree /home/ubuntu/server/.claude/worktrees/drill
+HEAD ccc
+detached
+"""
+
+CLAIMS = [
+    {"number": 12, "worktree": "worktree-fanout-1", "live": True},
+    {"number": 3, "worktree": "worktree-fanout-1", "live": True},
+    {"number": 40, "worktree": "worktree-elsewhere", "live": False},
+]
+
+
+def fake_run(ci_runs):
+    def run(argv):
+        if argv[0] == "gh":
+            return json.dumps(ci_runs)
+        if argv[:2] == ["git", "worktree"]:
+            return PORCELAIN
+        return json.dumps(CLAIMS)
+
+    return run
+
+
+def fake_deploy_ui(state):
+    def get_json(path):
+        return state if path == "/api/state" else {"runs": []}
+
+    return get_json
+
+
+GREEN = [
+    {"status": "completed", "conclusion": "success", "headSha": "a" * 40, "url": "u"}
+]
+CLEAR = {"hold_sha": "", "hold_plane_entries": []}
+
+
+def test_ci_state_reads_only_a_failing_conclusion_as_red():
+    assert landing.ci_state({"status": "completed", "conclusion": "failure"}) == "red"
+    assert landing.ci_state({"status": "completed", "conclusion": "success"}) == "green"
+    assert landing.ci_state({"status": "in_progress", "conclusion": ""}) == "pending"
+    assert (
+        landing.ci_state({"status": "completed", "conclusion": "cancelled"})
+        == "no-verdict"
+    )
+    assert landing.ci_state(None) == "pending"
+
+
+def test_a_clear_deployer_and_green_ci_is_not_blocked():
+    snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
+    assert snap["blockers"] == []
+    assert snap["errors"] == []
+
+
+def test_a_hold_off_the_deployer_host_is_a_blocker():
+    held = {"hold_sha": "deadbeefcafe", "hold_plane_entries": ["setup:k3s"]}
+    snap = landing.collect(lambda: None, fake_deploy_ui(held), fake_run(GREEN))
+    assert snap["blockers"] == ["hold_sha is set (deadbeef), waiting on setup:k3s"]
+
+
+def test_red_master_ci_is_a_blocker():
+    red = [
+        {
+            "status": "completed",
+            "conclusion": "failure",
+            "headSha": "b" * 40,
+            "url": "U",
+        }
+    ]
+    snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(red))
+    assert snap["blockers"] == ["master CI is red: U"]
+
+
+def test_manual_planes_are_unknown_off_the_deployer_host_and_block_nothing():
+    snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
+    assert snap["manual_planes"] is None
+
+
+def test_an_owed_manual_plane_on_the_deployer_host_is_a_blocker():
+    owed = json.dumps(
+        {
+            "class": "manual_plane",
+            "subject": "k3s",
+            "origin": "c" * 40,
+            "at": 0,
+            "playbook": "k3s-bringup.yml",
+        }
+    )
+    snap = landing.collect(lambda: ("", owed), fake_deploy_ui(CLEAR), fake_run(GREEN))
+    assert len(snap["manual_planes"]) == 1
+    assert len(snap["blockers"]) == 1
+    assert "`k3s` setup role" in snap["blockers"][0]
+
+
+def test_a_failing_source_is_named_and_leaves_the_others_read():
+    def down(path):
+        raise OSError("connection refused")
+
+    snap = landing.collect(lambda: None, down, fake_run(GREEN))
+    assert snap["hold"] is None and snap["runs"] is None
+    assert snap["ci"]["state"] == "green"
+    assert any(e.startswith("hold: OSError") for e in snap["errors"])
+    assert snap["blockers"] == []
+
+
+def test_worktrees_carry_their_claims_and_the_primary_checkout_is_left_out():
+    snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
+    assert snap["worktrees"] == [
+        {
+            "path": "/home/ubuntu/server/.claude/worktrees/fanout-1",
+            "branch": "worktree-fanout-1",
+            "claims": [3, 12],
+        },
+        {
+            "path": "/home/ubuntu/server/.claude/worktrees/drill",
+            "branch": "",
+            "claims": [],
+        },
+    ]
