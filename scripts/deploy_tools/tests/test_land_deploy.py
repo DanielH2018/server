@@ -6,7 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy.py
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, receipt
-from lib.exit_codes import DEPLOY_BROAD
+from lib.exit_codes import DEPLOY_BROAD, LAND_GAVE_UP
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -306,7 +306,7 @@ def test_losing_every_tip_race_is_not_a_deploy_failure(landing):
     ln.resolved_tags = ["sonarr"]
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)
-    assert exc.value.verdict == "tip-outran-retries" and exc.value.rc == 75
+    assert exc.value.verdict == "tip-outran-retries" and exc.value.rc == LAND_GAVE_UP
     assert ln.ledger.cause == "deploy-exit-4"
 
 

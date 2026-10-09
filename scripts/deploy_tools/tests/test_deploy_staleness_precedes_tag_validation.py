@@ -22,9 +22,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_tag
 """
 
 from _deploy_sh_fakes import make_snapshot_repo, run_front_half
-
-_STALE_EXIT = 4
-_TAG_MISS_EXIT = 2
+from lib.exit_codes import DEPLOY_STALE, DEPLOY_TAG_MISS
 
 
 def _run(
@@ -41,7 +39,7 @@ def _run(
 def test_a_stale_tree_with_an_unknown_tag_refuses_as_stale(tmp_path, monkeypatch):
     """RED half: a new role's tag on a not-yet-pulled tree."""
     code, names, _ = _run(tmp_path, monkeypatch, stale=1, validate=1)
-    assert code == _STALE_EXIT
+    assert code == DEPLOY_STALE
     # The tag was never judged against the wrong tree, and nothing was deployed.
     assert "validate" not in names and "deploy" not in names, names
 
@@ -49,7 +47,7 @@ def test_a_stale_tree_with_an_unknown_tag_refuses_as_stale(tmp_path, monkeypatch
 def test_an_unknown_tag_on_a_current_tree_is_still_a_tag_miss(tmp_path, monkeypatch):
     """CLEAN half: reordering must not swallow the tag check it moved past."""
     code, names, _ = _run(tmp_path, monkeypatch, stale=0, validate=1)
-    assert code == _TAG_MISS_EXIT
+    assert code == DEPLOY_TAG_MISS
     assert "validate" in names and "deploy" not in names, names
 
 

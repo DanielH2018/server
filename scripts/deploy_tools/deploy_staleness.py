@@ -52,6 +52,7 @@ from lib.deployer_park import (
     park_note,
     read_behind_marker,
 )
+from lib.exit_codes import DEPLOY_STALE
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
@@ -60,10 +61,6 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # tick decides with. The path entry is constant and free; the IMPORT is lazy, so `--help` and
 # every un-tagged run pay nothing for it.
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-
-# Distinct from deploy.sh's other refusals: 2 = tag matched nothing, 3 = broad --changed,
-# 75 = lock busy.
-STALE_EXIT = 4
 
 FETCH_TIMEOUT_S = 20
 
@@ -256,7 +253,7 @@ def format_tag_refusal(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Fetch origin, compare `--sha` (default HEAD) to `--ref`; STALE_EXIT (4) when behind."""
+    """Fetch origin, compare `--sha` (default HEAD) to `--ref`; DEPLOY_STALE when behind."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", default=".")
     parser.add_argument("--ref", default="origin/master")
@@ -363,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:
         note = park_note(read_behind_marker(args.state_dir))
         if note:
             print(note, file=sys.stderr)
-        return STALE_EXIT
+        return DEPLOY_STALE
 
     if behind:
         print(format_refusal(behind, ahead, args.ref, base), file=sys.stderr)
@@ -384,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
         note = park_note(read_behind_marker(args.state_dir))
         if note:
             print(note, file=sys.stderr)
-        return STALE_EXIT
+        return DEPLOY_STALE
     return 0
 
 

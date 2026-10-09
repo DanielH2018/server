@@ -21,9 +21,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_cha
 """
 
 from _deploy_sh_fakes import make_snapshot_repo, run_front_half
-
-_STALE_EXIT = 4
-_BROAD_EXIT = 3
+from lib.exit_codes import DEPLOY_BROAD, DEPLOY_STALE
 
 
 def _run(tmp_path, monkeypatch, *, stale, changed=(0, ""), args=("--changed",)):
@@ -39,7 +37,7 @@ def test_a_stale_tree_deriving_no_tags_refuses_as_stale_rather_than_exiting_zero
 ):
     """RED half: silence wearing the success code."""
     code, names, _ = _run(tmp_path, monkeypatch, stale=1)
-    assert code == _STALE_EXIT
+    assert code == DEPLOY_STALE
     assert "changed" not in names and "deploy" not in names, names
 
 
@@ -47,8 +45,8 @@ def test_a_stale_tree_with_a_broad_change_refuses_as_stale_not_as_broad(
     tmp_path, monkeypatch
 ):
     """The other pre-gate answer: exit 3 also reached the caller before the staleness read."""
-    code, names, _ = _run(tmp_path, monkeypatch, stale=1, changed=(_BROAD_EXIT, ""))
-    assert code == _STALE_EXIT
+    code, names, _ = _run(tmp_path, monkeypatch, stale=1, changed=(DEPLOY_BROAD, ""))
+    assert code == DEPLOY_STALE
     assert "changed" not in names, names
 
 
@@ -72,8 +70,8 @@ def test_a_current_tree_with_a_broad_change_still_refuses_as_broad(
     tmp_path, monkeypatch
 ):
     """The second CLEAN half: exit 3 must survive the reorder on a tree that is not stale."""
-    code, names, _ = _run(tmp_path, monkeypatch, stale=0, changed=(_BROAD_EXIT, ""))
-    assert code == _BROAD_EXIT
+    code, names, _ = _run(tmp_path, monkeypatch, stale=0, changed=(DEPLOY_BROAD, ""))
+    assert code == DEPLOY_BROAD
     assert "changed" in names and "deploy" not in names, names
 
 

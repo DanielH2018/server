@@ -196,7 +196,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "DEPLOY_BROAD",
             "the change is broad (shared templates, inventory, the setup plane) and maps to no "
             "single service, so NOTHING was deployed.",
-            "--changed refuses it by design; apply the plane by hand.",
+            "--changed refuses it by design; apply the plane by hand. `deploy_tags.py narrow "
+            "<old> <new>` prints, read-only, the services the tick would map the range to.",
             verdict="broad",
         ),
         _c(
@@ -204,7 +205,9 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "DEPLOY_STALE",
             "the tree is behind origin/master, so NOTHING was deployed.",
             "A stale tree renders stale templates and reverts live config while every "
-            "repo-side check still reads green. Pull first; never --skip-staleness-check.",
+            "repo-side check still reads green. Pull first; never --skip-staleness-check. "
+            "Staleness is decided before --tags is validated, so a stale tree carrying a tag "
+            "it does not know yet (a new role's first landing) reports this, not a tag miss.",
             verdict="stale",
         ),
         _c(

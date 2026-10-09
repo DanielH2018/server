@@ -69,8 +69,8 @@ Steps:
    service. So deploys of the same service serialize and deploys of different services do
    not. A Pi deploy takes both too, even though the writes land on the Pi. `--check` runs
    unlocked, from the working tree. **The snapshot is of `HEAD`: an uncommitted edit is not
-   deployed.** Exit 75 means a lock stayed busy and **nothing was deployed** — that is not a
-   playbook failure.
+   deployed.** On a non-zero exit, read the run's last two lines
+   ([below](#when-a-run-fails-read-its-last-two-lines)).
 5. **Verify it actually came up healthy** — Ansible reporting `ok`/`changed` only means the
    playbook ran, not that the workload is up (it can apply cleanly then crash-loop or fail
    its probes).
@@ -135,7 +135,7 @@ uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" -e target=dan
 # Deploy a commit that is not this checkout's HEAD: the snapshot is cut from <sha>, and the
 # staleness gate and the tag check are asked about <sha> too. This is how land.sh deploys a
 # PR's merge commit without waiting for the tick to fast-forward the primary checkout.
-# Any committish this checkout's object store resolves; --at with --changed is exit 64.
+# Any committish this checkout's object store resolves; --at with --changed is a bad command line.
 ./scripts/deploy.sh --tags "<service-name>" --at <sha>
 
 # Deploy everything
@@ -178,48 +178,33 @@ what stops two deploys of the same service racing. A `-e target=daniel-pi` deplo
 
 Because the snapshot is of `HEAD`, **an uncommitted edit is not deployed** — commit first.
 
-**`deploy.sh` prints what its exit code means, on every non-zero exit.** Two lines, last:
+## When a run fails, read its last two lines
+
+`deploy.sh` prints what its exit code means on every non-zero exit, as its last two lines:
 `deploy.sh: <NAME> (<code>): <meaning> <what to do>`, then
-`DEPLOY-VERDICT: <verdict> (<the arguments>)`. Read those rather than looking the number up --
-`scripts/lib/exit_codes.py` is where the wrapper reads them from, and
-`docs/reference/scripts.md` renders the same table per entry point. This skill carried a copy
-until 2026-09-30, alongside four others, and 77 and 78 reached only some of the five (#2853).
+`DEPLOY-VERDICT: <verdict> (<the arguments>)`. Act on those lines rather than on the number.
+The wrapper prints them from `CONTRACTS` in `scripts/lib/exit_codes.py`, and
+`docs/reference/scripts.md` renders the same table. A fact an operator needs at a failed run
+belongs in that table's text, not in this skill: a copy here drifted once already (#2853).
 
-Every member of `DEPLOY_SH_NO_VERDICT` means **nothing was deployed**, and each is a resume
-point rather than a failure. `DEPLOY_BAD_FLAGS` also ran nothing, but is a bad command line
-rather than a resume point. `DEPLOY_PLAYBOOK_FAILED` is the inverse: the playbook ran and
-changes are live, so a re-run is not automatically safe.
+## What `--tags`, `--at` and `--detach` change
 
-Exit 3 is `--changed`'s answer, and it is the operator path: `--changed` refuses a broad
-change rather than guessing. The TICK asks a second question first --
-`deploy_tags.py narrow <old> <new>`, which maps a deploy-plane range to the services it
-reaches and exits 3 only when it cannot. Running `narrow` by hand is read-only and prints its
-derivation; it does not change what `--changed` or `deploy.sh` do.
-
-Exit 4 exists because a stale tree renders stale templates and reverts live config while every
-repo-side check still reads green (`scripts/deploy_tools/deploy_staleness.py`). It runs ahead
-of `--check` and `--dry-run` too, since a green dry run against a stale tree is itself the
-misleading signal. Being *ahead* of master is normal branch work and is never refused.
-
-**With `--tags`, only a commit reaching those tags refuses.** `deploy.sh` hands the tag list to
-the gate, which classifies every path in `HEAD..origin/master` with the deployer's own mapper:
-a path reaching one of the tags, or any broad path (shared templates, `ansible/inventory/`, the
-setup plane), refuses and the message names the commits and paths responsible. A tail that
-touches only other roles prints one line saying how many commits behind the tree is and that
-none of them reach the tags, and the deploy proceeds. Without `--tags` the deploy is unscoped,
-so any commit behind refuses — the rule this guard has always had. The narrowing matters
+**With `--tags`, only a commit reaching those tags makes the tree stale.** The staleness gate
+classifies every path in `HEAD..origin/master` with the deployer's own mapper. A path reaching
+one of the tags refuses, and so does any broad path (shared templates, `ansible/inventory/`,
+the setup plane). The refusal names the commits and paths responsible. A tail that touches
+only other roles prints one line saying how far behind the tree is, and the deploy proceeds.
+Without `--tags` the deploy is unscoped, so any commit behind refuses. The narrowing matters
 because the GitOps deployer fast-forwards to the newest GREEN commit in its range rather than
 to the tip, so the primary checkout is legitimately behind a pending tip while every landing
 deploys from it.
 
 **With `--at <sha>`, the question is about `<sha>`, not about this checkout.** The run renders
-a snapshot of `<sha>`, so the gate asks what `<sha>..origin/master` carries and the tag check
-reads `containers_list` at `<sha>`. A checkout behind master therefore deploys a current
-commit without refusing, while a `<sha>` that is itself behind on the requested tags still
-exits 4. A committish this checkout cannot resolve is exit 64, not 2: it is a bad argument,
-and 2 means a tag matched no service. So is `--at` with no value at all — a run that asked
-for another commit must not fall back to deploying HEAD in silence, which is what an `--at
-"$sha"` whose variable came back empty would otherwise do.
+a snapshot of `<sha>`, so the staleness gate asks what `<sha>..origin/master` carries and the
+tag check reads `containers_list` at `<sha>`. A checkout behind master therefore deploys a
+current commit, while a `<sha>` that is itself behind on the requested tags still refuses as
+stale. An `--at` with no value is a bad command line rather than a fall-back to `HEAD`, so an
+`--at "$sha"` whose variable came back empty deploys nothing.
 
 With `--detach`, the completion notifier's health gate renders that same snapshot: it is kept
 until the notifier has run. The gate enumerates the workloads to check from the manifests of
@@ -230,34 +215,3 @@ The `--detach` playbook run is a grandchild in its own session, outside the call
 tree, so a Bash call killed at its time limit does not kill it. Started from a systemd user
 unit, it also moves into its own `deploy-<pid>.scope`, so stopping that unit does not kill it.
 The deploy log names the scope (`lib/detach_fork.py`).
-
-**Exit 4 is decided before exit 2.** `deploy.sh` asks whether the tree is stale before it
-validates `--tags`, so a stale tree carrying a tag it does not recognise reports 4, not 2
-(issue #1566). A tag check against a stale tree answers about the wrong tree: the first
-landing of a new role reads as a tag miss until the tick fast-forwards the merge commit, and
-`land.sh` retries a stale tree while it reports a tag miss as a failed deploy.
-
-**Read the second paragraph of an exit 4 before you rebase.** When the deployer has not
-fast-forwarded for longer than four ticks — its own `behind_since` marker, whose stamp any
-tick that moved the tree renews — the refusal appends a line saying so: the tree is behind
-because the PRIMARY checkout is parked, not because this worktree is stale, and rebasing here
-deploys nothing. The repair is the deployer's — `journalctl -t gitops-deploy`
-names the skip reason. The SessionStart banner carries the same decision
-(`scripts/lib/deployer_park.py` is the one copy of it), but only reaches a session as it opens;
-this reaches one that has been running for an hour (issue #1429).
-
-Exit 2 exists because Ansible itself exits 0 on an unmatched tag, so the wrapper checks tags
-against `containers_list` first (`scripts/deploy_tools/deploy_tags.py`).
-`--skip-tag-check` bypasses it.
-
-Exit 20 exists because ansible-playbook's own codes collide with the four above: it returns 2 on
-a failed host, 3 on an unreachable one and 4 on a parse error. `deploy.sh` returned that status
-verbatim until 2026-09-02, so a play that applied its manifests and then failed on a post-apply
-assert exited 2 and read as the tag miss (issue #840). Every non-zero playbook status is now
-collapsed onto 20; ansible's own number is printed on stderr rather than returned.
-
-One shape never reaches 20. ansible-playbook exits 2 on a USAGE error too -- an unknown flag,
-or `--tags` with no value -- and there argparse refused before the first play, so nothing is
-live. `deploy.sh` asks ansible's own parser before it takes the lock
-(`scripts/deploy_tools/deploy_flags.py`) and refuses with 64, the code `land.sh` also exits on
-a bad argument (issue #3024).

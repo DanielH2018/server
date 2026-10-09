@@ -16,13 +16,13 @@ import pytest
 
 
 from deploy_staleness import (
-    STALE_EXIT,
     behind_ahead,
     format_refusal,
     main,
     unscoped_reason,
 )
 from lib.deployer_park import BEHIND_PARK_SECONDS
+from lib.exit_codes import DEPLOY_STALE
 from lib.git_testing import commit, git_out, init_repo
 from gitops_markers import MARKERS
 
@@ -90,7 +90,7 @@ def test_main_refuses_when_behind(repos):
     origin, clone = repos
     _commit(origin, "theirs")
     git_out(clone, "fetch", "-q", "origin")
-    assert main(["--repo", str(clone), "--no-fetch"]) == STALE_EXIT
+    assert main(["--repo", str(clone), "--no-fetch"]) == DEPLOY_STALE
 
 
 def test_refusal_names_the_count_and_the_fix(repos):
@@ -137,7 +137,7 @@ def test_a_tree_behind_on_the_role_being_deployed_is_refused(repos, capsys):
     clone = _behind_on(repos, SONARR)
     rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr,radarr"])
     err = capsys.readouterr().err
-    assert rc == STALE_EXIT
+    assert rc == DEPLOY_STALE
     assert SONARR in err and "sonarr" in err
 
 
@@ -145,7 +145,7 @@ def test_a_tree_behind_on_a_broad_path_is_refused_whatever_the_tags(repos, capsy
     """`ansible/inventory/` reaches every service's rendered output, so no tag list clears it."""
     clone = _behind_on(repos, INVENTORY)
     rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
-    assert rc == STALE_EXIT
+    assert rc == DEPLOY_STALE
     assert INVENTORY in capsys.readouterr().err
 
 
@@ -159,7 +159,7 @@ def test_a_tree_behind_on_a_shared_k8s_role_is_refused(repos, capsys):
     clone = _behind_on(repos, SHARED_K8S)
     rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
     err = capsys.readouterr().err
-    assert rc == STALE_EXIT
+    assert rc == DEPLOY_STALE
     assert SHARED_K8S in err and "shared k8s role manifests" in err
 
 
@@ -173,7 +173,7 @@ def test_a_tree_behind_on_the_secrets_file_is_refused(repos, capsys):
     clone = _behind_on(repos, SECRETS)
     rc = main(["--repo", str(clone), "--no-fetch", "--tags", "sonarr"])
     err = capsys.readouterr().err
-    assert rc == STALE_EXIT
+    assert rc == DEPLOY_STALE
     assert SECRETS in err and "SOPS value" in err
 
 
@@ -185,7 +185,7 @@ def test_a_block_tag_falls_back_to_the_unscoped_rule(repos, capsys):
     clone = _behind_on(repos, RADARR)
     rc = main(["--repo", str(clone), "--no-fetch", "--tags", "config"])
     err = capsys.readouterr().err
-    assert rc == STALE_EXIT
+    assert rc == DEPLOY_STALE
     assert "not narrowing" in err and "config names no single service" in err
 
 
@@ -204,7 +204,7 @@ def test_unreadable_host_vars_refuses_to_narrow_at_all():
 def test_a_full_run_is_refused_for_any_commit_behind(repos):
     """No tags means the deploy is unscoped, so today's rule stands: any tail refuses."""
     clone = _behind_on(repos, RADARR)
-    assert main(["--repo", str(clone), "--no-fetch"]) == STALE_EXIT
+    assert main(["--repo", str(clone), "--no-fetch"]) == DEPLOY_STALE
 
 
 def _behind_marker(tmp_path: Path, age_s: float, now: float = 2_000_000_000.0) -> Path:
@@ -229,7 +229,7 @@ def test_exit_four_names_the_parked_deployer_when_one_is_parked(
     state = _behind_marker(tmp_path, BEHIND_PARK_SECONDS + 600, now=1_700_000_000.0)
     rc = main(["--repo", str(clone), "--no-fetch", "--state-dir", str(state)])
     err = capsys.readouterr().err
-    assert rc == STALE_EXIT
+    assert rc == DEPLOY_STALE
     assert "primary checkout" in err
     assert "journalctl -t gitops-deploy" in err
 
@@ -244,7 +244,7 @@ def test_exit_four_says_nothing_extra_when_the_deployer_is_converged(
     state.mkdir()
     rc = main(["--repo", str(clone), "--no-fetch", "--state-dir", str(state)])
     err = capsys.readouterr().err
-    assert rc == STALE_EXIT
+    assert rc == DEPLOY_STALE
     assert "rebase" in err
     assert "primary checkout" not in err
 
@@ -281,5 +281,5 @@ def test_a_sha_that_is_itself_behind_still_refuses(repos, capsys):
     head = git_out(clone, "rev-parse", "HEAD")
     rc = main(["--repo", str(clone), "--no-fetch", "--sha", head, "--tags", "sonarr"])
     err = capsys.readouterr().err
-    assert rc == STALE_EXIT
+    assert rc == DEPLOY_STALE
     assert head[:12] in err and "this tree is" not in err
