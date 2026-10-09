@@ -188,6 +188,23 @@ def test_the_green_gate_passes_a_fixed_red_test_that_calls_git(tmp_path):
     assert green_gate(run, repo, red, gate) == ""
 
 
+def test_the_green_gate_reads_the_same_origin_master_as_the_red_gate(tmp_path):
+    """A clone of a path would map the source's local branch to `origin/master`."""
+    diffs_base = (
+        "\n\ndef test_changed():\n    import subprocess\n\n"
+        "    changed = subprocess.run(\n"
+        "        ['git', 'diff', '--name-only', 'origin/master', 'HEAD'],\n"
+        "        capture_output=True, text=True, check=True,\n    ).stdout.split()\n"
+        "    assert 'mod.py' in changed\n"
+    )
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": diffs_base})
+    git_out(repo, "update-ref", "refs/remotes/origin/master", base)
+    gate = red_gate(run, repo, base, red)
+    assert gate.passed, gate.reason
+    commit(repo, "fix", **{"mod.py": FIXED})
+    assert green_gate(run, repo, red, gate) == ""
+
+
 def test_a_smudge_filter_cannot_rewrite_what_the_green_gate_runs(tmp_path):
     """The implementer owns the repo's config and `info/attributes` (#3837)."""
     repo, base, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})

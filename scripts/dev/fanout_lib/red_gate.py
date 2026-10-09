@@ -302,6 +302,18 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
             None,
         )  # fmt: skip
         if cloned.returncode == 0:
+            # A clone of a path maps the source's local branches to `origin/*`. Tests that
+            # read `origin/master` must see the base the red gate saw, so take the source's
+            # own remote-tracking refs, and prune the branches the clone mapped there.
+            cloned = run(
+                [
+                    *_BARE_GIT, "-C", str(tree), "fetch", "--quiet", "--prune",
+                    "--no-tags", str(worktree),
+                    "+refs/remotes/origin/*:refs/remotes/origin/*",
+                ],
+                None,
+            )  # fmt: skip
+        if cloned.returncode == 0:
             cloned = run(
                 [*_BARE_GIT, "-C", str(tree), "checkout", "--quiet", "--detach", head],
                 None,
