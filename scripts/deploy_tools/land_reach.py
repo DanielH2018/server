@@ -444,14 +444,14 @@ def remaining_setup_hosts_note(
     ref: str = "",
     repo: Path = REPO,
 ) -> str:
-    """`_remaining_note` over `ref`'s `ansible/` tree, or this checkout's without one.
+    """`_remaining_note` over `ref`'s `ansible/` tree, or `repo`'s checkout without one.
 
     `ref` is the merge commit: the checkout can predate it (`setup_role_diff.tree_at`), and
-    a ref git cannot archive falls back to the checkout. `repo` holds `ref` and `pr_range`.
+    a ref git cannot archive falls back to `repo`'s checkout and says so on stderr.
     """
     paths = (_INITIAL_SETUP_YML, ALL_VARS, HOST_VARS, _SETUP_ROLES_DIR)
     with tree_at(ref, repo) if ref else contextlib.nullcontext() as root:
-        at = [root / p.relative_to(REPO) for p in paths] if root else list(paths)
+        at = [(root or repo) / p.relative_to(REPO) for p in paths]
         return _remaining_note(
             files, local_host, quiet, at[0], at[1], at[2], at[3], pr_range, repo
         )

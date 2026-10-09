@@ -32,7 +32,9 @@ def task_file_chains(role_dir: Path, path: str, pr_range: str, repo: Path):
 
     Narrows only when every changed task is found in the checkout's copy: a checkout on
     another commit than the range's end would otherwise match some changed tasks and not
-    others, and read narrower than the truth.
+    others, and read narrower than the truth. A miss is printed on stderr, because a
+    checkout that predates the merge misses every changed task and the wide note it then
+    prints is the #3976 symptom, which must not pass for a narrowed answer.
     """
     task_file = Path(path).name
     every = task_chains(role_dir, lambda task, f: f == task_file)
@@ -49,7 +51,20 @@ def task_file_chains(role_dir: Path, path: str, pr_range: str, repo: Path):
         return False
 
     chains = task_chains(role_dir, keep)
-    return chains if matched == changed else every
+    if matched == changed:
+        return chains
+    old, _, new = pr_range.partition("..")
+    _warn(
+        f"{role_dir} does not hold the tasks {old[:8]}..{new[:8]} changed in {path} "
+        f"({len(changed) - len(matched)} of {len(changed)} missing), so its owed-host "
+        "note keeps the whole file's reach"
+    )
+    return every
+
+
+def _warn(message: str) -> None:
+    """One line on stderr, where `land.sh`'s operator and journal both see it."""
+    print(f"land_reach: {message}", file=sys.stderr)
 
 
 def deleted_in(path: str, pr_range: str, repo: Path) -> bool:
@@ -165,6 +180,10 @@ def tree_at(ref: str, repo: Path) -> Generator[Path | None]:
             git("archive", "-o", str(archive), ref, "ansible", cwd=repo)
             with tarfile.open(archive) as tar:
                 tar.extractall(root, filter="data")
-        except OSError, subprocess.SubprocessError, tarfile.TarError:
+        except (OSError, subprocess.SubprocessError, tarfile.TarError) as exc:
+            _warn(
+                f"could not read {ref[:8]}'s ansible/ tree ({type(exc).__name__}), so the "
+                f"owed-host note reads {repo}'s checkout, which can predate it"
+            )
             root = None
         yield root

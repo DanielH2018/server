@@ -9,6 +9,7 @@ below pairs the narrowed answer with one that must stay wide.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_changed_tasks.py
 """
 
+import pytest
 import yaml
 
 import land_reach
@@ -184,27 +185,36 @@ def _pre_merge_checkout(tmp_path) -> tuple:
     return repo, old, new
 
 
+def _note(repo, old: str, new: str, ref: str = "") -> str:
+    """The owed-host note for the range's crony edit, read in `repo`."""
+    return land_reach.remaining_setup_hosts_note(
+        [_TASKS], "daniel-box", pr_range=f"{old}..{new}", ref=ref, repo=repo
+    )
+
+
 def test_the_note_reads_the_merge_commits_tree_not_a_pre_merge_checkout(tmp_path):
+    """Read at the merge commit, the box-only edit owes no other host an apply.
+
+    The negative control reads the same range from the checkout, which predates it, and must
+    name the two other hosts. Without it the empty note also passed when `tree_at` fell back
+    and when no `ref` reached it, because the fallback read this repo's tree, where crony is
+    in no playbook (#4084).
+    """
     repo, old, new = _pre_merge_checkout(tmp_path)
-    note = land_reach.remaining_setup_hosts_note(
-        [_TASKS], "daniel-box", pr_range=f"{old}..{new}", ref=new, repo=repo
-    )
-    assert note == ""
+    unread = _note(repo, old, new)
+    assert "daniel-pi" in unread and "daniel-server" in unread, unread
+    assert _note(repo, old, new, ref=new) == ""
 
 
-def test_the_pre_merge_checkouts_own_tree_reads_wide(tmp_path):
-    """The red half: the same range read from the checkout names the two other hosts."""
+@pytest.mark.parametrize("ref", ["", "0" * 40], ids=["no-ref", "unarchivable-ref"])
+def test_a_tree_without_the_changed_tasks_says_the_note_stays_wide(
+    tmp_path, capsys, ref
+):
+    """A checkout that predates the merge holds none of the changed tasks, so the note keeps
+    the whole file's reach. It must say so, not print the wide note as if it were narrowed."""
     repo, old, new = _pre_merge_checkout(tmp_path)
-    ansible = repo / "ansible"
-    note = land_reach._remaining_note(
-        [_TASKS],
-        "daniel-box",
-        (),
-        ansible / "initial_setup.yml",
-        ansible / "inventory" / "group_vars" / "all.yml",
-        ansible / "inventory" / "host_vars",
-        ansible / "roles" / "setup",
-        pr_range=f"{old}..{new}",
-        repo=repo,
-    )
-    assert "daniel-pi" in note and "daniel-server" in note
+    note = _note(repo, old, new, ref=ref)
+    assert "daniel-pi" in note and "daniel-server" in note, note
+    err = capsys.readouterr().err
+    assert f"does not hold the tasks {old[:8]}..{new[:8]} changed in {_TASKS}" in err
+    assert ("could not read" in err) == bool(ref), err
