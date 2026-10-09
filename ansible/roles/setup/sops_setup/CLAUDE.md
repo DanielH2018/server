@@ -23,9 +23,9 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
    `defaults/main.yml:sops_setup_version` and arch-mapped amd64/arm64. The `get_url` is
    **sha256-checksum-pinned** (SOPS is the root of the secret-decryption trust chain — an
    unverified binary would be a supply-chain hole). Bump the version and both per-arch
-   sha256s **together**: `uv run python scripts/validate/asset_pins.py --only
-   sops_setup_binary_amd64,sops_setup_binary_arm64` fetches each URL and prints the hash that
-   does not match, and the release's `sops-<ver>.checksums.txt` is the same answer upstream.
+   sha256s **together**: `uv run python scripts/validate/asset_pins.py --refresh
+   getsops/sops` fetches each URL and rewrites both hashes, and the release's
+   `sops-<ver>.checksums.txt` is the same answer upstream; compare the two before merging.
    The pin lives in `defaults/main.yml` so `asset_pins.py` can see it at all — that checker
    reads defaults alone, and the URL was inline in `tasks/` until #2313. One url+digest pair
    per architecture, because a digest conditional on `ansible_facts.architecture` renders as

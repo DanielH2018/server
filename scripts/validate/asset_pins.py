@@ -22,7 +22,17 @@ example.
 
 `KNOWN_PINS` names pins the census must find. A scanner that finds its subjects by pattern
 returns an empty set the moment the keys are renamed, and a loop over nothing passes — the
-non-vacuity rule in CLAUDE.md's *Python & Tests*.
+non-vacuity rule in CLAUDE.md's *Python & Tests*. It is a fixed sample, not a register: a new
+pin needs no entry here, and deriving the list from the tree would make it find whatever the
+scanner finds, which is the failure it exists to catch.
+
+`--refresh` finishes a Renovate version bump. Renovate rewrites the `_version` line a
+`# renovate:` annotation points at, but cannot compute the digest paired with it, so a bump
+PR arrives with the old checksum. `--refresh <depName>` fetches every pin whose URL renders
+from that annotated version, hashes the download, and rewrites the digest in place. It trusts
+the first download: where upstream publishes its own checksum (a SOPS `checksums.txt`, a
+CoreDNS `.sha256` sidecar), compare against it before merging. The Renovate agent cannot push,
+so the operator runs this on the bump branch at land time.
 
 This is NOT a pytest and has no prek hook: the suite runs under `-p leakguard`, which fails
 any test that reaches the network, and prek is what a change runs offline. The
@@ -34,13 +44,18 @@ Usage:
     uv run python scripts/validate/asset_pins.py --list        # census only, no network
     uv run python scripts/validate/asset_pins.py --only jellyfin_k8s_anisync,k3s_install_script
     uv run python scripts/validate/asset_pins.py --skip hypervisor_staging_vm_image  # 600 MB
+    uv run python scripts/validate/asset_pins.py --refresh getsops/sops  # rewrite both digests
 
-Exit codes: 0 every checked pin matched; 1 at least one pin failed (the report names each);
-64 a `--only` name the census does not carry.
+Exit codes: 0 every checked pin matched, or every refreshed pin was rewritten or already
+current; 1 at least one pin failed (the report names each); 64 a `--only` or `--refresh` name
+the census does not carry.
 """
 
 import argparse
+import dataclasses
 import hashlib
+import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -57,7 +72,8 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import jinja2
 
 from lib import yaml_fast
-from lib.repo_paths import ROLES
+from lib.renovate_annotations import annotations_in, is_annotation_manager
+from lib.repo_paths import REPO, ROLES
 
 DIGEST_KEYS = ("sha256", "md5")
 FETCH_TIMEOUT = 60.0
@@ -94,6 +110,9 @@ class Pin:
         digest: the pinned hex digest, lower-cased.
         source: the defaults file the pin was read from, relative to the repo.
         error: why the pin cannot be fetched (an unresolved template), else None.
+        inputs: the defaults keys the URL renders from, directly or through another key.
+        dep_names: the Renovate depNames annotated on any of `inputs`; `--refresh` matches
+            on these.
     """
 
     name: str
@@ -102,6 +121,25 @@ class Pin:
     digest: str
     source: str
     error: str | None = None
+    inputs: frozenset[str] = frozenset()
+    dep_names: frozenset[str] = frozenset()
+
+
+_REFERENCE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _inputs(template: str, context: dict) -> frozenset[str]:
+    """Every key of `context` that `template` references, following references in values."""
+    seen: set[str] = set()
+    pending = _REFERENCE.findall(template)
+    while pending:
+        key = pending.pop()
+        if key in seen or key not in context:
+            continue
+        seen.add(key)
+        if isinstance(context[key], str):
+            pending.extend(_REFERENCE.findall(context[key]))
+    return frozenset(seen)
 
 
 def _render(template: str, context: dict) -> tuple[str, str | None]:
@@ -145,7 +183,17 @@ def pins_in(defaults: dict, source: str) -> tuple[list[Pin], list[str]]:
                 continue
             algorithm, digest = found
             url, error = _render(value, defaults)
-            pins.append(Pin(prefix, url, algorithm, digest, source, error))
+            pins.append(
+                Pin(
+                    prefix,
+                    url,
+                    algorithm,
+                    digest,
+                    source,
+                    error,
+                    _inputs(value, defaults),
+                )
+            )
         elif isinstance(value, list):
             for index, item in enumerate(value):
                 if not isinstance(item, dict) or not isinstance(item.get("url"), str):
@@ -157,7 +205,15 @@ def pins_in(defaults: dict, source: str) -> tuple[list[Pin], list[str]]:
                 label = str(item.get("name", index))
                 url, error = _render(item["url"], defaults)
                 pins.append(
-                    Pin(f"{key}[{label}]", url, algorithm, digest, source, error)
+                    Pin(
+                        f"{key}[{label}]",
+                        url,
+                        algorithm,
+                        digest,
+                        source,
+                        error,
+                        _inputs(item["url"], defaults),
+                    )
                 )
     paired = {pin.name for pin in pins}
     for key in defaults:
@@ -168,17 +224,50 @@ def pins_in(defaults: dict, source: str) -> tuple[list[Pin], list[str]]:
     return pins, unpaired
 
 
-def discover_pins(roles: _Path = ROLES) -> tuple[list[Pin], list[str]]:
-    """Every pin under `<roles>/*/*/defaults/main.yml`, and the unpaired digest keys."""
+def annotation_managers(config_file: _Path = REPO / "renovate.json") -> list[dict]:
+    """The custom managers in renovate.json that read `# renovate:` annotations."""
+    config = json.loads(config_file.read_text())
+    return [m for m in config["customManagers"] if is_annotation_manager(m)]
+
+
+def annotated_versions(text: str, managers: list[dict]) -> dict[str, str]:
+    """`{pinned key: depName}` for each annotation `managers` match in one defaults file."""
+    return {
+        found["variable"]: found["depName"]
+        for manager in managers
+        for found in annotations_in(manager, text)
+    }
+
+
+def discover_pins(
+    roles: _Path = ROLES, managers: list[dict] | None = None
+) -> tuple[list[Pin], list[str]]:
+    """Every pin under `<roles>/*/*/defaults/main.yml`, and the unpaired digest keys.
+
+    Each pin carries the depNames annotated on the keys its URL renders from. `managers` are
+    the annotation managers to read them with, renovate.json's by default.
+    """
+    if managers is None:
+        managers = annotation_managers()
     pins: list[Pin] = []
     unpaired: list[str] = []
     for defaults_file in sorted(roles.glob("*/*/defaults/main.yml")):
-        loaded = yaml_fast.safe_load(defaults_file.read_text())
+        text = defaults_file.read_text()
+        loaded = yaml_fast.safe_load(text)
         if not isinstance(loaded, dict):
             continue
         source = str(defaults_file.relative_to(roles.parent.parent))
         found, missing = pins_in(loaded, source)
-        pins.extend(found)
+        annotated = annotated_versions(text, managers)
+        pins.extend(
+            dataclasses.replace(
+                pin,
+                dep_names=frozenset(
+                    annotated[key] for key in pin.inputs if key in annotated
+                ),
+            )
+            for pin in found
+        )
         unpaired.extend(f"{source}: {key}" for key in missing)
     return pins, unpaired
 
@@ -218,23 +307,65 @@ def fetch(
     return response.status, chunks()
 
 
-def check_pin(pin: Pin, fetcher: Fetcher = fetch) -> str | None:
-    """Fetch `pin.url` and compare; None when it matches, else the reason it does not."""
+def _download_digest(pin: Pin, fetcher: Fetcher) -> tuple[str | None, str | None]:
+    """Fetch `pin.url` and hash it with `pin.algorithm`; (digest, None) or (None, reason)."""
     if pin.error:
-        return pin.error
+        return None, pin.error
     try:
         status, chunks = fetcher(pin.url)
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
-        return f"fetch failed: {exc}"
+        return None, f"fetch failed: {exc}"
     if status != 200:
-        return f"HTTP {status} (must be 200)"
+        return None, f"HTTP {status} (must be 200)"
     hasher = hashlib.new(pin.algorithm)
     for block in chunks:
         hasher.update(block)
-    actual = hasher.hexdigest()
+    return hasher.hexdigest(), None
+
+
+def check_pin(pin: Pin, fetcher: Fetcher = fetch) -> str | None:
+    """Fetch `pin.url` and compare; None when it matches, else the reason it does not."""
+    actual, reason = _download_digest(pin, fetcher)
+    if actual is None:
+        return reason
     if actual != pin.digest:
         return f"{pin.algorithm} {actual} does not match the pinned {pin.digest}"
     return None
+
+
+def refresh_pin(
+    pin: Pin, fetcher: Fetcher = fetch, root: _Path = REPO
+) -> tuple[bool, str]:
+    """Fetch `pin.url` and write its digest over the pinned one in `pin.source`.
+
+    The old digest is replaced as a literal, so the file keeps its comments and its
+    `# renovate:` annotations. It must occur exactly once in the file: zero means the census
+    and the file disagree, and two means the replacement could rewrite another pin's digest.
+
+    Args:
+        pin: the pin to refresh.
+        fetcher: the download seam.
+        root: the directory `pin.source` is relative to.
+
+    Returns:
+        `(ok, message)`: ok is True when the digest was rewritten or already current.
+    """
+    actual, reason = _download_digest(pin, fetcher)
+    if actual is None:
+        return False, reason or "no digest"
+    if actual == pin.digest:
+        return True, f"{pin.algorithm} {actual} already current"
+    path = root / pin.source
+    text = path.read_text()
+    pinned = re.compile(re.escape(pin.digest), re.IGNORECASE)
+    count = len(pinned.findall(text))
+    if count != 1:
+        return False, (
+            f"the pinned {pin.digest} occurs {count} times in {pin.source}, so it cannot be "
+            "rewritten safely; edit it by hand"
+        )
+    path.write_text(pinned.sub(actual, text))
+    return True, f"{pin.algorithm} {pin.digest} -> {actual}"
 
 
 def check_pins(pins: Iterable[Pin], fetcher: Fetcher = fetch, out=sys.stdout) -> int:
@@ -266,7 +397,27 @@ def _build_parser() -> argparse.ArgumentParser:
         "--only", help="comma-separated pin names to check (default: all)"
     )
     parser.add_argument("--skip", help="comma-separated pin names to leave out")
+    parser.add_argument(
+        "--refresh",
+        help="comma-separated Renovate depNames or pin names: fetch each pin and rewrite "
+        "its digest in defaults",
+    )
     return parser
+
+
+def refresh_pins(
+    pins: Iterable[Pin], fetcher: Fetcher = fetch, root: _Path = REPO, out=sys.stdout
+) -> int:
+    """Refresh each pin, print one line per pin, and return the count that failed."""
+    failures = 0
+    for pin in pins:
+        ok, message = refresh_pin(pin, fetcher, root)
+        if ok:
+            print(f"ok    {pin.name}  {message}  ({pin.source})", file=out)
+        else:
+            failures += 1
+            print(f"FAIL  {pin.name}  {pin.url}\n      {message}", file=out)
+    return failures
 
 
 def main(
@@ -275,9 +426,13 @@ def main(
     out=sys.stdout,
     discover: Callable[[], tuple[list[Pin], list[str]]] = discover_pins,
     known: frozenset[str] = KNOWN_PINS,
+    root: _Path = REPO,
 ) -> int:
-    """The CLI. `fetcher`, `discover` and `known` are the seams a test hands fakes to."""
-    args = _build_parser().parse_args(argv)
+    """The CLI. `fetcher`, `discover`, `known` and `root` are the seams a test hands fakes to."""
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if args.refresh and (args.only or args.skip or args.list):
+        parser.error("--refresh takes its own names; drop --only, --skip and --list")
     pins, unpaired = discover()
     names = {pin.name for pin in pins}
     missing_known = known - names
@@ -288,6 +443,20 @@ def main(
             file=out,
         )
         return 1
+    if args.refresh:
+        wanted = _name_set(args.refresh)
+        unknown = wanted - names - {dep for pin in pins for dep in pin.dep_names}
+        if unknown:
+            print(
+                f"unknown pin or depName(s): {sorted(unknown)}; --list prints the census "
+                "with each pin's depNames",
+                file=out,
+            )
+            return 64
+        chosen = [p for p in pins if p.name in wanted or p.dep_names & wanted]
+        failures = refresh_pins(chosen, fetcher, root, out)
+        print(f"{len(chosen) - failures}/{len(chosen)} pin(s) current", file=out)
+        return 1 if failures else 0
     unknown = _name_set(args.only) - names
     if unknown:
         print(
@@ -300,7 +469,8 @@ def main(
     if args.list:
         for pin in chosen:
             flag = f"  [{pin.error}]" if pin.error else ""
-            print(f"{pin.name}  {pin.algorithm}  {pin.url}{flag}", file=out)
+            deps = f"  <- {','.join(sorted(pin.dep_names))}" if pin.dep_names else ""
+            print(f"{pin.name}  {pin.algorithm}  {pin.url}{deps}{flag}", file=out)
         for key in unpaired:
             print(f"unpaired digest (URL not in defaults): {key}", file=out)
         return 0

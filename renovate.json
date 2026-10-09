@@ -112,18 +112,6 @@
     },
     {
       "customType": "regex",
-      "description": "The uv release the hosts install (`initial_setup_uv_version` in initial_setup's defaults/main.yml, #2148; it moved out of host-basics.yml in #2301). The role fetched `astral.sh/uv/install.sh`, which installs the newest release at run time, so daniel-box and daniel-server were provisioned onto 0.12.1 and 0.12.5. It now fetches the versioned installer with a sha256 -- and that installer embeds and verifies the sha256 of the release tarball, so the one hash pins the binary. The hash is a MANUAL finish on the bump PR (packageRule below, no automerge), the same class as the SOPS binary. `uv run python scripts/validate/asset_pins.py --only initial_setup_uv_installer` fetches the installer and prints the hash, which is why the version and the digest sit in defaults beside `initial_setup_uv_installer_url`.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/initial_setup/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "initial_setup_uv_version:\\s*\"(?<currentValue>[\\d.]+)\""
-      ],
-      "depNameTemplate": "astral-sh/uv",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
       "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases. A THIRD copy lives on the host side: `initial_setup_vale_version` in roles/setup/initial_setup/tasks/host-basics.yml installs the binary the prek hook runs, and a bump that moved only ci.yml would leave every workstation on the old rules (#1703). The two files agreeing is ENFORCED by ansible/tests/repo/test_vale_matches_the_ci_pin.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/",
@@ -162,152 +150,6 @@
       "packageNameTemplate": "https://github.com/DanielH2018/dotfiles",
       "currentValueTemplate": "main",
       "datasourceTemplate": "git-refs"
-    },
-    {
-      "customType": "regex",
-      "description": "CrowdSec bouncer Traefik plugin pin in k8s/traefik/defaults/main.yml. Re-homed at E7 (2026-08-13) when the Docker traefik role that used to carry the literal moduleName+version block retired \u2014 the k8s static config references this var instead of a literal, so the var is now the only place a regex manager can read the version. None of the other custom managers match this file, so this WAF-enforcement plugin would age silently \u2014 a stale version can lag Traefik API changes or miss plugin security fixes. depName is fixed (the var has no moduleName next to it); track GitHub releases.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/traefik/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "traefik_k8s_bouncer_plugin_version:\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
-      ],
-      "depNameTemplate": "maxlerebourg/crowdsec-bouncer-traefik-plugin",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "description": "SOPS binary pin in sops_setup/defaults/main.yml (it moved out of tasks/main.yml in #2313). SOPS is the root of the secret-decryption trust chain and is the one version pin no other manager covers, so it would age silently (silence != up-to-date, same failure mode as the galaxy/crowdsec pins). getsops/sops publishes real GitHub releases, so github-releases is the right datasource. The paired per-arch sha256s can't be auto-computed by a regex manager, so no automerge (packageRule below) \u2014 Renovate opens the version-bump PR, then finish both from `asset_pins.py --only sops_setup_binary_amd64,sops_setup_binary_arm64` (or the release's sops-<ver>.checksums.txt). One url+digest pair per arch, because asset_pins.py renders a pin against defaults alone under StrictUndefined and a digest conditional on ansible_facts.architecture would not resolve.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/sops_setup/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "sops_setup_version:\\s*\"(?<currentValue>v[^\"]+)\""
-      ],
-      "depNameTemplate": "getsops/sops",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "description": "chezmoi release pin in chezmoi_setup/defaults/main.yml (#2147). The role fetched get.chezmoi.io, which serves master's installer, and the installer picked the newest release at run time — two floating inputs behind a script that runs as the connecting user. Both are now pinned to chezmoi_setup_version, and the installer carries a sha256 no regex manager can compute, so no automerge (packageRule below): Renovate opens the version bump, the operator hashes the tag's assets/scripts/install.sh and finishes the pin. Same manual-finish class as the SOPS binary above.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/chezmoi_setup/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "chezmoi_setup_version:\\s*\"(?<currentValue>v[^\"]+)\""
-      ],
-      "depNameTemplate": "twpayne/chezmoi",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "description": "The Pi's Docker engine pins in docker_install/defaults/main.yml (#2153; retargeted onto Docker's apt repo by #2341). FOUR managers on one file, one per apt package version, because the five held packages carry four independent versions: docker-ce and docker-ce-cli share Moby's, and containerd.io, docker-compose-plugin and docker-buildx-plugin each have their own. The datasource is `deb` against Docker's OWN apt index, not the upstream GitHub releases, because the pin feeds an APT SPEC: `docker_install_package_specs` renders `<pkg>=<version>-*~ubuntu.24.04~noble`, and Docker packages an upstream release days-to-weeks after it is tagged. On github-releases a bump therefore opened a PR whose apply could not succeed -- #2341 measured containerd 2.4.0 offered (PR #2327) while the noble/arm64 index topped out at 2.3.5, so `docker-engine-upgrade` would have failed at apt AFTER stopping every Compose project. Tracking the index means the PR opens only once the Pi can install the version. `suite` and `binaryArch` are daniel-pi's own, measured 2026-09-24 (`dpkg --print-architecture` -> arm64, `VERSION_CODENAME` -> noble); it is the only host with `has_docker: true`, and a second Docker host on another release or arch needs its own registryUrl. extractVersionTemplate strips apt's epoch and Debian revision (`5:29.8.1-1~ubuntu.24.04~noble` -> `29.8.1`) so the extracted space matches the bare version the file pins; it is deliberately NOT anchored on `~ubuntu`, because the same index carries bare `<version>-<rev>` rows for containerd.io and a version extractVersion cannot match is dropped from the version space entirely. NOTE the stripped revision is the blind spot, the same shape as the k3s `+k3sN` note below: `2.3.4-1` and `2.3.4-2` collapse to one version, so a revision-only repackage offers no PR -- upstream-version moves are the axis worth having here. Because the manager cannot see the revision, the spec no longer asserts one either: `docker_install_apt_suffix` globs it (#2357), so apt resolves the newest revision of the pinned version and a `-2`-only repackage is installable rather than a spec apt rejects. versioningTemplate pins `semver` rather than inheriting the deb datasource's default `deb` versioning, so the extracted bare versions still classify major/minor/patch exactly as they did on github-releases and the packageRules below keep matching what they matched. NEVER automerged (packageRule below, one group for all four): a merged bump moves nothing on the Pi by itself, and applying it is the `docker-engine-upgrade` play, which stops every Compose project (#1961) -- the PR is the work order.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "docker_install_engine_version:\\s*\"(?<currentValue>[\\d.]+)\""
-      ],
-      "depNameTemplate": "docker-ce",
-      "datasourceTemplate": "deb",
-      "registryUrlTemplate": "https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64",
-      "extractVersionTemplate": "^(?:\\d+:)?(?<version>[\\d.]+)-",
-      "versioningTemplate": "semver"
-    },
-    {
-      "customType": "regex",
-      "description": "containerd.io pin on the Pi -- the second of the four docker_install managers; the docker-ce one above has the reasoning.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "docker_install_containerd_version:\\s*\"(?<currentValue>[\\d.]+)\""
-      ],
-      "depNameTemplate": "containerd.io",
-      "datasourceTemplate": "deb",
-      "registryUrlTemplate": "https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64",
-      "extractVersionTemplate": "^(?:\\d+:)?(?<version>[\\d.]+)-",
-      "versioningTemplate": "semver"
-    },
-    {
-      "customType": "regex",
-      "description": "docker-compose-plugin pin on the Pi -- the third of the four docker_install managers; the docker-ce one above has the reasoning.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "docker_install_compose_plugin_version:\\s*\"(?<currentValue>[\\d.]+)\""
-      ],
-      "depNameTemplate": "docker-compose-plugin",
-      "datasourceTemplate": "deb",
-      "registryUrlTemplate": "https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64",
-      "extractVersionTemplate": "^(?:\\d+:)?(?<version>[\\d.]+)-",
-      "versioningTemplate": "semver"
-    },
-    {
-      "customType": "regex",
-      "description": "docker-buildx-plugin pin on the Pi -- the fourth of the four docker_install managers; the docker-ce one above has the reasoning.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "docker_install_buildx_plugin_version:\\s*\"(?<currentValue>[\\d.]+)\""
-      ],
-      "depNameTemplate": "docker-buildx-plugin",
-      "datasourceTemplate": "deb",
-      "registryUrlTemplate": "https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64",
-      "extractVersionTemplate": "^(?:\\d+:)?(?<version>[\\d.]+)-",
-      "versioningTemplate": "semver"
-    },
-    {
-      "customType": "regex",
-      "description": "CoreDNS host-forwarder binary pin in roles/setup/k3s/defaults/main.yml. This is the resolver every DNS lookup on daniel-box passes through, installed from a GitHub release tarball rather than a package, so nothing else in this repo would notice it aging (silence != up-to-date, same failure mode as the SOPS pin above). extractVersionTemplate strips the tag's `v`, because the var holds a bare `1.14.7` while upstream tags are `v1.14.7` — without it the datasource's version space never matches what the matchString captures and the manager is inert. The three-component anchor is the other half (#3087): coredns/coredns carries stray tags `v002` ... `v011` beside its real `v1.x.y` releases, and the earlier `^v(?<version>.*)$` admitted `v011`, which Renovate ranked ABOVE 1.14.7 as a major and proposed as PR #3061. No such release exists, so that bump renders a 404 download URL while the paired sha256 still belongs to the old version, and it lands in the `k3s-bringup.yml` plane the deployer never applies, so nothing surfaces it until a person runs that playbook by hand. Anchoring on `\\d+\\.\\d+\\.\\d+` drops the stray tags WITHOUT capping the major, which an `allowedVersions: \"/^1\\./\"` bound would not — a real 2.0.0 stays offerable. NO automerge (packageRule below): the paired k3s_host_coredns_sha256 is not derivable from the tag, so the PR is a SIGNAL and the operator finishes the hash from the release's coredns_<ver>_linux_amd64.tgz.sha256. Same manual-finish class as SOPS.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "k3s_host_coredns_version:\\s*\"(?<currentValue>[^\"]+)\""
-      ],
-      "depNameTemplate": "coredns/coredns",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
-    },
-    {
-      "customType": "regex",
-      "description": "k3s control-plane pin in roles/setup/k3s/defaults/main.yml. The k8s-images manager one directory over (roles/k8s/*/defaults) matches `_image:` keys only, so this file was invisible to every manager AND to the coverage tests — the same one-directory-short escape crowdsec_k8s_image made from group_vars (2026-08-15 review H5). This is the highest-stakes untracked pin in the tree: it is the Kubernetes version itself, where staleness means unpatched CVEs. NOTE the `+k3sN` suffix is semver build metadata and is IGNORED when comparing, so an upstream-version bump (v1.36.2 -> v1.37.0) is offered but a same-version k3s re-tag (+k3s1 -> +k3s2) is not; that is the axis worth having, and stating it beats shipping a manager whose blind spot is undocumented (the shellcheck-py failure mode recorded above).",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "k3s_version:\\s*\"?(?<currentValue>v[^\"\\s]+)\"?"
-      ],
-      "depNameTemplate": "k3s-io/k3s",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "description": "MetalLB pin in roles/setup/k3s/defaults/main.yml — the manifest URL in tasks/main.yml interpolates this var, so it decides which MetalLB the cluster installs. Same file, same blind spot as the k3s pin above; separate manager because a regex manager takes one depNameTemplate. Every LoadBalancer VIP in the estate (Traefik's edge, Pi-hole's DNS) is served by this component. extractVersionTemplate is load-bearing: metallb/metallb publishes TWO tag families into one releases feed — the app (`v0.16.0`) and the Helm chart (`metallb-chart-0.16.1`) — and the chart runs a minor AHEAD of the app it packages, so on 2026-09-01 the newest release in the feed was a chart tag. This pin is the app; anchoring the extract to a leading `v` makes the manager read only app releases rather than relying on the datasource happening to skip a tag shape it cannot parse.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "k3s_metallb_version:\\s*\"?(?<currentValue>v[^\"\\s]+)\"?"
-      ],
-      "depNameTemplate": "metallb/metallb",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
-    },
-    {
-      "customType": "regex",
-      "description": "Longhorn pin in roles/setup/k3s/defaults/main.yml — the storage layer holding every PVC in the cluster, and the one pin in this file where a careless bump is worse than a stale one: the file header records that Longhorn has version-to-version upgrade constraints and does not support arbitrary version skips. Tracked for the signal, never automerged (packageRule below).",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
-      ],
-      "matchStrings": [
-        "k3s_longhorn_version:\\s*\"?(?<currentValue>v[^\"\\s]+)\"?"
-      ],
-      "depNameTemplate": "longhorn/longhorn",
-      "datasourceTemplate": "github-releases"
     },
     {
       "customType": "regex",
@@ -461,19 +303,19 @@
     },
     {
       "customType": "regex",
-      "description": "The Node.js release the code-server image unpacks from nodejs.org (`code_server_k8s_node_version` in the role's defaults, #2149). Replaced NodeSource's setup_22.x script piped to bash, which resolved whatever NodeSource served on build day. The paired code_server_k8s_node_sha256 is the tarball's line in SHASUMS256.txt, which no regex manager can compute — so no automerge (packageRule below), the same manual-finish class as the uv installer. Majors (22 -> 24) stay manual per the default rules anyway.",
+      "description": "Every pinned version in a role's defaults/main.yml that carries a `# renovate:` annotation on the line above it, which is Renovate's documented annotation pattern. The annotation names the dependency: `# renovate: datasource=<ds> depName=<name>`, optionally followed by `versioning=`, `extractVersion=` and `registryUrl=`, IN THAT ORDER, each value free of spaces. The next line must be a `<key>_version:` pin, quoted or not. Adding a pinned artifact is the annotation plus its defaults: no customManager, and the packageRule keyed on depTypeTemplate below makes it a manual PR whose title names `asset_pins.py --refresh <depName>`, the command that rewrites any digest paired with the version. This replaced 13 single-variable managers (#3732); the reasoning each one's description carried now sits in the comment block above its annotation, beside the pin it explains. A pin whose version appears in more than one place, or needs a matchString per occurrence (the jellyfin plugins, vale), keeps its own manager below. scripts/lib/renovate_annotations.py expands each annotation into the per-pin manager the guards in scripts/tests/ read, by running this matchString itself.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/code-server/defaults/main\\.yml$/"
+        "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
+        "/^ansible/roles/setup/[^/]+/defaults/main\\.yml$/"
       ],
       "matchStrings": [
-        "code_server_k8s_node_version:\\s*\"(?<currentValue>[\\d.]+)\""
+        "#[ \\t]*renovate:[ \\t]*datasource=(?<datasource>\\S+)[ \\t]+depName=(?<depName>\\S+)(?:[ \\t]+versioning=(?<versioning>\\S+))?(?:[ \\t]+extractVersion=(?<extractVersion>\\S+))?(?:[ \\t]+registryUrl=(?<registryUrl>\\S+))?[ \\t]*\\n[ \\t]*[A-Za-z0-9_]+_version:[ \\t]*\"?(?<currentValue>[^\"\\s]+)\"?"
       ],
-      "depNameTemplate": "node",
-      "datasourceTemplate": "node-version"
+      "depTypeTemplate": "annotated-pin"
     },
     {
       "customType": "regex",
-      "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the control-plane manager below already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it. autoReplaceStringTemplate was added 2026-09-24 (#2392), and it is what lets a TAG-ONLY pin gain an @sha256 suffix. With no template, Renovate rewrites a matched span by substituting currentValue -> newValue and currentDigest -> newDigest inside the text it matched (lib/workers/repository/update/branch/auto-replace.ts), so a pin carrying no digest has nothing to substitute: `pinDigests: true`, on since 5ba111de8 for #2146, refreshed every pin that already had a digest and added one to none of the rest, which is why PRs #2336-#2339 merged as one-line tag-only diffs. The template MUST keep the literal `_image: ` prefix. The matchString starts at `_image:` and Renovate replaces the WHOLE matched span, so a template without the prefix rewrites `bazarr_k8s_image: lscr.io/...` into `bazarr_k8slscr.io/...` and corrupts every pin this manager touches. It emits ONE space and NO quotes, matching what every pin here carries; the only quoted `_image:` lines in these files are the built-image ones (`\"{{ k8s_registry_pull_host }}/...\"`), and they match this manager not at all, because depName is `[^:\\s\"'@]+` and fails on the space after `{{`. scripts/tests/test_renovate_managers.py::test_the_k8s_image_template_round_trips_every_live_pin asserts the template reproduces every live matched span byte for byte, so a quoted or double-spaced pin added later fails at commit time rather than as a corrupted Renovate PR.",
+      "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the `# renovate:` annotation manager above already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it. autoReplaceStringTemplate was added 2026-09-24 (#2392), and it is what lets a TAG-ONLY pin gain an @sha256 suffix. With no template, Renovate rewrites a matched span by substituting currentValue -> newValue and currentDigest -> newDigest inside the text it matched (lib/workers/repository/update/branch/auto-replace.ts), so a pin carrying no digest has nothing to substitute: `pinDigests: true`, on since 5ba111de8 for #2146, refreshed every pin that already had a digest and added one to none of the rest, which is why PRs #2336-#2339 merged as one-line tag-only diffs. The template MUST keep the literal `_image: ` prefix. The matchString starts at `_image:` and Renovate replaces the WHOLE matched span, so a template without the prefix rewrites `bazarr_k8s_image: lscr.io/...` into `bazarr_k8slscr.io/...` and corrupts every pin this manager touches. It emits ONE space and NO quotes, matching what every pin here carries; the only quoted `_image:` lines in these files are the built-image ones (`\"{{ k8s_registry_pull_host }}/...\"`), and they match this manager not at all, because depName is `[^:\\s\"'@]+` and fails on the space after `{{`. scripts/tests/test_renovate_managers.py::test_the_k8s_image_template_round_trips_every_live_pin asserts the template reproduces every live matched span byte for byte, so a quoted or double-spaced pin added later fails at commit time rather than as a corrupted Renovate PR.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
         "/^ansible/roles/setup/[^/]+/defaults/main\\.yml$/",
@@ -711,14 +553,15 @@
       "groupName": "ansible-lint (lockstep: prek.toml + host-basics.yml)"
     },
     {
-      "description": "uv (astral-sh/uv) — the versioned installer's sha256 in initial_setup's defaults/main.yml is a manual finish, so NO automerge; own group so it overrides the `{{depName}}` file-scoped rule and the non-major automerge rule above. The group name names the command that produces the hash: an unattended renovate_agent run has no raw `curl` (the classifier denies it) and stalled on #2297 for want of one (#2301).",
-      "matchDatasources": [
-        "github-releases"
+      "description": "Every `# renovate:` annotated pin (depTypeTemplate of the annotation manager). Most pair the version with a sha256 or md5 that Renovate cannot compute, so NO automerge, and the group name names the command that finishes it: `asset_pins.py --refresh <depName>` fetches every pin whose URL renders from the annotated version and rewrites its digest. This one rule replaced the per-package uv, sops, chezmoi and coredns rules (#3732), which differed only in which pin name their title quoted. groupSingleUpdates puts the work order in a single-dependency PR's title. A pin needing more than a digest (k3s, the Pi's docker engine, the crowdsec bouncer plugin, code-server's node) keeps its own rule LATER in this list, which overrides this groupName; that ordering is what keeps `k8s_autodeploy: false` in the crowdsec title, and scripts/tests/test_renovate_annotated_pins.py asserts it.",
+      "matchManagers": [
+        "custom.regex"
       ],
-      "matchPackageNames": [
-        "astral-sh/uv"
+      "matchDepTypes": [
+        "annotated-pin"
       ],
-      "groupName": "uv (manual — finish initial_setup_uv_installer_sha256: asset_pins.py --only initial_setup_uv_installer)",
+      "groupName": "{{depName}} (manual — finish any paired digest: asset_pins.py --refresh {{depName}})",
+      "groupSingleUpdates": true,
       "automerge": false
     },
     {
@@ -771,28 +614,6 @@
       "automerge": false
     },
     {
-      "description": "SOPS binary (getsops/sops) \u2014 the secret-decryption root of trust; its paired per-arch sops_setup_binary_{amd64,arm64}_sha256 need a manual bump from the release checksums, so NO automerge (same manual-finish class as the galaxy collections + crowdsec plugin). Own group, so it overrides the custom.regex non-major automerge rule above and gets a deliberate operator review + sha256 finish.",
-      "matchDatasources": [
-        "github-releases"
-      ],
-      "matchPackageNames": [
-        "getsops/sops"
-      ],
-      "groupName": "sops binary (manual \u2014 finish the per-arch sha256: asset_pins.py --only sops_setup_binary_amd64,sops_setup_binary_arm64)",
-      "automerge": false
-    },
-    {
-      "description": "chezmoi (twpayne/chezmoi) \u2014 the installer script's sha256 in chezmoi_setup/defaults/main.yml is a manual finish, so NO automerge; own group so it overrides the custom.regex non-major automerge rule above.",
-      "matchDatasources": [
-        "github-releases"
-      ],
-      "matchPackageNames": [
-        "twpayne/chezmoi"
-      ],
-      "groupName": "chezmoi (manual \u2014 finish the installer sha256 from the tag's install.sh)",
-      "automerge": false
-    },
-    {
       "description": "The Pi's Docker engine (docker-ce, containerd.io, docker-compose-plugin, docker-buildx-plugin) \u2014 one group, NO automerge. Merging moves nothing: docker_install refuses to move an installed engine, and the apply is the docker-engine-upgrade play, which stops every Compose project on the Pi (#1961). The PR is the work order; the operator merges it and runs the play from a LAN session. The selector MOVES WITH the managers: #2341 retargeted them from github-releases onto the `deb` datasource, and a rule left matching the old datasource and depNames would have stopped matching entirely, dropping all four into the `container images (non-major)` catch-all above -- which automerges minor and patch. ENFORCED by scripts/tests/test_renovate_docker_engine_pins.py::test_pins_resolve_to_the_manual_group.",
       "matchDatasources": [
         "deb"
@@ -831,17 +652,6 @@
       "prBodyNotes": [
         "A k3s bump is a hand-run control-plane upgrade, never a plain merge. In this PR: set `k3s_install_script_sha256` beside `k3s_version` in `ansible/roles/setup/k3s/defaults/main.yml`, then run `uv run python scripts/validate/refresh_vendored_schemas.py` and commit the schemas it writes — even for a patch release, because `test_vendored_core_schemas_match_the_cluster` compares the full Kubernetes tag. For a new minor, also set `K8S_SCHEMA_VERSION` in `scripts/validate/validate_lib/k8s_schema.py`, raise this cap by one minor, and delete the previous `scripts/validate/schemas/kubernetes.io/v<old minor>/`. Then follow `docs/k3s-upgrade.md` before merging."
       ]
-    },
-    {
-      "description": "CoreDNS host forwarder (coredns/coredns) \u2014 daniel-box's own resolver, and the process /etc/resolv.conf names instead of an upstream. Its paired k3s_host_coredns_sha256 needs a manual bump from the release's .sha256 sidecar, so NO automerge (same manual-finish class as the SOPS binary). Own group, so it overrides the custom.regex non-major automerge rule above. A bad bump here costs the node all DNS at once, which is loud rather than silent \u2014 but it is still not something CI can prove.",
-      "matchDatasources": [
-        "github-releases"
-      ],
-      "matchPackageNames": [
-        "coredns/coredns"
-      ],
-      "groupName": "coredns host forwarder (manual \u2014 finish the sha256 from the release sidecar)",
-      "automerge": false
     },
     {
       "description": "karakeep-time-tagger's pinned runtime pip deps (2026-07-16 review M3). karakeep-python-api tracks the digest-pinned karakeep app's API and the uv base image is a manual bump too, so a client/dep bump wants a deliberate look alongside them rather than auto-merging on the 7-day soak. Own group, no automerge \u2014 overrides the custom.regex non-major automerge rule above.",

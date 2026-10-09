@@ -23,6 +23,7 @@ from pathlib import PurePosixPath
 import pytest
 
 from _renovate import (
+    _CONFIG_MANAGERS,
     _MANAGERS,
     _PACKAGE_RULES,
     _RENOVATE_CONFIG,
@@ -37,7 +38,9 @@ from _renovate import (
 
 
 @pytest.mark.parametrize(
-    "mgr", _MANAGERS, ids=[m["description"].split(".")[0][:40] for m in _MANAGERS]
+    "mgr",
+    _CONFIG_MANAGERS,
+    ids=[m["description"].split(".")[0][:40] for m in _CONFIG_MANAGERS],
 )
 def test_custom_manager_matches_live_targets(mgr: dict, tracked: list[str]) -> None:
     assert mgr["customType"] == "regex"

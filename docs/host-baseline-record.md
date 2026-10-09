@@ -42,7 +42,8 @@ the name:
   uv's version, installer URL and sha256 sit together at
   `initial_setup_uv_version` in the role's `defaults/main.yml`, so
   `scripts/validate/asset_pins.py` can render the URL and produce the hash an unattended
-  renovate_agent run has no `curl` to produce — `--only initial_setup_uv_installer` (#2301).
+  renovate_agent run has no `curl` to produce — `--refresh astral-sh/uv` rewrites it, and
+  `--only initial_setup_uv_installer` checks it (#2301).
   `ansible-core`, `ansible-lint`, `prek` and Vale each equal a twin in `pyproject.toml`,
   `prek.toml` or CI (`ansible/tests/repo/test_host_tool_pins_match_their_twins.py`,
   `ansible/tests/repo/test_vale_matches_the_ci_pin.py`), and every install is version-gated

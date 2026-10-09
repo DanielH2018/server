@@ -5,13 +5,15 @@
 
 # The uv release this host installs, and the versioned installer it is fetched with.
 #
-# ONE copy of the version, here rather than in group_vars: Renovate's uv custom manager reads
-# this file (github-releases, astral-sh/uv, no automerge), and a version in group_vars/all.yml
-# would land in the k8s image group instead. The sha256 is the installer script's, and a bump
-# finishes it by hand — `uv run python scripts/validate/asset_pins.py --only
-# initial_setup_uv_installer` fetches the URL below and prints the hash that does not match.
-# Run it twice before you trust the answer: astral.sh serves copies that have hashed
-# differently, and the `get_url` on a host re-fetches rather than reusing what CI saw.
+# ONE copy of the version, here rather than in group_vars: the `# renovate:` annotation below
+# is read only from role defaults (github-releases, astral-sh/uv, no automerge). The role used
+# to fetch `astral.sh/uv/install.sh`, which installs the newest release at run time, so
+# daniel-box and daniel-server were provisioned onto 0.12.1 and 0.12.5 (#2148). The sha256 is
+# the installer script's, and a bump finishes it with `uv run python
+# scripts/validate/asset_pins.py --refresh astral-sh/uv`, which fetches the URL below and
+# rewrites the hash. Run `--only initial_setup_uv_installer` afterwards before you trust the
+# answer: astral.sh serves copies that have hashed differently, and the `get_url` on a host
+# re-fetches rather than reusing what CI saw.
 # That script embeds the sha256 of every release artifact it downloads and verifies the
 # tarball against it, so pinning the script's hash pins the binary too.
 #
@@ -19,6 +21,7 @@
 # `asset_pins.py` can render it: the checker reads `defaults/main.yml` alone, and an inline
 # URL leaves the digest unpaired — the finish an unattended renovate_agent run could not do
 # without a raw `curl` (#2301).
+# renovate: datasource=github-releases depName=astral-sh/uv
 initial_setup_uv_version: "0.12.22"
 initial_setup_uv_installer_url: "https://astral.sh/uv/{{ initial_setup_uv_version }}/install.sh"
 initial_setup_uv_installer_sha256: 58488ae8dbd0773134c92c85e901430e33f99d975bd7f929d26aa9ab0c2f9390
