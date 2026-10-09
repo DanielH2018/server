@@ -179,7 +179,7 @@ def is_pi_alert(logql, line, name):
     """
     if logql == SYSLOG_ALERT_LOGQL:
         m = _SYSLOG_HOST_RE.match(line)
-        return bool(m) and m["host"] == "daniel-pi"
+        return bool(m) and m["host"] == core.PI_HOST
     return name == PI_PRESSURE_CHECK_NAME
 
 

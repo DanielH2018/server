@@ -22,6 +22,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from lib.ansible_inventory import PI_HOST  # noqa: F401  (re-exported as core.PI_HOST)
 from lib.repo_paths import REPO
 
 # The URL builders live in obs_api, which homelab-mcp's image also carries. Re-exported
@@ -235,9 +236,6 @@ def since_window_ns(since):
 
 def scrutiny_url(base):
     return f"{base}/api/summary"
-
-
-PI_HOST = "daniel-pi"
 
 
 def curl_argv(url, timeout=DEFAULT_TIMEOUT, resolve=None):

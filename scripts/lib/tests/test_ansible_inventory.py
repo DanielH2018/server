@@ -3,12 +3,20 @@
 Run: uv run pytest scripts/lib/tests/test_ansible_inventory.py
 """
 
+import re
 import sys
 import textwrap
+from pathlib import Path
 
-from lib.ansible_inventory import containers_entries_in, host_names, inventory_hosts
+from lib.ansible_inventory import (
+    GITOPS_HOST,
+    PI_HOST,
+    containers_entries_in,
+    host_names,
+    inventory_hosts,
+)
 from lib.proc_testing import run
-from lib.repo_paths import SCRIPTS
+from lib.repo_paths import HOST_VARS, HOSTS_INI, SCRIPTS
 
 INI = textwrap.dedent("""\
     # a leading comment
@@ -53,6 +61,39 @@ def test_a_host_in_two_groups_is_one_host_and_a_vars_section_is_not_a_host(tmp_p
 def test_the_real_inventory_declares_the_three_hosts():
     """Non-vacuity against ground truth: the derived tuples elsewhere read this list."""
     assert set(host_names()) >= {"daniel-box", "daniel-server", "daniel-pi"}
+
+
+def hosts_arming(
+    key: str, ini: Path = HOSTS_INI, host_vars: Path = HOST_VARS
+) -> tuple[str, ...]:
+    """The inventory hosts whose host_vars set top-level ``<key>: true``.
+
+    group_vars defaults ``has_gitops`` and ``has_docker`` to false, so an explicit true is the
+    only way a host takes either role.
+    """
+    armed = re.compile(rf"^{key}:\s*true\s*(#.*)?$", re.MULTILINE)
+    return tuple(
+        name
+        for name in host_names(ini)
+        if (host_vars / f"{name}.yml").is_file()
+        and armed.search((host_vars / f"{name}.yml").read_text())
+    )
+
+
+def test_role_host_constants_name_the_host_the_inventory_arms():
+    """The literals stand in for an inventory read; this keeps them equal to it."""
+    assert hosts_arming("has_gitops") == (GITOPS_HOST,)
+    assert hosts_arming("has_docker") == (PI_HOST,)
+
+
+def test_a_second_armed_host_breaks_the_pin(tmp_path):
+    """Red proof: a second host taking the role no longer reads as the one constant."""
+    ini = tmp_path / "hosts.ini"
+    ini.write_text("[all]\ndaniel-box\ndaniel-new\ndaniel-off\n")
+    (tmp_path / "daniel-box.yml").write_text("has_gitops: true\n")
+    (tmp_path / "daniel-new.yml").write_text("x: 1\nhas_gitops: true  # armed\n")
+    (tmp_path / "daniel-off.yml").write_text("has_gitops: false\n  has_gitops: true\n")
+    assert hosts_arming("has_gitops", ini, tmp_path) == ("daniel-box", "daniel-new")
 
 
 def test_containers_entries_keep_named_mappings_only():

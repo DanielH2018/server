@@ -11,6 +11,12 @@ tuples. This module imports only ``pathlib`` and ``repo_paths``, the same reason
 ``containers_entries_in`` takes an already-parsed mapping, so the caller keeps its own YAML
 loader and its own error handling. ``render_guard`` re-exports it.
 
+Two hosts hold a role a script must name without parsing YAML: ``GITOPS_HOST`` and
+``PI_HOST`` below. Each is a literal rather than a read of the inventory var that confers the
+role, because this module imports no YAML loader. ``scripts/lib/tests/test_ansible_inventory.py``
+pins each literal to that var instead, so moving the role in the inventory fails a test rather
+than leaving every script naming the old host.
+
 A deliberately narrower host set filters ``inventory_hosts()`` rather than replacing it.
 ``fanout_lib/transport.HOSTS`` (the agent hosts) and ``kubectl.CLUSTER_NODES`` (which
 ``probe.py`` must answer without parsing Ansible, and which names a retired host) stay
@@ -26,6 +32,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.repo_paths import HOSTS_INI
+
+# The one host whose host_vars set `has_gitops: true`: it runs the GitOps deployer and
+# `land.sh`. group_vars defaults the key to false, so a host is armed only by saying so.
+GITOPS_HOST = "daniel-box"
+# The one host whose host_vars set `has_docker: true`, driven over ssh with `-e target=`.
+PI_HOST = "daniel-pi"
 
 
 def containers_entries_in(data: dict | None) -> list[dict]:

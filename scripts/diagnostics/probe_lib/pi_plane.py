@@ -42,7 +42,10 @@ PROMETHEUS_TEMPLATE_PATH = (
     / "prometheus.yaml.j2"
 )
 
-PI_ORIGIN_LABEL = "daniel-pi"
+# prometheus.yaml.j2 writes `origin: daniel-pi` as a literal on each Pi job rather than deriving
+# it from the inventory hostname, so the label equals the host name by convention, not by
+# construction.
+PI_ORIGIN_LABEL = PI_HOST
 
 _JOB_NAME_RE = re.compile(r"^\s*-\s*job_name:\s*(\S+)")
 

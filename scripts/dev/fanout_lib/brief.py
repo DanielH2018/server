@@ -14,6 +14,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.target import (
     SERVER,
@@ -22,8 +23,10 @@ from fanout_lib.target import (
     Target,
     branch_name,
 )
+from lib.ansible_inventory import GITOPS_HOST
 
-LANDS = "daniel-box"
+# `land.sh` and the deployer run on the GitOps host, so only batches placed there land.
+LANDS = GITOPS_HOST
 # The label `findings.py` puts on every issue it files. The launch gate refuses anything
 # else: this repo is public, so an unlabelled issue is text an arbitrary GitHub account
 # wrote, and the consumer is an agent running under `--permission-mode auto`.

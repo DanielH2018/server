@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from lib import yaml_fast
+from lib.ansible_inventory import PI_HOST
 from lib.json_types import JsonObject, JsonValue, as_object
 from lib.render_guard import containers_entries, entry_tags
 from lib.jinja_comments import strip_jinja_comments
@@ -37,8 +38,7 @@ _sys.path.insert(0, str(FILTER_PLUGINS))
 from k8s_autodeploy import is_leftover_dir
 
 # The one host that still runs Docker.
-PI_HOST_VARS = REPO / "ansible/inventory/host_vars/daniel-pi.yml"
-PI_HOST = "daniel-pi"
+PI_HOST_VARS = REPO / f"ansible/inventory/host_vars/{PI_HOST}.yml"
 SETUP_ROLES = ROLES / "setup"
 CONTAINERS_ROLES = ROLES / "containers"
 # The playbooks that apply setup roles. `deploy.yml` applies none of them.

@@ -11,12 +11,15 @@ from pathlib import Path
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.manifest import live_batches
+from lib.ansible_inventory import GITOPS_HOST
 
 # The host `fanout_place` normally runs on; its launches go over `bash -c`, never ssh, so the
-# per-host ssh budget below doesn't apply to it.
-LOCAL_HOST = "daniel-box"
+# per-host ssh budget below doesn't apply to it. The orchestrator runs on the deploy host, which
+# is a coupling of convention: move one and this names the wrong host.
+LOCAL_HOST = GITOPS_HOST
 # ufw limit ssh REJECTs a 6th connection to one host within 30s. Two of those five go to the
 # headroom and health reads, leaving room for at most this many batch launches — each its
 # own ssh connection — before the run risks the 6th.
