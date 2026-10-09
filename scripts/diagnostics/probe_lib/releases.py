@@ -51,7 +51,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 RELEASE_DIR = Path("/var/lib/homelab/k8s-releases.d")
 
 from lib.git import git as _lib_git  # noqa: E402
+from lib.repo_paths import GITOPS_DEPLOY_FILES  # noqa: E402
 from lib.repo_paths import REPO as REPO_ROOT  # noqa: E402
+
+# The deployer's test-path rule, called rather than restated (#3660). Stdlib-only, so cheap.
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from deploy_changes import _is_test_only_path  # noqa: E402
 
 # The renderers live in releases_format.py (this module hit the 600-line cap); re-exported so
 # `run_releases`, probe.py and the tests keep one name for each.
@@ -254,10 +259,10 @@ def _deploy_time_shared_roles(shared_roles):
 def _is_real_change(path, deploy_time_roles=frozenset()):
     """False for a path that never reaches a deployed manifest.
 
-    Three classes. Docs, because no playbook applies prose. A role's own `tests/`, which holds
-    pytest guards over its `files/*.py` and never something `k8s/manifests` stages
-    (the `no-role-ships-a-test-file` row of `ansible/tests/repo/test_census_rows_roles.py`
-    enforces that tree-wide). And a
+    Three classes. Docs, because no playbook applies prose. A test file, by the deployer's
+    `_is_test_only_path`: a role's own `tests/` or a `test_*.py` beside its code, never
+    something `k8s/manifests` stages (the `no-role-ships-a-test-file` row of
+    `ansible/tests/repo/test_census_rows_roles.py` enforces that tree-wide). And a
     SHARED role's `tasks/`, which is the role-granularity narrowing applied one level down.
 
     That third class is the one that matters: the five shared roles holding only `tasks/` and
@@ -270,11 +275,9 @@ def _is_real_change(path, deploy_time_roles=frozenset()):
     its `manifests_files`, so a change there does move its bytes and must still count. The
     renderer's rollout wait (`drain.yml`) runs, renders nothing.
     """
-    if path.endswith(".md"):
+    if path.endswith(".md") or _is_test_only_path(path):
         return False
     parts = path.split("/")
-    if "tests" in parts[:-1]:
-        return False
     if (
         len(parts) > 5
         and tuple(parts[:3]) == K8S_ROLES_PREFIX

@@ -65,12 +65,25 @@ K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
 }
 
 
+# A filter plugin mapped to the setup roles whose rendered state calls one of its filters
+# (#3874). `ansible/deploy.yml` runs no setup role, so neither a narrowed deploy plane nor the
+# full play it falls back to re-renders these. `setup_roles_for` returns them, and the tick
+# applies or records each as it would its own change: `gitops_deploy` through
+# `initial_setup.yml`, and `k3s` as a `manual_plane` line, since only `k3s-bringup.yml` runs it.
+# `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
+SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
+    "ansible/filter_plugins/k8s_autodeploy.py": frozenset({"gitops_deploy"}),
+    "ansible/filter_plugins/service_tier.py": frozenset({"k3s"}),
+}
+
+
 # This module, by its repo path, and the names of the tables above.
 CROSS_ROLE_FILE = "ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py"
 TABLE_NAMES = (
     "K8S_ROLES_IMPORTING_SETUP_FILES",
     "SETUP_FILES_ROUTED_TO_OWNER",
     "SETUP_FILES_SHIPPED_BY_OTHER_ROLES",
+    "SETUP_ROLES_CALLING_FILTER_PLUGINS",
 )
 
 

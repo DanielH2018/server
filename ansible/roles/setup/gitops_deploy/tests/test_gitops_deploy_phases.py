@@ -283,6 +283,7 @@ def test_plan_tick_routes_a_new_shared_file_with_the_tables_its_own_range_adds(
                 "K8S_ROLES_IMPORTING_SETUP_FILES = {}\n"
                 "SETUP_FILES_ROUTED_TO_OWNER = frozenset()\n"
                 f"SETUP_FILES_SHIPPED_BY_OTHER_ROLES = {{{new_file!r}: frozenset({{'claude_code'}})}}\n"
+                "SETUP_ROLES_CALLING_FILTER_PLUGINS = {}\n"
             )
         }
     plan = deploy_phases.plan_tick(

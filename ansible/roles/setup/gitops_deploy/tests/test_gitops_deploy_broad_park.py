@@ -280,6 +280,45 @@ def test_a_mixed_range_writes_one_receipt_naming_both_halves(gitops_deploy, tick
     assert list(receipt.manual) == ["k3s"]
 
 
+def test_a_filter_plugin_a_bring_up_role_calls_records_that_role(gitops_deploy, tick):
+    """#3874: `k3s` renders `tier_backup_claims`, and no `deploy.yml` run re-renders it.
+
+    The deploy plane still narrows to its own callers; the setup caller gets the ledger line.
+    """
+    tick.paths = ["ansible/filter_plugins/service_tier.py"]
+    tick.narrow = (0, "sonarr")
+    assert gitops_deploy.main(tick.tools) == 0
+    assert tick.merges == [ORIGIN]
+    assert tick.playbooks[0][-3:] == ["ansible/deploy.yml", "--tags", "sonarr"]
+    assert [e.role for e in gitops_deploy.STATE.manual_plane_pending()] == ["k3s"]
+
+
+def test_a_filter_plugin_an_initial_setup_role_calls_applies_that_role(
+    gitops_deploy, tick
+):
+    """`gitops_deploy` renders `k8s_autodeploy_denylist`, and the tick can apply it itself."""
+    tick.paths = ["ansible/filter_plugins/k8s_autodeploy.py"]
+    tick.narrow = (0, "sonarr")
+    assert gitops_deploy.main(tick.tools) == 0
+    assert [p[-3:] for p in tick.playbooks] == [
+        ["ansible/initial_setup.yml", "--tags", "gitops_deploy"],
+        ["ansible/deploy.yml", "--tags", "sonarr"],
+    ]
+    assert gitops_deploy.STATE.manual_plane_pending() == []
+
+
+def test_a_filter_plugin_no_setup_role_calls_stays_on_the_deploy_plane(
+    gitops_deploy, tick
+):
+    tick.paths = ["ansible/filter_plugins/py_table.py"]
+    tick.narrow = (0, "monitor-bridge")
+    assert gitops_deploy.main(tick.tools) == 0
+    assert [p[-3:] for p in tick.playbooks] == [
+        ["ansible/deploy.yml", "--tags", "monitor-bridge"]
+    ]
+    assert gitops_deploy.STATE.manual_plane_pending() == []
+
+
 def test_a_setup_role_the_deployer_can_apply_logs_no_park(gitops_deploy, tick, capsys):
     """The rejecting half for the marker too: a resolvable role applies and records nothing."""
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]

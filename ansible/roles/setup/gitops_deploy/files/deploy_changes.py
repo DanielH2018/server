@@ -497,6 +497,8 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if any(p.startswith(prefix) for prefix in _BROAD_DEPLOY_PREFIXES):
             cs.broad = True
             cs.broad_deploy = True
+            cs.setup_roles |= setup_roles_for(p)  # filter-plugin callers (#3874)
+            cs.broad_setup |= bool(cs.setup_roles)
             continue
         at = role_of(p)
         if at is None:
@@ -530,10 +532,10 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
 
 
 def setup_roles_for(path: str) -> set[str]:
-    """Every setup role a change to `path` re-applies: its owner and each role shipping it."""
+    """Every setup role a change to `path` re-applies: owner, shippers, or filter callers."""
     at = role_of(path)
     if at is None or at.plane != "setup":
-        return set()
+        return set(deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS.get(path, ()))
     shippers = deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(
         path, frozenset()
     )

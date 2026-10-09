@@ -70,6 +70,7 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 # derived as `_BROAD_DEPLOY_PREFIXES` minus the census two. Imported at module level because
 # `deploy_changes` is stdlib-only and imports nothing from this tree, so no cycle opens.
 from deploy_changes import _BROAD_CENSUS_PREFIXES, _BROAD_PLAY_PREFIXES, role_of
+from deploy_changes import _is_test_only_path
 
 # Paths whose content every play reads, so no `--tags` value scopes a change to them: the play
 # itself, the task directories it imports, the toposort, and ansible.cfg. The Pi's shared
@@ -185,19 +186,18 @@ def _sort_hits(
 ) -> Importers:
     """Split grep hits into roles and shared templates; a play-level hit refuses.
 
-    A `.md` is prose no playbook applies, and a role's own `tests/` reaches no host — both
-    are dropped for the same reasons `land_tags.role_for` and `is_role_test_path` drop them.
-    An inventory hit that is not `key`'s own definition refuses: see `_defines_only`. A
-    `_`-prefixed inventory file is exempt on both sides — `_inventory_tags` skips it as a
-    file no host loads, so its commented-out examples are not consumers either. A macro
-    scan (`key is None`) drops a filter plugin, which can name a macro but never render
-    it: `toposort.py` names `ingressroute.yml.j2`, and counting that refused 23 of 24
-    sampled ranges. Every other play-level hit, and every one for a variable, refuses.
+    A `.md` and a test file (the deployer's `_is_test_only_path`, #3660) reach no host, so
+    both drop. An inventory hit that is not `key`'s own definition refuses: see
+    `_defines_only`. A `_`-prefixed inventory file is exempt on both sides —
+    `_inventory_tags` skips it as a file no host loads, so its commented-out examples are
+    not consumers either. A macro scan (`key is None`) drops a filter plugin, which can name
+    a macro but never render it: `toposort.py` names `ingressroute.yml.j2`, and counting
+    that refused 23 of 24 sampled ranges. Any other play-level hit refuses, a variable's too.
     """
     roles: set[str] = set()
     templates: set[str] = set()
     for path in hits:
-        if path.endswith(".md"):
+        if path.endswith(".md") or _is_test_only_path(path):
             continue
         if key is None and narrow_filters.is_plugin(path):
             continue
@@ -222,7 +222,7 @@ def _sort_hits(
             continue
         at = role_of(path)
         named = at and at.plane != "setup" and at.role not in _NOT_SERVICES
-        if named and at.subdir != "tests":
+        if named:
             roles.add(at.role)
     return Importers(roles, templates)
 
@@ -425,9 +425,9 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
 def _filter_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     """The tags a filter plugin reaches: the roles whose files name one of its filters.
 
-    `_grep` reads no `roles/setup/` tree, so a setup role calling the filter goes uncounted,
-    as it does under the full `deploy.yml` a refusal falls back to. A shared-template hit
-    follows that template's importers.
+    `_grep` reads no `roles/setup/` tree: the deployer's setup plane routes a setup caller
+    through `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS` instead (#3874). A
+    shared-template hit follows that template's importers.
     """
     roles: set[str] = set()
     for name in sorted(narrow_filters.plugin_names(path, old_ref, ctx.ref, ctx.cwd)):

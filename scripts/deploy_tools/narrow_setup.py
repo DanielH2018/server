@@ -83,6 +83,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deploy_changes import SETUP_FILES_SHIPPED_BY_OTHER_ROLES
+from deploy_cross_role import SETUP_ROLES_CALLING_FILTER_PLUGINS
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 from narrow_setup_index import SETUP_TREE, RoleIndex, foreign_tags
 from narrow_setup_playbook import playbook_applies_role
@@ -193,6 +194,11 @@ def role_tags(
         for path, consumers in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
         if role in consumers
     )
+    plugins = {
+        path
+        for path, callers in SETUP_ROLES_CALLING_FILTER_PLUGINS.items()
+        if role in callers
+    }
     r = git(
         "diff",
         "--name-only",
@@ -200,6 +206,7 @@ def role_tags(
         "--",
         prefix,
         *shipped,
+        *sorted(plugins),
         cwd=repo,
         check=False,
     )
@@ -208,6 +215,11 @@ def role_tags(
             f"`git diff {old}..{new} -- {prefix}` failed: {r.stderr.strip()}"
         )
     changed = [line for line in r.stdout.splitlines() if line]
+    # A filter plugin this role calls reaches it through a value no task file names, so no
+    # block tag is derivable from one, and the whole role applies (#3874).
+    called = sorted(set(changed) & plugins)
+    if called:
+        raise CannotNarrow(f"{role} calls a filter from {', '.join(called)}")
     if not changed:
         raise CannotNarrow(
             f"{old}..{new} changes nothing under {prefix} or in a file it ships"
