@@ -45,14 +45,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      # The pinned Python, from the action every CI job shares, so this job's interpreter moves
+      # with the rest of CI in one Renovate bump. smoke_extract.py runs under the bare `python`
+      # this puts on PATH.
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
         with:
-          # Kept, though this job needs no specific interpreter (see below): the pin is
-          # asserted in lockstep with ci.yml and .python-version by
-          # scripts/tests/test_renovate_dockerfiles.py::test_python_version_pins_in_lockstep. The
-          # step is free while the runner image's toolcache holds this patch, and a download
-          # of a few seconds when a Renovate bump gets ahead of the image.
-          python-version: "3.14.7"
+          uv: "false"
 
       # No setup-uv step: scripts/dev/smoke_extract.py imports `re` and `sys` and nothing else, so it
       # needs no project env, and `uv run` would resolve the whole `dev` group (uncached, since

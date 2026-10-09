@@ -263,7 +263,7 @@
   #   ansible-core  == pyproject.toml's dev-group pin -- the ansible that runs deploys is the
   #                    one the tests and `uv run ansible-playbook` resolve.
   #   ansible-lint  == prek.toml's ansible/ansible-lint rev (the hook's own version).
-  #   prek          == ci.yml's `pip install prek==` pin.
+  #   prek          == the CI setup action's `pip install prek==` pin (.github/actions/setup).
   # Renovate rewrites each pin here in the same PR as its twin (renovate.json groups them).
   ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.14 {{ item }}"
   loop:

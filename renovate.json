@@ -87,9 +87,9 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned prek version in the CI workflow (`pip install prek==X`) and, since #2148, the copy the hosts install as a uv tool (`- prek==X` in initial_setup's host-basics.yml). The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently. One manager for both files, so the two copies land in one `{{depName}}` PR (the file-scoped rule below names host-basics.yml); ansible/tests/repo/test_host_tool_pins_match_their_twins.py fails when they disagree anyway.",
+      "description": "Pinned prek version in CI (`pip install prek==X` in .github/actions/setup/action.yml, which every CI job installs prek through since #3723) and, since #2148, the copy the hosts install as a uv tool (`- prek==X` in initial_setup's host-basics.yml). The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently. One manager for both files, so the two copies land in one `{{depName}}` PR (the file-scoped rule below names host-basics.yml); ansible/tests/repo/test_host_tool_pins_match_their_twins.py fails when they disagree anyway.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/ci\\.yml$/",
+        "/(^|/)\\.github/actions/setup/action\\.yml$/",
         "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
       ],
       "matchStrings": [
@@ -311,9 +311,10 @@
     },
     {
       "customType": "regex",
-      "description": "CI test-runner Python pin (`python-version:` input in the workflows). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor. Scans EVERY workflow file (not just ci.yml): image-smoke.yml pins the same `python-version` and a ci.yml-only pattern let its twin age silently until it drifted (2026-07-10 review). Both hold the same value, so one bump PR edits them in lockstep. The literal is three-part (`3.14.7`, #2152): a two-part `3.14` had setup-python resolve the patch from the toolcache that day, while `.python-version` stays two-part on purpose — it is the minor the repo targets, and ansible/tests/repo/test_python_version_consistency.py compares the workflows to it on major.minor.",
+      "description": "CI test-runner Python pin (`python-version:` input in .github/actions/setup/action.yml). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor. Scans every workflow file and every local composite action: the one pin lives in .github/actions/setup/action.yml, which every CI job calls since #3733, and a workflow-only pattern would leave it untracked. Before that each job carried its own copy, and a ci.yml-only pattern let image-smoke.yml's twin age silently until it drifted (2026-07-10 review). A pin that reappears in a workflow is still tracked. The literal is three-part (`3.14.7`, #2152): a two-part `3.14` had setup-python resolve the patch from the toolcache that day, while `.python-version` stays two-part on purpose — it is the minor the repo targets, and ansible/tests/repo/test_python_version_consistency.py compares the workflows to it on major.minor.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/[^/]+\\.yml$/"
+        "/(^|/)\\.github/workflows/[^/]+\\.yml$/",
+        "/(^|/)\\.github/actions/[^/]+/action\\.yml$/"
       ],
       "matchStrings": [
         "python-version:\\s*\"(?<currentValue>[\\d.]+)\""
@@ -323,9 +324,10 @@
     },
     {
       "customType": "regex",
-      "description": "CI Node pin (`node-version:` input in the workflows) \u2014 the other silently-aging setup-* version input; it only feeds renovate-config-validator, so stakes are low, but the tracking doctrine applies uniformly. Majors (22 -> 24) stay manual per the default automerge rules. Scans EVERY workflow file, the same as the python manager above: renovate-config-canary.yml carries the same pin, and a ci.yml-only pattern left it untracked from the day the canary split out (#1269) until #2152. The literal is three-part (`24.21.0`), so the runner installs the patch this file names rather than whatever the toolcache holds that day; a `\\d+` matchString read the major alone and would go inert against it. Both files hold the same value, so one bump PR edits them in lockstep.",
+      "description": "CI Node pin (`node-version:` input in .github/actions/setup/action.yml) \u2014 the other silently-aging setup-* version input; it only feeds renovate-config-validator, so stakes are low, but the tracking doctrine applies uniformly. Majors (22 -> 24) stay manual per the default automerge rules. Scans every workflow file and every local composite action, the same as the python manager above: the one pin lives in the setup action since #3724, which both ci.yml's renovate-config job and renovate-config-canary.yml call. Before that each workflow carried a copy, and a ci.yml-only pattern left the canary's untracked from the day it split out (#1269) until #2152. The literal is three-part (`24.21.0`), so the runner installs the patch this file names rather than whatever the toolcache holds that day; a `\\d+` matchString read the major alone and would go inert against it.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/[^/]+\\.yml$/"
+        "/(^|/)\\.github/workflows/[^/]+\\.yml$/",
+        "/(^|/)\\.github/actions/[^/]+/action\\.yml$/"
       ],
       "matchStrings": [
         "node-version:\\s*\"(?<currentValue>[\\d.]+)\""
@@ -529,12 +531,13 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
-      "description": "CI toolchain + docs-lint pins under .github/workflows/** and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. The Ansible task file that installs Vale on the hosts is named here too, for the same reason: it carries the same depName as ci.yml's pin, so both copies belong in one PR, and without the path it would fall into the k8s-image group above instead. {{depName}} still groups python's ci.yml + image-smoke.yml pins together (same depName, two files) — only the shared catch-all name is removed, not that lockstep. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
+      "description": "CI toolchain + docs-lint pins under .github/workflows/**, .github/actions/** (the setup action holds the python, node and prek pins since #3733) and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. The Ansible task file that installs Vale on the hosts is named here too, for the same reason: it carries the same depName as ci.yml's pin, so both copies belong in one PR, and without the path it would fall into the k8s-image group above instead. {{depName}} still groups prek's setup-action and host-basics.yml pins together (same depName, two files) — only the shared catch-all name is removed, not that lockstep. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
       "matchManagers": [
         "custom.regex"
       ],
       "matchFileNames": [
         ".github/workflows/**",
+        ".github/actions/**",
         ".vale.ini",
         "ansible/roles/setup/initial_setup/tasks/host-basics.yml"
       ],

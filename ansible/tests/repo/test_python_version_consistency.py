@@ -21,6 +21,7 @@ from _helpers import REPO
 PYTHON_VERSION_FILE = REPO / ".python-version"
 PYPROJECT = REPO / "pyproject.toml"
 WORKFLOWS = REPO / ".github/workflows"
+ACTIONS = REPO / ".github/actions"
 
 
 def _canonical():
@@ -34,25 +35,32 @@ def _requires_python_floor():
 
 
 def workflow_pins(name: str, text: str) -> list[tuple[str, str]]:
-    """(workflow, pin) for every setup step's `python-version:` in one parsed workflow.
+    """(file, pin) for every setup step's `python-version:` in one parsed workflow or action.
+
+    A workflow's steps sit under `jobs.<id>.steps`, a composite action's under `runs.steps`;
+    the CI pin lives in `.github/actions/setup/action.yml` since #3733, so both are read.
 
     Read as YAML rather than matched as a quoted string (#3663): an unquoted
     `python-version: 3.14` parses as the float 3.14, which the old pattern skipped and this
     reads as the two-part pin it is.
     """
+    doc = yaml_fast.safe_load(text)
+    step_lists = [job.get("steps") or [] for job in (doc.get("jobs") or {}).values()]
+    step_lists.append((doc.get("runs") or {}).get("steps") or [])
     return [
         (name, str(step["with"]["python-version"]))
-        for job in (yaml_fast.safe_load(text).get("jobs") or {}).values()
-        for step in job.get("steps") or []
+        for steps in step_lists
+        for step in steps
         if "python-version" in (step.get("with") or {})
     ]
 
 
 def _workflow_pins():
+    files = sorted(WORKFLOWS.glob("*.yml")) + sorted(ACTIONS.glob("*/action.yml"))
     return [
         pin
-        for wf in sorted(WORKFLOWS.glob("*.yml"))
-        for pin in workflow_pins(wf.name, wf.read_text())
+        for path in files
+        for pin in workflow_pins(path.relative_to(REPO).as_posix(), path.read_text())
     ]
 
 
@@ -100,3 +108,9 @@ def test_an_unquoted_two_part_pin_is_read_as_one():
     """The case the quoted-string pattern skipped: YAML reads `3.14` bare as a float."""
     text = "jobs:\n  t:\n    steps:\n      - uses: actions/setup-python@v6\n        with:\n          python-version: 3.14\n"
     assert workflow_pins("ci.yml", text) == [("ci.yml", "3.14")]
+
+
+def test_a_composite_actions_pin_is_read():
+    """The CI pin's home since #3733; a workflow-only reader would find nothing there."""
+    text = 'runs:\n  using: composite\n  steps:\n    - uses: actions/setup-python@v6\n      with:\n        python-version: "3.14.7"\n'
+    assert workflow_pins("action.yml", text) == [("action.yml", "3.14.7")]
