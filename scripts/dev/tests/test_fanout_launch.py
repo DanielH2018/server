@@ -28,6 +28,7 @@ from fanout_lib.launch import (
     write_brief_command,
 )
 from fanout_lib.manifest import Batch, Manifest, load, new_run_id, save
+from fanout_lib.transport import REPO
 from _fanout_fakes import fake_tools, ok
 
 from lib.repo_paths import REPO as REPO_ROOT
@@ -187,6 +188,14 @@ def test_a_review_unit_runs_the_pipeline_under_the_longer_cap_and_a_plain_one_do
     assert "claude -p" not in review
     assert "fanout_review.py" not in plain and "claude -p" in plain
     assert (REPO_ROOT / "scripts/dev/fanout_review.py").is_file()
+
+
+def test_a_server_review_unit_runs_the_worktrees_script_not_the_primary_checkouts():
+    """The primary checkout can predate the script while the worktree is at origin/master;
+    every review unit on such a host failed to spawn (#3684)."""
+    cmd = systemd_run_command("b", review=True)
+    assert f"{REPO}/scripts/dev/fanout_review.py" not in cmd
+    assert " scripts/dev/fanout_review.py --batch b " in cmd
 
 
 def test_the_appended_system_prompt_file_exists_where_the_unit_resolves_it():

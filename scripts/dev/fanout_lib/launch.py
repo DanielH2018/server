@@ -72,6 +72,8 @@ RUNTIME_MAX_S = 5 * 3600
 REVIEW_RUNTIME_MAX_S = 8 * 3600
 # The interpreter a unit runs repo Python with; `fanout_place.HEALTH_CMD` pins the same one.
 HEADLESS_PYTHON = "3.14.6"
+# The script a `--review` unit runs, relative to a checkout of this repo; see `review_script`.
+REVIEW_SCRIPT = "scripts/dev/fanout_review.py"
 
 
 # The user manager's PATH lacks ~/.local/bin (claude, uv) and repo hooks need uv. The fnm
@@ -210,15 +212,39 @@ def claude_args(target: Target = SERVER_TARGET) -> str:
     return f"{prefix} --settings {shlex.quote(json.dumps(STOP_HOOK_SETTINGS))}"
 
 
-def review_command(batch: str, target: Target = SERVER_TARGET) -> str:
-    """The unit's command for a `--review` batch: `fanout_review.py` in place of `claude -p`.
+def review_script(target: Target = SERVER_TARGET) -> str:
+    """The `fanout_review.py` path a `--review` unit in `target` runs.
 
-    The script runs from this repo's primary checkout for every target, as the dotfiles
-    batch's Stop hook does, so another repo's worktree need not carry it.
+    This repo's batch runs the worktree's copy, relative to the unit's WorkingDirectory.
+    `worktree add` checks that tree out at `origin/master`, so the script is there and
+    current, and it imports `fanout_lib` from the same tree. The host's primary checkout
+    can lag `origin/master`: on 2026-10-09 daniel-server's was 85 commits behind, predated
+    the script, and every review unit placed there failed to spawn (#3684). Another repo's
+    worktree does not carry the script, so its batch runs the primary checkout's copy, and
+    `review_script_check_command` refuses the launch when that copy is missing.
     """
+    if target.is_server:
+        return REVIEW_SCRIPT
+    return f"{REPO}/{REVIEW_SCRIPT}"
+
+
+def review_script_check_command(target: Target) -> str:
+    """Refuse a `--review` batch whose host checkout lacks `fanout_review.py`, or "".
+
+    Only another repo's batch reads the script from this repo's primary checkout, so only its
+    chain carries the check. It runs first, before `exists`, so a refusal leaves no tree and
+    no branch, and `_launch_elsewhere` has not taken the claim yet.
+    """
+    if target.is_server:
+        return ""
+    return _step(f"test -f {review_script(target)}", _REVIEW_SCRIPT_STEP)
+
+
+def review_command(batch: str, target: Target = SERVER_TARGET) -> str:
+    """The unit's command for a `--review` batch: `fanout_review.py` in place of `claude -p`."""
     return (
         f"uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
-        f"{REPO}/scripts/dev/fanout_review.py --batch {batch} --repo {target.repo}"
+        f"{review_script(target)} --batch {batch} --repo {target.repo}"
     )
 
 
@@ -248,14 +274,16 @@ def systemd_run_command(
     )
 
 
-def prepare_command(batch: str, target: Target = SERVER_TARGET) -> str:
+def prepare_command(
+    batch: str, target: Target = SERVER_TARGET, review: bool = False
+) -> str:
     """Worktree add+lock and the brief write, without starting the agent."""
-    return " && ".join(
-        [
-            create_worktree_command(batch, target),
-            write_brief_command(batch, target),
-        ]
-    )
+    steps = [
+        review_script_check_command(target) if review else "",
+        create_worktree_command(batch, target),
+        write_brief_command(batch, target),
+    ]
+    return " && ".join(s for s in steps if s)
 
 
 def launch_command(batch: str, review: bool = False) -> str:
@@ -286,6 +314,8 @@ _STEP_SENTINEL_RE = re.compile(r"^fanout-step: (.+)$", re.MULTILINE)
 _CLEANUP_STEPS = frozenset({"worktree add", "worktree lock"})
 
 _EXISTS_STEP = "exists"
+# Precedes `exists`, so like it, it created nothing and is not in `_CLEANUP_STEPS`.
+_REVIEW_SCRIPT_STEP = "review script"
 
 
 def _attribute_failure(stderr: str) -> str | None:
@@ -401,7 +431,9 @@ def _launch_elsewhere(
         LaunchError: as `launch` documents, plus a refused claim, which removes the tree.
     """
     try:
-        proc = _run(tools, host, prepare_command(batch, target), brief_text, "launch")
+        proc = _run(
+            tools, host, prepare_command(batch, target, review), brief_text, "launch"
+        )
     except LaunchError as exc:
         message = str(exc) + (_cleanup_worktree(tools, host, batch, target) or "")
         raise LaunchError(message) from None
@@ -447,6 +479,11 @@ def _raise_failure(
             f"{branch_name(batch)} on {host} — run `clean <run-id>` first, or remove "
             "the tree by hand if you are abandoning its work; relaunching over it "
             "would delete that branch"
+        )
+    if step == _REVIEW_SCRIPT_STEP:
+        raise LaunchError(
+            f"{host}: {review_script(target)} is missing, and a {target.repo} --review "
+            f"unit runs it — fast-forward {REPO} to origin/master, then relaunch"
         )
     message = (
         f"{step or 'launch command'} failed ({proc.returncode}): {proc.stderr.strip()}"
