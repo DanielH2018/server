@@ -666,7 +666,7 @@ self-matching `pgrep -f` and a partial `security_and_analysis` PATCH.
 On opening a session here, it prints a health banner. It is silent when all-green, read-only
 and timeout-bounded. The banner's problem lines come in three groups, in this order:
 
-- **Service lines** (`hooklib/service_lines.py`): a down Prometheus scrape target, and
+- **Service lines** (`.claude/hooks/hooklib/service_lines.py`): a down Prometheus scrape target, and
   services whose running release is behind origin/master's manifests.
 - **Deployer lines** (`parked_deployer_problems`): a **dirty primary checkout**, a **GitOps
   deployer parked behind origin**, a **setup role the tick merged but cannot apply** (the
@@ -674,8 +674,9 @@ and timeout-bounded. The banner's problem lines come in three groups, in this or
   the tick merged but deferred, and a k8s change the deployer never applies.
 - **Branch line**: this worktree is behind origin/master, so a deploy from it would be refused.
 
-Each group also prints a `⚠ … is broken` line when its own read fails, because an empty list
-reads the same as a clean result.
+A failed read usually prints a `⚠ … is broken` line, because an empty list reads the same as
+a clean result. The exception is a failed `hooklib` import: it drops the service lines, and the
+fan-out section below reports the breakage instead.
 
 The dirty checkout and the park stop every deploy in the fleet, and a worktree session cannot
 look at either for itself: the isolation guard refuses a git command targeting the shared
