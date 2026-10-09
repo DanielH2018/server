@@ -89,6 +89,7 @@ def render_context(
     *,
     strict: bool = False,
     inventory: Inventory = REPO_INVENTORY,
+    host_vars: dict | None = None,
 ) -> dict:
     """The resolved context a template under `path` renders with in a deploy, `overrides` on top.
 
@@ -103,6 +104,10 @@ def render_context(
             }}"``) expands to the override rather than to the name's stub (#3191).
         strict: Raise rather than drop a variable whose value will not expand.
         inventory: Where all.yml and host_vars live; the repo's own unless a test says not.
+        host_vars: The host layer as a mapping, read in place of the host's file. A test
+            uses it to render a host the inventory does not hold, a key removed or a value
+            changed. Unlike `overrides`, it resolves like the file it replaces: a value
+            aliasing another (``x: "{{ sys_user }}"``) arrives expanded, never as braces.
 
     Returns:
         A fresh dict, safe for the caller to extend.
@@ -117,7 +122,7 @@ def render_context(
         **BASE_CONTEXT,
         **load_yaml(role_dir / "defaults" / "main.yml"),
         **load_yaml(inventory.all_vars),
-        **(load_yaml(inventory.host_vars / f"{host}.yml") if host else {}),
+        **(_host_layer(inventory, host) if host_vars is None else host_vars),
         "playbook_dir": str(ANSIBLE),
         **overrides,
     }
@@ -132,6 +137,10 @@ def render_context(
             _NOTED.add(note)
             print(note, file=sys.stderr)
     return {**resolved, **overrides}
+
+
+def _host_layer(inventory: Inventory, host: str | None) -> dict:
+    return load_yaml(inventory.host_vars / f"{host}.yml") if host else {}
 
 
 def _resolve(raw: dict) -> tuple[dict, dict[str, str]]:
