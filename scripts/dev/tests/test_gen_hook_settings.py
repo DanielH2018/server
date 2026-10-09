@@ -374,7 +374,9 @@ def test_committed_settings_json_is_what_the_generator_renders_now():
 def test_check_goes_red_on_an_undeclared_hook_file(tmp_path: Path, capsys):
     """The red proof the brief asks for: one silent file beside the real ones."""
     hooks = tmp_path / "hooks"
-    shutil.copytree(g.HOOKS_DIR, hooks)
+    # A parallel worker importing a hook writes, then renames, a `.pyc` temp file in
+    # `__pycache__`; copying that directory raced the rename and failed on CI.
+    shutil.copytree(g.HOOKS_DIR, hooks, ignore=shutil.ignore_patterns("__pycache__"))
     (hooks / "orphan.sh").write_text("#!/bin/bash\necho nothing declared\n")
     settings = tmp_path / "settings.json"
     settings.write_text(g.SETTINGS.read_text())
