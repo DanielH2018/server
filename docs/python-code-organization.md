@@ -262,6 +262,46 @@ freeze. The cheapest gates are ruff rules that already exist: `FA102` flags the 
 import; `UP` covers the `except` migration. The rest are a repo test over the AST, in the
 shape `test_script_bootstraps_present.py` already uses.
 
+### Textual guards under `ansible/tests/`
+
+Issue #3663 counted 156 of 412 test files reading source text with no renderer, 119 of them
+with a regex, and proposed moving them onto rendered-manifest property rows. A file-by-file
+pass on 2026-10-09 found that count was mostly heuristic error.
+
+- **The grep could not see three spellings of a render.** It missed
+  `make_ansible_env(...).from_string`, `_manifest_guards._render`, and a render reached
+  through a sibling helper module such as `services/_jellyfin_plugins.py`. Counting those as
+  renders, and counting a structured parse (YAML, JSON, TOML or `ast`) as a non-textual read,
+  left 34 files reading raw text. Of those, 15 applied a regex to a template, a task file or
+  other YAML.
+- **No template-source reader duplicates a property row.** Every directory under
+  `ansible/tests/` is in `SCANNED` of
+  `ansible/tests/repo/test_guard_tests_read_renders_not_templates.py`. Each module in its
+  `TEMPLATE_SOURCE_READERS` names what a render erases: a macro call against its expanded
+  body, byte identity, a Jinja filter, or a variable name. The four k8s modules among the 15
+  are entries there.
+- **A task file has no render, so the structural read is a parse.** The equivalent of a
+  property row for `tasks/*.yml` is a read through `yaml_fast` or `_helpers.walk_tasks`.
+  Convert a regex over task text only where its claim survives the parse unchanged. Three
+  conversions landed with this section: `deploy/test_manifests_apply_guarded.py` (its "next
+  ten lines" exemption became the registering task's own `changed_when` key),
+  `deploy/test_denylist_render_suppresses_the_kick.py` (a split on `- name: ` became a parsed
+  handler), and the journald cap in `setup/test_optimize_pi_declares_log2ram_sizes.py`.
+- **The rest read text on purpose.** Four `repo/` modules compare a CI workflow, a doc or a
+  tool pin against another file's text. `deploy/test_inventory_block_scalars_have_no_comment_shaped_lines.py`
+  is about the text itself. `longhorn/test_volume_cr_has_no_volumename.py` and
+  `setup/test_release_bin_groups_have_no_secrets.py` read shell and variable names a render
+  would replace. `longhorn/test_prune_backups.py` greps whole task files for a Backup CR name,
+  so a comment can only make it fail, never pass.
+- **Directory order.** By commits since 2026-08-08 to textual test files, `setup/` leads
+  (178), then `deploy/` (133) and `repo/` (130). Their subjects are task files, inventory and
+  shipped shell libraries, so none of them converts to a rendered-manifest row.
+- **The two ratchet lists are a different subject.** The 59- and 52-commit lists are
+  `ansible/tests/repo/module_length_allowlist.txt` and
+  `ansible/tests/repo/monkeypatch_allowlist.txt`. Both already run on one harness,
+  `ansible/tests/_ratchet.py`. Their commits are entries falling as splits and seams land,
+  which is the ratchet doing its job, and neither list records a textual read.
+
 ## Findings
 
 Ranked by severity. `Confirmed` means a second reader checked the cited lines the day of the

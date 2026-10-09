@@ -92,8 +92,17 @@ def test_the_size_regexps_are_anchored():
 def test_the_declared_tmpfs_is_larger_than_the_journald_cap_beside_it():
     """The relationship section 7 exists to hold: the caps have to fit in the tmpfs."""
     size_mb = _mb(DEFAULTS["optimize_pi_log2ram_size"])
-    body = TASKS.read_text()
-    caps = re.findall(r"SystemMaxUse=(\d+[KMG])", body)
+    # The cap is a line of the drop-in a `copy` task writes, so it is read out of that task's
+    # parsed `content`, where a comment in the task file cannot supply it.
+    caps = [
+        cap
+        for task in walk_tasks(load_tasks(TASKS))
+        if isinstance(spec := task.get("ansible.builtin.copy"), dict)
+        and str(spec.get("dest", "")).startswith("/etc/systemd/journald.conf.d/")
+        for cap in re.findall(
+            r"^SystemMaxUse=(\d+[KMG])$", str(spec.get("content", "")), re.M
+        )
+    ]
     assert caps, "no journald SystemMaxUse found in the role -- section 7 moved"
     for cap in caps:
         assert _mb(cap) < size_mb, (

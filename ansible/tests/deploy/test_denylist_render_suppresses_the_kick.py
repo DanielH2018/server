@@ -14,12 +14,19 @@ Three files carry one name, so this asserts the name they carry is the same one:
 - `handlers/main.yml` gates the kick on `when: <var> | bool`;
 - `defaults/main.yml` defines it true, so every ordinary apply still kicks.
 
+Each file is read parsed: the argv through `ast`, the handler and the default as YAML (#3663).
+The text reading split the handlers file on `- name: `, which a reordered key or a quoted name
+breaks, and matched the default with a line regex.
+
 Run: uv run pytest ansible/tests/deploy/test_denylist_render_suppresses_the_kick.py
 """
 
+import ast
+import itertools
 import re
 
 import pytest
+from lib import yaml_fast
 from _helpers import REPO as _REPO
 
 
@@ -34,23 +41,30 @@ _KICK_HANDLER = "Run gitops-deploy once"
 # were renamed to something the deployer never passes.
 _VAR = "gitops_deploy_kick_after_change"
 
-_EXTRA_VAR = re.compile(r'"-e",\s*\n?\s*"([a-z_]+)=false"')
+_FALSE_EXTRA_VAR = re.compile(r"([a-z_]+)=false")
+_BOOL_GATE = re.compile(r"([a-z_]+)\s*\|\s*bool")
 
 
 def _render_extra_var(source: str) -> str | None:
     """The variable `RENDER_CONFIG_ARGV` sets to false, or None when it sets none."""
-    body = source.split("RENDER_CONFIG_ARGV = [", 1)
-    if len(body) == 1:
-        return None
-    match = _EXTRA_VAR.search(body[1].split("]", 1)[0])
-    return match.group(1) if match else None
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign) and [
+            getattr(t, "id", None) for t in node.targets
+        ] == ["RENDER_CONFIG_ARGV"]:
+            argv = ast.literal_eval(node.value)
+            for flag, value in itertools.pairwise(argv):
+                match = _FALSE_EXTRA_VAR.fullmatch(value)
+                if flag == "-e" and match:
+                    return match.group(1)
+            return None
+    return None
 
 
 def _handler_gate(handlers: str) -> str | None:
     """The variable the kick handler is gated on, or None when it is ungated."""
-    for block in handlers.split("- name: "):
-        if block.startswith(_KICK_HANDLER):
-            match = re.search(r"when:\s*([a-z_]+)\s*\|\s*bool", block)
+    for handler in yaml_fast.safe_load(handlers) or []:
+        if handler.get("name") == _KICK_HANDLER:
+            match = _BOOL_GATE.fullmatch(str(handler.get("when", "")).strip())
             return match.group(1) if match else None
     raise AssertionError(f"no {_KICK_HANDLER!r} handler in {_HANDLERS}")
 
@@ -75,6 +89,17 @@ def test_an_ungated_kick_handler_is_flagged():
     )
 
 
+def test_a_gate_written_after_the_module_is_still_read():
+    """The accepting case the `- name: ` split could not read: key order carries no meaning."""
+    assert (
+        _handler_gate(
+            "---\n- ansible.builtin.systemd:\n    name: gitops-deploy.service\n"
+            f"  name: '{_KICK_HANDLER}'\n  when: {_VAR} | bool\n"
+        )
+        == _VAR
+    )
+
+
 def test_a_render_that_passes_no_extra_var_is_flagged():
     """The other rejecting half, for the deploy_phases side of the same pair."""
     assert (
@@ -87,13 +112,17 @@ def test_a_render_that_passes_no_extra_var_is_flagged():
 
 def test_the_default_arms_the_kick_for_an_ordinary_apply():
     """A first install must still activate without a manual `systemctl start`."""
-    assert re.search(rf"^{_VAR}:\s*true\s*$", _DEFAULTS.read_text(), re.MULTILINE)
+    assert yaml_fast.safe_load(_DEFAULTS.read_text()).get(_VAR) is True
 
 
 def test_the_kick_handler_exists_to_be_gated():
-    """Non-vacuity: both readers above are pattern-driven, so a renamed handler or a moved
-    function would otherwise make this whole file assert nothing."""
-    assert _KICK_HANDLER in _HANDLERS.read_text()
-    assert "RENDER_CONFIG_ARGV" in _PHASES.read_text()
+    """Non-vacuity: a renamed handler or a moved assignment must fail rather than read None."""
     with pytest.raises(AssertionError):
         _handler_gate("---\n- name: Reload systemd\n  ansible.builtin.systemd:\n")
+    assert "RENDER_CONFIG_ARGV" in {
+        t.id
+        for node in ast.parse(_PHASES.read_text()).body
+        if isinstance(node, ast.Assign)
+        for t in node.targets
+        if isinstance(t, ast.Name)
+    }
