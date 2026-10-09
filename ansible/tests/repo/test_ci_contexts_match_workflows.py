@@ -14,31 +14,43 @@ have held. So the two sets must be EQUAL, not merely overlapping.
 Run: uv run pytest ansible/tests/repo/test_ci_contexts_match_workflows.py
 """
 
-import re
+from lib import yaml_fast
 from _helpers import REPO
 
 
 import await_ci
 
-# Job-level `name:` keys sit at four spaces under `jobs:`. Matching that depth rather than
-# any `name:` keeps step names (six spaces, and far more numerous) out of the set.
-_JOB_NAME = re.compile(r"^\s{4}name:\s*(.+?)\s*$", re.M)
-
 
 def _workflow_job_names() -> set[str]:
-    text = (REPO / ".github" / "workflows" / "ci.yml").read_text()
-    return set(_JOB_NAME.findall(text))
+    """The check-run name of every job in ci.yml: its `name:`, or its id when it has none.
+
+    Read from the parsed workflow, so a step's `name:` can never enter the set however the
+    file is indented (#3663).
+    """
+    jobs = yaml_fast.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())[
+        "jobs"
+    ]
+    return {str(job.get("name", job_id)) for job_id, job in jobs.items()}
 
 
 def _deployer_contexts() -> set[str]:
     """The deployer's own gate, read from the YAML defaults rather than from config.env --
     that file is rendered, root-owned, and only exists on daniel-box."""
-    text = (
-        REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "defaults" / "main.yml"
-    ).read_text()
-    block = re.search(r"^gitops_deploy_ci_contexts:\s*\n((?:\s*-\s.+\n)+)", text, re.M)
-    assert block, "gitops_deploy_ci_contexts is not a literal list in defaults/main.yml"
-    return {line.strip().lstrip("-").strip() for line in block.group(1).splitlines()}
+    contexts = yaml_fast.safe_load(
+        (
+            REPO
+            / "ansible"
+            / "roles"
+            / "setup"
+            / "gitops_deploy"
+            / "defaults"
+            / "main.yml"
+        ).read_text()
+    ).get("gitops_deploy_ci_contexts")
+    assert isinstance(contexts, list), (
+        "gitops_deploy_ci_contexts is not a literal list in defaults/main.yml"
+    )
+    return {str(c) for c in contexts}
 
 
 def test_await_ci_requires_exactly_what_the_deployer_requires():

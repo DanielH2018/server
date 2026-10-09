@@ -23,49 +23,68 @@ directions are deliberately asymmetric and the safe one was chosen on evidence:
     That one was actually observed (the otel collector kept serving a stale config), and is the
     reason these rollout tasks exist at all.
 
+The guard reads each task file PARSED rather than as lines (#3663). The line reading exempted
+the ten lines after `register: manifests_apply` as a stand-in for that task's `changed_when`,
+so a consumer added within those ten lines passed, and a comment naming the register read as
+an offender. A parsed task has the `changed_when` key itself.
+
 Run: uv run pytest ansible/tests/deploy/test_manifests_apply_guarded.py
 """
 
 import re
+
+from lib import yaml_fast
 from _helpers import ROLES
 
-
-# The task that registers it evaluates `.stdout` in its own changed_when, where the command has
-# by definition just run. Guarding that one would hide a genuine failure rather than survive one.
-REGISTERING_ROLE = ROLES / "k8s" / "manifests" / "tasks" / "main.yml"
+REGISTER = "manifests_apply"
 
 # Any `.stdout` access on manifests_apply that is NOT already piped through a default filter.
 UNGUARDED = re.compile(r"manifests_apply\.stdout(?!\s*\|\s*default)")
+GUARDED = re.compile(r"manifests_apply\.stdout\s*\|\s*default")
 
 
 def _yaml_sources():
     return sorted(p for p in ROLES.rglob("*.yml") if "archive" not in p.parts)
 
 
-def _own_changed_when_lines(text: str) -> range:
-    """Line numbers belonging to the registering task's own `changed_when` expression.
+def _expressions(node, task: str = "<file>", exempt: bool = True):
+    """(task name, string) for every string value under `node`, minus one exempt expression.
 
-    That expression is the one legitimate bare read — the command has by definition just run,
-    so guarding it would hide a genuine failure instead of surviving one. It is a folded block
-    spanning several lines, so this exempts the block rather than a single line.
+    The exempt one is the `changed_when` of the task that registers `manifests_apply`: there
+    the command has by definition just run, so guarding it would hide a genuine failure rather
+    than survive one. `exempt=False` yields that expression too, for the census that proves
+    the exemption still has a subject.
     """
-    for i, line in enumerate(text.splitlines()):
-        if line.strip() == "register: manifests_apply":
-            return range(i + 1, i + 11)
-    raise AssertionError("k8s/manifests no longer registers manifests_apply")
+    if isinstance(node, dict):
+        task = str(node.get("name", task))
+        registers = exempt and node.get("register") == REGISTER
+        for key, value in node.items():
+            if not (registers and key == "changed_when"):
+                yield from _expressions(value, task, exempt)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _expressions(item, task, exempt)
+    elif isinstance(node, str):
+        yield task, node
+
+
+def unguarded_reads(text: str) -> list[str]:
+    """The names of the tasks in one YAML file that read `manifests_apply.stdout` bare."""
+    return [
+        task
+        for doc in yaml_fast.safe_load_all(text)
+        for task, expr in _expressions(doc)
+        if UNGUARDED.search(expr)
+    ]
 
 
 def test_every_consumer_tolerates_an_absent_register() -> None:
     """No rollout condition may read `.stdout` bare."""
-    offenders = []
-    for path in _yaml_sources():
-        text = path.read_text()
-        exempt = _own_changed_when_lines(text) if path == REGISTERING_ROLE else range(0)
-        for num, line in enumerate(text.splitlines(), 1):
-            if not UNGUARDED.search(line) or num in exempt:
-                continue
-            offenders.append(f"{path.relative_to(ROLES.parent)}:{num}: {line.strip()}")
-
+    offenders = [
+        f"{path.relative_to(ROLES.parent)}: task {task!r}"
+        for path in _yaml_sources()
+        for task in unguarded_reads(path.read_text())
+    ]
     assert not offenders, (
         "These read `manifests_apply.stdout` without `| default('')`, so a run that reaches "
         "them with the register absent fails the deploy at the wrong task instead of "
@@ -74,12 +93,59 @@ def test_every_consumer_tolerates_an_absent_register() -> None:
 
 
 def test_the_guard_is_actually_present_somewhere() -> None:
-    """Control: if the expression were renamed away entirely, the test above passes vacuously."""
-    guarded = sum(
-        len(re.findall(r"manifests_apply\.stdout\s*\|\s*default", p.read_text()))
-        for p in _yaml_sources()
-    )
+    """Control: the exemption and the guarded reads both still have a subject.
+
+    If the expression were renamed away entirely, the test above would pass vacuously. If the
+    registering task stopped reading `.stdout` in its own `changed_when`, the exemption would
+    be dead weight that could later hide a real consumer.
+    """
+    guarded = 0
+    exempted = 0
+    for path in _yaml_sources():
+        for doc in yaml_fast.safe_load_all(path.read_text()):
+            guarded += sum(len(GUARDED.findall(e)) for _, e in _expressions(doc))
+            every = sum(
+                len(UNGUARDED.findall(e)) for _, e in _expressions(doc, exempt=False)
+            )
+            exempted += every - sum(
+                len(UNGUARDED.findall(e)) for _, e in _expressions(doc)
+            )
     assert guarded >= 4, (
         f"expected at least the four known rollout consumers to carry the guard, found {guarded} "
         "— if a consumer was removed on purpose, lower this number deliberately"
+    )
+    assert exempted >= 1, (
+        "no task that registers manifests_apply reads its .stdout in its own changed_when, so "
+        "the exemption in `_expressions` no longer has a subject: delete it"
+    )
+
+
+def test_a_bare_consumer_is_flagged() -> None:
+    assert unguarded_reads(
+        "- name: Restart\n  when: \"'created' in manifests_apply.stdout\"\n"
+    ) == ["Restart"]
+
+
+def test_a_bare_read_in_the_registering_task_outside_changed_when_is_flagged() -> None:
+    """The exemption is one key of one task, not the whole task the line reading spanned."""
+    assert unguarded_reads(
+        "- name: Apply\n"
+        "  register: manifests_apply\n"
+        "  changed_when: \"'created' in manifests_apply.stdout\"\n"
+        "  failed_when: \"'error' in manifests_apply.stdout\"\n"
+    ) == ["Apply"]
+
+
+def test_a_guarded_consumer_and_the_own_changed_when_are_clean() -> None:
+    assert (
+        unguarded_reads(
+            "- name: Apply\n"
+            "  register: manifests_apply\n"
+            "  changed_when: >-\n"
+            "    'created' in manifests_apply.stdout\n"
+            "# A comment naming manifests_apply.stdout is not an expression.\n"
+            "- name: Restart\n"
+            "  when: not (manifests_apply.stdout | default('')) is search('created')\n"
+        )
+        == []
     )

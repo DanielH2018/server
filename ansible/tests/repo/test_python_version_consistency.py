@@ -12,6 +12,9 @@ full literal moves through Renovate. A workflow pin on a different minor still f
 """
 
 import re
+import tomllib
+
+from lib import yaml_fast
 from _helpers import REPO
 
 
@@ -25,17 +28,31 @@ def _canonical():
 
 
 def _requires_python_floor():
-    m = re.search(
-        r'requires-python\s*=\s*"[>=~ ]*([0-9]+\.[0-9]+)', PYPROJECT.read_text()
-    )
+    spec = tomllib.loads(PYPROJECT.read_text())["project"].get("requires-python", "")
+    m = re.match(r"[>=~ ]*([0-9]+\.[0-9]+)", spec)
     return m.group(1) if m else None
+
+
+def workflow_pins(name: str, text: str) -> list[tuple[str, str]]:
+    """(workflow, pin) for every setup step's `python-version:` in one parsed workflow.
+
+    Read as YAML rather than matched as a quoted string (#3663): an unquoted
+    `python-version: 3.14` parses as the float 3.14, which the old pattern skipped and this
+    reads as the two-part pin it is.
+    """
+    return [
+        (name, str(step["with"]["python-version"]))
+        for job in (yaml_fast.safe_load(text).get("jobs") or {}).values()
+        for step in job.get("steps") or []
+        if "python-version" in (step.get("with") or {})
+    ]
 
 
 def _workflow_pins():
     return [
-        (wf.name, v)
+        pin
         for wf in sorted(WORKFLOWS.glob("*.yml"))
-        for v in re.findall(r'python-version:\s*"([0-9.]+)"', wf.read_text())
+        for pin in workflow_pins(wf.name, wf.read_text())
     ]
 
 
@@ -77,3 +94,9 @@ def test_ci_workflows_pin_a_full_patch_release():
         f"two-part python-version pins {short} — setup-python resolves the patch from the "
         f"runner's toolcache that day; pin the full release so it moves only through Renovate"
     )
+
+
+def test_an_unquoted_two_part_pin_is_read_as_one():
+    """The case the quoted-string pattern skipped: YAML reads `3.14` bare as a float."""
+    text = "jobs:\n  t:\n    steps:\n      - uses: actions/setup-python@v6\n        with:\n          python-version: 3.14\n"
+    assert workflow_pins("ci.yml", text) == [("ci.yml", "3.14")]
