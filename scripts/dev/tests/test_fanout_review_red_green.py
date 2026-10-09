@@ -132,6 +132,9 @@ def test_a_red_batchs_implementer_loads_no_settings_file_the_red_author_could_wr
     prompt = argv[argv.index("--append-system-prompt") + 1]
     assert prompt.startswith(pipeline.headless_prompt)
     assert prompt.endswith("CLAUDE.MD AT START")
+    # The fix, land and file phases resume that session, whose transcript lacks CLAUDE.md.
+    resumed = pipeline._resume()
+    assert resumed[resumed.index("--append-system-prompt") + 1] == prompt
 
 
 def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path):

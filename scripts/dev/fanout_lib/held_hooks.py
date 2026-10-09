@@ -12,9 +12,9 @@ review-delta, land, file) runs with `--setting-sources user`. Another repo's bat
 project settings: the pipeline holds no copy of that repo's hooks, so dropping the source would
 drop its guards. A probe on 2026-10-09 showed that the flag also drops the project `CLAUDE.md`
 and the project skills from a fresh session. A resumed session already holds `CLAUDE.md` in its
-transcript, and the land text carries the whole `land.sh` command. The reviewer is a fresh
-session, so the pipeline appends the `CLAUDE.md` it read at start to the review prompt
-(#3825). The reviewer loses the project skills and `.claude/rules/`; it reads files rather
+transcript, except a red batch's, which gets the start-time copy again (below). The land text
+carries the whole `land.sh` command. The reviewer is a fresh session, so the pipeline appends
+the `CLAUDE.md` it read at start to the review prompt (#3825). The reviewer loses the project skills and `.claude/rules/`; it reads files rather
 than following a procedure, and its prompt names the role `CLAUDE.md` files to check.
 
 DECIDED: the implement phase keeps the project source only when no red phase ran before it.
@@ -23,7 +23,7 @@ and a fresh implementer needs the project skills and `.claude/rules/`. After a r
 red author has had the worktree, and the red gate reads only the tracked range `base..red`. An
 ignored `.claude/settings.local.json`, a hook edit hidden with `--skip-worktree` or a planted
 `.pyc` is outside that range (#3846). That implement phase therefore runs on the held settings
-and gets the start-time `CLAUDE.md` as text. Like the reviewer, it loses the project skills and
+and gets the start-time `CLAUDE.md` as text, and so does every phase that resumes it. Like the reviewer, it loses the project skills and
 rules.
 
 `block-protected-bash` derives its secret-bearing host paths from the session's cwd, which is

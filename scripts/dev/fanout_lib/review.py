@@ -387,13 +387,20 @@ class Pipeline:
         """
         if not self.red_green:
             return self._implementer()
-        prompt = ""
-        if self.project_claude_md:
-            prompt = (
-                "\n\n# The repo's CLAUDE.md, as it stood before the red phase ran\n\n"
-                + self.project_claude_md
-            )
-        return self._implementer(self._held_settings(), prompt)
+        return self._implementer(self._held_settings(), self._red_claude_md())
+
+    def _red_claude_md(self) -> str:
+        """The start-time `CLAUDE.md` a red batch's implementer session gets as text.
+
+        That session never loaded the project source, so its transcript holds no `CLAUDE.md`,
+        and `--resume` keeps no appended system prompt: every resumed phase passes it again.
+        """
+        if not (self.red_green and self.project_claude_md):
+            return ""
+        return (
+            "\n\n# The repo's CLAUDE.md, as it stood before the red phase ran\n\n"
+            + self.project_claude_md
+        )
 
     def _red_author(self) -> list[str]:
         return [
@@ -444,7 +451,8 @@ class Pipeline:
         return reason
 
     def _resume(self) -> list[str]:
-        return [*self._implementer(self._held_settings()), "--resume", self.session]
+        held = self._implementer(self._held_settings(), self._red_claude_md())
+        return [*held, "--resume", self.session]
 
     def _reviewer(self) -> list[str]:
         prompt = self.review_prompt
