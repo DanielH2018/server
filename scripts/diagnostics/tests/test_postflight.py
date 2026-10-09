@@ -337,10 +337,33 @@ def test_kuma_drift_reads_its_constants_from_the_module_that_holds_them(monkeypa
     assert isinstance(detail, str)
 
 
-def _drift_over(monkeypatch, declared, live, pod_age=lambda cluster: 99999):
+def test_the_drift_check_reports_a_long_interval_tile_kuma_never_created(monkeypatch):
+    """Postflight passes the status-page census too, not only `probe.py kuma-drift` (#4005).
+
+    A week-long tile inside its interval after a restart read as pending here as well.
+    """
+    declared = {
+        "Homelab Evals": {
+            "type": "push",
+            "interval": 626400,
+            "gated": False,
+            "gate": None,
+        }
+    }
+    status, detail = _drift_over(
+        monkeypatch, declared, set(), pod_age=lambda c: 3600, created=set()
+    )
+    assert status == postflight.FAIL
+    assert "Homelab Evals: declared, absent from Kuma's status page" in detail
+
+
+def _drift_over(
+    monkeypatch, declared, live, pod_age=lambda cluster: 99999, created=None
+):
     """Drive check_kuma_drift with `declared` against a live set, returning (status, detail).
 
-    `pod_age` stands in for `monitors.kuma_pod_age_seconds`, so it takes the cluster.
+    `pod_age` stands in for `kuma_live.pod_age_seconds`, so it takes the cluster.
+    `created` stands in for the status-page census, and defaults to every declared name.
     """
     body = json.dumps(
         {
@@ -351,8 +374,13 @@ def _drift_over(monkeypatch, declared, live, pod_age=lambda cluster: 99999):
             }
         }
     )
-    respond(monkeypatch, 200, body)
-    monkeypatch.setattr(postflight.monitors, "kuma_pod_age_seconds", pod_age)
+    held = [{"name": n} for n in (set(declared) if created is None else created)]
+    page = json.dumps({"publicGroupList": [{"monitorList": held}]})
+    respond(
+        monkeypatch,
+        lambda url, **kw: (200, page if "/api/status-page/" in url else body),
+    )
+    monkeypatch.setattr(postflight.kuma_live, "pod_age_seconds", pod_age)
     # STATIC_MONITORS_PATH is left alone: the real declaration file is tracked, and the parse
     # is patched anyway, so the only thing it supplies here is bytes to read.
     monkeypatch.setattr(

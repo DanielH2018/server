@@ -41,6 +41,7 @@ def test_an_and_gate_with_a_false_flag_is_gated_off_is_clean():
             set(),
             86400 * 3,
             gate_states={RENOVATE_GATE[0]: token_state, RENOVATE_GATE[1]: False},
+            created=set(declared),
         )
         assert code == 0, text
         assert (
@@ -63,6 +64,7 @@ def test_an_and_gate_with_every_conjunct_true_is_flagged():
         set(),
         86400 * 3,
         gate_states={RENOVATE_GATE[0]: True, RENOVATE_GATE[1]: True},
+        created=set(declared),
     )
     assert code == 1
     assert f"{RENOVATE_TILE}: declared, not live" in text
@@ -95,7 +97,9 @@ def test_a_disarmed_renovate_agent_is_listed_as_gated_not_missing(monkeypatch):
     declared = monitors.parse_declared_monitors(REAL_STATIC_MONITORS_TEXT)
     live = set(declared) - {RENOVATE_TILE}
     gate_states = monitors.resolve_gate_states(declared, live, no_secrets=True)
-    text, code = monitors.format_kuma_drift(declared, live, 86400 * 3, gate_states)
+    text, code = monitors.format_kuma_drift(
+        declared, live, 86400 * 3, gate_states, created=set(declared)
+    )
     assert code == 0, text
     assert f"skipped: {RENOVATE_TILE}" in text
     assert f"{RENOVATE_TILE}: declared, not live" not in text

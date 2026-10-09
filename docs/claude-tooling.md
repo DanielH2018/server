@@ -115,6 +115,18 @@ inventory variable, the UPS tiles' arithmetic) against the role's real render co
 are classified by their interval like a literal one — until 2026-09-18 they parsed as None and
 could only ever read as missing (#2019).
 
+Pending applies only to a monitor Kuma holds. `kuma-drift` reads which monitors exist from Kuma's
+public status page, which `kuma-status-page-sync` keeps listing every declared monitor. A
+declared name absent from that page is missing once Kuma has been up for one sync period plus
+the sync job's deadline, 1700s, whatever the tile's interval (#4005). A deploy that adds a tile
+restarts Kuma, so before that bound a new tile is absent from the page legitimately. Without the page, a
+weekly tile AutoKuma refused stayed pending forever, because the weekly reboot restarts Kuma
+before the tile's interval elapses. Absent from the page means never created, or added since the
+sync last succeeded. The sync runs every 15 minutes, and it fails while any declared tile is
+missing from Kuma, so one refused tile also leaves every tile added after it off the page. An
+unreadable page keeps the tiles pending and prints a line saying their existence went
+unverified.
+
 ### The Pi's own first-command triage
 
 daniel-pi runs no kubelet, so `targets`, `kuma-drift`, `alerts` and `health --docker` each need
