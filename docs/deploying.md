@@ -54,6 +54,10 @@ The four waiters are pinned by the census in
 waiter has to join. `deploy_under_locks.py:TREE_LOCK_HOLDERS` prints this list to a deploy
 that could not take the lock.
 
+The three crons take the lock through one Jinja macro,
+`ansible/roles/setup/initial_setup/templates/git-tree-lock.j2`, which owns the wait and the
+alert a skip raises.
+
 ## Exit codes are resume points
 
 Each non-zero exit in `DEPLOY_SH_NO_VERDICT` means **nothing was deployed**. None is a

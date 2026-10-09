@@ -420,6 +420,7 @@
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2
       - ansible/roles/setup/initial_setup/templates/secret-rotation-audit.sh.j2
+      - ansible/roles/setup/initial_setup/templates/git-tree-lock.j2
 
 # kuma-push-lib.sh is sourced by EVERY health cron on every host, with a `|| exit 1` guard — so a
 # stale copy silently changes how every heartbeat pushes. `tags: [always]`, matching the copy task it records: this fragment must
@@ -725,6 +726,7 @@
     stamp_render_name: docs-refresh
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2
+      - ansible/roles/setup/initial_setup/templates/git-tree-lock.j2
 
 - name: Create the eval-run state directory (box only)
   tags: [crons, evals]
@@ -793,3 +795,4 @@
     stamp_render_name: eval-run
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/eval-run.sh.j2
+      - ansible/roles/setup/initial_setup/templates/git-tree-lock.j2

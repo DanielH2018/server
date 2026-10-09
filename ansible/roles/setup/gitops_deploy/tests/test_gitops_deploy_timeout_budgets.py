@@ -26,6 +26,7 @@ import yaml
 from lib.repo_paths import REPO as _REPO
 
 from _helpers import manifests_rollout_timeout_s
+from _shell_render import rendered_shell_text
 from _role_tasks import in_role_wait_s
 
 # Each phase budget is measured from the moment its phase starts, which is AFTER flock acquires,
@@ -136,6 +137,9 @@ _SECRET_ROTATE = _INITIAL_SETUP_TEMPLATES / "secret-rotate.sh.j2"
 
 # Every job that waits for the git-tree lock, with the regex that reads its wait.
 #
+# The three cron templates are read RENDERED: their wait lives in git-tree-lock.j2, the macro
+# each one imports (#3722), so the template source no longer holds the number at all.
+#
 # WHY A CENSUS AND NOT ONE TEST EACH. A per-consumer test only covers the consumers somebody
 # remembered to write one for. This table is the thing a new waiter has to be added to, and the
 # non-vacuity test below is what makes forgetting fail rather than pass silently.
@@ -173,6 +177,13 @@ def test_the_lock_waiter_census_is_non_vacuous():
         )
 
 
+def _waiter_text(path: pathlib.Path) -> str:
+    # What ships: a template is read as its render, a Python module as its source.
+    if path.suffix == ".j2":
+        return rendered_shell_text("setup", "initial_setup", path.name)
+    return path.read_text()
+
+
 @pytest.mark.parametrize("name", sorted(_LOCK_WAITERS))
 def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     # gitops-deploy.service wraps its whole ExecStart in the git-tree lock, and one
@@ -189,7 +200,7 @@ def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     defaults = yaml.safe_load(_DEFAULTS.read_text())
     worst_hold = _worst_lock_hold(defaults)
 
-    wait = int(_search1(pattern, path.read_text()))
+    wait = int(_search1(pattern, _waiter_text(path)))
     assert wait >= worst_hold, (
         f"{name}'s git-tree lock wait of {wait}s must clear gitops-deploy's worst-case lock "
         f"hold ({worst_hold}s: K8S_DEPLOY_TIMEOUT_S then K8S_ROLLBACK_TIMEOUT_S), or a "
