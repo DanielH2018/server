@@ -81,7 +81,8 @@ version with a local `plugins-local/` tree: a Yaegi error appears only at Traefi
 ## What each CrowdSec init container works around
 
 Three init containers run before the agent and bouncer sidecars, and their order is
-load-bearing.
+load-bearing. The authelia pod runs the same three ahead of its own agent: both pods render
+them, the agent and their volumes from `ansible/templates/crowdsec-agent.yml.j2` (#3741).
 
 1. **The hub-tree rsync** stages the CrowdSec image's bundled hub into `/etc/crowdsec`, owned
    by the pod uid, and runs **before** the config seed. That rsync runs as the pod's own uid
@@ -95,5 +96,5 @@ load-bearing.
 3. **The datafile copy** puts the image's bundled datafiles into the agent's data volume
    world-readable. The image ships them `0600 root:root` and its entrypoint symlinks rather
    than copies them, so the non-root sidecar could not read through the link and GeoIP never
-   initialised. This container is the role's only `runAsUser: 0`, and it reaches nothing but
-   that volume.
+   initialised. It and the hub-tree rsync are the pod's two `runAsUser: 0` containers, and
+   this one reaches nothing but that volume.

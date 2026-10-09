@@ -140,6 +140,11 @@ TEMPLATE_SOURCE_READERS = {
         "beside the call; both render the same Deployment, so only the source tells them "
         "apart. The macro's body itself is checked on the render"
     ),
+    "k8s/test_crowdsec_agent_sidecar_shares_one_macro.py": (
+        "whether traefik's and authelia's templates CALL the shared CrowdSec agent macros or "
+        "write a container or volume out beside them; both render the same pod, so only the "
+        "source tells them apart. The map the macros read is checked on the render"
+    ),
     "k8s/test_shared_manifest_defaults.py": (
         "whether two roles ship BYTE-IDENTICAL templates the shared default should replace; "
         "each renders with its own `container_item`, so two identical sources render "

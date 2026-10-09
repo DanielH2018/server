@@ -101,7 +101,9 @@ Four CrowdSec containers run here and one job in
 plus AppSec), `crowdsec-node-agents` (the DaemonSet), `crowdsec-traefik-agent` and
 `crowdsec-authelia-agent` (the two sidecars). The `crowdsec` job renders from the `metrics`
 item on this role's `containers_list` entry, which is also where the engine's `:6060` is
-defined; the other three are hand-written in the template.
+defined. The sidecar jobs render one per entry of
+`ansible/inventory/group_vars/all.yml:crowdsec_k8s_sidecar_agents`, which this role's
+registration loop also reads; `crowdsec-node-agents` is hand-written.
 
 Read the job before writing a CrowdSec query: `node` is not a CrowdSec label and only the
 DaemonSet job attaches one, so a per-node selector on an engine or sidecar metric matches nothing

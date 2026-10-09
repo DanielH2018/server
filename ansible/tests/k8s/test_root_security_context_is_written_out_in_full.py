@@ -1,8 +1,9 @@
 """Convention guard: a root securityContext is written out in full, never built by the macro.
 
 WHY THIS EXISTS. `ansible/templates/security-context.yml.j2` documents that it is not for
-`runAsUser: 0`, and the fleet's six root sites (code-server, loki-homelab, and the four CrowdSec
-seeding init containers in authelia and traefik) stay written out in full. This file is what
+`runAsUser: 0`, and the fleet's root sites (code-server, loki-homelab, and the two CrowdSec
+seeding init containers in `ansible/templates/crowdsec-agent.yml.j2`, which authelia and traefik
+both render) stay written out in full. This file is what
 stops that convention from being a comment nobody reads — it is the executable half.
 
 The convention is about READABILITY, not about what the cluster admits. Each root site needs a
@@ -35,7 +36,7 @@ import re
 from pathlib import Path
 
 
-from _helpers import K8S_ROLES, REPO
+from _helpers import ANSIBLE, K8S_ROLES, REPO
 
 # `run_as_user=0` anywhere in a hardened_security_context() call, tolerant of whitespace and of
 # whichever other arguments sit around it. Deliberately textual, matching the guard it protects.
@@ -45,15 +46,14 @@ _ROOT_CALL = re.compile(
 
 _MACRO_CALL = re.compile(r"hardened_security_context\s*\(")
 
-# Templates the glob must still reach: the four holding a root site, which are the conversions
-# this rule exists to refuse, and two ordinary macro callers. A census that stopped matching
-# returns an empty corpus, and a scan over nothing passes.
+# Templates the glob must still reach: the three holding a root site, which are the conversions
+# this rule exists to refuse. A census that stopped matching returns an empty corpus, and a scan
+# over nothing passes.
 _KNOWN_MEMBERS = frozenset(
     {
-        "authelia/templates/deployment.yaml.j2",
-        "code-server/templates/deployment.yaml.j2",
-        "loki-homelab/templates/alloy-daemonset.yaml.j2",
-        "traefik/templates/deployment.yaml.j2",
+        "roles/k8s/code-server/templates/deployment.yaml.j2",
+        "roles/k8s/loki-homelab/templates/alloy-daemonset.yaml.j2",
+        "templates/crowdsec-agent.yml.j2",
     }
 )
 
@@ -63,9 +63,10 @@ _MACRO_CALL_SITE_FLOOR = 50
 
 
 def _manifest_files() -> list[Path]:
+    """Every k8s role template, plus the shared macros in ansible/templates/ they import."""
     return sorted(
         p for p in K8S_ROLES.rglob("templates/*.j2") if "archive" not in p.parts
-    )
+    ) + sorted((ANSIBLE / "templates").glob("*.j2"))
 
 
 def root_via_macro(text: str) -> list[int]:
@@ -92,10 +93,10 @@ def test_the_scanned_corpus_still_holds_the_macro_call_sites() -> None:
     """Non-vacuity: the glob reaches the root sites, and the fleet still calls the macro.
 
     The rule above expects zero matches, so an empty or narrowed corpus reads exactly like a
-    clean tree. This names the four templates a conversion would most likely happen in, and
+    clean tree. This names the three templates a conversion would most likely happen in, and
     floors the number of call sites the rule has to scan.
     """
-    corpus = {str(p.relative_to(K8S_ROLES)) for p in _manifest_files()}
+    corpus = {str(p.relative_to(ANSIBLE)) for p in _manifest_files()}
     missing = sorted(_KNOWN_MEMBERS - corpus)
     assert not missing, (
         "the template glob no longer reaches these root-site templates, so a macro call added "

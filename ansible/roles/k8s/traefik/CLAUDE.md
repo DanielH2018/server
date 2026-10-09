@@ -90,8 +90,10 @@ origin-pull, the 421 incidents).
   the hub-tree rsync runs before the config seed, or the agent drops `geoip-enrich` on every
   start (#1211). The second seeds the bouncer's config (`traefik_k8s_manage_crowdsec`), which
   is why traefik's `containers_list` entry declares `depends_on: [crowdsec]`. The third copies
-  the image's datafiles world-readable and is the role's only `runAsUser: 0`, reaching nothing
-  but that volume. `docs/traefik-plugins-and-startup.md` has what each one is working around.
+  the image's datafiles world-readable; it and the first are the pod's two `runAsUser: 0`
+  containers. All three and the agent sidecar render from `ansible/templates/crowdsec-agent.yml.j2`,
+  which authelia's pod shares. `docs/traefik-plugins-and-startup.md` has what each one is
+  working around.
 - Ports are unprivileged inside the pod (`8000`/`8443`/`8082`); the Service maps the
   public `80`/`443` to them, avoiding `NET_BIND_SERVICE`. `runAsUser` is pinned to
   `traefik_k8s_uid` (65532).

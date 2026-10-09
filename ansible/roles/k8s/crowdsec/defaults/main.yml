@@ -1,11 +1,11 @@
 ---
 # The in-cluster CrowdSec engine: LAPI + AppSec + the decision DB.
-# Log-parsing agents live NEXT TO the logs, not here: the k8s traefik pod carries a
-# tailing sidecar (roles/k8s/traefik), and the node-agent DaemonSet below reads each node's
+# Log-parsing agents live NEXT TO the logs, not here: the traefik and authelia pods each carry
+# a tailing sidecar (ansible/templates/crowdsec-agent.yml.j2), and the node-agent DaemonSet below reads each node's
 # auth.log.
 
-# crowdsec_k8s_image / crowdsec_k8s_agent_username / crowdsec_k8s_lapi_port /
-# crowdsec_k8s_appsec_port live in group_vars/all.yml — the traefik role's sidecar and
+# crowdsec_k8s_image / crowdsec_k8s_sidecar_agents / crowdsec_k8s_lapi_port /
+# crowdsec_k8s_appsec_port live in group_vars/all.yml — the app pods' sidecars and traefik's
 # bouncer middleware consume them too, and role defaults are invisible across roles.
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -39,8 +39,8 @@ crowdsec_k8s_collections: >-
   crowdsecurity/appsec-generic-rules
 
 # The engine pod's own in-pod agent registers itself via the image entrypoint under this
-# name; the traefik-sidecar machine ({{ crowdsec_k8s_agent_username }} from group_vars) is
-# registered by this role's post-deploy task. Both use SOPS crowdsec_k8s_agent_password.
+# name; the app-sidecar machines (crowdsec_k8s_sidecar_agents in group_vars) are
+# registered by this role's post-deploy task. All use SOPS crowdsec_k8s_agent_password.
 crowdsec_k8s_engine_machine: engine-local
 
 crowdsec_k8s_cpu_limit: "1"
