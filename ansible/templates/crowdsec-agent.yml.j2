@@ -96,9 +96,8 @@
               chmod -R a+rX,u+w /etc/crowdsec/hub ||
               echo "hub stage incomplete" >&2;
               exit 0
-          # Root, written out rather than built through hardened_security_context() — the macro
-          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
-          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
+          # Root, written out rather than built through hardened_security_context(), which by
+          # convention is never handed uid 0 (see that macro's header). DAC_READ_SEARCH is the read-only half of root's
           # permission-bit override, which is what reaches the root-only staged hub tree. CHOWN
           # is what lets root give the copy away: with ALL dropped, root cannot chown even its
           # own files. No write capability is needed because this runs first: /etc/crowdsec is
@@ -206,9 +205,8 @@
               install -m 644 "$f" /var/lib/crowdsec/data/ ||
               echo "skipped ${f##*/}" >&2;
               done; exit 0
-          # Root, written out rather than built through hardened_security_context() — the macro
-          # refuses uid 0 so that ansible/tests/k8s/test_root_needs_dac_capability.py can still
-          # see this block in raw template text. DAC_READ_SEARCH is the read-only half of root's
+          # Root, written out rather than built through hardened_security_context(), which by
+          # convention is never handed uid 0 (see that macro's header). DAC_READ_SEARCH is the read-only half of root's
           # permission-bit override: it covers the 0600 sources however the image later owns
           # them. Writing needs no DAC_OVERRIDE, since the emptyDir is root-owned and empty
           # until this container runs.

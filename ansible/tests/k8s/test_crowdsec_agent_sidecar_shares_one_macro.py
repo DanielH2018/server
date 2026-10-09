@@ -77,7 +77,7 @@ def test_a_written_out_copy_is_flagged():
     assert "`crowdsec-etc` written out instead of the macro" in offences
 
 
-def test_a_bare_call_passes():
+def test_a_bare_call_is_clean():
     text = (
         "{% from 'crowdsec-agent.yml.j2' import crowdsec_agent_init_containers, "
         "crowdsec_agent_sidecar, crowdsec_agent_volumes with context %}\n"
