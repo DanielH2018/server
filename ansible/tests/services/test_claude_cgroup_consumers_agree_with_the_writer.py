@@ -117,6 +117,13 @@ def test_the_alert_arm_selects_only_emitted_metrics():
     } <= used
 
 
+def test_the_retired_uid_arm_selects_the_series_the_writer_emits():
+    """Slice 6's series sits outside the `claude_cgroup_` prefix, so it gets its own pin."""
+    name = "claude_uid_processes"
+    assert re.search(r"printf 'claude_uid_processes\{uid=", WRITER.read_text())
+    assert re.search(name + r"\{", ARM.read_text())
+
+
 def test_the_board_selects_only_emitted_metrics_and_graphs_every_family():
     """Every family is graphed somewhere on the board — that is the point of the board.
 

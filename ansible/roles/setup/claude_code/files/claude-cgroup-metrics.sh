@@ -18,6 +18,7 @@ set -uo pipefail
 # cgroupfs; unset in production, where both default to the real paths.
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 CGROOT=${CGROOT:-/sys/fs/cgroup}
+PROCROOT=${PROCROOT:-/proc}
 OUT="$TEXTFILE_DIR/claude_cgroup.prom"
 
 # Skip silently on a host without the textfile hook (e.g. before node-exporter is deployed
@@ -106,6 +107,25 @@ trap 'rm -f "$TMP"' EXIT
     f="$CGROOT/${CGROUPS[$label]}/pids.current"
     [ -r "$f" ] && printf 'claude_cgroup_pids_current{cgroup="%s"} %s\n' "$label" "$(cat "$f")"
   done
+
+  # Slice 6 of docs/claude-agent-user.md: a uid listed in CLAUDE_WATCH_UIDS (the unit sets it
+  # from claude_code_watch_uids) must run no Claude Code. Each one gets an explicit series, 0
+  # included, so a quiet uid reads as checked rather than as absent. The real uid and the exact
+  # process name come from /proc/<pid>/status; a process that exits mid-scan is skipped.
+  if [[ -n "${CLAUDE_WATCH_UIDS:-}" ]]; then
+    printf '# HELP claude_uid_processes Processes named claude whose real uid is this watched uid.\n'
+    printf '# TYPE claude_uid_processes gauge\n'
+    counts=$(awk '
+      FNR == 1 { name = "" }
+      $1 == "Name:" { name = $2 }
+      $1 == "Uid:" && name == "claude" { n[$2]++ }
+      END { for (u in n) print u, n[u] }
+    ' "$PROCROOT"/[0-9]*/status 2>/dev/null)
+    for uid in $CLAUDE_WATCH_UIDS; do
+      n=$(awk -v u="$uid" '$1 == u { print $2 }' <<< "$counts")
+      printf 'claude_uid_processes{uid="%s"} %s\n' "$uid" "${n:-0}"
+    done
+  fi
 } > "$TMP"
 
 # 0644: node-exporter's container reads this as its own (non-root) user, same as the

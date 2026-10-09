@@ -241,6 +241,12 @@ def with_claude_cgroups(
         'sum by (origin, cgroup, event) (increase(claude_cgroup_memory_events_total{event=~"%s"}[%s]))'
         % (cfg.CLAUDE_CGROUP_EVENTS, cfg.CLAUDE_CGROUP_EVENT_WINDOW),
     )
+    # DECIDED: the retired-uid arm folds into this monitor too, rather than its own tile. The
+    # writer is the same script, so its absence is already arm 4's page here; and a session
+    # started as the wrong account escapes that account's cgroup caps, which this tile watches.
+    # No env knob: a host emits the series only for uids its claude_code_watch_uids lists, so
+    # an empty list there is the off switch. Slice 6 of docs/claude-agent-user.md.
+    uid_procs = src.prom_vector("max by (origin, uid) (claude_uid_processes{})")
     arm_ok, arm_msg = claude_cgroup_verdict(
         stalls,
         events,
@@ -248,6 +254,7 @@ def with_claude_cgroups(
         cfg.CLAUDE_CGROUP_STALL_MAX_PCT,
         cfg.CLAUDE_CGROUP_STALL_WINDOW,
         cfg.CLAUDE_CGROUP_EVENT_WINDOW,
+        uid_procs,
     )
     if arm_ok:
         src.state.down_streaks["claude_cgroups"] = 0

@@ -200,3 +200,60 @@ def test_output_file_is_world_readable(full_fixture: tuple[Path, Path]) -> None:
     _run(cgroot, textfile_dir)
     mode = (textfile_dir / "claude_cgroup.prom").stat().st_mode & 0o777
     assert mode == 0o644, f"expected mode 644, got {oct(mode)}"
+
+
+def _proc(procroot: Path, pid: int, name: str, uid: int) -> None:
+    """One /proc/<pid>/status in the kernel's layout: Name before Uid, real uid first."""
+    d = procroot / str(pid)
+    d.mkdir(parents=True)
+    (d / "status").write_text(
+        f"Name:\t{name}\nUmask:\t0002\nState:\tS (sleeping)\n"
+        f"Uid:\t{uid}\t{uid}\t{uid}\t{uid}\nGid:\t{uid}\t{uid}\t{uid}\t{uid}\n"
+    )
+
+
+def _run_watching(tmp_path: Path, procroot: Path, uids: str) -> str:
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir()
+    env = {
+        "CGROOT": str(tmp_path / "no-cgroup"),
+        "PROCROOT": str(procroot),
+        "TEXTFILE_DIR": str(textfile_dir),
+        "CLAUDE_WATCH_UIDS": uids,
+        "PATH": "/usr/bin:/bin",
+    }
+    result = run(["bash", str(SCRIPT)], env=env, check=False)
+    assert result.returncode == 0, result.stderr
+    return (textfile_dir / "claude_cgroup.prom").read_text()
+
+
+def test_a_watched_uid_running_claude_is_flagged(tmp_path: Path) -> None:
+    """Slice 6: a `claude` process whose real uid is watched is counted. A `claude` of another
+    uid and a non-claude process of the watched uid are not."""
+    procroot = tmp_path / "proc"
+    _proc(procroot, 10, "claude", 1000)
+    _proc(procroot, 11, "claude", 1000)
+    _proc(procroot, 12, "claude", 996)
+    _proc(procroot, 13, "bash", 1000)
+    out = _run_watching(tmp_path, procroot, "1000")
+    assert 'claude_uid_processes{uid="1000"} 2' in out, out
+
+
+def test_a_watched_uid_running_no_claude_is_clean_and_still_reported(
+    tmp_path: Path,
+) -> None:
+    """The quiet uid gets an explicit 0, so the series reads as checked rather than absent."""
+    procroot = tmp_path / "proc"
+    _proc(procroot, 12, "claude", 996)
+    _proc(procroot, 13, "claude-helper", 1000)
+    out = _run_watching(tmp_path, procroot, "1000 4242")
+    assert 'claude_uid_processes{uid="1000"} 0' in out, out
+    assert 'claude_uid_processes{uid="4242"} 0' in out, out
+
+
+def test_an_empty_watch_list_writes_no_uid_series(tmp_path: Path) -> None:
+    """The way out: on daniel-server, or any host with an empty list, nothing is judged."""
+    procroot = tmp_path / "proc"
+    _proc(procroot, 10, "claude", 1000)
+    out = _run_watching(tmp_path, procroot, "")
+    assert "claude_uid_processes" not in out, out

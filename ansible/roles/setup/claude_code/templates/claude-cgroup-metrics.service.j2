@@ -3,4 +3,5 @@ Description=Write claude-rc.service / user-1000.slice cgroup counters for node-e
 
 [Service]
 Type=oneshot
+Environment="CLAUDE_WATCH_UIDS={{ claude_code_watch_uids | join(' ') }}"
 ExecStart=/usr/local/bin/claude-cgroup-metrics.sh
