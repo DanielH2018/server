@@ -18,7 +18,7 @@ operator decided this on 2026-10-09 (#3685). See
 | 1 | A read-only `claude` user an operator can open a session as | Done 2026-10-04 (#3504, #3505) |
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
 | 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check passed 2026-10-09, after #3999 fixed the approved-PR merge. Done. |
-| 4 | The phone host `claude-rc.service` runs as `claude` | 4a to 4c deployed 2026-10-09 (#4035, #4030, #4036, #4039, #4044). 4d (#4054) switched the host over on 2026-10-09; the operator's `/login` and the check are owed. |
+| 4 | The phone host `claude-rc.service` runs as `claude` | 4a to 4c deployed 2026-10-09 (#4035, #4030, #4036, #4039, #4044). 4d (#4054) switched the host over on 2026-10-09, and it spawned its first phone session as `claude` at 19:06 UTC. The rest of the slice 4 check is owed. |
 | 5 | Peer users, and the tools that decrypt SOPS | The homelab-ui login deployed 2026-10-09 (#4051). Peer users dropped. The agent cannot yet drive homelab-ui (#4058). |
 | 6 | Retire Claude sessions as `ubuntu` | Planned |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
@@ -313,8 +313,17 @@ still opens PRs, and the operator lands them.
     claude
     ```
 
-    Run `/login`, trust the folder, then exit. Then run
-    `sudo systemctl restart claude-rc.service`, so the host reads the new login.
+    Run `/login`, trust the folder, then exit. The interactive session leaves a
+    `claude daemon run --origin transient` process behind in the login scope, and while it runs
+    the host spawns no phone session. The service stays `active` and logs nothing, so nothing
+    reports the failure. On 2026-10-09 the host started spawning only after that daemon was
+    killed, with the unit's hardening unchanged. Kill it, then restart the host:
+
+    ```bash
+    sudo pkill -u claude -f 'claude daemon run'
+    sudo systemctl restart claude-rc.service
+    ```
+
 1. Run the check below.
 
 **Read grant:** `ubuntu` reads the agent's artifacts and memory through one grant in the role.
