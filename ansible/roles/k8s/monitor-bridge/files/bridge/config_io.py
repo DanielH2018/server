@@ -256,47 +256,40 @@ def io_config(
         HEALTHCHECKS_API_KEY=_env_file("HEALTHCHECKS_API_KEY"),
         HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED")),
         HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S"),
-        # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
-        # stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
-        # regression) — a silently-dead log pipeline that quietly blinds the log dashboards and
-        # any future log forensics. Two arms, down if EITHER is silent:
-        #   arm 1 (file-tail union): count the file-tailed streams (authlog+syslog+traefik) over
-        #   a TOLERANT window (LOKI_FILETAIL_WINDOW) and go down at zero — a promtail
-        #   static_configs regression, a stale /var/log bind, or host rsyslog dying silences all
-        #   three at once (exactly what /ready can't see), while syslog's routine volume keeps
-        #   the union alive on a quiet night so no single low-volume file going quiet trips it.
-        #   The selector EXCLUDES the docker_sd stream (promtail stamps it `job: docker`, so a
-        #   bare `{job=~".+"}` would swallow it): that stream dwarfs the file-tail streams —
-        #   ~all 44 containers' stdout — so including it let a healthy docker stream MASK a total
-        #   file-tail outage (arm 1 could then only reach zero if promtail was TOTALLY dead,
-        #   which arm 2 already catches — the 2026-07-07 blind-spot review). The window is wider
-        #   than arm 2's because file-tail volume is low and dips overnight (a lone
+        # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when Alloy
+        # stops SHIPPING (a relabel regression, positions-file corruption, a stale /var/log
+        # mount) — a silently-dead log pipeline that quietly blinds the log dashboards and any
+        # future log forensics. Three arms, down if ANY is silent. Every selector is rendered in
+        # env-secret.yaml.j2 from the `loki_streams` label owner in group_vars/all.yml.
+        #   arm 1 (cluster file-tail union): count the cluster hosts' authlog+syslog streams over
+        #   a TOLERANT window (LOKI_FILETAIL_WINDOW) and go down at zero — an Alloy file-source
+        #   regression, a stale /var/log mount, or host rsyslog dying silences both at once
+        #   (exactly what /ready can't see), while syslog's routine volume keeps the union alive
+        #   on a quiet night so no single low-volume file going quiet trips it. The window is
+        #   wider than arm 2's because file-tail volume is low and dips overnight (a lone
         #   `{job="syslog"}` over 10m false-paged 2026-06-23 — this debloated host routinely
         #   idles >15m between syslog writes).
-        #   arm 2 (docker stream): count {container=~".+"} — the docker_sd stream carries a
-        #   `container` label, no `job`, so it's exactly the one arm 1 excludes. A
-        #   docker_sd-specific break (docker-proxy down, the docker relabel block regressing)
-        #   silences every container log while the file-tail streams keep flowing; a tight window
-        #   catches a total promtail death fast. Reached at loki:3100 over `monitoring`.
-        #   arm 3 (the Pi): both arms above are CLUSTER streams. daniel-pi runs its own promtail,
-        #   stamping `job="pi"` — the label LOG_ERROR_SELECTOR already knows about. Nothing
-        #   counted it, so the Pi's promtail could die with every cluster stream still flowing
-        #   and both arms green: the Pi's logs simply stop arriving and no monitor says so
-        #   (2026-08-25 review M-11). The window is the tolerant one, and for a stronger reason
-        #   than arm 1's: the Pi is a Zero 2 W running five LAN-only containers, so its log
-        #   volume is genuinely low and bursty. `machine!="daniel-pi"` is the SAME masking rule
-        #   as the docker_sd exclusion above, applied to a second source that has since started
-        #   writing into `job="syslog"`. daniel-pi's promtail now ships its two health crons'
-        #   verdict lines under that job (roles/containers/promtail, the pi-health scrape job) so
-        #   `probe.py alerts` can reconstruct a Pi episode. Those ~576 lines/day arrive from a
-        #   HOST OUTSIDE the cluster, so a total cluster file-tail outage would no longer reach
-        #   zero and arm 1 would never fire — the Pi would be holding the alert open on behalf of
-        #   the streams it knows nothing about. Loki's `!=` also matches a stream that has no
-        #   `machine` label at all, so the cluster's own authlog/syslog/traefik streams are
-        #   unaffected. The Pi's own liveness stays covered by arm 3.
+        #   The selector EXCLUDES `machine="daniel-pi"`. daniel-pi's Alloy ships its two health
+        #   crons' verdict lines under the same `job="syslog"` (roles/containers/alloy, the
+        #   pi_health source) so `probe.py alerts` can reconstruct a Pi episode. Those lines
+        #   arrive from a HOST OUTSIDE the cluster, so without the exclusion a total cluster
+        #   file-tail outage would never reach zero — the Pi would hold the alert open on behalf
+        #   of streams it knows nothing about. Loki's `!=` also matches a stream with no
+        #   `machine` label at all. Until #3739 the deployed selector lacked this filter.
+        #   arm 2 (cluster pod streams): count `job="k8s"`, the label the cluster Alloy
+        #   DaemonSet puts on every pod's stdout. A pod-source break silences every container
+        #   log while the file-tail streams keep flowing; a tight window (LOKI_WINDOW) catches a
+        #   total Alloy death fast. Not `{container=~".+"}`: the Pi's container streams carry
+        #   `container` too, and ~1900 Pi lines per 30m kept that selector non-zero through any
+        #   cluster outage (#3739).
+        #   arm 3 (the Pi): both arms above count CLUSTER streams only, so the Pi's Alloy could
+        #   die with every cluster stream flowing and both arms green (2026-08-25 review M-11).
+        #   `job="pi"` is its container stream. The window is the tolerant one, for a stronger
+        #   reason than arm 1's: the Pi is a Zero 2 W running five LAN-only containers, so its
+        #   log volume is genuinely low and bursty.
         LOKI_STREAM=_env("LOKI_STREAM"),
-        LOKI_DOCKER_STREAM=_env("LOKI_DOCKER_STREAM", '{container=~".+"}'),
-        LOKI_PI_STREAM=_env("LOKI_PI_STREAM", '{job="pi"}'),
+        LOKI_DOCKER_STREAM=_env("LOKI_DOCKER_STREAM"),
+        LOKI_PI_STREAM=_env("LOKI_PI_STREAM"),
         LOKI_WINDOW=_env("LOKI_WINDOW"),
         LOKI_FILETAIL_WINDOW=_env("LOKI_FILETAIL_WINDOW"),
         # ── log-pattern arm: a workload that is Ready and still failing ──────────────────

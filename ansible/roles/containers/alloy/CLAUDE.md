@@ -20,7 +20,10 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   `/metrics` needs basic auth (`DECIDED:` marker on `ports:` in the compose template).
 - **Sources:** container logs through docker-proxy (`job="pi"`), and
   `/var/log/pi-health/*.log` (`job="syslog"`, `machine="daniel-pi"`). The label contract is
-  guarded by `ansible/tests/services/test_alloy_pi_config_labels.py`.
+  guarded by `ansible/tests/services/test_alloy_pi_config_labels.py`. The label values render
+  from `loki_streams` in `group_vars/all.yml`, which the cluster's Alloy and monitor-bridge's
+  selectors also read; `ansible/tests/services/test_loki_stream_labels.py` holds the consumers
+  to it.
 - **Config in:** `templates/config.alloy.j2` (River) and `templates/docker-compose.yml.j2`
   (the GOMEMLIMIT/GOGC/GOMAXPROCS sizing, with the measurements behind each value).
 

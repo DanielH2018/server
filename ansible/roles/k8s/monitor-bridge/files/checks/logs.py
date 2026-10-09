@@ -29,18 +29,14 @@ from verdicts.logs import (
 def check_loki_ingestion(cfg: Config) -> tuple[bool, str]:
     """Checks that all three Loki ingestion arms (file-tail, container stream, Pi) are fresh.
 
-    Down if any arm is silent: the file-tail union, the docker-stream arm (a
-    docker_sd-specific break the file-tail selector excludes), and the Pi's own stream
-    (uncounted by the other two, so a dead Pi promtail would otherwise be invisible).
-    Returns (ok, msg).
+    Down if any arm is silent: the cluster file-tail union, the cluster pod streams, and the
+    Pi's container stream (uncounted by the other two, so a dead Pi Alloy would otherwise be
+    invisible). Returns (ok, msg).
     """
-    # Two arms, down if EITHER pipeline is silent: the file-tail union (arm 1) catches a
-    # file-tail break (all of authlog/syslog/traefik going silent — a total promtail death or
-    # a static_configs/bind regression) over a tolerant window; the container-stream arm
-    # (arm 2) catches a docker_sd-specific break the file-tail selector excludes (see
-    # LOKI_DOCKER_STREAM). The docker stream dwarfs the file-tail streams, so arm 1 must NOT
-    # include it (else a healthy docker stream masks a dead file-tail pipeline) — hence the
-    # separate selector + wider window (LOKI_FILETAIL_WINDOW).
+    # The pod streams dwarf the file-tail streams, so arm 1 must NOT include them (else a
+    # healthy pod stream masks a dead file-tail source) — hence the separate selector and the
+    # wider window (LOKI_FILETAIL_WINDOW). Arms 1 and 2 also exclude every daniel-pi stream,
+    # for the same masking reason (#3739). The selectors' reasoning is at bridge/config_io.py.
     ok_all, msg_all = loki_ingestion_fresh(
         bridge.net.loki_count(cfg, cfg.LOKI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
         cfg.LOKI_FILETAIL_WINDOW,
@@ -53,7 +49,7 @@ def check_loki_ingestion(cfg: Config) -> tuple[bool, str]:
     )
     if not ok_docker:
         return False, "container log stream silent — " + msg_docker
-    # Arm 3: the Pi ships its own logs and neither arm above counts them, so its promtail
+    # Arm 3: the Pi ships its own logs and neither arm above counts them, so its Alloy
     # dying is invisible while the cluster keeps talking.
     ok_pi, msg_pi = loki_ingestion_fresh(
         bridge.net.loki_count(cfg, cfg.LOKI_PI_STREAM, cfg.LOKI_FILETAIL_WINDOW),
@@ -224,7 +220,7 @@ def with_log_errors(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
 # `status=<up|down>` verdict line and kuma-push-lib.sh's final `push failed (` line. The
 # transient-retry line is excluded here rather than in Python so it never counts toward the
 # fetch cap. `{job="syslog"}` is the label Alloy puts on `logger` lines on both cluster hosts
-# and the one the Pi's promtail gives its health.log (alerts.py's `SYSLOG_ALERT_LOGQL` reads the
+# and the one the Pi's Alloy gives its health.log (alerts.py's `SYSLOG_ALERT_LOGQL` reads the
 # same stream).
 SWALLOWED_VERDICTS_LOGQL = '{job="syslog"} |~ `: (status=(up|down)|push failed \\()` != "push failed transiently"'
 # The one pusher that is a pod, not a host cron: pi-peer-backup's CronJob container (#1943).

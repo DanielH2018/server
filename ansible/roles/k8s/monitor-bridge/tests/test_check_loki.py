@@ -1,6 +1,6 @@
 """Loki: the selector roster, the log-error arm, and the ingestion watchdog.
 
-A LogQL selector naming a label promtail does not ship matches no stream and reports "no events"
+A LogQL selector naming a label Alloy does not ship matches no stream and reports "no events"
 forever. HA_BAN_SELECTOR shipped that way with app="home-assistant". A fail-open arm cannot tell
 "nothing to report" from "wrong question", so the selector labels are checked against the
 observed stream vocabulary rather than against the check's own verdict.
@@ -20,6 +20,8 @@ import bridge.net
 import checks.logs
 
 from lib.repo_paths import REPO as _REPO
+from _bridge_env import bridge_env
+from _helpers import ALL_VARS, load_yaml
 
 # ── HA ip_ban arm ───────────────────────────────────────────────────────────────────────────
 # HA's ban middleware keys on the peer address, so a burst of bad /api/ calls can ban the node's
@@ -32,7 +34,7 @@ from lib.repo_paths import REPO as _REPO
 #   2. The vocabulary below came from one k8s pod stream. LOKI_STREAM selects file-tail streams,
 #      which may legitimately carry labels this set does not list. Widen the set against a live
 #      stream if a genuine selector ever fails — do not delete the guard.
-# Promtail's k8s stream vocabulary, read off a live Loki stream. `app` is NOT in it — a
+# The k8s pod stream vocabulary, read off a live Loki stream. `app` is NOT in it — a
 # selector with app="home-assistant" matches no stream and reports "no ip_ban events" forever. A fail-open arm cannot tell "nothing to report" from "wrong question",
 # so the selector label has to be checked by something other than the check's own verdict.
 # Transcribed from a live stream. Kept as a FLOOR rather than the whole answer:
@@ -90,7 +92,7 @@ def _logql_selector_names(cfg):
 
     Derived rather than listed. A hardcoded list would let a later selector, such as
     LOKI_PI_STREAM, join unchecked. A selector this cannot see is a selector that can
-    name a label promtail does not emit and go permanently green, which is the exact failure
+    name a label Alloy does not emit and go permanently green, which is the exact failure
     the test exists for.
 
     Matched on the LEADING `{...}` only, deliberately: a selector may carry line filters
@@ -107,34 +109,18 @@ def _logql_selector_names(cfg):
 
 
 def _deployed_selector_values():
-    """LogQL selector values that actually deploy, read from `templates/env-secret.yaml.j2`.
+    """LogQL selector values that actually deploy, read from the rendered env-secret.
 
-    `_logql_selector_names()` reads the `cfg` fixture, the rendered env. This reads the
-    `KEY: "value"` pairs straight out of the template SOURCE instead, so a selector written into
-    a new key is checked even before any `Config` field reads it.
-
-    Only a QUOTED literal is a candidate: a LogQL selector is always written as a quoted string
-    here, and quoting is also what tells a selector apart from a Jinja substitution. A bare
-    shape test ("starts with `{`, contains `}`") is not enough on its own -- stripped of quotes,
-    `KUMA_PUSH_GITOPS_ALIVE: "{{ monitor_bridge_gitops_alive_push_token }}"` has the same shape
-    and this file has two dozen lines like it. Drop anything containing `{{` before applying the
-    shape test, so a future Jinja `default(...)` filter or dict literal can't get misclassified
-    as a selector.
+    `_logql_selector_names()` reads the `Config` fields. This reads every key the render
+    produces instead, so a selector written into a new key is checked even before any `Config`
+    field reads it. It reads the RENDER rather than the template source because the selectors
+    are Jinja over `loki_streams` (#3740), and the source text of one is not a selector.
     """
-    tmpl = (
-        _REPO / "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2"
-    ).read_text()
-    found = {}
-    for line in tmpl.splitlines():
-        match = re.match(r"\s*([A-Z][A-Z0-9_]*):\s*(['\"])(.*)\2\s*$", line)
-        if not match:
-            continue
-        key, _quote, value = match.groups()
-        if "{{" in value:
-            continue  # a Jinja substitution, not a literal
-        if value.startswith("{") and "}" in value:
-            found[key] = value
-    return found
+    return {
+        key: value
+        for key, value in bridge_env().items()
+        if value.startswith("{") and "}" in value
+    }
 
 
 def test_the_selector_roster_covers_the_known_selectors(cfg):
@@ -159,16 +145,20 @@ def test_loki_selectors_use_real_stream_labels(cfg):
         selector = getattr(cfg, name)
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
         assert not unknown, (
-            "%s selects on %s, which promtail does not emit — the query matches no stream and "
+            "%s selects on %s, which Alloy does not emit — the query matches no stream and "
             "the check goes permanently green: %s" % (name, sorted(unknown), selector)
         )
 
 
 def test_the_deployed_selector_roster_covers_known_overrides():
-    """A path typo or a template rewrite that drops the quoting would make
-    `_deployed_selector_values()` return an empty dict, silently reducing this guard to the
-    in-code-default arm above -- the exact gap it exists to close."""
-    known = {"LOKI_STREAM", "LOG_ERROR_SELECTOR"}
+    """A render that stopped producing the selectors would make `_deployed_selector_values()`
+    return an empty dict, and every loop over it below would pass on nothing."""
+    known = {
+        "LOKI_STREAM",
+        "LOKI_DOCKER_STREAM",
+        "LOKI_PI_STREAM",
+        "LOG_ERROR_SELECTOR",
+    }
     deployed = set(_deployed_selector_values())
     assert known <= deployed, (
         "the deployed-selector roster no longer covers the known overrides, so they are "
@@ -177,23 +167,102 @@ def test_the_deployed_selector_roster_covers_known_overrides():
 
 
 def test_deployed_loki_selectors_use_real_stream_labels():
-    """The in-code-default arm above cannot see a deploy-time override.
+    """Every rendered selector, including one no `Config` field reads yet, names real labels.
 
-    This is the other half: `LOKI_STREAM` and `LOG_ERROR_SELECTOR` both ship a different selector
-    than their check.py default (env-secret.yaml.j2).
-
-    This is a regression guard, not an active finding: both deployed selectors select on
-    `job`, which is a real promtail label. It exists for the NEXT edit to either constant --
+    This is a regression guard, not an active finding: the deployed selectors select on `job`
+    and `machine`, which are real Alloy labels. It exists for the NEXT edit to a selector --
     HA_BAN_SELECTOR is the precedent (see this role's CLAUDE.md): an `app=` label matched no
     stream and read "no ip_ban events" permanently green.
     """
     for name, selector in _deployed_selector_values().items():
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
         assert not unknown, (
-            "%s deploys as %s, which selects on %s -- promtail does not emit that label, so "
+            "%s deploys as %s, which selects on %s -- Alloy does not emit that label, so "
             "the query matches no stream and the check goes permanently green"
             % (name, selector, sorted(unknown))
         )
+
+
+# ── The cluster arms must not count the Pi ──────────────────────────────────────────────────
+# Arms 1 and 2 of Loki Log Ingestion go down when the CLUSTER stops shipping. A daniel-pi stream
+# they also match keeps their count above zero through a total cluster outage, so neither arm can
+# fire (#3739). The label sets come from the `loki_streams` owner both Alloy configs render from.
+_LOKI_STREAMS = load_yaml(ALL_VARS)["loki_streams"]
+_PI_STREAMS = {
+    role: {**labels, "container": "wg-easy"} if role == "pi_containers" else labels
+    for role, labels in _LOKI_STREAMS.items()
+    if labels.get("machine") == "daniel-pi"
+}
+
+
+def _selector_matches(selector, labels):
+    """Whether a LogQL stream selector matches a stream carrying `labels`.
+
+    Loki semantics: a matcher on an absent label compares against the empty string, so
+    `machine!="daniel-pi"` matches a stream with no `machine` label, and a regex is anchored.
+    """
+    head = selector.split("}", 1)[0]
+    for name, op, value in re.findall(r'(\w+)\s*(=~|!~|!=|=)\s*"([^"]*)"', head):
+        got = labels.get(name, "")
+        if op == "=":
+            ok = got == value
+        elif op == "!=":
+            ok = got != value
+        elif op == "=~":
+            ok = re.fullmatch(value, got) is not None
+        else:
+            ok = re.fullmatch(value, got) is None
+        if not ok:
+            return False
+    return True
+
+
+def test_both_pi_streams_are_in_the_census():
+    assert set(_PI_STREAMS) == {"pi_containers", "pi_health"}
+
+
+@pytest.mark.parametrize(
+    "key, cluster_role",
+    [
+        ("LOKI_STREAM", "host_syslog"),
+        ("LOKI_STREAM", "host_authlog"),
+        ("LOKI_DOCKER_STREAM", "cluster_pods"),
+    ],
+)
+def test_cluster_arm_counts_its_cluster_stream(cfg, key, cluster_role):
+    """The other half: a selector that excluded everything would also exclude the Pi."""
+    labels = {
+        **_LOKI_STREAMS[cluster_role],
+        "machine": "daniel-box",
+        "container": "authelia",
+    }
+    assert _selector_matches(getattr(cfg, key), labels)
+
+
+@pytest.mark.parametrize("key", ["LOKI_STREAM", "LOKI_DOCKER_STREAM"])
+def test_cluster_arm_counts_no_pi_stream(cfg, key):
+    selector = getattr(cfg, key)
+    held_open = sorted(
+        r for r, labels in _PI_STREAMS.items() if _selector_matches(selector, labels)
+    )
+    assert not held_open, (
+        "%s = %s also matches daniel-pi's %s stream, so the Pi keeps the arm's count above zero "
+        "through a total cluster outage and it never fires" % (key, selector, held_open)
+    )
+
+
+@pytest.mark.parametrize(
+    "key, selector",
+    [
+        # Both as deployed before #3739.
+        ("LOKI_STREAM", '{job=~"authlog|syslog"}'),
+        ("LOKI_DOCKER_STREAM", '{container=~".+"}'),
+    ],
+)
+def test_cluster_arm_that_counts_a_pi_stream_is_flagged(key, selector):
+    cfg = bridge.config.load_config(bridge_env(**{key: selector}))
+    with pytest.raises(AssertionError, match="daniel-pi"):
+        test_cluster_arm_counts_no_pi_stream(cfg, key)
 
 
 def test_log_error_inert_when_the_selector_matches_nothing():
@@ -344,11 +413,11 @@ def test_check_loki_ingestion_silent_is_down(monkeypatch, cfg):
 
 
 def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch, cfg):
-    # docker_sd-specific failure: the file-tail streams keep flowing, but the highest-volume
-    # container-log stream ({container=~".+"}) went silent. The file-tail arm alone stays
-    # non-zero and would hide it — the docker-specific arm must page.
+    # Pod-source failure: the file-tail streams keep flowing, but the highest-volume stream,
+    # every pod's stdout, went silent. The file-tail arm alone stays non-zero and would hide
+    # it — the pod-stream arm must page.
     def fake_count(_cfg, selector, window):
-        return 0 if "container" in selector else 500
+        return 0 if selector == cfg.LOKI_DOCKER_STREAM else 500
 
     monkeypatch.setattr(bridge.net, "loki_count", fake_count)
     ok, msg = checks.logs.check_loki_ingestion(cfg)
@@ -357,12 +426,11 @@ def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch, cfg):
 
 
 def test_check_loki_ingestion_filetail_silent_is_down(monkeypatch, cfg):
-    # file-tail-only failure: the docker stream keeps flowing,
-    # but authlog/syslog/traefik went silent. Arm 1's selector must EXCLUDE the docker stream
-    # (which carries a `container` label) so a healthy container stream can't mask a dead
-    # file-tail pipeline — the file-tail arm must page.
+    # File-tail-only failure: the pod streams keep flowing, but authlog/syslog went silent.
+    # Arm 1's selector must EXCLUDE the pod streams so a healthy pod stream can't mask a dead
+    # file-tail source — the file-tail arm must page.
     def fake_count(_cfg, selector, window):
-        return 500 if "container" in selector else 0
+        return 0 if selector == cfg.LOKI_STREAM else 500
 
     monkeypatch.setattr(bridge.net, "loki_count", fake_count)
     ok, msg = checks.logs.check_loki_ingestion(cfg)

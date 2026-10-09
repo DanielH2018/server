@@ -53,7 +53,7 @@ discovery.relabel "pods" {
   }
   rule {
     target_label = "job"
-    replacement  = "k8s"
+    replacement  = "{{ loki_streams.cluster_pods.job }}"
   }
   // The node name, mirroring the prometheus origin convention — one config, both nodes.
   rule {
@@ -138,7 +138,7 @@ loki.process "pods" {
 // ---- Host files. Root + DAC_READ_SEARCH in the DaemonSet exist for these. ---------------
 // Same job labels on both nodes so monitor-bridge's freshness arm sees them together.
 local.file_match "syslog" {
-  path_targets = [{"__path__" = "/var/log/syslog", "job" = "syslog", "machine" = sys.env("HOSTNAME")}]
+  path_targets = [{"__path__" = "/var/log/syslog", "job" = "{{ loki_streams.host_syslog.job }}", "machine" = sys.env("HOSTNAME")}]
 }
 
 loki.source.file "syslog" {
@@ -147,7 +147,7 @@ loki.source.file "syslog" {
 }
 
 local.file_match "authlog" {
-  path_targets = [{"__path__" = "/var/log/auth.log", "job" = "authlog", "machine" = sys.env("HOSTNAME")}]
+  path_targets = [{"__path__" = "/var/log/auth.log", "job" = "{{ loki_streams.host_authlog.job }}", "machine" = sys.env("HOSTNAME")}]
 }
 
 loki.source.file "authlog" {
@@ -166,7 +166,7 @@ loki.source.file "authlog" {
 // JSON, one object per line. Left unparsed on purpose — a stage.json here would index every
 // audit field as a label and blow past Loki's series limits. Query it with `| json` instead.
 local.file_match "k8s_audit" {
-  path_targets = [{"__path__" = "{{ k3s_audit_log_path | default('/var/lib/rancher/k3s/server/logs/audit.log') }}", "job" = "k8s-audit", "machine" = sys.env("HOSTNAME")}]
+  path_targets = [{"__path__" = "{{ k3s_audit_log_path | default('/var/lib/rancher/k3s/server/logs/audit.log') }}", "job" = "{{ loki_streams.k8s_audit.job }}", "machine" = sys.env("HOSTNAME")}]
 }
 
 loki.source.file "k8s_audit" {
