@@ -275,12 +275,7 @@ def test_changed_default_ref_is_origin_master():
         parser_ref.append(ref)
         return []
 
-    orig = deploy_tags._git_diff_paths
-    deploy_tags._git_diff_paths = fake_git_diff  # ty: ignore[invalid-assignment]  # hand-rolled patch, #3670
-    try:
-        deploy_tags.main(["changed"])
-    finally:
-        deploy_tags._git_diff_paths = orig
+    deploy_tags.main(["changed"], git_diff=fake_git_diff)
     assert parser_ref == ["origin/master"]
 
 

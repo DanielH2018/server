@@ -92,12 +92,7 @@ def test_the_query_scopes_to_the_plugins_subtree_and_is_not_origin_pinned(cfg):
         queries.append(promql)
         return []
 
-    saved = bridge.net.prom_vector
-    try:
-        bridge.net.prom_vector = record  # ty: ignore[invalid-assignment]  # hand-rolled patch, #3670
-        checks.storage.check_kubelet_plugin_readonly(cfg)
-    finally:
-        bridge.net.prom_vector = saved
+    checks.storage.check_kubelet_plugin_readonly(cfg, prom_vector=record)
 
     assert len(queries) == 1
     assert 'mountpoint=~"/var/lib/kubelet/plugins/.*"' in queries[0]

@@ -35,6 +35,7 @@ import argparse
 import difflib
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
@@ -392,12 +393,18 @@ def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]
     return comment_only_broad_changes(paths, old_ref, new_ref, _git_show)
 
 
-def changed(ref: str, cwd: Path = REPO) -> int:
+def changed(
+    ref: str,
+    cwd: Path = REPO,
+    git_diff: Callable[[str, Path], list[str]] | None = None,
+) -> int:
     """Print, on stdout, the comma-joined --tags value for every service changed vs `ref`.
 
     Nothing else goes to stdout, so `deploy_run.py` can capture it directly. Everything
     explaining the derivation goes to stderr. `cwd` is the checkout whose diff is read:
     `deploy_run.py` passes its caller's working tree rather than this module's checkout.
+    `git_diff` is the seam for the diff itself; None resolves `_git_diff_paths` at call time,
+    so a test that patches the module attribute still reaches it.
     """
     (
         services_from_changed_paths,
@@ -408,7 +415,7 @@ def changed(ref: str, cwd: Path = REPO) -> int:
     # sites share: that helper drops a quiet set and names the bring-up paths,
     # and this command has neither question. Its module docstring carries the decision.
     try:
-        paths = _git_diff_paths(ref, cwd)
+        paths = (git_diff or _git_diff_paths)(ref, cwd)
     except subprocess.CalledProcessError as exc:
         print(
             f"deploy --changed: `git diff {ref}...HEAD` failed: {exc.stderr.strip()}",
@@ -505,8 +512,14 @@ def _cmd_hosts(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Dispatch to the subcommand named in `argv`; returns that subcommand's exit code."""
+def main(
+    argv: list[str] | None = None,
+    git_diff: Callable[[str, Path], list[str]] | None = None,
+) -> int:
+    """Dispatch to the subcommand named in `argv`; returns that subcommand's exit code.
+
+    `git_diff` replaces the diff `changed` reads; None keeps `_git_diff_paths`.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -533,7 +546,7 @@ def main(argv: list[str] | None = None) -> int:
         "exit 3 refuses a broad change",
     )
     ch.add_argument("ref", nargs="?", default="origin/master")
-    ch.set_defaults(func=lambda a: changed(a.ref))
+    ch.set_defaults(func=lambda a: changed(a.ref, git_diff=git_diff))
 
     bl = sub.add_parser(
         "blockers",
