@@ -41,6 +41,7 @@ import deploy_alert_text
 import deploy_alerts
 import deploy_defer
 import deploy_handlers
+import deploy_k8s_owed
 import deploy_phases
 import deploy_state
 import deploy_tick_types
@@ -241,16 +242,9 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     # the broad arm never again. Without a line here the journal would say nothing at all
     # about a role nobody has applied yet.
     deploy_defer.log_pending(STATE)
-    # Same shape, one plane over: a promoted image bump a broad tick deferred for lack of
-    # budget is merged, so no later tick's range carries it either (#2449).
-    deploy_defer.log_k8s_deferred(STATE)
-    # The non-paging half of the same plane (#2570): a hand-edited or denylisted k8s role this
-    # deployer merged and will never apply. Discharged FIRST, so the journal line below never
-    # names a change somebody's own `deploy.sh` has since applied — that deploy is invisible to
-    # every other part of this tick.
-    deploy_defer.discharge_k8s_unapplied(tools, STATE, config)
-    deploy_phases.drop_deleted_k8s_unapplied(tools, STATE, config)
-    deploy_defer.log_k8s_unapplied(STATE)
+    # Same shape, one plane over: the k8s changes a tick merged and did not apply (#2449,
+    # #2570). `reconcile` discharges what a deploy has since covered, then names the rest.
+    deploy_k8s_owed.reconcile(tools, STATE, config)
 
     target = deploy_phases.assess(tools, STATE, config)
     if target.action == "dirty":

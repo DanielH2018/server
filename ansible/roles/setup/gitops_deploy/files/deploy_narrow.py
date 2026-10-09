@@ -208,7 +208,7 @@ def shared_role_callers(repo: str, roles) -> dict[str, set[str]]:
     """Ask `shared_role_callers.py` which tags' deploys run each shared role.
 
     A subprocess for the reason `narrow_deploy_plane` is one. The one reader,
-    `deploy_defer.discharge_k8s_unapplied`, keeps every line on any exception this raises.
+    `deploy_k8s_owed.discharge_k8s_unapplied`, keeps every line on any exception this raises.
 
     Raises:
         subprocess.CalledProcessError: the child exited non-zero.
@@ -223,7 +223,7 @@ def digest_provable(repo: str, roles) -> set[str]:
     """Ask `digest_provable.py` which of `roles` act only through their render digest (#3110).
 
     A subprocess for the reason `shared_role_callers` is one, raising what it raises. The one
-    reader, `deploy_defer.discharge_k8s_unapplied`, treats any exception as "none are".
+    reader, `deploy_k8s_owed.discharge_k8s_unapplied`, treats any exception as "none are".
     """
     out = _role_json(repo, digest_provable_argv(roles))
     return {role for role, ok in out.items() if ok is True}

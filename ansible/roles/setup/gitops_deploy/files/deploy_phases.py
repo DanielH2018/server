@@ -33,10 +33,10 @@ from deploy_k8s import (
     declared_denylist,
     declares_snapshot_claims,
     is_image_only_diff,
-    k8s_roles_listed,
     split_k8s_auto_deploy,
 )
-from deploy_state import OWED_K8S_UNAPPLIED, DeployerState
+from deploy_state import DeployerState
+from deploy_k8s_owed import k8s_roles_deleted_at
 from deploy_tick_types import (
     NotTheDeployerHost,
     RetryableFetchError,
@@ -257,57 +257,6 @@ def plan_tick(
     return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services)
 
 
-def k8s_roles_deleted_at(
-    tools: DeployTools, config: Config, ref: str, roles: set[str]
-) -> set[str]:
-    """The roles in `roles` whose directory is gone from `ref`'s tree (#3568, #3569).
-
-    A deleted role owes nothing: no play can run it, and an `include_role` still naming it
-    fails with "role not found" rather than applying anything. A `k8s_unapplied` line for one
-    never discharges, because a role with no callers has no tag whose deploy could carry it
-    (`volume-claim`, 2026-10-05). `plan_tick` asks this at origin so the tick writes no such
-    line; `drop_deleted_k8s_unapplied` asks it at `HEAD` to drop a line an earlier tick
-    wrote before the range that deleted the role. `land_shared.shared_roles` drops the
-    same roles on the landing side.
-
-    An unreadable or empty listing drops nothing, because a kept line costs one `clear-owed`
-    and a dropped one loses the only record of a change.
-    """
-    if not roles:
-        return set()
-    try:
-        listing = tools.run(
-            ["git", "ls-tree", "--name-only", ref, "ansible/roles/k8s/"],
-            cwd=config.repo,
-        )
-    except Exception as exc:
-        log(f"could not list the k8s roles at {ref[:8]} ({exc}) — dropping none")
-        return set()
-    present = k8s_roles_listed(listing)
-    if not present:
-        return set()
-    return roles - present
-
-
-def drop_deleted_k8s_unapplied(
-    tools: DeployTools, state: DeployerState, config: Config
-) -> set[str]:
-    """Drop each `k8s_unapplied` line whose role directory is gone from `HEAD` (#3569).
-
-    The line was written before a later range deleted the role, which `plan_tick` no longer
-    records, and `deploy_defer.discharge_k8s_unapplied` can never drop: no record or caller
-    is left to carry it. `main()` runs this after that discharge, on the merged checkout.
-    """
-    pending = {e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)}
-    deleted = k8s_roles_deleted_at(tools, config, "HEAD", pending)
-    if deleted:
-        state.clear_owed(OWED_K8S_UNAPPLIED, sorted(deleted))
-        log(
-            f"k8s_unapplied dropped for {', '.join(sorted(deleted))}: role deleted at HEAD"
-        )
-    return deleted
-
-
 def _adopt_incoming_cross_role_tables(
     tools: DeployTools, config: Config, origin: str
 ) -> None:
@@ -337,7 +286,7 @@ def k8s_change_commits(
 ) -> dict[str, str]:
     """The newest commit in `local..origin` whose own diff reaches each k8s service (#3111).
 
-    `deploy_defer.alert_and_record_deferred` writes a service's `k8s_unapplied` line at this
+    `deploy_k8s_owed.alert_and_record_deferred` writes a service's `k8s_unapplied` line at this
     commit rather than at the tick's tip. A landing deploys its PR's merge commit, so the
     release record names THAT commit; a line written at a later, unrelated tip in the same range
     is a commit the record can never descend from, and the line never discharged (2026-10-01:

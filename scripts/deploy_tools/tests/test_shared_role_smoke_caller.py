@@ -113,11 +113,11 @@ def test_the_smoke_path_rule_is_the_reach_rule_minus_meta():
 def test_the_smoke_set_cannot_widen_past_the_digest_provable_roles():
     """Both sets mean "this role acts only through the bytes it renders", so pin them.
 
-    `deploy_defer.DIGEST_PROVABLE_ROLES` carries the argument per role. A role added here but
+    `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` carries the argument per role. A role added here but
     not there would be smoke-tested on one caller while the deployer still demands a record
     from all of them.
     """
-    from deploy_defer import DIGEST_PROVABLE_ROLES
+    from deploy_k8s_owed import DIGEST_PROVABLE_ROLES
 
     assert SMOKE_TESTABLE_SHARED_ROLES <= DIGEST_PROVABLE_ROLES
 

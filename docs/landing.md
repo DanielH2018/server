@@ -346,7 +346,7 @@ Four things sit in that position:
   `shared_role_callers.smoke_caller` derives it — and the other 56 take the new task logic on
   their own next deploy. PR #3117 was the measured case: 57 tags, about 20 minutes, and 0 of 60
   release records showed the restart it was changing. The `# DECIDED:` at `smoke_caller` holds
-  the ruling and the gap it accepts, and `deploy_defer.discharge_k8s_unapplied` still reads
+  the ruling and the gap it accepts, and `deploy_k8s_owed.discharge_k8s_unapplied` still reads
   every caller, because its question is whether the change is applied rather than whether it
   runs.
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so

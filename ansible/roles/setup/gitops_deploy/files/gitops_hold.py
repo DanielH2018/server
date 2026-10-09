@@ -123,7 +123,8 @@ class Hold:
     """The hold under one state directory: `hold_sha` and the ledger's `hold_plane` lines.
 
     No method takes the git-tree lock unless it is handed one. Every deployer call runs inside
-    a tick, which already holds it; `clear` is the one call made from outside a tick.
+    a tick, which already holds it; `clear` is the one call made from outside a tick, and it
+    always takes the lock it is handed.
 
     Attributes:
         state_dir: the deployer's state directory, `gitops_markers.STATE_DIR` on a host.
@@ -250,28 +251,46 @@ class Hold:
 
         Args:
             expected_sha: the SHA the operator typed. A different live hold refuses.
-            lock: a factory for the git-tree lock. The ledger holds other classes a tick
-                rewrites under that lock, so the plane drop runs inside it: unlocked, a tick's
-                write between the read and the replace would be lost. A caller outside a tick
-                passes the lock; it may raise to refuse, and the hold is then left whole.
+            lock: a factory for the git-tree lock, which every tick holds while it writes the
+                hold. A caller outside a tick passes the lock; it may raise to refuse, and the
+                hold is then left whole.
 
         Returns:
             None on success, else the refusal text for a SHA mismatch.
 
-        The planes go first, and are re-read under the lock, because the drop is the half that
-        can refuse. A ledger with no `hold_plane` line is not touched and no lock is taken.
+        The check before the lock only saves a wait on a stale page. The comparison that
+        decides is the one inside it, and the unlink is inside it too (#3755). A tick that
+        failed after the first comparison has written its own `hold_sha` and `hold_plane`
+        line by the time the lock is free, so clearing on the first comparison alone dropped
+        a hold the operator never typed.
+
+        The lock is taken even when no `hold_plane` line exists. A tick can add one between
+        the read and the unlink, which would leave a plane with no hold. The cost is that a
+        Clear during a tick refuses, through the lock factory, until the tick ends.
         """
+        refusal = self._mismatch(expected_sha)
+        if refusal:
+            return refusal
+        with lock():
+            refusal = self._mismatch(expected_sha)
+            if refusal:
+                return refusal
+            owed = self._read("owed")
+            # Raw subjects, not `held_subjects`' stripped ones, which `drop_owed` would fail
+            # to match on a subject carrying stray whitespace.
+            keys = map(owed_line_key, (owed or "").splitlines())
+            held = {k[1] for k in keys if k and k[0] == OWED_HOLD_PLANE}
+            # The planes go first, so a crash between the writes leaves a hold with no plane
+            # rather than planes with no hold.
+            if held:
+                text, _ = drop_owed(owed, OWED_HOLD_PLANE, held)
+                self._write("owed", text)
+            self._write("hold", None)
+        return None
+
+    def _mismatch(self, expected_sha: str) -> str | None:
+        """The refusal text when the live hold is not `expected_sha`, else None."""
         live = self.current() or ""
         if live != expected_sha:
             return f"hold is {live or 'clear'}, not {expected_sha}; reload and retry"
-        if self.held_subjects():
-            with lock():
-                owed = self._read("owed")
-                # Raw subjects, not `held_subjects`' stripped ones, which `drop_owed` would
-                # fail to match on a subject carrying stray whitespace.
-                keys = map(owed_line_key, (owed or "").splitlines())
-                held = {k[1] for k in keys if k and k[0] == OWED_HOLD_PLANE}
-                text, _ = drop_owed(owed, OWED_HOLD_PLANE, held)
-                self._write("owed", text)
-        self._write("hold", None)
         return None

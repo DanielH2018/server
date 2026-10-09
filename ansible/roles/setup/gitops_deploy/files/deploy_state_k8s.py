@@ -59,7 +59,7 @@ _K8S_OWED: dict[str, _K8sOwedClass] = {
     OWED_K8S_DEFERRED: _K8sOwedClass(k8s_deferred_entries, advance=False),
     # The k8s changes a tick merged and will never apply (#2570). Nothing pages on it; the
     # SessionStart banner and the journal read it. An entry MOVES TO THE NEW ORIGIN:
-    # `deploy_defer.discharge_k8s_unapplied` drops an entry once a release record descends
+    # `deploy_k8s_owed.discharge_k8s_unapplied` drops an entry once a release record descends
     # from the SHA it names, so one left at the OLDEST origin discharges over every later
     # change to the same service.
     OWED_K8S_UNAPPLIED: _K8sOwedClass(k8s_unapplied_entries, advance=True),

@@ -17,11 +17,12 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_k8s_unapplied_ma
 """
 
 import json
+import re
 import pathlib
 
 import pytest
 
-import deploy_defer
+import deploy_k8s_owed
 import deploy_release
 from deploy_changes import ChangeSet
 from deploy_toolbox import DeployTools
@@ -42,7 +43,7 @@ def test_a_deferred_k8s_role_is_recorded_with_the_sha_and_the_stamp(
     gitops_deploy, state_dir, settings
 ):
     """FLAGGED half: the marker names the service and the SHA an operator's deploy applies."""
-    deploy_defer.alert_and_record_deferred(
+    deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
         gitops_deploy.STATE,
         settings,
@@ -63,7 +64,7 @@ def test_each_line_names_the_commit_that_changed_its_service(
 ):
     """sonarr changed at APPLIED, below a later tip. Its landing's record names APPLIED,
     so a line at the tip would never discharge. authelia has no attribution and keeps the tip."""
-    deploy_defer.alert_and_record_deferred(
+    deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
         gitops_deploy.STATE,
         settings,
@@ -80,7 +81,7 @@ def test_each_line_names_the_commit_that_changed_its_service(
 
 def test_a_range_with_no_k8s_role_records_nothing(gitops_deploy, state_dir, settings):
     """CLEAN half: a tasks-only push must not leave a line nobody can discharge."""
-    deploy_defer.alert_and_record_deferred(
+    deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
         gitops_deploy.STATE,
         settings,
@@ -102,7 +103,7 @@ def test_a_second_deferral_of_the_same_role_moves_the_origin_and_keeps_the_stamp
     """
     state = gitops_deploy.STATE
     state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"authelia"}, 1000.0)
-    deploy_defer.alert_and_record_deferred(
+    deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
         state,
         settings,
@@ -234,7 +235,7 @@ def pending(gitops_deploy, state_dir, settings):
 
 
 def _discharge(state, settings, release_commit, is_ancestor=lambda *_a: True):
-    return deploy_defer.discharge_k8s_unapplied(
+    return deploy_k8s_owed.discharge_k8s_unapplied(
         _tools(release_commit=release_commit, is_ancestor=is_ancestor), state, settings
     )
 
@@ -302,7 +303,7 @@ def _discharge_shared(
         ),
         render_proof=render_proof or (lambda _svc: None),
     )
-    return deploy_defer.discharge_k8s_unapplied(tools, state, settings)
+    return deploy_k8s_owed.discharge_k8s_unapplied(tools, state, settings)
 
 
 SHARED = {"game-stats-lib", "manifests"}
@@ -371,13 +372,13 @@ def test_a_role_acting_outside_the_digest_ignores_a_matching_render(
         )
         == []
     )
-    assert "game-stats-lib" not in deploy_defer.DIGEST_PROVABLE_ROLES
+    assert "game-stats-lib" not in deploy_k8s_owed.DIGEST_PROVABLE_ROLES
 
 
 # ── a service's own line takes the render proof when its role is digest-provable ─────────
 def _discharge_own(state, settings, digest_provable):
     """authelia's record predates the line; its render at LATER matches the applied bytes."""
-    return deploy_defer.discharge_k8s_unapplied(
+    return deploy_k8s_owed.discharge_k8s_unapplied(
         _tools(
             release_commit=lambda _svc: APPLIED,
             is_ancestor=lambda _repo, _origin, commit: commit == LATER,
@@ -450,7 +451,7 @@ def test_a_service_already_paging_from_k8s_deferred_is_not_recorded_twice(
     in the paging marker, so the banner would otherwise name the service twice."""
     state = gitops_deploy.STATE
     state.record_owed(OWED_K8S_DEFERRED, ORIGIN, {"sonarr"}, 1000.0)
-    deploy_defer.alert_and_record_deferred(
+    deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
         state,
         settings,
@@ -460,3 +461,32 @@ def test_a_service_already_paging_from_k8s_deferred_is_not_recorded_twice(
         declared_k8s={"sonarr", "authelia"},
     )
     assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["authelia"]
+
+
+# ── one owner: no stage module reads or writes the two k8s classes itself (#3669) ─────────
+_LEDGER_CALL = re.compile(
+    r"\.(owed_pending|record_owed|clear_owed)\(\s*OWED_K8S_(DEFERRED|UNAPPLIED)\b"
+)
+
+
+def _direct_ledger_calls(source: str) -> int:
+    return len(_LEDGER_CALL.findall(source))
+
+
+def test_a_direct_ledger_call_is_flagged():
+    assert _direct_ledger_calls(
+        "state.record_owed(OWED_K8S_DEFERRED, origin, bumps, time.time())"
+    )
+    assert _direct_ledger_calls("state.owed_pending(\n    OWED_K8S_UNAPPLIED)")
+
+
+def test_a_call_through_the_owner_is_clean():
+    assert not _direct_ledger_calls("deploy_k8s_owed.defer_bumps(state, origin, bumps)")
+
+
+def test_only_deploy_k8s_owed_touches_the_k8s_ledger_classes():
+    files = pathlib.Path(deploy_k8s_owed.__file__).parent
+    calls = {p.name: _direct_ledger_calls(p.read_text()) for p in files.glob("*.py")}
+    # The owner's own calls, so a renamed method cannot leave every count at zero.
+    assert calls.pop("deploy_k8s_owed.py") >= 6
+    assert {name for name, n in calls.items() if n} == set()

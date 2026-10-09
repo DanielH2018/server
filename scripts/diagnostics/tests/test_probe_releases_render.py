@@ -346,9 +346,9 @@ def test_a_matching_digest_keeps_a_volume_claim_hit_pending(tmp_path):
 
 
 def test_digest_provable_roles_match_the_deployers():
-    import deploy_defer
+    import deploy_k8s_owed
 
-    assert rr.DIGEST_PROVABLE_ROLES == deploy_defer.DIGEST_PROVABLE_ROLES
+    assert rr.DIGEST_PROVABLE_ROLES == deploy_k8s_owed.DIGEST_PROVABLE_ROLES
 
 
 TIP = "b" * 40
