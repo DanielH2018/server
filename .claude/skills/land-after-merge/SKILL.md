@@ -22,7 +22,7 @@ It arms `gh pr merge --squash --auto`, waits for the merge, waits for master CI 
 commit, deploys that commit, kicks the tick, gates the health, and prints the landing's
 `VERDICT:` line. `--detach` names its own logfile, forks into it and returns. `cc-wait land <n>`
 is the wait: it prints the landing's `VERDICT:` line and exits with the landing's own code.
-A PR waiting on a review is not armed. It is merged directly once its CI is green, because
+A PR waiting on a review, or approved, is not armed. It is merged directly once its CI is green, because
 GitHub's auto-merge ignores a ruleset bypass (`docs/landing.md` has the detail).
 
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only

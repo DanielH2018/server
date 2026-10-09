@@ -23,9 +23,14 @@ so and trusts the exit code.
 --await-merge polls the PR's state until merged, so `gh pr create` -> `gh pr merge --auto`
 -> one backgrounded land.sh is the whole procedure.
 
-A PR whose `reviewDecision` is REVIEW_REQUIRED is never armed. GitHub's auto-merge does not
-apply a ruleset bypass, so an armed PR waiting on a review that only a bypass clears stays
-BLOCKED until merge-timeout (github/docs#45265, open since 2026-07-23). `gh pr merge` refuses it
+A PR whose `reviewDecision` is REVIEW_REQUIRED or APPROVED is never armed. GitHub's auto-merge
+does not apply a ruleset bypass, so an armed PR that only a bypass lets into master stays
+BLOCKED until merge-timeout (github/docs#45265, open since 2026-07-23). REVIEW_REQUIRED needs
+the bypass for "master review gate". APPROVED needs it for "agent branch fence" (ruleset
+24517167), which restricts updates to every branch but the agent's own, master included: an
+agent PR the operator approved sat BLOCKED that way until a hand merge (#3911). A
+CHANGES_REQUESTED PR is refused outright, because the direct merge would apply the operator's
+bypass to a PR someone asked to change. `gh pr merge` refuses it
 at its own pre-flight as well (cli/cli#13388). The REST merge endpoint applies the bypass, so
 --await-merge merges such a PR through it once await_ci reads the head green, pinned to that
 head SHA. A ruleset with no bypass actor, such as the master CI gate, still refuses that call
@@ -207,7 +212,7 @@ def _merge_direct(ln: Landing, subject: str) -> None:
 
 
 def _leave_for_a_direct_merge(ln: Landing, subject: str) -> None:
-    """Hand a PR blocked by a missing review to await_merge, which merges it directly.
+    """Hand a PR only a ruleset bypass lets in to await_merge, which merges it directly.
 
     Arming `--auto` here would leave it BLOCKED until merge-timeout; the module docstring has
     why. Without --await-merge nothing in this run would merge it, so that dies instead.
@@ -215,15 +220,15 @@ def _leave_for_a_direct_merge(ln: Landing, subject: str) -> None:
     pr = ln.opts.pr
     if not ln.opts.await_merge:
         ln.die(
-            f"PR #{pr} waits on a review that only a ruleset bypass clears, and auto-merge "
+            f"PR #{pr} merges into {BRANCH} only through a ruleset bypass, and auto-merge "
             "never applies a bypass — re-run with both --arm-merge --await-merge, which "
             "merges it directly once CI is green; --await-merge alone only polls",
             1,
         )
     ln.direct_merge_subject = subject
     say(
-        f"PR #{pr} waits on a review; not arming auto-merge, which ignores a ruleset "
-        "bypass — merging directly once CI is green"
+        f"PR #{pr} merges only through a ruleset bypass; not arming auto-merge, which "
+        "ignores one — merging directly once CI is green"
     )
 
 
@@ -251,7 +256,7 @@ def _merge_past_review(ln: Landing, head: str) -> str:
         return (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
     except subprocess.TimeoutExpired:
         return "gh timed out"
-    say(f"merged directly past the review requirement: {ln.direct_merge_subject}")
+    say(f"merged directly through the ruleset bypass: {ln.direct_merge_subject}")
     return ""
 
 
@@ -318,7 +323,14 @@ def arm_merge(ln: Landing) -> None:
     if ln.opts.policy_active:
         ln.pinned_head = policy.check(ln)
     subject = ln.opts.subject or view.get("title", "")
-    if view.get("reviewDecision") == "REVIEW_REQUIRED":
+    review = view.get("reviewDecision")
+    if review == "CHANGES_REQUESTED":
+        ln.die(
+            f"PR #{pr} has changes requested — address them and get a new review, then "
+            "re-run this",
+            1,
+        )
+    if review in ("REVIEW_REQUIRED", "APPROVED"):
         _leave_for_a_direct_merge(ln, subject)
         return
     try:

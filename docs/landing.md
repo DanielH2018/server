@@ -72,8 +72,13 @@ The arm is idempotent, so re-running after a `merge-conflict` or `merge-timeout`
 cleanly. `--subject` overrides the squash commit's subject; the PR's own title is used
 otherwise.
 
-**A PR waiting on a review is merged directly, not armed.** When `reviewDecision` is
-`REVIEW_REQUIRED`, the arm leaves the PR alone. `--await-merge` then merges it through the REST
+**A PR only a ruleset bypass lets into master is merged directly, not armed.** When
+`reviewDecision` is `REVIEW_REQUIRED` or `APPROVED`, the arm leaves the PR alone.
+`REVIEW_REQUIRED` needs the bypass for the master review gate. `APPROVED` needs it for the
+agent branch fence (ruleset 24517167), which restricts updates to every branch except
+`worktree-claude+**`, master included. An approved agent PR that was armed sat `BLOCKED` until a
+hand merge (#3911). A `CHANGES_REQUESTED` PR is refused before any merge call, because the direct
+merge would apply the operator's bypass to it. `--await-merge` then merges it through the REST
 merge endpoint on the first poll where `await_ci` reads its head green, pinned to that head SHA.
 GitHub's auto-merge does not apply a ruleset bypass, so an armed PR in that state stays
 `BLOCKED` until `merge-timeout` (github/docs#45265). The REST endpoint does apply the bypass, and
