@@ -1,4 +1,7 @@
-# ansible/roles/setup/gitops_deploy/files/gitops_hold.py
+# ansible/roles/k8s/monitor-bridge/files/gitops_hold.py
+# generated_from: ansible/roles/setup/gitops_deploy/files/gitops_hold.py -- do not edit.
+# A verbatim copy written by scripts/dev/gen_gitops_markers.py; edit the source, run it, and
+# commit every copy in the same PR.
 """The deployer's hold: `hold_sha`, the planes it waits on, and the rule that clears it (#3658).
 
 A failed broad apply holds its SHA and records the plane it failed in as an `owed` ledger

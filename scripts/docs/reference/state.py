@@ -63,7 +63,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, REPO, ROLES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_ledger import held_planes
+from gitops_hold import DeployerSnapshot
 from gitops_markers import MARKERS, STATE_DIR
 
 LATE_MULTIPLIER = 2
@@ -117,20 +117,20 @@ def gitops_deploy_run(state_dir: Path = Path(STATE_DIR)) -> LoopRun:
     base = _epoch_marker(state_dir, MARKERS["last_run"], "ticked, no hold")
     if base.last_run is None:
         return base
-    hold_sha_path = state_dir / MARKERS["hold"]
-    if not hold_sha_path.is_file():
+    try:
+        snap = DeployerSnapshot.load(state_dir)
+    except OSError, UnicodeDecodeError:
+        return LoopRun(
+            base.last_run, "deployer state not readable from here", unreadable=True
+        )
+    if not snap.hold:
         return base
-    sha = hold_sha_path.read_text().strip()[:8] or "unknown"
     # The `owed` ledger's `hold_plane` class (#3392).
-    owed_path = state_dir / MARKERS["owed"]
-    planes = held_planes(
-        owed_path.read_text(errors="replace") if owed_path.is_file() else None
-    )
-    plane = "; ".join(planes) or "a service deploy"
+    plane = "; ".join(snap.held_planes) or "a service deploy"
     return LoopRun(
         base.last_run,
-        f"**HOLD** at `{sha}` ({plane}) -- a health gate or broad apply failed and is "
-        "parked until cleared",
+        f"**HOLD** at `{snap.hold[:8]}` ({plane}) -- a health gate or broad apply failed "
+        "and is parked until cleared",
     )
 
 

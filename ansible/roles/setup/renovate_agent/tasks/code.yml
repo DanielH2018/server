@@ -16,10 +16,11 @@
     - agent_logic.py
     - land_renovate_pr.py
     # The deployer's own modules, shipped from its `files/` rather than a copy here.
-    # `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to either to
+    # `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to any of them to
     # this role as well (#3306).
     - "{{ role_path }}/../gitops_deploy/files/gitops_markers.py"
     - "{{ role_path }}/../gitops_deploy/files/gitops_ledger.py"
+    - "{{ role_path }}/../gitops_deploy/files/gitops_hold.py"
   become: true
 
 - name: Install the shared host_lib helper beside the agent
@@ -48,5 +49,7 @@
         src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
       - live: /opt/renovate-agent/gitops_ledger.py
         src: ansible/roles/setup/gitops_deploy/files/gitops_ledger.py
+      - live: /opt/renovate-agent/gitops_hold.py
+        src: ansible/roles/setup/gitops_deploy/files/gitops_hold.py
       - live: /opt/renovate-agent/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py

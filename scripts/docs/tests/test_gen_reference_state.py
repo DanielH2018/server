@@ -81,6 +81,21 @@ def test_gitops_deploy_with_a_hold_surfaces_the_sha_and_the_ledgers_plane(tmp_pa
     assert "(ansible/deploy.yml sonarr)" in run.outcome
 
 
+def test_gitops_deploy_with_an_empty_hold_marker_is_a_plain_tick(tmp_path):
+    """An empty `hold_sha` is how the deployer clears a hold, not a HOLD at `unknown`."""
+    (tmp_path / "last_run").write_text(str(NOW.timestamp()))
+    (tmp_path / "hold_sha").write_text("\n")
+    assert g.gitops_deploy_run(tmp_path).outcome == "ticked, no hold"
+
+
+def test_gitops_deploy_with_an_unreadable_marker_is_unreadable_not_clear(tmp_path):
+    (tmp_path / "last_run").write_text(str(NOW.timestamp()))
+    (tmp_path / "owed.jsonl").mkdir()
+    run = g.gitops_deploy_run(tmp_path)
+    assert run.unreadable
+    assert "not readable" in run.outcome
+
+
 # --- renovate_notify_run(): notified vs. checked-and-quiet ----------------------------------
 
 

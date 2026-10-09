@@ -252,3 +252,10 @@ def test_the_runbook_calls_the_script_and_it_runs():
         timeout=300,
     )
     assert proc.returncode == 64, proc.stderr
+
+
+def test_an_unreadable_ledger_refuses_rather_than_reading_as_no_hold(state_dir):
+    """The snapshot reads `hold_sha` and the ledger together, so either one unreadable refuses."""
+    (state_dir / MARKERS["owed"]).mkdir()
+    found = gates.held_sha(state_dir)
+    assert len(found) == 1 and "cannot read" in found[0]

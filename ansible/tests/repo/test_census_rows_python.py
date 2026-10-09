@@ -394,6 +394,8 @@ ROWS = (
                 "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
                 "ansible/roles/k8s/monitor-bridge/files/gitops_ledger.py",
                 "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
+                "ansible/roles/k8s/monitor-bridge/files/gitops_hold.py",
+                "ansible/roles/setup/gitops_deploy/files/gitops_hold.py",
             )
         },
     ),

@@ -24,12 +24,13 @@ from _helpers import REPO
 from lib import yaml_fast
 
 
-from dev.gen_gitops_markers import COPIES, LEDGER_SOURCE, SOURCE, render
+from dev.gen_gitops_markers import COPIES, HOLD_SOURCE, LEDGER_SOURCE, SOURCE, render
 
 EXPECTED_COPIES = frozenset(
     {
         (SOURCE, "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py"),
         (LEDGER_SOURCE, "ansible/roles/k8s/monitor-bridge/files/gitops_ledger.py"),
+        (HOLD_SOURCE, "ansible/roles/k8s/monitor-bridge/files/gitops_hold.py"),
     }
 )
 

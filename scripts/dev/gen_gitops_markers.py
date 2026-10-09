@@ -12,7 +12,8 @@ Every other reader uses the source itself. Code that runs from the checkout impo
 through a named `sys.path` insert of `GITOPS_DEPLOY_FILES` (`scripts/lib/deployer_park.py`,
 `gitops_state.py`). `gitops_ledger.py`, the JSON-lines markers, is copied the same way: it
 imports `gitops_markers`, and monitor-bridge reads its `manual_plane`, `k8s_deferred` and
-`hold_plane` ledger classes (#3392). deploy-ui and renovate-agent install `gitops_markers.py`
+`hold_plane` ledger classes (#3392). `gitops_hold.py` is copied too: its `DeployerSnapshot`
+is how the GitOps Status check reads every marker it judges (#3703). deploy-ui and renovate-agent install `gitops_markers.py`
 and `gitops_ledger.py` into `/opt` with a `src:` naming the deployer's `files/`, and `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to each file to
 the roles that install it (#3275, #3306). monitor-bridge is the exception: it ships its own
 `files/` into a pod through a ConfigMap built from `monitor_bridge_modules`, so the module has
@@ -40,6 +41,7 @@ from lib.repo_paths import REPO
 SELF = "scripts/dev/gen_gitops_markers.py"
 SOURCE = "ansible/roles/setup/gitops_deploy/files/gitops_markers.py"
 LEDGER_SOURCE = "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py"
+HOLD_SOURCE = "ansible/roles/setup/gitops_deploy/files/gitops_hold.py"
 
 # Every module a role ships from its own `files/`, as `(source, copy)`. Each consumer reaches
 # a copy as a sibling module (`import gitops_markers`), which is also how the ledger copy
@@ -47,6 +49,7 @@ LEDGER_SOURCE = "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py"
 COPIES = (
     (SOURCE, "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py"),
     (LEDGER_SOURCE, "ansible/roles/k8s/monitor-bridge/files/gitops_ledger.py"),
+    (HOLD_SOURCE, "ansible/roles/k8s/monitor-bridge/files/gitops_hold.py"),
 )
 
 
