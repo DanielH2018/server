@@ -131,10 +131,13 @@ call and no report — every `must_match` then reads as missing, including trivi
 signature means "no output", not "wrong answer". Those three were confirmed by fixing a failing case
 and re-running it, not by reasoning:
 
-1. **Cite paths that exist.** `003` cited `roles/containers/app` (no such role — the Pi has five)
-   and scored 1/3 twice; repointed at the real `roles/containers/wg-easy` it scores **3/3**. Cases
-   citing retired roles (`k8s/kopia`) or roles that never existed (`k8s/longhorn` — the real files
-   are under `roles/setup/k3s/templates/`) were corrected for the same reason.
+1. **Cite paths that exist.** `003` cited `roles/containers/app` (no such role; the Pi runs four
+   plus the shared `common`) and scored 1/3 twice; repointed at the real `roles/containers/wg-easy`
+   it scores **3/3**. Cases citing retired roles (`k8s/kopia`) or roles that never existed
+   (`k8s/longhorn` — the real files are under `roles/setup/k3s/templates/`) were corrected for the
+   same reason. `test_no_case_cites_a_retired_container_role` holds every cited
+   `roles/containers/<x>` to daniel-pi's `containers_list`. A fixture for a service that does not
+   exist yet goes under `roles/k8s/`, marked "(a new role, not yet merged)".
 2. **Pre-supply anything an earlier step would have gathered.** `012` asked for the step-3 dispatch
    plan, so the model correctly went to do step-2 priming first — a memory read — and never got to
    the briefs: 0/3. With the primed material inlined and priming declared done, **3/3**. Same
@@ -157,11 +160,14 @@ and re-running it, not by reasoning:
    names a `roles/k8s/` path marked "(a new role, not yet merged)". This rule is a
    diagnosis, not yet a measurement: the sweep deleted its per-run output, so the next hermetic
    sweep is what confirms it. Of the sweep's two 1/3 cases, `008` was missing the `findings.py
-   list` output its skill's priming step asks for, and now carries it. `006` is unchanged. It
-   cites `roles/k8s/traefik/templates/middleware.yaml.j2`, which does not exist, but each live
-   file tried in its place makes finding 2 false: compression is attached entrypoint-wide in
-   `dynamic.yaml.j2`. One pass in three also fits ordinary variance, so the next sweep decides
-   whether `006` needs a rebuild (#4020 tracks the path).
+   list` output its skill's priming step asks for, and now carries it. `006` cited
+   `roles/k8s/traefik/templates/middleware.yaml.j2`, which does not exist, for an orphaned
+   compression middleware; compression is attached entrypoint-wide in `dynamic.yaml.j2`, so the
+   finding was false against any live file. #4020 replaced it with an open, true finding on a
+   live file (the never-rendered `wg-easy/templates/pull-pi-peers.sh.j2`, #3748). The same
+   change rebuilt eight cases that passed the sweep but cited retired `roles/containers/` roles,
+   and one of them, `homelab-review/002`, also carried a settled "Pi images are unpinned"
+   decision that the Pi's digest pins had made false. A passing case edited this way is unverified until the next hermetic sweep.
 
 **Grade judgment in the rubric, not the regex.** `skeptic/003` first asserted
 `must_not_match: REFUTED`, which fires on "this is *not* refuted" — the assertion rejected correct
