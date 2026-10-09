@@ -41,7 +41,9 @@ the operator and reports that landing's verdict and exit code as its own. It ref
 `--since` and `--subject`, because the unit decides what deploys.
 
 The lander refuses a PR that changes a path on its approval list,
-`/etc/claude-land/approval-paths`. Those paths widen your own authority. When it refuses one,
+`/etc/claude-land/approval-paths`. Those paths widen your own authority. It also refuses a PR
+that changes a module the landing code imports, such as one under `scripts/lib/`, because that
+code decides whether the next PR lands. When it refuses one,
 leave the PR open, tell the operator it needs their review, and stop. Once they approve the PR's
 head commit on GitHub, run the same command again. A push after their approval needs a new
 approval.

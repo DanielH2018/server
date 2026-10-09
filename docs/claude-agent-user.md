@@ -59,7 +59,8 @@ The split makes the path visible instead. Every change that reaches root needs a
 `DanielClaudeBot`, a CI run and a lander record.
 
 The slice 3 gate has limits of its own. It requires the operator's approval only for the paths
-on its list, and #3888 tracks the code the gate imports from outside that list.
+on its list and the modules the landing process imports. Code that runs only after the checks,
+such as the deploy itself, falls under the root chain above.
 
 ## The template: `renovate-agent`
 
@@ -208,6 +209,13 @@ source of truth for the rendered list, with a reason beside each entry. It holds
 - `.github/`
 - `scripts/deploy_tools/land`, a prefix that covers `land.sh`, `land.py`, `land_*.py` and
   `land_lib/`
+- `pyproject.toml`, `uv.lock`, `uv.toml` and `.python-version`, which set the interpreter and
+  the packages `uv run` syncs before `land.py` starts
+
+The list does not name the modules the landing process imports, such as `scripts/lib/` and the
+deployer's helpers. The policy derives that set when it runs, from the modules it has loaded,
+and refuses a PR that changes one or adds a file that would shadow one (#3888).
+`gate_hits` in `scripts/deploy_tools/land_lib/policy.py` holds the rule.
 
 After each of 3b to 3d, `land.sh` reported `needs-manual-apply` for daniel-server. That run was
 skipped on purpose. Both `claude_code_agent_user_enabled` and `claude_code_lander_enabled` are

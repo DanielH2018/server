@@ -7,13 +7,17 @@ interactive sessions and renovate-agent's lander must land exactly as before.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_policy.py
 """
 
+import sys
+from types import ModuleType
+
 import pytest
 
-import land
+import land  # loads the landing's modules, which gate_hits reads
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools
 from deploy_tools.land_lib import merge, policy
 from deploy_tools.land_lib.options import PRIMARY_ENV, REQUIRE_BRANCH_PREFIX_ENV
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.pr_json import parse_file
 
 HEAD = "c" * 40
 PREFIX = "worktree-claude+"
@@ -106,6 +110,11 @@ REFUSALS = {
             ]
         },
         "ansible/vars/secrets.yml",
+    ),
+    # Not on the approval list: the landing process imported it, which is what refuses it.
+    "a module the landing imports": (
+        {"pr_files": [{"filename": "scripts/lib/gh.py"}]},
+        "need the operator's approval: scripts/lib/gh.py",
     ),
     "a held deployer": ({"state": {"hold_sha": "deadbeef"}}, "holding deadbeef"),
     "an unreadable hold": ({"state": {"hold_sha": None}}, "could not be read"),
@@ -316,3 +325,58 @@ def test_a_review_history_without_a_head_approval_still_refuses(
 )
 def test_the_approvers_latest_verdict_decides(reviews):
     assert policy.approval_problem(reviews, APPROVER, HEAD) == ""
+
+
+def _module(name, source=None):
+    module = ModuleType(name)
+    module.__file__ = source
+    return module
+
+
+def _gate_hits(*paths, previous=None):
+    """`gate_hits` over a checkout that loaded `lib.gh` and the stdlib `json`."""
+    checkout = policy.CHECKOUT
+    modules = {
+        "lib": _module("lib"),
+        "lib.gh": _module("lib.gh", str(checkout / "scripts/lib/gh.py")),
+        "json": _module("json", "/usr/lib/python3.14/json/__init__.py"),
+    }
+    entries = [{"filename": p} for p in paths]
+    if previous:
+        entries.append({"filename": "docs/moved.py", "previous_filename": previous})
+    files = [parse_file(e) for e in entries]
+    return policy.gate_hits(files, checkout, modules, [str(checkout / "scripts")])
+
+
+def test_a_module_the_gate_loaded_is_flagged():
+    assert _gate_hits("scripts/lib/gh.py", "docs/landing.md") == ["scripts/lib/gh.py"]
+
+
+def test_a_path_the_gate_never_loaded_is_clean():
+    assert _gate_hits("scripts/lib/unused.py", "scripts/dev/findings.py") == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["scripts/json.py", "scripts/lib/__init__.py", "scripts/sitecustomize.py"],
+    ids=["shadows-stdlib", "namespace-to-package", "startup-hook"],
+)
+def test_a_new_file_that_would_import_under_a_loaded_name_is_flagged(path):
+    assert _gate_hits(path) == [path]
+
+
+def test_a_rename_out_of_a_loaded_module_is_flagged():
+    assert _gate_hits(previous="scripts/lib/gh.py") == ["scripts/lib/gh.py"]
+
+
+def test_the_real_landing_process_counts_its_shared_modules():
+    """What `import land` loads is the closure, so these members must be in it."""
+    members = [
+        "scripts/lib/gh.py",
+        "scripts/lib/repo_paths.py",
+        "scripts/deploy_tools/land_lib/policy.py",
+        "scripts/deploy_tools/narrow_paths.py",
+        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+    ]
+    files = [parse_file({"filename": p}) for p in members]
+    assert policy.gate_hits(files, policy.CHECKOUT, sys.modules, sys.path) == members
