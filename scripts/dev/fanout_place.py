@@ -65,7 +65,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib import claims as claims_mod
-from fanout_lib.abandon import cmd_abandon
+from fanout_lib.abandon import cmd_abandon, cmd_stop
 from fanout_lib import launch as launch_mod
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
@@ -337,37 +337,6 @@ def cmd_status(args, tools: Tools) -> int:
             worst = max(worst, tier)
             print(line)
     return worst
-
-
-def cmd_stop(args, tools: Tools) -> int:
-    run = manifest_mod.load(args.run_id, root=args.manifest_root)
-    for b in run.batches:
-        if args.batch and b.batch != args.batch:
-            continue
-        # `clean` already reset this batch's unit and took its worktree. Stopping it again
-        # reads systemd's "Unit … not loaded" as the batch's status and then tells the
-        # operator to clean a tree that is gone.
-        if b.removed_at:
-            print(f"{b.batch} on {b.host}: cleaned ({b.removed_at})")
-            continue
-        try:
-            proc = tools.run(b.host, status_mod.stop_command(b.unit), 30.0, None)
-        except subprocess.TimeoutExpired:
-            print(f"{b.batch} on {b.host}: stop timed out")
-            continue
-        print(
-            f"{b.batch} on {b.host}: {'stopped' if proc.returncode == 0 else proc.stderr.strip()}"
-        )
-        # The worktree stays locked until `clean` runs it through lib.worktrees' content
-        # check — stopping a batch says nothing about whether its PR merged.
-        print(f"  run `clean {args.run_id}` once its PR merges")
-        # A landing or detached deploy left the unit's cgroup for its own scope (#3160), so
-        # the stop above did not end it.
-        print(
-            "  a landing or detached deploy it started keeps running in its own scope; "
-            f"on {b.host}: systemctl --user list-units 'land*' 'deploy-*'"
-        )
-    return 0
 
 
 def cmd_clean_one(

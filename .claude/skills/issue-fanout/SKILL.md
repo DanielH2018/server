@@ -258,7 +258,8 @@ unit is still active is kept, naming the unit: a running agent's tree is clean a
 until it commits, which is exactly what a merged tree looks like, and a `clean` run too early
 on 2026-09-17 removed two working batches' trees out from under their units (#1872).
 `stop <run-id>` stops the units first, for a fan-out abandoned
-before landing — run `clean` once the survivors' PRs merge. A landing or detached deploy the
+before landing — run `clean` once the survivors' PRs merge. It also releases each stopped
+batch's claims; an open PR the agent left still withholds its issues from `next`. A landing or detached deploy the
 agent already started is not stopped with its unit: it runs in its own `land<pr>-<pid>.scope`
 or `deploy-<pid>.scope` (#3160), so a stopped batch never leaves an apply half done.
 `systemctl --user list-units 'land*' 'deploy-*'` lists them.
@@ -421,8 +422,12 @@ branch `launch` printed as `claims held under <branch>`:
 uv run python scripts/dev/findings.py release <n> --worktree <branch> --reason "..."
 ```
 
-Anything left claimed past this point sits until the next fan-out's triage step reaps it —
-releasing explicitly is faster and says why.
+When no agent finished anything, `release --all --worktree <branch> --reason "..."` releases
+every open claim that branch holds in one call. `stop` and `abandon` already released their
+batches' claims.
+
+Release explicitly. A claim under the orchestrator's branch stays live for as long as that
+worktree exists, so `reap` does not clear it.
 
 **Collect every `MANUAL APPLY PENDING` heading.** An agent whose landing ended
 `needs-manual-apply` or `blocked` filed the pending apply as its own issue (step 3). Carry

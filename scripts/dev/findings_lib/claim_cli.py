@@ -207,10 +207,25 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     # with the label never created — hand-posted, or after an `--add-label` that failed.
     # Without this the release comment is posted and THEN the label edit exits 1, leaving
     # the claim released in the fold and the label standing.
+    if bool(args.numbers) == args.all:
+        sys.stderr.write("release: give issue numbers or --all, not both or neither\n")
+        return 2
     run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
+    # `--all` is the bulk way out of `claims --worktree` (#3925): an orchestrator's claims
+    # sit under a branch that stays live, so `reap` never clears them.
+    if args.all:
+        pairs = [
+            (i["number"], i)
+            for i in load_issues("open", tools)
+            if current_claim(i) == args.worktree
+        ]
+        if not pairs:
+            print(f"release: `{args.worktree}` holds no open claims")
+            return 0
+    else:
+        pairs = ((n, _load_issue(n, tools)) for n in args.numbers)
     refused = False
-    for number in args.numbers:
-        issue = _load_issue(number, tools)
+    for number, issue in pairs:
         try:
             plans = plan_release(
                 issue, worktree=args.worktree, when=now_iso(), reason=args.reason

@@ -465,3 +465,33 @@ def test_reap_creates_the_claimed_label_before_it_removes_it():
     assert calls.gh.index(
         next(c for c in created if c[2] == "claimed")
     ) < calls.gh.index(["issue", "edit", "1132", "--remove-label", "claimed"])
+
+
+def test_release_all_releases_only_the_claims_that_worktree_holds(capsys):
+    mine = [
+        make_issue(n, labels=["claimed"], comments=[claim_comment(WT, None, "t")])
+        for n in (1132, 1133)
+    ]
+    other = make_issue(
+        1134, labels=["claimed"], comments=[claim_comment("worktree-other", None, "t")]
+    )
+    tools, calls = build_tools(Fakes(issues=[*mine, other]))
+    assert main(["release", "--all", "--worktree", WT], tools) == 0
+    edits = [c[2] for c in calls.gh if c[:2] == ["issue", "edit"]]
+    assert edits == ["1132", "1133"]
+
+
+def test_release_all_with_nothing_held_says_so_and_writes_nothing(capsys):
+    tools, calls = build_tools(Fakes(issues=[make_issue(1132)]))
+    assert main(["release", "--all", "--worktree", WT], tools) == 0
+    assert f"`{WT}` holds no open claims" in capsys.readouterr().out
+    assert not [
+        c for c in calls.gh if c[:2] in (["issue", "edit"], ["issue", "comment"])
+    ]
+
+
+def test_release_refuses_numbers_and_all_together(capsys):
+    tools, calls = build_tools(Fakes(issues=[make_issue(1132)]))
+    assert main(["release", "1132", "--all", "--worktree", WT], tools) == 2
+    assert "not both or neither" in capsys.readouterr().err
+    assert calls.gh == []

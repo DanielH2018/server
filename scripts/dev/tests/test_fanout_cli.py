@@ -189,6 +189,12 @@ def test_stop_stops_the_unit_and_names_clean_as_the_next_step(tmp_path, capsys):
     code = main(["stop", manifest.run_id, "--manifest-root", str(tmp_path)], tools)
     assert code == 0
     assert [c[1] for c in run.host_calls] == ["systemctl --user stop fanout-1"]
+    # The stopped batch's claims go back under the orchestrator's branch (#3925).
+    assert (
+        "findings",
+        "release 1 --worktree o --reason fan-out batch 1 stopped",
+        None,
+    ) in (run.calls)
     out = capsys.readouterr().out
     assert "1 on daniel-box: stopped" in out
     assert f"clean {manifest.run_id}" in out
