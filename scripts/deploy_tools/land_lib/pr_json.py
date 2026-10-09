@@ -10,8 +10,10 @@ nothing about a `.get` chain on it (#3704). Each reader here narrows one shape a
 Every key is optional, because a `gh pr view` answer carries only the fields asked for. A field
 of the wrong type raises `ValueError`, which `Landing.view` reports as unparseable gh output. A
 string field that is JSON `null` reads as `""`: every caller already treats the two alike.
-A field the lander does not read is dropped, and ty reports a `.get` of a key these TypedDicts
-do not declare, so a new read starts by adding its field here.
+A top-level view field `PrView` does not declare raises `KeyError`, because ty reports
+`view["x"]` for an undeclared key but not `view.get("x")`, which would read `None` forever. A
+new read therefore starts by adding its field here. Nested fields the lander does not read are
+dropped.
 """
 
 import sys as _sys
@@ -86,7 +88,18 @@ def _login(value: JsonValue, what: str) -> Login | None:
 
 
 def parse_view(obj: JsonObject) -> PrView:
-    """The fields of a `gh pr view --json` answer the lander reads, each type-checked."""
+    """The fields of a `gh pr view --json` answer the lander reads, each type-checked.
+
+    Raises:
+        KeyError: `obj` carries a field `PrView` does not declare, so a caller asked gh for a
+            field no parser here reads.
+        ValueError: a field has the wrong type.
+    """
+    unknown = sorted(set(obj) - PrView.__optional_keys__)
+    if unknown:
+        raise KeyError(
+            f"PrView declares no field {', '.join(unknown)}; add it to pr_json.py"
+        )
     view: PrView = {}
     if "author" in obj:
         view["author"] = _login(obj["author"], "author")

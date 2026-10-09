@@ -17,7 +17,6 @@ def test_a_view_keeps_the_fields_the_lander_reads():
             "isCrossRepository": False,
             "mergeCommit": None,
             "body": None,
-            "url": "https://example.invalid/pr/1",
         }
     )
     assert view == {
@@ -28,6 +27,11 @@ def test_a_view_keeps_the_fields_the_lander_reads():
         "mergeCommit": None,
         "body": "",
     }
+
+
+def test_a_view_field_no_parser_reads_is_refused():
+    with pytest.raises(KeyError, match="url"):
+        parse_view({"state": "OPEN", "url": "https://example.invalid/pr/1"})
 
 
 @pytest.mark.parametrize(

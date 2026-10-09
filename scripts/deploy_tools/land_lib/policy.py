@@ -27,6 +27,7 @@ approval as well.
 
 import subprocess
 import sys as _sys
+from collections.abc import Callable
 from pathlib import Path as _Path
 from typing import NoReturn
 
@@ -123,8 +124,12 @@ def _refuse(ln: Landing, why: str) -> NoReturn:
     ln.die(f"refused by the landing policy: {why}", 1)
 
 
-def _list(ln: Landing, what: str) -> list[JsonObject]:
-    """Every entry of the PR's REST `what` listing (`files`, `reviews`), across all pages."""
+def _list[T](ln: Landing, what: str, parse: Callable[[JsonObject], T]) -> list[T]:
+    """Every entry of the PR's REST `what` listing (`files`, `reviews`), across all pages.
+
+    `parse` runs inside the read, so an entry of the wrong shape refuses the landing as
+    unparseable gh output rather than escaping as a traceback.
+    """
     try:
         pages = as_list(
             ln.tools.gh_json(
@@ -137,7 +142,7 @@ def _list(ln: Landing, what: str) -> list[JsonObject]:
             f"gh api pulls/{what}",
         )
         return [
-            entry
+            parse(entry)
             for page in pages
             for entry in as_object_list(page, f"gh api pulls/{what} page")
         ]
@@ -179,7 +184,7 @@ def check(ln: Landing) -> str:
         except (OSError, ValueError) as exc:
             _refuse(ln, f"the approval-path list is unusable: {exc}")
         # The REST listing, because it also names a rename's old path.
-        files = [parse_file(f) for f in _list(ln, "files")]
+        files = _list(ln, "files", parse_file)
         if len(files) >= FILE_CAP:
             _refuse(ln, f"it changes {len(files)} files, at GitHub's listing cap")
         hits = approval_hits(files, prefixes)
@@ -189,8 +194,9 @@ def check(ln: Landing) -> str:
             )
             if not o.approver:
                 _refuse(ln, why)
-            reviews = [parse_review(r) for r in _list(ln, "reviews")]
-            problem = approval_problem(reviews, o.approver, head)
+            problem = approval_problem(
+                _list(ln, "reviews", parse_review), o.approver, head
+            )
             if problem:
                 _refuse(ln, f"{why}; {problem}")
             say(f"{o.approver} approved {head[:8]}, lifting the approval-path refusal")
