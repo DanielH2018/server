@@ -235,9 +235,14 @@ recovery window, a weekly volume whose newest backup is more than 168 h old miss
 ```bash
 kubectl get volumes.longhorn.io -n longhorn-system -o json | jq -r '.items[]
   | select(.metadata.labels | keys | any(test("^recurring-job-group.longhorn.io/weekly")))
-  | select((.status.lastBackupAt // "1970-01-01T00:00:00Z") | fromdateiso8601 < now - 168*3600)
-  | [.status.lastBackupAt, .status.kubernetesStatus.pvcName] | @tsv'
+  | (.status.lastBackupAt // "") as $at
+  | select($at == "" or ($at | fromdateiso8601 < now - 168*3600))
+  | [(if $at == "" then "never" else $at end), .status.kubernetesStatus.pvcName] | @tsv'
 ```
+
+Longhorn writes an empty `lastBackupAt`, not null, on a volume with no backup, and
+`fromdateiso8601` rejects the empty string. The filter therefore tests for it first and prints
+such a volume as `never`.
 
 Seed each one, one at a time. Before you seed more than a few, read the budget line in
 `journalctl -t longhorn-backup-health`, as the playbook's header says:
