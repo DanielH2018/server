@@ -51,8 +51,10 @@ Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fi
 output -> normal permission flow. The hook can only ever DENY.
 """
 
+import functools
 import re
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from _hook_common import (
@@ -65,7 +67,7 @@ from _hook_common import (
     strip_shell_keywords,
 )
 
-_SSH_HOSTS = ("daniel-server", "daniel-pi", "daniel-box", "daniel-stage")
+_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 _REPO_PATH = "/home/ubuntu/server"
 
 # Load generators, by the name you type. A single `curl` is deliberately absent: one request to
@@ -119,15 +121,35 @@ def rollout_restart_problem(stage: list[str]) -> str | None:
     )
 
 
+@functools.cache
+def _ssh_hosts() -> tuple[str, ...]:
+    """Every host `hosts.ini` declares, read through the one parser `scripts/lib` shares.
+
+    Derived rather than listed: a hand-kept tuple here still named daniel-stage weeks after its
+    retirement (#3705). Deferred to the first `ssh` stage so the hot path never pays for the
+    import, and fail-open like every guard in front of Bash: no hosts means the rule is inert,
+    never that a session cannot run anything.
+    """
+    if str(_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(_SCRIPTS))
+    try:
+        from lib.ansible_inventory import host_names
+
+        return host_names()
+    except Exception:
+        return ()
+
+
 def remote_git_problem(stage: list[str]) -> str | None:
     """`ssh daniel-<host> '<git ...>'` with no cd into the repo."""
     if not stage or stage[0] != "ssh":
         return None
-    if not any(host in stage for host in _SSH_HOSTS):
+    hosts = _ssh_hosts()
+    if not any(host in stage for host in hosts):
         return None
     # The remote command is one argument after the host, so the git call is inside a single
     # token rather than split across the stage.
-    remote = " ".join(word for word in stage[1:] if word not in _SSH_HOSTS)
+    remote = " ".join(word for word in stage[1:] if word not in hosts)
     if not remote.lstrip().startswith("git "):
         return None
     if _REPO_PATH in remote or remote.lstrip().startswith("cd "):
