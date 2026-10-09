@@ -22,14 +22,9 @@ Run: uv run pytest ansible/tests/k8s/test_traefik_netpol_https_origin_lock.py
 import pytest
 
 from lib import yaml_fast
+from lib.render_context import render_context
 from validate.k8s_manifests import (
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
     K8S_ROLES,
-    load_yaml,
-    resolve_vars,
-    role_defaults,
 )
 from _manifest_guards import _render
 
@@ -39,11 +34,7 @@ SOURCES_VAR = "netpol_baseline_traefik_https_sources"
 HTTPS_POD_PORT = 8443
 HTTP_POD_PORT = 8000
 
-_BASE = resolve_vars(
-    {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)},
-    {**BASE_CONTEXT, **load_yaml(ALL_VARS)},
-)
-CTX = {**_BASE, **role_defaults(ROLE, _BASE)}
+CTX = render_context(K8S_ROLES / ROLE, strict=True)
 
 # The four sources by the inventory name each comes from, so a failure says which caller
 # the policy would drop rather than which index moved.

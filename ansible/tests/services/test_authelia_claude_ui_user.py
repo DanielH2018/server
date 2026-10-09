@@ -18,8 +18,8 @@ rendered manifests, with a non-vacuity assertion that the users database was fou
 import pytest
 from lib import yaml_fast
 from _helpers import K8S_ROLES
-from _k8s_render import host_context, render_role_template, rendered_docs
-from validate.k8s_manifests import role_defaults
+from _k8s_render import render_role_template, rendered_docs
+from lib.render_context import render_context
 
 OPERATOR_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$operator"
 CLAUDE_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$claudeui"
@@ -137,7 +137,9 @@ def test_each_user_renders_the_digest_resolved_for_that_user():
     operator's variable gives both users one password, and a swap gives each the other's.
     """
     operator = "operator"
-    claude = role_defaults("authelia", host_context())["authelia_k8s_claude_user"]
+    claude = render_context(K8S_ROLES / "authelia", strict=True)[
+        "authelia_k8s_claude_user"
+    ]
     secret = yaml_fast.safe_load(
         render_role_template(
             "authelia",

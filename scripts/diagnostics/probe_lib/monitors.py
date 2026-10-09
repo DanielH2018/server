@@ -35,11 +35,11 @@ from jinja2 import StrictUndefined, TemplateError
 
 from lib import yaml_fast
 from lib.json_types import as_object, as_object_list
-from lib.k8s_context import resolve_vars, role_defaults
 from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
-from lib.k8s_roles import HOST_VARS
-from lib.render_guard import BASE_CONTEXT, load_yaml, make_env
-from lib.repo_paths import ALL_VARS, ANSIBLE, REPO
+from lib.k8s_roles import K8S_ROLES
+from lib.render_context import render_context
+from lib.render_guard import make_env
+from lib.repo_paths import ANSIBLE, REPO
 from diagnostics.probe_lib.kuma_table_loop import TableLoop
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
@@ -144,15 +144,16 @@ _GATE_OR_NOT_RE = re.compile(r"\b(?:or|not)\b")
 def monitor_vars():
     """The variables the static-monitors template renders its intervals with.
 
-    Built the way `validate/k8s_manifests.py` builds a role's render context — inventory
-    under the uptime-kuma role's own defaults — because that is where the intervals live:
-    `uptime_kuma_k8s_bridge_push_interval` is a role default, `etcd_drill_full_kuma_interval_s` a
-    group_var, and the UPS tiles read a nut_host default through `| default(10)`. A
-    group_vars-only lookup would resolve one tile in fifty.
+    `lib.render_context`'s, the context `validate/k8s_manifests.py` renders the role with —
+    the uptime-kuma role's own defaults under the inventory — because that is where the
+    intervals live: `uptime_kuma_k8s_bridge_push_interval` is a role default,
+    `etcd_drill_full_kuma_interval_s` a group_var, and the UPS tiles read a nut_host default
+    through `| default(10)`. A group_vars-only lookup would resolve one tile in fifty.
     """
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **load_yaml(HOST_VARS)}
-    base = resolve_vars(base, base)
-    return {**base, **role_defaults("uptime-kuma", base)}
+    # Not strict: a variable that will not expand is dropped with a note, and the interval
+    # that reads it comes back None, which format_kuma_drift files under `missing`. A raise
+    # would take down every tile's check for the sake of one.
+    return render_context(K8S_ROLES / "uptime-kuma")
 
 
 def interval_seconds(raw, variables):

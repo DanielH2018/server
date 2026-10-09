@@ -17,7 +17,7 @@ Run: uv run pytest ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinn
 """
 
 from lib import yaml_fast
-from _manifest_guards import ALL_VARS, K8S, _render, _role_defaults
+from _manifest_guards import ALL_VARS, K8S, _render, _role_context
 
 ROLE = "registry"
 # The order both address lists are written in, stated here so an inventory reordering fails a
@@ -25,7 +25,7 @@ ROLE = "registry"
 # asserted below is what actually ties an index to a node.
 PROD_NODES = ("daniel-box", "daniel-server")
 
-DEFAULTS = _role_defaults(ROLE)
+DEFAULTS = _role_context(ROLE)
 CNI0 = ALL_VARS["k3s_cni0_gateways"]
 FLANNEL = ALL_VARS["k3s_flannel_node_ips"]
 
@@ -106,8 +106,7 @@ def test_the_rendered_policy_carries_both_grants():
     """The defaults agreeing is not the policy admitting — the template has to name both."""
     rendered = _render(
         K8S / ROLE / "templates" / "networkpolicy.yaml.j2",
-        domain="example.com",
-        **DEFAULTS,
+        **_role_context(ROLE, domain="example.com"),
     )
     docs = [d for d in yaml_fast.safe_load_all(rendered) if d]
     cidrs = {

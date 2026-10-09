@@ -12,22 +12,22 @@ from _manifest_guards import (
     K8S,
     _k8s_entries,
     _render,
-    _role_defaults,
+    _role_context,
 )
 
 
 def _headlamp_pod_spec(**overrides) -> dict:
     """The rendered pod spec.
 
-    `domain` is a SOPS value, so `_role_defaults` expands the URL defaults that read it with an
-    empty host. The assertions below are therefore about each URL's SHAPE — which name it pins
-    and which path it ends on — which is the property that has to hold anyway.
+    `domain` is a SOPS value, so the URL defaults that read it expand against the render
+    context's `example.com` stub. The assertions below are therefore about each URL's SHAPE —
+    which name it pins and which path it ends on — which is the property that has to hold anyway.
     """
-    context = {
-        "container_item": next(c for c in _k8s_entries() if c["name"] == "headlamp"),
-        **_role_defaults("headlamp"),
+    context = _role_context(
+        "headlamp",
+        container_item=next(c for c in _k8s_entries() if c["name"] == "headlamp"),
         **overrides,
-    }
+    )
     doc = yaml_fast.safe_load(
         _render(K8S / "headlamp" / "templates" / "deployment.yaml.j2", **context)
     )
@@ -76,7 +76,7 @@ def test_headlamp_oidc_is_armed_by_default():
     this repo has paid for. Arming depends on the `--kube-apiserver-arg=oidc-*` flags in
     roles/setup/k3s, applied by hand through k3s-bringup.yml; turn both off together.
     """
-    assert _role_defaults("headlamp")["headlamp_k8s_oidc_enabled"] is True
+    assert _role_context("headlamp")["headlamp_k8s_oidc_enabled"] is True
 
 
 def test_headlamp_with_oidc_on_swaps_the_serviceaccount_flag_for_the_oidc_flags():
@@ -157,7 +157,7 @@ def test_headlamp_leaves_the_oidc_callback_to_the_request_host():
     """
     args = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=True)["containers"][0]["args"]
     assert not [a for a in args if a.startswith("-oidc-callback-url")]
-    assert _role_defaults("headlamp")["headlamp_k8s_oidc_callback_url"] == ""
+    assert _role_context("headlamp")["headlamp_k8s_oidc_callback_url"] == ""
 
 
 def test_the_oidc_callback_flag_still_renders_when_it_is_pinned():

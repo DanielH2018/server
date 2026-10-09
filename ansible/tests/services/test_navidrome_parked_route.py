@@ -12,32 +12,24 @@ leaves the live IngressRoute serving unless the role arms `manifests_prune`, sin
 
 from _helpers import ANSIBLE
 from lib import yaml_fast
+from lib.render_context import render_context
 
 
 from validate.k8s_manifests import (
-    ALL_VARS,
-    BASE_CONTEXT,
     SHARED_TPL,
     k8s_entries,
-    load_yaml,
     make_env,
     make_lookup,
     register_ansible_filters,
-    resolve_vars,
-    role_defaults,
 )
 
 ROLE = ANSIBLE / "roles" / "k8s" / "navidrome"
 
 
 def _render_route() -> str:
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
-    base = resolve_vars(base, base)
-    ctx = {
-        **base,
-        **role_defaults("navidrome", base),
-        "container_item": k8s_entries()["navidrome"],
-    }
+    ctx = render_context(
+        ROLE, overrides={"container_item": k8s_entries()["navidrome"]}, strict=True
+    )
     env = make_env([ROLE / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)

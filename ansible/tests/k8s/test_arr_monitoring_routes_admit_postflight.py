@@ -31,7 +31,7 @@ from _manifest_guards import (
     K8S,
     _k8s_entries,
     _render,
-    _role_defaults,
+    _role_context,
     _route_template,
 )
 
@@ -52,9 +52,7 @@ def _monitoring_matches() -> dict[str, str]:
             continue
         rendered = _render(
             K8S / entry["name"] / "templates" / "ingressroute-monitoring.yaml.j2",
-            container_item=entry,
-            domain="example.com",
-            **_role_defaults(entry["name"]),
+            **_role_context(entry["name"], container_item=entry, domain="example.com"),
         )
         for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
             if not doc["metadata"]["name"].endswith("-monitoring"):
@@ -182,9 +180,7 @@ def test_the_app_route_itself_is_not_widened(app):
     assert route_tpl is not None, f"{app} renders no main IngressRoute at all"
     rendered = _render(
         route_tpl,
-        container_item=entry,
-        domain="example.com",
-        **_role_defaults(app),
+        **_role_context(app, container_item=entry, domain="example.com"),
     )
     assert "ClientIP" not in rendered
 

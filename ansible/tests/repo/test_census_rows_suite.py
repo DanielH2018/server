@@ -85,6 +85,13 @@ INLINE_TASK_WALK = re.compile(
     r"|\b\w*(?i:tasks)\w*\.r?glob\("
 )
 
+# A two-argument `role_defaults(role, base)` call: `lib.k8s_context`'s resolver, laid over or
+# under an inventory context by hand. The one-argument raw readers (`fragment_readers`,
+# `_autodeploy._role_defaults`) take a path and read the file as written, so they stay clean,
+# as does any `_role_defaults` a module defines for itself.
+HAND_LAYERED_DEFAULTS = re.compile(r"(?<!\w)role_defaults\([^)\n]*,")
+
+
 # Every module whose role census goes through `role_dirs`, pinned by name so a rewrite that
 # drops the call fails even when it also drops the spelling BARE_ROLE_WALK reads.
 ROLE_DIRS_CALLERS = frozenset(
@@ -233,6 +240,36 @@ ROWS = (
                 "its caller passes, tmp_path fixtures included; it is not a role census"
             ),
         },
+    ),
+    Census(
+        name="role-context-goes-through-render-context",
+        reason=(
+            "A context built as `{**base, **role_defaults(role, base)}` puts role defaults over "
+            "the inventory, the reverse of Ansible's precedence, and agrees with the deploy only "
+            "while no inventory key shares a default's name. A guard on such a context checks a "
+            "context the validator does not render (failure class 2, #3808). Use "
+            "`lib.render_context.render_context(K8S_ROLES / role, ...)`."
+        ),
+        files=lambda: tracked("ansible/tests/*.py", "scripts/diagnostics/*.py"),
+        offence=lines_matching(HAND_LAYERED_DEFAULTS),
+        red=(
+            Subject("a.py", 'ctx = {**base, **role_defaults("pi-peer-backup", base)}'),
+            Subject("b.py", "return {**role_defaults(_ROLE, base), **base}"),
+            Subject("c.py", "role_vars = role_defaults(role, {})"),
+        ),
+        green=(
+            Subject("a.py", 'ctx = render_context(K8S_ROLES / "pi-peer-backup")'),
+            Subject("b.py", "rows = role_defaults(BRIDGE_DEFAULTS)['rows']"),
+            Subject("c.py", "defaults = _role_defaults(role)"),
+        ),
+        min_matches=100,
+        must_find=frozenset(
+            {
+                "scripts/diagnostics/probe_lib/monitors.py",
+                "ansible/tests/services/test_pi_peer_backup_forced_command.py",
+            }
+        ),
+        allow={SELF: "the red fixtures above hold the offending spelling as text"},
     ),
     Census(
         name="role-dirs-callers-still-call-it",

@@ -11,7 +11,7 @@ whose digest is missing or malformed.
 import re
 
 from lib import yaml_fast
-from _manifest_guards import K8S, _k8s_entries, _render, _role_defaults
+from _manifest_guards import K8S, _k8s_entries, _render, _role_context
 
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -30,8 +30,13 @@ def _pod_spec(plugins: list[dict]) -> dict:
     doc = yaml_fast.safe_load(
         _render(
             K8S / "headlamp" / "templates" / "deployment.yaml.j2",
-            container_item=next(c for c in _k8s_entries() if c["name"] == "headlamp"),
-            **{**_role_defaults("headlamp"), "headlamp_k8s_plugins": plugins},
+            **_role_context(
+                "headlamp",
+                container_item=next(
+                    c for c in _k8s_entries() if c["name"] == "headlamp"
+                ),
+                headlamp_k8s_plugins=plugins,
+            ),
         )
     )
     return doc["spec"]["template"]["spec"]
@@ -79,5 +84,5 @@ def test_an_empty_plugin_list_renders_no_init_container():
     """The committed list is empty because the image bundles the one plugin in use; an init
     container that downloads nothing would still be a GitHub dependency at every pod start."""
     assert "initContainers" not in _pod_spec([])
-    committed = _role_defaults("headlamp")["headlamp_k8s_plugins"]
+    committed = _role_context("headlamp")["headlamp_k8s_plugins"]
     assert _pod_spec(committed) == _pod_spec([])
