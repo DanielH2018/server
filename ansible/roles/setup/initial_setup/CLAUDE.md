@@ -111,4 +111,4 @@ into `evals/history.json`, then publishes it.
 **Two host checks live here rather than in monitor-bridge**, both `kuma-check-*` timers that
 rerun on failure: the setup-plane drift reader (`setup_drift`) and the Loki read-route witness
 (`loki_route_witness`). Their schedules are in *At a glance*; the read-route witness runs
-hourly, not daily.
+hourly.
