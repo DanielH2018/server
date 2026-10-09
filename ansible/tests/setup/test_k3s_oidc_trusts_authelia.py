@@ -28,6 +28,7 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ANSIBLE, load_defaults
+from _k8s_render import rendered_docs
 from _setup_render import render_setup_text
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
@@ -295,3 +296,110 @@ def test_headlamp_sends_logins_to_an_issuer_the_apiserver_trusts():
         .render(domain=DOMAIN)
     )
     assert issuer.removeprefix("https://") in _issuer_hosts(_rendered_auth_config())
+
+
+def _authelia_client_ids() -> set[str]:
+    """Every `client_id` in the rendered Authelia config.
+
+    The config is a YAML document inside a Secret's `stringData`, so it is loaded twice.
+    """
+    for role, _name, doc in rendered_docs():
+        if role != "authelia" or not isinstance(doc, dict):
+            continue
+        raw = (doc.get("stringData") or {}).get("configuration.yml")
+        if not raw:
+            continue
+        oidc = (yaml_fast.safe_load(raw).get("identity_providers") or {}).get("oidc")
+        return {client["client_id"] for client in (oidc or {}).get("clients") or []}
+    return set()
+
+
+def _headlamp_client_id_arg() -> str | None:
+    """The `-oidc-client-id=` value the rendered Headlamp Deployment passes, or None."""
+    for role, _name, doc in rendered_docs():
+        if role != "headlamp" or not isinstance(doc, dict):
+            continue
+        if doc.get("kind") != "Deployment":
+            continue
+        for container in doc["spec"]["template"]["spec"]["containers"]:
+            for arg in container.get("args") or []:
+                if arg.startswith("-oidc-client-id="):
+                    return arg.removeprefix("-oidc-client-id=")
+    return None
+
+
+def _client_id_disagreements(
+    headlamp_id: str,
+    enabled: bool,
+    deployment_arg: str | None,
+    authelia_ids: set[str],
+    audiences: list[list[str]],
+) -> list[str]:
+    """Every place the headlamp client id is missing or different. Empty means they agree.
+
+    `headlamp_id` is `headlamp_k8s_oidc_client_id` and `enabled` is
+    `headlamp_k8s_oidc_enabled`. `deployment_arg` is what the rendered Deployment passes, which
+    is None when the switch is off: that is the documented rollback, under which the Authelia
+    client still renders and is still compared.
+    `audiences` is one list per trusted issuer, because each `jwt` entry carries its own.
+    """
+    problems = []
+    if enabled and deployment_arg != headlamp_id:
+        problems.append(f"the Deployment passes -oidc-client-id={deployment_arg}")
+    if headlamp_id not in authelia_ids:
+        problems.append(
+            f"Authelia has no client {headlamp_id!r}: {sorted(authelia_ids)}"
+        )
+    problems += [
+        f"an issuer's audiences are {entry}, not [{headlamp_id!r}]"
+        for entry in audiences
+        if entry != [headlamp_id]
+    ]
+    return problems
+
+
+def test_headlamp_client_id_agrees_across_authelia_headlamp_and_k3s():
+    """One client id, written in three roles, and no disagreement among them errors.
+
+    Headlamp sends it as `client_id`, Authelia must hold a client by that name, and Authelia
+    puts it in `aud`, which the API server matches against each issuer's `audiences`. The
+    first mismatch fails the login at Authelia, the second passes the login and Forbids every
+    call. The ids are kept as three literals rather than one shared variable because
+    `roles/setup/k3s` is applied by hand and restarts the control plane; this test is the
+    tie between them (#3751).
+    """
+    audiences = [e["issuer"]["audiences"] for e in _rendered_auth_config()["jwt"]]
+    assert audiences, "the authentication config trusts no issuer; nothing was compared"
+    headlamp = load_defaults(HEADLAMP)
+    problems = _client_id_disagreements(
+        headlamp["headlamp_k8s_oidc_client_id"],
+        headlamp["headlamp_k8s_oidc_enabled"],
+        _headlamp_client_id_arg(),
+        _authelia_client_ids(),
+        audiences,
+    )
+    assert problems == []
+
+
+def test_the_client_id_check_flags_each_copy_that_drifts():
+    """The rejecting half: renaming any one of the copies is flagged.
+
+    Without it the test above passes on a check that returns `[]` for everything, and it
+    passes too once `_authelia_client_ids` stops finding the client list.
+    """
+    assert "headlamp" in _authelia_client_ids()
+    ids = {"grafana", "headlamp"}
+    both = [["headlamp"], ["headlamp"]]
+    assert _client_id_disagreements("headlamp", True, "headlamp", ids, both) == []
+    assert len(_client_id_disagreements("dashboard", True, "dashboard", ids, both)) == 3
+    assert len(_client_id_disagreements("headlamp", True, "dashboard", ids, both)) == 1
+    assert len(_client_id_disagreements("headlamp", True, None, ids, both)) == 1
+    assert (
+        len(_client_id_disagreements("headlamp", True, "headlamp", {"grafana"}, both))
+        == 1
+    )
+    assert _client_id_disagreements("headlamp", False, None, ids, both) == []
+    one_off = [["headlamp"], ["x"]]
+    assert (
+        len(_client_id_disagreements("headlamp", True, "headlamp", ids, one_off)) == 1
+    )

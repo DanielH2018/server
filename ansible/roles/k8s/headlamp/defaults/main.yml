@@ -86,7 +86,8 @@ headlamp_k8s_oidc_enabled: true
 # The client id, which is also the audience: Authelia's default
 # `id_token_audience_mode: specification` puts only the client id in `aud`, and the API server
 # matches it against the `audiences` of every issuer in its authentication config. One value,
-# three places.
+# three places, tied by test_headlamp_client_id_agrees_across_authelia_headlamp_and_k3s in
+# ansible/tests/setup/test_k3s_oidc_trusts_authelia.py.
 headlamp_k8s_oidc_client_id: headlamp
 # THE PUBLIC name, and pinning it is forced by Headlamp's code rather than chosen. Headlamp
 # reads `-oidc-idp-issuer-url` ONCE, at server start, and builds one `oidc.Provider` from it
