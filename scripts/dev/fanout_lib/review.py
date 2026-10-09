@@ -25,6 +25,14 @@ pipeline writes the running phase to `.fanout/phase` and resets the hook's block
 each call. The hook never blocks a `review` phase, whose final message is JSON, and holds a
 `land` phase to a `VERDICT:` line.
 
+WHAT THE IMPLEMENTER CAN WRITE. The worktree, and for another repo's batch the `.fanout/server`
+snapshot this module runs from. The pipeline therefore reads the review prompt, the headless
+system prompt and the Stop hook once, at start (#3763, #3794). Each phase gets the prompts as
+text and runs the hook from a copy outside the worktree that is rewritten before every call.
+This repo's `.claude/settings.json` still registers the worktree's copy of the hook, and the
+other project hooks, from the tree the agent writes; `--setting-sources` could drop them only
+with every guard hook besides.
+
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
 record under `STATE_DIR`.
@@ -34,7 +42,6 @@ kill criterion is measured, and it outlives the worktree that `clean` removes.
 """
 
 import json
-import shlex
 import subprocess
 import time
 from collections.abc import Callable, Sequence
@@ -49,11 +56,27 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import ISSUES_HEADING, _fence, _landing, lands
-from fanout_lib.launch import REVIEW_RUNTIME_MAX_S, claude_args
+from fanout_lib.launch import (
+    BUDGET_USD,
+    REVIEW_RUNTIME_MAX_S,
+    SYSTEM_PROMPT_FILE,
+    stop_hook_settings,
+)
 from fanout_lib.status import PR_URL
 from fanout_lib.target import Target
 
 PROMPT_FILE = Path(__file__).resolve().parent / "review_system_prompt.md"
+# The checkout this module was loaded from: the batch worktree for this repo, the batch's
+# `.fanout/server` snapshot for another repo. Both are trees the implementer can write.
+SOURCE_ROOT = Path(__file__).resolve().parents[3]
+HEADLESS_PROMPT_FILE = SOURCE_ROOT / SYSTEM_PROMPT_FILE
+# The files the `fanout-stop` Stop hook runs from: the hook, the shared module it imports and
+# the shell entry point that registers it.
+STOP_HOOK_FILES = ("run-hook.sh", "fanout-stop.py", "_hook_common.py")
+# Names the pipeline's own copy of `fanout-stop.py` to every hook the session runs. The
+# worktree's copy, which this repo's `.claude/settings.json` registers too, stands down when
+# it is set to another path, so one Stop spends the block cap once.
+STOP_HOOK_ENV = "FANOUT_STOP_HOOK"
 REVIEW_BUDGET_USD = 15
 # A finding the fix round acts on. The reviewer reports everything, as the user-level
 # `## Code review` rule asks; this is the separate filtering pass.
@@ -337,11 +360,35 @@ class Pipeline:
         self.session = ""
         # Read now, before the implementer runs. A server unit imports this module from the
         # batch worktree, which that agent can write, so a file read at review time would
-        # take whatever the implementer left there.
+        # take whatever the implementer left there. The headless prompt and the Stop hook
+        # are held the same way for every phase the implementer's session resumes into
+        # (#3794): each phase gets the prompt as text and runs the hook from `hook_root`,
+        # which `_snapshot_hook` rewrites from these bytes before every call.
         self.review_prompt = PROMPT_FILE.read_text()
+        self.headless_prompt = HEADLESS_PROMPT_FILE.read_text()
+        hooks = SOURCE_ROOT / ".claude" / "hooks"
+        self.stop_hook = {name: (hooks / name).read_bytes() for name in STOP_HOOK_FILES}
+        self.hook_root = state_dir / f"{batch}-stop-hook"
+
+    def _snapshot_hook(self) -> Path:
+        """Write the Stop hook held since start into `hook_root`, outside the worktree.
+
+        Every process here runs as one user, so no directory is out of the agent's reach.
+        Rewriting the bytes before each call is what makes the copy the pipeline's: an edit
+        the agent makes to it lasts until the next phase starts, never into it.
+        """
+        hooks = self.hook_root / ".claude" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        for name, data in self.stop_hook.items():
+            path = hooks / name
+            path.unlink(missing_ok=True)
+            path.write_bytes(data)
+            path.chmod(0o555 if name.endswith(".sh") else 0o444)
+        return hooks / "fanout-stop.py"
 
     def _claude(self, name: str, argv: list[str], stdin: str) -> Phase:
         fanout = self.worktree / ".fanout"
+        self._snapshot_hook()
         (fanout / "phase").write_text(
             f"{'review' if name.startswith('review') else name}\n"
         )
@@ -366,15 +413,31 @@ class Pipeline:
     def _git(self, *args: str) -> str:
         return self.run(["git", "-C", str(self.worktree), *args], None).stdout.strip()
 
+    def _stop_hook(self) -> list[str]:
+        """The prefix that runs `claude` under the Stop hook held since start.
+
+        `launch.claude_args` names the hook by path inside a tree the agent can write, so a
+        later phase would run whatever the agent left there.
+        """
+        hook = self.hook_root / ".claude" / "hooks" / "fanout-stop.py"
+        settings = json.dumps(stop_hook_settings(str(self.hook_root)))
+        return ["env", f"{STOP_HOOK_ENV}={hook}", "claude", "--settings", settings]
+
     def _implementer(self) -> list[str]:
-        return shlex.split(claude_args(self.target, str(self.worktree)))
+        return [
+            *self._stop_hook(),
+            "-p", "--model", "opus", "--permission-mode", "auto",
+            "--output-format", "json", "--max-budget-usd", str(BUDGET_USD),
+            "--append-system-prompt", self.headless_prompt,
+        ]  # fmt: skip
 
     def _resume(self) -> list[str]:
         return [*self._implementer(), "--resume", self.session]
 
     def _reviewer(self) -> list[str]:
         return [
-            "claude", "-p", "--model", "opus", "--permission-mode", "auto",
+            *self._stop_hook(),
+            "-p", "--model", "opus", "--permission-mode", "auto",
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
             "--append-system-prompt", self.review_prompt,
             "--disallowedTools", "Edit,Write,NotebookEdit",

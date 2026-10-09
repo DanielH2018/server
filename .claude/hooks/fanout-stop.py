@@ -44,6 +44,16 @@ message is structured JSON, with no PR URL to give. A `land` session owes a `VER
 although its brief stops at the PR, because the pipeline handed it the landing section
 afterwards. With no phase file, the brief alone decides, as before.
 
+A `red` session never blocks either. It writes the failing tests a red/green batch starts
+from, and like a reviewer it ends with structured JSON and has no PR to name.
+
+THE PIPELINE'S OWN COPY. A review pipeline reads this file once at start and runs every phase
+from a copy outside the worktree, because the implementer can rewrite the worktree's copy
+(#3794). It names that copy in `FANOUT_STOP_HOOK`. This repo's `.claude/settings.json` still
+registers the worktree's copy, so a copy that is not the named one stands down, and one Stop
+spends the block cap once. An edited worktree copy can ignore that, but it cannot stop the
+pipeline's copy from running.
+
 THE CAP. A counter in `.fanout/stop-blocks` allows at most `MAX_BLOCKS` blocks per batch.
 After that it lets the session end, and `status` reports the batch `no-pr` rather than `done`.
 Anthropic's Opus 5.5 guide recommends stopping after two or three automatic continuations. A
@@ -57,6 +67,7 @@ session, or nothing to let it stop.
 """
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -67,6 +78,10 @@ MARKER = Path(".fanout") / "brief.md"
 COUNTER = Path(".fanout") / "stop-blocks"
 PHASE = Path(".fanout") / "phase"
 MAX_BLOCKS = 3
+# Mirrors `review.STOP_HOOK_ENV`.
+STOP_HOOK_ENV = "FANOUT_STOP_HOOK"
+# The pipeline phases whose final message is structured JSON rather than a PR URL.
+UNBLOCKED_PHASES = frozenset({"review", "red"})
 
 # Mirrors `status.PR_URL`, `status.BLOCKER` and `status.VERDICT`.
 PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
@@ -160,13 +175,21 @@ def _blocks_so_far(root: Path) -> int:
         return 0
 
 
+def stands_down(env=os.environ) -> bool:
+    """Whether the pipeline named another copy of this hook as the one that decides."""
+    named = env.get(STOP_HOOK_ENV)
+    return bool(named) and Path(named).resolve() != Path(__file__).resolve()
+
+
 def decide(payload: dict) -> str | None:
     """The block reason for this Stop, or None to let the session end."""
+    if stands_down():
+        return None
     root = fanout_root(str(payload.get("cwd") or "."))
     if root is None:
         return None
     running = phase(root)
-    if running == "review":
+    if running in UNBLOCKED_PHASES:
         return None
     item = open_item(
         str(payload.get("last_assistant_message") or ""),

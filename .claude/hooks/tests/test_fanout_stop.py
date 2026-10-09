@@ -175,3 +175,22 @@ def test_a_land_phase_owes_a_verdict_although_its_brief_stops_at_the_pr(tmp_path
     reason = _stop(root, FINISHED)
     assert reason and "no `VERDICT:` line" in reason
     assert _stop(root, LANDED) is None
+
+
+def test_a_red_phase_may_stop_on_its_json(tmp_path):
+    """The test author ends with structured JSON and opens no PR."""
+    root = _fanout_tree(tmp_path)
+    (root / ".fanout" / "phase").write_text("red\n")
+    assert _stop(root, '{"behaviours": []}') is None
+
+
+def test_a_copy_the_pipeline_did_not_name_stands_down_and_the_named_one_decides(
+    tmp_path, monkeypatch
+):
+    """The worktree's copy and the pipeline's snapshot both run on a server batch (#3794)."""
+    root = _fanout_tree(tmp_path)
+    snapshot = tmp_path / "snapshot" / "fanout-stop.py"
+    monkeypatch.setenv(_mod.STOP_HOOK_ENV, str(snapshot))
+    assert _stop(root, PROGRESS) is None
+    monkeypatch.setenv(_mod.STOP_HOOK_ENV, _HOOK)
+    assert _stop(root, PROGRESS) is not None

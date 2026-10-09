@@ -162,7 +162,7 @@ def test_a_security_finding_stays_off_the_public_comment_and_the_tracker(tmp_pat
         "token leaks" not in run.claude[4][1]
     )  # the land prompt files public ones only
     assert "held off the public tracker" in final["result"]
-    (record,) = (tmp_path / "state").iterdir()
+    (record,) = (tmp_path / "state").glob("*.json")
     assert "token leaks" in record.read_text()
 
 
@@ -215,3 +215,43 @@ def test_the_reviewer_prompt_is_the_text_read_before_the_implementer_ran(tmp_pat
     assert Pipeline(tmp_path, "1", "h", SERVER_TARGET, "").review_prompt == (
         PROMPT_FILE.read_text()
     )
+
+
+def test_every_phase_runs_the_prompt_and_stop_hook_read_at_start(tmp_path):
+    """The implementer can rewrite the worktree's prompt file and hook, so neither is read
+    again once it has run (#3794)."""
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [_finding("off by one")]}),
+        _report(f"Fixed it. {PR}"),
+        _report(structured={"summary": "resolved", "findings": []}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    pipeline.headless_prompt = "PROMPT AT START"
+    pipeline.stop_hook = dict(
+        pipeline.stop_hook, **{"fanout-stop.py": b"HOOK AT START"}
+    )
+
+    hook = pipeline.hook_root / ".claude" / "hooks" / "fanout-stop.py"
+    seen = []
+
+    def agent_edits_the_hook(argv, stdin):
+        if argv[0] == "env":
+            seen.append(hook.read_bytes())
+            hook.chmod(0o644)
+            hook.write_bytes(b"EDITED")
+        return run(argv, stdin)
+
+    pipeline.run = agent_edits_the_hook
+    pipeline.run_all()
+
+    for argv in (run.claude[0][0], run.claude[2][0], run.claude[4][0]):
+        assert "--append-system-prompt-file" not in argv
+        assert argv[argv.index("--append-system-prompt") + 1] == "PROMPT AT START"
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        command = settings["hooks"]["Stop"][0]["hooks"][0]["command"]
+        assert command.startswith(str(pipeline.hook_root))
+        assert str(tmp_path / ".claude") not in command
+    # Every phase starts from the bytes read at start, not the last phase's edit.
+    assert seen == [b"HOOK AT START"] * 5
