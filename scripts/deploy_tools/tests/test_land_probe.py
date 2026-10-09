@@ -61,6 +61,22 @@ def test_a_refusal_without_a_verdict_reports_its_land_line(tmp_path):
     )
 
 
+def test_a_multi_line_refusal_is_reported_whole(tmp_path):
+    """`_refuse_stray_closing_refs` lists the refs and the remedy below its first line."""
+    message = (
+        "land: PR #939's body carries a closing keyword (issue #2513):\n"
+        "  Fixes #12 in passing\n"
+        "Rewrite the reference, then re-run this."
+    )
+    log = landing(tmp_path, f"== arm  arming\n{message}\n", rc=1)
+    assert land_probe.read(log)["detail"] == f"{message}; read {log}"
+
+
+def test_a_land_warning_ends_at_the_next_phase(tmp_path):
+    log = landing(tmp_path, "land: a warning\n== 4/6  deploying\n", rc=1)
+    assert land_probe.read(log)["detail"] == f"land: a warning; read {log}"
+
+
 def test_a_landing_with_neither_line_says_so(tmp_path):
     log = landing(tmp_path, "== 0/6  waiting\n", rc=1)
     assert land_probe.read(log)["detail"] == f"no VERDICT line; read {log}"
