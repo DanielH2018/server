@@ -188,20 +188,38 @@ def test_the_green_gate_passes_a_fixed_red_test_that_calls_git(tmp_path):
     assert green_gate(run, repo, red, gate) == ""
 
 
+DIFFS_BASE = (
+    "\n\ndef test_changed():\n    import subprocess\n\n"
+    "    changed = subprocess.run(\n"
+    "        ['git', 'diff', '--name-only', 'origin/master', 'HEAD'],\n"
+    "        capture_output=True, text=True, check=True,\n    ).stdout.split()\n"
+    "    assert 'mod.py' in changed\n"
+)
+
+
 def test_the_green_gate_reads_the_same_origin_master_as_the_red_gate(tmp_path):
     """A clone of a path would map the source's local branch to `origin/master`."""
-    diffs_base = (
-        "\n\ndef test_changed():\n    import subprocess\n\n"
-        "    changed = subprocess.run(\n"
-        "        ['git', 'diff', '--name-only', 'origin/master', 'HEAD'],\n"
-        "        capture_output=True, text=True, check=True,\n    ).stdout.split()\n"
-        "    assert 'mod.py' in changed\n"
-    )
-    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": diffs_base})
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": DIFFS_BASE})
     git_out(repo, "update-ref", "refs/remotes/origin/master", base)
     gate = red_gate(run, repo, base, red)
     assert gate.passed, gate.reason
     commit(repo, "fix", **{"mod.py": FIXED})
+    assert green_gate(run, repo, red, gate) == ""
+
+
+def test_moving_origin_master_after_the_red_gate_does_not_move_the_green_gates(
+    tmp_path,
+):
+    """Every worktree shares `origin/master`, and a fetch or the implementer can move it (#3845).
+
+    Moved to the fix itself, the live ref would leave `mod.py` out of the diff.
+    """
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": DIFFS_BASE})
+    git_out(repo, "update-ref", "refs/remotes/origin/master", base)
+    gate = red_gate(run, repo, base, red)
+    assert gate.passed, gate.reason
+    fix = commit(repo, "fix", **{"mod.py": FIXED})
+    git_out(repo, "update-ref", "refs/remotes/origin/master", fix)
     assert green_gate(run, repo, red, gate) == ""
 
 

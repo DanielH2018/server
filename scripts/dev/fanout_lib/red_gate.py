@@ -28,7 +28,9 @@ verdict HEAD's: the implementer controls the worktree's index and git config, so
 skip-worktree entry, an `info/exclude` line or `status.showUntrackedFiles=no` each hides an
 edit from `git status`. The clone reads none of that repo's config or `info/attributes`, so a
 smudge filter cannot rewrite a test on checkout either, and it is a repository, so a red test
-that runs `git ls-files` passes there as it would in CI (#3837). It shares the worktree's
+that runs `git ls-files` passes there as it would in CI (#3837). Its `origin/master` is the
+SHA the red gate read, so a test that diffs against it sees the same base at both gates
+(#3845). It shares the worktree's
 object store, which the agent can also write; CI's run is the backstop there too.
 
 Both gates run pytest with `-c pyproject.toml`, so the root configuration decides every run.
@@ -110,6 +112,9 @@ class Gate:
     reason: str = ""
     files: list[str] = field(default_factory=list)
     nodes: list[str] = field(default_factory=list)
+    # `refs/remotes/origin/master` when the red gate ran, "" when there was none. Every
+    # worktree shares that ref, so the green gate pins its clone's copy here (#3845).
+    origin: str = ""
 
     @property
     def passed(self) -> bool:
@@ -203,6 +208,27 @@ def _git(run: Runner, worktree: Path, *args: str) -> subprocess.CompletedProcess
     return run(["git", "-C", str(worktree), *args], None)
 
 
+ORIGIN_MASTER = "refs/remotes/origin/master"
+
+
+def _origin_refs(run: Runner, clone: Path, origin: str) -> str:
+    """The `update-ref --stdin` input that leaves `clone` only the red gate's `origin/master`.
+
+    A clone of a path maps the source's local branches to `origin/*`, so its `origin/master`
+    is the source's local `master`. Tests that diff against `origin/master` must see the base
+    the red gate saw, not that branch and not the source's live remote-tracking ref, which a
+    fetch or the implementer can move between the gates (#3845). One transaction may not name
+    a ref twice, so `origin/master` is set rather than deleted and recreated.
+    """
+    mapped = _git(
+        run, clone, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/"
+    ).stdout.split()
+    lines = [f"delete {ref}" for ref in mapped if not (origin and ref == ORIGIN_MASTER)]
+    if origin:
+        lines.append(f"update {ORIGIN_MASTER} {origin}")
+    return "".join(f"{line}\n" for line in lines)
+
+
 def stray_config(run: Runner, worktree: Path) -> list[str]:
     """Untracked files pytest would read as configuration, ignored ones included.
 
@@ -236,6 +262,9 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str) -> Gate:
     """
     if base == red:
         return Gate("the test author committed nothing")
+    origin = _git(
+        run, worktree, "rev-parse", "--verify", "--quiet", f"{ORIGIN_MASTER}^{{commit}}"
+    ).stdout.strip()
     # An uncommitted edit to the code would make the tests fail for a reason the range
     # never shows, and a rewritten base would carry other history onto the PR branch.
     dirty = _git(run, worktree, "status", "--porcelain").stdout.strip()
@@ -271,7 +300,7 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str) -> Gate:
         return Gate("the red commits add no test node", files)
     proc = run(_pytest(worktree, "-q", "-rA", "--tb=no", *nodes), None)
     reason = judge_red(proc.returncode, proc.stdout, nodes)
-    return Gate(reason, files, nodes)
+    return Gate(reason, files, nodes, origin)
 
 
 def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
@@ -302,17 +331,10 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
             None,
         )  # fmt: skip
         if cloned.returncode == 0:
-            # A clone of a path maps the source's local branches to `origin/*`. Tests that
-            # read `origin/master` must see the base the red gate saw, so take the source's
-            # own remote-tracking refs, and prune the branches the clone mapped there.
             cloned = run(
-                [
-                    *_BARE_GIT, "-C", str(tree), "fetch", "--quiet", "--prune",
-                    "--no-tags", str(worktree),
-                    "+refs/remotes/origin/*:refs/remotes/origin/*",
-                ],
-                None,
-            )  # fmt: skip
+                [*_BARE_GIT, "-C", str(tree), "update-ref", "--no-deref", "--stdin"],
+                _origin_refs(run, tree, gate.origin),
+            )
         if cloned.returncode == 0:
             cloned = run(
                 [*_BARE_GIT, "-C", str(tree), "checkout", "--quiet", "--detach", head],
