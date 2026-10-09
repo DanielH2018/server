@@ -132,10 +132,10 @@
     - claude_code_operator_copied.stat.exists
 
 # ~/.claude/settings.json is Claude Code's file for this user, not the role's: it writes there
-# when a session changes a setting. So the role reads it, changes only `outputStyle` and one
-# `env` key, and leaves the owner the agent. The output style takes effect only through its
-# key, and its value comes from the operator's own settings.json, never from a literal here. A file that is not
-# JSON fails the apply rather than being replaced.
+# when a session changes a setting. So the role reads it, changes only `outputStyle` and keys
+# of `env`, and leaves the owner the agent. The output style takes effect only through its key,
+# and it and the copied env come from the operator's own settings.json, never from literals
+# here. A file that is not JSON fails the apply rather than being replaced.
 - name: Read the operator's output style
   ansible.builtin.slurp:
     src: "{{ claude_code_agent_operator_config_src }}/settings.json"
@@ -163,12 +163,18 @@
 # operator's style, so a style the agent chose itself stays. Written only when the result
 # differs, so an apply that changes nothing leaves the file Claude Code last wrote untouched.
 #
+# The operator's `env` block follows the same two arms, key by key: telemetry, compaction and
+# the artifact link settings. Two keys stay behind. SUDO_ASKPASS names a helper in the
+# operator's home, and the agent has no sudo. The pytest cap is set below from the role's own
+# variable. CLAUDE_ARTIFACTS_HOST gets `-claude` appended, because the artifacts role mounts
+# the agent's tree as `<node>-claude` beside the operator's `<node>`.
+#
 # The same write carries the pytest worker cap into `env`, from the variable the RC unit
 # reads. login_caps.yml's environment.d file reaches only services the user manager starts,
 # not a login shell or a `machinectl shell` session, so a `claude agents` session gets the cap
 # from here or not at all. With the login caps off, the key goes only while it holds the cap.
 # One task, not two: a second would compare against the slurp this one has made stale.
-- name: Set the agent's output style and pytest worker cap
+- name: Set the agent's output style, env and pytest worker cap
   vars:
     _style: >-
       {{ (claude_code_operator_settings.content | b64decode | from_json).outputStyle | default('')
@@ -184,8 +190,24 @@
          if claude_code_agent_operator_config
          else (_kept if _style | length > 0 and _current.outputStyle | default('') == _style
                else _current) }}
+    _operator: >-
+      {{ (claude_code_operator_settings.content | b64decode | from_json)
+         if claude_code_operator_settings.content is defined else {} }}
+    _operator_env: >-
+      {{ _operator.env | default({}) | dict2items
+         | rejectattr('key', 'in', ['SUDO_ASKPASS', 'PYTEST_XDIST_AUTO_NUM_WORKERS'])
+         | list | items2dict }}
+    _copied_env: >-
+      {{ _operator_env | combine({'CLAUDE_ARTIFACTS_HOST':
+                                  _operator_env.CLAUDE_ARTIFACTS_HOST ~ '-claude'})
+         if 'CLAUDE_ARTIFACTS_HOST' in _operator_env else _operator_env }}
+    _styled_env: "{{ _styled.env | default({}) }}"
+    _env: >-
+      {{ _styled_env | combine(_copied_env)
+         if claude_code_agent_operator_config
+         else _styled_env | dict2items | reject('in', _copied_env | dict2items)
+              | list | items2dict }}
     _cap: "{{ claude_code_rc_pytest_workers | string }}"
-    _env: "{{ _styled.env | default({}) }}"
     _env_wanted: >-
       {{ _env | combine({'PYTEST_XDIST_AUTO_NUM_WORKERS': _cap})
          if claude_code_login_caps_enabled
