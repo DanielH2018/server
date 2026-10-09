@@ -1,0 +1,41 @@
+[Unit]
+Description={{ alert_unit_description }}
+
+[Service]
+Type=oneshot
+# Rendered by roles/setup/common/tasks/alert_unit.yml for every setup role whose unit pages
+# Discord through OnFailure=; that file's header lists the callers' variables.
+#
+# The webhook comes from a dedicated one-key file, NOT from the failing service's config.env.
+# config.env is exactly what can be broken or unreadable when the service fails (gitops_deploy's
+# cfg() parses it at import, before its crash handler), and a hard EnvironmentFile= on it would
+# leave THIS alert unable to start. systemd's own EnvironmentFile parser runs no application
+# code, so a one-key file does not reintroduce that failure mode. curl's own UA is fine:
+# Cloudflare 1010-blocks python-urllib, not curl.
+#
+# It is NOT embedded in this unit. Embedding it plus `mode: 0600` was the previous arrangement,
+# and the mode did not protect the value: systemd serves unit content over the system bus, so
+# `systemctl show <unit> -p ExecStart` printed the full webhook to any local user with no sudo
+# (2026-08-23b review M5, and again for claude-rc in the 2026-08-24 review, a copy made after
+# the first two units had moved off the embed). Referencing "${ALERT_WEBHOOK}" makes that
+# command print the literal variable name instead. One template is what keeps a fix like that
+# from landing in some copies and not others.
+EnvironmentFile={{ alert_unit_env_dir }}/alert-webhook.env
+# Retries every failure, a refused connection and a failed DNS lookup included: one attempt
+# lost the page for claude-rc's 2026-10-04 07:46 crash to a DNS failure (#3523). Plain
+# --retry skips a refused connection. Worst case about two minutes; a oneshot has no start timeout.
+ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors -H "Content-Type: application/json" \
+  -d '{"content":"{{ alert_unit_message }}"}' \
+  "${ALERT_WEBHOOK}"
+# A delivered page left NO on-host record: `curl -fsS` is silent on success, and systemd's own
+# Starting/Finished lines are info-level, which journald drops here (MaxLevelStore=notice). So
+# `journalctl -u <name>-alert` read `-- No entries --` against real failures, which looks
+# identical to "the alert unit never fired". Both directives below are required and neither is
+# sufficient alone: SyslogLevel= governs only THIS unit's own stdout, never PID 1's lifecycle
+# messages, so without the echo it stores nothing; without SyslogLevel the echo lands at info and
+# is dropped. ExecStartPost runs only when ExecStart succeeded, so the line means "delivered",
+# not "attempted" — and a FAILED curl already logs at err, which survives the cap. Deliberately
+# not a `/bin/sh -c '… && echo …'` wrapper: that would re-quote the single-quoted JSON payload
+# for no gain.
+SyslogLevel=notice
+ExecStartPost=/bin/echo {{ alert_unit_name }} failure alert delivered

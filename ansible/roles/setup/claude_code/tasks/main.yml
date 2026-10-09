@@ -161,31 +161,17 @@
     mode: "0750"
   become: true
 
-- name: Write the alert webhook where only systemd reads it
+# OnFailure target, which pages Discord if the host dies. What it CANNOT catch is an expired
+# login: the host keeps running and systemd keeps reporting `active` while every session fails,
+# so no OnFailure= ever fires. This role's CLAUDE.md has that gap.
+- name: Install the Remote Control failure alert
   tags: [claude_code]
-  # 0600 and root-owned because this file is the only place the value lives. Keeping it
-  # out of the unit is what stops `systemctl show` printing it over the system bus — the unit's
-  # own mode never did.
-  ansible.builtin.template:
-    src: alert-webhook.env.j2
-    dest: /etc/claude-rc/alert-webhook.env
-    owner: root
-    group: root
-    mode: "0600"
-  become: true
-  no_log: true
-  notify: Reload systemd
-
-- name: Install the Remote Control alert unit
-  tags: [claude_code]
-  ansible.builtin.template:
-    src: claude-rc-alert.service.j2   # OnFailure target — pages Discord if the host dies
-    dest: /etc/systemd/system/claude-rc-alert.service
-    owner: root
-    group: root
-    mode: "0644"   # holds no secret now; 0644 matches the sibling units
-  become: true
-  notify: Reload systemd
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: claude-rc
+    alert_unit_description: Alert when the Claude Code Remote Control host fails
+    alert_unit_message: "🚨 claude-rc unit failed on {{ inventory_hostname }} — Remote Control sessions cannot be started from the phone. Check `journalctl -u claude-rc`."
+    alert_unit_env_dir: /etc/claude-rc
 
 # Both states are driven from the one var so the service has a way out as well as a way in:
 # false stops AND disables it, which is the rollback if a phone-reachable session on the
@@ -348,10 +334,20 @@
   loop:
     - claude-memory-sync.service
     - claude-memory-sync.timer
-    - claude-memory-sync-alert.service
   become: true
   when: claude_code_memory_sync_enabled
   notify: Reload systemd
+
+# Shares claude-rc's webhook file in /etc/claude-rc; rewriting it here changes nothing.
+- name: Install the memory store copy failure alert
+  tags: [claude_code]
+  when: claude_code_memory_sync_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: claude-memory-sync
+    alert_unit_description: Alert when the Claude memory store copy fails
+    alert_unit_message: "claude-memory-sync failed on {{ inventory_hostname }}: sessions on {{ claude_code_memory_sync_target }} keep reading a stale memory store. Check `journalctl -u claude-memory-sync`."
+    alert_unit_env_dir: /etc/claude-rc
 
 - name: Enable and start the memory store copy timer
   tags: [claude_code]
@@ -646,10 +642,10 @@
     stamp_render_name: claude-code
     stamp_render_templates:
       - ansible/roles/setup/claude_code/templates/claude-rc.service.j2
-      - ansible/roles/setup/claude_code/templates/claude-rc-alert.service.j2
+      - ansible/roles/setup/common/templates/unit-failure-alert.service.j2
+      - ansible/roles/setup/common/templates/alert-webhook.env.j2
       - ansible/roles/setup/claude_code/templates/claude-rc-restart.service.j2
       - ansible/roles/setup/claude_code/templates/claude-rc-restart.timer.j2
-      - ansible/roles/setup/claude_code/templates/alert-webhook.env.j2
       - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.service.j2
       - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.timer.j2
       - ansible/roles/setup/claude_code/templates/fleet-slice-caps.conf.j2
@@ -657,7 +653,6 @@
       - ansible/roles/setup/claude_code/templates/pytest-fanout-cap.conf.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.service.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.timer.j2
-      - ansible/roles/setup/claude_code/templates/claude-memory-sync-alert.service.j2
       - ansible/roles/setup/claude_code/templates/claude-land@.service.j2
       - ansible/roles/setup/claude_code/templates/50-claude-land.rules.j2
       - ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2

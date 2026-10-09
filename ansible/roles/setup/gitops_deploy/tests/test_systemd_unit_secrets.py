@@ -69,7 +69,9 @@ def test_alert_units_read_a_dedicated_webhook_file():
     for unit_path in alerts:
         unit = unit_path.read_text()
         assert re.search(
-            r"^EnvironmentFile=\S*alert-webhook\.env$", unit, re.MULTILINE
+            r"^EnvironmentFile=(?:\{\{ \w+ \}\}|\S)*alert-webhook\.env$",
+            unit,
+            re.MULTILINE,
         ), (
             f"{unit_path.relative_to(_ROLES)} does not read a dedicated alert-webhook.env. It "
             f"must NOT fall back to the role's config.env — that file is exactly what can be "
@@ -108,8 +110,9 @@ def test_alert_units_retry_a_failed_delivery():
     alerts = {
         p.name: p for p in _unit_templates() if p.name.endswith("-alert.service.j2")
     }
-    assert "claude-rc-alert.service.j2" in alerts, (
-        "the walk no longer finds the #3523 unit"
+    # Every alert, claude-rc's #3523 one included, renders from this shared template.
+    assert "unit-failure-alert.service.j2" in alerts, (
+        "the walk no longer finds the shared alert template"
     )
     for unit_path in alerts.values():
         exec_start = re.search(

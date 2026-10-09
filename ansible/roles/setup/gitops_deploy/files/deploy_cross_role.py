@@ -27,7 +27,13 @@ _HOST_LIB = frozenset(
 )
 _STAMPED = _HOST_LIB | {"claude_code", "deploy_ui", "initial_setup"}
 _KUMA_CHECK = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
+_ALERT_UNIT = frozenset(
+    {"claude_code", "gitops_deploy", "renovate_agent", "renovate_notify"}
+)
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
+    f"{_COMMON}/tasks/alert_unit.yml": _ALERT_UNIT,
+    f"{_COMMON}/templates/unit-failure-alert.service.j2": _ALERT_UNIT,
+    f"{_COMMON}/templates/alert-webhook.env.j2": _ALERT_UNIT,
     f"{_COMMON}/tasks/agent_user.yml": frozenset({"claude_code", "renovate_agent"}),
     f"{_COMMON}/files/host_lib.py": _HOST_LIB,
     f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
