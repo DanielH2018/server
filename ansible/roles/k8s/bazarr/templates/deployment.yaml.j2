@@ -1,6 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+{% from 'lsio-env.yml.j2' import lsio_env with context %}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -36,12 +37,7 @@ spec:
           # the role it was copied from — until 2026-08-23b L6.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
-            - name: PUID
-              value: "{{ puid }}"
-            - name: PGID
-              value: "{{ pgid }}"
-            - name: TZ
-              value: "{{ tz }}"
+{{ lsio_env() }}
           volumeMounts:
             - name: bazarr-config
               mountPath: /config

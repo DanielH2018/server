@@ -114,6 +114,12 @@ def _kuma_dials(subject: Subject) -> list[tuple[int, str]]:
     ]
 
 
+# ── Every LSIO container takes PUID/PGID/TZ from lsio_env() ───────────────────────────
+
+_LSIO_LITERAL = re.compile(r"^\s*- name: (PUID|PGID)\s*$", re.MULTILINE)
+_LSIO_CALL = "{{ lsio_env() }}"
+
+
 ROWS = (
     Census(
         name="no-role-ships-a-test-file",
@@ -304,6 +310,51 @@ ROWS = (
                 "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2",
                 "ansible/roles/k8s/cloudflare-ddns/templates/deployment-direct.yaml.j2",
                 "ansible/roles/k8s/pi-peer-backup/templates/secret.yaml.j2",
+            }
+        ),
+    ),
+    Census(
+        name="lsio-env-is-the-macro",
+        reason=(
+            "A linuxserver.io image chowns its config to PUID:PGID and drops to that uid, so "
+            "the PUID, PGID and TZ entries travel together and come from `lsio_env()` in "
+            "ansible/templates/lsio-env.yml.j2 (#3729). A copy is where one goes missing and "
+            "the container runs as the image's default uid. A non-LSIO container that sets "
+            "only TZ writes it out; this row never flags TZ alone."
+        ),
+        files=lambda: [
+            rel
+            for rel in tracked(
+                "ansible/roles/k8s/*/templates/*.j2", "ansible/templates/*.j2"
+            )
+            if rel != "ansible/templates/lsio-env.yml.j2"
+        ],
+        offence=lambda s: [
+            f"`{m.group(1)}` written out instead of lsio_env()"
+            for m in _LSIO_LITERAL.finditer(s.text)
+        ],
+        count=lambda s: s.text.count(_LSIO_CALL),
+        red=(
+            Subject(
+                "deployment.yaml.j2",
+                "          env:\n            - name: PUID\n"
+                '              value: "{{ puid }}"\n',
+            ),
+        ),
+        green=(
+            Subject("deployment.yaml.j2", f"          env:\n{_LSIO_CALL}\n"),
+            Subject(
+                "tz-only.yaml.j2",
+                '          env:\n            - name: TZ\n              value: "{{ tz }}"\n',
+            ),
+        ),
+        # 12 calls across 11 templates when the row landed (2026-10-09); qbittorrent has two.
+        min_matches=12,
+        must_find=frozenset(
+            {
+                "ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2",
+                "ansible/roles/k8s/home-assistant/templates/deployment.yaml.j2",
+                "ansible/templates/arr-deployment.yml.j2",
             }
         ),
     ),
