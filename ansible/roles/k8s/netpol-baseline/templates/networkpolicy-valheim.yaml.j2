@@ -1,3 +1,10 @@
+{# DECIDED: valheim opens two UDP ports to every source, so this fence stays bespoke.
+   The callers model (`netpol_from` / `netpol_fences`, macro in
+   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   Do not reach for `from_apps: []`: it renders `from:` as null, which admits every source by
+   accident rather than by statement.
+#}
 ---
 # The Valheim server. Same shape as networkpolicy-terraria.yaml.j2 and for the same reason: a
 # LoadBalancer with `externalTrafficPolicy: Local` preserves each player's real source address,

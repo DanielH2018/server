@@ -52,6 +52,10 @@ needs, decides which one.
   `netpol_baseline_enforced` lever or `netpol_baseline_node_cidrs`. Role defaults are
   role-scoped, so neither resolves in another role. Every `templates/networkpolicy-*.yaml.j2`
   file here reads one of them.
+  Each one also opens with a `DECIDED:` marker naming the shape the callers model below
+  cannot express: an ipBlock, a from-less open port, UDP, a second port, a cross-namespace
+  peer or a non-`app:` peer (#3701). The `bespoke-netpol-says-why-it-is-not-a-callers-fence`
+  row of `ansible/tests/repo/test_census_rows_roles.py` fails on one that does not.
 - **As data on the `containers_list` entry**, when the fence is one port and a list of caller
   pods: `netpol_from: [apps]`, rendered through the `networkpolicy` macro in
   `ansible/templates/networkpolicy.yml.j2`. `templates/networkpolicy-callers.yaml.j2` loops

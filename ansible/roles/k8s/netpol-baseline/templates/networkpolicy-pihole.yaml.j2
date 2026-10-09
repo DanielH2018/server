@@ -1,3 +1,12 @@
+{# DECIDED: pihole's :53 is open to every source over UDP and TCP, so this fence stays
+   bespoke.
+   The callers model (`netpol_from` / `netpol_fences`, macro in
+   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   One rule here would fit that model on its own, but splitting it out leaves this file
+   behind anyway, doubles the policy objects on one pod and renames a live object under the
+   armed prune, so the whole fence keeps one owner.
+#}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

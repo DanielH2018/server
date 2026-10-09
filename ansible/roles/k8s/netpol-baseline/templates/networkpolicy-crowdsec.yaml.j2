@@ -1,3 +1,9 @@
+{# DECIDED: crowdsec admits traefik on two ports (LAPI and AppSec) and prometheus from
+   another namespace, so this fence stays bespoke.
+   The callers model (`netpol_from` / `netpol_fences`, macro in
+   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+#}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
