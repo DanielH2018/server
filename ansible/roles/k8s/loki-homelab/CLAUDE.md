@@ -47,14 +47,9 @@ successor's first line. `speedtest-685455d6d9-fb847`, the pod #1604 reported as 
 nothing, answers with its `Pinged hostname` line stamped `2026-09-09 11:00:04`.
 
 So an empty result for a pod that went away is a claim about the query, not about the pod,
-until you have ruled out both of these:
-
-- **`probe.py loki-query` looks back one hour unless you pass `--since`.** Loki's own default,
-  not the tool's. Anything older returns nothing, which reads as "the pod logged nothing".
-- **`--limit` returns the NEWEST N lines, not the first N.** The query runs
-  `direction=backward` (`probe_lib/metrics.py`), and the default is 100. A selector matching a
-  busy stream alongside a quiet one spends the whole budget on the busy one, and the quiet
-  pod's older lines never appear. Pin the pod in the selector, or raise `--limit`.
+until you have ruled out the query's window and its line budget. `probe.py loki-query --help`
+gives each default under `--since` and `--limit`, and says how each one returns nothing for a
+pod that did log.
 
 What is genuinely not durable is narrower than "the pod's logs": a line the container writes
 in the seconds between Alloy's last read and the node going down. Nothing here bounds that

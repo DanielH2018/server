@@ -14,7 +14,6 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
 
 ## Where it runs
 - In `ansible/initial_setup.yml`, after [[config_files]] / [[initial_setup]] — every host.
-- `uv run ansible-playbook ansible/initial_setup.yml --tags "sops_setup"`.
 - **Granular tags:** `sops-install` (age + sops binary), `collections` (pinned galaxy
   install), `age-key` (key-dir/keygen/pubkey display + the first-host `.sops.yaml` seed —
   the seed shares the tag because it consumes the registered pubkey).

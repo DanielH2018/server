@@ -75,9 +75,8 @@ because a role doc is loaded on every task in this directory whether it is neede
 ## Claude tooling for this role
 - **The `home-assistant-engineer` agent** and the `ha-edit-automation` and
   `z2m-device-setting` skills carry the authoring workflow.
-- **`scripts/diagnostics/probe.py ha`** is read-only live HA state: `ha state`, `ha automation
-  <id-or-alias>` (which resolves the alias-slug≠id trap), `ha why` for the live per-condition
-  trace, and `ha verify-automations` as the post-deploy gate. Prefer it over recorder-DB
+- **`scripts/diagnostics/probe.py ha`** is read-only live HA state; `probe.py ha --help` lists
+  its subcommands. `ha verify-automations` is the post-deploy gate. Prefer it over recorder-DB
   reads.
 - **The derived state model** (`state/STATE.md`, `state/derived_state.yml`) is generated and
   freshness-gated by the `validate-ha-config` hook — never hand-edit it. The one
