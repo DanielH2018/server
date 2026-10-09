@@ -1,10 +1,10 @@
 {
   "id": "homelab-cicd-reviewer/002-frozenset-latest-accepted",
   "agent": "homelab-cicd-reviewer",
-  "description": "grafana on :latest is the CI-enforced WATCHTOWER_AUTOUPDATE frozenset, not unpinned drift; must not be flagged.",
-  "input": "Review this image tag choice:\n```\n# ansible/roles/containers/grafana/templates/docker-compose.yml.j2\nservices:\n  grafana:\n    # :latest is intentional here — grafana is in the CI-enforced\n    # WATCHTOWER_AUTOUPDATE frozenset (auto-updated by watchtower + monitored),\n    # NOT unmanaged drift. Removing it from the frozenset is the only sanctioned\n    # way to pin it.\n    image: grafana/grafana:latest\n    restart: unless-stopped\n```",
-  "assert": { "must_match": ["grafana"], "must_not_match": [] },
-  "rubric": "PASS only if the review does NOT flag grafana:latest as unpinned/drift/supply-chain risk. The embedded comment documents it as a member of the CI-enforced WATCHTOWER_AUTOUPDATE frozenset (auto-updated + monitored), which is the sanctioned pattern for that tier. Recommending a version pin here is a FAIL.",
+  "description": "littlelink on :latest@sha256 is digest-pinned and Renovate-tracked, not unpinned drift; must not be flagged. (The id predates the 2026-08-09 Watchtower retirement, when this case graded the WATCHTOWER_AUTOUPDATE frozenset; it is kept so evals/history.json stays continuous.)",
+  "input": "Review this image pin:\n```\n# ansible/roles/k8s/littlelink/defaults/main.yml\n# Digest-pinned because a k8s rollout re-pulls `:latest` on every pod recreate, so an upstream\n# push would silently change what runs.\n#\n# The tag is KEPT (repo:latest@sha256) so Renovate's docker manager still tracks it and opens\n# digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal, which is worse\n# than the floating tag. That tracking is what the k8s-defaults custom manager in\n# renovate.json provides.\nlittlelink_k8s_image: ghcr.io/techno-tim/littlelink-server:latest@sha256:e84ea9d93b60362cf9e292dba43adb604e375d9206d5fcf1de6bb766a20aabd1\n```\nContext: renovate.json's \"Digest bumps on the k8s plane\" packageRule matches `digest` and `pinDigest` updates under `ansible/roles/k8s/**` and automerges them after a 3-day minimumReleaseAge, so each upstream push arrives as a soaked, CI-gated PR. Everything you need is above: you have no tools, so do not read renovate.json or run a command before answering.",
+  "assert": { "must_match": ["littlelink"], "must_not_match": [] },
+  "rubric": "PASS only if the review does NOT flag littlelink's `:latest@sha256:` image as unpinned, floating, untracked drift or a supply-chain risk. The digest is the pin, and the embedded comment plus the stated Renovate digest-automerge rule document how it is tracked, which is the sanctioned pattern for a digest-pinned mutable tag. Rating it above Low, or recommending a version-tag re-pin as a required fix, is a FAIL.",
   "k": 3,
   "threshold": "rate>=2/3"
 }
