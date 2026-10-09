@@ -406,8 +406,16 @@ none has been reported failed on a resume-point exit.
 
 A table of issue → worktree → PR → verdict, one row per issue the fan-out touched.
 
-**Release what you don't finish.** Before this report goes out, release any issue no agent
-finished:
+**Release what you don't finish.** To see what this fan-out still holds, run
+`claims --worktree` with the orchestrator's branch. It lists the claims that branch holds and
+the claims of every batch branch its `launch` runs started, and counts the rest rather than
+listing them:
+
+```bash
+uv run python scripts/dev/findings.py claims --worktree <orchestrator-branch>
+```
+
+Before this report goes out, release any issue it lists that no agent finished:
 
 ```bash
 uv run python scripts/dev/findings.py release <n> --worktree <orchestrator-branch> --reason "..."

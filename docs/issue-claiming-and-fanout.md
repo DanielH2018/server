@@ -201,6 +201,13 @@ claim comment records whatever worktree name the agent reports, auto-generated o
 `claims` renders the mapping. Session-to-issue attribution loses the readable branch name, so
 the `session-health.py` banner keeps printing `worktree-agent-a0291ece…`.
 
+**An orchestrator reads its own claims with `claims --worktree <its branch>`.** The filter keeps
+the claims that branch holds and adds the branch of every standing batch a `fanout_place.py
+launch` run under it started in the same register, read from the run manifests. A batch in this
+repo is claimed under the orchestrator's branch, so the branch alone covers it. A dotfiles batch
+is claimed under its own branch, and only the manifest ties it back. The filter counts the claims
+it drops rather than hiding them, so an empty result does not read as a register with nothing claimed.
+
 A session an operator drives can still name its own worktree `issue-1132`, because it has no
 cwd override. Only the fan-out is constrained.
 
@@ -338,7 +345,7 @@ drifts from the first.
 Following the repo's rule that a new check ships with a proof it can go red, and that a check
 finding its own subject by pattern ships with a named member it must find:
 
-The claim tests live in five files under `scripts/dev/tests/`, split by what each reads:
+The claim tests live in six files under `scripts/dev/tests/`, split by what each reads:
 
 | File | What it covers |
 |---|---|
@@ -347,6 +354,7 @@ The claim tests live in five files under `scripts/dev/tests/`, split by what eac
 | `test_findings_lib/claim_cli.py` | `claim`, `release`, `claims` and `reap` driven through `main()` |
 | `test_findings_claim_staleness.py` | `claim_is_live` against invented worktree state |
 | `test_findings_claim_reap_then_claim.py` | the reap-then-claim path `next` sends a session down |
+| `test_findings_claims_filter.py` | `claims --worktree` and the run-manifest read that widens it |
 
 Two of them carry the checks this page asked for by name:
 
