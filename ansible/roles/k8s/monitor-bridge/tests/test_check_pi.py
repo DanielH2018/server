@@ -134,6 +134,15 @@ def _queries(src):
     return [args[0] for _method, args in src.calls]
 
 
+def _pressure_cfg(cfg):
+    """`cfg` watching the Pi, with the port arm off so a pressure test opens no socket.
+
+    The rendered env carries the Pi's real published ports, which the arm would TCP-probe on
+    the LAN. The port arm's own tests below state their ports and stub `tcp_open`.
+    """
+    return replace(cfg, PI_ORIGIN="daniel-pi", PI_PUBLISHED_PORTS=())
+
+
 def test_pi_check_disabled_without_origin(cfg):
     # An empty PI_ORIGIN disables monitoring: never a false page, and no query is issued.
     src = _prom()
@@ -146,7 +155,7 @@ def test_pi_check_disabled_without_origin(cfg):
 def test_pi_check_selects_every_series_by_the_pi_origin(cfg):
     # The QUERY is what keeps this a Pi check: an unpinned node_load5 returns the first host
     # Prometheus happens to list, and a verdict test passes either way.
-    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    cfg = _pressure_cfg(cfg)
     src = _prom()
     checks.host_edge.check_pi_pressure(cfg, src)
     seen = _queries(src)
@@ -158,7 +167,7 @@ def test_pi_check_selects_every_series_by_the_pi_origin(cfg):
 
 
 def test_pi_check_down_on_pressure(cfg):
-    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    cfg = _pressure_cfg(cfg)
     src = _prom(load5=7.2)
     ok, msg = checks.host_edge.check_pi_pressure(cfg, src)
     assert not ok
@@ -166,7 +175,7 @@ def test_pi_check_down_on_pressure(cfg):
 
 
 def test_pi_check_up_when_quiet(cfg):
-    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    cfg = _pressure_cfg(cfg)
     src = _prom()
     ok, msg = checks.host_edge.check_pi_pressure(cfg, src)
     assert ok
@@ -176,7 +185,7 @@ def test_pi_check_up_when_quiet(cfg):
 def test_pi_check_readonly_root_pages_on_the_first_cycle(cfg):
     # No grace, like kubelet_plugin_readonly: a read-only remount does not self-heal, so two
     # consecutive cycles must both page.
-    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    cfg = _pressure_cfg(cfg)
     src = _prom(readonly={"/": 1.0, "/boot/firmware": 0.0})
     ok1, msg = checks.host_edge.check_pi_pressure(cfg, src)
     ok2, _ = checks.host_edge.check_pi_pressure(cfg, src)
@@ -187,7 +196,7 @@ def test_pi_check_readonly_root_pages_on_the_first_cycle(cfg):
 def test_pi_check_pages_when_the_pi_stops_reporting(cfg):
     # Prometheus answers, the node-pi series are gone: a Pi nothing is watching. The
     # `prometheus` gate and EXPORTER_DEPENDENT are what keep this from double-paging.
-    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    cfg = _pressure_cfg(cfg)
     src = _prom(load5=None, cores=None, avail=None, disk={}, readonly={})
     ok, msg = checks.host_edge.check_pi_pressure(cfg, src)
     assert not ok
@@ -195,7 +204,7 @@ def test_pi_check_pages_when_the_pi_stops_reporting(cfg):
 
 
 def test_pi_check_zero_cores_alerts_not_divides(cfg):
-    cfg = replace(cfg, PI_ORIGIN="daniel-pi")
+    cfg = _pressure_cfg(cfg)
     src = _prom(cores=0.0)
     ok, msg = checks.host_edge.check_pi_pressure(cfg, src)
     assert not ok

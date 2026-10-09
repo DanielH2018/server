@@ -118,6 +118,23 @@ def test_a_hand_written_job_reads_its_target_port_from_the_entry(entry_name):
     assert targets[entry_name] == [f"{entry_name}.homelab.svc:9999"]
 
 
+def test_the_alloy_pi_job_reads_its_port_from_the_pis_entry():
+    """daniel-box's containers_list holds no Pi entry, so the job reads the Pi's through hostvars."""
+    ctx = host_context()
+    hostvars = copy.deepcopy(ctx["hostvars"])
+    entry = next(
+        e for e in hostvars["daniel-pi"]["containers_list"] if e["name"] == "alloy"
+    )
+    assert entry["port"] != 9999
+    entry["port"] = 9999
+    targets = _scrape_targets(
+        render_role_template(
+            "observability", "prometheus.yaml.j2", {"hostvars": hostvars}
+        )
+    )
+    assert targets["alloy-pi"] == [f"{ctx['k8s_pi_client_ip']}:9999"]
+
+
 @pytest.mark.parametrize(
     ("role", "template"),
     [

@@ -345,12 +345,13 @@ data:
       # and lines simply stop arriving — so loki_write_sent_entries_total and
       # loki_write_dropped_entries_total are what make that visible. check_shipper_dropped
       # already reads the second one estate-wide, so this target joins an existing check
-      # rather than needing a new one.
+      # rather than needing a new one. The port is the Pi's alloy entry's, read through
+      # `hostvars` because daniel-box's own containers_list holds no Pi entry (#3860).
       - job_name: alloy-pi
         scrape_interval: 1m
         scrape_timeout: 30s
         static_configs:
-          - targets: ['{{ k8s_pi_client_ip }}:12345']
+          - targets: ['{{ k8s_pi_client_ip }}:{{ hostvars['daniel-pi'].containers_list | entry_port('alloy') }}']
             labels:
               origin: daniel-pi
               instance: daniel-pi
