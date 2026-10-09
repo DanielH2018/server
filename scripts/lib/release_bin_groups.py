@@ -25,6 +25,11 @@ the group from the defaults instead; the literal-list form is still accepted bec
 pass one directly.
 """
 
+# DECIDED: stays in `scripts/lib/` despite one production importer (`validate_lib/cron_targets`).
+# Its second consumer is the `ansible/tests/setup/` guards, which must resolve a group exactly as
+# the validator does. Moving it into `validate_lib/` would make them import a validator's
+# private leaf, and inlining it would write the resolution twice. Accepted in #3758 (#3667).
+
 import sys
 from pathlib import Path
 
