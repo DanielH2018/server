@@ -131,9 +131,16 @@ netpol_baseline_obs_node_cidrs:
 # the sentinel, and to nothing else.
 #
 # terraria is ABSENT while `terraria_k8s_replicas` is 0. Its EndpointSlice is empty then, so its
-# row would fail the gate on every full `deploy.yml`. To restore its open-port leg, add
+# row would fail the gate on every full `deploy.yml`.
+#
+# DECIDED: terraria's row stays a hand toggle and is not derived from `terraria_k8s_replicas`
+# (#3848). Its `expect: open` leg opens a TCP connection to :7777, and on 1.4.5.7 a bare TCP
+# connect can crash the server (#822). Scaling to 1 is only the first step of #822's restore
+# checklist, so a row that followed the replica count would dial a server that is not yet safe
+# to dial, on every netpol-baseline deploy. Add the row once the image is past 1.4.5.7, the same
+# condition that restores the Kuma port monitor:
 # `{service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2}`.
-# `ansible/tests/k8s/test_netpol_probe_targets.py` fails if the row and the replica count disagree.
+# `ansible/tests/k8s/test_netpol_probe_targets.py` fails if the row is present while the count is 0.
 netpol_baseline_probe_targets:
   # The namespace baseline: an app with no in-cluster caller. The probe's HTTPS liveness leg
   # reaches the same app through traefik, which is the allowed path.

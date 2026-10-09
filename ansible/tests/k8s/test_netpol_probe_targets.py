@@ -183,7 +183,12 @@ def test_the_clocks_are_ordered() -> None:
 
 
 def test_terraria_is_absent_while_it_is_scaled_to_zero() -> None:
-    """terraria runs at replicas 0, so gating it on a ready endpoint can only fail."""
+    """terraria runs at replicas 0, so gating it on a ready endpoint can only fail.
+
+    One direction only. A count above 0 does not require the row: its `expect: open` leg dials
+    :7777, which can crash a 1.4.5.7 server (#822), so the row comes back with the image fix
+    rather than with the replica count. defaults/main.yml records the decision (#3848).
+    """
     # In inventory, not terraria's defaults — k8s/game-stats renders the exporter
     # at the same count and a role default does not cross a role boundary.
     all_vars = yaml_fast.safe_load(ALL_VARS.read_text())
@@ -192,9 +197,4 @@ def test_terraria_is_absent_while_it_is_scaled_to_zero() -> None:
         assert "terraria" not in services, (
             "terraria is scaled to zero but is still a probe target, so every full deploy.yml "
             "fails its readiness gate"
-        )
-    else:
-        assert "terraria" in services, (
-            "terraria is running again — restore its `expect: open` row in "
-            "netpol_baseline_probe_targets so its open-port leg is covered"
         )
