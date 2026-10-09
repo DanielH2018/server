@@ -196,6 +196,7 @@ def test_the_snapshot_holds_origin_master_while_the_primary_checkout_lags(
     git(tmp_path, "clone", "-q", str(origin), str(server))
     script = "scripts/dev/fanout_review.py"
     files = {script: "old\n", ".claude/hooks/fanout-stop.py": "hook\n", "README": "x"}
+    files |= {"pyproject.toml": "p\n", "uv.lock": "l\n", ".python-version": "3.14\n"}
     commit(server, "old", **files)
     git(server, "push", "-q", "origin", "master")
     upstream = tmp_path / "upstream"
@@ -212,6 +213,9 @@ def test_the_snapshot_holds_origin_master_while_the_primary_checkout_lags(
     snap = wt / ".fanout" / "server"
     assert (snap / script).read_text() == "new\n"
     assert (snap / ".claude/hooks/fanout-stop.py").read_text() == "hook\n"
+    # #3783: the brief's `uv run --project` names the snapshot, so uv needs its project files.
+    assert (snap / "uv.lock").read_text() == "l\n"
+    assert (snap / ".python-version").read_text() == "3.14\n"
     assert not (snap / "README").exists()
     assert sorted(p.name for p in (wt / ".fanout").iterdir()) == ["server"]
 

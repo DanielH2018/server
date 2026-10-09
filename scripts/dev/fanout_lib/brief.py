@@ -18,7 +18,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.target import (
     SERVER,
-    SERVER_CHECKOUT,
     SERVER_TARGET,
     Target,
     branch_name,
@@ -79,6 +78,11 @@ def _worktree_path(batch: str, target: Target = SERVER_TARGET) -> str:
     # imports brief, and launch imports transport, so brief importing launch would cycle.
     # A contract test in test_fanout_cli.py asserts the two stay equal.
     return f"{target.checkout}/.claude/worktrees/fanout-{batch}"
+
+
+def _snapshot_root(batch: str, target: Target) -> str:
+    # Mirrors launch.snapshot_root, duplicated for the same reason as `_worktree_path`.
+    return f"{_worktree_path(batch, target)}/.fanout/server"
 
 
 def lands(host: str, repo: str = SERVER) -> bool:
@@ -262,10 +266,13 @@ def render_brief(
     if target.is_server:
         findings = "`findings.py open`"
     else:
-        # The agent's cwd is the other repo, which has no `findings.py`; `--directory` runs
-        # this repo's copy without the agent leaving its own worktree.
+        # The agent's cwd is the other repo, which has no `findings.py`. The batch's snapshot
+        # of this repo's `origin/master` has it, where the host's primary checkout can lag
+        # (#3783). `--project` rather than `--directory` keeps the cwd, so a relative
+        # `--body-file` still resolves against the agent's worktree.
+        snapshot = _snapshot_root(batch, target)
         findings = (
-            f"`uv run --directory {SERVER_CHECKOUT} python scripts/dev/findings.py open "
+            f"`uv run --project {snapshot} python {snapshot}/scripts/dev/findings.py open "
             f"--repo {target.repo}`"
         )
     return f"""# Fan-out batch {batch} on {host}

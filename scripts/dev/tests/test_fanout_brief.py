@@ -197,5 +197,11 @@ def test_a_dotfiles_brief_names_its_repo_and_stops_at_the_pr_on_every_host():
         assert "claimed under `worktree-fanout-1345-1386`" in brief
         assert "worktree-orch" not in brief
         assert "findings.py open --repo DanielH2018/dotfiles" in brief
+        snapshot = "/home/ubuntu/.local/share/chezmoi/.claude/worktrees/fanout-1345-1386/.fanout/server"
+        assert (
+            f"`uv run --project {snapshot} python {snapshot}/scripts/dev/findings.py open"
+            in brief
+        )
+        assert "/home/ubuntu/server" not in brief
         assert "of /home/ubuntu/.local/share/chezmoi, checked out" in brief
         assert "fresh from origin/main" in brief

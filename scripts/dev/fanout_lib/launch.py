@@ -72,11 +72,19 @@ REVIEW_SCRIPT = "scripts/dev/fanout_review.py"
 # Another repo's batch runs this repo's code from a snapshot of `origin/master` inside its own
 # worktree, never from the host's primary checkout, which can lag it (#3684, #3762). The
 # snapshot holds what such a batch reads: the review pipeline and everything it imports under
-# `scripts/`, the headless system prompt beside it, and the `fanout-stop` hook. It lives under
-# `.fanout/`, which `exclude_fanout_command` keeps out of git, so `clean` reads the tree as
-# clean and removes the snapshot with the tree.
+# `scripts/`, the headless system prompt beside it, and the `fanout-stop` hook. It also holds
+# the uv project files, so the brief's `findings.py` command can `uv run --project` the
+# snapshot rather than the primary checkout (#3783). It lives under `.fanout/`, which
+# `exclude_fanout_command` keeps out of git, so `clean` reads the tree as clean and removes the
+# snapshot with the tree.
 SNAPSHOT_DIR = ".fanout/server"
-SNAPSHOT_PATHS = ("scripts", ".claude/hooks")
+SNAPSHOT_PATHS = (
+    "scripts",
+    ".claude/hooks",
+    "pyproject.toml",
+    "uv.lock",
+    ".python-version",
+)
 
 
 # The user manager's PATH lacks ~/.local/bin (claude, uv) and repo hooks need uv. The fnm

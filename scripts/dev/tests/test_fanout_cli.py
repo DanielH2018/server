@@ -406,6 +406,9 @@ def test_the_briefs_worktree_path_matches_the_one_launch_creates():
         assert brief_mod._worktree_path(batch, dotfiles) == launch_mod.worktree_path(
             batch, dotfiles
         )
+        assert brief_mod._snapshot_root(batch, dotfiles) == launch_mod.snapshot_root(
+            launch_mod.worktree_path(batch, dotfiles)
+        )
 
 
 def test_a_batch_still_live_in_a_manifest_is_refused_before_any_host_is_read(
