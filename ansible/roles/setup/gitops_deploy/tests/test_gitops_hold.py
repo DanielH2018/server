@@ -133,14 +133,36 @@ def test_cover_services_with_no_service_covers_no_plane(hold: Hold):
     assert hold.current() == SHA
 
 
-def test_clear_with_no_plane_held_takes_no_lock(hold: Hold):
+def test_clear_with_no_plane_held_still_takes_the_lock(hold: Hold):
+    """A tick can write a plane between the check and the unlink, so the lock is always taken."""
     _hold_sha(hold).write_text(SHA)
 
     def refuse() -> contextlib.AbstractContextManager[None]:
-        raise AssertionError("the lock was taken with no plane to drop")
+        raise TimeoutError("tree.lock")
 
-    assert hold.clear(SHA, lock=refuse) is None
-    assert not _hold_sha(hold).exists()
+    with pytest.raises(TimeoutError):
+        hold.clear(SHA, lock=refuse)
+    assert hold.current() == SHA
+
+
+@pytest.mark.parametrize("planes", [[], ["sonarr"]], ids=["no-plane", "one-plane"])
+def test_clear_refuses_a_hold_a_tick_rewrote_before_the_lock(hold: Hold, planes):
+    """A tick that fails between the operator's check and the lock writes a hold they never typed (#3755)."""
+    other = "b" * 40
+    _hold_sha(hold).write_text(SHA)
+    for service in planes:
+        hold.record(SHA, "ansible/deploy.yml", [service])
+
+    @contextlib.contextmanager
+    def tick_fails_first():
+        hold.record(other, "ansible/initial_setup.yml", ["k3s"])
+        yield
+
+    refusal = hold.clear(SHA, lock=tick_fails_first)
+
+    assert refusal is not None and "reload and retry" in refusal
+    assert hold.current() == other
+    assert "ansible/initial_setup.yml k3s" in hold.held_subjects()
 
 
 def test_clear_drops_a_torn_plane_line_too(hold: Hold):
