@@ -55,7 +55,10 @@ def http_json(
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read()
     except urllib.error.HTTPError as exc:
-        raw = exc.read()
+        # An HTTPError owns the open error response; left unclosed it raises a ResourceWarning
+        # wherever garbage collection happens to run.
+        with exc:
+            raw = exc.read()
         try:
             err = json.loads(raw)
         except ValueError:
