@@ -152,7 +152,9 @@ and re-running it, not by reasoning:
    case's Mullvad-exit whitelist was framed as the remote-admin path, where the body names
    WireGuard. Other cases cited `roles/containers/<svc>` Docker roles for services that run on k3s,
    a `rate-limit@file` middleware that left with the Docker edge, or an automation stripped of the
-   20s delay that makes it correct. Each was rebuilt from the live file it names. This rule is a
+   20s delay that makes it correct. Three cases now quote the live file they cite (the whitelist,
+   the image pin and the automation). The other three are fixtures for a new role, so each now
+   names a `roles/k8s/` path marked "(a new role, not yet merged)". This rule is a
    diagnosis, not yet a measurement: the sweep deleted its per-run output, so the next hermetic
    sweep is what confirms it.
 
