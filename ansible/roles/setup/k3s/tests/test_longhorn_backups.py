@@ -59,17 +59,9 @@ def test_completed_keeps_only_completed_backups():
     ]
 
 
-def test_the_names_are_the_labels_the_role_writes():
-    """The Ansible side still spells the labels out; a renamed constant must fail here."""
-    shard_tasks = (ROLE / "tasks" / "longhorn-weekly-shard.yml").read_text()
-    tasks = (ROLE / "tasks" / "longhorn.yml").read_text()
+def test_the_nobackup_storageclass_names_the_no_backup_group():
+    """The static StorageClass cannot call a filter, so it alone still spells the group out."""
     nobackup_class = (
         ROLE / "files" / "longhorn-storageclass-nobackup.yaml"
     ).read_text()
-    shard_label = backups.group_label(backups.weekly_shard_group(0))
-    assert backups.group_label(backups.DEFAULT_GROUP) + "=enabled" in shard_tasks
-    assert shard_label[:-1] + "{{ shard }}=enabled" in shard_tasks
-    assert f"% {backups.WEEKLY_SHARDS} }}}}" in shard_tasks
-    assert backups.group_label(backups.NO_BACKUP_GROUP) + "=enabled" in tasks
-    assert backups.group_label(backups.WEEKLY_LEGACY_GROUP) + "=enabled" in tasks
     assert f'"name":"{backups.NO_BACKUP_GROUP}","isGroup":true' in nobackup_class
