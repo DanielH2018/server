@@ -51,7 +51,7 @@ from lib.repo_paths import FILTER_PLUGINS
 _sys.path.insert(0, str(FILTER_PLUGINS))
 
 from k8s_autodeploy import is_leftover_dir
-from lib.k8s_context import resolve_vars, role_defaults
+from lib.k8s_context import resolve_vars
 from lib.render_context import UnresolvedVarsError, render_context
 from validate.validate_lib.k8s_net_rules import (
     HTTPS_ENTRYPOINT,
@@ -142,7 +142,6 @@ __all__ = [
     "register_ansible_filters",
     "render_or_error",
     "resolve_vars",
-    "role_defaults",
     "schema_error",
     "shared_default_templates",
     "service_port_translations",

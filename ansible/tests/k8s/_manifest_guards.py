@@ -1,8 +1,8 @@
 """Paths, inventory vars and the single-template renderer the `test_k8s_manifests_*` guards share.
 
-These guards render ONE template with a hand-built context to assert on its output, which is
-the shape `_k8s_render.rendered_docs` (every template, the deploy's own context) does not
-serve.
+These guards render ONE template, with `_role_context`'s context and the values a guard
+overrides, to assert on its output. `_k8s_render.rendered_docs` renders every template at the
+deploy's own context and does not serve that shape.
 """
 
 from pathlib import Path
