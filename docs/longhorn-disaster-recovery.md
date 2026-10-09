@@ -52,15 +52,26 @@ decrypts the secrets, and **GitHub** holds the only off-site copy of the encrypt
 `secrets.yml` + all the Ansible. The age key alone can't reconstruct `secrets.yml`, so a
 simultaneous loss of the hosts *and* the GitHub repo would strand the B2 credentials.
 Close that leg by keeping the complete kit in ONE off-site place: the age key plus a repo
-bundle refreshed whenever the key backup is (or after a `secrets.yml` change):
+bundle refreshed whenever the key backup is (or after a `secrets.yml` change), with the
+`claude` issue register exported beside it:
 
 ```bash
 git bundle create "homelab-$(date +%F).bundle" --all
-# recover: git clone homelab-YYYY-MM-DD.bundle server   (sops -d needs the age key beside it)
+uv run python scripts/dev/findings.py export --out "homelab-register-$(date +%F).json"
+# recover: git clone homelab-YYYY-MM-DD.bundle server
+#   then, operator-only: sops -d needs the age key beside it, and prints every secret
 ```
 
 `secrets.yml` inside the bundle stays SOPS-encrypted — useless without the age key — so the
 bundle is no more sensitive than the GitHub repo; the age key is the part to protect.
+
+The register export exists because a bundle carries git history only. Every refuted and
+accepted finding lives in a GitHub issue, and losing GitHub would lose those rulings, so the
+next review would re-file them. The export holds every `claude` issue in every state with
+its body, comments, labels and closing PRs. It reads the register in `created:` date slices
+because gh's label-filtered list stops at 1000 issues; a slice that reaches the cap is split
+in half, and a single day at the cap fails the export rather than writing a short file. It
+takes about a minute per 1000 issues.
 
 ## The external dead-man's switch (re-homed 2026-08-14; re-validate at drain close)
 

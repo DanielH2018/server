@@ -43,6 +43,7 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py list [--json]
     uv run python scripts/dev/findings.py history <terms> [--file path] [--limit N] [--json]
     uv run python scripts/dev/findings.py show 688 [--json]
+    uv run python scripts/dev/findings.py export --out register.json
     uv run python scripts/dev/findings.py verify --all
     uv run python scripts/dev/findings.py verify 688 701
     uv run python scripts/dev/findings.py next [--limit N] [--json]
@@ -132,6 +133,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from dev.findings_lib.claim import claim_states
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
 from dev.findings_lib.cli import _parser
+from dev.findings_lib.export_cli import cmd_export
 from dev.findings_lib.history_cli import cmd_history, cmd_show
 from dev.findings_lib.gh_calls import (
     _create_with_optional_project,
@@ -550,6 +552,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "list": cmd_list,
         "history": cmd_history,
         "show": cmd_show,
+        "export": cmd_export,
         "open": cmd_open,
         "touch": cmd_touch,
         "defer": cmd_defer,
