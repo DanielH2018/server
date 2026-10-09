@@ -68,12 +68,13 @@ def test_a_queue_warning_still_pages_on_the_first_cycle(cfg):
     assert "down streak" not in msg
 
 
-def test_a_reachable_arr_resets_the_fetch_streak(cfg):
+def test_a_reachable_arr_resets_the_fetch_streak(cfg, state):
     cfg = replace(cfg, RADARR_API_KEY="x")
-    assert checks.service.check_arr_queue(cfg, FakeSources(get_json=_unreachable))[0]
+    down = FakeSources(state=state, get_json=_unreachable)
+    assert checks.service.check_arr_queue(cfg, down)[0]
     assert checks.service.check_arr_queue(
-        cfg, FakeSources(get_json=lambda *a, **k: _queue())
+        cfg, FakeSources(state=state, get_json=lambda *a, **k: _queue())
     )[0]
-    ok, msg = checks.service.check_arr_queue(cfg, FakeSources(get_json=_unreachable))
+    ok, msg = checks.service.check_arr_queue(cfg, down)
     assert ok, msg
     assert "down streak 1/3" in msg
