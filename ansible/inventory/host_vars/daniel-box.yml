@@ -142,8 +142,6 @@ containers_list:
     platform: k8s
     # Single label, for the same wildcard-cert reason as bento-pdf above.
     hostname: "texbrain"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -169,8 +167,6 @@ containers_list:
   - name: deploy-ui
     platform: k8s
     hostname: "deploy"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 8790
     use_authelia: true
     auth_tier: two_factor
@@ -183,8 +179,6 @@ containers_list:
   - name: longhorn-ui
     platform: k8s
     hostname: "longhorn"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 80
     use_authelia: true
     auth_tier: two_factor
@@ -209,8 +203,6 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "sonarr"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 8989
     use_authelia: true
     auth_tier: one_factor
@@ -239,8 +231,6 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "qbittorrent"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -258,8 +248,6 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "radarr"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 7878
     use_authelia: true
     auth_tier: one_factor
@@ -288,8 +276,6 @@ containers_list:
   - name: prowlarr
     platform: k8s
     hostname: "prowlarr"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 9696
     use_authelia: true
     auth_tier: one_factor
@@ -313,8 +299,6 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "bazarr"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 6767
     use_authelia: true
     auth_tier: one_factor
@@ -344,8 +328,6 @@ containers_list:
     platform: k8s
     depends_on: [media-volume]
     hostname: "tdarr"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 8265
     use_authelia: true
     auth_tier: one_factor
@@ -437,7 +419,8 @@ containers_list:
   - name: navidrome
     platform: k8s
     hostname: "navidrome"
-    # No ingress tile yet (#3886).
+    # No tile while parked: the role deploys no route at replicas 0, so the tile would be
+    # permanently red. Delete this line when bringing it back.
     kuma: false
     port: 4533
     use_authelia: true
@@ -486,8 +469,6 @@ containers_list:
   - name: artifacts
     platform: k8s
     hostname: "artifacts"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -498,8 +479,6 @@ containers_list:
   - name: docs
     platform: k8s
     hostname: "docs"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -572,8 +551,6 @@ containers_list:
   - name: n8n
     platform: k8s
     hostname: "n8n"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 5678
     use_authelia: true
     auth_tier: two_factor
@@ -700,8 +677,6 @@ containers_list:
     platform: k8s
     tier: platform
     hostname: "wg-easy"
-    # No ingress tile yet (#3886).
-    kuma: false
     port: 51821
     udp_port: 51820
     use_authelia: true
