@@ -24,9 +24,16 @@ needs, the check filter, and the two reads a repo test greps for by text:
 
 BUILDING THIS MUST NOT RAISE. A ValueError on one malformed number used to kill the pod during
 import, before the heartbeat file existed and before any monitor could be told. `_int`/`_num`
-below record the problem, fall back to the documented default, and hand the whole list to
+below record the problem, fall back to a placeholder, and hand the whole list to
 `main()` as `Config.CONFIG_PROBLEMS`, which prints one operator-readable line per problem and
 exits 2.
+
+A KEY THE ENV-SECRET RENDERS HAS NO DEFAULT HERE. `templates/env-secret.yaml.j2` holds the value
+the pod runs with, so a second default in this package was a copy the deploy never read, and 40
+of the 133 keys both files named had drifted apart (#3659). A read with no default is required:
+an absent key records a problem the same way a malformed one does. A default survives only on a
+key the template does not render. `tests/test_config_reads_the_rendered_env.py` holds both
+directions.
 
 Constants only. The mutable per-check state (`_n8n_streaks`, `_cadvisor_streaks`,
 `_host_origin_streaks`, `_down_streaks`) stays with the code that mutates it.
@@ -47,7 +54,7 @@ class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig):
 
     Frozen, and built once in `main()`. The four bases contribute the domain fields; what is
     declared here is what every domain needs or what has to stay in this file by name. Each
-    field is documented at its read — that is where the env var name and the default sit, and
+    field is documented at its read — that is where the env var name sits, and
     most of the reasoning is about the default rather than the type.
 
     EVERY CREDENTIAL-BEARING FIELD IS `field(repr=False)` in its domain module. A dataclass
@@ -99,30 +106,47 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
     """
     problems = [] if problems is None else list(problems)
 
-    def _env(name: str, default: str = "") -> str:
-        return env.get(name, default)
+    def _env(name: str, default: str | None = None) -> str:
+        """The `name` env var. With no `default`, the key is REQUIRED.
 
-    def _int(name: str, default: str) -> int:
+        A required key is one `templates/env-secret.yaml.j2` renders, so the env-secret holds
+        its value and this module holds none (#3659). Absent, it records a problem and reads
+        as "" rather than raising, and `main()` exits 2 naming it.
+        """
+        if default is not None:
+            return env.get(name, default)
+        if name not in env:
+            problems.append(
+                "%s is unset; templates/env-secret.yaml.j2 renders it, so this env is not "
+                "the one the pod gets" % name
+            )
+        return env.get(name, "")
+
+    def _int(name: str, default: str | None = None) -> int:
         """The `name` env var as an int, recording a malformed value instead of raising."""
         raw = _env(name, default)
         try:
             return int(raw)
         except ValueError:
-            problems.append(
-                "%s=%r is not an integer; falling back to %s" % (name, raw, default)
-            )
-            return int(default)
+            if name in env:  # an absent required key is already recorded by _env
+                problems.append(
+                    "%s=%r is not an integer; falling back to %s"
+                    % (name, raw, default or 0)
+                )
+            return int(default or 0)
 
-    def _num(name: str, default: str) -> float:
+    def _num(name: str, default: str | None = None) -> float:
         """The `name` env var as a float, recording a malformed value instead of raising."""
         raw = _env(name, default)
         try:
             return float(raw)
         except ValueError:
-            problems.append(
-                "%s=%r is not a number; falling back to %s" % (name, raw, default)
-            )
-            return float(default)
+            if name in env:  # an absent required key is already recorded by _env
+                problems.append(
+                    "%s=%r is not a number; falling back to %s"
+                    % (name, raw, default or 0)
+                )
+            return float(default or 0)
 
     def _env_file(name: str, default: str = "") -> str:
         """A secret from the file named by <name>_FILE if set, else the plain <name> env var.
@@ -152,8 +176,8 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         return frozenset(n for n in value.replace(" ", "").split(",") if n)
 
     # Read ahead of the Config() call because B2_TRANSPORT_RETRY_S defaults to INTERVAL.
-    INTERVAL = _int("INTERVAL", "300")
-    PROM_URL = _env("PROMETHEUS_URL", "http://prometheus:9090").rstrip("/")
+    INTERVAL = _int("INTERVAL")
+    PROM_URL = _env("PROMETHEUS_URL").rstrip("/")
 
     return Config(
         **vars(host_config(_env, _int, _num, _env_file, problems)),
@@ -168,14 +192,14 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         # and pages, then recovers next cycle — the weekly-reboot noise. Like HA_CONSECUTIVE,
         # only the GRACE_CYCLES'th consecutive down pages; a genuinely-down dependency still
         # alerts after ~one extra INTERVAL, and one ok resets the streak.
-        GRACE_CYCLES=_int("GRACE_CYCLES", "2"),
+        GRACE_CYCLES=_int("GRACE_CYCLES"),
         # Touched after every completed cycle; the container healthcheck compares its mtime
         # against ~3×INTERVAL. PID death already restarts the container, but a HANG only shows
         # up as push silence in Kuma — the healthcheck lets autoheal restart on that too.
         HEARTBEAT_FILE=_env("HEARTBEAT_FILE", "/tmp/heartbeat"),
         PROM_URL=PROM_URL,
-        KUMA_URL=_env("KUMA_URL", "http://uptime-kuma:3001").rstrip("/"),
-        LOKI_URL=_env("LOKI_URL", "http://loki:3100").rstrip("/"),
+        KUMA_URL=_env("KUMA_URL").rstrip("/"),
+        LOKI_URL=_env("LOKI_URL").rstrip("/"),
         # Extended resources that must stay ADVERTISED by at least one node. The DaemonSet arm
         # above watches whether the plugin's POD is running; this watches whether the thing the
         # pod exists to provide is still there. dri-device-plugin has no probe — and a container
@@ -200,7 +224,7 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         # and say WHY in the inventory, like LOG_ERROR_IGNORE: a growing exclusion list means
         # the arm is decaying.
         PVC_EXCLUDE=tuple(
-            c.strip() for c in _env("PVC_EXCLUDE", "media-data").split(",") if c.strip()
+            c.strip() for c in _env("PVC_EXCLUDE").split(",") if c.strip()
         ),
         # Which checks THIS instance runs. The Phase F twin/remnant split ended with the Docker
         # uninstall (2026-08-14): the cluster deployment is now the ONLY bridge and runs every

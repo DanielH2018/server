@@ -23,8 +23,8 @@ registry, the registry is right.
 > `pi_peers` and `renovate_alive` dissolved into direct pushers at the host flips
 > (k8s/pi-peer-backup CronJob; `renovate-notify`'s ExecStartPost). check.py still
 > refuses a CHECKS_ONLY/CHECKS_SKIP filter naming an unknown check or a gated check
-> without its gate, and `test_checks_and_env_secret_push_tokens_agree` asserts the
-> env-secret carries exactly the token set the code reads. Much of the per-check
+> without its gate, and `tests/test_push_check_table.py` asserts the
+> env-secret carries exactly one token per registered check and gate. Much of the per-check
 > documentation below predates the moves — Docker-era plumbing details (compose, bind
 > mounts, networks) are history: `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/monitor-bridge/`.
 >
@@ -108,8 +108,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   `CLAUDE_CGROUPS` (rendered in `templates/env-secret.yaml.j2`, `claude-rc,fleet`) is the set
   whose ABSENCE is a fault, not the set that is judged — the queries filter by metric, so
   `user-1000-slice` is watched whenever it exists and its absence never pages, because its
-  cgroup only exists once somebody has logged in since boot. **Empty disables the whole arm**,
-  which is the code default; the full threshold derivation, settled 2026-09-11 against 5.8 days of
+  cgroup only exists once somebody has logged in since boot. **Empty disables the whole arm**; the full threshold derivation, settled 2026-09-11 against 5.8 days of
   history that included both cgroups hitting their MemoryHigh caps (#1288), is at
   `CLAUDE_CGROUP_STALL_MAX_PCT` in `bridge/config_host.py`.
 - **Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)
@@ -1051,7 +1050,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   Fullness's `max by`: both longhorn-manager pods are scraped independently. A declared cap
   whose volume has NO series is a breach, not green. **Armed 2026-09-10** (#1627) —
   `monitor_bridge_snapshot_headroom_push_token` is in SOPS, and both halves read it unguarded:
-  `KUMA_PUSH_SNAPSHOT_HEADROOM` in this role's env-secret and the Kuma declaration in
+  the env-secret's `lookup('vars')` for its `monitor_bridge_push_checks` row and the Kuma declaration in
   k8s/uptime-kuma/templates/static-monitors.yaml.j2. It shipped inert on 2026-09-10 with the
   token absent, which is the shape #1632 names: a gated monitor with an unset variable reads
   green while watching nothing.)
@@ -1406,14 +1405,8 @@ no successor.
   the container). Kuma push silence remains the alerting path; the probe adds auto-recovery.
   (This was a Compose healthcheck restarted by autoheal until the k8s migration. autoheal now
   runs only on daniel-pi, so looking for its log line here finds nothing.)
-- Push tokens — **`templates/env-secret.yaml.j2`'s `KUMA_PUSH_*` keys are the list**; no test
-  reads this prose, so treat the names below as a reading aid that can go stale rather than as the
-  source of truth. Count them rather than trusting a number written here — this bullet carried a
-  hand-maintained "29" that was wrong by five when it was replaced:
-  `grep -c '^\s*KUMA_PUSH_[A-Z0-9_]*:' ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`.
-  (The names went stale the same way: they once carried eight tokens retired at the 2026-08-14
-  host flips and were missing six added after them.) The names on 2026-09-01:
-  `monitor_bridge_{arr_queue,b2_reachable,b2_storage,bazarr,cert,cluster_prometheus,cluster_targets,cpu,discord,disk,etcd_drill,gitops_alive,gitops_status,ha,host_temp,k8s_workloads,loki,loki_reachable,longhorn_volumes,mem,n8n,oom,pi,prometheus,promtail_dropped,prowlarr_indexers,pvc,r2_usage,restarts,scrutiny,speedtest,targets,traefik,traefik_latency,ups}_push_token`
+- Push tokens — **`monitor_bridge_push_checks` in `defaults/main.yml` is the list** (#3659), one
+  row per check and gate; the env-secret renders `KUMA_PUSH_<NAME>` from each. The tokens
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -1474,9 +1467,10 @@ no successor.
 The role file keeps the short form; this is the original, with the Docker-era `media`
 network note that no longer applies to the k8s pod.
 
-1. Add a push token to `secrets.yml` (`sops ansible/vars/secrets.yml`) for every `KUMA_PUSH_*`
-   entry in `templates/env-secret.yaml.j2` — `test_every_push_token_env_is_wired_to_a_monitor`
-   asserts that template's keys match the AutoKuma monitors, so the template is the list. (It
+1. Add a push token to `secrets.yml` (`sops ansible/vars/secrets.yml`) for every
+   `monitor_bridge_push_checks` row in `defaults/main.yml` —
+   `test_every_bridge_push_token_reaches_a_push_tile` asserts each row reaches an AutoKuma
+   monitor, so the table is the list. (It
    does not read this file; the token names quoted above are prose and have drifted before.)
    **They must
    be exactly 32 alphanumeric chars** (Kuma rejects others; for example `openssl rand -hex 16`);

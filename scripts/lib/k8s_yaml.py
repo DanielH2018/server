@@ -19,6 +19,9 @@ from typing import Any, cast
 
 import yaml
 import yaml.constructor
+from jinja2 import pass_context
+from jinja2.runtime import Context
+from jinja2.utils import missing
 
 from lib.render_guard import make_env
 
@@ -136,10 +139,16 @@ def make_lookup(ctx: dict):
     ``template`` needs the render context, hence the closure: livesync's CouchDB local.ini is a
     Jinja template on the Docker side, and reading it with ``file`` would leave any variable
     added to it later embedded as literal ``{{ ... }}`` in the ConfigMap.
+
+    ``vars`` reads a variable named at render time from the calling template's own context, so
+    an undefined one comes back as that environment's undefined (``STUB``, or a named stub), the
+    way a plain ``{{ name }}`` would. monitor-bridge's env-secret names each push token through
+    it, from the check table in that role's defaults (#3659).
     """
 
-    def lookup(kind: str, *args: str, **kwargs) -> str:
-        """Resolve one `lookup()` call, supporting `file`, `pipe` (base64 only) and `template`.
+    @pass_context
+    def lookup(context: Context, kind: str, *args: str, **kwargs) -> object:
+        """Resolve one `lookup()` call: `file`, `pipe` (base64 only), `template` or `vars`.
 
         Args:
             kind: The lookup plugin name.
@@ -150,9 +159,14 @@ def make_lookup(ctx: dict):
                 task's checksum of the same file, which is not stripped either.
 
         Raises:
-            ValueError: `kind` is not one of the three supported plugins, or `kind == "pipe"`
+            ValueError: `kind` is not one of the four supported plugins, or `kind == "pipe"`
                 names something other than `base64 -w0 <path>`.
         """
+        if kind == "vars":
+            value = context.resolve_or_missing(args[0])
+            if value is missing:
+                return context.environment.undefined(name=args[0])
+            return value
         path = Path(args[0])
         if kind == "file":
             text = path.read_text()
@@ -176,8 +190,8 @@ def make_lookup(ctx: dict):
             env.filters["to_json"] = to_json_stub
             return env.get_template(path.name).render(ctx).rstrip("\n")
         raise ValueError(
-            "lib.k8s_yaml implements lookup('file'), lookup('pipe') and lookup('template'), "
-            f"got {kind!r}"
+            "lib.k8s_yaml implements lookup('file'), lookup('pipe'), lookup('template') and "
+            f"lookup('vars'), got {kind!r}"
         )
 
     return lookup

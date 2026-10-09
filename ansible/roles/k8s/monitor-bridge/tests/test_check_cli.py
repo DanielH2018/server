@@ -15,6 +15,7 @@ import bridge.common
 from bridge.config import load_config
 import bridge.net
 import cli
+from _bridge_env import bridge_env
 from _check_gate_helpers import mk
 from bridge.types import Check
 from gates import Gates
@@ -23,8 +24,9 @@ from gates import Gates
 def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
     """Stub the transport and STATE the registry, so main() runs one cycle touching nothing live.
 
-    Returns the `checks=` / `gate_config=` keyword arguments to hand `cli.main`, which is how a
-    test says which checks exist without mutating a module.
+    Returns the `checks=` / `gate_config=` / `env=` keyword arguments to hand `cli.main`, which
+    is how a test says which checks exist without mutating a module. `env` is the rendered
+    env-secret, the environment the pod's `main()` reads.
 
     Args:
       monkeypatch: The fixture, for the two transport stubs that are not yet parameters.
@@ -42,6 +44,7 @@ def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
     monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
 
     return {
+        "env": bridge_env(),
         "checks": [Check(n, "tok_%s" % n, mk(ran, n)) for n in names],
         "gate_config": Gates(
             probe_prometheus=probe_prometheus or (lambda _cfg: (True, "prom ok")),
@@ -119,7 +122,7 @@ def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypat
     pushes, ran = [], []
     wired = _silence(monkeypatch, pushes, ran)
     monkeypatch.setenv("KUMA_PUSH_DISK", "from_os_environ")
-    env = {"KUMA_PUSH_DISK": "from_the_argument"}
+    env = bridge_env(KUMA_PUSH_DISK="from_the_argument")
     argv = ["--once", "--check", "disk"]
     assert cli.main(argv, env=env, checks=None, gate_config=wired["gate_config"]) == 0
     tokens = [t for t, _ok, _msg in pushes]
@@ -175,7 +178,8 @@ def test_checks_only_env_keeps_the_strict_gate_contract(monkeypatch):
     """
     pushes, ran = [], []
     wired = _silence(monkeypatch, pushes, ran)
-    assert cli.main(["--once"], env={"CHECKS_ONLY": "disk"}, **wired) == 2
+    wired["env"] = bridge_env(CHECKS_ONLY="disk")
+    assert cli.main(["--once"], **wired) == 2
     assert ran == []
 
 
@@ -209,14 +213,28 @@ def test_a_malformed_number_is_recorded_rather_than_raised():
     value. The environment is stated to `load_config` rather than set on the process and the
     module reloaded, so nothing outside this call sees it.
     """
-    cfg = load_config({"INTERVAL": "five minutes"})
-    assert cfg.INTERVAL == 300  # the documented default, not a crash
+    cfg = load_config(bridge_env(INTERVAL="five minutes"))
+    # 0, not a crash. The value never runs: main() exits 2 on any recorded problem.
+    assert cfg.INTERVAL == 0
     assert any("INTERVAL=" in p for p in cfg.CONFIG_PROBLEMS)
+
+
+def test_a_rendered_key_missing_from_the_env_is_recorded_rather_than_defaulted():
+    """A key the env-secret renders has no Python default since #3659, so its absence is a
+    config fault main() reports, never a quiet fall back to a second copy of the value."""
+    env = bridge_env()
+    del env["TRAEFIK_421_RPS"]
+    cfg = load_config(env)
+    assert cfg.TRAEFIK_421_RPS == 0
+    assert [p for p in cfg.CONFIG_PROBLEMS if p.startswith("TRAEFIK_421_RPS ")] == [
+        "TRAEFIK_421_RPS is unset; templates/env-secret.yaml.j2 renders it, so this env "
+        "is not the one the pod gets"
+    ]
 
 
 def test_a_well_formed_config_records_no_problems():
     """The accepting half: a clean environment must report an empty problem list."""
-    cfg = load_config({"INTERVAL": "300"})
+    cfg = load_config(bridge_env(INTERVAL="300"))
     assert cfg.CONFIG_PROBLEMS == ()
     assert cfg.INTERVAL == 300
 
@@ -234,7 +252,7 @@ def test_a_malformed_http_timeout_reaches_the_same_report(monkeypatch):
     try:
         assert common.HTTP_TIMEOUT == 10  # the documented default, not a crash
         assert any("HTTP_TIMEOUT=" in p for p in common.CONFIG_PROBLEMS)
-        carried = load_config({}, problems=common.CONFIG_PROBLEMS)
+        carried = load_config(bridge_env(), problems=common.CONFIG_PROBLEMS)
         assert any("HTTP_TIMEOUT=" in p for p in carried.CONFIG_PROBLEMS)
     finally:
         monkeypatch.delenv("HTTP_TIMEOUT")
@@ -248,6 +266,7 @@ def test_main_reports_config_problems_and_exits_two(monkeypatch):
     monkeypatch.setattr(
         bridge.common, "log", lambda *a: logged.append(" ".join(map(str, a)))
     )
-    assert cli.main(["--once"], env={"DISK_MAX_PCT": "ninety"}, **wired) == 2
+    wired["env"] = bridge_env(DISK_MAX_PCT="ninety")
+    assert cli.main(["--once"], **wired) == 2
     assert ran == []
     assert any("DISK_MAX_PCT" in line for line in logged)

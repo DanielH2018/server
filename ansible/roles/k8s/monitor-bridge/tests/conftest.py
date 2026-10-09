@@ -4,23 +4,26 @@ import bridge.streaks
 import pytest
 
 from bridge.config import load_config
+from _bridge_env import bridge_env
 
 
 @pytest.fixture
 def cfg():
-    """The configuration a check runs under, built from an EMPTY environment.
+    """The configuration a check runs under, built from the env the pod gets.
 
-    Every field therefore holds the documented default in `bridge/config.py`, which is what a
-    test wants unless it says otherwise. A test that needs a different value narrows this with
-    `dataclasses.replace(cfg, X=...)`, and one that is about the READ itself — a malformed
-    number, a derived field, a `_FILE`-mounted secret — calls `load_config({...})` directly
-    with the environment it means.
+    `_bridge_env.bridge_env()` renders `templates/env-secret.yaml.j2`, so every field holds the
+    deployed value: `bridge/config*.py` carries no second default for a rendered key (#3659). A
+    test that needs a different value narrows this with `dataclasses.replace(cfg, X=...)`, and
+    one that is about the READ itself — a malformed number, a derived field, a `_FILE`-mounted
+    secret — calls `load_config(bridge_env(X=...))` with the environment it means.
 
     A `monkeypatch.setattr(bridge.config, "X", ...)` mutates a process-wide global for the
     duration of one test; a fixture hands the code under test the object it reads, so two
     tests can state different configurations without either seeing the other's.
     """
-    return load_config({})
+    cfg = load_config(bridge_env())
+    assert not cfg.CONFIG_PROBLEMS, cfg.CONFIG_PROBLEMS
+    return cfg
 
 
 @pytest.fixture(autouse=True)

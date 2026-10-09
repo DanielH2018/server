@@ -99,9 +99,9 @@ def main(
     # which monitor a result is pushed to, which it could not while the KUMA_PUSH_* tokens were
     # read at import into a module-level list. The FOUR reachability-gate tokens are the
     # remaining exception: `gates._gate` still reads them from `os.environ` at push time, so
-    # `env` does not redirect a gate's push. They are four literals in `check.run_once` rather
-    # than a table, so there is no module global left to remove — moving them would be a new
-    # parameter for one caller, not the same fix.
+    # `env` does not redirect a gate's push. Each is `bridge.types.push_env(<gate name>)`, derived
+    # rather than stored, so there is no module global left to remove — moving them would be a
+    # new parameter for one caller, not the same fix.
     environment = os.environ if env is None else env
     cfg = load_config(environment, problems=bridge.common.CONFIG_PROBLEMS)
     if cfg.CONFIG_PROBLEMS:

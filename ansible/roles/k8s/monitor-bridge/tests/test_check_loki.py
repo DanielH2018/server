@@ -26,10 +26,9 @@ from lib.repo_paths import REPO as _REPO
 # pod-network gateway. The probes exec curl to 127.0.0.1 and are immune; this arm is what
 # keeps the ban itself from being silent.
 # Two limits, so this guard is not over-trusted:
-#   1. It reads each constant's IN-CODE DEFAULT. `env-secret.yaml.j2` overrides LOKI_STREAM at
-#      deploy time, and this role's CLAUDE.md already flags in-code-default != deployed-value as a
-#      live trap for exactly that constant. Both happen to select on `job`, so it passes either
-#      way — but a deployed override is NOT what is being checked here.
+#   1. It reads each selector off the `cfg` fixture, which since #3659 is the rendered
+#      env-secret, so the deployed LOKI_STREAM is what is checked. A selector built at runtime
+#      from other values is not.
 #   2. The vocabulary below came from one k8s pod stream. LOKI_STREAM selects file-tail streams,
 #      which may legitimately carry labels this set does not list. Widen the set against a live
 #      stream if a genuine selector ever fails — do not delete the guard.
@@ -110,11 +109,9 @@ def _logql_selector_names(cfg):
 def _deployed_selector_values():
     """LogQL selector values that actually deploy, read from `templates/env-secret.yaml.j2`.
 
-    `_logql_selector_names()` only sees the IN-CODE DEFAULTS. `LOKI_STREAM` and
-    `LOG_ERROR_SELECTOR` are both overridden at deploy time in this template (the comment on
-    `test_loki_selectors_use_real_stream_labels` says so: "a deployed override is NOT what is
-    being checked here"). Neither in-code default is what runs against live Loki, so this reads
-    the rendered `KEY: "value"` pairs straight out of the template.
+    `_logql_selector_names()` reads the `cfg` fixture, the rendered env. This reads the
+    `KEY: "value"` pairs straight out of the template SOURCE instead, so a selector written into
+    a new key is checked even before any `Config` field reads it.
 
     Only a QUOTED literal is a candidate: a LogQL selector is always written as a quoted string
     here, and quoting is also what tells a selector apart from a Jinja substitution. A bare

@@ -88,8 +88,8 @@ class IoConfig:
 
 def io_config(
     _env: Callable[..., str],
-    _int: Callable[[str, str], int],
-    _num: Callable[[str, str], float],
+    _int: Callable[..., int],
+    _num: Callable[..., float],
     _env_file: Callable[..., str],
     interval: int,
     problems: list[str],
@@ -162,13 +162,13 @@ def io_config(
         # the full 288 rejected calls/day into an exhausted cap. At 1800s this is 48 calls/day
         # flat, and detection lands within 30 min of a breach that last time went 9.5 hours
         # unactioned.
-        B2_PROBE_INTERVAL_S=_num("B2_PROBE_INTERVAL_S", "1800"),
+        B2_PROBE_INTERVAL_S=_num("B2_PROBE_INTERVAL_S"),
         # The TTL for a failure that never reached B2 (DNS, connect, timeout). Deliberately NOT
         # B2_PROBE_INTERVAL_S: the whole reason that interval is long is that a probe costs a
         # transaction, and a connection that never landed costs nothing, so the argument above
         # does not apply to it. One INTERVAL, so the next cycle re-probes and the recovery is
         # not held back — see b2_reachable.
-        B2_TRANSPORT_RETRY_S=_num("B2_TRANSPORT_RETRY_S", str(interval)),
+        B2_TRANSPORT_RETRY_S=_num("B2_TRANSPORT_RETRY_S"),
         # B2 free-tier STORAGE headroom — the other half of the B2 budget, billed separately
         # from the transaction cap b2_reachable watches. kopia reported this as
         # `kopia_b2_billable_bytes`; that metric retired with kopia on 2026-08-10 and nothing
@@ -181,11 +181,11 @@ def io_config(
         # how the cap filled unnoticed before (hidden kopia bytes wedged retention deletes,
         # 2026-08-13).
         B2_STORAGE_CAP_BYTES=_num("B2_STORAGE_CAP_BYTES", str(10 * 1000**3)),
-        B2_STORAGE_MAX_PCT=_num("B2_STORAGE_MAX_PCT", "80"),
+        B2_STORAGE_MAX_PCT=_num("B2_STORAGE_MAX_PCT"),
         # Daily rather than B2_PROBE_INTERVAL_S: a full listing costs one Class C call per 1000
         # versions, and a check that guards a budget must not be a meaningful part of the spend.
         # At ~5k versions that is ~5 calls/day against a 2500/day Class C allowance.
-        B2_STORAGE_INTERVAL_S=_num("B2_STORAGE_INTERVAL_S", "86400"),
+        B2_STORAGE_INTERVAL_S=_num("B2_STORAGE_INTERVAL_S"),
         # Stop paging rather than walk forever if the bucket is far larger than expected.
         # Hitting this is itself reported, because a truncated sum under-reports usage — the
         # direction that reads as headroom we do not have.
@@ -205,19 +205,19 @@ def io_config(
         CF_GRAPHQL_URL=_env(
             "CF_GRAPHQL_URL", "https://api.cloudflare.com/client/v4/graphql"
         ),
-        CF_ACCOUNT_ID=_env("CF_ACCOUNT_ID", ""),
+        CF_ACCOUNT_ID=_env("CF_ACCOUNT_ID"),
         CF_ANALYTICS_TOKEN=_env_file("CF_ANALYTICS_TOKEN"),
-        R2_BUCKET=_env("R2_BUCKET", ""),
-        R2_STORAGE_MAX_GB=_num("R2_STORAGE_MAX_GB", "10"),
-        R2_CLASS_A_MAX=_num("R2_CLASS_A_MAX", "1000000"),
-        R2_CLASS_B_MAX=_num("R2_CLASS_B_MAX", "10000000"),
-        R2_USAGE_MAX_PCT=_num("R2_USAGE_MAX_PCT", "80"),
+        R2_BUCKET=_env("R2_BUCKET"),
+        R2_STORAGE_MAX_GB=_num("R2_STORAGE_MAX_GB"),
+        R2_CLASS_A_MAX=_num("R2_CLASS_A_MAX"),
+        R2_CLASS_B_MAX=_num("R2_CLASS_B_MAX"),
+        R2_USAGE_MAX_PCT=_num("R2_USAGE_MAX_PCT"),
         # Outstanding incomplete multipart uploads. These bill as stored bytes but do NOT appear
         # in a normal object listing, so they are the quiet way a 10 GB budget fills. The
         # durable fix is a bucket lifecycle rule (AbortIncompleteMultipartUpload) — a one-time
         # operator step, see this role's CLAUDE.md — and this arm is the backstop that notices
         # when it is absent or not working.
-        R2_UPLOADS_MAX=_num("R2_UPLOADS_MAX", "25"),
+        R2_UPLOADS_MAX=_num("R2_UPLOADS_MAX"),
         # SUCCESSES are cached for this long; a failure re-probes next cycle. The opposite of
         # B2_PROBE_INTERVAL_S's cache-both, and deliberately so: the fault B2 detects is a spend
         # cap that retrying makes worse, whereas GraphQL analytics calls are free and count
@@ -234,13 +234,9 @@ def io_config(
         # because Cloudflare moves these ranges on a multi-year cadence; the interval caches
         # SUCCESSES only, so a red verdict re-probes every cycle (checks/cloudflare_ips.py).
         CLOUDFLARE_IPS_EXPECTED=frozenset(
-            c.strip()
-            for c in _env("CLOUDFLARE_IPS_EXPECTED", "").split(",")
-            if c.strip()
+            c.strip() for c in _env("CLOUDFLARE_IPS_EXPECTED").split(",") if c.strip()
         ),
-        CLOUDFLARE_IPS_PROBE_INTERVAL_S=_num(
-            "CLOUDFLARE_IPS_PROBE_INTERVAL_S", "86400"
-        ),
+        CLOUDFLARE_IPS_PROBE_INTERVAL_S=_num("CLOUDFLARE_IPS_PROBE_INTERVAL_S"),
         # The WAN gate's endpoints, comma-separated and tried in order; empty disables the
         # gate. They are URLs rather than hosts so resolution, connect and TLS are all probed
         # by one request — checks/wan.py's header has why an anycast IP would not do.
@@ -258,8 +254,8 @@ def io_config(
             "HEALTHCHECKS_API_URL", "https://healthchecks.io/api/v3/checks/"
         ),
         HEALTHCHECKS_API_KEY=_env_file("HEALTHCHECKS_API_KEY"),
-        HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED", "")),
-        HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S", "86400"),
+        HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED")),
+        HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S"),
         # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
         # stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
         # regression) — a silently-dead log pipeline that quietly blinds the log dashboards and
@@ -298,13 +294,11 @@ def io_config(
         #   the streams it knows nothing about. Loki's `!=` also matches a stream that has no
         #   `machine` label at all, so the cluster's own authlog/syslog/traefik streams are
         #   unaffected. The Pi's own liveness stays covered by arm 3.
-        LOKI_STREAM=_env(
-            "LOKI_STREAM", '{job=~"authlog|syslog|traefik", machine!="daniel-pi"}'
-        ),
+        LOKI_STREAM=_env("LOKI_STREAM"),
         LOKI_DOCKER_STREAM=_env("LOKI_DOCKER_STREAM", '{container=~".+"}'),
         LOKI_PI_STREAM=_env("LOKI_PI_STREAM", '{job="pi"}'),
-        LOKI_WINDOW=_env("LOKI_WINDOW", "30m"),
-        LOKI_FILETAIL_WINDOW=_env("LOKI_FILETAIL_WINDOW", "3h"),
+        LOKI_WINDOW=_env("LOKI_WINDOW"),
+        LOKI_FILETAIL_WINDOW=_env("LOKI_FILETAIL_WINDOW"),
         # ── log-pattern arm: a workload that is Ready and still failing ──────────────────
         #
         # Every other check here reads a metric or an API. None of them can see a service that
@@ -314,22 +308,20 @@ def io_config(
         #
         # Both estates in one selector. `job="k8s"` is the cluster Alloy shipper's label and
         # `job="pi"` is daniel-pi's, so this arm covered the Pi from the day that shipped.
-        LOG_ERROR_SELECTOR=_env("LOG_ERROR_SELECTOR", '{job=~"k8s|pi"}'),
+        LOG_ERROR_SELECTOR=_env("LOG_ERROR_SELECTOR"),
         # Deliberately narrow. `error` is not here and must not be added: it is the single most
         # common word in ordinary application logs (every 404, every retried connection), and an
         # arm that pages on it is an arm that gets muted. These four mean the process itself
         # gave up.
-        LOG_ERROR_PATTERN=_env(
-            "LOG_ERROR_PATTERN", "(?i)(panic:|fatal|traceback|out of memory)"
-        ),
-        LOG_ERROR_WINDOW=_env("LOG_ERROR_WINDOW", "1h"),
+        LOG_ERROR_PATTERN=_env("LOG_ERROR_PATTERN"),
+        LOG_ERROR_WINDOW=_env("LOG_ERROR_WINDOW"),
         # Per container, not estate-wide: one workload melting down must not be diluted by 50
         # quiet ones, and the offender's name is the whole value of the alert.
-        LOG_ERROR_MAX=_num("LOG_ERROR_MAX", "20"),
+        LOG_ERROR_MAX=_num("LOG_ERROR_MAX"),
         # Containers whose normal output trips the pattern. Comma-separated, case-insensitive.
         # Keep this list short and say WHY in the inventory — a growing ignore list is the arm
         # decaying.
-        LOG_ERROR_IGNORE=_env("LOG_ERROR_IGNORE", ""),
+        LOG_ERROR_IGNORE=_env("LOG_ERROR_IGNORE"),
         # Log-shipper dropped-entries watchdog. Prometheus scrapes both shippers' own metrics —
         # the cluster's Alloy DaemonSet (job=alloy) and daniel-pi's Alloy container
         # (job=alloy-pi), both on 12345 — and both expose loki_write_dropped_entries_total. The
@@ -376,9 +368,8 @@ def io_config(
         # larger.
         SHIPPER_DROPPED_SERVER_METRIC=_env(
             "SHIPPER_DROPPED_SERVER_METRIC",
-            "loki_discarded_samples_total",
         ),
-        SHIPPER_DROPPED_WINDOW=_env("SHIPPER_DROPPED_WINDOW", "1h"),
+        SHIPPER_DROPPED_WINDOW=_env("SHIPPER_DROPPED_WINDOW"),
         # DECIDED: 3000, from the gap between churn and bursts rather than from the streak the
         # issue proposed. Measured 2026-09-11 over the 14 days Prometheus retains, at 1h
         # resolution: the client-side counter is non-zero in 26 of ~336 hours, 13 of those clear
@@ -389,7 +380,7 @@ def io_config(
         # is a derived midpoint rather than a number fitted to the episode. A 2-3 cycle streak
         # was rejected on its own evidence: that episode ran 11 cycles, so a streak would have
         # removed 3 of them and left the tile red for 40 minutes.
-        SHIPPER_DROPPED_MAX=_num("SHIPPER_DROPPED_MAX", "3000"),
+        SHIPPER_DROPPED_MAX=_num("SHIPPER_DROPPED_MAX"),
         # The THIRD side of the same pipe, folded in from the observability role's
         # telemetry-health.sh host cron on 2026-10-01 (#3094): the OTel collector's own
         # export-failure counters. A failed export leaves no trace in Loki or Tempo by
@@ -409,21 +400,20 @@ def io_config(
         # clean until the first real failure.
         OTELCOL_SEND_FAILED_METRICS=_env(
             "OTELCOL_SEND_FAILED_METRICS",
-            "otelcol_exporter_send_failed_.*",
         ),
         # Its own window and threshold rather than SHIPPER_DROPPED_WINDOW/_MAX: those two are
         # sized for log-line churn that tops out near 1020/h, and an export failure is not churn
         # at any rate. 15m and 0 are the values the host cron used since it was written, carried
         # over unchanged so the fold does not also change what pages.
-        OTELCOL_SEND_FAILED_WINDOW=_env("OTELCOL_SEND_FAILED_WINDOW", "15m"),
-        OTELCOL_SEND_FAILED_MAX=_num("OTELCOL_SEND_FAILED_MAX", "0"),
+        OTELCOL_SEND_FAILED_WINDOW=_env("OTELCOL_SEND_FAILED_WINDOW"),
+        OTELCOL_SEND_FAILED_MAX=_num("OTELCOL_SEND_FAILED_MAX"),
         # How far back check_swallowed_verdicts reads the host crons' push-outcome lines. Long
         # enough that a lost DOWN verdict stays paged past a cycle or two of Loki ingest lag,
         # and past the next run of a */30 producer that may land; short enough that the fetch
         # stays a few hundred lines. The daily producers the check exists for run once inside
         # any window, so the window does not need to reach their period — the page fires
         # within a cycle and the tile's own deadline reports the same verdict a day later.
-        SWALLOWED_VERDICTS_WINDOW_S=_int("SWALLOWED_VERDICTS_WINDOW_S", "10800"),
+        SWALLOWED_VERDICTS_WINDOW_S=_int("SWALLOWED_VERDICTS_WINDOW_S"),
         # The two post-reboot arms (#2783). The weekly Sunday 07:30 reboot held these two
         # tiles red for hours AFTER every other tile recovered — shipper_dropped for 4.4h and
         # swallowed_verdicts for 2.9h on 2026-09-27 — because each reads a window that still
@@ -441,7 +431,7 @@ def io_config(
         # same way (#3490): daniel-pi's Alloy drops what Loki refuses while Loki is down for the
         # restart, and a 1h lookback held that loss in range 24 minutes past the Kuma
         # maintenance window on 2026-10-04.
-        BOOT_SETTLE_S=_int("BOOT_SETTLE_S", "1200"),
+        BOOT_SETTLE_S=_int("BOOT_SETTLE_S"),
         # SHIPPER_BACKLOG_GRACE_S covers a different fault with the same trigger: Alloy ships
         # its post-reboot backlog for hours, and Loki discards what arrives outside its accept
         # window as `reason=too_far_behind`. Those entries are genuinely lost and nothing an
@@ -452,12 +442,12 @@ def io_config(
         # stream_limited, line_too_long and the client-side counter all stay live inside the
         # window, so a real throughput fault during a reboot morning still pages. Dropping the
         # whole verdict for 6h weekly would be six hours of blindness on partial log loss.
-        SHIPPER_BACKLOG_GRACE_S=_int("SHIPPER_BACKLOG_GRACE_S", "21600"),
+        SHIPPER_BACKLOG_GRACE_S=_int("SHIPPER_BACKLOG_GRACE_S"),
         # How far back check_kuma_notify_failures reads Kuma's `Cannot send notification`
         # lines (#1891). The same 3h as the swallowed-verdict window: a drop stays paged past
         # Loki ingest lag and past the resend that likely follows it, and the tile clears on
         # its own once the window passes — there is nothing an operator clears by hand.
-        KUMA_NOTIFY_FAILURES_WINDOW_S=_int("KUMA_NOTIFY_FAILURES_WINDOW_S", "10800"),
+        KUMA_NOTIFY_FAILURES_WINDOW_S=_int("KUMA_NOTIFY_FAILURES_WINDOW_S"),
         # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
         # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
         # green-in-UI while Discord goes silent — the one link in the alert chain no other
@@ -467,34 +457,34 @@ def io_config(
         # message in the channel. Empty URL = disabled (stays up), like N8N_API_KEY. The streak
         # hysteresis (like HA_CONSECUTIVE) rides out a transient blip on the one check that
         # reaches the public internet.
-        DISCORD_WEBHOOK_URL=_env("DISCORD_WEBHOOK_URL", ""),
+        DISCORD_WEBHOOK_URL=_env("DISCORD_WEBHOOK_URL"),
         # The CrowdSec ban-alert webhook is a SECOND, independent Discord delivery hop: CrowdSec
         # POSTs directly to it (not via Kuma), so a rotated/revoked CrowdSec webhook silently
         # drops security-ban notifications with NO Kuma backstop. Verify it alongside the Kuma
         # webhook. Empty = not checked.
-        DISCORD_CROWDSEC_WEBHOOK_URL=_env("DISCORD_CROWDSEC_WEBHOOK_URL", ""),
+        DISCORD_CROWDSEC_WEBHOOK_URL=_env("DISCORD_CROWDSEC_WEBHOOK_URL"),
         # The GitOps/Renovate webhook is a THIRD independent hop: it delivers both the
         # gitops-deploy rollback alert AND every renovate_notify manual-action digest, neither
         # via Kuma. renovate_notify pushes its "alive" Kuma beat on every clean run regardless of
         # whether the Discord POST succeeded, so a rotated/revoked webhook here leaves the
         # Renovate Notifier — Alive monitor GREEN while every digest silently drops. Verify it
         # too. Empty = not checked.
-        DISCORD_GITOPS_WEBHOOK_URL=_env("DISCORD_GITOPS_WEBHOOK_URL", ""),
+        DISCORD_GITOPS_WEBHOOK_URL=_env("DISCORD_GITOPS_WEBHOOK_URL"),
         # The *arr health/event webhook is a FOURTH independent hop: Sonarr/Radarr/Prowlarr POST
         # their own onHealthIssue alerts (indexer down, download-client errors, app DB errors —
         # signals the Arr Queue check does NOT cover) directly to it via their in-app Discord
         # "Connect", not via Kuma. A rotated/revoked webhook silently drops those while every
         # container-up monitor stays green. Empty = not checked. (The URL lives only in the *arr
         # app DBs + SOPS — this GET-verify is its one watchdog.)
-        DISCORD_ARR_WEBHOOK_URL=_env("DISCORD_ARR_WEBHOOK_URL", ""),
+        DISCORD_ARR_WEBHOOK_URL=_env("DISCORD_ARR_WEBHOOK_URL"),
         # The healthchecks.io app's own Discord webhook is a FIFTH independent hop: healthchecks
         # POSTs its own check-down/up alerts to it via a "webhook" notification channel (config
         # lives only in hc.sqlite, not templated), NOT via Kuma. A rotated/revoked URL silently
         # drops those. It's a redundant secondary path (healthchecks' primary alert route is SMTP
         # email, and it self-logs send failures in hc.sqlite), but it's still an un-Kuma'd
         # delivery hop worth verifying. Empty = skipped.
-        DISCORD_HEALTHCHECKS_WEBHOOK_URL=_env("DISCORD_HEALTHCHECKS_WEBHOOK_URL", ""),
-        DISCORD_CONSECUTIVE=_int("DISCORD_CONSECUTIVE", "2"),
+        DISCORD_HEALTHCHECKS_WEBHOOK_URL=_env("DISCORD_HEALTHCHECKS_WEBHOOK_URL"),
+        DISCORD_CONSECUTIVE=_int("DISCORD_CONSECUTIVE"),
         # Alert-email backstop deliverability (folded into check_discord). The uptime-kuma
         # `email` notification (Gmail SMTP) is the independent 2nd channel attached ONLY to the
         # Discord Delivery monitor — the escape hatch when the Kuma Discord webhook is dead (the
@@ -508,7 +498,7 @@ def io_config(
         # disabled (stays up), like the empty-webhook skips.
         SMTP_HOST=_env("SMTP_HOST", "smtp.gmail.com"),
         SMTP_PORT=_int("SMTP_PORT", "465"),
-        SMTP_USER=_env("SMTP_USER", ""),
-        SMTP_PASSWORD=_env("SMTP_PASSWORD", ""),
+        SMTP_USER=_env("SMTP_USER"),
+        SMTP_PASSWORD=_env("SMTP_PASSWORD"),
         EMAIL_PROBE_INTERVAL_S=_num("EMAIL_PROBE_INTERVAL_S", "21600"),  # 6h
     )

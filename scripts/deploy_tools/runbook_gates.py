@@ -34,17 +34,18 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
 from lib.kubectl import MissingKubectl, Tools, WrongCluster, kubectl_json
+from lib.repo_paths import MONITOR_BRIDGE_FILES
+
+# The robustness allow-list is monitor-bridge's, shared rather than restated (#3668). Appended,
+# not prepended, so that role's `check.py`, `gates.py` and packages cannot shadow anything a
+# caller of this module imports later.
+sys.path.append(str(MONITOR_BRIDGE_FILES))
+from longhorn_robustness import unsafe_volumes as _unsafe_states
 
 EX_UNAVAILABLE = 69
 # The repo-wide 64, not a second definition of it: `lib.exit_codes` is the one scheme every
 # entry point here takes its usage code from.
 EX_USAGE = USAGE_ERROR
-
-# Allow-lists, not deny-lists: a Longhorn state this file has not heard of (a rename, a new
-# value after a Longhorn bump) must stop the procedure, not pass it. `healthy` is a volume with
-# every replica; `unknown` is what an idle, detached volume reports. `degraded` and `faulted`
-# are the ones the runbooks name.
-SAFE_ROBUSTNESS = frozenset({"healthy", "unknown"})
 
 LONGHORN_NS = "longhorn-system"
 VOLUMES_ARGS = ("-n", LONGHORN_NS, "get", "volumes.longhorn.io", "-o", "json")
@@ -61,15 +62,21 @@ def name_of(item: dict) -> str:
 
 
 def unsafe_volumes(doc) -> list[str]:
-    """`name (robustness)` for every volume whose robustness is not in `SAFE_ROBUSTNESS`."""
+    """`name (robustness)` for every volume that lost redundancy, or a placeholder if unlisted.
+
+    `longhorn_robustness.SAFE_ROBUSTNESS` is an allow-list, so a state nobody has heard of (a
+    rename, a new value after a Longhorn bump) stops the procedure rather than passing it.
+    """
     if doc is None:
         return ["<could not list volumes.longhorn.io>"]
-    found = []
-    for item in items(doc):
-        robustness = str((item.get("status") or {}).get("robustness", ""))
-        if robustness not in SAFE_ROBUSTNESS:
-            found.append(f"{name_of(item)} ({robustness or 'no robustness reported'})")
-    return found
+    unsafe = _unsafe_states(
+        (name_of(item), str((item.get("status") or {}).get("robustness", "")))
+        for item in items(doc)
+    )
+    return [
+        f"{name} ({robustness or 'no robustness reported'})"
+        for name, robustness in unsafe.items()
+    ]
 
 
 def unreachable_targets(doc, required: Sequence[str]) -> list[str]:

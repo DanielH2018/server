@@ -66,9 +66,9 @@ _DIRECTORY_LITERALS = {
     ),
 }
 
-# The pod's contention threshold is rendered into its env, and `_num()` reads the env before
-# the default `config_service.py` derives from `CONTENTION_PAGE_SECONDS`. The SessionStart
-# banner parks on that constant directly, so a bump to it that leaves this literal behind
+# The pod's contention threshold is rendered into its env, the one place it is set:
+# `config_service.py` reads it with no default (#3659). The SessionStart banner parks on
+# `gitops_markers.CONTENTION_PAGE_SECONDS` directly, so a bump to it that leaves this literal behind
 # quiets the banner while the pod still pages at the old threshold, or the reverse — an
 # operator sent looking for a page that never came. `GITOPS_BEHIND_MAX_MIN` is NOT pinned:
 # the banner's behind threshold is deliberately shorter than the pod's.

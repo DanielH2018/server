@@ -16,11 +16,14 @@ result while leaving the source line untouched, so it fails this and nothing els
 rendered keys are fine.
 
 A key written by a `{% for %}` loop carries no literal name in the source, so this scan cannot
-see it. Two templates are covered only in part for that reason:
+see it. Three templates are covered only in part for that reason:
 `homepage/icons-configmap.yaml.j2` builds all six of its keys in a loop and is covered not at
 all, and `artifacts/configmap.yaml.j2` writes `known_services.json` literally but loops its
 three `.py` keys over `artifacts_modules`. Those `.py` keys are pinned by
 `test_artifacts_configmap.py` instead, which compares them against the files on disk.
+monitor-bridge's `env-secret.yaml.j2` loops its 44 `KUMA_PUSH_*` keys over
+`monitor_bridge_push_checks` (#3659), and that role's `tests/test_push_check_table.py` pins
+them against the table.
 
 Two narrowings, both because the source is a template and not YAML:
 
@@ -147,7 +150,8 @@ def test_the_scan_finds_keys_across_most_configmaps() -> None:
     """Guard the guard: a broken scan reports no keys and every assertion below vacuously passes."""
     templates = len(CASES)
     keys = sum(len(k) for _, _, _, k in CASES)
-    # Measured: 51 templates, 321 keys. The floors sit just under that, high enough
+    # Measured: 51 templates, 321 keys; 290 keys since monitor-bridge's 44 push tokens moved
+    # into a loop (#3659). The floors sit just under that, high enough
     # to catch the two ways this scan can lose coverage silently: stopping at a
     # multi-line `{# ... #}` header drops it to 49/312, and stopping at the first column-0
     # `{{ lookup(...) }}` line drops home-assistant from ten checked keys to one. Both still
@@ -156,7 +160,7 @@ def test_the_scan_finds_keys_across_most_configmaps() -> None:
     assert templates >= 50, (
         f"only {templates} templates carry scanned keys — the source scan broke"
     )
-    assert keys >= 300, f"only {keys} keys are being checked — the source scan broke"
+    assert keys >= 280, f"only {keys} keys are being checked — the source scan broke"
 
 
 @pytest.mark.parametrize(

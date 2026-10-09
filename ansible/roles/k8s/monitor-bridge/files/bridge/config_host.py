@@ -5,8 +5,8 @@ every threshold read by a check in `checks/host.py`, `checks/host_thermal.py` an
 `checks/host_edge.py`, plus the origin-coverage floors the
 host-metric checks fail closed on.
 
-A field's justification sits beside its DECLARATION; its env var name and default sit beside
-its READ in `host_config`. `bridge/config.py` composes this into the single frozen `Config`
+A field's justification sits beside its DECLARATION; its env var name sits beside its READ in
+`host_config`, and its value in `templates/env-secret.yaml.j2`. `bridge/config.py` composes this into the single frozen `Config`
 that `main()` builds and threads down. This module imports nothing from `bridge.config` — the
 parsers arrive as arguments, so the split leaf never reaches back into its facade.
 """
@@ -83,8 +83,8 @@ class HostConfig:
 
 def host_config(
     _env: Callable[..., str],
-    _int: Callable[[str, str], int],
-    _num: Callable[[str, str], float],
+    _int: Callable[..., int],
+    _num: Callable[..., float],
     _env_file: Callable[..., str],
     problems: list[str],
 ) -> HostConfig:
@@ -143,15 +143,15 @@ def host_config(
 
     return HostConfig(
         DISK_MOUNTPOINTS=tuple(
-            m.strip() for m in _env("DISK_MOUNTPOINTS", "/").split(",") if m.strip()
+            m.strip() for m in _env("DISK_MOUNTPOINTS").split(",") if m.strip()
         ),
-        DISK_MAX_PCT=_num("DISK_MAX_PCT", "90"),
-        CERT_MIN_DAYS=_num("CERT_MIN_DAYS", "14"),
-        MEM_MAX_PCT=_num("MEM_MAX_PCT", "90"),
+        DISK_MAX_PCT=_num("DISK_MAX_PCT"),
+        CERT_MIN_DAYS=_num("CERT_MIN_DAYS"),
+        MEM_MAX_PCT=_num("MEM_MAX_PCT"),
         # Origins that check_disk/check_mem must NOT scan, as a regex alternation. See
         # host_metric_sel: daniel-pi runs node-exporter like the other hosts, but
         # check_pi_pressure owns its disk and memory with thresholds sized for a 456 MB box.
-        HOST_METRIC_ORIGIN_EXCLUDE=_env("HOST_METRIC_ORIGIN_EXCLUDE", "daniel-pi"),
+        HOST_METRIC_ORIGIN_EXCLUDE=_env("HOST_METRIC_ORIGIN_EXCLUDE"),
         # Scrutiny SMART freshness + health: the collector cron runs daily (00:00) and has no
         # usable container healthcheck (cron is PID 1) — a silently-dead collector only shows as
         # aging collector_date values in the web API. 26h allows one run + slack. On TOP of
@@ -163,16 +163,16 @@ def host_config(
         # optional temperature ceiling (°C); 0 = disabled (default), since Scrutiny already
         # folds the SMART temperature attribute into device_status — the ceiling is just an
         # earlier-warning lever.
-        SCRUTINY_URL=_env("SCRUTINY_URL", "http://scrutiny:8080").rstrip("/"),
-        SCRUTINY_MAX_AGE_H=_num("SCRUTINY_MAX_AGE_H", "26"),
-        SCRUTINY_TEMP_MAX=_num("SCRUTINY_TEMP_MAX", "0"),
+        SCRUTINY_URL=_env("SCRUTINY_URL").rstrip("/"),
+        SCRUTINY_MAX_AGE_H=_num("SCRUTINY_MAX_AGE_H"),
+        SCRUTINY_TEMP_MAX=_num("SCRUTINY_TEMP_MAX"),
         # NVMe endurance ceiling (percentage_used, where 100 means the controller's rated write
         # endurance is spent). Scrutiny ships this attribute with thresh=100, so its own
         # evaluation cannot fold a breach into device_status until the drive is fully consumed —
         # days of warning where the wear curve offers months. Verified against the live API
         # 2026-08-22: daniel-server's SHPP41-500GM reads 7 at 30,959 power-on hours,
         # daniel-box's CT1000E100SSD8 reads 0 at 576. 0 = disabled.
-        SCRUTINY_WEAR_MAX=_num("SCRUTINY_WEAR_MAX", "80"),
+        SCRUTINY_WEAR_MAX=_num("SCRUTINY_WEAR_MAX"),
         # Board and CPU temperature from node-exporter's hwmon collector. Drives are NOT read
         # here — check_scrutiny owns them (its device_status folds the SMART temperature
         # attribute), so HWMON_TEMP_EXCLUDE_CHIP drops the nvme chips and the two checks never
@@ -203,10 +203,10 @@ def host_config(
         # therefore treated as UNDECLARED and falls through (crit, then arm 2). This is also why
         # the fallback arm is not optional: without it, 14 of 21 sensors — including BOTH
         # daniel-pi sensors, on the host with no fan — carry no limit at all.
-        HWMON_TEMP_RATIO=_num("HWMON_TEMP_RATIO", "0.90"),
+        HWMON_TEMP_RATIO=_num("HWMON_TEMP_RATIO"),
         # 85C is an estate-wide flat default, not any chip's own rating, so it is the arm of last
         # resort rather than a limit anybody chose per part.
-        HWMON_TEMP_FALLBACK_C=_num("HWMON_TEMP_FALLBACK_C", "85"),
+        HWMON_TEMP_FALLBACK_C=_num("HWMON_TEMP_FALLBACK_C"),
         # Arm 3, and the one that keeps arm 2 rare: a sensor whose driver declares nothing can
         # still have a PUBLISHED rating, and an operator can supply it. Ratioed exactly like a
         # declared max, so a rated 100 and a declared 100 produce the same 90C limit.
@@ -217,10 +217,10 @@ def host_config(
         # verdicts.host.hwmon_temp_limits for that evidence and for how to fetch amd.com, and the
         # `DECIDED: k10temp subtracts no Tctl offset` marker above it for why Tctl is the
         # junction temperature this compares (#1003, #1152).
-        HWMON_TEMP_RATED_MAX_C=_rated_max(_env("HWMON_TEMP_RATED_MAX_C", "")),
-        HWMON_TEMP_MIN_PLAUSIBLE_C=_num("HWMON_TEMP_MIN_PLAUSIBLE_C", "20"),
-        HWMON_TEMP_MAX_PLAUSIBLE_C=_num("HWMON_TEMP_MAX_PLAUSIBLE_C", "150"),
-        HWMON_TEMP_EXCLUDE_CHIP=_env("HWMON_TEMP_EXCLUDE_CHIP", "nvme_"),
+        HWMON_TEMP_RATED_MAX_C=_rated_max(_env("HWMON_TEMP_RATED_MAX_C")),
+        HWMON_TEMP_MIN_PLAUSIBLE_C=_num("HWMON_TEMP_MIN_PLAUSIBLE_C"),
+        HWMON_TEMP_MAX_PLAUSIBLE_C=_num("HWMON_TEMP_MAX_PLAUSIBLE_C"),
+        HWMON_TEMP_EXCLUDE_CHIP=_env("HWMON_TEMP_EXCLUDE_CHIP"),
         # Hysteresis: a transcode or a compile spikes coretemp for one scrape, so only the Nth
         # consecutive breaching cycle pages. The streak is ONE counter for the whole check
         # (bridge.streaks._down_streaks["host_temp"]), not one per sensor, so this number is
@@ -250,7 +250,7 @@ def host_config(
         # Caveat: _down_streaks is module-global and resets on a bridge restart, so a deploy
         # mid-excursion costs a full 60 min re-accumulation. That cuts toward quiet, not toward
         # a missed fault.
-        HWMON_TEMP_CONSECUTIVE=_int("HWMON_TEMP_CONSECUTIVE", "12"),
+        HWMON_TEMP_CONSECUTIVE=_int("HWMON_TEMP_CONSECUTIVE"),
         # Host-coverage floor for the thermal check, the peer of HOST_ORIGINS_MIN and
         # deliberately a DIFFERENT number. Until 2026-08-29 hwmon_temp_verdict paged only on a
         # fully empty vector, so any non-empty subset passed: lose one host's hwmon collector
@@ -263,7 +263,7 @@ def host_config(
         # measured live 2026-08-29 after HWMON_TEMP_EXCLUDE_CHIP: daniel-server 9, daniel-box 5,
         # daniel-pi 2. The shared floor of 2 would be met by any two of them, which is exactly
         # the state this must catch.
-        HWMON_TEMP_ORIGINS_MIN=_int("HWMON_TEMP_ORIGINS_MIN", "3"),
+        HWMON_TEMP_ORIGINS_MIN=_int("HWMON_TEMP_ORIGINS_MIN"),
         # Its own grace, longer than HOST_ORIGINS_CONSECUTIVE, because the third host is
         # daniel-pi and the Pi drops out for longer than either amd64 node. Measured over the 7d
         # to 2026-08-29 at a 5m step: 1054 samples, coverage below 3 in 6 of them, all daniel-pi
@@ -271,44 +271,40 @@ def host_config(
         # 20 minutes. The shared grace of 3 cycles is 15 minutes at INTERVAL=300, so it would
         # have paged once in that week on a healthy estate. 5 cycles is 25 minutes: one cycle of
         # margin over the observed worst case.
-        HWMON_TEMP_ORIGINS_CONSECUTIVE=_int("HWMON_TEMP_ORIGINS_CONSECUTIVE", "5"),
+        HWMON_TEMP_ORIGINS_CONSECUTIVE=_int("HWMON_TEMP_ORIGINS_CONSECUTIVE"),
         # The Raspberry Pi firmware's own low-critical voltage alarm, a clean 0/1 that needs no
         # threshold: the firmware has already decided. Only daniel-pi reports it, which is why
         # the arm gates an empty vector on that host's own scrape rather than treating absence as
         # health — an empty vector means the Pi went quiet, and a Pi falling off the network is
         # what sustained undervoltage causes.
-        UNDERVOLTAGE_QUERY=_env(
-            "UNDERVOLTAGE_QUERY", "node_hwmon_in_lcrit_alarm_volts"
-        ),
-        UNDERVOLTAGE_UP_QUERY=_env("UNDERVOLTAGE_UP_QUERY", 'up{job="node-pi"}'),
+        UNDERVOLTAGE_QUERY=_env("UNDERVOLTAGE_QUERY"),
+        UNDERVOLTAGE_UP_QUERY=_env("UNDERVOLTAGE_UP_QUERY"),
         # 1 — no grace, unlike every other arm here. This is an alarm bit the firmware latched,
         # not a measurement that can spike: a 1 means the supply already went out of spec, and
         # the damage (a corrupted SD card) is not undone by the next cycle reading 0. Raise it
         # only if a real inrush transient is observed setting the bit spuriously.
-        UNDERVOLTAGE_CONSECUTIVE=_int("UNDERVOLTAGE_CONSECUTIVE", "1"),
+        UNDERVOLTAGE_CONSECUTIVE=_int("UNDERVOLTAGE_CONSECUTIVE"),
         # Kernel CPU thermal throttling — a non-zero cur_state means the kernel is derating the
         # CPU right now. `type="Processor"` narrows it to CPU throttling; the unfiltered metric
         # also carries PCIe link-speed and intel_powerclamp devices, which throttle for reasons
         # that are not heat.
-        THERMAL_THROTTLE_QUERY=_env(
-            "THERMAL_THROTTLE_QUERY", 'node_cooling_device_cur_state{type="Processor"}'
-        ),
+        THERMAL_THROTTLE_QUERY=_env("THERMAL_THROTTLE_QUERY"),
         # The empty-vector gate, `node` rather than `node-pi`: no Processor cooling device
         # anywhere means both amd64 node-exporters stopped publishing, which
         # check_cluster_targets and this check's EXPORTER_DEPENDENT entry already own. An empty
         # vector while `node` IS scraping pages — a driver or kernel change took the sensors
         # away, and nothing else would notice.
-        THERMAL_THROTTLE_UP_QUERY=_env("THERMAL_THROTTLE_UP_QUERY", 'up{job="node"}'),
+        THERMAL_THROTTLE_UP_QUERY=_env("THERMAL_THROTTLE_UP_QUERY"),
         # 2, not the temperature arm's 3: daniel-pi publishes no Processor cooling device at all,
         # so the floor is the two amd64 nodes. Measured live 2026-09-10 — daniel-box 16 devices,
         # daniel-server 8, daniel-pi 0. A floor of 3 would page forever; a floor of 1 would let
         # one node go blind while the other reported "not throttling" for the estate.
-        THERMAL_THROTTLE_ORIGINS_MIN=_int("THERMAL_THROTTLE_ORIGINS_MIN", "2"),
+        THERMAL_THROTTLE_ORIGINS_MIN=_int("THERMAL_THROTTLE_ORIGINS_MIN"),
         # 3 cycles (15 min at INTERVAL=300). A single cycle of throttling during a compile or a
         # transcode is ordinary; sustained throttling is the cooling fault worth paging on.
         # Shorter than HWMON_TEMP_CONSECUTIVE=12 because throttling is the kernel's own verdict
         # that the CPU is too hot, where a temperature above a chosen limit is ours.
-        THERMAL_THROTTLE_CONSECUTIVE=_int("THERMAL_THROTTLE_CONSECUTIVE", "3"),
+        THERMAL_THROTTLE_CONSECUTIVE=_int("THERMAL_THROTTLE_CONSECUTIVE"),
         # UPS battery health, read from nut-exporter's own scrape of upsd. Nothing else trends
         # the battery, so a slowly-degrading one — full-charge runtime decaying over years — is
         # invisible until an outage collapses it. We page on a low battery RUNWAY: charge below
@@ -337,12 +333,8 @@ def host_config(
         # replace-battery template floors to 0 — which the single source removes outright.
         # Units are nut's own: battery.charge is a percent, battery.runtime is seconds, so
         # UPS_CHARGE_MIN_PCT and UPS_RUNTIME_MIN_S keep their meaning and their values.
-        UPS_CHARGE_QUERY=_env(
-            "UPS_CHARGE_QUERY", "max(network_ups_tools_battery_charge)"
-        ),
-        UPS_RUNTIME_QUERY=_env(
-            "UPS_RUNTIME_QUERY", "max(network_ups_tools_battery_runtime)"
-        ),
+        UPS_CHARGE_QUERY=_env("UPS_CHARGE_QUERY"),
+        UPS_RUNTIME_QUERY=_env("UPS_RUNTIME_QUERY"),
         # The UPS's own "Replace Battery" self-test verdict (NUT `ups.status` RB flag).
         # Charge/runtime are a lagging runway proxy — a failed periodic self-test can trip RB
         # while both still read fine — so this is the earliest actionable replace-the-battery
@@ -350,9 +342,7 @@ def host_config(
         # only branches on OB/LB, and check_ups read only charge/runtime). One-hot over `flag`
         # like OB below, so RB is a real 0/1 series and its absence means the nut scrape went
         # quiet. Empty = arm disabled.
-        UPS_REPLACE_QUERY=_env(
-            "UPS_REPLACE_QUERY", 'max(network_ups_tools_ups_status{flag="RB"})'
-        ),
+        UPS_REPLACE_QUERY=_env("UPS_REPLACE_QUERY"),
         # Mains power gone, the UPS carrying the load. `ups.status` is a one-hot family over the
         # `flag` label: the exporter forces a 0 for every flag in its --nut.statuses default the
         # UPS is not asserting, so OB is a real 0/1 series rather than one that exists only
@@ -360,9 +350,7 @@ def host_config(
         # thing whose absence is ambiguous. HA never had an equivalent single series anyway: its
         # ups_power_event automation branches on the flag without publishing it. Empty = arm
         # off. Its own streak key, so it cannot compound with the others.
-        UPS_ON_BATTERY_QUERY=_env(
-            "UPS_ON_BATTERY_QUERY", 'max(network_ups_tools_ups_status{flag="OB"})'
-        ),
+        UPS_ON_BATTERY_QUERY=_env("UPS_ON_BATTERY_QUERY"),
         # The source scrape-up gate, used only to discriminate the all-arms-absent case: the nut
         # scrape down (Scrape Targets owns that, defer) vs the scrape answering while every UPS
         # series was renamed or removed at once (Scrape Targets cannot see it, so the UPS would
@@ -370,26 +358,26 @@ def host_config(
         # It covers a dead upsd as well as a dead exporter: nut-exporter's /ups_metrics fails the
         # whole scrape when upsd is unreachable, which is why its probes are tcpSocket
         # (roles/k8s/nut-exporter/CLAUDE.md). Empty disables the gate (always defer).
-        UPS_SOURCE_UP_QUERY=_env("UPS_SOURCE_UP_QUERY", 'max(up{job="nut"})'),
-        UPS_CHARGE_MIN_PCT=_num("UPS_CHARGE_MIN_PCT", "50"),
-        UPS_RUNTIME_MIN_S=_num("UPS_RUNTIME_MIN_S", "300"),
-        UPS_CONSECUTIVE=_int("UPS_CONSECUTIVE", "2"),
+        UPS_SOURCE_UP_QUERY=_env("UPS_SOURCE_UP_QUERY"),
+        UPS_CHARGE_MIN_PCT=_num("UPS_CHARGE_MIN_PCT"),
+        UPS_RUNTIME_MIN_S=_num("UPS_RUNTIME_MIN_S"),
+        UPS_CONSECUTIVE=_int("UPS_CONSECUTIVE"),
         # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
         # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
         # that no other monitor saw (containers stayed "restarting", never down long enough).
         # Read from the Pi's node-exporter series on Prometheus, selected by origin (the
         # `node-pi` scrape job); glances served it until 2026-09-18 (#2004). Empty = disabled.
-        PI_ORIGIN=_env("PI_ORIGIN", ""),
+        PI_ORIGIN=_env("PI_ORIGIN"),
         # The Pi's LAN address, for the published-port arm's TCP connects. Empty = the arm is
         # skipped. Separate from PI_ORIGIN because an origin label is not an address.
-        PI_HOST=_env("PI_HOST", ""),
-        PI_LOAD_MAX=_num("PI_LOAD_MAX", "1.5"),  # load5 per core
-        PI_MEM_MIN_MB=_num("PI_MEM_MIN_MB", "50"),
-        PI_DISK_MAX_PCT=_num("PI_DISK_MAX_PCT", "90"),
+        PI_HOST=_env("PI_HOST"),
+        PI_LOAD_MAX=_num("PI_LOAD_MAX"),  # load5 per core
+        PI_MEM_MIN_MB=_num("PI_MEM_MIN_MB"),
+        PI_DISK_MAX_PCT=_num("PI_DISK_MAX_PCT"),
         # `name:port` pairs for the Pi containers that publish a port, rendered from daniel-pi's
         # containers_list (every entry with a `port`) so the set cannot drift from the inventory.
         # Empty = the port arm is disabled, like PI_ORIGIN disables the whole check.
-        PI_PUBLISHED_PORTS=_published_ports(_env("PI_PUBLISHED_PORTS", "")),
+        PI_PUBLISHED_PORTS=_published_ports(_env("PI_PUBLISHED_PORTS")),
         PI_PORT_TIMEOUT=_num("PI_PORT_TIMEOUT", "3"),
         # A Pi deploy recreates containers, so their ports are genuinely closed for a few
         # seconds. Two cycles of grace, same idiom as HA_CONSECUTIVE; a detached container
@@ -404,7 +392,7 @@ def host_config(
         # read: the readonly SA holds no pods/exec, and the unauthenticated API is two endpoints,
         # one of which returns a single row. Five of the 42 runs between 2026-08-14 and
         # 2026-08-24 failed and none of them paged.
-        SPEEDTEST_URL=_env("SPEEDTEST_URL", "").rstrip("/"),
+        SPEEDTEST_URL=_env("SPEEDTEST_URL").rstrip("/"),
         # File-mounted (SPEEDTEST_TOKEN_FILE) for the same reason HA_TOKEN is: envFrom has no
         # per-key filter, so a token in monitor-bridge-env is a token in every process's
         # environment.
@@ -419,17 +407,17 @@ def host_config(
         # That is why the floor arm needs SPEEDTEST_FLOOR_CONSECUTIVE results, not one. The
         # value itself stays: it still marks the fifth percentile of a ~870 Mbps link, which is
         # the "the WAN is degraded" reading this check exists to catch.
-        SPEEDTEST_DOWNLOAD_MIN_MBPS=_num("SPEEDTEST_DOWNLOAD_MIN_MBPS", "100"),
+        SPEEDTEST_DOWNLOAD_MIN_MBPS=_num("SPEEDTEST_DOWNLOAD_MIN_MBPS"),
         # Staleness ceiling, hours. SPEEDTEST_SCHEDULE runs every 6h, so 8 allows one missed slot
         # plus slack. This arm is what notices the scheduler dying — the failure mode with no
         # other symptom, since a pod that runs no tests still serves its UI and passes both
         # probes.
-        SPEEDTEST_MAX_AGE_H=_num("SPEEDTEST_MAX_AGE_H", "8"),
+        SPEEDTEST_MAX_AGE_H=_num("SPEEDTEST_MAX_AGE_H"),
         # Consecutive-cycle hysteresis for the FETCH only, never for the verdict — see
         # check_speedtest. The floor arm's hysteresis is a different knob measured in a
         # different unit, SPEEDTEST_FLOOR_CONSECUTIVE below: cycles for the fetch, RESULTS for
         # the floor.
-        SPEEDTEST_CONSECUTIVE=_int("SPEEDTEST_CONSECUTIVE", "2"),
+        SPEEDTEST_CONSECUTIVE=_int("SPEEDTEST_CONSECUTIVE"),
         # Consecutive sub-floor RESULTS the floor arm needs before it pages (#2785). A test runs
         # every 6h, so one slow result held the tile red for ~6h — three times in the 14 days to
         # 2026-09-27, 11.6h in total. Read from the API's own history (the fetch asks for this
@@ -441,7 +429,7 @@ def host_config(
         # single bad draw, and it caps the page's delay at one test interval. 1 restores the
         # old page-on-sight behaviour; the status and age arms are untouched by this knob and
         # still page on the newest row alone.
-        SPEEDTEST_FLOOR_CONSECUTIVE=_int("SPEEDTEST_FLOOR_CONSECUTIVE", "2"),
+        SPEEDTEST_FLOOR_CONSECUTIVE=_int("SPEEDTEST_FLOOR_CONSECUTIVE"),
         # Distinct `origin` values the host-metric checks must see. node-exporter is a DaemonSet
         # on both nodes, so a vector grouped by origin returning fewer than this has LOST a host,
         # not measured a healthy estate — and check_disk/check_mem would report the survivor's
@@ -458,7 +446,7 @@ def host_config(
         # anywhere. Same shape as check_ups's partial-absence arm: never monitor the survivor
         # silently. Verified before setting the floor: /, /boot and /boot/efi each report from
         # both origins over the preceding 7d, so no mountpoint is legitimately single-host.
-        HOST_ORIGINS_MIN=_int("HOST_ORIGINS_MIN", "2"),
+        HOST_ORIGINS_MIN=_int("HOST_ORIGINS_MIN"),
         # Hysteresis, for the same reason UPS_CONSECUTIVE exists: the weekly Sunday reboot takes
         # a node's node-exporter away for minutes against a 1m scrape and a 5m check loop, and a
         # bare floor would page every week. Measured over the 7d to 2026-08-23,
@@ -487,7 +475,7 @@ def host_config(
         # Empty disables the arm entirely, like PI_ORIGIN and PI_PUBLISHED_PORTS; the live
         # value is set in templates/env-secret.yaml.j2, beside the host it describes.
         CLAUDE_CGROUPS=tuple(
-            c.strip() for c in _env("CLAUDE_CGROUPS", "").split(",") if c.strip()
+            c.strip() for c in _env("CLAUDE_CGROUPS").split(",") if c.strip()
         ),
         # PSI `full` stall rate window. The writer's timer samples cgroupfs every 30s, but the
         # BINDING sample interval is Prometheus's `job: node` scrape_interval of 1m

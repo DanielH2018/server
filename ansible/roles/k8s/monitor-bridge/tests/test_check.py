@@ -8,8 +8,6 @@ how a deployment narrows that registry.
 from dataclasses import replace
 
 import os
-import re
-from pathlib import Path
 
 
 import bridge.common
@@ -40,66 +38,6 @@ def test_touch_heartbeat_never_raises(monkeypatch, cfg):
     # Best-effort like push(): a heartbeat failure must not kill the loop.
     cfg = replace(cfg, HEARTBEAT_FILE="/nonexistent-dir/heartbeat")
     bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
-
-
-def _read_sibling(relpath):
-    return (Path(__file__).resolve().parent / relpath).read_text()
-
-
-def test_checks_and_env_secret_push_tokens_agree():
-    # Every KUMA_PUSH_* check.py reads must have an env entry in the env-secret and
-    # vice-versa. A check added to CHECKS without its env silently never pushes (empty
-    # token) with no Kuma no-heartbeat to self-correct.
-
-    # Matched as a bare quoted literal, NOT as a `tok("...")` call: the four reachability-gate
-    # tokens reach _env() through _gate() rather than through the registry's helper, and a
-    # scanner keyed to one call shape stops seeing a token the moment it moves one call outward —
-    # it reads green while checking nothing. Shape-independent is also exact here: every quoted
-    # KUMA_PUSH_* under files/ is a token the bridge reads.
-    #
-    # Scanned across EVERY runtime module rather than one file. The tokens live in two of them
-    # — the registry's in registry.py, the four gates' in check.py's run_once — and a
-    # single-file scan would go quiet for the larger half. The tree is the census rather than the ship list because
-    # ansible/tests/services/test_monitor_bridge_modules.py already pins the two to be equal.
-    files = Path(__file__).resolve().parent.parent / "files"
-    in_code = set()
-    for module in sorted(files.rglob("*.py")):
-        in_code |= set(re.findall(r'"(KUMA_PUSH_[A-Z0-9_]+)"', module.read_text()))
-    # Non-vacuity, by name rather than by count: a scan that stopped finding the registry would
-    # otherwise compare an empty set against an empty set the day env-secret.yaml.j2 was emptied
-    # too, and the census has to name a member of EACH of the two modules that carry tokens.
-    assert {"KUMA_PUSH_DISK", "KUMA_PUSH_PROMETHEUS"} <= in_code, sorted(in_code)
-    in_twin = set(
-        re.findall(
-            r"^\s*(KUMA_PUSH_[A-Z0-9_]+):",
-            _read_sibling("../templates/env-secret.yaml.j2"),
-            re.MULTILINE,
-        )
-    )
-    assert in_code == in_twin, "only in files/=%s ; only in env-secret=%s" % (
-        sorted(in_code - in_twin),
-        sorted(in_twin - in_code),
-    )
-
-
-def test_every_push_token_env_is_wired_to_a_monitor():
-    # Each KUMA_PUSH_* env value var must also appear as a push_token in the
-    # kuma-static-monitors Secret, i.e. a push monitor actually exists to receive what
-    # the check pushes. (Pre-uninstall this read AutoKuma labels on the remnant compose;
-    # the static Secret has been the declaration home for the cluster bridge all along.)
-
-    env_text = _read_sibling("../templates/env-secret.yaml.j2")
-    env_vars = set(
-        re.findall(r"KUMA_PUSH_[A-Z0-9_]+: \"\{\{ ([a-z0-9_]+) \}\}\"", env_text)
-    )
-    monitors_text = _read_sibling("../../uptime-kuma/templates/static-monitors.yaml.j2")
-    label_vars = set(
-        re.findall(r'"push_token": "\{\{ ([a-z0-9_]+) \}\}"', monitors_text)
-    )
-    assert env_vars, "no KUMA_PUSH_* env vars parsed — regex drift?"
-    assert env_vars <= label_vars, (
-        "env push tokens with no monitor declared: %s" % sorted(env_vars - label_vars)
-    )
 
 
 # A representative CHECKS_ONLY subset: only the host-state-file checks, every gate off. No
@@ -202,6 +140,9 @@ def _arm_pvc(cfg, monkeypatch, vector, claims=43.0):
         PVC_MIN_CLAIMS=32,
         PVC_CLAIMS_CONSECUTIVE=3,
         PVC_EXCLUDE=["media-data"],
+        # The deployed free-bytes floor names valheim-server; these tests are about the
+        # percentage and census arms, and state their own floors where they mean one.
+        PVC_MIN_FREE="",
     )
     monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: claims)
     monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: vector)

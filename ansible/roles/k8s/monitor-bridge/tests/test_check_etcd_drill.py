@@ -15,7 +15,6 @@ import yaml
 
 import checks.service
 import check
-import registry
 
 
 # Stamps are dated against this epoch and the check reads the same one, so "1.0 days ago"
@@ -135,26 +134,4 @@ def test_etcd_drill_grace_is_derived_from_the_cron(cfg):
     assert cfg.ETCD_DRILL_MAX_AGE_S < 2 * cadence_s, (
         "a window of two cadences tolerates a fully missed run, which is exactly what this "
         "check is for"
-    )
-
-
-def test_etcd_drill_is_registered_and_can_actually_push():
-    """Registration and the token must land together.
-
-    Asserting membership alone would pass for a check registered against a token nothing can
-    set — which pushes to nowhere forever, present in the code and absent from the world. So
-    this asserts the pair, in both directions: a later edit that drops either half fails here
-    rather than quietly producing a monitor that cannot page.
-    """
-    names = {c.name for c in registry.build_checks()}
-    env_secret = (
-        Path(check.__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
-    ).read_text()
-    registered = "etcd_restore_drill" in names
-    tokened = "KUMA_PUSH_ETCD_DRILL" in env_secret
-    assert registered, "an unregistered check never runs; the reader would be dead code"
-    assert registered == tokened, (
-        "etcd_restore_drill's CHECKS entry and its KUMA_PUSH_ETCD_DRILL env-secret key move "
-        "together — one without the other is either a check that cannot page or a token "
-        "nothing reads"
     )

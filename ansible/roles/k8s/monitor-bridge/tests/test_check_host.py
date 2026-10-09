@@ -229,7 +229,9 @@ def test_a_reboot_length_shortfall_does_not_page(monkeypatch, cfg):
     """The weekly reboot removes a node's node-exporter for minutes against a 5m check loop, so a
     bare floor would page every Sunday. Only the HOST_ORIGINS_CONSECUTIVE'th cycle fails."""
     _reset_origin_streaks()
-    cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=3)
+    # CLAUDE_CGROUPS off: the deployed value arms check_mem's cgroup arm, which would read the
+    # single memory vector this stub returns as a stall rate.
+    cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=3, CLAUDE_CGROUPS=())
     monkeypatch.setattr(
         bridge.net, "prom_vector", lambda _cfg, q: [({"origin": "daniel-server"}, 21.0)]
     )
@@ -240,7 +242,7 @@ def test_a_reboot_length_shortfall_does_not_page(monkeypatch, cfg):
 
 def test_full_coverage_resets_the_shortfall_streak(monkeypatch, cfg):
     _reset_origin_streaks()
-    cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=2)
+    cfg = replace(cfg, HOST_ORIGINS_CONSECUTIVE=2, CLAUDE_CGROUPS=())
     one = [({"origin": "daniel-server"}, 21.0)]
     both = [({"origin": "daniel-server"}, 21.0), ({"origin": "daniel-box"}, 30.0)]
     monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: one)

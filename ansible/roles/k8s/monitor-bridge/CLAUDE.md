@@ -62,8 +62,9 @@ the template rather than the constant.
 Two push-side rules bind as widely. **Every push monitor has `max_retries=0`**, so widen
 `uptime_kuma_k8s_bridge_push_interval` to fix post-boot flapping and never add retries
 (`test_push_monitors_never_retry`). **A new arm folds into an existing monitor by default**;
-prove its selector against a live source first (checks page's *Traps*). The push tokens, the
-liveness probe, the credentials and the prerequisites are on the internals page.
+prove its selector against a live source first (checks page's *Traps*). **A new tile is a
+`monitor_bridge_push_checks` row** in `defaults/main.yml`. The liveness probe, the credentials
+and the prerequisites are on the internals page.
 
 ## Module layout — and the one rule that governs it
 
@@ -83,10 +84,10 @@ it kills the pod at import on its next roll;
 `cli.py`'s `main()` calls `load_config(os.environ)` ONCE and hands the frozen `Config` to
 `check.run_once`, which passes it to every gate, check body and `bridge.net` helper that reads a
 URL; a test states the registry and the `Gates` rather than patching tables. Building the config
-MUST NOT raise: `_int`/`_num` record a malformed value in `bridge.common.CONFIG_PROBLEMS`, keep
-the default, and `main()` exits 2. A default argument cannot read the config — defaults evaluate
-at import — and a `verdicts/` module reads no `cfg` at all. The internals page has the
-test-side rules.
+MUST NOT raise: `_int`/`_num` record a malformed or missing value in `CONFIG_PROBLEMS`, and
+`main()` exits 2. **A key the env-secret renders has no Python default**; the `cfg` fixture is
+that render. A default argument cannot read the config — defaults evaluate at import — and a
+`verdicts/` module reads no `cfg` at all. The internals page has the test-side rules.
 
 ## Editing & testing
 Unit tests are `uv run pytest ansible/roles/k8s/monitor-bridge/tests`, one file per domain.

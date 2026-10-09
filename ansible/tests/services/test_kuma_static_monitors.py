@@ -207,6 +207,17 @@ EMAIL_TIER = {
 _WINDOW_PROBE_S = 7777
 
 
+def test_every_bridge_push_token_reaches_a_push_tile():
+    # A row in monitor-bridge's `monitor_bridge_push_checks` with no tile pushes into nothing:
+    # Kuma answers an unknown token with 404 and no monitor ever goes red. Joined on rendered
+    # values, the same way as the interval guard below, so the token the bridge pushes and the
+    # one the tile accepts are compared rather than two variable names.
+    bridge_tokens = bridge_push_tokens()
+    tile_tokens = set(push_tokens_by_monitor().values())
+    assert "stub-monitor_bridge_traefik_421_push_token" in bridge_tokens
+    assert not sorted(bridge_tokens - tile_tokens), sorted(bridge_tokens - tile_tokens)
+
+
 def test_bridge_push_monitors_share_one_interval():
     # Every tile the bridge feeds must take its heartbeat window from uptime_kuma_k8s_bridge_push_interval,
     # so widening the window is one edit rather than one per tile. A new bridge

@@ -149,6 +149,7 @@ def test_the_arm_is_off_until_a_cgroup_is_configured(cfg):
     that vector as a stall rate.
     """
     queries = []
+    cfg = replace(cfg, CLAUDE_CGROUPS=())
     ok, msg = checks.host.check_mem(cfg, _vectors([], [], queries))
     assert ok
     assert "claude" not in msg

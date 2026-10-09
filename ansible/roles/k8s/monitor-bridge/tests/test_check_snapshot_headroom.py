@@ -231,28 +231,15 @@ def test_every_volume_a_role_caps_is_declared_to_the_monitor():
     assert declared["jellyfin-config"] == int(size.group(1)) * 2 * 1024**3
 
 
-def test_the_push_token_is_armed_and_wired_to_a_monitor_declaration():
-    """Both halves must read the token BARE, which is what "armed" means here.
+def test_the_kuma_declaration_reads_the_push_token_unguarded():
+    """The tile must read the token BARE, which is what "armed" means on the Kuma side.
 
-    `{{ var | default('') }}` in the env-secret and a matching `{% if %}` around the Kuma
-    declaration leave the check inert: an absent secret pushes nowhere and declares no monitor.
-    That form also dodges `test_every_push_token_env_is_wired_to_a_monitor`, whose regex matches
-    `KUMA_PUSH_X: "{{ var }}"` exactly — an invisible token is how a check ends up pushing to a
-    monitor nobody declared. Reverting either half to the defaulted or guarded form silently
-    disarms the monitor while every other guard stays green, so this pins the armed shape by name
-    rather than relying on the general guard's set comparison to notice one missing member.
+    A `{% if %}` around the Kuma declaration leaves the check inert: an absent secret declares no
+    monitor, and the render-based guards seed every token, so they render the guarded tile and
+    stay green. The env-secret half is armed for every check by construction since #3659: it
+    reads each token through `lookup('vars')`, which fails the render on an undefined secret.
     """
-    env_text = ENV_SECRET.read_text()
-    env_token = re.search(
-        r"KUMA_PUSH_SNAPSHOT_HEADROOM:\s*\"\{\{\s*([a-z0-9_]+)\s*\}\}\"",
-        env_text,
-    )
-    assert env_token, (
-        "KUMA_PUSH_SNAPSHOT_HEADROOM is not rendered from a bare variable — a `| default('')` "
-        "here renders empty and the verdict reaches the pod log alone"
-    )
-    var = env_token.group(1)
-    assert var == "monitor_bridge_snapshot_headroom_push_token", var
+    var = "monitor_bridge_snapshot_headroom_push_token"
     monitors = (
         ROLES / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
     ).read_text()

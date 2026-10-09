@@ -90,7 +90,10 @@ def check_longhorn_volumes(
     unknown) with value 0 or 1 — four series per volume. So this selects on the label and never
     compares the value to a state ordinal, which is the mistake an earlier proposal made.
     `unknown` means detached and is deliberately not a fault: 6 of 43 volumes read it here,
-    including the intentionally scaled-to-zero game servers.
+    including the intentionally scaled-to-zero game servers. The vector holds every volume's
+    live state (`== 1`), and `longhorn_robustness.SAFE_ROBUSTNESS` decides which are faults —
+    the same allow-list the runbook gates apply to the CRs, so a state Longhorn adds pages
+    instead of falling outside a `degraded|faulted` selector (#3668).
 
     The two longhorn-manager pods report DISJOINT volume subsets (43 volumes total across both,
     not 43 each), so offenders are deduped by name rather than counted — a raw count would
@@ -113,11 +116,7 @@ def check_longhorn_volumes(
     # at all the verdict is already decided, and a second query would spend a request to learn
     # the same thing.
     offenders = (
-        longhorn_offenders(
-            fetch_vector(
-                cfg, 'longhorn_volume_robustness{state=~"degraded|faulted"} == 1'
-            )
-        )
+        longhorn_offenders(fetch_vector(cfg, "longhorn_volume_robustness == 1"))
         if volumes
         else {}
     )

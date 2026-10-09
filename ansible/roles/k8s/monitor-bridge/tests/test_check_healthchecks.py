@@ -10,6 +10,7 @@ from dataclasses import replace
 import json
 
 from bridge.config import load_config
+from _bridge_env import bridge_env
 import checks.healthchecks as hc
 
 EXPECTED = (
@@ -163,12 +164,12 @@ def test_a_failed_read_is_down_and_reprobed_next_cycle(cfg):
 
 
 def test_the_expected_list_parses_from_the_env():
-    cfg = load_config({"HEALTHCHECKS_EXPECTED": json.dumps(list(EXPECTED))})
+    cfg = load_config(bridge_env(HEALTHCHECKS_EXPECTED=json.dumps(list(EXPECTED))))
     assert cfg.HEALTHCHECKS_EXPECTED == EXPECTED
     assert cfg.CONFIG_PROBLEMS == ()
 
 
 def test_a_malformed_expected_list_is_a_config_problem():
-    cfg = load_config({"HEALTHCHECKS_EXPECTED": '[{"slug": "x"}]'})
+    cfg = load_config(bridge_env(HEALTHCHECKS_EXPECTED='[{"slug": "x"}]'))
     assert cfg.HEALTHCHECKS_EXPECTED == ()
     assert any("HEALTHCHECKS_EXPECTED is malformed" in p for p in cfg.CONFIG_PROBLEMS)
