@@ -101,7 +101,9 @@ def build_rows(
         One `ServiceRow` per service, across every host in `host_vars`.
     """
     estate = Estate(Inventory(all_vars=all_vars, host_vars=host_vars))
-    tiers = load_longhorn_tier_lists(k3s_defaults, estate.group_vars)
+    tiers = load_longhorn_tier_lists(
+        k3s_defaults, estate.group_vars, list(estate.k8s_entries().values())
+    )
     # Built once: a claim mounted by one role and declared by another (media-data) resolves
     # through this index, and every k8s row reads it.
     claim_classes = claim_index(k8s_roles)

@@ -100,6 +100,7 @@ from pathlib import Path
 from typing import Any
 
 from catalog_backup import (
+    LonghornTiers,
     autodeploy_stance,
     claim_index,
     claim_tiers,
@@ -186,11 +187,13 @@ def glance_lines(
     all_vars: Path = ALL_VARS,
     k3s_defaults: Path = K3S_DEFAULTS,
     claim_classes: dict[str, str | None] | None = None,
+    tiers: LonghornTiers | None = None,
 ) -> list[str]:
     """The block's bullet lines for one deployed k8s role, unwrapped.
 
-    `claim_classes` is `claim_index(k8s_roles)`, built once by the caller that renders
-    every role; built here for a single-role call.
+    `claim_classes` is `claim_index(k8s_roles)` and `tiers` the Longhorn tier lists, both
+    built once by the caller that renders every role; built here for a single-role call,
+    whose tier lists derive the R2 set from the repo's `containers_list`.
     """
     name = entry["name"]
     defaults = role_defaults(role_dir)
@@ -221,7 +224,7 @@ def glance_lines(
     claims = claim_tiers(
         role_dir,
         k8s_namespace=group_vars.get("k8s_namespace", "homelab"),
-        tiers=load_longhorn_tier_lists(k3s_defaults, group_vars),
+        tiers=tiers or load_longhorn_tier_lists(k3s_defaults, group_vars),
         k8s_roles=k8s_roles,
         claim_classes=claim_classes,
     )
@@ -371,8 +374,10 @@ def stale_k8s_docs(
     group_vars = estate.group_vars
     all_vars = estate.inventory.all_vars
     claim_classes = claim_index(k8s_roles)
+    entries = estate.k8s_entries()
+    tiers = load_longhorn_tier_lists(k3s_defaults, group_vars, list(entries.values()))
     stale: list[str] = []
-    for entry in estate.k8s_entries().values():
+    for entry in entries.values():
         name = entry["name"]
         role_dir = k8s_roles / name
         block = render_block(
@@ -384,6 +389,7 @@ def stale_k8s_docs(
                 all_vars=all_vars,
                 k3s_defaults=k3s_defaults,
                 claim_classes=claim_classes,
+                tiers=tiers,
             )
         )
         if _refresh(role_dir / "CLAUDE.md", block, write=write):

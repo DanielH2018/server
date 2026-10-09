@@ -53,12 +53,21 @@ def shed_set(entries: list[dict] | None = None) -> list[str]:
     return [entry["name"] for entry in shed_entries(entries)]
 
 
-def resolved_tier_lists(k3s_defaults: dict) -> dict:
+def resolved_tier_lists(k3s_defaults: dict, entries: list[dict] | None = None) -> dict:
     """A copy of the k3s role's raw defaults with ``k3s_longhorn_r2_volumes`` resolved.
 
     A value that is already a list, as a test fixture writes it, is kept as written; only the
     role's Jinja expression is replaced by the derived volumes.
+
+    Args:
+        k3s_defaults: The role's defaults, already layered under the inventory when the
+            caller has one. Its ``k8s_namespace``, when present, is the namespace the
+            expression derives with.
+        entries: The ``containers_list`` entries the expression derives from; daniel-box's
+            k8s entries in the repo inventory when omitted. A caller reading an injected
+            inventory passes that inventory's entries, or the derivation reads the repo's.
     """
     if isinstance(k3s_defaults.get("k3s_longhorn_r2_volumes"), list):
         return dict(k3s_defaults)
-    return {**k3s_defaults, "k3s_longhorn_r2_volumes": r2_volumes()}
+    r2 = r2_volumes(entries, k3s_defaults.get("k8s_namespace"))
+    return {**k3s_defaults, "k3s_longhorn_r2_volumes": r2}
