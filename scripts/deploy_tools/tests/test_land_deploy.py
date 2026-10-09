@@ -364,6 +364,8 @@ def test_deploy_phase_stamps_the_ledger(landing):
     ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     assert ln.ledger.tags_label == "sonarr" and ln.ledger.t_deploy is not None
+    # The health verdict compares release records against it (#3812).
+    assert ln.deploy_ended_at == 1_000_000.0
 
 
 def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):

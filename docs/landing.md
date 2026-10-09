@@ -284,6 +284,16 @@ reads `skipped` — green, on the landing that most needs a gate. That worktree 
 it cannot be made at all, the landing reports `unhealthy` rather than gating the primary — the
 one exception being a primary that already contains the commit.
 
+A failed gate is asked once more whether a later deploy re-rolled the workload. The landing's
+deploy releases the service lock before the gate runs, so another landing or a tick can deploy
+the same service under the gate's one sample. A `Recreate` workload then reads `0/1 ready`
+mid-roll (#3812). `land.sh` counts a tag as re-rolled when its service lock (or `all`) is held,
+or its release record was stamped after step 5 ended. It waits for that deploy to finish and
+gates again. The verdict line then reads `re-gated after a later deploy of <tags>`, and a change
+that is still broken fails the second gate as well. A healthy second gate settles only when the
+commit in that deploy's release record contains the merge commit. The tick's rollback
+redeploys an older pin, and its healthy pods say nothing about this change.
+
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the 180s
 restart window. It cannot see whether *your change* took effect: an Authelia 302 fires in the
 middleware before the backend is reached, and 19 dead Grafana panels sat behind a 1/1 pod.

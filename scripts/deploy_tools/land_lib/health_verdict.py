@@ -56,12 +56,56 @@ def gate_from_the_deployed_tree(ln: Landing) -> tuple[bool, list[str]]:
         ]
 
 
+def _regate_after_later_deploys(ln: Landing) -> bool:
+    """After a failed gate, gate again if a later deploy re-rolled the workloads; settled?
+
+    A later deploy of the same service can roll its pods under the gate's one sample, once
+    this landing's deploy has released the service lock (#3812). This gates again once that
+    deploy has ended, so the verdict grades what it left, and a change that is still broken
+    fails the second gate too.
+
+    A healthy second gate settles only where every re-rolled tag's later deploy rendered a
+    commit that CONTAINS this PR. The tick's rollback redeploys an older pin, and settling on
+    its healthy pods would report a change that is no longer live.
+    """
+    rerolled = ln.tools.later_deploys(ln.resolved_tags, ln.deploy_ended_at)
+    if not rerolled:
+        return False
+    ln.regated = ",".join(rerolled)
+    say(
+        f"{ln.regated}: a later deploy rolled this out again after this landing's own "
+        "deploy; gating the generation that deploy left"
+    )
+    settled, lines = gate_from_the_deployed_tree(ln)
+    for line in lines:
+        say(line)
+    if not settled:
+        return False
+    without = {
+        tag: commit
+        for tag, commit in rerolled.items()
+        if not commit
+        or ln.git("merge-base", "--is-ancestor", ln.merge_sha, commit).returncode
+    }
+    for tag, commit in without.items():
+        rendered = commit[:12] or "a commit its release record does not name"
+        say(
+            f"{tag}: the later deploy rendered {rendered}, which is not proved to contain "
+            f"{ln.merge_sha[:12]} -- this change may no longer be live"
+        )
+    return not without
+
+
 def health(ln: Landing) -> NoReturn:
     """Gate every deployed tag, then settle, or name what is still open."""
     pr, sha, tags = ln.opts.pr, ln.merge_sha, ln.tags_csv
     settled, lines = gate_from_the_deployed_tree(ln)
     for line in lines:
         say(line)
+    if not settled:
+        settled = _regate_after_later_deploys(ln)
+        if ln.regated:
+            tags += f" (re-gated after a later deploy of {ln.regated})"
     # Before any verdict, so every exit below has asked: the gate is the wait that lets a
     # joined tick end (`tick.rearm_tick`).
     tick.rearm_tick(ln)

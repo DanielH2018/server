@@ -50,6 +50,7 @@ from deploy_locks import TREE_LOCK as LOCK
 from deploy_tools import (
     await_ci,
     land_platform,
+    land_rerolls,
     land_reach,
     land_shared,
     land_tags,
@@ -206,8 +207,14 @@ def run_deploy(
     # (#3664). An import runs THIS checkout's deploy_run, not the primary's, which is the
     # re-aiming the module docstring rules out. deploy_run also chdirs into the repo, execs
     # ansible-playbook on the unlocked paths and clears O_NONBLOCK on fds 0-2 -- all
-    # process-wide, so each would land on the landing itself. A structured result, if one is
-    # wanted, comes back over the subprocess boundary rather than replacing it.
+    # process-wide, so each would land on the landing itself.
+    # DECIDED: no structured result comes back either; the exit code is the result (#3687).
+    # Each field such a result would carry is already known here. The verdict is one of
+    # `lib.exit_codes`' named DEPLOY_* constants, which both sides import from one module.
+    # The tags applied are the `--tags` this function passes: land.sh resolves `--changed`
+    # itself (`deploy.derive_from_diff`) and never hands it to deploy.sh. The resume point is
+    # per host, and `Landing.deployed_hosts` records it. A JSON line would be a second channel
+    # that must agree with the exit code and adds no fact a landing acts on.
     argv = ["./scripts/deploy.sh", "--tags", ",".join(tags)]
     if at:
         argv += ["--at", at]
@@ -517,6 +524,9 @@ class Tools:
     snapshot: Callable[[Path, str], contextlib.AbstractContextManager[Path | None]] = (
         gate_snapshot
     )
+    # The tags another deploy re-rolled after this landing's own, each with the commit that
+    # deploy rendered. Asked only after a failed gate; it waits out any such deploy first.
+    later_deploys: Callable[..., dict[str, str]] = land_rerolls.later_deploys
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     # `deploy_tags.py hosts` reads the checkout; this reads `containers_list` at the merge
     # commit a fast-path landing deploys. None sends the caller to the subprocess.
@@ -543,6 +553,8 @@ class Tools:
     logger: Callable[[str], None] = syslog
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
+    # Wall-clock seconds, for comparing with a release record's `applied_at`.
+    wall_clock: Callable[[], float] = time.time
 
 
 @dataclass(frozen=True)
