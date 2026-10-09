@@ -200,7 +200,8 @@ Print the PR URL as the last line of your final message.
 def _finishing(host: str, target: Target = SERVER_TARGET, review: bool = False) -> str:
     # The same completion condition `.claude/hooks/fanout-stop.py` and `status.py` check.
     # Only the landing host can owe a host apply, so only its brief names the heading. A
-    # review batch's first session owes only the PR; `review.land_prompt` asks for the verdict.
+    # review batch's first session owes only the PR; `review_prompts.land_prompt` asks for
+    # the verdict.
     if lands(host, target.repo) and not review:
         # The landing host owes a verdict as well as a PR: `gh pr create` returning says
         # nothing about whether the PR merged and deployed. The hook and

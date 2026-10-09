@@ -1,106 +1,18 @@
 """The review pipeline a `launch --review` batch runs: phase order, the filter, disclosure.
 
-Every process goes through one fake runner, which answers `git`, records `gh` and replays a
-scripted report per `claude` call. It also records `.fanout/phase` at each call, since the
-Stop hook reads that file to decide what a session owes.
+Every process goes through one fake runner, `_review_fakes.FakeRunner`, which answers `git`,
+records `gh` and replays a scripted report per `claude` call. It also records `.fanout/phase`
+at each call, since the Stop hook reads that file to decide what a session owes. The red/green
+phases are tested in `test_fanout_review_red_green.py`.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_review.py
 """
 
 import json
-import subprocess
 
-from fanout_lib.brief import ISSUES_HEADING, Issue, render_brief
-from fanout_lib.red_gate import Gate, Gates
+from _review_fakes import PR, _finding, _pipeline, _report
 from fanout_lib.review import PROMPT_FILE, Pipeline, actionable
 from fanout_lib.target import SERVER_TARGET, Target
-
-PR = "https://github.com/DanielH2018/server/pull/4000"
-# What `secret_bearing_host_paths.py` prints: `dest<TAB>name,name` per line.
-SECRET_LISTING = "/usr/local/bin/a.sh\tone_token,two_token\n"
-ISSUES = [Issue(1345, "Traefik startupProbe has no red-proof", "body one")]
-
-
-def _report(result="", session="sid-1", structured=None, is_error=False, cost=1.0):
-    out = {
-        "type": "result",
-        "result": result,
-        "session_id": session,
-        "is_error": is_error,
-        "total_cost_usd": cost,
-    }
-    if structured is not None:
-        out["structured_output"] = structured
-    return out
-
-
-def _finding(title, severity="high", confidence=0.9, category="correctness"):
-    return {
-        "title": title,
-        "file": "scripts/x.py",
-        "line": 3,
-        "severity": severity,
-        "confidence": confidence,
-        "category": category,
-        "detail": "fails on an empty list",
-    }
-
-
-class FakeRunner:
-    def __init__(self, worktree, reports, heads=("aaa", "bbb")):
-        self.worktree = worktree
-        self.reports = list(reports)
-        self.heads = list(heads)
-        self.claude = []  # (argv, stdin, phase file at call time)
-        self.comments = []
-        self.git = []
-
-    def __call__(self, argv, stdin):
-        if argv[0] == "git":
-            self.git.append(argv[3:])
-            if "merge-base" in argv:
-                out = "base0"
-            elif "rev-parse" in argv:
-                out = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
-            else:
-                out = ""
-            return subprocess.CompletedProcess(argv, 0, out + "\n", "")
-        if argv[0] == "gh":
-            self.comments.append(stdin)
-            return subprocess.CompletedProcess(argv, 0, "", "")
-        if argv[0] == "uv":
-            self.derived = argv
-            return subprocess.CompletedProcess(argv, 0, SECRET_LISTING, "")
-        phase = (self.worktree / ".fanout" / "phase").read_text().strip()
-        self.claude.append((argv, stdin, phase))
-        return subprocess.CompletedProcess(argv, 0, json.dumps(self.reports.pop(0)), "")
-
-
-def _pipeline(
-    tmp_path,
-    reports,
-    host="daniel-box",
-    heads=("aaa", "bbb"),
-    clock=None,
-    gates=None,
-    target=SERVER_TARGET,
-):
-    (tmp_path / ".fanout").mkdir()
-    brief = render_brief(ISSUES, host, "1345", "worktree-orch", [], review=True)
-    run = FakeRunner(tmp_path, reports, heads)
-    pipeline = Pipeline(
-        tmp_path,
-        "1345",
-        host,
-        target,
-        brief,
-        run=run,
-        clock=clock or (lambda: 0.0),
-        state_dir=tmp_path / "state",
-        red_green=gates is not None,
-        gates=gates or Gates(),
-    )
-    return pipeline, run
 
 
 def test_an_implementer_with_no_pr_ends_the_run_before_any_review(tmp_path):
@@ -318,7 +230,7 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
     assert json.loads((hooks / "secret_bearing_host_paths.json").read_text()) == {
         "/usr/local/bin/a.sh": ["one_token", "two_token"]
     }
-    # The implement phase keeps the project source: dropping it drops CLAUDE.md.
+    # With no red phase before it, the implement phase keeps the project source.
     assert "--setting-sources" not in run.claude[0][0]
 
 
@@ -370,131 +282,3 @@ def test_another_repos_later_phases_keep_its_own_project_settings(tmp_path):
     assert reviewer[reviewer.index("--append-system-prompt") + 1] == (
         pipeline.review_prompt
     )
-
-
-def _red_report(behaviours=1):
-    tested = [{"behaviour": f"b{i}", "tests": [f"t{i}"]} for i in range(behaviours)]
-    return _report(structured={"behaviours": tested})
-
-
-def _gates(red, green=()):
-    """The red gate's verdict and each green gate run's, in order."""
-    greens = list(green)
-    return Gates(
-        red=lambda run, wt, base, head: red,
-        green=lambda run, wt, sha, gate: greens.pop(0),
-    )
-
-
-def test_a_red_green_batch_hands_the_implementer_the_red_commit_it_must_not_edit(
-    tmp_path,
-):
-    gates = _gates(Gate(files=["t.py"], nodes=["t.py::test_a"]), green=[""])
-    reports = [
-        _red_report(behaviours=2),
-        _report(f"Opened {PR}"),
-        _report(structured={"summary": "", "findings": []}),
-        _report(f"{PR}\nVERDICT: settled"),
-    ]
-    pipeline, run = _pipeline(
-        tmp_path, reports, heads=("base", "red1", "red1"), gates=gates
-    )
-    pipeline.anti_patterns = "ANTI-PATTERNS READ AT START"
-    pipeline.run_all()
-
-    assert [phase for _, _, phase in run.claude] == [
-        "red",
-        "implement",
-        "review",
-        "land",
-    ]
-    red_argv, red_stdin, _ = run.claude[0]
-    assert "--resume" not in red_argv and "--json-schema" in red_argv
-    assert "body one" in red_stdin and "land.sh" not in red_stdin
-    assert "ANTI-PATTERNS READ AT START" in red_stdin
-    brief = run.claude[1][1]
-    assert brief.index("## Red tests") < brief.index(ISSUES_HEADING)
-    assert "red1" in brief and "t.py::test_a" in brief
-    assert pipeline.record.red_gate == "passed"
-    assert (pipeline.record.red_behaviours, pipeline.record.red_tests) == (2, 1)
-    assert "Red gate passed: 1 tests for 2 stated behaviours" in run.comments[0]
-
-
-def test_a_refused_red_commit_is_reset_away_and_the_implementer_runs_without_it(
-    tmp_path,
-):
-    gates = _gates(Gate("these new tests did not fail on the unchanged code: x"))
-    reports = [
-        _red_report(),
-        _report(f"Opened {PR}"),
-        _report(structured={"summary": "", "findings": []}),
-    ]
-    pipeline, run = _pipeline(
-        tmp_path,
-        reports,
-        host="daniel-server",
-        heads=("base", "red1", "aaa"),
-        gates=gates,
-    )
-    pipeline.run_all()
-
-    assert ["reset", "--hard", "base"] in run.git
-    assert "## Red tests" not in run.claude[1][1]
-    assert pipeline.record.red_gate.startswith("these new tests did not fail")
-    assert "Red gate refused the test author's commit" in run.comments[0]
-    (record,) = [f for f in (tmp_path / "state").iterdir() if f.suffix == ".json"]
-    assert json.loads(record.read_text())["red_gate"].startswith("these new tests")
-
-
-def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path):
-    edited = "the fix changed what the red tests stand on: t.py"
-    gates = _gates(Gate(files=["t.py"], nodes=["t.py::a"]), green=[edited, edited])
-    reports = [
-        _red_report(),
-        _report(f"Opened {PR}"),
-        _report(structured={"summary": "", "findings": []}),
-        _report(f"Fixed. {PR}"),
-        _report(structured={"summary": "", "findings": []}),
-    ]
-    pipeline, run = _pipeline(
-        tmp_path, reports, heads=("base", "red1", "aaa", "bbb"), gates=gates
-    )
-    final = pipeline.run_all()
-
-    assert [phase for _, _, phase in run.claude] == [
-        "red",
-        "implement",
-        "review",
-        "fix",
-        "review",
-    ]
-    assert edited in run.claude[3][1]
-    assert "git checkout red1 -- t.py" in run.claude[3][1]
-    assert final["result"].startswith("needs input: the PR fails the green gate")
-    assert final["result"].endswith(PR)
-
-
-def test_a_fix_round_after_a_passing_green_gate_runs_the_gate_again_and_holds_a_failure(
-    tmp_path,
-):
-    """The fixer may edit a red test even when the implementer's head passed the gate."""
-    edited = "the fix changed what the red tests stand on: t.py"
-    gates = _gates(Gate(files=["t.py"], nodes=["t.py::a"]), green=["", edited])
-    reports = [
-        _red_report(),
-        _report(f"Opened {PR}"),
-        _report(
-            structured={"summary": "", "findings": [_finding("red test is wrong")]}
-        ),
-        _report(f"Fixed. {PR}"),
-        _report(structured={"summary": "", "findings": []}),
-    ]
-    pipeline, run = _pipeline(
-        tmp_path, reports, heads=("base", "red1", "aaa", "bbb"), gates=gates
-    )
-    final = pipeline.run_all()
-
-    assert "The red tests committed at red1 stay as they are" in run.claude[3][1]
-    assert final["result"].startswith("needs input: the PR fails the green gate")
-    assert pipeline.record.green_gate == edited
-    assert "land" not in [phase for _, _, phase in run.claude]

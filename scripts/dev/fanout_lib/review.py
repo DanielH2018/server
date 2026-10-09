@@ -42,7 +42,8 @@ system prompt, this repo's `.claude/settings.json` and every hook once, at start
 #3794, #3810). Each phase gets the prompts as text and runs the Stop hook from a copy outside
 the worktree that is rewritten before every call. In this repo's batch, every phase after the
 implementer also loads no settings file from the worktree, and the reviewer gets the start-time
-`CLAUDE.md` as text; `held_hooks` says why.
+`CLAUDE.md` as text; `held_hooks` says why. A red batch's implement phase runs the same way,
+because the red author had the worktree before it (#3846).
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -75,9 +76,11 @@ from fanout_lib.held_hooks import (
 )
 from fanout_lib.review_prompts import (
     FINDINGS_SCHEMA,
-    _as_data,
     delta_prompt,
+    file_prompt,
     fix_prompt,
+    is_held,
+    land_prompt,
     review_prompt,
 )
 from fanout_lib.red_gate import (
@@ -179,11 +182,6 @@ def actionable(findings: Sequence[dict]) -> list[dict]:
     ]
 
 
-def is_held(finding: dict) -> bool:
-    """Whether a finding stays off the public PR and tracker for disclosure reasons."""
-    return finding.get("category") == "security"
-
-
 def findings_of(phase: Phase) -> tuple[list[dict] | None, str]:
     """The reviewer's findings, or None and the reason the review produced none."""
     if phase.failed:
@@ -201,39 +199,6 @@ def issues_section(brief: str) -> str:
     """The brief's fenced issue text, which is all the reviewer learns about intent."""
     _, sep, rest = brief.partition(ISSUES_HEADING)
     return sep + rest if sep else ""
-
-
-def land_prompt(record: Record, landing: str) -> str:
-    public = [f for f in record.remaining if not is_held(f)]
-    if record.review_error:
-        state = f"The review did not complete: {record.review_error}. Land without it, and say so."
-    elif public:
-        state = (
-            "These findings were not resolved. File each with `findings.py open` before you "
-            "land, and name it in the PR body as `Filed for later: #N`.\n\n"
-            + _as_data("The unresolved findings", public)
-        )
-    else:
-        state = "No finding is left to file."
-    return f"""The review of {record.pr} is finished. {state}
-
-Now land the PR. Your brief's own Landing section said to stop at the PR; this replaces it:
-
-{landing}
-End your final message with the PR URL and quote `land.sh`'s `VERDICT:` line.
-"""
-
-
-def file_prompt(record: Record) -> str:
-    public = [f for f in record.remaining if not is_held(f)]
-    return f"""The review of {record.pr} is finished. These findings were not resolved. File
-each with `findings.py open`, and add `Filed for later: #N` to the PR body with `gh pr edit`.
-Do not merge or land.
-
-{_as_data("The unresolved findings", public)}
-
-End your final message with the PR URL.
-"""
 
 
 def comment_body(record: Record) -> str:
@@ -400,13 +365,42 @@ class Pipeline:
             "claude", "--setting-sources", "user", "--settings", json.dumps(settings),
         ]  # fmt: skip
 
-    def _implementer(self, prefix: list[str] | None = None) -> list[str]:
+    def _implementer(
+        self, prefix: list[str] | None = None, prompt: str = ""
+    ) -> list[str]:
         return [
             *(prefix or self._stop_hook()),
             "-p", "--model", "opus", "--permission-mode", "auto",
             "--output-format", "json", "--max-budget-usd", str(BUDGET_USD),
-            "--append-system-prompt", self.headless_prompt,
+            "--append-system-prompt", self.headless_prompt + prompt,
         ]  # fmt: skip
+
+    def _first_implementer(self) -> list[str]:
+        """The implement phase's argv: on held settings when a red phase ran before it.
+
+        The red author could leave an ignored `.claude/settings.local.json`, a hook edit that
+        `update-index --skip-worktree` hides from `git status`, or a planted `.pyc` beside a
+        hook, and none of these is a change in the range the red gate reads (#3846). A
+        refused red commit is reset with `git clean -fd`, which keeps ignored files, so the
+        refused path is exposed too. Held settings drop the project `CLAUDE.md` from this
+        fresh session, so it gets the copy read at start as text, as the reviewer does.
+        """
+        if not self.red_green:
+            return self._implementer()
+        return self._implementer(self._held_settings(), self._red_claude_md())
+
+    def _red_claude_md(self) -> str:
+        """The start-time `CLAUDE.md` a red batch's implementer session gets as text.
+
+        That session never loaded the project source, so its transcript holds no `CLAUDE.md`,
+        and `--resume` keeps no appended system prompt: every resumed phase passes it again.
+        """
+        if not (self.red_green and self.project_claude_md):
+            return ""
+        return (
+            "\n\n# The repo's CLAUDE.md, as it stood before the red phase ran\n\n"
+            + self.project_claude_md
+        )
 
     def _red_author(self) -> list[str]:
         return [
@@ -457,7 +451,8 @@ class Pipeline:
         return reason
 
     def _resume(self) -> list[str]:
-        return [*self._implementer(self._held_settings()), "--resume", self.session]
+        held = self._implementer(self._held_settings(), self._red_claude_md())
+        return [*held, "--resume", self.session]
 
     def _reviewer(self) -> list[str]:
         prompt = self.review_prompt
@@ -494,7 +489,7 @@ class Pipeline:
         brief = self.brief
         if red is not None:
             brief = brief.replace(ISSUES_HEADING, red_section(*red) + ISSUES_HEADING, 1)
-        impl = self._claude("implement", self._implementer(), brief)
+        impl = self._claude("implement", self._first_implementer(), brief)
         pr = PR_URL.search(impl.text)
         if impl.failed or not pr:
             if self.red_green:
