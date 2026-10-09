@@ -130,14 +130,23 @@ def test_the_directory_census_is_not_vacuous():
 
 def test_the_teardown_removes_every_directory_install_creates():
     """The teardown must remove all three directories — the stale payload, the 0600 config env
-    file and the state — not just the units and crons."""
+    file and the state — not just the units and crons.
+
+    A directory inside one of those counts as removed, because `state: absent` takes the whole
+    tree: `/var/lib/gitops-deploy/detach_spool` goes with its parent (#3987)."""
     removal = task_named(
         load_tasks(ROLE / "teardown.yml"),
         "Remove the deployer's payload, config and state directories",
     )
     assert removal["ansible.builtin.file"]["state"] == "absent"
     assert removal.get("become") is True, "the directories are root-created"
-    assert _directories_install_creates() <= set(removal["loop"])
+    removed = removal["loop"]
+    left = {
+        d
+        for d in _directories_install_creates()
+        if not any(d == r or d.startswith(r + "/") for r in removed)
+    }
+    assert left == set()
 
 
 def test_the_playbook_no_longer_gates_the_role():
