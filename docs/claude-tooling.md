@@ -663,14 +663,33 @@ self-matching `pgrep -f` and a partial `security_and_analysis` PATCH.
 
 ### `session-health` (SessionStart)
 
-On opening a session here, it prints a banner of any down Prometheus targets. It is silent when
-all-green, read-only and timeout-bounded. It also names a
-**dirty primary checkout**, a **GitOps deployer parked behind origin**, and a **setup role the
-tick merged but cannot apply** (the `manual_plane` ledger class). The first two states stop every
-deploy in the fleet, and a worktree session cannot look at either for itself: the isolation
-guard refuses a git command targeting the shared checkout, and the failure it does see
-(`deploy.sh` exit 4) names its own tree instead. The banner is the only place that cause
-reaches the session that pays for it.
+On opening a session here, it prints a health banner. It is silent when all-green, read-only
+and timeout-bounded. The banner's problem lines come in three groups, in this order:
+
+- **Service lines** (`.claude/hooks/hooklib/service_lines.py`): a down Prometheus scrape target, and
+  services whose running release is behind origin/master's manifests.
+- **Deployer lines** (`parked_deployer_problems`): a **dirty primary checkout**, a **GitOps
+  deployer parked behind origin**, a **setup role the tick merged but cannot apply** (the
+  `manual_plane` ledger class), consecutive ticks deferred on a service lock, an image bump
+  the tick merged but deferred, and a k8s change the deployer never applies.
+- **Branch line**: this worktree is behind origin/master, so a deploy from it would be refused.
+
+A failed import is loud and a failed read is silent. A module the banner cannot import (`lib.git`,
+`lib.deployer_park`, `lib.worktrees`) prints a `⚠ … is broken` line, and a failed `hooklib`
+import is reported in the fan-out section below. A read that fails at run time, such as a
+`git status` timeout or an unreadable marker file, returns no line, so a silent banner is not
+proof of health. The release-staleness check is the one read that reports its own failure.
+
+The dirty checkout and the park stop every deploy in the fleet, and a worktree session cannot
+look at either for itself: the isolation guard refuses a git command targeting the shared
+checkout, and the failure it does see (`deploy.sh` exit 4) names its own tree instead. The
+banner is the only place that cause reaches the session that pays for it.
+
+The banner ends with a triage line of whole `probe.py` commands joined by `or`: `targets` and
+`health <svc>` always, and `landing` first whenever a deployer line is present.
+
+Three more sections print whether or not anything is unhealthy: the other live Claude sessions
+in this repo, merged worktrees ready to remove, and fan-out worktrees running on another host.
 
 ### `fanout-stop` (Stop)
 
