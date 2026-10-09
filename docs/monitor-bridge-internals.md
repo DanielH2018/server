@@ -7,6 +7,10 @@ table, the gate-set membership, the operator prerequisites and the test-side sea
 
 ## Gate-set membership
 
+Every set but `EXPORTER_DEPENDENT` derives from the `gate` column of
+`ansible/roles/k8s/monitor-bridge/files/check_table.py`, and each member's row carries the
+reason it is a member. The rules below shaped those memberships.
+
 - **`LOKI_DEPENDENT`** — `loki_ingestion`, `swallowed_verdicts`, `kuma_notify_failures`.
   `ha_heartbeat` is deliberately NOT a member: its ban arm fails open on a Loki error, so the
   heartbeat verdict survives a Loki outage.
@@ -34,11 +38,18 @@ table, the gate-set membership, the operator prerequisites and the test-side sea
 - **The heartbeat window is `uptime_kuma_k8s_bridge_push_interval` = 1200 s**, 4 × the loop.
 - **Liveness probe:** `cli.py` touches `/tmp/heartbeat` after every cycle and the probe in
   `templates/deployment.yaml.j2` fails past ~3×INTERVAL, so the kubelet restarts a hung loop.
-- **Push tokens:** `monitor_bridge_push_checks` in `defaults/main.yml` is the list, one row per
-  check and gate (#3659). The env-secret renders `KUMA_PUSH_<NAME>` for each row, the name
-  `bridge.types.push_env` reads, from the SOPS secret the row's `token` names. `tests/test_push_check_table.py` pins
-  the table to the registry, the env and SOPS, and
-  `test_every_bridge_push_token_reaches_a_push_tile` pins it to the AutoKuma monitors.
+- **Push tokens and tiles:** `files/check_table.py` holds one `PushCheck` row per check and
+  gate (#3659, #3788). The env-secret renders `KUMA_PUSH_<NAME>` for each row, the name
+  `bridge.types.push_env` reads, from the SOPS secret the row's `token` names. uptime-kuma's
+  `static-monitors.yaml.j2` renders each row's push tile from its `kuma_id`, `display`,
+  `description`, `critical` and `runbook` (#3781). Both templates read the table through
+  `ansible/filter_plugins/py_table.py`, which parses the module instead of importing it.
+  `tests/test_check_table.py` pins the table to the registry, the gates, the env, SOPS and
+  that parse, and `test_every_bridge_push_token_reaches_a_push_tile` pins it to the AutoKuma
+  monitors.
+- **A table change deploys uptime-kuma too.** `deploy_cross_role.k8s_lookup_readers` finds
+  every k8s role that `lookup()`s another role's file, and the landing, the deployer's defer
+  alert and the secret census all read it.
 - **Fold an arm into an existing monitor** when it answers that tile's existing question
   (cgroups into Memory, ports into Pi Pressure, `ip_ban` into HA); a new tile costs a push token in
   SOPS and a monitor created by hand.
@@ -51,7 +62,7 @@ table, the gate-set membership, the operator prerequisites and the test-side sea
 
 ## Operator prerequisites
 
-1. A push token in `secrets.yml` for every `monitor_bridge_push_checks` row — exactly 32 alphanumeric characters
+1. A push token in `secrets.yml` for every `check_table.py` row — exactly 32 alphanumeric characters
    (`openssl rand -hex 16`); AutoKuma silently refuses the monitor otherwise
    (`Invalid push_token`).
 2. `n8n_api_key`: minted in n8n → Settings → n8n API, scoped to read Workflow + Execution.
@@ -75,10 +86,11 @@ table, the gate-set membership, the operator prerequisites and the test-side sea
 |---|---|
 | `cli.py` | the `argparse` front end and `main(argv, env, checks, gate_config) -> int`, which builds the `Config`, the registry and the `Gates`, validates the check filter and loops `run_once` |
 | `check.py` | `run_once(cfg, checks, gates, dry_run, only)` — the run loop, and nothing else |
-| `registry.py` | `build_checks(env)`, every `Check` with its `KUMA_PUSH_*` name read from the environment it is handed |
-| `gates.py` | the five `*_DEPENDENT` sets, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
+| `check_table.py` | `CHECKS`, one `PushCheck` per check and gate: its body, push token, gate and Kuma tile |
+| `registry.py` | `build_checks(env)`, a `Check` for every non-gate row of `CHECKS`, with its token read from the environment it is handed |
+| `gates.py` | the `*_DEPENDENT` sets derived from `CHECKS`' `gate` column, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
 | `longhorn_robustness.py` | `SAFE_ROBUSTNESS` and `unsafe_volumes` — which Longhorn robustness states are lost redundancy. Import-free, because `scripts/deploy_tools/runbook_gates.py` imports the same file from the checkout to judge the CRs (#3668) |
-| `bridge/types.py` | `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
+| `bridge/types.py` | `PushCheck`, `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
 | `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster` (+ `cluster_etcd`, `cluster_rollout`, `cluster_traefik`, `cluster_zero`), `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `storage`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py` and `gitops_ledger.py`, the generated copies of the deployer's modules; the second reads the `owed` ledger's `manual_plane`, `k8s_deferred` and `hold_plane` classes. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,cluster,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)`, `load_config(env)`; one builder per domain. `K8S_EXTENDED_RESOURCES` and `PVC_EXCLUDE` stay in `config.py` because a repo test greps for them by text |
 | `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` (which caps its message with `bridge.common.cap_push_msg`), and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST |

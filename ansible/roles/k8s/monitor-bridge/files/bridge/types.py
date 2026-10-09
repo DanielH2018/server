@@ -1,7 +1,8 @@
 """The types the registry, the run loop and the HTTP fetchers pass between them.
 
-`Check` is one registry entry, `CheckResult` is what evaluating one produces, and `CheckFn` is
-the signature every check body and every gate probe shares. They live here rather than in
+`PushCheck` is one row of the check table, `Check` is one registry entry, `CheckResult` is what
+evaluating one produces, and `CheckFn` is the signature every check body and every gate probe
+shares. They live here rather than in
 `check.py` so `registry.py` can name them without importing the run loop — the registry is a
 leaf, and an import back into `check.py` would make the two mutually dependent.
 
@@ -55,12 +56,58 @@ class Check:
     fn: CheckFn
 
 
+@dataclass(frozen=True)
+class PushCheck:
+    """One row of `check_table.CHECKS`: a check or gate, and the Kuma push tile it feeds.
+
+    Every field but `fn` must be written as a LITERAL in the table. The deploy reads the table
+    with `ansible/filter_plugins/py_table.py`, which parses `check_table.py` rather than running
+    it, and keeps only the keyword arguments whose value is a literal. `fn` is the one it drops.
+
+    Attributes:
+      name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP, the gate sets and
+        `push_env` refer to.
+      fn: The check body, or the gate's probe for a row with `is_gate`.
+      token: The SOPS secret holding the push token. The env-secret renders its value as
+        `push_env(name)`, and the Kuma tile renders it as the tile's `push_token`.
+      kuma_id: The AutoKuma id, the declaration's file name minus `.json`. AutoKuma keys its
+        entity map on it, so changing it deletes the live monitor and its history.
+      display: The Kuma display name.
+      description: What the tile reads, what a DOWN means and where to look.
+      status_group: The status page group the tile is listed under, one of
+        `uptime_kuma_k8s_status_page_groups`' names. uptime-kuma's sync ConfigMap pins the
+        tile's id into that group's rule.
+      gate: The gate whose outage suppresses this check (`prometheus`, `loki_reachable`,
+        `b2_reachable`, `wan_reachable`), or `startup_grace` for a reach-out check held `up`
+        through its first down cycles. One value per row, because a check in two of these
+        sets would be suppressed by one and held by the other.
+      is_gate: This row is one of the four reachability gates, which `check.run_once`
+        evaluates first; `registry.build_checks` leaves it out.
+      critical: The tile carries `tag-severity: critical` and notifies email as well as
+        Discord. Every tile that pages by email carries the severity tag, so one flag sets
+        both.
+      runbook: The docs page slug the tile's `tag-runbook` links to.
+    """
+
+    name: str
+    fn: CheckFn
+    token: str
+    kuma_id: str
+    display: str
+    description: str
+    status_group: str
+    gate: str | None = None
+    is_gate: bool = False
+    critical: bool = False
+    runbook: str | None = None
+
+
 def push_env(name: str) -> str:
     """The env var carrying the Kuma push token of the check or gate called `name`.
 
     Derived, not declared: `templates/env-secret.yaml.j2` renders one `KUMA_PUSH_<NAME>` per row
-    of `monitor_bridge_push_checks` in this role's defaults by the same rule, so a check's name
-    is the only spelling the two sides share (#3659).
+    of `check_table.CHECKS` by the same rule, so a check's name is the only spelling the two
+    sides share (#3659).
     """
     return "KUMA_PUSH_" + name.upper()
 

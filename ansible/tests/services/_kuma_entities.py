@@ -33,6 +33,7 @@ import re
 from functools import lru_cache
 
 from jinja2 import ChainableUndefined
+from py_table import py_table
 
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env, register_ansible_filters
@@ -77,8 +78,9 @@ ROLE_DEFAULTS = yaml_fast.safe_load(
     (ANSIBLE / "roles/k8s/uptime-kuma/defaults/main.yml").read_text()
 )
 
-BRIDGE_DEFAULTS = yaml_fast.safe_load(
-    (ANSIBLE / "roles/k8s/monitor-bridge/defaults/main.yml").read_text()
+# monitor-bridge's check table, read the way both templates read it: through the filter.
+BRIDGE_CHECKS = py_table(
+    (ANSIBLE / "roles/k8s/monitor-bridge/files/check_table.py").read_text(), "CHECKS"
 )
 
 _STUB_PREFIX = "stub-"
@@ -103,11 +105,11 @@ def _token_seed() -> dict[str, str]:
     A seed, not an assertion: the names decide which gated tiles render at all, and a tile that
     does not render is a guard that covers nothing. Both sides are read because the join
     between a tile and its bridge feeder needs the same value on both. The bridge's names come
-    from `monitor_bridge_push_checks`, the table its env-secret renders one token per row from
-    (#3659); the template itself names none.
+    from its check table, which both templates render one token per row from (#3659, #3781);
+    neither template names one.
     """
     names = set(re.findall(r"\b([a-z0-9_]+_push_token)\b", TEMPLATE.read_text()))
-    for row in BRIDGE_DEFAULTS["monitor_bridge_push_checks"]:
+    for row in BRIDGE_CHECKS:
         names.add(row["token"])
     assert len(names) >= 40, f"the push-token scan went thin: {sorted(names)}"
     return {name: _STUB_PREFIX + name for name in names}

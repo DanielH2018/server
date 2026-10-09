@@ -115,7 +115,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     through the second, which raises on a ``use_authelia: true`` entry with no ``auth_tier``.
     A tiered role's pods take their PriorityClass from the third, which raises on an entry
     with no ``tier``. uptime-kuma's static monitors ask ``in_service_tier`` whether a service's
-    own tile pages by email, and it raises on an entry name it cannot find. Registering the real ones makes those failures reach the guard.
+    own tile pages by email, and it raises on an entry name it cannot find. ``py_table`` reads
+    monitor-bridge's check table out of its Python source, for the env-secret and the Kuma tiles.
+    Registering the real ones makes those failures reach the guard.
 
     Args:
         env: The environment to register on, modified in place.
@@ -128,6 +130,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     if str(ANSIBLE / "filter_plugins") not in _sys.path:
         _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
     from authelia_access import authelia_service_rules
+    from py_table import py_table
     from service_tier import in_service_tier, tier_priority_class
     from toposort import filter_by_platform
 
@@ -150,6 +153,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["authelia_service_rules"] = authelia_service_rules
     env.filters["tier_priority_class"] = tier_priority_class
     env.filters["in_service_tier"] = in_service_tier
+    env.filters["py_table"] = py_table
     env.tests["search"] = search
     return env
 

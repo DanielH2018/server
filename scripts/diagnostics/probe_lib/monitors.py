@@ -39,7 +39,8 @@ from lib.k8s_context import resolve_vars, role_defaults
 from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 from lib.k8s_roles import HOST_VARS
 from lib.render_guard import BASE_CONTEXT, load_yaml, make_env
-from lib.repo_paths import ALL_VARS, REPO
+from lib.repo_paths import ALL_VARS, ANSIBLE, REPO
+from diagnostics.probe_lib.kuma_table_loop import TableLoop
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
 _MONITOR_STATUS_LABELS = {"0": "DOWN", "1": "UP", "2": "PENDING", "3": "MAINTENANCE"}
@@ -97,8 +98,9 @@ def format_monitor_status(data, declared_total=None):
 # it validates the declaration file against itself and never asks what is live.
 #
 # Declared names are read straight out of the template rather than rendered through Jinja: every
-# `"name"` in it is a literal, and parsing beats standing up a Jinja environment with a stub for
-# every push token just to recover strings that were never templated.
+# `"name"` in it is a literal, or a field of a row in the one table loop `kuma_table_loop`
+# reads, and parsing beats standing up a Jinja environment with a stub for every push token
+# just to recover strings that were never templated.
 STATIC_MONITORS_PATH = os.path.join(
     REPO,
     "ansible",
@@ -174,7 +176,7 @@ def interval_seconds(raw, variables):
         return None
 
 
-def parse_declared_monitors(text, variables=None):
+def parse_declared_monitors(text, variables=None, root=ANSIBLE):
     """Monitor declarations from the static-monitors template.
 
     Returns {name: {"type": str, "interval": int|None, "gated": bool, "gate": tuple|None}}.
@@ -188,6 +190,9 @@ def parse_declared_monitors(text, variables=None):
     `kuma-drift` and `postflight` call this, and an opt-in would leave whichever caller forgot
     it reading every templated interval as None.
 
+    `root` is the `ansible/` directory a table loop's `playbook_dir` path resolves under; a
+    test passes its own tree.
+
     `gate` exists because `gated` alone was a licence to ignore. A gated monitor's absence
     must not be excused unconditionally on the reasoning that it "renders away when the secret
     is unset" — that is an assumption about the secret, not a reading of it. A gated monitor
@@ -195,8 +200,9 @@ def parse_declared_monitors(text, variables=None):
     check written to catch exactly that. Naming the variable lets the caller resolve it and
     tell the two cases apart.
     """
-    declared, gates = {}, []
+    declared, gates, loop = {}, [], TableLoop(root)
     for line in text.splitlines():
+        loop.see(line)
         for cond in _JINJA_IF_COND_RE.findall(line):
             gates.append(tuple(_GATE_AND_RE.split(cond)))
         # An `{% if %}` whose condition did not parse (split across lines) still opens a
@@ -210,7 +216,8 @@ def parse_declared_monitors(text, variables=None):
                 gates.pop()
         name = _ENTITY_NAME_RE.search(line)
         kind = _ENTITY_TYPE_RE.search(line)
-        if not name or not kind:
+        names = [name.group(1)] if name else loop.names(line)
+        if not names or not kind:
             continue
         if kind.group(1) in (
             "notification",
@@ -221,14 +228,15 @@ def parse_declared_monitors(text, variables=None):
         if interval and variables is None and not interval.group(1).isdigit():
             variables = monitor_vars()
         conjuncts = tuple(c for g in gates if g for c in g)
-        declared[name.group(1)] = {
-            "type": kind.group(1),
-            "interval": interval_seconds(interval.group(1), variables)
-            if interval
-            else None,
-            "gated": bool(gates),
-            "gate": conjuncts or None,
-        }
+        for each in names:
+            declared[each] = {
+                "type": kind.group(1),
+                "interval": interval_seconds(interval.group(1), variables)
+                if interval
+                else None,
+                "gated": bool(gates),
+                "gate": conjuncts or None,
+            }
     return declared
 
 

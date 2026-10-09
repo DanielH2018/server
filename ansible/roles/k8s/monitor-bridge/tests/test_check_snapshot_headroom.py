@@ -229,22 +229,3 @@ def test_every_volume_a_role_caps_is_declared_to_the_monitor():
     size = re.search(r"^jellyfin_k8s_size:\s*(\d+)Gi\s*$", jellyfin_defaults, re.M)
     assert size, "jellyfin_k8s_size is no longer a plain Gi value"
     assert declared["jellyfin-config"] == int(size.group(1)) * 2 * 1024**3
-
-
-def test_the_kuma_declaration_reads_the_push_token_unguarded():
-    """The tile must read the token BARE, which is what "armed" means on the Kuma side.
-
-    A `{% if %}` around the Kuma declaration leaves the check inert: an absent secret declares no
-    monitor, and the render-based guards seed every token, so they render the guarded tile and
-    stay green. The env-secret half is armed for every check by construction since #3659: it
-    reads each token through `lookup('vars')`, which fails the render on an undefined secret.
-    """
-    var = "monitor_bridge_snapshot_headroom_push_token"
-    monitors = (
-        ROLES / "k8s" / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
-    ).read_text()
-    assert '"push_token": "{{ %s }}"' % var in monitors
-    assert "{%% if %s" % var not in monitors, (
-        "the Kuma declaration is guarded on %s again — a guarded declaration means no monitor "
-        "exists to receive the push" % var
-    )

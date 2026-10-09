@@ -8,7 +8,7 @@ the hysteresis, the module layout) and is what a session loads before touching t
 page is where the numbers came from and what each arm was added after, and its *Live checks*
 walks the registry in order.
 
-`files/registry.py`'s `build_checks()` is the authority on which checks exist. Nothing tests
+`files/check_table.py`'s `CHECKS` is the authority on which checks exist. Nothing tests
 this page: a bullet here can describe a check that has since moved or been retired, and the
 *Retired and moved checks* section is exactly that record. If a bullet disagrees with the
 registry, the registry is right.
@@ -23,12 +23,12 @@ registry, the registry is right.
 > `pi_peers` and `renovate_alive` dissolved into direct pushers at the host flips
 > (k8s/pi-peer-backup CronJob; `renovate-notify`'s ExecStartPost). check.py still
 > refuses a CHECKS_ONLY/CHECKS_SKIP filter naming an unknown check or a gated check
-> without its gate, and `tests/test_push_check_table.py` asserts the
+> without its gate, and `tests/test_check_table.py` asserts the
 > env-secret carries exactly one token per registered check and gate. Much of the per-check
 > documentation below predates the moves — Docker-era plumbing details (compose, bind
 > mounts, networks) are history: `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/monitor-bridge/`.
 >
-> **`files/registry.py`'s `build_checks()` is the authority on which checks exist.** This file
+> **`files/check_table.py`'s `CHECKS` is the authority on which checks exist.** This file
 > is prose and nothing tests it: until 2026-08-16 the three retired above were still written up
 > here in the present tense, as live checks with unit-tested pure functions, four weeks after
 > the functions were deleted. If a bullet below disagrees with the registry, the registry is
@@ -45,17 +45,15 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
 `status=up|down&msg=…` to one Kuma push monitor each:
 - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
   prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, every
-  prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/ups/
-  host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly/pi_pressure) is
+  prom-dependent check (each row of `files/check_table.py` with `gate="prometheus"`) is
   **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" `msg` so their push-monitor
   heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
   fires all of them at once: one root cause, one page per dependent check. A single scrape
   target down (Prometheus up, one exporter gone) still surfaces separately on Scrape Targets.
-  The `PROM_DEPENDENT` set is guarded by a test against the live `CHECKS` so it can't drift,
-  and `tests/test_claude_md_prom_dependent_enumeration.py` pins the enumeration above to that
-  set so this prose can't drift either. It carried a hardcoded count of ten while the set held
-  more (#1359); the enumeration replaces the count because a count nothing reads goes stale
-  silently, and this one had.)
+  `PROM_DEPENDENT` derives from the `gate="prometheus"` rows of `files/check_table.py`, so
+  neither a count nor an enumeration of it is written anywhere else: the role CLAUDE.md
+  carried a hardcoded count of ten while the set held more (#1359), and then an enumeration
+  a test pinned, until the column made both redundant (#3788).)
 - **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`** — old kernels
   filling /boot quietly breaks upgrades, and a full ESP breaks firmware/bootloader
   updates the same way; server-only, the Pi's disk lives in the Pi Pressure check)
@@ -1050,8 +1048,8 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   Fullness's `max by`: both longhorn-manager pods are scraped independently. A declared cap
   whose volume has NO series is a breach, not green. **Armed 2026-09-10** (#1627) —
   `monitor_bridge_snapshot_headroom_push_token` is in SOPS, and both halves read it unguarded:
-  the env-secret's `lookup('vars')` for its `monitor_bridge_push_checks` row and the Kuma declaration in
-  k8s/uptime-kuma/templates/static-monitors.yaml.j2. It shipped inert on 2026-09-10 with the
+  the env-secret's `lookup('vars')` and the Kuma tile loop in
+  k8s/uptime-kuma/templates/static-monitors.yaml.j2, both over its `check_table.py` row. It shipped inert on 2026-09-10 with the
   token absent, which is the shape #1632 names: a gated monitor with an unset variable reads
   green while watching nothing.)
 - **Kubelet CSI Mount Read-Only** (`node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/
@@ -1408,8 +1406,8 @@ no successor.
   the container). Kuma push silence remains the alerting path; the probe adds auto-recovery.
   (This was a Compose healthcheck restarted by autoheal until the k8s migration. autoheal now
   runs only on daniel-pi, so looking for its log line here finds nothing.)
-- Push tokens — **`monitor_bridge_push_checks` in `defaults/main.yml` is the list** (#3659), one
-  row per check and gate; the env-secret renders `KUMA_PUSH_<NAME>` from each. The tokens
+- Push tokens — **`files/check_table.py` is the list** (#3659), one row per check and gate;
+  the env-secret renders `KUMA_PUSH_<NAME>` and uptime-kuma renders the push tile from each. The tokens
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
 - The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
@@ -1471,7 +1469,7 @@ The role file keeps the short form; this is the original, with the Docker-era `m
 network note that no longer applies to the k8s pod.
 
 1. Add a push token to `secrets.yml` (`sops ansible/vars/secrets.yml`) for every
-   `monitor_bridge_push_checks` row in `defaults/main.yml` —
+   `files/check_table.py` row —
    `test_every_bridge_push_token_reaches_a_push_tile` asserts each row reaches an AutoKuma
    monitor, so the table is the list. (It
    does not read this file; the token names quoted above are prose and have drifted before.)
