@@ -1,0 +1,37 @@
+# Ansible-managed (setup/k3s, tasks/static-address.yml). Do not edit by hand.
+#
+# Pin this node's LAN address so k3s can start while the gateway's DHCP server is down.
+# k3s binds {{ server_ip }} itself (etcd's peer listener on the server, kubelet's node IP on
+# an agent), so with no address on the link it crash-loops on `bind: cannot assign requested
+# address`. A WAN outage that took the gateway's DHCP with it, spanning a reboot, kept the
+# whole cluster down for ~70h from 2026-10-05 (#3882).
+#
+# DHCPv4 is switched OFF rather than kept alongside the static address: with both, the lease
+# and the static config claim the same address, and whether networkd removes it when the
+# lease is lost is not something this config should depend on. DNS does not come from the
+# lease on either node (resolv.conf is rendered by this role), so the address and the default
+# route are all the lease supplied. IPv6 router advertisements are untouched.
+#
+# The gateway must keep {{ server_ip }} out of its DHCP pool (a reservation for this NIC's
+# MAC, or a pool that ends below it). With DHCP off, nothing renews a lease, and an address
+# the gateway thinks is free can be handed to another device.
+#
+# Lexically before 99-homelab-dns.yaml and after the installer's 00-/50- files, so these keys
+# override the installer's `dhcp4: true` and the DNS file's overrides still merge on top.
+network:
+  version: 2
+  # A loop over at most one link, so the empty default renders `ethernets:` with no links rather than a
+  # bare `:` (static-address.yml skips the task then anyway).
+  ethernets:
+{% for link in [k3s_node_static_link] | select %}
+    {{ link }}:
+      dhcp4: false
+      addresses:
+        - "{{ server_ip }}/{{ lan_subnet.split('/')[1] }}"
+      routes:
+        # Metric 100 matches the DHCP route this replaces, so a second DHCP link (daniel-server's
+        # wlo1 at 600) stays the fallback it was.
+        - to: default
+          via: "{{ lan_router_ip }}"
+          metric: 100
+{% endfor %}

@@ -387,3 +387,35 @@ def test_build_verdict_ties_break_by_encounter_order():
         graced_seeded_vols=[],
     )
     assert push_msg.startswith("first rank-1")
+
+
+def test_build_verdict_flattens_a_multi_line_problem_onto_one_line():
+    """A kubectl error carries its own newlines, and the wrapper reads ONE stdout line (#3883)."""
+    problems = [
+        (
+            1,
+            "backup target default unavailable: The connection to the server "
+            "127.0.0.1:6443 was refused\n - did you specify the right host or port?\n",
+        ),
+        (3, "stale volumes"),
+    ]
+    _, msg, push_msg = logic.build_verdict(
+        problems,
+        backup_targets=["default"],
+        disarmed_targets=[],
+        age_s=0,
+        checked=0,
+        recent_n=0,
+        daily_backup_budget=16,
+        suppressed=0,
+        graced_new=0,
+        graced_new_vols=[],
+        graced_seeded=0,
+        graced_seeded_vols=[],
+    )
+    assert "\n" not in msg
+    assert push_msg == (
+        "backup target default unavailable: The connection to the server 127.0.0.1:6443 "
+        "was refused - did you specify the right host or port? "
+        "(+1 more: see journalctl -t longhorn-backup-health)"
+    )

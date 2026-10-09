@@ -160,6 +160,10 @@ export LONGHORN_TRIM_CRON_FILE="/etc/cron.d/longhorn-trim"
 export LONGHORN_TRIM_CRON_EXPECTED="true"
 export LONGHORN_B2_DELETIONS_CRON_FILE="/etc/cron.d/b2-deletion-accounting"
 export LONGHORN_B2_DELETIONS_CRON_EXPECTED="{{ has_repo_checkout | bool }}"
+# The file each cron line touches before its job runs. /etc/cron.d is root-only, so the stat
+# above never succeeds as {{ sys_user }}; the stamp says whether the cron fired (#3677).
+export LONGHORN_TRIM_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/longhorn-trim"
+export LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2-deletion-accounting"
 
 # The reader prints `up<TAB>msg` or `down<TAB>msg` on its LAST stdout line and always exits 0,
 # having already logged the full (unranked) verdict to syslog itself. A nonzero exit or empty
@@ -189,7 +193,17 @@ else
   RC=$?
   ERR=$(cat "$ERR_FILE" 2>/dev/null || true)
   rm -f "$ERR_FILE"
+  # The verdict is the last stdout line that OPENS with `up<TAB>` or `down<TAB>`, not simply the
+  # last line. A verdict whose message carried a newline (a kubectl error, before the reader
+  # flattened each problem's text) left its `(+N more ...)` tail as the last line, and the
+  # tile read "unrecognized status:" with the real cause cut off for 70 hours (#3883). With no
+  # such line, the last line still decides and is flagged below.
   LAST_LINE="${OUT##*$'\n'}"
+  while IFS= read -r line; do
+    if [[ "$line" == up$'\t'* || "$line" == down$'\t'* ]]; then
+      LAST_LINE="$line"
+    fi
+  done <<< "$OUT"
   # STATUS must be Kuma's own vocabulary before anything downstream trusts it: a reader that
   # exits 0 with a last stdout line carrying no tab (a stray print, a warning that slipped past
   # the separate-stderr guard above) makes STATUS the whole line, which is neither "up" nor
@@ -206,8 +220,11 @@ else
     STATUS="${LAST_LINE%%$'\t'*}"
     MSG="${LAST_LINE#*$'\t'}"
     if [[ "$STATUS" != "up" && "$STATUS" != "down" ]]; then
-      logger -t longhorn-backup-health "status=down reader printed an unrecognized status: ${LAST_LINE}"
-      MSG="longhorn backup health reader printed an unrecognized status: ${LAST_LINE}"
+      # The whole output, flattened, rather than the last line alone: whatever the reader did
+      # print ahead of it is the only explanation this path has.
+      FLAT_OUT="${OUT//$'\n'/ | }"
+      logger -t longhorn-backup-health "status=down reader printed an unrecognized status: ${FLAT_OUT}"
+      MSG="longhorn backup health reader printed an unrecognized status: ${FLAT_OUT}"
       STATUS=down
     elif [[ -n "$ERR" ]]; then
       # A green run's stderr is not necessarily empty — a kubectl RBAC warning or a uv resolution

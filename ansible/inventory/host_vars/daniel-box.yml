@@ -1,5 +1,9 @@
 ---
 server_ip: 10.0.0.215
+# The link carrying server_ip. setup/k3s pins the address on it statically, so k3s still
+# starts when the gateway's DHCP server is down (#3882). Confirm the gateway keeps server_ip
+# out of its DHCP pool before applying it: with DHCPv4 off, nothing renews a lease on it.
+k3s_node_static_link: eno1
 # daniel-server's node-to-node traffic (6443/8472/10250, k3s_join_server_ports) is
 # UFW-allowed here via the k3s role's join-firewall tag.
 k3s_agent_node_ips:

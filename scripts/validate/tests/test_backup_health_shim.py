@@ -206,7 +206,8 @@ def _run_rendered_shim(
         # KUMA_PUSH_OK is set by the real kuma_push and read further down by the healthchecks
         # block (`(( ${{KUMA_PUSH_OK:-1}} ))` under `set -u`) — `push_ok_unset` reproduces an
         # older lib that never made that assignment at all.
-        f'kuma_push() {{ printf "%s" "$1" > {kuma_push_call}; {push_ok_assignment} }}\n'
+        f'kuma_push() {{ printf "%s" "$1" > {kuma_push_call}; '
+        f'printf "%s" "$2" > {kuma_push_call}.msg; {push_ok_assignment} }}\n'
         "if boot_grace_active ",
         1,
     )
@@ -350,6 +351,26 @@ def test_backup_health_a_tabless_last_line_is_flagged_not_pushed_as_is(
     assert any("unrecognized status" in line for line in lines), lines
     # And it must page — the whole point of catching this rather than pushing it as-is.
     assert any("/fail" in call for call in curl_calls), curl_calls
+
+
+def test_backup_health_a_verdict_split_across_lines_still_names_its_cause(
+    tmp_path, logger_calls
+):
+    """A newline inside the verdict's message must not hide the cause behind its own tail.
+
+    The 2026-10-06 shape (#3883): a kubectl error's newline left `(+N more ...)` as the last
+    line, and the tile read "unrecognized status:" for 70 hours of a dead k3s API.
+    """
+    proc, kuma_status, _curl_calls = _run_rendered_shim(
+        tmp_path,
+        "printf 'down\\tbackup target default unavailable: The connection to the server "
+        "127.0.0.1:6443 was refused\\n (+7 more: see journalctl -t longhorn-backup-health)\\n'\n",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert kuma_status == "down"
+    pushed = (tmp_path / "kuma-push-call.txt.msg").read_text()
+    assert "127.0.0.1:6443 was refused" in pushed
+    assert "unrecognized status" not in pushed
 
 
 # ── an unchecked mktemp must not go unexplained ──────────────────────────────────────────────

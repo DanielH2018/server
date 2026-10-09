@@ -65,6 +65,15 @@ read as alive. It stays quiet in the three cases that produce silence legitimate
 shorter than the 24h cron period, a cron this host does not install (`b2-deletion-accounting` is
 gated on `has_repo_checkout`), and a cron installed less than one window ago.
 
+**Check 10 tells "fired and failed" from "stopped firing" with a fire stamp** (#3677).
+`initial_setup` hardens `/etc/cron.d` to 0700 root, so the `sys_user` this check runs as can
+never stat a cron's entry there. The trim script and the `b2-deletions` cron line each touch a stamp under
+`k3s_cron_fired_stamp_dir` before its job runs, and the shim exports the stamp paths. A stamp
+inside the window means the cron fired and its run did not complete, and the message points at
+the cron's journal tag. A stale or missing stamp means the cron has not fired. The message
+then says that whether the entry is still installed needs root to check. The 2026-10-08 outage
+was the first kind: `b2-deletions` fired every day and logged only its refusal.
+
 Every matched line is matched as written, so rewording one means changing `_TRIM_SUMMARY_RE` /
 `_TRIM_ABORT_RE` / `_DELETIONS_SUMMARY_RE` / `_DELETIONS_DECLINED_RE` in
 `ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py` in the same edit. The b2 shapes
@@ -156,6 +165,23 @@ last DOWN pushed in `/var/lib/homelab/release-staleness/stale-set` (written by `
 the `down` with the added and cleared names prefixed. A DOWN that is not a verdict (the fetch
 failing, or the probe exiting above 1) keeps the recorded set, or records an empty one so the
 first verdict after it still notifies. An `up` clears it.
+
+## Both nodes pin their LAN address, because k3s binds it
+
+k3s binds `server_ip` itself: etcd's peer listener on daniel-box and the node IP on an agent. A
+node that takes its address from DHCP cannot start k3s while the gateway's DHCP server is down.
+From the 2026-10-05 23:55 reboot to 2026-10-08 21:55 an internet outage took the gateway's DHCP
+with it. k3s crash-looped every ~6s on `listen tcp 10.0.0.215:2380: bind: cannot assign
+requested address`, and no CronJob fired for ~70h (#3882).
+
+`tasks/static-address.yml` renders `/etc/netplan/90-homelab-static-address.yaml` on the link
+each host names in `k3s_node_static_link`. It switches DHCPv4 off on that link, pins the
+address and a default route via `lan_router_ip`, and leaves IPv6 router advertisements alone.
+DNS never came from the lease on either node, because this role renders `/etc/resolv.conf`.
+The template says why DHCPv4 is off rather than running alongside. The gateway must keep both
+addresses out of its DHCP pool, since with DHCPv4 off nothing renews a lease on them. To apply
+it, run `k3s-bringup.yml --tags node-address` on daniel-box, and the `k3s_agent` join path on
+daniel-server.
 
 ## Two smaller traps
 

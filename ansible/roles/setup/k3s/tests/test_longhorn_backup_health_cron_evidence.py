@@ -25,6 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
 import longhorn_cron_evidence_logic as logic
+from _shell_render import rendered_shell_text
+from lib import yaml_fast
 
 
 # The trim's own summary and abort lines, copied from longhorn-trim-volumes.sh.j2. They are
@@ -164,6 +166,63 @@ def test_cron_liveness_separates_a_missing_cron_from_one_it_cannot_stat():
     assert len(problems) == 1
     assert "could not stat /etc/cron.d/longhorn-trim" in problems[0][1]
     assert "not installed" not in problems[0][1]
+
+
+def test_cron_liveness_names_a_cron_that_fired_and_logged_no_completed_run():
+    """The 2026-10-08 case: /etc/cron.d is root-only, and the cron fired but only refused (#3677)."""
+    fired = _B2._replace(
+        installed_at=None,
+        unreadable=True,
+        fired_stamp="/var/lib/longhorn-cron-fired/b2-deletion-accounting",
+        fired_at=_NOW - 2 * 3600,
+    )
+    problems = _liveness(
+        [_TRIM_CLEAN], ["cannot confirm this kubectl ... Refusing"], deletion=fired
+    )
+    assert len(problems) == 1
+    assert "b2-deletions fired 2h ago but logged no completed run" in problems[0][1]
+    assert "could not stat" not in problems[0][1]
+
+
+def test_cron_liveness_reads_a_stale_fire_stamp_as_not_firing():
+    """A stamp older than the window is no evidence; the message names both readers."""
+    stale = _TRIM._replace(
+        installed_at=None,
+        unreadable=True,
+        fired_stamp="/var/lib/longhorn-cron-fired/longhorn-trim",
+        fired_at=_NOW - 30 * 3600,
+    )
+    problems = _liveness([], [_SUMMARY], trim=stale)
+    assert len(problems) == 1
+    assert "longhorn-trim has not fired in the last 26h" in problems[0][1]
+    assert "/var/lib/longhorn-cron-fired/longhorn-trim" in problems[0][1]
+    assert "could not stat /etc/cron.d/longhorn-trim" in problems[0][1]
+
+
+def test_each_cron_touches_the_stamp_the_shim_exports():
+    """The cron writes the stamp and the shim names it; nothing else holds the two paths together."""
+    role = Path(__file__).resolve().parents[1]
+    stamp_dir = yaml_fast.safe_load((role / "defaults" / "main.yml").read_text())[
+        "k3s_cron_fired_stamp_dir"
+    ]
+    tasks = yaml_fast.safe_load((role / "tasks" / "health-crons.yml").read_text())
+    b2_job = next(
+        t["ansible.builtin.cron"]["job"]
+        for t in tasks
+        if t.get("ansible.builtin.cron", {}).get("cron_file")
+        == "b2-deletion-accounting"
+    )
+    trim_script = rendered_shell_text("setup", "k3s", "longhorn-trim-volumes.sh.j2")
+    shim = rendered_shell_text("setup", "k3s", "longhorn-backup-health.sh.j2")
+    assert b2_job.startswith(
+        "touch {{ k3s_cron_fired_stamp_dir }}/b2-deletion-accounting;"
+    ), b2_job
+    assert f'touch "{stamp_dir}/longhorn-trim"' in trim_script
+    assert f'LONGHORN_TRIM_CRON_FIRED_STAMP="{stamp_dir}/longhorn-trim"' in shim
+    assert (
+        f'LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{stamp_dir}/b2-deletion-accounting"'
+        in shim
+    )
 
 
 def test_cron_liveness_does_not_double_report_a_journal_read_that_failed():

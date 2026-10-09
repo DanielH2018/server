@@ -30,6 +30,12 @@
 # older than the restart means no detach happened.
 set -uo pipefail
 
+# Check 10 of longhorn-backup-health reads this stamp's mtime as "the cron fired", because the
+# /etc/cron.d entry it would otherwise stat is root-only (#3677). First, so a run that dies
+# anywhere below still counts as fired, and unchecked, so a stamp it cannot write never stops
+# the trim.
+touch "{{ k3s_cron_fired_stamp_dir }}/longhorn-trim" 2>/dev/null
+
 # Cron's PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s install script puts the binary,
 # and cron exports no KUBECONFIG. Both are set explicitly: without the first this exits "command
 # not found", and without the second kubectl reports an EMPTY cluster rather than failing — so
