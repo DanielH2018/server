@@ -504,6 +504,14 @@ class RoleIndex:
             for key in _top_level_keys_naming(doc, name)
         }
 
+    def mentions(self, name: str) -> bool:
+        """Whether any task file, template or vars value of the role names `name` as a word."""
+        word = re.compile(rf"(?<!\w){re.escape(name)}(?!\w)")
+        texts = [*self.task_text.values(), *self.template_text.values()]
+        return any(word.search(t) for t in texts) or any(
+            _top_level_keys_naming(doc, word) for doc in self.vars_doc.values()
+        )
+
     def key_readers(
         self, key: str, seen: frozenset[str] = frozenset()
     ) -> frozenset[str]:
