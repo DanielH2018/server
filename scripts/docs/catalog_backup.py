@@ -21,7 +21,7 @@ from typing import Any
 from catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
 from lib.jinja_comments import strip_jinja_comments
 from lib.k8s_roles import role_dirs
-from lib.estate import role_defaults
+from lib.estate import Estate, role_defaults
 from lib.render_guard import load_yaml as _load_yaml
 from lib.repo_paths import SHARED_TPL
 from lib.service_tiers import resolved_tier_lists
@@ -135,11 +135,14 @@ def _resolve_expr(expr: str, role_dir: Path) -> str | None:
     if not match:
         return None
     var = match.group(1)
-    defaults = role_defaults(role_dir)
-    value = defaults.get(var)
+    value = _ESTATE.role_vars(role_dir).get(var)
     if isinstance(value, str) and "{{" not in value:
         return value
     return None
+
+
+# One parse of the inventory per run: every claim of every role resolves through it.
+_ESTATE = Estate()
 
 
 def _decl(name_expr: str, class_expr: str | None, role_dir: Path) -> ClaimDecl:

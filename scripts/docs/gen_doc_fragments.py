@@ -86,7 +86,7 @@ from fragment_renderers import (
 )
 from lib.docs_provenance import write_if_body_changed
 from lib.ansible_inventory import K8S_HOST, K8S_HOST_VARS, PI_HOST, PI_HOST_VARS
-from lib.estate import Estate, role_defaults
+from lib.estate import Estate
 from lib.repo_paths import ALL_VARS, K3S_ROLE, K8S_ROLES, REPO, ROLES
 from lib.service_tiers import resolved_tier_lists
 
@@ -117,7 +117,7 @@ def header(sources: list[str]) -> str:
 
 
 def _longhorn() -> tuple[str, list[str]]:
-    return render_longhorn_tiers(resolved_tier_lists(role_defaults(K3S_ROLE))), [
+    return render_longhorn_tiers(resolved_tier_lists(Estate().role_vars(K3S_ROLE))), [
         "ansible/roles/setup/k3s/defaults/main.yml"
     ]
 
@@ -150,14 +150,14 @@ def _crowdsec_agent_liveness() -> tuple[str, list[str]]:
 
 
 def _etcd_offbox_retention() -> tuple[str, list[str]]:
-    retention = role_defaults(K3S_ROLE)["k3s_etcd_s3_retention"]
+    retention = Estate().role_vars(K3S_ROLE)["k3s_etcd_s3_retention"]
     return render_etcd_offbox_retention(retention), [
         "ansible/roles/setup/k3s/defaults/main.yml"
     ]
 
 
 def _traefik_ports() -> tuple[str, list[str]]:
-    d = role_defaults(TRAEFIK_ROLE)
+    d = Estate().role_vars(TRAEFIK_ROLE)
     return render_traefik_ports(
         d["traefik_k8s_http_port"], d["traefik_k8s_https_port"]
     ), ["ansible/roles/k8s/traefik/defaults/main.yml"]
@@ -173,11 +173,11 @@ def deadman_inputs(
     """
     estate = estate or Estate()
     return (
-        role_defaults(K3S_ROLE),
-        role_defaults(PI_PEER_ROLE),
-        role_defaults(REGISTRY_ROLE),
+        estate.role_vars(K3S_ROLE),
+        estate.role_vars(PI_PEER_ROLE),
+        estate.role_vars(REGISTRY_ROLE),
         estate.group_vars,
-        role_defaults(INITIAL_SETUP_ROLE),
+        estate.role_vars(INITIAL_SETUP_ROLE),
         host_has_docker(estate),
     )
 

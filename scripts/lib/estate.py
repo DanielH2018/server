@@ -87,7 +87,12 @@ def inventory_layers(defaults: dict, group: dict, host: dict) -> dict:
 
 
 def role_defaults(role_dir: Path) -> dict:
-    """A role's ``defaults/main.yml``, or ``{}`` for a role without one."""
+    """A role's ``defaults/main.yml``, or ``{}`` for a role without one.
+
+    The raw file answers what a role DECLARES: whether it states ``k8s_autodeploy``, which
+    ``k8s_claims`` it lists, which ``*_image`` variables it pins. A VALUE the role's tasks use
+    can be overridden by the inventory, so read it through ``Estate.role_vars`` instead.
+    """
     return load_yaml(role_dir / "defaults" / "main.yml")
 
 
@@ -129,6 +134,20 @@ class Estate:
     def vars(self, host: str, defaults: dict | None = None) -> dict:
         """`host`'s variables in Ansible's precedence, over `defaults` when a role is in play."""
         return inventory_layers(defaults or {}, self.group_vars, self.own_vars(host))
+
+    def role_vars(self, role_dir: Path, host: str | None = None) -> dict:
+        """The values a role's tasks see in a deploy: its defaults under the inventory layers.
+
+        `host` defaults the way `render_context` does: a k8s role takes the k8s plane's host,
+        and a setup role, which runs on several hosts, takes the group layer alone. Reading a
+        role's defaults raw would print the default even where the inventory overrides it.
+        """
+        host = host or self.inventory.plane_hosts.get(role_dir.parent.name)
+        return inventory_layers(
+            role_defaults(role_dir),
+            self.group_vars,
+            self.own_vars(host) if host else {},
+        )
 
     def source(self, host: str, key: str) -> Literal["host", "group"] | None:
         """Which inventory layer `key`'s value for `host` comes from, or None if neither has it.
