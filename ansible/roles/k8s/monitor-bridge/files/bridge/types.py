@@ -55,6 +55,16 @@ class Check:
     fn: CheckFn
 
 
+def push_env(name: str) -> str:
+    """The env var carrying the Kuma push token of the check or gate called `name`.
+
+    Derived, not declared: `templates/env-secret.yaml.j2` renders one `KUMA_PUSH_<NAME>` per row
+    of `monitor_bridge_push_checks` in this role's defaults by the same rule, so a check's name
+    is the only spelling the two sides share (#3659).
+    """
+    return "KUMA_PUSH_" + name.upper()
+
+
 def as_object(value: JsonValue, what: str) -> JsonObject:
     """`value` as a JSON object, or `RuntimeError` naming `what` and the type received."""
     if not isinstance(value, dict):

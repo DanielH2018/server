@@ -74,7 +74,7 @@ def run_once(
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
     prom_ok, _prom_msg = gate_lib._gate(
-        cfg, "prometheus", gates.probe_prometheus, "KUMA_PUSH_PROMETHEUS", dry_run, only
+        cfg, "prometheus", gates.probe_prometheus, dry_run, only
     )
 
     # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
@@ -114,7 +114,6 @@ def run_once(
         cfg,
         "loki_reachable",
         gates.probe_loki,
-        "KUMA_PUSH_LOKI_REACHABLE",
         dry_run,
         only,
     )
@@ -126,16 +125,14 @@ def run_once(
     # needs B2. The probe is throttled inside b2_reachable (it must not spend the transaction
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
-    b2_ok, _b2_msg = gate_lib._gate(
-        cfg, "b2_reachable", gates.probe_b2, "KUMA_PUSH_B2_REACHABLE", dry_run, only
-    )
+    b2_ok, _b2_msg = gate_lib._gate(cfg, "b2_reachable", gates.probe_b2, dry_run, only)
 
     # WAN-reachability gate (peer of the two above): an internet outage had no gate at all,
     # so every check reaching the internet paged on its own — 11 tiles red inside 90 minutes on
     # 2026-09-18 (#2784). Two independent providers probed by hostname, down only when NEITHER
     # answers, so a single provider's outage does not silence a dependent reading the other.
     wan_ok, _wan_msg = gate_lib._gate(
-        cfg, "wan_reachable", gates.probe_wan, "KUMA_PUSH_WAN_REACHABLE", dry_run, only
+        cfg, "wan_reachable", gates.probe_wan, dry_run, only
     )
 
     for entry in checks:

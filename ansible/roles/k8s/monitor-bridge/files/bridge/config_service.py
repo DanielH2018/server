@@ -242,8 +242,9 @@ def service_config(
         # gives one wait: a holder still on the lock 30 min after the first tick gave up has
         # outlived every legitimate deploy. The behind arm above would page the same fault,
         # but only after six hours sized for a dirty tree.
-        # The default is the shared module's figure, the same one the SessionStart banner
-        # names a streak at, so the banner and this page cannot disagree about a lock.
+        # The rendered value is `gitops_markers.CONTENTION_PAGE_SECONDS` in minutes, the figure
+        # the SessionStart banner names a streak at, so the banner and this page cannot
+        # disagree about a lock; ansible/tests/deploy/test_gitops_markers_copies.py pins it.
         GITOPS_CONTENTION_MAX_S=_num("GITOPS_CONTENTION_MAX_MIN") * 60,
         # HA automation-engine heartbeat: an HA time_pattern automation stamps
         # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY

@@ -404,29 +404,16 @@ def test_a_clean_cycle_clears_the_streak(monkeypatch, cfg):
     )
 
 
-def test_registered_tokened_and_prom_suppressed():
-    """Registration, token and suppression are one unit — any one alone is a broken monitor."""
+def test_registered_and_prom_suppressed():
+    """Registration and suppression are one unit. The token and its tile are every check's
+    pair, held by tests/test_push_check_table.py and test_kuma_static_monitors.py (#3659)."""
     names = {c.name for c in registry.build_checks()}
-    env_secret = (_ROLE / "templates" / "env-secret.yaml.j2").read_text()
-    registered = "host_temp" in names
-    assert registered, "an unregistered check never runs; it would be dead code"
-    assert registered == ("KUMA_PUSH_HOST_TEMP" in env_secret), (
-        "the CHECKS entry and the KUMA_PUSH_HOST_TEMP env-secret key move together — one "
-        "without the other is either a check that cannot page or a token nothing reads"
+    assert "host_temp" in names, (
+        "an unregistered check never runs; it would be dead code"
     )
     assert "host_temp" in gates.PROM_DEPENDENT, (
         "it reads Prometheus and pages on an empty vector, so a Prometheus outage must "
         "suppress it — otherwise one outage pages here and on the Prometheus monitor both"
-    )
-
-
-def test_the_kuma_tile_exists_for_the_token():
-    """The tile deploys from uptime-kuma and the pusher from monitor-bridge — the pair that drifts."""
-    tile = (
-        _ROLE.parent / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
-    ).read_text()
-    assert "monitor_bridge_host_temp_push_token" in tile, (
-        "a token with no Kuma tile pushes into the void"
     )
 
 

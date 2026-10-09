@@ -25,7 +25,7 @@ import bridge.net
 import bridge.streaks
 from bridge.common import _env
 from bridge.config import Config
-from bridge.types import Check, CheckFn, CheckResult
+from bridge.types import Check, CheckFn, CheckResult, push_env
 from checks.b2 import check_b2_reachable
 from checks.cluster import check_prometheus
 from checks.logs import check_loki_reachable
@@ -399,7 +399,6 @@ def _gate(
     cfg: Config,
     name: str,
     fn: CheckFn,
-    push_env: str,
     dry_run: bool,
     only: frozenset[str],
 ) -> CheckResult:
@@ -415,7 +414,6 @@ def _gate(
         nothing narrows the skip set, so it is read off `cfg.CHECKS_SKIP` rather than threaded.
       name: The gate's own check name, as CHECKS_ONLY/CHECKS_SKIP and GATE_DEPENDENTS spell it.
       fn: The gate's check body, taken off the `Gates` value run_once was given.
-      push_env: The env var holding this gate's Kuma push token.
       dry_run: Evaluate and log, but push nothing to Kuma.
       only: The enable-exactly-this-set filter.
     """
@@ -424,5 +422,5 @@ def _gate(
     ok, msg = _evaluate(cfg, name, fn)
     bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
     if not dry_run:
-        bridge.net.push(cfg, _env(push_env, ""), ok, msg)
+        bridge.net.push(cfg, _env(push_env(name), ""), ok, msg)
     return CheckResult(ok, msg)

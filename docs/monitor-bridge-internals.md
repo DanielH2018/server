@@ -34,10 +34,11 @@ table, the gate-set membership, the operator prerequisites and the test-side sea
 - **The heartbeat window is `uptime_kuma_k8s_bridge_push_interval` = 1200 s**, 4 × the loop.
 - **Liveness probe:** `cli.py` touches `/tmp/heartbeat` after every cycle and the probe in
   `templates/deployment.yaml.j2` fails past ~3×INTERVAL, so the kubelet restarts a hung loop.
-- **Push tokens:** `templates/env-secret.yaml.j2`'s `KUMA_PUSH_*` keys are the list, one SOPS
-  `monitor_bridge_<check>_push_token` each. `test_every_push_token_env_is_wired_to_a_monitor`
-  pins them to the AutoKuma monitors and `test_checks_and_env_secret_push_tokens_agree` to the
-  registry.
+- **Push tokens:** `monitor_bridge_push_checks` in `defaults/main.yml` is the list, one row per
+  check and gate (#3659). The env-secret renders `KUMA_PUSH_<NAME>` for each row, the name
+  `bridge.types.push_env` reads, from the SOPS secret the row's `token` names. `tests/test_push_check_table.py` pins
+  the table to the registry, the env and SOPS, and
+  `test_every_bridge_push_token_reaches_a_push_tile` pins it to the AutoKuma monitors.
 - **Fold an arm into an existing monitor** when it answers that tile's existing question
   (cgroups into Memory, ports into Pi Pressure, `ip_ban` into HA); a new tile costs a push token in
   SOPS and a monitor created by hand.
@@ -45,12 +46,12 @@ table, the gate-set membership, the operator prerequisites and the test-side sea
   `longhorn_b2_application_key`, `CF_ANALYTICS_TOKEN_FILE`, `SPEEDTEST_TOKEN_FILE`,
   `HEALTHCHECKS_API_KEY_FILE`) are rendered 0600 and read through `bridge.config._env_file`; an
   empty file disables the check. Ids stay inline.
-- Thresholds are env-tunable in `templates/env-secret.yaml.j2`, and `bridge/config*.py` names the
-  default for each. A failed query makes that monitor `down` with an explanatory message.
+- Thresholds are env-tunable in `templates/env-secret.yaml.j2`, the only place each value is
+  written: `bridge/config*.py` reads a rendered key with no default (#3659). A failed query makes that monitor `down` with an explanatory message.
 
 ## Operator prerequisites
 
-1. A push token in `secrets.yml` for every `KUMA_PUSH_*` key — exactly 32 alphanumeric characters
+1. A push token in `secrets.yml` for every `monitor_bridge_push_checks` row — exactly 32 alphanumeric characters
    (`openssl rand -hex 16`); AutoKuma silently refuses the monitor otherwise
    (`Invalid push_token`).
 2. `n8n_api_key`: minted in n8n → Settings → n8n API, scoped to read Workflow + Execution.

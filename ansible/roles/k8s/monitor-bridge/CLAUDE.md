@@ -62,8 +62,11 @@ the template rather than the constant.
 Two push-side rules bind as widely. **Every push monitor has `max_retries=0`**, so widen
 `uptime_kuma_k8s_bridge_push_interval` to fix post-boot flapping and never add retries
 (`test_push_monitors_never_retry`). **A new arm folds into an existing monitor by default**;
-prove its selector against a live source first (checks page's *Traps*). The push tokens, the
-liveness probe, the credentials and the prerequisites are on the internals page.
+prove its selector against a live source first (checks page's *Traps*). **A new tile is a row in
+`monitor_bridge_push_checks`** (`defaults/main.yml`), from which the env-secret renders the
+`KUMA_PUSH_<NAME>` the bridge reads; `tests/test_push_check_table.py` holds the table to the
+registry (#3659). The liveness probe, the credentials and the prerequisites are on the internals
+page.
 
 ## Module layout — and the one rule that governs it
 
