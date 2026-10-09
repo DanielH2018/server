@@ -60,8 +60,8 @@ schedule, the lock, and the contract below.
   `defaults/main.yml`).
 - **Required evidence:** every action lands in the ledger and `outcomes.jsonl`; a live
   replacement is Discord-alerted. A post the host could not deliver waits in
-  `/var/lib/autofix-fake-remux/discord-spool/` and goes out, marked as delayed, with the next
-  post from any of the three crons (#3905). `fake-remux-health.sh` (every `fake_remux_health_cron_minute`)
+  `/var/lib/autofix-fake-remux/discord-spool/` and goes out, marked as delayed, at the end of
+  the next run of any of the three crons, so within 15 minutes of the network returning (#3905). `fake-remux-health.sh` (every `fake_remux_health_cron_minute`)
   pushes three Kuma tiles from the scripts' state files, with max-ages derived from each
   cron's own cadence (`fake_remux_*_max_age_hours` — a grace shorter than the gap flaps, one
   much longer clears the DOWN it exists to make sticky).

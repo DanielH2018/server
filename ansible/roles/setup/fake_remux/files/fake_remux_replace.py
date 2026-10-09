@@ -538,6 +538,7 @@ def main() -> int:
         ok, msg = False, "fake-remux reconcile error: %s" % e
     log("OK  " if ok else "DOWN", msg)
     scan.write_state(state_file, ok, msg)
+    scan.flush_queued_posts(cfg)
     return 0
 
 

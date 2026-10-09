@@ -206,12 +206,18 @@ def _delayed_note(queued_at: float) -> str:
     return "\n(delayed: first attempt %s)" % when.strftime("%Y-%m-%d %H:%M UTC")
 
 
-def _flush_spool(spool_dir: str, webhook: str, user_agent: str, log=None) -> bool:
-    """Post up to ``DISCORD_SPOOL_FLUSH_MAX`` queued messages, oldest first.
+def flush_discord_spool(
+    spool_dir: str, webhook: str, user_agent: str, log=None
+) -> bool:
+    """Post up to ``DISCORD_SPOOL_FLUSH_MAX`` messages queued in ``spool_dir``, oldest first.
 
-    False when a delivery failed for a reason another attempt can fix, such as no network, a
-    5xx or a 429. That message and the ones after it stay queued.
+    A ``discord_post(spool_dir=...)`` caller runs this once per run, news or not, so a queued
+    post goes out within one run of the network returning. An absent spool costs one listing
+    and no request. False when the webhook is empty, or a delivery failed for a reason another
+    attempt can fix (no network, a 5xx, a 429); that message and the rest stay queued.
     """
+    if not webhook:
+        return False
     try:
         queued = sorted(n for n in os.listdir(spool_dir) if n.endswith(".json"))
     except OSError:
@@ -282,23 +288,20 @@ def discord_post(
     The posted message, ``marker`` included, goes through ``clamp_discord``, so an over-long
     message arrives cut to ``DISCORD_MAX`` and ending in the truncation marker.
 
-    ``spool_dir`` (optional) is for a caller that never retries a message itself. Such a caller
-    ignores the return value, so before #3905 a post sent while the host could not reach Discord
-    was lost. With ``spool_dir`` set, a post that fails for a reason another attempt can fix
-    (no network, a 5xx, a 429) is queued as a file there. The next call with the same
-    ``spool_dir`` first posts up to ``DISCORD_SPOOL_FLUSH_MAX`` queued messages, oldest first,
-    each ending in a ``(delayed: first attempt <UTC time>)`` line. Any beyond that wait for a
-    later call, so a long backlog can arrive after the new post. While the queue cannot be delivered, a new message joins it
-    without its own attempt. A caller that gates a marker on the return value must NOT pass
-    ``spool_dir``, since its next run re-sends the message and the spool would post it twice.
-    The return value is unchanged: False means "not delivered yet", queued or not.
+    ``spool_dir`` (optional) is for a caller that never retries a post itself. A post that
+    fails for a reason another attempt can fix (no network, a 5xx, a 429) is queued there, and
+    ``flush_discord_spool`` later sends it with a ``(delayed: first attempt <UTC time>)`` line.
+    This call runs that flush first; while the flush fails, the new post joins the queue without
+    an attempt of its own. Such a caller also runs the flush once per run (#3905). A caller
+    that gates a marker on the return value must NOT pass it: its next run re-sends the post,
+    so it would arrive twice. The return value is unchanged.
     """
     if not webhook:
         if log:
             log("no Discord webhook set; skipping post")
         return False
     message = f"{marker} {content}" if marker else content
-    if spool_dir and not _flush_spool(spool_dir, webhook, user_agent, log):
+    if spool_dir and not flush_discord_spool(spool_dir, webhook, user_agent, log):
         _spool_message(spool_dir, message, log)
         return False
     status = _discord_send(webhook, clamp_discord(message), user_agent, log)

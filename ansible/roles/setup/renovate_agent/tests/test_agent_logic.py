@@ -239,6 +239,7 @@ class _FakeHost:
         self.contained = contained
         self.posts: list[str] = []
         self.spools: set[str | None] = set()
+        self.flushed: list[str] = []
 
     def run(self, argv, cwd=None, timeout=120):
         if argv[0] == "gh" and "merged" in argv:
@@ -277,10 +278,17 @@ class _FakeHost:
         self.spools.add(spool_dir)
         return True
 
+    def flush_discord_spool(self, spool_dir, webhook, ua, log=None):
+        self.flushed.append(spool_dir)
+        return True
+
 
 def _tools(host: _FakeHost) -> renovate_agent.AgentTools:
     return renovate_agent.AgentTools(
-        run=host.run, discord_post=host.discord_post, read_file=lambda path: ""
+        run=host.run,
+        discord_post=host.discord_post,
+        flush_discord_spool=host.flush_discord_spool,
+        read_file=lambda path: "",
     )
 
 
@@ -445,5 +453,7 @@ class TestSkipExitCodes:
 
         assert renovate_agent.main(_tools(host), self._cfg(tmp_path)) == 0
         assert host.posts == []
+        # The quiet skip posts nothing, so only this flush delivers an outage's queue (#3905).
+        assert host.flushed == [f"{tmp_path}/state/discord-spool"]
         (rec,) = _records(tmp_path)
         assert rec["result"] == "skipped" and rec["reason"]

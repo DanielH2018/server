@@ -223,6 +223,9 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     )
     log_path = os.path.join(state_dir, "last_session.json")
     spool = discord_spool(state_dir)
+    # Every tick, before anything can fail or take the quiet skip: a crash report queued during
+    # an outage would otherwise wait for a day that has PRs to digest (#3905).
+    tools.flush_discord_spool(spool, webhook, USER_AGENT, log=log)
 
     before = open_prs(cfg["REPO"], tools)
     gate = decide(before, tools.read_file(HOLD_FILE), held_plane_text(tools))

@@ -97,6 +97,6 @@ the caps or the schedule cannot quietly widen it.
   has the full delta vocabulary, the crash path, and why a `permission denials:` line is the one
   to act on.
   A digest the host could not deliver waits in `<STATE_DIR>/discord-spool/` and goes out,
-  marked as delayed, with the next tick's post (#3905).
+  marked as delayed, at the start of the next daily tick, a quiet skip included (#3905).
 - **Next-run review:** before raising a cap or widening the prompt, read the last week's
   digests for what the sessions actually resolved and what they timed out on.

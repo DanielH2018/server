@@ -148,3 +148,24 @@ def test_a_long_queued_post_keeps_its_delay_line_inside_the_cap(tmp_path):
     assert len(delayed) <= host_lib.DISCORD_MAX
     assert host_lib.DISCORD_TRUNCATED in delayed
     assert delayed.endswith(" UTC)")
+
+
+def test_a_run_with_nothing_to_post_still_delivers_the_queue(tmp_path):
+    spool = tmp_path / "spool"
+    discord = _Discord("down")
+    _post(discord, spool, "queued")
+    with mock.patch("host_lib.urllib.request.urlopen", discord.urlopen):
+        assert host_lib.flush_discord_spool(str(spool), "https://x", "ua") is True
+    assert [m.split("\n")[0] for m in discord.delivered] == ["queued"]
+    assert not list(spool.glob("*.json"))
+
+
+def test_a_flush_with_no_webhook_or_no_queue_sends_nothing(tmp_path):
+    spool = tmp_path / "spool"
+    _post(_Discord("down"), spool, "queued")
+    discord = _Discord()
+    with mock.patch("host_lib.urllib.request.urlopen", discord.urlopen):
+        assert host_lib.flush_discord_spool(str(spool), "", "ua") is False
+        assert host_lib.flush_discord_spool(str(tmp_path / "none"), "https://x", "ua")
+    assert discord.delivered == []
+    assert len(list(spool.glob("*.json"))) == 1
