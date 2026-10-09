@@ -65,6 +65,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib import claims as claims_mod
+from fanout_lib.abandon import cmd_abandon
 from fanout_lib import launch as launch_mod
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
@@ -549,19 +550,19 @@ def main(argv=None, tools: Tools | None = None) -> int:
         help="issue numbers joined by commas; repeatable",
     )
     claim_parser.set_defaults(fn=cmd_claim)
-    status_parser = sub.add_parser("status")
-    status_parser.add_argument("run_id")
-    _add_manifest_root(status_parser)
-    status_parser.set_defaults(fn=cmd_status)
-    stop_parser = sub.add_parser("stop")
-    stop_parser.add_argument("run_id")
-    stop_parser.add_argument("batch", nargs="?")
-    _add_manifest_root(stop_parser)
-    stop_parser.set_defaults(fn=cmd_stop)
-    clean_parser = sub.add_parser("clean")
-    clean_parser.add_argument("run_id")
-    _add_manifest_root(clean_parser)
-    clean_parser.set_defaults(fn=cmd_clean)
+    run_parsers = {}
+    for name, fn in (
+        ("status", cmd_status),
+        ("stop", cmd_stop),
+        ("clean", cmd_clean),
+        ("abandon", cmd_abandon),
+    ):
+        run_parsers[name] = sub.add_parser(name)
+        run_parsers[name].add_argument("run_id")
+        _add_manifest_root(run_parsers[name])
+        run_parsers[name].set_defaults(fn=fn)
+    run_parsers["stop"].add_argument("batch", nargs="?")
+    run_parsers["abandon"].add_argument("batch")
     # No `help=` here, matching every other subparser above: argparse only lists a
     # subcommand under "positional arguments" when its own help text is set, so leaving it
     # unset is what keeps `clean-one` out of `--help`'s body. `help=argparse.SUPPRESS`
@@ -578,12 +579,12 @@ def main(argv=None, tools: Tools | None = None) -> int:
     clean_one_parser.add_argument("--repo", default=SERVER)
     clean_one_parser.set_defaults(fn=cmd_clean_one)
     args = p.parse_args(argv)
-    # The three manifest-reading subcommands, checked here rather than caught as a
+    # The manifest-reading subcommands, checked here rather than caught as a
     # FileNotFoundError around the call: a mistyped run-id is a usage error and deserves a
     # line, while an FileNotFoundError raised deeper inside one of them is a real fault and
     # must keep its traceback. `launch` refuses with "run clean <run-id> first", so a
     # mistyped id at that prompt is the likely way in.
-    if args.cmd in ("status", "stop", "clean"):
+    if args.cmd in run_parsers:
         if not manifest_mod.path(args.run_id, args.manifest_root).exists():
             print(
                 f"no manifest for run {args.run_id} under {args.manifest_root}",
