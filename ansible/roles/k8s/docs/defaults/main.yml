@@ -2,7 +2,7 @@
 # nginx-unprivileged rather than stock nginx: it listens on 8080 as a non-root uid out of the
 # box, so the pod needs neither a root user nor NET_BIND_SERVICE. Stock nginx binds 80, which
 # under `capabilities: drop: [ALL]` fails at startup rather than at request time.
-docs_k8s_image: nginxinc/nginx-unprivileged:1.31-alpine@sha256:26b0bf6fbf07297983cb341998d79c831508787de26627dd2a112321b9c3a4af
+docs_k8s_image: nginxinc/nginx-unprivileged:1.31-alpine@sha256:b9241c6e7b8e9a862f129d8d4199ab64b10390949a78bdd5603379b32c844083
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Stateless Deployment, RollingUpdate, no PVC, HTTP readinessProbe, and the tag above is a
