@@ -65,17 +65,13 @@ def host_context(
     Args:
         vars_: The host's vars. None reads daniel-pi's host_vars file. A dict REPLACES that
             file rather than laying keys over it, so a test can render a host that leaves a
-            key unset: it goes in as overrides with no host named, and a `roles/containers/`
-            path has no plane host to fall back on.
+            key unset, and it resolves as the file would: an alias in it arrives expanded.
         role_dir: The role whose `defaults/main.yml` goes under the inventory. The default,
             the plane directory, holds no defaults file, for a caller that wants the
             inventory alone.
         overrides: Values laid over everything, the validator's `container_item` among them.
     """
-    if vars_ is None:
-        ctx = render_context(role_dir, host=PI, overrides=overrides)
-    else:
-        ctx = render_context(role_dir, overrides={**vars_, **(overrides or {})})
+    ctx = render_context(role_dir, host=PI, overrides=overrides, host_vars=vars_)
     ctx.pop("containers_list", None)
     return ctx
 

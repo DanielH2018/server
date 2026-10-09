@@ -101,6 +101,20 @@ def test_a_default_aliasing_an_overridden_name_carries_the_override(tree):
     assert ctx["alias"] == "SENTINEL"
 
 
+def test_a_host_vars_mapping_replaces_the_hosts_file_and_resolves(tree):
+    # A key the mapping leaves out stays out, and an alias in it expands like a file value.
+    template, inv = tree(
+        {"tunable": "default"},
+        hosts={"box": {"tunable": "from-file", "unset_me": "x"}},
+        plane="k8s",
+    )
+    ctx = rc.render_context(
+        template, inventory=inv, host_vars={"alias": "{{ sys_user }}/a"}
+    )
+    assert (ctx["tunable"], ctx["alias"]) == ("default", "ubuntu/a")
+    assert "unset_me" not in ctx
+
+
 def test_a_value_that_will_not_expand_is_dropped(tree, capsys):
     # A dropped key renders as STUB. Kept raw, its literal braces would reach the render.
     template, inv = tree(

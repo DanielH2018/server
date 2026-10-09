@@ -83,20 +83,37 @@ def test_a_pi_template_that_will_not_render_fails_the_caller() -> None:
         render_role_template("alloy", "no-such-template.j2")
 
 
-def _pi_role_rendering(tmp_path, default: str) -> str:
-    """A tmp-tree Pi role whose template prints `value`, which its defaults set to `default`."""
+def _pi_role_rendering(tmp_path, default: str, host: dict | None = None) -> str:
+    """A tmp-tree Pi role whose template prints `value`, which its defaults set to `default`.
+
+    `host` goes into the host's vars, which outrank the default.
+    """
     role = tmp_path / "probe_role"
     (role / "templates").mkdir(parents=True)
     (role / "defaults").mkdir()
     (role / "templates" / "out.j2").write_text("value={{ value }}\n")
     (role / "defaults" / "main.yml").write_text(f'value: "{default}"\n')
-    vars_ = {"containers_list": [{"name": "probe_role"}], "sys_user": "pi-user"}
+    vars_ = {
+        "containers_list": [{"name": "probe_role"}],
+        "sys_user": "pi-user",
+        **(host or {}),
+    }
     ((_, _, text),) = render_texts(vars_, roles=tmp_path)
     return text
 
 
 def test_a_pi_default_aliasing_the_inventory_renders_expanded(tmp_path) -> None:
     assert _pi_role_rendering(tmp_path, "{{ sys_user }}/x") == "value=pi-user/x\n"
+
+
+def test_a_pi_host_var_aliasing_another_renders_expanded(tmp_path) -> None:
+    """Host vars a caller hands in resolve as the host_vars file would, as the validator's do.
+
+    Laid on as `render_context` overrides, they came back raw after resolution, so the render
+    carried the alias's literal braces.
+    """
+    text = _pi_role_rendering(tmp_path, "default", {"value": "{{ sys_user }}/a"})
+    assert text == "value=pi-user/a\n"
 
 
 def test_a_pi_default_that_will_not_expand_renders_stub_not_braces(tmp_path) -> None:
