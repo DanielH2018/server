@@ -11,6 +11,7 @@ This is for the authenticated CLI on this machine. It does not take a token: `gh
 `~/.config/gh/hosts.yml` for the invoking user, which is how every cron here already works.
 """
 
+# e2e: landing-policy import-path refusal check.
 import sys as _sys
 from pathlib import Path as _Path
 
