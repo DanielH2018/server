@@ -541,7 +541,9 @@ jobs:
       # It fails only on a pull_request or a branch dispatch, where the author can re-record.
       # On push and merge_group it annotates and passes (`--warn-only`): runner variance spans
       # the fixed bound, so the same code that passed on its PR turned master red three times,
-      # and nobody can apply the repair on master (#3604).
+      # and nobody can apply the repair on master (#3604). On a PR an unweighted module
+      # measuring between `RUNNER_HEAVY_SECONDS` and `RUNNER_HEAVY_FAIL_SECONDS` annotates
+      # too, since the same variance put one either side of the bound on a rerun (#4010).
       - name: Check every heavy module's recorded weight
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell

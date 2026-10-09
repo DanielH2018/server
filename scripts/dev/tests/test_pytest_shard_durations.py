@@ -1,6 +1,6 @@
 """The measured half of the shard-weight coverage gate.
 
-`pytest_shard.durations_problems` is what CI's `--check-durations` step runs against the
+`shard_weight_gate.durations_problems` is what CI's `--check-durations` step runs against the
 durations report its own test step produced. The static half is the ratchet in
 `ansible/tests/repo/test_pytest_shards_partition_the_suite.py`.
 
@@ -22,6 +22,7 @@ import sys
 
 import pytest
 import pytest_shard
+import shard_weight_gate
 from lib.proc_testing import run
 
 # A report in the shape pytest prints: seconds, phase, nodeid. `setup` and `teardown` count
@@ -44,7 +45,7 @@ RECORDED = {
 
 
 def test_the_parser_sums_every_phase_of_a_file():
-    totals = pytest_shard.parse_durations(REPORT)
+    totals = shard_weight_gate.parse_durations(REPORT)
     assert totals[NEW_MODULE] == 26.4
     assert totals["ansible/tests/k8s/test_secret_consumer_census.py"] == 17.31
     assert len(totals) == 3
@@ -53,7 +54,7 @@ def test_the_parser_sums_every_phase_of_a_file():
 def test_a_heavy_unweighted_module_is_flagged():
     """The reject half: a heavy file in a directory whose recorded
     siblings say nothing about it, which the ratchet's neighbour arm cannot see."""
-    problems = pytest_shard.durations_problems(REPORT, RECORDED)
+    problems = shard_weight_gate.durations_problems(REPORT, RECORDED)
     assert len(problems) == 1
     assert NEW_MODULE in problems[0] and "26.4s" in problems[0]
 
@@ -61,7 +62,10 @@ def test_a_heavy_unweighted_module_is_flagged():
 def test_a_heavy_module_that_is_already_recorded_is_clean():
     """The accept half. The heaviest file left in the report is 17.31s and the gate says
     nothing, because the split already packs it at that weight."""
-    assert pytest_shard.durations_problems(REPORT, RECORDED | {NEW_MODULE: 26.4}) == []
+    assert (
+        shard_weight_gate.durations_problems(REPORT, RECORDED | {NEW_MODULE: 26.4})
+        == []
+    )
 
 
 def test_a_light_unweighted_module_is_clean():
@@ -71,12 +75,36 @@ def test_a_light_unweighted_module_is_clean():
         NEW_MODULE: 26.4,
         "ansible/tests/k8s/test_secret_consumer_census.py": 17.31,
     }
-    assert pytest_shard.durations_problems(REPORT, weights) == []
+    assert shard_weight_gate.durations_problems(REPORT, weights) == []
 
 
 def test_the_threshold_decides():
-    assert pytest_shard.durations_problems(REPORT, RECORDED, threshold=30.0) == []
-    assert pytest_shard.durations_problems(REPORT, RECORDED, threshold=0.5) != []
+    assert shard_weight_gate.durations_problems(REPORT, RECORDED, threshold=30.0) == []
+    assert shard_weight_gate.durations_problems(REPORT, RECORDED, threshold=0.5) != []
+
+
+# The unweighted module measuring 12.4s, as `test_fanout_red_gate.py` did on the PR run that
+# failed and then 11.2s on its rerun (#4010): between the two bounds.
+MARGIN_REPORT = (
+    f"12.40s call     {NEW_MODULE}::test_the_long_one\n"
+    "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py::test_every_consumer\n"
+)
+
+
+def test_an_unweighted_module_between_the_bounds_annotates_rather_than_fails():
+    assert shard_weight_gate.durations_problems(MARGIN_REPORT, RECORDED) == []
+    warnings = shard_weight_gate.durations_warnings(MARGIN_REPORT, RECORDED)
+    assert len(warnings) == 1
+    assert NEW_MODULE in warnings[0] and "12.4s" in warnings[0]
+    assert "--record-missing" in warnings[0]
+
+
+def test_an_unweighted_module_past_the_fail_bound_fails_and_does_not_also_annotate():
+    """REPORT's module measures 26.4s, past `RUNNER_HEAVY_FAIL_SECONDS`, so it is one failing
+    complaint and no warning repeating it."""
+    assert shard_weight_gate.durations_warnings(REPORT, RECORDED) == []
+    assert shard_weight_gate.durations_problems(REPORT, RECORDED, fail_above=30.0) == []
+    assert shard_weight_gate.durations_warnings(REPORT, RECORDED, fail_above=30.0) != []
 
 
 def test_a_recorded_weight_far_above_what_it_measured_is_flagged():
@@ -84,7 +112,9 @@ def test_a_recorded_weight_far_above_what_it_measured_is_flagged():
     missing-from-the-table arms cannot see."""
     stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
-    problems = pytest_shard.durations_problems(report, RECORDED | {NEW_MODULE: 26.4})
+    problems = shard_weight_gate.durations_problems(
+        report, RECORDED | {NEW_MODULE: 26.4}
+    )
     assert len(problems) == 1
     assert "17.31s" in problems[0] and "0.09s" in problems[0]
     assert "--record-files" in problems[0]
@@ -96,7 +126,10 @@ def test_a_recorded_weight_inside_the_runner_noise_is_clean():
     difference between the runner and the recording workstation, not a stale entry."""
     stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "14.00s call     " + stale.split()[-1])
-    assert pytest_shard.durations_problems(report, RECORDED | {NEW_MODULE: 26.4}) == []
+    assert (
+        shard_weight_gate.durations_problems(report, RECORDED | {NEW_MODULE: 26.4})
+        == []
+    )
 
 
 def test_the_floor_keeps_a_cheap_entry_out_of_it():
@@ -105,7 +138,7 @@ def test_the_floor_keeps_a_cheap_entry_out_of_it():
     report = (
         "0.01s call     scripts/dev/tests/test_run_as_cron.py::test_a_shell_builtin\n"
     )
-    assert pytest_shard.stale_overweight(report, RECORDED) == []
+    assert shard_weight_gate.stale_overweight(report, RECORDED) == []
 
 
 def test_both_arms_report_together():
@@ -113,7 +146,7 @@ def test_both_arms_report_together():
     short-circuited on the first would hide the second until the next run."""
     stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
-    problems = pytest_shard.durations_problems(report, RECORDED)
+    problems = shard_weight_gate.durations_problems(report, RECORDED)
     assert len(problems) == 2
     assert NEW_MODULE in problems[0]
     assert "test_secret_consumer_census.py" in problems[1]
@@ -123,14 +156,14 @@ def test_the_stale_ratio_decides():
     stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
     weights = RECORDED | {NEW_MODULE: 26.4}
-    assert pytest_shard.durations_problems(report, weights, ratio=1000.0) == []
-    assert pytest_shard.durations_problems(report, weights, ratio=2.0) != []
+    assert shard_weight_gate.durations_problems(report, weights, ratio=1000.0) == []
+    assert shard_weight_gate.durations_problems(report, weights, ratio=2.0) != []
 
 
 def test_a_report_with_no_durations_is_itself_a_complaint():
     """Non-vacuity at run time. The gate finds its subject by parsing, so a format change or a
     test step that dropped `--durations=0` would otherwise leave it passing over nothing."""
-    problems = pytest_shard.durations_problems("no durations here\n", RECORDED)
+    problems = shard_weight_gate.durations_problems("no durations here\n", RECORDED)
     assert len(problems) == 1 and "parsed no durations" in problems[0]
 
 
@@ -158,7 +191,7 @@ def test_the_parser_reads_a_report_pytest_just_wrote(tmp_path):
         timeout=300,
     )
     assert proc.returncode == 0, proc.stdout[-2000:]
-    totals = pytest_shard.parse_durations(proc.stdout)
+    totals = shard_weight_gate.parse_durations(proc.stdout)
     assert totals, f"parsed nothing out of pytest's own report:\n{proc.stdout[-2000:]}"
     # pytest writes nodeids relative to the rootdir it picked, which is tmp_path here.
     assert totals[module.name] >= 0.05
@@ -191,6 +224,14 @@ def test_the_cli_exits_zero_when_every_heavy_module_is_recorded(tmp_path, capsys
     )
     assert _run_cli(tmp_path, recorded_only + "\n") == 0
     assert "no unweighted module" in capsys.readouterr().out
+
+
+def test_the_cli_exits_zero_and_annotates_a_module_between_the_bounds(tmp_path, capsys):
+    """The PR path: no `--warn-only`, and still exit 0, because the step is what failed 6
+    branches in 10 runs on a module that measured either side of 10s (#4010)."""
+    assert _run_cli(tmp_path, MARGIN_REPORT) == 0
+    printed = capsys.readouterr().out
+    assert printed.startswith("::warning::") and NEW_MODULE in printed
 
 
 def test_warn_only_annotates_the_same_complaint_and_exits_zero(tmp_path, capsys):

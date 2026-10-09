@@ -33,11 +33,13 @@ report CI's own test step already wrote, so it measures each module by running i
 lets it see the two shapes nothing static can. A heavy module landing where every recorded
 sibling is light is invisible to a neighbour heuristic, and `def test_` count, byte size and
 directory mean all fail to separate a heavy module from an ordinary file; the
-gate rejects it on `RUNNER_HEAVY_SECONDS`. And a recorded number can go wrong in the other
-direction, which no arm asking "is this file MISSING" ever sees:
+gate annotates it at `RUNNER_HEAVY_SECONDS` and rejects it at `RUNNER_HEAVY_FAIL_SECONDS`
+(both in `shard_weight_gate.py`, with the two arms).
+And a recorded number can go wrong in the other direction, which no arm asking "is this file
+MISSING" ever sees:
 a recorded 17.31s against 0.09s measured makes the greedy split place the file first, so one
 shard carries 17s of phantom weight. The gate
-answers that as a RATIO — see STALE_WEIGHT_RATIO — and `--record-files` is its repair, since
+answers that as a RATIO — see `shard_weight_gate.STALE_WEIGHT_RATIO` — and `--record-files` is its repair, since
 `--record-missing` only fills gaps.
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
@@ -47,7 +49,9 @@ and pushes. On a push to master nobody can, and a red master run still reaches t
 CI gate and every session's `land.sh`. Both arms compare one wall-clock reading against a fixed
 bound, and runner variance spans it: one module measured about 8s on its PR run and 15.6s on
 the master run of the same code (#3604). So CI passes `--warn-only` on push and merge_group,
-which prints each complaint as a `::warning::` annotation and exits zero.
+which prints each complaint as a `::warning::` annotation and exits zero. On a pull request
+the same variance lands a module near the bound on either side of it from run to run, so an
+unweighted module between the two bounds annotates there too (#4010).
 
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
@@ -62,7 +66,6 @@ Usage:
 
 import argparse
 import json
-import re
 import statistics
 import subprocess
 import sys
@@ -75,6 +78,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.git import git
 from lib.repo_paths import REPO
+from shard_weight_gate import (
+    RUNNER_HEAVY_FAIL_SECONDS,
+    RUNNER_HEAVY_SECONDS,
+    STALE_WEIGHT_RATIO,
+    durations_problems,
+    durations_warnings,
+    parse_durations,
+)
 
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
 # pytest's default `python_files`, both forms — the same pair
@@ -89,84 +100,6 @@ _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 # Without this term the split balances recorded seconds and leaves the file COUNT wildly uneven,
 # which is how the 357-file shard became the pole while the model called every shard equal.
 _PER_FILE_SECONDS = 0.028
-
-# A line of pytest's durations report: seconds, phase, then a nodeid whose leading segment,
-# up to the first pair of colons, is the test file this weight belongs to.
-_DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
-
-# What an unweighted module may measure on the CI runner before the shard gate rejects it.
-#
-# WHY A CI MEASUREMENT AND NOT A STATIC ARM. A neighbour heuristic sees an
-# unweighted file only where a recorded pole already sits in its directory. A heavy module
-# landing in a quiet directory is invisible to it, and no static proxy separates the two:
-# `def test_` count, byte size and directory mean were all checked against a heavy module
-# (6 tests, 248 lines, a directory averaging 0.19s) and none discriminates.
-# Only running the file says what it costs, and CI already runs it.
-#
-# WHY TEN. The gate reads the runner's own per-test seconds, summed per file, where the table
-# holds workstation seconds — the two are not the same scale, so the number is set against the
-# shard it would skew rather than against the table. A shard projects around 40s at six ways,
-# so an unweighted module worth 10s is a quarter of a shard placed by a 0.0s guess. The
-# module that motivated the gate measured about 30s. The
-# runner is slower per test than the workstation, so 10 runner seconds is FEWER than 10
-# recorded seconds: the gate sits at or below the pole cutoff a neighbour heuristic would use.
-RUNNER_HEAVY_SECONDS = 10.0
-
-# How many times its measured runner seconds a RECORDED weight may claim before the shard gate
-# rejects it, and the recorded seconds below which nobody cares.
-#
-# WHY A SECOND ARM AT ALL. Every other arm of the gate asks "is this file missing from the
-# table". None asks "is a recorded number still roughly what the file costs", so an entry that
-# has become far too high stands until someone runs a full `--record`: `--record-missing` only
-# fills gaps. A recorded 17.31s for `ansible/tests/k8s/test_secret_consumer_census.py` that
-# measured 0.09s made the greedy split place it first, so one shard carried 17s of phantom
-# weight for as long as the entry stood — the skew of an unweighted heavy file with the sign
-# flipped.
-#
-# WHY A RATIO AND NOT A DELTA. The table holds workstation seconds and the report holds runner
-# seconds, and the two are not the same scale. Controls measured on daniel-server
-# ran 1.10x to 1.46x their recorded values, so anything under about 3x is that scale
-# difference rather than a stale entry. FIVE leaves room above that noise while still catching
-# the 190x case, and a gate set nearer the noise would turn into a weekly chore.
-#
-# WHY A FLOOR ON THE RECORDED VALUE. The parser's own floor is pytest's 0.005s, so a file
-# recorded at 0.05s and measuring 0.005s is a 10x ratio and pure rounding. The floor is what
-# makes this arm about shard balance rather than about noise: a shard projects around 40s at
-# six ways, and 17 of the 795 recorded files clear 3s. Those are the files whose placement
-# decides the pole.
-#
-# THE OTHER WAY IT CAN FIRE, which is the gate being right rather than wrong: a module whose
-# expensive tests SKIP on the runner and run on the workstation measures a fraction of its
-# recorded weight there. The shard does not pay that cost on the runner either, so the entry is
-# wrong for the split's purpose; `--record-files` from a checkout where the same tests skip is
-# what records it honestly.
-#
-# THE BLIND SPOT. A file whose every test measures under pytest's `--durations-min` contributes
-# no line and cannot be compared at all, so an entry that collapsed to literally nothing is
-# invisible here. An entry that is merely far too high still produces lines, which is the
-# shape that occurs in practice.
-STALE_WEIGHT_RATIO = 5.0
-STALE_WEIGHT_FLOOR_SECONDS = 3.0
-
-# pytest's own `--durations-min`: no report line is smaller, so no measured total is either.
-# Used as the divisor's floor, which cannot then be zero.
-_DURATIONS_MIN_SECONDS = 0.005
-
-# The repair for the gate arm that finds a MISSING entry. `census()` reads `git ls-files`, so
-# the file has to be staged before the measurement can see it.
-RECORD_MISSING_HINT = (
-    "stage the new file, then `uv run python scripts/dev/pytest_shard.py "
-    "--record-missing` and commit scripts/dev/pytest_shard_weights.json"
-)
-
-# The repair for the stale arm, which `--record-missing` cannot do: it only fills gaps, and a
-# present-but-wrong entry is not a gap. A full `--record` re-measures the whole suite in
-# minutes; `--record-files` re-measures the named files in seconds, so the gate has a repair
-# cheap enough that nobody reaches for a stale entry as the lesser evil.
-RECORD_FILES_HINT = (
-    "re-measure just those files with `uv run python scripts/dev/pytest_shard.py "
-    "--record-files <path>...` and commit scripts/dev/pytest_shard_weights.json"
-)
 
 
 def testpaths() -> list[str]:
@@ -289,120 +222,6 @@ def measure_weights(files: list[str] | None = None) -> dict[str, float]:
     return totals
 
 
-def parse_durations(text: str) -> dict[str, float]:
-    """Per-file seconds summed out of a pytest `--durations` report.
-
-    One parser for both readers: `measure_weights` above, which runs pytest itself, and
-    `heavy_unweighted` below, which reads the log CI's own test step already produced. A
-    second parser would drift from the first and the drift would read green.
-
-    Every phase of every test counts — `setup` and `teardown` are what an expensive
-    module-scoped fixture costs, and `--dist loadscope` exists precisely because those
-    dominate some modules.
-    """
-    totals: dict[str, float] = {}
-    for line in text.splitlines():
-        match = _DURATION_LINE.match(line.strip())
-        if match:
-            totals[match.group(3)] = totals.get(match.group(3), 0.0) + float(
-                match.group(1)
-            )
-    return {k: round(v, 3) for k, v in totals.items()}
-
-
-def heavy_unweighted(
-    text: str,
-    weights: dict[str, float],
-    threshold: float = RUNNER_HEAVY_SECONDS,
-) -> list[tuple[str, float]]:
-    """The modules in a durations report that cost `threshold`+ and have no recorded weight.
-
-    Heaviest first. The report names only the files that shard actually ran, so no shard flags
-    a file it did not run and the caller needs no separate file list.
-
-    A file whose every test measures under pytest's `--durations-min` (0.005s by default)
-    contributes no line and cannot be seen here. It also cannot reach the threshold: 10s of
-    sub-5ms tests is 2000 of them in one module.
-    """
-    measured = parse_durations(text)
-    return sorted(
-        ((f, s) for f, s in measured.items() if f not in weights and s >= threshold),
-        key=lambda item: (-item[1], item[0]),
-    )
-
-
-def stale_overweight(
-    text: str,
-    weights: dict[str, float],
-    ratio: float = STALE_WEIGHT_RATIO,
-    floor: float = STALE_WEIGHT_FLOOR_SECONDS,
-) -> list[tuple[str, float, float]]:
-    """The modules whose recorded weight is `ratio`x or more of what they measured here.
-
-    `(path, recorded, measured)`, heaviest recorded first. Only entries recorded at `floor`
-    seconds or more are compared — see `STALE_WEIGHT_RATIO` for why both bounds are where they
-    are, and for the one shape this cannot see.
-
-    Over-recording only: the runner is slower per test than the recording workstation, so a
-    measured value ABOVE its recorded one is the normal case and not this arm's subject.
-    """
-    measured = parse_durations(text)
-    flagged = [
-        (f, weights[f], measured[f])
-        for f in measured
-        if f in weights
-        and weights[f] >= floor
-        and weights[f] >= ratio * max(measured[f], _DURATIONS_MIN_SECONDS)
-    ]
-    return sorted(flagged, key=lambda item: (-item[1], item[0]))
-
-
-def durations_problems(
-    text: str,
-    weights: dict[str, float] | None = None,
-    threshold: float = RUNNER_HEAVY_SECONDS,
-    ratio: float = STALE_WEIGHT_RATIO,
-) -> list[str]:
-    """What is wrong with a shard's durations report, as readable complaints.
-
-    Two arms over the one report, and both are reported: a heavy module with NO recorded
-    weight, and a recorded weight far HIGHER than what the module measured here. Each complaint
-    carries its own repair, because the two repairs differ — `--record-missing` fills a gap and
-    cannot refresh an entry that is merely wrong.
-
-    A function rather than inline asserts in `main`, so the accept and reject halves can hand
-    it a fixed report rather than needing a CI run.
-
-    An EMPTY report is itself a complaint. The gate's whole subject is found by parsing, so a
-    report format change would leave it passing over nothing forever — the vacuous-green shape
-    this repo's rule on pattern-found subjects names.
-    """
-    if not parse_durations(text):
-        return [
-            "parsed no durations out of the report — has the format changed, or did the "
-            "test step drop --durations=0?"
-        ]
-    weights = load_weights() if weights is None else weights
-    problems = []
-    if heavy := heavy_unweighted(text, weights, threshold):
-        listed = ", ".join(f"{f} ({s:.1f}s)" for f, s in heavy)
-        problems.append(
-            f"measured {threshold:.0f}s or more on this runner with no recorded weight, so "
-            f"the shard split packs it as the lightest thing in the suite: {listed}. "
-            f"Repair (seconds): {RECORD_MISSING_HINT}"
-        )
-    if stale := stale_overweight(text, weights, ratio):
-        listed = ", ".join(
-            f"{f} (recorded {rec:.2f}s, measured {got:.2f}s)" for f, rec, got in stale
-        )
-        problems.append(
-            f"recorded at {ratio:.0f}x or more of what it measured on this runner, so the "
-            f"shard split reserves time the file does not cost: {listed}. "
-            f"Repair (seconds): {RECORD_FILES_HINT}"
-        )
-    return problems
-
-
 def _write_weights(weights: dict[str, float], path: Path) -> dict[str, float]:
     ordered = dict(sorted(weights.items()))
     path.write_text(json.dumps(ordered, indent=1, sort_keys=True) + "\n")
@@ -518,7 +337,16 @@ def main(argv=None) -> int:
         "--threshold",
         type=float,
         default=RUNNER_HEAVY_SECONDS,
-        help="seconds an unweighted module may measure under --check-durations",
+        help="seconds an unweighted module may measure under --check-durations unannotated",
+    )
+    parser.add_argument(
+        "--fail-above",
+        type=float,
+        default=RUNNER_HEAVY_FAIL_SECONDS,
+        help=(
+            "seconds an unweighted module may measure under --check-durations before the "
+            "gate fails rather than annotates"
+        ),
     )
     parser.add_argument(
         "--stale-ratio",
@@ -529,21 +357,30 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     if args.check_durations:
+        report = args.check_durations.read_text(errors="replace")
+        weights = load_weights()
         problems = durations_problems(
-            args.check_durations.read_text(errors="replace"),
+            report,
+            weights,
             threshold=args.threshold,
             ratio=args.stale_ratio,
+            fail_above=args.fail_above,
         )
-        if problems and args.warn_only:
-            print("\n".join(f"::warning::{p}" for p in problems))
-            return 0
+        warnings = durations_warnings(
+            report, weights, threshold=args.threshold, fail_above=args.fail_above
+        )
+        if args.warn_only:
+            warnings, problems = warnings + problems, []
+        if warnings:
+            print("\n".join(f"::warning::{w}" for w in warnings))
         if problems:
             print("\n".join(problems))
             return 1
-        print(
-            f"no unweighted module measured {args.threshold:.0f}s or more in this shard, and "
-            f"no recorded weight is {args.stale_ratio:.0f}x what its module measured"
-        )
+        if not warnings:
+            print(
+                f"no unweighted module measured {args.threshold:.0f}s or more in this shard, "
+                f"and no recorded weight is {args.stale_ratio:.0f}x what its module measured"
+            )
         return 0
 
     if args.record:
