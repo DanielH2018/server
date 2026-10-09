@@ -25,6 +25,7 @@ import bridge.net
 import bridge.streaks
 from bridge.common import _env
 from bridge.config import Config
+from bridge.sources import Sources
 from bridge.types import Check, CheckFn, CheckResult, push_env
 from check_table import CHECKS
 from checks.b2 import check_b2_reachable
@@ -281,12 +282,12 @@ def expand_gates_for_cli(
 
 
 def down_exporters(
-    up_vector: list[tuple[dict, float]],
+    up_vector: list[tuple[dict[str, str], float]],
     exporter_dependent: Mapping[str, frozenset[str]] = EXPORTER_DEPENDENT,
 ) -> set[str]:
     """Pure: which `exporter_dependent` jobs report up==0 in a Prometheus `up` vector.
 
-    Fed prom_vector("up") — [(labels, value), ...]. Returns the subset of `exporter_dependent`
+    Fed `src.prom_vector("up")` — [(labels, value), ...]. Returns the subset of `exporter_dependent`
     keys whose Prometheus job is down, so run_once can suppress their dependents. Unit-tested.
 
     Args:
@@ -298,20 +299,21 @@ def down_exporters(
     return {job for job in exporter_dependent if job in down_jobs}
 
 
-def _evaluate(cfg: Config, name: str, fn: CheckFn) -> CheckResult:
+def _evaluate(cfg: Config, src: Sources, name: str, fn: CheckFn) -> CheckResult:
     """Runs one check, converting an unreachable source/metric into a descriptive `down`.
 
     Keeps the loop alive instead of letting an unreachable source or metric raise and
     kill it.
     """
     try:
-        return CheckResult(*fn(cfg))
+        return CheckResult(*fn(cfg, src))
     except Exception as e:  # an unreachable source/metric must not kill the loop
         return CheckResult(False, "%s check error: %s" % (name, e))
 
 
 def _gate(
     cfg: Config,
+    src: Sources,
     name: str,
     fn: CheckFn,
     dry_run: bool,
@@ -327,6 +329,7 @@ def _gate(
       cfg: The gate body's config, and the skip filter. ASYMMETRIC with `only` on purpose:
         `--check` can narrow `only` per run, so run_once has a value the config does not carry;
         nothing narrows the skip set, so it is read off `cfg.CHECKS_SKIP` rather than threaded.
+      src: The sources the gate body reads.
       name: The gate's own check name, as CHECKS_ONLY/CHECKS_SKIP and GATE_DEPENDENTS spell it.
       fn: The gate's check body, taken off the `Gates` value run_once was given.
       dry_run: Evaluate and log, but push nothing to Kuma.
@@ -334,7 +337,7 @@ def _gate(
     """
     if not check_enabled(name, only, cfg.CHECKS_SKIP):
         return CheckResult(True, "disabled by check filter")
-    ok, msg = _evaluate(cfg, name, fn)
+    ok, msg = _evaluate(cfg, src, name, fn)
     bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
     if not dry_run:
         bridge.net.push(cfg, _env(push_env(name), ""), ok, msg)

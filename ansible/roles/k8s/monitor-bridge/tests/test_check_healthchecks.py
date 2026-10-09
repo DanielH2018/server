@@ -2,8 +2,9 @@
 
 `healthchecks_verdict` is pure. The flagged cases are two real drifts:
 `pi-peer-backup` carrying `30 23 * * *` after its CronJob moved to `0 23`, and
-`longhorn-backup-health` set up as a daily Cron check instead of Simple 10m/20m. The fetch and
-the cache are parameters of `healthchecks_drift`, so nothing here patches the module.
+`longhorn-backup-health` set up as a daily Cron check instead of Simple 10m/20m. The console
+is read through the `src` argument and the cache is a parameter of `healthchecks_drift`, so
+nothing here patches the module.
 """
 
 from dataclasses import replace
@@ -11,6 +12,7 @@ import json
 
 from bridge.config import load_config
 from _bridge_env import bridge_env
+from _fake_sources import FakeSources
 import checks.healthchecks as hc
 
 EXPECTED = (
@@ -123,7 +125,9 @@ def test_an_undocumented_console_check_is_named_but_clean():
 
 def test_disabled_without_a_key(cfg):
     ok, msg = hc.healthchecks_drift(
-        replace(cfg, HEALTHCHECKS_EXPECTED=EXPECTED), probe=_fresh_probe()
+        replace(cfg, HEALTHCHECKS_EXPECTED=EXPECTED),
+        FakeSources(),
+        probe=_fresh_probe(),
     )
     assert ok and "disabled" in msg
 
@@ -132,16 +136,17 @@ def test_a_success_is_cached_for_the_interval(cfg):
     cfg = _armed(cfg)
     calls: list[int] = []
 
-    def fetch(_cfg):
+    def get_json(url, headers=None):
         calls.append(1)
-        return CONSOLE
+        return {"checks": CONSOLE}
 
+    src = FakeSources(get_json=get_json)
     probe = _fresh_probe()
-    assert hc.healthchecks_drift(cfg, now=1000.0, fetch=fetch, probe=probe)[0]
+    assert hc.healthchecks_drift(cfg, src, now=1000.0, probe=probe)[0]
     ok, msg = hc.healthchecks_drift(
         cfg,
+        src,
         now=1000.0 + cfg.HEALTHCHECKS_PROBE_INTERVAL_S - 1,
-        fetch=fetch,
         probe=probe,
     )
     assert ok and "checked" in msg
@@ -152,14 +157,15 @@ def test_a_failed_read_is_down_and_reprobed_next_cycle(cfg):
     cfg = _armed(cfg)
     calls: list[int] = []
 
-    def boom(_cfg):
+    def boom(url, headers=None):
         calls.append(1)
         raise RuntimeError("healthchecks.io: HTTP Error 401")
 
+    src = FakeSources(get_json=boom)
     probe = _fresh_probe()
-    ok, msg = hc.healthchecks_drift(cfg, now=1000.0, fetch=boom, probe=probe)
+    ok, msg = hc.healthchecks_drift(cfg, src, now=1000.0, probe=probe)
     assert not ok and "unverified" in msg and "401" in msg
-    assert not hc.healthchecks_drift(cfg, now=1300.0, fetch=boom, probe=probe)[0]
+    assert not hc.healthchecks_drift(cfg, src, now=1300.0, probe=probe)[0]
     assert len(calls) == 2
 
 

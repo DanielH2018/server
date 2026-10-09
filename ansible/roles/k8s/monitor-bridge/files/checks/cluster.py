@@ -3,9 +3,9 @@
 Covers the cAdvisor trio (restarts, OOM, CPU throttle), the Prometheus gates, scrape
 targets, Traefik 5xx and latency, and k3s workload health.
 
-Slice 6 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge.net.X`,
-the shared streak counter as `bridge.streaks.X` and the Loki arm as
-`checks.logs.with_log_errors`, so the tests' patches on those modules reach it; the verdicts
+Slice 6 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
+(`bridge.sources.Sources`), the shared streak counter as `bridge.streaks.X` and the Loki arm as
+`checks.logs.with_log_errors`, so a test hands in a fake `src` and patches those modules; the verdicts
 it from-imports from verdicts.cluster are patched on THIS module, where they are bound.
 `_cadvisor_streaks` and `_cpu_breach_streak` live here beside the code that mutates them.
 Rule and enforcement: bridge/config.py's header.
@@ -14,6 +14,7 @@ Rule and enforcement: bridge/config.py's header.
 from collections.abc import Callable
 
 from bridge.config import Config
+from bridge.sources import Sources
 import bridge.net
 import bridge.streaks
 import checks.cluster_rollout
@@ -67,13 +68,12 @@ def _cadvisor_blind(
     return ok, out
 
 
-def check_restarts(cfg: Config) -> tuple[bool, str]:
+def check_restarts(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Containers restarting more than RESTART_MAX times within RESTART_WINDOW.
 
     Catches crash-loops that an intermittent up-check can miss.
     """
-    vec = bridge.net.prom_vector(
-        cfg,
+    vec = src.prom_vector(
         "sum by (pod) (changes(container_start_time_seconds%s[%s]))"
         % (
             bridge.net.cadvisor_sel('container!=""', 'container!="POD"'),
@@ -95,15 +95,14 @@ def check_restarts(cfg: Config) -> tuple[bool, str]:
     return True, "no restart loops in %s" % cfg.RESTART_WINDOW
 
 
-def check_oom(cfg: Config) -> tuple[bool, str]:
+def check_oom(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Containers OOM-killed within OOM_WINDOW, naming each one.
 
     Closes the loop on the per-container memory limits (deploy.resources). An empty vector used to
     read as green here, which is how OOM kills went unmonitored for the whole Phase G window;
     _cadvisor_blind now reports that as UNKNOWN.
     """
-    vec = bridge.net.prom_vector(
-        cfg,
+    vec = src.prom_vector(
         "sum(increase(container_oom_events_total%s[%s])) by (pod)"
         % (
             bridge.net.cadvisor_sel('container!=""', 'container!="POD"'),
@@ -130,7 +129,7 @@ def check_oom(cfg: Config) -> tuple[bool, str]:
 _cpu_breach_streak = 0
 
 
-def check_cpu_throttle(cfg: Config) -> tuple[bool, str]:
+def check_cpu_throttle(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Containers under *sustained* CPU CFS throttling within CPU_WINDOW, naming each one.
 
     A container pinned at its `deploy.resources` cpu limit is throttled (slowed) without
@@ -160,8 +159,7 @@ def check_cpu_throttle(cfg: Config) -> tuple[bool, str]:
     """
     global _cpu_breach_streak
     sel = bridge.net.cadvisor_sel('container!=""', 'container!="POD"')
-    ratio_vec = bridge.net.prom_vector(
-        cfg,
+    ratio_vec = src.prom_vector(
         "sum(rate(container_cpu_cfs_throttled_periods_total%s[%s])) by (pod) "
         "/ sum(rate(container_cpu_cfs_periods_total%s[%s])) by (pod)"
         % (sel, cfg.CPU_WINDOW, sel, cfg.CPU_WINDOW),
@@ -172,8 +170,7 @@ def check_cpu_throttle(cfg: Config) -> tuple[bool, str]:
         return blind
     lost_cores = dict(
         (m.get("pod", "?"), v)
-        for m, v in bridge.net.prom_vector(
-            cfg,
+        for m, v in src.prom_vector(
             "sum(rate(container_cpu_cfs_throttled_seconds_total%s[%s])) by (pod)"
             % (sel, cfg.CPU_WINDOW),
         )
@@ -212,7 +209,7 @@ def check_cpu_throttle(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def check_prometheus(cfg: Config) -> tuple[bool, str]:
+def check_prometheus(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Is Prometheus itself reachable and answering queries?
 
     A trivial `vector(1)` instant query returns 1.0 whenever Prometheus is up; if it's
@@ -223,21 +220,21 @@ def check_prometheus(cfg: Config) -> tuple[bool, str]:
     monitor alerts. A single scrape target being down (Prometheus up, one exporter gone) still
     surfaces separately on the Scrape Targets monitor — a distinct condition from this one.
     """
-    val = bridge.net.prom_scalar(cfg, "vector(1)")
+    val = src.prom_scalar("vector(1)")
     if val is None:
         return False, "Prometheus answered but returned no data for vector(1)"
     return True, "Prometheus reachable"
 
 
-def check_targets_down(cfg: Config) -> tuple[bool, str]:
+def check_targets_down(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
     return targets_verdict(
-        bridge.net.prom_vector(cfg, "up%s" % bridge.net.origin_sel(cfg)),
+        src.prom_vector("up%s" % bridge.net.origin_sel(cfg)),
         cfg.TARGETS_MIN,
     )
 
 
-def check_traefik_5xx(cfg: Config) -> tuple[bool, str]:
+def check_traefik_5xx(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Elevated 5xx ratio per Traefik service, naming each offender.
 
     Per-service (not aggregate) for two reasons: the alert points at *which* backend is
@@ -245,13 +242,12 @@ def check_traefik_5xx(cfg: Config) -> tuple[bool, str]:
     healthy high-traffic ones. The TRAEFIK_MIN_RPS floor is per-service too — same idea
     as before, a single error on a near-idle route is not a 100%-error-ratio alarm.
     """
-    total_vec = bridge.net.prom_vector(
-        cfg, "sum(rate(traefik_service_requests_total[5m])) by (service)"
+    total_vec = src.prom_vector(
+        "sum(rate(traefik_service_requests_total[5m])) by (service)"
     )
     err_rps = dict(
         (m.get("service", "?"), v)
-        for m, v in bridge.net.prom_vector(
-            cfg,
+        for m, v in src.prom_vector(
             'sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) by (service)',
         )
     )
@@ -281,7 +277,7 @@ def check_traefik_5xx(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def check_traefik_latency(cfg: Config) -> tuple[bool, str]:
+def check_traefik_latency(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Share of slow requests per Traefik service, naming each offender.
 
     The gap check_traefik_5xx cannot close: a slow route still answers 200, so an error-ratio
@@ -312,15 +308,13 @@ def check_traefik_latency(cfg: Config) -> tuple[bool, str]:
     """
     total = dict(
         (m.get("service", "?"), v)
-        for m, v in bridge.net.prom_vector(
-            cfg,
+        for m, v in src.prom_vector(
             "sum(rate(traefik_service_request_duration_seconds_count[5m])) by (service)",
         )
     )
     under = dict(
         (m.get("service", "?"), v)
-        for m, v in bridge.net.prom_vector(
-            cfg,
+        for m, v in src.prom_vector(
             'sum(rate(traefik_service_request_duration_seconds_bucket{le="%s"}[5m])) '
             "by (service)" % cfg.TRAEFIK_SLOW_BUCKET,
         )
@@ -337,7 +331,7 @@ def check_traefik_latency(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def check_traefik_404_flood(cfg: Config) -> tuple[bool, str]:
+def check_traefik_404_flood(cfg: Config, src: Sources) -> tuple[bool, str]:
     """The 404 share of ENTRYPOINT traffic: an edge that answers but routes nothing.
 
     The gap check_traefik_5xx and check_traefik_latency both leave open, and #1322 fell
@@ -365,9 +359,7 @@ def check_traefik_404_flood(cfg: Config) -> tuple[bool, str]:
     with no series is a genuine zero — no 404s were served — so it reads as 0.0 rather than as
     unknown.
     """
-    total = bridge.net.prom_scalar(
-        cfg, "sum(rate(traefik_entrypoint_requests_total[5m]))"
-    )
+    total = src.prom_scalar("sum(rate(traefik_entrypoint_requests_total[5m]))")
     if total is None:
         return (
             True,
@@ -380,9 +372,7 @@ def check_traefik_404_flood(cfg: Config) -> tuple[bool, str]:
             cfg.TRAEFIK_MIN_RPS,
         )
     notfound = (
-        bridge.net.prom_scalar(
-            cfg, 'sum(rate(traefik_entrypoint_requests_total{code="404"}[5m]))'
-        )
+        src.prom_scalar('sum(rate(traefik_entrypoint_requests_total{code="404"}[5m]))')
         or 0.0
     )
     pct = 100.0 * notfound / total
@@ -398,7 +388,7 @@ def check_traefik_404_flood(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str]:
+def check_k8s_workloads(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Deployment readiness for every workload in the k3s cluster.
 
     In PROM_DEPENDENT: the `prometheus` gate watches the one Prometheus this reads, so an
@@ -406,44 +396,27 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
     The check's own series-count floor covers the other half — Prometheus answering while
     kube-state-metrics goes unscraped — which no reachability gate can see.
 
-    `fetch`/`scalar` are the injectable Prometheus boundaries, the seam check_cluster_targets and
-    checks/host_edge.py already use — six queries feed five arms here, and a test that wants one
-    arm states that arm's answer rather than patching a module. Resolved in the body, not as
-    defaults: a default binds at import, before a test could reach bridge.net.
+    Six queries feed five arms here, all through `src`, so a test that wants one arm states
+    that arm's answer in a `FakeSources` rather than patching a module.
     """
-    fetch = fetch or bridge.net.prom_vector
-    scalar = scalar or bridge.net.prom_scalar
-    total = scalar(
-        cfg,
-        "count(kube_deployment_status_replicas_unavailable)",
-    )
-    offenders = fetch(
-        cfg,
-        "kube_deployment_status_replicas_unavailable > 0",
-    )
+    total = src.prom_scalar("count(kube_deployment_status_replicas_unavailable)")
+    offenders = src.prom_vector("kube_deployment_status_replicas_unavailable > 0")
     # The second clause is the recency gate (K8S_RESTART_RECENT_WINDOW): it keeps a recovered
     # pod from holding the tile red for the rest of the 1h evidence window. `and` is a vector
     # match on the full label set, so it filters the first clause's series rather than
     # replacing them — the offender labels reaching the verdict are unchanged.
-    restart_offenders = fetch(
-        cfg,
+    restart_offenders = src.prom_vector(
         "increase(kube_pod_container_status_restarts_total[%s]) > %d"
         " and increase(kube_pod_container_status_restarts_total[%s]) > 0"
         % (cfg.K8S_RESTART_WINDOW, cfg.K8S_RESTART_MAX, cfg.K8S_RESTART_RECENT_WINDOW),
     )
-    ds_total = scalar(
-        cfg,
-        "count(kube_daemonset_status_number_unavailable)",
-    )
-    ds_offenders = fetch(
-        cfg,
-        "kube_daemonset_status_number_unavailable > 0",
-    )
+    ds_total = src.prom_scalar("count(kube_daemonset_status_number_unavailable)")
+    ds_offenders = src.prom_vector("kube_daemonset_status_number_unavailable > 0")
     stalled_offenders, stall_note = checks.cluster_rollout.held_stalled_offenders(
-        cfg, checks.cluster_rollout.stalled_rollout_offenders(cfg, fetch)
+        cfg, checks.cluster_rollout.stalled_rollout_offenders(cfg, src)
     )
     zero_offenders, zero_note = checks.cluster_zero.held_zero_available_offenders(
-        cfg, checks.cluster_zero.zero_available_offenders(cfg, fetch)
+        cfg, checks.cluster_zero.zero_available_offenders(cfg, src)
     )
     offenders, replica_note = checks.cluster_rollout.held_replica_offenders(
         cfg, offenders
@@ -465,8 +438,7 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
     advertised = {}
     for resource in cfg.K8S_EXTENDED_RESOURCES:
         advertised[resource] = len(
-            fetch(
-                cfg,
+            src.prom_vector(
                 'kube_node_status_allocatable{resource="%s"} > 0'
                 % ksm_resource_label(resource),
             )
@@ -474,10 +446,7 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
     res_ok, res_msg = extended_resource_verdict(
         cfg.K8S_EXTENDED_RESOURCES,
         advertised,
-        scalar(
-            cfg,
-            "count(kube_node_status_allocatable)",
-        ),
+        src.prom_scalar("count(kube_node_status_allocatable)"),
     )
     notes = [n for n in (zero_note, replica_note, stall_note) if n]
     tail = ", %s" % ", ".join(notes) if notes else ""
@@ -486,12 +455,12 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
         # than whatever the workload arm has to say, and the workload arm's own text is preserved
         # after it rather than dropped.
         return checks.logs.with_log_errors(
-            cfg, False, "%s | %s%s" % (res_msg, msg, tail)
+            cfg, src, False, "%s | %s%s" % (res_msg, msg, tail)
         )
-    return checks.logs.with_log_errors(cfg, ok, "%s, %s%s" % (msg, res_msg, tail))
+    return checks.logs.with_log_errors(cfg, src, ok, "%s, %s%s" % (msg, res_msg, tail))
 
 
-def check_cluster_targets(cfg: Config, fetch=None) -> tuple[bool, str]:
+def check_cluster_targets(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Scrape targets of the CLUSTER's own Prometheus (the other half of Scrape Targets).
 
     B5 pinned check_targets_down to origin="daniel-server" so it kept meaning exactly what it
@@ -510,13 +479,7 @@ def check_cluster_targets(cfg: Config, fetch=None) -> tuple[bool, str]:
     this Prometheus belongs to exactly one of the two checks. The same floor logic as its sibling,
     so an emptied `up` reads as UNKNOWN rather than as nothing being wrong.
     """
-    # Resolved here, not as the default: a default binds at import, which would capture
-    # bridge.net.prom_vector before a test patches that module and silently bypass the patch.
-    fetch = fetch or bridge.net.prom_vector
-    vec = fetch(
-        cfg,
-        'up{origin!="daniel-server"}',
-    )
+    vec = src.prom_vector('up{origin!="daniel-server"}')
     ok, msg = targets_verdict(vec, cfg.CLUSTER_TARGETS_MIN)
     # Hysteresis, because a rolling workload drops its own `up` series for a scrape or two and
     # this check cannot tell that from an exporter that died. Same shape as check_longhorn_volumes

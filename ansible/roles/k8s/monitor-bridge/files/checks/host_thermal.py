@@ -4,16 +4,17 @@ Covers SMART wear through Scrutiny, host temperature from node-exporter's hwmon 
 the three UPS battery arms.
 
 Split out of `checks/host.py`, which keeps disk, certificate expiry and memory. Reads config as
-`cfg.X`, the fetch layer as `bridge.net.X` and the shared streak counter as `bridge.streaks.X`,
-so the tests' patches on those modules reach it; the verdicts it from-imports from verdicts.host
-are patched on THIS module, where they are bound. The origin-coverage floor stays in
+`cfg.X` and the shared streak counter as `bridge.streaks.X`, so the tests' patches on that
+module reach it. Every Prometheus and HTTP query goes through the `src` argument
+(`bridge.sources.Sources`), which a test replaces with a `FakeSources`. The verdicts it
+from-imports from verdicts.host are patched on THIS module, where they are bound. The origin-coverage floor stays in
 `checks.host` and is read qualified as `checks.host._host_origin_shortfall`, because
 `_host_origin_streaks` is a single dict the tests clear on that module. Rule and enforcement:
 bridge/config.py's header.
 """
 
 from bridge.config import Config
-import bridge.net
+from bridge.sources import Sources
 import bridge.streaks
 import checks.host
 from bridge.types import as_object, optional_object
@@ -38,17 +39,17 @@ from verdicts.host_smart import (
 )
 
 
-def _source_is_up(cfg: Config, up_query: str) -> bool:
+def _source_is_up(cfg: Config, src: Sources, up_query: str) -> bool:
     """Whether a scrape a thermal arm depends on is AFFIRMATIVELY up.
 
-    Read through prom_vector rather than prom_scalar, so an arm needs exactly one fetch function
-    and therefore one patch point in its tests — `up{job=...}` is a vector anyway, so nothing is
-    lost. An empty answer, an unconfigured query and a 0 all mean "not affirmatively up", which
+    Read through prom_vector rather than prom_scalar, so a test answers this gate with the same
+    `prom_vector` answer as the arm's own reading — `up{job=...}` is a vector anyway, so nothing
+    is lost. An empty answer, an unconfigured query and a 0 all mean "not affirmatively up", which
     is the safe direction: never page over a source outage another monitor already owns.
     """
     if not up_query:
         return False
-    return any(value > 0.5 for _labels, value in bridge.net.prom_vector(cfg, up_query))
+    return any(value > 0.5 for _labels, value in src.prom_vector(up_query))
 
 
 def _undervoltage_arm(
@@ -109,7 +110,7 @@ def _thermal_throttle_arm(
 
     Takes its fetched vector and its source-gate answer rather than fetching them: the arm then
     holds streak state and decisions only, so its tests hand it inputs directly instead of
-    patching `bridge.net`. `check_host_temp` does the two fetches.
+    answering queries. `check_host_temp` does the two fetches through `src`.
 
     Distinct from check_cpu_throttle, which reads CFS throttling — a cgroup quota being hit, not
     heat. Distinct from the temperature arm too: the firmware can enforce a limit lower than the
@@ -151,13 +152,13 @@ def _thermal_throttle_arm(
 
 
 def scrutiny_wear_devices(
-    cfg: Config, summary: dict | None
+    cfg: Config, src: Sources, summary: dict | None
 ) -> list[tuple[str, float | None]]:
     """One /api/device/<wwn>/details fetch per non-archived device.
 
     The wear attributes are not in /api/summary, which is what makes this N calls per cycle rather
     than none — same shape as check_k8s_workloads' six Prometheus queries. Each payload is ~19 KB
-    and only smart_results[0] is read. A failing fetch raises out of _get_json and the runner
+    and only smart_results[0] is read. A failing fetch raises out of `src.get_json` and the runner
     reports DOWN; that is deliberate and must not be caught here.
     """
     devices = []
@@ -172,21 +173,21 @@ def scrutiny_wear_devices(
         model = dev.get("model_name")
         label = "%s (%s)" % (name, model) if model else name
         details = optional_object(
-            bridge.net._get_json("%s/api/device/%s/details" % (cfg.SCRUTINY_URL, wwn)),
+            src.get_json("%s/api/device/%s/details" % (cfg.SCRUTINY_URL, wwn)),
             "scrutiny device details",
         )
         devices.append((label, scrutiny_device_wear(details)))
     return devices
 
 
-def check_scrutiny(cfg: Config) -> tuple[bool, str]:
+def check_scrutiny(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Checks Scrutiny's summary for freshness, drive health, and (if configured) wear.
 
     Fetches /api/summary once; per-device wear details are fetched only when freshness and
     health both pass and cfg.SCRUTINY_WEAR_MAX is set. Returns (ok, msg).
     """
     data = as_object(
-        bridge.net._get_json(cfg.SCRUTINY_URL + "/api/summary"), "scrutiny summary"
+        src.get_json(cfg.SCRUTINY_URL + "/api/summary"), "scrutiny summary"
     )
     summary = optional_object(
         as_object(data.get("data") or {}, "scrutiny data").get("summary"),
@@ -205,14 +206,14 @@ def check_scrutiny(cfg: Config) -> tuple[bool, str]:
     if not cfg.SCRUTINY_WEAR_MAX:
         return True, "%s; %s" % (fresh_msg, health_msg)
     wear_ok, wear_msg = scrutiny_wear_verdict(
-        scrutiny_wear_devices(cfg, summary), cfg.SCRUTINY_WEAR_MAX
+        scrutiny_wear_devices(cfg, src, summary), cfg.SCRUTINY_WEAR_MAX
     )
     if not wear_ok:
         return False, wear_msg
     return True, "%s; %s; %s" % (fresh_msg, health_msg, wear_msg)
 
 
-def check_host_temp(cfg: Config) -> tuple[bool, str]:
+def check_host_temp(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Board and CPU temperature across the three hosts, plus undervoltage and CPU throttling.
 
     Three arms on one monitor, each with its OWN streak key so a blip in two of them cannot
@@ -256,19 +257,19 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
     compounded — down_streak is the thermal-spike grace and applies only to the hot-sensor path,
     while the coverage shortfall carries its own hysteresis inside checks.host._host_origin_shortfall.
     """
-    temps = bridge.net.prom_vector(cfg, "node_hwmon_temp_celsius")
+    temps = src.prom_vector("node_hwmon_temp_celsius")
     # node-exporter keeps the readable names in two side metrics rather than on the reading, so
     # naming the hot sensor `daniel-box k10temp/Tctl` instead of
     # `daniel-box/pci0000:00_0000:00:18_3/temp1` costs two more instant queries. Both are tiny
     # (11 and 16 series live on 2026-09-01) and neither can fail the check: an empty answer just
     # falls back to the sysfs path.
     names = hwmon_name_maps(
-        bridge.net.prom_vector(cfg, "node_hwmon_chip_names"),
-        bridge.net.prom_vector(cfg, "node_hwmon_sensor_label"),
+        src.prom_vector("node_hwmon_chip_names"),
+        src.prom_vector("node_hwmon_sensor_label"),
     )
     limits = hwmon_temp_limits(
         temps,
-        bridge.net.prom_vector(cfg, "node_hwmon_temp_max_celsius"),
+        src.prom_vector("node_hwmon_temp_max_celsius"),
         cfg.HWMON_TEMP_RATIO,
         cfg.HWMON_TEMP_FALLBACK_C,
         cfg.HWMON_TEMP_MIN_PLAUSIBLE_C,
@@ -279,7 +280,7 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
         # skips temp*_max but still publishes temp*_crit (issue #995 — see hwmon_temp_limits'
         # docstring for why max wins when both exist) would otherwise fall to the flat fallback
         # even though it declared a real limit.
-        crits=bridge.net.prom_vector(cfg, "node_hwmon_temp_crit_celsius"),
+        crits=src.prom_vector("node_hwmon_temp_crit_celsius"),
         # Config, not a query — the published rating for a sensor whose driver declares neither
         # source. Both queries above still win over it wherever they answer.
         rated=cfg.HWMON_TEMP_RATED_MAX_C,
@@ -299,18 +300,14 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
     # already decided — and the damage it does (a corrupted SD card) is not recoverable by
     # cooling down. A deferred or healthy arm falls through and changes nothing about the
     # temperature path below.
-    alarms = (
-        bridge.net.prom_vector(cfg, cfg.UNDERVOLTAGE_QUERY)
-        if cfg.UNDERVOLTAGE_QUERY
-        else []
-    )
+    alarms = src.prom_vector(cfg.UNDERVOLTAGE_QUERY) if cfg.UNDERVOLTAGE_QUERY else []
     # `bool(alarms) or ...` short-circuits, so the gate query is spent only on the cycle where
     # the reading came back empty — which is the only cycle the arm reads it on.
     under = _undervoltage_arm(
         cfg,
         names,
         alarms,
-        bool(alarms) or _source_is_up(cfg, cfg.UNDERVOLTAGE_UP_QUERY),
+        bool(alarms) or _source_is_up(cfg, src, cfg.UNDERVOLTAGE_UP_QUERY),
     )
     ok, msg = hwmon_temp_verdict(limits)
     temperature: tuple[bool, str] | None = None
@@ -333,19 +330,19 @@ def check_host_temp(cfg: Config) -> tuple[bool, str]:
         else:
             bridge.streaks._down_streaks["host_temp"] = 0
             states = (
-                bridge.net.prom_vector(cfg, cfg.THERMAL_THROTTLE_QUERY)
+                src.prom_vector(cfg.THERMAL_THROTTLE_QUERY)
                 if cfg.THERMAL_THROTTLE_QUERY
                 else []
             )
             throttle = _thermal_throttle_arm(
                 cfg,
                 states,
-                bool(states) or _source_is_up(cfg, cfg.THERMAL_THROTTLE_UP_QUERY),
+                bool(states) or _source_is_up(cfg, src, cfg.THERMAL_THROTTLE_UP_QUERY),
             )
     return thermal_monitor_verdict(under, temperature, throttle, short, msg)
 
 
-def check_ups(cfg: Config) -> tuple[bool, str]:
+def check_ups(cfg: Config, src: Sources) -> tuple[bool, str]:
     """UPS battery health from nut-exporter (the UPS_* env block in bridge/config_host.py).
 
     Four arms, one source: mains loss (NUT's `ups.status{flag="OB"}`), charge %, estimated runtime,
@@ -386,7 +383,7 @@ def check_ups(cfg: Config) -> tuple[bool, str]:
     ]
     if not configured:
         return True, "UPS monitoring disabled (no query)"
-    values = {name: bridge.net.prom_scalar(cfg, q) for name, q in configured}
+    values = {name: src.prom_scalar(q) for name, q in configured}
     if all(v is None for v in values.values()):
         # All arms gone. Every arm reads the one nut scrape, so all-absent means that scrape went
         # quiet — Scrape Targets owns that, so defer. But if it is scraping fine while every UPS
@@ -396,7 +393,7 @@ def check_ups(cfg: Config) -> tuple[bool, str]:
         # configured. An unqueryable or absent gate keeps the safe defer (never page over a
         # source outage another monitor owns).
         source_up = (
-            bridge.net.prom_scalar(cfg, cfg.UPS_SOURCE_UP_QUERY)
+            src.prom_scalar(cfg.UPS_SOURCE_UP_QUERY)
             if cfg.UPS_SOURCE_UP_QUERY
             else None
         )

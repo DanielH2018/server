@@ -19,6 +19,7 @@ from functools import partial
 import bridge.streaks
 import pytest
 from checks.cluster import check_k8s_workloads
+from _fake_sources import FakeSources
 
 HEALTHY_COUNTS = {
     "count(kube_deployment_status_replicas_unavailable)": 40.0,
@@ -44,11 +45,11 @@ def kcfg(cfg):
     )
 
 
-def _scalar(counts, _cfg, promql, **_kw):
+def _scalar(counts, promql, **_kw):
     return counts.get(promql, 0.0)
 
 
-def _vector(answers, _cfg, promql, **_kw):
+def _vector(answers, promql, **_kw):
     # Longest fragment first: "kube_deployment_spec_replicas" is a substring of the stall query,
     # so a shortest-first match would answer the stall query with the desired vector.
     for fragment in sorted(answers, key=len, reverse=True):
@@ -81,9 +82,10 @@ def _clear_streaks():
 @pytest.fixture
 def run(vectors):
     def _run(kcfg, counts=HEALTHY_COUNTS):
-        return check_k8s_workloads(
-            kcfg, fetch=partial(_vector, vectors), scalar=partial(_scalar, counts)
+        src = FakeSources(
+            prom_vector=partial(_vector, vectors), prom_scalar=partial(_scalar, counts)
         )
+        return check_k8s_workloads(kcfg, src)
 
     return _run
 

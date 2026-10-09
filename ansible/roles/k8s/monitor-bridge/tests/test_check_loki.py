@@ -21,6 +21,7 @@ import checks.logs
 
 from lib.repo_paths import REPO as _REPO
 from _bridge_env import bridge_env
+from _fake_sources import FakeSources
 from _helpers import ALL_VARS, load_yaml
 
 # ── HA ip_ban arm ───────────────────────────────────────────────────────────────────────────
@@ -312,19 +313,18 @@ def test_log_error_ignore_list_is_case_insensitive():
     assert ok
 
 
-def test_log_error_burst_wins_the_message_over_healthy_workloads(monkeypatch, cfg):
+def test_log_error_burst_wins_the_message_over_healthy_workloads(cfg):
     """A Ready-but-failing workload pages even though every Kubernetes arm reads healthy.
 
     That combination IS the finding: readiness asks whether the port is open.
     """
     cfg = replace(cfg, LOG_ERROR_SELECTOR='{job=~"k8s|pi"}', LOG_ERROR_IGNORE="")
-    monkeypatch.setattr(
-        bridge.net,
-        "log_error_counts",
-        lambda _cfg, *a, **k: ([({"container": "grafana"}, 91.0)], 5000),
+    src = FakeSources(
+        loki_vector=lambda q: [({"container": "grafana"}, 91.0)],
+        loki_count=lambda selector, window: 5000,
     )
 
-    ok, msg = checks.logs.with_log_errors(cfg, True, "42 k8s workloads healthy")
+    ok, msg = checks.logs.with_log_errors(cfg, src, True, "42 k8s workloads healthy")
 
     assert not ok
     assert msg.startswith("fatal log lines"), "the actionable arm leads"
@@ -333,7 +333,7 @@ def test_log_error_burst_wins_the_message_over_healthy_workloads(monkeypatch, cf
     )
 
 
-def test_log_error_arm_fails_open_on_a_loki_outage(monkeypatch, cfg):
+def test_log_error_arm_fails_open_on_a_loki_outage(cfg):
     """A Loki outage must not blind the three Kubernetes arms, which do not depend on it.
 
     This is why the check is NOT in LOKI_DEPENDENT: membership there suppresses the whole
@@ -341,12 +341,12 @@ def test_log_error_arm_fails_open_on_a_loki_outage(monkeypatch, cfg):
     """
     cfg = replace(cfg, LOG_ERROR_SELECTOR='{job=~"k8s|pi"}')
 
-    def boom(_cfg, *a, **k):
+    def boom(*a, **k):
         raise RuntimeError("loki query status=error")
 
-    monkeypatch.setattr(bridge.net, "log_error_counts", boom)
+    src = FakeSources(loki_vector=boom)
 
-    ok, msg = checks.logs.with_log_errors(cfg, False, "2 workloads unavailable")
+    ok, msg = checks.logs.with_log_errors(cfg, src, False, "2 workloads unavailable")
 
     assert not ok, "the workload verdict survives the arm being unavailable"
     assert "2 workloads unavailable" in msg
@@ -400,39 +400,37 @@ def test_loki_count_non_success_raises(monkeypatch, cfg):
         bridge.net.loki_count(cfg, '{job="syslog"}', "10m")
 
 
-def test_check_loki_ingestion_fresh_is_up(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "loki_count", lambda _cfg, *a, **k: 500)
-    ok, _ = checks.logs.check_loki_ingestion(cfg)
+def test_check_loki_ingestion_fresh_is_up(cfg):
+    src = FakeSources(loki_count=lambda *a, **k: 500)
+    ok, _ = checks.logs.check_loki_ingestion(cfg, src)
     assert ok
 
 
-def test_check_loki_ingestion_silent_is_down(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "loki_count", lambda _cfg, *a, **k: 0)
-    ok, _msg = checks.logs.check_loki_ingestion(cfg)
+def test_check_loki_ingestion_silent_is_down(cfg):
+    src = FakeSources(loki_count=lambda *a, **k: 0)
+    ok, _msg = checks.logs.check_loki_ingestion(cfg, src)
     assert not ok
 
 
-def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch, cfg):
+def test_check_loki_ingestion_docker_stream_silent_is_down(cfg):
     # Pod-source failure: the file-tail streams keep flowing, but the highest-volume stream,
     # every pod's stdout, went silent. The file-tail arm alone stays non-zero and would hide
     # it — the pod-stream arm must page.
-    def fake_count(_cfg, selector, window):
+    def fake_count(selector, window):
         return 0 if selector == cfg.LOKI_DOCKER_STREAM else 500
 
-    monkeypatch.setattr(bridge.net, "loki_count", fake_count)
-    ok, msg = checks.logs.check_loki_ingestion(cfg)
+    ok, msg = checks.logs.check_loki_ingestion(cfg, FakeSources(loki_count=fake_count))
     assert not ok
     assert "container" in msg
 
 
-def test_check_loki_ingestion_filetail_silent_is_down(monkeypatch, cfg):
+def test_check_loki_ingestion_filetail_silent_is_down(cfg):
     # File-tail-only failure: the pod streams keep flowing, but authlog/syslog went silent.
     # Arm 1's selector must EXCLUDE the pod streams so a healthy pod stream can't mask a dead
     # file-tail source — the file-tail arm must page.
-    def fake_count(_cfg, selector, window):
+    def fake_count(selector, window):
         return 0 if selector == cfg.LOKI_STREAM else 500
 
-    monkeypatch.setattr(bridge.net, "loki_count", fake_count)
-    ok, msg = checks.logs.check_loki_ingestion(cfg)
+    ok, msg = checks.logs.check_loki_ingestion(cfg, FakeSources(loki_count=fake_count))
     assert not ok
     assert "file-tail" in msg

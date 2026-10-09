@@ -21,6 +21,7 @@ import bridge.net
 import checks.b2
 import check
 from _check_gate_helpers import mk
+from _fake_sources import FakeSources
 from bridge.types import Check
 from gates import Gates
 
@@ -66,7 +67,7 @@ def _cap_denial(cfg):
 
 def test_b2_reachable_disabled_without_credentials(monkeypatch, cfg):
     cfg = _reset_b2_probe(cfg, monkeypatch, key_id="", app_key="")
-    ok, msg = checks.b2.b2_reachable(cfg, now=10_000)
+    ok, msg = checks.b2.b2_reachable(cfg, FakeSources(), now=10_000)
     assert ok is True and "disabled" in msg
 
 
@@ -89,10 +90,10 @@ def test_b2_reachable_disabled_without_credentials(monkeypatch, cfg):
         ),
     ],
 )
-def test_b2_authorize(monkeypatch, response, ok, must_contain, cfg):
+def test_b2_authorize(response, ok, must_contain, cfg):
     cfg = replace(cfg, B2_PROBE_KEY_ID="kid", B2_PROBE_APPLICATION_KEY="akey")
-    monkeypatch.setattr(bridge.net, "_get_json", lambda url, headers=None: response)
-    result_ok, msg = checks.b2.b2_authorize(cfg)
+    src = FakeSources(get_json=lambda url, headers=None: response)
+    result_ok, msg = checks.b2.b2_authorize(cfg, src)
     assert result_ok is ok
     for s in must_contain:
         assert s in msg
@@ -106,8 +107,8 @@ def test_b2_reachable_surfaces_the_cap_error_text(monkeypatch, cfg):
     def _boom(url, headers=None):
         raise _cap_denial(cfg)
 
-    monkeypatch.setattr(bridge.net, "_get_json", _boom)
-    ok, msg = checks.b2.b2_reachable(cfg, now=10_000)
+    src = FakeSources(get_json=_boom)
+    ok, msg = checks.b2.b2_reachable(cfg, src, now=10_000)
     assert ok is False and "transaction_cap_exceeded" in msg
 
 
@@ -121,11 +122,11 @@ def test_b2_reachable_caches_failure_and_does_not_reprobe(monkeypatch, cfg):
         calls.append(url)
         raise _cap_denial(cfg)
 
-    monkeypatch.setattr(bridge.net, "_get_json", _boom)
-    first_ok, _ = checks.b2.b2_reachable(cfg, now=10_000)
+    src = FakeSources(get_json=_boom)
+    first_ok, _ = checks.b2.b2_reachable(cfg, src, now=10_000)
     # five more cycles inside the interval (INTERVAL=300 -> 25 min of cycles)
     for offset in (300, 600, 900, 1200, 1500):
-        ok, msg = checks.b2.b2_reachable(cfg, now=10_000 + offset)
+        ok, msg = checks.b2.b2_reachable(cfg, src, now=10_000 + offset)
         assert ok is False
         assert (
             "transaction_cap_exceeded" in msg
@@ -150,12 +151,12 @@ def test_b2_reachable_reprobes_a_transport_failure_next_cycle(monkeypatch, cfg):
             raise outcomes.pop(0)
         return {"accountId": "a1"}
 
-    monkeypatch.setattr(bridge.net, "_get_json", _flaky)
-    ok, msg = checks.b2.b2_reachable(cfg, now=10_000)
+    src = FakeSources(get_json=_flaky)
+    ok, msg = checks.b2.b2_reachable(cfg, src, now=10_000)
     assert ok is False and "name resolution" in msg
     # One cycle later the transport TTL has expired, so the gate re-probes and recovers — where a
     # cap denial would still be reporting its cached verdict for another 25 minutes.
-    ok, msg = checks.b2.b2_reachable(cfg, now=10_300)
+    ok, msg = checks.b2.b2_reachable(cfg, src, now=10_300)
     assert ok is True, "a transport failure must re-probe next cycle, got: %s" % msg
     assert len(calls) == 2, "expected a re-probe, got %d calls" % len(calls)
 
@@ -174,11 +175,11 @@ def test_b2_reachable_reprobes_after_the_interval(monkeypatch, cfg):
         calls.append(url)
         return {"accountId": "a1"}
 
-    monkeypatch.setattr(bridge.net, "_get_json", _ok)
-    checks.b2.b2_reachable(cfg, now=10_000)
-    checks.b2.b2_reachable(cfg, now=10_000 + 1799)  # still cached
+    src = FakeSources(get_json=_ok)
+    checks.b2.b2_reachable(cfg, src, now=10_000)
+    checks.b2.b2_reachable(cfg, src, now=10_000 + 1799)  # still cached
     assert len(calls) == 1
-    checks.b2.b2_reachable(cfg, now=10_000 + 1801)  # interval elapsed
+    checks.b2.b2_reachable(cfg, src, now=10_000 + 1801)  # interval elapsed
     assert len(calls) == 2
 
 
@@ -188,19 +189,19 @@ def _wire_run_once_b2(cfg, monkeypatch, b2_result, checks, b2_dependent):
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
     )
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, q: [])
     check.run_once(
         cfg,
+        FakeSources(prom_vector=lambda q: []),
         [Check(n, "tok_%s" % n, mk(ran, n)) for n in checks],
         gates=Gates(
             prom_dependent=frozenset(),
             loki_dependent=frozenset(),
             startup_grace=frozenset(),
             b2_dependent=frozenset(b2_dependent),
-            probe_prometheus=lambda _cfg: (True, "prom ok"),
-            probe_loki=lambda _cfg: (True, "loki ok"),
-            probe_wan=lambda _cfg: (True, "wan ok"),
-            probe_b2=lambda _cfg: b2_result,
+            probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
+            probe_wan=lambda _cfg, _src: (True, "wan ok"),
+            probe_b2=lambda _cfg, _src: b2_result,
         ),
     )
     return ran, pushes

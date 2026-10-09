@@ -1,7 +1,7 @@
 """Cloudflare R2 free-tier headroom for monitor-bridge — one GraphQL query, four arms.
 
-Reads config as `cfg.X` and the fetch layer as `bridge.net.X`, so the tests' patches on those
-modules reach it. `_r2_probe` lives beside `r2_usage`, the only code that mutates it. Rule and
+Reads config as `cfg.X` and queries R2 through the `src` argument (`bridge.sources.Sources`),
+which a test replaces with a fake. `_r2_probe` lives beside `r2_usage`, the only code that mutates it. Rule and
 enforcement: bridge/config.py's header.
 """
 
@@ -11,7 +11,7 @@ from typing import TypedDict
 from datetime import datetime, timedelta, timezone
 
 from bridge.config import Config
-import bridge.net
+from bridge.sources import Sources
 from bridge.parsing import FETCH_BODY_MAX
 from bridge.types import JsonValue, as_list, as_object, as_object_list
 from verdicts.storage import (
@@ -56,7 +56,7 @@ def _count(value: JsonValue) -> float:
 
 
 def r2_query_usage(
-    cfg: Config, now: float
+    cfg: Config, src: Sources, now: float
 ) -> tuple[float, float, float, float, list[str]]:
     """(storage_bytes, uploads, class_a, class_b, unknown_actions) for the current month.
 
@@ -81,7 +81,7 @@ def r2_query_usage(
         ),
     }
     data = as_object(
-        bridge.net._post_json(
+        src.post_json(
             cfg.CF_GRAPHQL_URL,
             {"query": query},
             headers={"Authorization": "Bearer %s" % cfg.CF_ANALYTICS_TOKEN},
@@ -140,7 +140,7 @@ class _ProbeCache(TypedDict):
 _r2_probe: _ProbeCache = {"ts": None, "ok": True, "msg": ""}
 
 
-def r2_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:
+def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool, str]:
     """Throttled R2 free-tier headroom check. (ok, msg).
 
     SUCCESSES are cached for R2_PROBE_INTERVAL_S — month-to-date aggregates do not move on a 300s
@@ -161,7 +161,7 @@ def r2_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:
             _r2_probe["msg"],
             (now - _r2_probe["ts"]) / 60,
         )
-    storage_bytes, uploads, class_a, class_b, unknown = r2_query_usage(cfg, now)
+    storage_bytes, uploads, class_a, class_b, unknown = r2_query_usage(cfg, src, now)
     ok, msg = r2_usage_verdict(
         storage_bytes,
         uploads,
@@ -180,5 +180,5 @@ def r2_usage(cfg: Config, now: float | None = None) -> tuple[bool, str]:
     return ok, msg
 
 
-def check_r2_usage(cfg: Config) -> tuple[bool, str]:
-    return r2_usage(cfg)
+def check_r2_usage(cfg: Config, src: Sources) -> tuple[bool, str]:
+    return r2_usage(cfg, src)

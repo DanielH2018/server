@@ -18,6 +18,7 @@ import os
 import time
 
 from bridge.config import Config
+from bridge.sources import Sources
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     MARKERS,
@@ -247,7 +248,9 @@ def gitops_status(
     return True, "no held deploy"
 
 
-def check_gitops_alive(cfg: Config, now: float | None = None) -> tuple[bool, str]:
+def check_gitops_alive(
+    cfg: Config, src: Sources, now: float | None = None
+) -> tuple[bool, str]:
     """Checks that the GitOps deployer's last_run marker is fresh.
 
     Down when the marker is missing (the deployer never completed a tick) or unparseable.
@@ -298,7 +301,7 @@ def _read_decodable_lines(cfg: Config, name: str) -> str | None:
     return "\n".join(kept).strip() or None
 
 
-def check_gitops_status(cfg: Config) -> tuple[bool, str]:
+def check_gitops_status(cfg: Config, src: Sources) -> tuple[bool, str]:
     return gitops_status(
         cfg,
         _read_gitops_marker(cfg, MARKERS["hold"]),

@@ -7,11 +7,10 @@ operator smoke-test that proves B2 accepts the query.
 
 from dataclasses import replace
 
-import bridge.config
-import bridge.net
 import checks.b2
 import gates
 import registry
+from _fake_sources import FakeSources
 
 
 def test_sum_versions_counts_every_version_including_hidden():
@@ -78,9 +77,9 @@ def test_storage_api_reads_the_older_top_level_shape():
     assert checks.b2.b2_storage_api(auth) == ("https://api", "tok", "b1")
 
 
-def test_storage_disabled_without_credentials(monkeypatch, cfg):
+def test_storage_disabled_without_credentials(cfg):
     cfg = replace(cfg, B2_PROBE_KEY_ID="")
-    ok, msg = checks.b2.b2_storage_usage(cfg)
+    ok, msg = checks.b2.b2_storage_usage(cfg, FakeSources())
     assert ok
     assert "disabled" in msg
 
@@ -98,11 +97,11 @@ def test_storage_is_gated_by_b2_reachable():
 # files but neither nextFileName nor nextFileId — returns (pages, False) and b2_storage_verdict
 # reports a partial sum as a confident total. A bucket under the 1000 maxFileCount fits one page,
 # which is the shape that breaks silently the first time the bucket crosses 1000. None of this
-# needs a live call: _post_json is stubbed, zero B2 spend.
+# needs a live call: the fake Sources answers post_json, zero B2 spend.
 
 
 def _paging_stub(pages):
-    """Stub for check._post_json that replays `pages` and records each request payload."""
+    """Stub for Sources.post_json that replays `pages` and records each request payload."""
     sent = []
     it = iter(pages)
 
@@ -113,51 +112,51 @@ def _paging_stub(pages):
     return fake, sent
 
 
-def test_the_cursor_is_threaded_into_the_next_request(monkeypatch, cfg):
+def test_the_cursor_is_threaded_into_the_next_request(cfg):
     fake, sent = _paging_stub(
         [
             {"files": [], "nextFileName": "b.txt", "nextFileId": "4_zid"},
             {"files": []},
         ]
     )
-    monkeypatch.setattr(bridge.net, "_post_json", fake)
-    pages, truncated = checks.b2.b2_list_versions(cfg, "https://api", "tok", "bkt")
+    src = FakeSources(post_json=fake)
+    pages, truncated = checks.b2.b2_list_versions(cfg, src, "https://api", "tok", "bkt")
     assert len(pages) == 2
     assert truncated is False
     assert sent[1]["startFileName"] == "b.txt", "second request must carry nextFileName"
     assert sent[1]["startFileId"] == "4_zid", "second request must carry nextFileId"
 
 
-def test_a_page_with_no_cursor_ends_the_walk(monkeypatch, cfg):
+def test_a_page_with_no_cursor_ends_the_walk(cfg):
     fake, sent = _paging_stub([{"files": [{"contentLength": 1}]}])
-    monkeypatch.setattr(bridge.net, "_post_json", fake)
-    pages, truncated = checks.b2.b2_list_versions(cfg, "https://api", "tok", "bkt")
+    src = FakeSources(post_json=fake)
+    pages, truncated = checks.b2.b2_list_versions(cfg, src, "https://api", "tok", "bkt")
     assert len(pages) == 1
     assert truncated is False
     assert "startFileName" not in sent[0] and "startFileId" not in sent[0]
 
 
-def test_a_cursor_that_never_clears_reports_truncated(monkeypatch, cfg):
+def test_a_cursor_that_never_clears_reports_truncated(cfg):
     """The page cap must fail LOUD rather than silently under-counting — b2_storage_verdict keys
     on this flag to refuse a verdict it cannot stand behind."""
     fake, _ = _paging_stub(
         [{"files": [], "nextFileName": "n", "nextFileId": "i"}]
         * cfg.B2_STORAGE_MAX_PAGES
     )
-    monkeypatch.setattr(bridge.net, "_post_json", fake)
-    pages, truncated = checks.b2.b2_list_versions(cfg, "https://api", "tok", "bkt")
+    src = FakeSources(post_json=fake)
+    pages, truncated = checks.b2.b2_list_versions(cfg, src, "https://api", "tok", "bkt")
     assert len(pages) == cfg.B2_STORAGE_MAX_PAGES
     assert truncated is True
 
 
-def test_a_name_only_cursor_still_paginates(monkeypatch, cfg):
+def test_a_name_only_cursor_still_paginates(cfg):
     """B2 can return nextFileName without nextFileId.
 
     Requiring both would end the walk early and under-count — the silent direction.
     """
     fake, sent = _paging_stub([{"files": [], "nextFileName": "b.txt"}, {"files": []}])
-    monkeypatch.setattr(bridge.net, "_post_json", fake)
-    pages, truncated = checks.b2.b2_list_versions(cfg, "https://api", "tok", "bkt")
+    src = FakeSources(post_json=fake)
+    pages, truncated = checks.b2.b2_list_versions(cfg, src, "https://api", "tok", "bkt")
     assert len(pages) == 2
     assert truncated is False
     assert sent[1]["startFileName"] == "b.txt"

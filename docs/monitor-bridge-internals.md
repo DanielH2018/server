@@ -84,8 +84,8 @@ reason it is a member. The rules below shaped those memberships.
 
 | module | holds |
 |---|---|
-| `cli.py` | the `argparse` front end and `main(argv, env, checks, gate_config) -> int`, which builds the `Config`, the registry and the `Gates`, validates the check filter and loops `run_once` |
-| `check.py` | `run_once(cfg, checks, gates, dry_run, only)` — the run loop, and nothing else |
+| `cli.py` | the `argparse` front end and `main(argv, env, checks, gate_config, sources) -> int`, which builds the `Config`, the registry, the `Gates` and the `Sources`, validates the check filter and loops `run_once` |
+| `check.py` | `run_once(cfg, src, checks, gates, dry_run, only)` — the run loop, and nothing else |
 | `check_table.py` | `CHECKS`, one `PushCheck` per check and gate: its body, push token, gate and Kuma tile |
 | `registry.py` | `build_checks(env)`, a `Check` for every non-gate row of `CHECKS`, with its token read from the environment it is handed |
 | `gates.py` | the `*_DEPENDENT` sets derived from `CHECKS`' `gate` column, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
@@ -93,7 +93,8 @@ reason it is a member. The rules below shaped those memberships.
 | `bridge/types.py` | `PushCheck`, `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
 | `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster` (+ `cluster_etcd`, `cluster_rollout`, `cluster_traefik`, `cluster_zero`), `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `storage`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py` and `gitops_ledger.py`, the generated copies of the deployer's modules; the second reads the `owed` ledger's `manual_plane`, `k8s_deferred` and `hold_plane` classes. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,cluster,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)`, `load_config(env)`; one builder per domain. `K8S_EXTENDED_RESOURCES` and `PVC_EXCLUDE` stay in `config.py` because a repo test greps for them by text |
-| `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` (which caps its message with `bridge.common.cap_push_msg`), and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST |
+| `bridge/net.py` | the transport: `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` (which caps its message with `bridge.common.cap_push_msg`), and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
+| `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `loki_vector`, `loki_lines`, `get_json`, `post_json`, and `log_error_counts` composed from two of them). `cli.main()` builds one; `run_once` hands it to every body as `src` |
 | `bridge/msgfmt.py` | `format_down(unit, state, items, details)` — the one grammar for a push message naming several things; import-free so `probe.py releases --kuma` loads it from a host too |
 | `bridge/streaks.py` | `down_streak` (the consecutive-down counter four domains share, cleared by `conftest.py`) and `apply_startup_grace` |
 | `bridge/common.py` | `_env`, `sanitize`, `cap_push_msg` (`PUSH_MSG_MAX`) and `clamp_discord` (`DISCORD_MAX`) — the helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected — plus `host_uptime_s`, the node's boot clock the two post-reboot arms key on |
@@ -107,8 +108,12 @@ reason it is a member. The rules below shaped those memberships.
   default (#3659); narrow it with
   `dataclasses.replace(cfg, X=...)`, or call `load_config(bridge_env(X=...))` when the READ is
   under test.
-- **A test patches the module that READS the name, and a module reads it qualified**
-  (`bridge.net._get_json` at call time, never `from bridge.net import _get_json`). Getting it
+- **A test states what a check reads.** Every check body and gate probe takes `(cfg, src)`, and
+  a test hands it `tests/_fake_sources.py`'s `FakeSources(prom_vector=lambda q: ...)` rather
+  than patching `bridge.net` (#3742). An unanswered query raises, so `FakeSources()` proves a
+  check does no I/O; `src.queries("prom_vector")` lists the PromQL it sent.
+- **What a test still patches, it patches on the module that READS the name, and a module reads
+  it qualified** (`bridge.net.push` at call time, never `from bridge.net import push`). Getting it
   wrong is silent, so `ansible/tests/services/test_monitor_bridge_modules.py` re-derives every
   patched `(module, name)` pair by AST, and `test_bridge_patch_boundary.py` beside it fails a
   runtime module that from-imports a patched name.

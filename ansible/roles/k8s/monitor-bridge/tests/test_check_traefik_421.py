@@ -9,26 +9,25 @@ is one input the check must accept and one it must reject.
 from dataclasses import replace
 
 import checks.cluster_traefik
+from _fake_sources import FakeSources
 
 AUTHELIA = "homelab-authelia-5ac9e6c654eeb5a277d9@kubernetescrd"
 LOKI_PUSH = "homelab-loki-homelab-push-monitoring-95752c50a917d4491bde@kubernetescrd"
 
 
-def _fetch(rates):
-    """Answer the per-router 421 query with `rates`, a router -> rps mapping."""
+def _sources(rates):
+    """Sources answering the per-router 421 query with `rates`, a router -> rps mapping."""
 
-    def _vector(_cfg, promql, *a, **k):
+    def _vector(promql, *a, **k):
         assert 'code="421"' in promql and "by (router)" in promql, promql
         return [({"router": r}, v) for r, v in rates.items()]
 
-    return _vector
+    return FakeSources(prom_vector=_vector)
 
 
 def _cycles(cfg, rates, n):
-    fetch = _fetch(rates)
-    return [
-        checks.cluster_traefik.check_traefik_421(cfg, fetch=fetch) for _ in range(n)
-    ]
+    src = _sources(rates)
+    return [checks.cluster_traefik.check_traefik_421(cfg, src) for _ in range(n)]
 
 
 def test_a_one_shot_handshake_mismatch_is_clean(cfg):

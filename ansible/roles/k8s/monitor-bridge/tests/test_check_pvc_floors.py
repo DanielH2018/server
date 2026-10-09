@@ -14,9 +14,9 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-import bridge.net
 import checks.storage
 from verdicts.storage import parse_pvc_floors, pvc_fullness_verdict
+from _fake_sources import FakeSources
 
 ROLES = Path(__file__).resolve().parents[3]
 ENV_SECRET = Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
@@ -33,21 +33,21 @@ def _pvc(pvc, pct, namespace="homelab"):
     return ({"namespace": namespace, "persistentvolumeclaim": pvc}, float(pct))
 
 
-def _arm(cfg, monkeypatch, pcts, frees, floors="valheim-server=%d" % VALHEIM_FLOOR):
+def _arm(cfg, pcts, frees, floors="valheim-server=%d" % VALHEIM_FLOOR):
     """State the two claim vectors the check reads, keyed by which metric is asked for."""
 
-    def _vector(_cfg, promql, *a, **k):
+    def _vector(promql, *a, **k):
         return frees if "available_bytes)" in promql else pcts
 
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: 43.0)
-    monkeypatch.setattr(bridge.net, "prom_vector", _vector)
-    return replace(
+    src = FakeSources(prom_scalar=lambda *a, **k: 43.0, prom_vector=_vector)
+    cfg = replace(
         cfg,
         PVC_MAX_PCT=85.0,
         PVC_MIN_CLAIMS=32,
         PVC_EXCLUDE=["media-data"],
         PVC_MIN_FREE=floors,
     )
+    return cfg, src
 
 
 def test_a_claim_under_the_percentage_but_below_its_floor_is_flagged_at_once():
@@ -112,63 +112,54 @@ def test_no_declared_floor_leaves_the_verdict_as_it_was():
     assert "floors" not in summary
 
 
-def test_the_check_reads_free_bytes_only_when_a_floor_is_declared(monkeypatch, cfg):
-    asked = []
-
-    def _vector(_cfg, promql, *a, **k):
-        asked.append(promql)
-        return [_pvc("valheim-server", 38.5)]
-
-    monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: 43.0)
-    monkeypatch.setattr(bridge.net, "prom_vector", _vector)
-    ok, _ = checks.storage.check_pvc_fullness(replace(cfg, PVC_MIN_FREE=""))
+def test_the_check_reads_free_bytes_only_when_a_floor_is_declared(cfg):
+    src = FakeSources(
+        prom_scalar=lambda *a, **k: 43.0,
+        prom_vector=lambda *a, **k: [_pvc("valheim-server", 38.5)],
+    )
+    ok, _ = checks.storage.check_pvc_fullness(replace(cfg, PVC_MIN_FREE=""), src)
     assert ok
-    assert not any("available_bytes)" in q for q in asked)
+    assert not any("available_bytes)" in q for q in src.queries("prom_vector"))
 
 
 def test_the_check_pages_on_the_pre_update_shape_and_clears_on_the_grown_claim(
-    monkeypatch, cfg
+    cfg,
 ):
-    cfg = _arm(
+    cfg, src = _arm(
         cfg,
-        monkeypatch,
         [_pvc("valheim-server", _PRE_UPDATE_PCT)],
         [_pvc("valheim-server", _PRE_UPDATE_FREE)],
     )
-    ok, msg = checks.storage.check_pvc_fullness(cfg)
+    ok, msg = checks.storage.check_pvc_fullness(cfg, src)
     assert not ok
     assert "valheim-server 2.1G free < 3.0G" in msg
-    cfg = _arm(
+    cfg, src = _arm(
         cfg,
-        monkeypatch,
         [_pvc("valheim-server", 38.5)],
         [_pvc("valheim-server", 12.3 * GIB)],
     )
-    ok, msg = checks.storage.check_pvc_fullness(cfg)
+    ok, msg = checks.storage.check_pvc_fullness(cfg, src)
     assert ok
     assert "floors held: valheim-server 12.3G free >= 3.0G" in msg
 
 
-def test_a_floor_on_an_excluded_claim_is_flagged_rather_than_ignored(monkeypatch, cfg):
+def test_a_floor_on_an_excluded_claim_is_flagged_rather_than_ignored(cfg):
     # PVC_EXCLUDE drops the claim from both vectors, so its floor reads as unmonitored — the
     # decaying-list failure the PVC_EXCLUDE comment warns about, surfaced instead of silent.
-    cfg = _arm(
+    cfg, src = _arm(
         cfg,
-        monkeypatch,
         [_pvc("media-data", 50.0), _pvc("uptime-kuma-data", 38.6)],
         [_pvc("media-data", 300 * GIB), _pvc("uptime-kuma-data", 0.5 * GIB)],
         floors="media-data=%d" % GIB,
     )
-    ok, msg = checks.storage.check_pvc_fullness(cfg)
+    ok, msg = checks.storage.check_pvc_fullness(cfg, src)
     assert not ok
     assert "PVC_MIN_FREE names media-data" in msg
 
 
-def test_an_unparseable_floor_declaration_is_flagged(monkeypatch, cfg):
-    cfg = _arm(
-        cfg, monkeypatch, [_pvc("valheim-server", 38.5)], [], floors="valheim-server=3G"
-    )
-    ok, msg = checks.storage.check_pvc_fullness(cfg)
+def test_an_unparseable_floor_declaration_is_flagged(cfg):
+    cfg, src = _arm(cfg, [_pvc("valheim-server", 38.5)], [], floors="valheim-server=3G")
+    ok, msg = checks.storage.check_pvc_fullness(cfg, src)
     assert not ok
     assert "parsed to no usable floor" in msg
 

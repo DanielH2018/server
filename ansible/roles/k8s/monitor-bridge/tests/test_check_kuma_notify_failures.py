@@ -5,10 +5,10 @@ escapes, the drop line ends at the notification name, and the reason is the NEXT
 ERROR level.
 """
 
-import bridge.net
 import checks.logs
 import gates
 import registry
+from _fake_sources import FakeSources
 from verdicts.logs import (
     kuma_notify_failures,
     parse_notify_failure_line,
@@ -163,21 +163,20 @@ def test_the_check_is_registered_and_loki_gated():
     assert "kuma_notify_failures" in gates.LOKI_DEPENDENT
 
 
-def test_the_check_pages_on_the_live_line_shape(monkeypatch, cfg):
-    monkeypatch.setattr(
-        bridge.net, "loki_lines", lambda *a, **k: [(1, _DROPPED), (1, _REASON_429)]
-    )
-    ok, msg = checks.logs.check_kuma_notify_failures(cfg)
+def test_the_check_pages_on_the_live_line_shape(cfg):
+    src = FakeSources(loki_lines=lambda *a, **k: [(1, _DROPPED), (1, _REASON_429)])
+    ok, msg = checks.logs.check_kuma_notify_failures(cfg, src)
     assert not ok
     assert "Homelab Alerts x1" in msg and "3h" in msg
     assert "HTTP 429 Too Many Requests x1" in msg
 
 
-def test_a_fetch_error_fails_open_and_names_the_owner(monkeypatch, cfg):
+def test_a_fetch_error_fails_open_and_names_the_owner(cfg):
     def _raise(*a, **k):
         raise RuntimeError("loki-homelab: timed out")
 
-    monkeypatch.setattr(bridge.net, "loki_lines", _raise)
-    ok, msg = checks.logs.check_kuma_notify_failures(cfg)
+    ok, msg = checks.logs.check_kuma_notify_failures(
+        cfg, FakeSources(loki_lines=_raise)
+    )
     assert ok
     assert "timed out" in msg and "Loki Reachable" in msg

@@ -8,22 +8,20 @@ filling its quota is the failure the restore runbook exists for: at the quota et
 read-only and the whole control plane stops accepting writes.
 
 Its own module for the reason `cluster_zero.py` is one: `checks/cluster.py` sits near the
-600-line cap the module-length ratchet enforces. Config as `cfg.X`, the fetch through
-`bridge.net`, the same layering as its neighbours.
+600-line cap the module-length ratchet enforces. Config as `cfg.X`, the query through
+the `src` argument (`bridge.sources.Sources`), the same layering as its neighbours.
 """
 
 from bridge.config import Config
-import bridge.net
+from bridge.sources import Sources
 
 
-def check_etcd_db_size(cfg: Config, fetch=bridge.net.prom_scalar) -> tuple[bool, str]:
+def check_etcd_db_size(cfg: Config, src: Sources) -> tuple[bool, str]:
     """etcd's DB size as a percentage of ETCD_DB_QUOTA_BYTES, down over ETCD_DB_MAX_PCT.
 
     Args:
       cfg: The bridge's configuration; reads PROM_URL and the two ETCD_DB_* fields.
-      fetch: The instant-query seam, `bridge.net.prom_scalar`'s signature. A parameter rather
-        than a module reference so a test states the reading it means instead of patching
-        `bridge.net` process-wide — the same shape `check_k8s_workloads` threads to its arms.
+      src: The query source; a test hands in a `FakeSources` that states the reading it means.
 
     `max(...)` over the bare series, not a `by` grouping: k3s runs the apiserver and the
     kubelet in one process, so `apiserver_storage_size_bytes` is scraped TWICE — once under
@@ -48,10 +46,7 @@ def check_etcd_db_size(cfg: Config, fetch=bridge.net.prom_scalar) -> tuple[bool,
     or a Recreate rollout does, so holding the verdict through consecutive cycles would only
     delay a real page — the same reasoning check_kubelet_plugin_readonly documents.
     """
-    used = fetch(
-        cfg,
-        "max(apiserver_storage_size_bytes)",
-    )
+    used = src.prom_scalar("max(apiserver_storage_size_bytes)")
     if used is None:
         return True, "apiserver_storage_size_bytes absent — see Scrape Targets"
     quota = cfg.ETCD_DB_QUOTA_BYTES

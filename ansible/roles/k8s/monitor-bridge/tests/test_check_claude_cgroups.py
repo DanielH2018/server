@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 import checks.host
+from _fake_sources import FakeSources
 from verdicts.host_cgroups import claude_cgroup_verdict
 
 
@@ -48,29 +49,28 @@ def armed(cfg):
     return replace(cfg, CLAUDE_CGROUPS=("claude-rc",))
 
 
-def _vectors(stalls, events, seen=None):
-    """A fetch fake answering each of the arm's two queries separately.
+def _sources(stalls, events):
+    """A `FakeSources` answering each of the arm's two queries separately.
 
-    Handed to `check_mem` through its `prom_vector` seam rather than patched onto `bridge.net` —
-    nothing here monkeypatches a first-party module, which is what
+    Handed to `check_mem` as its `src` rather than patched onto `bridge.net`, so nothing here
+    monkeypatches a first-party module, which is what
     `test_no_test_module_patches_more_modules_than_its_allowlist_entry` asks of a new test module.
 
     Dispatching on the metric each query names is the load-bearing part: one lambda would hand
     the stall vector back for the events query too, which is how a fixture ends up proving the
     opposite of what it claims. `check_mem`'s own node_memory_* query gets both hosts, healthy, so
     neither the memory verdict nor `_host_origin_shortfall` decides an outcome the arm is about.
+    `src.queries("prom_vector")` lists the PromQL a test sent.
     """
 
-    def fake_vector(_cfg, promql):
-        if seen is not None:
-            seen.append(promql)
+    def fake_vector(promql):
         if STALL_METRIC in promql:
             return stalls
         if EVENT_METRIC in promql:
             return events
         return HEALTHY_MEMORY
 
-    return fake_vector
+    return FakeSources(prom_vector=fake_vector)
 
 
 # ── the verdict, in isolation ────────────────────────────────────────────────────────────────
@@ -148,16 +148,17 @@ def test_the_arm_is_off_until_a_cgroup_is_configured(cfg):
     with one memory-percentage vector, and an arm that queried on the default config would read
     that vector as a stall rate.
     """
-    queries = []
     cfg = replace(cfg, CLAUDE_CGROUPS=())
-    ok, msg = checks.host.check_mem(cfg, _vectors([], [], queries))
+    src = _sources([], [])
+    ok, msg = checks.host.check_mem(cfg, src)
     assert ok
     assert "claude" not in msg
+    queries = src.queries("prom_vector")
     assert not any(STALL_METRIC in q or EVENT_METRIC in q for q in queries)
 
 
 def test_a_quiet_arm_reports_alongside_the_memory_verdict(armed):
-    ok, msg = checks.host.check_mem(armed, _vectors([(RC, 0.0004)], []))
+    ok, msg = checks.host.check_mem(armed, _sources([(RC, 0.0004)], []))
     assert ok
     assert "mem 41%" in msg
     assert "claude cgroups stalled" in msg
@@ -165,8 +166,8 @@ def test_a_quiet_arm_reports_alongside_the_memory_verdict(armed):
 
 def test_a_firing_arm_leads_the_message_and_pages(armed):
     armed = replace(armed, CLAUDE_CGROUP_CONSECUTIVE=1)
-    fetch = _vectors([(RC, 0.0)], [(RC | {"event": "oom_kill"}, 1.0)])
-    ok, msg = checks.host.check_mem(armed, fetch)
+    src = _sources([(RC, 0.0)], [(RC | {"event": "oom_kill"}, 1.0)])
+    ok, msg = checks.host.check_mem(armed, src)
     assert not ok
     assert msg.startswith("claude cgroup memory events")
     assert "mem 41%" in msg
@@ -179,14 +180,14 @@ def test_hysteresis_holds_the_first_cycle_then_pages(armed):
     counter: Prometheus extrapolates across a reset, so one `increase()` window spanning one can
     report a rise from a counter that went 0 -> 0.
     """
-    breaching = _vectors([(RC, 55.0)], [])
+    breaching = _sources([(RC, 55.0)], [])
     assert checks.host.check_mem(armed, breaching)[0] is True
     assert checks.host.check_mem(armed, breaching)[0] is False
 
 
 def test_a_clean_cycle_resets_the_streak(armed):
-    breaching = _vectors([(RC, 55.0)], [])
-    quiet = _vectors([(RC, 0.1)], [])
+    breaching = _sources([(RC, 55.0)], [])
+    quiet = _sources([(RC, 0.1)], [])
     assert checks.host.check_mem(armed, breaching)[0] is True
     assert checks.host.check_mem(armed, quiet)[0] is True
     assert checks.host.check_mem(armed, breaching)[0] is True
@@ -212,9 +213,11 @@ def test_the_queries_are_instant_not_subqueries(armed):
     cycle. Both shipped queries were timed against the live Prometheus three times each at
     0.125-0.139s end to end.
     """
-    queries = []
-    checks.host.check_mem(armed, _vectors([(RC, 0.0)], [], queries))
-    arm = [q for q in queries if STALL_METRIC in q or EVENT_METRIC in q]
+    src = _sources([(RC, 0.0)], [])
+    checks.host.check_mem(armed, src)
+    arm = [
+        q for q in src.queries("prom_vector") if STALL_METRIC in q or EVENT_METRIC in q
+    ]
     assert len(arm) == 2
     assert not any(":" in q.split("[")[-1] for q in arm), arm
 

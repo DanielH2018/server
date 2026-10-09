@@ -8,15 +8,26 @@ will read empty as healthy.
 from dataclasses import replace
 from pathlib import Path
 
-import bridge.config
-import bridge.net
 import checks.cluster
 import check
+from _fake_sources import FakeSources
 
 
 # --- cAdvisor coverage floor -------------------------------------------------------------
 # restarts/oom/cpu filter a per-pod vector down to offenders, so empty-after-filtering is the
 # HEALTHY answer and an empty query is indistinguishable from it. Each pair below is one input the floor must accept and one it must reject.
+
+
+def _blind():
+    """Sources whose every vector query answers empty: cAdvisor scraped by nobody."""
+    return FakeSources(prom_vector=lambda *a, **k: [])
+
+
+def _covered():
+    """Sources answering 40 pods at zero offenders: a healthy, fully covered cycle."""
+    return FakeSources(
+        prom_vector=lambda *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)]
+    )
 
 
 def _reset_cadvisor(cfg, monkeypatch, min_pods=20, consecutive=2):
@@ -47,36 +58,28 @@ def test_a_covered_vector_with_zero_offenders_still_reads_clean(monkeypatch, cfg
     # The inversion this floor could most easily introduce: "no OOM kills" is the common case and
     # must stay green. Without this the floor would page on every healthy cycle.
     cfg = _reset_cadvisor(cfg, monkeypatch)
-    monkeypatch.setattr(
-        bridge.net,
-        "prom_vector",
-        lambda _cfg, *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
-    )
-    ok, msg = checks.cluster.check_oom(cfg)
+    ok, msg = checks.cluster.check_oom(cfg, _covered())
     assert ok is True
     assert "no OOM kills" in msg
 
 
 def test_check_oom_reads_unknown_not_green_when_blind(monkeypatch, cfg):
     cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=1)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
-    ok, msg = checks.cluster.check_oom(cfg)
+    ok, msg = checks.cluster.check_oom(cfg, _blind())
     assert ok is False
     assert "UNKNOWN" in msg
 
 
 def test_check_restarts_reads_unknown_not_green_when_blind(monkeypatch, cfg):
     cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=1)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
-    ok, msg = checks.cluster.check_restarts(cfg)
+    ok, msg = checks.cluster.check_restarts(cfg, _blind())
     assert ok is False
     assert "UNKNOWN" in msg
 
 
 def test_check_cpu_throttle_reads_unknown_not_green_when_blind(monkeypatch, cfg):
     cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=1)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
-    ok, msg = checks.cluster.check_cpu_throttle(cfg)
+    ok, msg = checks.cluster.check_cpu_throttle(cfg, _blind())
     assert ok is False
     assert "UNKNOWN" in msg
 
@@ -85,11 +88,10 @@ def test_the_floor_holds_up_for_one_cycle_before_paging(monkeypatch, cfg):
     # A kubelet restart briefly empties cAdvisor; three monitors going red together on one
     # transient is the storm the gates exist to prevent.
     cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=2)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
-    ok, msg = checks.cluster.check_oom(cfg)
+    ok, msg = checks.cluster.check_oom(cfg, _blind())
     assert ok is True
     assert "cAdvisor coverage shortfall 1/2" in msg
-    ok, _ = checks.cluster.check_oom(cfg)
+    ok, _ = checks.cluster.check_oom(cfg, _blind())
     assert ok is False
 
 
@@ -97,23 +99,16 @@ def test_each_check_ages_its_shortfall_independently(monkeypatch, cfg):
     # A single shared counter would take three increments per cycle — all three checks run in the
     # same run_once pass — and blow through CADVISOR_CONSECUTIVE inside the first one.
     cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=2)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
-    assert checks.cluster.check_oom(cfg)[0] is True
-    assert checks.cluster.check_restarts(cfg)[0] is True
-    assert checks.cluster.check_cpu_throttle(cfg)[0] is True
+    assert checks.cluster.check_oom(cfg, _blind())[0] is True
+    assert checks.cluster.check_restarts(cfg, _blind())[0] is True
+    assert checks.cluster.check_cpu_throttle(cfg, _blind())[0] is True
     assert checks.cluster._cadvisor_streaks == {"oom": 1, "restarts": 1, "cpu": 1}
 
 
 def test_a_covered_cycle_resets_the_streak(monkeypatch, cfg):
     cfg = _reset_cadvisor(cfg, monkeypatch, consecutive=2)
-    monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
-    checks.cluster.check_oom(cfg)
-    monkeypatch.setattr(
-        bridge.net,
-        "prom_vector",
-        lambda _cfg, *a, **k: [({"pod": "p%d" % i}, 0.0) for i in range(40)],
-    )
-    assert checks.cluster.check_oom(cfg)[0] is True
+    checks.cluster.check_oom(cfg, _blind())
+    assert checks.cluster.check_oom(cfg, _covered())[0] is True
     assert checks.cluster._cadvisor_streaks["oom"] == 0
 
 

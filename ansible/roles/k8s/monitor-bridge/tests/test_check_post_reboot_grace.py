@@ -15,6 +15,7 @@ import dataclasses
 
 import bridge.common
 import checks.logs
+from _fake_sources import FakeSources
 from verdicts.logs import TOO_FAR_BEHIND, shipper_dropped
 
 
@@ -100,15 +101,14 @@ def _grace_seen(cfg, uptime):
 
     Read off the verdict rather than by patching it: a 5000-entry `too_far_behind` burst is over
     `SHIPPER_DROPPED_MAX` (3000), so the check is `up` only while the grace drops that reason.
-    Every boundary goes in as an argument — the check takes `uptime_s`, `prom_scalar` and
-    `prom_vector` for the same reason `with_pi_ports` takes `tcp_open`.
+    Every boundary goes in as an argument — the check takes `uptime_s` and `src` for the same
+    reason `with_pi_ports` takes `tcp_open`.
     """
-    return checks.logs.check_shipper_dropped(
-        cfg,
-        uptime_s=lambda: uptime,
-        prom_scalar=lambda *a, **k: 0.0,
-        prom_vector=lambda *a, **k: [({"reason": TOO_FAR_BEHIND}, 5000.0)],
+    src = FakeSources(
+        prom_scalar=lambda q: 0.0,
+        prom_vector=lambda q: [({"reason": TOO_FAR_BEHIND}, 5000.0)],
     )
+    return checks.logs.check_shipper_dropped(cfg, src, uptime_s=lambda: uptime)
 
 
 def test_check_shipper_dropped_arms_the_grace_from_the_node_uptime(cfg):
@@ -138,19 +138,18 @@ def _shipper_ranges(cfg, uptime, client=0.0):
     """
     queries = []
 
-    def _scalar(_cfg, query):
+    def _scalar(query):
         queries.append(query)
         return client
 
-    def _vector(_cfg, query):
+    def _vector(query):
         queries.append(query)
         return []
 
     ok, msg = checks.logs.check_shipper_dropped(
         dataclasses.replace(cfg, OTELCOL_SEND_FAILED_METRICS=""),
+        FakeSources(prom_scalar=_scalar, prom_vector=_vector),
         uptime_s=lambda: uptime,
-        prom_scalar=_scalar,
-        prom_vector=_vector,
     )
     return ok, msg, queries
 
@@ -198,17 +197,17 @@ def test_a_shortened_shipper_window_still_pages_on_a_drop_after_the_reboot(cfg):
 def _window_seen(cfg, uptime, lines=()):
     """The lookback `check_swallowed_verdicts` asks for, at a stated node uptime.
 
-    Both the clock and the fetch go in as arguments; the check takes `uptime_s` and `fetch` so a
+    Both the clock and the fetch go in as arguments; the check takes `uptime_s` and `src` so a
     test states them.
     """
     windows = []
 
-    def _fetch(_cfg, query, window_s, _limit):
+    def _fetch(query, window_s, _limit):
         windows.append(window_s)
         return list(lines) if "syslog" in query else []
 
     ok, msg = checks.logs.check_swallowed_verdicts(
-        cfg, uptime_s=lambda: uptime, fetch=_fetch
+        cfg, FakeSources(loki_lines=_fetch), uptime_s=lambda: uptime
     )
     return ok, msg, windows
 

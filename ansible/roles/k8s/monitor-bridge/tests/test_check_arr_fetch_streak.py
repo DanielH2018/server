@@ -15,6 +15,7 @@ only ever fall.
 from dataclasses import replace
 
 import checks.service
+from _fake_sources import FakeSources
 
 
 def _queue(*records):
@@ -31,7 +32,7 @@ def test_arr_queue_holds_a_single_unreachable_cycle(cfg):
     # The rollout case: radarr is being replaced, so its API refuses connections for a cycle or
     # two.
     cfg = replace(cfg, RADARR_API_KEY="x")
-    ok, msg = checks.service.check_arr_queue(cfg, fetch=_unreachable)
+    ok, msg = checks.service.check_arr_queue(cfg, FakeSources(get_json=_unreachable))
     assert ok, msg
     assert "down streak 1/3 (rollout)" in msg
     assert "Radarr unreachable" in msg
@@ -41,8 +42,10 @@ def test_the_third_straight_unreachable_cycle_pages(cfg):
     # The red proof: the streak delays a fetch failure, it does not swallow one.
     cfg = replace(cfg, RADARR_API_KEY="x")
     for _ in range(2):
-        assert checks.service.check_arr_queue(cfg, fetch=_unreachable)[0]
-    ok, msg = checks.service.check_arr_queue(cfg, fetch=_unreachable)
+        assert checks.service.check_arr_queue(cfg, FakeSources(get_json=_unreachable))[
+            0
+        ]
+    ok, msg = checks.service.check_arr_queue(cfg, FakeSources(get_json=_unreachable))
     assert not ok
     assert "Radarr unreachable" in msg
     assert "Errno 111" in msg
@@ -59,15 +62,19 @@ def test_a_queue_warning_still_pages_on_the_first_cycle(cfg):
             "trackedDownloadState": "importPending",
         }
     )
-    ok, msg = checks.service.check_arr_queue(cfg, fetch=lambda *a, **k: q)
+    ok, msg = checks.service.check_arr_queue(
+        cfg, FakeSources(get_json=lambda *a, **k: q)
+    )
     assert not ok
     assert "down streak" not in msg
 
 
 def test_a_reachable_arr_resets_the_fetch_streak(cfg):
     cfg = replace(cfg, RADARR_API_KEY="x")
-    assert checks.service.check_arr_queue(cfg, fetch=_unreachable)[0]
-    assert checks.service.check_arr_queue(cfg, fetch=lambda *a, **k: _queue())[0]
-    ok, msg = checks.service.check_arr_queue(cfg, fetch=_unreachable)
+    assert checks.service.check_arr_queue(cfg, FakeSources(get_json=_unreachable))[0]
+    assert checks.service.check_arr_queue(
+        cfg, FakeSources(get_json=lambda *a, **k: _queue())
+    )[0]
+    ok, msg = checks.service.check_arr_queue(cfg, FakeSources(get_json=_unreachable))
     assert ok, msg
     assert "down streak 1/3" in msg

@@ -5,10 +5,10 @@ heartbeat with its ip_ban arm. The GitOps pair is `checks/gitops.py`: it grew pa
 module's 600-line cap with the busy-lock arm (issue #1847), the same split idiom as
 `checks/host_edge.py`.
 
-Slice 7 of the check.py split. Reads config as `cfg.X`, the fetch layer as `bridge.net.X` and
-the shared streak counter as `bridge.streaks.X`, so the tests' patches on those modules reach
-it; the verdicts it from-imports from verdicts.service are patched on THIS module, where they
-are bound. `_n8n_streaks` lives here beside `check_n8n`, the only code that mutates it. Rule
+Slice 7 of the check.py split. Reads config as `cfg.X`, queries through its `src` argument
+(`bridge.sources.Sources`, which a test replaces with a fake) and reads the shared streak counter
+as `bridge.streaks.X`, so the tests' patches on that module reach it; the verdicts it
+from-imports from verdicts.service are patched on THIS module, where they are bound. `_n8n_streaks` lives here beside `check_n8n`, the only code that mutates it. Rule
 and enforcement: bridge/config.py's header.
 """
 
@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timezone
 
 from bridge.config import Config
-import bridge.net
+from bridge.sources import Sources
 import bridge.streaks
 from bridge.common import sanitize
 from bridge.parsing import parse_duration
@@ -40,7 +40,9 @@ _n8n_streaks = {}
 # checks: each returns (ok, msg)
 
 
-def check_n8n(cfg: Config, now: datetime | None = None) -> tuple[bool, str]:
+def check_n8n(
+    cfg: Config, src: Sources, now: datetime | None = None
+) -> tuple[bool, str]:
     """Consecutive failures of active ("Prod") n8n workflows (streak accumulated across cycles).
 
     Polls the n8n public API on the internal network (X-N8N-API-KEY header, no Authelia). n8n
@@ -54,13 +56,13 @@ def check_n8n(cfg: Config, now: datetime | None = None) -> tuple[bool, str]:
         return True, "n8n monitoring disabled (no API key)"
     headers = {"X-N8N-API-KEY": cfg.N8N_API_KEY}
     workflows = as_object(
-        bridge.net._get_json(
+        src.get_json(
             cfg.N8N_URL + "/api/v1/workflows?active=true&limit=250", headers=headers
         ),
         "n8n workflows",
     )
     executions = as_object(
-        bridge.net._get_json(
+        src.get_json(
             cfg.N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers
         ),
         "n8n executions",
@@ -77,7 +79,7 @@ def check_n8n(cfg: Config, now: datetime | None = None) -> tuple[bool, str]:
     )
 
 
-def check_arr_queue(cfg: Config, fetch=None, now=None) -> tuple[bool, str]:
+def check_arr_queue(cfg: Config, src: Sources, now=None) -> tuple[bool, str]:
     """Sonarr/Radarr queue warning/blocked-import watchdog (see queue_warnings).
 
     Empty SONARR_API_KEY/RADARR_API_KEY independently skip that app (like the multi-webhook
@@ -101,12 +103,9 @@ def check_arr_queue(cfg: Config, fetch=None, now=None) -> tuple[bool, str]:
     Sonarr applies it and releases it itself, and the four conditions that turn the hold off are
     in queue_warnings.
 
-    `fetch` is the injectable *arr boundary, the seam check_cluster_targets and
-    checks/host_edge.py already use. Resolved in the body, not as a default: a default binds at
-    import, before a test could reach bridge.net. `now` is the injectable clock the title-hold
-    grace is measured against; None means real time.
+    `src.get_json` is the *arr boundary; a test hands in a fake. `now` is the injectable clock
+    the title-hold grace is measured against; None means real time.
     """
-    fetch = fetch or bridge.net._get_json
     apps = [
         (
             "Sonarr",
@@ -129,7 +128,7 @@ def check_arr_queue(cfg: Config, fetch=None, now=None) -> tuple[bool, str]:
     offenders = []
     for app_name, url, api_key in configured:
         try:
-            data = fetch(url, headers={"X-Api-Key": api_key})
+            data = src.get_json(url, headers={"X-Api-Key": api_key})
         except Exception as e:
             # The FETCH rides a streak; the queue verdict below does not. See the docstring.
             count, held, note = bridge.streaks.down_streak(
@@ -191,7 +190,7 @@ def bazarr_problems(status: dict | None, health: dict | None) -> list[str]:
     return problems
 
 
-def check_bazarr(cfg: Config) -> tuple[bool, str]:
+def check_bazarr(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Bazarr's own health, and whether it can still talk to Sonarr and Radarr.
 
     Bazarr is the one *arr with no exporter, and that is why the 2026-08-29 stale-key incident
@@ -216,11 +215,11 @@ def check_bazarr(cfg: Config) -> tuple[bool, str]:
         return True, "bazarr monitoring disabled (no API key)"
     headers = {"X-API-KEY": cfg.BAZARR_API_KEY}
     status = optional_object(
-        bridge.net._get_json(cfg.BAZARR_URL + "/api/system/status", headers=headers),
+        src.get_json(cfg.BAZARR_URL + "/api/system/status", headers=headers),
         "bazarr status",
     )
     health = optional_object(
-        bridge.net._get_json(cfg.BAZARR_URL + "/api/system/health", headers=headers),
+        src.get_json(cfg.BAZARR_URL + "/api/system/health", headers=headers),
         "bazarr health",
     )
     problems = bazarr_problems(status, health)
@@ -233,7 +232,7 @@ def check_bazarr(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def check_prowlarr_indexers(cfg: Config) -> tuple[bool, str]:
+def check_prowlarr_indexers(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Prowlarr sustained-indexer watchdog (see indexers_down).
 
     Pages only when an indexer has been failing >= PROWLARR_INDEXER_MIN_DOWN_MIN, not on the
@@ -250,13 +249,11 @@ def check_prowlarr_indexers(cfg: Config) -> tuple[bool, str]:
         return True, "prowlarr indexer monitoring disabled (no API key)"
     headers = {"X-Api-Key": cfg.PROWLARR_API_KEY}
     status = as_object_list(
-        bridge.net._get_json(
-            cfg.PROWLARR_URL + "/api/v1/indexerstatus", headers=headers
-        ),
+        src.get_json(cfg.PROWLARR_URL + "/api/v1/indexerstatus", headers=headers),
         "prowlarr indexerstatus",
     )
     indexers = as_object_list(
-        bridge.net._get_json(cfg.PROWLARR_URL + "/api/v1/indexer", headers=headers),
+        src.get_json(cfg.PROWLARR_URL + "/api/v1/indexer", headers=headers),
         "prowlarr indexers",
     )
     # An indexer with no name maps to "", which indexers_down reads as falsy and replaces with
@@ -286,7 +283,9 @@ def check_prowlarr_indexers(cfg: Config) -> tuple[bool, str]:
     )
 
 
-def check_etcd_restore_drill(cfg: Config, now: float | None = None) -> tuple[bool, str]:
+def check_etcd_restore_drill(
+    cfg: Config, src: Sources, now: float | None = None
+) -> tuple[bool, str]:
     """Is the off-box etcd snapshot still PROVABLY restorable?
 
     The snapshot half has been taken, uploaded and alarmed since 2026-08-16. Until 2026-08-28
@@ -347,7 +346,7 @@ def check_etcd_restore_drill(cfg: Config, now: float | None = None) -> tuple[boo
     return True, "etcd restore drill passed %.1f days ago" % (age_s / 86400)
 
 
-def with_ha_ban(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
+def with_ha_ban(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, str]:
     """Fold the ip_ban arm into a heartbeat verdict, ban winning the message.
 
     Folded into this monitor rather than given its own for the reason recorded at
@@ -364,7 +363,7 @@ def with_ha_ban(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
     # /config/ip_bans.yaml. See the HA_BAN_WINDOW comment for why that is the only signal available.
     """
     try:
-        banned = bridge.net.loki_count(cfg, cfg.HA_BAN_SELECTOR, cfg.HA_BAN_WINDOW)
+        banned = src.loki_count(cfg.HA_BAN_SELECTOR, cfg.HA_BAN_WINDOW)
     except Exception as e:
         return ok, "%s, ip_ban arm unavailable (%s)" % (msg, e)
     ban_ok, ban_msg = ha_ban_verdict(banned, cfg.HA_BAN_WINDOW)
@@ -373,7 +372,9 @@ def with_ha_ban(cfg: Config, ok: bool, msg: str) -> tuple[bool, str]:
     return False, "%s | %s" % (ban_msg, msg)
 
 
-def check_ha_heartbeat(cfg: Config, now: datetime | None = None) -> tuple[bool, str]:
+def check_ha_heartbeat(
+    cfg: Config, src: Sources, now: datetime | None = None
+) -> tuple[bool, str]:
     """Poll HA's automation-driven heartbeat over the apps network (Bearer token).
 
     Empty HA_URL/HA_TOKEN -> disabled (stays up), like check_n8n.
@@ -391,7 +392,7 @@ def check_ha_heartbeat(cfg: Config, now: datetime | None = None) -> tuple[bool, 
         return True, "HA heartbeat monitoring disabled (no URL/token)"
     try:
         state = optional_object(
-            bridge.net._get_json(
+            src.get_json(
                 cfg.HA_URL + "/api/states/" + cfg.HA_HEARTBEAT_ENTITY,
                 headers={"Authorization": "Bearer " + cfg.HA_TOKEN},
             ),
@@ -404,11 +405,11 @@ def check_ha_heartbeat(cfg: Config, now: datetime | None = None) -> tuple[bool, 
         ok, msg = False, "HA API unreachable: %s" % e
     if ok:
         bridge.streaks._down_streaks["ha"] = 0
-        return with_ha_ban(cfg, True, msg)
+        return with_ha_ban(cfg, src, True, msg)
     bridge.streaks._down_streaks["ha"], ok, msg = bridge.streaks.down_streak(
         bridge.streaks._down_streaks.get("ha", 0),
         cfg.HA_CONSECUTIVE,
         msg,
         "deploy/restart grace",
     )
-    return with_ha_ban(cfg, ok, msg)
+    return with_ha_ban(cfg, src, ok, msg)

@@ -15,6 +15,7 @@ import yaml
 
 import checks.service
 import check
+from _fake_sources import FakeSources
 
 
 # Stamps are dated against this epoch and the check reads the same one, so "1.0 days ago"
@@ -45,7 +46,7 @@ def _stamp_body(age_days, mode="list-only"):
 
 def test_etcd_drill_passes_on_a_recent_stamp(tmp_path, monkeypatch, cfg):
     cfg = _stamp(cfg, tmp_path, _stamp_body(1))
-    ok, msg = checks.service.check_etcd_restore_drill(cfg, now=DRILL_NOW)
+    ok, msg = checks.service.check_etcd_restore_drill(cfg, FakeSources(), now=DRILL_NOW)
     assert ok is True
     assert "1.0 days ago" in msg
 
@@ -53,7 +54,7 @@ def test_etcd_drill_passes_on_a_recent_stamp(tmp_path, monkeypatch, cfg):
 def test_etcd_drill_fails_when_it_has_never_run(tmp_path, monkeypatch, cfg):
     """The state most worth reporting, and the one `[[ -f $STAMP ]] && check_age` reports green."""
     cfg = replace(cfg, ETCD_DRILL_STATE_DIR=str(tmp_path))
-    ok, msg = checks.service.check_etcd_restore_drill(cfg, now=DRILL_NOW)
+    ok, msg = checks.service.check_etcd_restore_drill(cfg, FakeSources(), now=DRILL_NOW)
     assert ok is False
     assert "has ever passed" in msg
 
@@ -68,21 +69,21 @@ def test_etcd_drill_fails_when_the_stamp_is_unreadable(tmp_path, monkeypatch, cf
     if os.geteuid() == 0:
         pytest.skip("root ignores the mode bits this asserts")
     cfg = _stamp(cfg, tmp_path, _stamp_body(1), mode=0o000)
-    ok, msg = checks.service.check_etcd_restore_drill(cfg, now=DRILL_NOW)
+    ok, msg = checks.service.check_etcd_restore_drill(cfg, FakeSources(), now=DRILL_NOW)
     assert ok is False
     assert "unreadable" in msg
 
 
 def test_etcd_drill_fails_on_a_stale_stamp(tmp_path, monkeypatch, cfg):
     cfg = _stamp(cfg, tmp_path, _stamp_body(9))
-    ok, msg = checks.service.check_etcd_restore_drill(cfg, now=DRILL_NOW)
+    ok, msg = checks.service.check_etcd_restore_drill(cfg, FakeSources(), now=DRILL_NOW)
     assert ok is False
     assert "9.0 days ago" in msg
 
 
 def test_etcd_drill_fails_on_an_unparseable_stamp(tmp_path, monkeypatch, cfg):
     cfg = _stamp(cfg, tmp_path, "mode=list-only\nsnapshot=x.zip\n")
-    ok, msg = checks.service.check_etcd_restore_drill(cfg, now=DRILL_NOW)
+    ok, msg = checks.service.check_etcd_restore_drill(cfg, FakeSources(), now=DRILL_NOW)
     assert ok is False
     assert "epoch" in msg
 
@@ -101,7 +102,7 @@ def test_etcd_drill_never_accepts_the_full_stamp_as_coverage(
         _stamp_body(1, mode="full"),
         name="last-success-full",
     )
-    ok, msg = checks.service.check_etcd_restore_drill(cfg, now=DRILL_NOW)
+    ok, msg = checks.service.check_etcd_restore_drill(cfg, FakeSources(), now=DRILL_NOW)
     assert ok is False, "a full-mode stamp must not satisfy the list-only reader"
     assert "has ever passed" in msg
 

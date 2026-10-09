@@ -28,6 +28,7 @@ from typing import TypedDict
 
 from bridge.common import HTTP_TIMEOUT
 from bridge.config import Config
+from bridge.sources import Sources
 from bridge.parsing import describe_fetch_failure
 
 IPS_URLS = ("https://www.cloudflare.com/ips-v4", "https://www.cloudflare.com/ips-v6")
@@ -132,5 +133,5 @@ def cloudflare_ips_drift(
     return ok, msg
 
 
-def check_cloudflare_ips_drift(cfg: Config) -> tuple[bool, str]:
+def check_cloudflare_ips_drift(cfg: Config, src: Sources) -> tuple[bool, str]:
     return cloudflare_ips_drift(cfg)

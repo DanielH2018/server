@@ -11,9 +11,8 @@ from dataclasses import replace
 
 import pytest
 
-import bridge.config
-import bridge.net
 import checks.r2
+from _fake_sources import FakeSources
 
 
 # A fixed epoch, not the live clock: the verdict must not move with wall time.
@@ -125,38 +124,37 @@ def _r2_payload(storage=None, operations=None):
     return {"data": {"viewer": {"accounts": [account]}}}
 
 
-def test_r2_query_parses_storage_and_operations(monkeypatch, cfg):
+def test_r2_query_parses_storage_and_operations(cfg):
     payload = _r2_payload(
         storage=[{"max": {"payloadSize": 900, "metadataSize": 100, "uploadCount": 3}}],
         operations=_ops(PutObject=2, GetObject=8),
     )
-    monkeypatch.setattr(bridge.net, "_post_json", lambda *a, **k: payload)
-    assert checks.r2.r2_query_usage(cfg, R2_NOW) == (1000, 3, 2, 8, [])
+    src = FakeSources(post_json=lambda *a, **k: payload)
+    assert checks.r2.r2_query_usage(cfg, src, R2_NOW) == (1000, 3, 2, 8, [])
 
 
-def test_r2_query_treats_an_empty_bucket_as_zero_not_a_fault(monkeypatch, cfg):
-    monkeypatch.setattr(bridge.net, "_post_json", lambda *a, **k: _r2_payload())
-    assert checks.r2.r2_query_usage(cfg, R2_NOW) == (0, 0, 0, 0, [])
+def test_r2_query_treats_an_empty_bucket_as_zero_not_a_fault(cfg):
+    src = FakeSources(post_json=lambda *a, **k: _r2_payload())
+    assert checks.r2.r2_query_usage(cfg, src, R2_NOW) == (0, 0, 0, 0, [])
 
 
-def test_r2_query_raises_on_graphql_errors(monkeypatch, cfg):
+def test_r2_query_raises_on_graphql_errors(cfg):
     # A 200 carrying `errors` is how an under-scoped token arrives. Unchecked it would parse as a
     # zero-usage bucket — green while blind.
-    monkeypatch.setattr(
-        bridge.net,
-        "_post_json",
-        lambda *a, **k: {"data": None, "errors": [{"message": "unauthorized"}]},
+    src = FakeSources(
+        post_json=lambda *a, **k: {
+            "data": None,
+            "errors": [{"message": "unauthorized"}],
+        }
     )
     with pytest.raises(RuntimeError, match="unauthorized"):
-        checks.r2.r2_query_usage(cfg, R2_NOW)
+        checks.r2.r2_query_usage(cfg, src, R2_NOW)
 
 
-def test_r2_query_raises_when_no_account_matches(monkeypatch, cfg):
-    monkeypatch.setattr(
-        bridge.net, "_post_json", lambda *a, **k: {"data": {"viewer": {"accounts": []}}}
-    )
+def test_r2_query_raises_when_no_account_matches(cfg):
+    src = FakeSources(post_json=lambda *a, **k: {"data": {"viewer": {"accounts": []}}})
     with pytest.raises(RuntimeError, match="CF_ACCOUNT_ID"):
-        checks.r2.r2_query_usage(cfg, R2_NOW)
+        checks.r2.r2_query_usage(cfg, src, R2_NOW)
 
 
 def _arm_r2(cfg, monkeypatch):
@@ -167,9 +165,9 @@ def _arm_r2(cfg, monkeypatch):
     return cfg
 
 
-def test_r2_usage_disabled_without_credentials(monkeypatch, cfg):
+def test_r2_usage_disabled_without_credentials(cfg):
     cfg = replace(cfg, CF_ANALYTICS_TOKEN="")
-    ok, msg = checks.r2.r2_usage(cfg, now=1000.0)
+    ok, msg = checks.r2.r2_usage(cfg, FakeSources(), now=1000.0)
     assert ok and "disabled" in msg
 
 
@@ -179,10 +177,12 @@ def test_r2_usage_caches_a_success(monkeypatch, cfg):
     monkeypatch.setattr(
         checks.r2,
         "r2_query_usage",
-        lambda _cfg, now: (calls.append(now), (0, 0, 0, 0, []))[1],
+        lambda _cfg, _src, now: (calls.append(now), (0, 0, 0, 0, []))[1],
     )
-    checks.r2.r2_usage(cfg, now=1000.0)
-    ok, msg = checks.r2.r2_usage(cfg, now=1000.0 + cfg.R2_PROBE_INTERVAL_S - 1)
+    checks.r2.r2_usage(cfg, FakeSources(), now=1000.0)
+    ok, msg = checks.r2.r2_usage(
+        cfg, FakeSources(), now=1000.0 + cfg.R2_PROBE_INTERVAL_S - 1
+    )
     assert ok
     assert len(calls) == 1
     assert "checked" in msg
@@ -196,8 +196,8 @@ def test_r2_usage_reprobes_after_a_failure(monkeypatch, cfg):
     monkeypatch.setattr(
         checks.r2,
         "r2_query_usage",
-        lambda _cfg, now: (calls.append(now), (9_000_000_000, 0, 0, 0, []))[1],
+        lambda _cfg, _src, now: (calls.append(now), (9_000_000_000, 0, 0, 0, []))[1],
     )
-    assert not checks.r2.r2_usage(cfg, now=1000.0)[0]
-    assert not checks.r2.r2_usage(cfg, now=1001.0)[0]
+    assert not checks.r2.r2_usage(cfg, FakeSources(), now=1000.0)[0]
+    assert not checks.r2.r2_usage(cfg, FakeSources(), now=1001.0)[0]
     assert len(calls) == 2

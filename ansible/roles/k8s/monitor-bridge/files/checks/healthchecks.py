@@ -17,22 +17,22 @@ HEALTHCHECKS_PROBE_INTERVAL_S (a day), a failure is never cached, so a red tile 
 cycle and clears one cycle after the console is fixed.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 import time
 from typing import TypedDict
 
-import bridge.net
 from bridge.config import Config
+from bridge.sources import Sources
 from bridge.types import JsonObject, as_object_list
 
 
-def fetch_checks(cfg: Config) -> list[JsonObject]:
+def fetch_checks(cfg: Config, src: Sources) -> list[JsonObject]:
     """The project's checks as the v3 API returns them. Raises on any transport or HTTP error.
 
     A read-only key gets the same fields a read-write key does minus the ping and management
     URLs: `slug`, `grace`, and `timeout` on a Simple check or `schedule` + `tz` on a Cron one.
     """
-    body = bridge.net._get_json(
+    body = src.get_json(
         cfg.HEALTHCHECKS_API_URL, {"X-Api-Key": cfg.HEALTHCHECKS_API_KEY}
     )
     checks = body.get("checks") if isinstance(body, dict) else None
@@ -125,14 +125,14 @@ _probe: _ProbeCache = {"ts": None, "ok": True, "msg": ""}
 
 def healthchecks_drift(
     cfg: Config,
+    src: Sources,
     now: float | None = None,
-    fetch: Callable[[Config], list[dict]] = fetch_checks,
     probe: _ProbeCache | None = None,
 ) -> tuple[bool, str]:
     """Throttled console drift check. (ok, msg).
 
-    `fetch` and `probe` are the seams, as in `checks/cloudflare_ips.py`: a test passes a canned
-    fetch and a fresh cache dict rather than patching this module.
+    The console is read through `src` (`bridge.sources.Sources`) and `probe` is the cache: a
+    test hands in a fake `src` and a fresh cache dict rather than patching this module.
     """
     probe = _probe if probe is None else probe
     if not cfg.HEALTHCHECKS_API_KEY or not cfg.HEALTHCHECKS_EXPECTED:
@@ -151,7 +151,7 @@ def healthchecks_drift(
             (now - probe["ts"]) / 3600,
         )
     try:
-        live = fetch(cfg)
+        live = fetch_checks(cfg, src)
     except Exception as e:
         ok, msg = (
             False,
@@ -165,5 +165,5 @@ def healthchecks_drift(
     return ok, msg
 
 
-def check_healthchecks_drift(cfg: Config) -> tuple[bool, str]:
-    return healthchecks_drift(cfg)
+def check_healthchecks_drift(cfg: Config, src: Sources) -> tuple[bool, str]:
+    return healthchecks_drift(cfg, src)

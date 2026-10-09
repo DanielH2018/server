@@ -13,6 +13,7 @@ import json
 from dataclasses import replace
 
 import checks.gitops
+from _fake_sources import FakeSources
 
 _LATE = 1000.0 + 7 * 3600
 
@@ -98,7 +99,7 @@ def test_check_gitops_status_reads_the_ledger_off_the_mount(tmp_path, cfg):
     torn = b'{"class": "k8s_unapplied", "subject": "son\xffarr"}'
     line = _owed(subject="k3s", at=1, playbook="ansible/k3s-bringup.yml", tags=[])
     (tmp_path / "owed.jsonl").write_bytes(torn + b"\n" + line.encode())
-    ok, msg = checks.gitops.check_gitops_status(cfg)
+    ok, msg = checks.gitops.check_gitops_status(cfg, FakeSources())
     assert not ok
     assert msg.endswith("clear-owed manual_plane k3s`")
 

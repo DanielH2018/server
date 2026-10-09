@@ -20,6 +20,7 @@ import check
 import gates
 import registry
 from _check_gate_helpers import mk
+from _fake_sources import FakeSources
 from bridge.types import Check
 from gates import Gates
 
@@ -181,17 +182,15 @@ def _wire_run_once_prom_up(cfg, monkeypatch, up_vector, checks, prom_dependent):
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
     )
-    monkeypatch.setattr(
-        bridge.net, "prom_vector", lambda _cfg, q: up_vector if q == "up" else []
-    )
     check.run_once(
         cfg,
+        FakeSources(prom_vector=lambda q: up_vector if q == "up" else []),
         [Check(n, "tok_%s" % n, mk(ran, n)) for n in checks],
         gates=Gates(
             prom_dependent=frozenset(prom_dependent),
-            probe_prometheus=lambda _cfg: (True, "prom ok"),
-            probe_loki=lambda _cfg: (True, "loki ok"),
-            probe_wan=lambda _cfg: (True, "wan ok"),
+            probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
+            probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
     )
     return ran, pushes
@@ -214,31 +213,29 @@ def test_run_once_suppresses_node_dependents_when_node_exporter_down(monkeypatch
     assert "exporter" in by_tok["tok_disk"][1].lower()
 
 
-def _fake_vectors(cfg, monkeypatch, by_query):
-    """prom_vector stub keyed by substring of the query.
+def _fake_vectors(cfg, by_query):
+    """(cfg, src): a FakeSources whose prom_vector answers by substring of the query.
 
     Drops CADVISOR_PODS_MIN to 0 for its callers, which are all offender-logic tests built on
     one- or two-pod fixtures — far below the real floor. Scoped here rather than as an autouse
     fixture on purpose: an estate-wide default of 0 would make the coverage floor invisible to
     every other test in the suite, which is the failure the floor itself exists to prevent. The
-    floor's own tests stub prom_vector directly and never come through here.
+    floor's own tests answer prom_vector directly and never come through here.
     """
     cfg = replace(cfg, CADVISOR_PODS_MIN=0)
 
-    def fake(_cfg, promql):
+    def fake(promql):
         for key, vec in by_query.items():
             if key in promql:
                 return vec
         raise AssertionError("unexpected query: %s" % promql)
 
-    monkeypatch.setattr(bridge.net, "prom_vector", fake)
-    return cfg
+    return cfg, FakeSources(prom_vector=fake)
 
 
-def test_check_restarts_names_the_looping_pod(monkeypatch, cfg):
-    cfg = _fake_vectors(
+def test_check_restarts_names_the_looping_pod(cfg):
+    cfg, src = _fake_vectors(
         cfg,
-        monkeypatch,
         {
             "container_start_time_seconds": [
                 ({"pod": "n8n-abc"}, 7.0),
@@ -246,58 +243,56 @@ def test_check_restarts_names_the_looping_pod(monkeypatch, cfg):
             ]
         },
     )
-    ok, msg = checks.cluster.check_restarts(cfg)
+    ok, msg = checks.cluster.check_restarts(cfg, src)
     assert not ok and "n8n-abc" in msg
 
 
-def test_check_restarts_quiet_is_up(monkeypatch, cfg):
-    cfg = _fake_vectors(
-        cfg, monkeypatch, {"container_start_time_seconds": [({"pod": "quiet"}, 1.0)]}
+def test_check_restarts_quiet_is_up(cfg):
+    cfg, src = _fake_vectors(
+        cfg, {"container_start_time_seconds": [({"pod": "quiet"}, 1.0)]}
     )
-    ok, _ = checks.cluster.check_restarts(cfg)
+    ok, _ = checks.cluster.check_restarts(cfg, src)
     assert ok
 
 
-def test_check_oom_names_the_killed_pod(monkeypatch, cfg):
-    cfg = _fake_vectors(
-        cfg, monkeypatch, {"container_oom_events_total": [({"pod": "karakeep-x"}, 2.0)]}
+def test_check_oom_names_the_killed_pod(cfg):
+    cfg, src = _fake_vectors(
+        cfg, {"container_oom_events_total": [({"pod": "karakeep-x"}, 2.0)]}
     )
-    ok, msg = checks.cluster.check_oom(cfg)
+    ok, msg = checks.cluster.check_oom(cfg, src)
     assert not ok and "karakeep-x" in msg
 
 
-def test_check_cpu_throttle_needs_both_gates_and_streak(monkeypatch, cfg):
+def test_check_cpu_throttle_needs_both_gates_and_streak(cfg):
     # 90% throttled AND real cores lost — but only pages on the CPU_CONSECUTIVE-th
     # consecutive breaching cycle.
     checks.cluster._cpu_breach_streak = 0
-    cfg = _fake_vectors(
+    cfg, src = _fake_vectors(
         cfg,
-        monkeypatch,
         {
             "container_cpu_cfs_throttled_periods_total": [({"pod": "tdarr-y"}, 0.9)],
             "container_cpu_cfs_throttled_seconds_total": [({"pod": "tdarr-y"}, 0.5)],
         },
     )
     for _ in range(cfg.CPU_CONSECUTIVE - 1):
-        ok, msg = checks.cluster.check_cpu_throttle(cfg)
+        ok, msg = checks.cluster.check_cpu_throttle(cfg, src)
         assert ok and "tdarr-y" in msg  # named but not paging yet
-    ok, msg = checks.cluster.check_cpu_throttle(cfg)
+    ok, msg = checks.cluster.check_cpu_throttle(cfg, src)
     assert not ok and "tdarr-y" in msg
     checks.cluster._cpu_breach_streak = 0
 
 
-def test_check_cpu_throttle_tiny_loss_stays_up(monkeypatch, cfg):
+def test_check_cpu_throttle_tiny_loss_stays_up(cfg):
     # High ratio but negligible absolute cores lost — the volume floor gates it out.
     checks.cluster._cpu_breach_streak = 0
-    cfg = _fake_vectors(
+    cfg, src = _fake_vectors(
         cfg,
-        monkeypatch,
         {
             "container_cpu_cfs_throttled_periods_total": [({"pod": "sidecar"}, 0.9)],
             "container_cpu_cfs_throttled_seconds_total": [({"pod": "sidecar"}, 0.0001)],
         },
     )
-    ok, _ = checks.cluster.check_cpu_throttle(cfg)
+    ok, _ = checks.cluster.check_cpu_throttle(cfg, src)
     assert ok
 
 
@@ -325,22 +320,22 @@ def test_run_once_no_suppression_when_exporters_up(monkeypatch, cfg):
 
 def test_run_once_up_probe_failure_does_not_suppress(monkeypatch, cfg):
     # If the `up` probe itself errors, fail toward alerting: run the checks, don't mask them.
-    def boom(_cfg, q):
+    def boom(q):
         raise RuntimeError("prom hiccup")
 
     ran, pushes = [], []
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
     )
-    monkeypatch.setattr(bridge.net, "prom_vector", boom)
     check.run_once(
         cfg,
+        FakeSources(prom_vector=boom),
         [Check("disk", "tok_disk", mk(ran, "disk"))],
         gates=Gates(
             prom_dependent=frozenset({"disk"}),
-            probe_prometheus=lambda _cfg: (True, "prom ok"),
-            probe_loki=lambda _cfg: (True, "loki ok"),
-            probe_wan=lambda _cfg: (True, "wan ok"),
+            probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
+            probe_loki=lambda _cfg, _src: (True, "loki ok"),
+            probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
     )
     assert "disk" in ran  # not suppressed

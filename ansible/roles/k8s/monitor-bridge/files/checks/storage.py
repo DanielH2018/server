@@ -1,17 +1,16 @@
 """Cluster storage checks for monitor-bridge — Longhorn volume redundancy and PVC fullness.
 
 The Backblaze B2 and Cloudflare R2 checks that shared this module until 2026-09-01 are in
-checks/b2.py and checks/r2.py, mirroring their test files. Reads config as `cfg.X`, the fetch
-layer as `bridge.net.X` and the shared streak counter as `bridge.streaks.X`, so the tests'
-patches on those modules reach it. Rule and enforcement: bridge/config.py's header.
+checks/b2.py and checks/r2.py, mirroring their test files. Reads config as `cfg.X`, queries
+Prometheus through the `src` argument (`bridge.sources.Sources`), which a test replaces with a
+fake, and keeps the shared streak counter in `bridge.streaks`. Rule and enforcement:
+bridge/config.py's header.
 """
 
-from collections.abc import Callable
-
 from bridge.config import Config
+from bridge.sources import Sources
 import bridge.net
 import bridge.streaks
-from checks.host import PromVector
 from verdicts.storage import (
     longhorn_offenders,
     longhorn_redundancy_verdict,
@@ -22,13 +21,8 @@ from verdicts.storage import (
     snapshot_used_by_pvc,
 )
 
-# The scalar peer of `PromVector`: what `bridge.net.prom_scalar` returns for one PromQL expression.
-type PromScalar = Callable[[Config, str], float | None]
 
-
-def check_kubelet_plugin_readonly(
-    cfg: Config, prom_vector: PromVector | None = None
-) -> tuple[bool, str]:
+def check_kubelet_plugin_readonly(cfg: Config, src: Sources) -> tuple[bool, str]:
     """CSI global-mount filesystems ext4 remounted read-only, named by host and mountpoint.
 
     #1243: a reclaim stall dropped Longhorn's iSCSI sessions, and the replacement_timeout expiry
@@ -54,13 +48,9 @@ def check_kubelet_plugin_readonly(
     stop for check_disk/check_mem. An absent series is genuinely healthy here (no CSI global
     mount is read-only), unlike the Longhorn/PVC arms above: node-exporter being entirely down
     is check_targets_down's/check_disk's job, not this one's.
-
-    `prom_vector` is the fetch seam, an ARGUMENT a test passes rather than a module global it
-    patches. None resolves `bridge.net.prom_vector` at call time, which is what the pod does.
     """
-    fetch = bridge.net.prom_vector if prom_vector is None else prom_vector
     sel = bridge.net.host_metric_sel(cfg, 'mountpoint=~"/var/lib/kubelet/plugins/.*"')
-    vec = fetch(cfg, "node_filesystem_readonly%s == 1" % sel)
+    vec = src.prom_vector("node_filesystem_readonly%s == 1" % sel)
     if not vec:
         return True, "no read-only CSI global mounts"
     offenders = sorted(
@@ -73,11 +63,7 @@ def check_kubelet_plugin_readonly(
     )
 
 
-def check_longhorn_volumes(
-    cfg: Config,
-    prom_vector: PromVector | None = None,
-    prom_scalar: PromScalar | None = None,
-) -> tuple[bool, str]:
+def check_longhorn_volumes(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Longhorn volumes that have lost replica redundancy, named by PVC.
 
     `k3s_longhorn_replica_count` is 2, so a volume reading `degraded` is down to a single copy —
@@ -105,18 +91,13 @@ def check_longhorn_volumes(
     this estate keeps rediscovering (manifest-prune's unreadable staged dirs, the backup
     reaper's unpopulated owner map). The volume count doubles as that input assertion: the
     one-hot shape guarantees a `state="healthy"` series per volume even when its value is 0.
-
-    `prom_vector` and `prom_scalar` are the fetch seams, ARGUMENTS a test passes rather than
-    module globals it patches. None resolves the `bridge.net` function at call time.
     """
-    fetch_vector = bridge.net.prom_vector if prom_vector is None else prom_vector
-    fetch_scalar = bridge.net.prom_scalar if prom_scalar is None else prom_scalar
-    volumes = fetch_scalar(cfg, 'count(longhorn_volume_robustness{state="healthy"})')
+    volumes = src.prom_scalar('count(longhorn_volume_robustness{state="healthy"})')
     # Only fetch the offender vector when the census says the job is answering: with no series
     # at all the verdict is already decided, and a second query would spend a request to learn
     # the same thing.
     offenders = (
-        longhorn_offenders(fetch_vector(cfg, "longhorn_volume_robustness == 1"))
+        longhorn_offenders(src.prom_vector("longhorn_volume_robustness == 1"))
         if volumes
         else {}
     )
@@ -133,7 +114,7 @@ def check_longhorn_volumes(
     return ok, msg
 
 
-def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
+def check_pvc_fullness(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Filesystem fullness of every PersistentVolumeClaim the kubelet reports stats for.
 
     Nothing else covered this. check_disk iterates DISK_MOUNTPOINTS — `/`, `/boot`, `/boot/efi`
@@ -160,13 +141,11 @@ def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
             "PVC_MIN_FREE=%r parsed to no usable floor — the free-space floors are UNMONITORED"
             % cfg.PVC_MIN_FREE
         )
-    claims = bridge.net.prom_scalar(
-        cfg,
+    claims = src.prom_scalar(
         "count(count by (namespace, persistentvolumeclaim)"
         " (kubelet_volume_stats_capacity_bytes))",
     )
-    vec = bridge.net.prom_vector(
-        cfg,
+    vec = src.prom_vector(
         "max by (namespace, persistentvolumeclaim) (100 *"
         " (1 - kubelet_volume_stats_available_bytes"
         " / kubelet_volume_stats_capacity_bytes))",
@@ -184,8 +163,7 @@ def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
     free = (
         {
             labels.get("persistentvolumeclaim", "?"): value
-            for labels, value in bridge.net.prom_vector(
-                cfg,
+            for labels, value in src.prom_vector(
                 "max by (namespace, persistentvolumeclaim)"
                 " (kubelet_volume_stats_available_bytes)",
             )
@@ -220,7 +198,7 @@ def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
     return True, summary
 
 
-def check_snapshot_headroom(cfg: Config) -> tuple[bool, str]:
+def check_snapshot_headroom(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Snapshot space used against each capped Longhorn volume's spec.snapshotMaxSize.
 
     The space axis check_longhorn_volumes (replica redundancy) and check_pvc_fullness (the
@@ -249,8 +227,8 @@ def check_snapshot_headroom(cfg: Config) -> tuple[bool, str]:
     # the bytes on the snapshot one, so one query cannot answer this.
     used = (
         snapshot_used_by_pvc(
-            bridge.net.prom_vector(cfg, "longhorn_snapshot_actual_size_bytes"),
-            bridge.net.prom_vector(cfg, "longhorn_volume_capacity_bytes"),
+            src.prom_vector("longhorn_snapshot_actual_size_bytes"),
+            src.prom_vector("longhorn_volume_capacity_bytes"),
         )
         if caps
         else {}

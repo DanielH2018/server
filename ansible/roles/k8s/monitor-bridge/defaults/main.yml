@@ -32,6 +32,7 @@ monitor_bridge_modules:
   - bridge/config_cluster.py
   - bridge/config_io.py
   - bridge/net.py
+  - bridge/sources.py
   - bridge/streaks.py
   - bridge/msgfmt.py
   - checks/logs.py

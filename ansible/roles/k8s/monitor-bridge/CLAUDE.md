@@ -82,10 +82,10 @@ it kills the pod at import on its next roll;
 
 `cli.py`'s `main()` calls `load_config(os.environ)` ONCE and hands the frozen `Config` to
 `check.run_once`, which passes it to every gate, check body and `bridge.net` helper that reads a
-URL; a test states the registry and the `Gates` rather than patching tables. Building the config
-MUST NOT raise: `_int`/`_num` record a malformed or missing value in `CONFIG_PROBLEMS`, and
+URL; a test states the registry, the `Gates` and its I/O (a `FakeSources` as `src`).
+Building the config MUST NOT raise: `_int`/`_num` record a malformed or missing value in `CONFIG_PROBLEMS`, and
 `main()` exits 2. **A key the env-secret renders has no Python default**; the `cfg` fixture is
-that render. A default argument cannot read the config — defaults evaluate at import — and a
+that render. A default argument cannot read the config (it evaluates at import), and a
 `verdicts/` module reads no `cfg` at all. The internals page has the test-side rules.
 
 ## Editing & testing

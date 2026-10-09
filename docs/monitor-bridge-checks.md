@@ -1239,7 +1239,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   http=500 of 2026-09-10. `check_swallowed_verdicts` reads the crons' push-outcome lines out
   of Loki over `SWALLOWED_VERDICTS_WINDOW_S` (3h) — the cron's own `status=<up|down>` line
   and the library's final `push failed (` line, the transient-retry line excluded in the
-  LogQL — through `bridge.net.loki_lines`, a range query, because the newest line per tag is
+  LogQL — through `src.loki_lines`, a range query, because the newest line per tag is
   what decides and no metric query returns a line's timestamp. `down` when some tag's newest
   line is a swallowed `status=down` AND some other tag landed a push in the window; when
   nothing landed the loss is fleet-wide — Kuma unreachable, a total-404 edge, the host that
@@ -1277,7 +1277,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   lockout, 2026-09-10 18:00 and 2026-09-15 14:50, both Discord HTTP 429s. Discord Delivery
   GET-verifies the webhook and cannot see a dropped POST. `check_kuma_notify_failures` reads
   Kuma's own line out of `{container="uptime-kuma"}` over `KUMA_NOTIFY_FAILURES_WINDOW_S`
-  (3h) through `bridge.net.loki_lines`, and `down` names each notification with its drop
+  (3h) through `src.loki_lines`, and `down` names each notification with its drop
   count and the reasons Kuma recorded with theirs (`reasons: HTTP 429 Too Many Requests
   x2`). The reason is Kuma's NEXT line, also at ERROR level — #1895 filed it as debug-only,
   and measured 2026-09-17 every one of 74 drops in 14 days had one (69 x 429, 5 x 400) —

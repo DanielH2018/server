@@ -2,16 +2,16 @@
 
 Its own module for the reason `cluster_etcd.py` is one: `checks/cluster.py` sits at the
 600-line cap the module-length ratchet enforces, beside the three Traefik checks this one
-complements. Config as `cfg.X`, the fetch through `bridge.net`, the streak through
-`bridge.streaks`, the same layering as its neighbours.
+complements. Config as `cfg.X`, the query through the `src` argument (`bridge.sources.Sources`), the
+streak through `bridge.streaks`, the same layering as its neighbours.
 """
 
 from bridge.config import Config
-import bridge.net
+from bridge.sources import Sources
 import bridge.streaks
 
 
-def check_traefik_421(cfg: Config, fetch=None) -> tuple[bool, str]:
+def check_traefik_421(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Routers serving 421 continuously: a client wedged on a mis-pinned connection.
 
     SNICheck records the TLS-options name once per connection, at the handshake, and answers
@@ -32,17 +32,12 @@ def check_traefik_421(cfg: Config, fetch=None) -> tuple[bool, str]:
 
     An empty vector is a genuine zero, not an unknown: Traefik emits no 421 series until it
     serves one. An unscraped Traefik also reads empty here, which is Scrape Targets' page.
-
-    `fetch` is the injectable Prometheus boundary, the seam check_k8s_workloads uses, resolved
-    in the body so a default does not bind before a test could reach bridge.net.
     """
-    fetch = fetch or bridge.net.prom_vector
     key = "traefik_421"
     rates = sorted(
         (
             (m.get("router", "?"), v)
-            for m, v in fetch(
-                cfg,
+            for m, v in src.prom_vector(
                 'sum by (router)(rate(traefik_router_requests_total{code="421"}[5m]))',
             )
             if v > cfg.TRAEFIK_421_RPS

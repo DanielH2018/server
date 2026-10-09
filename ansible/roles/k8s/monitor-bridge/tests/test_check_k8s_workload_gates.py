@@ -9,8 +9,8 @@ The GATE above these — Prometheus unreachable — is `test_check_gates.py`; me
 `PROM_DEPENDENT` is `test_check_gate_dependents.py`.
 """
 
-import bridge.net
 import checks.cluster
+from _fake_sources import FakeSources
 
 
 def test_k8s_workloads_absent_series_is_down_not_up():
@@ -102,7 +102,7 @@ def test_k8s_daemonsets_healthy_alongside_healthy_deployments():
     assert "18 k8s workloads healthy" == msg
 
 
-def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch, cfg):
+def test_cluster_targets_covers_everything_its_sibling_does_not(cfg):
     """`origin!="daniel-server"` is the complement of check_targets_down's pin, so every `up`
     series belongs to exactly one of the two checks.
 
@@ -110,17 +110,12 @@ def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch, cfg
     (cluster-native). daniel-box's node-exporter carries `origin="daniel-box"`, so it would match
     NEITHER check and could die watched by nothing.
     """
-    seen = {}
-
-    def fake_vector(_cfg, promql, base=None, source="prometheus"):
-        seen["q"], seen["base"] = promql, base
-        return [({"job": "j%d" % i}, 1.0) for i in range(5)]
-
-    monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
-    ok, _ = checks.cluster.check_cluster_targets(cfg)
+    src = FakeSources(
+        prom_vector=lambda promql: [({"job": "j%d" % i}, 1.0) for i in range(5)]
+    )
+    ok, _ = checks.cluster.check_cluster_targets(cfg, src)
     assert ok is True
-    assert seen["q"] == 'up{origin!="daniel-server"}'
-    assert seen["base"] is None  # the one Prometheus, so prom_vector's PROM_URL default
+    assert src.queries("prom_vector") == ['up{origin!="daniel-server"}']
 
 
 def test_cluster_targets_empty_is_down(cfg):

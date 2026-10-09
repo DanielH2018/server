@@ -16,16 +16,21 @@ Stdlib only, like every module under files/.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from bridge.config import Config
+
+if TYPE_CHECKING:
+    # Annotation only: bridge.sources imports bridge.net, which imports this module.
+    from bridge.sources import Sources
 
 type JsonValue = (
     None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 )
 type JsonObject = dict[str, JsonValue]
 
-CheckFn = Callable[[Config], tuple[bool, str]]  # every check body and every gate
+# Every check body and every gate probe: the frozen config, and the sources it reads.
+CheckFn = Callable[[Config, "Sources"], tuple[bool, str]]
 
 
 class CheckResult(NamedTuple):
@@ -48,7 +53,7 @@ class Check:
     Attributes:
       name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP and the gate sets refer to.
       token: The Kuma push-monitor token this check's result is pushed to. Empty skips the push.
-      fn: The check body. Takes the frozen `Config` and returns (ok, msg).
+      fn: The check body. Takes the frozen `Config` and the `Sources`, and returns (ok, msg).
     """
 
     name: str

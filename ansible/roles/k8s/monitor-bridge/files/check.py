@@ -30,12 +30,14 @@ import bridge.streaks
 # gates` would make the parameter shadow it inside the function body.
 import gates as gate_lib
 from bridge.config import Config
+from bridge.sources import Sources
 from bridge.types import Check
 from gates import Gates
 
 
 def run_once(
     cfg: Config,
+    src: Sources,
     checks: list[Check],
     gates: Gates,
     dry_run: bool = False,
@@ -51,6 +53,8 @@ def run_once(
 
     Args:
       cfg: The frozen config `main()` built — the ONLY source of configuration in a cycle.
+      src: The `Sources` `main()` built — every Prometheus, Loki and HTTP query a gate or a
+        check body sends goes through it. A test hands in a fake holding canned answers.
       checks: The registry to evaluate, as `registry.build_checks(env)` returns it. A
         parameter rather than a module table so a test hands in the two entries it means.
       dry_run: Evaluate and log every check, but push nothing to Kuma. Defaults to False, so
@@ -74,7 +78,7 @@ def run_once(
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
     prom_ok, _prom_msg = gate_lib._gate(
-        cfg, "prometheus", gates.probe_prometheus, dry_run, only
+        cfg, src, "prometheus", gates.probe_prometheus, dry_run, only
     )
 
     # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
@@ -101,7 +105,7 @@ def run_once(
     if prom_ok and gate_lib.check_enabled("prometheus", only, skip):
         try:
             for job in gate_lib.down_exporters(
-                bridge.net.prom_vector(cfg, "up"),
+                src.prom_vector("up"),
                 gates.exporter_dependent,
             ):
                 suppressed |= gates.exporter_dependent[job]
@@ -112,6 +116,7 @@ def run_once(
     # is one page (Loki Reachable), not a storm across every Loki-querying check (loki_dependent).
     loki_ok, _loki_msg = gate_lib._gate(
         cfg,
+        src,
         "loki_reachable",
         gates.probe_loki,
         dry_run,
@@ -125,14 +130,16 @@ def run_once(
     # needs B2. The probe is throttled inside b2_reachable (it must not spend the transaction
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
-    b2_ok, _b2_msg = gate_lib._gate(cfg, "b2_reachable", gates.probe_b2, dry_run, only)
+    b2_ok, _b2_msg = gate_lib._gate(
+        cfg, src, "b2_reachable", gates.probe_b2, dry_run, only
+    )
 
     # WAN-reachability gate (peer of the two above): an internet outage had no gate at all,
     # so every check reaching the internet paged on its own — 11 tiles red inside 90 minutes on
     # 2026-09-18 (#2784). Two independent providers probed by hostname, down only when NEITHER
     # answers, so a single provider's outage does not silence a dependent reading the other.
     wan_ok, _wan_msg = gate_lib._gate(
-        cfg, "wan_reachable", gates.probe_wan, dry_run, only
+        cfg, src, "wan_reachable", gates.probe_wan, dry_run, only
     )
 
     for entry in checks:
@@ -155,7 +162,7 @@ def run_once(
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"
             bridge.common.log("SKIP", name, "-", msg)
         else:
-            ok, msg = gate_lib._evaluate(cfg, name, fn)
+            ok, msg = gate_lib._evaluate(cfg, src, name, fn)
             if name in gates.startup_grace:
                 ok, msg = bridge.streaks.apply_startup_grace(
                     name, ok, msg, cfg.GRACE_CYCLES, gates.grace_streaks
