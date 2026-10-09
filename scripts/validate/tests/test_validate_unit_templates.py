@@ -149,8 +149,9 @@ def test_discover_templates_finds_the_known_set():
         "node_exporter.service.j2",
         "kuma-check.service.j2",
         "kuma-check.timer.j2",
+        "unit-failure-alert.service.j2",
     } <= names
-    assert len(names) == 25
+    assert len(names) == 21
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

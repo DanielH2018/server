@@ -65,16 +65,24 @@ def _wired_alerts() -> dict[str, dict]:
     return {name: variables for name, (_, variables) in _wired_alerts_by_role().items()}
 
 
-def _onfailure_alerts() -> set[str]:
-    """Every `<name>` a setup unit template names as `OnFailure=<name>-alert.service`."""
+def onfailure_alerts(unit_texts: list[str]) -> set[str]:
+    """Every `<name>` the given unit texts name as `OnFailure=<name>-alert.service`."""
     names: set[str] = set()
-    for template in SETUP_ROLES.glob("*/templates/*.j2"):
+    for text in unit_texts:
         names |= set(
-            re.findall(
-                r"^OnFailure=(\S+)-alert\.service$", template.read_text(), re.MULTILINE
-            )
+            re.findall(r"^OnFailure=(\S+)-alert\.service$", text, re.MULTILINE)
         )
     return names
+
+
+def unwired_alerts(unit_texts: list[str], wired: set[str]) -> set[str]:
+    """The OnFailure= alert names no import of the shared task file installs."""
+    return onfailure_alerts(unit_texts) - wired
+
+
+def local_alert_templates(paths: list[Path]) -> list[Path]:
+    """The `*-alert.service.j2` paths that are not the shared template."""
+    return [p for p in paths if p.name.endswith("-alert.service.j2") and p != UNIT]
 
 
 def _render(text: str, **context: object) -> str:
@@ -88,7 +96,9 @@ def test_every_onfailure_alert_renders_from_the_shared_template() -> None:
     assert not missing, (
         f"alerts no longer wired through alert_unit.yml: {sorted(missing)}"
     )
-    unwired = _onfailure_alerts() - wired.keys()
+    texts = [p.read_text() for p in SETUP_ROLES.glob("*/templates/*.j2")]
+    assert KNOWN_ALERTS <= onfailure_alerts(texts), "the OnFailure= scan found too few"
+    unwired = unwired_alerts(texts, set(wired))
     assert not unwired, (
         f"OnFailure= names {sorted(unwired)}-alert.service, but no import of "
         f"common/tasks/alert_unit.yml installs it under that alert_unit_name"
@@ -98,15 +108,23 @@ def test_every_onfailure_alert_renders_from_the_shared_template() -> None:
             assert key in variables, f"{name}: import passes no {key}"
 
 
+def test_an_onfailure_alert_with_no_import_is_flagged() -> None:
+    unit = "[Unit]\nOnFailure=widget-alert.service\n"
+    assert unwired_alerts([unit], {"widget"}) == set()
+    assert unwired_alerts([unit], {"gitops-deploy"}) == {"widget"}
+
+
 def test_no_role_carries_its_own_alert_template() -> None:
-    local = [
-        p.relative_to(SETUP_ROLES).as_posix()
-        for p in SETUP_ROLES.glob("*/templates/*-alert.service.j2")
-        if p != UNIT
-    ]
+    local = local_alert_templates(sorted(SETUP_ROLES.glob("*/templates/*.j2")))
     assert not local, (
         f"{local} copy the alert unit; import common/tasks/alert_unit.yml instead"
     )
+
+
+def test_a_role_local_alert_template_is_flagged() -> None:
+    stray = SETUP_ROLES / "widget" / "templates" / "widget-alert.service.j2"
+    assert local_alert_templates([UNIT]) == []
+    assert local_alert_templates([UNIT, stray]) == [stray]
 
 
 def test_each_message_renders_a_valid_json_payload() -> None:

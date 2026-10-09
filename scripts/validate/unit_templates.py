@@ -119,6 +119,13 @@ CALLER_CONTEXT: dict[str, dict] = {
         "kuma_check_description": "Example Kuma check",
         "kuma_check_on_calendar": "*-*-* *:23:00",
     },
+    # `tasks/alert_unit.yml`. A STUB env dir renders a relative EnvironmentFile= path.
+    "unit-failure-alert.service.j2": {
+        "alert_unit_name": "example",
+        "alert_unit_description": "Alert when example fails",
+        "alert_unit_message": "example unit failed",
+        "alert_unit_env_dir": "/etc/example",
+    },
 }
 
 
