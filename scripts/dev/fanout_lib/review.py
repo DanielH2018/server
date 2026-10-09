@@ -40,8 +40,8 @@ WHAT THE IMPLEMENTER CAN WRITE. The worktree, and for another repo's batch the `
 snapshot this module runs from. The pipeline therefore reads the review prompt, the headless
 system prompt, this repo's `.claude/settings.json` and every hook once, at start (#3763,
 #3794, #3810). Each phase gets the prompts as text and runs the Stop hook from a copy outside
-the worktree that is rewritten before every call. A phase that resumes the implementer's
-session also loads no settings file from the worktree; `held_hooks` says which phases and why.
+the worktree that is rewritten before every call. In this repo's batch, a phase that resumes
+the implementer's session also loads no settings file from the worktree; `held_hooks` says which phases and why.
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -66,7 +66,12 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import ISSUES_HEADING, _landing, lands
-from fanout_lib.held_hooks import pointed_settings, read_hooks, write_hooks
+from fanout_lib.held_hooks import (
+    held_secret_paths,
+    pointed_settings,
+    read_hooks,
+    write_hooks,
+)
 from fanout_lib.review_prompts import (
     FINDINGS_SCHEMA,
     _as_data,
@@ -375,14 +380,16 @@ class Pipeline:
         return ["claude", "--settings", settings]
 
     def _held_settings(self) -> list[str]:
-        """The prefix a resumed phase runs `claude` with: no project or local settings file.
+        """The prefix a resumed phase runs `claude` with.
 
-        For this repo's batch it passes the project settings read at start, each hook command
-        pointed at the copy in `hook_root`. That set already registers `fanout-stop`, so the
-        Stop hook is not added a second time. Another repo's batch keeps `_stop_hook`'s.
+        For this repo's batch it loads no project or local settings file, and passes the
+        project settings read at start, each hook command pointed at the copy in `hook_root`.
+        That set already registers `fanout-stop`, so the Stop hook is not added a second time.
+        Another repo's batch keeps `_stop_hook`'s prefix and its own project settings: the
+        pipeline holds no copy of that repo's hooks, so dropping the source would drop them.
         """
         if not self.project_settings:
-            return ["claude", "--setting-sources", "user", *self._stop_hook()[1:]]
+            return self._stop_hook()
         settings = pointed_settings(self.project_settings, self.hook_root)
         return [
             "claude", "--setting-sources", "user", "--settings", json.dumps(settings),
@@ -470,6 +477,8 @@ class Pipeline:
         single-session batch: a PR URL, a `VERDICT:` line, or a blocker line.
         """
         issues = issues_section(self.brief)
+        if self.project_settings:
+            self.hooks.update(held_secret_paths(self.run, SOURCE_ROOT))
         red = self._red(issues) if self.red_green else None
         brief = self.brief
         if red is not None:

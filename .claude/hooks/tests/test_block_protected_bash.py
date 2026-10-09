@@ -185,6 +185,16 @@ def test_the_derivation_still_finds_the_incident_file():
     assert "secret_rotation_push_token" in paths[INCIDENT]
 
 
+def test_a_set_held_beside_the_hook_wins_over_the_trees_derivation(tmp_path):
+    """A fan-out pipeline ships the set it derived at start; the agent's tree is not read."""
+    held = tmp_path / "secret_bearing_host_paths.json"
+    held.write_text('{"/usr/local/bin/held.sh": ["held_token"]}')
+    assert _mod._secret_bearing_paths(_REPO, held=str(held)) == {
+        "/usr/local/bin/held.sh": ["held_token"]
+    }
+    assert INCIDENT in _mod._secret_bearing_paths(_REPO, held=str(tmp_path / "none"))
+
+
 # ── the payload's `cwd`, and what stands in for it ───────────────────────────────────
 
 

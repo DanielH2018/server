@@ -13,9 +13,11 @@ import subprocess
 from fanout_lib.brief import ISSUES_HEADING, Issue, render_brief
 from fanout_lib.red_gate import Gate, Gates
 from fanout_lib.review import PROMPT_FILE, Pipeline, actionable
-from fanout_lib.target import SERVER_TARGET
+from fanout_lib.target import SERVER_TARGET, Target
 
 PR = "https://github.com/DanielH2018/server/pull/4000"
+# What `secret_bearing_host_paths.py` prints: `dest<TAB>name,name` per line.
+SECRET_LISTING = "/usr/local/bin/a.sh\tone_token,two_token\n"
 ISSUES = [Issue(1345, "Traefik startupProbe has no red-proof", "body one")]
 
 
@@ -66,13 +68,22 @@ class FakeRunner:
         if argv[0] == "gh":
             self.comments.append(stdin)
             return subprocess.CompletedProcess(argv, 0, "", "")
+        if argv[0] == "uv":
+            self.derived = argv
+            return subprocess.CompletedProcess(argv, 0, SECRET_LISTING, "")
         phase = (self.worktree / ".fanout" / "phase").read_text().strip()
         self.claude.append((argv, stdin, phase))
         return subprocess.CompletedProcess(argv, 0, json.dumps(self.reports.pop(0)), "")
 
 
 def _pipeline(
-    tmp_path, reports, host="daniel-box", heads=("aaa", "bbb"), clock=None, gates=None
+    tmp_path,
+    reports,
+    host="daniel-box",
+    heads=("aaa", "bbb"),
+    clock=None,
+    gates=None,
+    target=SERVER_TARGET,
 ):
     (tmp_path / ".fanout").mkdir()
     brief = render_brief(ISSUES, host, "1345", "worktree-orch", [], review=True)
@@ -81,7 +92,7 @@ def _pipeline(
         tmp_path,
         "1345",
         host,
-        SERVER_TARGET,
+        target,
         brief,
         run=run,
         clock=clock or (lambda: 0.0),
@@ -300,9 +311,25 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
         assert all(c.startswith(f"{hooks}/run-hook.sh ") for c in commands)
         assert settings["permissions"] == held["permissions"]
         assert (hooks / "block-protected-edits.py").is_file()
+    # The guard reads the secret-bearing paths derived at start, not the agent's tree.
+    assert run.derived[-1] == "scripts/secrets_mgmt/secret_bearing_host_paths.py"
+    assert json.loads((hooks / "secret_bearing_host_paths.json").read_text()) == {
+        "/usr/local/bin/a.sh": ["one_token", "two_token"]
+    }
     # The implement and review phases keep the project source: dropping it drops CLAUDE.md.
     assert "--setting-sources" not in run.claude[0][0]
     assert "--setting-sources" not in run.claude[1][0]
+
+
+def test_another_repos_resumed_phase_keeps_its_own_project_settings(tmp_path):
+    """The pipeline holds no copy of another repo's hooks, so dropping its source drops them."""
+    dotfiles = Target("DanielH2018/dotfiles", str(tmp_path), "origin/main")
+    pipeline, _ = _pipeline(tmp_path, [], target=dotfiles)
+    pipeline.session = "sid-1"
+    argv = pipeline._resume()
+    assert "--setting-sources" not in argv
+    settings = json.loads(argv[argv.index("--settings") + 1])
+    assert list(settings["hooks"]) == ["Stop"]
 
 
 def _red_report(behaviours=1):

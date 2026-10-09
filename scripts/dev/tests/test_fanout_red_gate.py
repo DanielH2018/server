@@ -162,6 +162,17 @@ def test_the_green_gate_refuses_an_uncommitted_edit_the_pushed_head_lacks(tmp_pa
     )
 
 
+def test_the_green_gate_runs_head_not_an_edit_hidden_from_git_status(tmp_path):
+    """The implementer owns the index: a skip-worktree entry hides an edit from `status`."""
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
+    gate = red_gate(run, repo, base, red)
+    commit(repo, "not a fix", **{"mod.py": CODE + "\n"})
+    git_out(repo, "update-index", "--skip-worktree", "tests/test_new.py")
+    (repo / "tests/test_new.py").write_text("def test_two():\n    assert True\n")
+    assert git_out(repo, "status", "--porcelain") == ""
+    assert green_gate(run, repo, red, gate).startswith("pytest exited 1; not passing")
+
+
 def test_an_ignored_root_conftest_is_refused_by_both_gates(tmp_path):
     """`git status` and `git diff` cannot see an ignored file, and `/*` ignores every root path."""
     repo = init_repo(tmp_path / "repo")

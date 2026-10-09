@@ -7,18 +7,25 @@ pipeline reads the files once at start with `read_hooks`, rewrites a copy outsid
 before every phase with `write_hooks`, and hands a resumed phase the start-time settings with
 every hook command pointed at that copy (`pointed_settings`).
 
-DECIDED: only the phases that resume the implementer's session (fix, land, file) run with
-`--setting-sources user`. A probe on 2026-10-09 showed that the flag also drops the project
+DECIDED: only the phases that resume the implementer's session (fix, land, file) of this repo's
+batch run with `--setting-sources user`. Another repo's batch keeps its project settings: the
+pipeline holds no copy of that repo's hooks, so dropping the source would drop its guards. A probe on 2026-10-09 showed that the flag also drops the project
 `CLAUDE.md` and the project skills from a fresh session. A resumed session already holds
 `CLAUDE.md` in its transcript, and the land text carries the whole `land.sh` command, so only
 those phases lose the source at no cost. The implement phase starts from the tree `worktree add`
 checked out. The review phase starts after the implementer and still loads the worktree's
 settings (#3825).
+
+`block-protected-bash` derives its secret-bearing host paths from the session's cwd, which is
+the worktree. The pipeline derives the set at start and ships it beside the held hooks as
+`HELD_SECRET_PATHS`, which that guard reads in place of the derivation.
 """
 
 import json
 import shlex
 import shutil
+import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 HOOKS_DIR = Path(".claude") / "hooks"
@@ -27,6 +34,12 @@ HOOKS_DIR = Path(".claude") / "hooks"
 UNSNAPSHOTTED = frozenset({"tests", "__pycache__"})
 # How this repo's `.claude/settings.json` names its hooks directory in every hook command.
 PROJECT_HOOKS = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
+# The derivation `block-protected-bash` runs, and the file beside the held hooks that it reads
+# in its place. `.claude/hooks/block-protected-bash.py` mirrors the file name.
+SECRET_PATHS_SCRIPT = "scripts/secrets_mgmt/secret_bearing_host_paths.py"
+HELD_SECRET_PATHS = "secret_bearing_host_paths.json"
+
+Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
 def read_hooks(root: Path) -> dict[str, bytes]:
@@ -72,3 +85,23 @@ def pointed_settings(settings: str, root: Path) -> dict:
             for hook in group.get("hooks", []):
                 hook["command"] = hook["command"].replace(PROJECT_HOOKS, hooks)
     return held
+
+
+def held_secret_paths(run: Runner, root: Path) -> dict[str, bytes]:
+    """The `HELD_SECRET_PATHS` file to ship beside the held hooks, derived from `root` now.
+
+    Returns:
+        The file name and its JSON bytes, or nothing when the derivation failed. The guard
+        then falls back to deriving the set itself.
+    """
+    proc = run(
+        ["uv", "run", "--directory", str(root), "python", SECRET_PATHS_SCRIPT], None
+    )
+    if proc.returncode:
+        return {}
+    paths = {}
+    for line in proc.stdout.splitlines():
+        dest, sep, names = line.partition("\t")
+        if sep:
+            paths[dest] = names.split(",")
+    return {HELD_SECRET_PATHS: json.dumps(paths).encode()}
