@@ -201,6 +201,12 @@ def run_deploy(
     given. Both call sites pass `observe` BY KEYWORD, which keeps the positional tuple a
     fake records three elements long.
     """
+    # DECIDED: deploy.sh stays a subprocess; land.sh does not call `deploy_run` in process
+    # (#3664). An import runs THIS checkout's deploy_run, not the primary's, which is the
+    # re-aiming the module docstring rules out. deploy_run also chdirs into the repo, execs
+    # ansible-playbook on the unlocked paths and clears O_NONBLOCK on fds 0-2 -- all
+    # process-wide, so each would land on the landing itself. A structured result, if one is
+    # wanted, comes back over the subprocess boundary rather than replacing it.
     argv = ["./scripts/deploy.sh", "--tags", ",".join(tags)]
     if at:
         argv += ["--at", at]
