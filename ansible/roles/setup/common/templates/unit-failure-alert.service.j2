@@ -26,21 +26,24 @@ EnvironmentFile={{ alert_unit_env_dir }}/alert-webhook.env
 # --retry skips a refused connection. Worst case about two minutes; a oneshot has no start timeout.
 #
 # Two minutes does not cover an outage, so systemd re-runs a failed delivery until it succeeds.
-# daniel-box had no WAN at all from 2026-10-06 00:00 to 2026-10-08 21:31 UTC, and three alerts
-# exited 6 inside that window and were never retried (#3902). A resolver pin would not have
-# helped: the host forwarder already falls back to public resolvers, and nothing was reachable.
+# daniel-box could reach nothing off the host from its 2026-10-05 23:55 boot until about
+# 2026-10-08 21:55 UTC. Every alert that fired in that window exited 6 and was never retried,
+# so the outage's pages were lost (#3902). A resolver pin would not have helped: the host
+# forwarder already falls back to 1.1.1.1 and 1.0.0.1, and those were unreachable too.
 # Restart=on-failure is accepted for Type=oneshot (systemd 255; only always/on-success are
-# refused). While a retry is pending the unit reads `activating (auto-restart)`, not `failed`,
-# and a second failure of the parent merges into that pending start, so the outage produces one
-# page rather than a queue. `systemctl stop <name>-alert` abandons the retry. A reboot
+# refused). While a retry is pending the unit reads `activating (auto-restart)`, not `failed`.
+# Another failure of the parent in that state starts one immediate attempt and leaves the unit
+# pending again (measured with a transient user unit), so a repeating parent failure adds
+# attempts, not queued pages. `systemctl stop <name>-alert` abandons the retry. A reboot
 # abandons it too, because a pending restart is not persisted.
 #
-# RestartPreventExitStatus=22 makes an HTTP error final. curl -f exits 22 only after Discord
-# answered >= 400 through all five tries, which a revoked webhook or a rejected payload causes
-# and another attempt does not fix. Every network-class exit (6, 7, 28, 35, ...) keeps retrying.
+# RestartPreventExitStatus= lists the exits another attempt cannot fix. curl -f exits 22 only
+# after Discord answered >= 400 through all five tries, as a revoked webhook or a rejected
+# payload does. curl exits 3 on a malformed URL, as an empty ALERT_WEBHOOK gives. Both stay
+# `failed`. Every network-class exit (6, 7, 28, 35, ...) keeps retrying.
 Restart=on-failure
 RestartSec=5min
-RestartPreventExitStatus=22
+RestartPreventExitStatus=3 22
 ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors -H "Content-Type: application/json" \
   -d '{"content":"{{ alert_unit_message }}"}' \
   "${ALERT_WEBHOOK}"

@@ -158,17 +158,18 @@ def service_settings(unit: str) -> dict[str, str]:
 
 
 def retries_until_delivered(settings: dict[str, str]) -> bool:
-    """True when systemd re-runs a failed delivery and stops only on curl's HTTP error."""
+    """True when systemd re-runs a failed delivery and stops only on a bad URL or HTTP error."""
     return (
         settings.get("Restart") == "on-failure"
         and bool(settings.get("RestartSec"))
-        and settings.get("RestartPreventExitStatus", "").split() == ["22"]
+        and sorted(settings.get("RestartPreventExitStatus", "").split()) == ["22", "3"]
     )
 
 
 def test_a_failed_delivery_retries_until_the_network_returns() -> None:
-    # curl's own retries span about two minutes; the 2026-10-06 WAN outage lasted 69 hours,
-    # and three pages exited 6 inside it with nothing to try again (#3902).
+    # curl's own retries span about two minutes. daniel-box reached nothing off the host from
+    # 2026-10-05 23:55 to about 2026-10-08 21:55 UTC, and every page fired inside that window
+    # exited 6 with nothing to try again (#3902).
     unit = _render(
         UNIT.read_text(),
         alert_unit_name="widget",
@@ -180,7 +181,7 @@ def test_a_failed_delivery_retries_until_the_network_returns() -> None:
     assert settings.get("Type") == "oneshot", "the [Service] parse found no Type="
     assert retries_until_delivered(settings), (
         "a failed page must retry: Restart=on-failure, a RestartSec, and "
-        "RestartPreventExitStatus=22 so only an HTTP rejection is final"
+        "RestartPreventExitStatus=3 22 so only a bad URL or an HTTP rejection is final"
     )
 
 
@@ -188,13 +189,15 @@ def test_an_alert_that_gives_up_or_retries_a_rejection_is_flagged() -> None:
     retrying = {
         "Restart": "on-failure",
         "RestartSec": "5min",
-        "RestartPreventExitStatus": "22",
+        "RestartPreventExitStatus": "3 22",
     }
     assert retries_until_delivered(retrying)
     assert not retries_until_delivered(
         {k: v for k, v in retrying.items() if k != "Restart"}
     )
-    assert not retries_until_delivered({**retrying, "RestartPreventExitStatus": "6 22"})
+    assert not retries_until_delivered(
+        {**retrying, "RestartPreventExitStatus": "3 6 22"}
+    )
     assert not retries_until_delivered({**retrying, "RestartPreventExitStatus": ""})
 
 
